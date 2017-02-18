@@ -36,9 +36,11 @@
 #include "include/memory.h"
 using namespace std;
 
-//forward declaration
+// forward declaration
 class CephContext;
 class CrushWrapper;
+
+
 /*
  * we track up to two intervals during which the osd was alive and
  * healthy.  the most recent is [up_from,up_thru), where up_thru is

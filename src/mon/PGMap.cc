@@ -2367,3 +2367,70 @@ void PGMapUpdater::update_creating_pgs(
   }
 }
 
+static void _try_mark_pg_stale(
+  const OSDMap& osdmap,
+  pg_t pgid,
+  const pg_stat_t& cur,
+  PGMap::Incremental *pending_inc)
+{
+  if ((cur.state & PG_STATE_STALE) == 0 &&
+      cur.acting_primary != -1 &&
+      osdmap.is_down(cur.acting_primary)) {
+    pg_stat_t *newstat;
+    auto q = pending_inc->pg_stat_updates.find(pgid);
+    if (q != pending_inc->pg_stat_updates.end()) {
+      if ((q->second.acting_primary == cur.acting_primary) ||
+	  ((q->second.state & PG_STATE_STALE) == 0 &&
+	   q->second.acting_primary != -1 &&
+	   osdmap.is_down(q->second.acting_primary))) {
+	newstat = &q->second;
+      } else {
+	// pending update is no longer down or already stale
+	return;
+      }
+    } else {
+      newstat = &pending_inc->pg_stat_updates[pgid];
+      *newstat = cur;
+    }
+    dout(10) << __func__ << " marking pg " << pgid
+	     << " stale (acting_primary " << newstat->acting_primary
+	     << ")" << dendl;
+    newstat->state |= PG_STATE_STALE;
+    newstat->last_unstale = ceph_clock_now();
+  }
+}
+
+void PGMapUpdater::check_down_pgs(
+    const OSDMap &osdmap,
+    const PGMap *pg_map,
+    bool check_all,
+    const set<int>& need_check_down_pg_osds,
+    PGMap::Incremental *pending_inc)
+{
+  // if a large number of osds changed state, just iterate over the whole
+  // pg map.
+  if (need_check_down_pg_osds.size() > (unsigned)osdmap.get_num_osds() *
+      g_conf->mon_pg_check_down_all_threshold) {
+    check_all = true;
+  }
+
+  if (check_all) {
+    for (const auto& p : pg_map->pg_stat) {
+      _try_mark_pg_stale(osdmap, p.first, p.second, pending_inc);
+    }
+  } else {
+    for (auto osd : need_check_down_pg_osds) {
+      if (osdmap.is_down(osd)) {
+	auto p = pg_map->pg_by_osd.find(osd);
+	if (p == pg_map->pg_by_osd.end()) {
+	  continue;
+	}
+	for (auto pgid : p->second) {
+	  const pg_stat_t &stat = pg_map->pg_stat.at(pgid);
+	  assert(stat.acting_primary == osd);
+	  _try_mark_pg_stale(osdmap, pgid, stat, pending_inc);
+	}
+      }
+    }
+  }
+}
