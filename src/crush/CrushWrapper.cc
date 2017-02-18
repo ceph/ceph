@@ -1152,6 +1152,65 @@ int CrushWrapper::remove_rule(int ruleno)
   return 0;
 }
 
+int CrushWrapper::device_class_clone(int original_id, int device_class, int *clone)
+{
+  const char *item_name = get_item_name(original_id);
+  if (item_name == NULL)
+    return -ECHILD;
+  const char *class_name = get_class_name(device_class);
+  if (class_name == NULL)
+    return -EBADF;
+  string copy_name = item_name + string("~") + class_name;
+  if (name_exists(copy_name)) {
+    *clone = get_item_id(copy_name);
+    return 0;
+  }
+  crush_bucket *original = get_bucket(original_id);
+  if (original == NULL)
+    return -ENOENT;
+  crush_bucket *copy = crush_make_bucket(crush,
+					 original->alg,
+					 original->hash,
+					 original->type,
+					 0, NULL, NULL);
+  if(copy == NULL)
+    return -ENOMEM;
+  for (unsigned i = 0; i < original->size; i++) {
+    int item = original->items[i];
+    int weight = crush_get_bucket_item_weight(original, i);
+    if (item >= 0) {
+      if (class_map.count(item) != 0 && class_map[item] == device_class) {
+	int res = crush_bucket_add_item(crush, copy, item, weight);
+	if (res)
+	  return res;
+      }
+    } else {
+      int child_copy_id;
+      int res = device_class_clone(item, device_class, &child_copy_id);
+      if (res < 0)
+	return res;
+      crush_bucket *child_copy = get_bucket(child_copy_id);
+      if (IS_ERR(child_copy))
+	return -ENOENT;
+      res = crush_bucket_add_item(crush, copy, child_copy_id, child_copy->weight);
+      if (res)
+	return res;
+    }
+  }
+  int res = crush_add_bucket(crush, 0, copy, clone);
+  if (res)
+    return res;
+  res = set_item_class(*clone, device_class);
+  if (res < 0)
+    return res;
+  // we do not use set_item_name because the name is intentionally invalid
+  name_map[*clone] = copy_name;
+  if (have_rmaps)
+    name_rmap[copy_name] = *clone;
+  class_bucket[original_id][device_class] = *clone;
+  return 0;
+}
+
 void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
 {
   assert(crush);

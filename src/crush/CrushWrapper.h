@@ -435,6 +435,10 @@ public:
     class_map[i] = get_or_create_class_id(name);
     return 0;
   }
+  int set_item_class(int i, int c) {
+    class_map[i] = c;
+    return c;
+  }
 
   int can_rename_item(const string& srcname,
 		      const string& dstname,
@@ -1073,6 +1077,7 @@ public:
     crush_finalize(crush);
   }
 
+  int device_class_clone(int original, int device_class, int *clone);
   void start_choose_profile() {
     free(crush->choose_tries);
     /*
