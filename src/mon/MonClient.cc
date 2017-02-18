@@ -625,17 +625,19 @@ MonConnection& MonClient::_add_conn(unsigned rank)
 
 void MonClient::_add_conns()
 {
-  unsigned n = cct->_conf->mon_client_hunt_parallel;
-  if (n == 0 || n > monmap.size()) {
-    n = monmap.size();
-  }
-  vector<unsigned> ranks(n);
-  for (unsigned i = 0; i < n; i++) {
+  const unsigned num_mons = monmap.size();
+  vector<unsigned> ranks(num_mons);
+  for (unsigned i = 0; i < num_mons; i++) {
     ranks[i] = i;
   }
   std::random_device rd;
   std::mt19937 rng(rd());
   std::shuffle(ranks.begin(), ranks.end(), rng);
+
+  unsigned n = cct->_conf->mon_client_hunt_parallel;
+  if (n == 0 || n > monmap.size()) {
+     n = num_mons;
+  }
   for (unsigned i = 0; i < n; i++) {
     _add_conn(ranks[i]);
   }
