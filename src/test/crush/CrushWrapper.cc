@@ -972,6 +972,36 @@ TEST(CrushWrapper, remove_unused_root) {
   ASSERT_FALSE(c.name_exists("r12"));
 }
 
+TEST(CrushWrapper, trim_roots_with_class) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "root");
+
+  int weight = 1;
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  int cl = c.get_or_create_class_id("ssd");
+  c.class_map[item] = cl;
+
+
+  int root_id = c.get_item_id("default");
+  int clone_id;
+  ASSERT_EQ(c.device_class_clone(root_id, cl, &clone_id), 0);
+
+  ASSERT_TRUE(c.name_exists("default"));
+  ASSERT_TRUE(c.name_exists("default~ssd"));
+  c.trim_roots_with_class(); // do nothing because still in use
+  ASSERT_TRUE(c.name_exists("default"));
+  ASSERT_TRUE(c.name_exists("default~ssd"));
+  c.class_bucket.clear();
+  c.trim_roots_with_class(); // do nothing because still in use
+  ASSERT_TRUE(c.name_exists("default"));
+  ASSERT_FALSE(c.name_exists("default~ssd"));
+}
+
 TEST(CrushWrapper, device_class_clone) {
   CrushWrapper c;
   c.create();

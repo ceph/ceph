@@ -1000,6 +1000,26 @@ int CrushWrapper::get_immediate_parent_id(int id, int *parent)
   return -ENOENT;
 }
 
+int CrushWrapper::trim_roots_with_class()
+{
+  set<int> takes;
+  find_takes(takes);
+  set<int> roots;
+  find_roots(roots);
+  for (auto &r : roots) {
+    if (r >= 0)
+      continue;
+    if (!id_has_class(r))
+      continue;
+    int res = remove_unused_root(r);
+    if (res)
+      return res;
+  }
+  // there is no need to reweight because we only remove from the
+  // root and down
+  return 0;
+}
+
 void CrushWrapper::reweight(CephContext *cct)
 {
   set<int> roots;

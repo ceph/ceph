@@ -397,6 +397,13 @@ public:
       name_rmap[name] = i;
     return 0;
   }
+  bool id_has_class(int i) {
+    int idout;
+    int classout;
+    if (split_id_class(i, &idout, &classout) != 0)
+      return false;
+    return classout != -1;
+  }
   int split_id_class(int i, int *idout, int *classout) const;
 
   bool class_exists(const string& name) const {
@@ -1082,6 +1089,8 @@ public:
   }
 
   int device_class_clone(int original, int device_class, int *clone);
+  /* remove unused roots generated for class devices */
+  int trim_roots_with_class();
   void start_choose_profile() {
     free(crush->choose_tries);
     /*
