@@ -3115,30 +3115,28 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
 
     // warn about upgrade flags that can be set but are not.
-    if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS) &&
-	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      string msg = "all OSDs are running luminous or later but the"
-	" 'require_luminous_osds' osdmap flag is not set";
-      summary.push_back(make_pair(HEALTH_WARN, msg));
-      if (detail) {
-	detail->push_back(make_pair(HEALTH_WARN, msg));
-      }
-    } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN) &&
-	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
-      string msg = "all OSDs are running kraken or later but the"
-	" 'require_kraken_osds' osdmap flag is not set";
-      summary.push_back(make_pair(HEALTH_WARN, msg));
-      if (detail) {
-	detail->push_back(make_pair(HEALTH_WARN, msg));
-      }
-    } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL) &&
-	       !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
-      string msg = "all OSDs are running jewel or later but the"
-	" 'require_jewel_osds' osdmap flag is not set";
-      summary.push_back(make_pair(HEALTH_WARN, msg));
-      if (detail) {
-	detail->push_back(make_pair(HEALTH_WARN, msg));
-      }
+
+    std::string m, f;
+
+    (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS) &&
+      !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) ?
+      f = "luminous" : f = "";
+    (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN) &&
+      !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) ?
+      f = "kraken" : f = "";
+    (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL) &&
+      !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) ?
+      f = "jewel" : f = "";
+
+    if (!f.empty()) {
+
+      m = "all OSDs are running " + f + " or later but the"
+        " '" + f + "' osdmap flag is not set";
+
+      summary.push_back(make_pair(HEALTH_WARN, m));
+
+      if (detail)
+        detail->push_back(make_pair(HEALTH_WARN, m));
     }
 
     get_pools_health(summary, detail);
