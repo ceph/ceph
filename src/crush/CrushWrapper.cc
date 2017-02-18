@@ -344,14 +344,24 @@ bool CrushWrapper::_search_item_exists(int item) const
 
 bool CrushWrapper::_bucket_is_in_use(int item)
 {
+  for (auto &i : class_bucket)
+    for (auto &j : i.second)
+      if (j.second == item)
+	return true;
   for (unsigned i = 0; i < crush->max_rules; ++i) {
     crush_rule *r = crush->rules[i];
     if (!r)
       continue;
     for (unsigned j = 0; j < r->len; ++j) {
-      if (r->steps[j].op == CRUSH_RULE_TAKE &&
-	  r->steps[j].arg1 == item) {
-	return true;
+      if (r->steps[j].op == CRUSH_RULE_TAKE) {
+	int step_item = r->steps[j].arg1;
+	int original_item;
+	int c;
+	int res = split_id_class(step_item, &original_item, &c);
+	if (res < 0)
+	  return false;
+	if (step_item == item || original_item == item)
+	  return true;
       }
     }
   }
