@@ -52,6 +52,15 @@ static void print_item_class(ostream& out, int t, CrushWrapper &crush)
     out << " class " << c;
 }
 
+static void print_class(ostream& out, int t, CrushWrapper &crush)
+{
+  const char *c = crush.get_class_name(t);
+  if (c)
+    out << " class " << c;
+  else
+    out << " # unexpected class " << t;
+}
+
 static void print_rule_name(ostream& out, int t, CrushWrapper &crush)
 {
   const char *name = crush.get_rule_name(t);
@@ -270,7 +279,19 @@ int CrushCompiler::decompile(ostream &out)
 	break;
       case CRUSH_RULE_TAKE:
 	out << "\tstep take ";
-	print_item_name(out, crush.get_rule_arg1(i, j), crush);
+	{
+          int step_item = crush.get_rule_arg1(i, j);
+          int original_item;
+          int c;
+          int res = crush.split_id_class(step_item, &original_item, &c);
+          if (res < 0)
+            return res;
+	  if (c >= 0)
+            step_item = original_item;
+          print_item_name(out, step_item, crush);
+	  if (c >= 0)
+	    print_class(out, c, crush);
+	}
 	out << "\n";
 	break;
       case CRUSH_RULE_EMIT:
@@ -658,7 +679,35 @@ int CrushCompiler::parse_rule(iter_t const& i)
 	  err << "in rule '" << rname << "' item '" << item << "' not defined" << std::endl;
 	  return -1;
 	}
-	crush.set_rule_step_take(ruleno, step++, item_id[item]);
+        int id = item_id[item];
+        int c = -1;
+        string class_name;
+        if (s->children.size() > 2) {
+          class_name = string_node(s->children[3]);
+          c = crush.get_class_id(class_name);
+          if (c < 0)
+            return c;
+          if (crush.class_bucket.count(id) == 0) {
+            err << "in rule '" << rname << "' step take " << item
+                << " has no class information" << std::endl;
+            return -EINVAL;
+          }
+          if (crush.class_bucket[id].count(c) == 0) {
+            err << "in rule '" << rname << "' step take " << item
+                << " no matching bucket for class " << class_name << std::endl;
+            return -EINVAL;
+          }
+          id = crush.class_bucket[id][c];
+        }
+        if (verbose) {
+          err << "rule " << rname << " take " << item;
+          if (c < 0)
+            err << std::endl;
+          else
+            err << " remapped to " << crush.get_item_name(id) << std::endl;
+        }
+
+	crush.set_rule_step_take(ruleno, step++, id);
       }
       break;
 
