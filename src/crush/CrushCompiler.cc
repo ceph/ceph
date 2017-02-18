@@ -217,6 +217,8 @@ int CrushCompiler::decompile_bucket(int cur,
 
 int CrushCompiler::decompile(ostream &out)
 {
+  crush.cleanup_classes();
+
   out << "# begin crush map\n";
 
   // only dump tunables if they differ from the defaults
@@ -670,6 +672,8 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 
 int CrushCompiler::parse_rule(iter_t const& i)
 {
+  crush.populate_classes();
+
   int start;  // rule name is optional!
  
   string rname = string_node(i->children[1]);
@@ -878,6 +882,7 @@ int CrushCompiler::parse_crush(iter_t const& i)
   }
 
   //err << "max_devices " << crush.get_max_devices() << std::endl;
+  crush.cleanup_classes();
   crush.finalize();
   
   return 0;

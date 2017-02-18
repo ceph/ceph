@@ -1488,6 +1488,7 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
       for (auto &c : class_name)
 	class_rname[c.second] = c.first;
       ::decode(class_bucket, blp);
+      cleanup_classes();
     }
     finalize();
   }
