@@ -954,13 +954,3 @@ int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-
-/*
- * Local Variables:
- * compile-command: "cd ../.. ; make -j4 unittest_crush_wrapper && 
- *    valgrind \
- *    --max-stackframe=20000000 --tool=memcheck \
- *    ./unittest_crush_wrapper --log-to-stderr=true --debug-crush=20 \
- *        # --gtest_filter=CrushWrapper.insert_item"
- * End:
- */
