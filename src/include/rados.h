@@ -146,6 +146,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_SORTBITWISE (1<<15) /* use bitwise hobject_t sort */
 #define CEPH_OSDMAP_REQUIRE_JEWEL (1<<16) /* require jewel for booting osds */
 #define CEPH_OSDMAP_REQUIRE_KRAKEN (1<<17) /* require kraken for booting osds */
+#define CEPH_OSDMAP_REQUIRE_LUMINOUS (1<<18) /* require l for booting osds */
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -472,6 +473,14 @@ enum {
 };
 
 const char *ceph_osd_alloc_hint_flag_name(int f);
+
+enum {
+	CEPH_OSD_BACKOFF_OP_BLOCK = 1,
+	CEPH_OSD_BACKOFF_OP_ACK_BLOCK = 2,
+	CEPH_OSD_BACKOFF_OP_UNBLOCK = 3,
+};
+
+const char *ceph_osd_backoff_op_name(int op);
 
 /*
  * an individual object operation.  each may be accompanied by some data

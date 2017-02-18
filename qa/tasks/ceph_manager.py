@@ -112,6 +112,7 @@ class Thrasher:
         self.logger = logger
         self.config = config
         self.revive_timeout = self.config.get("revive_timeout", 150)
+        self.pools_to_fix_pgp_num = set()
         if self.config.get('powercycle'):
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
@@ -137,21 +138,15 @@ class Thrasher:
             self.config = dict()
         # prevent monitor from auto-marking things out while thrasher runs
         # try both old and new tell syntax, in case we are testing old code
-        try:
-            manager.raw_cluster_cmd('--', 'tell', 'mon.*', 'injectargs',
-                                    '--mon-osd-down-out-interval 0')
-        except Exception:
-            manager.raw_cluster_cmd('--', 'mon', 'tell', '*', 'injectargs',
-                                    '--mon-osd-down-out-interval 0')
-        self.thread = gevent.spawn(self.do_thrash)
-        if self.sighup_delay:
-            self.sighup_thread = gevent.spawn(self.do_sighup)
-        if self.optrack_toggle_delay:
-            self.optrack_toggle_thread = gevent.spawn(self.do_optrack_toggle)
-        if self.dump_ops_enable == "true":
-            self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
-        if self.noscrub_toggle_delay:
-            self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
+        self.saved_options = {}
+        first_mon = teuthology.get_first_mon(manager.ctx, self.config).split('.')
+        opt_name = 'mon_osd_down_out_interval'
+        self.saved_options[opt_name] = manager.get_config(first_mon[0],
+                                                          first_mon[1],
+                                                          opt_name)
+        self._set_config('mon', '*', opt_name, 0)
+        # initialize ceph_objectstore_tool property - must be done before
+        # do_thrash is spawned - http://tracker.ceph.com/issues/18799
         if (self.config.get('powercycle') or
             not self.cmd_exists_on_osds("ceph-objectstore-tool") or
             self.config.get('disable_objectstore_tool_tests', False)):
@@ -168,6 +163,28 @@ class Thrasher:
                 self.config.get('ceph_objectstore_tool', True)
             self.test_rm_past_intervals = \
                 self.config.get('test_rm_past_intervals', True)
+        # spawn do_thrash
+        self.thread = gevent.spawn(self.do_thrash)
+        if self.sighup_delay:
+            self.sighup_thread = gevent.spawn(self.do_sighup)
+        if self.optrack_toggle_delay:
+            self.optrack_toggle_thread = gevent.spawn(self.do_optrack_toggle)
+        if self.dump_ops_enable == "true":
+            self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
+        if self.noscrub_toggle_delay:
+            self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
+
+    def _set_config(self, service_type, service_id, name, value):
+        opt_arg = '--{name} {value}'.format(name=name, value=value)
+        try:
+            whom = '.'.join([service_type, service_id])
+            self.ceph_manager.raw_cluster_cmd('--', 'tell', whom,
+                                              'injectargs', opt_arg)
+        except Exception:
+            self.ceph_manager.raw_cluster_cmd('--', service_type,
+                                              'tell', service_id,
+                                              'injectargs', opt_arg)
+
 
     def cmd_exists_on_osds(self, cmd):
         allremotes = self.ceph_manager.ctx.cluster.only(\
@@ -298,12 +315,13 @@ class Thrasher:
             # import
             cmd = (prefix + "--op import --file {file}")
             cmd = cmd.format(id=imp_osd, file=exp_path)
-            proc = imp_remote.run(args=cmd, wait=True, check_status=False)
-            output = proc.stderr.getvalue()
-            bogosity = "The OSD you are using is older than the exported PG"
-            if proc.exitstatus == 1 and bogosity in output:
-                self.log("OSD older than exported PG"
-                         "...ignored")
+            proc = imp_remote.run(args=cmd, wait=True, check_status=False,
+                                  stderr=StringIO())
+            if proc.exitstatus == 1:
+                bogosity = "The OSD you are using is older than the exported PG"
+                if bogosity in proc.stderr.getvalue():
+                    self.log("OSD older than exported PG"
+                             "...ignored")
             elif proc.exitstatus == 10:
                 self.log("Pool went away before processing an import"
                          "...ignored")
@@ -511,18 +529,24 @@ class Thrasher:
         Increase the size of the pool
         """
         pool = self.ceph_manager.get_pool()
+        orig_pg_num = self.ceph_manager.get_pool_pg_num(pool)
         self.log("Growing pool %s" % (pool,))
         self.ceph_manager.expand_pool(pool,
                                       self.config.get('pool_grow_by', 10),
                                       self.max_pgs)
+        if orig_pg_num < self.ceph_manager.get_pool_pg_num(pool):
+            self.pools_to_fix_pgp_num.add(pool)
 
-    def fix_pgp_num(self):
+    def fix_pgp_num(self, pool=None):
         """
         Fix number of pgs in pool.
         """
-        pool = self.ceph_manager.get_pool()
+        if pool is None:
+            pool = self.ceph_manager.get_pool()
         self.log("fixing pg num pool %s" % (pool,))
         self.ceph_manager.set_pool_pgpnum(pool)
+        if pool in self.pools_to_fix_pgp_num:
+            self.pools_to_fix_pgp_num.remove(pool)
 
     def test_pool_min_size(self):
         """
@@ -835,6 +859,13 @@ class Thrasher:
                         Scrubber(self.ceph_manager, self.config)
             self.choose_action()()
             time.sleep(delay)
+        for pool in list(self.pools_to_fix_pgp_num):
+            if self.ceph_manager.get_pool_pg_num(pool) > 0:
+                self.fix_pgp_num(pool)
+        self.pools_to_fix_pgp_num.clear()
+        for opt, value in self.saved_options.iteritems():
+            self._set_config('mon', '*', opt, value)
+        self.saved_options.clear()
         self.all_up()
 
 
@@ -1231,7 +1262,7 @@ class CephManager:
             proc = self.admin_socket(service_type, service_id,
                                      args, check_status=False, stdout=stdout)
             if proc.exitstatus is 0:
-                break
+                return proc
             else:
                 tries += 1
                 if (tries * 5) > timeout:
@@ -1254,6 +1285,16 @@ class CephManager:
             if i['pool_name'] == pool:
                 return i
         assert False
+
+    def get_config(self, service_type, service_id, name):
+        """
+        :param node: like 'mon.a'
+        :param name: the option name
+        """
+        proc = self.wait_run_admin_socket(service_type, service_id,
+                                          ['config', 'show'])
+        j = json.loads(proc.stdout.getvalue())
+        return j[name]
 
     def set_config(self, osdnum, **argdict):
         """

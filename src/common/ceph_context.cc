@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2011 New Dream Network
+ * Copyright (C) 2017 OVH
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -393,6 +394,17 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
     command == "perf schema") {
     _perf_counters_collection->dump_formatted(f, true);
   }
+  else if (command == "perf histogram dump") {
+    std::string logger;
+    std::string counter;
+    cmd_getval(this, cmdmap, "logger", logger);
+    cmd_getval(this, cmdmap, "counter", counter);
+    _perf_counters_collection->dump_formatted_histograms(f, false, logger,
+                                                         counter);
+  }
+  else if (command == "perf histogram schema") {
+    _perf_counters_collection->dump_formatted_histograms(f, true);
+  }
   else if (command == "perf reset") {
     std::string var;
     string section = command;
@@ -555,8 +567,10 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
   _admin_socket->register_command("1", "1", _admin_hook, "");
   _admin_socket->register_command("perf dump", "perf dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump perfcounters value");
   _admin_socket->register_command("perfcounters_schema", "perfcounters_schema", _admin_hook, "");
+  _admin_socket->register_command("perf histogram dump", "perf histogram dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump perf histogram values");
   _admin_socket->register_command("2", "2", _admin_hook, "");
   _admin_socket->register_command("perf schema", "perf schema", _admin_hook, "dump perfcounters schema");
+  _admin_socket->register_command("perf histogram schema", "perf histogram schema", _admin_hook, "dump perf histogram schema");
   _admin_socket->register_command("perf reset", "perf reset name=var,type=CephString", _admin_hook, "perf reset <name>: perf reset all or one perfcounter name");
   _admin_socket->register_command("config show", "config show", _admin_hook, "dump current config settings");
   _admin_socket->register_command("config set", "config set name=var,type=CephString name=val,type=CephString,n=N",  _admin_hook, "config set <field> <val> [<val> ...]: set a config variable");

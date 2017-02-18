@@ -236,8 +236,12 @@ void PGMonitor::upgrade_format()
 void PGMonitor::post_paxos_update()
 {
   dout(10) << __func__ << dendl;
-  if (mon->osdmon()->osdmap.get_epoch()) {
-    send_pg_creates();
+  OSDMap& osdmap = mon->osdmon()->osdmap;
+  if (osdmap.get_epoch()) {
+    if (osdmap.get_num_up_osds() > 0) {
+      assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);
+      check_subs();
+    }
   }
 }
 
@@ -651,6 +655,12 @@ bool PGMonitor::preprocess_pg_stats(MonOpRequestRef op)
     return true;
   }
 
+  if (stats->fsid != mon->monmap->fsid) {
+    dout(0) << __func__ << " drop message on fsid " << stats->fsid << " != "
+            << mon->monmap->fsid << " for " << *stats << dendl;
+    return true;
+  }
+
   // First, just see if they need a new osdmap. But
   // only if they've had the map for a while.
   if (stats->had_map_for > 30.0 &&
@@ -879,17 +889,6 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   propose_pending();
 }
 
-void PGMonitor::send_pg_creates()
-{
-  OSDMap& osdmap = mon->osdmon()->osdmap;
-  if (osdmap.get_num_up_osds() == 0)
-    return;
-
-  assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);
-  check_subs();
-  return;
-}
-
 epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
 {
   dout(30) << __func__ << " " << pg_map.creating_pgs_by_osd_epoch << dendl;
@@ -927,12 +926,7 @@ epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
     return next;
   }
 
-  if (con) {
-    con->send_message(m);
-  } else {
-    assert(mon->osdmon()->osdmap.is_up(osd));
-    mon->messenger->send_message(m, mon->osdmon()->osdmap.get_inst(osd));
-  }
+  con->send_message(m);
   last_sent_pg_create[osd] = ceph_clock_now();
 
   // sub is current through last + 1
@@ -1027,6 +1021,12 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
   bufferlist rdata;
   stringstream ss, ds;
   bool primary = false;
+
+  if (m->fsid != mon->monmap->fsid) {
+    dout(0) << __func__ << " drop message on fsid " << m->fsid << " != "
+            << mon->monmap->fsid << " for " << *m << dendl;
+    return true;
+  }
 
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
@@ -1351,6 +1351,11 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
 {
   op->mark_pgmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  if (m->fsid != mon->monmap->fsid) {
+    dout(0) << __func__ << " drop message on fsid " << m->fsid << " != "
+            << mon->monmap->fsid << " for " << *m << dendl;
+    return true;
+  }
   stringstream ss;
   pg_t pgid;
   epoch_t epoch = mon->osdmon()->osdmap.get_epoch();
@@ -1393,10 +1398,13 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
     {
-      pg_stat_t& s = pending_inc.pg_stat_updates[pgid];
-      s.state = PG_STATE_CREATING;
-      s.created = epoch;
-      s.last_change = ceph_clock_now();
+      PGMapUpdater::register_pg(
+	mon->osdmon()->osdmap,
+	pgid,
+	epoch,
+	true,
+	&pg_map,
+	&pending_inc);
     }
     ss << "pg " << pgidstr << " now creating, ok";
     goto update;

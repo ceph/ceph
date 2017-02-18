@@ -6,37 +6,90 @@ function die() {
 }
 
 function usage() {
-    echo "bt: $0 -j job_name -c core_path -v version -d distro -s sha1"
+    echo "bt: $0 -c core_path [-d distro] [-C directory]"
     exit 1
 }
 
 while getopts  "j:c:v:d:s:" opt
 do
     case $opt in
-        j) run=$(dirname $OPTARG);
-           job=$(basename $OPTARG);;
         c) core_path=$OPTARG;;
-        v) release=$OPTARG;;
-        s) sha1=$OPTARG;;
-        d) distro=$OPTARG;;
+        C) wd=$OPTARG;;
+        d) codename=$OPTARG;;
         *) usage;;
     esac
 done
 
-if [ -z $run ] || [ -z $core_path ] || [ -z $release ] || [ -z $distro ] || [ -z $sha1 ]; then
+if [ -z $core_path ]; then
     usage
 fi
 
-prog=`file $core_path | grep -oP "from '\K[^ ]+"`
+sha1=$(strings $core_path | gawk 'BEGIN{ FS = "=" } /^CEPH_REF/{print $2}')
+
+if [ -z $distro ]; then
+    machine=${core_path%/coredump/*}
+    machine=$(basename $machine)
+    teuthology_log=${core_path%/remote/*}/teuthology.log
+    if [ ! -r ${teuthology_log} ]; then
+        die "missing distro, and unable to read it from ${teuthology_log}"
+    fi
+    ld=$(grep -m1 -A1 "${machine}:Running.*linux_distribution" ${teuthology_log} | tail -n1 | grep -oP "\(\K[^\)]+")
+    distro=$(echo $ld | gawk -F ", " '{print $1}' | sed s/\'//g)
+    distro=$(echo $distro | tr '[:upper:]' '[:lower:]')
+    distro_ver=$(echo $ld | gawk -F ", " '{print $2}' | sed s/\'//g)
+    codename=$(echo $ld | gawk -F ", " '{print $3}' | sed s/\'//g)
+else
+    case $codename in
+        xenial)
+            distro=ubuntu
+            distro_ver=16.04
+            ;;
+        trusty)
+            distro=ubuntu
+            distro_ver=14.04
+            ;;
+        centos7)
+            distro=centos
+            distro_ver=7
+        ;;
+        *)
+            die "unknown distro: $distro"
+            ;;
+    esac
+fi
+
+# try to figure out a name for working directory
+if [ -z $wd ]; then
+    run=${core_path%/remote/*}
+    job_id=${run#/a/}
+    if [ $job_id != $core_path ]; then
+        # use the run/job for the working dir
+        wd=$job_id
+    fi
+fi
+
+if [ -z $wd ]; then
+   echo "unable to figure out the working directory, using core's basename"
+   wd=$(basename $core_path)
+   wd=${wd%.*}
+fi
+
+mkdir -p $wd
+cd $wd
+
+prog=$(file $core_path | grep -oP "from '\K[^']+")
 case $prog in
     ceph_test_*)
-        pkg=ceph-test
+        pkgs="ceph-test librados2"
         ;;
     ceph-osd|ceph-mon)
-        pkg=$prog
+        pkgs=$prog
         ;;
     */python*)
-        pkg=librados2
+        pkgs=librados2
+        ;;
+    rados)
+        pkgs="ceph-common librados2 libradosstriper1"
         ;;
     *)
         die "unknown prog: $prog"
@@ -46,18 +99,20 @@ esac
 flavor=default
 arch=x86_64
 
+release=$(strings $core_path | grep -m1  -oP '/build/ceph-\K[^/]+')
 case $distro in
     ubuntu)
-        distro_ver=14.04
-        pkg_path=pool/main/c/ceph/%s_%s-1trusty_amd64.deb
-        pkgs="$pkg $pkg-dbg"
+        pkg_path=pool/main/c/ceph/%s_%s-1${codename}_amd64.deb
+        for p in $pkgs; do
+            t="$t $p $p-dbg"
+        done
+        pkgs="$t"
         ;;
     centos)
-        distro_ver=7
         pkg_path=${arch}/%s-%s.x86_64.rpm
         # 11.0.2-1022-g5b25cd3 => 11.0.2-1022.g5b25cd3
         release=$(echo $release | sed s/-/./2)
-        pkgs="$pkg ceph-debuginfo"
+        pkgs="$pkgs ceph-debuginfo"
         ;;
     *)
         die "unknown distro: $distro"
@@ -68,12 +123,9 @@ query_url="https://shaman.ceph.com/api/search?status=ready&project=ceph&flavor=$
 repo_url=`curl -L -s "${query_url}" | jq -r '.[0] | .url'`
 pkg_url=${repo_url}/${pkg_path}
 
-mkdir -p $run/$job
-cd $run/$job
-
 for pkg in ${pkgs}; do
     url=`printf $pkg_url $pkg $release`
-    wget $url
+    curl -O -L -C - --silent --fail --insecure $url
     fname=`basename $url`
     case $fname in
         *.deb)

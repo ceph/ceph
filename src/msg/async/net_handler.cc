@@ -175,6 +175,7 @@ int NetHandler::generic_connect(const entity_addr_t& addr, const entity_addr_t &
       if (ret < 0) {
         ret = -errno;
         ldout(cct, 2) << __func__ << " client bind error " << ", " << cpp_strerror(ret) << dendl;
+        close(s);
         return ret;
       }
     }

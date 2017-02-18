@@ -1491,15 +1491,15 @@ static int match_internal(boost::string_ref pattern, boost::string_ref input, in
     if (*it1 == '*' && (it1 + 1) == pattern.end() && it2 == input.end())
       return 0;
     if (function(*it1, *it2) || *it1 == '?') {
-      it1++;
-      it2++;
+      ++it1;
+      ++it2;
       continue;
     }
     if (*it1 == '*') {
       if (function(*(it1 + 1), *it2))
-        it1++;
+        ++it1;
       else
-        it2++;
+        ++it2;
       continue;
     }
     return 0;

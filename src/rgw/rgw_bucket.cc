@@ -133,9 +133,8 @@ int rgw_read_user_buckets(RGWRados * store,
     if (ret < 0)
       return ret;
 
-    for (list<cls_user_bucket_entry>::iterator q = entries.begin(); q != entries.end(); ++q) {
-      RGWBucketEnt e(*q);
-      buckets.add(e);
+    for (const auto& entry : entries) {
+      buckets.add(RGWBucketEnt(user_id, entry));
       total++;
     }
 

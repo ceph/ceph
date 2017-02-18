@@ -159,7 +159,8 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
             pr2info[number] = (author, title, message)
 
             for issue in set(issues):
-                issue = get_original_issue(issue, verbose)
+                if strict:
+                    issue = get_original_issue(issue, verbose)
                 issue2prs.setdefault(issue, set([])).add(number)
                 pr2issues.setdefault(number, set([])).add(issue)
             sys.stdout.write('.')

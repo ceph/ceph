@@ -164,6 +164,9 @@ public:
 
   uint64_t get_features() const { return features; }
   bool has_feature(uint64_t f) const { return features & f; }
+  bool has_features(uint64_t f) const {
+    return (features & f) == f;
+  }
   void set_features(uint64_t f) { features = f; }
   void set_feature(uint64_t f) { features |= f; }
 

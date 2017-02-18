@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2017 OVH
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -65,6 +66,7 @@
 #include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+#include "messages/MOSDBackoff.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDSubOp.h"
@@ -128,6 +130,7 @@
 #include "osd/OpRequest.h"
 
 #include "auth/AuthAuthorizeHandler.h"
+#include "auth/RotatingKeyRing.h"
 #include "common/errno.h"
 
 #include "objclass/objclass.h"
@@ -355,11 +358,12 @@ void OSDService::_maybe_split_pgid(OSDMapRef old_map,
 				  spg_t pgid)
 {
   assert(old_map->have_pg_pool(pgid.pool()));
-  if (pgid.ps() < static_cast<unsigned>(old_map->get_pg_num(pgid.pool()))) {
+  int old_pgnum = old_map->get_pg_num(pgid.pool());
+  if (pgid.ps() < static_cast<unsigned>(old_pgnum)) {
     set<spg_t> children;
-    pgid.is_split(old_map->get_pg_num(pgid.pool()),
-		  new_map->get_pg_num(pgid.pool()), &children);
-    _start_split(pgid, children);
+    if (pgid.is_split(old_pgnum,
+		  new_map->get_pg_num(pgid.pool()), &children)) { 
+      _start_split(pgid, children); }
   } else {
     assert(pgid.ps() < static_cast<unsigned>(new_map->get_pg_num(pgid.pool())));
   }
@@ -2515,6 +2519,25 @@ void OSD::create_logger()
 
   PerfCountersBuilder osd_plb(cct, "osd", l_osd_first, l_osd_last);
 
+  // Latency axis configuration for op histograms, values are in nanoseconds
+  PerfHistogramCommon::axis_config_d op_hist_x_axis_config{
+    "Latency (usec)",
+    PerfHistogramCommon::SCALE_LOG2, ///< Latency in logarithmic scale
+    0,                               ///< Start at 0
+    100000,                          ///< Quantization unit is 100usec
+    32,                              ///< Enough to cover much longer than slow requests
+  };
+
+  // Op size axis configuration for op histograms, values are in bytes
+  PerfHistogramCommon::axis_config_d op_hist_y_axis_config{
+    "Request size (bytes)",
+    PerfHistogramCommon::SCALE_LOG2, ///< Request size in logarithmic scale
+    0,                               ///< Start at 0
+    512,                             ///< Quantization unit is 512 bytes
+    32,                              ///< Enough to cover requests larger than GB
+  };
+
+
   osd_plb.add_u64(l_osd_op_wip, "op_wip",
       "Replication operations currently being processed (primary)");   // rep ops currently being processed (primary)
   osd_plb.add_u64_counter(l_osd_op,       "op",
@@ -2536,6 +2559,9 @@ void OSD::create_logger()
       "Client data read");   // client read out bytes
   osd_plb.add_time_avg(l_osd_op_r_lat,  "op_r_latency",
       "Latency of read operation (including queue time)");    // client read latency
+  osd_plb.add_histogram(l_osd_op_r_lat_outb_hist,  "op_r_latency_out_bytes_histogram",
+      op_hist_x_axis_config, op_hist_y_axis_config,
+      "Histogram of operation latency (including queue time) + data read");
   osd_plb.add_time_avg(l_osd_op_r_process_lat, "op_r_process_latency",
       "Latency of read operation (excluding queue time)");   // client read process latency
   osd_plb.add_time_avg(l_osd_op_r_prepare_lat, "op_r_prepare_latency",
@@ -2546,6 +2572,9 @@ void OSD::create_logger()
       "Client data written");    // client write in bytes
   osd_plb.add_time_avg(l_osd_op_w_lat,  "op_w_latency",
       "Latency of write operation (including queue time)");    // client write latency
+  osd_plb.add_histogram(l_osd_op_w_lat_inb_hist,  "op_w_latency_in_bytes_histogram",
+      op_hist_x_axis_config, op_hist_y_axis_config,
+      "Histogram of operation latency (including queue time) + data written");
   osd_plb.add_time_avg(l_osd_op_w_process_lat, "op_w_process_latency",
       "Latency of write operation (excluding queue time)");   // client write process latency
   osd_plb.add_time_avg(l_osd_op_w_prepare_lat, "op_w_prepare_latency",
@@ -2558,6 +2587,12 @@ void OSD::create_logger()
       "Client read-modify-write operations read out ");  // client rmw out bytes
   osd_plb.add_time_avg(l_osd_op_rw_lat, "op_rw_latency",
       "Latency of read-modify-write operation (including queue time)");   // client rmw latency
+  osd_plb.add_histogram(l_osd_op_rw_lat_inb_hist, "op_rw_latency_in_bytes_histogram",
+      op_hist_x_axis_config, op_hist_y_axis_config,
+      "Histogram of rw operation latency (including queue time) + data written");
+  osd_plb.add_histogram(l_osd_op_rw_lat_outb_hist, "op_rw_latency_out_bytes_histogram",
+      op_hist_x_axis_config, op_hist_y_axis_config,
+      "Histogram of rw operation latency (including queue time) + data read");
   osd_plb.add_time_avg(l_osd_op_rw_process_lat, "op_rw_process_latency",
       "Latency of read-modify-write operation (excluding queue time)");   // client rmw process latency
   osd_plb.add_time_avg(l_osd_op_rw_prepare_lat, "op_rw_prepare_latency",
@@ -2587,7 +2622,7 @@ void OSD::create_logger()
   osd_plb.add_u64(l_osd_buf, "buffer_bytes", "Total allocated buffer size");       // total ceph::buffer bytes
   osd_plb.add_u64(l_osd_history_alloc_bytes, "history_alloc_Mbytes");       // total ceph::buffer bytes in history
   osd_plb.add_u64(l_osd_history_alloc_num, "history_alloc_num");       // total ceph::buffer num in history
-  osd_plb.add_u64(l_osd_cached_crc, "cached_crc", "Total number getting crc from crc_cache"); // total ceph::buffer buffer_cached_crc_adjusted
+  osd_plb.add_u64(l_osd_cached_crc, "cached_crc", "Total number getting crc from crc_cache"); // total ceph::buffer buffer_cached_crc
   osd_plb.add_u64(l_osd_cached_crc_adjusted, "cached_crc_adjusted", "Total number getting crc from crc_cache with adjusting"); // total ceph::buffer buffer_cached_crc_adjusted
 
   osd_plb.add_u64(l_osd_pg, "numpg", "Placement groups");   // num pgs
@@ -3006,7 +3041,7 @@ void OSD::clear_temp_objects()
     ghobject_t next;
     while (1) {
       vector<ghobject_t> objects;
-      store->collection_list(*p, next, ghobject_t::get_max(), true,
+      store->collection_list(*p, next, ghobject_t::get_max(),
 			     store->get_ideal_list_max(),
 			     &objects, &next);
       if (objects.empty())
@@ -3059,7 +3094,7 @@ void OSD::recursive_remove_collection(CephContext* cct,
   SnapMapper mapper(cct, &driver, 0, 0, 0, pgid.shard);
 
   vector<ghobject_t> objects;
-  store->collection_list(tmp, ghobject_t(), ghobject_t::get_max(), true,
+  store->collection_list(tmp, ghobject_t(), ghobject_t::get_max(),
 			 INT_MAX, &objects, 0);
 
   // delete them.
@@ -4730,7 +4765,6 @@ bool remove_dir(
     coll,
     next,
     ghobject_t::get_max(),
-    true,
     store->get_ideal_list_max(),
     &olist,
     &next);
@@ -4907,12 +4941,15 @@ void OSD::ms_handle_fast_accept(Connection *con)
 
 bool OSD::ms_handle_reset(Connection *con)
 {
-  OSD::Session *session = (OSD::Session *)con->get_priv();
+  Session *session = (Session *)con->get_priv();
   dout(1) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
   session->wstate.reset(con);
   session->con.reset(NULL);  // break con <-> session ref cycle
+  // note that we break session->con *before* the session_handle_reset
+  // cleanup below.  this avoids a race between us and
+  // PG::add_backoff, split_backoff, etc.
   session_handle_reset(session);
   session->put();
   return true;
@@ -4923,7 +4960,7 @@ bool OSD::ms_handle_refused(Connection *con)
   if (!cct->_conf->osd_fast_fail_on_connection_refused)
     return false;
 
-  OSD::Session *session = (OSD::Session *)con->get_priv();
+  Session *session = (Session *)con->get_priv();
   dout(1) << "ms_handle_refused con " << con << " session " << session << dendl;
   if (!session)
     return false;
@@ -5001,10 +5038,10 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   } else if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
     dout(1) << "osdmap REQUIRE_JEWEL OSDMap flag is NOT set; please set it"
 	    << dendl;
-  } else if (osdmap->get_num_up_osds() &&
-	     (osdmap->get_up_osd_features() & CEPH_FEATURE_HAMMER_0_94_4) == 0) {
-    dout(1) << "osdmap indicates one or more pre-v0.94.4 hammer OSDs is running"
-	    << dendl;
+  } else if (!monc->monmap.get_required_features().contains_all(
+	       ceph::features::mon::FEATURE_LUMINOUS)) {
+    derr << "monmap REQUIRE_LUMINOUS is NOT set; must upgrade all monitors to "
+	 << "Luminous or later before Luminous OSDs will boot" << dendl;
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
     _send_boot();
@@ -5871,9 +5908,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       pg->lock();
 
       fout << *pg << std::endl;
-      std::map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator mend =
+      std::map<hobject_t, pg_missing_item>::const_iterator mend =
 	pg->pg_log.get_missing().get_items().end();
-      std::map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator mi =
+      std::map<hobject_t, pg_missing_item>::const_iterator mi =
 	pg->pg_log.get_missing().get_items().begin();
       for (; mi != mend; ++mi) {
 	fout << mi->first << " -> " << mi->second << std::endl;
@@ -6171,7 +6208,7 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
     }
   }
 
-  *authorizer = monc->auth->build_authorizer(dest_type);
+  *authorizer = monc->build_authorizer(dest_type);
   return *authorizer != NULL;
 }
 
@@ -6271,6 +6308,10 @@ epoch_t op_required_epoch(OpRequestRef op)
   case CEPH_MSG_OSD_OP: {
     MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
     return m->get_map_epoch();
+  }
+  case CEPH_MSG_OSD_BACKOFF: {
+    MOSDBackoff *m = static_cast<MOSDBackoff*>(op->get_req());
+    return m->osd_epoch;
   }
   case MSG_OSD_SUBOP:
     return replica_op_required_epoch<MOSDSubOp, MSG_OSD_SUBOP>(op);
@@ -6386,6 +6427,9 @@ bool OSD::dispatch_op_fast(OpRequestRef op, OSDMapRef& osdmap)
   // client ops
   case CEPH_MSG_OSD_OP:
     handle_op(op, osdmap);
+    break;
+  case CEPH_MSG_OSD_BACKOFF:
+    handle_backoff(op, osdmap);
     break;
     // for replication etc.
   case MSG_OSD_SUBOP:
@@ -6551,7 +6595,8 @@ void OSD::handle_scrub(MOSDScrub *m)
 
 bool OSD::scrub_random_backoff()
 {
-  bool coin_flip = (rand() % 3) == whoami % 3;
+  bool coin_flip = (rand() / (double)RAND_MAX >=
+		    cct->_conf->osd_scrub_backoff_ratio);
   if (!coin_flip) {
     dout(20) << "scrub_random_backoff lost coin flip, randomly backing off" << dendl;
     return true;
@@ -7152,7 +7197,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	  service.got_stop_ack();
 	} else {
 	  clog->warn() << "map e" << osdmap->get_epoch()
-		       << " wrongly marked me down";
+		       << " wrongly marked me down at e"
+		       << osdmap->get_down_at(whoami);
 	}
       } else if (!osdmap->get_addr(whoami).probably_equals(
 		   client_messenger->get_myaddr())) {
@@ -7527,6 +7573,11 @@ void OSD::activate_map()
   assert(osd_lock.is_locked());
 
   dout(7) << "activate_map version " << osdmap->get_epoch() << dendl;
+
+  if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+    derr << __func__ << " SORTBITWISE flag is not set" << dendl;
+    ceph_abort();
+  }
 
   if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
     dout(10) << " osdmap flagged full, doing onetime osdmap subscribe" << dendl;
@@ -8367,7 +8418,7 @@ void OSD::handle_pg_query(OpRequestRef op)
      * before the pg is recreated, we'll just start it off backfilling
      * instead of just empty */
     if (service.deleting_pgs.lookup(pgid))
-      empty.set_last_backfill(hobject_t(), true);
+      empty.set_last_backfill(hobject_t());
     if (it->second.type == pg_query_t::LOG ||
 	it->second.type == pg_query_t::FULLLOG) {
       ConnectionRef con = service.get_con_osd_cluster(from, osdmap->get_epoch());
@@ -8659,7 +8710,7 @@ public:
   }
 
   void finish(ThreadPool::TPHandle& tp) {
-    OSD::Session *session = static_cast<OSD::Session *>(
+    Session *session = static_cast<Session *>(
         con->get_priv());
     epoch_t last_sent_epoch;
     if (session) {
@@ -8808,6 +8859,54 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 	    << dendl;
     return;
   }
+}
+
+void OSD::handle_backoff(OpRequestRef& op, OSDMapRef& osdmap)
+{
+  MOSDBackoff *m = static_cast<MOSDBackoff*>(op->get_req());
+  Session *s = static_cast<Session*>(m->get_connection()->get_priv());
+  dout(10) << __func__ << " " << *m << " session " << s << dendl;
+  assert(s);
+  s->put();
+
+  if (m->op != CEPH_OSD_BACKOFF_OP_ACK_BLOCK) {
+    dout(10) << __func__ << " unrecognized op, ignoring" << dendl;
+    return;
+  }
+
+  // map hobject range to PG(s)
+  bool queued = false;
+  hobject_t pos = m->begin;
+  do {
+    pg_t _pgid(pos.get_hash(), pos.pool);
+    if (osdmap->have_pg_pool(pos.pool)) {
+      _pgid = osdmap->raw_pg_to_pg(_pgid);
+    }
+    if (!osdmap->have_pg_pool(_pgid.pool())) {
+      // missing pool -- drop
+      return;
+    }
+    spg_t pgid;
+    if (osdmap->get_primary_shard(_pgid, &pgid)) {
+      dout(10) << __func__ << " pos " << pos << " pgid " << pgid << dendl;
+      PGRef pg = get_pg_or_queue_for_pg(pgid, op, s);
+      if (pg) {
+	if (!queued) {
+	  enqueue_op(pg, op);
+	  queued = true;
+	} else {
+	  // use a fresh OpRequest
+	  m->get();	// take a ref for the new OpRequest
+	  OpRequestRef newop(op_tracker.create_request<OpRequest, Message*>(m));
+	  newop->mark_event("duplicated original op for another pg");
+	  enqueue_op(pg, newop);
+	}
+      }
+    }
+    // advance
+    pos = _pgid.get_hobj_end(osdmap->get_pg_pool(pos.pool)->get_pg_num());
+    dout(20) << __func__ << "  next pg " << pos << dendl;
+  } while (pos < m->end);
 }
 
 template<typename T, int MSGTYPE>

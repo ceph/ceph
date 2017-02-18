@@ -159,7 +159,8 @@ do_root_cmd_okfail() {
 get_local_daemon_list() {
     type=$1
     if [ -d "/var/lib/ceph/$type" ]; then
-	for i in `find -L /var/lib/ceph/$type -mindepth 1 -maxdepth 1 -type d -printf '%f\n'`; do
+	for p in `find -L /var/lib/ceph/$type -mindepth 1 -maxdepth 1 -type d`; do
+	    i=`basename $p` 
 	    if [ -e "/var/lib/ceph/$type/$i/sysvinit" ]; then
 		id=`echo $i | sed 's/[^-]*-//'`
 		local="$local $type.$id"

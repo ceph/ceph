@@ -328,7 +328,7 @@ void AsyncConnection::process()
 {
   ssize_t r = 0;
   int prev_state = state;
-#ifdef WITH_LTTNG
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   utime_t ltt_recv_stamp = ceph_clock_now();
 #endif
   bool need_dispatch_writer = false;
@@ -432,7 +432,7 @@ void AsyncConnection::process()
 
       case STATE_OPEN_MESSAGE_HEADER:
         {
-#ifdef WITH_LTTNG
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
           ltt_recv_stamp = ceph_clock_now();
 #endif
           ldout(async_msgr->cct, 20) << __func__ << " begin MSG" << dendl;
@@ -1074,7 +1074,7 @@ ssize_t AsyncConnection::_process_connection()
         }
 
         connect_reply = *((ceph_msg_connect_reply*)state_buffer);
-        connect_reply.features = ceph_sanitize_features(connect_reply.features);
+        connect_reply.features = connect_reply.features;
 
         ldout(async_msgr->cct, 20) << __func__ << " connect got reply tag " << (int)connect_reply.tag
                              << " connect_seq " << connect_reply.connect_seq << " global_seq "
@@ -1287,7 +1287,7 @@ ssize_t AsyncConnection::_process_connection()
 
         connect_msg = *((ceph_msg_connect*)state_buffer);
         // sanitize features
-        connect_msg.features = ceph_sanitize_features(connect_msg.features);
+        connect_msg.features = connect_msg.features;
         state = STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH;
         break;
       }

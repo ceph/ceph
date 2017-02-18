@@ -1094,18 +1094,20 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   }
   mask |= CEPH_FEATURE_OSD_PRIMARY_AFFINITY;
 
-  const uint64_t jewel_features = CEPH_FEATURE_SERVER_JEWEL;
-  if (test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
-    features |= jewel_features;
-  }
-  mask |= jewel_features;
+  if (entity_type == CEPH_ENTITY_TYPE_OSD) {
+    const uint64_t jewel_features = CEPH_FEATURE_SERVER_JEWEL;
+    if (test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      features |= jewel_features;
+    }
+    mask |= jewel_features;
 
-  const uint64_t kraken_features = CEPH_FEATURE_SERVER_KRAKEN
-    | CEPH_FEATURE_MSG_ADDR2;
-  if (test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
-    features |= kraken_features;
+    const uint64_t kraken_features = CEPH_FEATUREMASK_SERVER_KRAKEN
+      | CEPH_FEATURE_MSG_ADDR2;
+    if (test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      features |= kraken_features;
+    }
+    mask |= kraken_features;
   }
-  mask |= kraken_features;
 
   if (pmask)
     *pmask = mask;
@@ -2410,6 +2412,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",require_jewel_osds";
   if (f & CEPH_OSDMAP_REQUIRE_KRAKEN)
     s += ",require_kraken_osds";
+  if (f & CEPH_OSDMAP_REQUIRE_LUMINOUS)
+    s += ",require_luminous_osds";
   if (s.length())
     s.erase(0, 1);
   return s;

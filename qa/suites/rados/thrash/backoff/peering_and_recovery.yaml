@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd peering aggressive backoff: true
+        osd recovery aggressive backoff: true
