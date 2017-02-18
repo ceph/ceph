@@ -3,6 +3,7 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/asio/write.hpp>
+#include <beast/http/read.hpp>
 
 #include "rgw_asio_client.h"
 
@@ -12,22 +13,23 @@
 #undef dout_prefix
 #define dout_prefix (*_dout << "asio: ")
 
+using namespace rgw::asio;
 
-RGWAsioClientIO::RGWAsioClientIO(tcp::socket&& socket,
-                                 request_type&& request)
-  : socket(std::move(socket)),
-    request(std::move(request)),
-    txbuf(*this) {
+ClientIO::ClientIO(tcp::socket& socket,
+                   parser_type& parser,
+                   beast::flat_streambuf& buffer)
+  : socket(socket), parser(parser), buffer(buffer), txbuf(*this)
+{
 }
 
-RGWAsioClientIO::~RGWAsioClientIO() = default;
+ClientIO::~ClientIO() = default;
 
-void RGWAsioClientIO::init_env(CephContext *cct)
+void ClientIO::init_env(CephContext *cct)
 {
   env.init(cct);
-  body_iter = request.body.begin();
 
-  const auto& headers = request.headers;
+  const auto& request = parser.get();
+  const auto& headers = request.fields;
   for (auto header = headers.begin(); header != headers.end(); ++header) {
     const auto& name = header->name();
     const auto& value = header->value();
@@ -80,42 +82,58 @@ void RGWAsioClientIO::init_env(CephContext *cct)
   // TODO: set REMOTE_USER if authenticated
 }
 
-size_t RGWAsioClientIO::write_data(const char* const buf,
-                                   const size_t len)
+size_t ClientIO::write_data(const char* buf, size_t len)
 {
   boost::system::error_code ec;
   auto bytes = boost::asio::write(socket, boost::asio::buffer(buf, len), ec);
   if (ec) {
     derr << "write_data failed: " << ec.message() << dendl;
     throw rgw::io::Exception(ec.value(), std::system_category());
-  } else {
-    /* According to the documentation of boost::asio::write if there is
-     * no error (signalised by ec), then bytes == len. We don't need to
-     * take care of partial writes in such situation. */
-    return bytes;
   }
-}
-
-size_t RGWAsioClientIO::read_data(char* const buf, const size_t max)
-{
-  // read data from the body's bufferlist
-  auto bytes = std::min<unsigned>(max, body_iter.get_remaining());
-  body_iter.copy(bytes, buf);
+  /* According to the documentation of boost::asio::write if there is
+   * no error (signalised by ec), then bytes == len. We don't need to
+   * take care of partial writes in such situation. */
   return bytes;
 }
 
-size_t RGWAsioClientIO::complete_request()
+size_t ClientIO::read_data(char* buf, size_t max)
+{
+  auto& message = parser.get();
+  auto& body_remaining = message.body;
+  body_remaining = boost::asio::mutable_buffer{buf, max};
+
+  boost::system::error_code ec;
+
+  dout(30) << this << " read_data for " << max << " with "
+      << buffer.size() << " bytes buffered" << dendl;
+
+  while (boost::asio::buffer_size(body_remaining) && !parser.is_complete()) {
+    auto bytes = beast::http::read_some(socket, buffer, parser, ec);
+    buffer.consume(bytes);
+    if (ec == boost::asio::error::connection_reset ||
+        ec == boost::asio::error::eof ||
+        ec == beast::http::error::partial_message) {
+      break;
+    }
+    if (ec) {
+      derr << "failed to read body: " << ec.message() << dendl;
+      throw rgw::io::Exception(ec.value(), std::system_category());
+    }
+  }
+  return max - boost::asio::buffer_size(body_remaining);
+}
+
+size_t ClientIO::complete_request()
 {
   return 0;
 }
 
-void RGWAsioClientIO::flush()
+void ClientIO::flush()
 {
   txbuf.pubsync();
 }
 
-size_t RGWAsioClientIO::send_status(const int status,
-                                    const char* const status_name)
+size_t ClientIO::send_status(int status, const char* status_name)
 {
   static constexpr size_t STATUS_BUF_SIZE = 128;
 
@@ -126,7 +144,7 @@ size_t RGWAsioClientIO::send_status(const int status,
   return txbuf.sputn(statusbuf, statuslen);
 }
 
-size_t RGWAsioClientIO::send_100_continue()
+size_t ClientIO::send_100_continue()
 {
   const char HTTTP_100_CONTINUE[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
   const size_t sent = txbuf.sputn(HTTTP_100_CONTINUE,
@@ -148,7 +166,7 @@ static size_t dump_date_header(char (&timestr)[TIME_BUF_SIZE])
                   "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp);
 }
 
-size_t RGWAsioClientIO::complete_header()
+size_t ClientIO::complete_header()
 {
   size_t sent = 0;
 
@@ -172,8 +190,8 @@ size_t RGWAsioClientIO::complete_header()
   return sent;
 }
 
-size_t RGWAsioClientIO::send_header(const boost::string_ref& name,
-                                    const boost::string_ref& value)
+size_t ClientIO::send_header(const boost::string_ref& name,
+                             const boost::string_ref& value)
 {
   static constexpr char HEADER_SEP[] = ": ";
   static constexpr char HEADER_END[] = "\r\n";
@@ -188,7 +206,7 @@ size_t RGWAsioClientIO::send_header(const boost::string_ref& name,
   return sent;
 }
 
-size_t RGWAsioClientIO::send_content_length(const uint64_t len)
+size_t ClientIO::send_content_length(uint64_t len)
 {
   static constexpr size_t CONLEN_BUF_SIZE = 128;
 
