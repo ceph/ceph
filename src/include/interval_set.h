@@ -558,9 +558,9 @@ private:
 // want to include _nohead variants.
 template<typename T>
 struct denc_traits<interval_set<T>> {
-  enum { supported = true };
-  enum { bounded = false };
-  enum { featured = false };
+  static constexpr bool supported = true;
+  static constexpr bool bounded = false;
+  static constexpr bool featured = false;
   static void bound_encode(const interval_set<T>& v, size_t& p) {
     v.bound_encode(p);
   }

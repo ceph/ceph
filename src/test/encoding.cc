@@ -201,6 +201,62 @@ TEST(EncodingRoundTrip, MultimapConstructorCounter) {
   EXPECT_EQ(my_val_t::get_assigns(), 0);
 }
 
+// make sure that the legacy encode/decode methods are selected
+// over the ones defined using templates. the later is likely to
+// be slower, see also the definition of "WRITE_INT_DENC" in
+// include/denc.h
+template<>
+void encode<uint64_t, denc_traits<uint64_t>>(const uint64_t&,
+                                             bufferlist&,
+                                             uint64_t f) {
+  static_assert(denc_traits<uint64_t>::supported,
+                "should support new encoder");
+  static_assert(!denc_traits<uint64_t>::featured,
+                "should not be featured");
+  ASSERT_EQ(0UL, f);
+  // make sure the test fails if i get called
+  ASSERT_TRUE(false);
+}
+
+template<>
+void encode<ceph_le64, denc_traits<ceph_le64>>(const ceph_le64&,
+                                               bufferlist&,
+                                               uint64_t f) {
+  static_assert(denc_traits<ceph_le64>::supported,
+                "should support new encoder");
+  static_assert(!denc_traits<ceph_le64>::featured,
+                "should not be featured");
+  ASSERT_EQ(0UL, f);
+  // make sure the test fails if i get called
+  ASSERT_TRUE(false);
+}
+
+TEST(EncodingRoundTrip, Integers) {
+  // int types
+  {
+    uint64_t i = 42;
+    test_encode_and_decode(i);
+  }
+  {
+    int16_t i = 42;
+    test_encode_and_decode(i);
+  }
+  {
+    bool b = true;
+    test_encode_and_decode(b);
+  }
+  {
+    bool b = false;
+    test_encode_and_decode(b);
+  }
+  // raw encoder
+  {
+    ceph_le64 i;
+    i = 42;
+    test_encode_and_decode(i);
+  }
+}
+
 const char* expected_what[] = {
   "buffer::malformed_input: void lame_decoder(int) unknown encoding version > 100",
   "buffer::malformed_input: void lame_decoder(int) no longer understand old encoding version < 100",
