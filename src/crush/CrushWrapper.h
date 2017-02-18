@@ -397,7 +397,11 @@ public:
       name_rmap[name] = i;
     return 0;
   }
+  int split_id_class(int i, int *idout, int *classout) const;
 
+  bool class_exists(const string& name) const {
+    return class_rname.count(name);
+  }
   const char *get_class_name(int i) const {
     std::map<int,string>::const_iterator p = class_name.find(i);
     if (p != class_name.end())

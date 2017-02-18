@@ -1012,6 +1012,34 @@ TEST(CrushWrapper, device_class_clone) {
   ASSERT_EQ(c.device_class_clone(root_id, 12345, &other_clone_id), -EBADF);
 }
 
+TEST(CrushWrapper, split_id_class) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "root");
+
+  int weight = 1;
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  int class_id = c.get_or_create_class_id("ssd");
+  c.class_map[item] = class_id;
+
+  int item_id = c.get_item_id("default");
+  int clone_id;
+  ASSERT_EQ(c.device_class_clone(item_id, class_id, &clone_id), 0);
+  int retrieved_item_id;
+  int retrieved_class_id;
+  ASSERT_EQ(c.split_id_class(clone_id, &retrieved_item_id, &retrieved_class_id), 0);
+  ASSERT_EQ(item_id, retrieved_item_id);
+  ASSERT_EQ(class_id, retrieved_class_id);
+
+  ASSERT_EQ(c.split_id_class(item_id, &retrieved_item_id, &retrieved_class_id), 0);
+  ASSERT_EQ(item_id, retrieved_item_id);
+  ASSERT_EQ(-1, retrieved_class_id);
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
