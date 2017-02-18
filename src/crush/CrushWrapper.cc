@@ -1010,6 +1010,30 @@ int CrushWrapper::get_immediate_parent_id(int id, int *parent)
   return -ENOENT;
 }
 
+int CrushWrapper::populate_classes()
+{
+  set<int> roots;
+  find_roots(roots);
+  for (auto &r : roots) {
+    if (r >= 0)
+      continue;
+    if (id_has_class(r))
+      continue;
+    for (auto &c : class_name) {
+      int clone;
+      int res = device_class_clone(r, c.first, &clone);
+      if (res < 0)
+	return res;
+    }
+  }
+  return 0;
+}
+
+int CrushWrapper::cleanup_classes()
+{
+  return trim_roots_with_class();
+}
+
 int CrushWrapper::trim_roots_with_class()
 {
   set<int> takes;

@@ -1070,6 +1070,29 @@ TEST(CrushWrapper, split_id_class) {
   ASSERT_EQ(-1, retrieved_class_id);
 }
 
+TEST(CrushWrapper, populate_and_cleanup_classes) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "root");
+
+  int weight = 1;
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  int class_id = c.get_or_create_class_id("ssd");
+  c.class_map[item] = class_id;
+
+  ASSERT_EQ(c.populate_classes(), 0);
+
+  ASSERT_TRUE(c.name_exists("default~ssd"));
+
+  c.class_bucket.clear();
+  ASSERT_EQ(c.cleanup_classes(), 0);
+  ASSERT_FALSE(c.name_exists("default~ssd"));
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
