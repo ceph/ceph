@@ -972,6 +972,46 @@ TEST(CrushWrapper, remove_unused_root) {
   ASSERT_FALSE(c.name_exists("r12"));
 }
 
+TEST(CrushWrapper, device_class_clone) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "root");
+
+  map<string,string> loc;
+  loc["host"] = "b1";
+  loc["root"] = "default";
+  int weight = 1;
+
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  int cl = c.get_or_create_class_id("ssd");
+  c.class_map[item] = cl;
+
+  int item_no_class = 2;
+  c.insert_item(g_ceph_context, item_no_class, weight, "osd.2", loc);
+
+  c.reweight(g_ceph_context);
+
+  int root_id = c.get_item_id("default");
+  int clone_id;
+  ASSERT_EQ(c.device_class_clone(root_id, cl, &clone_id), 0);
+  ASSERT_TRUE(c.name_exists("default~ssd"));
+  ASSERT_EQ(clone_id, c.get_item_id("default~ssd"));
+  ASSERT_TRUE(c.subtree_contains(clone_id, item));
+  ASSERT_FALSE(c.subtree_contains(clone_id, item_no_class));
+  ASSERT_TRUE(c.subtree_contains(root_id, item_no_class));
+  ASSERT_EQ(c.get_item_weightf(root_id), 2);
+  ASSERT_EQ(c.get_item_weightf(clone_id), 1);
+  // cloning again does nothing and returns the existing one
+  int other_clone_id;
+  ASSERT_EQ(c.device_class_clone(root_id, cl, &other_clone_id), 0);
+  ASSERT_EQ(clone_id, other_clone_id);
+  // invalid arguments
+  ASSERT_EQ(c.device_class_clone(12345, cl, &other_clone_id), -ECHILD);
+  ASSERT_EQ(c.device_class_clone(root_id, 12345, &other_clone_id), -EBADF);
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
