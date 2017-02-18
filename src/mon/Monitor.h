@@ -44,6 +44,7 @@
 #include <cmath>
 
 #include "mon/MonOpRequest.h"
+#include "common/WorkQueue.h"
 
 
 #define CEPH_MON_PROTOCOL     13 /* cluster internal */
@@ -121,6 +122,7 @@ public:
   ConnectionRef con_self;
   Mutex lock;
   SafeTimer timer;
+  ThreadPool cpu_tp;  ///< threadpool for CPU intensive work
   
   /// true if we have ever joined a quorum.  if false, we are either a
   /// new cluster, a newly joining monitor, or a just-upgraded

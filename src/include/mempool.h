@@ -148,6 +148,7 @@ namespace mempool {
   f(buffer_meta)		      \
   f(buffer_data)		      \
   f(osd)			      \
+  f(osdmap_mapping)		      \
   f(unittest_1)			      \
   f(unittest_2)
 
