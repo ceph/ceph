@@ -614,6 +614,22 @@ namespace rgw {
     rc = rgwlib.get_fe()->execute_req(&req);
     rc2 = req.get_ret();
 
+    if (rc == -ENOENT) {
+      /* special case:  materialize placeholder dir */
+      buffer::list bl;
+      RGWPutObjRequest req(get_context(), get_user(), rgw_fh->bucket_name(),
+			   obj_name, bl);
+
+      rgw_fh->encode_attrs(ux_key, ux_attrs); /* because std::moved */
+
+      /* save attrs */
+      req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
+      req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
+
+      rc = rgwlib.get_fe()->execute_req(&req);
+      rc2 = req.get_ret();
+    }
+
     return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
   } /* RGWLibFS::setattr */
 
