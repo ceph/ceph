@@ -12728,8 +12728,16 @@ void Client::ms_handle_remote_reset(Connection *con)
 	  break;
 
 	case MetaSession::STATE_OPEN:
-	  ldout(cct, 1) << "reset from mds we were open; mark session as stale" << dendl;
-	  s->state = MetaSession::STATE_STALE;
+	  {
+	    const md_config_t *conf = cct->_conf;
+	    if (conf->client_reconnect_stale) {
+	      ldout(cct, 1) << "reset from mds we were open; close mds session for reconnect" << dendl;
+	      _closed_mds_session(s);
+	    } else {
+	      ldout(cct, 1) << "reset from mds we were open; mark session as stale" << dendl;
+	      s->state = MetaSession::STATE_STALE;
+	    }
+	  }
 	  break;
 
 	case MetaSession::STATE_NEW:
