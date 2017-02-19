@@ -531,10 +531,9 @@ class Thrasher:
         pool = self.ceph_manager.get_pool()
         orig_pg_num = self.ceph_manager.get_pool_pg_num(pool)
         self.log("Growing pool %s" % (pool,))
-        self.ceph_manager.expand_pool(pool,
-                                      self.config.get('pool_grow_by', 10),
-                                      self.max_pgs)
-        if orig_pg_num < self.ceph_manager.get_pool_pg_num(pool):
+        if self.ceph_manager.expand_pool(pool,
+                                         self.config.get('pool_grow_by', 10),
+                                         self.max_pgs):
             self.pools_to_fix_pgp_num.add(pool)
 
     def fix_pgp_num(self, pool=None):
@@ -544,9 +543,8 @@ class Thrasher:
         if pool is None:
             pool = self.ceph_manager.get_pool()
         self.log("fixing pg num pool %s" % (pool,))
-        self.ceph_manager.set_pool_pgpnum(pool)
-        if pool in self.pools_to_fix_pgp_num:
-            self.pools_to_fix_pgp_num.remove(pool)
+        if self.ceph_manager.set_pool_pgpnum(pool):
+            self.pools_to_fix_pgp_num.discard(pool)
 
     def test_pool_min_size(self):
         """
@@ -1536,13 +1534,14 @@ class CephManager:
             assert isinstance(by, int)
             assert pool_name in self.pools
             if self.get_num_creating() > 0:
-                return
+                return False
             if (self.pools[pool_name] + by) > max_pgs:
-                return
+                return False
             self.log("increase pool size by %d" % (by,))
             new_pg_num = self.pools[pool_name] + by
             self.set_pool_property(pool_name, "pg_num", new_pg_num)
             self.pools[pool_name] = new_pg_num
+            return True
 
     def set_pool_pgpnum(self, pool_name):
         """
@@ -1552,8 +1551,9 @@ class CephManager:
             assert isinstance(pool_name, basestring)
             assert pool_name in self.pools
             if self.get_num_creating() > 0:
-                return
+                return False
             self.set_pool_property(pool_name, 'pgp_num', self.pools[pool_name])
+            return True
 
     def list_pg_missing(self, pgid):
         """
