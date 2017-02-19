@@ -376,6 +376,17 @@ struct crush_map {
 
 
 /* crush.c */
+/** @ingroup API
+ *
+ * Return the 16.16 fixed point weight of the item at __pos__ (zero
+ * based index) within the bucket __b__. If __pos__ is negative or
+ * greater or equal to the number of items in the bucket, return 0.
+ *
+ * @param b the bucket containing items
+ * @param pos the zero based index of the item
+ *
+ * @returns the 16.16 fixed point item weight
+ */
 extern int crush_get_bucket_item_weight(const struct crush_bucket *b, int pos);
 extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b);
 extern void crush_destroy_bucket_list(struct crush_bucket_list *b);
