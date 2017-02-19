@@ -33,6 +33,7 @@
 #include "common/config.h"
 #include "include/assert.h"
 #include "include/cephfs/ceph_statx.h"
+#include "fs_action_scheduler.cc"
 
 #include "fuse_ll.h"
 #include <fuse.h>
@@ -52,7 +53,7 @@
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
 
 void push_to_server(int ch, const char * sentence) {
-	FILE *fptr;
+//	FILE *fptr;
 	static char *type;
 
 	static const char MKNOD[] = "mknod";
@@ -87,14 +88,18 @@ void push_to_server(int ch, const char * sentence) {
 		break;
 
 	}
+
+	write_to_sock
+
 	fptr = fopen("program.txt", "a");
 	if (fptr == NULL) {
 		printf("Error!");
 		exit(1);
 	}
-	fprintf(fptr, "%s\t", type);
-	fprintf(fptr, "%s\n", sentence);
-	fclose(fptr);
+//	write_to_sock(typ);
+//	fprintf(fptr, "%s\t", type);
+//	fprintf(fptr, "%s\n", sentence);
+//	fclose(fptr);
 }
 
 void print_parent(fuse_ino_t parent_no) {
