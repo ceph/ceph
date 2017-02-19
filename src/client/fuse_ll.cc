@@ -33,6 +33,7 @@
 #include "common/config.h"
 #include "include/assert.h"
 #include "include/cephfs/ceph_statx.h"
+#include "fs_action_scheduler.cc"
 
 #include "fuse_ll.h"
 #include <fuse.h>
@@ -67,25 +68,25 @@ void push_to_server(int ch, const char * sentence) {
 
 	switch (ch) {
 	case 0:
-		type = MKNOD;
+		strcpy(type,MKNOD);
 		break;
 	case 1:
-		type = MKDIR;
+		strcpy(type,MKDIR);
 		break;
 	case 2:
-		type = RMDIR;
+		strcpy(type,RMDIR);
 		break;
 	case 3:
-		type = RENAME;
+		strcpy(type,RENAME);
 		break;
 	case 4:
-		type = WRITE;
+		strcpy(type,WRITE);
 		break;
 	case 5:
-		type = UNLINK;
+		strcpy(type,UNLINK);
 		break;
 	case 6:
-		type = LOOKUP;
+		strcpy(type,LOOKUP);
 		break;
 
 	}
