@@ -2623,6 +2623,9 @@ class PrepareData(object):
         if self.args.osd_uuid is None:
             self.args.osd_uuid = str(uuid.uuid4())
 
+        if os.path.realpath(self.args.data).startswith('/dev/'):
+            self.args.data_dev = True
+
     def set_type(self):
         dmode = os.stat(self.args.data).st_mode
 
