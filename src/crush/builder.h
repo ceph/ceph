@@ -55,6 +55,9 @@ extern void crush_finalize(struct crush_map *map);
  * crush_find_rule() when looking for a rule and by
  * __CRUSH_RULE_CHOOSE*__ steps when looking for items.
  *
+ * The caller is responsible for deallocating the returned pointer via
+ * crush_destroy_rule().
+ *
  * If __malloc(3)__ fails, return NULL.
  *
  * @param len number of steps in the rule
@@ -151,6 +154,9 @@ extern int crush_add_bucket(struct crush_map *map,
  * to have a weight equal to __weights[0]__, otherwise the weight of
  * __items[x]__ is set to be the value of __weights[x]__.
  *
+ * The caller is responsible for deallocating the returned pointer via
+ * crush_destroy_bucket().
+ *
  * @param map __unused__
  * @param alg algorithm for item selection
  * @param hash always set to CRUSH_HASH_RJENKINS1
@@ -158,6 +164,8 @@ extern int crush_add_bucket(struct crush_map *map,
  * @param size of the __items__ array
  * @param items array of __size__ items
  * @param weights the weight of each item in __items__, depending on __alg__
+ *
+ * @returns a pointer to the newly created bucket or NULL
  */
 struct crush_bucket *crush_make_bucket(struct crush_map *map, int alg, int hash, int type, int size, int *items, int *weights);
 /** @ingroup API

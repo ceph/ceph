@@ -393,7 +393,19 @@ extern void crush_destroy_bucket_list(struct crush_bucket_list *b);
 extern void crush_destroy_bucket_tree(struct crush_bucket_tree *b);
 extern void crush_destroy_bucket_straw(struct crush_bucket_straw *b);
 extern void crush_destroy_bucket_straw2(struct crush_bucket_straw2 *b);
+/** @ingroup API
+ *
+ * Deallocate a bucket created via crush_add_bucket().
+ *
+ * @param bucket the bucket to deallocate
+ */
 extern void crush_destroy_bucket(struct crush_bucket *b);
+/** @ingroup API
+ *
+ * Deallocate a rule created via crush_add_rule().
+ *
+ * @param r the rule to deallocate
+ */
 extern void crush_destroy_rule(struct crush_rule *r);
 /** @ingroup API
  *
