@@ -147,6 +147,12 @@
 :Type: Integer
 :Default: ``131072`` (128KB)
 
+``client_reconnect_stale``
+
+:Description: Automatically reconnect stale session.
+:Type: Boolean
+:Default: ``false``
+
 ``client_snapdir``
 
 :Description: Set the snapshot directory name.
