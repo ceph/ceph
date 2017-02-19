@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_TEST_LIBRBD_MOCK_IMAGE_CTX_H
@@ -96,7 +96,8 @@ struct MockImageCtx {
       journal_max_concurrent_object_sets(
           image_ctx.journal_max_concurrent_object_sets),
       mirroring_resync_after_disconnect(
-          image_ctx.mirroring_resync_after_disconnect)
+          image_ctx.mirroring_resync_after_disconnect),
+      mirroring_replay_delay(image_ctx.mirroring_replay_delay)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -150,11 +151,11 @@ struct MockImageCtx {
   MOCK_CONST_METHOD2(is_snap_unprotected, int(librados::snap_t in_snap_id,
                                               bool *is_unprotected));
 
-  MOCK_METHOD7(add_snap, void(std::string in_snap_name,
+  MOCK_METHOD8(add_snap, void(std::string in_snap_name,
 			      cls::rbd::SnapshotNamespace in_snap_namespace,
 			      librados::snap_t id,
-                              uint64_t in_size, parent_info parent,
-                              uint8_t protection_status, uint64_t flags));
+			      uint64_t in_size, parent_info parent,
+			      uint8_t protection_status, uint64_t flags, utime_t timestamp));
   MOCK_METHOD2(rm_snap, void(std::string in_snap_name, librados::snap_t id));
 
   MOCK_METHOD0(user_flushed, void());
@@ -163,8 +164,9 @@ struct MockImageCtx {
   MOCK_METHOD1(flush_copyup, void(Context *));
 
   MOCK_METHOD1(flush_cache, void(Context *));
-  MOCK_METHOD1(invalidate_cache, void(Context *));
+  MOCK_METHOD2(invalidate_cache, void(bool, Context *));
   MOCK_METHOD1(shut_down_cache, void(Context *));
+  MOCK_METHOD0(is_cache_empty, bool());
 
   MOCK_CONST_METHOD1(test_features, bool(uint64_t test_features));
   MOCK_CONST_METHOD2(test_features, bool(uint64_t test_features,
@@ -272,6 +274,7 @@ struct MockImageCtx {
   uint32_t journal_max_payload_bytes;
   int journal_max_concurrent_object_sets;
   bool mirroring_resync_after_disconnect;
+  int mirroring_replay_delay;
 };
 
 } // namespace librbd

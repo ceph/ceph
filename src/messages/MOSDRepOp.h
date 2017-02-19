@@ -16,14 +16,13 @@
 #ifndef CEPH_MOSDREPOP_H
 #define CEPH_MOSDREPOP_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 
 /*
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDRepOp : public Message {
+class MOSDRepOp : public MOSDFastDispatchOp {
 
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
@@ -63,6 +62,13 @@ public:
 
   /// non-empty if this transaction involves a hit_set history update
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
+
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
 
   int get_cost() const {
     return data.length();
@@ -116,13 +122,13 @@ public:
   }
 
   MOSDRepOp()
-    : Message(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0),
       final_decode_needed(true), acks_wanted (0) {}
   MOSDRepOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po, int aw,
 	    epoch_t mape, ceph_tid_t rtid, eversion_t v)
-    : Message(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
       reqid(r),
       pgid(p),

@@ -1455,6 +1455,35 @@ int get_snapshot_name(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   return 0;
 }
 
+int get_snapshot_timestamp(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+  
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "get_snapshot_timestamp snap_id=%llu", (unsigned long long)snap_id);
+
+  if (snap_id == CEPH_NOSNAP) {
+    return -EINVAL;
+  }
+  
+  cls_rbd_snap snap;
+  string snapshot_key;
+  key_from_snap_id(snap_id, &snapshot_key);
+  int r = read_key(hctx, snapshot_key, &snap);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(snap.timestamp, *out);
+  return 0;
+}
+
 /**
  * Retrieve namespace of a snapshot.
  *
@@ -1566,6 +1595,8 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     CLS_ERR("Could not read snapshot limit off disk: %s", cpp_strerror(r).c_str());
     return r;
   }
+
+  snap_meta.timestamp = ceph_clock_now();
 
   int max_read = RBD_MAX_KEYS_READ;
   uint64_t total_read = 0;
@@ -2712,19 +2743,19 @@ int metadata_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 int snapshot_get_limit(cls_method_context_t hctx, bufferlist *in,
 		       bufferlist *out)
 {
-  int rc;
   uint64_t snap_limit;
-
-  rc = read_key(hctx, "snap_limit", &snap_limit);
-  if (rc == -ENOENT) {
-    rc = 0;
-    ::encode(UINT64_MAX, *out);
-  } else {
-    ::encode(snap_limit, *out);
+  int r = read_key(hctx, "snap_limit", &snap_limit);
+  if (r == -ENOENT) {
+    snap_limit = UINT64_MAX;
+  } else if (r < 0) {
+    CLS_ERR("error retrieving snapshot limit: %s", cpp_strerror(r).c_str());
+    return r;
   }
 
   CLS_LOG(20, "read snapshot limit %lu", snap_limit);
-  return rc;
+  ::encode(snap_limit, *out);
+
+  return 0;
 }
 
 int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
@@ -3318,7 +3349,7 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
 		     const cls::rbd::MirrorImageStatus &status) {
   MirrorImageStatusOnDisk ondisk_status(status);
   ondisk_status.up = false;
-  ondisk_status.last_update = ceph_clock_now(g_ceph_context);
+  ondisk_status.last_update = ceph_clock_now();
 
   int r = cls_get_request_origin(hctx, &ondisk_status.origin);
   assert(r == 0);
@@ -3777,7 +3808,10 @@ int mirror_peer_add(cls_method_context_t hctx, bufferlist *in,
 
   std::string mirror_uuid;
   r = mirror::uuid_get(hctx, &mirror_uuid);
-  if (mirror_peer.uuid == mirror_uuid) {
+  if (r < 0) {
+    CLS_ERR("error retrieving mirroring uuid: %s", cpp_strerror(r).c_str());
+    return r;
+  } else if (mirror_peer.uuid == mirror_uuid) {
     CLS_ERR("peer uuid '%s' matches pool mirroring uuid",
             mirror_uuid.c_str());
     return -EINVAL;
@@ -4741,6 +4775,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_get_data_pool;
   cls_method_handle_t h_get_snapshot_name;
   cls_method_handle_t h_get_snapshot_namespace;
+  cls_method_handle_t h_get_snapshot_timestamp;
   cls_method_handle_t h_snapshot_add;
   cls_method_handle_t h_snapshot_remove;
   cls_method_handle_t h_snapshot_rename;
@@ -4831,6 +4866,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "get_snapshot_namespace",
 			  CLS_METHOD_RD,
 			  get_snapshot_namespace, &h_get_snapshot_namespace);
+  cls_register_cxx_method(h_class, "get_snapshot_timestamp",
+			  CLS_METHOD_RD,
+			  get_snapshot_timestamp, &h_get_snapshot_timestamp);
   cls_register_cxx_method(h_class, "snapshot_add",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  snapshot_add, &h_snapshot_add);

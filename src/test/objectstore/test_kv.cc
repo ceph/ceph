@@ -54,7 +54,7 @@ public:
     db.reset(NULL);
   }
 
-  virtual void SetUp() {
+  void SetUp() override {
     int r = ::mkdir("kv_test_temp_dir", 0777);
     if (r < 0 && errno != EEXIST) {
       r = -errno;
@@ -64,7 +64,7 @@ public:
     }
     init();
   }
-  virtual void TearDown() {
+  void TearDown() override {
     fini();
     rm_r("kv_test_temp_dir");
   }
@@ -159,7 +159,7 @@ TEST_P(KVTest, PutReopen) {
 TEST_P(KVTest, BenchCommit) {
   int n = 1024;
   ASSERT_EQ(0, db->create_and_open(cout));
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   {
     cout << "priming" << std::endl;
     // prime
@@ -183,7 +183,7 @@ TEST_P(KVTest, BenchCommit) {
     t->set("prefix", "key" + stringify(i), data);
     db->submit_transaction_sync(t);
   }
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   utime_t dur = end - start;
   cout << n << " commits in " << dur << ", avg latency " << (dur / (double)n)
        << std::endl;
@@ -191,20 +191,20 @@ TEST_P(KVTest, BenchCommit) {
 }
 
 struct AppendMOP : public KeyValueDB::MergeOperator {
-  virtual void merge_nonexistent(
+  void merge_nonexistent(
     const char *rdata, size_t rlen, std::string *new_value) override {
     *new_value = "?" + std::string(rdata, rlen);
   }
-  virtual void merge(
+  void merge(
     const char *ldata, size_t llen,
     const char *rdata, size_t rlen,
-    std::string *new_value) {
+    std::string *new_value) override {
 
     *new_value = std::string(ldata, llen) + std::string(rdata, rlen);
   }
   // We use each operator name and each prefix to construct the
   // overall RocksDB operator name for consistency check at open time.
-  virtual string name() const {
+  string name() const override {
     return "Append";
   }
 };

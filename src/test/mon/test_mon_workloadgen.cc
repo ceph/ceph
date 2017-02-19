@@ -63,6 +63,7 @@
 
 using namespace std;
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, get_name())
@@ -91,7 +92,7 @@ class TestStub : public Dispatcher
   struct C_Tick : public Context {
     TestStub *s;
     explicit C_Tick(TestStub *stub) : s(stub) {}
-    void finish(int r) {
+    void finish(int r) override {
       generic_dout(20) << "C_Tick::" << __func__ << dendl;
       if (r == -ECANCELED) {
 	generic_dout(20) << "C_Tick::" << __func__
@@ -102,9 +103,9 @@ class TestStub : public Dispatcher
     }
   };
 
-  virtual bool ms_dispatch(Message *m) = 0;
-  virtual void ms_handle_connect(Connection *con) = 0;
-  virtual void ms_handle_remote_reset(Connection *con) = 0;
+  bool ms_dispatch(Message *m) override = 0;
+  void ms_handle_connect(Connection *con) override = 0;
+  void ms_handle_remote_reset(Connection *con) override = 0;
   virtual int _shutdown() = 0;
   // courtesy method to be implemented by the stubs at their
   // own discretion
@@ -187,7 +188,7 @@ class ClientStub : public TestStub
   rngen_t gen;
 
  protected:
-  bool ms_dispatch(Message *m) {
+  bool ms_dispatch(Message *m) override {
     Mutex::Locker l(lock);
     dout(1) << "client::" << __func__ << " " << *m << dendl;
     switch (m->get_type()) {
@@ -199,34 +200,34 @@ class ClientStub : public TestStub
     return true;
   }
 
-  void ms_handle_connect(Connection *con) {
+  void ms_handle_connect(Connection *con) override {
     dout(1) << "client::" << __func__ << " " << con << dendl;
     Mutex::Locker l(lock);
     objecter->ms_handle_connect(con);
   }
 
-  void ms_handle_remote_reset(Connection *con) {
+  void ms_handle_remote_reset(Connection *con) override {
     dout(1) << "client::" << __func__ << " " << con << dendl;
     Mutex::Locker l(lock);
     objecter->ms_handle_remote_reset(con);
   }
 
-  bool ms_handle_reset(Connection *con) {
+  bool ms_handle_reset(Connection *con) override {
     dout(1) << "client::" << __func__ << dendl;
     Mutex::Locker l(lock);
     objecter->ms_handle_reset(con);
     return false;
   }
 
-  bool ms_handle_refused(Connection *con) {
+  bool ms_handle_refused(Connection *con) override {
     return false;
   }
 
-  const string get_name() {
+  const string get_name() override {
     return "client";
   }
 
-  virtual int _shutdown() {
+  int _shutdown() override {
     if (objecter) {
       objecter->shutdown();
     }
@@ -239,7 +240,7 @@ class ClientStub : public TestStub
       gen((int) time(NULL))
   { }
 
-  int init() {
+  int init() override {
     int err;
     err = monc.build_initial_monmap();
     if (err < 0) {
@@ -333,7 +334,7 @@ class OSDStub : public TestStub
   struct C_CreatePGs : public Context {
     OSDStub *s;
     explicit C_CreatePGs(OSDStub *stub) : s(stub) {}
-    void finish(int r) {
+    void finish(int r) override {
       if (r == -ECANCELED) {
 	generic_dout(20) << "C_CreatePGs::" << __func__
 			<< " shutdown" << dendl;
@@ -360,7 +361,8 @@ class OSDStub : public TestStub
 	     << cct->_conf->auth_supported << dendl;
     stringstream ss;
     ss << "client-osd" << whoami;
-    messenger.reset(Messenger::create(cct, cct->_conf->ms_type, entity_name_t::OSD(whoami),
+    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->ms_type : cct->_conf->ms_public_type;
+    messenger.reset(Messenger::create(cct, public_msgr_type, entity_name_t::OSD(whoami),
 				      ss.str().c_str(), getpid(), 0));
 
     Throttle throttler(g_ceph_context, "osd_client_bytes",
@@ -393,7 +395,7 @@ class OSDStub : public TestStub
     monc.set_messenger(messenger.get());
   }
 
-  int init() {
+  int init() override {
     dout(10) << __func__ << dendl;
     Mutex::Locker l(lock);
 
@@ -441,7 +443,7 @@ class OSDStub : public TestStub
     return 0;
   }
 
-  int _shutdown() {
+  int _shutdown() override {
 
     return 0;
   }
@@ -449,7 +451,7 @@ class OSDStub : public TestStub
   void boot() {
     dout(1) << __func__ << " boot?" << dendl;
 
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
     if ((last_boot_attempt > 0.0)
 	&& ((now - last_boot_attempt)) <= STUB_BOOT_INTERVAL) {
       dout(1) << __func__ << " backoff and try again later." << dendl;
@@ -465,7 +467,7 @@ class OSDStub : public TestStub
 
   void add_pg(pg_t pgid, epoch_t epoch, pg_t parent) {
 
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
 
     pg_stat_t s;
     s.created = epoch;
@@ -543,7 +545,7 @@ class OSDStub : public TestStub
   void send_pg_stats() {
     dout(10) << __func__
 	     << " pgs " << pgs.size() << " osdmap " << osdmap << dendl;
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
     MPGStats *mstats = new MPGStats(monc.get_fsid(), osdmap.get_epoch(), now);
 
     mstats->set_tid(1);
@@ -577,7 +579,7 @@ class OSDStub : public TestStub
     assert(pgs.count(pgid) > 0);
 
     pg_stat_t &s = pgs[pgid];
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
 
     if (now - s.last_change < 10.0) {
       dout(10) << __func__
@@ -702,7 +704,7 @@ class OSDStub : public TestStub
     dout(10) << __func__
 	     << " send " << num_entries << " log messages" << dendl;
 
-    utime_t now = ceph_clock_now(messenger->cct);
+    utime_t now = ceph_clock_now();
     int seq = 0;
     for (; num_entries > 0; --num_entries) {
       LogEntry e;
@@ -717,7 +719,7 @@ class OSDStub : public TestStub
     monc.send_mon_message(m);
   }
 
-  void _tick() {
+  void _tick() override {
     if (!osdmap.exists(whoami)) {
       std::cout << __func__ << " not in the cluster; boot!" << std::endl;
       boot();
@@ -872,7 +874,7 @@ class OSDStub : public TestStub
     m->put();
   }
 
-  bool ms_dispatch(Message *m) {
+  bool ms_dispatch(Message *m) override {
     dout(1) << __func__ << " " << *m << dendl;
 
     switch (m->get_type()) {
@@ -889,29 +891,29 @@ class OSDStub : public TestStub
     return true;
   }
 
-  void ms_handle_connect(Connection *con) {
+  void ms_handle_connect(Connection *con) override {
     dout(1) << __func__ << " " << con << dendl;
     if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
       dout(10) << __func__ << " on mon" << dendl;
     }
   }
 
-  void ms_handle_remote_reset(Connection *con) {}
+  void ms_handle_remote_reset(Connection *con) override {}
 
-  bool ms_handle_reset(Connection *con) {
+  bool ms_handle_reset(Connection *con) override {
     dout(1) << __func__ << dendl;
-    OSD::Session *session = (OSD::Session *)con->get_priv();
+    Session *session = (Session *)con->get_priv();
     if (!session)
       return false;
     session->put();
     return true;
   }
 
-  bool ms_handle_refused(Connection *con) {
+  bool ms_handle_refused(Connection *con) override {
     return false;
   }
 
-  const string get_name() {
+  const string get_name() override {
     stringstream ss;
     ss << "osd." << whoami;
     return ss.str();
@@ -932,7 +934,7 @@ SafeTimer *shutdown_timer = NULL;
 
 struct C_Shutdown : public Context
 {
-  void finish(int r) {
+  void finish(int r) override {
     generic_dout(10) << "main::shutdown time has ran out" << dendl;
     shutdown_cond.Signal();
   }

@@ -1,0 +1,7 @@
+# Amazon::S3 is not available on el7
+os_type: ubuntu
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rgw/s3_multipart_upload.pl

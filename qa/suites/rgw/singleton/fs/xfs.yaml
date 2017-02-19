@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    fs: xfs
+    conf:
+      osd:
+        osd sloppy crc: true

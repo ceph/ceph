@@ -1,0 +1,32 @@
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+- - osd.3
+  - osd.4
+  - osd.5
+tasks:
+- install:
+- ceph:
+    conf:
+      osd:
+        osd debug reject backfill probability: .3
+        osd min pg log entries: 25
+        osd max pg log entries: 100
+        osd max object name len: 460
+        osd max object namespace len: 64
+- exec:
+    client.0:
+      - sudo ceph osd pool create foo 64
+      - rados -p foo bench 60 write -b 1024 --no-cleanup
+      - sudo ceph osd pool set foo size 3
+      - sudo ceph osd out 0 1
+- sleep:
+    duration: 60
+- exec:
+    client.0:
+      - sudo ceph osd in 0 1
+- sleep:
+    duration: 60

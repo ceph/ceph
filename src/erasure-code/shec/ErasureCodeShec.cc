@@ -35,6 +35,7 @@ extern int calc_determinant(int *matrix, int dim);
 extern int* reed_sol_vandermonde_coding_matrix(int k, int m, int w);
 }
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
@@ -301,7 +302,7 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const ErasureCodeProfile &profi
   } else if (profile.find("k") == profile.end() ||
 	     profile.find("m") == profile.end() ||
 	     profile.find("c") == profile.end()){
-    dout(10) << "(k, m, c) must be choosed" << dendl;
+    dout(10) << "(k, m, c) must be chosen" << dendl;
     err = -EINVAL;
   } else {
     std::string err_k, err_m, err_c, value_k, value_m, value_c;

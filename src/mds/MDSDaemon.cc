@@ -56,6 +56,7 @@
 #include "messages/MCommandReply.h"
 
 #include "auth/AuthAuthorizeHandler.h"
+#include "auth/RotatingKeyRing.h"
 #include "auth/KeyRing.h"
 
 #include "common/config.h"
@@ -63,7 +64,7 @@
 #include "perfglue/cpu_profiler.h"
 #include "perfglue/heap_profiler.h"
 
-
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << name << ' '
@@ -85,7 +86,7 @@ class C_VoidFn : public Context
     assert(fn_);
   }
 
-  void finish(int r)
+  void finish(int r) override
   {
     (mds->*fn)();
   }
@@ -96,7 +97,7 @@ class MDSDaemon::C_MDS_Tick : public Context {
     MDSDaemon *mds_daemon;
 public:
   explicit C_MDS_Tick(MDSDaemon *m) : mds_daemon(m) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(mds_daemon->mds_lock.is_locked_by_me());
 
     mds_daemon->tick_event = 0;
@@ -155,7 +156,7 @@ class MDSSocketHook : public AdminSocketHook {
 public:
   explicit MDSSocketHook(MDSDaemon *m) : mds(m) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     stringstream ss;
     bool r = mds->asok_command(command, cmdmap, format, ss);
     out.append(ss);
@@ -497,10 +498,8 @@ int MDSDaemon::init()
   }
 
   int rotating_auth_attempts = 0;
-  const int max_rotating_auth_attempts = 10;
-
   while (monc->wait_auth_rotating(30.0) < 0) {
-    if (++rotating_auth_attempts <= max_rotating_auth_attempts) {
+    if (++rotating_auth_attempts <= g_conf->max_rotating_auth_attempts) {
       derr << "unable to obtain rotating service keys; retrying" << dendl;
       continue;
     }
@@ -718,7 +717,7 @@ int MDSDaemon::_handle_command(
 
     public:
     explicit SuicideLater(MDSDaemon *mds_) : mds(mds_) {}
-    void finish(int r) {
+    void finish(int r) override {
       // Wait a little to improve chances of caller getting
       // our response before seeing us disappear from mdsmap
       sleep(1);
@@ -735,7 +734,7 @@ int MDSDaemon::_handle_command(
     public:
 
     explicit RespawnLater(MDSDaemon *mds_) : mds(mds_) {}
-    void finish(int r) {
+    void finish(int r) override {
       // Wait a little to improve chances of caller getting
       // our response before seeing us disappear from mdsmap
       sleep(1);
@@ -1187,7 +1186,7 @@ bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bo
       return false;
   }
 
-  *authorizer = monc->auth->build_authorizer(dest_type);
+  *authorizer = monc->build_authorizer(dest_type);
   return *authorizer != NULL;
 }
 
@@ -1326,8 +1325,9 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
   EntityName name;
   uint64_t global_id;
 
-  is_valid = authorize_handler->verify_authorizer(cct, monc->rotating_secrets,
-						  authorizer_data, authorizer_reply, name, global_id, caps_info, session_key);
+  is_valid = authorize_handler->verify_authorizer(
+    cct, monc->rotating_secrets.get(),
+    authorizer_data, authorizer_reply, name, global_id, caps_info, session_key);
 
   if (is_valid) {
     entity_name_t n(con->get_peer_type(), global_id);

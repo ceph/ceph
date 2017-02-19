@@ -40,6 +40,9 @@ cdef extern from "Python.h":
 
 cdef extern from "time.h":
     ctypedef long int time_t
+    cdef struct timespec:
+        time_t tv_sec
+        long tv_nsec
 
 cdef extern from "limits.h":
     cdef uint64_t INT64_MAX
@@ -130,6 +133,10 @@ cdef extern from "rbd/librbd.h" nogil:
         time_t last_update
         bint up
 
+    ctypedef enum rbd_lock_mode_t:
+        _RBD_LOCK_MODE_EXCLUSIVE "RBD_LOCK_MODE_EXCLUSIVE"
+        _RBD_LOCK_MODE_SHARED "RBD_LOCK_MODE_SHARED"
+
     ctypedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg)
     ctypedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void* ptr)
 
@@ -208,7 +215,6 @@ cdef extern from "rbd/librbd.h" nogil:
                             char *parent_name, size_t pnamelen,
                             char *parent_snapname, size_t psnapnamelen)
     int rbd_get_flags(rbd_image_t image, uint64_t *flags)
-    int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner)
     ssize_t rbd_read2(rbd_image_t image, uint64_t ofs, size_t len,
                       char *buf, int op_flags)
     ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
@@ -232,6 +238,7 @@ cdef extern from "rbd/librbd.h" nogil:
                               int *is_protected)
     int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit)
     int rbd_snap_set_limit(rbd_image_t image, uint64_t limit)
+    int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, timespec *timestamp)
     int rbd_snap_set(rbd_image_t image, const char *snapname)
     int rbd_flatten(rbd_image_t image)
     int rbd_rebuild_object_map(rbd_image_t image, librbd_progress_fn_t cb,
@@ -249,6 +256,16 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_unlock(rbd_image_t image, const char *cookie)
     int rbd_break_lock(rbd_image_t image, const char *client,
                        const char *cookie)
+
+    int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner)
+    int rbd_lock_acquire(rbd_image_t image, rbd_lock_mode_t lock_mode)
+    int rbd_lock_release(rbd_image_t image)
+    int rbd_lock_get_owners(rbd_image_t image, rbd_lock_mode_t *lock_mode,
+                            char **lock_owners, size_t *max_lock_owners)
+    void rbd_lock_get_owners_cleanup(char **lock_owners,
+                                     size_t lock_owner_count)
+    int rbd_lock_break(rbd_image_t image, rbd_lock_mode_t lock_mode,
+                       char *lock_owner)
 
     # We use -9000 to propagate Python exceptions. We use except? to make sure
     # things still work as intended if -9000 happens to be a valid errno value
@@ -322,6 +339,9 @@ MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY = _MIRROR_IMAGE_STATUS_STATE_STARTING_
 MIRROR_IMAGE_STATUS_STATE_REPLAYING = _MIRROR_IMAGE_STATUS_STATE_REPLAYING
 MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY = _MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY
 MIRROR_IMAGE_STATUS_STATE_STOPPED = _MIRROR_IMAGE_STATUS_STATE_STOPPED
+
+RBD_LOCK_MODE_EXCLUSIVE = _RBD_LOCK_MODE_EXCLUSIVE
+RBD_LOCK_MODE_SHARED = _RBD_LOCK_MODE_SHARED
 
 RBD_IMAGE_OPTION_FORMAT = _RBD_IMAGE_OPTION_FORMAT
 RBD_IMAGE_OPTION_FEATURES = _RBD_IMAGE_OPTION_FEATURES
@@ -1728,6 +1748,20 @@ cdef class Image(object):
             raise make_ex(ret, 'error setting snapshot limit for %s' % self.name)
         return ret
 
+    def get_snap_timestamp(self, snap_id):
+        """
+        Get the snapshot timestamp for an image.
+        :param snap_id: the snapshot id of a snap shot
+        """
+        cdef:
+            timespec timestamp
+            uint64_t _snap_id = snap_id
+        with nogil:
+            ret = rbd_snap_get_timestamp(self.image, _snap_id, &timestamp)
+        if ret != 0:
+            raise make_ex(ret, 'error getting snapshot timestamp for image: %s, snap_id: %d' % (self.name, snap_id))
+        return datetime.fromtimestamp(timestamp.tv_sec)
+
     def remove_snap_limit(self):
         """
         Remove the snapshot limit for an image, essentially setting
@@ -2048,6 +2082,54 @@ written." % (self.name, ret, length))
             free(c_cookies)
             free(c_addrs)
             free(c_tag)
+
+    def lock_acquire(self, lock_mode):
+        """
+        Acquire a managed lock on the image.
+
+        :param lock_mode: lock mode to set
+        :type lock_mode: int
+        :raises: :class:`ImageBusy` if the lock could not be acquired
+        """
+        cdef:
+            rbd_lock_mode_t _lock_mode = lock_mode
+        with nogil:
+            ret = rbd_lock_acquire(self.image, _lock_mode)
+        if ret < 0:
+            raise make_ex(ret, 'error acquiring lock on image')
+
+    def lock_release(self):
+        """
+        Release a managed lock on the image that was previously acquired.
+        """
+        with nogil:
+            ret = rbd_lock_release(self.image)
+        if ret < 0:
+            raise make_ex(ret, 'error releasing lock on image')
+
+    def lock_get_owners(self):
+        """
+        Iterate over the lock owners of an image.
+
+        :returns: :class:`LockOwnerIterator`
+        """
+        return LockOwnerIterator(self)
+
+    def lock_break(self, lock_mode, lock_owner):
+        """
+        Break the image lock held by a another client.
+
+        :param lock_owner: the owner of the lock to break
+        :type lock_owner: str
+        """
+        lock_owner = cstr(lock_owner, 'lock_owner')
+        cdef:
+            rbd_lock_mode_t _lock_mode = lock_mode
+            char *_lock_owner = lock_owner
+        with nogil:
+            ret = rbd_lock_break(self.image, _lock_mode, _lock_owner)
+        if ret < 0:
+            raise make_ex(ret, 'error breaking lock on image')
 
     def lock_exclusive(self, cookie):
         """
@@ -2376,6 +2458,54 @@ written." % (self.name, ret, length))
             raise
 
         return completion
+
+cdef class LockOwnerIterator(object):
+    """
+    Iterator over managed lock owners for an image
+
+    Yields a dictionary containing information about the image's lock
+
+    Keys are:
+
+    * ``mode`` (int) - active lock mode
+
+    * ``owner`` (str) - lock owner name
+    """
+
+    cdef:
+        rbd_lock_mode_t lock_mode
+        char **lock_owners
+        size_t num_lock_owners
+        object image
+
+    def __init__(self, Image image):
+        self.image = image
+        self.lock_owners = NULL
+        self.num_lock_owners = 8
+        while True:
+            self.lock_owners = <char**>realloc_chk(self.lock_owners,
+                                                   self.num_lock_owners *
+                                                   sizeof(char*))
+            with nogil:
+                ret = rbd_lock_get_owners(image.image, &self.lock_mode,
+                                          self.lock_owners,
+                                          &self.num_lock_owners)
+            if ret >= 0:
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing lock owners for image %s' % (image.name,))
+
+    def __iter__(self):
+        for i in range(self.num_lock_owners):
+            yield {
+                'mode'  : int(self.lock_mode),
+                'owner' : decode_cstr(self.lock_owners[i]),
+                }
+
+    def __dealloc__(self):
+        if self.lock_owners:
+            rbd_lock_get_owners_cleanup(self.lock_owners, self.num_lock_owners)
+            free(self.lock_owners)
 
 cdef class SnapIterator(object):
     """

@@ -36,7 +36,7 @@ int main(int argc, char **argv)
     
     int s = blocks*4096;
 
-    utime_t start = ceph_clock_now(g_ceph_context);
+    utime_t start = ceph_clock_now();
     for (int i=0; i<count; i++) {
       off64_t o = (lrand48() % numblocks) * 4096;
       //cout << "s = " << s << " o = " << o << endl;
@@ -47,7 +47,7 @@ int main(int argc, char **argv)
       //int r = ::read(fd, buf, s);
       if (r < 0) cout << "r = " << r << " " << strerror(errno) << endl;
     }
-    utime_t end = ceph_clock_now(g_ceph_context);
+    utime_t end = ceph_clock_now();
     
     double timeper = end - start;
     timeper /= count;

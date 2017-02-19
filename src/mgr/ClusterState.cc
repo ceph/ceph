@@ -16,6 +16,7 @@
 
 #include "mgr/ClusterState.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
@@ -101,6 +102,12 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
 
   PGMapUpdater::update_creating_pgs(osd_map, &pg_map, &pending_inc);
   PGMapUpdater::register_new_pgs(osd_map, &pg_map, &pending_inc);
+
+  // brute force this for now (don't bother being clever by only
+  // checking osds that went up/down)
+  set<int> need_check_down_pg_osds;
+  PGMapUpdater::check_down_pgs(osd_map, &pg_map, true,
+			       need_check_down_pg_osds, &pending_inc);
 
   pg_map.apply_incremental(g_ceph_context, pending_inc);
 

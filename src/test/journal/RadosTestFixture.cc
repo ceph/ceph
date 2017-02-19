@@ -119,8 +119,7 @@ bool RadosTestFixture::wait_for_update(journal::JournalMetadataPtr metadata) {
   Mutex::Locker locker(m_listener.mutex);
   while (m_listener.updates[metadata.get()] == 0) {
     if (m_listener.cond.WaitInterval(
-          reinterpret_cast<CephContext*>(m_ioctx.cct()),
-          m_listener.mutex, utime_t(10, 0)) != 0) {
+	  m_listener.mutex, utime_t(10, 0)) != 0) {
       return false;
     }
   }

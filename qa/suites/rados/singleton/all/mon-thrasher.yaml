@@ -1,0 +1,25 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 2
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+- mon_thrash:
+    revive_delay: 20
+    thrash_delay: 1
+- workunit:
+    clients:
+      all:
+        - mon/workloadgen.sh
+    env:
+      LOADGEN_NUM_OSDS: "5"
+      VERBOSE: "1"
+      DURATION: "600"

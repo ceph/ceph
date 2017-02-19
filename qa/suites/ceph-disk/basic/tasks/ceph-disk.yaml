@@ -1,0 +1,37 @@
+roles:
+- - mon.a
+  - client.0
+- - osd.0
+  - osd.1
+openstack:
+  - machine:
+      disk: 20 # GB
+      ram: 2000 # MB
+      cpus: 1
+    volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    fs: xfs # this implicitly means /dev/vd? are used instead of directories
+    wait-for-scrub: false
+    conf:
+       global:
+           mon pg warn min per osd: 2
+           osd pool default size: 2
+           osd crush chooseleaf type: 0 # failure domain == osd
+           osd pg bits: 2
+           osd pgp bits: 2
+#
+# Keep this around for debugging purposes. If uncommented the target
+# will pause and the workunit can be run and debug manually.
+#
+# - exec:
+#     client.0:
+#       - sleep 1000000000 # forever
+#
+- workunit:
+    clients:
+      all:
+        - ceph-disk/ceph-disk.sh

@@ -1,0 +1,11 @@
+
+overrides:
+  ceph:
+    conf:
+      global:
+        lockdep: true
+
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_config_commands

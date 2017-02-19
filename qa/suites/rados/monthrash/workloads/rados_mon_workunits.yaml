@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - wrongly marked me down
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - mon/pool_ops.sh
+        - mon/crush_ops.sh
+        - mon/osd.sh
+        - mon/caps.sh
+

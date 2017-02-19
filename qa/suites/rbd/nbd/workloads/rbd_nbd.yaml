@@ -1,0 +1,10 @@
+os_type: ubuntu
+overrides:
+  install:
+    ceph:
+      extra_packages: [rbd-nbd]
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/rbd-nbd.sh

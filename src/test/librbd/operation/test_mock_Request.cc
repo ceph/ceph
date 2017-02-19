@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -41,7 +41,6 @@ struct AsyncRequest<librbd::MockTestImageCtx> {
 } // namespace librbd
 
 #include "librbd/operation/Request.cc"
-template class librbd::operation::Request<librbd::MockTestImageCtx>;
 
 namespace librbd {
 namespace journal {

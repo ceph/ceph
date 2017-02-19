@@ -1,0 +1,9 @@
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - slow request
+    - .*clock.*skew.*
+    - clocks not synchronized
+- mon_clock_skew_check:
+    expect-skew: false

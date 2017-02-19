@@ -36,7 +36,7 @@ public:
       m_object_num(object_num) {
   }
 
-  virtual int send() {
+  int send() override {
     I &image_ctx = this->m_image_ctx;
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << "C_RollbackObject: " << __func__ << ": object_num="
@@ -286,7 +286,7 @@ Context *SnapshotRollbackRequest<I>::send_invalidate_cache() {
   Context *ctx = create_context_callback<
     SnapshotRollbackRequest<I>,
     &SnapshotRollbackRequest<I>::handle_invalidate_cache>(this);
-  image_ctx.invalidate_cache(ctx);
+  image_ctx.invalidate_cache(true, ctx);
   return nullptr;
 }
 

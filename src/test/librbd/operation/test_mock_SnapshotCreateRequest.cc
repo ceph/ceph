@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -63,12 +63,6 @@ public:
   }
 
   void expect_snap_create(MockImageCtx &mock_image_ctx, int r) {
-    if (!mock_image_ctx.old_format &&
-         mock_image_ctx.exclusive_lock != nullptr) {
-      EXPECT_CALL(*mock_image_ctx.exclusive_lock, assert_header_locked(_))
-                    .Times(r == -ESTALE ? 2 : 1);
-    }
-
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
                                StrEq(mock_image_ctx.old_format ? "snap_add" :
@@ -94,8 +88,8 @@ public:
   void expect_update_snap_context(MockImageCtx &mock_image_ctx) {
     // state machine checks to ensure a refresh hasn't already added the snap
     EXPECT_CALL(mock_image_ctx, get_snap_info(_))
-                  .WillOnce(Return(reinterpret_cast<const librbd::SnapInfo*>(NULL)));
-    EXPECT_CALL(mock_image_ctx, add_snap("snap1", _, _, _, _, _, _));
+                  .WillOnce(Return(static_cast<const librbd::SnapInfo*>(NULL)));
+    EXPECT_CALL(mock_image_ctx, add_snap("snap1", _, _, _, _, _, _, _));
   }
 
   void expect_unblock_writes(MockImageCtx &mock_image_ctx) {

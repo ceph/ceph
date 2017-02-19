@@ -1,0 +1,8 @@
+roles:
+- [mon.a, mon.d, mon.g, osd.0]
+- [mon.b, mon.e, mon.h]
+- [mon.c, mon.f, mon.i, osd.1]
+openstack:
+- volumes: # attached to each instance
+    count: 1
+    size: 10 # GB

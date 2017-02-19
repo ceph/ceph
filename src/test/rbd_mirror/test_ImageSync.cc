@@ -48,7 +48,7 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size)
 class TestImageSync : public TestFixture {
 public:
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestFixture::SetUp();
     create_and_open(m_local_io_ctx, &m_local_image_ctx);
     create_and_open(m_remote_io_ctx, &m_remote_image_ctx);
@@ -66,7 +66,7 @@ public:
     ASSERT_EQ(0, m_remote_journaler->register_client(client_data_bl));
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     TestFixture::TearDown();
     delete m_remote_journaler;
   }
@@ -79,7 +79,7 @@ public:
     C_SaferCond ctx;
     {
       RWLock::RLocker owner_locker((*image_ctx)->owner_lock);
-      (*image_ctx)->exclusive_lock->try_lock(&ctx);
+      (*image_ctx)->exclusive_lock->try_acquire_lock(&ctx);
     }
     ASSERT_EQ(0, ctx.wait());
     ASSERT_TRUE((*image_ctx)->exclusive_lock->is_lock_owner());

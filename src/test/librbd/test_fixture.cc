@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
@@ -75,7 +75,7 @@ int TestFixture::open_image(const std::string &image_name,
   *ictx = new librbd::ImageCtx(image_name.c_str(), "", NULL, m_ioctx, false);
   m_ictxs.insert(*ictx);
 
-  return (*ictx)->state->open();
+  return (*ictx)->state->open(false);
 }
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,

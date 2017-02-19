@@ -156,6 +156,12 @@ Context *create_async_context_callback(I &image_ctx, Context *on_finish) {
       image_ctx.op_work_queue, on_finish);
 }
 
+template <typename WQ>
+Context *create_async_context_callback(WQ *work_queue, Context *on_finish) {
+  // use async callback to acquire a clean lock context
+  return new detail::C_AsyncCallback<WQ>(work_queue, on_finish);
+}
+
 // TODO: temporary until AioCompletion supports templated ImageCtx
 inline ImageCtx *get_image_ctx(ImageCtx *image_ctx) {
   return image_ctx;
@@ -197,7 +203,7 @@ private:
   Context *m_on_finish = nullptr;
 };
 
-uint64_t parse_rbd_default_features(CephContext* cct);
+uint64_t get_rbd_default_features(CephContext* cct);
 
 } // namespace util
 

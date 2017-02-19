@@ -130,9 +130,9 @@ if __name__ == '__main__':
     assert('epoch' in r.myjson['output'])
 
     assert('GLOBAL' in expect('df', 'GET', 200, 'plain').text)
-    assert('CATEGORY' in expect('df?detail=detail', 'GET', 200, 'plain').text)
+    assert('DIRTY' in expect('df?detail=detail', 'GET', 200, 'plain').text)
     # test param with no value (treated as param=param)
-    assert('CATEGORY' in expect('df?detail', 'GET', 200, 'plain').text)
+    assert('DIRTY' in expect('df?detail', 'GET', 200, 'plain').text)
 
     r = expect('df', 'GET', 200, 'json', JSONHDR)
     assert('total_used_bytes' in r.myjson['output']['stats'])
@@ -171,9 +171,9 @@ if __name__ == '__main__':
     assert(r.tree.find('output/mdsmap/created') is not None)
 
     expect('fs/flag/set?flag_name=enable_multiple&val=true', 'PUT', 200, '')
-    expect('osd/pool/create?pg_num=1&pool=cephfs_metadata', 'PUT', 200, '')
-    expect('osd/pool/create?pg_num=1&pool=cephfs_data', 'PUT', 200, '')
-    expect('fs/new?fs_name=cephfs&metadata=cephfs_metadata&data=cephfs_data', 'PUT', 200, '')
+    expect('osd/pool/create?pg_num=1&pool=my_cephfs_metadata', 'PUT', 200, '')
+    expect('osd/pool/create?pg_num=1&pool=my_cephfs_data', 'PUT', 200, '')
+    expect('fs/new?fs_name=mycephfs&metadata=my_cephfs_metadata&data=my_cephfs_data', 'PUT', 200, '')
     expect('osd/pool/create?pool=data2&pg_num=10', 'PUT', 200, '')
     r = expect('osd/dump', 'GET', 200, 'json', JSONHDR)
     pools = r.myjson['output']['pools']
@@ -398,7 +398,7 @@ if __name__ == '__main__':
     expect('osd/reweight?id=0&weight=-1', 'PUT', 400, '')
     expect('osd/reweight?id=0&weight=1', 'PUT', 200, '')
 
-    for v in ['pg_num', 'pgp_num', 'size', 'min_size', 'crash_replay_interval',
+    for v in ['pg_num', 'pgp_num', 'size', 'min_size',
               'crush_ruleset']:
         r = expect('osd/pool/get.json?pool=rbd&var=' + v, 'GET', 200, 'json')
         assert(v in r.myjson['output'])

@@ -1,0 +1,20 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+  - osd.2
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    conf:
+      osd:
+        osd min pg log entries: 5
+- osd_backfill:

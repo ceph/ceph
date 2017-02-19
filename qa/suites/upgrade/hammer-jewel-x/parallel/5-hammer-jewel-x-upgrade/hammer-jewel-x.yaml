@@ -1,0 +1,14 @@
+tasks:
+   - install.upgrade:
+       exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+       client.0:
+         branch: jewel
+   - print: "**** done install.upgrade client.0 to jewel"
+   - install.upgrade:
+       osd.0:
+       osd.2:
+   - print: "**** done install.upgrade daemons to x"
+   - parallel:
+     - workload2
+     - upgrade-sequence2
+   - print: "**** done parallel workload2 and upgrade-sequence2"

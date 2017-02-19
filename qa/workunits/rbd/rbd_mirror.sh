@@ -7,12 +7,7 @@
 # socket, temporary files, and launches rbd-mirror daemon.
 #
 
-if [ -n "${CEPH_REF}" ]; then
-  wget -O rbd_mirror_helpers.sh "https://git.ceph.com/?p=ceph.git;a=blob_plain;hb=$CEPH_REF;f=qa/workunits/rbd/rbd_mirror_helpers.sh"
-  . ./rbd_mirror_helpers.sh
-else
-  . $(dirname $0)/rbd_mirror_helpers.sh
-fi
+. $(dirname $0)/rbd_mirror_helpers.sh
 
 testlog "TEST: add image and test replay"
 start_mirror ${CLUSTER1}
@@ -43,6 +38,7 @@ compare_images ${POOL} ${image1}
 
 testlog "TEST: test the first image is replaying after restart"
 write_image ${CLUSTER2} ${POOL} ${image} 100
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${image}
@@ -228,8 +224,6 @@ unprotect_snapshot ${CLUSTER2} ${POOL} ${image5} 'snap2'
 for i in ${image3} ${image5}; do
   remove_snapshot ${CLUSTER2} ${POOL} ${i} 'snap1'
   remove_snapshot ${CLUSTER2} ${POOL} ${i} 'snap2'
-  # workaround #16555: before removing make sure it is not still bootstrapped
-  wait_for_image_replay_started ${CLUSTER1} ${POOL} ${i}
   remove_image_retry ${CLUSTER2} ${POOL} ${i}
 done
 
@@ -259,7 +253,9 @@ stop_mirror ${CLUSTER1}
 stop_mirror ${CLUSTER2}
 set_pool_mirror_mode ${CLUSTER2} ${POOL} 'image'
 disable_mirror ${CLUSTER2} ${POOL} ${image}
-test_image_present ${CLUSTER1} ${POOL} ${image} 'present'
+if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+  test_image_present ${CLUSTER1} ${POOL} ${image} 'present'
+fi
 start_mirror ${CLUSTER1}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
 set_pool_mirror_mode ${CLUSTER2} ${POOL} 'pool'
@@ -288,6 +284,7 @@ testlog "TEST: request image resync while daemon is offline"
 stop_mirror ${CLUSTER1}
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 start_mirror ${CLUSTER1}
+wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${image}

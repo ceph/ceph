@@ -160,7 +160,7 @@ int seed::sha1_process()
 
   SHA1 h;
   list<bufferlist>::iterator iter = torrent_bl.begin();
-  for (; iter != torrent_bl.end(); iter++)
+  for (; iter != torrent_bl.end(); ++iter)
   {
     bufferlist &bl_info = *iter;
     sha1(&h, bl_info, (*iter).length());

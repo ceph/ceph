@@ -150,9 +150,9 @@ The procedure is as follows:
 
 	mon host = 192.168.0.1
 
-   **Note:** You may use IPv6 addresses too, but you must set ``ms bind ipv6`` 
-   to ``true``. See `Network Configuration Reference`_ for details about 
-   network configuration.
+   **Note:** You may use IPv6 addresses instead of IPv4 addresses, but
+   you must set ``ms bind ipv6`` to ``true``. See `Network Configuration
+   Reference`_ for details about network configuration.
 
 #. Create a keyring for your cluster and generate a monitor secret key. ::
 

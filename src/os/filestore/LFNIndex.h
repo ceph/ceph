@@ -127,11 +127,12 @@ private:
 public:
   /// Constructor
   LFNIndex(
+    CephContext* cct,
     coll_t collection,
     const char *base_path, ///< [in] path to Index root
     uint32_t index_version,
     double _error_injection_probability=0)
-    : CollectionIndex(collection),
+    : CollectionIndex(cct, collection),
       base_path(base_path),
       index_version(index_version),
       error_injection_enabled(false),
@@ -188,7 +189,6 @@ public:
   int collection_list_partial(
     const ghobject_t &start,
     const ghobject_t &end,
-    bool sort_bitwise,
     int max_count,
     vector<ghobject_t> *ls,
     ghobject_t *next
@@ -254,7 +254,6 @@ protected:
   virtual int _collection_list_partial(
     const ghobject_t &start,
     const ghobject_t &end,
-    bool sort_bitwise,
     int max_count,
     vector<ghobject_t> *ls,
     ghobject_t *next

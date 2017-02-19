@@ -14,9 +14,11 @@ Environment=CLUSTER=ceph
 # permissions to create the mgr key.  Failure is ignored at every step (the
 # '-' prefix) in case someone has already used some other trick to set
 # everything up manually.
-ExecStartPre=-/usr/bin/mkdir -p /var/lib/ceph/mgr/${CLUSTER}-%i
-ExecStartPre=-/usr/bin/sh -c "[ -f /var/lib/ceph/mgr/${CLUSTER}-%i/keyring ] || /usr/bin/ceph-authtool --create-keyring --gen-key --name=mgr.%i /var/lib/ceph/mgr/${CLUSTER}-%i/keyring"
-ExecStartPre=-/usr/bin/chown -R ceph.ceph /var/lib/ceph/mgr/${CLUSTER}-%i
+# `sh -c "exec ..."` is required, since different Linux ditributives have different rules on absolute paths of that executables.
+# systemd requires to use absoulte paths.
+ExecStartPre=-/bin/sh -c "exec mkdir -p /var/lib/ceph/mgr/${CLUSTER}-%i"
+ExecStartPre=-/bin/sh -c "[ -f /var/lib/ceph/mgr/${CLUSTER}-%i/keyring ] || /usr/bin/ceph-authtool --create-keyring --gen-key --name=mgr.%i /var/lib/ceph/mgr/${CLUSTER}-%i/keyring"
+ExecStartPre=-/bin/sh -c "exec chown -R ceph.ceph /var/lib/ceph/mgr/${CLUSTER}-%i"
 ExecStartPre=-/usr/bin/ceph -i /var/lib/ceph/mgr/${CLUSTER}-%i/keyring auth add mgr.%i mon 'allow *' --keyring=/var/lib/ceph/mon/${CLUSTER}-%i/keyring --name=mon.
 ExecStart=/usr/bin/ceph-mgr -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID

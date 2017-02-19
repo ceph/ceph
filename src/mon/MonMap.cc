@@ -209,6 +209,11 @@ void MonMap::decode(bufferlist::iterator &p)
   }
   if (struct_v >= 5) {
     ::decode(mon_info, p);
+  } else {
+    // we may be decoding to an existing monmap; if we do not
+    // clear the mon_info map now, we will likely incur in problems
+    // later on MonMap::sanitize_mons()
+    mon_info.clear();
   }
   DECODE_FINISH(p);
   sanitize_mons(mon_addr);
@@ -457,7 +462,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
              << std::endl;
       return r;
     }
-    created = ceph_clock_now(cct);
+    created = ceph_clock_now();
     last_changed = created;
     return 0;
   }
@@ -543,7 +548,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
     errout << "no monitors specified to connect to." << std::endl;
     return -ENOENT;
   }
-  created = ceph_clock_now(cct);
+  created = ceph_clock_now();
   last_changed = created;
   return 0;
 }

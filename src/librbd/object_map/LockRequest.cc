@@ -32,7 +32,7 @@ void LockRequest<I>::send() {
 template <typename I>
 void LockRequest<I>::send_lock() {
   CephContext *cct = m_image_ctx.cct;
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
+  std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
   ldout(cct, 10) << this << " " << __func__ << ": oid=" << oid << dendl;
 
   librados::ObjectWriteOperation op;
@@ -54,6 +54,10 @@ Context *LockRequest<I>::handle_lock(int *ret_val) {
 
   if (*ret_val == 0) {
     return m_on_finish;
+  } else if (*ret_val == -EEXIST) {
+    // already locked by myself
+    *ret_val = 0;
+    return m_on_finish;
   } else if (m_broke_lock || *ret_val != -EBUSY) {
     lderr(cct) << "failed to lock object map: " << cpp_strerror(*ret_val)
                << dendl;
@@ -68,7 +72,7 @@ Context *LockRequest<I>::handle_lock(int *ret_val) {
 template <typename I>
 void LockRequest<I>::send_get_lock_info() {
   CephContext *cct = m_image_ctx.cct;
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
+  std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
   ldout(cct, 10) << this << " " << __func__ << ": oid=" << oid << dendl;
 
   librados::ObjectReadOperation op;
@@ -113,7 +117,7 @@ Context *LockRequest<I>::handle_get_lock_info(int *ret_val) {
 template <typename I>
 void LockRequest<I>::send_break_locks() {
   CephContext *cct = m_image_ctx.cct;
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
+  std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
   ldout(cct, 10) << this << " " << __func__ << ": oid=" << oid << ", "
                  << "num_lockers=" << m_lockers.size() << dendl;
 

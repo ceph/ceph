@@ -452,7 +452,7 @@ public:
 class RGW_Auth_S3 {
 private:
   static int authorize_v2(RGWRados *store, struct req_state *s);
-  static int authorize_v4(RGWRados *store, struct req_state *s);
+  static int authorize_v4(RGWRados *store, struct req_state *s, bool force_boto2_compat = true);
   static int authorize_v4_complete(RGWRados *store, struct req_state *s,
 				  const string& request_payload,
 				  bool unsigned_payload);
@@ -503,6 +503,7 @@ protected:
   }
   RGWOp *op_get();
   RGWOp *op_head();
+  RGWOp *op_post();
 public:
   RGWHandler_REST_Service_S3() {}
   virtual ~RGWHandler_REST_Service_S3() {}

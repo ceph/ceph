@@ -119,6 +119,17 @@ namespace librbd {
                              std::vector<uint64_t> *sizes,
                              std::vector<parent_info> *parents,
                              std::vector<uint8_t> *protection_statuses);
+    void snapshot_timestamp_list_start(librados::ObjectReadOperation *op,
+                                       const std::vector<snapid_t> &ids);
+
+    int snapshot_timestamp_list_finish(bufferlist::iterator *it,
+                                       const std::vector<snapid_t> &ids,
+                                       std::vector<utime_t> *timestamps);
+
+    int snapshot_timestamp_list(librados::IoCtx *ioctx, const std::string &oid,
+                                const std::vector<snapid_t> &ids,
+                                std::vector<utime_t> *timestamps);
+
     int snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
@@ -126,14 +137,14 @@ namespace librbd {
 		      std::vector<parent_info> *parents,
 		      std::vector<uint8_t> *protection_statuses);
 
-    void snap_namespace_list_start(librados::ObjectReadOperation *op,
-				   const std::vector<snapid_t> &ids);
-    int snap_namespace_list_finish(bufferlist::iterator *it,
-				   const std::vector<snapid_t> &ids,
-				   std::vector<cls::rbd::SnapshotNamespace> *namespaces);
-    int snap_namespace_list(librados::IoCtx *ioctx, const std::string &oid,
-			    const std::vector<snapid_t> &ids,
-			    std::vector<cls::rbd::SnapshotNamespace> *namespaces);
+    void snapshot_namespace_list_start(librados::ObjectReadOperation *op,
+                                       const std::vector<snapid_t> &ids);
+    int snapshot_namespace_list_finish(bufferlist::iterator *it,
+                                       const std::vector<snapid_t> &ids,
+                                       std::vector<cls::rbd::SnapshotNamespace> *namespaces);
+    int snapshot_namespace_list(librados::IoCtx *ioctx, const std::string &oid,
+                                const std::vector<snapid_t> &ids,
+                                std::vector<cls::rbd::SnapshotNamespace> *namespaces);
 
     void get_all_features_start(librados::ObjectReadOperation *op);
     int get_all_features_finish(bufferlist::iterator *it,
@@ -199,6 +210,9 @@ namespace librbd {
     int dir_get_name_finish(bufferlist::iterator *it, std::string *name);
     int dir_get_name(librados::IoCtx *ioctx, const std::string &oid,
 		     const std::string &id, std::string *name);
+    void dir_list_start(librados::ObjectReadOperation *op,
+                        const std::string &start, uint64_t max_return);
+    int dir_list_finish(bufferlist::iterator *it, map<string, string> *images);
     int dir_list(librados::IoCtx *ioctx, const std::string &oid,
 		 const std::string &start, uint64_t max_return,
 		 map<string, string> *images);
@@ -276,6 +290,10 @@ namespace librbd {
     int mirror_peer_set_cluster(librados::IoCtx *ioctx,
                                 const std::string &uuid,
                                 const std::string &cluster_name);
+    void mirror_image_list_start(librados::ObjectReadOperation *op,
+                                 const std::string &start, uint64_t max_return);
+    int mirror_image_list_finish(bufferlist::iterator *it,
+                                 std::map<string, string> *mirror_image_ids);
     int mirror_image_list(librados::IoCtx *ioctx,
 		          const std::string &start, uint64_t max_return,
                           std::map<std::string, std::string> *mirror_image_ids);

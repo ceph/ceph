@@ -8,6 +8,7 @@
 #include "rgw_common.h"
 
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 class RGWPolicyCondition {
@@ -46,7 +47,7 @@ public:
 
 class RGWPolicyCondition_StrEqual : public RGWPolicyCondition {
 protected:
-  bool check(const string& first, const string& second, string& msg) {
+  bool check(const string& first, const string& second, string& msg) override {
     bool ret = first.compare(second) == 0;
     if (!ret) {
       msg = "Policy condition failed: eq";
@@ -57,7 +58,7 @@ protected:
 
 class RGWPolicyCondition_StrStartsWith : public RGWPolicyCondition {
 protected:
-  bool check(const string& first, const string& second, string& msg) {
+  bool check(const string& first, const string& second, string& msg) override {
     bool ret = first.compare(0, second.size(), second) == 0;
     if (!ret) {
       msg = "Policy condition failed: starts-with";
@@ -182,7 +183,7 @@ int RGWPolicy::add_condition(const string& op, const string& first, const string
 
 int RGWPolicy::check(RGWPolicyEnv *env, string& err_msg)
 {
-  uint64_t now = ceph_clock_now(NULL).sec();
+  uint64_t now = ceph_clock_now().sec();
   if (expires <= now) {
     dout(0) << "NOTICE: policy calculated as expired: " << expiration_str << dendl;
     err_msg = "Policy expired";

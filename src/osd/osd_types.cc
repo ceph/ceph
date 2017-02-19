@@ -1130,6 +1130,8 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("crash_replay_interval", get_crash_replay_interval());
   f->dump_stream("last_change") << get_last_change();
   f->dump_stream("last_force_op_resend") << get_last_force_op_resend();
+  f->dump_stream("last_force_op_resend_preluminous")
+    << get_last_force_op_resend_preluminous();
   f->dump_unsigned("auid", get_auid());
   f->dump_string("snap_mode", is_pool_snaps_mode() ? "pool" : "selfmanaged");
   f->dump_unsigned("snap_seq", get_snap_seq());
@@ -1482,11 +1484,16 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 24;
+  uint8_t v = 25;
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
     v = 21;
+  }
+  if ((features &
+       (CEPH_FEATURE_RESEND_ON_SPLIT|CEPH_FEATURE_SERVER_JEWEL)) !=
+      (CEPH_FEATURE_RESEND_ON_SPLIT|CEPH_FEATURE_SERVER_JEWEL)) {
+    v = 24;
   }
 
   ENCODE_START(v, 5, bl);
@@ -1528,7 +1535,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(cache_min_flush_age, bl);
   ::encode(cache_min_evict_age, bl);
   ::encode(erasure_code_profile, bl);
-  ::encode(last_force_op_resend, bl);
+  ::encode(last_force_op_resend_preluminous, bl);
   ::encode(min_read_recency_for_promote, bl);
   ::encode(expected_num_objects, bl);
   if (v >= 19) {
@@ -1549,6 +1556,9 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   }
   if (v >= 24) {
     ::encode(opts, bl);
+  }
+  if (v >= 25) {
+    ::encode(last_force_op_resend, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -1653,9 +1663,9 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     ::decode(erasure_code_profile, bl);
   }
   if (struct_v >= 15) {
-    ::decode(last_force_op_resend, bl);
+    ::decode(last_force_op_resend_preluminous, bl);
   } else {
-    last_force_op_resend = 0;
+    last_force_op_resend_preluminous = 0;
   }
   if (struct_v >= 16) {
     ::decode(min_read_recency_for_promote, bl);
@@ -1697,6 +1707,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 24) {
     ::decode(opts, bl);
   }
+  if (struct_v >= 25) {
+    ::decode(last_force_op_resend, bl);
+  } else {
+    last_force_op_resend = last_force_op_resend_preluminous;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1715,6 +1730,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.pgp_num = 5;
   a.last_change = 9;
   a.last_force_op_resend = 123823;
+  a.last_force_op_resend_preluminous = 123824;
   a.snap_seq = 10;
   a.snap_epoch = 11;
   a.auid = 12;
@@ -1772,8 +1788,10 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num()
       << " last_change " << p.get_last_change();
-  if (p.get_last_force_op_resend())
-    out << " lfor " << p.get_last_force_op_resend();
+  if (p.get_last_force_op_resend() ||
+      p.get_last_force_op_resend_preluminous())
+    out << " lfor " << p.get_last_force_op_resend() << "/"
+	<< p.get_last_force_op_resend_preluminous();
   if (p.get_auid())
     out << " owner " << p.get_auid();
   if (p.flags)
@@ -3099,6 +3117,47 @@ bool pg_interval_t::check_new_interval(
   map<epoch_t, pg_interval_t> *past_intervals,
   std::ostream *out)
 {
+  /*
+   * We have to be careful to gracefully deal with situations like
+   * so. Say we have a power outage or something that takes out both
+   * OSDs, but the monitor doesn't mark them down in the same epoch.
+   * The history may look like
+   *
+   *  1: A B
+   *  2:   B
+   *  3:       let's say B dies for good, too (say, from the power spike) 
+   *  4: A
+   *
+   * which makes it look like B may have applied updates to the PG
+   * that we need in order to proceed.  This sucks...
+   *
+   * To minimize the risk of this happening, we CANNOT go active if
+   * _any_ OSDs in the prior set are down until we send an MOSDAlive
+   * to the monitor such that the OSDMap sets osd_up_thru to an epoch.
+   * Then, we have something like
+   *
+   *  1: A B
+   *  2:   B   up_thru[B]=0
+   *  3:
+   *  4: A
+   *
+   * -> we can ignore B, bc it couldn't have gone active (up_thru still 0).
+   *
+   * or,
+   *
+   *  1: A B
+   *  2:   B   up_thru[B]=0
+   *  3:   B   up_thru[B]=2
+   *  4:
+   *  5: A    
+   *
+   * -> we must wait for B, bc it was alive through 2, and could have
+   *    written to the pg.
+   *
+   * If B is really dead, then an administrator will need to manually
+   * intervene by marking the OSD as "lost."
+   */
+
   // remember past interval
   //  NOTE: a change in the up set primary triggers an interval
   //  change, even though the interval members in the pg_interval_t
@@ -3140,7 +3199,7 @@ bool pg_interval_t::check_new_interval(
 	num_acting >= old_pg_pool.min_size &&
         (*could_have_gone_active)(old_acting_shards)) {
       if (out)
-	*out << "generate_past_intervals " << i
+	*out << __func__ << " " << i
 	     << ": not rw,"
 	     << " up_thru " << lastmap->get_up_thru(i.primary)
 	     << " up_from " << lastmap->get_up_from(i.primary)
@@ -3150,7 +3209,7 @@ bool pg_interval_t::check_new_interval(
 	  lastmap->get_up_from(i.primary) <= i.first) {
 	i.maybe_went_rw = true;
 	if (out)
-	  *out << "generate_past_intervals " << i
+	  *out << __func__ << " " << i
 	       << " : primary up " << lastmap->get_up_from(i.primary)
 	       << "-" << lastmap->get_up_thru(i.primary)
 	       << " includes interval"
@@ -3166,14 +3225,14 @@ bool pg_interval_t::check_new_interval(
 	// last_epoch_clean timing.
 	i.maybe_went_rw = true;
 	if (out)
-	  *out << "generate_past_intervals " << i
+	  *out << __func__ << " " << i
 	       << " : includes last_epoch_clean " << last_epoch_clean
 	       << " and presumed to have been rw"
 	       << std::endl;
       } else {
 	i.maybe_went_rw = false;
 	if (out)
-	  *out << "generate_past_intervals " << i
+	  *out << __func__ << " " << i
 	       << " : primary up " << lastmap->get_up_from(i.primary)
 	       << "-" << lastmap->get_up_thru(i.primary)
 	       << " does not include interval"
@@ -3182,7 +3241,7 @@ bool pg_interval_t::check_new_interval(
     } else {
       i.maybe_went_rw = false;
       if (out)
-	*out << "generate_past_intervals " << i << " : acting set is too small" << std::endl;
+	*out << __func__ << " " << i << " : acting set is too small" << std::endl;
     }
     return true;
   } else {
@@ -4812,9 +4871,9 @@ void ObjectRecoveryInfo::decode(bufferlist::iterator &bl,
   if (struct_v < 2) {
     if (!soid.is_max() && soid.pool == -1)
       soid.pool = pool;
-    map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> tmp;
+    map<hobject_t, interval_set<uint64_t>> tmp;
     tmp.swap(clone_subset);
-    for (map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator>::iterator i = tmp.begin();
+    for (map<hobject_t, interval_set<uint64_t>>::iterator i = tmp.begin();
 	 i != tmp.end();
 	 ++i) {
       hobject_t first(i->first);
@@ -5093,11 +5152,11 @@ void ScrubMap::merge_incr(const ScrubMap &l)
   assert(valid_through == l.incr_since);
   valid_through = l.valid_through;
 
-  for (map<hobject_t,object, hobject_t::BitwiseComparator>::const_iterator p = l.objects.begin();
+  for (map<hobject_t,object>::const_iterator p = l.objects.begin();
        p != l.objects.end();
        ++p){
     if (p->second.negative) {
-      map<hobject_t,object, hobject_t::BitwiseComparator>::iterator q = objects.find(p->first);
+      map<hobject_t,object>::iterator q = objects.find(p->first);
       if (q != objects.end()) {
 	objects.erase(q);
       }
@@ -5135,9 +5194,9 @@ void ScrubMap::decode(bufferlist::iterator& bl, int64_t pool)
 
   // handle hobject_t upgrade
   if (struct_v < 3) {
-    map<hobject_t, object, hobject_t::ComparatorWithDefault> tmp;
+    map<hobject_t, object> tmp;
     tmp.swap(objects);
-    for (map<hobject_t, object, hobject_t::ComparatorWithDefault>::iterator i = tmp.begin();
+    for (map<hobject_t, object>::iterator i = tmp.begin();
 	 i != tmp.end();
 	 ++i) {
       hobject_t first(i->first);
@@ -5153,7 +5212,7 @@ void ScrubMap::dump(Formatter *f) const
   f->dump_stream("valid_through") << valid_through;
   f->dump_stream("incremental_since") << incr_since;
   f->open_array_section("objects");
-  for (map<hobject_t,object, hobject_t::ComparatorWithDefault>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
+  for (map<hobject_t,object>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
     f->open_object_section("object");
     f->dump_string("name", p->first.oid.name);
     f->dump_unsigned("hash", p->first.get_hash());
@@ -5281,18 +5340,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
   if (ceph_osd_op_type_data(op.op.op)) {
     // data extent
     switch (op.op.op) {
-    case CEPH_OSD_OP_STAT:
-    case CEPH_OSD_OP_DELETE:
-    case CEPH_OSD_OP_LIST_WATCHERS:
-    case CEPH_OSD_OP_LIST_SNAPS:
-    case CEPH_OSD_OP_UNDIRTY:
-    case CEPH_OSD_OP_ISDIRTY:
-    case CEPH_OSD_OP_CACHE_FLUSH:
-    case CEPH_OSD_OP_CACHE_TRY_FLUSH:
-    case CEPH_OSD_OP_CACHE_EVICT:
-    case CEPH_OSD_OP_CACHE_PIN:
-    case CEPH_OSD_OP_CACHE_UNPIN:
-      break;
     case CEPH_OSD_OP_ASSERT_VER:
       out << " v" << op.op.assert_ver.ver;
       break;
@@ -5301,7 +5348,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       break;
     case CEPH_OSD_OP_MASKTRUNC:
     case CEPH_OSD_OP_TRIMTRUNC:
-      out << " " << op.op.extent.truncate_seq << "@" << (int64_t)op.op.extent.truncate_size;
+      out << " " << op.op.extent.truncate_seq << "@"
+	  << (int64_t)op.op.extent.truncate_size;
       break;
     case CEPH_OSD_OP_ROLLBACK:
       out << " " << snapid_t(op.op.snap.snapid);
@@ -5313,6 +5361,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
 	out << " gen " << op.op.watch.gen;
       break;
     case CEPH_OSD_OP_NOTIFY:
+    case CEPH_OSD_OP_NOTIFY_ACK:
       out << " cookie " << op.op.notify.cookie;
       break;
     case CEPH_OSD_OP_COPY_GET:
@@ -5326,12 +5375,23 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << " object_size " << op.op.alloc_hint.expected_object_size
           << " write_size " << op.op.alloc_hint.expected_write_size;
       break;
-    default:
+    case CEPH_OSD_OP_READ:
+    case CEPH_OSD_OP_SPARSE_READ:
+    case CEPH_OSD_OP_SYNC_READ:
+    case CEPH_OSD_OP_WRITE:
+    case CEPH_OSD_OP_WRITEFULL:
+    case CEPH_OSD_OP_ZERO:
+    case CEPH_OSD_OP_APPEND:
+    case CEPH_OSD_OP_MAPEXT:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
       if (op.op.extent.truncate_seq)
-	out << " [" << op.op.extent.truncate_seq << "@" << (int64_t)op.op.extent.truncate_size << "]";
+	out << " [" << op.op.extent.truncate_seq << "@"
+	    << (int64_t)op.op.extent.truncate_size << "]";
       if (op.op.flags)
 	out << " [" << ceph_osd_op_flag_string(op.op.flags) << "]";
+    default:
+      // don't show any arg info
+      break;
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name
@@ -5342,7 +5402,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     if (op.op.xattr.value_len)
       out << " (" << op.op.xattr.value_len << ")";
     if (op.op.op == CEPH_OSD_OP_CMPXATTR)
-      out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
+      out << " op " << (int)op.op.xattr.cmp_op
+	  << " mode " << (int)op.op.xattr.cmp_mode;
   } else if (ceph_osd_op_type_exec(op.op.op)) {
     // class.method
     if (op.op.cls.class_len && op.indata.length()) {
@@ -5367,28 +5428,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_SCRUBLS:
       break;
     }
-  } else if (ceph_osd_op_type_multi(op.op.op)) {
-    switch (op.op.op) {
-    case CEPH_OSD_OP_CLONERANGE:
-      out << " " << op.op.clonerange.offset << "~" << op.op.clonerange.length
-	  << " from " << op.soid
-	  << " offset " << op.op.clonerange.src_offset;
-      break;
-    case CEPH_OSD_OP_ASSERT_SRC_VERSION:
-      out << " v" << op.op.watch.ver
-	  << " of " << op.soid;
-      break;
-    case CEPH_OSD_OP_SRC_CMPXATTR:
-      out << " " << op.soid;
-      if (op.op.xattr.name_len && op.indata.length()) {
-	out << " ";
-	op.indata.write(0, op.op.xattr.name_len, out);
-      }
-      if (op.op.xattr.value_len)
-	out << " (" << op.op.xattr.value_len << ")";
-      out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
-      break;
-    }
   }
   return out;
 }
@@ -5398,9 +5437,6 @@ void OSDOp::split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
 {
   bufferlist::iterator datap = in.begin();
   for (unsigned i = 0; i < ops.size(); i++) {
-    if (ceph_osd_op_type_multi(ops[i].op.op)) {
-      ::decode(ops[i].soid, datap);
-    }
     if (ops[i].op.payload_len) {
       datap.copy(ops[i].op.payload_len, ops[i].indata);
     }
@@ -5410,9 +5446,6 @@ void OSDOp::split_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& in)
 void OSDOp::merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out)
 {
   for (unsigned i = 0; i < ops.size(); i++) {
-    if (ceph_osd_op_type_multi(ops[i].op.op)) {
-      ::encode(ops[i].soid, out);
-    }
     if (ops[i].indata.length()) {
       ops[i].op.payload_len = ops[i].indata.length();
       out.append(ops[i].indata);

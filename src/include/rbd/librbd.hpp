@@ -241,6 +241,9 @@ public:
   int is_exclusive_lock_owner(bool *is_owner);
   int lock_acquire(rbd_lock_mode_t lock_mode);
   int lock_release();
+  int lock_get_owners(rbd_lock_mode_t *lock_mode,
+                      std::list<std::string> *lock_owners);
+  int lock_break(rbd_lock_mode_t lock_mode, const std::string &lock_owner);
 
   /* object map feature */
   int rebuild_object_map(ProgressContext &prog_ctx);
@@ -293,6 +296,7 @@ public:
   int snap_rename(const char *srcname, const char *dstname);
   int snap_get_limit(uint64_t *limit);
   int snap_set_limit(uint64_t limit);
+  int snap_get_timestamp(uint64_t snap_id, struct timespec *timestamp);
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);

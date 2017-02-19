@@ -33,6 +33,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_client_io.h"
 #include "rgw_compression.h"
+#include "rgw_role.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -42,6 +43,7 @@
 #include "compressor/Compressor.h"
 
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -60,7 +62,7 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
   MultipartMetaFilter() {}
-  bool filter(string& name, string& key) {
+  bool filter(string& name, string& key) override {
     int len = name.size();
     if (len < 6)
       return false;
@@ -890,7 +892,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
   bool is_truncated;
   vector<RGWObjEnt> objs;
 
-  utime_t start_time = ceph_clock_now(cct);
+  utime_t start_time = ceph_clock_now();
 
   RGWRados::Bucket target(store, *pbucket_info);
   RGWRados::Bucket::List list_op(&target);
@@ -927,7 +929,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
       }
 
       perfcounter->tinc(l_rgw_get_lat,
-                       (ceph_clock_now(cct) - start_time));
+			(ceph_clock_now() - start_time));
 
       if (found_start && !handled_end) {
         len_count += end_ofs - start_ofs;
@@ -941,7 +943,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
       }
 
       handled_end = found_end;
-      start_time = ceph_clock_now(cct);
+      start_time = ceph_clock_now();
     }
   } while (is_truncated);
 
@@ -987,7 +989,7 @@ static int iterate_slo_parts(CephContext *cct,
     return 0;
   }
 
-  utime_t start_time = ceph_clock_now(cct);
+  utime_t start_time = ceph_clock_now();
 
   map<uint64_t, rgw_slo_part>::iterator iter = slo_parts.upper_bound(ofs);
   if (iter != slo_parts.begin()) {
@@ -1020,7 +1022,7 @@ static int iterate_slo_parts(CephContext *cct,
     }
 
     perfcounter->tinc(l_rgw_get_lat,
-                      (ceph_clock_now(cct) - start_time));
+		      (ceph_clock_now() - start_time));
 
     if (found_start) {
       if (cb) {
@@ -1030,7 +1032,7 @@ static int iterate_slo_parts(CephContext *cct,
       }
     }
 
-    start_time = ceph_clock_now(cct);
+    start_time = ceph_clock_now();
   }
 
   return 0;
@@ -1263,7 +1265,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   /* garbage collection related handling */
-  utime_t start_time = ceph_clock_now(s->cct);
+  utime_t start_time = ceph_clock_now();
   if (start_time > gc_invalidate_time) {
     int r = store->defer_gc(s->obj_ctx, obj);
     if (r < 0) {
@@ -1318,7 +1320,7 @@ static bool object_is_expired(map<string, bufferlist>& attrs) {
       return false;
     }
 
-    if (delete_at <= ceph_clock_now(g_ceph_context)) {
+    if (delete_at <= ceph_clock_now()) {
       return true;
     }
   }
@@ -1330,7 +1332,7 @@ void RGWGetObj::execute()
 {
   utime_t start_time = s->time;
   bufferlist bl;
-  gc_invalidate_time = ceph_clock_now(s->cct);
+  gc_invalidate_time = ceph_clock_now();
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
 
   bool need_decompress;
@@ -1467,7 +1469,7 @@ void RGWGetObj::execute()
     op_ret = filter->flush();
 
   perfcounter->tinc(l_rgw_get_lat,
-                   (ceph_clock_now(s->cct) - start_time));
+		    (ceph_clock_now() - start_time));
   if (op_ret < 0) {
     goto done_err;
   }
@@ -1747,8 +1749,8 @@ void RGWSetBucketVersioning::execute()
     op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
     if (op_ret < 0) {
       ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
     }
-    return;
   }
 
   if (enable_versioning) {
@@ -2574,14 +2576,14 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
   string upload_id;
 
 protected:
-  int prepare(RGWRados *store, string *oid_rand);
+  int prepare(RGWRados *store, string *oid_rand) override;
   int do_complete(size_t accounted_size, const string& etag, real_time *mtime,
                   real_time set_mtime, map<string, bufferlist>& attrs,
                   real_time delete_at, const char *if_match,
                   const char *if_nomatch) override;
 
 public:
-  bool immutable_head() { return true; }
+  bool immutable_head() override { return true; }
   RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
                    RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
 };
@@ -2755,9 +2757,9 @@ class RGWPutObj_CB : public RGWGetDataCB
   RGWPutObj *op;
 public:
   RGWPutObj_CB(RGWPutObj *_op) : op(_op) {}
-  virtual ~RGWPutObj_CB() {}
+  ~RGWPutObj_CB() {}
 
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
     return op->get_data_cb(bl, bl_ofs, bl_len);
   }
 };
@@ -3188,7 +3190,7 @@ void RGWPutObj::execute()
 done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
-                   (ceph_clock_now(s->cct) - s->time));
+		    (ceph_clock_now() - s->time));
 }
 
 int RGWPostObj::verify_permission()
@@ -4235,12 +4237,12 @@ void RGWPutLC::execute()
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
 
   if (!parser.parse(data, len, 1)) {
-    op_ret = -EACCES;
+    op_ret = -ERR_MALFORMED_XML;
     return;
   }
   config = static_cast<RGWLifecycleConfiguration_S3 *>(parser.find_first("LifecycleConfiguration"));
   if (!config) {
-    op_ret = -EINVAL;
+    op_ret = -ERR_MALFORMED_XML;
     return;
   }
 

@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        mon client ping interval: 4
+        mon client ping timeout: 12
+tasks:
+- mon_thrash:
+    revive_delay: 20
+    thrash_delay: 1
+    thrash_many: true
+    freeze_mon_duration: 20
+    freeze_mon_probability: 10

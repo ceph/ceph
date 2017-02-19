@@ -39,7 +39,7 @@ void CreateRequest<I>::send() {
       m_snap_ids.push_back(it.first);
     }
 
-    if (ObjectMap::is_compatible(m_image_ctx->layout, max_size)) {
+    if (ObjectMap<>::is_compatible(m_image_ctx->layout, max_size)) {
       send_object_map_resize();
       return;
     }
@@ -66,7 +66,7 @@ void CreateRequest<I>::send_object_map_resize() {
 				    m_image_ctx->layout, snap_size),
 				  OBJECT_NONEXISTENT);
 
-    std::string oid(ObjectMap::object_map_name(m_image_ctx->id, snap_id));
+    std::string oid(ObjectMap<>::object_map_name(m_image_ctx->id, snap_id));
     librados::AioCompletion *comp = create_rados_ack_callback(gather_ctx->new_sub());
     int r = m_image_ctx->md_ctx.aio_operate(oid, comp, &op);
     assert(r == 0);

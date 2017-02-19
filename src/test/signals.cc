@@ -12,6 +12,7 @@
 
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 static volatile sig_atomic_t got_sigusr1 = 0;
 
 static void handle_sigusr1(int signo)

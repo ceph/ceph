@@ -46,13 +46,13 @@ rm -rf build && ./do_cmake.sh "$*" \
 	-D WITH_LTTNG=OFF \
 	-D WITH_BLKID=OFF \
 	-D WITH_FUSE=OFF \
-	-D WITH_RBD=OFF \
+	-D WITH_KRBD=OFF \
 	-D WITH_XFS=OFF \
 	-D WITH_KVS=OFF \
-	-D WITH_MANPAGE=OFF \
+	-D WITH_MANPAGE=ON \
+	-D CEPH_MAN_DIR=man \
 	-D WITH_LIBCEPHFS=OFF \
 	-D WITH_CEPHFS=OFF \
-	-D WITH_RADOSGW=OFF \
 	2>&1 | tee cmake.log
 
 cd build

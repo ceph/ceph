@@ -33,16 +33,16 @@ public:
       : lock("lock"), entries_available(false), complete(false),
         complete_result(0) {}
 
-    virtual void get() {}
-    virtual void put() {}
+    void get() override {}
+    void put() override {}
 
-    virtual void handle_entries_available() {
+    void handle_entries_available() override {
       Mutex::Locker locker(lock);
       entries_available = true;
       cond.Signal();
     }
 
-    virtual void handle_complete(int r) {
+    void handle_complete(int r) override {
       Mutex::Locker locker(lock);
       complete = true;
       complete_result = r;
@@ -50,7 +50,7 @@ public:
     }
   };
 
-  virtual void TearDown() {
+  void TearDown() override {
     for (JournalPlayers::iterator it = m_players.begin();
          it != m_players.end(); ++it) {
       delete *it;
@@ -101,7 +101,6 @@ public:
       if (m_replay_hander.entries_available) {
         m_replay_hander.entries_available = false;
       } else if (m_replay_hander.cond.WaitInterval(
-          reinterpret_cast<CephContext*>(m_ioctx.cct()),
           m_replay_hander.lock, utime_t(10, 0)) != 0) {
         break;
       }
@@ -117,7 +116,6 @@ public:
       player->try_pop_front(&entry, &commit_tid);
 
       if (m_replay_hander.cond.WaitInterval(
-            reinterpret_cast<CephContext*>(m_ioctx.cct()),
             m_replay_hander.lock, utime_t(10, 0)) != 0) {
         return false;
       }

@@ -127,12 +127,12 @@ struct ceph_dir_layout {
 #define CEPH_MSG_OSD_OP                 42
 #define CEPH_MSG_OSD_OPREPLY            43
 #define CEPH_MSG_WATCH_NOTIFY           44
+#define CEPH_MSG_OSD_BACKOFF            61
 
 /* FSMap subscribers (see all MDS clusters at once) */
 #define CEPH_MSG_FS_MAP                 45
 /* FSMapUser subscribers (get MDS clusters name->ID mapping) */
 #define CEPH_MSG_FS_MAP_USER		103
-
 
 /* watch-notify operations */
 enum {
@@ -380,6 +380,7 @@ extern const char *ceph_mds_op_name(int op);
 #endif
 #define CEPH_SETATTR_MTIME_NOW	(1 << 7)
 #define CEPH_SETATTR_ATIME_NOW	(1 << 8)
+#define CEPH_SETATTR_KILL_SGUID	(1 << 10)
 
 /*
  * Ceph setxattr request flags.

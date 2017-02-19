@@ -52,6 +52,7 @@
 
 #include "Locker.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef DOUT_COND
 #define DOUT_COND(cct, l) (l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log \
@@ -1570,11 +1571,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       if (session) {
 	dout(20) << " (session prealloc " << session->info.prealloc_inos << ")" << dendl;
 	if (used_preallocated_ino) {
-	  if (session->info.prealloc_inos.empty()) {
-	    // HRM: badness in the journal
-	    mds->clog->warn() << " replayed op " << client_reqs << " on session for "
-			     << client_name << " with empty prealloc_inos\n";
-	  } else {
+	  if (!session->info.prealloc_inos.empty()) {
 	    inodeno_t next = session->next_ino();
 	    inodeno_t i = session->take_ino(used_preallocated_ino);
 	    if (next != i)
@@ -2132,11 +2129,9 @@ void EUpdate::replay(MDSRank *mds)
 	       << " < " << cmapv << dendl;
       // open client sessions?
       map<client_t,entity_inst_t> cm;
-      map<client_t, uint64_t> seqm;
       bufferlist::iterator blp = client_map.begin();
       ::decode(cm, blp);
-      mds->server->prepare_force_open_sessions(cm, seqm);
-      mds->server->finish_force_open_sessions(cm, seqm);
+      mds->sessionmap.open_sessions(cm);
 
       assert(mds->sessionmap.get_version() == cmapv);
       mds->sessionmap.set_projected(mds->sessionmap.get_version());

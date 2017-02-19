@@ -105,8 +105,22 @@ TEST(AdminSocket, SendNoOp) {
   ASSERT_EQ(true, asoct.shutdown());
 }
 
+TEST(AdminSocket, SendTooLongRequest) {
+  std::unique_ptr<AdminSocket>
+      asokc(new AdminSocket(g_ceph_context));
+  AdminSocketTest asoct(asokc.get());
+  ASSERT_EQ(true, asoct.shutdown());
+  ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
+  AdminSocketClient client(get_rand_socket_path());
+  string version;
+  string request(16384, 'a');
+  //if admin_socket cannot handle it, segfault will happened.
+  ASSERT_NE("", client.do_request(request, &version));
+  ASSERT_EQ(true, asoct.shutdown());
+}
+
 class MyTest : public AdminSocketHook {
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) {
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) override {
     std::vector<std::string> args;
     cmd_getval(g_ceph_context, cmdmap, "args", args);
     result.append(command);
@@ -138,7 +152,7 @@ TEST(AdminSocket, RegisterCommand) {
 }
 
 class MyTest2 : public AdminSocketHook {
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) {
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) override {
     std::vector<std::string> args;
     cmd_getval(g_ceph_context, cmdmap, "args", args);
     result.append(command);
@@ -190,7 +204,7 @@ public:
 
   BlockingHook() : _lock("BlockingHook::_lock") {}
 
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) {
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) override {
     Mutex::Locker l(_lock);
     _cond.Wait(_lock);
     return true;

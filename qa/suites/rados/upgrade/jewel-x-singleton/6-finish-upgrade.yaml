@@ -1,0 +1,11 @@
+meta:
+- desc: |
+    install upgrade on remaining node
+    restartin remaining osds
+tasks:
+- install.upgrade:
+    osd.3:
+- ceph.restart:
+    daemons: [osd.3, osd.4, osd.5]
+    wait-for-up: true
+    wait-for-healthy: false

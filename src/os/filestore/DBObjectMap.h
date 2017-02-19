@@ -70,7 +70,7 @@ public:
    * Set of headers currently in use
    */
   set<uint64_t> in_use;
-  set<ghobject_t, ghobject_t::BitwiseComparator> map_header_in_use;
+  set<ghobject_t> map_header_in_use;
 
   /**
    * Takes the map_header_in_use entry in constructor, releases in
@@ -115,9 +115,10 @@ public:
     }
   };
 
-  explicit DBObjectMap(KeyValueDB *db) : db(db), header_lock("DBOBjectMap"),
-           	                         cache_lock("DBObjectMap::CacheLock"),
-      	                                 caches(g_conf->filestore_omap_header_cache_size)
+  DBObjectMap(CephContext* cct, KeyValueDB *db)
+    : ObjectMap(cct), db(db), header_lock("DBOBjectMap"),
+      cache_lock("DBObjectMap::CacheLock"),
+      caches(cct->_conf->filestore_omap_header_cache_size)
     {}
 
   int set_keys(
@@ -324,12 +325,13 @@ public:
   /// String munging (public for testing)
   static string ghobject_key(const ghobject_t &oid);
   static string ghobject_key_v0(coll_t c, const ghobject_t &oid);
-  static int is_buggy_ghobject_key_v1(const string &in);
+  static int is_buggy_ghobject_key_v1(CephContext* cct,
+				      const string &in);
 private:
   /// Implicit lock on Header->seq
   typedef ceph::shared_ptr<_Header> Header;
   Mutex cache_lock;
-  SimpleLRU<ghobject_t, _Header, ghobject_t::BitwiseComparator> caches;
+  SimpleLRU<ghobject_t, _Header> caches;
 
   string map_header_key(const ghobject_t &oid);
   string header_key(uint64_t seq);

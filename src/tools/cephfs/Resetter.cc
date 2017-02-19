@@ -23,6 +23,7 @@
 
 #include "Resetter.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
 int Resetter::reset(mds_role_t role)

@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_fixture.h"
@@ -32,18 +32,18 @@ public:
       : lock("ReplayHandler::lock"), entries_available(false), complete(false) {
     }
 
-    virtual void get() {
+    void get() override {
     }
-    virtual void put() {
+    void put() override {
     }
 
-    virtual void handle_entries_available()  {
+    void handle_entries_available() override  {
       Mutex::Locker locker(lock);
       entries_available = true;
       cond.Signal();
     }
 
-    virtual void handle_complete(int r) {
+    void handle_complete(int r) override {
       Mutex::Locker locker(lock);
       complete = true;
       cond.Signal();
@@ -53,7 +53,7 @@ public:
   ReplayHandler m_replay_handler;
   Journalers m_journalers;
 
-  virtual void TearDown() {
+  void TearDown() override {
     for (Journalers::iterator it = m_journalers.begin();
          it != m_journalers.end(); ++it) {
       journal::Journaler *journaler = *it;
@@ -93,9 +93,9 @@ public:
   bool wait_for_entries_available(librbd::ImageCtx *ictx) {
     Mutex::Locker locker(m_replay_handler.lock);
     while (!m_replay_handler.entries_available) {
-      if (m_replay_handler.cond.WaitInterval(ictx->cct, m_replay_handler.lock,
-                                             utime_t(10, 0)) != 0) {
-        return false;
+      if (m_replay_handler.cond.WaitInterval(m_replay_handler.lock,
+					     utime_t(10, 0)) != 0) {
+	return false;
       }
     }
     m_replay_handler.entries_available = false;

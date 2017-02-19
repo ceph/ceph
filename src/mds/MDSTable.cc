@@ -28,6 +28,7 @@
 #include "include/assert.h"
 
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << "." << table_name << ": "
@@ -37,7 +38,7 @@ class MDSTableIOContext : public MDSIOContextBase
 {
   protected:
     MDSTable *ida;
-    MDSRank *get_mds() {return ida->mds;}
+    MDSRank *get_mds() override {return ida->mds;}
   public:
     explicit MDSTableIOContext(MDSTable *ida_) : ida(ida_) {
       assert(ida != NULL);
@@ -49,7 +50,7 @@ class C_IO_MT_Save : public MDSTableIOContext {
   version_t version;
 public:
   C_IO_MT_Save(MDSTable *i, version_t v) : MDSTableIOContext(i), version(v) {}
-  void finish(int r) {
+  void finish(int r) override {
     ida->save_2(r, version);
   }
 };
@@ -81,8 +82,7 @@ void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
   mds->objecter->write_full(oid, oloc,
 			    snapc,
-			    bl, ceph::real_clock::now(g_ceph_context), 0,
-			    NULL,
+			    bl, ceph::real_clock::now(), 0,
 			    new C_OnFinisher(new C_IO_MT_Save(this, version),
 					     mds->finisher));
 }
@@ -125,7 +125,7 @@ public:
   Context *onfinish;
   bufferlist bl;
   C_IO_MT_Load(MDSTable *i, Context *o) : MDSTableIOContext(i), onfinish(o) {}
-  void finish(int r) {
+  void finish(int r) override {
     ida->load_2(r, bl, onfinish);
   }
 };

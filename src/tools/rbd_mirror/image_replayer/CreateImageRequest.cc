@@ -14,6 +14,7 @@
 #include "librbd/Utils.h"
 #include "librbd/image/CreateRequest.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::image_replayer::CreateImageRequest: " \
@@ -77,7 +78,7 @@ void CreateImageRequest<I>::create_image() {
 
   librbd::image::CreateRequest<I> *req = librbd::image::CreateRequest<I>::create(
     m_local_io_ctx, m_local_image_name, id, m_remote_image_ctx->size,
-    image_options, m_global_image_id, m_remote_mirror_uuid,
+    image_options, m_global_image_id, m_remote_mirror_uuid, false,
     m_remote_image_ctx->op_work_queue, ctx);
   req->send();
 }

@@ -56,11 +56,11 @@ struct Observer : public md_config_obs_t {
     keys[1] = NULL;
   }
 
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     return (const char **)keys;
   }
   void handle_conf_change(const struct md_config_t *conf,
-			  const std::set <std::string> &changed) {
+			  const std::set <std::string> &changed) override {
     // do nothing.
   }
 };
@@ -112,6 +112,7 @@ void pick_addresses(CephContext *cct, int needs)
     exit(1);
   }
 
+
   if ((needs & CEPH_PICK_ADDRESS_PUBLIC)
       && cct->_conf->public_addr.is_blank_ip()
       && !cct->_conf->public_network.empty()) {
@@ -119,9 +120,16 @@ void pick_addresses(CephContext *cct, int needs)
   }
 
   if ((needs & CEPH_PICK_ADDRESS_CLUSTER)
-      && cct->_conf->cluster_addr.is_blank_ip()
-      && !cct->_conf->cluster_network.empty()) {
-    fill_in_one_address(cct, ifa, cct->_conf->cluster_network, "cluster_addr");
+      && cct->_conf->cluster_addr.is_blank_ip()) {
+    if (!cct->_conf->cluster_network.empty()) {
+      fill_in_one_address(cct, ifa, cct->_conf->cluster_network, "cluster_addr");
+    } else {
+      if (!cct->_conf->public_network.empty()) {
+        lderr(cct) << "Public network was set, but cluster network was not set " << dendl;
+        lderr(cct) << "    Using public network also for cluster network" << dendl;
+        fill_in_one_address(cct, ifa, cct->_conf->public_network, "cluster_addr");
+      }
+    }
   }
 
   freeifaddrs(ifa);

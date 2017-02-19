@@ -50,7 +50,7 @@ protected:
     {
     }
 
-    virtual void *entry() {
+    void *entry() override {
       usleep(5);
       waited = throttle.get(count);
       throttle.put(count);
@@ -278,7 +278,7 @@ std::pair<double, std::chrono::duration<double> > test_backoff(
   uint64_t total_observed_total = 0;
   uint64_t total_observations = 0;
 
-  BackoffThrottle throttle(5);
+  BackoffThrottle throttle(g_ceph_context, "backoff_throttle_test", 5);
   bool valid = throttle.set_params(
     low_threshhold,
     high_threshhold,

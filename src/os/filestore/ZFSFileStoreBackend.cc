@@ -36,7 +36,7 @@
 
 ZFSFileStoreBackend::ZFSFileStoreBackend(FileStore *fs) :
   GenericFileStoreBackend(fs), base_zh(NULL), current_zh(NULL),
-  m_filestore_zfs_snap(g_conf->filestore_zfs_snap)
+  m_filestore_zfs_snap(cct->_conf->filestore_zfs_snap)
 {
   int ret = zfs.init();
   if (ret < 0) {

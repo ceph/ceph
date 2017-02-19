@@ -1,0 +1,4 @@
+tasks:
+- mon_thrash:
+    revive_delay: 20
+    thrash_delay: 1

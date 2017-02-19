@@ -20,6 +20,7 @@
 
 using namespace std;
 #define HASH_PRIME 7877
+#define MAX_ID_LEN 255
 static string lc_oid_prefix = "lc";
 static string lc_index_lock_name = "lc_process";
 
@@ -102,6 +103,8 @@ public:
   void set_expiration(LCExpiration*_expiration) {
     expiration = *_expiration;
   }
+
+  bool validate();
   
   void encode(bufferlist& bl) const {
      ENCODE_START(1, 1, bl);
@@ -161,6 +164,10 @@ public:
 //  static void generate_test_instances(list<RGWAccessControlList*>& o);
 
   void add_rule(LCRule* rule);
+
+  int check_and_add_rule(LCRule* rule);
+
+  bool validate();
 
   multimap<string, LCRule>& get_rule_map() { return rule_map; }
   map<string, int>& get_prefix_map() { return prefix_map; }

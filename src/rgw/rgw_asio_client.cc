@@ -6,6 +6,7 @@
 
 #include "rgw_asio_client.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix

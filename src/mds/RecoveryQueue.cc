@@ -21,6 +21,7 @@
 #include "RecoveryQueue.h"
 
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << " RecoveryQueue::" << __func__ << " "
@@ -29,11 +30,11 @@ class C_MDC_Recover : public MDSIOContextBase {
 protected:
   RecoveryQueue *rq;
   CInode *in;
-  void finish(int r) {
+  void finish(int r) override {
     rq->_recovered(in, r, size, mtime);
   }
 
-  MDSRank *get_mds() {
+  MDSRank *get_mds() override {
     return rq->mds;
   }
 

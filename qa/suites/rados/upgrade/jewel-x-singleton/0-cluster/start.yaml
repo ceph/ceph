@@ -1,0 +1,23 @@
+meta:
+- desc: |
+   Run ceph on two nodes,
+   with a separate client-only node. 
+   Use xfs beneath the osds.
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on legacy crush tunables: false
+    fs: xfs
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+- - client.0

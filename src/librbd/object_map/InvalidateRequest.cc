@@ -59,10 +59,6 @@ void InvalidateRequest<I>::send() {
 
   lderr(cct) << this << " invalidating object map on-disk" << dendl;
   librados::ObjectWriteOperation op;
-  if (image_ctx.exclusive_lock != nullptr &&
-      m_snap_id == CEPH_NOSNAP && !m_force) {
-    image_ctx.exclusive_lock->assert_header_locked(&op);
-  }
   cls_client::set_flags(&op, m_snap_id, flags, flags);
 
   librados::AioCompletion *rados_completion =

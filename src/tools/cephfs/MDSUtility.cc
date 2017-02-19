@@ -14,6 +14,7 @@
 #include "MDSUtility.h"
 #include "mon/MonClient.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
 
@@ -164,6 +165,6 @@ bool MDSUtility::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
       return false;
   }
 
-  *authorizer = monc->auth->build_authorizer(dest_type);
+  *authorizer = monc->build_authorizer(dest_type);
   return *authorizer != NULL;
 }

@@ -116,7 +116,11 @@ public:
                    bufferlist *bl) = 0;
   virtual int remove(const std::string& oid, const SnapContext &snapc) = 0;
   virtual int selfmanaged_snap_create(uint64_t *snapid) = 0;
+  virtual void aio_selfmanaged_snap_create(uint64_t *snapid,
+                                           AioCompletionImpl *c);
   virtual int selfmanaged_snap_remove(uint64_t snapid) = 0;
+  virtual void aio_selfmanaged_snap_remove(uint64_t snapid,
+                                           AioCompletionImpl *c);
   virtual int selfmanaged_snap_rollback(const std::string& oid,
                                         uint64_t snapid) = 0;
   virtual int selfmanaged_snap_set_write_ctx(snap_t seq,

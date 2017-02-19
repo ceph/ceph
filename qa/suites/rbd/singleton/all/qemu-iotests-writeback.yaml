@@ -1,0 +1,13 @@
+exclude_arch: armv7l
+roles:
+- [mon.a, osd.0, osd.1, client.0]
+tasks:
+- install:
+- ceph:
+    fs: xfs
+    conf:
+      client:
+        rbd cache: true
+- workunit:
+    clients:
+      all: [rbd/qemu-iotests.sh]

@@ -11,6 +11,7 @@
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/WorkQueue.h"
 #include "journal/Future.h"
 #include "journal/JournalMetadataListener.h"
 #include "journal/ReplayEntry.h"
@@ -23,7 +24,6 @@
 #include <string>
 #include <unordered_map>
 
-class ContextWQ;
 class SafeTimer;
 namespace journal {
 class Journaler;
@@ -106,6 +106,9 @@ public:
   static int is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
                           bool *is_tag_owner);
   static void is_tag_owner(ImageCtxT *image_ctx, bool *is_tag_owner,
+                           Context *on_finish);
+  static void is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
+                           bool *is_tag_owner, ContextWQ *op_work_queue,
                            Context *on_finish);
   static int get_tag_owner(ImageCtxT *image_ctx, std::string *mirror_uuid);
   static int get_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,

@@ -47,7 +47,7 @@ void RemoveRequest<I>::send_remove_object_map() {
 
   for (auto snap_id : snap_ids) {
     m_ref_counter++;
-    std::string oid(ObjectMap::object_map_name(m_image_ctx->id, snap_id));
+    std::string oid(ObjectMap<>::object_map_name(m_image_ctx->id, snap_id));
     using klass = RemoveRequest<I>;
     librados::AioCompletion *comp =
       create_rados_ack_callback<klass, &klass::handle_remove_object_map>(this);

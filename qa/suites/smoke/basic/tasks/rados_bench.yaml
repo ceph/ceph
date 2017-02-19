@@ -1,0 +1,36 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms inject delay max: 1
+        ms inject delay probability: 0.005
+        ms inject delay type: osd
+        ms inject internal delays: 0.002
+        ms inject socket failures: 2500
+tasks:
+- install: null
+- ceph:
+    fs: xfs
+    log-whitelist:
+    - wrongly marked me down
+    - objects unfound and apparently lost
+- thrashosds:
+    chance_pgnum_grow: 2
+    chance_pgpnum_fix: 1
+    timeout: 1200
+- full_sequential:
+  - radosbench:
+      clients: [client.0]
+      time: 150
+  - radosbench:
+      clients: [client.0]
+      time: 150
+  - radosbench:
+      clients: [client.0]
+      time: 150
+  - radosbench:
+      clients: [client.0]
+      time: 150
+  - radosbench:
+      clients: [client.0]
+      time: 150

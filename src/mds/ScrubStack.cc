@@ -20,6 +20,7 @@
 #include "mds/MDCache.h"
 #include "mds/MDSContinuation.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, scrubstack->mdcache->mds)
@@ -255,7 +256,7 @@ class C_InodeValidated : public MDSInternalContext
       : MDSInternalContext(mds), stack(stack_), target(target_)
     {}
 
-    void finish(int r)
+    void finish(int r) override
     {
       stack->_validate_inode_done(target, r, result);
     }

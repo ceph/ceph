@@ -5,6 +5,7 @@ import os
 import time
 import sys
 
+from datetime import datetime
 from nose import with_setup, SkipTest
 from nose.tools import eq_ as eq, assert_raises, assert_not_equal
 from rados import (Rados,
@@ -13,12 +14,14 @@ from rados import (Rados,
                    LIBRADOS_OP_FLAG_FADVISE_RANDOM)
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
-                 FunctionNotSupported, ArgumentOutOfRange, DiskQuotaExceeded,
+                 FunctionNotSupported, ArgumentOutOfRange,
+                 DiskQuotaExceeded, ConnectionShutdown,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
                  RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_JOURNALING,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
                  RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
-                 RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN)
+                 RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
+                 RBD_LOCK_MODE_EXCLUSIVE)
 
 rados = None
 ioctx = None
@@ -521,6 +524,17 @@ class TestImage(object):
         self.image.remove_snap('snap1')
         assert_raises(ImageNotFound, self.image.unprotect_snap, 'snap1')
         assert_raises(ImageNotFound, self.image.is_protected_snap, 'snap1')
+
+    def test_snap_timestamp(self):
+        self.image.create_snap('snap1')
+        eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
+        for snap in self.image.list_snaps():
+            snap_id = snap["id"]
+        time = self.image.get_snap_timestamp(snap_id)
+        assert_not_equal(b'', time.year)
+        assert_not_equal(0, time.year)
+        assert_not_equal(time.year, '1970')
+        self.image.remove_snap('snap1')
 
     def test_limit_snaps(self):
         self.image.set_snap_limit(2)
@@ -1243,6 +1257,45 @@ class TestExclusiveLock(object):
             for offset in [0, IMG_SIZE // 2]:
                 read = image2.read(offset, 256)
                 eq(data, read)
+    def test_acquire_release_lock(self):
+        with Image(ioctx, image_name) as image:
+            image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
+            image.lock_release()
+
+    def test_break_lock(self):
+        blacklist_rados = Rados(conffile='')
+        blacklist_rados.connect()
+        try:
+            blacklist_ioctx = blacklist_rados.open_ioctx(pool_name)
+            try:
+                rados2.conf_set('rbd_blacklist_on_break_lock', 'true')
+                with Image(ioctx2, image_name) as image, \
+                     Image(blacklist_ioctx, image_name) as blacklist_image:
+                    blacklist_image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
+                    assert_raises(ReadOnlyImage, image.lock_acquire,
+                                  RBD_LOCK_MODE_EXCLUSIVE)
+
+                    lock_owners = list(image.lock_get_owners())
+                    eq(1, len(lock_owners))
+                    eq(RBD_LOCK_MODE_EXCLUSIVE, lock_owners[0]['mode'])
+                    image.lock_break(RBD_LOCK_MODE_EXCLUSIVE,
+                                     lock_owners[0]['owner'])
+
+                    blacklist_rados.wait_for_latest_osdmap()
+                    data = rand_data(256)
+                    assert_raises(ConnectionShutdown,
+                                  blacklist_image.write, data, 0)
+
+                    image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
+
+                    try:
+                        blacklist_image.close()
+                    except ConnectionShutdown:
+                        pass
+            finally:
+                blacklist_ioctx.close()
+        finally:
+            blacklist_rados.shutdown()
 
 class TestMirroring(object):
 

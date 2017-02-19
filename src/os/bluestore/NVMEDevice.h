@@ -19,7 +19,6 @@
 
 #include <queue>
 #include <map>
-#include <pciaccess.h>
 #include <limits>
 
 // since _Static_assert introduced in c11
@@ -55,7 +54,6 @@ class NVMEDevice : public BlockDevice {
   uint64_t block_size;
 
   bool aio_stop;
-  bufferptr zeros;
 
   struct BufferedExtents {
     struct Extent {
@@ -207,7 +205,7 @@ class NVMEDevice : public BlockDevice {
   aio_callback_t aio_callback;
   void *aio_callback_priv;
 
-  NVMEDevice(aio_callback_t cb, void *cbpriv);
+  NVMEDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);
 
   bool supported_bdev_label() override { return false; }
 
@@ -223,7 +221,11 @@ class NVMEDevice : public BlockDevice {
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
            IOContext *ioc,
            bool buffered) override;
-
+  int aio_read(
+    uint64_t off,
+    uint64_t len,
+    bufferlist *pbl,
+    IOContext *ioc) override;
   int aio_write(uint64_t off, bufferlist& bl,
                 IOContext *ioc,
                 bool buffered) override;
@@ -232,7 +234,7 @@ class NVMEDevice : public BlockDevice {
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;
-  int open(string path) override;
+  int open(const string& path) override;
   void close() override;
 };
 

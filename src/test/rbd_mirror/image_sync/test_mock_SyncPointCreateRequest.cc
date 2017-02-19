@@ -48,7 +48,7 @@ class TestMockImageSyncSyncPointCreateRequest : public TestMockFixture {
 public:
   typedef SyncPointCreateRequest<librbd::MockTestImageCtx> MockSyncPointCreateRequest;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;

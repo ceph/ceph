@@ -17,6 +17,7 @@
 
 #include "ClusterWatcher.h"
 #include "ImageReplayer.h"
+#include "LeaderWatcher.h"
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
 #include "types.h"
@@ -26,7 +27,6 @@ namespace mirror {
 
 struct Threads;
 class ReplayerAdminSocketHook;
-class MirrorStatusWatchCtx;
 
 /**
  * Controls mirroring for a single remote cluster.
@@ -42,6 +42,7 @@ public:
   Replayer& operator=(const Replayer&) = delete;
 
   bool is_blacklisted() const;
+  bool is_leader() const;
 
   int init();
   void run();
@@ -51,24 +52,20 @@ public:
   void stop(bool manual);
   void restart();
   void flush();
+  void release_leader();
 
 private:
-  typedef PoolWatcher::ImageId ImageId;
-  typedef PoolWatcher::ImageIds ImageIds;
-
   void init_local_mirroring_images();
   void set_sources(const ImageIds &image_ids);
 
-  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
-                            const std::string &image_id,
-                            const boost::optional<std::string>& image_name);
+  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
   bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
 
-  int mirror_image_status_init();
-  void mirror_image_status_shut_down();
-
-  int init_rados(const std::string &cluser_name, const std::string &client_name,
+  int init_rados(const std::string &cluster_name, const std::string &client_name,
                  const std::string &description, RadosRef *rados_ref);
+
+  void handle_post_acquire_leader(Context *on_finish);
+  void handle_pre_release_leader(Context *on_finish);
 
   Threads *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
@@ -92,30 +89,11 @@ private:
 
   std::unique_ptr<PoolWatcher> m_pool_watcher;
   std::map<std::string, std::unique_ptr<ImageReplayer<> > > m_image_replayers;
-  std::unique_ptr<MirrorStatusWatchCtx> m_status_watcher;
 
   std::string m_asok_hook_name;
   ReplayerAdminSocketHook *m_asok_hook;
 
-  struct InitImageInfo {
-    std::string global_id;
-    std::string id;
-    std::string name;
-
-    InitImageInfo(const std::string& global_id, const std::string &id = "",
-                  const std::string &name = "")
-      : global_id(global_id), id(id), name(name) {
-    }
-
-    inline bool operator==(const InitImageInfo &rhs) const {
-      return (global_id == rhs.global_id && id == rhs.id && name == rhs.name);
-    }
-    inline bool operator<(const InitImageInfo &rhs) const {
-      return global_id < rhs.global_id;
-    }
-  };
-
-  std::set<InitImageInfo> m_init_images;
+  std::set<ImageId> m_init_image_ids;
 
   class ReplayerThread : public Thread {
     Replayer *m_replayer;
@@ -126,6 +104,26 @@ private:
       return 0;
     }
   } m_replayer_thread;
+
+  class LeaderListener : public LeaderWatcher<>::Listener {
+  public:
+    LeaderListener(Replayer *replayer) : m_replayer(replayer) {
+    }
+
+  protected:
+    virtual void post_acquire_handler(Context *on_finish) {
+      m_replayer->handle_post_acquire_leader(on_finish);
+    }
+
+    virtual void pre_release_handler(Context *on_finish) {
+      m_replayer->handle_pre_release_leader(on_finish);
+    }
+
+  private:
+    Replayer *m_replayer;
+  } m_leader_listener;
+
+  std::unique_ptr<LeaderWatcher<> > m_leader_watcher;
 };
 
 } // namespace mirror

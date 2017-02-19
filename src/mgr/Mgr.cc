@@ -31,6 +31,7 @@
 
 #include "Mgr.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
@@ -76,7 +77,7 @@ public:
   MetadataUpdate(DaemonStateIndex &daemon_state_, const DaemonKey &key_)
     : daemon_state(daemon_state_), key(key_) {}
 
-  void finish(int r)
+  void finish(int r) override
   {
     daemon_state.clear_updating(key);
     if (r == 0) {

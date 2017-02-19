@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "osdc/Striper.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::image_sync::SnapshotCreateRequest: " \
@@ -227,7 +228,7 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
   librados::snap_t local_snap_id = snap_it->second;
   m_local_image_ctx->snap_lock.put_read();
 
-  std::string object_map_oid(librbd::ObjectMap::object_map_name(
+  std::string object_map_oid(librbd::ObjectMap<>::object_map_name(
     m_local_image_ctx->id, local_snap_id));
   uint64_t object_count = Striper::get_num_objects(m_local_image_ctx->layout,
                                                    m_size);

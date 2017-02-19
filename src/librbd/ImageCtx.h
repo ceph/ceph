@@ -47,7 +47,7 @@ namespace librbd {
   template <typename> class ImageWatcher;
   template <typename> class Journal;
   class LibrbdAdminSocketHook;
-  class ObjectMap;
+  template <typename> class ObjectMap;
   template <typename> class Operations;
   class LibrbdWriteback;
 
@@ -146,7 +146,7 @@ namespace librbd {
     Operations<ImageCtx> *operations;
 
     ExclusiveLock<ImageCtx> *exclusive_lock;
-    ObjectMap *object_map;
+    ObjectMap<ImageCtx> *object_map;
 
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
@@ -190,6 +190,7 @@ namespace librbd {
     uint32_t journal_max_payload_bytes;
     int journal_max_concurrent_object_sets;
     bool mirroring_resync_after_disconnect;
+    int mirroring_replay_delay;
 
     LibrbdAdminSocketHook *asok_hook;
 
@@ -250,7 +251,7 @@ namespace librbd {
 		  cls::rbd::SnapshotNamespace in_snap_namespace,
 		  librados::snap_t id,
 		  uint64_t in_size, parent_info parent,
-                  uint8_t protection_status, uint64_t flags);
+		  uint8_t protection_status, uint64_t flags, utime_t timestamp);
     void rm_snap(std::string in_snap_name, librados::snap_t id);
     uint64_t get_image_size(librados::snap_t in_snap_id) const;
     uint64_t get_object_count(librados::snap_t in_snap_id) const;
@@ -277,9 +278,10 @@ namespace librbd {
     void user_flushed();
     void flush_cache(Context *onfinish);
     void shut_down_cache(Context *on_finish);
-    int invalidate_cache(bool purge_on_error=false);
-    void invalidate_cache(Context *on_finish);
+    int invalidate_cache(bool purge_on_error);
+    void invalidate_cache(bool purge_on_error, Context *on_finish);
     void clear_nonexistence_cache();
+    bool is_cache_empty();
     void register_watch(Context *on_finish);
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
@@ -296,7 +298,7 @@ namespace librbd {
     void apply_metadata(const std::map<std::string, bufferlist> &meta);
 
     ExclusiveLock<ImageCtx> *create_exclusive_lock();
-    ObjectMap *create_object_map(uint64_t snap_id);
+    ObjectMap<ImageCtx> *create_object_map(uint64_t snap_id);
     Journal<ImageCtx> *create_journal();
 
     void clear_pending_completions();

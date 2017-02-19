@@ -13,12 +13,15 @@
 
 #include "DaemonServer.h"
 
+#include "auth/RotatingKeyRing.h"
+
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
@@ -45,7 +48,8 @@ DaemonServer::~DaemonServer() {
 int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
 {
   // Initialize Messenger
-  msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
+  msgr = Messenger::create(g_ceph_context, public_msgr_type,
 			   entity_name_t::MGR(gid), "server", getpid(), 0);
   int r = msgr->bind(g_conf->public_addr);
   if (r < 0) {
@@ -88,11 +92,12 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
   EntityName name;
   uint64_t global_id = 0;
 
-  is_valid = handler->verify_authorizer(cct, monc->rotating_secrets,
-						  authorizer_data,
-                                                  authorizer_reply, name,
-                                                  global_id, caps_info,
-                                                  session_key);
+  is_valid = handler->verify_authorizer(
+    cct, monc->rotating_secrets.get(),
+    authorizer_data,
+    authorizer_reply, name,
+    global_id, caps_info,
+    session_key);
 
   // TODO: invent some caps suitable for ceph-mgr
 
@@ -114,7 +119,7 @@ bool DaemonServer::ms_get_authorizer(int dest_type,
       return false;
   }
 
-  *authorizer = monc->auth->build_authorizer(dest_type);
+  *authorizer = monc->build_authorizer(dest_type);
   dout(20) << "got authorizer " << *authorizer << dendl;
   return *authorizer != NULL;
 }
@@ -164,7 +169,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
           << m->daemon_name << dendl;
 
   auto configure = new MMgrConfigure();
-  configure->stats_period = 5;
+  configure->stats_period = g_conf->mgr_stats_period;
   m->get_connection()->send_message(configure);
 
   if (daemon_state.exists(key)) {

@@ -198,18 +198,32 @@ class WouldBlock(Error):
 class OutOfRange(Error):
     pass
 
-cdef errno_to_exception =  {
-    errno.EPERM      : PermissionError,
-    errno.ENOENT     : ObjectNotFound,
-    errno.EIO        : IOError,
-    errno.ENOSPC     : NoSpace,
-    errno.EEXIST     : ObjectExists,
-    errno.ENODATA    : NoData,
-    errno.EINVAL     : InvalidValue,
-    errno.EOPNOTSUPP : OperationNotSupported,
-    errno.ERANGE     : OutOfRange,
-    errno.EWOULDBLOCK: WouldBlock,
-}
+IF UNAME_SYSNAME == "FreeBSD":
+    cdef errno_to_exception =  {
+        errno.EPERM      : PermissionError,
+        errno.ENOENT     : ObjectNotFound,
+        errno.EIO        : IOError,
+        errno.ENOSPC     : NoSpace,
+        errno.EEXIST     : ObjectExists,
+        errno.ENOATTR    : NoData,
+        errno.EINVAL     : InvalidValue,
+        errno.EOPNOTSUPP : OperationNotSupported,
+        errno.ERANGE     : OutOfRange,
+        errno.EWOULDBLOCK: WouldBlock,
+    }
+ELSE:
+    cdef errno_to_exception =  {
+        errno.EPERM      : PermissionError,
+        errno.ENOENT     : ObjectNotFound,
+        errno.EIO        : IOError,
+        errno.ENOSPC     : NoSpace,
+        errno.EEXIST     : ObjectExists,
+        errno.ENODATA    : NoData,
+        errno.EINVAL     : InvalidValue,
+        errno.EOPNOTSUPP : OperationNotSupported,
+        errno.ERANGE     : OutOfRange,
+        errno.EWOULDBLOCK: WouldBlock,
+    }
 
 
 cdef make_ex(ret, msg):
@@ -325,6 +339,13 @@ cdef class LibCephFS(object):
                                   "CephFS object in state %s." % (self.state))
 
     def __cinit__(self, conf=None, conffile=None, auth_id=None, rados_inst=None):
+        """Create a libcephfs wrapper
+
+        :param conf dict opt: settings overriding the default ones and conffile
+        :param conffile str opt: the path to ceph.conf to override the default settings
+        :auth_id str opt: the id used to authenticate the client entity
+        :rados_inst Rados opt: a rados.Rados instance
+        """
         PyEval_InitThreads()
         self.state = "uninitialized"
         if rados_inst is not None:
@@ -347,7 +368,7 @@ cdef class LibCephFS(object):
         if conf is not None and not isinstance(conf, dict):
             raise TypeError("conf must be dict or None")
         cstr(conffile, 'configfile', opt=True)
-        auth_id = cstr(auth_id, 'configfile', opt=True)
+        auth_id = cstr(auth_id, 'auth_id', opt=True)
 
         cdef:
             char* _auth_id = opt_str(auth_id)

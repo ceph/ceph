@@ -1,0 +1,9 @@
+roles:
+- [mon.a, osd.0, osd.1, client.0]
+tasks:
+- install:
+- ceph:
+    fs: xfs
+- workunit:
+    clients:
+      all: [rbd/merge_diff.sh]

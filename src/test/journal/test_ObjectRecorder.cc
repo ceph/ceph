@@ -31,12 +31,12 @@ public:
     Handler() : lock("lock") {
     }
 
-    virtual void closed(journal::ObjectRecorder *object_recorder) {
+    void closed(journal::ObjectRecorder *object_recorder) override {
       Mutex::Locker locker(lock);
       is_closed = true;
       cond.Signal();
     }
-    virtual void overflow(journal::ObjectRecorder *object_recorder) {
+    void overflow(journal::ObjectRecorder *object_recorder) override {
       Mutex::Locker locker(lock);
       journal::AppendBuffers append_buffers;
       object_lock->Lock();
@@ -59,7 +59,7 @@ public:
   double m_flush_age;
   Handler m_handler;
 
-  void TearDown() {
+  void TearDown() override {
     for (ObjectRecorders::iterator it = m_object_recorders.begin();
          it != m_object_recorders.end(); ++it) {
       C_SaferCond cond;
@@ -372,7 +372,6 @@ TEST_F(TestObjectRecorder, Close) {
     Mutex::Locker locker(m_handler.lock);
     while (!m_handler.is_closed) {
       if (m_handler.cond.WaitInterval(
-            reinterpret_cast<CephContext*>(m_ioctx.cct()),
             m_handler.lock, utime_t(10, 0)) != 0) {
         break;
       }
@@ -423,7 +422,6 @@ TEST_F(TestObjectRecorder, Overflow) {
     Mutex::Locker locker(m_handler.lock);
     while (m_handler.overflows == 0) {
       if (m_handler.cond.WaitInterval(
-            reinterpret_cast<CephContext*>(m_ioctx.cct()),
             m_handler.lock, utime_t(10, 0)) != 0) {
         break;
       }

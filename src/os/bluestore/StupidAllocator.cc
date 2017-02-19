@@ -5,14 +5,13 @@
 #include "bluestore_types.h"
 #include "common/debug.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "stupidalloc "
 
-StupidAllocator::StupidAllocator()
-  : num_free(0),
-    num_uncommitted(0),
-    num_committing(0),
+StupidAllocator::StupidAllocator(CephContext* cct)
+  : cct(cct), num_free(0),
     num_reserved(0),
     free(10),
     last_alloc(0)
@@ -25,7 +24,7 @@ StupidAllocator::~StupidAllocator()
 
 unsigned StupidAllocator::_choose_bin(uint64_t orig_len)
 {
-  uint64_t len = orig_len / g_conf->bdev_block_size;
+  uint64_t len = orig_len / cct->_conf->bdev_block_size;
   int bin = std::min((int)cbits(len), (int)free.size() - 1);
   dout(30) << __func__ << " len 0x" << std::hex << orig_len << std::dec
 	   << " -> " << bin << dendl;
@@ -84,7 +83,7 @@ static uint64_t aligned_len(btree_interval_set<uint64_t>::iterator p,
     return p.get_len() - skew;
 }
 
-int StupidAllocator::allocate(
+int64_t StupidAllocator::allocate_int(
   uint64_t want_size, uint64_t alloc_unit, int64_t hint,
   uint64_t *offset, uint32_t *length)
 {
@@ -160,9 +159,9 @@ int StupidAllocator::allocate(
     skew = alloc_unit - skew;
   *offset = p.get_start() + skew;
   *length = MIN(MAX(alloc_unit, want_size), p.get_len() - skew);
-  if (g_conf->bluestore_debug_small_allocations) {
+  if (cct->_conf->bluestore_debug_small_allocations) {
     uint64_t max =
-      alloc_unit * (rand() % g_conf->bluestore_debug_small_allocations);
+      alloc_unit * (rand() % cct->_conf->bluestore_debug_small_allocations);
     if (max && *length > max) {
       dout(10) << __func__ << " shortening allocation of 0x" << std::hex
 	       << *length << " -> 0x"
@@ -202,13 +201,12 @@ int StupidAllocator::allocate(
   return 0;
 }
 
-int StupidAllocator::alloc_extents(
+int64_t StupidAllocator::allocate(
   uint64_t want_size,
   uint64_t alloc_unit,
   uint64_t max_alloc_size,
   int64_t hint,
-  mempool::bluestore_alloc::vector<AllocExtent> *extents,
-  int *count)
+  mempool::bluestore_alloc::vector<AllocExtent> *extents)
 {
   uint64_t allocated_size = 0;
   uint64_t offset = 0;
@@ -222,7 +220,7 @@ int StupidAllocator::alloc_extents(
   ExtentList block_list = ExtentList(extents, 1, max_alloc_size);
 
   while (allocated_size < want_size) {
-    res = allocate(MIN(max_alloc_size, (want_size - allocated_size)),
+    res = allocate_int(MIN(max_alloc_size, (want_size - allocated_size)),
        alloc_unit, hint, &offset, &length);
     if (res != 0) {
       /*
@@ -235,13 +233,10 @@ int StupidAllocator::alloc_extents(
     hint = offset + length;
   }
 
-  *count = block_list.get_extent_count();
-  if (want_size - allocated_size > 0) {
-    release_extents(extents, *count);
+  if (allocated_size == 0) {
     return -ENOSPC;
   }
-
-  return 0;
+  return allocated_size;
 }
 
 int StupidAllocator::release(
@@ -250,8 +245,8 @@ int StupidAllocator::release(
   std::lock_guard<std::mutex> l(lock);
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  uncommitted.insert(offset, length);
-  num_uncommitted += length;
+  _insert_free(offset, length);
+  num_free += length;
   return 0;
 }
 
@@ -273,22 +268,6 @@ void StupidAllocator::dump()
       dout(0) << __func__ << "  0x" << std::hex << p.get_start() << "~"
 	      << p.get_len() << std::dec << dendl;
     }
-  }
-  dout(0) << __func__ << " committing: "
-	  << committing.num_intervals() << " extents" << dendl;
-  for (auto p = committing.begin();
-       p != committing.end();
-       ++p) {
-    dout(0) << __func__ << "  0x" << std::hex << p.get_start() << "~"
-	    << p.get_len() << std::dec << dendl;
-  }
-  dout(0) << __func__ << " uncommitted: "
-	  << uncommitted.num_intervals() << " extents" << dendl;
-  for (auto p = uncommitted.begin();
-       p != uncommitted.end();
-       ++p) {
-    dout(0) << __func__ << "  0x" << std::hex << p.get_start() << "~"
-	    << p.get_len() << std::dec << dendl;
   }
 }
 
@@ -329,28 +308,3 @@ void StupidAllocator::shutdown()
   dout(1) << __func__ << dendl;
 }
 
-void StupidAllocator::commit_start()
-{
-  std::lock_guard<std::mutex> l(lock);
-  dout(10) << __func__ << " releasing " << num_uncommitted
-	   << " in extents " << uncommitted.num_intervals() << dendl;
-  assert(committing.empty());
-  committing.swap(uncommitted);
-  num_committing = num_uncommitted;
-  num_uncommitted = 0;
-}
-
-void StupidAllocator::commit_finish()
-{
-  std::lock_guard<std::mutex> l(lock);
-  dout(10) << __func__ << " released " << num_committing
-	   << " in extents " << committing.num_intervals() << dendl;
-  for (auto p = committing.begin();
-       p != committing.end();
-       ++p) {
-    _insert_free(p.get_start(), p.get_len());
-  }
-  committing.clear();
-  num_free += num_committing;
-  num_committing = 0;
-}

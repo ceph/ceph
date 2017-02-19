@@ -424,6 +424,26 @@ recovery operations to ensure optimal performance during recovery.
 :Valid Range: 1-63
 
 
+``osd scrub priority``
+
+:Description: The priority set for scrub operations. It is relative to
+              ``osd client op priority``.
+
+:Type: 32-bit Integer
+:Default: ``5``
+:Valid Range: 1-63
+
+
+``osd snap trim priority``
+
+:Description: The priority set for snap trim operations. It is relative to
+              ``osd client op priority``.
+
+:Type: 32-bit Integer
+:Default: ``5``
+:Valid Range: 1-63
+
+
 ``osd op thread timeout`` 
 
 :Description: The Ceph OSD Daemon operation thread timeout in seconds.
@@ -462,10 +482,9 @@ recovery operations to ensure optimal performance during recovery.
 	      operations. ``be`` is the default and is the same
 	      priority as all other threads in the OSD. ``rt`` means
 	      the disk thread will have precendence over all other
-	      threads in the OSD. This is useful if scrubbing is much
-	      needed and must make progress at the expense of client
-	      operations. Note: Only works with the Linux Kernel CFQ
-	      scheduler.
+	      threads in the OSD. Note: Only works with the Linux Kernel 
+	      CFQ scheduler. Since Jewel scrubbing is no longer carried
+	      out by the disk iothread, see osd priority options instead.
 :Type: String
 :Default: the empty string
 
@@ -479,9 +498,8 @@ recovery operations to ensure optimal performance during recovery.
 	      host were in class ``idle`` and compete for I/O
 	      (i.e. due to controller congestion), it can be used to
 	      lower the disk thread priority of one OSD to 7 so that
-	      another OSD with priority 0 can potentially scrub
-	      faster. Note: Only works with the Linux Kernel CFQ
-	      scheduler.
+	      another OSD with priority 0 can have priority.
+	      Note: Only works with the Linux Kernel CFQ scheduler.
 :Type: Integer in the range of 0 to 7 or -1 if not to be used.
 :Default: ``-1``
 

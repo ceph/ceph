@@ -1,0 +1,10 @@
+roles:
+- [mon.a, osd.0, osd.1, client.0]
+tasks:
+- install:
+- ceph:
+    fs: xfs
+- cram:
+    clients:
+      client.0:
+      - http://git.ceph.com/?p={repo};a=blob_plain;hb={branch};f=src/test/cli-integration/rbd/formatted-output.t

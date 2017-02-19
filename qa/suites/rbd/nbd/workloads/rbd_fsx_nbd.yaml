@@ -1,0 +1,15 @@
+os_type: ubuntu
+overrides:
+  install:
+    ceph:
+      extra_packages: [rbd-nbd]
+tasks:
+- rbd_fsx:
+    clients: [client.0]
+    ops: 6000
+    nbd: True
+    holebdy: 512
+    punch_holes: true
+    readbdy: 512
+    truncbdy: 512
+    writebdy: 512

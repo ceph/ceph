@@ -1,0 +1,66 @@
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 30 # GB
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - slow request
+- exec:
+    client.0:
+      - sudo ceph osd pool create base 4
+      - sudo ceph osd pool create cache 4
+      - sudo ceph osd tier add base cache
+      - sudo ceph osd tier cache-mode cache writeback
+      - sudo ceph osd tier set-overlay base cache
+      - sudo ceph osd pool set cache hit_set_type bloom
+      - sudo ceph osd pool set cache hit_set_count 8
+      - sudo ceph osd pool set cache hit_set_period 60
+      - sudo ceph osd pool set cache target_max_objects 500
+- background_exec:
+    mon.a:
+      - while true
+      - do sleep 30
+      - echo proxy
+      - sudo ceph osd tier cache-mode cache proxy
+      - sleep 10
+      - sudo ceph osd pool set cache cache_target_full_ratio .001
+      - echo cache-try-flush-evict-all
+      - rados -p cache cache-try-flush-evict-all
+      - sleep 5
+      - echo cache-flush-evict-all
+      - rados -p cache cache-flush-evict-all
+      - sleep 5
+      - echo remove overlay
+      - sudo ceph osd tier remove-overlay base
+      - sleep 20
+      - echo add writeback overlay
+      - sudo ceph osd tier cache-mode cache writeback
+      - sudo ceph osd pool set cache cache_target_full_ratio .8
+      - sudo ceph osd tier set-overlay base cache
+      - sleep 30
+      - sudo ceph osd tier cache-mode cache readproxy
+      - done
+- rados:
+    clients: [client.0]
+    pools: [base]
+    max_seconds: 600
+    ops: 400000
+    objects: 10000
+    size: 1024
+    op_weights:
+      read: 100
+      write: 100
+      delete: 50
+      copy_from: 50

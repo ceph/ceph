@@ -28,7 +28,7 @@ public:
   {
   }
 
-  virtual int send() {
+  int send() override {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
     CephContext *cct = image_ctx.cct;
@@ -140,9 +140,6 @@ bool FlattenRequest<I>::send_update_header() {
 
   // remove parent from this (base) image
   librados::ObjectWriteOperation op;
-  if (image_ctx.exclusive_lock != nullptr) {
-    image_ctx.exclusive_lock->assert_header_locked(&op);
-  }
   cls_client::remove_parent(&op);
 
   librados::AioCompletion *rados_completion = this->create_callback_completion();

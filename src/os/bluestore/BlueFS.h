@@ -40,6 +40,7 @@ enum {
 
 class BlueFS {
 public:
+  CephContext* cct;
   static constexpr unsigned MAX_BDEV = 3;
   static constexpr unsigned BDEV_WAL = 0;
   static constexpr unsigned BDEV_DB = 1;
@@ -129,7 +130,8 @@ public:
     FileWriter(FileRef f)
       : file(f),
 	pos(0),
-	buffer_appender(buffer.get_page_aligned_appender()) {
+	buffer_appender(buffer.get_page_aligned_appender(
+			  g_conf->bluefs_alloc_size / CEPH_PAGE_SIZE)) {
       ++file->num_writers;
       iocv.fill(nullptr);
     }
@@ -251,6 +253,7 @@ private:
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
   vector<uint64_t> block_total;               ///< sum of block_all
   vector<Allocator*> alloc;                   ///< allocators for bdevs
+  vector<interval_set<uint64_t>> pending_release; ///< extents to release
 
   void _init_logger();
   void _shutdown_logger();
@@ -321,7 +324,7 @@ private:
   }
 
 public:
-  BlueFS();
+  BlueFS(CephContext* cct);
   ~BlueFS();
 
   // the super is always stored on bdev 0
@@ -335,6 +338,7 @@ public:
   uint64_t get_total(unsigned id);
   uint64_t get_free(unsigned id);
   void get_usage(vector<pair<uint64_t,uint64_t>> *usage); // [<free,total> ...]
+  void dump_perf_counters(Formatter *f);
 
   /// get current extents that we own for given block device
   int get_block_extents(unsigned id, interval_set<uint64_t> *extents);
@@ -387,7 +391,7 @@ public:
 
   /// reclaim block space
   int reclaim_blocks(unsigned bdev, uint64_t want,
-		     uint64_t *offset, uint32_t *length);
+		     AllocExtentVector *extents);
 
   void flush(FileWriter *h) {
     std::lock_guard<std::mutex> l(lock);

@@ -7,6 +7,7 @@
 #include "librbd/Utils.h"
 #include "common/errno.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::image_sync::ObjectCopyRequest: " \
@@ -289,15 +290,11 @@ void ObjectCopyRequest<I>::send_update_object_map() {
            << dendl;
 
   RWLock::WLocker object_map_locker(m_local_image_ctx->object_map_lock);
-  Context *ctx = create_context_callback<
+  bool sent = m_local_image_ctx->object_map->template aio_update<
     ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_update_object_map>(
+      snap_object_state.first, m_object_number, snap_object_state.second, {},
       this);
-
-  m_local_image_ctx->object_map->aio_update(snap_object_state.first,
-                                            m_object_number,
-                                            m_object_number + 1,
-                                            snap_object_state.second,
-                                            boost::none, ctx);
+  assert(sent);
   m_local_image_ctx->snap_lock.put_read();
 }
 

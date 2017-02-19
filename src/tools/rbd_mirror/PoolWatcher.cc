@@ -12,6 +12,7 @@
 
 #include "PoolWatcher.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::PoolWatcher: " << this << " " \
@@ -53,7 +54,7 @@ bool PoolWatcher::is_blacklisted() const {
   return m_blacklisted;
 }
 
-const PoolWatcher::ImageIds& PoolWatcher::get_images() const
+const ImageIds& PoolWatcher::get_images() const
 {
   assert(m_lock.is_locked());
   return m_images;
@@ -123,12 +124,12 @@ int PoolWatcher::refresh(ImageIds *image_ids) {
       return r;
     }
     for (auto it = mirror_images.begin(); it != mirror_images.end(); ++it) {
-      boost::optional<std::string> image_name(boost::none);
+      std::string image_name;
       auto it2 = image_id_to_name.find(it->first);
       if (it2 != image_id_to_name.end()) {
         image_name = it2->second;
       }
-      image_ids->insert(ImageId(it->first, image_name, it->second));
+      image_ids->insert(ImageId(it->second, it->first, image_name));
     }
     if (!mirror_images.empty()) {
       last_read = mirror_images.rbegin()->first;

@@ -562,7 +562,7 @@ int main(int argc, const char **argv)
     ::encode(v, final);
     ::encode(mapbl, final);
 
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     // save it
     t->put("monmap", v, mapbl);
     t->put("monmap", "latest", final);
@@ -651,7 +651,8 @@ int main(int argc, const char **argv)
 
   // bind
   int rank = monmap.get_rank(g_conf->name.get_id());
-  Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
+  Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MON(rank), "mon",
 				      0, Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)
@@ -662,7 +663,6 @@ int main(int argc, const char **argv)
   uint64_t supported =
     CEPH_FEATURE_UID |
     CEPH_FEATURE_NOSRCADDR |
-    DEPRECATED_CEPH_FEATURE_MONCLOCKCHECK |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_MSG_AUTH;
   msgr->set_default_policy(Messenger::Policy::stateless_server(supported, 0));

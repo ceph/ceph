@@ -1,0 +1,20 @@
+roles:
+- - backup.mon.a
+  - backup.mon.b
+  - backup.osd.0
+  - backup.osd.1
+  - backup.osd.2
+- - backup.mon.c
+  - backup.osd.3
+  - backup.osd.4
+  - backup.osd.5
+  - backup.client.0
+tasks:
+- install:
+- ceph:
+    cluster: backup
+- thrashosds:
+    cluster: backup
+- workunit:
+    clients:
+      all: [true.sh]

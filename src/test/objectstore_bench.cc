@@ -15,6 +15,7 @@
 #include "common/strtol.h"
 #include "common/ceph_argparse.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
 
 static void usage()
@@ -86,7 +87,7 @@ class C_NotifyCond : public Context {
 public:
   C_NotifyCond(std::mutex *mutex, std::condition_variable *cond, bool *done)
     : mutex(mutex), cond(cond), done(done) {}
-  void finish(int r) {
+  void finish(int r) override {
     std::lock_guard<std::mutex> lock(*mutex);
     *done = true;
     cond->notify_one();

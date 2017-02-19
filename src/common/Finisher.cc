@@ -59,7 +59,7 @@ void *Finisher::finisher_thread_entry()
       ldout(cct, 10) << "finisher_thread doing " << ls << dendl;
 
       if (logger)
-        start = ceph_clock_now(cct);
+	start = ceph_clock_now();
 
       // Now actually process the contexts.
       for (vector<Context*>::iterator p = ls.begin();
@@ -79,7 +79,7 @@ void *Finisher::finisher_thread_entry()
 	}
 	if (logger) {
 	  logger->dec(l_finisher_queue_len);
-          end = ceph_clock_now(cct);
+	  end = ceph_clock_now();
 	  logger->tinc(l_finisher_complete_lat, end - start);
 	  start = end;
         }

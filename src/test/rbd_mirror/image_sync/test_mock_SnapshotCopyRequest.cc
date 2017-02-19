@@ -94,7 +94,7 @@ public:
   typedef SnapshotCopyRequest<librbd::MockTestImageCtx> MockSnapshotCopyRequest;
   typedef SnapshotCreateRequest<librbd::MockTestImageCtx> MockSnapshotCreateRequest;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;

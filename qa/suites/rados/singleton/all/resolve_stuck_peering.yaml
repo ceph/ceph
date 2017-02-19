@@ -1,0 +1,10 @@
+roles:
+- [mon.0]
+- [osd.0, osd.1, osd.2, client.0]
+
+tasks:
+- install:
+- ceph:
+    fs: xfs
+- resolve_stuck_peering:
+

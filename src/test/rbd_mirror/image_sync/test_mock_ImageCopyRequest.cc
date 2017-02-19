@@ -95,7 +95,7 @@ public:
   typedef ImageCopyRequest<librbd::MockTestImageCtx> MockImageCopyRequest;
   typedef ObjectCopyRequest<librbd::MockTestImageCtx> MockObjectCopyRequest;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;
@@ -134,8 +134,7 @@ public:
                                std::function<void()> fn = []() {}) {
     Mutex::Locker locker(mock_object_copy_request.lock);
     while (mock_object_copy_request.object_contexts.count(object_num) == 0) {
-      if (mock_object_copy_request.cond.WaitInterval(m_local_image_ctx->cct,
-                                                     mock_object_copy_request.lock,
+      if (mock_object_copy_request.cond.WaitInterval(mock_object_copy_request.lock,
                                                      utime_t(10, 0)) != 0) {
         return false;
       }
@@ -153,8 +152,7 @@ public:
   MockImageCopyRequest::SnapMap wait_for_snap_map(MockObjectCopyRequest &mock_object_copy_request) {
     Mutex::Locker locker(mock_object_copy_request.lock);
     while (mock_object_copy_request.snap_map == nullptr) {
-      if (mock_object_copy_request.cond.WaitInterval(m_local_image_ctx->cct,
-                                                     mock_object_copy_request.lock,
+      if (mock_object_copy_request.cond.WaitInterval(mock_object_copy_request.lock,
                                                      utime_t(10, 0)) != 0) {
         return MockImageCopyRequest::SnapMap();
       }

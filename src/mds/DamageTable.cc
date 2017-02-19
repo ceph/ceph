@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include "common/debug.h"
@@ -18,6 +18,7 @@
 
 #include "DamageTable.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".damage " << __func__ << " "
@@ -37,12 +38,12 @@ class DirFragDamage : public DamageEntry
     : ino(ino_), frag(frag_)
   {}
 
-  virtual damage_entry_type_t get_type() const
+  damage_entry_type_t get_type() const override
   {
     return DAMAGE_ENTRY_DIRFRAG;
   }
 
-  void dump(Formatter *f) const
+  void dump(Formatter *f) const override
   {
     f->open_object_section("dir_frag_damage");
     f->dump_string("damage_type", "dir_frag");
@@ -73,12 +74,12 @@ class DentryDamage : public DamageEntry
     : ino(ino_), frag(frag_), dname(dname_), snap_id(snap_id_)
   {}
 
-  virtual damage_entry_type_t get_type() const
+  damage_entry_type_t get_type() const override
   {
     return DAMAGE_ENTRY_DENTRY;
   }
 
-  void dump(Formatter *f) const
+  void dump(Formatter *f) const override
   {
     f->open_object_section("dentry_damage");
     f->dump_string("damage_type", "dentry");
@@ -104,12 +105,12 @@ class BacktraceDamage : public DamageEntry
     : ino(ino_)
   {}
 
-  virtual damage_entry_type_t get_type() const
+  damage_entry_type_t get_type() const override
   {
     return DAMAGE_ENTRY_BACKTRACE;
   }
 
-  void dump(Formatter *f) const
+  void dump(Formatter *f) const override
   {
     f->open_object_section("backtrace_damage");
     f->dump_string("damage_type", "backtrace");

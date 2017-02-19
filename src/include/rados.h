@@ -146,6 +146,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_SORTBITWISE (1<<15) /* use bitwise hobject_t sort */
 #define CEPH_OSDMAP_REQUIRE_JEWEL (1<<16) /* require jewel for booting osds */
 #define CEPH_OSDMAP_REQUIRE_KRAKEN (1<<17) /* require kraken for booting osds */
+#define CEPH_OSDMAP_REQUIRE_LUMINOUS (1<<18) /* require l for booting osds */
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -172,7 +173,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSD_OP_TYPE_ATTR  0x0300
 #define CEPH_OSD_OP_TYPE_EXEC  0x0400
 #define CEPH_OSD_OP_TYPE_PG    0x0500
-#define CEPH_OSD_OP_TYPE_MULTI 0x0600 /* multiobject */
+//      LEAVE UNUSED           0x0600 used to be multiobject ops
 
 #define __CEPH_OSD_OP1(mode, nr) \
 	(CEPH_OSD_OP_MODE_##mode | (nr))
@@ -260,11 +261,6 @@ extern const char *ceph_osd_state_name(int s);
 	/* ESX/SCSI */							    \
 	f(WRITESAME,	__CEPH_OSD_OP(WR, DATA, 38),	"write-same")	    \
 									    \
-	/** multi **/							    \
-	f(CLONERANGE,	__CEPH_OSD_OP(WR, MULTI, 1),	"clonerange")	    \
-	f(ASSERT_SRC_VERSION, __CEPH_OSD_OP(RD, MULTI, 2), "assert-src-version") \
-	f(SRC_CMPXATTR,	__CEPH_OSD_OP(RD, MULTI, 3),	"src-cmpxattr")	    \
-									    \
 	/** attrs **/							    \
 	/* read */							    \
 	f(GETXATTR,	__CEPH_OSD_OP(RD, ATTR, 1),	"getxattr")	    \
@@ -322,10 +318,6 @@ static inline int ceph_osd_op_type_exec(int op)
 static inline int ceph_osd_op_type_pg(int op)
 {
 	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_PG;
-}
-static inline int ceph_osd_op_type_multi(int op)
-{
-	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_MULTI;
 }
 
 static inline int ceph_osd_op_mode_subop(int op)
@@ -479,6 +471,14 @@ enum {
 };
 
 const char *ceph_osd_alloc_hint_flag_name(int f);
+
+enum {
+	CEPH_OSD_BACKOFF_OP_BLOCK = 1,
+	CEPH_OSD_BACKOFF_OP_ACK_BLOCK = 2,
+	CEPH_OSD_BACKOFF_OP_UNBLOCK = 3,
+};
+
+const char *ceph_osd_backoff_op_name(int op);
 
 /*
  * an individual object operation.  each may be accompanied by some data

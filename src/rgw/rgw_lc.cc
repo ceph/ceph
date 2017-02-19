@@ -18,7 +18,7 @@
 #include "rgw_lc_s3.h"
 
 
-
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 const char* LC_STATUS[] = {
@@ -30,6 +30,18 @@ const char* LC_STATUS[] = {
 
 using namespace std;
 using namespace librados;
+
+bool LCRule::validate()
+{
+  if (id.length() > MAX_ID_LEN) {
+    return false;
+  }
+  else if (expiration.get_days() <= 0) {
+    return false;
+  }
+  return true;
+}
+
 void RGWLifecycleConfiguration::add_rule(LCRule *rule)
 {
   string id;
@@ -43,9 +55,50 @@ void RGWLifecycleConfiguration::_add_rule(LCRule *rule)
   prefix_map[rule->get_prefix()] = rule->get_expiration().get_days();
 }
 
+int RGWLifecycleConfiguration::check_and_add_rule(LCRule *rule)
+{
+  if (!rule->validate()) {
+    return -EINVAL;
+  }
+  string id;
+  rule->get_id(id);
+  if (rule_map.find(id) != rule_map.end()) {  //id shouldn't be the same 
+    return -EINVAL;
+  }
+  rule_map.insert(pair<string, LCRule>(id, *rule));
+
+  auto ret = prefix_map.insert(pair<string, int>(rule->get_prefix(), rule->get_expiration().get_days()));
+  //Now prefix shouldn't be the same. When we add noncurrent expiration or other action, prefix may be same.
+  if (!ret.second) {
+    return -ERR_INVALID_REQUEST;
+  }
+  return 0;
+}
+
+//Rules are conflicted: if one rule's prefix starts with other rule's prefix, and these two rules
+//define same action(now only support expiration days). 
+bool RGWLifecycleConfiguration::validate() 
+{
+  if (prefix_map.size() < 2) {
+    return true;
+  }
+  auto next_iter = prefix_map.begin();
+  auto cur_iter = next_iter++;
+  while (next_iter != prefix_map.end()) {
+    string c_pre = cur_iter->first;
+    string n_pre = next_iter->first;
+    if (n_pre.compare(0, c_pre.length(), c_pre) == 0) {
+      return false;
+    }
+    ++next_iter;
+    ++cur_iter;
+  }
+  return true;
+}
+
 void *RGWLC::LCWorker::entry() {
   do {
-    utime_t start = ceph_clock_now(cct);
+    utime_t start = ceph_clock_now();
     if (should_work(start)) {
       dout(5) << "life cycle: start" << dendl;
       int r = lc->process();
@@ -57,7 +110,7 @@ void *RGWLC::LCWorker::entry() {
     if (lc->going_down())
       break;
 
-    utime_t end = ceph_clock_now(cct);
+    utime_t end = ceph_clock_now();
     int secs = schedule_next_start_time(start, end);
     time_t next_time = end + secs;
     char buf[30];
@@ -65,7 +118,7 @@ void *RGWLC::LCWorker::entry() {
     dout(5) << "schedule life cycle next start time: " << nt <<dendl;
 
     lock.Lock();
-    cond.WaitInterval(cct, lock, utime_t(secs, 0));
+    cond.WaitInterval(lock, utime_t(secs, 0));
     lock.Unlock();
   } while (!lc->going_down());
 
@@ -103,7 +156,7 @@ bool RGWLC::if_already_run_today(time_t& start_date)
 {
   struct tm bdt;
   time_t begin_of_day;
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
   localtime_r(&start_date, &bdt);
 
   if (cct->_conf->rgw_lc_debug_interval > 0) {
@@ -221,7 +274,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
     }
 
   map<string, int>& prefix_map = config.get_prefix_map();
-  for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end();  prefix_iter++) {
+  for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
     if (prefix_iter->first.empty()) {
       default_config = true;
       default_days = prefix_iter->second;
@@ -244,13 +297,13 @@ int RGWLC::bucket_lc_process(string& shard_id)
 
       vector<RGWObjEnt>::iterator obj_iter;
       int pos = 0;
-      utime_t now = ceph_clock_now(cct);
-      for (obj_iter = objs.begin(); obj_iter != objs.end(); obj_iter++) {
+      utime_t now = ceph_clock_now();
+      for (obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
         bool prefix_match = false;
         int match_days = 0;
         map<string, int>& prefix_map = config.get_prefix_map();
 
-        for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end();  prefix_iter++) {
+        for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
           if (prefix_iter->first.empty()) {
             continue;
           }
@@ -290,7 +343,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
       }
     } while (is_truncated);
   } else {
-    for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end();  prefix_iter++) {
+    for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
       if (prefix_iter->first.empty()) {
         continue;
       }
@@ -311,9 +364,9 @@ int RGWLC::bucket_lc_process(string& shard_id)
 
         vector<RGWObjEnt>::iterator obj_iter;
         int days = prefix_iter->second;
-        utime_t now = ceph_clock_now(cct);
+        utime_t now = ceph_clock_now();
 
-        for (obj_iter = objs.begin(); obj_iter != objs.end(); obj_iter++) {
+        for (obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
           if (obj_has_expired(now - ceph::real_clock::to_time_t((*obj_iter).mtime), days)) {
             RGWObjectCtx rctx(store);
             rgw_obj obj(bucket_info.bucket, (*obj_iter).key.name);
@@ -421,7 +474,7 @@ int RGWLC::process(int index, int max_lock_secs)
 {
   rados::cls::lock::Lock l(lc_index_lock_name);
   do {
-    utime_t now = ceph_clock_now(cct);
+    utime_t now = ceph_clock_now();
     pair<string, int > entry;//string = bucket_name:bucket_id ,int = LC_BUCKET_STATUS
     if (max_lock_secs <= 0)
       return -EAGAIN;

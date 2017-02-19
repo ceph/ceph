@@ -1,0 +1,10 @@
+tasks:
+- ssh_keys:
+- install:
+- ceph:
+- hadoop:
+- workunit: 
+    clients:
+      client.0: [hadoop/terasort.sh]
+    env:
+      NUM_RECORDS: "10000000"

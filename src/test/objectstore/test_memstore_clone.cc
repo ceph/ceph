@@ -20,6 +20,8 @@
 #include "common/errno.h"
 #include "store_test_fixture.h"
 
+#define dout_context g_ceph_context
+
 namespace {
 
 const coll_t cid;

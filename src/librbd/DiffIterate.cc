@@ -75,7 +75,7 @@ protected:
   typedef boost::tuple<uint64_t, size_t, bool> Diff;
   typedef std::list<Diff> Diffs;
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     CephContext *cct = m_image_ctx.cct;
     if (r == 0 && m_snap_ret < 0) {
       r = m_snap_ret;
@@ -263,8 +263,8 @@ int DiffIterate::execute() {
   if (m_include_parent && from_snap_id == 0) {
     RWLock::RLocker l(m_image_ctx.snap_lock);
     RWLock::RLocker l2(m_image_ctx.parent_lock);
-    uint64_t overlap = end_size;
-    m_image_ctx.get_parent_overlap(from_snap_id, &overlap);
+    uint64_t overlap = 0;
+    m_image_ctx.get_parent_overlap(m_image_ctx.snap_id, &overlap);
     r = 0;
     if (m_image_ctx.parent && overlap > 0) {
       ldout(cct, 10) << " first getting parent diff" << dendl;
@@ -385,8 +385,8 @@ int DiffIterate::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
     }
 
     BitVector<2> object_map;
-    std::string oid(ObjectMap::object_map_name(m_image_ctx.id,
-                                               current_snap_id));
+    std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id,
+                                                 current_snap_id));
     r = cls_client::object_map_load(&m_image_ctx.md_ctx, oid, &object_map);
     if (r < 0) {
       lderr(cct) << "diff_object_map: failed to load object map " << oid

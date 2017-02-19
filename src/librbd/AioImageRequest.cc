@@ -44,7 +44,7 @@ struct C_DiscardJournalCommit : public Context {
     aio_comp->add_request();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << this << " C_DiscardJournalCommit: "
                    << "journal committed: discarding from cache" << dendl;
@@ -71,7 +71,7 @@ struct C_FlushJournalCommit : public Context {
     aio_comp->add_request();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     CephContext *cct = image_ctx.cct;
     ldout(cct, 20) << this << " C_FlushJournalCommit: journal committed"
                    << dendl;
@@ -86,7 +86,7 @@ public:
     : C_AioRequest(completion), m_req(nullptr) {
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     m_completion->lock.Lock();
     CephContext *cct = m_completion->ictx->cct;
     ldout(cct, 10) << "C_AioRead::finish() " << this << " r = " << r << dendl;
@@ -133,7 +133,7 @@ public:
   }
 
 protected:
-  virtual void finish(int r) {
+  void finish(int r) override {
     CephContext *cct = m_completion->ictx->cct;
     ldout(cct, 10) << "C_ImageCacheRead::finish() " << this << ": r=" << r
                    << dendl;
@@ -163,7 +163,7 @@ public:
   explicit C_ObjectCacheRead(ImageCtxT &ictx, AioObjectRead<ImageCtxT> *req)
     : m_image_ctx(ictx), m_req(req), m_enqueued(false) {}
 
-  virtual void complete(int r) {
+  void complete(int r) override {
     if (!m_enqueued) {
       // cache_lock creates a lock ordering issue -- so re-execute this context
       // outside the cache_lock
@@ -175,7 +175,7 @@ public:
   }
 
 protected:
-  virtual void finish(int r) {
+  void finish(int r) override {
     m_req->complete(r);
   }
 
@@ -472,7 +472,7 @@ uint64_t AioImageWrite<I>::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   I &image_ctx = this->m_image_ctx;
 
-  uint64_t tid;
+  uint64_t tid = 0;
   uint64_t buffer_offset = 0;
   assert(!this->m_image_extents.empty());
   for (auto &extent : this->m_image_extents) {
@@ -561,7 +561,7 @@ uint64_t AioImageDiscard<I>::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   I &image_ctx = this->m_image_ctx;
 
-  uint64_t tid;
+  uint64_t tid = 0;
   assert(!this->m_image_extents.empty());
   for (auto &extent : this->m_image_extents) {
     journal::EventEntry event_entry(journal::AioDiscardEvent(extent.first,

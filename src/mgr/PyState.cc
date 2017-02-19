@@ -22,6 +22,8 @@
 
 #include "PyState.h"
 
+#define dout_context g_ceph_context
+
 PyModules *global_handle = NULL;
 
 
@@ -46,7 +48,7 @@ public:
     Py_DECREF(python_completion);
   }
 
-  void finish(int r)
+  void finish(int r) override
   {
     PyGILState_STATE gstate;
     gstate = PyGILState_Ensure();

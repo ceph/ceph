@@ -35,10 +35,12 @@ public:
                                const ImageOptions &image_options,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
+                               bool skip_mirror_enable,
                                ContextWQ *op_work_queue, Context *on_finish) {
     return new CreateRequest(ioctx, image_name, image_id, size, image_options,
                              non_primary_global_image_id, primary_mirror_uuid,
-                             op_work_queue, on_finish);
+                             skip_mirror_enable, op_work_queue,
+                             on_finish);
   }
 
   static int validate_order(CephContext *cct, uint8_t order);
@@ -79,14 +81,9 @@ private:
    * |               |\             JOURNAL CREATE              .
    * |               | \               /  |                     .
    * v               |  *<------------/   v                     .
-   * |               |           FETCH MIRROR IMAGE             v
+   * |               |           MIRROR IMAGE ENABLE            .
    * |               |                /   |                     .
-   * |        JOURNAL REMOVE<--------/    v                     .
-   * |                \          MIRROR IMAGE ENABLE            .
-   * |                 \               /  |                     .
-   * |                  *<------------/   v                     .
-   * |                              NOTIFY WATCHERS             .
-   * |                                    |                     .
+   * |        JOURNAL REMOVE*<-------/    |                     .
    * |                                    v                     .
    * |_____________>___________________<finish> . . . . < . . . .
    *
@@ -98,6 +95,7 @@ private:
                 const ImageOptions &image_options,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid,
+                bool skip_mirror_enable,
                 ContextWQ *op_work_queue, Context *on_finish);
 
   IoCtx m_ioctx;
@@ -115,6 +113,7 @@ private:
   int64_t m_data_pool_id = -1;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
+  bool m_skip_mirror_enable;
   bool m_negotiate_features = false;
 
   ContextWQ *m_op_work_queue;
@@ -157,14 +156,8 @@ private:
   void journal_create();
   Context *handle_journal_create(int *result);
 
-  void fetch_mirror_image();
-  Context *handle_fetch_mirror_image(int *result);
-
   void mirror_image_enable();
   Context *handle_mirror_image_enable(int *result);
-
-  void send_watcher_notification();
-  void handle_watcher_notify(int r);
 
   void complete(int r);
 

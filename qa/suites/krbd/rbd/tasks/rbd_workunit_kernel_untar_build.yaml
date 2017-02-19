@@ -1,0 +1,9 @@
+tasks:
+- install:
+- ceph:
+- rbd:
+    all:
+- workunit:
+    clients:
+      all:
+        - kernel_untar_build.sh

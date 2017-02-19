@@ -1,0 +1,41 @@
+tasks:
+- install: null
+- ceph:
+    fs: btrfs
+    log-whitelist:
+    - wrongly marked me down
+    - objects unfound and apparently lost
+- thrashosds:
+    chance_pgnum_grow: 2
+    chance_pgpnum_fix: 1
+    timeout: 1200
+- exec:
+    client.0:
+    - sudo ceph osd pool create base 4
+    - sudo ceph osd pool create cache 4
+    - sudo ceph osd tier add base cache
+    - sudo ceph osd tier cache-mode cache writeback
+    - sudo ceph osd tier set-overlay base cache
+    - sudo ceph osd pool set cache hit_set_type bloom
+    - sudo ceph osd pool set cache hit_set_count 8
+    - sudo ceph osd pool set cache hit_set_period 3600
+    - sudo ceph osd pool set cache target_max_objects 250
+- rados:
+    clients:
+    - client.0
+    objects: 500
+    op_weights:
+      copy_from: 50
+      delete: 50
+      evict: 50
+      flush: 50
+      read: 100
+      rollback: 50
+      snap_create: 50
+      snap_remove: 50
+      try_flush: 50
+      write: 100
+    ops: 4000
+    pool_snaps: true
+    pools:
+    - base

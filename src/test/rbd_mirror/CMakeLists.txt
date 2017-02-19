@@ -4,6 +4,7 @@ set(rbd_mirror_test_srcs
   test_ImageReplayer.cc
   test_ImageDeleter.cc
   test_ImageSync.cc
+  test_LeaderWatcher.cc
   test_fixture.cc
   )
 add_library(rbd_mirror STATIC ${rbd_mirror_test_srcs})
@@ -16,6 +17,7 @@ add_executable(unittest_rbd_mirror
   test_mock_ImageReplayer.cc
   test_mock_ImageSync.cc
   test_mock_ImageSyncThrottler.cc
+  test_mock_LeaderWatcher.cc
   image_replayer/test_mock_BootstrapRequest.cc
   image_replayer/test_mock_CreateImageRequest.cc
   image_replayer/test_mock_EventPreprocessor.cc
@@ -25,6 +27,7 @@ add_executable(unittest_rbd_mirror
   image_sync/test_mock_SnapshotCreateRequest.cc
   image_sync/test_mock_SyncPointCreateRequest.cc
   image_sync/test_mock_SyncPointPruneRequest.cc
+  pool_watcher/test_mock_RefreshImagesRequest.cc
   )
 add_ceph_unittest(unittest_rbd_mirror ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rbd_mirror)
 set_target_properties(unittest_rbd_mirror PROPERTIES COMPILE_FLAGS
@@ -37,6 +40,7 @@ target_link_libraries(unittest_rbd_mirror
   rbd_mirror
   rados_test_stub
   rbd_mirror_internal
+  rbd_mirror_types
   rbd_api
   rbd_internal
   rbd_test_mock
@@ -60,6 +64,7 @@ set_target_properties(ceph_test_rbd_mirror PROPERTIES COMPILE_FLAGS
 target_link_libraries(ceph_test_rbd_mirror
   rbd_mirror
   rbd_mirror_internal
+  rbd_mirror_types
   rbd_api
   rbd_internal
   journal

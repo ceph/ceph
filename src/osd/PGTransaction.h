@@ -20,6 +20,7 @@
 
 #include "common/hobject.h"
 #include "osd/osd_types.h"
+#include "osd/osd_internal_types.h"
 #include "common/interval_map.h"
 #include "common/inline_variant.h"
 
@@ -36,7 +37,7 @@
  */
 class PGTransaction {
 public:
-  map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator> obc_map;
+  map<hobject_t, ObjectContextRef> obc_map;
 
   class ObjectOperation {
   public:
@@ -245,7 +246,7 @@ public:
 
     friend class PGTransaction;
   };
-  map<hobject_t, ObjectOperation, hobject_t::BitwiseComparator> op_map;
+  map<hobject_t, ObjectOperation> op_map;
 private:
   ObjectOperation &get_object_op_for_modify(const hobject_t &hoid) {
     auto &op = op_map[hoid];
@@ -509,7 +510,7 @@ public:
    * object clone from source case (make_writeable made a clone).
    *
    * This structure only requires that the source->sink graph be acyclic.
-   * This is much more general than is actually required by ReplicatedPG.
+   * This is much more general than is actually required by PrimaryLogPG.
    * Only 4 flavors of multi-object transactions actually happen:
    * 1) rename temp -> object for copyfrom
    * 2) clone head -> clone, modify head for make_writeable on normal head write
@@ -523,7 +524,7 @@ public:
    */
   template <typename T>
   void safe_create_traverse(T &&t) {
-    map<hobject_t, list<hobject_t>, hobject_t::BitwiseComparator> dgraph;
+    map<hobject_t, list<hobject_t>> dgraph;
     list<hobject_t> stack;
 
     // Populate stack with roots, dgraph with edges

@@ -512,7 +512,7 @@ class ObjectCacher {
   void mark_dirty(BufferHead *bh) {
     bh_set_state(bh, BufferHead::STATE_DIRTY);
     bh_lru_dirty.lru_touch(bh);
-    //bh->set_dirty_stamp(ceph_clock_now(g_ceph_context));
+    //bh->set_dirty_stamp(ceph_clock_now());
   }
 
   void bh_add(Object *ob, BufferHead *bh);

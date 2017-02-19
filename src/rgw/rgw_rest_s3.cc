@@ -31,8 +31,10 @@
 
 #include "rgw_ldap.h"
 #include "rgw_token.h"
+#include "rgw_rest_role.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 using namespace rgw;
@@ -696,7 +698,7 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
 
 class RGWSetBucketVersioningParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el) {
+  XMLObj *alloc_obj(const char *el) override {
     return new XMLObj;
   }
 
@@ -899,7 +901,7 @@ class RGWLocationConstraint : public XMLObj
 public:
   RGWLocationConstraint() {}
   ~RGWLocationConstraint() {}
-  bool xml_end(const char *el) {
+  bool xml_end(const char *el) override {
     if (!el)
       return false;
 
@@ -920,7 +922,7 @@ public:
 
 class RGWCreateBucketParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el) {
+  XMLObj *alloc_obj(const char *el) override {
     return new XMLObj;
   }
 
@@ -2543,7 +2545,7 @@ void RGWGetRequestPayment_ObjStore_S3::send_response()
 
 class RGWSetRequestPaymentParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el) {
+  XMLObj *alloc_obj(const char *el) override {
     return new XMLObj;
   }
 
@@ -2910,6 +2912,32 @@ RGWOp *RGWHandler_REST_Service_S3::op_get()
 RGWOp *RGWHandler_REST_Service_S3::op_head()
 {
   return new RGWListBuckets_ObjStore_S3;
+}
+
+RGWOp *RGWHandler_REST_Service_S3::op_post()
+{
+  if (s->info.args.exists("Action")) {
+    string action = s->info.args.get("Action");
+    if (action.compare("CreateRole") == 0)
+      return new RGWCreateRole;
+    if (action.compare("DeleteRole") == 0)
+      return new RGWDeleteRole;
+    if (action.compare("GetRole") == 0)
+      return new RGWGetRole;
+    if (action.compare("UpdateAssumeRolePolicy") == 0)
+      return new RGWModifyRole;
+    if (action.compare("ListRoles") == 0)
+      return new RGWListRoles;
+    if (action.compare("PutRolePolicy") == 0)
+      return new RGWPutRolePolicy;
+    if (action.compare("GetRolePolicy") == 0)
+      return new RGWGetRolePolicy;
+    if (action.compare("ListRolePolicies") == 0)
+      return new RGWListRolePolicies;
+    if (action.compare("DeleteRolePolicy") == 0)
+      return new RGWDeleteRolePolicy;
+  }
+  return NULL;
 }
 
 RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
@@ -3359,7 +3387,14 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
       if (algorithm != "AWS4-HMAC-SHA256") {
         return -EPERM;
       }
-      return authorize_v4(store, s);
+      /* compute first aws4 signature (stick to the boto2 implementation) */
+      int err = authorize_v4(store, s);
+      if ((err==-ERR_SIGNATURE_NO_MATCH) && !store->ctx()->_conf->rgw_s3_auth_aws4_force_boto2_compat) {
+        /* compute second aws4 signature (no bugs supported) */
+        ldout(s->cct, 10) << "computing second aws4 signature..." << dendl;
+        return authorize_v4(store, s, false);
+      }
+      return err;
     }
 
     /* AWS2 */
@@ -3513,20 +3548,18 @@ static std::array<string, 3> aws4_presigned_required_keys = { "Credential", "Sig
 /*
  * handle v4 signatures (rados auth only)
  */
-int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
+int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_boto2_compat /* = true */)
 {
   string::size_type pos;
   bool using_qs;
 
   uint64_t now_req = 0;
-  uint64_t now = ceph_clock_now(s->cct);
+  uint64_t now = ceph_clock_now();
 
   /* v4 requires rados auth */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
     return -EPERM;
   }
-
-  string algorithm = "AWS4-HMAC-SHA256";
 
   try {
     s->aws4_auth = std::unique_ptr<rgw_aws4_auth>(new rgw_aws4_auth);
@@ -3790,11 +3823,13 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       }
     }
     string token_value = string(t);
-    if (using_qs && (token == "host")) {
-      if (!port.empty() && port != "80" && port != "0") {
-        token_value = token_value + ":" + port;
-      } else if (!secure_port.empty() && secure_port != "443") {
-        token_value = token_value + ":" + secure_port;
+    if (force_boto2_compat && using_qs && (token == "host")) {
+      if (!secure_port.empty()) {
+	if (secure_port != "443")
+	  token_value = token_value + ":" + secure_port;
+      } else if (!port.empty()) {
+	if (port != "80")
+	  token_value = token_value + ":" + port;
       }
     }
     canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);

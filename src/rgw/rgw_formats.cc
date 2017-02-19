@@ -25,11 +25,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 RGWFormatter_Plain::RGWFormatter_Plain(const bool ukv)
-  : buf(NULL),
-    len(0),
-    max_len(0),
-    min_stack_level(0),
-    use_kv(ukv)
+  : use_kv(ukv)
 {
 }
 
@@ -44,7 +40,7 @@ void RGWFormatter_Plain::flush(ostream& os)
     return;
 
   if (len) {
-    os << buf << "\n";
+    os << buf;
     os.flush();
   }
 
@@ -159,13 +155,14 @@ void RGWFormatter_Plain::dump_format_va(const char *name, const char *ns, bool q
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
 
   const char *eol;
-  if (len) {
+  if (wrote_something) {
     if (use_kv && entry.is_array && entry.size > 1)
       eol = ", ";
     else
       eol = "\n";
   } else
     eol = "";
+  wrote_something = true;
 
   if (use_kv && !entry.is_array)
     write_data("%s%s: %s", eol, name, buf);
@@ -271,10 +268,11 @@ void RGWFormatter_Plain::dump_value_int(const char *name, const char *fmt, ...)
   va_end(ap);
 
   const char *eol;
-  if (len)
+  if (wrote_something) {
     eol = "\n";
-  else
+  } else
     eol = "";
+  wrote_something = true;
 
   if (use_kv && !entry.is_array)
     write_data("%s%s: %s", eol, name, buf);

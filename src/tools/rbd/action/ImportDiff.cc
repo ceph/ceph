@@ -12,6 +12,7 @@
 #include <iostream>
 #include <boost/program_options.hpp>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 
 namespace rbd {
@@ -229,6 +230,6 @@ Shell::Action action(
   {"import-diff"}, {}, "Import an incremental diff.", "", &get_arguments,
   &execute);
 
-} // namespace list
+} // namespace import_diff
 } // namespace action
 } // namespace rbd

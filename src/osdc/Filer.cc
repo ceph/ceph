@@ -43,7 +43,7 @@ public:
   ceph::real_time mtime;
   C_Probe(Filer *f, Probe *p, object_t o) : filer(f), probe(p), oid(o),
 					    size(0) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r == -ENOENT) {
       r = 0;
       assert(size == 0);
@@ -323,7 +323,7 @@ int Filer::purge_range(inodeno_t ino,
   if (num_obj == 1) {
     object_t oid = file_object_t(ino, first_obj);
     object_locator_t oloc = OSDMap::file_to_object_locator(*layout);
-    objecter->remove(oid, oloc, snapc, mtime, flags, NULL, oncommit);
+    objecter->remove(oid, oloc, snapc, mtime, flags, oncommit);
     return 0;
   }
 
@@ -338,7 +338,7 @@ struct C_PurgeRange : public Context {
   Filer *filer;
   PurgeRange *pr;
   C_PurgeRange(Filer *f, PurgeRange *p) : filer(f), pr(p) {}
-  void finish(int r) {
+  void finish(int r) override {
     filer->_do_purge_range(pr, 1);
   }
 };
@@ -373,7 +373,7 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
   // Issue objecter ops outside pr->lock to avoid lock dependency loop
   for (const auto& oid : remove_oids) {
     object_locator_t oloc = OSDMap::file_to_object_locator(pr->layout);
-    objecter->remove(oid, oloc, pr->snapc, pr->mtime, pr->flags, NULL,
+    objecter->remove(oid, oloc, pr->snapc, pr->mtime, pr->flags,
 		     new C_OnFinisher(new C_PurgeRange(this, pr), finisher));
   }
 }

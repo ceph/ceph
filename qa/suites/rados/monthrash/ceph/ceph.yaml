@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon min osdmap epochs: 25
+        paxos service trim min: 5
+tasks:
+- install:
+- ceph:

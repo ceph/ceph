@@ -1,0 +1,8 @@
+roles:
+- [mon.0, osd.0, osd.1, client.0]
+tasks:
+- install:
+- exec:
+    client.0:
+      - mkdir $TESTDIR/kvtest && cd $TESTDIR/kvtest && ceph_test_keyvaluedb
+      - rm -rf $TESTDIR/kvtest

@@ -27,6 +27,7 @@
 
 #include "MgrStandby.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
@@ -210,7 +211,7 @@ bool MgrStandby::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
       return false;
   }
 
-  *authorizer = monc->auth->build_authorizer(dest_type);
+  *authorizer = monc->build_authorizer(dest_type);
   return *authorizer != NULL;
 }
 

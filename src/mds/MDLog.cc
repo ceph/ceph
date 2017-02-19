@@ -31,6 +31,7 @@
 #include "common/errno.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef DOUT_COND
 #define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_log
@@ -73,7 +74,7 @@ void MDLog::create_logger()
   plb.add_u64(l_mdl_expos, "expos", "Journaler xpire position");
   plb.add_u64(l_mdl_wrpos, "wrpos", "Journaler  write position");
   plb.add_u64(l_mdl_rdpos, "rdpos", "Journaler  read position");
-  plb.add_u64(l_mdl_jlat, "jlat", "Journaler flush latency");
+  plb.add_time_avg(l_mdl_jlat, "jlat", "Journaler flush latency");
 
   plb.add_u64_counter(l_mdl_replayed, "replayed", "Events replayed");
 
@@ -90,9 +91,9 @@ void MDLog::set_write_iohint(unsigned iohint_flags)
 class C_MDL_WriteError : public MDSIOContextBase {
   protected:
   MDLog *mdlog;
-  MDSRank *get_mds() {return mdlog->mds;}
+  MDSRank *get_mds() override {return mdlog->mds;}
 
-  void finish(int r) {
+  void finish(int r) override {
     MDSRank *mds = get_mds();
     // assume journal is reliable, so don't choose action based on
     // g_conf->mds_action_on_write_error.
@@ -201,7 +202,7 @@ class C_ReopenComplete : public MDSInternalContext {
   MDSInternalContextBase *on_complete;
 public:
   C_ReopenComplete(MDLog *mdlog_, MDSInternalContextBase *on_complete_) : MDSInternalContext(mdlog_->mds), mdlog(mdlog_), on_complete(on_complete_) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdlog->append();
     on_complete->complete(r);
   }
@@ -295,7 +296,7 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
 
   le->_segment = ls;
   le->update_segment();
-  le->set_stamp(ceph_clock_now(g_ceph_context));
+  le->set_stamp(ceph_clock_now());
 
   mdsmap_up_features = mds->mdsmap->get_up_features();
   pending_events[ls->seq].push_back(PendingEvent(le, c));
@@ -338,10 +339,10 @@ void MDLog::_submit_entry(LogEvent *le, MDSLogContextBase *c)
 class C_MDL_Flushed : public MDSLogContextBase {
 protected:
   MDLog *mdlog;
-  MDSRank *get_mds() {return mdlog->mds;}
+  MDSRank *get_mds() override {return mdlog->mds;}
   MDSInternalContextBase *wrapped;
 
-  void finish(int r) {
+  void finish(int r) override {
     if (wrapped)
       wrapped->complete(r);
   }
@@ -615,7 +616,7 @@ void MDLog::trim(int m)
   }
 
   // hack: only trim for a few seconds at a time
-  utime_t stop = ceph_clock_now(g_ceph_context);
+  utime_t stop = ceph_clock_now();
   stop += 2.0;
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
@@ -624,7 +625,7 @@ void MDLog::trim(int m)
 	   num_events - expiring_events - expired_events > max_events) ||
 	  (segments.size() - expiring_segments.size() - expired_segments.size() > max_segments))) {
     
-    if (stop < ceph_clock_now(g_ceph_context))
+    if (stop < ceph_clock_now())
       break;
 
     int num_expiring_segments = (int)expiring_segments.size();
@@ -677,7 +678,7 @@ class C_MaybeExpiredSegment : public MDSInternalContext {
   public:
   C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s, int p) :
     MDSInternalContext(mdl->mds), mdlog(mdl), ls(s), op_prio(p) {}
-  void finish(int res) {
+  void finish(int res) override {
     if (res < 0)
       mdlog->mds->handle_write_error(res);
     mdlog->_maybe_expired(ls, op_prio);
@@ -1167,9 +1168,9 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
       if (le->get_type() == EVENT_SUBTREEMAP
           || le->get_type() == EVENT_SUBTREEMAP_TEST) {
         ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
+        assert(sle != NULL);
         dout(20) << __func__ << " zeroing expire_pos in subtreemap event at "
           << le_pos << " seq=" << sle->event_seq << dendl;
-        assert(sle != NULL);
         sle->expire_pos = 0;
         modified = true;
       }

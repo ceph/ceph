@@ -1093,7 +1093,7 @@ protected:
     {
     }
 
-    virtual void *entry() {
+    void *entry() override {
       obc.ondisk_read_lock();
       return NULL;
     }
@@ -1108,7 +1108,7 @@ protected:
     {
     }
 
-    virtual void *entry() {
+    void *entry() override {
       obc.ondisk_write_lock();
       return NULL;
     }
@@ -1442,14 +1442,14 @@ TEST(ghobject_t, cmp) {
   sep.set_shard(shard_id_t(1));
   sep.hobj.pool = -1;
   cout << min << " < " << sep << std::endl;
-  ASSERT_TRUE(cmp_bitwise(min, sep) < 0);
+  ASSERT_TRUE(min < sep);
 
   sep.set_shard(shard_id_t::NO_SHARD);
   cout << "sep shard " << sep.shard_id << std::endl;
   ghobject_t o(hobject_t(object_t(), string(), CEPH_NOSNAP, 0x42,
 			 1, string()));
   cout << "o " << o << std::endl;
-  ASSERT_TRUE(cmp_bitwise(o, sep) > 0);
+  ASSERT_TRUE(o > sep);
 }
 
 TEST(ghobject_t, parse) {

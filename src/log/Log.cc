@@ -191,7 +191,7 @@ void Log::start_graylog()
 {
   pthread_mutex_lock(&m_flush_mutex);
   if (! m_graylog.get())
-    m_graylog = Graylog::Ref(new Graylog(m_subs, "dlog"));
+    m_graylog = std::make_shared<Graylog>(m_subs, "dlog");
   pthread_mutex_unlock(&m_flush_mutex);
 }
 
@@ -225,13 +225,13 @@ void Log::submit_entry(Entry *e)
 Entry *Log::create_entry(int level, int subsys)
 {
   if (true) {
-    return new Entry(ceph_clock_now(NULL),
-		   pthread_self(),
-		   level, subsys);
+    return new Entry(ceph_clock_now(),
+		     pthread_self(),
+		     level, subsys);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
-    e->m_stamp = ceph_clock_now(NULL);
+    e->m_stamp = ceph_clock_now();
     e->m_thread = pthread_self();
     e->m_prio = level;
     e->m_subsys = subsys;
@@ -246,13 +246,13 @@ Entry *Log::create_entry(int level, int subsys, size_t* expected_size)
                                "Log hint");
     size_t size = __atomic_load_n(expected_size, __ATOMIC_RELAXED);
     void *ptr = ::operator new(sizeof(Entry) + size);
-    return new(ptr) Entry(ceph_clock_now(NULL),
+    return new(ptr) Entry(ceph_clock_now(),
        pthread_self(), level, subsys,
        reinterpret_cast<char*>(ptr) + sizeof(Entry), size, expected_size);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
-    e->m_stamp = ceph_clock_now(NULL);
+    e->m_stamp = ceph_clock_now();
     e->m_thread = pthread_self();
     e->m_prio = level;
     e->m_subsys = subsys;
@@ -354,9 +354,12 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 void Log::_log_message(const char *s, bool crash)
 {
   if (m_fd >= 0) {
-    int r = safe_write(m_fd, s, strlen(s));
-    if (r >= 0)
-      r = safe_write(m_fd, "\n", 1);
+    size_t len = strlen(s);
+    std::string b;
+    b.reserve(len + 1);
+    b.append(s, len);
+    b += '\n';
+    int r = safe_write(m_fd, b.c_str(), b.size());
     if (r < 0)
       cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
   }

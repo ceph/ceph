@@ -1,0 +1,26 @@
+# verify #13098 fix
+roles:
+- [mon.a, osd.0, osd.1, osd.2, client.0]
+overrides:
+  ceph:
+    log-whitelist:
+      - is full
+tasks:
+- install:
+- ceph:
+    conf:
+      global:
+        osd max object name len: 460
+        osd max object namespace len: 64
+- exec:
+    client.0:
+      - ceph osd pool create ec-ca 1 1
+      - ceph osd pool create ec 1 1 erasure default
+      - ceph osd tier add ec ec-ca
+      - ceph osd tier cache-mode ec-ca readproxy
+      - ceph osd tier set-overlay ec ec-ca
+      - ceph osd pool set ec-ca hit_set_type bloom
+      - ceph osd pool set-quota ec-ca max_bytes 20480000
+      - ceph osd pool set-quota ec max_bytes 20480000
+      - ceph osd pool set ec-ca target_max_bytes 20480000
+      - timeout 30 rados -p ec-ca bench 30 write || true

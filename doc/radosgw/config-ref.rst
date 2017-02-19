@@ -47,6 +47,11 @@ Ceph configuration file, the default value will be set automatically.
 :Type: String
 :Default: N/A
 
+``rgw fcgi socket backlog``
+
+:Description: The socket backlog for fcgi.
+:Type: Integer
+:Default: ``1024``
 
 ``rgw host``
 
@@ -133,7 +138,7 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw num rados handles``
 
-:Description: The numer of the `RADOS cluster handles`_ for Ceph Object Gateway.
+:Description: The number of `RADOS cluster handles`_ for Ceph Object Gateway.
               Having a configurable number of RADOS handles is resulting in
               significant performance boost for all types of workloads. Each RGW
               worker thread would now get to pick a RADOS handle for its lifetime,
@@ -934,6 +939,17 @@ Logging Settings
 :Description: Flush pending usage log data every ``n`` seconds.
 :Type: Integer
 :Default: ``30``
+
+
+``rgw log http headers``
+
+:Description: Comma-delimited list of HTTP headers to include with ops
+	      log entries.  Header names are case insensitive, and use
+	      the full header name with words separated by underscores.
+
+:Type: String
+:Default: None
+:Example: "http_x_forwarded_for, http_x_special_k"
 
 
 ``rgw intent log object name``

@@ -30,6 +30,7 @@ class SequencerPosition;
  */
 class ObjectMap {
 public:
+  CephContext* cct;
   /// Set keys and values from specified map
   virtual int set_keys(
     const ghobject_t &oid,              ///< [in] object containing map
@@ -146,6 +147,7 @@ public:
   }
 
 
+  ObjectMap(CephContext* cct) : cct(cct) {}
   virtual ~ObjectMap() {}
 };
 

@@ -30,6 +30,7 @@ using namespace std;
 #include "msg/Messenger.h"
 
 #include "osd/OSDMap.h"
+#include "osd/OSDMapMapping.h"
 
 #include "PaxosService.h"
 
@@ -99,22 +100,26 @@ struct failure_info_t {
     }
   }
 
-  void cancel_report(int who) {
+  MonOpRequestRef cancel_report(int who) {
     map<int, failure_reporter_t>::iterator p = reporters.find(who);
     if (p == reporters.end())
-      return;
+      return MonOpRequestRef();
+    MonOpRequestRef ret = p->second.op;
     reporters.erase(p);
-    if (reporters.empty())
-      max_failed_since = utime_t();
+    return ret;
   }
 };
 
 class OSDMonitor : public PaxosService {
   CephContext *cct;
+
+  ParallelPGMapper mapper;                        ///< for background pg work
+  unique_ptr<OSDMapMapping> mapping;              ///< pg <-> osd mappings
+  unique_ptr<ParallelPGMapper::Job> mapping_job;  ///< background mapping job
+
 public:
   OSDMap osdmap;
 
-private:
   // [leader]
   OSDMap::Incremental pending_inc;
   map<int, bufferlist> pending_metadata;
@@ -131,10 +136,8 @@ private:
   bool check_failure(utime_t now, int target_osd, failure_info_t& fi);
   void force_failure(utime_t now, int target_osd);
 
-  // map thrashing
-  int thrash_map;
-  int thrash_last_up_osd;
-  bool thrash();
+  // the time of last msg(MSG_ALIVE and MSG_PGTEMP) proposed without delay
+  utime_t last_attempted_minwait_time;
 
   bool _have_pending_crush();
   CrushWrapper &_get_stable_crush();
@@ -191,10 +194,21 @@ private:
 
   void share_map_with_random_osd();
 
+  Mutex prime_pg_temp_lock = {"OSDMonitor::prime_pg_temp_lock"};
+  struct PrimeTempJob : public ParallelPGMapper::Job {
+    OSDMonitor *osdmon;
+    PrimeTempJob(const OSDMap& om, OSDMonitor *m)
+      : ParallelPGMapper::Job(&om), osdmon(m) {}
+    void process(int64_t pool, unsigned ps_begin, unsigned ps_end) override {
+      for (unsigned ps = ps_begin; ps < ps_end; ++ps) {
+	pg_t pgid(ps, pool);
+	osdmon->prime_pg_temp(*osdmap, pgid);
+      }
+    }
+    void complete() override {}
+  };
   void maybe_prime_pg_temp();
-  void prime_pg_temp(OSDMap& next,
-		     ceph::unordered_map<pg_t, pg_stat_t>::iterator pp);
-  int prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd);
+  void prime_pg_temp(const OSDMap& next, pg_t pgid);
 
   void update_logger();
 
@@ -411,7 +425,6 @@ private:
   bool prepare_command(MonOpRequestRef op);
   bool prepare_command_impl(MonOpRequestRef op, map<string,cmd_vartype>& cmdmap);
 
-  int set_crash_replay_interval(const int64_t pool_id, const uint32_t cri);
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
 

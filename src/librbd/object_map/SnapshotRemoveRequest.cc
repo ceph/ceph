@@ -112,7 +112,7 @@ bool SnapshotRemoveRequest::should_complete(int r) {
 
 void SnapshotRemoveRequest::send_load_map() {
   CephContext *cct = m_image_ctx.cct;
-  std::string snap_oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
+  std::string snap_oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_snap_id));
   ldout(cct, 5) << this << " " << __func__ << ": snap_oid=" << snap_oid
                 << dendl;
   m_state = STATE_LOAD_MAP;
@@ -129,7 +129,7 @@ void SnapshotRemoveRequest::send_load_map() {
 
 void SnapshotRemoveRequest::send_remove_snapshot() {
   CephContext *cct = m_image_ctx.cct;
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_next_snap_id));
+  std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_next_snap_id));
   ldout(cct, 5) << this << " " << __func__ << ": oid=" << oid << dendl;
   m_state = STATE_REMOVE_SNAPSHOT;
 
@@ -161,7 +161,7 @@ void SnapshotRemoveRequest::send_invalidate_next_map() {
 
 void SnapshotRemoveRequest::send_remove_map() {
   CephContext *cct = m_image_ctx.cct;
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
+  std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_snap_id));
   ldout(cct, 5) << this << " " << __func__ << ": oid=" << oid << dendl;
   m_state = STATE_REMOVE_MAP;
 

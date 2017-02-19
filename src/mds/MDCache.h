@@ -31,6 +31,7 @@
 #include "StrayManager.h"
 #include "MDSContext.h"
 #include "MDSMap.h"
+#include "Mutation.h"
 
 #include "messages/MClientRequest.h"
 #include "messages/MMDSSlaveRequest.h"
@@ -67,10 +68,6 @@ struct MClientSnap;
 class MMDSFragmentNotify;
 
 class ESubtreeMap;
-
-struct MDRequestImpl;
-typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
-struct MDSlaveUpdate;
 
 enum {
   l_mdc_first = 3000,
@@ -146,6 +143,10 @@ public:
     stray_index = (stray_index+1)%NUM_STRAY;
   }
 
+  void activate_stray_manager() {
+    stray_manager.activate();
+  }
+
   /**
    * Call this when you know that a CDentry is ready to be passed
    * on to StrayManager (i.e. this is a stray you've just created)
@@ -216,10 +217,21 @@ public:
     frag_t frag;
     snapid_t snap;
     filepath want_path;
+    MDSCacheObject *base;
     bool want_base_dir;
     bool want_xlocked;
 
-    discover_info_t() : tid(0), mds(-1), snap(CEPH_NOSNAP), want_base_dir(false), want_xlocked(false) {}
+    discover_info_t() :
+      tid(0), mds(-1), snap(CEPH_NOSNAP), base(NULL),
+      want_base_dir(false), want_xlocked(false) {}
+    ~discover_info_t() {
+      if (base)
+	base->put(MDSCacheObject::PIN_DISCOVERBASE);
+    }
+    void pin_base(MDSCacheObject *b) {
+      base = b;
+      base->get(MDSCacheObject::PIN_DISCOVERBASE);
+    }
   };
 
   map<ceph_tid_t, discover_info_t> discovers;
@@ -350,7 +362,7 @@ public:
   void project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first,
 				   int linkunlink, SnapRealm *prealm);
   void _project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
-				    CDir *parent, int linkunlink=0);
+				    CDir *parent, int linkunlink, bool update_inode);
   void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
 				   snapid_t ofirst, snapid_t last, 
 				   CInode *pin, bool cow_head);
@@ -368,6 +380,9 @@ public:
   }
   void wait_for_uncommitted_master(metareqid_t reqid, MDSInternalContextBase *c) {
     uncommitted_masters[reqid].waiters.push_back(c);
+  }
+  bool have_uncommitted_master(metareqid_t reqid) {
+    return uncommitted_masters.count(reqid);
   }
   void log_master_commit(metareqid_t reqid);
   void logged_master_update(metareqid_t reqid);
@@ -912,10 +927,12 @@ protected:
     bool want_xlocked;
     version_t tid;
     int64_t pool;
+    int last_err;
     list<MDSInternalContextBase*> waiters;
     open_ino_info_t() : checking(MDS_RANK_NONE), auth_hint(MDS_RANK_NONE),
       check_peers(true), fetch_backtrace(true), discover(false),
-      want_replica(false), want_xlocked(false), tid(0), pool(-1) {}
+      want_replica(false), want_xlocked(false), tid(0), pool(-1),
+      last_err(0) {}
   };
   ceph_tid_t open_ino_last_tid;
   map<inodeno_t,open_ino_info_t> opening_inodes;
@@ -923,15 +940,14 @@ protected:
   void _open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err);
   void _open_ino_parent_opened(inodeno_t ino, int ret);
   void _open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int err);
-  void _open_ino_fetch_dir(inodeno_t ino, MMDSOpenIno *m, CDir *dir);
-  MDSInternalContextBase* _open_ino_get_waiter(inodeno_t ino, MMDSOpenIno *m);
+  void _open_ino_fetch_dir(inodeno_t ino, MMDSOpenIno *m, CDir *dir, bool parent);
   int open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
 			    vector<inode_backpointer_t>& ancestors,
 			    bool discover, bool want_xlocked, mds_rank_t *hint);
   void open_ino_finish(inodeno_t ino, open_ino_info_t& info, int err);
   void do_open_ino(inodeno_t ino, open_ino_info_t& info, int err);
   void do_open_ino_peer(inodeno_t ino, open_ino_info_t& info);
-  void handle_open_ino(MMDSOpenIno *m);
+  void handle_open_ino(MMDSOpenIno *m, int err=0);
   void handle_open_ino_reply(MMDSOpenInoReply *m);
   friend class C_IO_MDC_OpenInoBacktraceFetched;
   friend struct C_MDC_OpenInoTraverseDir;

@@ -22,17 +22,26 @@ set(librbd_internal_srcs
   Journal.cc
   LibrbdAdminSocketHook.cc
   LibrbdWriteback.cc
+  ManagedLock.cc
   MirroringWatcher.cc
   ObjectMap.cc
-  ObjectWatcher.cc
   Operations.cc
   Utils.cc
   cache/ImageWriteback.cc
   cache/PassthroughImageCache.cc
-  exclusive_lock/AcquireRequest.cc
+  Watcher.cc
+  watcher/Types.cc
+  watcher/RewatchRequest.cc
+  managed_lock/AcquireRequest.cc
+  managed_lock/BreakRequest.cc
+  managed_lock/GetLockerRequest.cc
+  managed_lock/ReleaseRequest.cc
+  managed_lock/ReacquireRequest.cc
+  managed_lock/Utils.cc
   exclusive_lock/AutomaticPolicy.cc
-  exclusive_lock/ReacquireRequest.cc
-  exclusive_lock/ReleaseRequest.cc
+  exclusive_lock/PreAcquireRequest.cc
+  exclusive_lock/PostAcquireRequest.cc
+  exclusive_lock/PreReleaseRequest.cc
   exclusive_lock/StandardPolicy.cc
   image/CloseRequest.cc
   image/CreateRequest.cc
@@ -42,7 +51,6 @@ set(librbd_internal_srcs
   image/SetFlagsRequest.cc
   image/SetSnapRequest.cc
   image_watcher/NotifyLockOwner.cc
-  image_watcher/RewatchRequest.cc
   journal/RemoveRequest.cc
   journal/CreateRequest.cc
   journal/OpenRequest.cc
@@ -64,7 +72,7 @@ set(librbd_internal_srcs
   object_map/SnapshotRollbackRequest.cc
   object_map/UnlockRequest.cc
   object_map/UpdateRequest.cc
-  object_watcher/Notifier.cc
+  watcher/Notifier.cc
   operation/DisableFeaturesRequest.cc
   operation/EnableFeaturesRequest.cc
   operation/FlattenRequest.cc
@@ -105,11 +113,14 @@ target_link_libraries(librbd LINK_PRIVATE
   cls_rbd_client 
   cls_lock_client 
   cls_journal_client 
-  common
+  ceph-common
   pthread
-  udev
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
+if(HAVE_UDEV)
+  target_link_libraries(librbd LINK_PRIVATE
+    udev)
+endif()
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES
     OUTPUT_NAME rbd

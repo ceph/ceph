@@ -81,22 +81,6 @@ namespace rgw {
     using std::get;
 
     LookupFHResult fhr{nullptr, 0};
-#if 0
-    RGWFileHandle::directory* d = parent->get_directory();
-    if (! d->name_cache.empty()) {
-      RGWFileHandle::dirent_string name{path};
-      const auto& diter = d->name_cache.find(name);
-      if (diter != d->name_cache.end()) {
-	fhr = lookup_fh(parent, path,
-			RGWFileHandle::FLAG_CREATE|
-			((diter->second == RGW_FS_TYPE_DIRECTORY) ?
-			  RGWFileHandle::FLAG_DIRECTORY :
-			  RGWFileHandle::FLAG_NONE));
-	if (get<0>(fhr))
-	  return fhr;
-      }
-    }
-#endif
 
     /* XXX the need for two round-trip operations to identify file or
      * directory leaf objects is unecessary--the current proposed
@@ -283,7 +267,8 @@ namespace rgw {
     }
 
     rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
-    fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh, cohort::lru::FLAG_NONE);
+    fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
+		    RGWFileHandle::FHCache::FLAG_LOCK);
 
 #if 1 /* XXX verify clear cache */
     fh_key fhk(rgw_fh->fh.fh_hk);
@@ -602,6 +587,10 @@ namespace rgw {
 
     string obj_name{rgw_fh->relative_object_name()};
 
+    if (rgw_fh->is_dir()) {
+      obj_name += "/";
+    }
+
     RGWSetAttrsRequest req(cct, get_user(), rgw_fh->bucket_name(), obj_name);
 
     rgw_fh->create_stat(st, mask);
@@ -643,13 +632,34 @@ namespace rgw {
     rele();
   } /* RGWLibFS::close */
 
+  std::ostream& operator<<(std::ostream &os, RGWLibFS::event const &ev) {
+    os << "<event:";
+      switch (ev.t) {
+      case RGWLibFS::event::type::READDIR:
+	os << "type=READDIR;";
+	break;
+      default:
+	os << "type=UNKNOWN;";
+	break;
+      };
+    os << "fid=" << ev.fhk.fh_hk.bucket << ":" << ev.fhk.fh_hk.object
+       << ";ts=<timespec:" << ev.ts.tv_sec << ";" << ev.ts.tv_nsec << ">>";
+    return os;
+  }
+
   void RGWLibFS::gc()
   {
     using std::get;
     using directory = RGWFileHandle::directory;
 
-    static constexpr uint32_t max_ev = 24;
-    static constexpr uint16_t expire_s = 300; /* 5m */
+    /* dirent invalidate timeout--basically, the upper-bound on
+     * inconsistency with the S3 namespace */
+    auto expire_s
+      = get_context()->_conf->rgw_nfs_namespace_expire_secs;
+
+    /* max events to gc in one cycle */
+    uint32_t max_ev =
+      std::max(1, get_context()->_conf->rgw_nfs_max_gc);
 
     struct timespec now;
     event_vector ve;
@@ -660,11 +670,15 @@ namespace rgw {
     do {
       {
 	lock_guard guard(state.mtx); /* LOCKED */
+	/* just return if no events */
+	if (events.empty()) {
+	  return;
+	}
 	uint32_t _max_ev =
 	  (events.size() < 500) ? max_ev : (events.size() / 4);
 	for (uint32_t ix = 0; (ix < _max_ev) && (events.size() > 0); ++ix) {
 	  event& ev = events.front();
-	  if (ev.ts.tv_sec < (now.tv_sec + expire_s)) {
+	  if (ev.ts.tv_sec > (now.tv_sec + expire_s)) {
 	    stop = true;
 	    break;
 	  }
@@ -674,8 +688,12 @@ namespace rgw {
       } /* anon */
       /* !LOCKED */
       for (auto& ev : ve) {
+	lsubdout(get_context(), rgw, 15)
+	  << "try-expire ev: " << ev << dendl;
 	if (likely(ev.t == event::type::READDIR)) {
 	  RGWFileHandle* rgw_fh = lookup_handle(ev.fhk.fh_hk);
+	  lsubdout(get_context(), rgw, 15)
+	    << "ev rgw_fh: " << rgw_fh << dendl;
 	  if (rgw_fh) {
 	    RGWFileHandle::directory* d;
 	    if (unlikely(! rgw_fh->is_dir())) {
@@ -692,15 +710,54 @@ namespace rgw {
 	    if (d) {
 	      lock_guard guard(rgw_fh->mtx);
 	      d->clear_state();
+	      rgw_fh->invalidate();
 	    }
 	  rele:
 	    unref(rgw_fh);
 	  } /* rgw_fh */
 	} /* event::type::READDIR */
       } /* ev */
-      std::this_thread::sleep_for(std::chrono::seconds(120));
-    } while (! stop);
+      ve.clear();
+    } while (! (stop || shutdown));
   } /* RGWLibFS::gc */
+
+  std::ostream& operator<<(std::ostream &os,
+			   RGWFileHandle const &rgw_fh)
+  {
+    const auto& fhk = rgw_fh.get_key();
+    const auto& fh = const_cast<RGWFileHandle&>(rgw_fh).get_fh();
+    os << "<RGWFileHandle:";
+    os << "addr=" << &rgw_fh << ";";
+    switch (fh->fh_type) {
+    case RGW_FS_TYPE_DIRECTORY:
+	os << "type=DIRECTORY;";
+	break;
+    case RGW_FS_TYPE_FILE:
+	os << "type=FILE;";
+	break;
+    default:
+	os << "type=UNKNOWN;";
+	break;
+      };
+    os << "fid=" << fhk.fh_hk.bucket << ":" << fhk.fh_hk.object << ";";
+    os << "name=" << rgw_fh.object_name() << ";";
+    os << "refcnt=" << rgw_fh.get_refcnt() << ";";
+    os << ">";
+    return os;
+  }
+
+  RGWFileHandle::~RGWFileHandle() {
+    if (parent && (! parent->is_root())) {
+      /* safe because if parent->unref causes its deletion,
+       * there are a) by refcnt, no other objects/paths pointing
+       * to it and b) by the semantics of valid iteration of
+       * fh_lru (observed, e.g., by cohort_lru<T,...>::drain())
+       * no unsafe iterators reaching it either--n.b., this constraint
+       * is binding oncode which may in future attempt to e.g.,
+       * cause the eviction of objects in LRU order */
+      (void) get_fs()->fh_lru.unref(parent, cohort::lru::FLAG_NONE);
+    }
+  }
 
   void RGWFileHandle::encode_attrs(ceph::buffer::list& ux_key1,
 				   ceph::buffer::list& ux_attrs1)
@@ -723,7 +780,13 @@ namespace rgw {
   } /* RGWFileHandle::decode_attrs */
 
   bool RGWFileHandle::reclaim() {
-    fs->fh_cache.remove(fh.fh_hk.object, this, cohort::lru::FLAG_NONE);
+    lsubdout(fs->get_context(), rgw, 17)
+      << __func__ << " " << *this
+      << dendl;
+    /* if !deleted, then object still in fh_cache */
+    if (! deleted()) {
+      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
+    }
     return true;
   } /* RGWFileHandle::reclaim */
 
@@ -734,7 +797,6 @@ namespace rgw {
     int rc = 0;
     struct timespec now;
     CephContext* cct = fs->get_context();
-    directory* d = get_directory(); /* already type-checked */
 
     (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 
@@ -749,8 +811,9 @@ namespace rgw {
 				offset);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
-	set_nlink(2 + d->name_cache.size());
+	lock_guard guard(mtx);
 	state.atime = now;
+	set_nlink(2 + 1);
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
 	fs->state.push_event(ev);
@@ -760,8 +823,9 @@ namespace rgw {
       RGWReaddirRequest req(cct, fs->get_user(), this, rcb, cb_arg, offset);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
+	lock_guard guard(mtx);
 	state.atime = now;
-	set_nlink(2 + d->name_cache.size());
+	set_nlink(2 + 1);
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
 	fs->state.push_event(ev);
@@ -916,6 +980,18 @@ namespace rgw {
   RGWFileHandle::file::~file()
   {
     delete write_req;
+  }
+
+  void RGWFileHandle::directory::clear_state()
+  {
+    marker_cache.clear();
+  }
+
+  void RGWFileHandle::invalidate() {
+    RGWLibFS *fs = get_fs();
+    if (fs->invalidate_cb) {
+      fs->invalidate_cb(fs->invalidate_arg, get_key().fh_hk);
+    }
   }
 
   int RGWWriteRequest::exec_start() {
@@ -1080,7 +1156,7 @@ namespace rgw {
   done:
     dispose_processor(processor);
     perfcounter->tinc(l_rgw_put_lat,
-		      (ceph_clock_now(s->cct) - s->time));
+		      (ceph_clock_now() - s->time));
     return op_ret;
   } /* exec_finish */
 
@@ -1131,6 +1207,17 @@ void rgwfile_version(int *major, int *minor, int *extra)
   *rgw_fs = fs;
 
   return 0;
+}
+
+/*
+ register invalidate callbacks
+*/
+int rgw_register_invalidate(struct rgw_fs *rgw_fs, rgw_fh_callback_t cb,
+			    void *arg, uint32_t flags)
+
+{
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  return fs->register_invalidate(cb, arg, flags);
 }
 
 /*
@@ -1328,8 +1415,12 @@ int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
-  fs->unref(rgw_fh);
 
+  lsubdout(fs->get_context(), rgw, 17)
+    << __func__ << " " << *rgw_fh
+    << dendl;
+
+  fs->unref(rgw_fh);
   return 0;
 }
 

@@ -97,6 +97,11 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
         merge = merge_re.match(commit.summary)
         if merge:
             number = merge.group(1)
+            print ("Considering PR#" + number)
+            # do not pick up ceph/ceph-qa-suite.git PRs
+            if int(number) < 1311:
+                print ("Ignoring low-numbered PR, probably picked up from ceph/ceph-qa-suite.git")
+                continue
             pr = gh.repos("ceph")("ceph").pulls(number).get()
             title = pr['title']
             message_lines = commit.message.split('\n')
@@ -142,7 +147,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
                 continue    
             
             if strict:
-                title_re = '^(?:hammer|infernalis|jewel|kraken):\s+(cli|common|mon|msgr|osd|log|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|cmake|doc|crush|librados)(:.*)'
+                title_re = '^(?:hammer|infernalis|jewel|kraken):\s+(cephx|cli|common|mon|msgr|osd|log|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|cmake|doc|crush|librados)(:.*)'
                 match = re.match(title_re, title)
                 if not match:
                     print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title.encode("utf-8") + " does not match " + title_re)
@@ -154,7 +159,8 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
             pr2info[number] = (author, title, message)
 
             for issue in set(issues):
-                issue = get_original_issue(issue, verbose)
+                if strict:
+                    issue = get_original_issue(issue, verbose)
                 issue2prs.setdefault(issue, set([])).add(number)
                 pr2issues.setdefault(number, set([])).add(issue)
             sys.stdout.write('.')

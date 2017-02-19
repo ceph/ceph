@@ -173,7 +173,7 @@
                               object-map(+*), fast-diff(+*), deep-flatten(+-),
                               journaling(*), data-pool]
     --image-shared            shared image
-    --stripe-unit arg         stripe unit
+    --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
@@ -219,7 +219,7 @@
                                  object-map(+*), fast-diff(+*), deep-flatten(+-),
                                  journaling(*), data-pool]
     --image-shared               shared image
-    --stripe-unit arg            stripe unit
+    --stripe-unit arg            stripe unit in B/K/M
     --stripe-count arg           stripe count
     --data-pool arg              data pool
     --journal-splay-width arg    number of active journal objects
@@ -263,7 +263,7 @@
                               object-map(+*), fast-diff(+*), deep-flatten(+-),
                               journaling(*), data-pool]
     --image-shared            shared image
-    --stripe-unit arg         stripe unit
+    --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
@@ -609,7 +609,7 @@
                               object-map(+*), fast-diff(+*), deep-flatten(+-),
                               journaling(*), data-pool]
     --image-shared            shared image
-    --stripe-unit arg         stripe unit
+    --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects

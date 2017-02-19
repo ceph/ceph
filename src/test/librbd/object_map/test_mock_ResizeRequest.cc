@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -22,7 +22,7 @@ using ::testing::StrEq;
 class TestMockObjectMapResizeRequest : public TestMockFixture {
 public:
   void expect_resize(librbd::ImageCtx *ictx, uint64_t snap_id, int r) {
-    std::string oid(ObjectMap::object_map_name(ictx->id, snap_id));
+    std::string oid(ObjectMap<>::object_map_name(ictx->id, snap_id));
     if (snap_id == CEPH_NOSNAP) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                   exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _))
@@ -41,8 +41,6 @@ public:
   }
 
   void expect_invalidate(librbd::ImageCtx *ictx) {
-    EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _)).Times(0);
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
                 exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _, _, _))
                   .WillOnce(DoDefault());

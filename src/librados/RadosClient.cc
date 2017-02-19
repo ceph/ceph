@@ -47,6 +47,7 @@
 #include "RadosClient.h"
 
 #include "include/assert.h"
+#include "common/EventTrace.h"
 
 #define dout_subsys ceph_subsys_rados
 #undef dout_prefix
@@ -59,7 +60,7 @@ bool librados::RadosClient::ms_get_authorizer(int dest_type,
   /* monitor authorization is being handled on different layer */
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
-  *authorizer = monclient.auth->build_authorizer(dest_type);
+  *authorizer = monclient.build_authorizer(dest_type);
   return *authorizer != NULL;
 }
 
@@ -395,18 +396,15 @@ struct C_aio_watch_flush_Complete : public Context {
     c->get();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     c->lock.Lock();
     c->rval = r;
-    c->ack = true;
-    c->safe = true;
+    c->complete = true;
     c->cond.Signal();
 
-    if (c->callback_complete) {
+    if (c->callback_complete ||
+	c->callback_safe) {
       client->finisher.queue(new librados::C_AioComplete(c));
-    }
-    if (c->callback_safe) {
-      client->finisher.queue(new librados::C_AioSafe(c));
     }
     c->put_unlock();
   }
@@ -543,13 +541,13 @@ int librados::RadosClient::wait_for_osdmap()
 
     if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
       ldout(cct, 10) << __func__ << " waiting" << dendl;
-      utime_t start = ceph_clock_now(cct);
+      utime_t start = ceph_clock_now();
       while (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
         if (timeout.is_zero()) {
           cond.Wait(lock);
         } else {
-          cond.WaitInterval(cct, lock, timeout);
-          utime_t elapsed = ceph_clock_now(cct) - start;
+          cond.WaitInterval(lock, timeout);
+          utime_t elapsed = ceph_clock_now() - start;
           if (elapsed > timeout) {
             lderr(cct) << "timed out waiting for first osdmap from monitors"
                        << dendl;
@@ -789,6 +787,12 @@ int librados::RadosClient::blacklist_add(const string& client_address,
   cmds.push_back(cmd.str());
   bufferlist inbl;
   int r = mon_command(cmds, inbl, NULL, NULL);
+  if (r < 0) {
+    return r;
+  }
+
+  // ensure we have the latest osd map epoch before proceeding
+  r = wait_for_latest_osdmap();
   return r;
 }
 

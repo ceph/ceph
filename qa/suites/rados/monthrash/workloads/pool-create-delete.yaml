@@ -1,0 +1,56 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - slow request
+tasks:
+- exec:
+    client.0:
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel
+      - ceph_test_rados_delete_pools_parallel

@@ -409,6 +409,14 @@ public:
    */
   virtual int rebind(const set<int>& avoid_ports) { return -EOPNOTSUPP; }
   /**
+   * Bind the 'client' Messenger to a specific address.Messenger will bind
+   * the address before connect to others when option ms_bind_before_connect
+   * is true.
+   * @param bind_addr The address to bind to.
+   * @return 0 on success, or -1 on error, or -errno if
+   */
+  virtual int client_bind(const entity_addr_t& bind_addr) = 0;
+  /**
    * @} // Configuration
    */
 
@@ -554,9 +562,10 @@ public:
    *
    * @param m The Message we are fast dispatching. We take ownership
    * of one reference to it.
+   * If none of our Dispatchers can handle it, ceph_abort().
    */
   void ms_fast_dispatch(Message *m) {
-    m->set_dispatch_stamp(ceph_clock_now(cct));
+    m->set_dispatch_stamp(ceph_clock_now());
     for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
 	 p != fast_dispatchers.end();
 	 ++p) {
@@ -580,13 +589,13 @@ public:
   /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
-   *  If none of our Dispatchers can handle it, ceph_abort().
+   *  If none of our Dispatchers can handle it, assert(0).
    *
    *  @param m The Message to deliver. We take ownership of
    *  one reference to it.
    */
   void ms_deliver_dispatch(Message *m) {
-    m->set_dispatch_stamp(ceph_clock_now(cct));
+    m->set_dispatch_stamp(ceph_clock_now());
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 ++p) {

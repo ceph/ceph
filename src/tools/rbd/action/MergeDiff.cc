@@ -15,6 +15,7 @@
 #include <iostream>
 #include <boost/program_options.hpp>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 
 namespace rbd {
@@ -159,7 +160,9 @@ static int do_merge_diff(const char *first, const char *second,
 
   string f_from, f_to;
   string s_from, s_to;
-  uint64_t f_size, s_size, pc_size;
+  uint64_t f_size = 0;
+  uint64_t s_size = 0;
+  uint64_t pc_size;
 
   __u8 f_tag = 0, s_tag = 0;
   uint64_t f_off = 0, f_len = 0;
@@ -198,7 +201,6 @@ static int do_merge_diff(const char *first, const char *second,
 
   //We just handle the case like 'banner, [ftag], [ttag], stag, [wztag]*,etag',
   // and the (offset,length) in wztag must be ascending order.
-
   r = parse_diff_header(fd, &f_tag, &f_from, &f_to, &f_size);
   if (r < 0) {
     std::cerr << "rbd: failed to parse first diff header" << std::endl;
@@ -322,6 +324,10 @@ static int do_merge_diff(const char *first, const char *second,
       if (delta > f_len)
         delta = f_len;
       r = accept_diff_body(fd, pd, f_tag, f_off, delta);
+      if (r < 0) {
+        std::cerr << "rbd: failed to merge diff chunk" << std::endl;
+        goto done;
+      }
       f_off += delta;
       f_len -= delta;
 
@@ -360,11 +366,16 @@ static int do_merge_diff(const char *first, const char *second,
     assert(f_off >= s_off + s_len);
     if (s_len) {
       r = accept_diff_body(sd, pd, s_tag, s_off, s_len);
+      if (r < 0) {
+        std::cerr << "rbd: failed to merge diff chunk" << std::endl;
+        goto done;
+      }
       s_off += s_len;
       s_len = 0;
       s_tag = 0;
-    } else
+    } else {
       assert(f_end && s_end);
+    }
     continue;
   }
 

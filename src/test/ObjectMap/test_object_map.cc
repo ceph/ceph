@@ -522,10 +522,10 @@ class ObjectMapTest : public ::testing::Test {
 public:
   boost::scoped_ptr< ObjectMap > db;
   ObjectMapTester tester;
-  virtual void SetUp() {
+  void SetUp() override {
     char *path = getenv("OBJECT_MAP_PATH");
     if (!path) {
-      db.reset(new DBObjectMap(new KeyValueDBMemory()));
+      db.reset(new DBObjectMap(g_ceph_context, new KeyValueDBMemory()));
       tester.db = db.get();
       return;
     }
@@ -536,11 +536,11 @@ public:
     KeyValueDB *store = KeyValueDB::create(g_ceph_context, "leveldb", strpath);
     assert(!store->create_and_open(cerr));
 
-    db.reset(new DBObjectMap(store));
+    db.reset(new DBObjectMap(g_ceph_context, store));
     tester.db = db.get();
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     std::cerr << "Checking..." << std::endl;
     assert(db->check(std::cerr));
   }

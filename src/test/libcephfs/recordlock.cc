@@ -355,6 +355,8 @@ static void thread_ConcurrentRecordLocking(str_ConcurrentRecordLocking& s) {
   lock1.l_pid = getpid();
   ASSERT_EQ(0, ceph_ll_setlk(cmount, fh, &lock1, pthread_self(), false));
   PING_MAIN(7); // (7)
+
+  ASSERT_EQ(0, ceph_ll_close(cmount, fh));
 }
 
 // Used by ConcurrentRecordLocking test
@@ -746,6 +748,7 @@ static void process_ConcurrentRecordLocking(str_ConcurrentRecordLocking& s) {
   ASSERT_EQ(0, ceph_ll_setlk(cmount, fh, &lock1, mypid, false));
   PING_MAIN(7); // (7)
 
+  ASSERT_EQ(0, ceph_ll_close(cmount, fh));
   CLEANUP_CEPH();
 
   s.sem_destroy();
