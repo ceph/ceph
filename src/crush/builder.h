@@ -119,7 +119,7 @@ extern int crush_get_next_bucket_id(struct crush_map *map);
 /** @ingroup API
  *
  * Add __bucket__ into the crush __map__ and assign it the
- * __bucketno__ unique identifier. If __bucketno__ is -1, the function
+ * __bucketno__ unique identifier. If __bucketno__ is 0, the function
  * will assign the lowest available identifier.  The bucket identifier
  * must be a negative integer. The bucket identifier is returned via
  * __idout__.
@@ -130,7 +130,7 @@ extern int crush_get_next_bucket_id(struct crush_map *map);
  *   to another bucket.
  *
  * @param[in] map the crush_map
- * @param[in] bucketno the bucket unique identifer or -1
+ * @param[in] bucketno the bucket unique identifer or 0
  * @param[in] bucket the bucket to add to the __map__
  * @param[out] idout a pointer to the bucket identifier
  *
