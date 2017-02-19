@@ -13,13 +13,11 @@ set(rbd_srcs
   action/Diff.cc
   action/DiskUsage.cc
   action/Export.cc
-  action/ExportDiff.cc
   action/Feature.cc
   action/Flatten.cc
   action/Group.cc
   action/ImageMeta.cc
   action/Import.cc
-  action/ImportDiff.cc
   action/Info.cc
   action/Journal.cc
   action/Kernel.cc
