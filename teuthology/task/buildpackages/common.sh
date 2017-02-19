@@ -42,7 +42,11 @@ function get_ceph() {
     test -d ceph || git clone ${git_ceph_url} ceph
     cd ceph
     if test -d src ; then # so we don't try to fetch when using a fixture
-       git fetch --tags http://github.com/ceph/ceph
+       if test "x$BUILDPACKAGES_CANONICAL_TAGS" != "xfalse" ; then
+          echo "Fetching canonical tags from http://github.com/ceph/ceph (to disable, " \
+               "set BUILDPACKAGES_CANONICAL_TAGS=false in the environment)"
+          git fetch --tags http://github.com/ceph/ceph
+       fi
     fi
     git fetch --tags ${git_ceph_url}
     git checkout ${sha1}

@@ -248,6 +248,11 @@ def get_openstack_parser():
               'as NAME:URL, NAME!PRIORITY:URL or @FILENAME, for details see below.'),
         default=None,
     )
+    parser.add_argument(
+        '--no-canonical-tags',
+        action='store_true', default=False,
+        help='configure remote teuthology to not fetch tags from http://github.com/ceph/ceph.git in buildpackages task',
+    )
     return parser
 
 def get_parser():

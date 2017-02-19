@@ -29,6 +29,7 @@ git_ceph_url=$3
 sha1=$4
 flavor=$5
 arch=$6
+canonical_tags=$7
 
 suse=false
 [[ $codename =~ suse ]] && suse=true
@@ -40,6 +41,7 @@ else
     sudo yum install -y git
 fi
 
+export BUILDPACKAGES_CANONICAL_TAGS=$canonical_tags
 source $(dirname $0)/common.sh
 
 init_ceph $git_ceph_url $sha1

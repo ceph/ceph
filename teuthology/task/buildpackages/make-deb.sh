@@ -28,10 +28,12 @@ git_ceph_url=$3
 sha1=$4
 flavor=$5
 arch=$6
+canonical_tags=$7
 
 sudo apt-get update
 sudo apt-get install -y git
 
+export BUILDPACKAGES_CANONICAL_TAGS=$canonical_tags
 source $(dirname $0)/common.sh
 
 init_ceph $git_ceph_url $sha1

@@ -738,7 +738,8 @@ class TeuthologyOpenStack(OpenStack):
                                     '--simultaneous-jobs'):
                 del original_argv[0:2]
             elif original_argv[0] in ('--teardown',
-                                      '--upload'):
+                                      '--upload',
+                                      '--no-canonical-tags'):
                 del original_argv[0]
             elif os.path.isabs(original_argv[0]):
                 remote_path = self._upload_yaml_file(original_argv[0])
@@ -944,19 +945,23 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
                                self.args.ceph_workbench_branch)
             ceph_workbench += (" --ceph-workbench-git-url " +
                                self.args.ceph_workbench_git_url)
+        canonical_tags = "--no-canonical-tags" if self.args.no_canonical_tags else ""
         log.debug("OPENRC = " + openrc + " " +
                   "TEUTHOLOGY_USERNAME = " + self.username + " " +
                   "CLONE_OPENSTACK = " + clone + " " +
                   "UPLOAD = " + upload + " " +
                   "CEPH_WORKBENCH = " + ceph_workbench + " " +
-                  "NWORKERS = " + str(self.args.simultaneous_jobs))
+                  "NWORKERS = " + str(self.args.simultaneous_jobs) +
+                  "CANONICAL_TAGS = " +
+                  ("(empty string)" if canonical_tags == "" else canonical_tags))
         content = (template.
                    replace('OPENRC', openrc).
                    replace('TEUTHOLOGY_USERNAME', self.username).
                    replace('CLONE_OPENSTACK', clone).
                    replace('UPLOAD', upload).
                    replace('CEPH_WORKBENCH', ceph_workbench).
-                   replace('NWORKERS', str(self.args.simultaneous_jobs)))
+                   replace('NWORKERS', str(self.args.simultaneous_jobs)).
+                   replace('CANONICAL_TAGS', canonical_tags))
         open(path, 'w').write(content)
         log.debug("get_user_data: " + content + " written to " + path)
         return path

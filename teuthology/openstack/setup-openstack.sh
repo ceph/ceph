@@ -35,6 +35,7 @@ function create_config() {
     local ip="$5"
     local flavor_select="$6"
     local archive_upload="$7"
+    local canonical_tags="$8"
 
     if test "$flavor_select" ; then
         flavor_select="flavor-select-regexp: $flavor_select"
@@ -62,6 +63,7 @@ queue_host: localhost
 lab_domain: $labdomain
 max_job_time: 32400 # 9 hours
 teuthology_path: .
+canonical_tags: $canonical_tags
 openstack:
   clone: git clone http://github.com/ceph/teuthology
   user-data: teuthology/openstack/openstack-{os_type}-{os_version}-user-data.txt
@@ -520,6 +522,7 @@ function main() {
     local do_populate_paddles=false
     local do_setup_pulpito=false
     local do_clobber=false
+    local canonical_tags=true
 
     export LC_ALL=C
 
@@ -598,6 +601,9 @@ function main() {
             --clobber)
                 do_clobber=true
                 ;;
+            --no-canonical-tags)
+                canonical_tags=false
+                ;;
             *)
                 echo $1 is not a known option
                 return 1
@@ -639,7 +645,7 @@ function main() {
     : ${nameserver:=$ip}
 
     if $do_create_config ; then
-        create_config "$network" "$subnets" "$nameserver" "$labdomain" "$ip" "$flavor_select" "$archive_upload" || return 1
+        create_config "$network" "$subnets" "$nameserver" "$labdomain" "$ip" "$flavor_select" "$archive_upload" "$canonical_tags" || return 1
         setup_ansible "$subnets" $labdomain || return 1
         setup_ssh_config || return 1
         setup_authorized_keys || return 1

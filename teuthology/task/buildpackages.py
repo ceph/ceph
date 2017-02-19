@@ -215,9 +215,18 @@ def task(ctx, config):
                " BUILD_FLAVOR=" + build_flavor +
                " HTTP_FLAVOR=" + http_flavor +
                " HTTP_ARCH=" + default_arch +
+               " BUILDPACKAGES_CANONICAL_TAGS=" + 
+               ("true" if teuth_config.canonical_tags else "false") +
                " " + target +
                " ")
-        log.info("buildpackages: " + cmd)
+        log.info("Executing the following make command to build {} packages. " \
+                 "Note that some values in the command, like CEPH_GIT_URL " \
+                 "and BUILDPACKAGES_CANONICAL_TAGS, may differ from similar " \
+                 "command-line parameter values. This is because " \
+                 "the values used by this task are taken from the teuthology " \
+                 "configuration file. If in doubt, tear down your teuthology " \
+                 "instance and start again from scratch.".format(pkg_type))
+        log.info("buildpackages make command: " + cmd)
         misc.sh(cmd)
     teuth_config.gitbuilder_host = openstack.get_ip('packages-repository', '')
     log.info('Finished buildpackages')
