@@ -55,7 +55,6 @@
 
 
 void push_to_server(int ch, const char * sentence) {
-	FILE *fptr;
 	static char *type;
 
 	static const char MKNOD[] = "mknod";
