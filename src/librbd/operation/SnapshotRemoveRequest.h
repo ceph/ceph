@@ -60,10 +60,10 @@ public:
 		        const std::string &snap_name, uint64_t snap_id);
 
 protected:
-  virtual void send_op();
-  virtual bool should_complete(int r);
+  void send_op() override;
+  bool should_complete(int r) override;
 
-  virtual journal::Event create_event(uint64_t op_tid) const {
+  journal::Event create_event(uint64_t op_tid) const override {
     return journal::SnapRemoveEvent(op_tid, m_snap_name);
   }
 

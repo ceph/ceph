@@ -53,17 +53,17 @@ public:
 		           const std::string &snap_name);
 
 protected:
-  virtual void send_op();
-  virtual bool should_complete(int r);
+  void send_op() override;
+  bool should_complete(int r) override;
 
-  virtual int filter_return_code(int r) const {
+  int filter_return_code(int r) const override {
     if (m_ret_val < 0) {
       return m_ret_val;
     }
     return 0;
   }
 
-  virtual journal::Event create_event(uint64_t op_tid) const {
+  journal::Event create_event(uint64_t op_tid) const override {
     return journal::SnapUnprotectEvent(op_tid, m_snap_name);
   }
 

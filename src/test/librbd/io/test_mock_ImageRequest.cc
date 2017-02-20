@@ -82,7 +82,7 @@ struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
     assert(s_instance == nullptr);
     s_instance = this;
   }
-  ~ObjectRequest() {
+  ~ObjectRequest() override {
     s_instance = nullptr;
   }
 
@@ -112,7 +112,7 @@ struct ObjectReadRequest<librbd::MockTestImageCtx> : public ObjectRequest<librbd
     assert(s_instance == nullptr);
     s_instance = this;
   }
-  ~ObjectReadRequest() {
+  ~ObjectReadRequest() override {
     s_instance = nullptr;
   }
 

@@ -39,8 +39,8 @@ public:
   static void SetUpTestCase();
   static void TearDownTestCase();
 
-  virtual void SetUp();
-  virtual void TearDown();
+  void SetUp() override;
+  void TearDown() override;
 
   void expect_test_features(librbd::MockImageCtx &mock_image_ctx);
 

@@ -58,8 +58,8 @@ public:
   void clear_require_lock_on_read();
 
 protected:
-  virtual void *_void_dequeue();
-  virtual void process(ImageRequest<ImageCtx> *req);
+  void *_void_dequeue() override;
+  void process(ImageRequest<ImageCtx> *req) override;
 
 private:
   typedef std::list<Context *> Contexts;
@@ -72,7 +72,7 @@ private:
                     ImageRequest<ImageCtx> *aio_image_request)
       : aio_work_queue(aio_work_queue), aio_image_request(aio_image_request) {
     }
-    virtual void finish(int r) override {
+    void finish(int r) override {
       aio_work_queue->handle_refreshed(r, aio_image_request);
     }
   };
@@ -83,7 +83,7 @@ private:
       : aio_work_queue(_aio_work_queue) {
     }
 
-    virtual void finish(int r) {
+    void finish(int r) override {
       aio_work_queue->handle_blocked_writes(r);
     }
   };

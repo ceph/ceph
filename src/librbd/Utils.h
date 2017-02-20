@@ -50,7 +50,7 @@ public:
   }
 
 protected:
-  virtual void finish(int r) {
+  void finish(int r) override {
     (obj->*MF)(r);
   }
 };
@@ -63,7 +63,7 @@ public:
   }
 
 protected:
-  virtual void complete(int r) override {
+  void complete(int r) override {
     Context *on_finish = (obj->*MF)(&r);
     if (on_finish != nullptr) {
       on_finish->complete(r);
@@ -73,7 +73,7 @@ protected:
     }
     Context::complete(r);
   }
-  virtual void finish(int r) override {
+  void finish(int r) override {
   }
 };
 
@@ -85,7 +85,7 @@ struct C_AsyncCallback : public Context {
   C_AsyncCallback(WQ *op_work_queue, Context *on_finish)
     : op_work_queue(op_work_queue), on_finish(on_finish) {
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     op_work_queue->queue(on_finish, r);
   }
 };

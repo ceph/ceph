@@ -114,11 +114,11 @@ private:
 
     WatchCtx(Watcher &parent) : watcher(parent) {}
 
-    virtual void handle_notify(uint64_t notify_id,
-                               uint64_t handle,
-      			       uint64_t notifier_id,
-                               bufferlist& bl);
-    virtual void handle_error(uint64_t handle, int err);
+    void handle_notify(uint64_t notify_id,
+                       uint64_t handle,
+                       uint64_t notifier_id,
+                       bufferlist& bl) override;
+    void handle_error(uint64_t handle, int err) override;
   };
 
   struct C_RegisterWatch : public Context {
@@ -128,7 +128,7 @@ private:
     C_RegisterWatch(Watcher *watcher, Context *on_finish)
        : watcher(watcher), on_finish(on_finish) {
     }
-    virtual void finish(int r) override {
+    void finish(int r) override {
       watcher->handle_register_watch(r, on_finish);
     }
   };
