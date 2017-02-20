@@ -128,6 +128,7 @@ class TestKillPoints(CephFSTestCase):
         crashed_mds = self.fs.get_crashed_mds()
         for k in crashed_mds:
             print "Restarting rank %d" %k
+            self.fs.mds_fail(crashed_mds[k])
             self.fs.mds_restart(crashed_mds[k])
 
         # After the restarted, the other MDS can fail on a killpoint.
@@ -145,6 +146,7 @@ class TestKillPoints(CephFSTestCase):
         # Restart the killed daemon.
         for k in crashed_mds:
             print "Restarting rank %d" %k
+            self.fs.mds_fail(crashed_mds[k])
             self.fs.mds_restart(crashed_mds[k])
 
         time.sleep(grace * 2)
@@ -184,8 +186,8 @@ class TestKillPoints(CephFSTestCase):
         self.setup_cluster()
         success_count = 0
 
-        import_killpoint = 8
-        export_killpoint = 8
+        import_killpoint = 13
+        export_killpoint = 13
 
         killpoints_count = 2 * import_killpoint * export_killpoint
 
