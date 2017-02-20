@@ -8,7 +8,7 @@
 // is specified in pthread_create()
 int sock;
 struct sockaddr_un server;
-const char *unix_sock = "/var/run/ceph.sock";
+char *unix_sock = "/var/run/ceph.sock";
 
 void log_ceph_sock1(char *string){
     FILE *fptr;
@@ -41,6 +41,8 @@ void initialize_socket() {
 }
 
 void write_to_sock(char *hooks_string) {
+	log_ceph_sock1("writing to sock\n");
+	log_ceph_sock1(hooks_string);
 	if (write(sock, hooks_string, sizeof(hooks_string)) < 0)
 		perror("writing on stream socket");
 }
