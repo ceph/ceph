@@ -7160,9 +7160,7 @@ void BlueStore::_txc_state_proc(TransBatch batch)
     case TransContext::STATE_KV_SUBMITTED:
       //txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
       batch.set_state(TransContext::STATE_KV_DONE);
-      batch.for_each([this](TransContext* txc) {
-        _txc_finish_kv(txc);
-      });
+      _txc_finish_kv(batch);
       // ** fall-thru **
 
     case TransContext::STATE_KV_DONE:
@@ -7345,30 +7343,44 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
   }
 }
 
-void BlueStore::_txc_finish_kv(TransContext *txc)
+void BlueStore::_txc_finish_kv(TransBatch& batch)
 {
-  dout(20) << __func__ << " txc " << txc << dendl;
+  //dout(20) << __func__ << " txc " << txc << dendl;
 
-  // warning: we're calling onreadable_sync inside the sequencer lock
-  if (txc->onreadable_sync) {
-    txc->onreadable_sync->complete(0);
-    txc->onreadable_sync = NULL;
-  }
-  unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
-  if (txc->oncommit) {
-    logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
-    finishers[n]->queue(txc->oncommit);
-    txc->oncommit = NULL;
-  }
-  if (txc->onreadable) {
-    finishers[n]->queue(txc->onreadable);
-    txc->onreadable = NULL;
+  std::vector<std::vector<Context*>> finishers_jobs(m_finisher_num);
+  for (auto txc : batch) {
+    unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
+
+    if (txc->onreadable_sync) {
+      // warning: we're calling onreadable_sync inside the sequencer lock
+      txc->onreadable_sync->complete(0);
+      txc->onreadable_sync = nullptr;
+    }
+
+    if (txc->oncommit) {
+      logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
+      finishers_jobs[n].emplace_back(txc->oncommit);
+      txc->oncommit = nullptr;
+    }
+
+    if (txc->onreadable) {
+      finishers_jobs[n].emplace_back(txc->onreadable);
+      txc->onreadable = nullptr;
+    }
+
+    if (! txc->oncommits.empty()) {
+      std::move(std::begin(txc->oncommits), std::end(txc->oncommits),
+                std::back_inserter(finishers_jobs[n]));
+      txc->oncommits.clear();
+    }
   }
 
-  if (!txc->oncommits.empty()) {
-    finishers[n]->queue(txc->oncommits);
+  for (size_t i = 0; i < finishers_jobs.size(); i++) {
+    if (! finishers_jobs[i].empty()) {
+      finishers[i]->queue(finishers_jobs[i]);
+    }
   }
-  _op_queue_release_throttle(txc);
+  op_queue_release_throttle(batch);
 }
 
 void BlueStore::BSPerfTracker::update_from_perfcounters(
@@ -7497,6 +7509,25 @@ void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
   }
 
   _txc_update_store_statfs(txc);
+}
+
+void BlueStore::_txc_release_alloc(TransBatch& batch)
+{
+  // update allocator with full released set
+  if (! cct->_conf->bluestore_debug_no_reuse_blocks) {
+    for (auto txc : batch) {
+      for (interval_set<uint64_t>::iterator p = txc->released.begin();
+        p != txc->released.end();
+        ++p) {
+        alloc->release(p.get_start(), p.get_len());
+      }
+    }
+  }
+
+  for (auto txc : batch) {
+    txc->allocated.clear();
+    txc->released.clear();
+  }
 }
 
 void BlueStore::_txc_release_alloc(TransContext *txc)
@@ -7634,12 +7665,13 @@ void BlueStore::_kv_sync_thread()
       dout(20) << __func__ << " committed " << kv_committing.size()
 	       << " cleaned " << wal_cleaning.size()
 	       << " in " << dur << dendl;
-      while (!kv_committing.empty()) {
-	TransContext *txc = kv_committing.front();
-	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
-	_txc_release_alloc(txc);
-	_txc_state_proc(txc);
-	kv_committing.pop_front();
+      if (! kv_committing.empty()) {
+	//assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+        TransBatch batch(TransContext::STATE_KV_SUBMITTED,
+                         std::move(kv_committing));
+        kv_committing.clear();
+        _txc_release_alloc(batch);
+        _txc_state_proc(batch);
       }
       while (!wal_cleaning.empty()) {
 	TransContext *txc = wal_cleaning.front();
@@ -7880,10 +7912,17 @@ void BlueStore::_op_queue_reserve_throttle(TransContext *txc)
   logger->set(l_bluestore_cur_bytes_in_queue, throttle_bytes.get_current());
 }
 
-void BlueStore::_op_queue_release_throttle(TransContext *txc)
+void BlueStore::op_queue_release_throttle(TransBatch& batch)
 {
-  throttle_ops.put(txc->ops);
-  throttle_bytes.put(txc->bytes);
+  uint64_t total_ops = 0, total_bytes = 0;
+
+  for (auto txc : batch) {
+    total_ops += txc->ops;
+    total_bytes += txc->bytes;
+  }
+
+  throttle_ops.put(total_ops);
+  throttle_bytes.put(total_bytes);
 
   logger->set(l_bluestore_cur_ops_in_queue, throttle_ops.get_current());
   logger->set(l_bluestore_cur_bytes_in_queue, throttle_bytes.get_current());

@@ -1530,10 +1530,19 @@ public:
       : base_t({ txc }),
         state(txc->state) {
     }
+    TransBatch(const TransContext::state_t state,
+               std::deque<TransContext*>&& txc_queue)
+      : state(state) {
+      auto& base_vec = static_cast<base_t&>(*this);
+      base_vec.reserve(txc_queue.size());
+      std::move(std::begin(txc_queue), std::end(txc_queue),
+                std::back_inserter(base_vec));
+    }
 
     ~TransBatch() = default;
 
     using base_t::emplace_back;
+    using base_t::push_back;
     using base_t::front;
     using base_t::empty;
     using base_t::size;
@@ -1940,8 +1949,9 @@ public:
 private:
   void _txc_finish_io(TransContext *txc);
   void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
+  void _txc_release_alloc(TransBatch& batch);
   void _txc_release_alloc(TransContext *txc);
-  void _txc_finish_kv(TransContext *txc);
+  void _txc_finish_kv(TransBatch& batch);
   void _txc_finish(TransContext *txc);
 
   void _osr_reap_done(OpSequencer *osr);
@@ -2496,10 +2506,10 @@ private:
 			CollectionRef& d,
 			unsigned bits, int rem);
 
-  void _op_queue_reserve_throttle(TransContext *txc);
-  void _op_queue_release_throttle(TransContext *txc);
-  void _op_queue_reserve_wal_throttle(TransContext *txc);
-  void _op_queue_release_wal_throttle(TransContext *txc);
+  void op_queue_reserve_throttle(TransContext *txc);
+  void op_queue_release_throttle(TransBatch& batch);
+  void op_queue_reserve_wal_throttle(TransContext *txc);
+  void op_queue_release_wal_throttle(TransContext *txc);
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {
