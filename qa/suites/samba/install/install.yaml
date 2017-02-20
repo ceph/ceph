@@ -1,4 +1,5 @@
-# we currently can't install Samba on RHEL; need a gitbuilder and code updates
+# Samba packages not installable on centos
+# http://tracker.ceph.com/issues/19007
 os_type: ubuntu
 
 tasks:
