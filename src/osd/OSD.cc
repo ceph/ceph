@@ -7788,7 +7788,7 @@ void OSD::split_pgs(
  */
 void OSD::handle_pg_create(OpRequestRef op)
 {
-  MOSDPGCreate *m = (MOSDPGCreate*)op->get_req();
+  const MOSDPGCreate *m = static_cast<const MOSDPGCreate*>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_CREATE);
 
   dout(10) << "handle_pg_create " << *m << dendl;
@@ -7802,8 +7802,8 @@ void OSD::handle_pg_create(OpRequestRef op)
 
   op->mark_started();
 
-  map<pg_t,utime_t>::iterator ci = m->ctimes.begin();
-  for (map<pg_t,pg_create_t>::iterator p = m->mkpg.begin();
+  map<pg_t,utime_t>::const_iterator ci = m->ctimes.begin();
+  for (map<pg_t,pg_create_t>::const_iterator p = m->mkpg.begin();
        p != m->mkpg.end();
        ++p, ++ci) {
     assert(ci != m->ctimes.end() && ci->first == p->first);
