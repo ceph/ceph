@@ -184,9 +184,9 @@ bool ReplicatedBackend::can_handle_while_inactive(OpRequestRef op)
   case MSG_OSD_PG_PULL:
     return true;
   case MSG_OSD_SUBOP: {
-    MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
+    const MOSDSubOp *m = static_cast<const MOSDSubOp*>(op->get_req());
     if (m->ops.size() >= 1) {
-      OSDOp *first = &m->ops[0];
+      const OSDOp *first = &m->ops[0];
       switch (first->op.op) {
       case CEPH_OSD_OP_PULL:
 	return true;
@@ -221,9 +221,9 @@ bool ReplicatedBackend::handle_message(
     return true;
 
   case MSG_OSD_SUBOP: {
-    MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
+    const MOSDSubOp *m = static_cast<const MOSDSubOp*>(op->get_req());
     if (m->ops.size() >= 1) {
-      OSDOp *first = &m->ops[0];
+      const OSDOp *first = &m->ops[0];
       switch (first->op.op) {
       case CEPH_OSD_OP_PULL:
 	sub_op_pull(op);
@@ -247,9 +247,9 @@ bool ReplicatedBackend::handle_message(
   }
 
   case MSG_OSD_SUBOPREPLY: {
-    MOSDSubOpReply *r = static_cast<MOSDSubOpReply*>(op->get_req());
+    const MOSDSubOpReply *r = static_cast<const MOSDSubOpReply*>(op->get_req());
     if (r->ops.size() >= 1) {
-      OSDOp &first = r->ops[0];
+      const OSDOp &first = r->ops[0];
       switch (first.op.op) {
       case CEPH_OSD_OP_PUSH:
 	// continue peer recovery
@@ -664,8 +664,8 @@ void ReplicatedBackend::op_commit(
 
 void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 {
-  MOSDRepOpReply *r = static_cast<MOSDRepOpReply *>(op->get_req());
-  r->finish_decode();
+  static_cast<MOSDRepOpReply*>(op->get_nonconst_req())->finish_decode();
+  const MOSDRepOpReply *r = static_cast<const MOSDRepOpReply *>(op->get_req());
   assert(r->get_header().type == MSG_OSD_REPOPREPLY);
 
   op->mark_started();
@@ -678,9 +678,9 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
     map<ceph_tid_t, InProgressOp>::iterator iter =
       in_progress_ops.find(rep_tid);
     InProgressOp &ip_op = iter->second;
-    MOSDOp *m = NULL;
+    const MOSDOp *m = NULL;
     if (ip_op.op)
-      m = static_cast<MOSDOp *>(ip_op.op->get_req());
+      m = static_cast<const MOSDOp *>(ip_op.op->get_req());
 
     if (m)
       dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
@@ -840,7 +840,7 @@ void ReplicatedBackend::be_deep_scrub(
 
 void ReplicatedBackend::_do_push(OpRequestRef op)
 {
-  MOSDPGPush *m = static_cast<MOSDPGPush *>(op->get_req());
+  const MOSDPGPush *m = static_cast<const MOSDPGPush *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
 
@@ -848,7 +848,7 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
 
   vector<PushReplyOp> replies;
   ObjectStore::Transaction t;
-  for (vector<PushOp>::iterator i = m->pushes.begin();
+  for (vector<PushOp>::const_iterator i = m->pushes.begin();
        i != m->pushes.end();
        ++i) {
     replies.push_back(PushReplyOp());
@@ -892,7 +892,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
 
 void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 {
-  MOSDPGPush *m = static_cast<MOSDPGPush *>(op->get_req());
+  const MOSDPGPush *m = static_cast<const MOSDPGPush *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
 
@@ -901,7 +901,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
   vector<PullOp> replies(1);
   ObjectStore::Transaction t;
   list<pull_complete_info> to_continue;
-  for (vector<PushOp>::iterator i = m->pushes.begin();
+  for (vector<PushOp>::const_iterator i = m->pushes.begin();
        i != m->pushes.end();
        ++i) {
     bool more = handle_pull_response(from, *i, &(replies.back()), &to_continue, &t);
@@ -940,7 +940,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 
 void ReplicatedBackend::do_pull(OpRequestRef op)
 {
-  MOSDPGPull *m = static_cast<MOSDPGPull *>(op->get_req());
+  MOSDPGPull *m = static_cast<MOSDPGPull *>(op->get_nonconst_req());
   assert(m->get_type() == MSG_OSD_PG_PULL);
   pg_shard_t from = m->from;
 
@@ -956,12 +956,12 @@ void ReplicatedBackend::do_pull(OpRequestRef op)
 
 void ReplicatedBackend::do_push_reply(OpRequestRef op)
 {
-  MOSDPGPushReply *m = static_cast<MOSDPGPushReply *>(op->get_req());
+  const MOSDPGPushReply *m = static_cast<const MOSDPGPushReply *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_PUSH_REPLY);
   pg_shard_t from = m->from;
 
   vector<PushOp> replies(1);
-  for (vector<PushReplyOp>::iterator i = m->replies.begin();
+  for (vector<PushReplyOp>::const_iterator i = m->replies.begin();
        i != m->replies.end();
        ++i) {
     bool more = handle_push_reply(from, *i, &(replies.back()));
@@ -1084,8 +1084,8 @@ void ReplicatedBackend::issue_op(
 // sub op modify
 void ReplicatedBackend::sub_op_modify(OpRequestRef op)
 {
-  MOSDRepOp *m = static_cast<MOSDRepOp *>(op->get_req());
-  m->finish_decode();
+  static_cast<MOSDRepOp*>(op->get_nonconst_req())->finish_decode();
+  const MOSDRepOp *m = static_cast<const MOSDRepOp *>(op->get_req());
   int msg_type = m->get_type();
   assert(MSG_OSD_REPOP == msg_type);
 
@@ -1118,7 +1118,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
   // shipped transaction and log entries
   vector<pg_log_entry_t> log;
 
-  bufferlist::iterator p = m->get_data().begin();
+  bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
   ::decode(rm->opt, p);
 
   if (m->new_temp_oid != hobject_t()) {
@@ -1135,7 +1135,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
     clear_temp_obj(m->discard_temp_oid);
   }
 
-  p = m->logbl.begin();
+  p = const_cast<bufferlist&>(m->logbl).begin();
   ::decode(log, p);
   rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
@@ -1177,25 +1177,25 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
 
   dout(10) << "sub_op_modify_applied on " << rm << " op "
 	   << *rm->op->get_req() << dendl;
-  Message *m = rm->op->get_req();
+  const Message *m = rm->op->get_req();
 
   Message *ack = NULL;
   eversion_t version;
 
   if (m->get_type() == MSG_OSD_SUBOP) {
     // doesn't have CLIENT SUBOP feature ,use Subop
-    MOSDSubOp *req = static_cast<MOSDSubOp*>(m);
+    const MOSDSubOp *req = static_cast<const MOSDSubOp*>(m);
     version = req->version;
     if (!rm->committed)
       ack = new MOSDSubOpReply(
 	req, parent->whoami_shard(),
 	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
   } else if (m->get_type() == MSG_OSD_REPOP) {
-    MOSDRepOp *req = static_cast<MOSDRepOp*>(m);
+    const MOSDRepOp *req = static_cast<const MOSDRepOp*>(m);
     version = req->version;
     if (!rm->committed)
       ack = new MOSDRepOpReply(
-	static_cast<MOSDRepOp*>(m), parent->whoami_shard(),
+	static_cast<const MOSDRepOp*>(m), parent->whoami_shard(),
 	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
   } else {
     ceph_abort();
@@ -1224,19 +1224,19 @@ void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
   assert(get_osdmap()->is_up(rm->ackerosd));
   get_parent()->update_last_complete_ondisk(rm->last_complete);
 
-  Message *m = rm->op->get_req();
+  const Message *m = rm->op->get_req();
   Message *commit = NULL;
   if (m->get_type() == MSG_OSD_SUBOP) {
     // doesn't have CLIENT SUBOP feature ,use Subop
     MOSDSubOpReply  *reply = new MOSDSubOpReply(
-      static_cast<MOSDSubOp*>(m),
+      static_cast<const MOSDSubOp*>(m),
       get_parent()->whoami_shard(),
       0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     reply->set_last_complete_ondisk(rm->last_complete);
     commit = reply;
   } else if (m->get_type() == MSG_OSD_REPOP) {
     MOSDRepOpReply *reply = new MOSDRepOpReply(
-      static_cast<MOSDRepOp*>(m),
+      static_cast<const MOSDRepOp*>(m),
       get_parent()->whoami_shard(),
       0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     reply->set_last_complete_ondisk(rm->last_complete);
@@ -1675,15 +1675,15 @@ int ReplicatedBackend::send_pull_legacy(int prio, pg_shard_t peer,
 }
 
 void ReplicatedBackend::submit_push_data(
-  ObjectRecoveryInfo &recovery_info,
+  const ObjectRecoveryInfo &recovery_info,
   bool first,
   bool complete,
   bool cache_dont_need,
   const interval_set<uint64_t> &intervals_included,
   bufferlist data_included,
   bufferlist omap_header,
-  map<string, bufferlist> &attrs,
-  map<string, bufferlist> &omap_entries,
+  const map<string, bufferlist> &attrs,
+  const map<string, bufferlist> &omap_entries,
   ObjectStore::Transaction *t)
 {
   hobject_t target_oid;
@@ -1706,7 +1706,7 @@ void ReplicatedBackend::submit_push_data(
     if (omap_header.length()) 
       t->omap_setheader(coll, ghobject_t(target_oid), omap_header);
 
-    bufferlist bv = attrs[OI_ATTR];
+    bufferlist bv = attrs.at(OI_ATTR);
     object_info_t oi(bv);
     t->set_alloc_hint(coll, ghobject_t(target_oid),
 		      oi.expected_object_size,
@@ -1746,8 +1746,9 @@ void ReplicatedBackend::submit_push_data(
   }
 }
 
-void ReplicatedBackend::submit_push_complete(ObjectRecoveryInfo &recovery_info,
-					     ObjectStore::Transaction *t)
+void ReplicatedBackend::submit_push_complete(
+  const ObjectRecoveryInfo &recovery_info,
+  ObjectStore::Transaction *t)
 {
   for (map<hobject_t, interval_set<uint64_t>>::const_iterator p =
 	 recovery_info.clone_subset.begin();
@@ -1785,13 +1786,13 @@ ObjectRecoveryInfo ReplicatedBackend::recalc_subsets(
 }
 
 bool ReplicatedBackend::handle_pull_response(
-  pg_shard_t from, PushOp &pop, PullOp *response,
+  pg_shard_t from, const PushOp &pop, PullOp *response,
   list<pull_complete_info> *to_continue,
   ObjectStore::Transaction *t)
 {
   interval_set<uint64_t> data_included = pop.data_included;
   bufferlist data;
-  data.claim(pop.data);
+  data = pop.data;
   dout(10) << "handle_pull_response "
 	   << pop.recovery_info
 	   << pop.after_progress
@@ -1804,7 +1805,7 @@ bool ReplicatedBackend::handle_pull_response(
     return false;
   }
 
-  hobject_t &hoid = pop.soid;
+  const hobject_t &hoid = pop.soid;
   assert((data_included.empty() && data.length() == 0) ||
 	 (!data_included.empty() && data.length() > 0));
 
@@ -1821,16 +1822,17 @@ bool ReplicatedBackend::handle_pull_response(
 
   bool first = pi.recovery_progress.first;
   if (first) {
-    // attrs only reference the origin bufferlist (decode from MOSDPGPush message)
-    // whose size is much greater than attrs in recovery. If obc cache it (get_obc maybe
-    // cache the attr), this causes the whole origin bufferlist would not be free until
-    // obc is evicted from obc cache. So rebuild the bufferlist before cache it.
-    for (map<string, bufferlist>::iterator it = pop.attrset.begin();
-         it != pop.attrset.end();
-         ++it) {
-      it->second.rebuild();
+    // attrs only reference the origin bufferlist (decode from
+    // MOSDPGPush message) whose size is much greater than attrs in
+    // recovery. If obc cache it (get_obc maybe cache the attr), this
+    // causes the whole origin bufferlist would not be free until obc
+    // is evicted from obc cache. So rebuild the bufferlists before
+    // cache it.
+    auto attrset = pop.attrset;
+    for (auto& a : attrset) {
+      a.second.rebuild();
     }
-    pi.obc = get_parent()->get_obc(pi.recovery_info.soid, pop.attrset);
+    pi.obc = get_parent()->get_obc(pi.recovery_info.soid, attrset);
     pi.recovery_info.oi = pi.obc->obs.oi;
     pi.recovery_info = recalc_subsets(
       pi.recovery_info,
@@ -1885,7 +1887,7 @@ bool ReplicatedBackend::handle_pull_response(
 }
 
 void ReplicatedBackend::handle_push(
-  pg_shard_t from, PushOp &pop, PushReplyOp *response,
+  pg_shard_t from, const PushOp &pop, PushReplyOp *response,
   ObjectStore::Transaction *t)
 {
   dout(10) << "handle_push "
@@ -1893,7 +1895,7 @@ void ReplicatedBackend::handle_push(
 	   << pop.after_progress
 	   << dendl;
   bufferlist data;
-  data.claim(pop.data);
+  data = pop.data;
   bool first = pop.before_progress.first;
   bool complete = pop.after_progress.data_complete &&
     pop.after_progress.omap_complete;
@@ -2167,7 +2169,7 @@ void ReplicatedBackend::prep_push_op_blank(const hobject_t& soid, PushOp *op)
 
 void ReplicatedBackend::sub_op_push_reply(OpRequestRef op)
 {
-  MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->get_req());
+  const MOSDSubOpReply *reply = static_cast<const MOSDSubOpReply*>(op->get_req());
   const hobject_t& soid = reply->get_poid();
   assert(reply->get_type() == MSG_OSD_SUBOPREPLY);
   dout(10) << "sub_op_push_reply from " << reply->get_source() << " " << *reply << dendl;
@@ -2183,7 +2185,8 @@ void ReplicatedBackend::sub_op_push_reply(OpRequestRef op)
     send_push_op_legacy(op->get_req()->get_priority(), peer, pop);
 }
 
-bool ReplicatedBackend::handle_push_reply(pg_shard_t peer, PushReplyOp &op, PushOp *reply)
+bool ReplicatedBackend::handle_push_reply(
+  pg_shard_t peer, const PushReplyOp &op, PushOp *reply)
 {
   const hobject_t &soid = op.soid;
   if (pushing.count(soid) == 0) {
@@ -2238,7 +2241,7 @@ bool ReplicatedBackend::handle_push_reply(pg_shard_t peer, PushReplyOp &op, Push
  */
 void ReplicatedBackend::sub_op_pull(OpRequestRef op)
 {
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
+  const MOSDSubOp *m = static_cast<const MOSDSubOp*>(op->get_req());
   assert(m->get_type() == MSG_OSD_SUBOP);
 
   op->mark_started();
@@ -2344,7 +2347,9 @@ void ReplicatedBackend::trim_pushed_data(
 void ReplicatedBackend::sub_op_push(OpRequestRef op)
 {
   op->mark_started();
-  MOSDSubOp *m = static_cast<MOSDSubOp *>(op->get_req());
+  // don't bother with const-ness here; we're about to kill MOSDSubOp
+  // anyway.
+  MOSDSubOp *m = static_cast<MOSDSubOp *>(op->get_nonconst_req());
 
   PushOp pop;
   pop.soid = m->poid;
