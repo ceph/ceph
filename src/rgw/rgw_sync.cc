@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/optional.hpp>
+
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
 #include "common/RefCountedObj.h"
@@ -1239,6 +1241,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWMetadataLog* mdlog; //< log of syncing period
   uint32_t shard_id;
   rgw_meta_sync_marker& sync_marker;
+  boost::optional<rgw_meta_sync_marker> temp_marker; //< for pending updates
   string marker;
   string max_marker;
   const std::string& period_marker; //< max marker stored in next period
@@ -1462,15 +1465,18 @@ public:
       if (!lost_lock) {
         /* update marker to reflect we're done with full sync */
         if (can_adjust_marker) {
-	  sync_marker.state = rgw_meta_sync_marker::IncrementalSync;
-	  sync_marker.marker = sync_marker.next_step_marker;
-	  sync_marker.next_step_marker.clear();
-	  ldout(sync_env->cct, 0) << *this << ": saving marker pos=" << sync_marker.marker << dendl;
+          // apply updates to a temporary marker, or operate() will send us
+          // to incremental_sync() after we yield
+          temp_marker = sync_marker;
+	  temp_marker->state = rgw_meta_sync_marker::IncrementalSync;
+	  temp_marker->marker = std::move(temp_marker->next_step_marker);
+	  temp_marker->next_step_marker.clear();
+	  ldout(sync_env->cct, 0) << *this << ": saving marker pos=" << temp_marker->marker << dendl;
 
 	  using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_meta_sync_marker>;
 	  yield call(new WriteMarkerCR(sync_env->async_rados, sync_env->store,
 				       pool, sync_env->shard_obj_name(shard_id),
-				       sync_marker));
+				       *temp_marker));
         }
 
         if (retcode < 0) {
@@ -1498,6 +1504,12 @@ public:
       if (lost_lock) {
         return -EBUSY;
       }
+
+      // apply the sync marker update
+      assert(temp_marker);
+      sync_marker = std::move(*temp_marker);
+      temp_marker = boost::none;
+      // must not yield after this point!
     }
     return 0;
   }
