@@ -78,7 +78,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     timer(cct, lock),
     refcnt(1),
     log_last_version(0), log_cb(NULL), log_cb_arg(NULL),
-    finisher(cct)
+    finisher(cct, "radosclient", "fn-radosclient")
 {
 }
 
