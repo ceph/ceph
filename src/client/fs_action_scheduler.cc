@@ -38,6 +38,7 @@ void initialize_socket() {
 		perror("connecting stream socket");
 		exit(1);
 	}
+	log_ceph_sock1("finishing socket creation\n");
 }
 
 void write_to_sock(char *hooks_string) {

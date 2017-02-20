@@ -55,6 +55,7 @@
 
 
 void push_to_server(int ch, const char * sentence) {
+	log_ceph_sock("in pushing to server\n");
 	static char *type;
 
 	static const char MKNOD[] = "mknod";
@@ -90,14 +91,6 @@ void push_to_server(int ch, const char * sentence) {
 
 	}
 	write_to_sock(type);
-//	fptr = fopen("program.txt", "a");
-//	if (fptr == NULL) {
-//		printf("Error!");
-//		exit(1);
-//	}
-//	fprintf(fptr, "%s\t", type);
-//	fprintf(fptr, "%s\n", sentence);
-//	fclose(fptr);
 }
 
 void log_ceph_sock(char *string){
@@ -225,6 +218,7 @@ static CephFuse::Handle *fuse_ll_req_prepare(fuse_req_t req)
 
 static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+  log_ceph_sock("looking up\n");
   push_to_server(6,name);
   print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
