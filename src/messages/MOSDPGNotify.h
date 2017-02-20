@@ -36,12 +36,14 @@ class MOSDPGNotify : public Message {
   vector<pair<pg_notify_t,pg_interval_map_t> > pg_list;   // pgid -> version
 
  public:
-  version_t get_epoch() { return epoch; }
-  vector<pair<pg_notify_t,pg_interval_map_t> >& get_pg_list() { return pg_list; }
+  version_t get_epoch() const { return epoch; }
+  const vector<pair<pg_notify_t,pg_interval_map_t> >& get_pg_list() const {
+    return pg_list;
+  }
 
   MOSDPGNotify()
     : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { 
-    set_priority(CEPH_MSG_PRIO_HIGH); 
+    set_priority(CEPH_MSG_PRIO_HIGH);
   }
   MOSDPGNotify(epoch_t e, vector<pair<pg_notify_t,pg_interval_map_t> >& l)
     : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
