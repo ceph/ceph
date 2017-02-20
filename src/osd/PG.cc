@@ -1854,7 +1854,7 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
   if (op->get_req()->get_type() != CEPH_MSG_OSD_OP)
     return true;
 
-  MOSDOp *req = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *req = static_cast<const MOSDOp*>(op->get_req());
 
   Session *session = (Session *)req->get_connection()->get_priv();
   if (!session) {
@@ -3623,7 +3623,7 @@ void PG::unreg_next_scrub()
 
 void PG::sub_op_scrub_map(OpRequestRef op)
 {
-  MOSDSubOp *m = static_cast<MOSDSubOp *>(op->get_req());
+  const MOSDSubOp *m = static_cast<const MOSDSubOp *>(op->get_req());
   assert(m->get_type() == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_map" << dendl;
 
@@ -3641,7 +3641,7 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   op->mark_started();
 
   dout(10) << " got " << m->from << " scrub map" << dendl;
-  bufferlist::iterator p = m->get_data().begin();
+  bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
 
   scrubber.received_maps[m->from].decode(p, info.pgid.pool());
   dout(10) << "map version is "
@@ -3677,7 +3677,7 @@ void PG::_request_scrub_map(
 
 void PG::sub_op_scrub_reserve(OpRequestRef op)
 {
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
+  const MOSDSubOp *m = static_cast<const MOSDSubOp*>(op->get_req());
   assert(m->get_type() == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_reserve" << dendl;
 
@@ -3698,7 +3698,7 @@ void PG::sub_op_scrub_reserve(OpRequestRef op)
 
 void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
 {
-  MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->get_req());
+  const MOSDSubOpReply *reply = static_cast<const MOSDSubOpReply*>(op->get_req());
   assert(reply->get_type() == MSG_OSD_SUBOPREPLY);
   dout(7) << "sub_op_scrub_reserve_reply" << dendl;
 
@@ -3710,7 +3710,7 @@ void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
   op->mark_started();
 
   pg_shard_t from = reply->from;
-  bufferlist::iterator p = reply->get_data().begin();
+  bufferlist::iterator p = const_cast<bufferlist&>(reply->get_data()).begin();
   bool reserved;
   ::decode(reserved, p);
 
@@ -4022,7 +4022,7 @@ void PG::replica_scrub(
   OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
-  MOSDRepScrub *msg = static_cast<MOSDRepScrub *>(op->get_req());
+  const MOSDRepScrub *msg = static_cast<const MOSDRepScrub *>(op->get_req());
   assert(!scrubber.active_rep_scrub);
   dout(7) << "replica_scrub" << dendl;
 
@@ -5369,7 +5369,7 @@ ostream& operator<<(ostream& out, const PG& pg)
 
 bool PG::can_discard_op(OpRequestRef& op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   if (cct->_conf->osd_discard_disconnected_ops && OSD::op_is_discardable(m)) {
     dout(20) << " discard " << *m << dendl;
     return true;
@@ -5407,7 +5407,7 @@ bool PG::can_discard_op(OpRequestRef& op)
 template<typename T, int MSGTYPE>
 bool PG::can_discard_replica_op(OpRequestRef& op)
 {
-  T *m = static_cast<T *>(op->get_req());
+  const T *m = static_cast<const T *>(op->get_req());
   assert(m->get_type() == MSGTYPE);
 
   /* Mostly, this overlaps with the old_peering_msg
@@ -5432,7 +5432,7 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
 
 bool PG::can_discard_scan(OpRequestRef op)
 {
-  MOSDPGScan *m = static_cast<MOSDPGScan *>(op->get_req());
+  const MOSDPGScan *m = static_cast<const MOSDPGScan *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_SCAN);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
@@ -5444,7 +5444,7 @@ bool PG::can_discard_scan(OpRequestRef op)
 
 bool PG::can_discard_backfill(OpRequestRef op)
 {
-  MOSDPGBackfill *m = static_cast<MOSDPGBackfill *>(op->get_req());
+  const MOSDPGBackfill *m = static_cast<const MOSDPGBackfill *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_BACKFILL);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
@@ -5509,7 +5509,7 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
   case CEPH_MSG_OSD_OP:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDOp*>(op->get_req())->get_map_epoch());
+      static_cast<const MOSDOp*>(op->get_req())->get_map_epoch());
 
   case CEPH_MSG_OSD_BACKOFF:
     return false; // we don't care about maps
@@ -5517,82 +5517,82 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
   case MSG_OSD_SUBOP:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDSubOp*>(op->get_req())->map_epoch);
+      static_cast<const MOSDSubOp*>(op->get_req())->map_epoch);
 
   case MSG_OSD_REPOP:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDRepOp*>(op->get_req())->map_epoch);
+      static_cast<const MOSDRepOp*>(op->get_req())->map_epoch);
 
   case MSG_OSD_SUBOPREPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDSubOpReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDSubOpReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_REPOPREPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDRepOpReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDRepOpReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_SCAN:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGScan*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGScan*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_BACKFILL:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGBackfill*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGBackfill*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PUSH:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGPush*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGPush*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PULL:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGPull*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGPull*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PUSH_REPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGPushReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGPushReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_WRITE:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDECSubOpWrite*>(op->get_req())->map_epoch);
+      static_cast<const MOSDECSubOpWrite*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_WRITE_REPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDECSubOpWriteReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDECSubOpWriteReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_READ:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDECSubOpRead*>(op->get_req())->map_epoch);
+      static_cast<const MOSDECSubOpRead*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_READ_REPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDECSubOpReadReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDECSubOpReadReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_REP_SCRUB:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDRepScrub*>(op->get_req())->map_epoch);
+      static_cast<const MOSDRepScrub*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGUpdateLogMissing*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGUpdateLogMissing*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGUpdateLogMissingReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGUpdateLogMissingReply*>(op->get_req())->map_epoch);
   }
   ceph_abort();
   return false;
