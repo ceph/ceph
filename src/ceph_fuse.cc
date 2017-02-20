@@ -115,28 +115,32 @@ int main(int argc, const char **argv, const char *envp[]) {
     cerr << std::endl;
   }
 
-  global_init_prefork(g_ceph_context);
   Preforker forker;
   if (g_conf->daemonize) {
+    global_init_prefork(g_ceph_context);
+    int r;
     string err;
-    if (forker.prefork(err)) {
-      cerr << "ceph-fuse[" << err << std::endl;
-      return 1;
+    r = forker.prefork(err);
+    if (r < 0 || forker.is_parent()) {
+      // Start log if current process is about to exit. Otherwise, we hit an assert
+      // in the Ceph context destructor.
+      g_ceph_context->_log->start();
+    }
+    if (r < 0) {
+      cerr << "ceph-fuse " << err << std::endl;
+      return r;
+    }
+    if (forker.is_parent()) {
+      r = forker.parent_wait(err);
+      if (r < 0) {
+	cerr << "ceph-fuse " << err << std::endl;
+      }
+      return r;
     }
     global_init_postfork_start(cct.get());
   }
 
-
-  if (forker.is_parent()) {
-    string err;
-    int r = forker.parent_wait(err);
-    if (r) {
-      cerr << "ceph-fuse" << err << std::endl;
-    }
-    return r;
-  }
-
-  if (forker.is_child()) {
+  {
     common_init_finish(g_ceph_context);
 
     //cout << "child, mounting" << std::endl;
