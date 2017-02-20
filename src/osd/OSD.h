@@ -2231,18 +2231,18 @@ protected:
 		OSDMapRef map);
 
   bool require_mon_peer(const Message *m);
-  bool require_osd_peer(Message *m);
+  bool require_osd_peer(const Message *m);
   /***
    * Verifies that we were alive in the given epoch, and that
    * still are.
    */
-  bool require_self_aliveness(Message *m, epoch_t alive_since);
+  bool require_self_aliveness(const Message *m, epoch_t alive_since);
   /**
    * Verifies that the OSD who sent the given op has the same
    * address as in the given map.
    * @pre op was sent by an OSD using the cluster messenger
    */
-  bool require_same_peer_instance(Message *m, OSDMapRef& map,
+  bool require_same_peer_instance(const Message *m, OSDMapRef& map,
 				  bool is_fast_dispatch);
 
   bool require_same_or_newer_map(OpRequestRef& op, epoch_t e,
@@ -2493,7 +2493,7 @@ public:
   void handle_signal(int signum);
 
   /// check if we can throw out op from a disconnected client
-  static bool op_is_discardable(MOSDOp *m);
+  static bool op_is_discardable(const MOSDOp *m);
 
 public:
   OSDService service;
