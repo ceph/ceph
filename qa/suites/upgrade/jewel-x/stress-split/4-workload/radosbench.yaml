@@ -2,7 +2,7 @@ meta:
 - desc: |
    run randomized correctness test for rados operations
    generate write load with rados bench
-tasks:
+stress-tasks:
 - full_sequential:
   - radosbench:
       clients: [client.0]
