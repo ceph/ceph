@@ -22,7 +22,7 @@ class RGWRole
   int store_info(bool exclusive);
   int store_name(bool exclusive);
   int store_path(bool exclusive);
-  int read_id(const string& role_name, string& role_id);
+  int read_id(const string& role_name, const string& tenant, string& role_id);
   int read_name();
   int read_info();
   void set_id(const string& id) { this->id = id; }
@@ -46,10 +46,12 @@ public:
 
   RGWRole(CephContext *cct,
           RGWRados *store,
-          string name)
+          string name,
+          string tenant)
   : cct(cct),
     store(store),
-    name(std::move(name)) {}
+    name(std::move(name)),
+    tenant(std::move(tenant)) {}
 
   RGWRole(CephContext *cct,
           RGWRados *store)
@@ -61,7 +63,7 @@ public:
   ~RGWRole() = default;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(id, bl);
     ::encode(name, bl);
     ::encode(path, bl);
@@ -69,11 +71,12 @@ public:
     ::encode(creation_date, bl);
     ::encode(trust_policy, bl);
     ::encode(perm_policy_map, bl);
+    ::encode(tenant, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(id, bl);
     ::decode(name, bl);
     ::decode(path, bl);
@@ -81,6 +84,9 @@ public:
     ::decode(creation_date, bl);
     ::decode(trust_policy, bl);
     ::decode(perm_policy_map, bl);
+    if (struct_v >= 2) {
+      ::decode(tenant, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -104,7 +110,11 @@ public:
   static const string& get_names_oid_prefix();
   static const string& get_info_oid_prefix();
   static const string& get_path_oid_prefix();
-  static int get_roles_by_path_prefix(RGWRados *store, CephContext *cct, const string& path_prefix, vector<RGWRole>& roles);
+  static int get_roles_by_path_prefix(RGWRados *store,
+                                      CephContext *cct,
+                                      const string& path_prefix,
+                                      const string& tenant,
+                                      vector<RGWRole>& roles);
 };
 WRITE_CLASS_ENCODER(RGWRole)
 #endif /* CEPH_RGW_ROLE_H */
