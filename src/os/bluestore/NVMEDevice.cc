@@ -959,7 +959,6 @@ int NVMEDevice::aio_read(
 
   bufferptr p = buffer::create_page_aligned(len);
   pbl->append(p);
-  int r = 0;
   t->ctx = ioc;
   char *buf = p.c_str();
   t->fill_cb = [buf, t]() {
