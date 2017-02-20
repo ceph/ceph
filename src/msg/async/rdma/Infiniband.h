@@ -138,7 +138,7 @@ class Infiniband {
    public:
     class Chunk {
      public:
-      Chunk(char* b, uint32_t len, ibv_mr* m);
+      Chunk(ibv_mr* m, uint32_t len, char* b);
       ~Chunk();
 
       void set_offset(uint32_t o);
@@ -152,26 +152,22 @@ class Infiniband {
       bool over();
       void clear();
       void post_srq(Infiniband *ib);
-      void set_owner(uint64_t o);
-      uint64_t get_owner();
 
      public:
-      char* buffer;
+      ibv_mr* mr;
       uint32_t bytes;
       uint32_t bound;
       uint32_t offset;
-      ibv_mr* mr;
-      uint64_t owner;
+      char* buffer;
     };
 
     class Cluster {
      public:
       Cluster(MemoryManager& m, uint32_t s);
-      Cluster(MemoryManager& m, uint32_t s, uint32_t n);
       ~Cluster();
 
       int add(uint32_t num);
-      void take_back(Chunk* ck);
+      void take_back(std::vector<Chunk*> &ck);
       int get_buffers(std::vector<Chunk*> &chunks, size_t bytes);
 
       MemoryManager& manager;
@@ -180,6 +176,7 @@ class Infiniband {
       std::vector<Chunk*> free_chunks;
       std::set<Chunk*> all_chunks;
       char* base;
+      char* chunk_base;
     };
 
     MemoryManager(Device *d, ProtectionDomain *p, bool hugepage);
