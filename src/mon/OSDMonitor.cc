@@ -733,7 +733,9 @@ protected:
     int64_t kb = 0, kb_used = 0, kb_avail = 0;
     double util = 0;
     if (get_bucket_utilization(qi.id, &kb, &kb_used, &kb_avail))
-      util = 100.0 * (double)kb_used / (double)kb;
+      if (kb_used && kb)
+        util = 100.0 * (double)kb_used / (double)kb;
+
     double var = 1.0;
     if (average_util)
       var = util / average_util;
