@@ -22,6 +22,7 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <functional>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/unordered_set.hpp>
@@ -1514,6 +1515,61 @@ public:
     void removed(OnodeRef& o) {
       onodes.erase(o);
       modified_objects.erase(o);
+    }
+  };
+
+  class TransBatch : private std::vector<TransContext*> {
+    typedef std::vector<TransContext*> base_t;
+    TransContext::state_t state;
+
+  public:
+    TransBatch(const TransContext::state_t state)
+      : state(state) {
+    }
+    TransBatch(TransContext* const txc)
+      : base_t({ txc }),
+        state(txc->state) {
+    }
+
+    ~TransBatch() = default;
+
+    using base_t::emplace_back;
+    using base_t::front;
+    using base_t::empty;
+    using base_t::size;
+    using base_t::cbegin;
+    using base_t::cend;
+
+    using base_t::begin;
+    using base_t::end;
+
+    TransContext::state_t get_state() const {
+      return state;
+    }
+
+    void set_state(const TransContext::state_t new_state) {
+      for (auto txc : *this) {
+        txc->state = new_state;
+      }
+      state = new_state;
+    }
+
+    TransBatch dissect(std::function<bool(TransContext*)> pred) {
+      TransBatch dissected(get_state());
+
+      for (auto it = this->begin(); it != this->end(); /* see body */) {
+        if (pred(*it)) {
+          dissected.emplace_back(*it);
+          it = this->erase(it);
+        } else {
+          it++;
+        }
+      }
+      return std::move(dissected);
+    }
+
+    void for_each(std::function<void(TransContext*)> f) {
+      std::for_each(std::begin(*this), std::end(*this), f);
     }
   };
 
