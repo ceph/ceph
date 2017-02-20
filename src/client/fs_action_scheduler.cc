@@ -10,7 +10,7 @@ int sock;
 struct sockaddr_un server;
 const char *unix_sock = "/var/run/ceph.sock";
 
-void log_ceph_sock(char *string){
+void log_ceph_sock1(char *string){
     FILE *fptr;
 	fptr = fopen("program.txt", "a");
 	if (fptr == NULL) {
@@ -22,13 +22,13 @@ void log_ceph_sock(char *string){
 }
 
 void initialize_socket() {
-	log_ceph_sock("inside init socket\n");
+	log_ceph_sock1("inside init socket\n");
 	sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock < 0) {
 		perror("opening stream socket");
 		exit(1);
 	}
-	log_ceph_sock("got sock\n");
+	log_ceph_sock1("got sock\n");
 	server.sun_family = AF_UNIX;
 	strcpy(server.sun_path, unix_sock);
 	if (connect(sock, (struct sockaddr *) &server, sizeof(struct sockaddr_un)) < 0) {
