@@ -280,7 +280,7 @@ struct RecoveryMessages {
 };
 
 void ECBackend::handle_recovery_push(
-  PushOp &op,
+  const PushOp &op,
   RecoveryMessages *m)
 {
 
@@ -362,7 +362,7 @@ void ECBackend::handle_recovery_push(
 }
 
 void ECBackend::handle_recovery_push_reply(
-  PushReplyOp &op,
+  const PushReplyOp &op,
   pg_shard_t from,
   RecoveryMessages *m)
 {
@@ -934,12 +934,11 @@ void ECBackend::handle_sub_write(
 
 void ECBackend::handle_sub_read(
   pg_shard_t from,
-  ECSubRead &op,
+  const ECSubRead &op,
   ECSubReadReply *reply)
 {
   shard_id_t shard = get_parent()->whoami_shard().shard;
-  for(map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >>::iterator i =
-        op.to_read.begin();
+  for(auto i = op.to_read.begin();
       i != op.to_read.end();
       ++i) {
     int r = 0;
@@ -953,8 +952,7 @@ void ECBackend::handle_sub_read(
 	goto error;
       }
     }
-    for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::iterator j =
-	   i->second.begin(); j != i->second.end(); ++j) {
+    for (auto j = i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
       r = store->read(
 	ch,
@@ -1032,7 +1030,7 @@ error:
 
 void ECBackend::handle_sub_write_reply(
   pg_shard_t from,
-  ECSubWriteReply &op)
+  const ECSubWriteReply &op)
 {
   map<ceph_tid_t, Op>::iterator i = tid_to_op_map.find(op.tid);
   assert(i != tid_to_op_map.end());
@@ -1074,8 +1072,7 @@ void ECBackend::handle_sub_read_reply(
     return;
   }
   ReadOp &rop = iter->second;
-  for (map<hobject_t, list<pair<uint64_t, bufferlist> >>::iterator i =
-	 op.buffers_read.begin();
+  for (auto i = op.buffers_read.begin();
        i != op.buffers_read.end();
        ++i) {
     assert(!op.errors.count(i->first));	// If attribute error we better not have sent a buffer
@@ -1102,7 +1099,7 @@ void ECBackend::handle_sub_read_reply(
       riter->get<2>()[from].claim(j->second);
     }
   }
-  for (map<hobject_t, map<string, bufferlist>>::iterator i = op.attrs_read.begin();
+  for (auto i = op.attrs_read.begin();
        i != op.attrs_read.end();
        ++i) {
     assert(!op.errors.count(i->first));	// if read error better not have sent an attribute
@@ -1114,7 +1111,7 @@ void ECBackend::handle_sub_read_reply(
     rop.complete[i->first].attrs = map<string, bufferlist>();
     (*(rop.complete[i->first].attrs)).swap(i->second);
   }
-  for (map<hobject_t, int>::iterator i = op.errors.begin();
+  for (auto i = op.errors.begin();
        i != op.errors.end();
        ++i) {
     rop.complete[i->first].errors.insert(
