@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_AIO_OBJECT_REQUEST_H
-#define CEPH_LIBRBD_AIO_OBJECT_REQUEST_H
+#ifndef CEPH_LIBRBD_IO_OBJECT_REQUEST_H
+#define CEPH_LIBRBD_IO_OBJECT_REQUEST_H
 
 #include "include/int_types.h"
 
@@ -17,16 +17,19 @@ class Context;
 
 namespace librbd {
 
-struct AioCompletion;
-class AioObjectRemove;
-class AioObjectTruncate;
-class AioObjectWrite;
-class AioObjectZero;
 struct ImageCtx;
-class CopyupRequest;
 
-struct AioObjectRequestHandle {
-  virtual ~AioObjectRequestHandle() {
+namespace io {
+
+struct AioCompletion;
+class CopyupRequest;
+class ObjectRemoveRequest;
+class ObjectTruncateRequest;
+class ObjectWriteRequest;
+class ObjectZeroRequest;
+
+struct ObjectRequestHandle {
+  virtual ~ObjectRequestHandle() {
   }
 
   virtual void complete(int r) = 0;
@@ -39,38 +42,38 @@ struct AioObjectRequestHandle {
  * for I/O due to layering.
  */
 template <typename ImageCtxT = ImageCtx>
-class AioObjectRequest : public AioObjectRequestHandle {
+class ObjectRequest : public ObjectRequestHandle {
 public:
   typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
 
-  static AioObjectRequest* create_remove(ImageCtxT *ictx,
-                                         const std::string &oid,
-                                         uint64_t object_no,
-                                         const ::SnapContext &snapc,
-                                         Context *completion);
-  static AioObjectRequest* create_truncate(ImageCtxT *ictx,
-                                           const std::string &oid,
-                                           uint64_t object_no,
-                                           uint64_t object_off,
-                                           const ::SnapContext &snapc,
-                                           Context *completion);
-  static AioObjectRequest* create_write(ImageCtxT *ictx, const std::string &oid,
+  static ObjectRequest* create_remove(ImageCtxT *ictx,
+                                      const std::string &oid,
+                                      uint64_t object_no,
+                                      const ::SnapContext &snapc,
+                                      Context *completion);
+  static ObjectRequest* create_truncate(ImageCtxT *ictx,
+                                        const std::string &oid,
                                         uint64_t object_no,
                                         uint64_t object_off,
-                                        const ceph::bufferlist &data,
                                         const ::SnapContext &snapc,
-                                        Context *completion, int op_flags);
-  static AioObjectRequest* create_zero(ImageCtxT *ictx, const std::string &oid,
-                                       uint64_t object_no, uint64_t object_off,
-                                       uint64_t object_len,
-                                       const ::SnapContext &snapc,
-                                       Context *completion);
+                                        Context *completion);
+  static ObjectRequest* create_write(ImageCtxT *ictx, const std::string &oid,
+                                     uint64_t object_no,
+                                     uint64_t object_off,
+                                     const ceph::bufferlist &data,
+                                     const ::SnapContext &snapc,
+                                     Context *completion, int op_flags);
+  static ObjectRequest* create_zero(ImageCtxT *ictx, const std::string &oid,
+                                    uint64_t object_no, uint64_t object_off,
+                                    uint64_t object_len,
+                                    const ::SnapContext &snapc,
+                                    Context *completion);
 
-  AioObjectRequest(ImageCtx *ictx, const std::string &oid,
-                   uint64_t objectno, uint64_t off, uint64_t len,
-                   librados::snap_t snap_id,
-                   Context *completion, bool hide_enoent);
-  virtual ~AioObjectRequest() {}
+  ObjectRequest(ImageCtx *ictx, const std::string &oid,
+                uint64_t objectno, uint64_t off, uint64_t len,
+                librados::snap_t snap_id,
+                Context *completion, bool hide_enoent);
+  virtual ~ObjectRequest() {}
 
   virtual void add_copyup_ops(librados::ObjectWriteOperation *wr) {};
 
@@ -106,24 +109,25 @@ private:
 };
 
 template <typename ImageCtxT = ImageCtx>
-class AioObjectRead : public AioObjectRequest<ImageCtxT> {
+class ObjectReadRequest : public ObjectRequest<ImageCtxT> {
 public:
   typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
   typedef std::map<uint64_t, uint64_t> ExtentMap;
 
-  static AioObjectRead* create(ImageCtxT *ictx, const std::string &oid,
-                               uint64_t objectno, uint64_t offset,
-                               uint64_t len, Extents &buffer_extents,
-                               librados::snap_t snap_id, bool sparse,
-                               Context *completion, int op_flags) {
-    return new AioObjectRead(ictx, oid, objectno, offset, len, buffer_extents,
-                             snap_id, sparse, completion, op_flags);
+  static ObjectReadRequest* create(ImageCtxT *ictx, const std::string &oid,
+                                   uint64_t objectno, uint64_t offset,
+                                   uint64_t len, Extents &buffer_extents,
+                                   librados::snap_t snap_id, bool sparse,
+                                   Context *completion, int op_flags) {
+    return new ObjectReadRequest(ictx, oid, objectno, offset, len,
+                                 buffer_extents, snap_id, sparse, completion,
+                                 op_flags);
   }
 
-  AioObjectRead(ImageCtxT *ictx, const std::string &oid,
-                uint64_t objectno, uint64_t offset, uint64_t len,
-                Extents& buffer_extents, librados::snap_t snap_id, bool sparse,
-                Context *completion, int op_flags);
+  ObjectReadRequest(ImageCtxT *ictx, const std::string &oid,
+                    uint64_t objectno, uint64_t offset, uint64_t len,
+                    Extents& buffer_extents, librados::snap_t snap_id,
+                    bool sparse, Context *completion, int op_flags);
 
   virtual bool should_complete(int r);
   virtual void send();
@@ -190,12 +194,12 @@ private:
   void read_from_parent(Extents&& image_extents);
 };
 
-class AbstractAioObjectWrite : public AioObjectRequest<> {
+class AbstractObjectWriteRequest : public ObjectRequest<> {
 public:
-  AbstractAioObjectWrite(ImageCtx *ictx, const std::string &oid,
-                         uint64_t object_no, uint64_t object_off,
-                         uint64_t len, const ::SnapContext &snapc,
-                         Context *completion, bool hide_enoent);
+  AbstractObjectWriteRequest(ImageCtx *ictx, const std::string &oid,
+                             uint64_t object_no, uint64_t object_off,
+                             uint64_t len, const ::SnapContext &snapc,
+                             Context *completion, bool hide_enoent);
 
   virtual void add_copyup_ops(librados::ObjectWriteOperation *wr)
   {
@@ -274,14 +278,14 @@ private:
   void send_copyup();
 };
 
-class AioObjectWrite : public AbstractAioObjectWrite {
+class ObjectWriteRequest : public AbstractObjectWriteRequest {
 public:
-  AioObjectWrite(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-                 uint64_t object_off, const ceph::bufferlist &data,
-                 const ::SnapContext &snapc, Context *completion,
-                 int op_flags)
-    : AbstractAioObjectWrite(ictx, oid, object_no, object_off, data.length(),
-                             snapc, completion, false),
+  ObjectWriteRequest(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+                     uint64_t object_off, const ceph::bufferlist &data,
+                     const ::SnapContext &snapc, Context *completion,
+                     int op_flags)
+    : AbstractObjectWriteRequest(ictx, oid, object_no, object_off,
+                                 data.length(), snapc, completion, false),
       m_write_data(data), m_op_flags(op_flags) {
   }
 
@@ -308,12 +312,13 @@ private:
   int m_op_flags;
 };
 
-class AioObjectRemove : public AbstractAioObjectWrite {
+class ObjectRemoveRequest : public AbstractObjectWriteRequest {
 public:
-  AioObjectRemove(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-                  const ::SnapContext &snapc, Context *completion)
-    : AbstractAioObjectWrite(ictx, oid, object_no, 0, 0, snapc, completion,
-                             true),
+  ObjectRemoveRequest(ImageCtx *ictx, const std::string &oid,
+                      uint64_t object_no, const ::SnapContext &snapc,
+                      Context *completion)
+    : AbstractObjectWriteRequest(ictx, oid, object_no, 0, 0, snapc, completion,
+                                 true),
       m_object_state(OBJECT_NONEXISTENT) {
   }
 
@@ -357,16 +362,18 @@ private:
   uint8_t m_object_state;
 };
 
-class AioObjectTrim : public AbstractAioObjectWrite {
+class ObjectTrimRequest : public AbstractObjectWriteRequest {
 public:
   // we'd need to only conditionally specify if a post object map
   // update is needed. pre update is decided as usual (by checking
   // the state of the object in the map).
-  AioObjectTrim(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-                const ::SnapContext &snapc, Context *completion,
-                bool post_object_map_update)
-    : AbstractAioObjectWrite(ictx, oid, object_no, 0, 0, snapc, completion,
-                             true), m_post_object_map_update(post_object_map_update) { }
+  ObjectTrimRequest(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+                    const ::SnapContext &snapc, Context *completion,
+                    bool post_object_map_update)
+    : AbstractObjectWriteRequest(ictx, oid, object_no, 0, 0, snapc, completion,
+                                 true),
+      m_post_object_map_update(post_object_map_update) {
+  }
 
   virtual const char* get_op_type() const {
     return "remove (trim)";
@@ -390,13 +397,13 @@ private:
   bool m_post_object_map_update;
 };
 
-class AioObjectTruncate : public AbstractAioObjectWrite {
+class ObjectTruncateRequest : public AbstractObjectWriteRequest {
 public:
-  AioObjectTruncate(ImageCtx *ictx, const std::string &oid,
-                    uint64_t object_no, uint64_t object_off,
-                    const ::SnapContext &snapc, Context *completion)
-    : AbstractAioObjectWrite(ictx, oid, object_no, object_off, 0, snapc,
-                             completion, true) {
+  ObjectTruncateRequest(ImageCtx *ictx, const std::string &oid,
+                        uint64_t object_no, uint64_t object_off,
+                        const ::SnapContext &snapc, Context *completion)
+    : AbstractObjectWriteRequest(ictx, oid, object_no, object_off, 0, snapc,
+                                 completion, true) {
   }
 
   virtual const char* get_op_type() const {
@@ -419,13 +426,13 @@ protected:
   }
 };
 
-class AioObjectZero : public AbstractAioObjectWrite {
+class ObjectZeroRequest : public AbstractObjectWriteRequest {
 public:
-  AioObjectZero(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
-                uint64_t object_off, uint64_t object_len,
-                const ::SnapContext &snapc, Context *completion)
-    : AbstractAioObjectWrite(ictx, oid, object_no, object_off, object_len,
-                             snapc, completion, true) {
+  ObjectZeroRequest(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+                    uint64_t object_off, uint64_t object_len,
+                    const ::SnapContext &snapc, Context *completion)
+    : AbstractObjectWriteRequest(ictx, oid, object_no, object_off, object_len,
+                                 snapc, completion, true) {
   }
 
   virtual const char* get_op_type() const {
@@ -443,9 +450,10 @@ protected:
   }
 };
 
+} // namespace io
 } // namespace librbd
 
-extern template class librbd::AioObjectRequest<librbd::ImageCtx>;
-extern template class librbd::AioObjectRead<librbd::ImageCtx>;
+extern template class librbd::io::ObjectRequest<librbd::ImageCtx>;
+extern template class librbd::io::ObjectReadRequest<librbd::ImageCtx>;
 
-#endif // CEPH_LIBRBD_AIO_OBJECT_REQUEST_H
+#endif // CEPH_LIBRBD_IO_OBJECT_REQUEST_H

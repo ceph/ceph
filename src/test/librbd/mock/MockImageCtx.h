@@ -5,7 +5,6 @@
 #define CEPH_TEST_LIBRBD_MOCK_IMAGE_CTX_H
 
 #include "include/rados/librados.hpp"
-#include "test/librbd/mock/MockAioImageRequestWQ.h"
 #include "test/librbd/mock/MockContextWQ.h"
 #include "test/librbd/mock/MockExclusiveLock.h"
 #include "test/librbd/mock/MockImageState.h"
@@ -14,6 +13,7 @@
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librbd/mock/MockOperations.h"
 #include "test/librbd/mock/MockReadahead.h"
+#include "test/librbd/mock/io/MockImageRequestWQ.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
@@ -75,7 +75,7 @@ struct MockImageCtx {
       format_string(image_ctx.format_string),
       group_spec(image_ctx.group_spec),
       layout(image_ctx.layout),
-      aio_work_queue(new MockAioImageRequestWQ()),
+      io_work_queue(new io::MockImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
       readahead_max_bytes(image_ctx.readahead_max_bytes),
       parent(NULL), operations(new MockOperations()),
@@ -116,7 +116,7 @@ struct MockImageCtx {
     delete operations;
     delete image_watcher;
     delete op_work_queue;
-    delete aio_work_queue;
+    delete io_work_queue;
   }
 
   void wait_for_async_requests() {
@@ -244,7 +244,7 @@ struct MockImageCtx {
   xlist<AsyncRequest<MockImageCtx>*> async_requests;
   std::list<Context*> async_requests_waiters;
 
-  MockAioImageRequestWQ *aio_work_queue;
+  io::MockImageRequestWQ *io_work_queue;
   MockContextWQ *op_work_queue;
 
   cache::MockImageCache *image_cache = nullptr;

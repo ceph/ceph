@@ -5,11 +5,12 @@
 #include "include/interval_set.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd/object_map_types.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
+#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ReadResult.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "tools/rbd_mirror/Threads.h"
@@ -55,7 +56,7 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size,
     bufferlist bl;
     bl.append(std::string(len, '1'));
 
-    int r = image_ctx->aio_work_queue->write(off, len, bl.c_str(), 0);
+    int r = image_ctx->io_work_queue->write(off, len, std::move(bl), 0);
     ASSERT_EQ(static_cast<int>(len), r);
 
     interval_set<uint64_t> w;
@@ -265,16 +266,16 @@ public:
 
       bufferlist remote_bl;
       remote_bl.append(std::string(object_size, '1'));
-      r = m_remote_image_ctx->aio_work_queue->read(0, object_size,
-                                                   remote_bl.c_str(), 0);
+      r = m_remote_image_ctx->io_work_queue->read(
+        0, object_size, librbd::io::ReadResult{&remote_bl}, 0);
       if (r < 0) {
         return r;
       }
 
       bufferlist local_bl;
       local_bl.append(std::string(object_size, '1'));
-      r = m_local_image_ctx->aio_work_queue->read(0, object_size,
-                                                  local_bl.c_str(), 0);
+      r = m_local_image_ctx->io_work_queue->read(
+        0, object_size, librbd::io::ReadResult{&local_bl}, 0);
       if (r < 0) {
         return r;
       }
@@ -485,7 +486,7 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Trim) {
 
   // trim the object
   uint64_t trim_offset = rand() % one.range_end();
-  ASSERT_LE(0, m_remote_image_ctx->aio_work_queue->discard(
+  ASSERT_LE(0, m_remote_image_ctx->io_work_queue->discard(
     trim_offset, one.range_end() - trim_offset));
   ASSERT_EQ(0, create_snap("sync"));
 
@@ -529,7 +530,7 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Remove) {
 
   // remove the object
   uint64_t object_size = 1 << m_remote_image_ctx->order;
-  ASSERT_LE(0, m_remote_image_ctx->aio_work_queue->discard(0, object_size));
+  ASSERT_LE(0, m_remote_image_ctx->io_work_queue->discard(0, object_size));
   ASSERT_EQ(0, create_snap("sync"));
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);

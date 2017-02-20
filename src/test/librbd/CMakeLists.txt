@@ -24,10 +24,9 @@ set_target_properties(rbd_test_mock PROPERTIES COMPILE_FLAGS
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh
 set(unittest_librbd_srcs
   test_BlockGuard.cc
-  test_ConsistencyGroups.cc
+  test_Groups.cc
   test_main.cc
   test_mock_fixture.cc
-  test_mock_AioImageRequest.cc
   test_mock_ExclusiveLock.cc
   test_mock_Journal.cc
   test_mock_ManagedLock.cc
@@ -36,6 +35,7 @@ set(unittest_librbd_srcs
   exclusive_lock/test_mock_PostAcquireRequest.cc
   exclusive_lock/test_mock_PreReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
+  io/test_mock_ImageRequest.cc
   journal/test_mock_OpenRequest.cc
   journal/test_mock_PromoteRequest.cc
   journal/test_mock_Replay.cc

@@ -3,10 +3,10 @@
 
 #include "common/errno.h"
 
-#include "librbd/AioCompletion.h"
 #include "librbd/Group.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
+#include "librbd/io/AioCompletion.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
