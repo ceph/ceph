@@ -1208,11 +1208,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 	cluster_full = cluster_full || _osdmap_full_flag();
 	update_pool_full_map(pool_full_map);
+
+	// check all outstanding requests on every epoch
 	_scan_requests(homeless_session, skipped_map, cluster_full,
 		       &pool_full_map, need_resend,
 		       need_resend_linger, need_resend_command, sul);
-
-	// osd addr changes?
 	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
 	     p != osd_sessions.end(); ) {
 	  OSDSession *s = p->second;
@@ -1220,6 +1220,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 			 &pool_full_map, need_resend,
 			 need_resend_linger, need_resend_command, sul);
 	  ++p;
+	  // osd down or addr change?
 	  if (!osdmap->is_up(s->osd) ||
 	      (s->con &&
 	       s->con->get_peer_addr() != osdmap->get_inst(s->osd).addr)) {
@@ -1252,6 +1253,23 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	monc->sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
 	monc->renew_subs();
       }
+    }
+  }
+
+  // make sure need_resend targets reflect latest map
+  for (auto p = need_resend.begin(); p != need_resend.end(); ) {
+    Op *op = p->second;
+    if (op->target.epoch < osdmap->get_epoch()) {
+      ldout(cct, 10) << __func__ << "  checking op " << p->first << dendl;
+      int r = _calc_target(&op->target, nullptr);
+      if (r == RECALC_OP_TARGET_POOL_DNE) {
+	p = need_resend.erase(p);
+	_check_op_pool_dne(op, nullptr);
+      } else {
+	++p;
+      }
+    } else {
+      ++p;
     }
   }
 
@@ -2756,20 +2774,23 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     force_resend = true;
   }
 
-  bool need_resend = false;
-
-  bool paused = target_should_be_paused(t);
-  if (!paused && paused != t->paused) {
+  bool unpaused = false;
+  if (t->paused && !target_should_be_paused(t)) {
     t->paused = false;
-    need_resend = true;
+    unpaused = true;
   }
-  if (t->pgid != pgid ||
+
+  bool legacy_change =
+    t->pgid != pgid ||
       is_pg_changed(
 	t->acting_primary, t->acting, acting_primary, acting,
-	t->used_replica || any_change) ||
-      (con && con->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT) &&
-       prev_pgid.is_split(t->pg_num, pg_num, nullptr)) ||
-      force_resend) {
+	t->used_replica || any_change);
+  bool split = false;
+  if (t->pg_num) {
+    split = prev_pgid.is_split(t->pg_num, pg_num, nullptr);
+  }
+
+  if (legacy_change || split || force_resend) {
     t->pgid = pgid;
     t->acting = acting;
     t->acting_primary = acting_primary;
@@ -2829,9 +2850,11 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       }
       t->osd = osd;
     }
-    need_resend = true;
   }
-  if (need_resend) {
+  if (legacy_change || unpaused || force_resend) {
+    return RECALC_OP_TARGET_NEED_RESEND;
+  }
+  if (split && con && con->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT)) {
     return RECALC_OP_TARGET_NEED_RESEND;
   }
   return RECALC_OP_TARGET_NO_ACTION;
