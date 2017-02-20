@@ -99,6 +99,7 @@ void push_to_server(int ch, const char * sentence) {
 		break;
 
 	}
+	log_ceph_sock("in pushing to server\n");
 	write_to_sock(type);
 }
 
