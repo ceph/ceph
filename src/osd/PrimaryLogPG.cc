@@ -8861,9 +8861,10 @@ ObjectContextRef PrimaryLogPG::create_object_context(const object_info_t& oi,
   return obc;
 }
 
-ObjectContextRef PrimaryLogPG::get_object_context(const hobject_t& soid,
-						  bool can_create,
-						  map<string, bufferlist> *attrs)
+ObjectContextRef PrimaryLogPG::get_object_context(
+  const hobject_t& soid,
+  bool can_create,
+  const map<string, bufferlist> *attrs)
 {
   assert(
     attrs || !pg_log.get_missing().is_missing(soid) ||
@@ -9280,7 +9281,7 @@ void PrimaryLogPG::kick_object_context_blocked(ObjectContextRef obc)
 SnapSetContext *PrimaryLogPG::get_snapset_context(
   const hobject_t& oid,
   bool can_create,
-  map<string, bufferlist> *attrs,
+  const map<string, bufferlist> *attrs,
   bool oid_existed)
 {
   Mutex::Locker l(snapset_contexts_lock);
