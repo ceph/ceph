@@ -1,4 +1,4 @@
-tasks:
+stress-tasks:
 - workunit:
     branch: hammer
     clients:
