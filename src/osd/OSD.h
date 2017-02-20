@@ -1404,7 +1404,7 @@ public:
     unsigned mask = ~((~0)<<bits);
     switch (op->get_req()->get_type()) {
     case CEPH_MSG_OSD_OP:
-      return (static_cast<MOSDOp*>(
+      return (static_cast<const MOSDOp*>(
 		op->get_req())->get_raw_pg().m_seed & mask) == match;
     }
     return false;

@@ -1381,7 +1381,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err)
 void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
                                 version_t uv)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
   int flags;
   flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
@@ -1394,7 +1394,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
 
 void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
 
   assert(m->get_map_epoch() >= pg->info.history.same_primary_since);
@@ -6310,7 +6310,7 @@ void OSD::do_waiters()
 template<typename T, int MSGTYPE>
 epoch_t replica_op_required_epoch(OpRequestRef op)
 {
-  T *m = static_cast<T *>(op->get_req());
+  const T *m = static_cast<const T *>(op->get_req());
   assert(m->get_type() == MSGTYPE);
   return m->map_epoch;
 }
@@ -6319,11 +6319,11 @@ epoch_t op_required_epoch(OpRequestRef op)
 {
   switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP: {
-    MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+    const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
     return m->get_map_epoch();
   }
   case CEPH_MSG_OSD_BACKOFF: {
-    MOSDBackoff *m = static_cast<MOSDBackoff*>(op->get_req());
+    const MOSDBackoff *m = static_cast<const MOSDBackoff*>(op->get_req());
     return m->map_epoch;
   }
   case MSG_OSD_SUBOP:
@@ -7696,7 +7696,7 @@ bool OSD::require_same_peer_instance(const Message *m, OSDMapRef& map,
 bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch,
 				    bool is_fast_dispatch)
 {
-  Message *m = op->get_req();
+  const Message *m = op->get_req();
   dout(15) << "require_same_or_newer_map " << epoch
 	   << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
 
@@ -8192,7 +8192,7 @@ void OSD::handle_pg_info(OpRequestRef op)
 
 void OSD::handle_pg_trim(OpRequestRef op)
 {
-  MOSDPGTrim *m = (MOSDPGTrim *)op->get_req();
+  const MOSDPGTrim *m = static_cast<const MOSDPGTrim*>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_TRIM);
 
   dout(7) << "handle_pg_trim " << *m << " from " << m->get_source() << dendl;
@@ -8246,7 +8246,7 @@ void OSD::handle_pg_trim(OpRequestRef op)
 
 void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 {
-  MBackfillReserve *m = static_cast<MBackfillReserve*>(op->get_req());
+  const MBackfillReserve *m = static_cast<const MBackfillReserve*>(op->get_req());
   assert(m->get_type() == MSG_OSD_BACKFILL_RESERVE);
 
   if (!require_osd_peer(op->get_req()))
@@ -8294,7 +8294,7 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 
 void OSD::handle_pg_recovery_reserve(OpRequestRef op)
 {
-  MRecoveryReserve *m = static_cast<MRecoveryReserve*>(op->get_req());
+  const MRecoveryReserve *m = static_cast<const MRecoveryReserve*>(op->get_req());
   assert(m->get_type() == MSG_OSD_RECOVERY_RESERVE);
 
   if (!require_osd_peer(op->get_req()))
@@ -8751,7 +8751,7 @@ struct send_map_on_destruct {
   OSDMapRef osdmap;
   epoch_t map_epoch;
   bool should_send;
-  send_map_on_destruct(OSD *osd, Message *m,
+  send_map_on_destruct(OSD *osd, const Message *m,
                        OSDMapRef& osdmap, epoch_t map_epoch)
     : osd(osd), name(m->get_source()), con(m->get_connection()),
       osdmap(osdmap), map_epoch(map_epoch),
@@ -8766,7 +8766,7 @@ struct send_map_on_destruct {
 
 void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
   if (op_is_discardable(m)) {
     dout(10) << " discardable " << *m << dendl;
@@ -8864,7 +8864,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 
 void OSD::handle_backoff(OpRequestRef& op, OSDMapRef& osdmap)
 {
-  MOSDBackoff *m = static_cast<MOSDBackoff*>(op->get_req());
+  const MOSDBackoff *m = static_cast<const MOSDBackoff*>(op->get_req());
   Session *s = static_cast<Session*>(m->get_connection()->get_priv());
   dout(10) << __func__ << " " << *m << " session " << s << dendl;
   assert(s);
@@ -8885,7 +8885,7 @@ void OSD::handle_backoff(OpRequestRef& op, OSDMapRef& osdmap)
 template<typename T, int MSGTYPE>
 void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
 {
-  T *m = static_cast<T *>(op->get_req());
+  const T *m = static_cast<const T *>(op->get_req());
   assert(m->get_type() == MSGTYPE);
 
   dout(10) << __func__ << " " << *m << " epoch " << m->map_epoch << dendl;
@@ -9109,7 +9109,7 @@ void OSD::dequeue_op(
 
   // share our map with sender, if they're old
   if (op->send_map_update) {
-    Message *m = op->get_req();
+    const Message *m = op->get_req();
     Session *session = static_cast<Session *>(m->get_connection()->get_priv());
     epoch_t last_sent_epoch;
     if (session) {
@@ -9410,8 +9410,8 @@ void OSD::get_latest_osdmap()
 
 int OSD::init_op_flags(OpRequestRef& op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  vector<OSDOp>::iterator iter;
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
+  vector<OSDOp>::const_iterator iter;
 
   // client flags have no bearing on whether an op is a read, write, etc.
   op->rmw_flags = 0;
@@ -9485,7 +9485,7 @@ int OSD::init_op_flags(OpRequestRef& op)
     switch (iter->op.op) {
     case CEPH_OSD_OP_CALL:
       {
-	bufferlist::iterator bp = iter->indata.begin();
+	bufferlist::iterator bp = const_cast<bufferlist&>(iter->indata).begin();
 	int is_write, is_read;
 	string cname, mname;
 	bp.copy(iter->op.cls.class_len, cname);
