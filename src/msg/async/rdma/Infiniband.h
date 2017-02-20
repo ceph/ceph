@@ -67,14 +67,13 @@ class Device {
   ibv_device *device;
   const char* name;
   uint8_t  port_cnt;
-  Port** ports;
  public:
   explicit Device(CephContext *c, ibv_device* d);
   ~Device() {
-    for (uint8_t i = 0; i < port_cnt; ++i)
-      delete ports[i];
-    delete []ports;
-    assert(ibv_close_device(ctxt) == 0);
+    if (active_port) {
+      delete active_port;
+      assert(ibv_close_device(ctxt) == 0);
+    }
   }
   const char* get_name() { return name;}
   uint16_t get_lid() { return active_port->get_lid(); }
@@ -180,6 +179,7 @@ class Infiniband {
 
       MemoryManager& manager;
       uint32_t buffer_size;
+      uint32_t num_chunk;
       Mutex lock;
       std::vector<Chunk*> free_chunks;
       char *base = nullptr;
