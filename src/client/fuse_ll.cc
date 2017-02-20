@@ -100,7 +100,7 @@ void push_to_server(int ch, const char * sentence) {
 //	fclose(fptr);
 }
 
-void log(char *string){
+void log_ceph_sock(char *string){
     FILE *fptr;
 	fptr = fopen("program.txt", "a");
 	if (fptr == NULL) {
@@ -1318,6 +1318,7 @@ CephFuse::~CephFuse()
 
 int CephFuse::init(int argc, const char *argv[])
 {
+  log_ceph_sock("starting\n");
   initialize_socket();
   return _handle->init(argc, argv);
 }
@@ -1329,12 +1330,13 @@ int CephFuse::start()
 
 int CephFuse::loop()
 {
-  close_socket();
   return _handle->loop();
 }
 
 void CephFuse::finalize()
 {
+  log_ceph_sock("closing\n");
+  close_socket();
   return _handle->finalize();
 }
 
