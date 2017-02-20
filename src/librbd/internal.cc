@@ -1722,6 +1722,9 @@ reprotect_and_return_err:
     int r = open_image(ictx);
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
+      if (r != -ENOENT) {
+	return r;
+      }
     } else {
       string header_oid = ictx->header_oid;
       old_format = ictx->old_format;
