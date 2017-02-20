@@ -24,9 +24,9 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/variant.hpp>
 #include <boost/utility/string_ref.hpp>
+#include <boost/optional.hpp>
 #include "xxhash.h"
 #include "include/buffer.h"
-#include "common/sstring.hh"
 #include "common/cohort_lru.h"
 #include "common/ceph_timer.h"
 #include "rgw_common.h"
@@ -164,11 +164,7 @@ namespace rgw {
     using lock_guard = std::lock_guard<std::mutex>;
     using unique_lock = std::unique_lock<std::mutex>;
 
-    /* median file name length (HPC) has been found to be 16,
-     * w/90% of file names <= 31 (Yifan Wang, CMU) */
-    using dirent_string = basic_sstring<char, uint16_t, 32>;
-
-    using marker_cache_t = flat_map<uint64_t, dirent_string>;
+    using marker_cache_t = flat_map<uint64_t, rgw_obj_key>;
 
     struct State {
       uint64_t dev;
@@ -450,27 +446,26 @@ namespace rgw {
       }
     }
 
-    void add_marker(uint64_t off, const boost::string_ref& marker,
+    void add_marker(uint64_t off, const rgw_obj_key& marker,
 		    uint8_t obj_type) {
       using std::get;
       directory* d = get<directory>(&variant_type);
       if (d) {
 	unique_lock guard(mtx);
-	// XXXX check for failure (dup key)
 	d->marker_cache.insert(
-	  marker_cache_t::value_type(off, marker.data()));
+	  marker_cache_t::value_type(off, marker));
       }
     }
 
-    std::string find_marker(uint64_t off) { // XXX copy
+    const rgw_obj_key* find_marker(uint64_t off) {
       using std::get;
       directory* d = get<directory>(&variant_type);
       if (d) {
 	const auto& iter = d->marker_cache.find(off);
 	if (iter != d->marker_cache.end())
-	  return iter->second;
+	  return &(iter->second);
       }
-      return "";
+      return nullptr;
     }
     
     bool is_open() const { return flags & FLAG_OPEN; }
@@ -1102,9 +1097,9 @@ public:
 			void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
       cb_arg(_cb_arg), rcb(_rcb), ix(0) {
-    const std::string& sm = rgw_fh->find_marker(*offset);
-    if (sm.size() > 0) {
-      marker = sm;
+    const auto& mk = rgw_fh->find_marker(*offset);
+    if (mk) {
+      marker = mk->name;
     }
     op = this;
   }
@@ -1166,11 +1161,13 @@ public:
     // do nothing
   }
 
-  int operator()(const boost::string_ref& name, const boost::string_ref& marker) {
+  int operator()(const boost::string_ref& name,
+		 const boost::string_ref& marker) {
     uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
     *offset = off;
     /* update traversal cache */
-    rgw_fh->add_marker(off, marker, RGW_FS_TYPE_DIRECTORY);
+    rgw_fh->add_marker(off, rgw_obj_key{marker.data(), ""},
+		       RGW_FS_TYPE_DIRECTORY);
     rcb(name.data(), cb_arg, off);
     return 0;
   }
@@ -1203,9 +1200,9 @@ public:
 		    void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
       cb_arg(_cb_arg), rcb(_rcb), ix(0) {
-    const std::string& sm{rgw_fh->find_marker(*offset)};
-    if (sm.size() > 0) {
-      marker = sm;
+    const auto& mk = rgw_fh->find_marker(*offset);
+    if (mk) {
+      marker = *mk;
     }
     default_max = 1000; // XXX was being omitted
     op = this;
@@ -1248,7 +1245,7 @@ public:
     return 0;
   }
 
-  int operator()(const boost::string_ref name, const boost::string_ref marker,
+  int operator()(const boost::string_ref name, const rgw_obj_key& marker,
 		uint8_t type) {
 
     assert(name.length() > 0); // XXX
@@ -1293,7 +1290,7 @@ public:
 			     << dendl;
 
       /* call me maybe */
-      this->operator()(sref, sref, RGW_FS_TYPE_FILE);
+      this->operator()(sref, next_marker, RGW_FS_TYPE_FILE);
       ++ix;
     }
     for (auto& iter : common_prefixes) {
@@ -1326,7 +1323,7 @@ public:
 			     << " cpref=" << sref
 			     << dendl;
 
-      this->operator()(sref, sref, RGW_FS_TYPE_DIRECTORY);
+      this->operator()(sref, next_marker, RGW_FS_TYPE_DIRECTORY);
       ++ix;
     }
   }
