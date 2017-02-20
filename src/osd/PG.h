@@ -2397,7 +2397,7 @@ public:
   virtual void kick_snap_trim() = 0;
   virtual void snap_trimmer_scrub_complete() = 0;
   bool requeue_scrub(bool high_priority = false);
-  void queue_recovery(bool front = false);
+  void queue_recovery();
   bool queue_scrub();
   unsigned get_scrub_priority();
 

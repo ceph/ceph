@@ -1970,7 +1970,7 @@ bool PG::requeue_scrub(bool high_priority)
   }
 }
 
-void PG::queue_recovery(bool front)
+void PG::queue_recovery()
 {
   if (!is_primary() || !is_peered()) {
     dout(10) << "queue_recovery -- not primary or not peered " << dendl;
@@ -1980,7 +1980,7 @@ void PG::queue_recovery(bool front)
   } else {
     dout(10) << "queue_recovery -- queuing" << dendl;
     recovery_queued = true;
-    osd->queue_for_recovery(this, front);
+    osd->queue_for_recovery(this);
   }
 }
 

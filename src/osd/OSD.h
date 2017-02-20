@@ -947,9 +947,10 @@ public:
     }
   }
   // delayed pg activation
-  void queue_for_recovery(PG *pg, bool front = false) {
+  void queue_for_recovery(PG *pg) {
     Mutex::Locker l(recovery_lock);
-    if (front) {
+
+    if (pg->get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL)) {
       awaiting_throttle.push_front(make_pair(pg->get_osdmap()->get_epoch(), pg));
     } else {
       awaiting_throttle.push_back(make_pair(pg->get_osdmap()->get_epoch(), pg));
