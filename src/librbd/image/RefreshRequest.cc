@@ -1029,6 +1029,7 @@ void RefreshRequest<I>::apply() {
       // object map and journaling
       assert(m_exclusive_lock == nullptr);
       m_exclusive_lock = m_image_ctx.exclusive_lock;
+      m_image_ctx.aio_work_queue->clear_require_lock_on_read();
     } else {
       if (m_exclusive_lock != nullptr) {
         assert(m_image_ctx.exclusive_lock == nullptr);
@@ -1047,6 +1048,10 @@ void RefreshRequest<I>::apply() {
                                      m_image_ctx.snap_lock) ||
           m_object_map != nullptr) {
         std::swap(m_object_map, m_image_ctx.object_map);
+      }
+      if (m_image_ctx.clone_copy_on_read &&
+          m_image_ctx.aio_work_queue->is_lock_required()) {
+        m_image_ctx.aio_work_queue->set_require_lock_on_read();
       }
     }
   }
