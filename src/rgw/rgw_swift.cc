@@ -613,8 +613,8 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
    * of Swift API entry point removed. */
   const size_t pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
   vector<string> allowed_paths;
-  allowed_paths.push_back(s->info.request_uri);
-  allowed_paths.push_back(s->info.request_uri.substr(pos + 1));
+  allowed_paths.push_back(s->decoded_uri);
+  allowed_paths.push_back(s->decoded_uri.substr(pos + 1));
 
   vector<string> allowed_methods;
   allowed_methods.push_back(s->info.method);
