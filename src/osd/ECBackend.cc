@@ -726,18 +726,22 @@ bool ECBackend::handle_message(
   int priority = _op->get_req()->get_priority();
   switch (_op->get_req()->get_type()) {
   case MSG_OSD_EC_WRITE: {
-    MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(_op->get_req());
+    // NOTE: this is non-const because handle_sub_write modifies the embedded
+    // ObjectStore::Transaction in place (and then std::move's it).  It does
+    // not conflict with ECSubWrite's operator<<.
+    MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(
+      _op->get_nonconst_req());
     handle_sub_write(op->op.from, _op, op->op);
     return true;
   }
   case MSG_OSD_EC_WRITE_REPLY: {
-    MOSDECSubOpWriteReply *op = static_cast<MOSDECSubOpWriteReply*>(
+    const MOSDECSubOpWriteReply *op = static_cast<const MOSDECSubOpWriteReply*>(
       _op->get_req());
     handle_sub_write_reply(op->op.from, op->op);
     return true;
   }
   case MSG_OSD_EC_READ: {
-    MOSDECSubOpRead *op = static_cast<MOSDECSubOpRead*>(_op->get_req());
+    const MOSDECSubOpRead *op = static_cast<const MOSDECSubOpRead*>(_op->get_req());
     MOSDECSubOpReadReply *reply = new MOSDECSubOpReadReply;
     reply->pgid = get_parent()->primary_spg_t();
     reply->map_epoch = get_parent()->get_epoch();
@@ -747,17 +751,19 @@ bool ECBackend::handle_message(
     return true;
   }
   case MSG_OSD_EC_READ_REPLY: {
+    // NOTE: this is non-const because handle_sub_read_reply steals resulting
+    // buffers.  It does not conflict with ECSubReadReply operator<<.
     MOSDECSubOpReadReply *op = static_cast<MOSDECSubOpReadReply*>(
-      _op->get_req());
+      _op->get_nonconst_req());
     RecoveryMessages rm;
     handle_sub_read_reply(op->op.from, op->op, &rm);
     dispatch_recovery_messages(rm, priority);
     return true;
   }
   case MSG_OSD_PG_PUSH: {
-    MOSDPGPush *op = static_cast<MOSDPGPush *>(_op->get_req());
+    const MOSDPGPush *op = static_cast<const MOSDPGPush *>(_op->get_req());
     RecoveryMessages rm;
-    for (vector<PushOp>::iterator i = op->pushes.begin();
+    for (vector<PushOp>::const_iterator i = op->pushes.begin();
 	 i != op->pushes.end();
 	 ++i) {
       handle_recovery_push(*i, &rm);
@@ -766,9 +772,10 @@ bool ECBackend::handle_message(
     return true;
   }
   case MSG_OSD_PG_PUSH_REPLY: {
-    MOSDPGPushReply *op = static_cast<MOSDPGPushReply *>(_op->get_req());
+    const MOSDPGPushReply *op = static_cast<const MOSDPGPushReply *>(
+      _op->get_req());
     RecoveryMessages rm;
-    for (vector<PushReplyOp>::iterator i = op->replies.begin();
+    for (vector<PushReplyOp>::const_iterator i = op->replies.begin();
 	 i != op->replies.end();
 	 ++i) {
       handle_recovery_push_reply(*i, op->from, &rm);
