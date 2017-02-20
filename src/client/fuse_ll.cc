@@ -100,6 +100,17 @@ void push_to_server(int ch, const char * sentence) {
 //	fclose(fptr);
 }
 
+void log(char *string){
+    FILE *fptr;
+	fptr = fopen("program.txt", "a");
+	if (fptr == NULL) {
+		printf("Error!");
+		exit(1);
+	}
+	fprintf(fptr, "%s\n", string);
+	fclose(fptr);
+}
+
 void print_parent(fuse_ino_t parent_no){
    FILE *fptr;
 
@@ -1307,6 +1318,7 @@ CephFuse::~CephFuse()
 
 int CephFuse::init(int argc, const char *argv[])
 {
+  initialize_socket();
   return _handle->init(argc, argv);
 }
 
@@ -1317,6 +1329,7 @@ int CephFuse::start()
 
 int CephFuse::loop()
 {
+  close_socket();
   return _handle->loop();
 }
 
