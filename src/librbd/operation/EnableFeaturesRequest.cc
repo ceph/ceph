@@ -4,13 +4,13 @@
 #include "librbd/operation/EnableFeaturesRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/image/SetFlagsRequest.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/object_map/CreateRequest.h"
@@ -91,7 +91,7 @@ void EnableFeaturesRequest<I>::send_block_writes() {
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
   RWLock::WLocker locker(image_ctx.owner_lock);
-  image_ctx.aio_work_queue->block_writes(create_context_callback<
+  image_ctx.io_work_queue->block_writes(create_context_callback<
     EnableFeaturesRequest<I>,
     &EnableFeaturesRequest<I>::handle_block_writes>(this));
 }
@@ -471,7 +471,7 @@ Context *EnableFeaturesRequest<I>::handle_finish(int r) {
       image_ctx.exclusive_lock->unblock_requests();
     }
     if (m_writes_blocked) {
-      image_ctx.aio_work_queue->unblock_writes();
+      image_ctx.io_work_queue->unblock_writes();
     }
   }
   image_ctx.state->handle_prepare_lock_complete();

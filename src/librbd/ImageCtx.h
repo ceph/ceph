@@ -38,10 +38,7 @@ class SafeTimer;
 
 namespace librbd {
 
-  class AioCompletion;
-  class AioImageRequestWQ;
   class AsyncOperation;
-  class CopyupRequest;
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
   template <typename> class ImageWatcher;
@@ -53,6 +50,11 @@ namespace librbd {
 
   namespace cache { struct ImageCache; }
   namespace exclusive_lock { struct Policy; }
+  namespace io {
+  class AioCompletion;
+  class ImageRequestWQ;
+  class CopyupRequest;
+  }
   namespace journal { struct Policy; }
 
   namespace operation {
@@ -136,7 +138,7 @@ namespace librbd {
     Readahead readahead;
     uint64_t total_bytes_read;
 
-    std::map<uint64_t, CopyupRequest*> copyup_list;
+    std::map<uint64_t, io::CopyupRequest*> copyup_list;
 
     xlist<AsyncOperation*> async_ops;
     xlist<AsyncRequest<>*> async_requests;
@@ -150,8 +152,8 @@ namespace librbd {
 
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
-    AioImageRequestWQ *aio_work_queue;
-    xlist<AioCompletion*> completed_reqs;
+    io::ImageRequestWQ *io_work_queue;
+    xlist<io::AioCompletion*> completed_reqs;
     EventSocket event_socket;
 
     ContextWQ *op_work_queue;

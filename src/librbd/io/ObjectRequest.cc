@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "librbd/io/ObjectRequest.h"
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -9,71 +10,72 @@
 #include "common/WorkQueue.h"
 #include "include/Context.h"
 
-#include "librbd/AioObjectRequest.h"
-#include "librbd/AioCompletion.h"
-#include "librbd/AioImageRequest.h"
-#include "librbd/CopyupRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/CopyupRequest.h"
+#include "librbd/io/ImageRequest.h"
+#include "librbd/io/ReadResult.h"
 
 #include <boost/bind.hpp>
 #include <boost/optional.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::AioObjectRequest: "
+#define dout_prefix *_dout << "librbd::io::ObjectRequest: "
 
 namespace librbd {
+namespace io {
 
 template <typename I>
-AioObjectRequest<I>*
-AioObjectRequest<I>::create_remove(I *ictx, const std::string &oid,
-                                   uint64_t object_no,
-                                   const ::SnapContext &snapc,
-                                   Context *completion) {
-  return new AioObjectRemove(util::get_image_ctx(ictx), oid, object_no, snapc,
-                             completion);
+ObjectRequest<I>*
+ObjectRequest<I>::create_remove(I *ictx, const std::string &oid,
+                                uint64_t object_no,
+                                const ::SnapContext &snapc,
+                                Context *completion) {
+  return new ObjectRemoveRequest(util::get_image_ctx(ictx), oid, object_no,
+                                 snapc, completion);
 }
 
 template <typename I>
-AioObjectRequest<I>*
-AioObjectRequest<I>::create_truncate(I *ictx, const std::string &oid,
-                                     uint64_t object_no, uint64_t object_off,
-                                     const ::SnapContext &snapc,
-                                     Context *completion) {
-  return new AioObjectTruncate(util::get_image_ctx(ictx), oid, object_no,
-                               object_off, snapc, completion);
-}
-
-template <typename I>
-AioObjectRequest<I>*
-AioObjectRequest<I>::create_write(I *ictx, const std::string &oid,
+ObjectRequest<I>*
+ObjectRequest<I>::create_truncate(I *ictx, const std::string &oid,
                                   uint64_t object_no, uint64_t object_off,
-                                  const ceph::bufferlist &data,
                                   const ::SnapContext &snapc,
-                                  Context *completion, int op_flags) {
-  return new AioObjectWrite(util::get_image_ctx(ictx), oid, object_no,
-                            object_off, data, snapc, completion, op_flags);
+                                  Context *completion) {
+  return new ObjectTruncateRequest(util::get_image_ctx(ictx), oid, object_no,
+                                   object_off, snapc, completion);
 }
 
 template <typename I>
-AioObjectRequest<I>*
-AioObjectRequest<I>::create_zero(I *ictx, const std::string &oid,
-                                 uint64_t object_no, uint64_t object_off,
-                                 uint64_t object_len,
-                                 const ::SnapContext &snapc,
-                                 Context *completion) {
-  return new AioObjectZero(util::get_image_ctx(ictx), oid, object_no,
-                           object_off, object_len, snapc, completion);
+ObjectRequest<I>*
+ObjectRequest<I>::create_write(I *ictx, const std::string &oid,
+                               uint64_t object_no, uint64_t object_off,
+                               const ceph::bufferlist &data,
+                               const ::SnapContext &snapc,
+                               Context *completion, int op_flags) {
+  return new ObjectWriteRequest(util::get_image_ctx(ictx), oid, object_no,
+                                object_off, data, snapc, completion, op_flags);
 }
 
 template <typename I>
-AioObjectRequest<I>::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
-                                      uint64_t objectno, uint64_t off,
-                                      uint64_t len, librados::snap_t snap_id,
-                                      Context *completion, bool hide_enoent)
+ObjectRequest<I>*
+ObjectRequest<I>::create_zero(I *ictx, const std::string &oid,
+                              uint64_t object_no, uint64_t object_off,
+                              uint64_t object_len,
+                              const ::SnapContext &snapc,
+                              Context *completion) {
+  return new ObjectZeroRequest(util::get_image_ctx(ictx), oid, object_no,
+                               object_off, object_len, snapc, completion);
+}
+
+template <typename I>
+ObjectRequest<I>::ObjectRequest(ImageCtx *ictx, const std::string &oid,
+                                uint64_t objectno, uint64_t off,
+                                uint64_t len, librados::snap_t snap_id,
+                                Context *completion, bool hide_enoent)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_object_off(off),
     m_object_len(len), m_snap_id(snap_id), m_completion(completion),
     m_hide_enoent(hide_enoent) {
@@ -87,7 +89,7 @@ AioObjectRequest<I>::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
 }
 
 template <typename I>
-void AioObjectRequest<I>::complete(int r)
+void ObjectRequest<I>::complete(int r)
 {
   if (should_complete(r)) {
     ldout(m_ictx->cct, 20) << "complete " << this << dendl;
@@ -100,7 +102,7 @@ void AioObjectRequest<I>::complete(int r)
 }
 
 template <typename I>
-bool AioObjectRequest<I>::compute_parent_extents() {
+bool ObjectRequest<I>::compute_parent_extents() {
   assert(m_ictx->snap_lock.is_locked());
   assert(m_ictx->parent_lock.is_locked());
 
@@ -117,8 +119,8 @@ bool AioObjectRequest<I>::compute_parent_extents() {
     return false;
   }
 
-  uint64_t object_overlap =
-    m_ictx->prune_parent_extents(m_parent_extents, parent_overlap);
+  uint64_t object_overlap = m_ictx->prune_parent_extents(
+    m_parent_extents, parent_overlap);
   if (object_overlap > 0) {
     ldout(m_ictx->cct, 20) << this << " compute_parent_extents: "
                            << "overlap " << parent_overlap << " "
@@ -140,21 +142,20 @@ static inline bool is_copy_on_read(ImageCtx *ictx, librados::snap_t snap_id) {
 /** read **/
 
 template <typename I>
-AioObjectRead<I>::AioObjectRead(I *ictx, const std::string &oid,
-                                uint64_t objectno, uint64_t offset,
-                                uint64_t len,
-                                vector<pair<uint64_t,uint64_t> >& be,
-                                librados::snap_t snap_id, bool sparse,
-                                Context *completion, int op_flags)
-  : AioObjectRequest<I>(util::get_image_ctx(ictx), oid, objectno, offset, len,
-                        snap_id, completion, false),
+ObjectReadRequest<I>::ObjectReadRequest(I *ictx, const std::string &oid,
+                                        uint64_t objectno, uint64_t offset,
+                                        uint64_t len, Extents& be,
+                                        librados::snap_t snap_id, bool sparse,
+                                        Context *completion, int op_flags)
+  : ObjectRequest<I>(util::get_image_ctx(ictx), oid, objectno, offset, len,
+                     snap_id, completion, false),
     m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
     m_op_flags(op_flags), m_state(LIBRBD_AIO_READ_FLAT) {
   guard_read();
 }
 
 template <typename I>
-void AioObjectRead<I>::guard_read()
+void ObjectReadRequest<I>::guard_read()
 {
   ImageCtx *image_ctx = this->m_ictx;
   RWLock::RLocker snap_locker(image_ctx->snap_lock);
@@ -167,7 +168,7 @@ void AioObjectRead<I>::guard_read()
 }
 
 template <typename I>
-bool AioObjectRead<I>::should_complete(int r)
+bool ObjectReadRequest<I>::should_complete(int r)
 {
   ImageCtx *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << "should_complete " << this << " "
@@ -249,7 +250,7 @@ bool AioObjectRead<I>::should_complete(int r)
 }
 
 template <typename I>
-void AioObjectRead<I>::send() {
+void ObjectReadRequest<I>::send() {
   ImageCtx *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << "send " << this << " " << this->m_oid << " "
                             << this->m_object_off << "~" << this->m_object_len
@@ -262,7 +263,7 @@ void AioObjectRead<I>::send() {
     if (image_ctx->object_map != nullptr &&
         !image_ctx->object_map->object_may_exist(this->m_object_no)) {
       image_ctx->op_work_queue->queue(util::create_context_callback<
-        AioObjectRequest<I> >(this), -ENOENT);
+        ObjectRequest<I> >(this), -ENOENT);
       return;
     }
   }
@@ -287,7 +288,7 @@ void AioObjectRead<I>::send() {
 }
 
 template <typename I>
-void AioObjectRead<I>::send_copyup()
+void ObjectReadRequest<I>::send_copyup()
 {
   ImageCtx *image_ctx = this->m_ictx;
   {
@@ -316,39 +317,39 @@ void AioObjectRead<I>::send_copyup()
 }
 
 template <typename I>
-void AioObjectRead<I>::read_from_parent(Extents&& parent_extents)
+void ObjectReadRequest<I>::read_from_parent(Extents&& parent_extents)
 {
   ImageCtx *image_ctx = this->m_ictx;
   AioCompletion *parent_completion = AioCompletion::create_and_start<
-    AioObjectRequest<I> >(this, image_ctx, AIO_TYPE_READ);
+    ObjectRequest<I> >(this, image_ctx, AIO_TYPE_READ);
 
   ldout(image_ctx->cct, 20) << "read_from_parent this = " << this
                             << " parent completion " << parent_completion
                             << " extents " << parent_extents
                             << dendl;
-  AioImageRequest<>::aio_read(image_ctx->parent, parent_completion,
-                              std::move(parent_extents), nullptr, &m_read_data,
-                              0);
+  ImageRequest<>::aio_read(image_ctx->parent, parent_completion,
+                           std::move(parent_extents),
+                           ReadResult{&m_read_data}, 0);
 }
 
 /** write **/
 
-AbstractAioObjectWrite::AbstractAioObjectWrite(ImageCtx *ictx,
-                                               const std::string &oid,
-                                               uint64_t object_no,
-                                               uint64_t object_off,
-                                               uint64_t len,
-                                               const ::SnapContext &snapc,
-                                               Context *completion,
-                                               bool hide_enoent)
-  : AioObjectRequest(ictx, oid, object_no, object_off, len, CEPH_NOSNAP,
-                     completion, hide_enoent),
+AbstractObjectWriteRequest::AbstractObjectWriteRequest(ImageCtx *ictx,
+                                                       const std::string &oid,
+                                                       uint64_t object_no,
+                                                       uint64_t object_off,
+                                                       uint64_t len,
+                                                       const ::SnapContext &snapc,
+                                                       Context *completion,
+                                                       bool hide_enoent)
+  : ObjectRequest(ictx, oid, object_no, object_off, len, CEPH_NOSNAP,
+                  completion, hide_enoent),
     m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
 {
   m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
 }
 
-void AbstractAioObjectWrite::guard_write()
+void AbstractObjectWriteRequest::guard_write()
 {
   if (has_parent()) {
     m_state = LIBRBD_AIO_WRITE_GUARD;
@@ -357,7 +358,7 @@ void AbstractAioObjectWrite::guard_write()
   }
 }
 
-bool AbstractAioObjectWrite::should_complete(int r)
+bool AbstractObjectWriteRequest::should_complete(int r)
 {
   ldout(m_ictx->cct, 20) << get_op_type() << " " << this << " " << m_oid
                          << " " << m_object_off << "~" << m_object_len
@@ -428,7 +429,7 @@ bool AbstractAioObjectWrite::should_complete(int r)
   return finished;
 }
 
-void AbstractAioObjectWrite::send() {
+void AbstractObjectWriteRequest::send() {
   ldout(m_ictx->cct, 20) << "send " << get_op_type() << " " << this <<" "
                          << m_oid << " " << m_object_off << "~"
                          << m_object_len << dendl;
@@ -446,7 +447,7 @@ void AbstractAioObjectWrite::send() {
   send_write();
 }
 
-void AbstractAioObjectWrite::send_pre_object_map_update() {
+void AbstractObjectWriteRequest::send_pre_object_map_update() {
   ldout(m_ictx->cct, 20) << __func__ << dendl;
 
   {
@@ -460,7 +461,7 @@ void AbstractAioObjectWrite::send_pre_object_map_update() {
                              << dendl;
       m_state = LIBRBD_AIO_WRITE_PRE;
 
-      if (m_ictx->object_map->aio_update<AioObjectRequest>(
+      if (m_ictx->object_map->aio_update<ObjectRequest>(
             CEPH_NOSNAP, m_object_no, new_state, {}, this)) {
         return;
       }
@@ -470,7 +471,7 @@ void AbstractAioObjectWrite::send_pre_object_map_update() {
   send_write_op();
 }
 
-bool AbstractAioObjectWrite::send_post_object_map_update() {
+bool AbstractObjectWriteRequest::send_post_object_map_update() {
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
   if (m_ictx->object_map == nullptr || !post_object_map_update()) {
     return true;
@@ -484,7 +485,7 @@ bool AbstractAioObjectWrite::send_post_object_map_update() {
                          << m_object_off << "~" << m_object_len << dendl;
   m_state = LIBRBD_AIO_WRITE_POST;
 
-  if (m_ictx->object_map->aio_update<AioObjectRequest>(
+  if (m_ictx->object_map->aio_update<ObjectRequest>(
         CEPH_NOSNAP, m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING, this)) {
     return false;
   }
@@ -492,7 +493,7 @@ bool AbstractAioObjectWrite::send_post_object_map_update() {
   return true;
 }
 
-void AbstractAioObjectWrite::send_write() {
+void AbstractObjectWriteRequest::send_write() {
   ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
       		         << m_object_off << "~" << m_object_len
                          << " object exist " << m_object_exist << dendl;
@@ -505,7 +506,7 @@ void AbstractAioObjectWrite::send_write() {
   }
 }
 
-void AbstractAioObjectWrite::send_copyup()
+void AbstractObjectWriteRequest::send_copyup()
 {
   ldout(m_ictx->cct, 20) << "send_copyup " << this << " " << m_oid << " "
                          << m_object_off << "~" << m_object_len << dendl;
@@ -531,7 +532,7 @@ void AbstractAioObjectWrite::send_copyup()
     m_ictx->copyup_list_lock.Unlock();
   }
 }
-void AbstractAioObjectWrite::send_write_op()
+void AbstractObjectWriteRequest::send_write_op()
 {
   m_state = LIBRBD_AIO_WRITE_FLAT;
   if (m_guard) {
@@ -548,7 +549,7 @@ void AbstractAioObjectWrite::send_write_op()
   assert(r == 0);
   rados_completion->release();
 }
-void AbstractAioObjectWrite::handle_write_guard()
+void AbstractObjectWriteRequest::handle_write_guard()
 {
   bool has_parent;
   {
@@ -567,7 +568,7 @@ void AbstractAioObjectWrite::handle_write_guard()
   }
 }
 
-void AioObjectWrite::add_write_ops(librados::ObjectWriteOperation *wr) {
+void ObjectWriteRequest::add_write_ops(librados::ObjectWriteOperation *wr) {
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
   if (m_ictx->enable_alloc_hint &&
       (m_ictx->object_map == nullptr || !m_object_exist)) {
@@ -582,7 +583,7 @@ void AioObjectWrite::add_write_ops(librados::ObjectWriteOperation *wr) {
   wr->set_op_flags2(m_op_flags);
 }
 
-void AioObjectWrite::send_write() {
+void ObjectWriteRequest::send_write() {
   bool write_full = (m_object_off == 0 && m_object_len == m_ictx->get_object_size());
   ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
                          << m_object_off << "~" << m_object_len
@@ -592,35 +593,36 @@ void AioObjectWrite::send_write() {
     m_guard = false;
   }
 
-  AbstractAioObjectWrite::send_write();
+  AbstractObjectWriteRequest::send_write();
 }
 
-void AioObjectRemove::guard_write() {
+void ObjectRemoveRequest::guard_write() {
   // do nothing to disable write guard only if deep-copyup not required
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
   if (!m_ictx->snaps.empty()) {
-    AbstractAioObjectWrite::guard_write();
+    AbstractObjectWriteRequest::guard_write();
   }
 }
-void AioObjectRemove::send_write() {
+void ObjectRemoveRequest::send_write() {
   ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
                          << m_object_off << "~" << m_object_len << dendl;
   send_pre_object_map_update();
 }
 
-void AioObjectTruncate::send_write() {
+void ObjectTruncateRequest::send_write() {
   ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid
                          << " truncate " << m_object_off << dendl;
   if (!m_object_exist && ! has_parent()) {
     m_state = LIBRBD_AIO_WRITE_FLAT;
-    Context *ctx = util::create_context_callback<AioObjectRequest>(this);
+    Context *ctx = util::create_context_callback<ObjectRequest>(this);
     m_ictx->op_work_queue->queue(ctx, 0);
   } else {
-    AbstractAioObjectWrite::send_write();
+    AbstractObjectWriteRequest::send_write();
   }
 }
 
+} // namespace io
 } // namespace librbd
 
-template class librbd::AioObjectRequest<librbd::ImageCtx>;
-template class librbd::AioObjectRead<librbd::ImageCtx>;
+template class librbd::io::ObjectRequest<librbd::ImageCtx>;
+template class librbd::io::ObjectReadRequest<librbd::ImageCtx>;

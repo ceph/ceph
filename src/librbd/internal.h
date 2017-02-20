@@ -52,8 +52,8 @@ enum {
 
 namespace librbd {
 
-  struct AioCompletion;
   struct ImageCtx;
+  namespace io { struct AioCompletion; }
 
   class NoOpProgressContext : public ProgressContext
   {
@@ -195,7 +195,7 @@ namespace librbd {
 
   int flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);
-  int poll_io_events(ImageCtx *ictx, AioCompletion **comps, int numcomp);
+  int poll_io_events(ImageCtx *ictx, io::AioCompletion **comps, int numcomp);
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
 

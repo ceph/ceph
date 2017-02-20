@@ -1,20 +1,21 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "librbd/io/CopyupRequest.h"
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Mutex.h"
 
-#include "librbd/AioCompletion.h"
-#include "librbd/AioImageRequest.h"
-#include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
-#include "librbd/CopyupRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageRequest.h"
+#include "librbd/io/ObjectRequest.h"
+#include "librbd/io/ReadResult.h"
 
 #include <boost/bind.hpp>
 #include <boost/lambda/bind.hpp>
@@ -22,9 +23,10 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::CopyupRequest: "
+#define dout_prefix *_dout << "librbd::io::CopyupRequest: "
 
 namespace librbd {
+namespace io {
 
 namespace {
 
@@ -90,15 +92,15 @@ CopyupRequest::~CopyupRequest() {
   m_async_op.finish_op();
 }
 
-void CopyupRequest::append_request(AioObjectRequest<> *req) {
+void CopyupRequest::append_request(ObjectRequest<> *req) {
   ldout(m_ictx->cct, 20) << __func__ << " " << this << ": " << req << dendl;
   m_pending_requests.push_back(req);
 }
 
 void CopyupRequest::complete_requests(int r) {
   while (!m_pending_requests.empty()) {
-    vector<AioObjectRequest<> *>::iterator it = m_pending_requests.begin();
-    AioObjectRequest<> *req = *it;
+    vector<ObjectRequest<> *>::iterator it = m_pending_requests.begin();
+    ObjectRequest<> *req = *it;
     ldout(m_ictx->cct, 20) << __func__ << " completing request " << req
                            << dendl;
     req->complete(r);
@@ -165,7 +167,7 @@ bool CopyupRequest::send_copyup() {
 
     // merge all pending write ops into this single RADOS op
     for (size_t i=0; i<m_pending_requests.size(); ++i) {
-      AioObjectRequest<> *req = m_pending_requests[i];
+      ObjectRequest<> *req = m_pending_requests[i];
       ldout(m_ictx->cct, 20) << __func__ << " add_copyup_ops " << req
                              << dendl;
       req->add_copyup_ops(&write_op);
@@ -183,7 +185,7 @@ bool CopyupRequest::send_copyup() {
 
 bool CopyupRequest::is_copyup_required() {
   bool noop = true;
-  for (const AioObjectRequest<> *req : m_pending_requests) {
+  for (const ObjectRequest<> *req : m_pending_requests) {
     if (!req->is_op_payload_empty()) {
       noop = false;
       break;
@@ -204,8 +206,8 @@ void CopyupRequest::send()
                          << ", oid " << m_oid
                          << ", extents " << m_image_extents
                          << dendl;
-  AioImageRequest<>::aio_read(m_ictx->parent, comp, std::move(m_image_extents),
-                              nullptr, &m_copyup_data, 0);
+  ImageRequest<>::aio_read(m_ictx->parent, comp, std::move(m_image_extents),
+                           ReadResult{&m_copyup_data}, 0);
 }
 
 void CopyupRequest::complete(int r)
@@ -311,9 +313,9 @@ bool CopyupRequest::send_object_map_head() {
       bool may_update = false;
       uint8_t new_state, current_state;
 
-      vector<AioObjectRequest<> *>::reverse_iterator r_it = m_pending_requests.rbegin();
+      vector<ObjectRequest<> *>::reverse_iterator r_it = m_pending_requests.rbegin();
       for (; r_it != m_pending_requests.rend(); ++r_it) {
-        AioObjectRequest<> *req = *r_it;
+        ObjectRequest<> *req = *r_it;
         if (!req->pre_object_map_update(&new_state)) {
           continue;
         }
@@ -363,4 +365,5 @@ bool CopyupRequest::send_object_map() {
   return false;
 }
 
+} // namespace io
 } // namespace librbd

@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_AIO_COMPLETION_H
-#define CEPH_LIBRBD_AIO_COMPLETION_H
+#ifndef CEPH_LIBRBD_IO_AIO_COMPLETION_H
+#define CEPH_LIBRBD_IO_AIO_COMPLETION_H
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
@@ -12,28 +12,13 @@
 
 #include "librbd/AsyncOperation.h"
 #include "librbd/ImageCtx.h"
-
-#include "osdc/Striper.h"
+#include "librbd/io/ReadResult.h"
+#include "librbd/io/Types.h"
 
 class CephContext;
 
 namespace librbd {
-
-typedef enum {
-  AIO_TYPE_NONE = 0,
-  AIO_TYPE_OPEN,
-  AIO_TYPE_CLOSE,
-  AIO_TYPE_READ,
-  AIO_TYPE_WRITE,
-  AIO_TYPE_DISCARD,
-  AIO_TYPE_FLUSH,
-} aio_type_t;
-
-typedef enum {
-  STATE_PENDING = 0,
-  STATE_CALLBACK,
-  STATE_COMPLETE,
-} aio_state_t;
+namespace io {
 
 /**
  * AioCompletion is the overall completion for a single
@@ -49,6 +34,12 @@ typedef enum {
  * context or via a thread pool context for cache read hits).
  */
 struct AioCompletion {
+  typedef enum {
+    AIO_STATE_PENDING = 0,
+    AIO_STATE_CALLBACK,
+    AIO_STATE_COMPLETE,
+  } aio_state_t;
+
   mutable Mutex lock;
   Cond cond;
   aio_state_t state;
@@ -64,10 +55,7 @@ struct AioCompletion {
   utime_t start_time;
   aio_type_t aio_type;
 
-  Striper::StripedReadResult destriper;
-  bufferlist *read_bl;
-  char *read_buf;
-  size_t read_buf_len;
+  ReadResult read_result;
 
   AsyncOperation async_op;
 
@@ -109,12 +97,11 @@ struct AioCompletion {
   }
 
   AioCompletion() : lock("AioCompletion::lock", true, false),
-                    state(STATE_PENDING), rval(0), complete_cb(NULL),
+                    state(AIO_STATE_PENDING), rval(0), complete_cb(NULL),
                     complete_arg(NULL), rbd_comp(NULL),
                     pending_count(0), blockers(1),
                     ref(1), released(false), ictx(NULL),
                     aio_type(AIO_TYPE_NONE),
-                    read_bl(NULL), read_buf(NULL), read_buf_len(0),
                     journal_tid(0), m_xlist_item(this), event_notify(false) {
   }
 
@@ -233,6 +220,7 @@ protected:
   AioCompletion *m_completion;
 };
 
+} // namespace io
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_AIO_COMPLETION_H
+#endif // CEPH_LIBRBD_IO_AIO_COMPLETION_H

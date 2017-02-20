@@ -21,21 +21,12 @@
 #include "cls/journal/cls_journal_types.h"
 #include "cls/journal/cls_journal_client.h"
 
-#include "librbd/AioCompletion.h"
-#include "librbd/AioImageRequest.h"
-#include "librbd/AioImageRequestWQ.h"
-#include "librbd/AioObjectRequest.h"
-#include "librbd/image/CreateRequest.h"
 #include "librbd/DiffIterate.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
-#include "librbd/journal/Types.h"
-#include "librbd/managed_lock/Types.h"
-#include "librbd/mirror/DisableRequest.h"
-#include "librbd/mirror/EnableRequest.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
@@ -43,6 +34,16 @@
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
+#include "librbd/image/CreateRequest.h"
+#include "librbd/managed_lock/Types.h"
+#include "librbd/mirror/DisableRequest.h"
+#include "librbd/mirror/EnableRequest.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageRequest.h"
+#include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ObjectRequest.h"
+#include "librbd/io/ReadResult.h"
+#include "librbd/journal/Types.h"
 #include "librbd/operation/TrimRequest.h"
 
 #include "journal/Journaler.h"
@@ -2088,12 +2089,12 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
       }
 
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
-      AioCompletion *comp = AioCompletion::create(ctx);
+      auto comp = io::AioCompletion::create(ctx);
 
       // coordinate through AIO WQ to ensure lock is acquired if needed
-      m_dest->aio_work_queue->aio_write(comp, m_offset, m_bl->length(),
-                                        m_bl->c_str(),
-                                        LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+      m_dest->io_work_queue->aio_write(comp, m_offset, m_bl->length(),
+                                       std::move(*m_bl),
+                                       LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     }
 
   private:
@@ -2146,10 +2147,10 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
       uint64_t len = min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
-      AioCompletion *comp = AioCompletion::create_and_start(ctx, src,
-                                                            AIO_TYPE_READ);
-      AioImageRequest<>::aio_read(src, comp, {{offset, len}}, nullptr, bl,
-                                  fadvise_flags);
+      auto comp = io::AioCompletion::create_and_start(ctx, src,
+                                                      io::AIO_TYPE_READ);
+      io::ImageRequest<>::aio_read(src, comp, {{offset, len}},
+                                   io::ReadResult{bl}, fadvise_flags);
       prog_ctx.update_progress(offset, src_size);
     }
 
@@ -2334,7 +2335,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
   void rbd_ctx_cb(completion_t cb, void *arg)
   {
     Context *ctx = reinterpret_cast<Context *>(arg);
-    AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
+    auto comp = reinterpret_cast<io::AioCompletion *>(cb);
     ctx->complete(comp->get_return_value());
     comp->release();
   }
@@ -2372,9 +2373,10 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
       bufferlist bl;
 
       C_SaferCond ctx;
-      AioCompletion *c = AioCompletion::create_and_start(&ctx, ictx,
-                                                         AIO_TYPE_READ);
-      AioImageRequest<>::aio_read(ictx, c, {{off, read_len}}, nullptr, &bl, 0);
+      auto c = io::AioCompletion::create_and_start(&ctx, ictx,
+                                                   io::AIO_TYPE_READ);
+      io::ImageRequest<>::aio_read(ictx, c, {{off, read_len}},
+                                   io::ReadResult{&bl}, 0);
 
       int ret = ctx.wait();
       if (ret < 0) {
@@ -2493,12 +2495,13 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     return r;
   }
 
-  int poll_io_events(ImageCtx *ictx, AioCompletion **comps, int numcomp)
+  int poll_io_events(ImageCtx *ictx, io::AioCompletion **comps, int numcomp)
   {
     if (numcomp <= 0)
       return -EINVAL;
     CephContext *cct = ictx->cct;
-    ldout(cct, 20) << __func__ << " " << ictx << " numcomp = " << numcomp << dendl;
+    ldout(cct, 20) << __func__ << " " << ictx << " numcomp = " << numcomp
+                   << dendl;
     int i = 0;
     Mutex::Locker l(ictx->completed_reqs_lock);
     while (i < numcomp) {
@@ -3369,7 +3372,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     uint64_t image_size = ictx->get_image_size(ictx->snap_id);
     ictx->snap_lock.put_read();
     ictx->md_lock.put_write();
-    
+ 
     pair<uint64_t, uint64_t> readahead_extent = ictx->readahead.update(image_extents, image_size);
     uint64_t readahead_offset = readahead_extent.first;
     uint64_t readahead_length = readahead_extent.second;

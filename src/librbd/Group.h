@@ -1,9 +1,17 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_LIBRBD_GROUP_H
 #define CEPH_LIBRBD_GROUP_H
 
+#include "include/rados/librados.hpp"
+#include "include/rbd/librbd.hpp"
+#include <string>
+#include <vector>
+
 namespace librbd {
+
+struct ImageCtx;
 
 // Consistency groups functions
 int group_create(librados::IoCtx& io_ctx, const char *imgname);
@@ -16,6 +24,7 @@ int group_image_remove(librados::IoCtx& group_ioctx, const char *group_name,
 int group_image_list(librados::IoCtx& group_ioctx, const char *group_name,
 		     std::vector<group_image_status_t> *images);
 int image_get_group(ImageCtx *ictx, group_spec_t *group_spec);
-}
+
+} // namespace librbd
 
 #endif // CEPH_LIBRBD_GROUP_H
