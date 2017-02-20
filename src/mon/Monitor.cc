@@ -141,6 +141,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   con_self(m ? m->get_loopback_connection() : NULL),
   lock("Monitor::lock"),
   timer(cct_, lock),
+  cpu_tp(cct, "Monitor::cpu_tp", "cpu_tp", g_conf->mon_cpu_threads),
   has_ever_joined(false),
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
@@ -263,7 +264,7 @@ class AdminHook : public AdminSocketHook {
 public:
   explicit AdminHook(Monitor *m) : mon(m) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     stringstream ss;
     mon->do_admin_command(command, cmdmap, format, ss);
     out.append(ss);
@@ -939,6 +940,8 @@ int Monitor::init()
   timer.init();
   new_tick();
 
+  cpu_tp.start();
+
   // i'm ready!
   messenger->add_dispatcher_tail(this);
 
@@ -1062,6 +1065,8 @@ void Monitor::shutdown()
   finish_contexts(g_ceph_context, maybe_wait_for_quorum, -ECANCELED);
 
   timer.shutdown();
+
+  cpu_tp.stop();
 
   remove_all_sessions();
 
@@ -5009,7 +5014,7 @@ void Monitor::scrub_event_start()
   struct C_Scrub : public Context {
     Monitor *mon;
     explicit C_Scrub(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       mon->scrub_start();
     }
   };
@@ -5043,7 +5048,7 @@ void Monitor::scrub_reset_timeout()
   struct C_ScrubTimeout : public Context {
     Monitor *mon;
     explicit C_ScrubTimeout(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       mon->scrub_timeout();
     }
   };
@@ -5058,7 +5063,7 @@ class C_Mon_Tick : public Context {
   Monitor *mon;
 public:
   explicit C_Mon_Tick(Monitor *m) : mon(m) {}
-  void finish(int r) {
+  void finish(int r) override {
     mon->tick();
   }
 };

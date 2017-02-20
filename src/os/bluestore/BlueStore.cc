@@ -494,14 +494,14 @@ static void get_wal_key(uint64_t seq, string *out)
 // merge operators
 
 struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
-  virtual void merge_nonexistent(
+  void merge_nonexistent(
     const char *rdata, size_t rlen, std::string *new_value) override {
     *new_value = std::string(rdata, rlen);
   }
-  virtual void merge(
+  void merge(
     const char *ldata, size_t llen,
     const char *rdata, size_t rlen,
-    std::string *new_value) {
+    std::string *new_value) override {
     assert(llen == rlen);
     assert((rlen % 8) == 0);
     new_value->resize(rlen);
@@ -514,7 +514,7 @@ struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
   }
   // We use each operator name and each prefix to construct the
   // overall RocksDB operator name for consistency check at open time.
-  virtual string name() const {
+  string name() const override {
     return "int64_array";
   }
 };
@@ -532,6 +532,197 @@ ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
   return out << ")";
 }
 
+// Garbage Collector
+
+void BlueStore::GarbageCollector::process_protrusive_extents(
+  const BlueStore::ExtentMap& extent_map, 
+  uint64_t start_offset,
+  uint64_t end_offset,
+  uint64_t start_touch_offset,
+  uint64_t end_touch_offset,
+  uint64_t min_alloc_size)
+{
+  assert(start_offset <= start_touch_offset && end_offset>= end_touch_offset);
+
+  uint64_t lookup_start_offset = P2ALIGN(start_offset, min_alloc_size);
+  uint64_t lookup_end_offset = ROUND_UP_TO(end_offset, min_alloc_size);
+
+  dout(30) << __func__ << " (hex): [" << std::hex
+           << lookup_start_offset << ", " << lookup_end_offset 
+           << ")" << std::dec << dendl;
+
+  for (auto it = extent_map.seek_lextent(lookup_start_offset);
+       it != extent_map.extent_map.end() &&
+         it->logical_offset < lookup_end_offset;
+       ++it) {
+    uint64_t alloc_unit_start = it->logical_offset / min_alloc_size;
+    uint64_t alloc_unit_end = (it->logical_end() - 1) / min_alloc_size;
+
+    dout(30) << __func__ << " " << *it
+             << "alloc_units: " << alloc_unit_start << ".." << alloc_unit_end
+             << dendl;
+
+    Blob* b = it->blob.get();
+
+    if (it->logical_offset >=start_touch_offset &&
+        it->logical_end() <= end_touch_offset) {
+      // Process extents within the range affected by 
+      // the current write request.
+      // Need to take into account if existing extents
+      // can be merged with them (uncompressed case)
+      if (!b->get_blob().is_compressed()) {
+        if (blob_info_counted && used_alloc_unit == alloc_unit_start) {
+	  --blob_info_counted->expected_allocations; // don't need to allocate
+                                                     // new AU for compressed
+                                                     // data since another
+                                                     // collocated uncompressed
+                                                     // blob already exists
+          dout(30) << __func__  << " --expected:"
+                   << alloc_unit_start << dendl;
+        }
+        used_alloc_unit = alloc_unit_end;
+        blob_info_counted =  nullptr;
+      }
+    } else if (b->get_blob().is_compressed()) {
+
+      // additionally we take compressed blobs that were not impacted
+      // by the write into account too
+      BlobInfo& bi =
+        affected_blobs.emplace(
+          b, BlobInfo(b->get_referenced_bytes())).first->second;
+
+      int adjust =
+       (used_alloc_unit && used_alloc_unit == alloc_unit_start) ? 0 : 1;
+      bi.expected_allocations += alloc_unit_end - alloc_unit_start + adjust;
+      dout(30) << __func__  << " expected_allocations=" 
+               << bi.expected_allocations << " end_au:"
+               << alloc_unit_end << dendl;
+
+      blob_info_counted =  &bi;
+      used_alloc_unit = alloc_unit_end;
+
+      assert(it->length <= bi.referenced_bytes);
+       bi.referenced_bytes -= it->length;
+      dout(30) << __func__ << " affected_blob:" << *b
+               << " unref 0x" << std::hex << it->length
+               << " referenced = 0x" << bi.referenced_bytes
+               << std::dec << dendl;
+      // NOTE: we can't move specific blob to resulting GC list here
+      // when reference counter == 0 since subsequent extents might
+      // decrement its expected_allocation. 
+      // Hence need to enumerate all the extents first.
+      if (!bi.collect_candidate) {
+        bi.first_lextent = it;
+        bi.collect_candidate = true;
+      }
+      bi.last_lextent = it;
+    } else {
+      if (blob_info_counted && used_alloc_unit == alloc_unit_start) {
+        // don't need to allocate new AU for compressed data since another
+        // collocated uncompressed blob already exists
+    	--blob_info_counted->expected_allocations;
+        dout(30) << __func__  << " --expected_allocations:"
+		 << alloc_unit_start << dendl;
+      }
+      used_alloc_unit = alloc_unit_end;
+      blob_info_counted = nullptr;
+    }
+  }
+
+  for (auto b_it = affected_blobs.begin();
+       b_it != affected_blobs.end();
+       ++b_it) {
+    Blob* b = b_it->first;
+    BlobInfo& bi = b_it->second;
+    if (bi.referenced_bytes == 0) {
+      uint64_t len_on_disk = b_it->first->get_blob().get_ondisk_length();
+      int64_t blob_expected_for_release =
+        ROUND_UP_TO(len_on_disk, min_alloc_size) / min_alloc_size;
+
+      dout(30) << __func__ << " " << *(b_it->first)
+               << " expected4release=" << blob_expected_for_release
+               << " expected_allocations=" << bi.expected_allocations
+               << dendl;
+      int64_t benefit = blob_expected_for_release - bi.expected_allocations;
+      if (benefit >= g_conf->bluestore_gc_enable_blob_threshold) {
+        if (bi.collect_candidate) {
+          auto it = bi.first_lextent;
+          bool bExit = false;
+          do {
+            if (it->blob.get() == b) {
+              extents_to_collect.emplace_back(it->logical_offset, it->length);
+            }
+            bExit = it == bi.last_lextent;
+            ++it;
+          } while(!bExit);
+        }
+        expected_for_release += blob_expected_for_release;
+        expected_allocations += bi.expected_allocations;
+      }
+    }
+  }
+}
+
+int64_t BlueStore::GarbageCollector::estimate(
+  uint64_t start_offset,
+  uint64_t length,
+  const BlueStore::ExtentMap& extent_map,
+  const BlueStore::extent_map_t& old_extents,
+  uint64_t min_alloc_size)
+{
+
+  affected_blobs.clear();
+  extents_to_collect.clear();
+  used_alloc_unit = boost::optional<uint64_t >();
+  blob_info_counted = nullptr;
+
+  gc_start_offset = start_offset;
+  gc_end_offset = start_offset + length;
+
+  uint64_t end_offset = start_offset + length;
+
+  for (auto it = old_extents.begin(); it != old_extents.end(); ++it) {
+    Blob* b = it->blob.get();
+    if (b->get_blob().is_compressed()) {
+
+      // update gc_start_offset/gc_end_offset if needed
+      gc_start_offset = min(gc_start_offset, (uint64_t)it->blob_start());
+      gc_end_offset = max(gc_end_offset, (uint64_t)it->blob_end());
+
+      auto o = it->logical_offset;
+      auto l = it->length;
+
+      uint64_t ref_bytes = b->get_referenced_bytes();
+      assert(l <= ref_bytes);
+      // micro optimization to bypass blobs that have no more references
+      if (ref_bytes != l) {
+        dout(30) << __func__ << " affected_blob:" << *b
+                 << " unref 0x" << std::hex << o << "~" << l
+                 << std::dec << dendl;
+	// emplace () call below returns previously existed entry from
+        // the map if any instead of inserting a new one. Hence we need
+        // to decrement referenced_bytes counter after such an insert.
+	BlobInfo& bi =
+          affected_blobs.emplace(b, BlobInfo(ref_bytes)).first->second;
+        bi.referenced_bytes -= l;
+      }
+    }
+  }
+  dout(30) << __func__ << " gc range(hex): [" << std::hex
+           << gc_start_offset << ", " << gc_end_offset 
+           << ")" << std::dec << dendl;
+
+  // enumerate preceeding extents to check if they reference affected blobs
+  if (gc_start_offset < start_offset || gc_end_offset > end_offset) {
+    process_protrusive_extents(extent_map,
+                               gc_start_offset,
+			       gc_end_offset,
+			       start_offset,
+			       end_offset,
+			       min_alloc_size);
+  }
+  return expected_for_release - expected_allocations;
+}
 
 // Cache
 
@@ -2501,6 +2692,20 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_lextent(
   return fp;
 }
 
+BlueStore::extent_map_t::const_iterator BlueStore::ExtentMap::seek_lextent(
+  uint64_t offset) const
+{
+  Extent dummy(offset);
+  auto fp = extent_map.lower_bound(dummy);
+  if (fp != extent_map.begin()) {
+    --fp;
+    if (fp->logical_end() <= offset) {
+      ++fp;
+    }
+  }
+  return fp;
+}
+
 bool BlueStore::ExtentMap::has_any_lextents(uint64_t offset, uint64_t length)
 {
   auto fp = seek_lextent(offset);
@@ -3243,6 +3448,8 @@ void BlueStore::_init_logger()
             "Sum for blob splitting due to resharding");
   b.add_u64(l_bluestore_extent_compress, "bluestore_extent_compress",
             "Sum for extents that have been removed due to compression");
+  b.add_u64(l_bluestore_gc_merged, "bluestore_gc_merged",
+            "Sum for extents that have been merged due to garbage collection");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -8602,7 +8809,7 @@ int BlueStore::_do_alloc_write(
     // counting machinery.
     assert(!b->is_referenced());
     b->get_ref(coll.get(), wi.b_off0, wi.length0); 
-                                                   
+                                               
 
     // queue io
     if (!g_conf->bluestore_debug_omit_block_device_write) {
@@ -8677,6 +8884,35 @@ void BlueStore::_wctx_finish(
       dout(20) << __func__ << "  spanning_blob_map removing empty " << *b
 	       << dendl;
       o->extent_map.spanning_blob_map.erase(b->id);
+    }
+  }
+}
+
+void BlueStore::_do_garbage_collection(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef o,
+  uint64_t offset,
+  uint64_t length,
+  WriteContext *wctx)
+{
+  GarbageCollector gc(c->store->cct);
+  int64_t benefit = gc.estimate(offset,
+                                length,
+				o->extent_map,
+				wctx->old_extents,
+				min_alloc_size);
+  if (benefit >= g_conf->bluestore_gc_enable_total_threshold) {
+    auto& extents_to_collect = gc.get_extents_to_collect();
+    for (auto it = extents_to_collect.begin();
+         it != extents_to_collect.end();
+         ++it) {
+      bufferlist bl;
+      int r = _do_read(c.get(), o, it->offset, it->length, bl, 0);
+      assert(r == (int)it->length);
+      o->extent_map.fault_range(db, it->offset, it->length);
+      _do_write_data(txc, c, o, it->offset, it->length, bl, wctx);
+      logger->inc(l_bluestore_gc_merged, it->length);
     }
   }
 }
@@ -8847,6 +9083,8 @@ int BlueStore::_do_write(
 
   o->extent_map.fault_range(db, offset, length);
   _do_write_data(txc, c, o, offset, length, bl, &wctx);
+
+  _do_garbage_collection(txc, c, o, offset, length, &wctx);
 
   r = _do_alloc_write(txc, c, &wctx);
   if (r < 0) {
@@ -9894,5 +10132,12 @@ void BlueStore::generate_db_histogram(Formatter *f)
 
   dout(20) << __func__ << " finished in " << duration << " seconds" << dendl;
 
+}
+
+void BlueStore::flush_cache()
+{
+  for (auto i : cache_shards) {
+    i->trim_all();
+  }
 }
 // ===========================================

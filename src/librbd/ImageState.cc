@@ -194,7 +194,7 @@ private:
 		   1) {
       start();
     }
-    virtual ~ThreadPoolSingleton() {
+    ~ThreadPoolSingleton() override {
       stop();
     }
   };

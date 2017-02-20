@@ -38,12 +38,12 @@ class DirFragDamage : public DamageEntry
     : ino(ino_), frag(frag_)
   {}
 
-  virtual damage_entry_type_t get_type() const
+  damage_entry_type_t get_type() const override
   {
     return DAMAGE_ENTRY_DIRFRAG;
   }
 
-  void dump(Formatter *f) const
+  void dump(Formatter *f) const override
   {
     f->open_object_section("dir_frag_damage");
     f->dump_string("damage_type", "dir_frag");
@@ -74,12 +74,12 @@ class DentryDamage : public DamageEntry
     : ino(ino_), frag(frag_), dname(dname_), snap_id(snap_id_)
   {}
 
-  virtual damage_entry_type_t get_type() const
+  damage_entry_type_t get_type() const override
   {
     return DAMAGE_ENTRY_DENTRY;
   }
 
-  void dump(Formatter *f) const
+  void dump(Formatter *f) const override
   {
     f->open_object_section("dentry_damage");
     f->dump_string("damage_type", "dentry");
@@ -105,12 +105,12 @@ class BacktraceDamage : public DamageEntry
     : ino(ino_)
   {}
 
-  virtual damage_entry_type_t get_type() const
+  damage_entry_type_t get_type() const override
   {
     return DAMAGE_ENTRY_BACKTRACE;
   }
 
-  void dump(Formatter *f) const
+  void dump(Formatter *f) const override
   {
     f->open_object_section("backtrace_damage");
     f->dump_string("damage_type", "backtrace");

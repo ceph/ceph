@@ -33,7 +33,7 @@ struct C_SendLockRequest : public Context {
   R* request;
   explicit C_SendLockRequest(R* request) : request(request) {
   }
-  virtual void finish(int r) override {
+  void finish(int r) override {
     request->send();
   }
 };
@@ -45,10 +45,10 @@ struct C_Tracked : public Context {
     : tracker(tracker), ctx(ctx) {
     tracker.start_op();
   }
-  virtual ~C_Tracked() {
+  ~C_Tracked() override {
     tracker.finish_op();
   }
-  virtual void finish(int r) override {
+  void finish(int r) override {
     ctx->complete(r);
   }
 };

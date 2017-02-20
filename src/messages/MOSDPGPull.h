@@ -15,10 +15,9 @@
 #ifndef MOSDPGPULL_H
 #define MOSDPGPULL_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 
-class MOSDPGPull : public Message {
+class MOSDPGPull : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
@@ -30,9 +29,16 @@ public:
   vector<PullOp> pulls;
   uint64_t cost;
 
-  MOSDPGPull() :
-    Message(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
-    cost(0)
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
+
+  MOSDPGPull()
+    : MOSDFastDispatchOp(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
+      cost(0)
     {}
 
   void compute_cost(CephContext *cct) {

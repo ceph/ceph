@@ -16,7 +16,7 @@
 #ifndef CEPH_MOSDREPOPREPLY_H
 #define CEPH_MOSDREPOPREPLY_H
 
-#include "msg/Message.h"
+#include "MOSDFastDispatchOp.h"
 
 #include "os/ObjectStore.h"
 
@@ -28,7 +28,7 @@
  *
  */
 
-class MOSDRepOpReply : public Message {
+class MOSDRepOpReply : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 public:
@@ -49,6 +49,13 @@ public:
   bufferlist::iterator p;
   // Decoding flags. Decoding is only needed for messages catched by pipe reader.
   bool final_decode_needed;
+
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
 
   virtual void decode_payload() {
     p = payload.begin();
@@ -93,7 +100,7 @@ public:
 public:
   MOSDRepOpReply(
     MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, int at) :
-    Message(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
     map_epoch(e),
     reqid(req->reqid),
     from(from),
@@ -104,7 +111,8 @@ public:
     set_tid(req->get_tid());
   }
   MOSDRepOpReply() 
-    : Message(MSG_OSD_REPOPREPLY), map_epoch(0),  
+    : MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+      map_epoch(0),
       ack_type(0), result(0),
       final_decode_needed(true) {}
 private:

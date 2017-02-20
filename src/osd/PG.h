@@ -840,8 +840,6 @@ protected:
   map<eversion_t,
       list<pair<OpRequestRef, version_t> > > waiting_for_ondisk;
 
-  void split_ops(PG *child, unsigned split_bits);
-
   void requeue_object_waiters(map<hobject_t, list<OpRequestRef>>& m);
   void requeue_op(OpRequestRef op);
   void requeue_ops(list<OpRequestRef> &l);
@@ -870,17 +868,16 @@ public:
     return actingbackfill.count(osd);
   }
   bool is_acting(pg_shard_t osd) const {
-    if (pool.info.ec_pool()) {
-      return acting.size() > (unsigned)osd.shard && acting[osd.shard] == osd.osd;
-    } else {
-      return std::find(acting.begin(), acting.end(), osd.osd) != acting.end();
-    }
+    return has_shard(pool.info.ec_pool(), acting, osd);
   }
   bool is_up(pg_shard_t osd) const {
-    if (pool.info.ec_pool()) {
-      return up.size() > (unsigned)osd.shard && up[osd.shard] == osd.osd;
+    return has_shard(pool.info.ec_pool(), up, osd);
+  }
+  static bool has_shard(bool ec, const vector<int>& v, pg_shard_t osd) {
+    if (ec) {
+      return v.size() > (unsigned)osd.shard && v[osd.shard] == osd.osd;
     } else {
-      return std::find(up.begin(), up.end(), osd.osd) != up.end();
+      return std::find(v.begin(), v.end(), osd.osd) != v.end();
     }
   }
   
@@ -983,6 +980,7 @@ public:
 
   map<pg_shard_t, pg_info_t>::const_iterator find_best_info(
     const map<pg_shard_t, pg_info_t> &infos,
+    bool restrict_to_up_acting,
     bool *history_les_bound) const;
   static void calc_ec_acting(
     map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
@@ -993,6 +991,7 @@ public:
     pg_shard_t up_primary,
     const map<pg_shard_t, pg_info_t> &all_info,
     bool compat_mode,
+    bool restrict_to_up_acting,
     vector<int> *want,
     set<pg_shard_t> *backfill,
     set<pg_shard_t> *acting_backfill,
@@ -1007,12 +1006,14 @@ public:
     pg_shard_t up_primary,
     const map<pg_shard_t, pg_info_t> &all_info,
     bool compat_mode,
+    bool restrict_to_up_acting,
     vector<int> *want,
     set<pg_shard_t> *backfill,
     set<pg_shard_t> *acting_backfill,
     pg_shard_t *want_primary,
     ostream &ss);
   bool choose_acting(pg_shard_t &auth_log_shard,
+		     bool restrict_to_up_acting,
 		     bool *history_les_bound);
   void build_might_have_unfound();
   void activate(
@@ -1076,7 +1077,6 @@ public:
     release_backoffs(o, o);
   }
   void clear_backoffs();
-  void split_backoffs(PG *child, unsigned split_bits);
 
   void add_pg_backoff(SessionRef s) {
     hobject_t begin = info.pgid.pgid.get_hobj_start();

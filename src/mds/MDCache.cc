@@ -136,7 +136,7 @@ set<int> SimpleLock::empty_gather_set;
 class MDCacheContext : public virtual MDSInternalContextBase {
 protected:
   MDCache *mdcache;
-  virtual MDSRank *get_mds()
+  MDSRank *get_mds() override
   {
     assert(mdcache != NULL);
     return mdcache->mds;
@@ -156,7 +156,7 @@ public:
 class MDCacheIOContext : public virtual MDSIOContextBase {
 protected:
   MDCache *mdcache;
-  virtual MDSRank *get_mds()
+  MDSRank *get_mds() override
   {
     assert(mdcache != NULL);
     return mdcache->mds;
@@ -168,7 +168,7 @@ public:
 class MDCacheLogContext : public virtual MDSLogContextBase {
 protected:
   MDCache *mdcache;
-  virtual MDSRank *get_mds()
+  MDSRank *get_mds() override
   {
     assert(mdcache != NULL);
     return mdcache->mds;
@@ -486,7 +486,7 @@ struct C_MDC_CreateSystemFile : public MDCacheLogContext {
   MDSInternalContextBase *fin;
   C_MDC_CreateSystemFile(MDCache *c, MutationRef& mu, CDentry *d, version_t v, MDSInternalContextBase *f) :
     MDCacheLogContext(c), mut(mu), dn(d), dpv(v), fin(f) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->_create_system_file_finish(mut, dn, dpv, fin);
   }
 };
@@ -573,7 +573,7 @@ void MDCache::_create_system_file_finish(MutationRef& mut, CDentry *dn, version_
 struct C_MDS_RetryOpenRoot : public MDSInternalContext {
   MDCache *cache;
   explicit C_MDS_RetryOpenRoot(MDCache *c) : MDSInternalContext(c->mds), cache(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r < 0) {
       // If we can't open root, something disastrous has happened: mark
       // this rank damaged for operator intervention.  Note that
@@ -896,7 +896,7 @@ class C_MDC_SubtreeMergeWB : public MDCacheLogContext {
   MutationRef mut;
 public:
   C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, MutationRef& m) : MDCacheLogContext(mdc), in(i), mut(m) {}
-  void finish(int r) { 
+  void finish(int r) override { 
     mdcache->subtree_merge_writebehind_finish(in, mut);
   }
 };
@@ -2384,7 +2384,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 struct C_MDC_CommittedMaster : public MDCacheLogContext {
   metareqid_t reqid;
   C_MDC_CommittedMaster(MDCache *s, metareqid_t r) : MDCacheLogContext(s), reqid(r) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->_logged_master_commit(reqid);
   }
 };
@@ -2460,7 +2460,7 @@ struct C_MDC_SlaveCommit : public MDCacheLogContext {
   mds_rank_t from;
   metareqid_t reqid;
   C_MDC_SlaveCommit(MDCache *c, int f, metareqid_t r) : MDCacheLogContext(c), from(f), reqid(r) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->_logged_slave_commit(from, reqid);
   }
 };
@@ -4504,7 +4504,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 class C_MDC_RejoinGatherFinish : public MDCacheContext {
 public:
   explicit C_MDC_RejoinGatherFinish(MDCache *c) : MDCacheContext(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->rejoin_gather_finish();
   }
 };
@@ -5206,7 +5206,7 @@ class C_MDC_RejoinOpenInoFinish: public MDCacheContext {
   inodeno_t ino;
 public:
   C_MDC_RejoinOpenInoFinish(MDCache *c, inodeno_t i) : MDCacheContext(c), ino(i) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->rejoin_open_ino_finish(ino, r);
   }
 };
@@ -5248,7 +5248,7 @@ public:
 
   C_MDC_RejoinSessionsOpened(MDCache *c, map<client_t,entity_inst_t>& cm) :
     MDCacheLogContext(c), client_map(cm) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0);
     mdcache->rejoin_open_sessions_finish(client_map, sseqmap);
   }
@@ -5719,7 +5719,7 @@ void MDCache::do_delayed_cap_imports()
 
 struct C_MDC_OpenSnapParents : public MDCacheContext {
   explicit C_MDC_OpenSnapParents(MDCache *c) : MDCacheContext(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->open_snap_parents();
   }
 };
@@ -6059,7 +6059,7 @@ struct C_MDC_QueuedCow : public MDCacheContext {
   MutationRef mut;
   C_MDC_QueuedCow(MDCache *mdc, CInode *i, MutationRef& m) :
     MDCacheContext(mdc), in(i), mut(m) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->_queued_file_recover_cow(in, mut);
   }
 };
@@ -6200,7 +6200,7 @@ class C_MDC_RetryTruncate : public MDCacheContext {
 public:
   C_MDC_RetryTruncate(MDCache *c, CInode *i, LogSegment *l) :
     MDCacheContext(c), in(i), ls(l) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->_truncate_inode(in, ls);
   }
 };
@@ -6233,7 +6233,7 @@ struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
   LogSegment *ls;
   C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
     MDCacheIOContext(c), in(i), ls(l) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(r == 0 || r == -ENOENT);
     mdcache->truncate_inode_finish(in, ls);
   }
@@ -6276,7 +6276,7 @@ struct C_MDC_TruncateLogged : public MDCacheLogContext {
   MutationRef mut;
   C_MDC_TruncateLogged(MDCache *m, CInode *i, MutationRef& mu) :
     MDCacheLogContext(m), in(i), mut(mu) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->truncate_inode_logged(in, mut);
   }
 };
@@ -7421,7 +7421,7 @@ void MDCache::check_memory_usage()
 class C_MDC_ShutdownCheck : public MDCacheContext {
 public:
   explicit C_MDC_ShutdownCheck(MDCache *m) : MDCacheContext(m) {}
-  void finish(int) {
+  void finish(int) override {
     mdcache->shutdown_check();
   }
 };
@@ -8231,7 +8231,7 @@ struct C_MDC_OpenRemoteDentry : public MDCacheContext {
   bool want_xlocked;
   C_MDC_OpenRemoteDentry(MDCache *m, CDentry *d, inodeno_t i, MDSInternalContextBase *f, bool wx) :
     MDCacheContext(m), dn(d), ino(i), onfinish(f), want_xlocked(wx) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->_open_remote_dentry_finish(dn, ino, onfinish, want_xlocked, r);
   }
 };
@@ -8288,7 +8288,7 @@ class C_IO_MDC_OpenInoBacktraceFetched : public MDCacheIOContext {
   bufferlist bl;
   C_IO_MDC_OpenInoBacktraceFetched(MDCache *c, inodeno_t i) :
     MDCacheIOContext(c), ino(i) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->_open_ino_backtrace_fetched(ino, bl, r);
   }
 };
@@ -8300,7 +8300,7 @@ struct C_MDC_OpenInoTraverseDir : public MDCacheContext {
   public:
   C_MDC_OpenInoTraverseDir(MDCache *c, inodeno_t i, MMDSOpenIno *m,  bool p) :
     MDCacheContext(c), ino(i), msg(m), parent(p) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r < 0 && !parent)
       r = -EAGAIN;
     if (msg) {
@@ -8316,7 +8316,7 @@ struct C_MDC_OpenInoParentOpened : public MDCacheContext {
   inodeno_t ino;
   public:
   C_MDC_OpenInoParentOpened(MDCache *c, inodeno_t i) : MDCacheContext(c), ino(i) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->_open_ino_parent_opened(ino, r);
   }
 };
@@ -9220,7 +9220,7 @@ struct C_MDC_snaprealm_create_finish : public MDCacheLogContext {
   C_MDC_snaprealm_create_finish(MDCache *c, MDRequestRef& m,
                                 MutationRef& mu, CInode *i) :
     MDCacheLogContext(c), mdr(m), mut(mu), in(i) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->_snaprealm_create_finish(mdr, mut, in);
   }
 };
@@ -9415,7 +9415,7 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CIno
 struct C_MDC_RetryScanStray : public MDCacheContext {
   dirfrag_t next;
   C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n) : MDCacheContext(c), next(n) { }
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->scan_stray_dir(next);
   }
 };
@@ -9582,7 +9582,7 @@ struct C_MDC_RetryDiscoverPath : public MDCacheContext {
   mds_rank_t from;
   C_MDC_RetryDiscoverPath(MDCache *c, CInode *b, snapid_t s, filepath &p, mds_rank_t f) :
     MDCacheContext(c), base(b), snapid(s), path(p), from(f)  {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->discover_path(base, snapid, path, 0, from);
   }
 };
@@ -9639,7 +9639,7 @@ struct C_MDC_RetryDiscoverPath2 : public MDCacheContext {
   filepath path;
   C_MDC_RetryDiscoverPath2(MDCache *c, CDir *b, snapid_t s, filepath &p) :
     MDCacheContext(c), base(b), snapid(s), path(p) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdcache->discover_path(base, snapid, path, 0);
   }
 };
@@ -10738,7 +10738,7 @@ class C_MDC_FragmentFrozen : public MDSInternalContext {
 public:
   C_MDC_FragmentFrozen(MDCache *m, MDRequestRef& r) :
     MDSInternalContext(m->mds), mdcache(m), mdr(r) {}
-  virtual void finish(int r) {
+  void finish(int r) override {
     mdcache->fragment_frozen(mdr, r);
   }
 };
@@ -10874,7 +10874,7 @@ class C_MDC_FragmentMarking : public MDCacheContext {
   MDRequestRef mdr;
 public:
   C_MDC_FragmentMarking(MDCache *m, MDRequestRef& r) : MDCacheContext(m), mdr(r) {}
-  virtual void finish(int r) {
+  void finish(int r) override {
     mdcache->fragment_mark_and_complete(mdr);
   }
 };
@@ -11076,7 +11076,7 @@ class C_MDC_FragmentPrep : public MDCacheLogContext {
   MDRequestRef mdr;
 public:
   C_MDC_FragmentPrep(MDCache *m, MDRequestRef& r) : MDCacheLogContext(m),  mdr(r) {}
-  virtual void finish(int r) {
+  void finish(int r) override {
     mdcache->_fragment_logged(mdr);
   }
 };
@@ -11085,7 +11085,7 @@ class C_MDC_FragmentStore : public MDCacheContext {
   MDRequestRef mdr;
 public:
   C_MDC_FragmentStore(MDCache *m, MDRequestRef& r) : MDCacheContext(m), mdr(r) {}
-  virtual void finish(int r) {
+  void finish(int r) override {
     mdcache->_fragment_stored(mdr);
   }
 };
@@ -11096,7 +11096,7 @@ class C_MDC_FragmentCommit : public MDCacheLogContext {
 public:
   C_MDC_FragmentCommit(MDCache *m, dirfrag_t df, list<CDir*>& l) :
     MDCacheLogContext(m), basedirfrag(df), resultfrags(l) {}
-  virtual void finish(int r) {
+  void finish(int r) override {
     mdcache->_fragment_committed(basedirfrag, resultfrags);
   }
 };
@@ -11109,7 +11109,7 @@ public:
     MDCacheIOContext(m), basedirfrag(f) {
     resultfrags.swap(l);
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     assert(r == 0 || r == -ENOENT);
     mdcache->_fragment_finish(basedirfrag, resultfrags);
   }
@@ -11972,7 +11972,7 @@ public:
     return fin;
   }
 
-  void finish(int r) {
+  void finish(int r) override {
     if (r < 0) { // we failed the lookup or something; dump ourselves
       formatter->open_object_section("results");
       formatter->dump_int("return_code", r);
@@ -12046,7 +12046,7 @@ struct C_MDC_RepairDirfragStats : public MDCacheLogContext {
   MDRequestRef mdr;
   C_MDC_RepairDirfragStats(MDCache *c, MDRequestRef& m) :
     MDCacheLogContext(c), mdr(m) {}
-  void finish(int r) {
+  void finish(int r) override {
     mdr->apply();
     get_mds()->server->respond_to_request(mdr, r);
   }
@@ -12266,10 +12266,10 @@ class C_FinishIOMDR : public MDSInternalContextBase {
 protected:
   MDSRank *mds;
   MDRequestRef mdr;
-  MDSRank *get_mds() { return mds; }
+  MDSRank *get_mds() override { return mds; }
 public:
   C_FinishIOMDR(MDSRank *mds_, MDRequestRef& mdr_) : mds(mds_), mdr(mdr_) {}
-  void finish(int r) { mds->server->respond_to_request(mdr, r); }
+  void finish(int r) override { mds->server->respond_to_request(mdr, r); }
 };
 
 void MDCache::flush_dentry_work(MDRequestRef& mdr)

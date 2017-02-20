@@ -78,6 +78,9 @@ public:
   uint64_t end() const {
     return offset + length;
   }
+  bool operator==(const AllocExtent& other) const {
+    return offset == other.offset && length == other.length;
+  }
 };
 
 inline static ostream& operator<<(ostream& out, const AllocExtent& e) {
@@ -157,9 +160,9 @@ typedef mempool::bluestore_meta_other::vector<bluestore_pextent_t> PExtentVector
 
 template<>
 struct denc_traits<PExtentVector> {
-  enum { supported = true };
-  enum { bounded = false };
-  enum { featured = false };
+  static constexpr bool supported = true;
+  static constexpr bool bounded = false;
+  static constexpr bool featured = false;
   static void bound_encode(const PExtentVector& v, size_t& p) {
     p += sizeof(uint32_t);
     size_t per = 0;

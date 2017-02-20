@@ -98,7 +98,6 @@ struct ManagedLock<MockTestImageCtx> {
 
 // template definitions
 #include "tools/rbd_mirror/LeaderWatcher.cc"
-template class rbd::mirror::LeaderWatcher<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {

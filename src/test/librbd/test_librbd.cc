@@ -179,7 +179,7 @@ public:
     }
   }
 
-  virtual void SetUp() {
+  void SetUp() override {
     ASSERT_NE("", m_pool_name = create_pool());
   }
 
@@ -686,7 +686,7 @@ TEST_F(TestLibRBD, UpdateWatchAndResizePP)
     struct Watcher : public librbd::UpdateWatchCtx {
       Watcher(librbd::Image &image) : m_image(image), m_lock("lock") {
       }
-      void handle_notify() {
+      void handle_notify() override {
         librbd::image_info_t info;
 	ASSERT_EQ(0, m_image.stat(info, sizeof(info)));
         Mutex::Locker locker(m_lock);
@@ -887,7 +887,7 @@ TEST_F(TestLibRBD, TestCopy)
 class PrintProgress : public librbd::ProgressContext
 {
 public:
-  int update_progress(uint64_t offset, uint64_t src_size)
+  int update_progress(uint64_t offset, uint64_t src_size) override
   {
     float percent = ((float)offset * 100) / src_size;
     printf("%3.2f%% done\n", percent);
@@ -4033,7 +4033,7 @@ class RBDWriter : public Thread {
  public:
    explicit RBDWriter(librbd::Image &image) : m_image(image) {};
  protected:
-  void *entry() {
+  void *entry() override {
     librbd::image_info_t info;
     int r = m_image.stat(info, sizeof(info));
     assert(r == 0);
@@ -5137,7 +5137,7 @@ TEST_F(TestLibRBD, ExclusiveLock)
   };
 
   protected:
-    void *entry() {
+    void *entry() override {
       for (int i = 0; i < 10; i++) {
 	{
 	  Mutex::Locker locker(m_lock);

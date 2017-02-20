@@ -102,10 +102,6 @@ BuildRequires:	selinux-policy-devel
 BuildRequires:	/usr/share/selinux/devel/policyhelp
 %endif
 BuildRequires:	bc
-BuildRequires:	boost-devel
-%if ! 0%{?suse_version}
-BuildRequires:	boost-python
-%endif
 BuildRequires:  cmake
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
@@ -580,7 +576,9 @@ Summary:	Python 2 libraries for Ceph distributed file system
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	libcephfs2 = %{version}-%{release}
-Requires:	python-rados = %{version}-%{release}
+%if 0%{?suse_version}
+Recommends:	python-rados = %{version}-%{release}
+%endif
 Obsoletes:	python-ceph < %{version}-%{release}
 %description -n python-cephfs
 This package contains Python 2 libraries for interacting with Cephs distributed

@@ -22,7 +22,7 @@ struct T : public Thread {
     mymap[10] = "bar";
   }
 
-  void *entry() {
+  void *entry() override {
     while (num-- > 0)
       generic_dout(0) << "this is a typical log line.  set "
 		      << myset << " and map " << mymap << dendl;

@@ -15,11 +15,10 @@
 #ifndef MOSDECSUBOPWRITE_H
 #define MOSDECSUBOPWRITE_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 #include "osd/ECMsgTypes.h"
 
-class MOSDECSubOpWrite : public Message {
+class MOSDECSubOpWrite : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 
@@ -31,12 +30,18 @@ public:
   int get_cost() const {
     return 0;
   }
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
 
   MOSDECSubOpWrite()
-    : Message(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION)
+    : MOSDFastDispatchOp(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION)
     {}
   MOSDECSubOpWrite(ECSubWrite &in_op)
-    : Message(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION) {
+    : MOSDFastDispatchOp(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION) {
     op.claim(in_op);
   }
 

@@ -21,7 +21,7 @@ struct C_CompleteFlushes : public Context {
   explicit C_CompleteFlushes(ImageCtx *image_ctx, std::list<Context *> &&flush_contexts)
     : image_ctx(image_ctx), flush_contexts(std::move(flush_contexts)) {
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     RWLock::RLocker owner_locker(image_ctx->owner_lock);
     while (!flush_contexts.empty()) {
       Context *flush_ctx = flush_contexts.front();

@@ -59,7 +59,7 @@ static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
 class LockerContext : public MDSInternalContextBase {
 protected:
   Locker *locker;
-  MDSRank *get_mds()
+  MDSRank *get_mds() override
   {
     return locker->mds;
   }
@@ -73,7 +73,7 @@ public:
 class LockerLogContext : public MDSLogContextBase {
 protected:
   Locker *locker;
-  MDSRank *get_mds()
+  MDSRank *get_mds() override
   {
     return locker->mds;
   }
@@ -471,7 +471,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
     
     // hose any stray locks
-    if (*existing == *p) {
+    if (existing != mdr->locks.end() && *existing == *p) {
       assert(need_wrlock || need_remote_wrlock);
       SimpleLock *lock = *existing;
       if (mdr->wrlocks.count(lock)) {
@@ -1006,7 +1006,7 @@ public:
     assert(locker->mds->mds_lock.is_locked_by_me());
     p->get(MDSCacheObject::PIN_PTRWAITER);    
   }
-  void finish(int r) {
+  void finish(int r) override {
     p->put(MDSCacheObject::PIN_PTRWAITER);
     locker->try_eval(p, mask);
   }
@@ -1717,7 +1717,7 @@ public:
       ack(ac) {
     in->get(CInode::PIN_PTRWAITER);
   }
-  void finish(int r) {
+  void finish(int r) override {
     locker->file_update_finish(in, mut, share, client, cap, ack);
   }
 };
@@ -2094,7 +2094,7 @@ public:
   C_MDL_RequestInodeFileCaps(Locker *l, CInode *i) : LockerContext(l), in(i) {
     in->get(CInode::PIN_PTRWAITER);
   }
-  void finish(int r) {
+  void finish(int r) override {
     in->put(CInode::PIN_PTRWAITER);
     if (!in->is_auth())
       locker->request_inode_file_caps(in);
@@ -2171,7 +2171,7 @@ public:
   {
     in->get(CInode::PIN_PTRWAITER);
   }
-  void finish(int r) {
+  void finish(int r) override {
     in->put(CInode::PIN_PTRWAITER);
     if (in->is_auth())
       locker->check_inode_max_size(in, false, new_max_size, newsize, mtime);
@@ -2789,7 +2789,7 @@ class C_Locker_RetryRequestCapRelease : public LockerContext {
 public:
   C_Locker_RetryRequestCapRelease(Locker *l, client_t c, const ceph_mds_request_release& it) :
     LockerContext(l), client(c), item(it) { }
-  void finish(int r) {
+  void finish(int r) override {
     string dname;
     MDRequestRef null_ref;
     locker->process_request_cap_release(null_ref, client, item, dname);
@@ -2889,7 +2889,7 @@ public:
     LockerContext(l), in(i), client(c), seq(s) {
     in->get(CInode::PIN_PTRWAITER);
   }
-  void finish(int r) {
+  void finish(int r) override {
     locker->kick_issue_caps(in, client, seq);
     in->put(CInode::PIN_PTRWAITER);
   }
@@ -3348,7 +3348,7 @@ public:
   C_Locker_RetryCapRelease(Locker *l, client_t c, inodeno_t i, uint64_t id,
 			   ceph_seq_t mseq, ceph_seq_t seq) :
     LockerContext(l), client(c), ino(i), cap_id(id), migrate_seq(mseq), issue_seq(seq) {}
-  void finish(int r) {
+  void finish(int r) override {
     locker->_do_cap_release(client, ino, cap_id, migrate_seq, issue_seq);
   }
 };
@@ -4244,7 +4244,7 @@ class C_Locker_ScatterWB : public LockerLogContext {
 public:
   C_Locker_ScatterWB(Locker *l, ScatterLock *sl, MutationRef& m) :
     LockerLogContext(l), lock(sl), mut(m) {}
-  void finish(int r) { 
+  void finish(int r) override { 
     locker->scatter_writebehind_finish(lock, mut); 
   }
 };

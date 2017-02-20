@@ -1,0 +1,11 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: debug_white_box_testing_ec_overwrites
+
+tasks:
+- workunit:
+    clients:
+      all:
+        - rbd/krbd_data_pool.sh

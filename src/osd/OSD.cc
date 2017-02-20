@@ -85,7 +85,6 @@
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
-#include "messages/MOSDPGMissing.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDECSubOpWrite.h"
@@ -531,7 +530,7 @@ class AgentTimeoutCB : public Context {
   PGRef pg;
 public:
   explicit AgentTimeoutCB(PGRef _pg) : pg(_pg) {}
-  void finish(int) {
+  void finish(int) override {
     pg->agent_choose_mode_restart();
   }
 };
@@ -1424,7 +1423,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 	      << m->get_map_epoch() << ", dropping" << dendl;
       return;
     }
-    pg_t _pgid = m->get_pg();
+    pg_t _pgid = m->get_raw_pg();
     spg_t pgid;
     if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0)
       _pgid = opmap->raw_pg_to_pg(_pgid);
@@ -1438,7 +1437,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 
   dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;
   clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
-	       << " pg " << m->get_pg()
+	       << " pg " << m->get_raw_pg()
 	       << " to osd." << whoami
 	       << " not " << pg->acting
 	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch()
@@ -1786,7 +1785,7 @@ class OSDSocketHook : public AdminSocketHook {
 public:
   explicit OSDSocketHook(OSD *o) : osd(o) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     stringstream ss;
     bool r = osd->asok_command(command, cmdmap, format, ss);
     out.append(ss);
@@ -1952,6 +1951,8 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     service.dumps_scrub(f);
   } else if (command == "calc_objectstore_db_histogram") {
     store->generate_db_histogram(f);
+  } else if (command == "flush_store_cache") {
+    store->flush_cache();
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2423,8 +2424,16 @@ void OSD::final_init()
 				     "print scheduled scrubs");
   assert(r == 0);
 
-  r = admin_socket->register_command("calc_objectstore_db_histogram", "calc_objectstore_db_histogram", asok_hook,
-					 "Generate key value histogram of kvdb(rocksdb) which used by bluestore");
+  r = admin_socket->register_command("calc_objectstore_db_histogram",
+                                     "calc_objectstore_db_histogram",
+                                     asok_hook,
+                                     "Generate key value histogram of kvdb(rocksdb) which used by bluestore");
+  assert(r == 0);
+
+  r = admin_socket->register_command("flush_store_cache",
+                                     "flush_store_cache",
+                                     asok_hook,
+                                     "Flush bluestore internal cache");
   assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
@@ -2784,6 +2793,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("get_heap_property");
   cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
   cct->get_admin_socket()->unregister_command("calc_objectstore_db_histogram");
+  cct->get_admin_socket()->unregister_command("flush_store_cache");
   delete asok_hook;
   asok_hook = NULL;
 
@@ -4942,14 +4952,14 @@ void OSD::ms_handle_fast_accept(Connection *con)
 bool OSD::ms_handle_reset(Connection *con)
 {
   Session *session = (Session *)con->get_priv();
-  dout(1) << "ms_handle_reset con " << con << " session " << session << dendl;
+  dout(2) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
   session->wstate.reset(con);
   session->con.reset(NULL);  // break con <-> session ref cycle
   // note that we break session->con *before* the session_handle_reset
   // cleanup below.  this avoids a race between us and
-  // PG::add_backoff, split_backoff, etc.
+  // PG::add_backoff, Session::check_backoff, etc.
   session_handle_reset(session);
   session->put();
   return true;
@@ -4961,7 +4971,7 @@ bool OSD::ms_handle_refused(Connection *con)
     return false;
 
   Session *session = (Session *)con->get_priv();
-  dout(1) << "ms_handle_refused con " << con << " session " << session << dendl;
+  dout(2) << "ms_handle_refused con " << con << " session " << session << dendl;
   if (!session)
     return false;
   int type = con->get_peer_type();
@@ -4990,7 +5000,7 @@ struct C_OSD_GetVersion : public Context {
   OSD *osd;
   uint64_t oldest, newest;
   explicit C_OSD_GetVersion(OSD *o) : osd(o), oldest(0), newest(0) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r >= 0)
       osd->_got_mon_epochs(oldest, newest);
   }
@@ -5007,7 +5017,7 @@ void OSD::start_boot()
     heartbeat_kick();
     return;
   }
-  dout(1) << "We are healthy, booting" << dendl;
+  dout(1) << __func__ << dendl;
   set_state(STATE_PREBOOT);
   dout(10) << "start_boot - have maps " << superblock.oldest_map
 	   << ".." << superblock.newest_map << dendl;
@@ -5031,13 +5041,13 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
-    dout(5) << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
+    derr << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-    dout(1) << "osdmap SORTBITWISE OSDMap flag is NOT set; please set it"
-	    << dendl;
+    derr << "osdmap SORTBITWISE OSDMap flag is NOT set; please set it"
+	 << dendl;
   } else if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
-    dout(1) << "osdmap REQUIRE_JEWEL OSDMap flag is NOT set; please set it"
-	    << dendl;
+    derr << "osdmap REQUIRE_JEWEL OSDMap flag is NOT set; please set it"
+	 << dendl;
   } else if (!monc->monmap.get_required_features().contains_all(
 	       ceph::features::mon::FEATURE_LUMINOUS)) {
     derr << "monmap REQUIRE_LUMINOUS is NOT set; must upgrade all monitors to "
@@ -6311,7 +6321,7 @@ epoch_t op_required_epoch(OpRequestRef op)
   }
   case CEPH_MSG_OSD_BACKOFF: {
     MOSDBackoff *m = static_cast<MOSDBackoff*>(op->get_req());
-    return m->osd_epoch;
+    return m->map_epoch;
   }
   case MSG_OSD_SUBOP:
     return replica_op_required_epoch<MOSDSubOp, MSG_OSD_SUBOP>(op);
@@ -6386,11 +6396,6 @@ void OSD::dispatch_op(OpRequestRef op)
   case MSG_OSD_PG_TRIM:
     handle_pg_trim(op);
     break;
-  case MSG_OSD_PG_MISSING:
-    assert(0 ==
-	   "received MOSDPGMissing; this message is supposed to be unused!?!");
-    break;
-
   case MSG_OSD_BACKFILL_RESERVE:
     handle_pg_backfill_reserve(op);
     break;
@@ -6527,7 +6532,15 @@ void OSD::_dispatch(Message *m)
 
     // -- need OSDMap --
 
-  default:
+  case MSG_OSD_PG_CREATE:
+  case MSG_OSD_PG_NOTIFY:
+  case MSG_OSD_PG_QUERY:
+  case MSG_OSD_PG_LOG:
+  case MSG_OSD_PG_REMOVE:
+  case MSG_OSD_PG_INFO:
+  case MSG_OSD_PG_TRIM:
+  case MSG_OSD_BACKFILL_RESERVE:
+  case MSG_OSD_RECOVERY_RESERVE:
     {
       OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
       // no map?  starting up?
@@ -6798,7 +6811,7 @@ struct C_OnMapCommit : public Context {
   MOSDMap *msg;
   C_OnMapCommit(OSD *o, epoch_t f, epoch_t l, MOSDMap *m)
     : osd(o), first(f), last(l), msg(m) {}
-  void finish(int r) {
+  void finish(int r) override {
     osd->_committed_osd_maps(first, last, msg);
   }
 };
@@ -6811,7 +6824,7 @@ struct C_OnMapApply : public Context {
 	       const list<OSDMapRef> &pinned_maps,
 	       epoch_t e)
     : service(service), pinned_maps(pinned_maps), e(e) {}
-  void finish(int r) {
+  void finish(int r) override {
     service->clear_map_bl_cache_pins(e);
   }
 };
@@ -7534,7 +7547,7 @@ void OSD::consume_map()
   for (set<spg_t>::iterator p = pgs_to_check.begin();
        p != pgs_to_check.end();
        ++p) {
-    if (!(osdmap->is_acting_osd_shard(p->pgid, whoami, p->shard))) {
+    if (!(osdmap->is_acting_osd_shard(spg_t(p->pgid, p->shard), whoami))) {
       set<Session*> concerned_sessions;
       get_sessions_possibly_interested_in_pg(*p, &concerned_sessions);
       for (set<Session*>::iterator i = concerned_sessions.begin();
@@ -7911,7 +7924,7 @@ struct C_OpenPGs : public Context {
   C_OpenPGs(set<PGRef>& p, ObjectStore *s, OSD* o) : store(s), osd(o) {
     pgs.swap(p);
   }
-  void finish(int r) {
+  void finish(int r) override {
     RWLock::RLocker l(osd->pg_map_lock);
     for (auto p : pgs) {
       if (osd->pg_map.count(p->info.pgid)) {
@@ -8709,7 +8722,7 @@ public:
     osd(osd), name(n), con(con), osdmap(osdmap), map_epoch(map_epoch) {
   }
 
-  void finish(ThreadPool::TPHandle& tp) {
+  void finish(ThreadPool::TPHandle& tp) override {
     Session *session = static_cast<Session *>(
         con->get_priv());
     epoch_t last_sent_epoch;
@@ -8781,16 +8794,8 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     client_session->put();
   }
 
-  if (cct->_conf->osd_debug_drop_op_probability > 0 &&
-      !m->get_source().is_mds()) {
-    if ((double)rand() / (double)RAND_MAX < cct->_conf->osd_debug_drop_op_probability) {
-      dout(0) << "handle_op DEBUG artificially dropping op " << *m << dendl;
-      return;
-    }
-  }
-
   // calc actual pgid
-  pg_t _pgid = m->get_pg();
+  pg_t _pgid = m->get_raw_pg();
   int64_t pool = _pgid.pool();
 
   if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0 &&
@@ -8828,7 +8833,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   if (!send_map->have_pg_pool(pgid.pool())) {
     dout(7) << "dropping request; pool did not exist" << dendl;
     clog->warn() << m->get_source_inst() << " invalid " << m->get_reqid()
-		      << " pg " << m->get_pg()
+		      << " pg " << m->get_raw_pg()
 		      << " to osd." << whoami
 		      << " in e" << osdmap->get_epoch()
 		      << ", client e" << m->get_map_epoch()
@@ -8839,7 +8844,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   if (!send_map->osd_is_valid_op_target(pgid.pgid, whoami)) {
     dout(7) << "we are invalid target" << dendl;
     clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
-		 << " pg " << m->get_pg()
+		 << " pg " << m->get_raw_pg()
 		 << " to osd." << whoami
 		 << " in e" << osdmap->get_epoch()
 		 << ", client e" << m->get_map_epoch()
@@ -8875,38 +8880,10 @@ void OSD::handle_backoff(OpRequestRef& op, OSDMapRef& osdmap)
   }
 
   // map hobject range to PG(s)
-  bool queued = false;
-  hobject_t pos = m->begin;
-  do {
-    pg_t _pgid(pos.get_hash(), pos.pool);
-    if (osdmap->have_pg_pool(pos.pool)) {
-      _pgid = osdmap->raw_pg_to_pg(_pgid);
-    }
-    if (!osdmap->have_pg_pool(_pgid.pool())) {
-      // missing pool -- drop
-      return;
-    }
-    spg_t pgid;
-    if (osdmap->get_primary_shard(_pgid, &pgid)) {
-      dout(10) << __func__ << " pos " << pos << " pgid " << pgid << dendl;
-      PGRef pg = get_pg_or_queue_for_pg(pgid, op, s);
-      if (pg) {
-	if (!queued) {
-	  enqueue_op(pg, op);
-	  queued = true;
-	} else {
-	  // use a fresh OpRequest
-	  m->get();	// take a ref for the new OpRequest
-	  OpRequestRef newop(op_tracker.create_request<OpRequest, Message*>(m));
-	  newop->mark_event("duplicated original op for another pg");
-	  enqueue_op(pg, newop);
-	}
-      }
-    }
-    // advance
-    pos = _pgid.get_hobj_end(osdmap->get_pg_pool(pos.pool)->get_pg_num());
-    dout(20) << __func__ << "  next pg " << pos << dendl;
-  } while (pos < m->end);
+  PGRef pg = get_pg_or_queue_for_pg(m->pgid, op, s);
+  if (pg) {
+    enqueue_op(pg, op);
+  }
 }
 
 template<typename T, int MSGTYPE>
@@ -9178,7 +9155,7 @@ struct C_CompleteSplits : public Context {
   set<boost::intrusive_ptr<PG> > pgs;
   C_CompleteSplits(OSD *osd, const set<boost::intrusive_ptr<PG> > &in)
     : osd(osd), pgs(in) {}
-  void finish(int r) {
+  void finish(int r) override {
     Mutex::Locker l(osd->osd_lock);
     if (osd->is_stopping())
       return;

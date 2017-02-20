@@ -1,6 +1,12 @@
 #!/bin/sh
 
-eval set -- "$(getopt -o i: --long id:,cluster: -- $@)"
+if [ `uname` = FreeBSD ]; then
+  GETOPT=/usr/local/bin/getopt
+else
+  GETOPT=getopt
+fi
+
+eval set -- "$(${GETOPT} -o i: --long id:,cluster: -- $@)"
 
 while true ; do
 	case "$1" in

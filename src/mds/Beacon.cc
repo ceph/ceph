@@ -36,7 +36,7 @@
 class Beacon::C_MDS_BeaconSender : public Context {
 public:
   explicit C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(beacon->lock.is_locked_by_me());
     beacon->sender = NULL;
     beacon->_send();

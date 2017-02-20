@@ -303,7 +303,7 @@ struct ExclusiveLock<I>::C_InitComplete : public Context {
                  Context *on_init)
     : exclusive_lock(exclusive_lock), features(features), on_init(on_init) {
   }
-  virtual void finish(int r) override {
+  void finish(int r) override {
     if (r == 0) {
       exclusive_lock->handle_init_complete(features);
     }

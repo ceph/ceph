@@ -57,11 +57,11 @@ struct TestMockWatcherRewatchRequest : public TestMockFixture {
   }
 
   struct WatchCtx : public librados::WatchCtx2 {
-    virtual void handle_notify(uint64_t, uint64_t, uint64_t,
-                               ceph::bufferlist&) {
+    void handle_notify(uint64_t, uint64_t, uint64_t,
+                               ceph::bufferlist&) override {
       assert(false);
     }
-    virtual void handle_error(uint64_t, int) {
+    void handle_error(uint64_t, int) override {
       assert(false);
     }
   };

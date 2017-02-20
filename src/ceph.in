@@ -473,7 +473,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     if parsed_args.output_format:
                         valid_dict['format'] = parsed_args.output_format
                     if verbose:
-                        print("Submitting command ", valid_dict, file=sys.stderr)
+                        print("Submitting command: ", valid_dict, file=sys.stderr)
                     ret, outbuf, outs = json_command(cluster_handle,
                                                      target=target,
                                                      argdict=valid_dict)
@@ -489,7 +489,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     print("Invalid command", file=sys.stderr)
 
     if verbose:
-        print("Submitting command ", valid_dict, file=sys.stderr)
+        print("Submitting command: ", valid_dict, file=sys.stderr)
     return json_command(cluster_handle, target=target, argdict=valid_dict,
                         inbuf=inbuf)
 
@@ -659,7 +659,6 @@ def main():
         try:
             raw_write(admin_socket(sockpath, childargs, format))
         except Exception as e:
-            print('admin_socket: {0}'.format(e))
             print('admin_socket: {0}'.format(e), file=sys.stderr)
             return errno.EINVAL
         return 0
@@ -705,7 +704,7 @@ def main():
                                        conffile=conffile)
         retargs = run_in_thread(cluster_handle.conf_parse_argv, childargs)
     except rados.Error as e:
-        print('Error initializing cluster client: {0}'.format(repr(e)), file=sys.stderr)
+        print('Error initializing cluster client: {0}'.format(e), file=sys.stderr)
         return 1
 
     childargs = retargs
@@ -750,10 +749,10 @@ def main():
         print('Cluster connection aborted', file=sys.stderr)
         return 1
     except rados.PermissionDeniedError as e:
-        print('Error connecting to cluster: {0}'.format(e.__class__.__name__), file=sys.stderr)
+        print(str(e), file=sys.stderr)
         return errno.EACCES
     except Exception as e:
-        print('Error connecting to cluster: {0}'.format(e.__class__.__name__), file=sys.stderr)
+        print(str(e), file=sys.stderr)
         return 1
 
     if parsed_args.help:

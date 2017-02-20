@@ -67,6 +67,20 @@
 #include "include/str_map.h"
 
 #define dout_subsys ceph_subsys_mon
+
+struct C_PrintTime : public Context {
+  utime_t start;
+  epoch_t epoch;
+  C_PrintTime(epoch_t e) : start(ceph_clock_now()), epoch(e) {}
+  void finish(int r) {
+    if (r >= 0) {
+      utime_t end = ceph_clock_now();
+      dout(10) << "osdmap epoch " << epoch << " mapping took "
+	       << (end - start) << " seconds" << dendl;
+    }
+  }
+};
+
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, osdmap)
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, const OSDMap& osdmap) {
@@ -75,9 +89,14 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, const OSDMap& osdmap)
 		<< ").osd e" << osdmap.get_epoch() << " ";
 }
 
-OSDMonitor::OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name)
+OSDMonitor::OSDMonitor(
+  CephContext *cct,
+  Monitor *mn,
+  Paxos *p,
+  const string& service_name)
  : PaxosService(mn, p, service_name),
    cct(cct),
+   mapper(mn->cct, &mn->cpu_tp),
    inc_osd_cache(g_conf->mon_osd_cache_size),
    full_osd_cache(g_conf->mon_osd_cache_size),
    last_attempted_minwait_time(utime_t()),
@@ -354,11 +373,30 @@ void OSDMonitor::on_active()
       ls.pop_front();
     }
   }
+
+  // initiate mapping job
+  if (mapping_job) {
+    dout(10) << __func__ << " canceling previous mapping_job " << mapping_job.get()
+	     << dendl;
+    mapping_job->abort();
+  }
+  C_PrintTime *fin = new C_PrintTime(osdmap.get_epoch());
+  mapping.reset(new OSDMapMapping);
+  mapping_job = mapping->start_update(osdmap, mapper,
+				      g_conf->mon_osd_mapping_pgs_per_chunk);
+  dout(10) << __func__ << " started mapping job " << mapping_job.get()
+	   << " at " << fin->start << dendl;
+  mapping_job->set_finish_event(fin);
 }
 
 void OSDMonitor::on_shutdown()
 {
   dout(10) << __func__ << dendl;
+  if (mapping_job) {
+    dout(10) << __func__ << " canceling previous mapping_job " << mapping_job.get()
+	     << dendl;
+    mapping_job->abort();
+  }
 
   // discard failure info, waiters
   list<MonOpRequestRef> ls;
@@ -560,7 +598,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
       } else {
         oss << "osd." << p->first << " weight "
             << (float)weight / (float)0x10000 << " -> "
-            << (float)new_weight / (float)0x10000;
+            << (float)new_weight / (float)0x10000 << "\n";
       }
       if (++num_changed >= max_osds)
 	break;
@@ -579,7 +617,7 @@ int OSDMonitor::reweight_by_utilization(int oload,
 	}
         oss << "osd." << p->first << " weight "
             << (float)weight / (float)0x10000 << " -> "
-            << (float)new_weight / (float)0x10000;
+            << (float)new_weight / (float)0x10000 << "\n";
 	if (++num_changed >= max_osds)
 	  break;
       }
@@ -633,7 +671,7 @@ protected:
     }
   }
 
-  virtual void dump_item(const CrushTreeDumper::Item &qi, F *f) {
+  void dump_item(const CrushTreeDumper::Item &qi, F *f) override {
     if (!tree && qi.is_bucket())
       return;
 
@@ -784,7 +822,7 @@ protected:
   friend std::ostream &operator<<(ostream& out, const lowprecision_t& v);
 
   using OSDUtilizationDumper<TextTable>::dump_item;
-  virtual void dump_item(const CrushTreeDumper::Item &qi,
+  void dump_item(const CrushTreeDumper::Item &qi,
 			 float &reweight,
 			 int64_t kb,
 			 int64_t kb_used,
@@ -792,7 +830,7 @@ protected:
 			 double& util,
 			 double& var,
 			 const size_t num_pgs,
-			 TextTable *tbl) {
+			 TextTable *tbl) override {
     *tbl << qi.id
 	 << weightf_t(qi.weight)
 	 << weightf_t(reweight)
@@ -868,7 +906,7 @@ public:
 
 protected:
   using OSDUtilizationDumper<Formatter>::dump_item;
-  virtual void dump_item(const CrushTreeDumper::Item &qi,
+  void dump_item(const CrushTreeDumper::Item &qi,
 			 float &reweight,
 			 int64_t kb,
 			 int64_t kb_used,
@@ -876,7 +914,7 @@ protected:
 			 double& util,
 			 double& var,
 			 const size_t num_pgs,
-			 Formatter *f) {
+			 Formatter *f) override {
     f->open_object_section("item");
     CrushTreeDumper::dump_item_fields(crush, qi, f);
     f->dump_float("reweight", reweight);
@@ -976,102 +1014,103 @@ void OSDMonitor::maybe_prime_pg_temp()
   if (!all && osds.empty())
     return;
 
+  if (!all) {
+    unsigned estimate =
+      mapping->get_osd_acting_pgs(*osds.begin()).size() * osds.size();
+    if (estimate > mapping->get_num_pgs() *
+	g_conf->mon_osd_prime_pg_temp_max_estimate) {
+      dout(10) << __func__ << " estimate " << estimate << " pgs on "
+	       << osds.size() << " osds >= "
+	       << g_conf->mon_osd_prime_pg_temp_max_estimate << " of total "
+	       << mapping->get_num_pgs() << " pgs, all"
+	       << dendl;
+      all = true;
+    } else {
+      dout(10) << __func__ << " estimate " << estimate << " pgs on "
+	       << osds.size() << " osds" << dendl;
+    }
+  }
+
   OSDMap next;
   next.deepish_copy_from(osdmap);
   next.apply_incremental(pending_inc);
 
-  PGMap *pg_map = &mon->pgmon()->pg_map;
-
-  utime_t stop = ceph_clock_now();
-  stop += g_conf->mon_osd_prime_pg_temp_max_time;
-  int chunk = 1000;
-  int n = chunk;
-
   if (all) {
-    for (ceph::unordered_map<pg_t, pg_stat_t>::iterator pp =
-	   pg_map->pg_stat.begin();
-	 pp != pg_map->pg_stat.end();
-	 ++pp) {
-      prime_pg_temp(next, pp);
-      if (--n <= 0) {
-	n = chunk;
-	if (ceph_clock_now() > stop) {
-	  dout(10) << __func__ << " consumed more than "
-		   << g_conf->mon_osd_prime_pg_temp_max_time
-		   << " seconds, stopping"
-		   << dendl;
-	  break;
-	}
-      }
+    PrimeTempJob job(next, this);
+    mapper.queue(&job, g_conf->mon_osd_mapping_pgs_per_chunk);
+    if (job.wait_for(g_conf->mon_osd_prime_pg_temp_max_time)) {
+      dout(10) << __func__ << " done in " << job.get_duration() << dendl;
+    } else {
+      dout(10) << __func__ << " did not finish in "
+	       << g_conf->mon_osd_prime_pg_temp_max_time
+	       << ", stopping" << dendl;
+      job.abort();
     }
   } else {
     dout(10) << __func__ << " " << osds.size() << " interesting osds" << dendl;
-    for (set<int>::iterator p = osds.begin(); p != osds.end(); ++p) {
-      n -= prime_pg_temp(next, pg_map, *p);
-      if (n <= 0) {
-	n = chunk;
-	if (ceph_clock_now() > stop) {
-	  dout(10) << __func__ << " consumed more than "
-		   << g_conf->mon_osd_prime_pg_temp_max_time
-		   << " seconds, stopping"
-		   << dendl;
-	  break;
+    utime_t stop = ceph_clock_now();
+    stop += g_conf->mon_osd_prime_pg_temp_max_time;
+    const int chunk = 1000;
+    int n = chunk;
+    std::unordered_set<pg_t> did_pgs;
+    for (auto osd : osds) {
+      auto& pgs = mapping->get_osd_acting_pgs(osd);
+      dout(20) << __func__ << " osd." << osd << " " << pgs << dendl;
+      for (auto pgid : pgs) {
+	if (!did_pgs.insert(pgid).second) {
+	  continue;
+	}
+	prime_pg_temp(next, pgid);
+	if (--n <= 0) {
+	  n = chunk;
+	  if (ceph_clock_now() > stop) {
+	    dout(10) << __func__ << " consumed more than "
+		     << g_conf->mon_osd_prime_pg_temp_max_time
+		     << " seconds, stopping"
+		     << dendl;
+	    return;
+	  }
 	}
       }
     }
   }
 }
 
-void OSDMonitor::prime_pg_temp(OSDMap& next,
-			       ceph::unordered_map<pg_t, pg_stat_t>::iterator pp)
+void OSDMonitor::prime_pg_temp(
+  const OSDMap& next,
+  pg_t pgid)
 {
-  // do not prime creating pgs
-  if (pp->second.state & PG_STATE_CREATING)
+  PGMap *pg_map = &mon->pgmon()->pg_map;  // FIMXE: use new creating_pgs map
+  if (!pg_map->creating_pgs.count(pgid)) {
     return;
-  // do not touch a mapping if a change is pending
-  if (pending_inc.new_pg_temp.count(pp->first))
-    return;
+  }
+
   vector<int> up, acting;
-  int up_primary, acting_primary;
-  next.pg_to_up_acting_osds(pp->first, &up, &up_primary, &acting, &acting_primary);
-  if (acting == pp->second.acting)
-    return;  // no change since last pg update, skip
-  vector<int> cur_up, cur_acting;
-  osdmap.pg_to_up_acting_osds(pp->first, &cur_up, &up_primary,
-			      &cur_acting, &acting_primary);
-  if (cur_acting == acting)
-    return;  // no change this epoch; must be stale pg_stat
-  if (cur_acting.empty())
+  mapping->get(pgid, &up, nullptr, &acting, nullptr);
+
+  vector<int> next_up, next_acting;
+  int next_up_primary, next_acting_primary;
+  next.pg_to_up_acting_osds(pgid, &next_up, &next_up_primary,
+			    &next_acting, &next_acting_primary);
+  if (acting == next_acting)
+    return;  // no change since last epoch
+
+  if (acting.empty())
     return;  // if previously empty now we can be no worse off
-  const pg_pool_t *pool = next.get_pg_pool(pp->first.pool());
-  if (pool && cur_acting.size() < pool->min_size)
+  const pg_pool_t *pool = next.get_pg_pool(pgid.pool());
+  if (pool && acting.size() < pool->min_size)
     return;  // can be no worse off than before
 
-  dout(20) << __func__ << " " << pp->first << " " << cur_up << "/" << cur_acting
-	   << " -> " << up << "/" << acting
-	   << ", priming " << cur_acting
+  dout(20) << __func__ << " " << pgid << " " << up << "/" << acting
+	   << " -> " << next_up << "/" << next_acting
+	   << ", priming " << acting
 	   << dendl;
-  pending_inc.new_pg_temp[pp->first] = cur_acting;
-}
-
-int OSDMonitor::prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd)
-{
-  dout(10) << __func__ << " osd." << osd << dendl;
-  int num = 0;
-  ceph::unordered_map<int, set<pg_t> >::iterator po = pg_map->pg_by_osd.find(osd);
-  if (po != pg_map->pg_by_osd.end()) {
-    for (set<pg_t>::iterator p = po->second.begin();
-	 p != po->second.end();
-	 ++p, ++num) {
-      ceph::unordered_map<pg_t, pg_stat_t>::iterator pp = pg_map->pg_stat.find(*p);
-      if (pp == pg_map->pg_stat.end())
-	continue;
-      prime_pg_temp(next, pp);
-    }
+  {
+    Mutex::Locker l(prime_pg_temp_lock);
+    // do not touch a mapping if a change is pending
+    pending_inc.new_pg_temp.emplace(pgid, acting);
   }
-  return num;
 }
-
 
 /**
  * @note receiving a transaction in this function gives a fair amount of
@@ -1088,8 +1127,26 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   int r = pending_inc.propagate_snaps_to_tiers(g_ceph_context, osdmap);
   assert(r == 0);
 
-  if (g_conf->mon_osd_prime_pg_temp)
-    maybe_prime_pg_temp();
+  if (g_conf->mon_osd_prime_pg_temp) {
+    if (mapping && mapping_job) {
+      if (!mapping_job->is_done()) {
+	dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
+		<< mapping_job.get() << " did not complete, "
+		<< mapping_job->shards << " left" << dendl;
+	mapping_job->abort();
+      } else if (mapping->get_epoch() == osdmap.get_epoch()) {
+	dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
+		<< mapping_job.get() << " is prior epoch "
+		<< mapping->get_epoch() << dendl;
+      } else {
+	maybe_prime_pg_temp();
+      }
+    } else {
+      dout(1) << __func__ << " skipping prime_pg_temp; mapping job did not start"
+	      << dendl;
+    }
+  }
+  mapping_job.reset();
 
   bufferlist bl;
 
@@ -1520,7 +1577,7 @@ public:
     MonOpRequestRef op)
     : C_MonOp(op), osdmon(osdmon) {}
 
-  void _finish(int) {
+  void _finish(int) override {
     MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
     osdmon->mon->send_reply(
       op,
@@ -5222,6 +5279,9 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -E2BIG;
     }
     p.set_pg_num(n);
+    // force pre-luminous clients to resend their ops, since they
+    // don't understand that split PGs now form a new interval.
+    p.last_force_op_resend_preluminous = pending_inc.epoch;
   } else if (var == "pgp_num") {
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
@@ -5268,10 +5328,29 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.crush_ruleset = n;
-  } else if (var == "hashpspool" || var == "nodelete" || var == "nopgchange" ||
+  } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
 	     var == "noscrub" || var == "nodeep-scrub") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
+    // make sure we only compare against 'n' if we didn't receive a string
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.set_flag(flag);
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      p.unset_flag(flag);
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
+      return -EINVAL;
+    }
+  } else if (var == "hashpspool") {
+    uint64_t flag = pg_pool_t::get_flag_by_name(var);
+    string force;
+    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    if (force != "--yes-i-really-mean-it") {
+      ss << "are you SURE?  this will remap all placement groups in this pool,"
+	    " this triggers large data movement,"
+	    " pass --yes-i-really-mean-it if you really do.";
+      return -EPERM;
+    }
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
       p.set_flag(flag);
@@ -7520,9 +7599,9 @@ done:
     pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
     np->read_tier = overlaypool_id;
     np->write_tier = overlaypool_id;
-    np->last_force_op_resend = pending_inc.epoch;
+    np->set_last_force_op_resend(pending_inc.epoch);
     pg_pool_t *noverlay_p = pending_inc.get_new_pool(overlaypool_id, overlay_p);
-    noverlay_p->last_force_op_resend = pending_inc.epoch;
+    noverlay_p->set_last_force_op_resend(pending_inc.epoch);
     ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
     if (overlay_p->cache_mode == pg_pool_t::CACHEMODE_NONE)
       ss <<" (WARNING: overlay pool cache_mode is still NONE)";
@@ -7556,16 +7635,16 @@ done:
     if (np->has_read_tier()) {
       const pg_pool_t *op = osdmap.get_pg_pool(np->read_tier);
       pg_pool_t *nop = pending_inc.get_new_pool(np->read_tier,op);
-      nop->last_force_op_resend = pending_inc.epoch;
+      nop->set_last_force_op_resend(pending_inc.epoch);
     }
     if (np->has_write_tier()) {
       const pg_pool_t *op = osdmap.get_pg_pool(np->write_tier);
       pg_pool_t *nop = pending_inc.get_new_pool(np->write_tier, op);
-      nop->last_force_op_resend = pending_inc.epoch;
+      nop->set_last_force_op_resend(pending_inc.epoch);
     }
     np->clear_read_tier();
     np->clear_write_tier();
-    np->last_force_op_resend = pending_inc.epoch;
+    np->set_last_force_op_resend(pending_inc.epoch);
     ss << "there is now (or already was) no overlay for '" << poolstr << "'";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
@@ -7799,8 +7878,8 @@ done:
     np->tiers.insert(tierpool_id);
     np->read_tier = np->write_tier = tierpool_id;
     np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
-    np->last_force_op_resend = pending_inc.epoch;
-    ntp->last_force_op_resend = pending_inc.epoch;
+    np->set_last_force_op_resend(pending_inc.epoch);
+    ntp->set_last_force_op_resend(pending_inc.epoch);
     ntp->tier_of = pool_id;
     ntp->cache_mode = mode;
     ntp->hit_set_count = g_conf->osd_tier_default_cache_hit_set_count;

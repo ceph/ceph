@@ -88,7 +88,7 @@ public:
   ~DelayedDelivery() {
     discard();
   }
-  void *entry();
+  void *entry() override;
   void queue(utime_t release, Message *m) {
     Mutex::Locker l(delay_lock);
     delay_queue.push_back(make_pair(release, m));
@@ -426,9 +426,6 @@ int Pipe::accept()
       ldout(msgr->cct,10) << "accept couldn't read connect" << dendl;
       goto fail_unlocked;
     }
-
-    // sanitize features
-    connect.features = connect.features;
 
     authorizer.clear();
     if (connect.authorizer_len) {
@@ -923,11 +920,24 @@ void Pipe::set_socket_options()
     int r = -1;
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
-    r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-    if (r < 0) {
+
+    if (peer_addr.get_family() == AF_INET) {
+      r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
       r = -errno;
-      ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
-                         << ": " << cpp_strerror(r) << dendl;
+      if (r < 0) {
+        ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
+                           << ": " << cpp_strerror(r) << dendl;
+      }
+    } else if (peer_addr.get_family() == AF_INET6) {
+      r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
+      r = -errno;
+      if (r < 0) {
+        ldout(msgr->cct,0) << "couldn't set IPV6_TCLASS to " << iptos
+                           << ": " << cpp_strerror(r) << dendl;
+      }
+    } else {
+      ldout(msgr->cct,0) << "couldn't set ToS of unknown family to " << iptos
+                         << dendl;
     }
 #endif
 #if defined(SO_PRIORITY) 
@@ -1147,9 +1157,6 @@ int Pipe::connect()
       ldout(msgr->cct,2) << "connect read reply " << cpp_strerror(rc) << dendl;
       goto fail;
     }
-
-    // sanitize features
-    reply.features = reply.features;
 
     ldout(msgr->cct,20) << "connect got reply tag " << (int)reply.tag
 			<< " connect_seq " << reply.connect_seq

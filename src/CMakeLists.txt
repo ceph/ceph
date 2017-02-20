@@ -460,6 +460,7 @@ set(libcommon_files
   msg/msg_types.cc
   common/hobject.cc
   osd/OSDMap.cc
+  osd/OSDMapMapping.cc
   common/histogram.cc
   osd/osd_types.cc
   osd/OpRequest.cc
@@ -579,6 +580,7 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
 include(SIMDExt)
 if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
+  set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")
   list(APPEND ceph_common_deps common_crc_aarch64)
 endif(HAVE_ARMV8_CRC)
 

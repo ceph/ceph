@@ -52,7 +52,7 @@ class C_time_wakeup : public EventCallback {
 
  public:
   explicit C_time_wakeup(AsyncConnectionRef c): conn(c) {}
-  void do_request(int fd_or_id) {
+  void do_request(int fd_or_id) override {
     conn->wakeup_from(fd_or_id);
   }
 };
@@ -62,7 +62,7 @@ class C_handle_read : public EventCallback {
 
  public:
   explicit C_handle_read(AsyncConnectionRef c): conn(c) {}
-  void do_request(int fd_or_id) {
+  void do_request(int fd_or_id) override {
     conn->process();
   }
 };
@@ -72,7 +72,7 @@ class C_handle_write : public EventCallback {
 
  public:
   explicit C_handle_write(AsyncConnectionRef c): conn(c) {}
-  void do_request(int fd) {
+  void do_request(int fd) override {
     conn->handle_write();
   }
 };
@@ -81,7 +81,7 @@ class C_clean_handler : public EventCallback {
   AsyncConnectionRef conn;
  public:
   explicit C_clean_handler(AsyncConnectionRef c): conn(c) {}
-  void do_request(int id) {
+  void do_request(int id) override {
     conn->cleanup();
     delete this;
   }
@@ -92,7 +92,7 @@ class C_tick_wakeup : public EventCallback {
 
  public:
   explicit C_tick_wakeup(AsyncConnectionRef c): conn(c) {}
-  void do_request(int fd_or_id) {
+  void do_request(int fd_or_id) override {
     conn->tick(fd_or_id);
   }
 };
@@ -1074,7 +1074,6 @@ ssize_t AsyncConnection::_process_connection()
         }
 
         connect_reply = *((ceph_msg_connect_reply*)state_buffer);
-        connect_reply.features = connect_reply.features;
 
         ldout(async_msgr->cct, 20) << __func__ << " connect got reply tag " << (int)connect_reply.tag
                              << " connect_seq " << connect_reply.connect_seq << " global_seq "
@@ -1286,8 +1285,6 @@ ssize_t AsyncConnection::_process_connection()
         }
 
         connect_msg = *((ceph_msg_connect*)state_buffer);
-        // sanitize features
-        connect_msg.features = connect_msg.features;
         state = STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH;
         break;
       }

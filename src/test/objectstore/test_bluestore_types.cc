@@ -996,7 +996,7 @@ TEST(Blob, legacy_decode)
     BlueStore::Blob Bres, Bres2;
     Bres.shared_blob = new BlueStore::SharedBlob(&coll);
     Bres2.shared_blob = new BlueStore::SharedBlob(&coll);
-   
+
     uint64_t sbid, sbid2;
     Bres.decode(
       &coll,
@@ -1213,6 +1213,290 @@ TEST(ExtentMap, compress_extent_map)
   ASSERT_EQ(1, em.compress_extent_map(0, 1000));
   ASSERT_EQ(6u, em.extent_map.size());
 }
+
+TEST(GarbageCollector, BasicTest)
+{
+  BlueStore::LRUCache cache(g_ceph_context);
+  BlueStore store(g_ceph_context, "", 4096);
+  BlueStore::Collection coll(&store, &cache, coll_t());
+  BlueStore::Onode onode(&coll, ghobject_t(), "");
+  BlueStore::ExtentMap em(&onode);
+
+  BlueStore::extent_map_t old_extents;
+
+
+ /*
+  min_alloc_size = 4096
+  original disposition
+  extent1 <loffs = 100, boffs = 100, len  = 10>
+    -> blob1<compressed, len_on_disk=4096, logical_len=8192>
+  extent2 <loffs = 200, boffs = 200, len  = 10>
+    -> blob2<raw, len_on_disk=4096, llen=4096>
+  extent3 <loffs = 300, boffs = 300, len  = 10>
+    -> blob1<compressed, len_on_disk=4096, llen=8192>
+  extent4 <loffs = 4096, boffs = 0, len  = 10>
+    -> blob3<raw, len_on_disk=4096, llen=4096>
+  on write(300~100) resulted in
+  extent1 <loffs = 100, boffs = 100, len  = 10>
+    -> blob1<compressed, len_on_disk=4096, logical_len=8192>
+  extent2 <loffs = 200, boffs = 200, len  = 10>
+    -> blob2<raw, len_on_disk=4096, llen=4096>
+  extent3 <loffs = 300, boffs = 300, len  = 100>
+    -> blob4<raw, len_on_disk=4096, llen=4096>
+  extent4 <loffs = 4096, boffs = 0, len  = 10>
+    -> blob3<raw, len_on_disk=4096, llen=4096>
+  */  
+  {
+    BlueStore::GarbageCollector gc(g_ceph_context);
+    int64_t saving;
+    BlueStore::BlobRef b1(new BlueStore::Blob);
+    BlueStore::BlobRef b2(new BlueStore::Blob);
+    BlueStore::BlobRef b3(new BlueStore::Blob);
+    BlueStore::BlobRef b4(new BlueStore::Blob);
+    b1->shared_blob = new BlueStore::SharedBlob(&coll);
+    b2->shared_blob = new BlueStore::SharedBlob(&coll);
+    b3->shared_blob = new BlueStore::SharedBlob(&coll);
+    b4->shared_blob = new BlueStore::SharedBlob(&coll);
+    b1->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
+    b1->dirty_blob().compressed_length_orig = 0x2000;
+    b1->dirty_blob().compressed_length = 0x1000;
+    b1->dirty_blob().extents.emplace_back(0, 0x1000);
+    b2->dirty_blob().extents.emplace_back(1, 0x1000);
+    b3->dirty_blob().extents.emplace_back(2, 0x1000);
+    b4->dirty_blob().extents.emplace_back(3, 0x1000);
+    em.extent_map.insert(*new BlueStore::Extent(100, 100, 10, b1));
+    b1->get_ref(&coll, 100, 10);
+    em.extent_map.insert(*new BlueStore::Extent(200, 200, 10, b2));
+    b2->get_ref(&coll, 200, 10);
+    em.extent_map.insert(*new BlueStore::Extent(300, 300, 100, b4));
+    b4->get_ref(&coll, 300, 100);
+    em.extent_map.insert(*new BlueStore::Extent(4096, 0, 10, b3));
+    b3->get_ref(&coll, 0, 10);
+
+    old_extents.push_back(*new BlueStore::Extent(300, 300, 10, b1)); 
+    b1->get_ref(&coll, 300, 10);
+
+    saving = gc.estimate(300, 100, em, old_extents, 4096);
+    ASSERT_EQ(saving, 1);
+    auto& to_collect = gc.get_extents_to_collect();
+    ASSERT_EQ(to_collect.size(), 1u);
+    ASSERT_EQ(to_collect[0], AllocExtent(100,10) );
+
+    em.clear();
+    old_extents.clear();
+  }
+ /*
+  original disposition
+  min_alloc_size = 0x10000
+  extent1 <loffs = 0, boffs = 0, len  = 0x40000>
+    -> blob1<compressed, len_on_disk=0x20000, logical_len=0x40000>
+  Write 0x8000~37000 resulted in the following extent map prior to GC
+  for the last write_small(0x30000~0xf000):
+
+  extent1 <loffs = 0, boffs = 0, len  = 0x8000>
+    -> blob1<compressed, len_on_disk=0x20000, logical_len=0x40000>
+  extent2 <loffs = 0x8000, boffs = 0x8000, len  = 0x8000>
+    -> blob2<raw, len_on_disk=0x10000, llen=0x10000>
+  extent3 <loffs = 0x10000, boffs = 0, len  = 0x20000>
+    -> blob3<raw, len_on_disk=0x20000, llen=0x20000>
+  extent4 <loffs = 0x30000, boffs = 0, len  = 0xf000>
+    -> blob4<raw, len_on_disk=0x10000, llen=0x10000>
+  extent5 <loffs = 0x3f000, boffs = 0x3f000, len  = 0x1000>
+    -> blob1<compressed, len_on_disk=0x20000, llen=0x40000>
+  */  
+  {
+    BlueStore store(g_ceph_context, "", 0x10000);
+    BlueStore::Collection coll(&store, &cache, coll_t());
+    BlueStore::Onode onode(&coll, ghobject_t(), "");
+    BlueStore::ExtentMap em(&onode);
+
+    BlueStore::extent_map_t old_extents;
+    BlueStore::GarbageCollector gc(g_ceph_context);
+    int64_t saving;
+    BlueStore::BlobRef b1(new BlueStore::Blob);
+    BlueStore::BlobRef b2(new BlueStore::Blob);
+    BlueStore::BlobRef b3(new BlueStore::Blob);
+    BlueStore::BlobRef b4(new BlueStore::Blob);
+    b1->shared_blob = new BlueStore::SharedBlob(&coll);
+    b2->shared_blob = new BlueStore::SharedBlob(&coll);
+    b3->shared_blob = new BlueStore::SharedBlob(&coll);
+    b4->shared_blob = new BlueStore::SharedBlob(&coll);
+    b1->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
+    b1->dirty_blob().extents.emplace_back(0, 0x20000);
+    b1->dirty_blob().compressed_length = 0x20000;
+    b1->dirty_blob().compressed_length_orig = 0x40000;
+    b2->dirty_blob().extents.emplace_back(1, 0x10000);
+    b3->dirty_blob().extents.emplace_back(2, 0x20000);
+    b4->dirty_blob().extents.emplace_back(3, 0x10000);
+
+    em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x8000, b1));
+    b1->get_ref(&coll, 0, 0x8000);
+    em.extent_map.insert(
+      *new BlueStore::Extent(0x8000, 0x8000, 0x8000, b2)); // new extent
+    b2->get_ref(&coll, 0x8000, 0x8000);
+    em.extent_map.insert(
+      *new BlueStore::Extent(0x10000, 0, 0x20000, b3)); // new extent
+    b3->get_ref(&coll, 0, 0x20000);
+    em.extent_map.insert(
+      *new BlueStore::Extent(0x30000, 0, 0xf000, b4)); // new extent
+    b4->get_ref(&coll, 0, 0xf000);
+    em.extent_map.insert(*new BlueStore::Extent(0x3f000, 0x3f000, 0x1000, b1));
+    b1->get_ref(&coll, 0x3f000, 0x1000);
+
+    old_extents.push_back(*new BlueStore::Extent(0x8000, 0x8000, 0x8000, b1)); 
+    b1->get_ref(&coll, 0x8000, 0x8000);
+    old_extents.push_back(
+      *new BlueStore::Extent(0x10000, 0x10000, 0x20000, b1));
+    b1->get_ref(&coll, 0x10000, 0x20000);
+    old_extents.push_back(*new BlueStore::Extent(0x30000, 0x30000, 0xf000, b1)); 
+    b1->get_ref(&coll, 0x30000, 0xf000);
+
+    saving = gc.estimate(0x30000, 0xf000, em, old_extents, 0x10000);
+    ASSERT_EQ(saving, 2);
+    auto& to_collect = gc.get_extents_to_collect();
+    ASSERT_EQ(to_collect.size(), 2u);
+    ASSERT_TRUE(to_collect[0] == AllocExtent(0x0,0x8000) ||
+		  to_collect[1] == AllocExtent(0x0,0x8000));
+    ASSERT_TRUE(to_collect[0] == AllocExtent(0x3f000,0x1000) ||
+		  to_collect[1] == AllocExtent(0x3f000,0x1000));
+
+    em.clear();
+    old_extents.clear();
+  }
+ /*
+  original disposition
+  min_alloc_size = 0x1000
+  extent1 <loffs = 0, boffs = 0, len  = 0x4000>
+    -> blob1<compressed, len_on_disk=0x2000, logical_len=0x4000>
+  write 0x3000~4000 resulted in the following extent map
+  (future feature - suppose we can compress incoming write prior to
+  GC invocation)
+
+  extent1 <loffs = 0, boffs = 0, len  = 0x4000>
+    -> blob1<compressed, len_on_disk=0x2000, logical_len=0x4000>
+  extent2 <loffs = 0x3000, boffs = 0, len  = 0x4000>
+    -> blob2<compressed, len_on_disk=0x2000, llen=0x4000>
+  */  
+  {
+    BlueStore::GarbageCollector gc(g_ceph_context);
+    int64_t saving;
+    BlueStore::BlobRef b1(new BlueStore::Blob);
+    BlueStore::BlobRef b2(new BlueStore::Blob);
+    b1->shared_blob = new BlueStore::SharedBlob(&coll);
+    b2->shared_blob = new BlueStore::SharedBlob(&coll);
+    b1->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
+    b1->dirty_blob().extents.emplace_back(0, 0x2000);
+    b1->dirty_blob().compressed_length_orig = 0x4000;
+    b1->dirty_blob().compressed_length = 0x2000;
+    b2->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
+    b2->dirty_blob().extents.emplace_back(0, 0x2000);
+    b2->dirty_blob().compressed_length_orig = 0x4000;
+    b2->dirty_blob().compressed_length = 0x2000;
+
+    em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x3000, b1));
+    b1->get_ref(&coll, 0, 0x3000);
+    em.extent_map.insert(
+      *new BlueStore::Extent(0x3000, 0, 0x4000, b2)); // new extent
+    b2->get_ref(&coll, 0, 0x4000);
+
+    old_extents.push_back(*new BlueStore::Extent(0x3000, 0x3000, 0x1000, b1)); 
+    b1->get_ref(&coll, 0x3000, 0x1000);
+
+    saving = gc.estimate(0x3000, 0x4000, em, old_extents, 0x1000);
+    ASSERT_EQ(saving, 0);
+    auto& to_collect = gc.get_extents_to_collect();
+    ASSERT_EQ(to_collect.size(), 0u);
+    em.clear();
+    old_extents.clear();
+  }
+ /*
+  original disposition
+  min_alloc_size = 0x10000
+  extent0 <loffs = 0, boffs = 0, len  = 0x20000>
+    -> blob0<compressed, len_on_disk=0x10000, logical_len=0x20000>
+  extent1 <loffs = 0x20000, boffs = 0, len  = 0x20000>
+     -> blob1<compressed, len_on_disk=0x10000, logical_len=0x20000>
+  write 0x8000~37000 resulted in the following extent map prior
+  to GC for the last write_small(0x30000~0xf000)
+
+  extent0 <loffs = 0, boffs = 0, len  = 0x8000>
+    -> blob0<compressed, len_on_disk=0x10000, logical_len=0x20000>
+  extent2 <loffs = 0x8000, boffs = 0x8000, len  = 0x8000>
+    -> blob2<raw, len_on_disk=0x10000, llen=0x10000>
+  extent3 <loffs = 0x10000, boffs = 0, len  = 0x20000>
+    -> blob3<raw, len_on_disk=0x20000, llen=0x20000>
+  extent4 <loffs = 0x30000, boffs = 0, len  = 0xf000>
+    -> blob4<raw, len_on_disk=0x1000, llen=0x1000>
+  extent5 <loffs = 0x3f000, boffs = 0x1f000, len  = 0x1000>
+   -> blob1<compressed, len_on_disk=0x10000, llen=0x20000>
+  */  
+  {
+    BlueStore store(g_ceph_context, "", 0x10000);
+    BlueStore::Collection coll(&store, &cache, coll_t());
+    BlueStore::Onode onode(&coll, ghobject_t(), "");
+    BlueStore::ExtentMap em(&onode);
+
+    BlueStore::extent_map_t old_extents;
+    BlueStore::GarbageCollector gc(g_ceph_context);
+    int64_t saving;
+    BlueStore::BlobRef b0(new BlueStore::Blob);
+    BlueStore::BlobRef b1(new BlueStore::Blob);
+    BlueStore::BlobRef b2(new BlueStore::Blob);
+    BlueStore::BlobRef b3(new BlueStore::Blob);
+    BlueStore::BlobRef b4(new BlueStore::Blob);
+    b0->shared_blob = new BlueStore::SharedBlob(&coll);
+    b1->shared_blob = new BlueStore::SharedBlob(&coll);
+    b2->shared_blob = new BlueStore::SharedBlob(&coll);
+    b3->shared_blob = new BlueStore::SharedBlob(&coll);
+    b4->shared_blob = new BlueStore::SharedBlob(&coll);
+    b0->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
+    b0->dirty_blob().extents.emplace_back(0, 0x10000);
+    b0->dirty_blob().compressed_length_orig = 0x20000;
+    b0->dirty_blob().compressed_length = 0x10000;
+    b1->dirty_blob().set_flag(bluestore_blob_t::FLAG_COMPRESSED);
+    b1->dirty_blob().extents.emplace_back(0, 0x10000);
+    b1->dirty_blob().compressed_length_orig = 0x20000;
+    b1->dirty_blob().compressed_length = 0x10000;
+    b2->dirty_blob().extents.emplace_back(1, 0x10000);
+    b3->dirty_blob().extents.emplace_back(2, 0x20000);
+    b4->dirty_blob().extents.emplace_back(3, 0x1000);
+
+    em.extent_map.insert(*new BlueStore::Extent(0, 0, 0x8000, b0));
+    b0->get_ref(&coll, 0, 0x8000);
+    em.extent_map.insert(
+      *new BlueStore::Extent(0x8000, 0x8000, 0x8000, b2)); // new extent
+    b2->get_ref(&coll, 0x8000, 0x8000);
+    em.extent_map.insert(
+      *new BlueStore::Extent(0x10000, 0, 0x20000, b3)); // new extent
+    b3->get_ref(&coll, 0, 0x20000);
+    em.extent_map.insert(
+      *new BlueStore::Extent(0x30000, 0, 0xf000, b4)); // new extent
+    b4->get_ref(&coll, 0, 0xf000);
+    em.extent_map.insert(*new BlueStore::Extent(0x3f000, 0x1f000, 0x1000, b1));
+    b1->get_ref(&coll, 0x1f000, 0x1000);
+
+    old_extents.push_back(*new BlueStore::Extent(0x8000, 0x8000, 0x8000, b0)); 
+    b0->get_ref(&coll, 0x8000, 0x8000);
+    old_extents.push_back(
+      *new BlueStore::Extent(0x10000, 0x10000, 0x10000, b0)); 
+    b0->get_ref(&coll, 0x10000, 0x10000);
+    old_extents.push_back(
+      *new BlueStore::Extent(0x20000, 0x00000, 0x1f000, b1)); 
+    b1->get_ref(&coll, 0x0, 0x1f000);
+
+    saving = gc.estimate(0x30000, 0xf000, em, old_extents, 0x10000);
+    ASSERT_EQ(saving, 2);
+    auto& to_collect = gc.get_extents_to_collect();
+    ASSERT_EQ(to_collect.size(), 2u);
+    ASSERT_TRUE(to_collect[0] == AllocExtent(0x0,0x8000) ||
+		  to_collect[1] == AllocExtent(0x0,0x8000));
+    ASSERT_TRUE(to_collect[0] == AllocExtent(0x3f000,0x1000) ||
+		  to_collect[1] == AllocExtent(0x3f000,0x1000));
+
+    em.clear();
+    old_extents.clear();
+  }
+ }
 
 int main(int argc, char **argv) {
   vector<const char*> args;

@@ -130,7 +130,7 @@ SUBSYS(rbd_replay, 0, 5)
 SUBSYS(journaler, 0, 5)
 SUBSYS(objectcacher, 0, 5)
 SUBSYS(client, 0, 5)
-SUBSYS(osd, 0, 5)
+SUBSYS(osd, 1, 5)
 SUBSYS(optracker, 0, 5)
 SUBSYS(objclass, 0, 5)
 SUBSYS(filestore, 1, 3)
@@ -260,6 +260,8 @@ OPTION(mon_compact_on_bootstrap, OPT_BOOL, false)  // trigger leveldb compaction
 OPTION(mon_compact_on_trim, OPT_BOOL, true)       // compact (a prefix) when we trim old states
 OPTION(mon_osd_cache_size, OPT_INT, 10)  // the size of osdmaps cache, not to rely on underlying store's cache
 
+OPTION(mon_cpu_threads, OPT_INT, 4)
+OPTION(mon_osd_mapping_pgs_per_chunk, OPT_INT, 4096)
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_session_timeout, OPT_INT, 300)    // must send keepalive or subscribe
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 24*3600)  // for legacy clients only
@@ -282,6 +284,7 @@ OPTION(mon_osd_allow_primary_temp, OPT_BOOL, false)  // allow primary_temp to be
 OPTION(mon_osd_allow_primary_affinity, OPT_BOOL, false)  // allow primary_affinity to be set in the osdmap
 OPTION(mon_osd_prime_pg_temp, OPT_BOOL, true)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT, .5)  // max time to spend priming
+OPTION(mon_osd_prime_pg_temp_max_estimate, OPT_FLOAT, .25) // max estimate of pg total before we do all pgs in parallel
 OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL, false) // whether turn on fast read on the pool or not
 OPTION(mon_stat_smooth_intervals, OPT_INT, 6)  // smooth stats over last N PGMap maps
 OPTION(mon_election_timeout, OPT_FLOAT, 5)  // on election proposer, max waiting time for all ACKs
@@ -843,12 +846,13 @@ OPTION(osd_command_max_records, OPT_INT, 256)
 OPTION(osd_max_pg_blocked_by, OPT_U32, 16)    // max peer osds to report that are blocking our progress
 OPTION(osd_op_log_threshold, OPT_INT, 5) // how many op log messages to show in one go
 OPTION(osd_verify_sparse_read_holes, OPT_BOOL, false)  // read fiemap-reported holes and verify they are zeros
-OPTION(osd_peering_aggressive_backoff, OPT_BOOL, false)  // issue aggressive client backoff during peering
-OPTION(osd_recovery_aggressive_backoff, OPT_BOOL, false) // issue aggressive client backoff during per-object recovery
+OPTION(osd_backoff_on_unfound, OPT_BOOL, true)   // object unfound
+OPTION(osd_backoff_on_degraded, OPT_BOOL, false) // [mainly for debug?] object unreadable/writeable
+OPTION(osd_backoff_on_down, OPT_BOOL, true)      // pg in down/incomplete state
+OPTION(osd_backoff_on_peering, OPT_BOOL, false)  // [debug] pg peering
 OPTION(osd_debug_crash_on_ignored_backoff, OPT_BOOL, false) // crash osd if client ignores a backoff; useful for debugging
 OPTION(osd_debug_drop_ping_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_drop_ping_duration, OPT_INT, 0)
-OPTION(osd_debug_drop_op_probability, OPT_DOUBLE, 0)   // probability of stalling/dropping a client op
 OPTION(osd_debug_op_order, OPT_BOOL, false)
 OPTION(osd_debug_verify_missing_on_start, OPT_BOOL, false)
 OPTION(osd_debug_scrub_chance_rewrite_digest, OPT_U64, 0)
@@ -1043,6 +1047,19 @@ OPTION(bluestore_compression_mode, OPT_STR, "none")  // force|aggressive|passive
 OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
 OPTION(bluestore_compression_min_blob_size, OPT_U32, 128*1024)
 OPTION(bluestore_compression_max_blob_size, OPT_U32, 512*1024)
+/*
+ * Specifies minimum expected amount of saved allocation units
+ * per single blob to enable compressed blobs garbage collection
+ * 
+ */
+OPTION(bluestore_gc_enable_blob_threshold, OPT_INT, 0)  
+/*
+ * Specifies minimum expected amount of saved allocation units
+ * per all blobsb to enable compressed blobs garbage collection
+ * 
+ */
+OPTION(bluestore_gc_enable_total_threshold, OPT_INT, 0)  
+
 OPTION(bluestore_max_blob_size, OPT_U32, 512*1024)
 /*
  * Require the net gain of compression at least to be at this ratio,
@@ -1472,6 +1489,7 @@ OPTION(rgw_admin_entry, OPT_STR, "admin")  // entry point for which a url is con
 OPTION(rgw_enforce_swift_acls, OPT_BOOL, true)
 OPTION(rgw_swift_token_expiration, OPT_INT, 24 * 3600) // time in seconds for swift token expiration
 OPTION(rgw_print_continue, OPT_BOOL, true)  // enable if 100-Continue works
+OPTION(rgw_print_prohibited_content_length, OPT_BOOL, false) // violate RFC 7230 and send Content-Length in 204 and 304
 OPTION(rgw_remote_addr_param, OPT_STR, "REMOTE_ADDR")  // e.g. X-Forwarded-For, if you have a reverse proxy
 OPTION(rgw_op_thread_timeout, OPT_INT, 10*60)
 OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)

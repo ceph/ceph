@@ -77,7 +77,6 @@ using namespace std;
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGTrim.h"
-#include "messages/MOSDPGMissing.h"
 #include "messages/MOSDScrub.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGScan.h"
@@ -500,9 +499,6 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_REMOVE_SNAPS:
     m = new MRemoveSnaps;
-    break;
-  case MSG_OSD_PG_MISSING:
-    m = new MOSDPGMissing;
     break;
   case MSG_OSD_REP_SCRUB:
     m = new MOSDRepScrub;

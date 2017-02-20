@@ -234,7 +234,7 @@ struct OnRecoveryReadComplete :
   set<int> want;
   OnRecoveryReadComplete(ECBackend *pg, const hobject_t &hoid)
     : pg(pg), hoid(hoid) {}
-  void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) {
+  void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) override {
     ECBackend::read_result_t &res = in.second;
     if (!(res.r == 0 && res.errors.empty())) {
         pg->_failed_push(hoid, in);
@@ -450,7 +450,7 @@ struct SendPushReplies : public Context {
     map<int, MOSDPGPushReply*> &in) : l(l), epoch(epoch) {
     replies.swap(in);
   }
-  void finish(int) {
+  void finish(int) override {
     for (map<int, MOSDPGPushReply*>::iterator i = replies.begin();
 	 i != replies.end();
 	 ++i) {
@@ -798,7 +798,7 @@ struct SubWriteCommitted : public Context {
     eversion_t last_complete)
     : pg(pg), msg(msg), tid(tid),
       version(version), last_complete(last_complete) {}
-  void finish(int) {
+  void finish(int) override {
     if (msg)
       msg->mark_event("sub_op_committed");
     pg->sub_write_committed(tid, version, last_complete);
@@ -841,7 +841,7 @@ struct SubWriteApplied : public Context {
     ceph_tid_t tid,
     eversion_t version)
     : pg(pg), msg(msg), tid(tid), version(version) {}
-  void finish(int) {
+  void finish(int) override {
     if (msg)
       msg->mark_event("sub_op_applied");
     pg->sub_write_applied(tid, version);
@@ -1226,7 +1226,7 @@ struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
   ECBackend *ec;
   ceph_tid_t tid;
   FinishReadOp(ECBackend *ec, ceph_tid_t tid) : ec(ec), tid(tid) {}
-  void finish(ThreadPool::TPHandle &handle) {
+  void finish(ThreadPool::TPHandle &handle) override {
     auto ropiter = ec->tid_to_read_map.find(tid);
     assert(ropiter != ec->tid_to_read_map.end());
     int priority = ropiter->second.priority;
@@ -2136,7 +2136,7 @@ struct CallClientContexts :
     ECBackend::ClientAsyncReadStatus *status,
     const list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read)
     : hoid(hoid), ec(ec), status(status), to_read(to_read) {}
-  void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) {
+  void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) override {
     ECBackend::read_result_t &res = in.second;
     extent_map result;
     if (res.r != 0)

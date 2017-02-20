@@ -625,17 +625,19 @@ MonConnection& MonClient::_add_conn(unsigned rank)
 
 void MonClient::_add_conns()
 {
-  unsigned n = cct->_conf->mon_client_hunt_parallel;
-  if (n == 0 || n > monmap.size()) {
-    n = monmap.size();
-  }
-  vector<unsigned> ranks(n);
-  for (unsigned i = 0; i < n; i++) {
+  const unsigned num_mons = monmap.size();
+  vector<unsigned> ranks(num_mons);
+  for (unsigned i = 0; i < num_mons; i++) {
     ranks[i] = i;
   }
   std::random_device rd;
   std::mt19937 rng(rd());
   std::shuffle(ranks.begin(), ranks.end(), rng);
+
+  unsigned n = cct->_conf->mon_client_hunt_parallel;
+  if (n == 0 || n > monmap.size()) {
+     n = num_mons;
+  }
   for (unsigned i = 0; i < n; i++) {
     _add_conn(ranks[i]);
   }
@@ -758,7 +760,7 @@ void MonClient::schedule_tick()
   struct C_Tick : public Context {
     MonClient *monc;
     explicit C_Tick(MonClient *m) : monc(m) {}
-    void finish(int r) {
+    void finish(int r) override {
       monc->tick();
     }
   };
@@ -1041,7 +1043,7 @@ int MonClient::start_mon_command(const vector<string>& cmd,
       MonClient *monc;
       public:
       C_CancelMonCommand(uint64_t tid, MonClient *monc) : tid(tid), monc(monc) {}
-      void finish(int r) {
+      void finish(int r) override {
 	monc->_cancel_mon_command(tid, -ETIMEDOUT);
       }
     };
