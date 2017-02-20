@@ -1,8 +1,8 @@
 meta:
 - desc: |
-   randomized correctness test for rados operations on a replicated pool, 
+   randomized correctness test for rados operations on a replicated pool,
    using only reads, writes, and deletes
-tasks:
+stress-tasks:
 - full_sequential:
   - rados:
       clients: [client.0]

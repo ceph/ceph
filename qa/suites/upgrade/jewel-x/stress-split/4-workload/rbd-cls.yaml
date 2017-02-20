@@ -1,9 +1,9 @@
 meta:
 - desc: |
    run basic cls tests for rbd
-tasks:
+stress-tasks:
 - workunit:
-    branch: jewel
+    branch: kraken
     clients:
       client.0:
         - cls/test_cls_rbd.sh
