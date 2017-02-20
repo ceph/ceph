@@ -8456,7 +8456,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 
 void OSD::handle_pg_remove(OpRequestRef op)
 {
-  MOSDPGRemove *m = (MOSDPGRemove *)op->get_req();
+  const MOSDPGRemove *m = static_cast<const MOSDPGRemove *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_REMOVE);
   assert(osd_lock.is_locked());
 
@@ -8471,7 +8471,7 @@ void OSD::handle_pg_remove(OpRequestRef op)
 
   op->mark_started();
 
-  for (vector<spg_t>::iterator it = m->pg_list.begin();
+  for (auto it = m->pg_list.begin();
        it != m->pg_list.end();
        ++it) {
     spg_t pgid = *it;
