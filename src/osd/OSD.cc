@@ -7632,7 +7632,7 @@ bool OSD::require_mon_peer(const Message *m)
   return true;
 }
 
-bool OSD::require_osd_peer(Message *m)
+bool OSD::require_osd_peer(const Message *m)
 {
   if (!m->get_connection()->peer_is_osd()) {
     dout(0) << "require_osd_peer received from non-osd "
@@ -7643,7 +7643,7 @@ bool OSD::require_osd_peer(Message *m)
   return true;
 }
 
-bool OSD::require_self_aliveness(Message *m, epoch_t epoch)
+bool OSD::require_self_aliveness(const Message *m, epoch_t epoch)
 {
   epoch_t up_epoch = service.get_up_epoch();
   if (epoch < up_epoch) {
@@ -7659,7 +7659,7 @@ bool OSD::require_self_aliveness(Message *m, epoch_t epoch)
   return true;
 }
 
-bool OSD::require_same_peer_instance(Message *m, OSDMapRef& map,
+bool OSD::require_same_peer_instance(const Message *m, OSDMapRef& map,
 				     bool is_fast_dispatch)
 {
   int from = m->get_source().num();
@@ -8932,7 +8932,7 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
   }
 }
 
-bool OSD::op_is_discardable(MOSDOp *op)
+bool OSD::op_is_discardable(const MOSDOp *op)
 {
   // drop client request if they are not connected and can't get the
   // reply anyway.
