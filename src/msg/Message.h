@@ -376,6 +376,7 @@ public:
       byte_throttler->take(data.length());
   }
 
+  const bufferlist& get_data() const { return data; }
   bufferlist& get_data() { return data; }
   void claim_data(bufferlist& bl,
 		  unsigned int flags = buffer::list::CLAIM_DEFAULT) {
