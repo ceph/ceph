@@ -1847,7 +1847,7 @@ public:
   }
 
 private:
-  void _check_op_pool_dne(Op *op, unique_lock& sl);
+  void _check_op_pool_dne(Op *op, unique_lock *sl);
   void _send_op_map_check(Op *op);
   void _op_cancel_map_check(Op *op);
   void _check_linger_pool_dne(LingerOp *op, bool *need_unregister);
