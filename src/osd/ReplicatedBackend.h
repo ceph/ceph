@@ -238,7 +238,7 @@ private:
   void do_pull(OpRequestRef op);
   void do_push_reply(OpRequestRef op);
 
-  bool handle_push_reply(pg_shard_t peer, PushReplyOp &op, PushOp *reply);
+  bool handle_push_reply(pg_shard_t peer, const PushReplyOp &op, PushOp *reply);
   void handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply);
 
   struct pull_complete_info {
@@ -247,10 +247,10 @@ private:
     object_stat_sum_t stat;
   };
   bool handle_pull_response(
-    pg_shard_t from, PushOp &op, PullOp *response,
+    pg_shard_t from, const PushOp &op, PullOp *response,
     list<pull_complete_info> *to_continue,
     ObjectStore::Transaction *t);
-  void handle_push(pg_shard_t from, PushOp &op, PushReplyOp *response,
+  void handle_push(pg_shard_t from, const PushOp &op, PushReplyOp *response,
 		   ObjectStore::Transaction *t);
 
   static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
@@ -277,17 +277,17 @@ private:
 		    PushOp *out_op,
 		    object_stat_sum_t *stat = 0,
                     bool cache_dont_need = true);
-  void submit_push_data(ObjectRecoveryInfo &recovery_info,
+  void submit_push_data(const ObjectRecoveryInfo &recovery_info,
 			bool first,
 			bool complete,
 			bool cache_dont_need,
 			const interval_set<uint64_t> &intervals_included,
 			bufferlist data_included,
 			bufferlist omap_header,
-			map<string, bufferlist> &attrs,
-			map<string, bufferlist> &omap_entries,
+			const map<string, bufferlist> &attrs,
+			const map<string, bufferlist> &omap_entries,
 			ObjectStore::Transaction *t);
-  void submit_push_complete(ObjectRecoveryInfo &recovery_info,
+  void submit_push_complete(const ObjectRecoveryInfo &recovery_info,
 			    ObjectStore::Transaction *t);
 
   void calc_clone_subsets(
