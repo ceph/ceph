@@ -4900,6 +4900,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	diri = new CInode(this, false);
 	diri->inode.ino = p->first.ino;
 	diri->inode.mode = S_IFDIR;
+	diri->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
 	add_inode(diri);
 	if (MDS_INO_MDSDIR(from) == p->first.ino) {
 	  diri->inode_auth = mds_authority_t(from, CDIR_AUTH_UNKNOWN);
@@ -4971,6 +4972,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 	    in = new CInode(this, false, q->second.first, q->first.snapid);
 	    in->inode.ino = q->second.ino;
 	    in->inode.mode = S_IFDIR;
+	    in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
 	    add_inode(in);
 	    dout(10) << " add inode " << *in << dendl;
 	  } else if (in->get_parent_dn()) {
