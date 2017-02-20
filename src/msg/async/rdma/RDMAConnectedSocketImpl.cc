@@ -528,7 +528,7 @@ void RDMAConnectedSocketImpl::fin() {
 }
 
 void RDMAConnectedSocketImpl::cleanup() {
-  if (con_handler) {
+  if (con_handler && tcp_fd >= 0) {
     (static_cast<C_handle_connection*>(con_handler))->close();
     worker->center.submit_to(worker->center.get_id(), [this]() {
       worker->center.delete_file_event(tcp_fd, EVENT_READABLE);
