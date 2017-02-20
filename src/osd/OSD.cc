@@ -4876,11 +4876,12 @@ void OSD::RemoveWQ::_process(
 
 void OSD::ms_handle_connect(Connection *con)
 {
+  dout(10) << __func__ << " con " << con << dendl;
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     Mutex::Locker l(osd_lock);
     if (is_stopping())
       return;
-    dout(10) << "ms_handle_connect on mon" << dendl;
+    dout(10) << __func__ << " on mon" << dendl;
 
     if (is_preboot()) {
       start_boot();
