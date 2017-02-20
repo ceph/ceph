@@ -104,7 +104,7 @@ private:
     }
 
   protected:
-    virtual void post_acquire_lock_handler(int r, Context *on_finish) {
+    void post_acquire_lock_handler(int r, Context *on_finish) {
       if (r == 0) {
         // lock is owned at this point
         Mutex::Locker locker(Parent::m_lock);
@@ -112,12 +112,12 @@ private:
       }
       watcher->handle_post_acquire_leader_lock(r, on_finish);
     }
-    virtual void pre_release_lock_handler(bool shutting_down,
-                                          Context *on_finish) {
+    void pre_release_lock_handler(bool shutting_down,
+                                  Context *on_finish) {
       watcher->handle_pre_release_leader_lock(on_finish);
     }
-    virtual void post_release_lock_handler(bool shutting_down, int r,
-                                           Context *on_finish) {
+    void post_release_lock_handler(bool shutting_down, int r,
+                                   Context *on_finish) {
       watcher->handle_post_release_leader_lock(r, on_finish);
     }
   private:
@@ -146,7 +146,7 @@ private:
       : leader_watcher(leader_watcher) {
     }
 
-    virtual void finish(int r) {
+    void finish(int r) override {
       leader_watcher->handle_get_locker(r, locker);
     }
   };
@@ -220,7 +220,7 @@ private:
   void handle_post_release_leader_lock(int r, Context *on_finish);
 
   void handle_notify(uint64_t notify_id, uint64_t handle,
-                     uint64_t notifier_id, bufferlist &bl);
+                     uint64_t notifier_id, bufferlist &bl) override;
 
   void handle_heartbeat(Context *on_ack);
   void handle_lock_acquired(Context *on_ack);

@@ -26,8 +26,8 @@ public:
   static void SetUpTestCase();
   static void TearDownTestCase();
 
-  virtual void SetUp();
-  virtual void TearDown();
+  void SetUp() override;
+  void TearDown() override;
 
   librados::IoCtx m_local_io_ctx;
   librados::IoCtx m_remote_io_ctx;

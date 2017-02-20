@@ -212,8 +212,8 @@ public:
   C_AioRequest(AioCompletion *completion) : m_completion(completion) {
     m_completion->add_request();
   }
-  virtual ~C_AioRequest() {}
-  virtual void finish(int r) {
+  ~C_AioRequest() override {}
+  void finish(int r) override {
     m_completion->complete_request(r);
   }
 protected:

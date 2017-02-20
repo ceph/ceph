@@ -61,7 +61,7 @@ namespace librbd {
     NoOpProgressContext()
     {
     }
-    int update_progress(uint64_t offset, uint64_t src_size)
+    int update_progress(uint64_t offset, uint64_t src_size) override
     {
       return 0;
     }

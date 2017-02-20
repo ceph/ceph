@@ -75,10 +75,10 @@ public:
                    const std::string &remote_mirror_uuid, Journaler *journaler,
                    MirrorPeerClientMeta *client_meta, Context *on_finish,
                    bool *do_resync, ProgressContext *progress_ctx = nullptr);
-  ~BootstrapRequest();
+  ~BootstrapRequest() override;
 
-  void send();
-  void cancel();
+  void send() override;
+  void cancel() override;
 
 private:
   /**

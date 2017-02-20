@@ -244,15 +244,15 @@ private:
       : img_replayer(img_replayer) {
     }
 
-    virtual void handle_close() {
+    void handle_close() override {
       img_replayer->on_stop_journal_replay();
     }
 
-    virtual void handle_promoted() {
+    void handle_promoted() override {
       img_replayer->on_stop_journal_replay(0, "force promoted");
     }
 
-    virtual void handle_resync() {
+    void handle_resync() override {
       img_replayer->resync_image();
     }
   };
@@ -263,8 +263,8 @@ private:
       replayer(replayer) {
     }
 
-    virtual void update_progress(const std::string &description,
-				 bool flush = true);
+    void update_progress(const std::string &description,
+				 bool flush = true) override;
   private:
     ImageReplayer<ImageCtxT> *replayer;
   };
@@ -334,7 +334,7 @@ private:
 
     RemoteJournalerListener(ImageReplayer *replayer) : replayer(replayer) { }
 
-    void handle_update(::journal::JournalMetadata *);
+    void handle_update(::journal::JournalMetadata *) override;
   } m_remote_listener;
 
   struct C_ReplayCommitted : public Context {
@@ -345,7 +345,7 @@ private:
                       ReplayEntry &&replay_entry)
       : replayer(replayer), replay_entry(std::move(replay_entry)) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       replayer->handle_process_entry_safe(replay_entry, r);
     }
   };

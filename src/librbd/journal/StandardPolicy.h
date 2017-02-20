@@ -18,13 +18,13 @@ public:
   StandardPolicy(ImageCtxT *image_ctx) : m_image_ctx(image_ctx) {
   }
 
-  virtual bool append_disabled() const {
+  bool append_disabled() const override {
     return false;
   }
-  virtual bool journal_disabled() const {
+  bool journal_disabled() const override {
     return false;
   }
-  virtual void allocate_tag_on_lock(Context *on_finish);
+  void allocate_tag_on_lock(Context *on_finish) override;
 
 private:
   ImageCtxT *m_image_ctx;

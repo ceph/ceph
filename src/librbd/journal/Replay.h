@@ -68,7 +68,7 @@ private:
     C_OpOnComplete(Replay *replay, uint64_t op_tid)
       : replay(replay), op_tid(op_tid) {
     }
-    virtual void finish(int r) override {
+    void finish(int r) override {
       replay->handle_op_complete(op_tid, r);
     }
   };
@@ -80,7 +80,7 @@ private:
     C_AioModifyComplete(Replay *replay, Context *on_ready, Context *on_safe)
       : replay(replay), on_ready(on_ready), on_safe(on_safe) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       replay->handle_aio_modify_complete(on_ready, on_safe, r);
     }
   };
@@ -94,7 +94,7 @@ private:
       : replay(replay), on_flush_safe(on_flush_safe),
         on_safe_ctxs(on_safe_ctxs) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       replay->handle_aio_flush_complete(on_flush_safe, on_safe_ctxs, r);
     }
   };

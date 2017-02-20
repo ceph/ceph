@@ -50,8 +50,8 @@ public:
                       librbd::journal::MirrorPeerClientMeta *client_meta,
                       ContextWQ *work_queue, Context *on_finish);
 
-  void send();
-  void cancel();
+  void send() override;
+  void cancel() override;
 
 private:
   /**

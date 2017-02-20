@@ -221,7 +221,7 @@ private:
       : journal(_journal), tid(_tid) {
     }
 
-    virtual void finish(int r) {
+    void finish(int r) override {
       journal->handle_io_event_safe(r, tid);
     }
   };
@@ -239,7 +239,7 @@ private:
         op_finish_future(op_finish_future), on_safe(on_safe) {
     }
 
-    virtual void finish(int r) {
+    void finish(int r) override {
       journal->handle_op_event_safe(r, tid, op_start_future, op_finish_future,
                                     on_safe);
     }
@@ -252,7 +252,7 @@ private:
     C_ReplayProcessSafe(Journal *journal, ReplayEntry &&replay_entry) :
       journal(journal), replay_entry(std::move(replay_entry)) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       journal->handle_replay_process_safe(replay_entry, r);
     }
   };
@@ -262,17 +262,17 @@ private:
     ReplayHandler(Journal *_journal) : journal(_journal) {
     }
 
-    virtual void get() {
+    void get() override {
       // TODO
     }
-    virtual void put() {
+    void put() override {
       // TODO
     }
 
-    virtual void handle_entries_available() {
+    void handle_entries_available() override {
       journal->handle_replay_ready();
     }
-    virtual void handle_complete(int r) {
+    void handle_complete(int r) override {
       journal->handle_replay_complete(r);
     }
   };
@@ -315,7 +315,7 @@ private:
 
     MetadataListener(Journal<ImageCtxT> *journal) : journal(journal) { }
 
-    void handle_update(::journal::JournalMetadata *) {
+    void handle_update(::journal::JournalMetadata *) override {
       FunctionContext *ctx = new FunctionContext([this](int r) {
         journal->handle_metadata_updated();
       });

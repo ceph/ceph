@@ -34,10 +34,10 @@ public:
   {
   }
 
-  virtual void send();
+  void send() override;
 
 protected:
-  virtual bool should_complete(int r);
+  bool should_complete(int r) override;
 
 private:
   enum State {

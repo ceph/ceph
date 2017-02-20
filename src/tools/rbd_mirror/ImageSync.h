@@ -51,10 +51,10 @@ public:
             Journaler *journaler, MirrorPeerClientMeta *client_meta,
             ContextWQ *work_queue, Context *on_finish,
             ProgressContext *progress_ctx = nullptr);
-  ~ImageSync();
+  ~ImageSync() override;
 
-  void send();
-  void cancel();
+  void send() override;
+  void cancel() override;
 
 private:
   /**

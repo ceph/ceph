@@ -199,7 +199,7 @@ private:
     C_ShutDownRelease(ManagedLock *lock)
       : lock(lock) {
     }
-    virtual void finish(int r) override {
+    void finish(int r) override {
       lock->send_shutdown_release();
     }
   };
