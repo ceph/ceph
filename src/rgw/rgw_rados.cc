@@ -6460,7 +6460,7 @@ int RGWRados::aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
 int RGWRados::aio_wait(void *handle)
 {
   AioCompletion *c = (AioCompletion *)handle;
-  c->wait_for_complete();
+  c->wait_for_safe();
   int ret = c->get_return_value();
   c->release();
   return ret;
@@ -6469,7 +6469,7 @@ int RGWRados::aio_wait(void *handle)
 bool RGWRados::aio_completed(void *handle)
 {
   AioCompletion *c = (AioCompletion *)handle;
-  return c->is_complete();
+  return c->is_safe();
 }
 
 class RGWRadosPutObj : public RGWGetDataCB
@@ -8284,7 +8284,7 @@ int RGWRados::Object::Stat::wait()
     return state.ret;
   }
 
-  state.completion->wait_for_complete();
+  state.completion->wait_for_safe();
   state.ret = state.completion->get_return_value();
   state.completion->release();
 
@@ -9224,7 +9224,7 @@ struct get_obj_data : public RefCountedObject {
     librados::AioCompletion *c = iter->second;
     lock.Unlock();
 
-    c->wait_for_complete_and_cb();
+    c->wait_for_safe_and_cb();
     int r = c->get_return_value();
 
     lock.Lock();
@@ -9260,7 +9260,7 @@ struct get_obj_data : public RefCountedObject {
 
     struct get_obj_aio_data *paio_data =  &aio_data.back(); /* last element */
 
-    librados::AioCompletion *c = librados::Rados::aio_create_completion((void *)paio_data, _get_obj_aio_completion_cb, NULL);
+    librados::AioCompletion *c = librados::Rados::aio_create_completion((void *)paio_data, NULL, _get_obj_aio_completion_cb);
     completion_map[ofs] = c;
 
     *pc = c;
@@ -9322,7 +9322,7 @@ struct get_obj_data : public RefCountedObject {
 
     for (; aiter != completion_map.end(); ++aiter) {
       completion = aiter->second;
-      if (!completion->is_complete()) {
+      if (!completion->is_safe()) {
         /* reached a request that is not yet complete, stop */
         break;
       }

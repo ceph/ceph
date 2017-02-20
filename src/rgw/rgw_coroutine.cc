@@ -360,8 +360,6 @@ bool RGWCoroutinesStack::collect(int *ret, RGWCoroutinesStack *skip_stack) /* re
   return collect(NULL, ret, skip_stack);
 }
 
-static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg);
-
 static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
 {
   ((RGWAioCompletionNotifier *)arg)->cb();
@@ -369,7 +367,8 @@ static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
 
 RGWAioCompletionNotifier::RGWAioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data) : completion_mgr(_mgr),
                                                                          user_data(_user_data), lock("RGWAioCompletionNotifier"), registered(true) {
-  c = librados::Rados::aio_create_completion((void *)this, _aio_completion_notifier_cb, NULL);
+  c = librados::Rados::aio_create_completion((void *)this, NULL,
+					     _aio_completion_notifier_cb);
 }
 
 RGWAioCompletionNotifier *RGWCoroutinesStack::create_completion_notifier()
