@@ -402,6 +402,9 @@ struct pg_t {
   bool contains(int bits, const ghobject_t& oid) {
     return oid.match(bits, ps());
   }
+  bool contains(int bits, const hobject_t& oid) {
+    return oid.match(bits, ps());
+  }
 
   hobject_t get_hobj_start() const;
   hobject_t get_hobj_end(unsigned pg_num) const;

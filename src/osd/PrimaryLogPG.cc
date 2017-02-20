@@ -1713,6 +1713,17 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   hobject_t head = m->get_hobj();
   head.snap = CEPH_NOSNAP;
 
+  if (!info.pgid.pgid.contains(
+	info.pgid.pgid.get_split_bits(pool.info.get_pg_num()), head)) {
+    derr << __func__ << " " << info.pgid.pgid << " does not contain "
+	 << head << " pg_num " << pool.info.get_pg_num() << " hash "
+	 << std::hex << head.get_hash() << std::dec << dendl;
+    osd->clog->warn() << info.pgid.pgid << " does not contain " << head
+		      << " op " << *m << "\n";
+    assert(!cct->_conf->osd_debug_misdirected_ops);
+    return;
+  }
+
   bool can_backoff =
     m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF);
   SessionRef session;
