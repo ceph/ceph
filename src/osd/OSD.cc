@@ -8349,7 +8349,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 {
   assert(osd_lock.is_locked());
 
-  MOSDPGQuery *m = (MOSDPGQuery*)op->get_req();
+  const MOSDPGQuery *m = static_cast<const MOSDPGQuery*>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_QUERY);
 
   if (!require_osd_peer(op->get_req()))
@@ -8365,7 +8365,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 
   map< int, vector<pair<pg_notify_t, pg_interval_map_t> > > notify_list;
 
-  for (map<spg_t,pg_query_t>::iterator it = m->pg_list.begin();
+  for (auto it = m->pg_list.begin();
        it != m->pg_list.end();
        ++it) {
     spg_t pgid = it->first;
