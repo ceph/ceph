@@ -47,6 +47,7 @@ public:
   AES_256_CTR(CephContext* cct): cct(cct) {
   }
   ~AES_256_CTR() {
+    memset(key, 0, AES_256_KEYSIZE);
   }
   bool set_key(const uint8_t* _key, size_t key_size) {
     if (key_size != AES_256_KEYSIZE) {
@@ -253,6 +254,7 @@ public:
   AES_256_CBC(CephContext* cct): cct(cct) {
   }
   ~AES_256_CBC() {
+    memset(key, 0, AES_256_KEYSIZE);
   }
   bool set_key(const uint8_t* _key, size_t key_size) {
     if (key_size != AES_256_KEYSIZE) {
@@ -927,7 +929,8 @@ int request_key_from_barbican(CephContext *cct,
   if (secret_req.get_http_status() >=200 &&
       secret_req.get_http_status() < 300 &&
       secret_bl.length() == AES_256_KEYSIZE) {
-    actual_key = secret_bl.to_str();
+    actual_key.assign(secret_bl.c_str(), secret_bl.length());
+    memset(secret_bl.c_str(), 0, secret_bl.length());
     } else {
       res = -EACCES;
     }
@@ -963,6 +966,7 @@ int get_actual_key_from_kms(CephContext *cct,
       } else {
         res = -EIO;
       }
+      memset(_actual_key, 0, sizeof(_actual_key));
     } else {
       ldout(cct, 20) << "Wrong size for key=" << key_id << dendl;
       res = -EIO;
@@ -1174,6 +1178,7 @@ int s3_prepare_encrypt(struct req_state* s,
         aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
         *block_crypt = std::move(aes);
       }
+      actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
       return 0;
     }
 
@@ -1196,6 +1201,7 @@ int s3_prepare_encrypt(struct req_state* s,
                               reinterpret_cast<const uint8_t*>(master_encryption_key.c_str()), AES_256_KEYSIZE,
                               reinterpret_cast<const uint8_t*>(key_selector.c_str()),
                               actual_key, AES_256_KEYSIZE) != true) {
+        memset(actual_key, 0, sizeof(actual_key));
         return -EIO;
       }
       if (block_crypt) {
@@ -1203,6 +1209,7 @@ int s3_prepare_encrypt(struct req_state* s,
         aes->set_key(reinterpret_cast<const uint8_t*>(actual_key), AES_256_KEYSIZE);
         *block_crypt = std::move(aes);
       }
+      memset(actual_key, 0, sizeof(actual_key));
       return 0;
     }
   }
@@ -1276,7 +1283,7 @@ int s3_prepare_decrypt(struct req_state* s,
 
     auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
     aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
-
+    actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
     if (block_crypt) *block_crypt = std::move(aes);
 
     crypt_http_responses["x-amz-server-side-encryption"] = "aws:kms";
@@ -1302,10 +1309,12 @@ int s3_prepare_decrypt(struct req_state* s,
                             AES_256_KEYSIZE,
                             reinterpret_cast<const uint8_t*>(attr_key_selector.c_str()),
                             actual_key, AES_256_KEYSIZE) != true) {
+      memset(actual_key, 0, sizeof(actual_key));
       return -EIO;
     }
     auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s->cct));
     aes->set_key(actual_key, AES_256_KEYSIZE);
+    memset(actual_key, 0, sizeof(actual_key));
     if (block_crypt) *block_crypt = std::move(aes);
     return 0;
   }
