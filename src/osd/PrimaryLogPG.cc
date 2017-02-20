@@ -1022,7 +1022,9 @@ int PrimaryLogPG::do_command(
 
 void PrimaryLogPG::do_pg_op(OpRequestRef op)
 {
-  MOSDOp *m = static_cast<MOSDOp *>(op->get_req());
+  // NOTE: this is non-const because we modify the OSDOp.outdata in
+  // place
+  MOSDOp *m = static_cast<MOSDOp *>(op->get_nonconst_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
   dout(10) << "do_pg_op " << *m << dendl;
 
@@ -1700,13 +1702,14 @@ hobject_t PrimaryLogPG::earliest_backfill() const
 void PrimaryLogPG::do_op(OpRequestRef& op)
 {
   FUNCTRACE();
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  // NOTE: take a non-const pointer here; we must be careful not to
+  // change anything that will break other reads on m (operator<<).
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
-
   if (m->finish_decode()) {
     op->reset_desc();   // for TrackedOp
+    m->clear_payload();
   }
-  m->clear_payload();
 
   dout(20) << __func__ << ": op " << *m << dendl;
 
@@ -2550,7 +2553,9 @@ struct C_ProxyRead : public Context {
 
 void PrimaryLogPG::do_proxy_read(OpRequestRef op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  // NOTE: non-const here because the ProxyReadOp needs mutable refs to
+  // stash the result in the request's OSDOp vector
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
   object_locator_t oloc(m->get_object_locator());
   oloc.pool = pool.info.tier_of;
 
@@ -2739,7 +2744,8 @@ struct C_ProxyWrite_Commit : public Context {
 
 void PrimaryLogPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  // NOTE: non-const because ProxyWriteOp takes a mutable ref
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
   object_locator_t oloc(m->get_object_locator());
   oloc.pool = pool.info.tier_of;
   SnapContext snapc(m->get_snap_seq(), m->get_snaps());
@@ -7067,7 +7073,10 @@ int PrimaryLogPG::fill_in_copy_get(
 void PrimaryLogPG::fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
                                           OSDOp& osd_op, bool classic)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  // NOTE: we take non-const ref here for claim_op_out_data below; we must
+  // be careful not to modify anything else that will upset a racing
+  // operator<<
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
   uint64_t features = m->get_features();
   object_copy_data_t reply_obj;
 
