@@ -8090,7 +8090,7 @@ void OSD::do_infos(map<int,
  */
 void OSD::handle_pg_notify(OpRequestRef op)
 {
-  MOSDPGNotify *m = (MOSDPGNotify*)op->get_req();
+  const MOSDPGNotify *m = static_cast<const MOSDPGNotify*>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_NOTIFY);
 
   dout(7) << "handle_pg_notify from " << m->get_source() << dendl;
@@ -8104,10 +8104,9 @@ void OSD::handle_pg_notify(OpRequestRef op)
 
   op->mark_started();
 
-  for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator it = m->get_pg_list().begin();
+  for (auto it = m->get_pg_list().begin();
        it != m->get_pg_list().end();
        ++it) {
-
     if (it->first.info.pgid.preferred() >= 0) {
       dout(20) << "ignoring localized pg " << it->first.info.pgid << dendl;
       continue;
