@@ -1354,7 +1354,7 @@ public:
     pg_shard_t from;
     pg_info_t info;
     epoch_t msg_epoch;
-    MInfoRec(pg_shard_t from, pg_info_t &info, epoch_t msg_epoch) :
+    MInfoRec(pg_shard_t from, const pg_info_t &info, epoch_t msg_epoch) :
       from(from), info(info), msg_epoch(msg_epoch) {}
     void print(std::ostream *out) const {
       *out << "MInfoRec from " << from << " info: " << info;
@@ -1375,7 +1375,7 @@ public:
     pg_shard_t from;
     pg_notify_t notify;
     uint64_t features;
-    MNotifyRec(pg_shard_t from, pg_notify_t &notify, uint64_t f) :
+    MNotifyRec(pg_shard_t from, const pg_notify_t &notify, uint64_t f) :
       from(from), notify(notify), features(f) {}
     void print(std::ostream *out) const {
       *out << "MNotifyRec from " << from << " notify: " << notify
