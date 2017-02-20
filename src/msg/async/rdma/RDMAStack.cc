@@ -524,6 +524,15 @@ void RDMAWorker::handle_pending_message()
 
 RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
 {
+  //
+  //On RDMA MUST be called before fork
+  //
+  int rc = ibv_fork_init();
+  if (rc) {
+     lderr(cct) << __func__ << " failed to call ibv_for_init(). On RDMA must be called before fork. Application aborts." << dendl;
+     ceph_abort();
+  }
+
   //Check ulimit
   struct rlimit limit;
   getrlimit(RLIMIT_MEMLOCK, &limit);
