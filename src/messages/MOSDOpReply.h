@@ -128,7 +128,8 @@ public:
     : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION) {
     do_redirect = false;
   }
-  MOSDOpReply(MOSDOp *req, int r, epoch_t e, int acktype, bool ignore_out_data)
+  MOSDOpReply(const MOSDOp *req, int r, epoch_t e, int acktype,
+	      bool ignore_out_data)
     : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
       oid(req->hobj.oid), pgid(req->pgid.pgid), ops(req->ops) {
 

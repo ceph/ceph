@@ -95,11 +95,11 @@ public:
   int get_result() { return result; }
 
   void set_last_complete_ondisk(eversion_t v) { last_complete_ondisk = v; }
-  eversion_t get_last_complete_ondisk() { return last_complete_ondisk; }
+  eversion_t get_last_complete_ondisk() const { return last_complete_ondisk; }
 
 public:
   MOSDRepOpReply(
-    MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, int at) :
+    const MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, int at) :
     MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
     map_epoch(e),
     reqid(req->reqid),

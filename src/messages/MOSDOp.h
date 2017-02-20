@@ -130,14 +130,14 @@ public:
     else
       return object_locator_t(hobj);
   }
-  object_t& get_oid() {
+  const object_t& get_oid() const {
     assert(!final_decode_needed);
     return hobj.oid;
   }
   const hobject_t &get_hobj() const {
     return hobj;
   }
-  snapid_t get_snapid() {
+  snapid_t get_snapid() const {
     assert(!final_decode_needed);
     return hobj.snap;
   }
@@ -231,7 +231,7 @@ public:
     add_simple_op(CEPH_OSD_OP_STAT, 0, 0);
   }
 
-  bool has_flag(__u32 flag) { return flags & flag; };
+  bool has_flag(__u32 flag) const { return flags & flag; };
   bool wants_ack() const { return flags & CEPH_OSD_FLAG_ACK; }
   bool wants_ondisk() const { return flags & CEPH_OSD_FLAG_ONDISK; }
   bool wants_onnvram() const { return flags & CEPH_OSD_FLAG_ONNVRAM; }
