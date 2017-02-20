@@ -52,7 +52,16 @@
 #define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
 
-
+void log_ceph_sock(char *string){
+    FILE *fptr;
+	fptr = fopen("program.txt", "a");
+	if (fptr == NULL) {
+		printf("Error!");
+		exit(1);
+	}
+	fprintf(fptr, "%s\n", string);
+	fclose(fptr);
+}
 
 void push_to_server(int ch, const char * sentence) {
 	log_ceph_sock("in pushing to server\n");
@@ -91,17 +100,6 @@ void push_to_server(int ch, const char * sentence) {
 
 	}
 	write_to_sock(type);
-}
-
-void log_ceph_sock(char *string){
-    FILE *fptr;
-	fptr = fopen("program.txt", "a");
-	if (fptr == NULL) {
-		printf("Error!");
-		exit(1);
-	}
-	fprintf(fptr, "%s\n", string);
-	fclose(fptr);
 }
 
 void print_parent(fuse_ino_t parent_no){
