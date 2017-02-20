@@ -190,8 +190,11 @@ int Infiniband::QueuePair::init()
   qp = ibv_create_qp(pd, &qpia);
   if (qp == NULL) {
     lderr(cct) << __func__ << " failed to create queue pair" << cpp_strerror(errno) << dendl;
-    lderr(cct) << __func__ << " try reducing ms_async_rdma_receive_buffers or"
-	" ms_async_rdma_send_buffers" << dendl;
+    if (errno == ENOMEM) {
+      lderr(cct) << __func__ << " try reducing ms_async_rdma_receive_buffers, "
+				" ms_async_rdma_send_buffers or"
+				" ms_async_rdma_buffer_size" << dendl;
+    }
     return -1;
   }
 
