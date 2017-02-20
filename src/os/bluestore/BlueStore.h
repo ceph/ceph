@@ -1931,7 +1931,7 @@ private:
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
-  void _txc_state_proc(TransContext *txc);
+  void _txc_state_proc(TransBatch batch);
   void _txc_aio_submit(TransContext *txc);
 public:
   void _txc_aio_finish(void *p) {

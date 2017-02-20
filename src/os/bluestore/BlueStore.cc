@@ -7077,29 +7077,37 @@ void BlueStore::_txc_update_store_statfs(TransContext *txc)
   txc->statfs_delta.reset();
 }
 
-void BlueStore::_txc_state_proc(TransContext *txc)
+void BlueStore::_txc_state_proc(TransBatch batch)
 {
   while (true) {
-    dout(10) << __func__ << " txc " << txc
-	     << " " << txc->get_state_name() << dendl;
-    switch (txc->state) {
+    //dout(10) << __func__ << " txc " << txc
+//	     << " " << txc->get_state_name() << dendl;
+    switch (batch.get_state()) {
     case TransContext::STATE_PREPARE:
-      txc->log_state_latency(logger, l_bluestore_state_prepare_lat);
-      if (txc->ioc.has_pending_aios()) {
-	txc->state = TransContext::STATE_AIO_WAIT;
+      //txc->log_state_latency(logger, l_bluestore_state_prepare_lat);
+      {
+      TransBatch pending_aios = batch.dissect([](TransContext* txc) {
+        return txc->ioc.has_pending_aios();
+      });
+
+      pending_aios.set_state(TransContext::STATE_AIO_WAIT);
+      pending_aios.for_each([this](TransContext* txc) {
 	txc->had_ios = true;
 	_txc_aio_submit(txc);
-	return;
+      });
       }
       // ** fall-thru **
 
     case TransContext::STATE_AIO_WAIT:
-      txc->log_state_latency(logger, l_bluestore_state_aio_wait_lat);
-      _txc_finish_io(txc);  // may trigger blocked txc's too
+      //txc->log_state_latency(logger, l_bluestore_state_aio_wait_lat);
+      batch.for_each([this](TransContext* txc) {
+        _txc_finish_io(txc);  // may trigger blocked txc's too
+      });
       return;
 
     case TransContext::STATE_IO_DONE:
       //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
+      batch.for_each([this](TransContext* txc) {
       if (txc->had_ios) {
 	++txc->osr->txc_with_unstable_io;
       }
@@ -7147,54 +7155,68 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  ++txc->osr->kv_committing_serially;
 	}
       }
+      });
       return;
     case TransContext::STATE_KV_SUBMITTED:
-      txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
-      txc->state = TransContext::STATE_KV_DONE;
-      _txc_finish_kv(txc);
+      //txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
+      batch.set_state(TransContext::STATE_KV_DONE);
+      batch.for_each([this](TransContext* txc) {
+        _txc_finish_kv(txc);
+      });
       // ** fall-thru **
 
     case TransContext::STATE_KV_DONE:
-      txc->log_state_latency(logger, l_bluestore_state_kv_done_lat);
-      if (txc->wal_txn) {
-	txc->state = TransContext::STATE_WAL_QUEUED;
-	if (sync_wal_apply) {
-	  _wal_apply(txc);
-	} else {
-	  wal_wq.queue(txc);
-	}
-	return;
-      }
-      txc->state = TransContext::STATE_FINISHING;
+      //txc->log_state_latency(logger, l_bluestore_state_kv_done_lat);
+      batch.dissect([this](TransContext* txc) {
+        const bool had_wal_txn = txc->wal_txn;
+        if (txc->wal_txn) {
+	  txc->state = TransContext::STATE_WAL_QUEUED;
+	  if (sync_wal_apply) {
+	    _wal_apply(txc);
+	  } else {
+	    wal_wq.queue(txc);
+	  }
+        }
+	return had_wal_txn;
+      });
+      batch.set_state(TransContext::STATE_FINISHING);
       break;
 
     case TransContext::STATE_WAL_APPLYING:
-      txc->log_state_latency(logger, l_bluestore_state_wal_applying_lat);
-      if (txc->ioc.has_pending_aios()) {
-	txc->state = TransContext::STATE_WAL_AIO_WAIT;
-	_txc_aio_submit(txc);
-	return;
-      }
+      //txc->log_state_latency(logger, l_bluestore_state_wal_applying_lat);
+      batch.dissect([this](TransContext* txc) {
+        if (txc->ioc.has_pending_aios()) {
+          txc->state = TransContext::STATE_WAL_AIO_WAIT;
+          _txc_aio_submit(txc);
+          return true;
+        } else {
+          return false;
+        }
+      });
       // ** fall-thru **
 
     case TransContext::STATE_WAL_AIO_WAIT:
-      txc->log_state_latency(logger, l_bluestore_state_wal_aio_wait_lat);
-      _wal_finish(txc);
+      //txc->log_state_latency(logger, l_bluestore_state_wal_aio_wait_lat);
+      batch.for_each([this](TransContext* txc) {
+        _wal_finish(txc);
+      });
       return;
 
     case TransContext::STATE_WAL_CLEANUP:
-      txc->log_state_latency(logger, l_bluestore_state_wal_cleanup_lat);
-      txc->state = TransContext::STATE_FINISHING;
+      //txc->log_state_latency(logger, l_bluestore_state_wal_cleanup_lat);
+      batch.set_state(TransContext::STATE_FINISHING);
       // ** fall-thru **
 
     case TransContext::STATE_FINISHING:
-      txc->log_state_latency(logger, l_bluestore_state_finishing_lat);
-      _txc_finish(txc);
+      //txc->log_state_latency(logger, l_bluestore_state_finishing_lat);
+      batch.for_each([this](TransContext* txc) {
+        _txc_finish(txc);
+      });
       return;
 
     default:
-      derr << __func__ << " unexpected txc " << txc
-	   << " state " << txc->get_state_name() << dendl;
+//      derr << __func__ << " unexpected txc " << txc
+//	   << " state " << txc->get_state_name() << dendl;
       assert(0 == "unexpected txc state");
       return;
     }
