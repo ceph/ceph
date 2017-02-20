@@ -30,7 +30,7 @@ class MOSDPGRemove : public Message {
  public:
   vector<spg_t> pg_list;
 
-  epoch_t get_epoch() { return epoch; }
+  epoch_t get_epoch() const { return epoch; }
 
   MOSDPGRemove() :
     Message(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {}
