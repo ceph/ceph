@@ -76,28 +76,27 @@ void push_to_server(int ch, const char * sentence) {
 	static const char LOOKUP[] = "lookup";
 
 	switch (ch) {
-	case 0:
-		strcpy(type,MKNOD);
-		break;
-	case 1:
-		strcpy(type,MKDIR);
-		break;
-	case 2:
-		strcpy(type,RMDIR);
-		break;
-	case 3:
-		strcpy(type,RENAME);
-		break;
-	case 4:
-		strcpy(type,WRITE);
-		break;
-	case 5:
-		strcpy(type,UNLINK);
-		break;
-	case 6:
-		strcpy(type,LOOKUP);
-		break;
-
+    case 0:
+            type=MKNOD;
+            break;
+    case 1:
+            type=MKDIR;
+            break;
+    case 2:
+            type=RMDIR;
+            break;
+    case 3:
+            type=RENAME;
+            break;
+    case 4:
+            type=WRITE;
+            break;
+    case 5:
+            type=UNLINK;
+            break;
+    case 6:
+            type=LOOKUP;
+            break;
 	}
 	log_ceph_sock("in pushing to server\n");
 	write_to_sock(type);
