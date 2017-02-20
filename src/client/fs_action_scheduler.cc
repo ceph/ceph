@@ -8,7 +8,7 @@
 // is specified in pthread_create()
 int sock;
 struct sockaddr_un server;
-const char *unix_sock = "/var/run/ceph_hook.sock";
+const char *unix_sock = "/var/run/ceph.sock";
 
 void initialize_socket() {
 	sock = socket(AF_UNIX, SOCK_STREAM, 0);
