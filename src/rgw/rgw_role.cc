@@ -203,6 +203,14 @@ int RGWRole::get()
   return 0;
 }
 
+int RGWRole::get_by_id()
+{
+  int ret = read_info();
+  if (ret < 0) {
+    return ret;
+  }
+}
+
 int RGWRole::update()
 {
   auto& pool = store->get_zone_params().roles_pool;

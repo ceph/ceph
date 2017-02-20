@@ -57,6 +57,13 @@ public:
     tenant(std::move(tenant)) {}
 
   RGWRole(CephContext *cct,
+          RGWRados *store,
+          string id)
+  : cct(cct),
+    store(store),
+    id(std::move(id)) {}
+
+  RGWRole(CephContext *cct,
           RGWRados *store)
   : cct(cct),
     store(store) {}
@@ -97,10 +104,12 @@ public:
   const string& get_name() const { return name; }
   const string& get_path() const { return path; }
   const string& get_create_date() const { return creation_date; }
+  const string& get_assume_role_policy() const { return trust_policy;}
 
   int create(bool exclusive);
   int delete_obj();
   int get();
+  int get_by_id();
   int update();
   void update_trust_policy(string& trust_policy);
   void set_perm_policy(const string& policy_name, const string& perm_policy);
