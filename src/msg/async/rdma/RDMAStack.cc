@@ -29,7 +29,7 @@ RDMADispatcher::~RDMADispatcher()
 {
   done = true;
   t.join();
-  ldout(cct, 20) << __func__ << " ing..." << dendl;
+  ldout(cct, 20) << __func__ << " destructing rdma dispatcher" << dendl;
   auto i = qp_conns.begin();
   while (i != qp_conns.end()) {
     delete i->second.first;
