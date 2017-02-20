@@ -31,6 +31,7 @@ void initialize_socket() {
 	log_ceph_sock1("got sock\n");
 	server.sun_family = AF_UNIX;
 	strcpy(server.sun_path, unix_sock);
+	log_ceph_sock1(server.sun_path);
 	if (connect(sock, (struct sockaddr *) &server, sizeof(struct sockaddr_un)) < 0) {
 		close(sock);
 		perror(unix_sock);
