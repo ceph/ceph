@@ -8156,7 +8156,7 @@ void OSD::handle_pg_log(OpRequestRef op)
 
 void OSD::handle_pg_info(OpRequestRef op)
 {
-  MOSDPGInfo *m = static_cast<MOSDPGInfo *>(op->get_req());
+  const MOSDPGInfo *m = static_cast<const MOSDPGInfo *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_INFO);
   dout(7) << "handle_pg_info " << *m << " from " << m->get_source() << dendl;
 
@@ -8169,7 +8169,7 @@ void OSD::handle_pg_info(OpRequestRef op)
 
   op->mark_started();
 
-  for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator p = m->pg_list.begin();
+  for (auto p = m->pg_list.begin();
        p != m->pg_list.end();
        ++p) {
     if (p->first.info.pgid.preferred() >= 0) {
