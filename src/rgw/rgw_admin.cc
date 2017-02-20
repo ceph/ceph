@@ -2856,7 +2856,15 @@ int main(int argc, const char **argv)
     if (tenant.empty()) {
       tenant = user_id.tenant;
     } else {
-      if (user_id.empty() && opt_cmd != OPT_ROLE_CREATE) {
+      if (user_id.empty() && opt_cmd != OPT_ROLE_CREATE
+                          && opt_cmd != OPT_ROLE_DELETE
+                          && opt_cmd != OPT_ROLE_GET
+                          && opt_cmd != OPT_ROLE_MODIFY
+                          && opt_cmd != OPT_ROLE_LIST
+                          && opt_cmd != OPT_ROLE_POLICY_PUT
+                          && opt_cmd != OPT_ROLE_POLICY_LIST
+                          && opt_cmd != OPT_ROLE_POLICY_GET
+                          && opt_cmd != OPT_ROLE_POLICY_DELETE) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -4625,7 +4633,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.delete_obj();
       if (ret < 0) {
         return -ret;
@@ -4639,7 +4647,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -4667,7 +4675,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       string trust_policy = bl.to_str();
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -4683,7 +4691,7 @@ int main(int argc, const char **argv)
   case OPT_ROLE_LIST:
     {
       vector<RGWRole> result;
-      ret = RGWRole::get_roles_by_path_prefix(store, g_ceph_context, path_prefix, result);
+      ret = RGWRole::get_roles_by_path_prefix(store, g_ceph_context, path_prefix, tenant, result);
       if (ret < 0) {
         return -ret;
       }
@@ -4712,7 +4720,7 @@ int main(int argc, const char **argv)
       string perm_policy;
       perm_policy = bl.c_str();
 
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -4731,7 +4739,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: Role name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -4746,7 +4754,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: One of role name or policy name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       int ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -4765,7 +4773,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: One of role name or policy name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name);
+      RGWRole role(g_ceph_context, store, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;

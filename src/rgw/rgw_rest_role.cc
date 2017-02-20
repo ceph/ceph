@@ -109,7 +109,7 @@ void RGWDeleteRole::execute()
   if (op_ret < 0) {
     return;
   }
-  RGWRole role(s->cct, store, role_name);
+  RGWRole role(s->cct, store, role_name, s->user->user_id.tenant);
   op_ret = role.delete_obj();
 
   if (op_ret == -ENOENT) {
@@ -135,7 +135,7 @@ void RGWGetRole::execute()
   if (op_ret < 0) {
     return;
   }
-  RGWRole role(s->cct, store, role_name);
+  RGWRole role(s->cct, store, role_name, s->user->user_id.tenant);
   op_ret = role.get();
 
   if (op_ret == -ENOENT) {
@@ -173,7 +173,7 @@ void RGWModifyRole::execute()
   if (op_ret < 0) {
     return;
   }
-  RGWRole role(s->cct, store, role_name);
+  RGWRole role(s->cct, store, role_name, s->user->user_id.tenant);
   op_ret = role.get();
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
@@ -199,7 +199,7 @@ void RGWListRoles::execute()
     return;
   }
   vector<RGWRole> result;
-  op_ret = RGWRole::get_roles_by_path_prefix(store, s->cct, path_prefix, result);
+  op_ret = RGWRole::get_roles_by_path_prefix(store, s->cct, path_prefix, s->user->user_id.tenant, result);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("Roles");
@@ -238,7 +238,7 @@ void RGWPutRolePolicy::execute()
     return;
   }
 
-  RGWRole role(s->cct, store, role_name);
+  RGWRole role(s->cct, store, role_name, s->user->user_id.tenant);
   op_ret = role.get();
   if (op_ret == 0) {
     role.set_perm_policy(policy_name, perm_policy);
@@ -265,7 +265,7 @@ void RGWGetRolePolicy::execute()
     return;
   }
 
-  RGWRole role(g_ceph_context, store, role_name);
+  RGWRole role(g_ceph_context, store, role_name, s->user->user_id.tenant);
   op_ret = role.get();
 
   if (op_ret == -ENOENT) {
@@ -304,7 +304,7 @@ void RGWListRolePolicies::execute()
     return;
   }
 
-  RGWRole role(g_ceph_context, store, role_name);
+  RGWRole role(g_ceph_context, store, role_name, s->user->user_id.tenant);
   op_ret = role.get();
 
   if (op_ret == -ENOENT) {
@@ -340,7 +340,7 @@ void RGWDeleteRolePolicy::execute()
     return;
   }
 
-  RGWRole role(g_ceph_context, store, role_name);
+  RGWRole role(g_ceph_context, store, role_name, s->user->user_id.tenant);
   op_ret = role.get();
 
   if (op_ret == -ENOENT) {
