@@ -475,7 +475,7 @@ struct ceph_osd_request_head {
 	::decode_raw(opgid, p);
 	pgid.pgid = opgid;
       } else {
-	::decode(pgid, p);
+	::decode(pgid.pgid, p);
       }
 
       ::decode(hobj.oid, p);
