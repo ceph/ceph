@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -15,6 +15,8 @@
  */
 
 #include <poll.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include "include/str_list.h"
 #include "common/deleter.h"
@@ -545,6 +547,14 @@ void RDMAWorker::handle_tx_event()
 
 RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
 {
+  //Check ulimit
+  struct rlimit limit;
+  getrlimit(RLIMIT_MEMLOCK, &limit);
+  if (limit.rlim_cur != RLIM_INFINITY || limit.rlim_max != RLIM_INFINITY) {
+     lderr(cct) << __func__ << "!!! WARNING !!! For RDMA to work properly user memlock (ulimit -l) must be big enough to allow large amount of registered memory."
+				  " We recommend setting this parameter to infinity" << dendl;
+  }
+
   if (!global_infiniband)
     global_infiniband = new Infiniband(
       cct, cct->_conf->ms_async_rdma_device_name, cct->_conf->ms_async_rdma_port_num);
