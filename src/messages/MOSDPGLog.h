@@ -38,9 +38,9 @@ public:
   pg_missing_t missing;
   pg_interval_map_t past_intervals;
 
-  epoch_t get_epoch() { return epoch; }
-  spg_t get_pgid() { return spg_t(info.pgid.pgid, to); }
-  epoch_t get_query_epoch() { return query_epoch; }
+  epoch_t get_epoch() const { return epoch; }
+  spg_t get_pgid() const { return spg_t(info.pgid.pgid, to); }
+  epoch_t get_query_epoch() const { return query_epoch; }
 
   MOSDPGLog() : Message(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) { 
     set_priority(CEPH_MSG_PRIO_HIGH); 
@@ -67,6 +67,8 @@ private:
 public:
   const char *get_type_name() const { return "PGlog"; }
   void print(ostream& out) const {
+    // NOTE: log is not const, but operator<< doesn't touch fields
+    // swapped out by OSD code.
     out << "pg_log(" << info.pgid << " epoch " << epoch
 	<< " log " << log
 	<< " query_epoch " << query_epoch << ")";

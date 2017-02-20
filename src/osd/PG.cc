@@ -341,7 +341,9 @@ void PG::proc_master_log(
     
 void PG::proc_replica_log(
   ObjectStore::Transaction& t,
-  pg_info_t &oinfo, pg_log_t &olog, pg_missing_t& omissing,
+  pg_info_t &oinfo,
+  const pg_log_t &olog,
+  pg_missing_t& omissing,
   pg_shard_t from)
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
@@ -7112,7 +7114,7 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MLogRec&
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 10) << "received log from " << logevt.from << dendl;
   ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
-  pg->merge_log(*t,logevt.msg->info, logevt.msg->log, logevt.from);
+  pg->merge_log(*t, logevt.msg->info, logevt.msg->log, logevt.from);
   assert(pg->pg_log.get_head() == pg->info.last_update);
 
   return discard_event();
