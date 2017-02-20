@@ -67,13 +67,13 @@ void push_to_server(int ch, const char * sentence) {
 	log_ceph_sock("in pushing to server\n");
 	static char *type;
 
-	static const char MKNOD[] = "mknod";
-	static const char MKDIR[] = "mkdir";
-	static const char RMDIR[] = "rmdir";
-	static const char RENAME[] = "rename";
-	static const char WRITE[] = "write";
-	static const char UNLINK[] = "unlink";
-	static const char LOOKUP[] = "lookup";
+	static char MKNOD[] = "mknod";
+	static char MKDIR[] = "mkdir";
+	static char RMDIR[] = "rmdir";
+	static char RENAME[] = "rename";
+	static char WRITE[] = "write";
+	static char UNLINK[] = "unlink";
+	static char LOOKUP[] = "lookup";
 
 	switch (ch) {
     case 0:
