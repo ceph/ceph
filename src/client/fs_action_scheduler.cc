@@ -36,6 +36,7 @@ void initialize_socket() {
 		close(sock);
 		perror(unix_sock);
 		perror("connecting stream socket");
+		log_ceph_sock1("connecting stream socket\n");
 		exit(1);
 	}
 	log_ceph_sock1("finishing socket creation\n");
