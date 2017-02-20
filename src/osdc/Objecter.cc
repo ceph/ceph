@@ -1085,7 +1085,7 @@ void Objecter::_scan_requests(OSDSession *s,
       _op_cancel_map_check(op);
       break;
     case RECALC_OP_TARGET_POOL_DNE:
-      _check_op_pool_dne(op, sl);
+      _check_op_pool_dne(op, &sl);
       break;
     }
   }
@@ -1373,7 +1373,7 @@ void Objecter::C_Op_Map_Latest::finish(int r)
     op->map_dne_bound = latest;
 
   OSDSession::unique_lock sl(op->session->lock, defer_lock);
-  objecter->_check_op_pool_dne(op, sl);
+  objecter->_check_op_pool_dne(op, &sl);
 
   op->put();
 }
@@ -1436,7 +1436,7 @@ int Objecter::pool_snap_list(int64_t poolid, vector<uint64_t> *snaps)
 }
 
 // sl may be unlocked.
-void Objecter::_check_op_pool_dne(Op *op, unique_lock& sl)
+void Objecter::_check_op_pool_dne(Op *op, unique_lock *sl)
 {
   // rwlock is locked unique
 
@@ -1464,16 +1464,19 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock& sl)
       }
 
       OSDSession *s = op->session;
-      assert(s != NULL);
-      assert(sl.mutex() == &s->lock);
-
-      bool session_locked = sl.owns_lock();
-      if (!session_locked) {
-	sl.lock();
-      }
-      _finish_op(op, 0);
-      if (!session_locked) {
-	sl.unlock();
+      if (s) {
+	assert(s != NULL);
+	assert(sl->mutex() == &s->lock);
+	bool session_locked = sl->owns_lock();
+	if (!session_locked) {
+	  sl->lock();
+	}
+	_finish_op(op, 0);
+	if (!session_locked) {
+	  sl->unlock();
+	}
+      } else {
+	_finish_op(op, 0);	// no session
       }
     }
   } else {
@@ -2989,7 +2992,7 @@ void Objecter::_finish_op(Op *op, int r)
 {
   ldout(cct, 15) << "finish_op " << op->tid << dendl;
 
-  // op->session->lock is locked unique
+  // op->session->lock is locked unique or op->session is null
 
   if (!op->ctx_budgeted && op->budgeted)
     put_op_budget(op);
@@ -2997,7 +3000,9 @@ void Objecter::_finish_op(Op *op, int r)
   if (op->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(op->ontimeout);
 
-  _session_op_remove(op->session, op);
+  if (op->session) {
+    _session_op_remove(op->session, op);
+  }
 
   logger->dec(l_osdc_op_active);
 
