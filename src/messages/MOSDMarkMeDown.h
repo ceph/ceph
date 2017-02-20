@@ -40,8 +40,8 @@ class MOSDMarkMeDown : public PaxosServiceMessage {
   ~MOSDMarkMeDown() {}
 
 public: 
-  entity_inst_t get_target() { return target_osd; }
-  epoch_t get_epoch() { return epoch; }
+  entity_inst_t get_target() const { return target_osd; }
+  epoch_t get_epoch() const { return epoch; }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
