@@ -613,12 +613,6 @@ void AsyncMessenger::set_addr_unknowns(const entity_addr_t &addr)
   }
 }
 
-int AsyncMessenger::send_keepalive(Connection *con)
-{
-  con->send_keepalive();
-  return 0;
-}
-
 void AsyncMessenger::shutdown_connections(bool queue_reset)
 {
   ldout(cct,1) << __func__ << " " << dendl;
