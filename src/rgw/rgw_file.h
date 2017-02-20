@@ -1098,11 +1098,7 @@ public:
       cb_arg(_cb_arg), rcb(_rcb), ix(0) {
     const std::string& sm = rgw_fh->find_marker(*offset);
     if (sm.size() > 0) {
-      RGWListBuckets::marker =
-	rgw_fh->relative_object_name();
-      if (marker.back() != '/')
-	marker += "/";
-      marker += sm;
+      marker = sm;
     }
     op = this;
   }
@@ -1203,10 +1199,7 @@ public:
       cb_arg(_cb_arg), rcb(_rcb), ix(0) {
     const std::string& sm{rgw_fh->find_marker(*offset)};
     if (sm.size() > 0) {
-      RGWListBucket::marker = {rgw_fh->relative_object_name(), ""};
-      if (marker.name.back() != '/')
-	marker.name += "/";
-      marker.name += sm;
+      marker = sm;
     }
     default_max = 1000; // XXX was being omitted
     op = this;
