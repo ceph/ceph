@@ -2661,7 +2661,9 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   // rwlock is locked
   bool is_read = t->flags & CEPH_OSD_FLAG_READ;
   bool is_write = t->flags & CEPH_OSD_FLAG_WRITE;
-  ldout(cct,20) << __func__ << " base " << t->base_oid << " " << t->base_oloc
+  t->epoch = osdmap->get_epoch();
+  ldout(cct,20) << __func__ << " epoch " << t->epoch
+		<< " base " << t->base_oid << " " << t->base_oloc
 		<< " precalc_pgid " << (int)t->precalc_pgid
 		<< " pgid " << t->base_pgid
 		<< (is_read ? " is_read" : "")

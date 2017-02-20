@@ -1182,6 +1182,9 @@ public:
 
   struct op_target_t {
     int flags = 0;
+
+    epoch_t epoch = 0;  ///< latest epoch we calculated the mapping
+
     object_t base_oid;
     object_locator_t base_oloc;
     object_t target_oid;
