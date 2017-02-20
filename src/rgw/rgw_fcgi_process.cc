@@ -117,10 +117,11 @@ void RGWFCGXProcess::handle_request(RGWRequest* r)
   RGWFCGXRequest* const req = static_cast<RGWFCGXRequest*>(r);
 
   RGWFCGX fcgxfe(req->fcgx);
+  /* We are skipping the chunking & buffering filters intensionally. Both
+   * Apache/mod_proxy_fci and nginx fallback to chunked-transfer-encoding
+   * if there was no content length provided on their own. */
   auto real_client_io = rgw::io::add_reordering(
-                          rgw::io::add_buffering(
-                            rgw::io::add_chunking(
-                              &fcgxfe)));
+                          &fcgxfe);
   RGWRestfulIO client_io(&real_client_io);
 
  
