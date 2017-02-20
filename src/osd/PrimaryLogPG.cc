@@ -6383,7 +6383,24 @@ inline int PrimaryLogPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   const hobject_t& soid = oi.soid;
   PGTransaction* t = ctx->op_t.get();
 
-  if (!obs.exists || (obs.oi.is_whiteout() && !no_whiteout))
+  // cache: cache: set whiteout on delete?
+  bool whiteout = false;
+  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE && !no_whiteout) {
+    whiteout = true;
+  }
+  if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    // in luminous or later, we can't delete the head if there are
+    // clones. we trust the caller passing no_whiteout has already
+    // verified they don't exist.
+    if (!no_whiteout &&
+	(!snapset.clones.empty() ||
+	 (!ctx->snapc.snaps.empty() && ctx->snapc.snaps[0] > snapset.seq))) {
+      dout(20) << __func__ << " has or will have clones; will whiteout" << dendl;
+      whiteout = true;
+    }
+  }
+  dout(20) << __func__ << " " << soid << " whiteout=" << (int)whiteout << dendl;
+  if (!obs.exists || (obs.oi.is_whiteout() && whiteout))
     return -ENOENT;
 
   t->remove(soid);
@@ -6415,8 +6432,7 @@ inline int PrimaryLogPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   }
   oi.watchers.clear();
 
-  // cache: cache: set whiteout on delete?
-  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE && !no_whiteout) {
+  if (whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ctx->delta_stats.num_whiteouts++;
@@ -6425,6 +6441,7 @@ inline int PrimaryLogPG::_delete_oid(OpContext *ctx, bool no_whiteout)
     return 0;
   }
 
+  // delete the head
   ctx->delta_stats.num_objects--;
   if (soid.is_snap())
     ctx->delta_stats.num_object_clones--;
@@ -6989,19 +7006,19 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       if (!ctx->obs->exists) {
 	if (ctx->snapset_obc && ctx->snapset_obc->obs.exists) {
 	  hobject_t snapoid = soid.get_snapdir();
+	  dout(10) << " removing unneeded snapdir " << snapoid << dendl;
 	  ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid,
 	      ctx->at_version,
 	      ctx->snapset_obc->obs.oi.version,
 	      0, osd_reqid_t(), ctx->mtime, 0));
 	  ctx->op_t->remove(snapoid);
-	  dout(10) << " removing old " << snapoid << dendl;
 
 	  ctx->at_version.version++;
 
 	  ctx->snapset_obc->obs.exists = false;
 	}
       }
-    } else if (ctx->new_snapset.clones.size() &&
+    } else if (!ctx->new_snapset.clones.empty() &&
 	       !ctx->cache_evict &&
 	       (!ctx->snapset_obc || !ctx->snapset_obc->obs.exists)) {
       // save snapset on _snap
@@ -7009,6 +7026,7 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 			info.pgid.pool(), soid.get_namespace());
       dout(10) << " final snapset " << ctx->new_snapset
 	       << " in " << snapoid << dendl;
+      assert(!get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS));
       ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid,
 					ctx->at_version,
 	                                eversion_t(),
@@ -9623,10 +9641,10 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
 	r = pgbackend->objects_get_attr(oid.get_head(), SS_ATTR, &bv);
       if (r < 0) {
 	// try _snapset
-      if (!(oid.is_snapdir() && !oid_existed))
-	r = pgbackend->objects_get_attr(oid.get_snapdir(), SS_ATTR, &bv);
-      if (r < 0 && !can_create)
-	return NULL;
+	if (!(oid.is_snapdir() && !oid_existed))
+	  r = pgbackend->objects_get_attr(oid.get_snapdir(), SS_ATTR, &bv);
+	if (r < 0 && !can_create)
+	  return NULL;
       }
     } else {
       assert(attrs->count(SS_ATTR));
