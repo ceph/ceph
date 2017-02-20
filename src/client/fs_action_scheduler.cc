@@ -20,6 +20,7 @@ void initialize_socket() {
 	strcpy(server.sun_path, unix_sock);
 	if (connect(sock, (struct sockaddr *) &server, sizeof(struct sockaddr_un)) < 0) {
 		close(sock);
+		perror(unix_sock);
 		perror("connecting stream socket");
 		exit(1);
 	}
