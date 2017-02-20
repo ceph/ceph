@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <ctime>
+#include <regex>
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -57,6 +58,10 @@ int RGWRole::store_path(bool exclusive)
 int RGWRole::create(bool exclusive)
 {
   int ret;
+
+  if (! validate_input()) {
+    return -EINVAL;
+  }
 
   /* check to see the name is not used */
   ret = read_id(name, tenant, id);
@@ -348,6 +353,31 @@ int RGWRole::read_name()
   }
   id = nameToId.obj_id;
   return 0;
+}
+
+bool RGWRole::validate_input()
+{
+  if (name.length() > MAX_ROLE_NAME_LEN) {
+    ldout(cct, 0) << "ERROR: Invalid name length " << dendl;
+    return false;
+  }
+
+  if (path.length() > MAX_PATH_NAME_LEN) {
+    ldout(cct, 0) << "ERROR: Invalid path length " << dendl;
+    return false;
+  }
+
+  std::regex regex_name("[A-Za-z0-9:=,.@-]+");
+  if (! std::regex_match(name, regex_name)) {
+    ldout(cct, 0) << "ERROR: Invalid chars in name " << dendl;
+    return false;
+  }
+
+  std::regex regex_path("(\/[!-~]+\/)|(\/)");
+  if (! std::regex_match(path,regex_path)) {
+    ldout(cct, 0) << "ERROR: Invalid chars in path " << dendl;
+    return false;
+  }
 }
 
 void RGWRole::update_trust_policy(string& trust_policy)

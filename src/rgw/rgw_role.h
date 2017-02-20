@@ -7,6 +7,8 @@ class RGWRole
   static const string role_oid_prefix;
   static const string role_path_oid_prefix;
   static const string role_arn_prefix;
+  static constexpr int MAX_ROLE_NAME_LEN = 64;
+  static constexpr int MAX_PATH_NAME_LEN = 512;
 
   CephContext *cct;
   RGWRados *store;
@@ -26,6 +28,7 @@ class RGWRole
   int read_name();
   int read_info();
   void set_id(const string& id) { this->id = id; }
+  bool validate_input();
 
 public:
   RGWRole(CephContext *cct,
