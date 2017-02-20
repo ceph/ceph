@@ -83,7 +83,7 @@ void Session::ack_backoff(
 }
 
 bool Session::check_backoff(
-  CephContext *cct, spg_t pgid, const hobject_t& oid, Message *m)
+  CephContext *cct, spg_t pgid, const hobject_t& oid, const Message *m)
 {
   BackoffRef b(have_backoff(pgid, oid));
   if (b) {

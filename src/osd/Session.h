@@ -195,7 +195,7 @@ struct Session : public RefCountedObject {
   }
 
   bool check_backoff(
-    CephContext *cct, spg_t pgid, const hobject_t& oid, Message *m);
+    CephContext *cct, spg_t pgid, const hobject_t& oid, const Message *m);
 
   void add_backoff(BackoffRef b) {
     Mutex::Locker l(backoff_lock);
