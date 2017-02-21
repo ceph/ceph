@@ -104,6 +104,23 @@ void AioWriteEvent::dump(Formatter *f) const {
   f->dump_unsigned("length", length);
 }
 
+void AioWriteSameEvent::encode(bufferlist& bl) const {
+  ::encode(offset, bl);
+  ::encode(length, bl);
+  ::encode(data, bl);
+}
+
+void AioWriteSameEvent::decode(__u8 version, bufferlist::iterator& it) {
+  ::decode(offset, it);
+  ::decode(length, it);
+  ::decode(data, it);
+}
+
+void AioWriteSameEvent::dump(Formatter *f) const {
+  f->dump_unsigned("offset", offset);
+  f->dump_unsigned("length", length);
+}
+
 void AioFlushEvent::encode(bufferlist& bl) const {
 }
 
@@ -382,6 +399,9 @@ void EventEntry::decode(bufferlist::iterator& it) {
     break;
   case EVENT_TYPE_METADATA_REMOVE:
     event = MetadataRemoveEvent();
+    break;
+  case EVENT_TYPE_AIO_WRITESAME:
+    event = AioWriteSameEvent();
     break;
   default:
     event = UnknownEvent();
@@ -723,6 +743,9 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
     break;
   case EVENT_TYPE_METADATA_REMOVE:
     out << "MetadataRemove";
+    break;
+  case EVENT_TYPE_AIO_WRITESAME:
+    out << "AioWriteSame";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";
