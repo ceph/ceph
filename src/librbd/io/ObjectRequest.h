@@ -73,14 +73,14 @@ public:
                 uint64_t objectno, uint64_t off, uint64_t len,
                 librados::snap_t snap_id,
                 Context *completion, bool hide_enoent);
-  virtual ~ObjectRequest() {}
+  ~ObjectRequest() override {}
 
   virtual void add_copyup_ops(librados::ObjectWriteOperation *wr) {};
 
-  void complete(int r);
+  void complete(int r) override;
 
   virtual bool should_complete(int r) = 0;
-  virtual void send() = 0;
+  void send() override = 0;
 
   bool has_parent() const {
     return m_has_parent;
@@ -129,8 +129,8 @@ public:
                     Extents& buffer_extents, librados::snap_t snap_id,
                     bool sparse, Context *completion, int op_flags);
 
-  virtual bool should_complete(int r);
-  virtual void send();
+  bool should_complete(int r) override;
+  void send() override;
   void guard_read();
 
   inline uint64_t get_offset() const {
@@ -149,11 +149,11 @@ public:
     return m_ext_map;
   }
 
-  const char *get_op_type() const {
+  const char *get_op_type() const override {
     return "read";
   }
 
-  bool pre_object_map_update(uint8_t *new_state) {
+  bool pre_object_map_update(uint8_t *new_state) override {
     return false;
   }
 
@@ -201,13 +201,13 @@ public:
                              uint64_t len, const ::SnapContext &snapc,
                              Context *completion, bool hide_enoent);
 
-  virtual void add_copyup_ops(librados::ObjectWriteOperation *wr)
+  void add_copyup_ops(librados::ObjectWriteOperation *wr) override
   {
     add_write_ops(wr);
   }
 
-  virtual bool should_complete(int r);
-  virtual void send();
+  bool should_complete(int r) override;
+  void send() override;
 
   /**
    * Writes go through the following state machine to deal with
@@ -289,23 +289,23 @@ public:
       m_write_data(data), m_op_flags(op_flags) {
   }
 
-  bool is_op_payload_empty() const {
+  bool is_op_payload_empty() const override {
     return (m_write_data.length() == 0);
   }
 
-  virtual const char *get_op_type() const {
+  const char *get_op_type() const override {
     return "write";
   }
 
-  virtual bool pre_object_map_update(uint8_t *new_state) {
+  bool pre_object_map_update(uint8_t *new_state) override {
     *new_state = OBJECT_EXISTS;
     return true;
   }
 
 protected:
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr);
+  void add_write_ops(librados::ObjectWriteOperation *wr) override;
 
-  virtual void send_write();
+  void send_write() override;
 
 private:
   ceph::bufferlist m_write_data;
@@ -322,14 +322,14 @@ public:
       m_object_state(OBJECT_NONEXISTENT) {
   }
 
-  virtual const char* get_op_type() const {
+  const char* get_op_type() const override {
     if (has_parent()) {
       return "remove (trunc)";
     }
     return "remove";
   }
 
-  virtual bool pre_object_map_update(uint8_t *new_state) {
+  bool pre_object_map_update(uint8_t *new_state) override {
     if (has_parent()) {
       m_object_state = OBJECT_EXISTS;
     } else {
@@ -339,18 +339,18 @@ public:
     return true;
   }
 
-  virtual bool post_object_map_update() {
+  bool post_object_map_update() override {
     if (m_object_state == OBJECT_EXISTS) {
       return false;
     }
     return true;
   }
 
-  virtual void guard_write();
-  virtual void send_write();
+  void guard_write() override;
+  void send_write() override;
 
 protected:
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+  void add_write_ops(librados::ObjectWriteOperation *wr) override {
     if (has_parent()) {
       wr->truncate(0);
     } else {
@@ -375,21 +375,21 @@ public:
       m_post_object_map_update(post_object_map_update) {
   }
 
-  virtual const char* get_op_type() const {
+  const char* get_op_type() const override {
     return "remove (trim)";
   }
 
-  virtual bool pre_object_map_update(uint8_t *new_state) {
+  bool pre_object_map_update(uint8_t *new_state) override {
     *new_state = OBJECT_PENDING;
     return true;
   }
 
-  virtual bool post_object_map_update() {
+  bool post_object_map_update() override {
     return m_post_object_map_update;
   }
 
 protected:
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+  void add_write_ops(librados::ObjectWriteOperation *wr) override {
     wr->remove();
   }
 
@@ -406,11 +406,11 @@ public:
                                  completion, true) {
   }
 
-  virtual const char* get_op_type() const {
+  const char* get_op_type() const override {
     return "truncate";
   }
 
-  virtual bool pre_object_map_update(uint8_t *new_state) {
+  bool pre_object_map_update(uint8_t *new_state) override {
     if (!m_object_exist && !has_parent())
       *new_state = OBJECT_NONEXISTENT;
     else
@@ -418,10 +418,10 @@ public:
     return true;
   }
 
-  virtual void send_write();
+  void send_write() override;
 
 protected:
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+  void add_write_ops(librados::ObjectWriteOperation *wr) override {
     wr->truncate(m_object_off);
   }
 };
@@ -435,17 +435,17 @@ public:
                                  snapc, completion, true) {
   }
 
-  virtual const char* get_op_type() const {
+  const char* get_op_type() const override {
     return "zero";
   }
 
-  virtual bool pre_object_map_update(uint8_t *new_state) {
+  bool pre_object_map_update(uint8_t *new_state) override {
     *new_state = OBJECT_EXISTS;
     return true;
   }
 
 protected:
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
+  void add_write_ops(librados::ObjectWriteOperation *wr) override {
     wr->zero(m_object_off, m_object_len);
   }
 };

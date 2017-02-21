@@ -83,13 +83,13 @@ public:
                    int op_flags);
 
 protected:
-  virtual void send_request() override;
-  virtual void send_image_cache_request() override;
+  void send_request() override;
+  void send_image_cache_request() override;
 
-  virtual aio_type_t get_aio_type() const {
+  aio_type_t get_aio_type() const override {
     return AIO_TYPE_READ;
   }
-  virtual const char *get_request_type() const {
+  const char *get_request_type() const override {
     return "aio_read";
   }
 private:
@@ -101,7 +101,7 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class AbstractImageWriteRequest : public ImageRequest<ImageCtxT> {
 public:
-  virtual bool is_write_op() const {
+  bool is_write_op() const override {
     return true;
   }
 
@@ -121,7 +121,7 @@ protected:
       m_synchronous(false) {
   }
 
-  virtual void send_request();
+  void send_request() override;
 
   virtual void prune_object_extents(ObjectExtents &object_extents) {
   }
@@ -162,30 +162,32 @@ protected:
   using typename ImageRequest<ImageCtxT>::ObjectRequests;
   using typename AbstractImageWriteRequest<ImageCtxT>::ObjectExtents;
 
-  virtual aio_type_t get_aio_type() const {
+  aio_type_t get_aio_type() const override {
     return AIO_TYPE_WRITE;
   }
-  virtual const char *get_request_type() const {
+  const char *get_request_type() const override {
     return "aio_write";
   }
 
   void assemble_extent(const ObjectExtent &object_extent, bufferlist *bl);
 
-  virtual void send_image_cache_request() override;
+  void send_image_cache_request() override;
 
-  virtual void send_object_cache_requests(const ObjectExtents &object_extents,
-                                          uint64_t journal_tid);
+  void send_object_cache_requests(const ObjectExtents &object_extents,
+                                  uint64_t journal_tid) override;
 
-  virtual void send_object_requests(const ObjectExtents &object_extents,
-                                    const ::SnapContext &snapc,
-                                    ObjectRequests *object_requests);
-  virtual ObjectRequestHandle *create_object_request(
+  void send_object_requests(const ObjectExtents &object_extents,
+                            const ::SnapContext &snapc,
+                            ObjectRequests *aio_object_requests) override;
+
+  ObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish);
+      Context *on_finish) override;
 
-  virtual uint64_t append_journal_event(const ObjectRequests &requests,
-                                        bool synchronous);
-  virtual void update_stats(size_t length);
+  uint64_t append_journal_event(const ObjectRequests &requests,
+                                bool synchronous) override;
+  void update_stats(size_t length) override;
+
 private:
   bufferlist m_bl;
   int m_op_flags;
@@ -203,28 +205,28 @@ protected:
   using typename ImageRequest<ImageCtxT>::ObjectRequests;
   using typename AbstractImageWriteRequest<ImageCtxT>::ObjectExtents;
 
-  virtual aio_type_t get_aio_type() const {
+  aio_type_t get_aio_type() const override {
     return AIO_TYPE_DISCARD;
   }
-  virtual const char *get_request_type() const {
+  const char *get_request_type() const override {
     return "aio_discard";
   }
 
-  virtual void prune_object_extents(ObjectExtents &object_extents) override;
+  void prune_object_extents(ObjectExtents &object_extents) override;
 
-  virtual void send_image_cache_request() override;
+  void send_image_cache_request() override;
 
-  virtual uint32_t get_object_cache_request_count(bool journaling) const override;
-  virtual void send_object_cache_requests(const ObjectExtents &object_extents,
-                                          uint64_t journal_tid);
+  uint32_t get_object_cache_request_count(bool journaling) const override;
+  void send_object_cache_requests(const ObjectExtents &object_extents,
+                                  uint64_t journal_tid) override;
 
-  virtual ObjectRequestHandle *create_object_request(
+  ObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish);
+      Context *on_finish) override;
 
-  virtual uint64_t append_journal_event(const ObjectRequests &requests,
-                                        bool synchronous);
-  virtual void update_stats(size_t length);
+  uint64_t append_journal_event(const ObjectRequests &requests,
+                                bool synchronous) override;
+  void update_stats(size_t length) override;
 };
 
 template <typename ImageCtxT = ImageCtx>
@@ -234,23 +236,23 @@ public:
     : ImageRequest<ImageCtxT>(image_ctx, aio_comp, {}) {
   }
 
-  virtual bool is_write_op() const {
+  bool is_write_op() const override {
     return true;
   }
 
 protected:
   using typename ImageRequest<ImageCtxT>::ObjectRequests;
 
-  virtual int clip_request() {
+  int clip_request() override {
     return 0;
   }
-  virtual void send_request();
-  virtual void send_image_cache_request() override;
+  void send_request() override;
+  void send_image_cache_request() override;
 
-  virtual aio_type_t get_aio_type() const {
+  aio_type_t get_aio_type() const override {
     return AIO_TYPE_FLUSH;
   }
-  virtual const char *get_request_type() const {
+  const char *get_request_type() const override {
     return "aio_flush";
   }
 };

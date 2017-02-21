@@ -42,10 +42,10 @@ public:
   {
   }
 
-  virtual void send();
+  void send() override;
 
 protected:
-  virtual void finish_request() override;
+  void finish_request() override;
 
 private:
   ceph::BitVector<2> &m_object_map;

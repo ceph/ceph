@@ -66,14 +66,14 @@ public:
                         bool skip_object_map);
 
 protected:
-  virtual void send_op();
-  virtual bool should_complete(int r) {
+  void send_op() override;
+  bool should_complete(int r) override {
     return true;
   }
-  virtual bool can_affect_io() const override {
+  bool can_affect_io() const override {
     return true;
   }
-  virtual journal::Event create_event(uint64_t op_tid) const {
+  journal::Event create_event(uint64_t op_tid) const override {
     return journal::SnapCreateEvent(op_tid, m_snap_name, m_snap_namespace);
   }
 

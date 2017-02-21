@@ -34,11 +34,11 @@ struct C_DecodeTag : public Context {
       on_finish(on_finish) {
   }
 
-  virtual void complete(int r) override {
+  void complete(int r) override {
     on_finish->complete(process(r));
     Context::complete(0);
   }
-  virtual void finish(int r) override {
+  void finish(int r) override {
   }
 
   int process(int r);
@@ -64,11 +64,11 @@ struct C_DecodeTags : public Context {
       on_finish(on_finish) {
   }
 
-  virtual void complete(int r) {
+  void complete(int r) override {
     on_finish->complete(process(r));
     Context::complete(0);
   }
-  virtual void finish(int r) override {
+  void finish(int r) override {
   }
 
   int process(int r);

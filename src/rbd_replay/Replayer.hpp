@@ -36,31 +36,31 @@ public:
   void start();
 
   /// Should only be called by StopThreadAction
-  void stop();
+  void stop() override;
 
   void join();
 
   void send(Action::ptr action);
 
-  void add_pending(PendingIO::ptr io);
+  void add_pending(PendingIO::ptr io) override;
 
-  void remove_pending(PendingIO::ptr io);
+  void remove_pending(PendingIO::ptr io) override;
 
-  librbd::Image* get_image(imagectx_id_t imagectx_id);
+  librbd::Image* get_image(imagectx_id_t imagectx_id) override;
 
-  void put_image(imagectx_id_t imagectx_id, librbd::Image* image);
+  void put_image(imagectx_id_t imagectx_id, librbd::Image* image) override;
 
-  void erase_image(imagectx_id_t imagectx_id);
+  void erase_image(imagectx_id_t imagectx_id) override;
 
-  librbd::RBD* rbd();
+  librbd::RBD* rbd() override;
 
-  librados::IoCtx* ioctx();
+  librados::IoCtx* ioctx() override;
 
-  void set_action_complete(action_id_t id);
+  void set_action_complete(action_id_t id) override;
 
-  bool readonly() const;
+  bool readonly() const override;
 
-  rbd_loc map_image_name(std::string image_name, std::string snap_name) const;
+  rbd_loc map_image_name(std::string image_name, std::string snap_name) const override;
 
 private:
   void run();

@@ -59,15 +59,15 @@ public:
   SnapshotRollbackRequest(ImageCtxT &image_ctx, Context *on_finish,
                           const std::string &snap_name, uint64_t snap_id,
                           uint64_t snap_size, ProgressContext &prog_ctx);
-  virtual ~SnapshotRollbackRequest();
+  ~SnapshotRollbackRequest() override;
 
 protected:
-  virtual void send_op();
-  virtual bool should_complete(int r) {
+  void send_op() override;
+  bool should_complete(int r) override {
     return true;
   }
 
-  virtual journal::Event create_event(uint64_t op_tid) const {
+  journal::Event create_event(uint64_t op_tid) const override {
     return journal::SnapRollbackEvent(op_tid, m_snap_name);
   }
 
