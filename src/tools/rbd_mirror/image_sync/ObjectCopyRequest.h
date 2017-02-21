@@ -11,7 +11,6 @@
 #include <list>
 #include <map>
 #include <string>
-#include <tuple>
 #include <vector>
 
 class Context;
@@ -81,7 +80,21 @@ private:
     SYNC_OP_TYPE_REMOVE
   };
 
-  typedef std::tuple<SyncOpType, uint64_t, uint64_t, bufferlist, std::map<uint64_t, uint64_t> > SyncOp;
+  typedef std::map<uint64_t, uint64_t> ExtentMap;
+
+  struct SyncOp {
+    SyncOp(SyncOpType type, uint64_t offset, uint64_t length)
+      : type(type), offset(offset), length(length) {
+    }
+
+    SyncOpType type;
+    uint64_t offset;
+    uint64_t length;
+
+    ExtentMap extent_map;
+    bufferlist out_bl;
+  };
+
   typedef std::list<SyncOp> SyncOps;
   typedef std::map<librados::snap_t, SyncOps> SnapSyncOps;
   typedef std::map<librados::snap_t, uint8_t> SnapObjectStates;
