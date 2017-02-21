@@ -37,7 +37,7 @@ private:
     C_AioNotify(Notifier *notifier, Context *on_finish)
       : notifier(notifier), on_finish(on_finish) {
     }
-    virtual void finish(int r) override {
+    void finish(int r) override {
       notifier->handle_notify(r, on_finish);
     }
   };

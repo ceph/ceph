@@ -54,7 +54,7 @@ struct ProgressContext : public librbd::ProgressContext {
     : operation(o), progress(!no_progress), last_pc(0) {
   }
 
-  int update_progress(uint64_t offset, uint64_t total);
+  int update_progress(uint64_t offset, uint64_t total) override;
   void finish();
   void fail();
 };

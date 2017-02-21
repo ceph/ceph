@@ -26,7 +26,7 @@ struct C_NotifyAck : public Context {
   bufferlist out;
 
   C_NotifyAck(Watcher *watcher, uint64_t notify_id, uint64_t handle);
-  void finish(int r);
+  void finish(int r) override;
 };
 
 template <typename Watcher>

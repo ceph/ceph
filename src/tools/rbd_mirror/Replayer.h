@@ -99,7 +99,7 @@ private:
     Replayer *m_replayer;
   public:
     ReplayerThread(Replayer *replayer) : m_replayer(replayer) {}
-    void *entry() {
+    void *entry() override {
       m_replayer->run();
       return 0;
     }
@@ -111,11 +111,11 @@ private:
     }
 
   protected:
-    virtual void post_acquire_handler(Context *on_finish) {
+    void post_acquire_handler(Context *on_finish) override {
       m_replayer->handle_post_acquire_leader(on_finish);
     }
 
-    virtual void pre_release_handler(Context *on_finish) {
+    void pre_release_handler(Context *on_finish) override {
       m_replayer->handle_pre_release_leader(on_finish);
     }
 
