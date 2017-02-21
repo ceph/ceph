@@ -570,6 +570,51 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
   }
 };
 
+class ResetFilesystemHandler : public FileSystemCommandHandler
+{
+  public:
+  ResetFilesystemHandler()
+    : FileSystemCommandHandler("fs reset")
+  {}
+
+  int handle(
+      Monitor *mon,
+      FSMap &fsmap,
+      MonOpRequestRef op,
+      map<string, cmd_vartype> &cmdmap,
+      std::stringstream &ss) override
+  {
+    string fs_name;
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    auto fs = fsmap.get_filesystem(fs_name);
+    if (fs == nullptr) {
+        ss << "filesystem '" << fs_name << "' does not exist";
+        // Unlike fs rm, we consider this case an error
+        return -ENOENT;
+    }
+
+    // Check that no MDS daemons are active
+    if (fs->mds_map.get_num_up_mds() > 0) {
+      ss << "all MDS daemons must be inactive before resetting filesystem: set the cluster_down flag"
+            " and use `ceph mds fail` to make this so";
+      return -EINVAL;
+    }
+
+    // Check for confirmation flag
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    if (sure != "--yes-i-really-mean-it") {
+      ss << "this is a potentially destructive operation, only for use by experts in disaster recovery.  "
+        "Add --yes-i-really-mean-it if you are sure you wish to continue.";
+      return -EPERM;
+    }
+
+    fsmap.reset_filesystem(fs->fscid);
+
+    return 0;
+  }
+};
+
 class RemoveDataPoolHandler : public FileSystemCommandHandler
 {
   public:
@@ -728,6 +773,7 @@ std::list<std::shared_ptr<FileSystemCommandHandler> > FileSystemCommandHandler::
         "mds rm_data_pool"));
   handlers.push_back(std::make_shared<FsNewHandler>());
   handlers.push_back(std::make_shared<RemoveFilesystemHandler>());
+  handlers.push_back(std::make_shared<ResetFilesystemHandler>());
 
   handlers.push_back(std::make_shared<SetDefaultHandler>());
   handlers.push_back(std::make_shared<AliasHandler<SetDefaultHandler> >(

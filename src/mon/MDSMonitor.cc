@@ -1239,24 +1239,6 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
     goto out;
   } 
 
-  /* Execute filesystem add/remove, or pass through to filesystem_command */
-  r = management_command(op, prefix, cmdmap, ss);
-  if (r >= 0)
-    goto out;
-  
-  if (r == -EAGAIN) {
-    // message has been enqueued for retry; return.
-    dout(4) << __func__ << " enqueue for retry by management_command" << dendl;
-    return false;
-  } else if (r != -ENOSYS) {
-    // MDSMonitor::management_command() returns -ENOSYS if it knows nothing
-    // about the command passed to it, in which case we will check whether
-    // MDSMonitor::filesystem_command() knows about it.  If on the other hand
-    // the error code is different from -ENOSYS, we will treat it as is and
-    // behave accordingly.
-    goto out;
-  }
-
   r = filesystem_command(op, prefix, cmdmap, ss);
   if (r >= 0) {
     goto out;
@@ -1300,79 +1282,6 @@ out:
     // reply immediately
     mon->reply_command(op, r, rs, rdata, get_last_committed());
     return false;
-  }
-}
-
-/**
- * Handle a command for creating or removing a filesystem.
- *
- * @retval 0        Command was successfully handled and has side effects
- * @retval -EAGAIN  Message has been queued for retry
- * @retval -ENOSYS  Unknown command
- * @retval < 0      An error has occurred; **ss** may have been set.
- */
-int MDSMonitor::management_command(
-    MonOpRequestRef op,
-    std::string const &prefix,
-    map<string, cmd_vartype> &cmdmap,
-    std::stringstream &ss)
-{
-  if (prefix == "fs reset") {
-    string fs_name;
-    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
-    auto fs = pending_fsmap.get_filesystem(fs_name);
-    if (fs == nullptr) {
-        ss << "filesystem '" << fs_name << "' does not exist";
-        // Unlike fs rm, we consider this case an error
-        return -ENOENT;
-    }
-
-    // Check that no MDS daemons are active
-    if (!fs->mds_map.up.empty()) {
-      ss << "all MDS daemons must be inactive before resetting filesystem: set the cluster_down flag"
-            " and use `ceph mds fail` to make this so";
-      return -EINVAL;
-    }
-
-    // Check for confirmation flag
-    string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    if (sure != "--yes-i-really-mean-it") {
-      ss << "this is a potentially destructive operation, only for use by experts in disaster recovery.  "
-        "Add --yes-i-really-mean-it if you are sure you wish to continue.";
-      return -EPERM;
-    }
-
-    FSMap newmap;
-
-    auto new_fs = std::make_shared<Filesystem>();
-
-    // Populate rank 0 as existing (so don't go into CREATING)
-    // but failed (so that next available MDS is assigned the rank)
-    new_fs->mds_map.in.insert(mds_rank_t(0));
-    new_fs->mds_map.failed.insert(mds_rank_t(0));
-
-    // Carry forward what makes sense
-    new_fs->fscid = fs->fscid;
-    new_fs->mds_map.inline_data_enabled = fs->mds_map.inline_data_enabled;
-    new_fs->mds_map.max_mds = 1;
-    new_fs->mds_map.data_pools = fs->mds_map.data_pools;
-    new_fs->mds_map.metadata_pool = fs->mds_map.metadata_pool;
-    new_fs->mds_map.cas_pool = fs->mds_map.cas_pool;
-    new_fs->mds_map.fs_name = fs->mds_map.fs_name;
-    new_fs->mds_map.max_file_size = g_conf->mds_max_file_size;
-    new_fs->mds_map.compat = fsmap.compat;
-    new_fs->mds_map.created = ceph_clock_now();
-    new_fs->mds_map.modified = ceph_clock_now();
-    new_fs->mds_map.session_timeout = g_conf->mds_session_timeout;
-    new_fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
-    new_fs->mds_map.enabled = true;
-
-    // Persist the new FSMap
-    pending_fsmap.filesystems[new_fs->fscid] = new_fs;
-    return 0;
-  } else {
-    return -ENOSYS;
   }
 }
 

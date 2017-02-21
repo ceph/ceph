@@ -324,6 +324,13 @@ public:
   }
 
   /**
+   * Reset all the state information (not configuration information)
+   * in a particular filesystem.  Caller must have verified that
+   * the filesystem already exists.
+   */
+  void reset_filesystem(fs_cluster_id_t fscid);
+
+  /**
    * Mutator helper for Filesystem objects: expose a non-const
    * Filesystem pointer to `fn` and update epochs appropriately.
    */
