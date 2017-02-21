@@ -576,7 +576,7 @@ void BitMapZone::dump_state(int& count)
   BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
           &m_bmap_vec, 0);
   dout(0) << __func__ << " zone " << count << " dump start " << dendl;
-  while ((bmap = (BmapEntry *) iter.next())) {
+  while ((bmap = static_cast<BmapEntry *>(iter.next()))) {
     bmap->dump_state(cct, bmap_idx);
     bmap_idx++;
   }
@@ -830,8 +830,8 @@ bool BitMapAreaIN::is_allocated(int64_t start_block, int64_t num_blocks)
   }
 
   while (num_blocks) {
-    area = (BitMapArea *) m_child_list->get_nth_item(
-                    start_block / m_child_size_blocks);
+    area = static_cast<BitMapArea *>(m_child_list->get_nth_item(
+                    start_block / m_child_size_blocks));
 
     area_block_offset = start_block % m_child_size_blocks;
     falling_in_area = MIN(m_child_size_blocks - area_block_offset,
@@ -855,7 +855,7 @@ int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wrap, int64_t num_blocks, i
   BmapEntityListIter iter = BmapEntityListIter(
         m_child_list, hint / m_child_size_blocks, wrap);
 
-  while ((child = (BitMapArea *) iter.next())) {
+  while ((child = static_cast<BitMapArea *>(iter.next()))) {
     if (!child_check_n_lock(child, 1)) {
       hint = 0;
       continue;
@@ -906,8 +906,8 @@ void BitMapAreaIN::set_blocks_used_int(int64_t start_block, int64_t num_blocks)
   alloc_assert(start_block >= 0);
 
   while (blks) {
-    child = (BitMapArea *) m_child_list->get_nth_item(
-                  start_blk / m_child_size_blocks);
+    child = static_cast<BitMapArea *>(m_child_list->get_nth_item(
+                  start_blk / m_child_size_blocks));
 
     child_block_offset = start_blk % child->size();
     falling_in_child = MIN(m_child_size_blocks - child_block_offset,
@@ -946,8 +946,8 @@ void BitMapAreaIN::free_blocks_int(int64_t start_block, int64_t num_blocks)
   }
 
   while (num_blocks) {
-    child = (BitMapArea *) m_child_list->get_nth_item(
-          start_block / m_child_size_blocks);
+    child = static_cast<BitMapArea *>(m_child_list->get_nth_item(
+          start_block / m_child_size_blocks));
 
     child_block_offset = start_block % m_child_size_blocks;
 
@@ -980,7 +980,7 @@ void BitMapAreaIN::dump_state(int& count)
   BmapEntityListIter iter = BmapEntityListIter(
         m_child_list, 0, false);
 
-  while ((child = (BitMapArea *) iter.next())) {
+  while ((child = static_cast<BitMapArea *>(iter.next()))) {
     child->dump_state(count);
   }
 }
@@ -1035,7 +1035,7 @@ BitMapAreaLeaf::~BitMapAreaLeaf()
 
   BitMapAreaList *list = m_child_list;
   for (int64_t i = 0; i < list->size(); i++) {
-    BitMapArea *child = (BitMapArea *) list->get_nth_item(i);
+    BitMapArea *child = static_cast<BitMapArea *>(list->get_nth_item(i));
     delete child;
   }
 
@@ -1118,8 +1118,8 @@ void BitMapAreaLeaf::free_blocks_int(int64_t start_block, int64_t num_blocks)
   }
 
   while (num_blocks) {
-    child = (BitMapArea *) m_child_list->get_nth_item(
-          start_block / m_child_size_blocks);
+    child = static_cast<BitMapArea *>(m_child_list->get_nth_item(
+          start_block / m_child_size_blocks));
 
     child_block_offset = start_block % m_child_size_blocks;
 
@@ -1242,7 +1242,7 @@ BitAllocator::~BitAllocator()
 
   BitMapAreaList *list = m_child_list;
   for (int64_t i = 0; i < list->size(); i++) {
-    BitMapArea *child = (BitMapArea *) list->get_nth_item(i);
+    BitMapArea *child = static_cast<BitMapArea *>(list->get_nth_item(i));
     delete child;
   }
 
