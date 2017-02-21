@@ -478,6 +478,32 @@ class AddDataPoolHandler : public FileSystemCommandHandler
   }
 };
 
+class SetDefaultHandler : public FileSystemCommandHandler
+{
+  public:
+  SetDefaultHandler()
+    : FileSystemCommandHandler("fs set-default")
+  {}
+
+  int handle(
+      Monitor *mon,
+      FSMap &fsmap,
+      MonOpRequestRef op,
+      map<string, cmd_vartype> &cmdmap,
+      std::stringstream &ss) override
+  {
+    std::string fs_name;
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    auto fs = fsmap.get_filesystem(fs_name);
+    if (fs == nullptr) {
+        ss << "filesystem '" << fs_name << "' does not exist";
+        return -ENOENT;
+    }
+
+    fsmap.set_legacy_client_fscid(fs->fscid);
+    return 0;
+  }
+};
 
 class RemoveDataPoolHandler : public FileSystemCommandHandler
 {
@@ -591,6 +617,34 @@ class LegacyHandler : public T
   }
 };
 
+/**
+ * For commands with an alternative prefix
+ */
+template<typename T>
+class AliasHandler : public T
+{
+  std::string alias_prefix;
+
+  public:
+  AliasHandler(const std::string &new_prefix)
+    : T()
+  {
+    alias_prefix = new_prefix;
+  }
+
+  std::string const &get_prefix() override {return alias_prefix;}
+
+  int handle(
+      Monitor *mon,
+      FSMap &fsmap,
+      MonOpRequestRef op,
+      map<string, cmd_vartype> &cmdmap,
+      std::stringstream &ss) override
+  {
+    return T::handle(mon, fsmap, op, cmdmap, ss);
+  }
+};
+
 
 std::list<std::shared_ptr<FileSystemCommandHandler> > FileSystemCommandHandler::load()
 {
@@ -608,6 +662,10 @@ std::list<std::shared_ptr<FileSystemCommandHandler> > FileSystemCommandHandler::
   handlers.push_back(std::make_shared<LegacyHandler<RemoveDataPoolHandler> >(
         "mds rm_data_pool"));
   handlers.push_back(std::make_shared<FsNewHandler>());
+
+  handlers.push_back(std::make_shared<SetDefaultHandler>());
+  handlers.push_back(std::make_shared<AliasHandler<SetDefaultHandler> >(
+        "fs set_default"));
 
   return handlers;
 }

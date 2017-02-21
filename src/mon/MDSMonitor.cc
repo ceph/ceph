@@ -1230,6 +1230,15 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
     }
   }
 
+  if (prefix == "mds newfs") {
+    // newfs is the legacy command that in single-filesystem times
+    // used to be equivalent to doing an "fs rm ; fs new".  We
+    // can't do this in a sane way in multi-filesystem world.
+    ss << "'newfs' no longer available.  Please use 'fs new'.";
+    r = -EINVAL;
+    goto out;
+  } 
+
   /* Execute filesystem add/remove, or pass through to filesystem_command */
   r = management_command(op, prefix, cmdmap, ss);
   if (r >= 0)
@@ -1308,15 +1317,7 @@ int MDSMonitor::management_command(
     map<string, cmd_vartype> &cmdmap,
     std::stringstream &ss)
 {
-  op->mark_mdsmon_event(__func__);
-
-  if (prefix == "mds newfs") {
-    // newfs is the legacy command that in single-filesystem times
-    // used to be equivalent to doing an "fs rm ; fs new".  We
-    // can't do this in a sane way in multi-filesystem world.
-    ss << "'newfs' no longer available.  Please use 'fs new'.";
-    return -EINVAL;
-  } else if (prefix == "fs rm") {
+  if (prefix == "fs rm") {
     // Check caller has correctly named the FS to delete
     // (redundant while there is only one FS, but command
     //  syntax should apply to multi-FS future)
@@ -1410,18 +1411,6 @@ int MDSMonitor::management_command(
 
     // Persist the new FSMap
     pending_fsmap.filesystems[new_fs->fscid] = new_fs;
-    return 0;
-  } else if (prefix == "fs set_default" ||
-	     prefix == "fs set-default") {
-    string fs_name;
-    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
-    auto fs = pending_fsmap.get_filesystem(fs_name);
-    if (fs == nullptr) {
-        ss << "filesystem '" << fs_name << "' does not exist";
-        return -ENOENT;
-    }
-
-    pending_fsmap.legacy_client_fscid = fs->fscid;
     return 0;
   } else {
     return -ENOSYS;
