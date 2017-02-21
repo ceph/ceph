@@ -2273,6 +2273,13 @@ private:
     };
     vector<write_item> writes;                 ///< blobs we're writing
 
+    /// partial clone of the context
+    void fork(const WriteContext& other) {
+      buffered = other.buffered;
+      compress = other.compress;
+      target_blob_size = other.target_blob_size;
+      csum_order = other.csum_order;
+    }
     void write(
       BlobRef b,
       uint64_t blob_len,
@@ -2335,12 +2342,6 @@ private:
                       uint64_t length,
                       bufferlist& bl,
                       WriteContext *wctx);
-  void _do_garbage_collection(TransContext *txc,
-			      CollectionRef& c,
-			      OnodeRef o,
-			      uint64_t offset,
-			      uint64_t length,
-			      WriteContext *wctx);
 
   int _touch(TransContext *txc,
 	     CollectionRef& c,
