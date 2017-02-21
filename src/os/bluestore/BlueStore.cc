@@ -8661,7 +8661,7 @@ void BlueStore::_do_write_small(
 			 length, b, &wctx->old_extents);
   txc->statfs_delta.stored() += le->length;
   dout(20) << __func__ << "  lex " << *le << dendl;
-  wctx->write(b, alloc_len, b_off0, bl, b_off, length, true);
+  wctx->write(b, alloc_len, b_off0, std::move(bl), b_off, length, true);
   logger->inc(l_bluestore_write_small_new);
   return;
 }
@@ -8671,7 +8671,7 @@ void BlueStore::_do_write_big(
     CollectionRef &c,
     OnodeRef o,
     uint64_t offset, uint64_t length,
-    bufferlist::iterator& blp,
+    bufferlist&& bl,
     WriteContext *wctx)
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
@@ -8683,10 +8683,16 @@ void BlueStore::_do_write_big(
   while (length > 0) {
     BlobRef b = c->new_blob();
     auto l = MIN(wctx->target_blob_size, length);
-    bufferlist t;
-    blp.copy(l, t);
+
+    ceph::bufferlist t;
+    if (l == length) {
+      //std::cout << "l=" << l << std::endl;
+      t = std::move(bl);
+    } else {
+      bl.begin().copy(l, t);
+    }
     _buffer_cache_write(txc, b, 0, t, wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-    wctx->write(b, l, 0, t, 0, l, false);
+    wctx->write(b, l, 0, std::move(t), 0, l, false);
     Extent *le = o->extent_map.set_lextent(offset, 0, l,
                                            b, &wctx->old_extents);
     txc->statfs_delta.stored() += l;
@@ -9025,7 +9031,7 @@ void BlueStore::_do_write_data(
     }
 
     if (middle_length) {
-      _do_write_big(txc, c, o, middle_offset, middle_length, p, wctx);
+      _do_write_big(txc, c, o, middle_offset, middle_length, std::move(bl), wctx);
     }
 
     if (tail_length) {

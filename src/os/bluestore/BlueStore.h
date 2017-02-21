@@ -2328,14 +2328,14 @@ private:
         BlobRef b,
         uint64_t blob_len,
         uint64_t o,
-        bufferlist& bl,
+        ceph::bufferlist&& bl,
         uint64_t o0,
         uint64_t l0,
         bool _mark_unused)
        : b(b),
          blob_length(blob_len),
          b_off(o),
-         bl(bl),
+         bl(std::move(bl)),
          b_off0(o0),
          length0(l0),
          mark_unused(_mark_unused) {}
@@ -2346,10 +2346,10 @@ private:
       BlobRef b,
       uint64_t blob_len,
       uint64_t o,
-      bufferlist& bl,
+      ceph::bufferlist&& bl,
       uint64_t o0,
       uint64_t len0, bool _mark_unused) {
-      writes.emplace_back(write_item(b, blob_len, o, bl, o0, len0, _mark_unused));
+      writes.emplace_back(b, blob_len, o, std::move(bl), o0, len0, _mark_unused);
     }
   };
 
@@ -2365,7 +2365,7 @@ private:
     CollectionRef &c,
     OnodeRef o,
     uint64_t offset, uint64_t length,
-    bufferlist::iterator& blp,
+    ceph::bufferlist&& bl,
     WriteContext *wctx);
   int _do_alloc_write(
     TransContext *txc,
