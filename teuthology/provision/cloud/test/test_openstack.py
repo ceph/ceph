@@ -176,9 +176,11 @@ class TestOpenStackProvider(TestOpenStackBase):
 
     def test_sizes(self):
         obj = cloud.get_provider('my_provider')
-        self.mocks['m_list_sizes'].return_value = ['size0', 'size1']
+        fake_sizes = [get_fake_obj(attributes=dict(name='size%s' % i)) for
+                      i in range(2)]
+        self.mocks['m_list_sizes'].return_value = fake_sizes
         assert not hasattr(obj, '_sizes')
-        assert obj.sizes == ['size0', 'size1']
+        assert [s.name for s in obj.sizes] == ['size0', 'size1']
         assert hasattr(obj, '_sizes')
 
     def test_networks(self):
@@ -363,9 +365,9 @@ class TestOpenStackProvisioner(TestOpenStackBase):
     )
     def test_size(self, input_attrs, func_or_exc):
         size_attrs = [
-            dict(ram=8000, disk=9999, vcpus=99),
-            dict(ram=2**16, disk=20, vcpus=99),
-            dict(ram=2**16, disk=9999, vcpus=1),
+            dict(ram=8000, disk=9999, vcpus=99, name='s0'),
+            dict(ram=2**16, disk=20, vcpus=99, name='s1'),
+            dict(ram=2**16, disk=9999, vcpus=1, name='s2'),
         ]
         fake_sizes = list()
         for item in size_attrs:
@@ -482,7 +484,7 @@ class TestOpenStackProvisioner(TestOpenStackBase):
         node_name = 'node0'
         fake_sizes = [
             get_fake_obj(
-                attributes=dict(ram=2**16, disk=9999, vcpus=99)),
+                attributes=dict(ram=2**16, disk=9999, vcpus=99, name='s0')),
         ]
         fake_security_groups = [
             get_fake_obj(attributes=dict(name=name))

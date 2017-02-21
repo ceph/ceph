@@ -1,4 +1,5 @@
 import logging
+import re
 import requests
 import socket
 import time
@@ -82,7 +83,15 @@ class OpenStackProvider(Provider):
     @property
     def sizes(self):
         if not hasattr(self, '_sizes'):
-            self._sizes = retry(self.driver.list_sizes)
+            # By default, exclude instance types meant for Windows
+            exclude_sizes = self.conf.get('exclude_sizes', 'win-.*')
+            sizes = retry(self.driver.list_sizes)
+            if exclude_sizes:
+                sizes = filter(
+                    lambda s: not re.match(exclude_sizes, s.name),
+                    sizes
+                )
+            self._sizes = sizes
         return self._sizes
 
     @property
