@@ -551,13 +551,17 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
       fsmap.set_legacy_client_fscid(FS_CLUSTER_ID_NONE);
     }
 
+    std::vector<mds_gid_t> to_fail;
     // There may be standby_replay daemons left here
     for (const auto &i : fs->mds_map.get_mds_info()) {
       assert(i.second.state == MDSMap::STATE_STANDBY_REPLAY);
+      to_fail.push_back(i.first);
+    }
 
+    for (const auto &gid : to_fail) {
       // Standby replays don't write, so it isn't important to
       // wait for an osdmap propose here: ignore return value.
-      mon->mdsmon()->fail_mds_gid(i.first);
+      mon->mdsmon()->fail_mds_gid(gid);
     }
 
     fsmap.erase_filesystem(fs->fscid);
