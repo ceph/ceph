@@ -533,9 +533,11 @@ ConnectionRef AsyncMessenger::get_loopback_connection()
 int AsyncMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
   FUNCTRACE();
-  if (m && m->get_type() == CEPH_MSG_OSD_OP)
+  assert(m);
+
+  if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE(((MOSDOp *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP");
-  else if (m && m->get_type() == CEPH_MSG_OSD_OPREPLY)
+  else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
     OID_EVENT_TRACE(((MOSDOpReply *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP_REPLY");
 
   ldout(cct, 1) << __func__ << "--> " << dest.name << " "
