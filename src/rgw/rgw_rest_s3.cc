@@ -4032,7 +4032,7 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
   int ret = 0;
   s->formatter->reset(); /* Try to throw it all away */
 
-  std::shared_ptr<RGWGetObj_ObjStore_S3Website> getop( (RGWGetObj_ObjStore_S3Website*) op_get() );
+  std::shared_ptr<RGWGetObj_ObjStore_S3Website> getop( static_cast<RGWGetObj_ObjStore_S3Website*>(op_get()));
   if (getop.get() == NULL) {
     return -1; // Trigger double error handler
   }
