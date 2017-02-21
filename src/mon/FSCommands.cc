@@ -17,6 +17,7 @@
 #include "PGMonitor.h"
 
 #include "FSCommands.h"
+#include "MDSMonitor.h"
 
 
 
@@ -505,6 +506,66 @@ class SetDefaultHandler : public FileSystemCommandHandler
   }
 };
 
+class RemoveFilesystemHandler : public FileSystemCommandHandler
+{
+  public:
+  RemoveFilesystemHandler()
+    : FileSystemCommandHandler("fs rm")
+  {}
+
+  int handle(
+      Monitor *mon,
+      FSMap &fsmap,
+      MonOpRequestRef op,
+      map<string, cmd_vartype> &cmdmap,
+      std::stringstream &ss) override
+  {
+    // Check caller has correctly named the FS to delete
+    // (redundant while there is only one FS, but command
+    //  syntax should apply to multi-FS future)
+    string fs_name;
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    auto fs = fsmap.get_filesystem(fs_name);
+    if (fs == nullptr) {
+        // Consider absence success to make deletes idempotent
+        ss << "filesystem '" << fs_name << "' does not exist";
+        return 0;
+    }
+
+    // Check that no MDS daemons are active
+    if (fs->mds_map.get_num_up_mds() > 0) {
+      ss << "all MDS daemons must be inactive before removing filesystem";
+      return -EINVAL;
+    }
+
+    // Check for confirmation flag
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    if (sure != "--yes-i-really-mean-it") {
+      ss << "this is a DESTRUCTIVE operation and will make data in your filesystem permanently" \
+            " inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
+      return -EPERM;
+    }
+
+    if (fsmap.get_legacy_client_fscid() == fs->fscid) {
+      fsmap.set_legacy_client_fscid(FS_CLUSTER_ID_NONE);
+    }
+
+    // There may be standby_replay daemons left here
+    for (const auto &i : fs->mds_map.get_mds_info()) {
+      assert(i.second.state == MDSMap::STATE_STANDBY_REPLAY);
+
+      // Standby replays don't write, so it isn't important to
+      // wait for an osdmap propose here: ignore return value.
+      mon->mdsmon()->fail_mds_gid(i.first);
+    }
+
+    fsmap.erase_filesystem(fs->fscid);
+
+    return 0;
+  }
+};
+
 class RemoveDataPoolHandler : public FileSystemCommandHandler
 {
   public:
@@ -662,6 +723,7 @@ std::list<std::shared_ptr<FileSystemCommandHandler> > FileSystemCommandHandler::
   handlers.push_back(std::make_shared<LegacyHandler<RemoveDataPoolHandler> >(
         "mds rm_data_pool"));
   handlers.push_back(std::make_shared<FsNewHandler>());
+  handlers.push_back(std::make_shared<RemoveFilesystemHandler>());
 
   handlers.push_back(std::make_shared<SetDefaultHandler>());
   handlers.push_back(std::make_shared<AliasHandler<SetDefaultHandler> >(

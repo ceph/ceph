@@ -1317,48 +1317,7 @@ int MDSMonitor::management_command(
     map<string, cmd_vartype> &cmdmap,
     std::stringstream &ss)
 {
-  if (prefix == "fs rm") {
-    // Check caller has correctly named the FS to delete
-    // (redundant while there is only one FS, but command
-    //  syntax should apply to multi-FS future)
-    string fs_name;
-    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
-    auto fs = pending_fsmap.get_filesystem(fs_name);
-    if (fs == nullptr) {
-        // Consider absence success to make deletes idempotent
-        ss << "filesystem '" << fs_name << "' does not exist";
-        return 0;
-    }
-
-    // Check that no MDS daemons are active
-    if (!fs->mds_map.up.empty()) {
-      ss << "all MDS daemons must be inactive before removing filesystem";
-      return -EINVAL;
-    }
-
-    // Check for confirmation flag
-    string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    if (sure != "--yes-i-really-mean-it") {
-      ss << "this is a DESTRUCTIVE operation and will make data in your filesystem permanently" \
-            " inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
-      return -EPERM;
-    }
-
-    if (pending_fsmap.legacy_client_fscid == fs->fscid) {
-      pending_fsmap.legacy_client_fscid = FS_CLUSTER_ID_NONE;
-    }
-
-    // There may be standby_replay daemons left here
-    for (const auto &i : fs->mds_map.mds_info) {
-      assert(i.second.state == MDSMap::STATE_STANDBY_REPLAY);
-      fail_mds_gid(i.first);
-    }
-
-    pending_fsmap.filesystems.erase(fs->fscid);
-
-    return 0;
-  } else if (prefix == "fs reset") {
+  if (prefix == "fs reset") {
     string fs_name;
     cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
     auto fs = pending_fsmap.get_filesystem(fs_name);
