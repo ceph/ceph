@@ -101,11 +101,6 @@ class MDSMonitor : public PaxosService {
       mds_role_t *role,
       std::ostream &ss);
 
-  int management_command(
-      MonOpRequestRef op,
-      std::string const &prefix,
-      map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss);
   void modify_legacy_filesystem(
       std::function<void(std::shared_ptr<Filesystem> )> fn);
   int legacy_filesystem_command(
