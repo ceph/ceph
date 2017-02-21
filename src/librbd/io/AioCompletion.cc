@@ -70,6 +70,8 @@ void AioCompletion::complete() {
     ictx->perfcounter->tinc(l_librbd_discard_latency, elapsed); break;
   case AIO_TYPE_FLUSH:
     ictx->perfcounter->tinc(l_librbd_aio_flush_latency, elapsed); break;
+  case AIO_TYPE_WRITESAME:
+    ictx->perfcounter->tinc(l_librbd_ws_latency, elapsed); break;
   default:
     lderr(cct) << "completed invalid aio_type: " << aio_type << dendl;
     break;
