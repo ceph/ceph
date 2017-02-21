@@ -107,6 +107,10 @@ def create_users(ctx, config):
         for section, user in users.iteritems():
             _config_user(ragweed_conf, section, '{user}.{client}'.format(user=user, client=client))
             log.debug('Creating user {user} on {host}'.format(user=ragweed_conf[section]['user_id'], host=client))
+            if user == 'sysuser':
+                sys_str = 'true'
+            else:
+                sys_str = 'false'
             ctx.cluster.only(client).run(
                 args=[
                     'adjust-ulimits',
@@ -120,6 +124,7 @@ def create_users(ctx, config):
                     '--access-key', ragweed_conf[section]['access_key'],
                     '--secret', ragweed_conf[section]['secret_key'],
                     '--email', ragweed_conf[section]['email'],
+                    '--system', sys_str,
                 ],
             )
     try:
