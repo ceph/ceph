@@ -12,6 +12,22 @@
 #define dout_prefix *_dout << "rbd::mirror::image_sync::ObjectCopyRequest: " \
                            << this << " " << __func__
 
+namespace librados {
+
+bool operator==(const clone_info_t& rhs, const clone_info_t& lhs) {
+  return (rhs.cloneid == lhs.cloneid &&
+          rhs.snaps == lhs.snaps &&
+          rhs.overlap == lhs.overlap &&
+          rhs.size == lhs.size);
+}
+
+bool operator==(const snap_set_t& rhs, const snap_set_t& lhs) {
+  return (rhs.clones == lhs.clones &&
+          rhs.seq == lhs.seq);
+}
+
+} // namespace librados
+
 namespace rbd {
 namespace mirror {
 namespace image_sync {
@@ -54,6 +70,8 @@ void ObjectCopyRequest<I>::send_list_snaps() {
     ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_list_snaps>(this);
 
   librados::ObjectReadOperation op;
+  m_snap_set = {};
+  m_snap_ret = 0;
   op.list_snaps(&m_snap_set, &m_snap_ret);
 
   m_remote_io_ctx.snap_set_read(CEPH_SNAPDIR);
@@ -75,10 +93,24 @@ void ObjectCopyRequest<I>::handle_list_snaps(int r) {
     finish(0);
     return;
   }
+
   if (r < 0) {
     derr << ": failed to list snaps: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
+  }
+
+  if (m_retry_missing_read) {
+    if (m_snap_set == m_retry_snap_set) {
+      derr << ": read encountered missing object using up-to-date snap set"
+           << dendl;
+      finish(-ENOENT);
+      return;
+    }
+
+    dout(20) << ": retrying using updated snap set" << dendl;
+    m_retry_missing_read = false;
+    m_retry_snap_set = {};
   }
 
   compute_diffs();
@@ -97,16 +129,17 @@ void ObjectCopyRequest<I>::send_read_object() {
   auto &sync_ops = m_snap_sync_ops.begin()->second;
   assert(!sync_ops.empty());
 
-  // map the sync op start snap id back to the necessary read snap id
-  librados::snap_t remote_snap_seq = m_snap_sync_ops.begin()->first.second;
-  m_remote_io_ctx.snap_set_read(remote_snap_seq);
-
   bool read_required = false;
   librados::ObjectReadOperation op;
   for (auto &sync_op : sync_ops) {
     switch (sync_op.type) {
     case SYNC_OP_TYPE_WRITE:
       if (!read_required) {
+        // map the sync op start snap id back to the necessary read snap id
+        librados::snap_t remote_snap_seq =
+          m_snap_sync_ops.begin()->first.second;
+        m_remote_io_ctx.snap_set_read(remote_snap_seq);
+
         dout(20) << ": remote_snap_seq=" << remote_snap_seq << dendl;
         read_required = true;
       }
@@ -138,6 +171,15 @@ void ObjectCopyRequest<I>::send_read_object() {
 template <typename I>
 void ObjectCopyRequest<I>::handle_read_object(int r) {
   dout(20) << ": r=" << r << dendl;
+
+  if (r == -ENOENT) {
+    m_retry_snap_set = m_snap_set;
+    m_retry_missing_read = true;
+
+    dout(5) << ": object missing potentially due to removed snapshot" << dendl;
+    send_list_snaps();
+    return;
+  }
 
   if (r < 0) {
     derr << ": failed to read from remote object: " << cpp_strerror(r)
@@ -312,6 +354,10 @@ void ObjectCopyRequest<I>::handle_update_object_map(int r) {
 template <typename I>
 void ObjectCopyRequest<I>::compute_diffs() {
   CephContext *cct = m_local_image_ctx->cct;
+
+  m_snap_sync_ops = {};
+  m_snap_object_states = {};
+  m_snap_object_sizes = {};
 
   librados::snap_t remote_sync_pont_snap_id = m_snap_map->rbegin()->first;
   uint64_t prev_end_size = 0;
