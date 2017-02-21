@@ -40,7 +40,7 @@ namespace ceph {
      */
     int reconnect(const entity_addr_t &addr, int sd);
     int nonblock_connect(const entity_addr_t &addr, const entity_addr_t& bind_addr);
-    void set_priority(int sd, int priority);
+    void set_priority(int sd, int priority, int domain);
   };
 }
 
