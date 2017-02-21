@@ -106,7 +106,11 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
   rados_pool_create(cluster_a, pool2name);
 
   list<rados_completion_t> cls;
-  while (true) {
+  // this should normally trigger pretty easily, but we need to bound
+  // the requests because if we get too many we'll get stuck by always
+  // sending enough messages that we hit the socket failure injection.
+  int max = 512;
+  while (max--) {
     char buf[100];
     rados_completion_t c;
     rados_aio_create_completion(0, 0, 0, &c);
@@ -117,6 +121,11 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
       break;
     }
   }
+  while (!rados_aio_is_complete(cls.front())) {
+    cout << "waiting 1 sec" << std::endl;
+    sleep(1);
+  }
+
   cout << " started " << cls.size() << " aios" << std::endl;
   for (auto c : cls) {
     cout << "waiting " << (void*)c << std::endl;
