@@ -97,7 +97,8 @@ struct MonClientPinger : public Dispatcher {
 class MonConnection {
 public:
   MonConnection(CephContext *cct,
-		ConnectionRef conn);
+		ConnectionRef conn,
+		uint64_t global_id);
   ~MonConnection();
   MonConnection(MonConnection&& rhs) = default;
   MonConnection& operator=(MonConnection&&) = default;
@@ -140,7 +141,7 @@ private:
   ConnectionRef con;
 
   std::unique_ptr<AuthClientHandler> auth;
-  uint64_t global_id = 0;
+  uint64_t global_id;
 };
 
 class MonClient : public Dispatcher {
@@ -205,8 +206,8 @@ private:
   void _finish_hunting();
   void _finish_auth(int auth_err);
   void _reopen_session(int rank = -1);
-  MonConnection& _add_conn(unsigned rank);
-  void _add_conns();
+  MonConnection& _add_conn(unsigned rank, uint64_t global_id);
+  void _add_conns(uint64_t global_id);
   void _send_mon_message(Message *m);
 
 public:
