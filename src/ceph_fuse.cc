@@ -108,12 +108,12 @@ int main(int argc, const char **argv, const char *envp[]) {
   g_ceph_context->_conf->apply_changes(NULL);
 
   // check for 32-bit arch
-  if (sizeof(long) == 4) {
+#ifndef __LP64__
     cerr << std::endl;
     cerr << "WARNING: Ceph inode numbers are 64 bits wide, and FUSE on 32-bit kernels does" << std::endl;
     cerr << "         not cope well with that situation.  Expect to crash shortly." << std::endl;
     cerr << std::endl;
-  }
+#endif
 
   Preforker forker;
   if (g_conf->daemonize) {
