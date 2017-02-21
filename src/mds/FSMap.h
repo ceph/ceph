@@ -177,6 +177,11 @@ public:
     legacy_client_fscid = fscid;
   }
 
+  fs_cluster_id_t get_legacy_client_fscid() const
+  {
+    return legacy_client_fscid;
+  }
+
   /**
    * Get state of all daemons (for all filesystems, including all standbys)
    */
@@ -308,6 +313,15 @@ public:
   void create_filesystem(const std::string &name,
                          int64_t metadata_pool, int64_t data_pool,
                          uint64_t features);
+
+  /**
+   * Remove the filesystem (it must exist).  Caller should already
+   * have failed out any MDSs that were assigned to the filesystem.
+   */
+  void erase_filesystem(fs_cluster_id_t fscid)
+  {
+    filesystems.erase(fscid);
+  }
 
   /**
    * Mutator helper for Filesystem objects: expose a non-const

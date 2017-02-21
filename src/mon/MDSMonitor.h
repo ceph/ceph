@@ -65,6 +65,10 @@ class MDSMonitor : public PaxosService {
   void dump_info(Formatter *f);
   int print_nodes(Formatter *f);
 
+  /**
+   * Return true if a blacklist was done (i.e. OSD propose needed)
+   */
+  bool fail_mds_gid(mds_gid_t gid);
  protected:
   // mds maps
   FSMap fsmap;           // current
@@ -88,10 +92,6 @@ class MDSMonitor : public PaxosService {
 		  list<pair<health_status_t,string> > *detail,
 		  CephContext *cct) const override;
   int fail_mds(std::ostream &ss, const std::string &arg);
-  /**
-   * Return true if a blacklist was done (i.e. OSD propose needed)
-   */
-  bool fail_mds_gid(mds_gid_t gid);
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
