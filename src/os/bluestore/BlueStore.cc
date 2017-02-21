@@ -7249,10 +7249,16 @@ void BlueStore::_txc_finish_io(TransContext *txc)
       break;
     }
   }
+
+  TransBatch batch(TransContext::STATE_IO_DONE);
   do {
-    _txc_state_proc(&*p++);
+    batch.emplace_back(&*p++);
   } while (p != osr->q.end() &&
 	   p->state == TransContext::STATE_IO_DONE);
+
+  if (! batch.empty()) {
+    _txc_state_proc(batch);
+  }
 }
 
 void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
