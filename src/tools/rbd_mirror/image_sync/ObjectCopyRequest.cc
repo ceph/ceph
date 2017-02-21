@@ -104,17 +104,16 @@ void ObjectCopyRequest<I>::send_read_object() {
   bool read_required = false;
   librados::ObjectReadOperation op;
   for (auto &sync_op : sync_ops) {
-    switch (std::get<0>(sync_op)) {
+    switch (sync_op.type) {
     case SYNC_OP_TYPE_WRITE:
       if (!read_required) {
         dout(20) << ": remote_snap_seq=" << remote_snap_seq << dendl;
         read_required = true;
       }
 
-      dout(20) << ": read op: " << std::get<1>(sync_op) << "~"
-               << std::get<2>(sync_op) << dendl;
-      op.read(std::get<1>(sync_op), std::get<2>(sync_op),
-              &std::get<3>(sync_op), nullptr);
+      dout(20) << ": read op: " << sync_op.offset << "~" << sync_op.length
+               << dendl;
+      op.read(sync_op.offset, sync_op.length, &sync_op.out_bl, nullptr);
       break;
     default:
       break;
@@ -176,15 +175,15 @@ void ObjectCopyRequest<I>::send_write_object() {
 
   librados::ObjectWriteOperation op;
   for (auto &sync_op : sync_ops) {
-    switch (std::get<0>(sync_op)) {
+    switch (sync_op.type) {
     case SYNC_OP_TYPE_WRITE:
-      dout(20) << ": write op: " << std::get<1>(sync_op) << "~"
-               << std::get<3>(sync_op).length() << dendl;
-      op.write(std::get<1>(sync_op), std::get<3>(sync_op));
+      dout(20) << ": write op: " << sync_op.offset << "~"
+               << sync_op.out_bl.length() << dendl;
+      op.write(sync_op.offset, sync_op.out_bl);
       break;
     case SYNC_OP_TYPE_TRUNC:
-      dout(20) << ": trunc op: " << std::get<1>(sync_op) << dendl;
-      op.truncate(std::get<1>(sync_op));
+      dout(20) << ": trunc op: " << sync_op.offset << dendl;
+      op.truncate(sync_op.offset);
       break;
     case SYNC_OP_TYPE_REMOVE:
       dout(20) << ": remove op" << dendl;
@@ -329,21 +328,19 @@ void ObjectCopyRequest<I>::compute_diffs() {
                  << it.get_len() << dendl;
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_WRITE,
                                                          it.get_start(),
-                                                         it.get_len(),
-                                                         bufferlist());
+                                                         it.get_len());
       }
       if (end_size < prev_end_size) {
         dout(20) << ": trunc op: " << end_size << dendl;
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_TRUNC,
-                                                         end_size, 0U,
-                                                         bufferlist());
+                                                         end_size, 0U);
       }
     } else {
       if (prev_exists) {
         // object remove
         dout(20) << ": remove op" << dendl;
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_REMOVE,
-                                                         0U, 0U, bufferlist());
+                                                         0U, 0U);
       }
     }
 
