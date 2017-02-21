@@ -222,8 +222,8 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
 	  return -EIO;
 	}
 
-	ldout(cct, 10) << __func__ << " from " << p->first << " to "
-		       << r->first << dendl;
+        ldout(cct, 10) << __func__ << " from " << p->first << " to "
+                       << *q << dendl;
 	tier->snap_seq = base.snap_seq;
 	tier->snap_epoch = base.snap_epoch;
 	tier->snaps = base.snaps;
