@@ -5033,7 +5033,7 @@ void OSD::ms_handle_fast_accept(Connection *con)
 
 bool OSD::ms_handle_reset(Connection *con)
 {
-  Session *session = (Session *)con->get_priv();
+  Session *session = static_cast<Session*>(con->get_priv());
   dout(2) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
@@ -5052,7 +5052,7 @@ bool OSD::ms_handle_refused(Connection *con)
   if (!cct->_conf->osd_fast_fail_on_connection_refused)
     return false;
 
-  Session *session = (Session *)con->get_priv();
+  Session *session = static_cast<Session*>(con->get_priv());
   dout(2) << "ms_handle_refused con " << con << " session " << session << dendl;
   if (!session)
     return false;
