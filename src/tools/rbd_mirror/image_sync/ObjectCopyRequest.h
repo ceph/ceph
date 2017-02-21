@@ -93,7 +93,8 @@ private:
   };
 
   typedef std::list<SyncOp> SyncOps;
-  typedef std::map<librados::snap_t, SyncOps> SnapSyncOps;
+  typedef std::pair<librados::snap_t, librados::snap_t> WriteReadSnapIds;
+  typedef std::map<WriteReadSnapIds, SyncOps> SnapSyncOps;
   typedef std::map<librados::snap_t, uint8_t> SnapObjectStates;
 
   ImageCtxT *m_local_image_ctx;
