@@ -4283,9 +4283,11 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     int r = alloc->reserve(gift);
     assert(r == 0);
 
+    thread_local uint64_t hint = 0;
+
     AllocExtentVector exts;
     int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
-					0, 0, &exts);
+					0, hint, &exts);
 
     if (alloc_len < (int64_t)gift) {
       derr << __func__ << " allocate failed on 0x" << std::hex << gift
@@ -4298,6 +4300,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
       bluestore_pextent_t e = bluestore_pextent_t(p);
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
       extents->push_back(e);
+      hint = p.end();
     }
     gift = 0;
 
