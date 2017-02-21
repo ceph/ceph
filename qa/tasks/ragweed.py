@@ -324,6 +324,10 @@ def task(ctx, config):
                 'fixtures' : {},
                 'user system'  : {},
                 'user regular'   : {},
+                'rados':
+                    {
+                    'ceph_conf'  : '/etc/ceph/ceph.conf',
+                    },
                 }
             )
 
