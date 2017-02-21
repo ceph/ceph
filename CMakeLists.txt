@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(Ceph)
-set(VERSION 0.94.9)
+set(VERSION 0.94.10)
 
 if (NOT (CMAKE_MAJOR_VERSION LESS 3))
   # Tweak policies (this one disables "missing" dependency warning)
