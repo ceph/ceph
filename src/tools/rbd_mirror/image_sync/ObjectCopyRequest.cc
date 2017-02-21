@@ -104,16 +104,16 @@ void ObjectCopyRequest<I>::send_read_object() {
   bool read_required = false;
   librados::ObjectReadOperation op;
   for (auto &sync_op : sync_ops) {
-    switch (std::get<0>(sync_op)) {
+    switch (sync_op.type) {
     case SYNC_OP_TYPE_WRITE:
       if (!read_required) {
         dout(20) << ": remote_snap_seq=" << remote_snap_seq << dendl;
         read_required = true;
       }
-      dout(20) << ": read op: " << std::get<1>(sync_op) << "~"
-               << std::get<2>(sync_op) << dendl;
-      op.sparse_read(std::get<1>(sync_op), std::get<2>(sync_op), &std::get<4>(sync_op),
-                     &std::get<3>(sync_op), nullptr);
+      dout(20) << ": read op: " << sync_op.offset << "~" << sync_op.length
+               << dendl;
+      op.sparse_read(sync_op.offset, sync_op.length, &sync_op.extent_map,
+                     &sync_op.out_bl, nullptr);
       op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
                        LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
       break;
@@ -178,11 +178,11 @@ void ObjectCopyRequest<I>::send_write_object() {
   uint64_t buffer_offset;
   librados::ObjectWriteOperation op;
   for (auto &sync_op : sync_ops) {
-    switch (std::get<0>(sync_op)) {
+    switch (sync_op.type) {
     case SYNC_OP_TYPE_WRITE:
-      object_offset = std::get<1>(sync_op);
+      object_offset = sync_op.offset;
       buffer_offset = 0;
-      for (auto it : std::get<4>(sync_op)) {
+      for (auto it : sync_op.extent_map) {
         if (object_offset < it.first) {
           dout(20) << ": zero op: " << object_offset << "~"
                    << it.first - object_offset << dendl;
@@ -190,15 +190,15 @@ void ObjectCopyRequest<I>::send_write_object() {
         }
         dout(20) << ": write op: " << it.first << "~" << it.second << dendl;
         bufferlist tmpbl;
-        tmpbl.substr_of(std::get<3>(sync_op), buffer_offset, it.second);
+        tmpbl.substr_of(sync_op.out_bl, buffer_offset, it.second);
         op.write(it.first, tmpbl);
         op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
                          LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
         buffer_offset += it.second;
         object_offset = it.first + it.second;
       }
-      if (object_offset < std::get<1>(sync_op) + std::get<2>(sync_op)) {
-        uint64_t sync_op_end = std::get<1>(sync_op) + std::get<2>(sync_op);
+      if (object_offset < sync_op.offset + sync_op.length) {
+        uint64_t sync_op_end = sync_op.offset + sync_op.length;
         assert(sync_op_end <= m_snap_object_sizes[remote_snap_seq]);
         if (sync_op_end == m_snap_object_sizes[remote_snap_seq]) {
           dout(20) << ": trunc op: " << object_offset << dendl;
@@ -212,12 +212,12 @@ void ObjectCopyRequest<I>::send_write_object() {
       }
       break;
     case SYNC_OP_TYPE_TRUNC:
-      if (std::get<1>(sync_op) > m_snap_object_sizes[remote_snap_seq]) {
+      if (sync_op.offset > m_snap_object_sizes[remote_snap_seq]) {
         // skip (must have been updated in WRITE op case issuing trunc op)
         break;
       }
-      dout(20) << ": trunc op: " << std::get<1>(sync_op) << dendl;
-      op.truncate(std::get<1>(sync_op));
+      dout(20) << ": trunc op: " << sync_op.offset << dendl;
+      op.truncate(sync_op.offset);
       break;
     case SYNC_OP_TYPE_REMOVE:
       dout(20) << ": remove op" << dendl;
@@ -334,7 +334,6 @@ void ObjectCopyRequest<I>::compute_diffs() {
              << "diff=" << diff << ", "
              << "end_size=" << end_size << ", "
              << "exists=" << exists << dendl;
-
     if (exists) {
       // clip diff to size of object (in case it was truncated)
       if (end_size < prev_end_size) {
@@ -363,16 +362,12 @@ void ObjectCopyRequest<I>::compute_diffs() {
                  << it.get_len() << dendl;
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_WRITE,
                                                          it.get_start(),
-                                                         it.get_len(),
-                                                         bufferlist(),
-                                                         std::map<uint64_t, uint64_t>());
+                                                         it.get_len());
       }
       if (end_size < prev_end_size) {
         dout(20) << ": trunc op: " << end_size << dendl;
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_TRUNC,
-                                                         end_size, 0U,
-                                                         bufferlist(),
-                                                         std::map<uint64_t, uint64_t>());
+                                                         end_size, 0U);
       }
       m_snap_object_sizes[end_remote_snap_id] = end_size;
     } else {
@@ -380,8 +375,7 @@ void ObjectCopyRequest<I>::compute_diffs() {
         // object remove
         dout(20) << ": remove op" << dendl;
         m_snap_sync_ops[end_remote_snap_id].emplace_back(SYNC_OP_TYPE_REMOVE,
-                                                         0U, 0U, bufferlist(),
-                                                         std::map<uint64_t, uint64_t>());
+                                                         0U, 0U);
       }
     }
 
