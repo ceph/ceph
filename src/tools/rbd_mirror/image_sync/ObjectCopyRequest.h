@@ -54,9 +54,11 @@ private:
    * <start>
    *    |
    *    v
-   * LIST_SNAPS
-   *    |
-   *    v
+   * LIST_SNAPS < * * *
+   *    |             * (-ENOENT and snap set stale)
+   *    |   * * * * * *
+   *    |   *
+   *    v   *
    * READ_OBJECT <--------\
    *    |                 | (repeat for each snapshot)
    *    v                 |
@@ -110,6 +112,9 @@ private:
 
   librados::snap_set_t m_snap_set;
   int m_snap_ret;
+
+  bool m_retry_missing_read = false;
+  librados::snap_set_t m_retry_snap_set;
 
   SnapSyncOps m_snap_sync_ops;
   SnapObjectStates m_snap_object_states;
