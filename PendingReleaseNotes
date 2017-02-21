@@ -1,6 +1,18 @@
 0.94.11
 -------
 
+* librbd and librados include lttng tracepoints on distros with
+  liblttng 2.4 or later (only Ubuntu Trusty for the ceph.com
+  packages). When running a daemon that uses these libraries, i.e. an
+  application that calls fork(2) or clone(2) without exec(3), you must
+  set LD_PRELOAD=liblttng-ust-fork.so.0 to prevent a crash in the
+  lttng atexit handler when the process exits. The only ceph tool that
+  requires this is rbd-fuse.
+
+* ceph-objectstore-tool and ceph-monstore-tool now enable user to
+  rebuild the monitor database from OSDs. This feature is especially
+  useful when all monitors fail to boot due to leveldb corruption.
+
 12.0.0
 ------
 
