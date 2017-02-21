@@ -8647,7 +8647,7 @@ int BlueStore::_do_alloc_write(
     return r;
   }
 
-  uint64_t hint = 0;
+  thread_local uint64_t hint = 0;
   CompressorRef c;
   double crr = 0;
   if (wctx->compress) {
