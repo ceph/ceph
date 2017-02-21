@@ -232,9 +232,12 @@ def run_tests(ctx, config):
     if not ctx.rgw.use_fastcgi:
         attrs.append("!fails_on_mod_proxy_fcgi")
     for client, client_config in config.iteritems():
+        stages = 'prepare,check'
+        if client_config is not None:
+            stages = client_config.get('stages', 'prepare,check')
         args = [
             'RAGWEED_CONF={tdir}/archive/ragweed.{client}.conf'.format(tdir=testdir, client=client),
-            'RAGWEED_RUN=stage,check',
+            'RAGWEED_STAGES={stages}'.format(stages=stages),
             'BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir),
             '{tdir}/ragweed/virtualenv/bin/nosetests'.format(tdir=testdir),
             '-w',
@@ -279,6 +282,7 @@ def task(ctx, config):
             client.0:
               rgw_server: client.1
               idle_timeout: 600
+              stages: prepare,check
 
     To pass extra arguments to nose (e.g. to run a certain test)::
 
