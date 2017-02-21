@@ -478,7 +478,7 @@ int Journal<I>::get_tag_owner(I *image_ctx, std::string *mirror_uuid) {
 template <typename I>
 int Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
                               std::string *mirror_uuid) {
-  CephContext *cct = (CephContext *)io_ctx.cct();
+  CephContext *cct = static_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << __func__ << dendl;
 
   Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
