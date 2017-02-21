@@ -74,7 +74,7 @@ test_others() {
 
     # remove snapshots
     rbd snap rm --snap=snap1 testimg1
-    rbd info --snap=snap1 testimg1 2>&1 | grep 'error setting snapshot context: (2) No such file or directory'
+    rbd info --snap=snap1 testimg1 2>&1 | grep 'error opening testimg1@snap1: (2) No such file or directory'
 
     remove_images
     rm -f $TMP_FILES

@@ -70,7 +70,7 @@ int execute(const po::variables_map &vm) {
                 << std::endl;
     } else if (r == -EMLINK) {
       librbd::Image image;
-      int image_r = utils::open_image(io_ctx, image_name, true, &image);
+      int image_r = utils::open_image(io_ctx, image_name, "", true, &image);
       librbd::group_spec_t group_spec;
       if (image_r == 0) {
 	image_r = image.get_group(&group_spec);
