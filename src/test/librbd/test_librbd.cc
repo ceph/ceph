@@ -657,7 +657,7 @@ TEST_F(TestLibRBD, UpdateWatchAndResize)
   uint64_t size = 2 << 20;
   struct Watcher {
     static void cb(void *arg) {
-      Watcher *watcher = (Watcher *)arg;
+      Watcher *watcher = static_cast<Watcher *>(arg);
       watcher->handle_notify();
     }
     Watcher(rbd_image_t &image) : m_image(image), m_lock("lock") {}
