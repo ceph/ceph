@@ -93,6 +93,31 @@ int ImageRequestWQ::discard(uint64_t off, uint64_t len) {
   return len;
 }
 
+ssize_t ImageRequestWQ::writesame(uint64_t off, uint64_t len, bufferlist &&bl,
+                                  int op_flags) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "writesame ictx=" << &m_image_ctx << ", off=" << off << ", "
+                 << "len = " << len << ", data_len " << bl.length() << dendl;
+
+  m_image_ctx.snap_lock.get_read();
+  int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len);
+  m_image_ctx.snap_lock.put_read();
+  if (r < 0) {
+    lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  C_SaferCond cond;
+  AioCompletion *c = AioCompletion::create(&cond);
+  aio_writesame(c, off, len, std::move(bl), op_flags, false);
+
+  r = cond.wait();
+  if (r < 0) {
+    return r;
+  }
+  return len;
+}
+
 void ImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
                               ReadResult &&read_result, int op_flags,
                               bool native_async) {
@@ -206,6 +231,36 @@ void ImageRequestWQ::aio_flush(AioCompletion *c, bool native_async) {
     queue(new ImageFlushRequest<>(m_image_ctx, c));
   } else {
     ImageRequest<>::aio_flush(&m_image_ctx, c);
+    finish_in_flight_op();
+  }
+}
+
+void ImageRequestWQ::aio_writesame(AioCompletion *c, uint64_t off, uint64_t len,
+                                   bufferlist &&bl, int op_flags,
+                                   bool native_async) {
+  c->init_time(&m_image_ctx, AIO_TYPE_WRITESAME);
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "aio_writesame: ictx=" << &m_image_ctx << ", "
+                 << "completion=" << c << ", off=" << off << ", "
+                 << "len=" << len << ", data_len = " << bl.length() << ", "
+                 << "flags=" << op_flags << dendl;
+
+  if (native_async && m_image_ctx.event_socket.is_valid()) {
+    c->set_event_notify(true);
+  }
+
+  if (!start_in_flight_op(c)) {
+    return;
+  }
+
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  if (m_image_ctx.non_blocking_aio || writes_blocked()) {
+    queue(new ImageWriteSameRequest<>(m_image_ctx, c, off, len, std::move(bl),
+                                      op_flags));
+  } else {
+    c->start_op();
+    ImageRequest<>::aio_writesame(&m_image_ctx, c, off, len, std::move(bl),
+                                  op_flags);
     finish_in_flight_op();
   }
 }
