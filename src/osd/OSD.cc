@@ -1566,6 +1566,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   debug_drop_pg_create_left(-1),
   outstanding_pg_stats(false),
   timeout_mon_on_pg_stats(true),
+  send_boot_count(0),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
@@ -4012,7 +4013,13 @@ void OSD::tick()
       start_boot();
     }
   }
-
+  // mon didn't respond to reply , the osd become state_booting, it need resend boot message 
+  if (is_booting()) {
+    if(send_boot_count++ >= 5){
+      start_boot();
+      send_boot_count = 0;
+    }
+  }
   if (is_active()) {
     // periodically kick recovery work queue
     recovery_tp.wake();
