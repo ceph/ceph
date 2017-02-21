@@ -9006,35 +9006,6 @@ void BlueStore::_wctx_finish(
   }
 }
 
-void BlueStore::_do_garbage_collection(
-  TransContext *txc,
-  CollectionRef& c,
-  OnodeRef o,
-  uint64_t offset,
-  uint64_t length,
-  WriteContext *wctx)
-{
-  GarbageCollector gc(c->store->cct);
-  int64_t benefit = gc.estimate(offset,
-                                length,
-				o->extent_map,
-				wctx->old_extents,
-				min_alloc_size);
-  if (benefit >= g_conf->bluestore_gc_enable_total_threshold) {
-    auto& extents_to_collect = gc.get_extents_to_collect();
-    for (auto it = extents_to_collect.begin();
-         it != extents_to_collect.end();
-         ++it) {
-      bufferlist bl;
-      int r = _do_read(c.get(), o, it->offset, it->length, bl, 0);
-      assert(r == (int)it->length);
-      o->extent_map.fault_range(db, it->offset, it->length);
-      _do_write_data(txc, c, o, it->offset, it->length, bl, wctx);
-      logger->inc(l_bluestore_gc_merged, it->length);
-    }
-  }
-}
-
 void BlueStore::_do_write_data(
   TransContext *txc,
   CollectionRef& c,
@@ -9105,8 +9076,13 @@ int BlueStore::_do_write(
   }
 
   uint64_t end = offset + length;
+  bool was_gc = false;
+  GarbageCollector gc(c->store->cct);
+  int64_t benefit;
+  auto dirty_start = offset;
+  auto dirty_end = offset + length;
 
-  WriteContext wctx;
+  WriteContext wctx, wctx_gc;
   if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
     dout(20) << __func__ << " will do buffered write" << dendl;
     wctx.buffered = true;
@@ -9194,15 +9170,13 @@ int BlueStore::_do_write(
       wctx.target_blob_size < min_alloc_size * 2) {
     wctx.target_blob_size = min_alloc_size * 2;
   }
-
+  wctx_gc.fork(wctx); // make a clone for garbage collection
   dout(20) << __func__ << " prefer csum_order " << wctx.csum_order
 	   << " target_blob_size 0x" << std::hex << wctx.target_blob_size
 	   << std::dec << dendl;
 
   o->extent_map.fault_range(db, offset, length);
   _do_write_data(txc, c, o, offset, length, bl, &wctx);
-
-  _do_garbage_collection(txc, c, o, offset, length, &wctx);
 
   r = _do_alloc_write(txc, c, o, &wctx);
   if (r < 0) {
@@ -9211,17 +9185,54 @@ int BlueStore::_do_write(
     goto out;
   }
 
+  benefit = gc.estimate(offset,
+                                length,
+				o->extent_map,
+				wctx.old_extents,
+				min_alloc_size);
+
   _wctx_finish(txc, c, o, &wctx);
-
-  o->extent_map.compress_extent_map(offset, length);
-
-  o->extent_map.dirty_range(txc->t, offset, length);
-
   if (end > o->onode.size) {
     dout(20) << __func__ << " extending size to 0x" << std::hex << end
 	     << std::dec << dendl;
     o->onode.size = end;
   }
+
+  if (benefit >= g_conf->bluestore_gc_enable_total_threshold) {
+    dout(20)  << __func__ << " perform garbage collection, expected benefit = "
+              << benefit << " AUs" << dendl;
+    auto& extents_to_collect = gc.get_extents_to_collect();
+    for (auto it = extents_to_collect.begin();
+         it != extents_to_collect.end();
+         ++it) {
+      bufferlist bl;
+      int r = _do_read(c.get(), o, it->offset, it->length, bl, 0);
+      assert(r == (int)it->length);
+      o->extent_map.fault_range(db, it->offset, it->length);
+      _do_write_data(txc, c, o, it->offset, it->length, bl, &wctx_gc);
+      logger->inc(l_bluestore_gc_merged, it->length);
+      was_gc = true;
+      if (dirty_start > it->offset) {
+        dirty_start = it->offset;
+      }
+      if (dirty_end < it->offset + it->length) {
+        dirty_end = it->offset + it->length;
+      }
+    }
+  }
+  if (was_gc) {
+    dout(30)  << __func__ << " alloc write for GC" << dendl;
+    r = _do_alloc_write(txc, c, o, &wctx_gc);
+    if (r < 0) {
+      derr << __func__ << " _do_alloc_write(gc) failed with " << cpp_strerror(r)
+	   << dendl;
+      goto out;
+    }
+    _wctx_finish(txc, c, o, &wctx_gc);
+  }
+
+  o->extent_map.compress_extent_map(dirty_start, dirty_end - dirty_start);
+  o->extent_map.dirty_range(txc->t, dirty_start, dirty_end - dirty_start);
   r = 0;
 
  out:
