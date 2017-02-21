@@ -171,6 +171,12 @@ public:
     return enable_multiple;
   }
 
+  void set_legacy_client_fscid(fs_cluster_id_t fscid)
+  {
+    assert(fscid == FS_CLUSTER_ID_NONE || filesystems.count(fscid));
+    legacy_client_fscid = fscid;
+  }
+
   /**
    * Get state of all daemons (for all filesystems, including all standbys)
    */
