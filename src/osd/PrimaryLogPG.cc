@@ -3044,6 +3044,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
       // client specified snapc
       ctx->snapc.seq = m->get_snap_seq();
       ctx->snapc.snaps = m->get_snaps();
+      filter_snapc(ctx->snapc.snaps);
     }
     if ((m->has_flag(CEPH_OSD_FLAG_ORDERSNAP)) &&
 	ctx->snapc.seq < obc->ssc->snapset.seq) {
@@ -6642,12 +6643,10 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
   if (ctx->new_snapset.seq > snapc.seq) {
     snapc.seq = ctx->new_snapset.seq;
     snapc.snaps = ctx->new_snapset.snaps;
+    filter_snapc(snapc.snaps);
     dout(10) << " using newer snapc " << snapc << dendl;
   }
 
-  if (ctx->obs->exists)
-    filter_snapc(snapc.snaps);
-  
   if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
       !ctx->cache_evict &&
