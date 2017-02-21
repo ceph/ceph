@@ -1268,11 +1268,14 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 
   dout(7) << *pg << " misdirected op in " << m->get_map_epoch() << dendl;
   clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
-	      << " pg " << m->get_pg()
-	      << " to osd." << whoami
-	      << " not " << pg->acting
-	      << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch() << "\n";
-  reply_op_error(op, -ENXIO);
+	       << " pg " << m->get_pg()
+	       << " to osd." << whoami
+	       << " not " << pg->acting
+	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch()
+	       << "\n";
+  if (g_conf->osd_enxio_on_misdirected_op) {
+    reply_op_error(op, -ENXIO);
+  }
 }
 
 
@@ -8285,14 +8288,16 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   if (!send_map->osd_is_valid_op_target(pgid.pgid, whoami)) {
     dout(7) << "we are invalid target" << dendl;
     clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
-		      << " pg " << m->get_pg()
-		      << " to osd." << whoami
-		      << " in e" << osdmap->get_epoch()
-		      << ", client e" << m->get_map_epoch()
-		      << " pg " << pgid
-		      << " features " << m->get_connection()->get_features()
-		      << "\n";
-    service.reply_op_error(op, -ENXIO);
+		 << " pg " << m->get_pg()
+		 << " to osd." << whoami
+		 << " in e" << osdmap->get_epoch()
+		 << ", client e" << m->get_map_epoch()
+		 << " pg " << pgid
+		 << " features " << m->get_connection()->get_features()
+		 << "\n";
+    if (g_conf->osd_enxio_on_misdirected_op) {
+      service.reply_op_error(op, -ENXIO);
+    }
     return;
   }
 
