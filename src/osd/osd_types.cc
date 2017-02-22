@@ -5578,7 +5578,7 @@ void ScrubMap::object::encode(bufferlist& bl) const
   ::encode(digest, bl);
   ::encode(digest_present, bl);
   ::encode((uint32_t)0, bl);  // obsolete nlinks
-  ::encode(snapcolls, bl);
+  ::encode((uint32_t)0, bl);  // snapcolls
   ::encode(omap_digest, bl);
   ::encode(omap_digest_present, bl);
   ::encode(compat_read_error, bl);
@@ -5600,9 +5600,12 @@ void ScrubMap::object::decode(bufferlist::iterator& bl)
   ::decode(digest, bl);
   ::decode(tmp, bl);
   digest_present = tmp;
-  uint32_t nlinks;
-  ::decode(nlinks, bl);
-  ::decode(snapcolls, bl);
+  {
+    uint32_t nlinks;
+    ::decode(nlinks, bl);
+    set<snapid_t> snapcolls;
+    ::decode(snapcolls, bl);
+  }
   ::decode(omap_digest, bl);
   ::decode(tmp, bl);
   omap_digest_present = tmp;
