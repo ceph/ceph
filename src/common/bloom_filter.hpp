@@ -557,7 +557,7 @@ public:
     size_list.push_back(table_size_);
   }
 
-  inline virtual std::size_t size() const
+  inline std::size_t size() const override
   {
     return size_list.back() * bits_per_char;
   }
@@ -601,7 +601,7 @@ public:
     return true;
   }
 
-  virtual inline double approx_unique_element_count() const {
+  inline double approx_unique_element_count() const override {
     // this is not a very good estimate; a better solution should have
     // some asymptotic behavior as density() approaches 1.0.
     //
@@ -611,7 +611,7 @@ public:
 
 private:
 
-  inline virtual void compute_indices(const bloom_type& hash, std::size_t& bit_index, std::size_t& bit) const
+  inline void compute_indices(const bloom_type& hash, std::size_t& bit_index, std::size_t& bit) const override
   {
     bit_index = hash;
     for (std::size_t i = 0; i < size_list.size(); ++i)

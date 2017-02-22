@@ -140,7 +140,7 @@ struct lambda_deleter_impl final : deleter::impl {
   Deleter del;
   lambda_deleter_impl(deleter next, Deleter&& del)
           : impl(std::move(next)), del(std::move(del)) {}
-  virtual ~lambda_deleter_impl() override { del(); }
+  ~lambda_deleter_impl() override { del(); }
 };
 
 template <typename Object>
@@ -183,7 +183,7 @@ deleter make_deleter(Object o) {
 struct free_deleter_impl final : deleter::impl {
   void* obj;
   free_deleter_impl(void* obj) : impl(deleter()), obj(obj) {}
-  virtual ~free_deleter_impl() override { std::free(obj); }
+  ~free_deleter_impl() override { std::free(obj); }
 };
 /// \endcond
 

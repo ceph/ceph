@@ -89,11 +89,11 @@ private:
   struct C_ConsistentAck : public Context {
     FutureImplPtr future;
     C_ConsistentAck(FutureImpl *_future) : future(_future) {}
-    virtual void complete(int r) {
+    void complete(int r) override {
       future->consistent(r);
       future.reset();
     }
-    virtual void finish(int r) {}
+    void finish(int r) override {}
   };
 
   uint64_t m_tag_tid;

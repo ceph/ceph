@@ -342,7 +342,7 @@ namespace librados
     time_t *unused;
   public:
     ObjectWriteOperation() : unused(NULL) {}
-    ~ObjectWriteOperation() {}
+    ~ObjectWriteOperation() override {}
 
     void mtime(time_t *pt);
     void mtime2(struct timespec *pts);
@@ -457,7 +457,7 @@ namespace librados
   {
   public:
     ObjectReadOperation() {}
-    ~ObjectReadOperation() {}
+    ~ObjectReadOperation() override {}
 
     void stat(uint64_t *psize, time_t *pmtime, int *prval);
     void stat2(uint64_t *psize, struct timespec *pts, int *prval);

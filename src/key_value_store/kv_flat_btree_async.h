@@ -749,15 +749,15 @@ public:
   /**
    * returns 0
    */
-  int nothing();
+  int nothing() override;
   /**
    * 10% chance of waiting wait_ms seconds
    */
-  int wait();
+  int wait() override;
   /**
    * 10% chance of killing the client.
    */
-  int suicide();
+  int suicide() override;
 
 KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
     bool verb)
@@ -815,18 +815,18 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
    * If inject is wait and wait_time is set, wait will have a 10% chance of
    * sleeping for waite_time miliseconds.
    */
-  void set_inject(injection_t inject, int wait_time);
+  void set_inject(injection_t inject, int wait_time) override;
 
   /**
    * sets up the rados and io_ctx of this KvFlatBtreeAsync. If the don't already
    * exist, creates the index and max object.
    */
-  int setup(int argc, const char** argv);
+  int setup(int argc, const char** argv) override;
 
   int set(const string &key, const bufferlist &val,
-        bool update_on_existing);
+        bool update_on_existing) override;
 
-  int remove(const string &key);
+  int remove(const string &key) override;
 
   /**
    * returns true if all of the following are true:
@@ -840,23 +840,23 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
    *
    * @pre: no operations are in progress
    */
-  bool is_consistent();
+  bool is_consistent() override;
 
   /**
    * returns an ASCII representation of the index and sub objects, showing
    * stats about each object and all omaps. Don't use if you have more than
    * about 10 objects.
    */
-  string str();
+  string str() override;
 
-  int get(const string &key, bufferlist *val);
+  int get(const string &key, bufferlist *val) override;
 
   //async versions of these methods
   void aio_get(const string &key, bufferlist *val, callback cb,
-      void *cb_args, int * err);
+      void *cb_args, int * err) override;
   void aio_set(const string &key, const bufferlist &val, bool exclusive,
-      callback cb, void * cb_args, int * err);
-  void aio_remove(const string &key, callback cb, void *cb_args, int * err);
+      callback cb, void * cb_args, int * err) override;
+  void aio_remove(const string &key, callback cb, void *cb_args, int * err) override;
 
   //these methods that deal with multiple keys at once are efficient, but make
   //no guarantees about atomicity!
@@ -866,7 +866,7 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
    * attempt to do this safely - make sure this is the only operation running
    * when it is called!
    */
-  int remove_all();
+  int remove_all() override;
 
   /**
    * This does not add prefixes to the index and therefore DOES NOT guarantee
@@ -890,10 +890,10 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
    * * The keys are distributed across the range of keys in the store
    * * there is a small number of keys compared to k
    */
-  int set_many(const map<string, bufferlist> &in_map);
+  int set_many(const map<string, bufferlist> &in_map) override;
 
-  int get_all_keys(std::set<string> *keys);
-  int get_all_keys_and_values(map<string,bufferlist> *kv_map);
+  int get_all_keys(std::set<string> *keys) override;
+  int get_all_keys_and_values(map<string,bufferlist> *kv_map) override;
 
 };
 

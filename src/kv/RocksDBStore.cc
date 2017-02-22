@@ -100,7 +100,7 @@ public:
   explicit CephRocksdbLogger(CephContext *c) : cct(c) {
     cct->get();
   }
-  ~CephRocksdbLogger() {
+  ~CephRocksdbLogger() override {
     cct->put();
   }
 

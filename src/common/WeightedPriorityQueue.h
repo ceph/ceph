@@ -335,30 +335,30 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       {
 	std::srand(time(0));
       }
-    unsigned length() const override final {
+    unsigned length() const final {
       return strict.size + normal.size;
     }
-    void remove_by_filter(std::function<bool (T)> f) override final {
+    void remove_by_filter(std::function<bool (T)> f) final {
       strict.filter_list_pairs(f);
       normal.filter_list_pairs(f);
     }
-    void remove_by_class(K cl, std::list<T>* removed = 0) override final {
+    void remove_by_class(K cl, std::list<T>* removed = 0) final {
       strict.filter_class(cl, removed);
       normal.filter_class(cl, removed);
     }
-    bool empty() const override final {
+    bool empty() const final {
       return !(strict.size + normal.size);
     }
-    void enqueue_strict(K cl, unsigned p, T item) override final {
+    void enqueue_strict(K cl, unsigned p, T item) final {
       strict.insert(p, cl, 0, item);
     }
-    void enqueue_strict_front(K cl, unsigned p, T item) override final {
+    void enqueue_strict_front(K cl, unsigned p, T item) final {
       strict.insert(p, cl, 0, item, true);
     }
-    void enqueue(K cl, unsigned p, unsigned cost, T item) override final {
+    void enqueue(K cl, unsigned p, unsigned cost, T item) final {
       normal.insert(p, cl, cost, item);
     }
-    void enqueue_front(K cl, unsigned p, unsigned cost, T item) override final {
+    void enqueue_front(K cl, unsigned p, unsigned cost, T item) final {
       normal.insert(p, cl, cost, item, true);
     }
     T dequeue() override {

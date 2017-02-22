@@ -122,7 +122,7 @@ public:
 
 class RGWGetDirHeader_CB : public RefCountedObject {
 public:
-  virtual ~RGWGetDirHeader_CB() {}
+  ~RGWGetDirHeader_CB() override {}
   virtual void handle_response(int r, rgw_bucket_dir_header& header) = 0;
 };
 
@@ -285,9 +285,9 @@ public:
 
 class CLSRGWIssueBucketIndexInit : public CLSRGWConcurrentIO {
 protected:
-  int issue_op(int shard_id, const string& oid);
-  int valid_ret_code() { return -EEXIST; }
-  void cleanup();
+  int issue_op(int shard_id, const string& oid) override;
+  int valid_ret_code() override { return -EEXIST; }
+  void cleanup() override;
 public:
   CLSRGWIssueBucketIndexInit(librados::IoCtx& ioc, map<int, string>& _bucket_objs,
                      uint32_t _max_aio) :
@@ -297,7 +297,7 @@ public:
 class CLSRGWIssueSetTagTimeout : public CLSRGWConcurrentIO {
   uint64_t tag_timeout;
 protected:
-  int issue_op(int shard_id, const string& oid);
+  int issue_op(int shard_id, const string& oid) override;
 public:
   CLSRGWIssueSetTagTimeout(librados::IoCtx& ioc, map<int, string>& _bucket_objs,
                      uint32_t _max_aio, uint64_t _tag_timeout) :
@@ -368,7 +368,7 @@ class CLSRGWIssueBucketList : public CLSRGWConcurrentIO {
   bool list_versions;
   map<int, rgw_cls_list_ret>& result;
 protected:
-  int issue_op(int shard_id, const string& oid);
+  int issue_op(int shard_id, const string& oid) override;
 public:
   CLSRGWIssueBucketList(librados::IoCtx& io_ctx, const cls_rgw_obj_key& _start_obj,
                         const string& _filter_prefix, uint32_t _num_entries,
@@ -385,7 +385,7 @@ class CLSRGWIssueBILogList : public CLSRGWConcurrentIO {
   BucketIndexShardsManager& marker_mgr;
   uint32_t max;
 protected:
-  int issue_op(int shard_id, const string& oid);
+  int issue_op(int shard_id, const string& oid) override;
 public:
   CLSRGWIssueBILogList(librados::IoCtx& io_ctx, BucketIndexShardsManager& _marker_mgr, uint32_t _max,
                        map<int, string>& oids,
@@ -398,12 +398,12 @@ class CLSRGWIssueBILogTrim : public CLSRGWConcurrentIO {
   BucketIndexShardsManager& start_marker_mgr;
   BucketIndexShardsManager& end_marker_mgr;
 protected:
-  int issue_op(int shard_id, const string& oid);
+  int issue_op(int shard_id, const string& oid) override;
   // Trim until -ENODATA is returned.
-  int valid_ret_code() { return -ENODATA; }
-  bool need_multiple_rounds() { return true; }
-  void add_object(int shard, const string& oid) { objs_container[shard] = oid; }
-  void reset_container(map<int, string>& objs) {
+  int valid_ret_code() override { return -ENODATA; }
+  bool need_multiple_rounds() override { return true; }
+  void add_object(int shard, const string& oid) override { objs_container[shard] = oid; }
+  void reset_container(map<int, string>& objs) override {
     objs_container.swap(objs);
     iter = objs_container.begin();
     objs.clear();
@@ -427,7 +427,7 @@ public:
 class CLSRGWIssueBucketCheck : public CLSRGWConcurrentIO /*<map<string, struct rgw_cls_check_index_ret> >*/ {
   map<int, struct rgw_cls_check_index_ret>& result;
 protected:
-  int issue_op(int shard_id, const string& oid);
+  int issue_op(int shard_id, const string& oid) override;
 public:
   CLSRGWIssueBucketCheck(librados::IoCtx& ioc, map<int, string>& oids, map<int, struct rgw_cls_check_index_ret>& bucket_objs_ret,
                      uint32_t _max_aio) :
@@ -436,7 +436,7 @@ public:
 
 class CLSRGWIssueBucketRebuild : public CLSRGWConcurrentIO {
 protected:
-  int issue_op(int shard_id, const string& oid);
+  int issue_op(int shard_id, const string& oid) override;
 public:
   CLSRGWIssueBucketRebuild(librados::IoCtx& io_ctx, map<int, string>& bucket_objs,
                            uint32_t max_aio) : CLSRGWConcurrentIO(io_ctx, bucket_objs, max_aio) {}
@@ -445,7 +445,7 @@ public:
 class CLSRGWIssueGetDirHeader : public CLSRGWConcurrentIO {
   map<int, rgw_cls_list_ret>& result;
 protected:
-  int issue_op(int shard_id, const string& oid);
+  int issue_op(int shard_id, const string& oid) override;
 public:
   CLSRGWIssueGetDirHeader(librados::IoCtx& io_ctx, map<int, string>& oids, map<int, rgw_cls_list_ret>& dir_headers,
                           uint32_t max_aio) :
