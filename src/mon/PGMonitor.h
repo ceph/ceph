@@ -52,24 +52,24 @@ private:
   const char *pgmap_pg_prefix;
   const char *pgmap_osd_prefix;
 
-  void create_initial();
-  void update_from_paxos(bool *need_bootstrap);
-  void upgrade_format();
-  void on_upgrade();
-  void post_paxos_update();
+  void create_initial() override;
+  void update_from_paxos(bool *need_bootstrap) override;
+  void upgrade_format() override;
+  void on_upgrade() override;
+  void post_paxos_update() override;
   void handle_osd_timeouts();
-  void create_pending();  // prepare a new pending
+  void create_pending() override;  // prepare a new pending
   // propose pending update to peers
-  version_t get_trim_to();
+  version_t get_trim_to() override;
   void update_logger();
 
-  void encode_pending(MonitorDBStore::TransactionRef t);
+  void encode_pending(MonitorDBStore::TransactionRef t) override;
   void read_pgmap_meta();
   void read_pgmap_full();
   void apply_pgmap_delta(bufferlist& bl);
 
-  bool preprocess_query(MonOpRequestRef op);  // true if processed.
-  bool prepare_update(MonOpRequestRef op);
+  bool preprocess_query(MonOpRequestRef op) override;  // true if processed.
+  bool prepare_update(MonOpRequestRef op) override;
 
   bool preprocess_pg_stats(MonOpRequestRef op);
   bool pg_stats_have_changed(int from, const MPGStats *stats) const;
@@ -109,31 +109,31 @@ public:
       pgmap_pg_prefix("pgmap_pg"),
       pgmap_osd_prefix("pgmap_osd")
   { }
-  ~PGMonitor() { }
+  ~PGMonitor() override { }
 
-  virtual void get_store_prefixes(set<string>& s) {
+  void get_store_prefixes(set<string>& s) override {
     s.insert(get_service_name());
     s.insert(pgmap_meta_prefix);
     s.insert(pgmap_pg_prefix);
     s.insert(pgmap_osd_prefix);
   }
 
-  virtual void on_restart();
+  void on_restart() override;
 
   /* Courtesy function provided by PaxosService, called when an election
    * finishes and the cluster goes active. We use it here to make sure we
    * haven't lost any PGs from new pools. */
-  virtual void on_active();
+  void on_active() override;
 
-  bool should_stash_full() {
+  bool should_stash_full() override {
     return false;  // never
   }
-  virtual void encode_full(MonitorDBStore::TransactionRef t) {
+  void encode_full(MonitorDBStore::TransactionRef t) override {
     assert(0 == "unimplemented encode_full");
   }
 
 
-  void tick();  // check state, take actions
+  void tick() override;  // check state, take actions
 
   void check_osd_map(epoch_t epoch);
 

@@ -41,21 +41,21 @@ class MDSMonitor : public PaxosService {
   MDSMonitor(Monitor *mn, Paxos *p, string service_name);
 
   // service methods
-  void create_initial();
-  void update_from_paxos(bool *need_bootstrap);
-  void init();
-  void create_pending(); 
-  void encode_pending(MonitorDBStore::TransactionRef t);
+  void create_initial() override;
+  void update_from_paxos(bool *need_bootstrap) override;
+  void init() override;
+  void create_pending() override; 
+  void encode_pending(MonitorDBStore::TransactionRef t) override;
   // we don't require full versions; don't encode any.
-  virtual void encode_full(MonitorDBStore::TransactionRef t) { }
-  version_t get_trim_to();
+  void encode_full(MonitorDBStore::TransactionRef t) override { }
+  version_t get_trim_to() override;
 
-  bool preprocess_query(MonOpRequestRef op);  // true if processed.
-  bool prepare_update(MonOpRequestRef op);
-  bool should_propose(double& delay);
+  bool preprocess_query(MonOpRequestRef op) override;  // true if processed.
+  bool prepare_update(MonOpRequestRef op) override;
+  bool should_propose(double& delay) override;
 
-  void on_active();
-  void on_restart();
+  void on_active() override;
+  void on_restart() override;
 
   void check_subs();
   void check_sub(Subscription *sub);
@@ -132,7 +132,7 @@ class MDSMonitor : public PaxosService {
   bool maybe_expand_cluster(std::shared_ptr<Filesystem> fs);
   void maybe_replace_gid(mds_gid_t gid, const beacon_info_t &beacon,
       bool *mds_propose, bool *osd_propose);
-  void tick();     // check state, take actions
+  void tick() override;     // check state, take actions
 
   int dump_metadata(const string& who, Formatter *f, ostream& err);
 

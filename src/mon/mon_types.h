@@ -218,7 +218,7 @@ struct C_MonOp : public Context
   explicit C_MonOp(MonOpRequestRef o) :
     op(o) { }
 
-  void finish(int r) {
+  void finish(int r) override {
     if (op && r == -ECANCELED) {
       op->mark_event("callback canceled");
     } else if (op && r == -EAGAIN) {

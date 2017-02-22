@@ -35,36 +35,36 @@ class ConfigKeyService : public QuorumService
   static const string STORE_PREFIX;
 
 protected:
-  virtual void service_shutdown() { }
+  void service_shutdown() override { }
 
 public:
   ConfigKeyService(Monitor *m, Paxos *p) :
     QuorumService(m),
     paxos(p)
   { }
-  virtual ~ConfigKeyService() { }
+  ~ConfigKeyService() override { }
 
 
   /**
    * @defgroup ConfigKeyService_Inherited_h Inherited abstract methods
    * @{
    */
-  virtual void init() { }
-  virtual void get_health(Formatter *f,
-			  list<pair<health_status_t,string> >& summary,
-                          list<pair<health_status_t,string> > *detail) { }
-  virtual bool service_dispatch(MonOpRequestRef op);
+  void init() override { }
+  void get_health(Formatter *f,
+                  list<pair<health_status_t,string> >& summary,
+                  list<pair<health_status_t,string> > *detail) override { }
+  bool service_dispatch(MonOpRequestRef op) override;
 
-  virtual void start_epoch() { }
-  virtual void finish_epoch() { }
-  virtual void cleanup() { }
-  virtual void service_tick() { }
+  void start_epoch() override { }
+  void finish_epoch() override { }
+  void cleanup() override { }
+  void service_tick() override { }
 
-  virtual int get_type() {
+  int get_type() override {
     return QuorumService::SERVICE_CONFIG_KEY;
   }
 
-  virtual string get_name() const {
+  string get_name() const override {
     return "config_key";
   }
   virtual void get_store_prefixes(set<string>& s);

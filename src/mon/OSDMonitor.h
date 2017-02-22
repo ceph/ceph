@@ -151,24 +151,24 @@ public:
 
   // svc
 public:  
-  void create_initial();
+  void create_initial() override;
 private:
-  void update_from_paxos(bool *need_bootstrap);
-  void create_pending();  // prepare a new pending
-  void encode_pending(MonitorDBStore::TransactionRef t);
-  void on_active();
-  void on_shutdown();
+  void update_from_paxos(bool *need_bootstrap) override;
+  void create_pending() override;  // prepare a new pending
+  void encode_pending(MonitorDBStore::TransactionRef t) override;
+  void on_active() override;
+  void on_shutdown() override;
   /**
    * we haven't delegated full version stashing to paxosservice for some time
    * now, making this function useless in current context.
    */
-  virtual void encode_full(MonitorDBStore::TransactionRef t) { }
+  void encode_full(MonitorDBStore::TransactionRef t) override { }
   /**
    * do not let paxosservice periodically stash full osdmaps, or we will break our
    * locally-managed full maps.  (update_from_paxos loads the latest and writes them
    * out going forward from there, but if we just synced that may mean we skip some.)
    */
-  virtual bool should_stash_full() {
+  bool should_stash_full() override {
     return false;
   }
 
@@ -178,7 +178,7 @@ private:
    * This ensures that anyone post-sync will have enough to rebuild their
    * full osdmaps.
    */
-  void encode_trim_extra(MonitorDBStore::TransactionRef tx, version_t first);
+  void encode_trim_extra(MonitorDBStore::TransactionRef tx, version_t first) override;
 
   void update_msgr_features();
   int check_cluster_features(uint64_t features, stringstream &ss);
@@ -213,11 +213,11 @@ private:
   void update_logger();
 
   void handle_query(PaxosServiceMessage *m);
-  bool preprocess_query(MonOpRequestRef op);  // true if processed.
-  bool prepare_update(MonOpRequestRef op);
-  bool should_propose(double &delay);
+  bool preprocess_query(MonOpRequestRef op) override;  // true if processed.
+  bool prepare_update(MonOpRequestRef op) override;
+  bool should_propose(double &delay) override;
 
-  version_t get_trim_to();
+  version_t get_trim_to() override;
 
   bool can_mark_down(int o);
   bool can_mark_up(int o);
@@ -354,7 +354,7 @@ private:
     bool logit;
     C_Booted(OSDMonitor *cm, MonOpRequestRef op_, bool l=true) :
       C_MonOp(op_), cmon(cm), logit(l) {}
-    void _finish(int r) {
+    void _finish(int r) override {
       if (r >= 0)
 	cmon->_booted(op, logit);
       else if (r == -ECANCELED)
@@ -371,7 +371,7 @@ private:
     epoch_t e;
     C_ReplyMap(OSDMonitor *o, MonOpRequestRef op_, epoch_t ee)
       : C_MonOp(op_), osdmon(o), e(ee) {}
-    void _finish(int r) {
+    void _finish(int r) override {
       if (r >= 0)
 	osdmon->_reply_map(op, e);
       else if (r == -ECANCELED)
@@ -392,7 +392,7 @@ private:
       if (rd)
 	reply_data = *rd;
     }
-    void _finish(int r) {
+    void _finish(int r) override {
       if (r >= 0)
 	osdmon->_pool_op_reply(op, replyCode, epoch, &reply_data);
       else if (r == -ECANCELED)
@@ -414,7 +414,7 @@ private:
  public:
   OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name);
 
-  void tick();  // check state, take actions
+  void tick() override;  // check state, take actions
 
   int parse_osd_id(const char *s, stringstream *pss);
 

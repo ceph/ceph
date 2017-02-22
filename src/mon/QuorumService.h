@@ -31,7 +31,7 @@ class QuorumService
   struct C_Tick : public Context {
     QuorumService *s;
     C_Tick(QuorumService *qs) : s(qs) { }
-    void finish(int r) {
+    void finish(int r) override {
       if (r < 0)
         return;
       s->tick();
