@@ -4954,7 +4954,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   if (soid.snap == CEPH_NOSNAP)
     ::encode(osd_reqid_t(), bl);  // used to be wrlock_by
   else
-    ::encode(snaps, bl);
+    ::encode(legacy_snaps, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
   ::encode(is_lost(), bl);
@@ -4996,7 +4996,7 @@ void object_info_t::decode(bufferlist::iterator& bl)
     osd_reqid_t wrlock_by;
     ::decode(wrlock_by, bl);
   } else {
-    ::decode(snaps, bl);
+    ::decode(legacy_snaps, bl);
   }
   ::decode(truncate_seq, bl);
   ::decode(truncate_size, bl);
@@ -5078,9 +5078,10 @@ void object_info_t::dump(Formatter *f) const
   f->dump_stream("local_mtime") << local_mtime;
   f->dump_unsigned("lost", (int)is_lost());
   f->dump_unsigned("flags", (int)flags);
-  f->open_array_section("snaps");
-  for (vector<snapid_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p)
-    f->dump_unsigned("snap", *p);
+  f->open_array_section("legacy_snaps");
+  for (auto s : legacy_snaps) {
+    f->dump_unsigned("snap", s);
+  }
   f->close_section();
   f->dump_unsigned("truncate_seq", truncate_seq);
   f->dump_unsigned("truncate_size", truncate_size);
@@ -5113,8 +5114,8 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
 {
   out << oi.soid << "(" << oi.version
       << " " << oi.last_reqid;
-  if (oi.soid.snap != CEPH_NOSNAP)
-    out << " " << oi.snaps;
+  if (oi.soid.snap != CEPH_NOSNAP && !oi.legacy_snaps.empty())
+    out << " " << oi.legacy_snaps;
   if (oi.flags)
     out << " " << oi.get_flag_string();
   out << " s " << oi.size;
