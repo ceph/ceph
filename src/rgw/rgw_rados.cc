@@ -6109,7 +6109,7 @@ int RGWRados::on_last_entry_in_listing(RGWBucketInfo& bucket_info,
     if (ret < 0) {
       return ret;
     } else if (!entries.empty()) {
-      last_entry = last_entry = entries.back();
+      last_entry = entries.back();
     }
   } while (is_truncated);
 
