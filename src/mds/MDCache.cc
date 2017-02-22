@@ -111,21 +111,6 @@ static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".cache ";
 }
 
-long g_num_ino = 0;
-long g_num_dir = 0;
-long g_num_dn = 0;
-long g_num_cap = 0;
-
-long g_num_inoa = 0;
-long g_num_dira = 0;
-long g_num_dna = 0;
-long g_num_capa = 0;
-
-long g_num_inos = 0;
-long g_num_dirs = 0;
-long g_num_dns = 0;
-long g_num_caps = 0;
-
 set<int> SimpleLock::empty_gather_set;
 
 
