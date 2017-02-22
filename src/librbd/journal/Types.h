@@ -50,11 +50,12 @@ struct AioDiscardEvent {
 
   uint64_t offset;
   uint64_t length;
+  bool skip_partial_discard;
 
-  AioDiscardEvent() : offset(0), length(0) {
+  AioDiscardEvent() : offset(0), length(0), skip_partial_discard(false) {
   }
-  AioDiscardEvent(uint64_t _offset, uint64_t _length)
-    : offset(_offset), length(_length) {
+  AioDiscardEvent(uint64_t _offset, uint64_t _length, bool _skip_partial_discard)
+    : offset(_offset), length(_length), skip_partial_discard(_skip_partial_discard) {
   }
 
   void encode(bufferlist& bl) const;

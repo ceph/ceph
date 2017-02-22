@@ -30,7 +30,8 @@ public:
                 int fadvise_flags, Context *on_finish);
   void aio_write(Extents &&image_extents, ceph::bufferlist&& bl,
                  int fadvise_flags, Context *on_finish);
-  void aio_discard(uint64_t offset, uint64_t length, Context *on_finish);
+  void aio_discard(uint64_t offset, uint64_t length,
+                   bool skip_partial_discard, Context *on_finish);
   void aio_flush(Context *on_finish);
   void aio_writesame(uint64_t offset, uint64_t length,
                      ceph::bufferlist&& bl,

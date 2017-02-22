@@ -315,7 +315,7 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
                                                io::AIO_TYPE_DISCARD,
                                                &flush_required);
   io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp, event.offset,
-                                   event.length);
+                                   event.length, event.skip_partial_discard);
   if (flush_required) {
     m_lock.Lock();
     auto flush_comp = create_aio_flush_completion(nullptr);
