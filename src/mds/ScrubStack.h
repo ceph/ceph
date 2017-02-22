@@ -42,8 +42,8 @@ protected:
     ScrubStack *stack;
   public:
     C_KickOffScrubs(MDCache *mdcache, ScrubStack *s);
-    void finish(int r) { }
-    void complete(int r) {
+    void finish(int r) override { }
+    void complete(int r) override {
       stack->scrubs_in_progress--;
       stack->kick_off_scrubs();
       // don't delete self

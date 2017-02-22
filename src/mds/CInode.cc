@@ -3755,7 +3755,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       set_callback(DIRFRAGS, static_cast<Continuation::stagePtr>(&ValidationContinuation::_dirfrags));
     }
 
-    ~ValidationContinuation() {
+    ~ValidationContinuation() override {
       delete shadow_in;
     }
 

@@ -28,11 +28,11 @@ public:
   explicit EOpen(MDLog *mdlog) :
     LogEvent(EVENT_OPEN), metablob(mdlog) { }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "EOpen " << metablob << ", " << inos.size() << " open files";
   }
 
-  EMetaBlob *get_metablob() { return &metablob; }
+  EMetaBlob *get_metablob() override { return &metablob; }
 
   void add_clean_inode(CInode *in) {
     if (!in->is_base()) {
@@ -48,13 +48,13 @@ public:
     inos.push_back(ino);
   }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(bufferlist& bl, uint64_t features) const override;
+  void decode(bufferlist::iterator& bl) override;
+  void dump(Formatter *f) const override;
   static void generate_test_instances(list<EOpen*>& ls);
 
-  void update_segment();
-  void replay(MDSRank *mds);
+  void update_segment() override;
+  void replay(MDSRank *mds) override;
 };
 WRITE_CLASS_ENCODER_FEATURES(EOpen)
 

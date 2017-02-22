@@ -92,7 +92,7 @@ public:
     : TrackedOp(tracker, initiated),
       reqid(ri), attempt(att),
       slave_to_mds(slave_to) { }
-  virtual ~MutationImpl() {
+  ~MutationImpl() override {
     assert(locking == NULL);
     assert(pins.empty());
     assert(auth_pins.empty());
@@ -313,7 +313,7 @@ struct MDRequestImpl : public MutationImpl {
     if (!params.dispatched.is_zero())
       mark_event("dispatched", params.dispatched);
   }
-  ~MDRequestImpl();
+  ~MDRequestImpl() override;
   
   More* more();
   bool has_more() const;
@@ -339,8 +339,8 @@ struct MDRequestImpl : public MutationImpl {
   // TrackedOp stuff
   typedef boost::intrusive_ptr<MDRequestImpl> Ref;
 protected:
-  void _dump(Formatter *f) const;
-  void _dump_op_descriptor_unlocked(ostream& stream) const;
+  void _dump(Formatter *f) const override;
+  void _dump_op_descriptor_unlocked(ostream& stream) const override;
 };
 
 typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;

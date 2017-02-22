@@ -175,7 +175,7 @@ public:
   static const int PIN_DIRWAITER =        24;
   static const int PIN_SCRUBQUEUE =       25;
 
-  const char *pin_name(int p) const {
+  const char *pin_name(int p) const override {
     switch (p) {
     case PIN_DIRFRAG: return "dirfrag";
     case PIN_CAPS: return "caps";
@@ -240,7 +240,7 @@ public:
   // misc
   static const unsigned EXPORT_NONCE = 1; // nonce given to replicas created by export
 
-  ostream& print_db_line_prefix(ostream& out);
+  ostream& print_db_line_prefix(ostream& out) override;
 
  public:
   MDCache *mdcache;
@@ -685,7 +685,7 @@ public:
     state = 0;  
     if (auth) state_set(STATE_AUTH);
   }
-  ~CInode() {
+  ~CInode() override {
     close_dirfrags();
     close_snaprealm();
     clear_file_locks();
@@ -730,7 +730,7 @@ public:
   CDir *get_projected_parent_dir();
   CInode *get_parent_inode();
   
-  bool is_lt(const MDSCacheObject *r) const {
+  bool is_lt(const MDSCacheObject *r) const override {
     const CInode *o = static_cast<const CInode*>(r);
     return ino() < o->ino() ||
       (ino() == o->ino() && last < o->last);
@@ -820,8 +820,8 @@ public:
   bool is_waiting_for_dir(frag_t fg) {
     return waiting_on_dir.count(fg);
   }
-  void add_waiter(uint64_t tag, MDSInternalContextBase *c);
-  void take_waiting(uint64_t tag, std::list<MDSInternalContextBase*>& ls);
+  void add_waiter(uint64_t tag, MDSInternalContextBase *c) override;
+  void take_waiting(uint64_t tag, std::list<MDSInternalContextBase*>& ls) override;
 
   // -- encode/decode helpers --
   void _encode_base(bufferlist& bl, uint64_t features);
@@ -877,7 +877,7 @@ public:
   SimpleLock flocklock;
   SimpleLock policylock;
 
-  SimpleLock* get_lock(int type) {
+  SimpleLock* get_lock(int type) override {
     switch (type) {
     case CEPH_LOCK_IFILE: return &filelock;
     case CEPH_LOCK_IAUTH: return &authlock;
@@ -892,13 +892,13 @@ public:
     return 0;
   }
 
-  void set_object_info(MDSCacheObjectInfo &info);
-  void encode_lock_state(int type, bufferlist& bl);
-  void decode_lock_state(int type, bufferlist& bl);
+  void set_object_info(MDSCacheObjectInfo &info) override;
+  void encode_lock_state(int type, bufferlist& bl) override;
+  void decode_lock_state(int type, bufferlist& bl) override;
 
   void _finish_frag_update(CDir *dir, MutationRef& mut);
 
-  void clear_dirty_scattered(int type);
+  void clear_dirty_scattered(int type) override;
   bool is_dirty_scattered();
   void clear_scatter_dirty();  // on rejoin ack
 
@@ -1009,21 +1009,21 @@ public:
   void replicate_relax_locks();
 
   // -- authority --
-  mds_authority_t authority() const;
+  mds_authority_t authority() const override;
 
   // -- auth pins --
   void adjust_nested_auth_pins(int a, void *by);
-  bool can_auth_pin() const;
-  void auth_pin(void *by);
-  void auth_unpin(void *by);
+  bool can_auth_pin() const override;
+  void auth_pin(void *by) override;
+  void auth_unpin(void *by) override;
 
   // -- freeze --
   bool is_freezing_inode() const { return state_test(STATE_FREEZING); }
   bool is_frozen_inode() const { return state_test(STATE_FROZEN); }
   bool is_frozen_auth_pin() const { return state_test(STATE_FROZENAUTHPIN); }
-  bool is_frozen() const;
+  bool is_frozen() const override;
   bool is_frozen_dir() const;
-  bool is_freezing() const;
+  bool is_freezing() const override;
 
   /* Freeze the inode. auth_pin_allowance lets the caller account for any
    * auth_pins it is itself holding/responsible for. */
@@ -1035,7 +1035,7 @@ public:
   void unfreeze_auth_pin();
 
   // -- reference counting --
-  void bad_put(int by) {
+  void bad_put(int by) override {
     generic_dout(0) << " bad put " << *this << " by " << by << " " << pin_name(by) << " was " << ref
 #ifdef MDS_REF_SET
 		    << " (" << ref_map << ")"
@@ -1046,7 +1046,7 @@ public:
 #endif
     assert(ref > 0);
   }
-  void bad_get(int by) {
+  void bad_get(int by) override {
     generic_dout(0) << " bad get " << *this << " by " << by << " " << pin_name(by) << " was " << ref
 #ifdef MDS_REF_SET
 		    << " (" << ref_map << ")"
@@ -1056,9 +1056,9 @@ public:
     assert(ref_map[by] >= 0);
 #endif
   }
-  void first_get();
-  void last_put();
-  void _put();
+  void first_get() override;
+  void last_put() override;
+  void _put() override;
 
 
   // -- hierarchy stuff --
@@ -1086,7 +1086,7 @@ public:
     projected_parent.pop_front();
   }
 
-  void print(ostream& out);
+  void print(ostream& out) override;
   void dump(Formatter *f) const;
 
   /**
