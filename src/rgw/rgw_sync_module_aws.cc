@@ -66,7 +66,9 @@ public:
                                                sync_env->http_manager,
                                                obj_path,
                                                nullptr,
-                                               &res));
+                                                   &res,
+                                                   true,
+                                                   &res));
 
       }
       if (retcode < 0) {
