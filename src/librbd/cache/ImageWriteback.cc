@@ -78,6 +78,24 @@ void ImageWriteback<I>::aio_flush(Context *on_finish) {
   req.send();
 }
 
+template <typename I>
+void ImageWriteback<I>::aio_writesame(uint64_t offset, uint64_t length,
+                                      ceph::bufferlist&& bl,
+                                      int fadvise_flags, Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "offset=" << offset << ", "
+                 << "length=" << length << ", "
+                 << "data_len=" << bl.length() << ", "
+                 << "on_finish=" << on_finish << dendl;
+
+  auto aio_comp = io::AioCompletion::create_and_start(on_finish, &m_image_ctx,
+                                                      io::AIO_TYPE_WRITESAME);
+  io::ImageWriteSameRequest<I> req(m_image_ctx, aio_comp, offset, length,
+                                   std::move(bl), fadvise_flags);
+  req.set_bypass_image_cache();
+  req.send();
+}
+
 } // namespace cache
 } // namespace librbd
 
