@@ -1131,10 +1131,19 @@ def get_dmcrypt_key(
     if os.path.exists(path):
         mode = get_oneliner(path, 'key-management-mode')
         osd_uuid = get_oneliner(path, 'osd-uuid')
+        ceph_fsid = read_one_line(path, 'ceph_fsid')
+        if ceph_fsid is None:
+            raise Error('No cluster uuid assigned.')
+        cluster = find_cluster_by_uuid(ceph_fsid)
+        if cluster is None:
+            raise Error('No cluster conf found in ' + SYSCONFDIR +
+                        ' with fsid %s' % ceph_fsid)
+
         if mode == KEY_MANAGEMENT_MODE_V1:
             key, stderr, ret = command(
                 [
                     'ceph',
+                    '--cluster', cluster,
                     '--name',
                     'client.osd-lockbox.' + osd_uuid,
                     '--keyring',
@@ -2291,6 +2300,7 @@ class Lockbox(object):
         command_check_call(
             [
                 'ceph',
+                '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
                 'config-key',
@@ -2302,6 +2312,7 @@ class Lockbox(object):
         keyring, stderr, ret = command(
             [
                 'ceph',
+                '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
                 'auth',
@@ -2339,6 +2350,9 @@ class Lockbox(object):
         LOG.debug('Mounting lockbox ' + str(" ".join(args)))
         command_check_call(args)
         write_one_line(path, 'osd-uuid', self.args.osd_uuid)
+        if self.args.cluster_uuid is None:
+            self.args.cluster_uuid = get_fsid(cluster=self.args.cluster)
+        write_one_line(path, 'ceph_fsid', self.args.cluster_uuid)
         self.create_key()
         self.symlink_spaces(path)
         write_one_line(path, 'magic', CEPH_LOCKBOX_ONDISK_MAGIC)
@@ -3580,15 +3594,17 @@ def _deallocate_osd_id(cluster, osd_id):
     ])
 
 
-def _remove_lockbox(uuid):
+def _remove_lockbox(uuid, cluster):
     command([
         'ceph',
+        '--cluster', cluster,
         'auth',
         'del',
         'client.osd-lockbox.' + uuid,
     ])
     command([
         'ceph',
+        '--cluster', cluster,
         'config-key',
         'del',
         'dm-crypt/osd/' + uuid + '/luks',
@@ -3686,7 +3702,7 @@ def main_destroy_locked(args):
         for name in Space.NAMES:
             if target_dev.get(name + '_uuid'):
                 dmcrypt_unmap(target_dev[name + '_uuid'])
-        _remove_lockbox(target_dev['uuid'])
+        _remove_lockbox(target_dev['uuid'], args.cluster)
 
     # Check zap flag. If we found zap flag, we need to find device for
     # destroy this osd data.
