@@ -11,7 +11,7 @@ EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-mds -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID
-PrivateDevices=yes
+PrivateDevices=no
 ProtectHome=true
 ProtectSystem=full
 PrivateTmp=true
@@ -19,6 +19,7 @@ TasksMax=infinity
 Restart=on-failure
 StartLimitInterval=30min
 StartLimitBurst=3
+LimitMEMLOCK=infinity
 
 [Install]
 WantedBy=ceph-mds.target

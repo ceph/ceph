@@ -10,7 +10,7 @@ EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
 ExecStart=/usr/bin/rbd-mirror -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID
-PrivateDevices=yes
+PrivateDevices=no
 ProtectHome=true
 ProtectSystem=full
 PrivateTmp=true
@@ -18,6 +18,7 @@ Restart=on-failure
 StartLimitInterval=30min
 StartLimitBurst=3
 TasksMax=infinity
+LimitMEMLOCK=infinity
 
 [Install]
 WantedBy=ceph-rbd-mirror.target

@@ -20,6 +20,7 @@ Restart=on-failure
 StartLimitInterval=30min
 StartLimitBurst=30
 RestartSec=20s
+LimitMEMLOCK=infinity
 
 [Install]
 WantedBy=ceph-osd.target
