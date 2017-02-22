@@ -1,0 +1,7 @@
+* In previous versions, if a client sent an op to the wrong OSD, the OSD
+  would reply with ENXIO.  The rationale here is that the client or OSD is
+  clearly buggy and we want to surface the error as clearly as possible.
+  We now only send the ENXIO reply if the osd_enxio_on_misdirected_op option
+  is enabled (it's off by default).  This means that a VM using librbd that
+  previously would have gotten an EIO and gone read-only will now see a
+  blocked/hung IO instead.
