@@ -4553,7 +4553,7 @@ struct ObjectRecoveryInfo {
   eversion_t version;
   uint64_t size;
   object_info_t oi;
-  SnapSet ss;
+  SnapSet ss;   // only populated if soid is_snap()
   interval_set<uint64_t> copy_subset;
   map<hobject_t, interval_set<uint64_t>> clone_subset;
 
