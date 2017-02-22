@@ -34,12 +34,12 @@ struct ECSubReadReply;
 struct RecoveryMessages;
 class ECBackend : public PGBackend {
 public:
-  RecoveryHandle *open_recovery_op();
+  RecoveryHandle *open_recovery_op() override;
 
   void run_recovery_op(
     RecoveryHandle *h,
     int priority
-    );
+    ) override;
 
   void recover_object(
     const hobject_t &hoid,
@@ -47,14 +47,14 @@ public:
     ObjectContextRef head,
     ObjectContextRef obc,
     RecoveryHandle *h
-    );
+    ) override;
 
   bool handle_message(
     OpRequestRef op
-    );
+    ) override;
   bool can_handle_while_inactive(
     OpRequestRef op
-    );
+    ) override;
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
   void sub_write_applied(
@@ -83,14 +83,14 @@ public:
     );
 
   /// @see ReadOp below
-  void check_recovery_sources(const OSDMapRef& osdmap);
+  void check_recovery_sources(const OSDMapRef& osdmap) override;
 
-  void on_change();
-  void clear_recovery_state();
+  void on_change() override;
+  void clear_recovery_state() override;
 
-  void on_flushed();
+  void on_flushed() override;
 
-  void dump_recovery_info(Formatter *f) const;
+  void dump_recovery_info(Formatter *f) const override;
 
   void call_write_ordered(std::function<void(void)> &&cb) override;
 
@@ -109,14 +109,14 @@ public:
     ceph_tid_t tid,
     osd_reqid_t reqid,
     OpRequestRef op
-    );
+    ) override;
 
   int objects_read_sync(
     const hobject_t &hoid,
     uint64_t off,
     uint64_t len,
     uint32_t op_flags,
-    bufferlist *bl);
+    bufferlist *bl) override;
 
   /**
    * Async read mechanism
@@ -173,7 +173,7 @@ public:
     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		    pair<bufferlist*, Context*> > > &to_read,
     Context *on_complete,
-    bool fast_read = false);
+    bool fast_read = false) override;
 
   template <typename Func>
   void objects_read_async_no_cache(
@@ -574,7 +574,7 @@ public:
 	want.insert(i);
       }
     }
-    bool operator()(const set<pg_shard_t> &_have) const {
+    bool operator()(const set<pg_shard_t> &_have) const override {
       set<int> have;
       for (set<pg_shard_t>::const_iterator i = _have.begin();
 	   i != _have.end();
@@ -585,7 +585,7 @@ public:
       return ec_impl->minimum_to_decode(want, have, &min) == 0;
     }
   };
-  IsPGRecoverablePredicate *get_is_recoverable_predicate() {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() override {
     return new ECRecPred(ec_impl);
   }
 
@@ -601,11 +601,11 @@ public:
     ECReadPred(
       pg_shard_t whoami,
       ErasureCodeInterfaceRef ec_impl) : whoami(whoami), rec_pred(ec_impl) {}
-    bool operator()(const set<pg_shard_t> &_have) const {
+    bool operator()(const set<pg_shard_t> &_have) const override {
       return _have.count(whoami) && rec_pred(_have);
     }
   };
-  IsPGReadablePredicate *get_is_readable_predicate() {
+  IsPGReadablePredicate *get_is_readable_predicate() override {
     return new ECReadPred(get_parent()->whoami_shard(), ec_impl);
   }
 
@@ -642,22 +642,22 @@ public:
 
   int objects_get_attrs(
     const hobject_t &hoid,
-    map<string, bufferlist> *out);
+    map<string, bufferlist> *out) override;
 
   void rollback_append(
     const hobject_t &hoid,
     uint64_t old_size,
-    ObjectStore::Transaction *t);
+    ObjectStore::Transaction *t) override;
 
-  bool scrub_supported() { return true; }
-  bool auto_repair_supported() const { return true; }
+  bool scrub_supported() override { return true; }
+  bool auto_repair_supported() const override { return true; }
 
   void be_deep_scrub(
     const hobject_t &obj,
     uint32_t seed,
     ScrubMap::object &o,
-    ThreadPool::TPHandle &handle);
-  uint64_t be_get_ondisk_size(uint64_t logical_size) {
+    ThreadPool::TPHandle &handle) override;
+  uint64_t be_get_ondisk_size(uint64_t logical_size) override {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
   void _failed_push(const hobject_t &hoid,

@@ -242,7 +242,7 @@ public:
       coll_lock("MemStore::coll_lock"),
       finisher(cct),
       used_bytes(0) {}
-  ~MemStore() { }
+  ~MemStore() override { }
 
   string get_type() override {
     return "memstore";
@@ -290,7 +290,7 @@ public:
 	   struct stat *st, bool allow_eio = false) override;
   int set_collection_opts(
     const coll_t& cid,
-    const pool_opts_t& opts);
+    const pool_opts_t& opts) override;
   int read(
     const coll_t& cid,
     const ghobject_t& oid,
@@ -388,7 +388,7 @@ public:
 
   objectstore_perf_stat_t get_cur_stats() override;
 
-  const PerfCounters* get_perf_counters() const {
+  const PerfCounters* get_perf_counters() const override {
     return nullptr;
   }
 

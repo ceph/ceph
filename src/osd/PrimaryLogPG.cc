@@ -122,7 +122,7 @@ protected:
 
 public:
   /// Provide the final size of the copied object to the CopyCallback
-  ~CopyCallback() {}
+  ~CopyCallback() override {}
 };
 
 template <typename T>
@@ -209,7 +209,7 @@ struct OnReadComplete : public Context {
       opcontext->async_read_result = r;
     opcontext->finish_read(pg);
   }
-  ~OnReadComplete() {}
+  ~OnReadComplete() override {}
 };
 
 class PrimaryLogPG::C_OSD_AppliedRecoveredObject : public Context {
@@ -280,7 +280,7 @@ public:
     : results(NULL),
       retval(0),
       ctx(ctx_) {}
-  ~CopyFromCallback() {}
+  ~CopyFromCallback() override {}
 
   void finish(PrimaryLogPG::CopyCallbackResults results_) override {
     results = results_.get<1>();
@@ -689,7 +689,7 @@ public:
 
     return 0;
   }
-  ~PGLSPlainFilter() {}
+  ~PGLSPlainFilter() override {}
   bool filter(const hobject_t &obj, bufferlist& xattr_data,
                       bufferlist& outdata) override;
 };
@@ -712,7 +712,7 @@ public:
 
     return 0;
   }
-  ~PGLSParentFilter() {}
+  ~PGLSParentFilter() override {}
   bool filter(const hobject_t &obj, bufferlist& xattr_data,
                       bufferlist& outdata) override;
 };

@@ -457,7 +457,7 @@ struct SendPushReplies : public Context {
     }
     replies.clear();
   }
-  ~SendPushReplies() {
+  ~SendPushReplies() override {
     for (map<int, MOSDPGPushReply*>::iterator i = replies.begin();
 	 i != replies.end();
 	 ++i) {

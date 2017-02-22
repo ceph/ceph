@@ -324,7 +324,7 @@ struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
     c->complete(r);
     c = NULL;
   }
-  ~AsyncReadCallback() {
+  ~AsyncReadCallback() override {
     delete c;
   }
 };
