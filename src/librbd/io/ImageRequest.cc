@@ -130,8 +130,9 @@ void ImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
 
 template <typename I>
 void ImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
-                                  uint64_t off, uint64_t len) {
-  ImageDiscardRequest<I> req(*ictx, c, off, len);
+                                  uint64_t off, uint64_t len,
+                                  bool skip_partial_discard) {
+  ImageDiscardRequest<I> req(*ictx, c, off, len, skip_partial_discard);
   req.send();
 }
 
@@ -505,7 +506,8 @@ uint64_t ImageDiscardRequest<I>::append_journal_event(
   assert(!this->m_image_extents.empty());
   for (auto &extent : this->m_image_extents) {
     journal::EventEntry event_entry(journal::AioDiscardEvent(extent.first,
-                                                             extent.second));
+                                                             extent.second,
+                                                             this->m_skip_partial_discard));
     tid = image_ctx.journal->append_io_event(std::move(event_entry),
                                              requests, extent.first,
                                              extent.second, synchronous);
@@ -520,7 +522,7 @@ template <typename I>
 void ImageDiscardRequest<I>::prune_object_extents(ObjectExtents &object_extents) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  if (!cct->_conf->rbd_skip_partial_discard) {
+  if (!this->m_skip_partial_discard) {
     return;
   }
 
@@ -552,7 +554,8 @@ void ImageDiscardRequest<I>::send_image_cache_request() {
   aio_comp->set_request_count(this->m_image_extents.size());
   for (auto &extent : this->m_image_extents) {
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-    image_ctx.image_cache->aio_discard(extent.first, extent.second, req_comp);
+    image_ctx.image_cache->aio_discard(extent.first, extent.second,
+                                       this->m_skip_partial_discard, req_comp);
   }
 }
 

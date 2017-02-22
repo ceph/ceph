@@ -246,7 +246,8 @@ TEST_F(TestMockIoImageRequest, AioDiscardJournalAppendDisabled) {
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
     &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
-  MockImageDiscardRequest mock_aio_image_discard(mock_image_ctx, aio_comp, 0, 1);
+  MockImageDiscardRequest mock_aio_image_discard(mock_image_ctx, aio_comp,
+                                                 0, 1, ictx->skip_partial_discard);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     mock_aio_image_discard.send();

@@ -35,7 +35,7 @@ public:
   static void aio_write(ImageCtxT *ictx, AioCompletion *c,
                         Extents &&image_extents, bufferlist &&bl, int op_flags);
   static void aio_discard(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
-                          uint64_t len);
+                          uint64_t len, bool skip_partial_discard);
   static void aio_flush(ImageCtxT *ictx, AioCompletion *c);
   static void aio_writesame(ImageCtxT *ictx, AioCompletion *c, uint64_t off,
                             uint64_t len, bufferlist &&bl, int op_flags);
@@ -199,8 +199,9 @@ template <typename ImageCtxT = ImageCtx>
 class ImageDiscardRequest : public AbstractImageWriteRequest<ImageCtxT> {
 public:
   ImageDiscardRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
-                      uint64_t off, uint64_t len)
-    : AbstractImageWriteRequest<ImageCtxT>(image_ctx, aio_comp, {{off, len}}) {
+                      uint64_t off, uint64_t len, bool skip_partial_discard)
+    : AbstractImageWriteRequest<ImageCtxT>(image_ctx, aio_comp, {{off, len}}),
+      m_skip_partial_discard(skip_partial_discard) {
   }
 
 protected:
@@ -229,6 +230,8 @@ protected:
   uint64_t append_journal_event(const ObjectRequests &requests,
                                 bool synchronous) override;
   void update_stats(size_t length) override;
+private:
+  bool m_skip_partial_discard;
 };
 
 template <typename ImageCtxT = ImageCtx>
