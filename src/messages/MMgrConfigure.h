@@ -29,18 +29,18 @@ class MMgrConfigure : public Message
 public:
   uint32_t stats_period;
 
-  void decode_payload()
+  void decode_payload() override
   {
     bufferlist::iterator p = payload.begin();
     ::decode(stats_period, p);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(stats_period, payload);
   }
 
-  const char *get_type_name() const { return "mgrconfigure"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "mgrconfigure"; }
+  void print(ostream& out) const override {
     out << get_type_name() << "()";
   }
 

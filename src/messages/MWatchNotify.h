@@ -44,10 +44,10 @@ class MWatchNotify : public Message {
       return_code(0),
       notifier_gid(0) { }
 private:
-  ~MWatchNotify() {}
+  ~MWatchNotify() override {}
 
 public:
-  void decode_payload() {
+  void decode_payload() override {
     uint8_t msg_ver;
     bufferlist::iterator p = payload.begin();
     ::decode(msg_ver, p);
@@ -66,7 +66,7 @@ public:
     else
       notifier_gid = 0;
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     uint8_t msg_ver = 1;
     ::encode(msg_ver, payload);
     ::encode(opcode, payload);
@@ -78,8 +78,8 @@ public:
     ::encode(notifier_gid, payload);
   }
 
-  const char *get_type_name() const { return "watch-notify"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "watch-notify"; }
+  void print(ostream& out) const override {
     out << "watch-notify("
 	<< ceph_watch_event_name(opcode) << " (" << (int)opcode << ")"
 	<< " cookie " << cookie

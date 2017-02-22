@@ -48,13 +48,13 @@ struct MRoute : public Message {
     msg = decode_message(NULL, 0, p);
   }
 private:
-  ~MRoute() {
+  ~MRoute() override {
     if (msg)
       msg->put();
   }
 
 public:
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(session_mon_tid, p);
     ::decode(dest, p);
@@ -70,7 +70,7 @@ public:
       ::decode(send_osdmap_first, p);
     }
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(session_mon_tid, payload);
     ::encode(dest, payload, features);
     bool m = msg ? true : false;
@@ -80,8 +80,8 @@ public:
     ::encode(send_osdmap_first, payload);
   }
 
-  const char *get_type_name() const { return "route"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "route"; }
+  void print(ostream& o) const override {
     if (msg)
       o << "route(" << *msg;
     else

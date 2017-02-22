@@ -31,19 +31,19 @@ class MExportDirNotifyAck : public Message {
     set_tid(tid);
   }
 private:
-  ~MExportDirNotifyAck() {}
+  ~MExportDirNotifyAck() override {}
 
 public:
-  const char *get_type_name() const { return "ExNotA"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "ExNotA"; }
+  void print(ostream& o) const override {
     o << "export_notify_ack(" << dirfrag << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(dirfrag, payload);
     ::encode(new_auth, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(new_auth, p);

@@ -31,11 +31,11 @@ struct MClientSnap : public Message {
     head.op = o;
   }
 private:
-  ~MClientSnap() {}
+  ~MClientSnap() override {}
 
 public:  
-  const char *get_type_name() const { return "client_snap"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "client_snap"; }
+  void print(ostream& out) const override {
     out << "client_snap(" << ceph_snap_op_name(head.op);
     if (head.split)
       out << " split=" << inodeno_t(head.split);
@@ -43,7 +43,7 @@ public:
     out << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     head.num_split_inos = split_inos.size();
     head.num_split_realms = split_realms.size();
     head.trace_len = bl.length();
@@ -52,7 +52,7 @@ public:
     ::encode_nohead(split_realms, payload);
     ::encode_nohead(bl, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode_nohead(head.num_split_inos, split_inos, p);

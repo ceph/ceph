@@ -62,11 +62,11 @@ public:
   }
 
 private:
-  ~MOSDPGLog() {}
+  ~MOSDPGLog() override {}
 
 public:
-  const char *get_type_name() const { return "PGlog"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "PGlog"; }
+  void print(ostream& out) const override {
     // NOTE: log is not const, but operator<< doesn't touch fields
     // swapped out by OSD code.
     out << "pg_log(" << info.pgid << " epoch " << epoch
@@ -74,7 +74,7 @@ public:
 	<< " query_epoch " << query_epoch << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(epoch, payload);
     ::encode(info, payload);
     ::encode(log, payload);
@@ -84,7 +84,7 @@ public:
     ::encode(to, payload);
     ::encode(from, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(info, p);

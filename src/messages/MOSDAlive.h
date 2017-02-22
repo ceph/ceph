@@ -26,21 +26,21 @@ class MOSDAlive : public PaxosServiceMessage {
   MOSDAlive(epoch_t h, epoch_t w) : PaxosServiceMessage(MSG_OSD_ALIVE, h), want(w) { }
   MOSDAlive() : PaxosServiceMessage(MSG_OSD_ALIVE, 0) {}
 private:
-  ~MOSDAlive() {}
+  ~MOSDAlive() override {}
 
 public:
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(want, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(want, p);
   }
 
-  const char *get_type_name() const { return "osd_alive"; }
-  void print(ostream &out) const {
+  const char *get_type_name() const override { return "osd_alive"; }
+  void print(ostream &out) const override {
     out << "osd_alive(want up_thru " << want << " have " << version << ")";
   }
   

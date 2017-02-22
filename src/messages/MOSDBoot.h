@@ -52,17 +52,17 @@ class MOSDBoot : public PaxosServiceMessage {
   { }
   
 private:
-  ~MOSDBoot() { }
+  ~MOSDBoot() override { }
 
 public:
-  const char *get_type_name() const { return "osd_boot"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_boot"; }
+  void print(ostream& out) const override {
     out << "osd_boot(osd." << sb.whoami << " booted " << boot_epoch
 	<< " features " << osd_features
 	<< " v" << version << ")";
   }
   
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(sb, payload);
     ::encode(hb_back_addr, payload, features);
@@ -72,7 +72,7 @@ public:
     ::encode(metadata, payload);
     ::encode(osd_features, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(sb, p);

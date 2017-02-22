@@ -287,7 +287,7 @@ public:
   }
 
 protected:
-  virtual ~Message() {
+  ~Message() override {
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
     release_message_throttle();

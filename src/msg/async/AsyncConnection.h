@@ -154,7 +154,7 @@ class AsyncConnection : public Connection {
                              DispatchQueue *q, uint64_t cid)
       : msgr(omsgr), center(c), dispatch_queue(q), conn_id(cid),
         stop_dispatch(false) { }
-    ~DelayedDelivery() {
+    ~DelayedDelivery() override {
       assert(register_time_events.empty());
       assert(delay_queue.empty());
     }
@@ -187,7 +187,7 @@ class AsyncConnection : public Connection {
 
  public:
   AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q, Worker *w);
-  ~AsyncConnection();
+  ~AsyncConnection() override;
   void maybe_start_delay_thread();
 
   ostream& _conn_prefix(std::ostream *_dout);
