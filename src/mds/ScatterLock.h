@@ -64,14 +64,14 @@ public:
   ScatterLock(MDSCacheObject *o, LockType *lt) : 
     SimpleLock(o, lt), _more(NULL)
   {}
-  ~ScatterLock() {
+  ~ScatterLock() override {
     if (_more) {
       _more->item_updated.remove_myself();   // FIXME this should happen sooner, i think...
       delete _more;
     }
   }
 
-  bool is_scatterlock() const {
+  bool is_scatterlock() const override {
     return true;
   }
 
@@ -135,13 +135,13 @@ public:
     return have_more() ? _more->state_flags & UNSCATTER_WANTED : false;
   }
 
-  bool is_dirty() const {
+  bool is_dirty() const override {
     return have_more() ? _more->state_flags & DIRTY : false;
   }
-  bool is_flushing() const {
+  bool is_flushing() const override {
     return have_more() ? _more->state_flags & FLUSHING: false;
   }
-  bool is_flushed() const {
+  bool is_flushed() const override {
     return have_more() ? _more->state_flags & FLUSHED: false;
   }
   bool is_dirty_or_flushing() const {
@@ -175,7 +175,7 @@ public:
     start_flush();
     finish_flush();
   }
-  void clear_flushed() {
+  void clear_flushed() override {
     if (have_more()) {
       _more->state_flags &= ~FLUSHED;
       try_clear_more();
@@ -228,7 +228,7 @@ public:
     return SimpleLock::remove_replica(from);
   }
 
-  virtual void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "(";
     _print(out);
     if (is_dirty())
