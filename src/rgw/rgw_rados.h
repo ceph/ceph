@@ -1105,7 +1105,7 @@ struct RGWZone {
 /**
  * Represents the number of shards for the bucket index object, a value of zero
  * indicates there is no sharding. By default (no sharding, the name of the object
- * is '.dir.{marker}', with sharding, the name is '.dir.{markder}.{sharding_id}',
+ * is '.dir.{marker}', with sharding, the name is '.dir.{marker}.{sharding_id}',
  * sharding_id is zero-based value. It is not recommended to set a too large value
  * (e.g. thousand) as it increases the cost for bucket listing.
  */
