@@ -57,13 +57,13 @@ private:
   uint64_t instance_id;
 
   bool _dispatch(Message *m);
-  bool ms_dispatch(Message *m);
+  bool ms_dispatch(Message *m) override;
 
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
-  void ms_handle_connect(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con);
-  bool ms_handle_refused(Connection *con);
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
+  void ms_handle_connect(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override;
+  bool ms_handle_refused(Connection *con) override;
 
   Objecter *objecter;
 
@@ -83,7 +83,7 @@ public:
   Finisher finisher;
 
   explicit RadosClient(CephContext *cct_);
-  ~RadosClient();
+  ~RadosClient() override;
   int ping_monitor(string mon_id, string *result);
   int connect();
   void shutdown();
