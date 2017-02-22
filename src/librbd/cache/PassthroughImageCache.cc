@@ -63,6 +63,20 @@ void PassthroughImageCache<I>::aio_flush(Context *on_finish) {
 }
 
 template <typename I>
+void PassthroughImageCache<I>::aio_writesame(uint64_t offset, uint64_t length,
+                                             bufferlist&& bl, int fadvise_flags,
+                                             Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "offset=" << offset << ", "
+                 << "length=" << length << ", "
+                 << "data_len=" << bl.length() << ", "
+                 << "on_finish=" << on_finish << dendl;
+
+  m_image_writeback.aio_writesame(offset, length, std::move(bl), fadvise_flags,
+                                  on_finish);
+}
+
+template <typename I>
 void PassthroughImageCache<I>::init(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
