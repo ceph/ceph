@@ -3908,8 +3908,9 @@ void Client::remove_session_caps(MetaSession *s)
   while (s->caps.size()) {
     Cap *cap = *s->caps.begin();
     Inode *in = cap->inode;
-    int dirty_caps = 0;
+    bool dirty_caps = false, cap_snaps = false;
     if (in->auth_cap == cap) {
+      cap_snaps = !in->cap_snaps.empty();
       dirty_caps = in->dirty_caps | in->flushing_caps;
       in->wanted_max_size = 0;
       in->requested_max_size = 0;
@@ -3917,6 +3918,10 @@ void Client::remove_session_caps(MetaSession *s)
     }
     remove_cap(cap, false);
     signal_cond_list(in->waitfor_caps);
+    if (cap_snaps) {
+      InodeRef tmp_ref(in);
+      in->cap_snaps.clear();
+    }
     if (dirty_caps) {
       lderr(cct) << "remove_session_caps still has dirty|flushing caps on " << *in << dendl;
       if (in->flushing_caps) {
