@@ -4657,7 +4657,6 @@ struct ScrubMap {
     uint64_t size;
     __u32 omap_digest;         ///< omap crc32c
     __u32 digest;              ///< data crc32c
-    uint32_t nlinks;
     bool negative:1;
     bool digest_present:1;
     bool omap_digest_present:1;
@@ -4668,7 +4667,7 @@ struct ScrubMap {
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
-      size(-1), omap_digest(0), digest(0), nlinks(0), 
+      size(-1), omap_digest(0), digest(0),
       negative(false), digest_present(false), omap_digest_present(false), 
       read_error(false), stat_error(false), ec_hash_mismatch(false), ec_size_mismatch(false) {}
 

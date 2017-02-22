@@ -5571,13 +5571,13 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 void ScrubMap::object::encode(bufferlist& bl) const
 {
   bool compat_read_error = read_error || ec_hash_mismatch || ec_size_mismatch;
-  ENCODE_START(8, 2, bl);
+  ENCODE_START(8, 7, bl);
   ::encode(size, bl);
   ::encode(negative, bl);
   ::encode(attrs, bl);
   ::encode(digest, bl);
   ::encode(digest_present, bl);
-  ::encode(nlinks, bl);
+  ::encode((uint32_t)0, bl);  // obsolete nlinks
   ::encode(snapcolls, bl);
   ::encode(omap_digest, bl);
   ::encode(omap_digest_present, bl);
@@ -5591,37 +5591,24 @@ void ScrubMap::object::encode(bufferlist& bl) const
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
+  DECODE_START(8, bl);
   ::decode(size, bl);
   bool tmp, compat_read_error = false;
   ::decode(tmp, bl);
   negative = tmp;
   ::decode(attrs, bl);
-  if (struct_v >= 3) {
-    ::decode(digest, bl);
-    ::decode(tmp, bl);
-    digest_present = tmp;
-  }
-  if (struct_v >= 4) {
-    ::decode(nlinks, bl);
-    ::decode(snapcolls, bl);
-  } else {
-    /* Indicates that encoder was not aware of this field since stat must
-     * return nlink >= 1 */
-    nlinks = 0;
-  }
-  if (struct_v >= 5) {
-    ::decode(omap_digest, bl);
-    ::decode(tmp, bl);
-    omap_digest_present = tmp;
-  }
-  if (struct_v >= 6) {
-    ::decode(compat_read_error, bl);
-  }
-  if (struct_v >= 7) {
-    ::decode(tmp, bl);
-    stat_error = tmp;
-  }
+  ::decode(digest, bl);
+  ::decode(tmp, bl);
+  digest_present = tmp;
+  uint32_t nlinks;
+  ::decode(nlinks, bl);
+  ::decode(snapcolls, bl);
+  ::decode(omap_digest, bl);
+  ::decode(tmp, bl);
+  omap_digest_present = tmp;
+  ::decode(compat_read_error, bl);
+  ::decode(tmp, bl);
+  stat_error = tmp;
   if (struct_v >= 8) {
     ::decode(tmp, bl);
     read_error = tmp;
