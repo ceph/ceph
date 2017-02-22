@@ -20,14 +20,14 @@ class RGWOp_ZoneGroupMap_Get : public RGWRESTOp {
   bool old_format;
 public:
   RGWOp_ZoneGroupMap_Get(bool _old_format):old_format(_old_format) {}
-  ~RGWOp_ZoneGroupMap_Get() {}
+  ~RGWOp_ZoneGroupMap_Get() override {}
 
-  int verify_permission() {
+  int verify_permission() override {
     return 0; 
   }
-  void execute();
-  virtual void send_response();
-  virtual const string name() {
+  void execute() override;
+  void send_response() override;
+  const string name() override {
     if (old_format) {
       return "get_region_map";
     } else {
@@ -56,21 +56,21 @@ public:
 
 class RGWHandler_Config : public RGWHandler_Auth_S3 {
 protected:
-  RGWOp *op_get();
+  RGWOp *op_get() override;
 
-  int read_permissions(RGWOp*) {
+  int read_permissions(RGWOp*) override {
     return 0;
   }
 public:
   RGWHandler_Config() : RGWHandler_Auth_S3() {}
-  virtual ~RGWHandler_Config() {}
+  ~RGWHandler_Config() override {}
 };
 
 
 class RGWRESTMgr_Config : public RGWRESTMgr {
 public:
   RGWRESTMgr_Config() = default;
-  virtual ~RGWRESTMgr_Config() = default;
+  ~RGWRESTMgr_Config() override = default;
 
   RGWHandler_REST* get_handler(struct req_state*,
                                const std::string&) override {

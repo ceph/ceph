@@ -74,7 +74,7 @@ public:
     mtime = m;
   }
 
-  void dump(Formatter *f) const {
+  void dump(Formatter *f) const override {
     ep.dump(f);
   }
 };
@@ -88,7 +88,7 @@ public:
     mtime = m;
   }
 
-  void dump(Formatter *f) const {
+  void dump(Formatter *f) const override {
     info.dump(f);
   }
 
@@ -433,7 +433,7 @@ class RGWDataChangesLog {
 
   public:
     ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log), lock("ChangesRenewThread::lock") {}
-    void *entry();
+    void *entry() override;
     void stop();
   };
 

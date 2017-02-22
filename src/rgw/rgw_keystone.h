@@ -155,7 +155,7 @@ class RGWKeystoneTokenCache {
         cache(cache),
         lock("RGWKeystoneTokenCache::RevokeThread") {
     }
-    void *entry();
+    void *entry() override;
     void stop();
     int check_revoked();
   } revocator;
@@ -217,7 +217,7 @@ public:
   KeystoneAdminTokenRequestVer2(CephContext * const _cct)
     : cct(_cct) {
   }
-  void dump(Formatter *f) const;
+  void dump(Formatter *f) const override;
 };
 
 class KeystoneAdminTokenRequestVer3 : public KeystoneAdminTokenRequest {
@@ -227,7 +227,7 @@ public:
   KeystoneAdminTokenRequestVer3(CephContext * const _cct)
     : cct(_cct) {
   }
-  void dump(Formatter *f) const;
+  void dump(Formatter *f) const override;
 };
 
 #endif

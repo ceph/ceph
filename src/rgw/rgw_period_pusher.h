@@ -24,7 +24,7 @@ class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
                               public RGWRealmReloader::Pauser {
  public:
   RGWPeriodPusher(RGWRados* store);
-  ~RGWPeriodPusher();
+  ~RGWPeriodPusher() override;
 
   /// respond to realm notifications by pushing new periods to other zones
   void handle_notify(RGWRealmNotify type, bufferlist::iterator& p) override;

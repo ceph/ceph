@@ -12,7 +12,7 @@ class RGWAsioFrontend : public RGWFrontend {
   std::unique_ptr<Impl> impl;
 public:
   RGWAsioFrontend(const RGWProcessEnv& env);
-  ~RGWAsioFrontend();
+  ~RGWAsioFrontend() override;
 
   int init() override;
   int run() override;

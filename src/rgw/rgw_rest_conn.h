@@ -132,7 +132,7 @@ class RGWStreamIntoBufferlist : public RGWGetDataCB {
   bufferlist& bl;
 public:
   RGWStreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
-  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) {
+  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) override {
     bl.claim_append(inbl);
     return bl_len;
   }
