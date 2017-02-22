@@ -1113,6 +1113,10 @@ int s3_prepare_encrypt(struct req_state* s,
       if (req_sse_ca != "AES256") {
         return -ERR_INVALID_REQUEST;
       }
+      if (s->cct->_conf->rgw_crypt_require_ssl &&
+          !s->info.env->exists("SERVER_PORT_SECURE")) {
+        return -ERR_INVALID_REQUEST;
+      }
       std::string key_bin = from_base64(
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY) );
       if (key_bin.size() != AES_256_CBC::AES_256_KEYSIZE) {
@@ -1151,6 +1155,10 @@ int s3_prepare_encrypt(struct req_state* s,
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION);
     if (! req_sse.empty()) {
       if (req_sse != "aws:kms") {
+        return -ERR_INVALID_REQUEST;
+      }
+      if (s->cct->_conf->rgw_crypt_require_ssl &&
+          !s->info.env->exists("SERVER_PORT_SECURE")) {
         return -ERR_INVALID_REQUEST;
       }
       boost::string_ref key_id =
@@ -1227,6 +1235,10 @@ int s3_prepare_decrypt(struct req_state* s,
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
   ldout(s->cct, 15) << "Encryption mode: " << stored_mode << dendl;
   if (stored_mode == "SSE-C-AES256") {
+    if (s->cct->_conf->rgw_crypt_require_ssl &&
+        !s->info.env->exists("SERVER_PORT_SECURE")) {
+      return -ERR_INVALID_REQUEST;
+    }
     const char *req_cust_alg =
         s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
 
@@ -1266,6 +1278,10 @@ int s3_prepare_decrypt(struct req_state* s,
   }
 
   if (stored_mode == "SSE-KMS") {
+    if (s->cct->_conf->rgw_crypt_require_ssl &&
+        !s->info.env->exists("SERVER_PORT_SECURE")) {
+      return -ERR_INVALID_REQUEST;
+    }
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string key_selector = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
