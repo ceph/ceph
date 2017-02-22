@@ -92,15 +92,23 @@ def _config_user(ragweed_conf, section, user):
 
 
 @contextlib.contextmanager
-def create_users(ctx, config):
+def create_users(ctx, config, run_stages):
     """
     Create a main and an alternate s3 user.
     """
     assert isinstance(config, dict)
+
+    for client, properties in config['config'].iteritems():
+        run_stages[client] = string.split(properties.get('stages', 'prepare,check'), ',')
+
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
     users = {'user regular': 'foo', 'user system': 'sysuser'}
     for client in config['clients']:
+        if not 'prepare' in run_stages[client]:
+            # should have been prepared in a previous run
+            continue
+
         ragweed_conf = config['ragweed_conf'][client]
         ragweed_conf.setdefault('fixtures', {})
         ragweed_conf['rgw'].setdefault('bucket_prefix', 'test-' + client)
@@ -131,6 +139,9 @@ def create_users(ctx, config):
         yield
     finally:
         for client in config['clients']:
+            if not 'check' in run_stages[client]:
+                # only remove user if went through the check stage
+                continue
             for user in users.itervalues():
                 uid = '{user}.{client}'.format(user=user, client=client)
                 ctx.cluster.only(client).run(
@@ -148,7 +159,7 @@ def create_users(ctx, config):
 
 
 @contextlib.contextmanager
-def configure(ctx, config):
+def configure(ctx, config, run_stages):
     """
     Configure the ragweed.  This includes the running of the
     bootstrap code and the updating of local conf files.
@@ -157,6 +168,21 @@ def configure(ctx, config):
     log.info('Configuring ragweed...')
     testdir = teuthology.get_testdir(ctx)
     for client, properties in config['clients'].iteritems():
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        remote.run(
+            args=[
+                'cd',
+                '{tdir}/ragweed'.format(tdir=testdir),
+                run.Raw('&&'),
+                './bootstrap',
+                ],
+            )
+
+        preparing = 'prepare' in run_stages[client]
+        if not preparing:
+            # should have been prepared in a previous run
+            continue
+
         ragweed_conf = config['ragweed_conf'][client]
         if properties is not None and 'rgw_server' in properties:
             host = None
@@ -173,15 +199,6 @@ def configure(ctx, config):
         if properties is not None and 'slow_backend' in properties:
 	    ragweed_conf['fixtures']['slow backend'] = properties['slow_backend']
 
-        (remote,) = ctx.cluster.only(client).remotes.keys()
-        remote.run(
-            args=[
-                'cd',
-                '{tdir}/ragweed'.format(tdir=testdir),
-                run.Raw('&&'),
-                './bootstrap',
-                ],
-            )
         conf_fp = StringIO()
         ragweed_conf.write(conf_fp)
         teuthology.write_file(
@@ -219,7 +236,7 @@ def configure(ctx, config):
                 )
 
 @contextlib.contextmanager
-def run_tests(ctx, config):
+def run_tests(ctx, config, run_stages):
     """
     Run the ragweed after everything is set up.
 
@@ -232,9 +249,7 @@ def run_tests(ctx, config):
     if not ctx.rgw.use_fastcgi:
         attrs.append("!fails_on_mod_proxy_fcgi")
     for client, client_config in config.iteritems():
-        stages = 'prepare,check'
-        if client_config is not None:
-            stages = client_config.get('stages', 'prepare,check')
+        stages = string.join(run_stages[client], ',')
         args = [
             'RAGWEED_CONF={tdir}/archive/ragweed.{client}.conf'.format(tdir=testdir, client=client),
             'RAGWEED_STAGES={stages}'.format(stages=stages),
@@ -335,17 +350,22 @@ def task(ctx, config):
                 }
             )
 
+    run_stages = {}
+
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),
         lambda: create_users(ctx=ctx, config=dict(
                 clients=clients,
                 ragweed_conf=ragweed_conf,
-                )),
+                config=config,
+                ),
+                run_stages=run_stages),
         lambda: configure(ctx=ctx, config=dict(
                 clients=config,
                 ragweed_conf=ragweed_conf,
-                )),
-        lambda: run_tests(ctx=ctx, config=config),
+                ),
+                run_stages=run_stages),
+        lambda: run_tests(ctx=ctx, config=config, run_stages=run_stages),
         ):
         pass
     yield
