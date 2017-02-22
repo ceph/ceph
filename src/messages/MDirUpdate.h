@@ -55,15 +55,15 @@ class MDirUpdate : public Message {
     this->path = path;
   }
 private:
-  ~MDirUpdate() {}
+  ~MDirUpdate() override {}
 
 public:
-  const char *get_type_name() const { return "dir_update"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "dir_update"; }
+  void print(ostream& out) const override {
     out << "dir_update(" << get_dirfrag() << ")";
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(from_mds, p);
     ::decode(dirfrag, p);
@@ -73,7 +73,7 @@ public:
     ::decode(path, p);
   }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(from_mds, payload);
     ::encode(dirfrag, payload);
     ::encode(dir_rep, payload);

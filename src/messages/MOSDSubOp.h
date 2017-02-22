@@ -99,13 +99,13 @@ public:
     return pgid;
   }
 
-  int get_cost() const {
+  int get_cost() const override {
     if (ops.size() == 1 && ops[0].op.op == CEPH_OSD_OP_PULL)
       return ops[0].op.extent.length;
     return data.length();
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     //since we drop incorrect_pools flag, now we only support
     //version >=7
     assert (header.version >= 7);
@@ -186,7 +186,7 @@ public:
 
   void finish_decode() { }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     header.version = HEAD_VERSION;
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
@@ -263,11 +263,11 @@ public:
     set_tid(rtid);
   }
 private:
-  ~MOSDSubOp() {}
+  ~MOSDSubOp() override {}
 
 public:
-  const char *get_type_name() const { return "osd_sub_op"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_sub_op"; }
+  void print(ostream& out) const override {
     out << "osd_sub_op(" << reqid
 	<< " " << pgid
 	<< " " << poid

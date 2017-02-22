@@ -56,11 +56,11 @@ public:
     lockdata.claim(bl);
   }
 private:
-  ~MLock() {}
+  ~MLock() override {}
   
 public:
-  const char *get_type_name() const { return "ILock"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "ILock"; }
+  void print(ostream& out) const override {
     out << "lock(a=" << get_lock_action_name(action)
 	<< " " << get_lock_type_name(lock_type)
 	<< " " << object_info
@@ -72,7 +72,7 @@ public:
     this->lockdata = lockdata;
   }
   
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(asker, p);
     ::decode(action, p);
@@ -81,7 +81,7 @@ public:
     ::decode(object_info, p);
     ::decode(lockdata, p);
   }
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(asker, payload);
     ::encode(action, payload);
     ::encode(reqid, payload);

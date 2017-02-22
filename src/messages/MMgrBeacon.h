@@ -51,25 +51,25 @@ public:
   const std::string& get_name() const { return name; }
 
 private:
-  ~MMgrBeacon() {}
+  ~MMgrBeacon() override {}
 
 public:
 
-  const char *get_type_name() const { return "mgrbeacon"; }
+  const char *get_type_name() const override { return "mgrbeacon"; }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << get_type_name() << " mgr." << name << "(" << gid << ", "
         << server_addr << ", " << available << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(server_addr, payload, features);
     ::encode(gid, payload);
     ::encode(available, payload);
     ::encode(name, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(server_addr, p);
