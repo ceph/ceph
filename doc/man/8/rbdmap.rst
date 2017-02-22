@@ -25,7 +25,7 @@ at shutdown), as triggered by the init system (a systemd unit file,
 
 The script takes a single argument, which can be either "map" or "unmap".
 In either case, the script parses a configuration file (defaults to ``/etc/ceph/rbdmap``,
-but can be overrided via an  environment variable ``RBDMAPFILE``). Each line
+but can be overridden via an environment variable ``RBDMAPFILE``). Each line
 of the configuration file corresponds to an RBD image which is to be mapped, or
 unmapped.
 
@@ -51,8 +51,12 @@ When run as ``rbdmap map``, the script parses the configuration file, and for
 each RBD image specified attempts to first map the image (using the ``rbd map``
 command) and, second, to mount the image.
 
-When run as ``rbd unmap``, the script parses the configuration file, and
-attempts to first unmount, and then unmap, each image specified.
+When run as ``rbdmap unmap``, images listed in the configuration file will
+be unmounted and unmapped.
+
+``rbdmap unmap-all`` attempts to unmount and subsequently unmap all currently
+mapped RBD images, regardless of whether or not they're listed in the
+configuration file.
 
 If successful, the ``rbd map`` operation maps the image to a ``/dev/rbdX``
 device, at which point a udev rule is triggered to create a friendly device
