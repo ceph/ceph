@@ -1483,8 +1483,8 @@ void RGWGetObj::execute()
 
   start = ofs;
 
-  if (!get_data || ofs > end) {
-    send_response_data(bl, 0, 0);
+  /* STAT ops don't need data, and do no i/o */
+  if (get_type() == RGW_OP_STAT_OBJ) {
     return;
   }
 
@@ -1496,6 +1496,11 @@ void RGWGetObj::execute()
   }
   if (op_ret < 0) {
     goto done_err;
+  }
+
+  if (!get_data || ofs > end) {
+    send_response_data(bl, 0, 0);
+    return;
   }
 
   perfcounter->inc(l_rgw_get_b, end - ofs);
