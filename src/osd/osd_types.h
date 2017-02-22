@@ -4538,19 +4538,6 @@ struct object_info_t {
 };
 WRITE_CLASS_ENCODER_FEATURES(object_info_t)
 
-struct SnapSetContext {
-  hobject_t oid;
-  SnapSet snapset;
-  int ref;
-  bool registered : 1;
-  bool exists : 1;
-
-  explicit SnapSetContext(const hobject_t& o) :
-    oid(o), ref(0), registered(false), exists(true) { }
-};
-
-
-
 ostream& operator<<(ostream& out, const object_info_t& oi);
 
 
