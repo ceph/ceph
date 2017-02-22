@@ -380,13 +380,15 @@ void OSDMonitor::on_active()
 	     << dendl;
     mapping_job->abort();
   }
-  C_PrintTime *fin = new C_PrintTime(osdmap.get_epoch());
-  mapping.reset(new OSDMapMapping);
-  mapping_job = mapping->start_update(osdmap, mapper,
-				      g_conf->mon_osd_mapping_pgs_per_chunk);
-  dout(10) << __func__ << " started mapping job " << mapping_job.get()
-	   << " at " << fin->start << dendl;
-  mapping_job->set_finish_event(fin);
+  if (g_conf->mon_osd_prime_pg_temp) {
+    C_PrintTime *fin = new C_PrintTime(osdmap.get_epoch());
+    mapping.reset(new OSDMapMapping);
+    mapping_job = mapping->start_update(osdmap, mapper,
+					g_conf->mon_osd_mapping_pgs_per_chunk);
+    dout(10) << __func__ << " started mapping job " << mapping_job.get()
+	     << " at " << fin->start << dendl;
+    mapping_job->set_finish_event(fin);
+  }
 }
 
 void OSDMonitor::on_shutdown()
@@ -1127,24 +1129,24 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   int r = pending_inc.propagate_snaps_to_tiers(g_ceph_context, osdmap);
   assert(r == 0);
 
-  if (g_conf->mon_osd_prime_pg_temp) {
-    if (mapping && mapping_job) {
-      if (!mapping_job->is_done()) {
-	dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
-		<< mapping_job.get() << " did not complete, "
-		<< mapping_job->shards << " left" << dendl;
-	mapping_job->abort();
-      } else if (mapping->get_epoch() == osdmap.get_epoch()) {
-	dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
-		<< mapping_job.get() << " is prior epoch "
-		<< mapping->get_epoch() << dendl;
-      } else {
+  if (mapping && mapping_job) {
+    if (!mapping_job->is_done()) {
+      dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
+	      << mapping_job.get() << " did not complete, "
+	      << mapping_job->shards << " left" << dendl;
+      mapping_job->abort();
+    } else if (mapping->get_epoch() == osdmap.get_epoch()) {
+      dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
+	      << mapping_job.get() << " is prior epoch "
+	      << mapping->get_epoch() << dendl;
+    } else {
+      if (g_conf->mon_osd_prime_pg_temp) {
 	maybe_prime_pg_temp();
       }
-    } else {
-      dout(1) << __func__ << " skipping prime_pg_temp; mapping job did not start"
-	      << dendl;
-    }
+    } 
+  } else if (g_conf->mon_osd_prime_pg_temp) {
+    dout(1) << __func__ << " skipping prime_pg_temp; mapping job did not start"
+	    << dendl;
   }
   mapping_job.reset();
 
