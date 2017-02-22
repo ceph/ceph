@@ -52,7 +52,7 @@ public:
 
   TracepointProvider(CephContext *cct, const char *library,
                      const char *config_key);
-  virtual ~TracepointProvider();
+  ~TracepointProvider() override;
 
   template <const Traits &traits>
   static void initialize(CephContext *cct) {
@@ -63,11 +63,11 @@ public:
   }
 
 protected:
-  virtual const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     return m_config_keys;
   }
-  virtual void handle_conf_change(const struct md_config_t *conf,
-                                  const std::set <std::string> &changed);
+  void handle_conf_change(const struct md_config_t *conf,
+                                  const std::set <std::string> &changed) override;
 
 private:
   CephContext *m_cct;

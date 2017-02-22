@@ -51,7 +51,7 @@ class LockdepObs : public md_config_obs_t {
 public:
   explicit LockdepObs(CephContext *cct) : m_cct(cct), m_registered(false) {
   }
-  ~LockdepObs() {
+  ~LockdepObs() override {
     if (m_registered) {
       lockdep_unregister_ceph_context(m_cct);
     }
@@ -91,7 +91,7 @@ public:
       "get mempool stats");
     assert(r == 0);
   }
-  ~MempoolObs() {
+  ~MempoolObs() override {
     cct->_conf->remove_observer(this);
     cct->get_admin_socket()->unregister_command("dump_mempools");
   }
@@ -138,7 +138,7 @@ public:
   {
   }
 
-  ~CephContextServiceThread() {}
+  ~CephContextServiceThread() override {}
 
   void *entry() override
   {

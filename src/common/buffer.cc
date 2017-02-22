@@ -255,7 +255,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_total_alloc(len);
       inc_history_alloc(len);
     }
-    ~raw_combined() {
+    ~raw_combined() override {
       dec_total_alloc(len);
     }
     raw* clone_empty() override {
@@ -309,7 +309,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_total_alloc(len);
       bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
-    ~raw_malloc() {
+    ~raw_malloc() override {
       free(data);
       dec_total_alloc(len);
       bdout << "raw_malloc " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
@@ -332,7 +332,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_history_alloc(len);
       bdout << "raw_mmap " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
-    ~raw_mmap_pages() {
+    ~raw_mmap_pages() override {
       ::munmap(data, len);
       dec_total_alloc(len);
       bdout << "raw_mmap " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
@@ -357,7 +357,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_history_alloc(len);
       bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " l=" << l << ", align=" << align << " total_alloc=" << buffer::get_total_alloc() << bendl;
     }
-    ~raw_posix_aligned() {
+    ~raw_posix_aligned() override {
       mempool::buffer_data::alloc_char.deallocate_aligned(data, len);
       dec_total_alloc(len);
       bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
@@ -439,7 +439,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	    << buffer::get_total_alloc() << bendl;
     }
 
-    ~raw_pipe() {
+    ~raw_pipe() override {
       if (data)
 	free(data);
       close_pipe(pipefds);
@@ -595,7 +595,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_total_alloc(len);
       bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
-    ~raw_char() {
+    ~raw_char() override {
       if (data)
 	mempool::buffer_data::alloc_char.deallocate(data, len);
       dec_total_alloc(len);
@@ -624,7 +624,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     bool is_shareable() override {
       return false; // !shareable, will force make_shareable()
     }
-    ~raw_unshareable() {
+    ~raw_unshareable() override {
       delete[] data;
     }
   };
@@ -634,7 +634,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     MEMPOOL_CLASS_HELPERS();
 
     raw_static(const char *d, unsigned l) : raw((char*)d, l) { }
-    ~raw_static() {}
+    ~raw_static() override {}
     raw* clone_empty() override {
       return new buffer::raw_char(len);
     }
@@ -645,7 +645,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
    public:
     raw_claim_buffer(const char *b, unsigned l, deleter d)
         : raw((char*)b, l), del(std::move(d)) { }
-    ~raw_claim_buffer() {}
+    ~raw_claim_buffer() override {}
     raw* clone_empty() override {
       return new buffer::raw_char(len);
     }
