@@ -44,7 +44,7 @@ public:
     Py_INCREF(python_completion);
   }
 
-  ~MonCommandCompletion()
+  ~MonCommandCompletion() override
   {
     Py_DECREF(python_completion);
   }
