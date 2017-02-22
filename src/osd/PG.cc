@@ -3952,33 +3952,67 @@ void PG::_scan_rollback_obs(
 
 void PG::_scan_snaps(ScrubMap &smap) 
 {
-  for (map<hobject_t, ScrubMap::object>::iterator i = smap.objects.begin();
-       i != smap.objects.end();
+  hobject_t head;
+  SnapSet snapset;
+  for (map<hobject_t, ScrubMap::object>::reverse_iterator i = smap.objects.rbegin();
+       i != smap.objects.rend();
        ++i) {
     const hobject_t &hoid = i->first;
     ScrubMap::object &o = i->second;
 
-    if (hoid.snap < CEPH_MAXSNAP) {
-      // check and if necessary fix snap_mapper
+    if (hoid.is_head() || hoid.is_snapdir()) {
+      // parse the SnapSet
       bufferlist bl;
-      if (o.attrs.find(OI_ATTR) == o.attrs.end()) {
+      if (o.attrs.find(SS_ATTR) == o.attrs.end()) {
 	continue;
       }
-      bl.push_back(o.attrs[OI_ATTR]);
-      object_info_t oi;
+      bl.push_back(o.attrs[SS_ATTR]);
+      auto p = bl.begin();
       try {
-	oi.decode(bl);
+	::decode(snapset, p);
       } catch(...) {
 	continue;
       }
-      set<snapid_t> oi_snaps(oi.legacy_snaps.begin(), oi.legacy_snaps.end());
+      head = hoid.get_head();
+      continue;
+    }
+    if (hoid.snap < CEPH_MAXSNAP) {
+      // check and if necessary fix snap_mapper
+      if (hoid.get_head() != head) {
+	derr << __func__ << " no head for " << hoid << " (have " << head << ")"
+	     << dendl;
+	continue;
+      }
+      set<snapid_t> obj_snaps;
+      if (!snapset.is_legacy()) {
+	auto p = snapset.clone_snaps.find(hoid.snap);
+	if (p == snapset.clone_snaps.end()) {
+	  derr << __func__ << " no clone_snaps for " << hoid << " in " << snapset
+	       << dendl;
+	  continue;
+	}
+	obj_snaps.insert(p->second.begin(), p->second.end());
+      } else {
+	bufferlist bl;
+	if (o.attrs.find(OI_ATTR) == o.attrs.end()) {
+	  continue;
+	}
+	bl.push_back(o.attrs[OI_ATTR]);
+	object_info_t oi;
+	try {
+	  oi.decode(bl);
+	} catch(...) {
+	  continue;
+	}
+	obj_snaps.insert(oi.legacy_snaps.begin(), oi.legacy_snaps.end());
+      }
       set<snapid_t> cur_snaps;
       int r = snap_mapper.get_snaps(hoid, &cur_snaps);
       if (r != 0 && r != -ENOENT) {
 	derr << __func__ << ": get_snaps returned " << cpp_strerror(r) << dendl;
 	ceph_abort();
       }
-      if (r == -ENOENT || cur_snaps != oi_snaps) {
+      if (r == -ENOENT || cur_snaps != obj_snaps) {
 	ObjectStore::Transaction t;
 	OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
 	if (r == 0) {
@@ -3993,7 +4027,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 			    << info.pgid
 			    << " oid " << hoid << " snaps in mapper: "
 			    << cur_snaps << ", oi: "
-			    << oi_snaps
+			    << obj_snaps
 			    << "...repaired";
 	} else {
 	  osd->clog->error() << "osd." << osd->whoami
@@ -4001,10 +4035,10 @@ void PG::_scan_snaps(ScrubMap &smap)
 			    << info.pgid
 			    << " oid " << hoid << " snaps missing in mapper"
 			    << ", should be: "
-			    << oi_snaps
+			    << obj_snaps
 			    << "...repaired";
 	}
-	snap_mapper.add_oid(hoid, oi_snaps, &_t);
+	snap_mapper.add_oid(hoid, obj_snaps, &_t);
 	r = osd->store->apply_transaction(osr.get(), std::move(t));
 	if (r != 0) {
 	  derr << __func__ << ": apply_transaction got " << cpp_strerror(r)

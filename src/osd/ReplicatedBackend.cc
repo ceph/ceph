@@ -1414,6 +1414,7 @@ void ReplicatedBackend::prepare_pull(
     SnapSetContext *ssc = headctx->ssc;
     assert(ssc);
     dout(10) << " snapset " << ssc->snapset << dendl;
+    recovery_info.ss = ssc->snapset;
     calc_clone_subsets(
       ssc->snapset, soid, get_parent()->get_local_missing(),
       get_info().last_backfill,
