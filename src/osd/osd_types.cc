@@ -4682,25 +4682,31 @@ void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
 
 void SnapSet::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(seq, bl);
   ::encode(head_exists, bl);
   ::encode(snaps, bl);
   ::encode(clones, bl);
   ::encode(clone_overlap, bl);
   ::encode(clone_size, bl);
+  ::encode(clone_snaps, bl);
   ENCODE_FINISH(bl);
 }
 
 void SnapSet::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(seq, bl);
   ::decode(head_exists, bl);
   ::decode(snaps, bl);
   ::decode(clones, bl);
   ::decode(clone_overlap, bl);
   ::decode(clone_size, bl);
+  if (struct_v >= 3) {
+    ::decode(clone_snaps, bl);
+  } else {
+    clone_snaps.clear();
+  }
   DECODE_FINISH(bl);
 }
 
@@ -4717,6 +4723,14 @@ void SnapSet::dump(Formatter *f) const
     f->dump_unsigned("snap", *p);
     f->dump_unsigned("size", clone_size.find(*p)->second);
     f->dump_stream("overlap") << clone_overlap.find(*p)->second;
+    auto q = clone_snaps.find(*p);
+    if (q != clone_snaps.end()) {
+      f->open_array_section("snaps");
+      for (auto s : q->second) {
+	f->dump_unsigned("snap", s);
+      }
+      f->close_section();
+    }
     f->close_section();
   }
   f->close_section();
@@ -4738,13 +4752,23 @@ void SnapSet::generate_test_instances(list<SnapSet*>& o)
   o.back()->clones.push_back(12);
   o.back()->clone_size[12] = 12345;
   o.back()->clone_overlap[12];
+  o.back()->clone_snaps[12] = {12, 10, 8};
 }
 
 ostream& operator<<(ostream& out, const SnapSet& cs)
 {
-  return out << cs.seq << "=" << cs.snaps << ":"
-	     << cs.clones
-	     << (cs.head_exists ? "+head":"");
+  if (cs.is_legacy()) {
+    out << cs.seq << "=" << cs.snaps << ":"
+	<< cs.clones
+	<< (cs.head_exists ? "+head":"");
+    if (!cs.clone_snaps.empty()) {
+      out << "+stray_clone_snaps=" << cs.clone_snaps;
+    }
+    return out;
+  } else {
+    return out << cs.seq << "=" << cs.snaps << ":"
+	       << cs.clone_snaps;
+  }
 }
 
 void SnapSet::from_snap_set(const librados::snap_set_t& ss)
