@@ -1577,6 +1577,12 @@ public:
       return std::move(dissected);
     }
 
+    void log_state_latency(PerfCounters* const logger, const int state) {
+      for (auto txc : *this) {
+        txc->log_state_latency(logger, state);
+      }
+    }
+
     void for_each(std::function<void(TransContext*)> f) {
       std::for_each(std::begin(*this), std::end(*this), f);
     }
