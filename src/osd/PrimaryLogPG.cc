@@ -334,11 +334,11 @@ void PrimaryLogPG::on_local_recover(
   ObjectRecoveryInfo recovery_info(_recovery_info);
   clear_object_snap_mapping(t, hoid);
   if (recovery_info.soid.snap < CEPH_NOSNAP) {
-    assert(recovery_info.oi.snaps.size());
+    assert(recovery_info.oi.legacy_snaps.size());
     OSDriver::OSTransaction _t(osdriver.get_transaction(t));
     set<snapid_t> snaps(
-      recovery_info.oi.snaps.begin(),
-      recovery_info.oi.snaps.end());
+      recovery_info.oi.legacy_snaps.begin(),
+      recovery_info.oi.legacy_snaps.end());
     snap_mapper.add_oid(
       recovery_info.soid,
       snaps,
@@ -3531,7 +3531,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
   assert(snapset_obc);
 
   object_info_t &coi = obc->obs.oi;
-  set<snapid_t> old_snaps(coi.snaps.begin(), coi.snaps.end());
+  set<snapid_t> old_snaps(coi.legacy_snaps.begin(), coi.legacy_snaps.end());
   if (old_snaps.empty()) {
     osd->clog->error() << __func__ << " No object info snaps for " << coid;
     return NULL;
@@ -3655,7 +3655,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
     // save adjusted snaps for this object
     dout(10) << coid << " snaps " << old_snaps
 	     << " -> " << new_snaps << dendl;
-    coi.snaps = vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend());
+    coi.legacy_snaps = vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend());
 
     coi.prior_version = coi.version;
     coi.version = ctx->at_version;
@@ -5235,8 +5235,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    }
 	    break;
 	  }
-	  for (vector<snapid_t>::reverse_iterator p = clone_obc->obs.oi.snaps.rbegin();
-	       p != clone_obc->obs.oi.snaps.rend();
+	  for (vector<snapid_t>::reverse_iterator p =
+		 clone_obc->obs.oi.legacy_snaps.rbegin();
+	       p != clone_obc->obs.oi.legacy_snaps.rend();
 	       ++p) {
 	    ci.snaps.push_back(*p);
 	  }
@@ -6719,7 +6720,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     snap_oi->version = ctx->at_version;
     snap_oi->prior_version = ctx->obs->oi.version;
     snap_oi->copy_user_bits(ctx->obs->oi);
-    snap_oi->snaps = snaps;
+    snap_oi->legacy_snaps = snaps;
 
     _make_clone(ctx, ctx->op_t.get(), ctx->clone_obc, soid, coid, snap_oi);
     
@@ -7138,9 +7139,9 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     case pg_log_entry_t::MODIFY:
     case pg_log_entry_t::PROMOTE:
     case pg_log_entry_t::CLEAN:
-      dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps
+      dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.legacy_snaps
 	       << dendl;
-      ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
+      ::encode(ctx->new_obs.oi.legacy_snaps, ctx->log.back().snaps);
       break;
     default:
       break;
@@ -7307,7 +7308,7 @@ int PrimaryLogPG::fill_in_copy_get(
   reply_obj.size = oi.size;
   reply_obj.mtime = oi.mtime;
   if (soid.snap < CEPH_NOSNAP) {
-    reply_obj.snaps = oi.snaps;
+    reply_obj.snaps = oi.legacy_snaps;
   } else {
     assert(obc->ssc);
     reply_obj.snap_seq = obc->ssc->snapset.seq;
@@ -8041,8 +8042,8 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     tctx->new_obs.oi.truncate_size = results->truncate_size;
 
     if (soid.snap != CEPH_NOSNAP) {
-      tctx->new_obs.oi.snaps = results->snaps;
-      assert(!tctx->new_obs.oi.snaps.empty());
+      tctx->new_obs.oi.legacy_snaps = results->snaps;
+      assert(!tctx->new_obs.oi.legacy_snaps.empty());
       assert(obc->ssc->snapset.clone_size.count(soid.snap));
       assert(obc->ssc->snapset.clone_size[soid.snap] ==
 	     results->object_size);
@@ -8281,7 +8282,7 @@ int PrimaryLogPG::start_flush(
       snapc.seq = snapset.seq;
       snapc.snaps = snapset.snaps;
     } else {
-      snapid_t min_included_snap = oi.snaps.back();
+      snapid_t min_included_snap = oi.legacy_snaps.back();
       snapc = snapset.get_ssc_as_of(min_included_snap - 1);
     }
 
@@ -9539,10 +9540,11 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
   ssc = 0;
 
   // clone
-  dout(20) << "find_object_context  " << soid << " snaps " << obc->obs.oi.snaps
+  dout(20) << "find_object_context  " << soid
+	   << " snaps " << obc->obs.oi.legacy_snaps
 	   << dendl;
-  snapid_t first = obc->obs.oi.snaps[obc->obs.oi.snaps.size()-1];
-  snapid_t last = obc->obs.oi.snaps[0];
+  snapid_t first = obc->obs.oi.legacy_snaps[obc->obs.oi.legacy_snaps.size()-1];
+  snapid_t last = obc->obs.oi.legacy_snaps[0];
   if (first <= oid.snap) {
     dout(20) << "find_object_context  " << soid << " [" << first << "," << last
 	     << "] contains " << oid.snap << " -- HIT " << obc->obs << dendl;

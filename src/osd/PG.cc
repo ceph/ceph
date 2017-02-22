@@ -3971,7 +3971,7 @@ void PG::_scan_snaps(ScrubMap &smap)
       } catch(...) {
 	continue;
       }
-      set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
+      set<snapid_t> oi_snaps(oi.legacy_snaps.begin(), oi.legacy_snaps.end());
       set<snapid_t> cur_snaps;
       int r = snap_mapper.get_snaps(hoid, &cur_snaps);
       if (r != 0 && r != -ENOENT) {

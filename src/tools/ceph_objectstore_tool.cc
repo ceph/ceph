@@ -840,7 +840,7 @@ int get_attrs(ObjectStore *store, coll_t coll, ghobject_t hoid,
         cerr << "object_info " << oi << std::endl;
 
       OSDriver::OSTransaction _t(driver.get_transaction(t));
-      set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
+      set<snapid_t> oi_snaps(oi.legacy_snaps.begin(), oi.legacy_snaps.end());
       snap_mapper.add_oid(hoid.hobj, oi_snaps, &_t);
     }
   }

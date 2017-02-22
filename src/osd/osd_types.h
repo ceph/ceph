@@ -4440,7 +4440,7 @@ struct object_info_t {
     return get_flag_string(flags);
   }
 
-  vector<snapid_t> snaps;  // [clone]
+  vector<snapid_t> legacy_snaps;  // [clone] pre-luminous; moved to SnapSet
 
   uint64_t truncate_seq, truncate_size;
 
