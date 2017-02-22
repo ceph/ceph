@@ -69,28 +69,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << name << ' '
 
-/**
- * Helper for simple callbacks that call a void fn with no args.
- */
-class C_VoidFn : public Context
-{
-  typedef void (MDSDaemon::*fn_ptr)();
-  protected:
-   MDSDaemon *mds;
-   fn_ptr fn;
-  public:
-  C_VoidFn(MDSDaemon *mds_, fn_ptr fn_)
-    : mds(mds_), fn(fn_)
-  {
-    assert(mds_);
-    assert(fn_);
-  }
-
-  void finish(int r) override
-  {
-    (mds->*fn)();
-  }
-};
 
 class MDSDaemon::C_MDS_Tick : public Context {
   protected:
@@ -997,8 +975,8 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
     if (mds_rank == NULL) {
       mds_rank = new MDSRankDispatcher(whoami, mds_lock, clog,
           timer, beacon, mdsmap, messenger, monc,
-          new C_VoidFn(this, &MDSDaemon::respawn),
-          new C_VoidFn(this, &MDSDaemon::suicide));
+          new FunctionContext([this](int r){respawn();}),
+          new FunctionContext([this](int r){suicide();}));
       dout(10) <<  __func__ << ": initializing MDS rank "
                << mds_rank->get_nodeid() << dendl;
       mds_rank->init();
