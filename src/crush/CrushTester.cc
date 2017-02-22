@@ -364,6 +364,7 @@ int CrushTester::test_with_crushtool(const string& crushtool,
 {
   string timeout_string = stringify(timeout);
   string opt_max_id = stringify(max_id);
+  string opt_ruleset = stringify(ruleset);
   vector<const char *> cmd_args;
   cmd_args.push_back("timeout");
   cmd_args.push_back(timeout_string.c_str());
@@ -379,7 +380,7 @@ int CrushTester::test_with_crushtool(const string& crushtool,
   cmd_args.push_back("50");
   if (ruleset >= 0) {
     cmd_args.push_back("--ruleset");
-    cmd_args.push_back(stringify(ruleset).c_str());
+    cmd_args.push_back(opt_ruleset.c_str());
   }
   cmd_args.push_back(NULL);
 
