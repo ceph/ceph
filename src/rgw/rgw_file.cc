@@ -444,6 +444,8 @@ namespace rgw {
       rc = valid_s3_bucket_name(bname, false /* relaxed */);
       if (rc != 0) {
 	rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
+	fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
+			RGWFileHandle::FHCache::FLAG_LOCK);
 	rgw_fh->mtx.unlock();
 	unref(rgw_fh);
 	get<0>(mkr) = nullptr;
