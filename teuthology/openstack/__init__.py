@@ -189,11 +189,11 @@ class OpenStack(object):
     # https://download.fedoraproject.org/pub/fedora/linux/releases/22/Cloud/x86_64/Images/Fedora-Cloud-Base-22-20150521.x86_64.qcow2
     # http://fedora.mirrors.ovh.net/linux/releases/21/Cloud/Images/x86_64/Fedora-Cloud-Base-20141203-21.x86_64.qcow2
     # http://fedora.mirrors.ovh.net/linux/releases/20/Images/x86_64/Fedora-x86_64-20-20131211.1-sda.qcow2
-    # http://download.opensuse.org/repositories/Cloud:/Images:/Leap_42.2/images/openSUSE-Leap-42.2-OpenStack-rootfs.x86_64.tbz
     image2url = {
         'centos-7.2-x86_64': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1511.qcow2',
         'centos-7.3-x86_64': 'http://cloud.centos.org/centos/7/images/CentOS-7-x86_64-GenericCloud-1701.qcow2',
         'opensuse-42.1-x86_64': 'http://download.opensuse.org/repositories/Cloud:/Images:/Leap_42.1/images/openSUSE-Leap-42.1-OpenStack.x86_64.qcow2',
+        'opensuse-42.2-x86_64': 'http://download.opensuse.org/repositories/Cloud:/Images:/Leap_42.2/images/openSUSE-Leap-42.2-OpenStack.x86_64.qcow2',
         'ubuntu-14.04-x86_64': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img',
         'ubuntu-14.04-arm64': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-arm64-disk1.img',
         'ubuntu-14.04-i686': 'https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-i386-disk1.img',
