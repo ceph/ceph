@@ -54,7 +54,7 @@ protected:
       : ThreadPool::WorkQueue<RGWRequest>("RGWWQ", timeout, suicide_timeout,
 					  tp), process(p) {}
 
-    bool _enqueue(RGWRequest* req) {
+    bool _enqueue(RGWRequest* req) override {
       process->m_req_queue.push_back(req);
       perfcounter->inc(l_rgw_qlen);
       dout(20) << "enqueued request req=" << hex << req << dec << dendl;
@@ -62,15 +62,15 @@ protected:
       return true;
     }
 
-    void _dequeue(RGWRequest* req) {
+    void _dequeue(RGWRequest* req) override {
       ceph_abort();
     }
 
-    bool _empty() {
+    bool _empty() override {
       return process->m_req_queue.empty();
     }
 
-    RGWRequest* _dequeue() {
+    RGWRequest* _dequeue() override {
       if (process->m_req_queue.empty())
 	return NULL;
       RGWRequest *req = process->m_req_queue.front();
@@ -92,7 +92,7 @@ protected:
 
     void _dump_queue();
 
-    void _clear() {
+    void _clear() override {
       assert(process->m_req_queue.empty());
     }
   } req_wq;
@@ -151,8 +151,8 @@ public:
       max_connections(num_threads + (num_threads >> 3)) {
   }
 
-  void run();
-  void handle_request(RGWRequest* req);
+  void run() override;
+  void handle_request(RGWRequest* req) override;
 };
 
 class RGWProcessControlThread : public Thread {
@@ -160,7 +160,7 @@ class RGWProcessControlThread : public Thread {
 public:
   RGWProcessControlThread(RGWProcess *_pprocess) : pprocess(_pprocess) {}
 
-  void *entry() {
+  void *entry() override {
     pprocess->run();
     return NULL;
   }
@@ -172,9 +172,9 @@ public:
   RGWLoadGenProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
 		  RGWFrontendConfig* _conf) :
   RGWProcess(cct, pe, num_threads, _conf) {}
-  void run();
+  void run() override;
   void checkpoint();
-  void handle_request(RGWRequest* req);
+  void handle_request(RGWRequest* req) override;
   void gen_request(const string& method, const string& resource,
 		  int content_length, atomic_t* fail_flag);
 

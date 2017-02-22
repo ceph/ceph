@@ -18,7 +18,7 @@ public:
     : RGWLocalAuthApplier(cct, user_info, RGWLocalAuthApplier::NO_SUBUSER) {
   };
 
-  virtual void modify_request_state(req_state * s) const override; /* in/out */
+  void modify_request_state(req_state * s) const override; /* in/out */
 
   struct Factory {
     virtual ~Factory() {}
@@ -127,23 +127,23 @@ public:
 class RGW_SWIFT_Auth_Get : public RGWOp {
 public:
   RGW_SWIFT_Auth_Get() {}
-  ~RGW_SWIFT_Auth_Get() {}
+  ~RGW_SWIFT_Auth_Get() override {}
 
-  int verify_permission() { return 0; }
-  void execute();
-  virtual const string name() { return "swift_auth_get"; }
+  int verify_permission() override { return 0; }
+  void execute() override;
+  const string name() override { return "swift_auth_get"; }
 };
 
 class RGWHandler_SWIFT_Auth : public RGWHandler_REST {
 public:
   RGWHandler_SWIFT_Auth() {}
-  ~RGWHandler_SWIFT_Auth() {}
-  RGWOp *op_get();
+  ~RGWHandler_SWIFT_Auth() override {}
+  RGWOp *op_get() override;
 
-  int init(RGWRados *store, struct req_state *state, rgw::io::BasicClient *cio);
-  int authorize();
-  int postauth_init() { return 0; }
-  int read_permissions(RGWOp *op) { return 0; }
+  int init(RGWRados *store, struct req_state *state, rgw::io::BasicClient *cio) override;
+  int authorize() override;
+  int postauth_init() override { return 0; }
+  int read_permissions(RGWOp *op) override { return 0; }
 
   virtual RGWAccessControlPolicy *alloc_policy() { return NULL; }
   virtual void free_policy(RGWAccessControlPolicy *policy) {}
@@ -152,16 +152,16 @@ public:
 class RGWRESTMgr_SWIFT_Auth : public RGWRESTMgr {
 public:
   RGWRESTMgr_SWIFT_Auth() = default;
-  virtual ~RGWRESTMgr_SWIFT_Auth() = default;
+  ~RGWRESTMgr_SWIFT_Auth() override = default;
 
-  virtual RGWRESTMgr *get_resource_mgr(struct req_state* const s,
-                                       const std::string& uri,
-                                       std::string* const out_uri) override {
+  RGWRESTMgr *get_resource_mgr(struct req_state* const s,
+                               const std::string& uri,
+                               std::string* const out_uri) override {
     return this;
   }
 
-  virtual RGWHandler_REST* get_handler(struct req_state*,
-                                       const std::string&) override {
+  RGWHandler_REST* get_handler(struct req_state*,
+                               const std::string&) override {
     return new RGWHandler_SWIFT_Auth;
   }
 };

@@ -156,13 +156,13 @@ public:
   }
 
 protected:
-  virtual int receive_header(void *ptr, size_t len) override;
+  int receive_header(void *ptr, size_t len) override;
 
-  virtual int receive_data(void *ptr, size_t len) override {
+  int receive_data(void *ptr, size_t len) override {
     return 0;
   }
 
-  virtual int send_data(void *ptr, size_t len) override {
+  int send_data(void *ptr, size_t len) override {
     return 0;
   }
 
@@ -247,7 +247,7 @@ class RGWHTTPManager {
 
   public:
     ReqsThread(RGWHTTPManager *_m) : manager(_m) {}
-    void *entry();
+    void *entry() override;
   };
 
   ReqsThread *reqs_thread;

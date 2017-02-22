@@ -151,7 +151,7 @@ public:
                                                            conf(_conf) {
   }
 
-  ~RGWElasticHandleRemoteObjCR() {}
+  ~RGWElasticHandleRemoteObjCR() override {}
 
   RGWStatRemoteObjCBCR *allocate_callback() override {
     return new RGWElasticHandleRemoteObjCBCR(sync_env, bucket_info, key, conf);
@@ -198,7 +198,7 @@ public:
     conf.id = string("elastic:") + elastic_endpoint;
     conf.conn = new RGWRESTConn(cct, nullptr, conf.id, { elastic_endpoint });
   }
-  ~RGWElasticDataSyncModule() {
+  ~RGWElasticDataSyncModule() override {
     delete conf.conn;
   }
 

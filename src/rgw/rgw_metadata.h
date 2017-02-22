@@ -164,7 +164,7 @@ class RGWMetadataLogInfoCompletion : public RefCountedObject {
   boost::optional<info_callback_t> callback; //< cleared on cancel
  public:
   RGWMetadataLogInfoCompletion(info_callback_t callback);
-  virtual ~RGWMetadataLogInfoCompletion();
+  ~RGWMetadataLogInfoCompletion() override;
 
   librados::IoCtx& get_io_ctx() { return io_ctx; }
   cls_log_header& get_header() { return header; }

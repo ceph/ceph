@@ -86,7 +86,7 @@ public:
   typedef std::unique_ptr<RGWAuthApplier> aplptr_t;
 
   RGWAuthApplier(CephContext * const cct) : cct(cct) {}
-  virtual ~RGWAuthApplier() {};
+  ~RGWAuthApplier() override {};
 
   /* Fill provided RGWUserInfo with information about the account that
    * RGWOp will operate on. Errors are handled solely through exceptions.

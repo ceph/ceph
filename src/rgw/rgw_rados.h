@@ -1156,23 +1156,23 @@ struct RGWZoneParams : RGWSystemMetaObj {
     : RGWSystemMetaObj(id, name), realm_id(_realm_id) {}
 
   rgw_pool get_pool(CephContext *cct);
-  const string get_default_oid(bool old_format = false);
-  const string& get_names_oid_prefix();
-  const string& get_info_oid_prefix(bool old_format = false);
-  const string& get_predefined_name(CephContext *cct);
+  const string get_default_oid(bool old_format = false) override;
+  const string& get_names_oid_prefix() override;
+  const string& get_info_oid_prefix(bool old_format = false) override;
+  const string& get_predefined_name(CephContext *cct) override;
 
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true,
 	   bool old_format = false);
   using RGWSystemMetaObj::init;
-  int read_default_id(string& default_id, bool old_format = false);
+  int read_default_id(string& default_id, bool old_format = false) override;
   int set_as_default(bool exclusive = false) override;
   int create_default(bool old_format = false);
-  int create(bool exclusive = true);
+  int create(bool exclusive = true) override;
   int fix_pool_names();
 
   const string& get_compression_type(const string& placement_rule) const;
   
-  void encode(bufferlist& bl) const {
+  void encode(bufferlist& bl) const override {
     ENCODE_START(9, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
@@ -1195,7 +1195,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::iterator& bl) override {
     DECODE_START(9, bl);
     ::decode(domain_root, bl);
     ::decode(control_pool, bl);
@@ -1473,7 +1473,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   }
   void post_process_params();
 
-  void encode(bufferlist& bl) const {
+  void encode(bufferlist& bl) const override {
     ENCODE_START(4, 1, bl);
     ::encode(name, bl);
     ::encode(api_name, bl);
@@ -1490,7 +1490,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::iterator& bl) override {
     DECODE_START(4, bl);
     ::decode(name, bl);
     ::decode(api_name, bl);
@@ -1515,7 +1515,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     DECODE_FINISH(bl);
   }
 
-  int read_default_id(string& default_id, bool old_format = false);
+  int read_default_id(string& default_id, bool old_format = false) override;
   int set_as_default(bool exclusive = false) override;
   int create_default(bool old_format = false);
   int equals(const string& other_zonegroup) const;
@@ -1525,10 +1525,10 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
   rgw_pool get_pool(CephContext *cct);
-  const string get_default_oid(bool old_region_format = false);
-  const string& get_info_oid_prefix(bool old_region_format = false);
-  const string& get_names_oid_prefix();
-  const string& get_predefined_name(CephContext *cct);
+  const string get_default_oid(bool old_region_format = false) override;
+  const string& get_info_oid_prefix(bool old_region_format = false) override;
+  const string& get_names_oid_prefix() override;
+  const string& get_predefined_name(CephContext *cct) override;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -1677,7 +1677,7 @@ public:
   RGWRealm(CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_cct, _store) {}
   RGWRealm(const string& _name, CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_name, _cct, _store){}
 
-  void encode(bufferlist& bl) const {
+  void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
     RGWSystemMetaObj::encode(bl);
     ::encode(current_period, bl);
@@ -1685,7 +1685,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::iterator& bl) override {
     DECODE_START(1, bl);
     RGWSystemMetaObj::decode(bl);
     ::decode(current_period, bl);
@@ -1693,13 +1693,13 @@ public:
     DECODE_FINISH(bl);
   }
 
-  int create(bool exclusive = true);
+  int create(bool exclusive = true) override;
   int delete_obj();
   rgw_pool get_pool(CephContext *cct);
-  const string get_default_oid(bool old_format = false);
-  const string& get_names_oid_prefix();
-  const string& get_info_oid_prefix(bool old_format = false);
-  const string& get_predefined_name(CephContext *cct);
+  const string get_default_oid(bool old_format = false) override;
+  const string& get_names_oid_prefix() override;
+  const string& get_info_oid_prefix(bool old_format = false) override;
+  const string& get_predefined_name(CephContext *cct) override;
 
   using RGWSystemMetaObj::read_id; // expose as public for radosgw-admin
 
@@ -1958,7 +1958,7 @@ public:
 
 class RGWOpState : public RGWStateLog {
 protected:
-  bool dump_entry_internal(const cls_statelog_entry& entry, Formatter *f);
+  bool dump_entry_internal(const cls_statelog_entry& entry, Formatter *f) override;
 public:
 
   enum OpState {
@@ -2002,7 +2002,7 @@ protected:
   map<RGWObjCategory, RGWStorageStats> *stats;
 public:
   explicit RGWGetBucketStats_CB(rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
-  virtual ~RGWGetBucketStats_CB() {}
+  ~RGWGetBucketStats_CB() override {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(map<RGWObjCategory, RGWStorageStats> *_stats) {
     stats = _stats;
@@ -2015,7 +2015,7 @@ protected:
   RGWStorageStats stats;
 public:
   explicit RGWGetUserStats_CB(const rgw_user& _user) : user(_user) {}
-  virtual ~RGWGetUserStats_CB() {}
+  ~RGWGetUserStats_CB() override {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(RGWStorageStats& _stats) {
     stats = _stats;
@@ -3593,18 +3593,18 @@ public:
     return store->chain_cache_entry(cache_info_entries, &chain_entry);
   }
 
-  void chain_cb(const string& key, void *data) {
+  void chain_cb(const string& key, void *data) override {
     T *entry = static_cast<T *>(data);
     RWLock::WLocker wl(lock);
     entries[key] = *entry;
   }
 
-  void invalidate(const string& key) {
+  void invalidate(const string& key) override {
     RWLock::WLocker wl(lock);
     entries.erase(key);
   }
 
-  void invalidate_all() {
+  void invalidate_all() override {
     RWLock::WLocker wl(lock);
     entries.clear();
   }
@@ -3644,7 +3644,7 @@ public:
                                                                    is_complete(false), 
                                                                    bucket_info(_bi), 
                                                                    canceled(false) {}
-  virtual ~RGWPutObjProcessor() {}
+  ~RGWPutObjProcessor() override {}
   virtual int prepare(RGWRados *_store, string *oid_rand) {
     store = _store;
     return 0;
@@ -3694,11 +3694,11 @@ protected:
   int handle_obj_data(rgw_raw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive);
 
 public:
-  int prepare(RGWRados *store, string *oid_rand);
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait);
+  int prepare(RGWRados *store, string *oid_rand) override;
+  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override;
 
   RGWPutObjProcessor_Aio(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info) : RGWPutObjProcessor(obj_ctx, bucket_info) {}
-  virtual ~RGWPutObjProcessor_Aio();
+  ~RGWPutObjProcessor_Aio() override;
 }; /* RGWPutObjProcessor_Aio */
 
 class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
@@ -3740,7 +3740,7 @@ protected:
   int prepare_init(RGWRados *store, string *oid_rand);
 
 public:
-  ~RGWPutObjProcessor_Atomic() {}
+  ~RGWPutObjProcessor_Atomic() override {}
   RGWPutObjProcessor_Atomic(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info,
                             rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t, bool versioned) :
                                 RGWPutObjProcessor_Aio(obj_ctx, bucket_info),
@@ -3755,9 +3755,9 @@ public:
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
-  int prepare(RGWRados *store, string *oid_rand);
+  int prepare(RGWRados *store, string *oid_rand) override;
   virtual bool immutable_head() { return false; }
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again);
+  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override;
 
   void set_olh_epoch(uint64_t epoch) {
     olh_epoch = epoch;
