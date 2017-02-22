@@ -46,7 +46,7 @@ extern void crush_finalize(struct crush_map *map);
  * Allocate an empty crush_rule structure large enough to store __len__ steps.
  * Steps can be added to a rule via crush_rule_set_step(). The __ruleset__
  * is a user defined integer, not used by __libcrush__ and stored in
- * the allocated rule at __rule->ruleset__.
+ * the allocated rule at __rule->mask.ruleset__.
  *
  * The rule is designed to allow crush_do_rule() to get at least __minsize__ items
  * and at most __maxsize__ items.
@@ -54,6 +54,9 @@ extern void crush_finalize(struct crush_map *map);
  * The __type__ is defined by the caller and will be used by
  * crush_find_rule() when looking for a rule and by
  * __CRUSH_RULE_CHOOSE*__ steps when looking for items.
+ *
+ * The caller is responsible for deallocating the returned pointer via
+ * crush_destroy_rule().
  *
  * If __malloc(3)__ fails, return NULL.
  *
@@ -119,7 +122,7 @@ extern int crush_get_next_bucket_id(struct crush_map *map);
 /** @ingroup API
  *
  * Add __bucket__ into the crush __map__ and assign it the
- * __bucketno__ unique identifier. If __bucketno__ is -1, the function
+ * __bucketno__ unique identifier. If __bucketno__ is 0, the function
  * will assign the lowest available identifier.  The bucket identifier
  * must be a negative integer. The bucket identifier is returned via
  * __idout__.
@@ -130,7 +133,7 @@ extern int crush_get_next_bucket_id(struct crush_map *map);
  *   to another bucket.
  *
  * @param[in] map the crush_map
- * @param[in] bucketno the bucket unique identifer or -1
+ * @param[in] bucketno the bucket unique identifer or 0
  * @param[in] bucket the bucket to add to the __map__
  * @param[out] idout a pointer to the bucket identifier
  *
@@ -151,6 +154,9 @@ extern int crush_add_bucket(struct crush_map *map,
  * to have a weight equal to __weights[0]__, otherwise the weight of
  * __items[x]__ is set to be the value of __weights[x]__.
  *
+ * The caller is responsible for deallocating the returned pointer via
+ * crush_destroy_bucket().
+ *
  * @param map __unused__
  * @param alg algorithm for item selection
  * @param hash always set to CRUSH_HASH_RJENKINS1
@@ -158,6 +164,8 @@ extern int crush_add_bucket(struct crush_map *map,
  * @param size of the __items__ array
  * @param items array of __size__ items
  * @param weights the weight of each item in __items__, depending on __alg__
+ *
+ * @returns a pointer to the newly created bucket or NULL
  */
 struct crush_bucket *crush_make_bucket(struct crush_map *map, int alg, int hash, int type, int size, int *items, int *weights);
 /** @ingroup API
@@ -169,7 +177,7 @@ struct crush_bucket *crush_make_bucket(struct crush_map *map, int alg, int hash,
  * If __bucket->alg__ is ::CRUSH_BUCKET_UNIFORM, the value of __weight__ must be equal to
  * __(struct crush_bucket_uniform *)bucket->item_weight__.
  *
- * - return -ENOMEN if the __bucket__ cannot be resized with __realloc(3)__.
+ * - return -ENOMEM if the __bucket__ cannot be resized with __realloc(3)__.
  * - return -ERANGE if adding __weight__ to the weight of the bucket overflows.
  * - return -1 if the value of __bucket->alg__ is unknown.
  *
@@ -224,7 +232,7 @@ extern int crush_remove_bucket(struct crush_map *map, struct crush_bucket *bucke
  * the bucket weight. If the weight of the item is greater than the
  * weight of the bucket, silentely set the bucket weight to zero.
  *
- * - return -ENOMEN if the __bucket__ cannot be sized down with __realloc(3)__.
+ * - return -ENOMEM if the __bucket__ cannot be sized down with __realloc(3)__.
  * - return -1 if the value of __bucket->alg__ is unknown.
  *
  * @param map __unused__
