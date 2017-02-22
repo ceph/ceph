@@ -75,7 +75,7 @@ public:
 	num_writers(0),
 	num_reading(0)
       {}
-    ~File() {
+    ~File() override {
       assert(num_readers.load() == 0);
       assert(num_writers.load() == 0);
       assert(num_reading.load() == 0);

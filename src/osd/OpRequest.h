@@ -76,7 +76,7 @@ struct OpRequest : public TrackedOp {
     return classes_;
   }
 
-  void _dump(Formatter *f) const;
+  void _dump(Formatter *f) const override;
 
   bool has_feature(uint64_t f) const {
     return request->get_connection()->has_feature(f);
@@ -100,11 +100,11 @@ private:
   OpRequest(Message *req, OpTracker *tracker);
 
 protected:
-  void _dump_op_descriptor_unlocked(ostream& stream) const;
-  void _unregistered();
+  void _dump_op_descriptor_unlocked(ostream& stream) const override;
+  void _unregistered() override;
 
 public:
-  ~OpRequest() {
+  ~OpRequest() override {
     request->put();
   }
 
@@ -123,7 +123,7 @@ public:
     }
   }
 
-  const char *state_string() const {
+  const char *state_string() const override {
     switch(latest_flag_point) {
     case flag_queued_for_pg: return "queued for pg";
     case flag_reached_pg: return "reached pg";

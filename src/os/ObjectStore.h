@@ -159,7 +159,7 @@ public:
       ) = 0; ///< @return true if idle, false otherwise
 
     Sequencer_impl(CephContext* cct) : RefCountedObject(NULL, 0), cct(cct)  {}
-    virtual ~Sequencer_impl() {}
+    ~Sequencer_impl() override {}
   };
   typedef boost::intrusive_ptr<Sequencer_impl> Sequencer_implRef;
 

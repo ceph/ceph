@@ -30,20 +30,20 @@ private:
   bool m_filestore_btrfs_snap;
 public:
   explicit BtrfsFileStoreBackend(FileStore *fs);
-  ~BtrfsFileStoreBackend() {}
-  const char *get_name() {
+  ~BtrfsFileStoreBackend() override {}
+  const char *get_name() override {
     return "btrfs";
   }
-  int detect_features();
-  bool can_checkpoint();
-  int create_current();
-  int list_checkpoints(list<string>& ls);
-  int create_checkpoint(const string& name, uint64_t *cid);
-  int sync_checkpoint(uint64_t cid);
-  int rollback_to(const string& name);
-  int destroy_checkpoint(const string& name);
-  int syncfs();
-  int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff);
+  int detect_features() override;
+  bool can_checkpoint() override;
+  int create_current() override;
+  int list_checkpoints(list<string>& ls) override;
+  int create_checkpoint(const string& name, uint64_t *cid) override;
+  int sync_checkpoint(uint64_t cid) override;
+  int rollback_to(const string& name) override;
+  int destroy_checkpoint(const string& name) override;
+  int syncfs() override;
+  int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) override;
 };
 #endif
 #endif

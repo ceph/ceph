@@ -22,10 +22,10 @@
 # endif
 
 class XFS : public FS {
-  const char *get_name() {
+  const char *get_name() override {
     return "xfs";
   }
-  int set_alloc_hint(int fd, uint64_t hint);
+  int set_alloc_hint(int fd, uint64_t hint) override;
 };
 
 #endif

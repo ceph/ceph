@@ -115,8 +115,8 @@ class BlueStore : public ObjectStore,
   // types
 public:
   // config observer
-  virtual const char** get_tracked_conf_keys() const override;
-  virtual void handle_conf_change(const struct md_config_t *conf,
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
                                   const std::set<std::string> &changed) override;
 
   void _set_csum();
@@ -1319,14 +1319,14 @@ public:
     string head, tail;
   public:
     OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
-    int seek_to_first();
-    int upper_bound(const string &after);
-    int lower_bound(const string &to);
-    bool valid();
-    int next(bool validate=true);
-    string key();
-    bufferlist value();
-    int status() {
+    int seek_to_first() override;
+    int upper_bound(const string &after) override;
+    int lower_bound(const string &to) override;
+    bool valid() override;
+    int next(bool validate=true) override;
+    string key() override;
+    bufferlist value() override;
+    int status() override {
       return 0;
     }
   };
@@ -1558,7 +1558,7 @@ public:
 	parent(NULL), store(store) {
       store->register_osr(this);
     }
-    ~OpSequencer() {
+    ~OpSequencer() override {
       assert(q.empty());
       _unregister();
     }
@@ -1647,7 +1647,7 @@ public:
   struct KVSyncThread : public Thread {
     BlueStore *store;
     explicit KVSyncThread(BlueStore *s) : store(s) {}
-    void *entry() {
+    void *entry() override {
       store->_kv_sync_thread();
       return NULL;
     }
@@ -1780,7 +1780,7 @@ private:
     explicit MempoolThread(BlueStore *s)
       : store(s),
 	lock("BlueStore::MempoolThread::lock") {}
-    void *entry();
+    void *entry() override;
     void init() {
       assert(stop == false);
       create("bstore_mempool");
@@ -1942,7 +1942,7 @@ private:
 public:
   BlueStore(CephContext *cct, const string& path);
   BlueStore(CephContext *cct, const string& path, uint64_t min_alloc_size); // Ctor for UT only
-  ~BlueStore();
+  ~BlueStore() override;
 
   string get_type() override {
     return "bluestore";
@@ -2175,7 +2175,7 @@ public:
     perf_tracker.update_from_perfcounters(*logger);
     return perf_tracker.get_cur_stats();
   }
-  const PerfCounters* get_perf_counters() const {
+  const PerfCounters* get_perf_counters() const override {
     return logger;
   }
 
