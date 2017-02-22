@@ -97,7 +97,7 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
     ::close(sd);
     return -errno;
   }
-  net.set_priority(sd, opt.priority);
+  net.set_priority(sd, opt.priority, out->get_family());
 
   RDMAConnectedSocketImpl* server;
   //Worker* w = dispatcher->get_stack()->get_worker();
