@@ -8138,16 +8138,16 @@ void Client::_put_fh(Fh *f)
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
 		  const UserPerm& perms)
 {
+  if (in->snapid != CEPH_NOSNAP &&
+      (flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND))) {
+    return -EROFS;
+  }
+
   int cmode = ceph_flags_to_mode(flags);
   if (cmode < 0)
     return -EINVAL;
   int want = ceph_caps_for_mode(cmode);
   int result = 0;
-
-  if (in->snapid != CEPH_NOSNAP &&
-      (flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND))) {
-    return -EROFS;
-  }
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
