@@ -17,6 +17,7 @@
 #ifndef CEPH_CDIR_H
 #define CEPH_CDIR_H
 
+#include "include/counter.h"
 #include "include/types.h"
 #include "include/buffer_fwd.h"
 #include "common/bloom_filter.hpp"
@@ -41,7 +42,7 @@ class MDCache;
 struct ObjectOperation;
 
 ostream& operator<<(ostream& out, const class CDir& dir);
-class CDir : public MDSCacheObject {
+class CDir : public MDSCacheObject, public Counter<CDir> {
   friend ostream& operator<<(ostream& out, const class CDir& dir);
 
   /*
@@ -404,10 +405,6 @@ protected:
 
  public:
   CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth);
-  ~CDir() {
-    g_num_dir--;
-    g_num_dirs++;
-  }
 
   const scrub_info_t *scrub_info() const {
     if (!scrub_infop) {
