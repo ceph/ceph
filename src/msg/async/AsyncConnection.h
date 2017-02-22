@@ -110,6 +110,7 @@ class AsyncConnection : public Connection {
       center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
       cs.shutdown();
       cs.close();
+      cs.reset();
     }
   }
   Message *_get_next_outgoing(bufferlist *bl) {
