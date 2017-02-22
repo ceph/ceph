@@ -443,8 +443,7 @@ protected:
   SnapRealm *get_snap_realm_maybe(inodeno_t r);
   void put_snap_realm(SnapRealm *realm);
   bool adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
-  inodeno_t update_snap_trace(bufferlist& bl, bool must_flush=true);
-  inodeno_t _update_snap_trace(vector<SnapRealmInfo>& trace);
+  void update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool must_flush=true);
   void invalidate_snaprealm_and_children(SnapRealm *realm);
 
   Inode *open_snapdir(Inode *diri);
