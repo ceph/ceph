@@ -1432,9 +1432,10 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
   LookupFHResult fhr;
 
   if (parent->is_root()) {
-    /* special: lookup on root itself */
-    if (strcmp(path, "/") == 0) {
-      rgw_fh = fs->ref(parent);
+    /* special: parent lookup--note lack of ref()! */
+    if (unlikely((strcmp(path, "..") == 0) ||
+		 (strcmp(path, "/") == 0))) {
+      rgw_fh = parent;
     } else {
       fhr = fs->stat_bucket(parent, path, RGWFileHandle::FLAG_NONE);
       rgw_fh = get<0>(fhr);
