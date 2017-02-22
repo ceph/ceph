@@ -1182,10 +1182,8 @@ def get_dmcrypt_key_path(
 def get_dmcrypt_key(
     _uuid,
     key_dir,
-    luks,
-    cluster
+    luks
 ):
-
     legacy_path = get_dmcrypt_key_path(_uuid, key_dir, luks)
     if os.path.exists(legacy_path):
         return (legacy_path,)
@@ -1193,12 +1191,19 @@ def get_dmcrypt_key(
     if os.path.exists(path):
         mode = get_oneliner(path, 'key-management-mode')
         osd_uuid = get_oneliner(path, 'osd-uuid')
+        ceph_fsid = read_one_line(path, 'ceph_fsid')
+        if ceph_fsid is None:
+            raise Error('No cluster uuid assigned.')
+        cluster = find_cluster_by_uuid(ceph_fsid)
+        if cluster is None:
+            raise Error('No cluster conf found in ' + SYSCONFDIR +
+                        ' with fsid %s' % ceph_fsid)
+
         if mode == KEY_MANAGEMENT_MODE_V1:
             key, stderr, ret = command(
                 [
                     'ceph',
-                    '--cluster',
-                    cluster,
+                    '--cluster', cluster,
                     '--name',
                     'client.osd-lockbox.' + osd_uuid,
                     '--keyring',
@@ -1764,7 +1769,7 @@ class DevicePartitionCryptPlain(DevicePartitionCrypt):
 
         self.osd_dm_key = get_dmcrypt_key(
             self.get_uuid(), self.args.dmcrypt_key_dir,
-            False, self.args.cluster)
+            False)
 
     def set_variables_ptype(self):
         self.ptype_map = PTYPE['plain']
@@ -1790,7 +1795,7 @@ class DevicePartitionCryptLuks(DevicePartitionCrypt):
 
         self.osd_dm_key = get_dmcrypt_key(
             self.get_uuid(), self.args.dmcrypt_key_dir,
-            True, self.args.cluster)
+            True)
 
     def set_variables_ptype(self):
         self.ptype_map = PTYPE['luks']
@@ -2487,7 +2492,7 @@ class Lockbox(object):
                       self.args.lockbox)
             self.partition = self.create_partition()
 
-    def create_key(self):
+    def create_key(self, cluster):
         key_size = CryptHelpers.get_dmcrypt_keysize(self.args)
         key = open('/dev/urandom', 'rb').read(key_size / 8)
         base64_key = base64.b64encode(key)
@@ -2497,10 +2502,9 @@ class Lockbox(object):
         command_check_call(
             [
                 'ceph',
+                '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
-                '--cluster',
-                cluster,
                 'config-key',
                 'put',
                 'dm-crypt/osd/' + self.args.osd_uuid + '/luks',
@@ -2510,10 +2514,9 @@ class Lockbox(object):
         keyring, stderr, ret = command(
             [
                 'ceph',
+                '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
-                '--cluster',
-                cluster,
                 'auth',
                 'get-or-create',
                 'client.osd-lockbox.' + self.args.osd_uuid,
@@ -2549,7 +2552,10 @@ class Lockbox(object):
         LOG.debug('Mounting lockbox ' + str(" ".join(args)))
         command_check_call(args)
         write_one_line(path, 'osd-uuid', self.args.osd_uuid)
-        self.create_key()
+        if self.args.cluster_uuid is None:
+            self.args.cluster_uuid = get_fsid(cluster=self.args.cluster)
+        write_one_line(path, 'ceph_fsid', self.args.cluster_uuid)
+        self.create_key(self.args.cluster)
         self.symlink_spaces(path)
         write_one_line(path, 'magic', CEPH_LOCKBOX_ONDISK_MAGIC)
         if self.device is not None:
@@ -3258,7 +3264,7 @@ def dmcrypt_is_mapped(uuid):
         return None
 
 
-def dmcrypt_map(dev, dmcrypt_key_dir, cluster):
+def dmcrypt_map(dev, dmcrypt_key_dir):
     ptype = get_partition_type(dev)
     if ptype in Ptype.get_ready_by_type('plain'):
         luks = False
@@ -3270,7 +3276,7 @@ def dmcrypt_map(dev, dmcrypt_key_dir, cluster):
         raise Error('--dmcrypt called for dev %s with invalid ptype %s'
                     % (dev, ptype))
     part_uuid = get_partition_uuid(dev)
-    dmcrypt_key = get_dmcrypt_key(part_uuid, dmcrypt_key_dir, luks, cluster)
+    dmcrypt_key = get_dmcrypt_key(part_uuid, dmcrypt_key_dir, luks)
     return _dmcrypt_map(
         rawdev=dev,
         key=dmcrypt_key,
@@ -3287,13 +3293,12 @@ def mount_activate(
     init,
     dmcrypt,
     dmcrypt_key_dir,
-    cluster,
     reactivate=False,
 ):
 
     if dmcrypt:
         part_uuid = get_partition_uuid(dev)
-        dev = dmcrypt_map(dev, dmcrypt_key_dir, cluster)
+        dev = dmcrypt_map(dev, dmcrypt_key_dir)
     try:
         fstype = detect_fstype(dev=dev)
     except (subprocess.CalledProcessError,
@@ -3591,7 +3596,6 @@ def main_activate(args):
                 init=args.mark_init,
                 dmcrypt=args.dmcrypt,
                 dmcrypt_key_dir=args.dmcrypt_key_dir,
-                cluster=args.cluster,
                 reactivate=args.reactivate,
             )
             osd_data = get_mount_point(cluster, osd_id)
@@ -3832,14 +3836,14 @@ def _deallocate_osd_id(cluster, osd_id):
 def _remove_lockbox(uuid, cluster):
     command([
         'ceph',
+        '--cluster', cluster,
         'auth',
         'del',
         'client.osd-lockbox.' + uuid,
     ])
     command([
         'ceph',
-        '--cluster',
-        cluster,
+        '--cluster', cluster,
         'config-key',
         'del',
         'dm-crypt/osd/' + uuid + '/luks',
@@ -3872,8 +3876,7 @@ def destroy_lookup_device(args, predicate, description):
                     unmap = False
                 else:
                     dmcrypt_path = dmcrypt_map(partition['path'],
-                                               args.dmcrypt_key_dir,
-                                               args.cluster)
+                                               args.dmcrypt_key_dir)
                     unmap = True
                 list_dev_osd(dmcrypt_path, {}, partition)
                 if unmap:
@@ -3992,7 +3995,7 @@ def main_activate_space(name, args):
     dev = None
     with activate_lock:
         if args.dmcrypt:
-            dev = dmcrypt_map(args.dev, args.dmcrypt_key_dir, args.cluster)
+            dev = dmcrypt_map(args.dev, args.dmcrypt_key_dir)
         else:
             dev = args.dev
         # FIXME: For an encrypted journal dev, does this return the
@@ -4018,7 +4021,6 @@ def main_activate_space(name, args):
             init=args.mark_init,
             dmcrypt=args.dmcrypt,
             dmcrypt_key_dir=args.dmcrypt_key_dir,
-            cluster=args.cluster,
             reactivate=args.reactivate,
         )
 
@@ -4062,7 +4064,6 @@ def main_activate_all(args):
                         activate_key_template=args.activate_key_template,
                         init=args.mark_init,
                         dmcrypt=False,
-                        cluster=args.cluster,
                         dmcrypt_key_dir='',
                     )
                     start_daemon(
