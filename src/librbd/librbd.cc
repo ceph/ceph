@@ -1346,6 +1346,13 @@ namespace librbd {
       tracepoint(librbd, writesame_exit, -EINVAL);
       return -EINVAL;
     }
+
+    if (mem_is_zero(bl.c_str(), bl.length())) {
+      int r = ictx->io_work_queue->discard(ofs, len);
+      tracepoint(librbd, writesame_exit, r);
+      return r;
+    }
+
     int r = ictx->io_work_queue->writesame(ofs, len, bufferlist{bl}, op_flags);
     tracepoint(librbd, writesame_exit, r);
     return r;
@@ -1447,6 +1454,13 @@ namespace librbd {
       tracepoint(librbd, aio_writesame_exit, -EINVAL);
       return -EINVAL;
     }
+
+    if (mem_is_zero(bl.c_str(), bl.length())) {
+      ictx->io_work_queue->aio_discard(get_aio_completion(c), off, len);
+      tracepoint(librbd, aio_writesame_exit, 0);
+      return 0;
+    }
+
     ictx->io_work_queue->aio_writesame(get_aio_completion(c), off, len,
                                        bufferlist{bl}, op_flags);
     tracepoint(librbd, aio_writesame_exit, 0);
@@ -2947,6 +2961,12 @@ extern "C" ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
     return -EINVAL;
   }
 
+  if (mem_is_zero(buf, data_len)) {
+    int r = ictx->io_work_queue->discard(ofs, len);
+    tracepoint(librbd, writesame_exit, r);
+    return r;
+  }
+
   bufferlist bl;
   bl.push_back(create_write_raw(ictx, buf, data_len));
   int r = ictx->io_work_queue->writesame(ofs, len, std::move(bl), op_flags);
@@ -3136,6 +3156,12 @@ extern "C" int rbd_aio_writesame(rbd_image_t image, uint64_t off, size_t len,
   if (data_len <= 0 || len % data_len) {
     tracepoint(librbd, aio_writesame_exit, -EINVAL);
     return -EINVAL;
+  }
+
+  if (mem_is_zero(buf, data_len)) {
+    ictx->io_work_queue->aio_discard(get_aio_completion(comp), off, len);
+    tracepoint(librbd, aio_writesame_exit, 0);
+    return 0;
   }
 
   bufferlist bl;
