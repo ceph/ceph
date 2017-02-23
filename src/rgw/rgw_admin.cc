@@ -4601,8 +4601,13 @@ int main(int argc, const char **argv)
     return 0;
   case OPT_ROLE_CREATE:
     {
-      if (role_name.empty() || assume_role_doc.empty()) {
-        cerr << "ERROR: one of role name or assume role policy document is empty" << std::endl;
+      if (role_name.empty()) {
+        cerr << "ERROR: role name is empty" << std::endl;
+        return -EINVAL;
+      }
+
+      if (assume_role_doc.empty()) {
+        cerr << "ERROR: assume role policy document is empty" << std::endl;
         return -EINVAL;
       }
       /* The following two calls will be replaced by read_decode_json or something
@@ -4657,10 +4662,16 @@ int main(int argc, const char **argv)
     }
   case OPT_ROLE_MODIFY:
     {
-      if (role_name.empty() || assume_role_doc.empty()) {
-        cerr << "ERROR: one of role name or assume role policy document is empty" << std::endl;
+      if (role_name.empty()) {
+        cerr << "ERROR: role name is empty" << std::endl;
         return -EINVAL;
       }
+
+      if (assume_role_doc.empty()) {
+        cerr << "ERROR: assume role policy document is empty" << std::endl;
+        return -EINVAL;
+      }
+
       /* The following two calls will be replaced by read_decode_json or something
          similar when the code for AWS Policies is in place */
       bufferlist bl;
@@ -4700,10 +4711,21 @@ int main(int argc, const char **argv)
     }
   case OPT_ROLE_POLICY_PUT:
     {
-      if (role_name.empty() || policy_name.empty() || perm_policy_doc.empty()) {
-        cerr << "One of role name, policy name or permission policy document is empty" << std::endl;
+      if (role_name.empty()) {
+        cerr << "role name is empty" << std::endl;
         return -EINVAL;
       }
+
+      if (policy_name.empty()) {
+        cerr << "policy name is empty" << std::endl;
+        return -EINVAL;
+      }
+
+      if (perm_policy_doc.empty()) {
+        cerr << "permission policy document is empty" << std::endl;
+        return -EINVAL;
+      }
+
       /* The following two calls will be replaced by read_decode_json or something
          similar, when code for AWS Policies is in place.*/
       bufferlist bl;
@@ -4750,8 +4772,13 @@ int main(int argc, const char **argv)
     }
   case OPT_ROLE_POLICY_GET:
     {
-      if (role_name.empty() || policy_name.empty()) {
-        cerr << "ERROR: One of role name or policy name is empty" << std::endl;
+      if (role_name.empty()) {
+        cerr << "ERROR: role name is empty" << std::endl;
+        return -EINVAL;
+      }
+
+      if (policy_name.empty()) {
+        cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store, role_name, tenant);
@@ -4769,8 +4796,13 @@ int main(int argc, const char **argv)
     }
   case OPT_ROLE_POLICY_DELETE:
     {
-      if (role_name.empty() || policy_name.empty()) {
-        cerr << "ERROR: One of role name or policy name is empty" << std::endl;
+      if (role_name.empty()) {
+        cerr << "ERROR: role name is empty" << std::endl;
+        return -EINVAL;
+      }
+
+      if (policy_name.empty()) {
+        cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
       RGWRole role(g_ceph_context, store, role_name, tenant);
