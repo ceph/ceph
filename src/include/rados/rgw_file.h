@@ -27,7 +27,7 @@ extern "C" {
 
 #define LIBRGW_FILE_VER_MAJOR 1
 #define LIBRGW_FILE_VER_MINOR 1
-#define LIBRGW_FILE_VER_EXTRA 1
+#define LIBRGW_FILE_VER_EXTRA 2
 
 #define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
@@ -91,6 +91,7 @@ void rgwfile_version(int *major, int *minor, int *extra);
 */
 #define RGW_LOOKUP_FLAG_NONE    0x0000
 #define RGW_LOOKUP_FLAG_CREATE  0x0001
+#define RGW_LOOKUP_FLAG_RCB     0x0002 /* readdir callback hint */
 
 int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh, const char *path,
