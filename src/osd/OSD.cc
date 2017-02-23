@@ -4546,6 +4546,8 @@ void OSD::tick_without_osd_lock()
     if (now - last_pg_stats_sent > max) {
       osd_stat_updated = true;
       report = true;
+    } else if (service.need_fullness_update()) {
+      report = true;
     } else if ((int)outstanding_pg_stats.size() >=
 	       cct->_conf->osd_mon_report_max_in_flight) {
       dout(20) << __func__ << " have max " << outstanding_pg_stats
