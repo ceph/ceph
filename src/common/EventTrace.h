@@ -54,6 +54,7 @@ private:
   string file;
   string func;
   int line;
+  utime_t entry_ts;
   utime_t last_ts;
 
   static bool tpinit;

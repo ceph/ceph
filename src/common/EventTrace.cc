@@ -73,7 +73,7 @@ EventTrace::EventTrace(CephContext *_ctx, const char *_file, const char *_func, 
 {
   if (unlikely(!ctx)) 
     return;
-  last_ts = ceph_clock_now();
+  entry_ts = last_ts = ceph_clock_now();
   init_tp(ctx);
 
   lsubdout(ctx, eventtrace, LOG_LEVEL) << "ENTRY (" <<  func << ") " << file << ":" << line << dendl;
@@ -85,7 +85,7 @@ EventTrace::~EventTrace()
   if (unlikely(!ctx)) 
     return;
   lsubdout(ctx, eventtrace, LOG_LEVEL) << "EXIT (" << func << ") " << file << dendl;
-  tracepoint(eventtrace, func_exit, file.c_str(), func.c_str());
+  tracepoint(eventtrace, func_exit, file.c_str(), func.c_str(), (ceph_clock_now() - entry_ts).to_nsec()/1000);
 }
 
 void EventTrace::log_event_latency(const char *event)

@@ -15,10 +15,12 @@ TRACEPOINT_EVENT(eventtrace, func_enter,
 TRACEPOINT_EVENT(eventtrace, func_exit,
     TP_ARGS(
         const char*, file,
-        const char*, func),
+        const char*, func,
+	double, elapsed),
     TP_FIELDS(
         ctf_string(file, file)
         ctf_string(func, func)
+        ctf_float(double, elapsed, elapsed)
     )
 )
 
