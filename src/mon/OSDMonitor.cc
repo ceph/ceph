@@ -153,6 +153,9 @@ void OSDMonitor::create_initial()
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_KRAKEN);
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
 
+  newmap.full_ratio = g_conf->mon_osd_full_ratio;
+  newmap.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
+
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap,
                 mon->get_quorum_con_features() | CEPH_FEATURE_RESERVED);
