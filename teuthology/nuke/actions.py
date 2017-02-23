@@ -259,6 +259,10 @@ def remove_ceph_packages(ctx):
                 check_status=False,
             )
             remote.run(
+                args=['sudo', 'rm', run.Raw("/etc/yum.repos.d/*samba*")],
+                check_status=False,
+            )
+            remote.run(
                 args=['sudo', 'rpm', '--rebuilddb', run.Raw('&&'), 'yum',
                       'clean', 'all']
             )
@@ -271,6 +275,10 @@ def remove_ceph_packages(ctx):
             log.info("Remove any broken repos")
             remote.run(
                 args=['sudo', 'rm', run.Raw("/etc/apt/sources.list.d/*ceph*")],
+                check_status=False,
+            )
+            remote.run(
+                args=['sudo', 'rm', run.Raw("/etc/apt/sources.list.d/*samba*")],
                 check_status=False,
             )
             log.info("Autoclean")
