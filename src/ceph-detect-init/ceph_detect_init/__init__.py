@@ -24,6 +24,7 @@ from ceph_detect_init import suse
 from ceph_detect_init import gentoo
 from ceph_detect_init import freebsd
 from ceph_detect_init import docker
+from ceph_detect_init import oracle
 import os
 import logging
 import platform
