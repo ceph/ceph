@@ -470,19 +470,19 @@ public:
       m_write_data(data), m_op_flags(op_flags) {
   }
 
-  virtual const char *get_op_type() const {
+  const char *get_op_type() const override {
     return "writesame";
   }
 
-  virtual bool pre_object_map_update(uint8_t *new_state) {
+  bool pre_object_map_update(uint8_t *new_state) override {
     *new_state = OBJECT_EXISTS;
     return true;
   }
 
 protected:
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr);
+  void add_write_ops(librados::ObjectWriteOperation *wr) override;
 
-  virtual void send_write();
+  void send_write() override;
 
 private:
   ceph::bufferlist m_write_data;
