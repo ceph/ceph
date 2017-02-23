@@ -771,6 +771,25 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
   }
 }
 
+bool OSDService::need_fullness_update()
+{
+  OSDMapRef osdmap = get_osdmap();
+  s_names cur = NONE;
+  if (osdmap->exists(whoami)) {
+    if (osdmap->get_state(whoami) & CEPH_OSD_FULL) {
+      cur = FULL;
+    } else if (osdmap->get_state(whoami) & CEPH_OSD_NEARFULL) {
+      cur = NEARFULL;
+    }
+  }
+  s_names want = NONE;
+  if (is_full())
+    want = FULL;
+  else if (is_nearfull())
+    want = NEARFULL;
+  return want != cur;
+}
+
 bool OSDService::check_failsafe_full()
 {
   Mutex::Locker l(full_status_lock);
@@ -4548,6 +4567,7 @@ void OSD::tick_without_osd_lock()
       last_mon_report = now;
 
       // do any pending reports
+      send_full_update();
       send_failures();
       send_pg_stats(now);
     }
@@ -4915,6 +4935,7 @@ void OSD::ms_handle_connect(Connection *con)
       last_mon_report = now;
 
       // resend everything, it's a new session
+      send_full_update();
       send_alive();
       service.requeue_pg_temp();
       service.send_pg_temp();
@@ -5060,6 +5081,9 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   dout(10) << __func__ << " _preboot mon has osdmaps "
 	   << oldest << ".." << newest << dendl;
 
+  // ensure our local fullness awareness is accurate
+  heartbeat();
+
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
     derr << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
@@ -5073,6 +5097,9 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 	       ceph::features::mon::FEATURE_LUMINOUS)) {
     derr << "monmap REQUIRE_LUMINOUS is NOT set; must upgrade all monitors to "
 	 << "Luminous or later before Luminous OSDs will boot" << dendl;
+  } else if (service.need_fullness_update()) {
+    derr << "osdmap fullness state needs update" << dendl;
+    send_full_update();
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
     _send_boot();
@@ -5084,6 +5111,22 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
     osdmap_subscribe(osdmap->get_epoch() + 1, false);
   else
     osdmap_subscribe(oldest - 1, true);
+}
+
+void OSD::send_full_update()
+{
+  if (!service.need_fullness_update())
+    return;
+  unsigned state = 0;
+  if (service.is_full()) {
+    state = CEPH_OSD_FULL;
+  } else if (service.is_nearfull()) {
+    state = CEPH_OSD_NEARFULL;
+  }
+  set<string> s;
+  OSDMap::calc_state_set(state, s);
+  dout(10) << __func__ << " want state " << s << dendl;
+  monc->send_mon_message(new MOSDFull(osdmap->get_epoch(), state));
 }
 
 void OSD::start_waiting_for_healthy()
