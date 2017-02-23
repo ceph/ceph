@@ -89,7 +89,7 @@ dict_templ = {
             }
         },
         'workunit': {
-            'sha1': Placeholder('ceph_hash'),
+            'sha1': Placeholder('suite_hash'),
         }
     },
     'repo': Placeholder('ceph_repo'),

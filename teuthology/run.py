@@ -345,6 +345,9 @@ def main(args):
     ceph_repo = config.get('repo')
     if ceph_repo:
         teuth_config.ceph_git_url = ceph_repo
+    suite_repo = config.get('suite_repo')
+    if suite_repo:
+        teuth_config.ceph_qa_suite_git_url = suite_repo
 
     config["tasks"] = validate_tasks(config)
 
