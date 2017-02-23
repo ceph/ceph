@@ -76,7 +76,10 @@ public:
       }
       ldout(sync_env->cct,0) << "abhi: download complete, printing object"<< dendl;
       yield {
+        // TODO: actually create buckets if they dont' exist, we currently just
+        // create object, assuming buckets are already there
         string path=aws_object_name(bucket_info, key);
+        ldout(sync_env->cct,0) << "abhi sending request to " << conf.conn << " path" << path << dendl;
         call(new RGWPutRawRESTResourceCR<int> (sync_env->cct, conf.conn,
                                                         sync_env->http_manager,
                                                         path, nullptr,
