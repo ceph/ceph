@@ -328,9 +328,6 @@ void AsyncConnection::process()
 {
   ssize_t r = 0;
   int prev_state = state;
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
-  utime_t ltt_recv_stamp = ceph_clock_now();
-#endif
   bool need_dispatch_writer = false;
   std::lock_guard<std::mutex> l(lock);
   last_active = ceph::coarse_mono_clock::now();
@@ -432,9 +429,7 @@ void AsyncConnection::process()
 
       case STATE_OPEN_MESSAGE_HEADER:
         {
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
-          ltt_recv_stamp = ceph_clock_now();
-#endif
+          recv_stamp = ceph_clock_now();
           ldout(async_msgr->cct, 20) << __func__ << " begin MSG" << dendl;
           ceph_msg_header header;
           ceph_msg_header_old oldheader;
@@ -490,7 +485,6 @@ void AsyncConnection::process()
           front.clear();
           middle.clear();
           data.clear();
-          recv_stamp = ceph_clock_now();
           current_header = header;
           state = STATE_OPEN_MESSAGE_THROTTLE_MESSAGE;
           break;
@@ -753,8 +747,7 @@ void AsyncConnection::process()
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
           if (message->get_type() == CEPH_MSG_OSD_OP || message->get_type() == CEPH_MSG_OSD_OPREPLY) {
             utime_t ltt_processed_stamp = ceph_clock_now();
-            double usecs_elapsed = (ltt_processed_stamp.to_nsec()-ltt_recv_stamp.to_nsec())/1000;
-            ostringstream buf;
+            double usecs_elapsed = (ltt_processed_stamp.to_nsec()- recv_stamp.to_nsec())/1000;
             if (message->get_type() == CEPH_MSG_OSD_OP)
               OID_ELAPSED_WITH_MSG(message, usecs_elapsed, "TIME_TO_DECODE_OSD_OP", false);
             else
