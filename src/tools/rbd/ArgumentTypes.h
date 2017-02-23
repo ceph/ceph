@@ -30,6 +30,7 @@ enum SpecFormat {
 };
 
 static const std::string DEFAULT_POOL_NAME("rbd");
+static const std::string DEFAULT_NAMESPACE("");
 
 static const std::string SOURCE_PREFIX("source-");
 static const std::string DEST_PREFIX("dest-");
@@ -49,6 +50,8 @@ static const std::string IMAGE_ID("image-id");
 static const std::string CONFIG_PATH("conf");
 static const std::string POOL_NAME("pool");
 static const std::string DEST_POOL_NAME("dest-pool");
+static const std::string NAMESPACE("namespace");
+static const std::string DEST_NAMESPACE("dest-namespace");
 static const std::string IMAGE_NAME("image");
 static const std::string DEST_IMAGE_NAME("dest");
 static const std::string GROUP_NAME("group");
@@ -154,6 +157,9 @@ void add_journal_option(boost::program_options::options_description *opt,
                       const std::string &desc_suffix = "");
 
 void add_pool_options(boost::program_options::options_description *pos,
+                      boost::program_options::options_description *opt);
+
+void add_namespace_options(boost::program_options::options_description *pos,
                       boost::program_options::options_description *opt);
 
 void add_image_spec_options(boost::program_options::options_description *pos,

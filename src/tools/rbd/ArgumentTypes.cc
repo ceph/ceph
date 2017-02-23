@@ -201,6 +201,14 @@ void add_pool_options(boost::program_options::options_description *pos,
     ((POOL_NAME + ",p").c_str(), po::value<std::string>(), "pool name");
 }
 
+void add_namespace_options(boost::program_options::options_description *pos,
+			  boost::program_options::options_description *opt) {
+  pos->add_options()
+    ("namespace", "namespace");
+  opt->add_options()
+    ((NAMESPACE + ",N").c_str(), po::value<std::string>(), "namespace");
+}
+
 void add_image_spec_options(po::options_description *pos,
                             po::options_description *opt,
                             ArgumentModifier modifier) {
