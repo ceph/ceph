@@ -538,7 +538,8 @@ AC_MSG_NOTICE([radosgw: openssl INCLUDES $OPENSSL_INCLUDES LIBS $OPENSSL_LIBS])
 AC_MSG_CHECKING(for radosgw/civetweb: sonames for openssl libraries)
   saved_LIBS="${LIBS}"
   LIBS="$OPENSSL_LIBS"
-  AC_LINK_IFELSE([AC_LANG_PROGRAM([[]], [[]])],
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([#include <openssl/ssl.h>
+#include <openssl/evp.h>], [SSL *s = 0;printf ("%p %d\n", (void*)EVP_md5(), SSL_get_fd(s))])],
       [AC_MSG_RESULT([linked])
 eval `$OBJDUMP -p ./conftest$ac_exeext | sed -n 's/^  NEEDED  *libssl/LIBSSL_SONAME=libssl/p;
 s/^  NEEDED  *libcrypto/LIBCRYPTO_SONAME=libcrypto/p'`],
