@@ -2003,21 +2003,14 @@ struct C_PG_FinishRecovery : public Context {
 
 void PG::mark_clean()
 {
-  // only mark CLEAN if we have the desired number of replicas AND we
-  // are not remapped.
-  if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid) &&
-      up == acting)
+  if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid)) {
     state_set(PG_STATE_CLEAN);
-
-  // NOTE: this is actually a bit premature: we haven't purged the
-  // strays yet.
-  info.history.last_epoch_clean = get_osdmap()->get_epoch();
-  info.history.last_interval_clean = info.history.same_interval_since;
-
-  past_intervals.clear();
-  dirty_big_info = true;
-
-  dirty_info = true;
+    info.history.last_epoch_clean = get_osdmap()->get_epoch();
+    info.history.last_interval_clean = info.history.same_interval_since;
+    past_intervals.clear();
+    dirty_big_info = true;
+    dirty_info = true;
+  }
 
   kick_snap_trim();
 }
