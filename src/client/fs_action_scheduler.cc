@@ -42,10 +42,10 @@ void initialize_socket() {
 	log_ceph_sock1("finishing socket creation\n");
 }
 
-void write_to_sock(char *hooks_string) {
+void write_to_sock(char *hooks_type,char *name) {
 	log_ceph_sock1("writing to sock\n");
-	log_ceph_sock1(hooks_string);
-	if (write(sock, hooks_string, sizeof(hooks_string)) < 0)
+	log_ceph_sock1(hooks_type);
+	if (write(sock, strcat(hooks_type,name), sizeof(hooks_type)+sizeof(name)) < 0)
 		perror("writing on stream socket");
 }
 
