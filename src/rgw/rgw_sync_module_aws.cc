@@ -74,11 +74,17 @@ public:
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
-      ldout(sync_env->cct,0) << "abhi: download complete, printing object res:=" << res.c_str() << dendl;
-      //ldout(sync_env->cct, 0) << "abhi: list size" << res.size() << dendl;
-      // yield {
-      //   // implement me here should be the coroutine to send the stuff we received to aws
-
+      ldout(sync_env->cct,0) << "abhi: download complete, printing object"<< dendl;
+      yield {
+        string path=aws_object_name(bucket_info, key);
+        call(new RGWPutRawRESTResourceCR<int> (sync_env->cct, conf.conn,
+                                                        sync_env->http_manager,
+                                                        path, nullptr,
+                                                        res, nullptr));
+      }
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
 
 
 
