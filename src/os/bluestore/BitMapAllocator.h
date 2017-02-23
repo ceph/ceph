@@ -15,7 +15,6 @@ class BitMapAllocator : public Allocator {
   std::mutex m_lock;
 
   int64_t m_block_size;
-  int64_t m_num_reserved;
 
   BitAllocator *m_bit_alloc; // Bit allocator instance
 
