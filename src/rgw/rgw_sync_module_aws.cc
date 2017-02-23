@@ -116,6 +116,39 @@ public:
   }
 };
 
+class RGWAWSRemoveRemoteObjCBCR : public RGWCoroutine {
+  RGWDataSyncEnv *sync_env;
+  RGWBucketInfo bucket_info;
+  rgw_obj_key key;
+  ceph::real_time mtime;
+  const AWSConfig& conf;
+public:
+  RGWAWSRemoveRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
+                          RGWBucketInfo& _bucket_info, rgw_obj_key& _key, const ceph::real_time& _mtime,
+                          const AWSConfig& _conf) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+                                                        bucket_info(_bucket_info), key(_key),
+                                                        mtime(_mtime), conf(_conf) {}
+  int operate() override {
+    reenter(this) {
+      ldout(sync_env->cct, 0) << ": remove remote obj: z=" << sync_env->source_zone
+                              << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
+      yield {
+        string path = aws_object_name(bucket_info, key);
+        ldout(sync_env->cct, 0) << "abhi: removing aws object at" << path << dendl;
+        call(new RGWDeleteRESTResourceCR(sync_env->cct, conf.conn,
+                                         sync_env->http_manager,
+                                         path, nullptr /* params */));
+      }
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
+      return set_cr_done();
+    }
+    return 0;
+  }
+
+};
+
 
 class RGWAWSDataSyncModule: public RGWDataSyncModule {
   AWSConfig conf;
@@ -136,8 +169,8 @@ public:
     return new RGWAWSHandleRemoteObjCR(sync_env, bucket_info, key, conf);
   }
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch) override {
-    ldout(sync_env->cct, 0) <<"AWS Not implemented: rm_object: b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
-    return NULL;
+    ldout(sync_env->cct, 0) <<"rm_object: b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
+    return new RGWAWSRemoveRemoteObjCBCR(sync_env, bucket_info, key, mtime, conf);
   }
   RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch) override {
