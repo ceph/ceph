@@ -3171,7 +3171,25 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
         ss << " osds: [" << osds << "]";
         detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
-    } 
+    }
+
+    if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      int full, nearfull;
+      osdmap.count_full_nearfull_osds(&full, &nearfull);
+      if (full > 0) {
+	ostringstream ss;
+	ss << full << " full osds(s)";
+	summary.push_back(make_pair(HEALTH_ERR, ss.str()));
+      }
+      if (nearfull > 0) {
+	ostringstream ss;
+	ss << nearfull << " nearfull osds(s)";
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+    // note: we leave it to ceph-mgr to generate details health warnings
+    // with actual osd utilizations
+
     // warn about flags
     uint64_t warn_flags =
       CEPH_OSDMAP_FULL |
