@@ -426,6 +426,34 @@ void CreateRequest<I>::handle_create_id_object(int r) {
     return;
   }
 
+  set_namespace();
+}
+
+template<typename I>
+void CreateRequest<I>::set_namespace() {
+  ldout(m_cct, 20) << this << " " << __func__ << dendl;
+
+  std::string nspace = m_ioctx.get_namespace();
+  librados::ObjectWriteOperation op;
+  cls_client::set_namespace(&op, nspace);
+
+  using klass = CreateRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_callback<klass, &klass::handle_set_namespace>(this);
+  int r = m_ioctx.aio_operate(m_id_obj, comp, &op);
+  assert(r == 0);
+  comp->release();
+}
+
+template<typename I>
+void CreateRequest<I>::handle_set_namespace(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "error set namespace: " << cpp_strerror(r) << dendl;
+    return complete(r);
+  }
+
   add_image_to_directory();
 }
 

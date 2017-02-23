@@ -105,6 +105,7 @@ private:
   IoCtx m_data_io_ctx;
   std::string m_image_name;
   std::string m_image_id;
+  std::string m_namespace;
   uint64_t m_size;
   uint8_t m_order = 0;
   uint64_t m_features = 0;
@@ -141,6 +142,9 @@ private:
 
   void create_id_object();
   void handle_create_id_object(int r);
+
+  void set_namespace();
+  void handle_set_namespace(int r);
 
   void add_image_to_directory();
   void handle_add_image_to_directory(int r);
