@@ -33,6 +33,7 @@
 
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDFull.h"
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
 #include "messages/MOSDBoot.h"
@@ -1363,6 +1364,8 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     // damp updates
   case MSG_OSD_MARK_ME_DOWN:
     return preprocess_mark_me_down(op);
+  case MSG_OSD_FULL:
+    return preprocess_full(op);
   case MSG_OSD_FAILURE:
     return preprocess_failure(op);
   case MSG_OSD_BOOT:
@@ -1394,6 +1397,8 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     // damp updates
   case MSG_OSD_MARK_ME_DOWN:
     return prepare_mark_me_down(op);
+  case MSG_OSD_FULL:
+    return prepare_full(op);
   case MSG_OSD_FAILURE:
     return prepare_failure(op);
   case MSG_OSD_BOOT:
@@ -2295,6 +2300,97 @@ void OSDMonitor::_booted(MonOpRequestRef op, bool logit)
   send_latest(op, m->sb.current_epoch+1);
 }
 
+
+// -------------
+// full
+
+bool OSDMonitor::preprocess_full(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  MOSDFull *m = static_cast<MOSDFull*>(op->get_req());
+  int from = m->get_orig_source().num();
+  set<string> state;
+  unsigned mask = CEPH_OSD_NEARFULL | CEPH_OSD_FULL;
+
+  // check permissions, ignore if failed
+  MonSession *session = m->get_session();
+  if (!session)
+    goto ignore;
+  if (!session->is_capable("osd", MON_CAP_X)) {
+    dout(0) << "MOSDFull from entity with insufficient privileges:"
+	    << session->caps << dendl;
+    goto ignore;
+  }
+
+  // ignore a full message from the osd instance that already went down
+  if (!osdmap.exists(from)) {
+    dout(7) << __func__ << " ignoring full message from nonexistent "
+	    << m->get_orig_source_inst() << dendl;
+    goto ignore;
+  }
+  if ((!osdmap.is_up(from) &&
+       osdmap.get_most_recent_inst(from) == m->get_orig_source_inst()) ||
+      (osdmap.is_up(from) &&
+       osdmap.get_inst(from) != m->get_orig_source_inst())) {
+    dout(7) << __func__ << " ignoring full message from down "
+	    << m->get_orig_source_inst() << dendl;
+    goto ignore;
+  }
+
+  OSDMap::calc_state_set(osdmap.get_state(from), state);
+
+  if ((osdmap.get_state(from) & mask) == m->state) {
+    dout(7) << __func__ << " state already " << state << " for osd." << from
+	    << " " << m->get_orig_source_inst() << dendl;
+    _reply_map(op, m->version);
+    goto ignore;
+  }
+
+  dout(10) << __func__ << " want state " << state << " for osd." << from
+	   << " " << m->get_orig_source_inst() << dendl;
+  return false;
+
+ ignore:
+  return true;
+}
+
+bool OSDMonitor::prepare_full(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  const MOSDFull *m = static_cast<MOSDFull*>(op->get_req());
+  const int from = m->get_orig_source().num();
+
+  const unsigned mask = CEPH_OSD_NEARFULL | CEPH_OSD_FULL;
+  const unsigned want_state = m->state & mask;  // safety first
+
+  unsigned cur_state = osdmap.get_state(from);
+  auto p = pending_inc.new_state.find(from);
+  if (p != pending_inc.new_state.end()) {
+    cur_state ^= p->second;
+  }
+  cur_state &= mask;
+
+  set<string> want_state_set, cur_state_set;
+  OSDMap::calc_state_set(want_state, want_state_set);
+  OSDMap::calc_state_set(cur_state, cur_state_set);
+
+  if (cur_state != want_state) {
+    if (p != pending_inc.new_state.end()) {
+      p->second &= ~mask;
+    } else {
+      pending_inc.new_state[from] = 0;
+    }
+    pending_inc.new_state[from] |= (osdmap.get_state(from) & mask) ^ want_state;
+    dout(7) << __func__ << " osd." << from << " " << cur_state_set
+	    << " -> " << want_state_set << dendl;
+  } else {
+    dout(7) << __func__ << " osd." << from << " " << cur_state_set
+	    << " = wanted " << want_state_set << ", just waiting" << dendl;
+  }
+
+  wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
+  return true;
+}
 
 // -------------
 // alive
