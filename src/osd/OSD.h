@@ -1136,14 +1136,23 @@ public:
   // -- OSD Full Status --
 private:
   Mutex full_status_lock;
-  enum s_names { NONE, NEAR, FULL } cur_state;
-  time_t last_msg;
-  double cur_ratio;
+  enum s_names { NONE, NEARFULL, FULL, FAILSAFE } cur_state;  // ascending
+  const char *get_full_state_name(s_names s) {
+    switch (s) {
+    case NONE: return "none";
+    case NEARFULL: return "nearfull";
+    case FULL: return "full";
+    case FAILSAFE: return "failsafe";
+    default: return "???";
+    }
+  }
+  double cur_ratio;  ///< current utilization
   float get_failsafe_full_ratio();
-  float get_failsafe_nearfull_ratio();
-  void check_nearfull_warning(const osd_stat_t &stat);
+  void check_full_status(const osd_stat_t &stat);
 public:
   bool check_failsafe_full();
+  bool is_nearfull();
+  bool is_full();
   bool too_full_for_backfill(double *ratio, double *max_ratio);
 
   // -- epochs --
