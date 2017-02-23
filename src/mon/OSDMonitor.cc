@@ -6680,6 +6680,30 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
 
+  } else if (prefix == "osd set-full-ratio" ||
+             prefix == "osd set-nearfull-ratio") {
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must complete the upgrade and set require_luminous_osds before"
+	 << " using the new interface";
+      err = -EPERM;
+      goto reply;
+    }
+    double n;
+    if (!cmd_getval(g_ceph_context, cmdmap, "ratio", n)) {
+      ss << "unable to parse 'ratio' value '"
+         << cmd_vartype_stringify(cmdmap["who"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (prefix == "osd set-full-ratio")
+      pending_inc.new_full_ratio = n;
+    else if (prefix == "osd set-nearfull-ratio")
+      pending_inc.new_nearfull_ratio = n;
+    ss << prefix << " " << n;
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd pause") {
     return prepare_set_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
 
