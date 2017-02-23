@@ -1185,6 +1185,41 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   bufferlist bl;
 
+  // set or clear full/nearfull?
+  {
+    OSDMap tmp;
+    tmp.deepish_copy_from(osdmap);
+    tmp.apply_incremental(pending_inc);
+
+    if (tmp.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      int full, nearfull;
+      tmp.count_full_nearfull_osds(&full, &nearfull);
+      if (full > 0) {
+	if (!tmp.test_flag(CEPH_OSDMAP_FULL)) {
+	  dout(10) << __func__ << " setting full flag" << dendl;
+	  add_flag(CEPH_OSDMAP_FULL);
+	  remove_flag(CEPH_OSDMAP_NEARFULL);
+	}
+      } else {
+	if (tmp.test_flag(CEPH_OSDMAP_FULL)) {
+	  dout(10) << __func__ << " clearing full flag" << dendl;
+	  remove_flag(CEPH_OSDMAP_FULL);
+	}
+	if (nearfull > 0) {
+	  if (!tmp.test_flag(CEPH_OSDMAP_NEARFULL)) {
+	    dout(10) << __func__ << " setting nearfull flag" << dendl;
+	    add_flag(CEPH_OSDMAP_NEARFULL);
+	  }
+	} else {
+	  if (tmp.test_flag(CEPH_OSDMAP_NEARFULL)) {
+	    dout(10) << __func__ << " clearing nearfull flag" << dendl;
+	    remove_flag(CEPH_OSDMAP_NEARFULL);
+	  }
+	}
+      }
+    }
+  }
+
   // tell me about it
   for (map<int32_t,uint8_t>::iterator i = pending_inc.new_state.begin();
        i != pending_inc.new_state.end();
@@ -3020,8 +3055,10 @@ void OSDMonitor::tick()
     }
   }
 
-  //if map full setting has changed, get that info out there!
-  if (mon->pgmon()->is_readable()) {
+  // if map full setting has changed, get that info out there!
+  if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) &&
+      mon->pgmon()->is_readable()) {
+    // for pre-luminous compat only!
     if (!mon->pgmon()->pg_map.full_osds.empty()) {
       dout(5) << "There are full osds, setting full flag" << dendl;
       add_flag(CEPH_OSDMAP_FULL);
