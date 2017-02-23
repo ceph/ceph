@@ -1416,7 +1416,11 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	return -ENOENT;
     }
   } else {
-    fhr = fs->stat_leaf(parent, path, RGWFileHandle::FLAG_NONE);
+    /* lookup in a readdir callback */
+    uint32_t sl_flags = (flags & RGW_LOOKUP_FLAG_RCB)
+      ? RGWFileHandle::FLAG_NONE
+      : RGWFileHandle::FLAG_EXACT_MATCH;
+    fhr = fs->stat_leaf(parent, path, sl_flags);
     if (! get<0>(fhr)) {
       if (! (flags & RGW_LOOKUP_FLAG_CREATE))
 	return -ENOENT;
