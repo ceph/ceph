@@ -209,6 +209,38 @@ int FS::aio_queue_t::submit(aio_t &aio, int *retries)
   return 0;
 }
 
+
+// FIXME: generic iterators needed
+int FS::aio_queue_t::submit(const std::list<aio_t>::iterator begin,
+                            const std::list<aio_t>::iterator end)
+{
+  const size_t iocb_num = std::distance(begin, end);
+
+  struct iocb* iocbsp[iocb_num];
+  size_t idx = 0;
+  for (auto it = begin; it != end; it++) {
+    iocbsp[idx++] = &it->iocb;
+  }
+
+  for (size_t sent = 0; sent < iocb_num; /* see body */) {
+    // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
+    int attempts = 16;
+    int delay = 125;
+
+    const int r = io_submit(ctx, iocb_num - sent, &iocbsp[sent]);
+    if (r == -EAGAIN && attempts-- > 0) {
+      usleep(delay);
+      delay *= 2;
+      continue;
+    } else if (r < 0) {
+      return r;
+    }
+    sent += r;
+  }
+
+  return 0;
+}
+
 int FS::aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
 {
   io_event event[max];

@@ -119,6 +119,8 @@ public:
     }
 
     int submit(aio_t &aio, int *retries);
+    int submit(std::list<aio_t>::iterator begin,
+               std::list<aio_t>::iterator end);
     int get_next_completed(int timeout_ms, aio_t **paio, int max);
   };
 #endif
