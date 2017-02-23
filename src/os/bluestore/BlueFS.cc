@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <atomic>
+
 #include "boost/algorithm/string.hpp" 
 #include "BlueFS.h"
 
@@ -1775,15 +1777,13 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     return r;
   }
 
-  uint64_t hint = 0;
-  if (!ev->empty()) {
-    hint = ev->back().end();
-  }
+  static std::atomic<std::uint64_t> hint { 0 };
 
   AllocExtentVector extents;
   extents.reserve(4);  // 4 should be (more than) enough for most allocations
-  int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, hint,
-                          &extents);
+  int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size,
+                                          ev->empty() ? hint.load() : ev->back().end(),
+                                          &extents);
   if (alloc_len < (int64_t)left) {
     derr << __func__ << " allocate failed on 0x" << std::hex << left
 	 << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
@@ -1801,6 +1801,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     } else {
       ev->push_back(e);
     }
+    hint = p.end();
   }
    
   return 0;
