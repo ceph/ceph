@@ -1344,6 +1344,12 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
     goto update;
   } else if (prefix == "pg set_full_ratio" ||
              prefix == "pg set_nearfull_ratio") {
+    if (mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "please use the new luminous interfaces"
+	 << " ('osd set-full-ratio' and 'osd set-nearfull-ratio')";
+      r = -EPERM;
+      goto reply;
+    }
     double n;
     if (!cmd_getval(g_ceph_context, cmdmap, "ratio", n)) {
       ss << "unable to parse 'ratio' value '"
