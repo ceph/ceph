@@ -48,16 +48,6 @@ public:
   string& to_str() { return data; }
 };
 
-class LCNoncurDays_S3 : public XMLObj
-{
-public:
-  LCNoncurDays_S3() {}
-  ~LCNoncurDays_S3() override {}
-  string& to_str() {
-    return data;
-  }
-};
-
 class LCExpiration_S3 : public LCExpiration, public XMLObj
 {
 public:
@@ -92,6 +82,23 @@ public:
   }
 };
 
+class LCMPExpiration_S3 : public LCExpiration, public XMLObj
+{
+public:
+  LCMPExpiration_S3() {}
+  ~LCMPExpiration_S3() {}
+
+  bool xml_end(const char *el);
+  void to_xml(ostream& out) {
+    out << "<AbortIncompleteMultipartUpload>" << "<DaysAfterInitiation>" << days << "</DaysAfterInitiation>" << "</AbortIncompleteMultipartUpload>";
+  }
+  void dump_xml(Formatter *f) const {
+    f->open_object_section("AbortIncompleteMultipartUpload");
+    encode_xml("DaysAfterInitiation", days, f);
+    f->close_section();
+  }
+};
+
 class LCRule_S3 : public LCRule, public XMLObj
 {
 public:
@@ -113,6 +120,10 @@ public:
     if (!noncur_expiration.empty()) {
       const LCNoncurExpiration_S3& noncur_expir = static_cast<const LCNoncurExpiration_S3&>(noncur_expiration);
       noncur_expir.dump_xml(f);
+    }
+    if (!mp_expiration.empty()) {
+      const LCMPExpiration_S3& mp_expir = static_cast<const LCMPExpiration_S3&>(mp_expiration);
+      mp_expir.dump_xml(f);
     }
     f->close_section(); // Rule
   }
