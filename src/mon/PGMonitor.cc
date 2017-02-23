@@ -1734,8 +1734,12 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   // full/nearfull
-  check_full_osd_health(summary, detail, pg_map.full_osds, "full", HEALTH_ERR);
-  check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full", HEALTH_WARN);
+  if (!mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    check_full_osd_health(summary, detail, pg_map.full_osds, "full",
+			  HEALTH_ERR);
+    check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full",
+			  HEALTH_WARN);
+  }
 
   // near-target max pools
   const map<int64_t,pg_pool_t>& pools = mon->osdmon()->osdmap.get_pools();
