@@ -276,31 +276,31 @@ protected:
   using typename ImageRequest<ImageCtxT>::ObjectRequests;
   using typename AbstractImageWriteRequest<ImageCtxT>::ObjectExtents;
 
-  virtual aio_type_t get_aio_type() const {
+  aio_type_t get_aio_type() const override {
     return AIO_TYPE_WRITESAME;
   }
-  virtual const char *get_request_type() const {
+  const char *get_request_type() const override {
     return "aio_writesame";
   }
 
   bool assemble_writesame_extent(const ObjectExtent &object_extent,
                                  bufferlist *bl, bool force_write);
 
-  virtual void send_image_cache_request() override;
+  void send_image_cache_request() override;
 
-  virtual void send_object_cache_requests(const ObjectExtents &object_extents,
-                                          uint64_t journal_tid);
+  void send_object_cache_requests(const ObjectExtents &object_extents,
+                                  uint64_t journal_tid) override;
 
-  virtual void send_object_requests(const ObjectExtents &object_extents,
-                                    const ::SnapContext &snapc,
-                                    ObjectRequests *object_requests);
-  virtual ObjectRequestHandle *create_object_request(
+  void send_object_requests(const ObjectExtents &object_extents,
+                            const ::SnapContext &snapc,
+                            ObjectRequests *object_requests) override;
+  ObjectRequestHandle *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish);
+      Context *on_finish) override;
 
-  virtual uint64_t append_journal_event(const ObjectRequests &requests,
-                                        bool synchronous);
-  virtual void update_stats(size_t length);
+  uint64_t append_journal_event(const ObjectRequests &requests,
+                                bool synchronous) override;
+  void update_stats(size_t length) override;
 private:
   bufferlist m_data_bl;
   int m_op_flags;
