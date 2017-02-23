@@ -9,15 +9,19 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static string aws_object_name(const RGWBucketInfo& bucket_info, const rgw_obj_key&key, bool user_buckets=false){
-  string obj_name;
-  if(!user_buckets){
-    obj_name = bucket_info.owner.tenant + bucket_info.owner.id + "/" + bucket_info.bucket.name + "/" + key.name;
-      } else {
-    // for future when every tenant gets their own bucket
-    obj_name = bucket_info.bucket.name + "/" + key.name;
+// TODO: have various bucket naming schemes at a global/user and a bucket level
+
+static string aws_bucket_name(const RGWBucketInfo& bucket_info, bool user_buckets=false){
+  string bucket_name="rgwx" + bucket_info.zonegroup;
+  if (user_buckets){
+    bucket_name+=bucket_info.owner.tenant + bucket_info.owner.id;
   }
-  return obj_name;
+  return bucket_name;
+}
+
+static string aws_object_name(const RGWBucketInfo& bucket_info, const rgw_obj_key&key, bool user_buckets=false){
+  auto bucket = aws_bucket_name(bucket_info, user_buckets);
+  return bucket + key.name;
 }
 
 struct AWSConfig {
@@ -29,6 +33,8 @@ struct AWSConfig {
 class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
   const AWSConfig& conf;
   bufferlist res;
+  unordered_map <string, bool> bucket_created;
+  string bucket_name;
 public:
   RGWAWSHandleRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
                             RGWBucketInfo& _bucket_info,
@@ -58,9 +64,9 @@ public:
 
         // Don't try this at home, very hacky, probably need a proper aws client
         // written so RESTResourceCR expects a JSON as a result, we workaround
-        // by providing a list which is a native json type
+        // by providing a bufferlist, need to rewrite the class to support RAW requests
 
-        // And we should do a part by part get and initiate mp on the aws side
+        // TODO-future: And we should do a part by part get and initiate mp on the aws side
         call(new RGWReadRESTResourceCR<bufferlist>(sync_env->cct,
                                                    conn,
                                                    sync_env->http_manager,
@@ -74,10 +80,26 @@ public:
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
-      ldout(sync_env->cct,0) << "abhi: download complete, printing object"<< dendl;
+      ldout(sync_env->cct,0) << "abhi: download complete, creating buckets"<< dendl;
+
+      bucket_name=aws_bucket_name(bucket_info);
+      if (bucket_created.find(bucket_name) == bucket_created.end()){
+      //   // TODO: maybe do a head request for subsequent tries & make it configurable
+        yield {
+        //string bucket_name = aws_bucket_name(bucket_info);
+          bufferlist bl;
+          call(new RGWPutRawRESTResourceCR <int> (sync_env->cct, conf.conn,
+                                                  sync_env->http_manager,
+                                                  bucket_name, nullptr, bl, nullptr));
+        }
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+
+        bucket_created[bucket_name]=true;
+      }
+
       yield {
-        // TODO: actually create buckets if they dont' exist, we currently just
-        // create object, assuming buckets are already there
         string path=aws_object_name(bucket_info, key);
         ldout(sync_env->cct,0) << "abhi sending request to " << conf.conn << " path" << path << dendl;
         call(new RGWPutRawRESTResourceCR<int> (sync_env->cct, conf.conn,
@@ -89,9 +111,6 @@ public:
         return set_cr_error(retcode);
       }
 
-
-
-      // };
 
       return set_cr_done();
     }
