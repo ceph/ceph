@@ -22,9 +22,11 @@ struct MMDSOpenIno : public Message {
   vector<inode_backpointer_t> ancestors;
 
   MMDSOpenIno() : Message(MSG_MDS_OPENINO) {}
-  MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>& a) :
-    Message(MSG_MDS_OPENINO), ino(i), ancestors(a) {
+  MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>* pa) :
+    Message(MSG_MDS_OPENINO), ino(i) {
     header.tid = t;
+    if (pa)
+      ancestors = *pa;
   }
 
   const char *get_type_name() const override { return "openino"; }

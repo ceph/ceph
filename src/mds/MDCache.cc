@@ -8614,7 +8614,11 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
     }
   } else {
     info.checking = peer;
-    mds->send_message_mds(new MMDSOpenIno(info.tid, ino, info.ancestors), peer);
+    vector<inode_backpointer_t> *pa = NULL;
+    // got backtrace from peer or backtrace just fetched
+    if (info.discover || !info.fetch_backtrace)
+      pa = &info.ancestors;
+    mds->send_message_mds(new MMDSOpenIno(info.tid, ino, pa), peer);
   }
 }
 
