@@ -2492,7 +2492,7 @@ class Lockbox(object):
                       self.args.lockbox)
             self.partition = self.create_partition()
 
-    def create_key(self, cluster):
+    def create_key(self):
         key_size = CryptHelpers.get_dmcrypt_keysize(self.args)
         key = open('/dev/urandom', 'rb').read(key_size / 8)
         base64_key = base64.b64encode(key)
@@ -2555,7 +2555,7 @@ class Lockbox(object):
         if self.args.cluster_uuid is None:
             self.args.cluster_uuid = get_fsid(cluster=self.args.cluster)
         write_one_line(path, 'ceph_fsid', self.args.cluster_uuid)
-        self.create_key(self.args.cluster)
+        self.create_key()
         self.symlink_spaces(path)
         write_one_line(path, 'magic', CEPH_LOCKBOX_ONDISK_MAGIC)
         if self.device is not None:
