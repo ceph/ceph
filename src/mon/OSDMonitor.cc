@@ -981,6 +981,33 @@ void OSDMonitor::create_pending()
   // clean up pg_temp, primary_temp
   OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
   dout(10) << "create_pending  did clean_temps" << dendl;
+
+  if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    // transition nearfull ratios from PGMap to OSDMap (on upgrade)
+    PGMap *pg_map = &mon->pgmon()->pg_map;
+    if (osdmap.full_ratio != pg_map->full_ratio) {
+      dout(10) << __func__ << " full_ratio " << osdmap.full_ratio
+	       << " -> " << pg_map->full_ratio << " (from pgmap)" << dendl;
+      pending_inc.new_full_ratio = pg_map->full_ratio;
+    }
+    if (osdmap.nearfull_ratio != pg_map->nearfull_ratio) {
+      dout(10) << __func__ << " nearfull_ratio " << osdmap.nearfull_ratio
+	       << " -> " << pg_map->nearfull_ratio << " (from pgmap)" << dendl;
+      pending_inc.new_nearfull_ratio = pg_map->nearfull_ratio;
+    }
+  } else {
+    // safety check (this shouldn't really happen)
+    if (osdmap.full_ratio <= 0) {
+      dout(1) << __func__ << " setting full_ratio = "
+	      << g_conf->mon_osd_full_ratio << dendl;
+      pending_inc.new_full_ratio = g_conf->mon_osd_full_ratio;
+    }
+    if (osdmap.nearfull_ratio <= 0) {
+      dout(1) << __func__ << " setting nearfull_ratio = "
+	      << g_conf->mon_osd_nearfull_ratio << dendl;
+      pending_inc.new_nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
+    }
+  }
 }
 
 void OSDMonitor::maybe_prime_pg_temp()
