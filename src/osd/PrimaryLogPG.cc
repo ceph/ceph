@@ -3175,9 +3175,9 @@ void PrimaryLogPG::log_op_stats(OpContext *ctx)
 
   utime_t now = ceph_clock_now();
   utime_t latency = now;
-  latency -= ctx->op->get_req()->get_recv_stamp();
+  latency -= m->get_recv_stamp();
   utime_t process_latency = now;
-  process_latency -= ctx->op->get_dequeued_time();
+  process_latency -= op->get_dequeued_time();
 
   uint64_t inb = ctx->bytes_written;
   uint64_t outb = ctx->bytes_read;
