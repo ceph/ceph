@@ -975,9 +975,6 @@ void MDSRank::set_osd_epoch_barrier(epoch_t e)
   osd_epoch_barrier = e;
 }
 
-/**
- * FIXME ugly call up to MDS daemon until the dispatching is separated out
- */
 void MDSRank::retry_dispatch(Message *m)
 {
   inc_dispatch_depth();
