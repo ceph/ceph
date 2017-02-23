@@ -241,7 +241,9 @@ TEST_F(TestMockIoImageRequest, AioDiscardJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
-  expect_object_request_send(mock_image_ctx, mock_aio_object_request, 0);
+  if (!ictx->skip_partial_discard) {
+    expect_object_request_send(mock_image_ctx, mock_aio_object_request, 0);
+  }
 
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
