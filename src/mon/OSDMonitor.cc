@@ -6813,8 +6813,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    PGMap& pg_map = mon->pgmon()->pg_map;
-    if (!pg_map.pg_stat.count(pgid)) {
+    if (!osdmap.pg_exists(pgid)) {
       ss << "pg " << pgid << " does not exist";
       err = -ENOENT;
       goto reply;
