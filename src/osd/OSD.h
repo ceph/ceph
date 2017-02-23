@@ -1154,6 +1154,8 @@ public:
   bool is_nearfull();
   bool is_full();
   bool too_full_for_backfill(double *ratio, double *max_ratio);
+  bool need_fullness_update();  ///< osdmap state needs update
+
 
   // -- epochs --
 private:
@@ -2087,6 +2089,8 @@ protected:
 
   void start_waiting_for_healthy();
   bool _is_healthy();
+
+  void send_full_update();
   
   friend struct C_OSD_GetVersion;
 
