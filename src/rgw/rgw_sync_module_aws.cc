@@ -113,11 +113,10 @@ class RGWAWSDataSyncModule: public RGWDataSyncModule {
 public:
   RGWAWSDataSyncModule(CephContext *cct, const string& s3_endpoint, const string& access_key, const string& secret){
     conf.id = string("s3:") + s3_endpoint;
-    // TODO: modify restconn class to accept user spec. keys
     conf.conn = new RGWRESTConn(cct,
-                                nullptr, // we don't need a rados store handle for this client
                                 conf.id,
-                                { s3_endpoint });
+                                { s3_endpoint },
+                                RGWAccessKey(access_key,secret));
   }
 
   ~RGWAWSDataSyncModule() {
