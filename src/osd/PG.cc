@@ -2017,13 +2017,9 @@ void PG::mark_clean()
   past_intervals.clear();
   dirty_big_info = true;
 
-  if (is_active()) {
-    /* The check is needed because if we are below min_size we're not
-     * actually active */
-    kick_snap_trim();
-  }
-
   dirty_info = true;
+
+  kick_snap_trim();
 }
 
 unsigned PG::get_recovery_priority()
@@ -6830,7 +6826,10 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
     ceph_abort();
   }
   pg->finish_recovery(*context< RecoveryMachine >().get_on_safe_context_list());
-  pg->mark_clean();
+
+  if (pg->is_active()) {
+    pg->mark_clean();
+  }
 
   pg->share_pg_info();
   pg->publish_stats_to_osd();
