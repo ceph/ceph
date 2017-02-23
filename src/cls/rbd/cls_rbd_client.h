@@ -166,6 +166,10 @@ namespace librbd {
 			   uint64_t *limit);
     void snapshot_set_limit(librados::ObjectWriteOperation *op,
 			    uint64_t limit);
+    int get_namespace(librados::IoCtx *ioctx, const std::string &oid,
+		      std::string *ns);
+    void set_namespace(librados::ObjectWriteOperation *op,
+		      const std::string ns);
 
     void get_stripe_unit_count_start(librados::ObjectReadOperation *op);
     int get_stripe_unit_count_finish(bufferlist::iterator *it,

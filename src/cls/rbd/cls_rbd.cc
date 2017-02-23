@@ -2784,6 +2784,45 @@ int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
   return rc;
 }
 
+int get_namespace(cls_method_context_t hctx, bufferlist *in,
+		  bufferlist *out)
+{
+  int rc;
+  string ns;
+
+  rc = read_key(hctx, "namespace", &ns);
+  if (rc == -ENOENT) {
+    rc = 0;
+    ::encode("", *out);
+  } else {
+    ::encode(ns, *out);
+  }
+
+  CLS_LOG(20, "get namespace %s", ns.c_str());
+  return rc;
+}
+
+int set_namespace(cls_method_context_t hctx, bufferlist *in,
+		  bufferlist *out)
+{
+  int rc;
+  string ns;
+  bufferlist bl;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(ns, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "set namespace to %s\n", ns.c_str());
+  ::encode(ns, bl);
+  rc = cls_cxx_map_set_val(hctx, "namespace", &bl);
+
+  return rc;
+}
+
 
 /****************************** Old format *******************************/
 
@@ -5116,6 +5155,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_metadata_get;
   cls_method_handle_t h_snapshot_get_limit;
   cls_method_handle_t h_snapshot_set_limit;
+  cls_method_handle_t h_get_namespace;
+  cls_method_handle_t h_set_namespace;
   cls_method_handle_t h_old_snapshots_list;
   cls_method_handle_t h_old_snapshot_add;
   cls_method_handle_t h_old_snapshot_remove;
@@ -5251,6 +5292,12 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "snapshot_set_limit",
 			  CLS_METHOD_WR,
 			  snapshot_set_limit, &h_snapshot_set_limit);
+  cls_register_cxx_method(h_class, "get_namespace",
+			  CLS_METHOD_RD,
+			  get_namespace, &h_get_namespace);
+  cls_register_cxx_method(h_class, "set_namespace",
+			  CLS_METHOD_WR,
+			  set_namespace, &h_set_namespace);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",

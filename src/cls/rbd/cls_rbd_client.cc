@@ -861,6 +861,34 @@ namespace librbd {
       op->exec("rbd", "snapshot_set_limit", in);
     }
 
+    int get_namespace(librados::IoCtx *ioctx, const std::string &oid,
+		      std::string *ns)
+    {
+      bufferlist in, out;
+      int r =  ioctx->exec(oid, "rbd", "get_namespace", in, out);
+
+      if (r < 0) {
+	return r;
+      }
+
+      try {
+	bufferlist::iterator iter = out.begin();
+	::decode(*ns, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    void set_namespace(librados::ObjectWriteOperation *op,
+		      const std::string ns)
+    {
+      bufferlist in;
+      ::encode(ns, in);
+      op->exec("rbd", "set_namespace", in);
+    }
+
     void get_stripe_unit_count_start(librados::ObjectReadOperation *op) {
       bufferlist empty_bl;
       op->exec("rbd", "get_stripe_unit_count", empty_bl);
