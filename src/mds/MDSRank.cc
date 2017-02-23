@@ -2631,21 +2631,68 @@ bool MDSRankDispatcher::kill_session(int64_t session_id, bool wait, std::strings
     return false;
   }
 
-  Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
+  Session *session = sessionmap.get_session(
+      entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
   if (!session) {
     err_ss << "session " << session_id << " not in sessionmap!";
     return false;
   }
+
+  dout(4) << "Preparing blacklist command... (wait=" << wait << ")" << dendl;
+  stringstream ss;
+  ss << "{\"prefix\":\"osd blacklist\", \"blacklistop\":\"add\",";
+  ss << "\"addr\":\"";
+  ss << session->info.inst.addr;
+  ss << "\"}";
+  std::string tmp = ss.str();
+  std::vector<std::string> cmd = {tmp};
+
+  C_SaferCond on_blacklist_inline;
+  Context *on_blacklist_done = nullptr;
   if (wait) {
+    on_blacklist_done = &on_blacklist_inline;
+  } else {
+    on_blacklist_done = new FunctionContext([this, session_id](int r) {
+      Session *session = sessionmap.get_session(
+          entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
+      if (session) {
+        server->kill_session(session, NULL);
+      } else {
+        dout(1) << "session " << session_id << " was removed while we waited "
+                   "for blacklist" << dendl;
+      }
+    });
+  }
+
+  dout(4) << "Sending mon blacklist command: " << cmd[0] << dendl;
+  monc->start_mon_command(cmd, {}, nullptr, nullptr, on_blacklist_done);
+
+  if (wait) {
+    mds_lock.Unlock();
+    int r = on_blacklist_inline.wait();
+    mds_lock.Lock();
+    if (r != 0) {
+      err_ss << "Failed to blacklist, r=" << r;
+      return false;
+    }
+
+    // We dropped mds_lock, so check that session still exists
+    session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
+          session_id));
+    if (!session) {
+      dout(1) << "session " << session_id << " was removed while we waited "
+                 "for blacklist" << dendl;
+      return true;
+    }
+
     C_SaferCond on_safe;
     server->kill_session(session, &on_safe);
 
     mds_lock.Unlock();
     on_safe.wait();
     mds_lock.Lock();
-  } else {
-    server->kill_session(session, NULL);
   }
+
   return true;
 }
 
