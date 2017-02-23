@@ -63,7 +63,7 @@ void log_ceph_sock(char *string){
 	fclose(fptr);
 }
 
-void push_to_server(int ch, char * sentence) {
+void push_to_server(int ch, const char * sentence) {
 	log_ceph_sock("in pushing to server\n");
 	static char *type;
 

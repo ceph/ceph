@@ -42,7 +42,7 @@ void initialize_socket() {
 	log_ceph_sock1("finishing socket creation\n");
 }
 
-void write_to_sock(char *hooks_type,char *name) {
+void write_to_sock(char *hooks_type,const char *name) {
 	log_ceph_sock1("writing to sock\n");
 	log_ceph_sock1(hooks_type);
 	if (write(sock, strcat(hooks_type,name), sizeof(hooks_type)+sizeof(name)) < 0)
