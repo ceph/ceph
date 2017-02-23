@@ -62,10 +62,10 @@ public:
 
         // And we should do a part by part get and initiate mp on the aws side
         call(new RGWReadRESTResourceCR<bufferlist>(sync_env->cct,
-                                               conn,
-                                               sync_env->http_manager,
-                                               obj_path,
-                                               nullptr,
+                                                   conn,
+                                                   sync_env->http_manager,
+                                                   obj_path,
+                                                   nullptr,
                                                    &res,
                                                    true,
                                                    &res));
