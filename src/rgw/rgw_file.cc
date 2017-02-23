@@ -477,12 +477,24 @@ namespace rgw {
       buffer::list bl;
       string dir_name = /* XXX get rid of this some day soon, too */
 	parent->relative_object_name();
+
       /* creating objects w/leading '/' makes a mess */
       if ((dir_name.size() > 0) &&
 	  (dir_name.back() != '/'))
 	dir_name += "/";
       dir_name += name;
       dir_name += "/";
+
+      /* need valid S3 name (characters, length <= 1024, etc) */
+      if (! valid_s3_object_name(dir_name)) {
+	rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
+	fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
+			RGWFileHandle::FHCache::FLAG_LOCK);
+	rgw_fh->mtx.unlock();
+	unref(rgw_fh);
+	get<0>(mkr) = nullptr;
+	return mkr;
+      }
 
       RGWPutObjRequest req(get_context(), get_user(), parent->bucket_name(),
 			  dir_name, bl);
