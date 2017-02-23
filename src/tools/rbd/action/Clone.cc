@@ -26,6 +26,8 @@ void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_SOURCE);
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
+  at::add_namespace_option(options, at::ARGUMENT_MODIFIER_SOURCE);
+  at::add_namespace_option(options, at::ARGUMENT_MODIFIER_DEST);
   at::add_create_image_options(options, false);
 }
 
@@ -40,6 +42,7 @@ int execute(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
+  std::string nspace = utils::get_namespace(vm, at::ARGUMENT_MODIFIER_SOURCE);
 
   std::string dst_pool_name;
   std::string dst_image_name;
@@ -50,6 +53,7 @@ int execute(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
+  std::string dst_nspace = utils::get_namespace(vm, at::ARGUMENT_MODIFIER_DEST);
 
   librbd::ImageOptions opts;
   r = utils::get_image_options(vm, false, &opts);
@@ -60,13 +64,13 @@ int execute(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, "", &rados, &io_ctx);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
 
   librados::IoCtx dst_io_ctx;
-  r = utils::init_io_ctx(rados, dst_pool_name, "", &dst_io_ctx);
+  r = utils::init_io_ctx(rados, dst_pool_name, dst_nspace, &dst_io_ctx);
   if (r < 0) {
     return r;
   }

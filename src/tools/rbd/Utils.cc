@@ -202,11 +202,14 @@ std::string get_pool_name(const po::variables_map &vm,
   return pool_name;
 }
 
-std::string get_namespace(const po::variables_map &vm)
+std::string get_namespace(const po::variables_map &vm, at::ArgumentModifier mod)
 {
   std::string nspace;
-  if (vm.count(at::NAMESPACE)) {
-    nspace = vm[at::NAMESPACE].as<std::string>();
+  std::string nspace_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_NAMESPACE : at::NAMESPACE);
+
+  if (vm.count(nspace_key)) {
+    nspace = vm[nspace_key].as<std::string>();
   }
 
   if (nspace.empty()) {
