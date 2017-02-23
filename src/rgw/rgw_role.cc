@@ -209,6 +209,8 @@ int RGWRole::get_by_id()
   if (ret < 0) {
     return ret;
   }
+
+  return 0;
 }
 
 int RGWRole::update()
@@ -381,10 +383,21 @@ bool RGWRole::validate_input()
     return false;
   }
 
-  std::regex regex_path("(\/[!-~]+\/)|(\/)");
+  std::regex regex_path("(/[!-~]+/)|(/)");
   if (! std::regex_match(path,regex_path)) {
     ldout(cct, 0) << "ERROR: Invalid chars in path " << dendl;
     return false;
+  }
+
+  return true;
+}
+
+void RGWRole::extract_name_tenant(const std::string& str)
+{
+  size_t pos = str.find('$');
+  if (pos != std::string::npos) {
+    tenant = str.substr(0, pos);
+    name = str.substr(pos + 1);
   }
 }
 

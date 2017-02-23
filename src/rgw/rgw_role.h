@@ -29,6 +29,7 @@ class RGWRole
   int read_info();
   void set_id(const string& id) { this->id = id; }
   bool validate_input();
+  void extract_name_tenant(const std::string& str);
 
 public:
   RGWRole(CephContext *cct,
@@ -45,6 +46,7 @@ public:
     tenant(std::move(tenant)) {
     if (this->path.empty())
       this->path = "/";
+    extract_name_tenant(this->name);
   }
 
   RGWRole(CephContext *cct,
@@ -54,7 +56,9 @@ public:
   : cct(cct),
     store(store),
     name(std::move(name)),
-    tenant(std::move(tenant)) {}
+    tenant(std::move(tenant)) {
+    extract_name_tenant(this->name);
+  }
 
   RGWRole(CephContext *cct,
           RGWRados *store,
