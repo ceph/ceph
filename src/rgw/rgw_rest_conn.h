@@ -60,7 +60,8 @@ class RGWRESTConn
 
 public:
 
-  RGWRESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints);
+  RGWRESTConn(CephContext *_cct, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred);
+
   // custom move needed for atomic
   RGWRESTConn(RGWRESTConn&& other);
   RGWRESTConn& operator=(RGWRESTConn&& other);

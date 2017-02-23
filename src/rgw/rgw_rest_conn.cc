@@ -8,9 +8,11 @@
 
 RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
                          const string& _remote_id,
-                         const list<string>& remote_endpoints)
+                         const list<string>& remote_endpoints,
+                         RGWAccessKey _cred)
   : cct(_cct),
     endpoints(remote_endpoints.begin(), remote_endpoints.end()),
+    key(std::move(_cred)),
     remote_id(_remote_id)
 {
   if (store) {
