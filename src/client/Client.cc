@@ -301,7 +301,12 @@ Client::~Client()
 {
   assert(!client_lock.is_locked());
 
+  // It is necessary to hold client_lock, because any inode destruction
+  // may call into ObjectCacher, which asserts that it's lock (which is
+  // client_lock) is held.
+  client_lock.Lock();
   tear_down_cache();
+  client_lock.Unlock();
 }
 
 void Client::tear_down_cache()
@@ -2437,6 +2442,11 @@ void Client::handle_osd_map(MOSDMap *m)
       auto session = i->second;
       _closed_mds_session(session);
     }
+
+    // Since we know all our OSD ops will fail, cancel them all preemtively,
+    // so that on an unhealthy cluster we can umount promptly even if e.g.
+    // some PGs were inaccessible.
+    objecter->op_cancel_writes(-EBLACKLISTED);
 
   } else if (blacklisted) {
     // Handle case where we were blacklisted but no longer are
@@ -5812,6 +5822,17 @@ void Client::unmount()
 
   if (blacklisted) {
     ldout(cct, 0) << " skipping clean shutdown, we are blacklisted" << dendl;
+
+    if (cct->_conf->client_oc) {
+      // Purge all cached data so that ObjectCacher doesn't get hung up
+      // trying to flush it.  ObjectCacher's behaviour on EBLACKLISTED
+      // is to just leave things marked dirty
+      // (http://tracker.ceph.com/issues/9105)
+      for (const auto &i : inode_map) {
+        objectcacher->purge_set(&(i.second->oset));
+      }
+    }
+
     mounted = false;
     return;
   }
