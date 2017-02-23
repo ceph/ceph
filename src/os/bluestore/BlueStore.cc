@@ -3147,6 +3147,8 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 	     cct->_conf->bluestore_wal_thread_suicide_timeout,
 	     &wal_tp),
     m_finisher_num(1),
+    nagle_submit_thread(this),
+    prepare_stop(false),
     kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
@@ -3203,6 +3205,8 @@ BlueStore::BlueStore(CephContext *cct,
 	     cct->_conf->bluestore_wal_thread_suicide_timeout,
 	     &wal_tp),
     m_finisher_num(1),
+    nagle_submit_thread(this),
+    prepare_stop(false),
     kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
@@ -4762,6 +4766,7 @@ int BlueStore::mount()
     f->start();
   }
   wal_tp.start();
+  nagle_submit_thread.create("bstore_submit");
   kv_sync_thread.create("bstore_kv_sync");
 
   r = _wal_replay();
@@ -4777,6 +4782,7 @@ int BlueStore::mount()
   return 0;
 
  out_stop:
+  _prepare_stop();
   _kv_stop();
   wal_wq.drain();
   wal_tp.stop();
@@ -4810,6 +4816,8 @@ int BlueStore::umount()
 
   mempool_thread.shutdown();
 
+  dout(20) << __func__ << " stopping prepare thread" << dendl;
+  _prepare_stop();
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
   dout(20) << __func__ << " draining wal_wq" << dendl;
@@ -7148,16 +7156,18 @@ void BlueStore::_txc_state_proc(TransBatch batch)
           }
 	}
       }
+      });
       {
 	std::lock_guard<std::mutex> l(kv_lock);
-	kv_queue.push_back(txc);
+        for (auto txc : batch) {
+	  kv_queue.push_back(txc);
+	  if (txc->state != TransContext::STATE_KV_SUBMITTED) {
+	    kv_queue_unsubmitted.push_back(txc);
+	    ++txc->osr->kv_committing_serially;
+	  }
+        }
 	kv_cond.notify_one();
-	if (txc->state != TransContext::STATE_KV_SUBMITTED) {
-	  kv_queue_unsubmitted.push_back(txc);
-	  ++txc->osr->kv_committing_serially;
-	}
       }
-      });
       return;
     case TransContext::STATE_KV_SUBMITTED:
       batch.log_state_latency(logger, l_bluestore_state_kv_committing_lat);
@@ -7553,6 +7563,32 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   txc->released.clear();
 }
 
+void BlueStore::_prepare_thread()
+{
+  while (true) {
+    if (ceph_clock_now().usec() - nagle_submit_thread.touched.load() > 1000) {
+      std::unique_lock<std::mutex> l(submit_lock);
+
+      if (! submit_queue.empty()) {
+        submit_queue_t submitting_queue;
+        submitting_queue.swap(submit_queue);
+
+        l.unlock();
+
+        nagle_submit_thread.touch();
+        _submit_queued(submitting_queue);
+      }
+    }
+
+    std::unique_lock<std::mutex> ctl_l(prepare_ctl_lock);
+    if (prepare_stop) {
+      break;
+    } else {
+      prepare_ctl_cond.wait_for(ctl_l, std::chrono::microseconds(1000));
+    }
+  }
+}
+
 void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -7836,25 +7872,75 @@ int BlueStore::_wal_replay()
 int BlueStore::queue_transactions(
     Sequencer *posr,
     vector<Transaction>& tls,
-    TrackedOpRef op,
+    TrackedOpRef,
     ThreadPool::TPHandle *handle)
 {
   FUNCTRACE();
+
+  if (cct->_conf->objectstore_blackhole) {
+    dout(0) << __func__ << " objectstore_blackhole = TRUE, dropping transaction"
+	    << dendl;
+
+    Context *onreadable;
+    Context *ondisk;
+    Context *onreadable_sync;
+    ObjectStore::Transaction::collect_contexts(
+      tls, &onreadable, &ondisk, &onreadable_sync);
+
+    delete ondisk;
+    delete onreadable;
+    delete onreadable_sync;
+    return 0;
+  }
+
+  std::unique_lock<std::mutex> l(submit_lock);
+  submit_queue.emplace_back(posr, tls, handle);
+
+  if (submit_queue.size() > 16) {
+    submit_queue_t submitting_queue;
+    submitting_queue.swap(submit_queue);
+
+    l.unlock();
+
+    nagle_submit_thread.touch();
+    _submit_queued(submitting_queue);
+  } else {
+    /* We're deferring the submit step to harvest some additional requests
+     * and batch them together. If there will be further transaction for
+     * reasonable time, NagleBatcherThread will do that for us. */
+  }
+
+  return 0;
+}
+
+void BlueStore::_submit_queued(submit_queue_t& submitting_queue)
+{
+  TransBatch batch(TransContext::STATE_PREPARE);
+
+  for (auto& item : submitting_queue) {
+    Sequencer* const posr = std::get<0>(item);
+    std::vector<Transaction> tls = std::move(std::get<1>(item));
+    ThreadPool::TPHandle* const handle = std::get<2>(item);
+
+    batch.emplace_back(_txc_prepare(posr, tls, handle));
+  }
+
+  // execute (start)
+  utime_t start = ceph_clock_now();
+  _txc_state_proc(std::move(batch));
+  logger->tinc(l_bluestore_submit_lat, ceph_clock_now() - start);
+}
+
+BlueStore::TransContext* BlueStore::_txc_prepare(Sequencer* posr,
+                                                 std::vector<Transaction>& tls,
+                                                 ThreadPool::TPHandle *handle)
+{
   Context *onreadable;
   Context *ondisk;
   Context *onreadable_sync;
   ObjectStore::Transaction::collect_contexts(
     tls, &onreadable, &ondisk, &onreadable_sync);
 
-  if (cct->_conf->objectstore_blackhole) {
-    dout(0) << __func__ << " objectstore_blackhole = TRUE, dropping transaction"
-	    << dendl;
-    delete ondisk;
-    delete onreadable;
-    delete onreadable_sync;
-    return 0;
-  }
-  utime_t start = ceph_clock_now();
   // set up the sequencer
   OpSequencer *osr;
   assert(posr);
@@ -7908,11 +7994,7 @@ int BlueStore::queue_transactions(
 
   logger->inc(l_bluestore_txc);
 
-  // execute (start)
-  _txc_state_proc(txc);
-
-  logger->tinc(l_bluestore_submit_lat, ceph_clock_now() - start);
-  return 0;
+  return txc;
 }
 
 void BlueStore::_op_queue_reserve_throttle(TransContext *txc)
