@@ -2653,14 +2653,23 @@ bool MDSRankDispatcher::kill_session(int64_t session_id, bool wait, std::strings
     on_blacklist_done = &on_blacklist_inline;
   } else {
     on_blacklist_done = new FunctionContext([this, session_id](int r) {
-      Session *session = sessionmap.get_session(
-          entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
-      if (session) {
-        server->kill_session(session, NULL);
-      } else {
-        dout(1) << "session " << session_id << " was removed while we waited "
-                   "for blacklist" << dendl;
-      }
+      objecter->wait_for_latest_osdmap(
+       new FunctionContext([this, session_id](int r) {
+            auto epoch = objecter->with_osdmap([](const OSDMap &o){
+                return o.get_epoch();
+                });
+
+            set_osd_epoch_barrier(epoch);
+
+            Session *session = sessionmap.get_session(
+                entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
+            if (session) {
+              server->kill_session(session, NULL);
+            } else {
+              dout(1) << "session " << session_id << " was removed while we waited "
+                         "for blacklist" << dendl;
+            }
+          }));
     });
   }
 
@@ -2675,6 +2684,19 @@ bool MDSRankDispatcher::kill_session(int64_t session_id, bool wait, std::strings
       err_ss << "Failed to blacklist, r=" << r;
       return false;
     }
+
+    // Wait for latest OSDMap so that we can learn the OSDMap epoch in
+    // which the blacklist happened
+    C_SaferCond on_latest_osdmap;
+    objecter->wait_for_latest_osdmap(&on_latest_osdmap);
+    mds_lock.Unlock();
+    on_latest_osdmap.wait();
+    mds_lock.Lock();
+    auto epoch = objecter->with_osdmap([](const OSDMap &o){
+        return o.get_epoch();
+        });
+
+    set_osd_epoch_barrier(epoch);
 
     // We dropped mds_lock, so check that session still exists
     session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
