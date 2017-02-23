@@ -1233,10 +1233,9 @@ protected:
     OpContext *ctx,
     bufferlist::iterator& bp,
     OSDOp& op,
-    ObjectContextRef& obc,
-    bool classic);
+    ObjectContextRef& obc);
   void fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
-                              OSDOp& osd_op, bool classic);
+                              OSDOp& osd_op);
 
   /**
    * To copy an object, call start_copy.

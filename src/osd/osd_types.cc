@@ -3919,37 +3919,6 @@ void object_copy_cursor_t::generate_test_instances(list<object_copy_cursor_t*>& 
 
 // -- object_copy_data_t --
 
-void object_copy_data_t::encode_classic(bufferlist& bl) const
-{
-  ::encode(size, bl);
-  ::encode(mtime, bl);
-  ::encode(attrs, bl);
-  ::encode(data, bl);
-  if (omap_data.length())
-    bl.append(omap_data);
-  else
-    ::encode((__u32)0, bl);
-  ::encode(cursor, bl);
-}
-
-void object_copy_data_t::decode_classic(bufferlist::iterator& bl)
-{
-  ::decode(size, bl);
-  ::decode(mtime, bl);
-  ::decode(attrs, bl);
-  ::decode(data, bl);
-  {
-    map<string,bufferlist> omap;
-    ::decode(omap, bl);
-    omap_data.clear();
-    if (!omap.empty())
-      ::encode(omap, omap_data);
-  }
-  ::decode(cursor, bl);
-  flags = 0;
-  data_digest = omap_digest = 0;
-}
-
 void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(7, 5, bl);
@@ -5365,7 +5334,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << " cookie " << op.op.notify.cookie;
       break;
     case CEPH_OSD_OP_COPY_GET:
-    case CEPH_OSD_OP_COPY_GET_CLASSIC:
       out << " max " << op.op.copy_get.max;
       break;
     case CEPH_OSD_OP_COPY_FROM:
