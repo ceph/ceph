@@ -138,6 +138,10 @@ void add_pool_option(boost::program_options::options_description *opt,
                      ArgumentModifier modifier,
                      const std::string &desc_suffix = "");
 
+void add_namespace_option(boost::program_options::options_description *opt,
+                     ArgumentModifier modifier,
+                     const std::string &desc_suffix = "");
+
 void add_image_option(boost::program_options::options_description *opt,
                       ArgumentModifier modifier,
                       const std::string &desc_suffix = "");
