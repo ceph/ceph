@@ -64,6 +64,7 @@
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDFull.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDBackoff.h"
@@ -699,14 +700,14 @@ void OSDService::promote_throttle_recalibrate()
 
 // -------------------------------------
 
-float OSDService::get_full_ratio()
+float OSDService::get_failsafe_full_ratio()
 {
   float full_ratio = cct->_conf->osd_failsafe_full_ratio;
   if (full_ratio > 1.0) full_ratio /= 100.0;
   return full_ratio;
 }
 
-float OSDService::get_nearfull_ratio()
+float OSDService::get_failsafe_nearfull_ratio()
 {
   float nearfull_ratio = cct->_conf->osd_failsafe_nearfull_ratio;
   if (nearfull_ratio > 1.0) nearfull_ratio /= 100.0;
@@ -725,9 +726,10 @@ void OSDService::check_nearfull_warning(const osd_stat_t &osd_stat)
   // chunks reserved for metadata, and for our purposes (avoiding
   // completely filling the disk) it's far more important to know how
   // much space is available to use than how much we've already used.
-  float ratio = ((float)(osd_stat.kb - osd_stat.kb_avail)) / ((float)osd_stat.kb);
-  float nearfull_ratio = get_nearfull_ratio();
-  float full_ratio = get_full_ratio();
+  float ratio = ((float)(osd_stat.kb - osd_stat.kb_avail)) /
+    ((float)osd_stat.kb);
+  float nearfull_ratio = get_failsafe_nearfull_ratio();
+  float full_ratio = get_failsafe_full_ratio();
   cur_ratio = ratio;
 
   if (full_ratio > 0 && ratio > full_ratio) {

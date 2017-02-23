@@ -1134,13 +1134,15 @@ public:
   }
 
   // -- OSD Full Status --
+private:
   Mutex full_status_lock;
   enum s_names { NONE, NEAR, FULL } cur_state;
   time_t last_msg;
   double cur_ratio;
-  float get_full_ratio();
-  float get_nearfull_ratio();
+  float get_failsafe_full_ratio();
+  float get_failsafe_nearfull_ratio();
   void check_nearfull_warning(const osd_stat_t &stat);
+public:
   bool check_failsafe_full();
   bool too_full_for_backfill(double *ratio, double *max_ratio);
 
