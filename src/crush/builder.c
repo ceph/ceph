@@ -1416,6 +1416,8 @@ int crush_addition_is_unsafe(__u32 a, __u32 b)
 int crush_multiplication_is_unsafe(__u32  a, __u32 b)
 {
 	/* prevent division by zero */
+        if (!a)
+                return 0;
 	if (!b)
 		return 1;
 	if ((((__u32)(-1)) / b) < a)
