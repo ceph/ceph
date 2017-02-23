@@ -111,6 +111,7 @@
  *  NOFORWARD - command may not be forwarded
  *  OBSOLETE  - command is considered obsolete
  *  DEPRECATED - command is considered deprecated
+ *  MGR       - command goes to ceph-mgr (for luminous+)
  *
  * A command should always be first considered DEPRECATED before being
  * considered OBSOLETE, giving due consideration to users and conforming
