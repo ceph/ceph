@@ -16,12 +16,18 @@ static string aws_bucket_name(const RGWBucketInfo& bucket_info, bool user_bucket
   if (user_buckets){
     bucket_name+=bucket_info.owner.tenant + bucket_info.owner.id;
   }
+  bucket_name.erase(std::remove(bucket_name.begin(),bucket_name.end(),'-'));
   return bucket_name;
 }
 
 static string aws_object_name(const RGWBucketInfo& bucket_info, const rgw_obj_key&key, bool user_buckets=false){
-  auto bucket = aws_bucket_name(bucket_info, user_buckets);
-  return bucket + key.name;
+  string bucket_name = aws_bucket_name(bucket_info, user_buckets);
+  string object_name = bucket_name+"/";
+  if (!user_buckets){
+    object_name += bucket_info.bucket.name;
+  }
+  object_name += key.name;
+  return object_name;
 }
 
 struct AWSConfig {
