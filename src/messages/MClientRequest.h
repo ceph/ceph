@@ -78,7 +78,7 @@ public:
   filepath path, path2;
   vector<uint64_t> gid_list;
 
-
+  bool queued_for_replay = false;
 
  public:
   // cons
@@ -166,6 +166,9 @@ public:
   const filepath& get_filepath2() const { return path2; }
 
   int get_dentry_wanted() { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
+
+  void mark_queued_for_replay() { queued_for_replay = true; }
+  bool is_queued_for_replay() { return queued_for_replay; }
 
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
@@ -260,6 +263,8 @@ public:
       out << " RETRY=" << (int)head.num_retry;
     if (get_flags() & CEPH_MDS_FLAG_REPLAY)
       out << " REPLAY";
+    if (queued_for_replay)
+      out << " QUEUED_FOR_REPLAY";
     out << " caller_uid=" << head.caller_uid
 	<< ", caller_gid=" << head.caller_gid
 	<< '{';

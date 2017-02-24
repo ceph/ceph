@@ -173,6 +173,7 @@ void Server::dispatch(Message *m)
 	req->releases.clear();
       }
       if (queue_replay) {
+	req->mark_queued_for_replay();
 	mds->enqueue_replay(new C_MDS_RetryMessage(mds, m));
 	return;
       }
@@ -190,12 +191,8 @@ void Server::dispatch(Message *m)
 	wait_for_active = false;
       } else if (m->get_type() == CEPH_MSG_CLIENT_REQUEST) {
 	MClientRequest *req = static_cast<MClientRequest*>(m);
-	if (req->is_replay()) {
+	if (req->is_queued_for_replay()) {
 	  wait_for_active = false;
-	} else {
-	  Session *session = get_session(req);
-	  if (session && session->have_completed_request(req->get_reqid().tid, NULL))
-	    wait_for_active = false;
 	}
       }
     }
@@ -1003,7 +1000,7 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
   mdr->committing = true;
   submit_mdlog_entry(le, fin, mdr, __func__);
   
-  if (mdr->client_request && mdr->client_request->is_replay()) {
+  if (mdr->client_request && mdr->client_request->is_queued_for_replay()) {
     if (mds->queue_one_replay()) {
       dout(10) << " queued next replay op" << dendl;
     } else {
@@ -1195,7 +1192,16 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
     req->get_connection()->send_message(reply);
   }
 
-  const bool completed = mdr->has_completed;
+  if (req->is_queued_for_replay() &&
+      (mdr->has_completed || reply->get_result() < 0)) {
+    if (reply->get_result() < 0) {
+      int r = reply->get_result();
+      derr << "reply_client_request: failed to replay " << *req
+	   << " error " << r << " (" << cpp_strerror(r)  << ")" << dendl;
+      mds->clog->warn() << "failed to replay " << req->get_reqid() << " error " << r;
+    }
+    mds->queue_one_replay();
+  }
 
   // clean up request
   mdcache->request_finish(mdr);
@@ -1205,11 +1211,6 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
       tracedn &&
       tracedn->get_projected_linkage()->is_remote()) {
     mdcache->eval_remote(tracedn);
-  }
-
-  // Advance clientreplay process if we're in it
-  if (completed && mds->is_clientreplay()) {
-    mds->queue_one_replay();
   }
 }
 
@@ -1345,13 +1346,15 @@ void Server::handle_client_request(MClientRequest *req)
     session = get_session(req);
     if (!session) {
       dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
-      req->put();
-      return;
-    }
-    if (session->is_closed() ||
-	session->is_closing() ||
-	session->is_killing()) {
+    } else if (session->is_closed() ||
+	       session->is_closing() ||
+	       session->is_killing()) {
       dout(5) << "session closed|closing|killing, dropping" << dendl;
+      session = NULL;
+    }
+    if (!session) {
+      if (req->is_queued_for_replay())
+	mds->queue_one_replay();
       req->put();
       return;
     }
@@ -1385,7 +1388,7 @@ void Server::handle_client_request(MClientRequest *req)
 	}
 	req->get_connection()->send_message(reply);
 
-	if (mds->is_clientreplay())
+	if (req->is_queued_for_replay())
 	  mds->queue_one_replay();
 
 	req->put();
