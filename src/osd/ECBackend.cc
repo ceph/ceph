@@ -280,7 +280,7 @@ struct RecoveryMessages {
 };
 
 void ECBackend::handle_recovery_push(
-  PushOp &op,
+  const PushOp &op,
   RecoveryMessages *m)
 {
 
@@ -362,7 +362,7 @@ void ECBackend::handle_recovery_push(
 }
 
 void ECBackend::handle_recovery_push_reply(
-  PushReplyOp &op,
+  const PushReplyOp &op,
   pg_shard_t from,
   RecoveryMessages *m)
 {
@@ -726,40 +726,44 @@ bool ECBackend::handle_message(
   int priority = _op->get_req()->get_priority();
   switch (_op->get_req()->get_type()) {
   case MSG_OSD_EC_WRITE: {
-    MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(_op->get_req());
+    // NOTE: this is non-const because handle_sub_write modifies the embedded
+    // ObjectStore::Transaction in place (and then std::move's it).  It does
+    // not conflict with ECSubWrite's operator<<.
+    MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(
+      _op->get_nonconst_req());
     handle_sub_write(op->op.from, _op, op->op);
     return true;
   }
   case MSG_OSD_EC_WRITE_REPLY: {
-    MOSDECSubOpWriteReply *op = static_cast<MOSDECSubOpWriteReply*>(
+    const MOSDECSubOpWriteReply *op = static_cast<const MOSDECSubOpWriteReply*>(
       _op->get_req());
-    op->set_priority(priority);
     handle_sub_write_reply(op->op.from, op->op);
     return true;
   }
   case MSG_OSD_EC_READ: {
-    MOSDECSubOpRead *op = static_cast<MOSDECSubOpRead*>(_op->get_req());
+    const MOSDECSubOpRead *op = static_cast<const MOSDECSubOpRead*>(_op->get_req());
     MOSDECSubOpReadReply *reply = new MOSDECSubOpReadReply;
     reply->pgid = get_parent()->primary_spg_t();
     reply->map_epoch = get_parent()->get_epoch();
     handle_sub_read(op->op.from, op->op, &(reply->op));
-    op->set_priority(priority);
     get_parent()->send_message_osd_cluster(
       op->op.from.osd, reply, get_parent()->get_epoch());
     return true;
   }
   case MSG_OSD_EC_READ_REPLY: {
+    // NOTE: this is non-const because handle_sub_read_reply steals resulting
+    // buffers.  It does not conflict with ECSubReadReply operator<<.
     MOSDECSubOpReadReply *op = static_cast<MOSDECSubOpReadReply*>(
-      _op->get_req());
+      _op->get_nonconst_req());
     RecoveryMessages rm;
     handle_sub_read_reply(op->op.from, op->op, &rm);
     dispatch_recovery_messages(rm, priority);
     return true;
   }
   case MSG_OSD_PG_PUSH: {
-    MOSDPGPush *op = static_cast<MOSDPGPush *>(_op->get_req());
+    const MOSDPGPush *op = static_cast<const MOSDPGPush *>(_op->get_req());
     RecoveryMessages rm;
-    for (vector<PushOp>::iterator i = op->pushes.begin();
+    for (vector<PushOp>::const_iterator i = op->pushes.begin();
 	 i != op->pushes.end();
 	 ++i) {
       handle_recovery_push(*i, &rm);
@@ -768,9 +772,10 @@ bool ECBackend::handle_message(
     return true;
   }
   case MSG_OSD_PG_PUSH_REPLY: {
-    MOSDPGPushReply *op = static_cast<MOSDPGPushReply *>(_op->get_req());
+    const MOSDPGPushReply *op = static_cast<const MOSDPGPushReply *>(
+      _op->get_req());
     RecoveryMessages rm;
-    for (vector<PushReplyOp>::iterator i = op->replies.begin();
+    for (vector<PushReplyOp>::const_iterator i = op->replies.begin();
 	 i != op->replies.end();
 	 ++i) {
       handle_recovery_push_reply(*i, op->from, &rm);
@@ -936,12 +941,11 @@ void ECBackend::handle_sub_write(
 
 void ECBackend::handle_sub_read(
   pg_shard_t from,
-  ECSubRead &op,
+  const ECSubRead &op,
   ECSubReadReply *reply)
 {
   shard_id_t shard = get_parent()->whoami_shard().shard;
-  for(map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >>::iterator i =
-        op.to_read.begin();
+  for(auto i = op.to_read.begin();
       i != op.to_read.end();
       ++i) {
     int r = 0;
@@ -955,8 +959,7 @@ void ECBackend::handle_sub_read(
 	goto error;
       }
     }
-    for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::iterator j =
-	   i->second.begin(); j != i->second.end(); ++j) {
+    for (auto j = i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
       r = store->read(
 	ch,
@@ -1034,7 +1037,7 @@ error:
 
 void ECBackend::handle_sub_write_reply(
   pg_shard_t from,
-  ECSubWriteReply &op)
+  const ECSubWriteReply &op)
 {
   map<ceph_tid_t, Op>::iterator i = tid_to_op_map.find(op.tid);
   assert(i != tid_to_op_map.end());
@@ -1076,8 +1079,7 @@ void ECBackend::handle_sub_read_reply(
     return;
   }
   ReadOp &rop = iter->second;
-  for (map<hobject_t, list<pair<uint64_t, bufferlist> >>::iterator i =
-	 op.buffers_read.begin();
+  for (auto i = op.buffers_read.begin();
        i != op.buffers_read.end();
        ++i) {
     assert(!op.errors.count(i->first));	// If attribute error we better not have sent a buffer
@@ -1104,7 +1106,7 @@ void ECBackend::handle_sub_read_reply(
       riter->get<2>()[from].claim(j->second);
     }
   }
-  for (map<hobject_t, map<string, bufferlist>>::iterator i = op.attrs_read.begin();
+  for (auto i = op.attrs_read.begin();
        i != op.attrs_read.end();
        ++i) {
     assert(!op.errors.count(i->first));	// if read error better not have sent an attribute
@@ -1116,7 +1118,7 @@ void ECBackend::handle_sub_read_reply(
     rop.complete[i->first].attrs = map<string, bufferlist>();
     (*(rop.complete[i->first].attrs)).swap(i->second);
   }
-  for (map<hobject_t, int>::iterator i = op.errors.begin();
+  for (auto i = op.errors.begin();
        i != op.errors.end();
        ++i) {
     rop.complete[i->first].errors.insert(

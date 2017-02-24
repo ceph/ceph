@@ -116,8 +116,8 @@ public:
 
   epoch_t get_map_epoch() { return map_epoch; }
 
-  spg_t get_pg() { return pgid; }
-  hobject_t get_poid() { return poid; }
+  spg_t get_pg() const { return pgid; }
+  const hobject_t& get_poid() const { return poid; }
 
   int get_ack_type() { return ack_type; }
   bool is_ondisk() { return ack_type & CEPH_OSD_FLAG_ONDISK; }
@@ -136,7 +136,7 @@ public:
 
 public:
   MOSDSubOpReply(
-    MOSDSubOp *req, pg_shard_t from, int result_, epoch_t e, int at)
+    const MOSDSubOp *req, pg_shard_t from, int result_, epoch_t e, int at)
     : MOSDFastDispatchOp(MSG_OSD_SUBOPREPLY, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(e),
       reqid(req->reqid),

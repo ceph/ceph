@@ -337,7 +337,7 @@ public:
 
   ObjectContextRef get_obc(
     const hobject_t &hoid,
-    map<string, bufferlist> &attrs) override {
+    const map<string, bufferlist> &attrs) override {
     return get_object_context(hoid, true, &attrs);
   }
 
@@ -370,7 +370,7 @@ public:
 
   void log_operation(
     const vector<pg_log_entry_t> &logv,
-    boost::optional<pg_hit_set_history_t> &hset_history,
+    const boost::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
     bool transaction_applied,
@@ -952,7 +952,7 @@ protected:
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
-    map<string, bufferlist> *attrs = 0
+    const map<string, bufferlist> *attrs = 0
     );
 
   void context_registry_on_change();
@@ -972,7 +972,7 @@ protected:
   SnapSetContext *get_snapset_context(
     const hobject_t& oid,
     bool can_create,
-    map<string, bufferlist> *attrs = 0,
+    const map<string, bufferlist> *attrs = 0,
     bool oid_existed = true //indicate this oid whether exsited in backend
     );
   void register_snapset_context(SnapSetContext *ssc) {

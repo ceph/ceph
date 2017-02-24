@@ -924,7 +924,8 @@ public:
 
   virtual void calc_trim_to() = 0;
 
-  void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
+  void proc_replica_log(ObjectStore::Transaction& t,
+			pg_info_t &oinfo, const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 		       pg_missing_t& omissing, pg_shard_t from);
@@ -1356,7 +1357,7 @@ public:
     pg_shard_t from;
     pg_info_t info;
     epoch_t msg_epoch;
-    MInfoRec(pg_shard_t from, pg_info_t &info, epoch_t msg_epoch) :
+    MInfoRec(pg_shard_t from, const pg_info_t &info, epoch_t msg_epoch) :
       from(from), info(info), msg_epoch(msg_epoch) {}
     void print(std::ostream *out) const {
       *out << "MInfoRec from " << from << " info: " << info;
@@ -1377,7 +1378,7 @@ public:
     pg_shard_t from;
     pg_notify_t notify;
     uint64_t features;
-    MNotifyRec(pg_shard_t from, pg_notify_t &notify, uint64_t f) :
+    MNotifyRec(pg_shard_t from, const pg_notify_t &notify, uint64_t f) :
       from(from), notify(notify), features(f) {}
     void print(std::ostream *out) const {
       *out << "MNotifyRec from " << from << " notify: " << notify
@@ -2183,7 +2184,7 @@ public:
     const vector<int>& acting,
     int acting_primary,
     const pg_history_t& history,
-    pg_interval_map_t& pim,
+    const pg_interval_map_t& pim,
     bool backfill,
     ObjectStore::Transaction *t);
 
