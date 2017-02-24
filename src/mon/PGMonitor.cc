@@ -883,10 +883,10 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   const OSDMap& osdmap = mon->osdmon()->osdmap;
   assert(pg_map.last_osdmap_epoch < epoch);
   pending_inc.osdmap_epoch = epoch;
-  PGMapUpdater::update_creating_pgs(osdmap, &pg_map, &pending_inc);
-  PGMapUpdater::register_new_pgs(osdmap, &pg_map, &pending_inc);
+  PGMapUpdater::update_creating_pgs(osdmap, pg_map, &pending_inc);
+  PGMapUpdater::register_new_pgs(osdmap, pg_map, &pending_inc);
 
-  PGMapUpdater::check_down_pgs(osdmap, &pg_map, check_all_pgs,
+  PGMapUpdater::check_down_pgs(osdmap, pg_map, check_all_pgs,
 			       need_check_down_pg_osds, &pending_inc);
   check_all_pgs = false;
 
@@ -1337,7 +1337,7 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
 	pgid,
 	epoch,
 	true,
-	&pg_map,
+	pg_map,
 	&pending_inc);
     }
     ss << "pg " << pgidstr << " now creating, ok";
