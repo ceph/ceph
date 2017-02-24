@@ -278,10 +278,16 @@ CEPH_RBD_API int rbd_mirror_image_status_summary(rados_ioctx_t io_ctx,
 
 CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
                           rbd_image_t *image, const char *snap_name);
+CEPH_RBD_API int rbd_open_by_id(rados_ioctx_t io, const char *id,
+                                rbd_image_t *image, const char *snap_name);
 
 CEPH_RBD_API int rbd_aio_open(rados_ioctx_t io, const char *name,
 			      rbd_image_t *image, const char *snap_name,
 			      rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_open_by_id(rados_ioctx_t io, const char *id,
+                                    rbd_image_t *image, const char *snap_name,
+                                    rbd_completion_t c);
+
 /**
  * Open an image in read-only mode.
  *
@@ -303,9 +309,14 @@ CEPH_RBD_API int rbd_aio_open(rados_ioctx_t io, const char *name,
  */
 CEPH_RBD_API int rbd_open_read_only(rados_ioctx_t io, const char *name,
                                     rbd_image_t *image, const char *snap_name);
+CEPH_RBD_API int rbd_open_by_id_read_only(rados_ioctx_t io, const char *id,
+                                          rbd_image_t *image, const char *snap_name);
 CEPH_RBD_API int rbd_aio_open_read_only(rados_ioctx_t io, const char *name,
 					rbd_image_t *image, const char *snap_name,
 					rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_open_by_id_read_only(rados_ioctx_t io, const char *id,
+                                              rbd_image_t *image, const char *snap_name,
+                                              rbd_completion_t c);
 CEPH_RBD_API int rbd_close(rbd_image_t image);
 CEPH_RBD_API int rbd_aio_close(rbd_image_t image, rbd_completion_t c);
 CEPH_RBD_API int rbd_resize(rbd_image_t image, uint64_t size);

@@ -116,13 +116,21 @@ public:
 
   int open(IoCtx& io_ctx, Image& image, const char *name);
   int open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname);
+  int open_by_id(IoCtx& io_ctx, Image& image, const char *id);
+  int open_by_id(IoCtx& io_ctx, Image& image, const char *id, const char *snapname);
   int aio_open(IoCtx& io_ctx, Image& image, const char *name,
 	       const char *snapname, RBD::AioCompletion *c);
+  int aio_open_by_id(IoCtx& io_ctx, Image& image, const char *id,
+	             const char *snapname, RBD::AioCompletion *c);
   // see librbd.h
   int open_read_only(IoCtx& io_ctx, Image& image, const char *name,
 		     const char *snapname);
+  int open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
+                           const char *snapname);
   int aio_open_read_only(IoCtx& io_ctx, Image& image, const char *name,
 			 const char *snapname, RBD::AioCompletion *c);
+  int aio_open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
+                               const char *snapname, RBD::AioCompletion *c);
   int list(IoCtx& io_ctx, std::vector<std::string>& names);
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
