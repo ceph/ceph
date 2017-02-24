@@ -205,8 +205,7 @@ public:
     ceph_tid_t objecter_tid;
     vector<OSDOp> &ops;
     version_t user_version;
-    bool sent_disk;
-    bool sent_ack;
+    bool sent_reply;
     utime_t mtime;
     bool canceled;
     osd_reqid_t reqid;
@@ -214,8 +213,8 @@ public:
     ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops, osd_reqid_t _reqid)
       : ctx(NULL), op(_op), soid(oid),
         objecter_tid(0), ops(_ops),
-	user_version(0), sent_disk(false),
-	sent_ack(false), canceled(false),
+	user_version(0), sent_reply(false),
+	canceled(false),
         reqid(_reqid) { }
   };
   typedef ceph::shared_ptr<ProxyWriteOp> ProxyWriteOpRef;
