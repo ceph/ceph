@@ -3111,10 +3111,26 @@ void *BlueStore::MempoolThread::entry()
 #define dout_prefix *_dout << "bluestore(" << path << ") "
 
 
-static void aio_cb(void *priv, void *priv2)
+static void aio_cb_batch(void *priv, std::vector<void*> &aios)
 {
   BlueStore *store = static_cast<BlueStore*>(priv);
-  store->_txc_aio_finish(priv2);
+  BlueStore::TransBatch batch_aio(BlueStore::TransContext::STATE_AIO_WAIT);
+  BlueStore::TransBatch batch_wal_aio(BlueStore::TransContext::STATE_WAL_AIO_WAIT);
+  for (void* i:aios) {
+    BlueStore::TransContext *txc = static_cast<BlueStore::TransContext*>(i);
+    assert(txc->state == BlueStore::TransContext::STATE_AIO_WAIT ||
+           txc->state == BlueStore::TransContext::STATE_WAL_AIO_WAIT);
+    if (txc->state == BlueStore::TransContext::STATE_AIO_WAIT) {
+      batch_aio.emplace_back(txc);
+    }
+    if (txc->state == BlueStore::TransContext::STATE_WAL_AIO_WAIT) {
+      batch_wal_aio.emplace_back(txc);
+    }
+  }
+  if (batch_aio.size() > 0)
+    store->_txc_aio_finish(batch_aio);
+  if (batch_wal_aio.size() > 0)
+      store->_txc_aio_finish(batch_wal_aio);
 }
 
 BlueStore::BlueStore(CephContext *cct, const string& path)
@@ -3624,7 +3640,7 @@ int BlueStore::_open_bdev(bool create)
   bluestore_bdev_label_t label;
   assert(bdev == NULL);
   string p = path + "/block";
-  bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this));
+  bdev = BlockDevice::create(cct, p, aio_cb_batch, static_cast<void*>(this));
   int r = bdev->open(p);
   if (r < 0)
     goto fail;

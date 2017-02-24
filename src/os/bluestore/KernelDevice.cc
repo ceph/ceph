@@ -251,6 +251,7 @@ void KernelDevice::_aio_thread()
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
     }
     if (r > 0) {
+      std::vector<void*> batch;
       dout(30) << __func__ << " got " << r << " completed aios" << dendl;
       for (int i = 0; i < r; ++i) {
 	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
@@ -275,9 +276,12 @@ void KernelDevice::_aio_thread()
 	  void *priv = ioc->priv;
 	  ioc->aio_wake();
 	  if (priv) {
-	    aio_callback(aio_callback_priv, priv);
+            batch.push_back(priv);
 	  }
 	}
+      }
+      if (batch.size() > 0) {
+        aio_callback(aio_callback_priv, batch);
       }
     }
     if (cct->_conf->bdev_debug_aio) {

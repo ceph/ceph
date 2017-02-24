@@ -1987,8 +1987,8 @@ private:
   void _txc_state_proc(TransBatch batch);
   void _txc_aio_submit(TransContext *txc);
 public:
-  void _txc_aio_finish(void *p) {
-    _txc_state_proc(static_cast<TransContext*>(p));
+  void _txc_aio_finish(TransBatch& batch) {
+    _txc_state_proc(batch);
   }
 private:
   void _txc_finish_io(TransContext *txc);
@@ -2564,10 +2564,10 @@ private:
 			CollectionRef& d,
 			unsigned bits, int rem);
 
-  void op_queue_reserve_throttle(TransContext *txc);
+  void _op_queue_reserve_throttle(TransContext *txc);
   void op_queue_release_throttle(TransBatch& batch);
-  void op_queue_reserve_wal_throttle(TransContext *txc);
-  void op_queue_release_wal_throttle(TransContext *txc);
+  void _op_queue_reserve_wal_throttle(TransContext *txc);
+  void _op_queue_release_wal_throttle(TransContext *txc);
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {

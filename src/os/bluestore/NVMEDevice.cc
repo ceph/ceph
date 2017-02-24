@@ -721,7 +721,8 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     if (ctx && !--ctx->num_running) {
       ctx->aio_wake();
       if (task->device->aio_callback && ctx->priv) {
-        task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
+        std::vector<void*> completed_aios{ctx->priv};
+        task->device->aio_callback(task->device->aio_callback_priv, completed_aios);
       }
     }
     task->release_segs();
