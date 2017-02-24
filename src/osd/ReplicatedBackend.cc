@@ -883,7 +883,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
       auto j = bc->pulling.find(i.hoid);
       assert(j != bc->pulling.end());
       ObjectContextRef obc = j->second.obc;
-      bc->clear_pull(j);
+      bc->clear_pull(j, false /* already did it */);
       if (!bc->start_pushes(i.hoid, obc, h)) {
 	bc->get_parent()->on_global_recover(
 	  i.hoid, i.stat);
@@ -1813,11 +1813,12 @@ bool ReplicatedBackend::handle_pull_response(
   assert((data_included.empty() && data.length() == 0) ||
 	 (!data_included.empty() && data.length() > 0));
 
-  if (!pulling.count(hoid)) {
+  auto piter = pulling.find(hoid);
+  if (piter == pulling.end()) {
     return false;
   }
 
-  PullInfo &pi = pulling[hoid];
+  PullInfo &pi = piter->second;
   if (pi.recovery_info.size == (uint64_t(-1))) {
     pi.recovery_info.size = pop.recovery_info.size;
     pi.recovery_info.copy_subset.intersection_of(
@@ -1877,6 +1878,7 @@ bool ReplicatedBackend::handle_pull_response(
 
   if (complete) {
     pi.stat.num_objects_recovered++;
+    clear_pull_from(piter);
     to_continue->push_back({hoid, pi.stat});
     get_parent()->on_local_recover(
       hoid, pi.recovery_info, pi.obc, t);
@@ -2415,15 +2417,21 @@ void ReplicatedBackend::_failed_push(pg_shard_t from, const hobject_t &soid)
   clear_pull(pulling.find(soid));
 }
 
+void ReplicatedBackend::clear_pull_from(
+  map<hobject_t, PullInfo>::iterator piter)
+{
+  auto from = piter->second.from;
+  pull_from_peer[from].erase(piter->second.soid);
+  if (pull_from_peer[from].empty())
+    pull_from_peer.erase(from);
+}
+
 void ReplicatedBackend::clear_pull(
   map<hobject_t, PullInfo>::iterator piter,
   bool clear_pull_from_peer)
 {
-  auto from = piter->second.from;
   if (clear_pull_from_peer) {
-    pull_from_peer[from].erase(piter->second.soid);
-    if (pull_from_peer[from].empty())
-      pull_from_peer.erase(from);
+    clear_pull_from(piter);
   }
   get_parent()->release_locks(piter->second.lock_manager);
   pulling.erase(piter);
