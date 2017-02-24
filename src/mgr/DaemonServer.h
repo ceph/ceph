@@ -40,6 +40,15 @@ class MCommand;
 class DaemonServer : public Dispatcher
 {
 protected:
+  boost::scoped_ptr<Throttle> client_byte_throttler;
+  boost::scoped_ptr<Throttle> client_msg_throttler;
+  boost::scoped_ptr<Throttle> osd_byte_throttler;
+  boost::scoped_ptr<Throttle> osd_msg_throttler;
+  boost::scoped_ptr<Throttle> mds_byte_throttler;
+  boost::scoped_ptr<Throttle> mds_msg_throttler;
+  boost::scoped_ptr<Throttle> mon_byte_throttler;
+  boost::scoped_ptr<Throttle> mon_msg_throttler;
+
   Messenger *msgr;
   MonClient *monc;
   DaemonStateIndex &daemon_state;
