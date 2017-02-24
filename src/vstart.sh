@@ -290,6 +290,10 @@ esac
 shift
 done
 
+if [ "$start_all" -eq 1 ]; then
+    $SUDO $INIT_CEPH stop
+fi
+
 if [ "$overwrite_conf" -eq 0 ]; then
     MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mon 2>/dev/null` && \
         CEPH_NUM_MON="$MON"
@@ -422,9 +426,6 @@ fi
 # sudo if btrfs
 test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
 
-if [ "$start_all" -eq 1 ]; then
-    $SUDO $INIT_CEPH stop
-fi
 prun $SUDO rm -f core*
 
 test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
