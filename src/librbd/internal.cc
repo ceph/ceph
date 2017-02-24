@@ -1306,7 +1306,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   int remove(IoCtx& io_ctx, const std::string &image_name,
              const std::string &image_id, ProgressContext& prog_ctx,
-             bool force)
+             bool force, bool from_trash_remove)
   {
     CephContext *cct((CephContext *)io_ctx.cct());
     ldout(cct, 20) << "remove " << &io_ctx << " "
@@ -1318,10 +1318,235 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond cond;
     auto req = librbd::image::RemoveRequest<>::create(
-      io_ctx, image_name, image_id, force, prog_ctx, op_work_queue, &cond);
+      io_ctx, image_name, image_id, force, from_trash_remove, prog_ctx,
+      op_work_queue, &cond);
     req->send();
 
     return cond.wait();
+  }
+
+  int trash_move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
+                 const std::string &image_name, uint64_t delay) {
+    CephContext *cct((CephContext *)io_ctx.cct());
+    ldout(cct, 20) << "trash_move " << &io_ctx << " " << image_name
+                   << dendl;
+
+    std::string image_id;
+    ImageCtx *ictx = new ImageCtx(image_name, "", nullptr, io_ctx, false);
+    int r = ictx->state->open(true);
+    if (r < 0) {
+      ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
+      delete ictx;
+      if (r != -ENOENT) {
+	return r;
+      }
+    } else {
+      if (ictx->old_format) {
+        ictx->state->close();
+        return -EOPNOTSUPP;
+      }
+
+      image_id = ictx->id;
+      ictx->owner_lock.get_read();
+      if (ictx->exclusive_lock != nullptr) {
+        r = ictx->operations->prepare_image_update();
+        if (r < 0 || (ictx->exclusive_lock != nullptr &&
+                      !ictx->exclusive_lock->is_lock_owner())) {
+	  lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
+	  ictx->owner_lock.put_read();
+	  ictx->state->close();
+          return -EBUSY;
+        }
+      }
+    }
+
+    BOOST_SCOPE_EXIT_ALL(ictx, cct) {
+      bool is_locked = ictx->exclusive_lock != nullptr &&
+                       ictx->exclusive_lock->is_lock_owner();
+      if (is_locked) {
+        C_SaferCond ctx;
+        ictx->exclusive_lock->shut_down(&ctx);
+        ictx->owner_lock.put_read();
+        int r = ctx.wait();
+        if (r < 0) {
+          lderr(cct) << "error shutting down exclusive lock" << dendl;
+        }
+      } else {
+        ictx->owner_lock.put_read();
+      }
+      ictx->state->close();
+    };
+
+    ldout(cct, 2) << "adding image entry to rbd_trash" << dendl;
+    utime_t ts = ceph_clock_now();
+    utime_t deferment_end_time = ts;
+    deferment_end_time += (double)delay;
+    cls::rbd::TrashImageSource trash_source =
+        static_cast<cls::rbd::TrashImageSource>(source);
+    cls::rbd::TrashImageSpec trash_spec(trash_source, image_name, ts,
+                                        deferment_end_time);
+    r = cls_client::trash_add(&io_ctx, image_id, trash_spec);
+    if (r < 0 && r != -EEXIST) {
+      lderr(cct) << "error adding image " << image_name << " to rbd_trash"
+                 << dendl;
+      return r;
+    } else if (r == -EEXIST) {
+      ldout(cct, 10) << "found previous unfinished deferred remove for image:"
+                     << image_id << dendl;
+      // continue with removing image from directory
+    }
+
+    ldout(cct, 2) << "removing id object..." << dendl;
+    r = io_ctx.remove(util::id_obj_name(image_name));
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error removing id object: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    ldout(cct, 2) << "removing rbd image from v2 directory..." << dendl;
+    r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY, image_name,
+                                     image_id);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        lderr(cct) << "error removing image from v2 directory: "
+                   << cpp_strerror(-r) << dendl;
+      }
+      return r;
+    }
+
+    return 0;
+  }
+
+  int trash_list(IoCtx &io_ctx, vector<trash_image_info_t> &entries) {
+    CephContext *cct((CephContext *)io_ctx.cct());
+    ldout(cct, 20) << "trash_list " << &io_ctx << dendl;
+
+    map<string, cls::rbd::TrashImageSpec> trash_entries;
+    int r = cls_client::trash_list(&io_ctx,  &trash_entries);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        lderr(cct) << "error listing rbd_trash entries: " << cpp_strerror(r)
+                   << dendl;
+      }
+      return r;
+    }
+
+    for (const auto &entry : trash_entries) {
+      rbd_trash_image_source_t source =
+          static_cast<rbd_trash_image_source_t>(entry.second.source);
+      entries.push_back({entry.first, entry.second.name, source,
+                         entry.second.deletion_time.sec(),
+                         entry.second.deferment_end_time.sec()});
+    }
+    return 0;
+  }
+
+  int trash_remove(IoCtx &io_ctx, const std::string &image_id, bool force,
+                   ProgressContext& prog_ctx) {
+    CephContext *cct((CephContext *)io_ctx.cct());
+    ldout(cct, 20) << "trash_remove " << &io_ctx << " " << image_id
+                   << " " << force << dendl;
+
+    cls::rbd::TrashImageSpec trash_spec;
+    int r = cls_client::trash_get(&io_ctx, image_id, &trash_spec);
+    if (r < 0) {
+      lderr(cct) << "error getting image id " << image_id
+                 << " info from trash: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    utime_t now = ceph_clock_now();
+    if (now < trash_spec.deferment_end_time && !force) {
+      lderr(cct) << "error: deferment time has not expired." << dendl;
+      return -EPERM;
+    }
+
+    r = remove(io_ctx, "", image_id, prog_ctx, false, true);
+    if (r < 0) {
+      lderr(cct) << "error removing image " << image_id
+                 << ", which is pending deletion" << dendl;
+      return r;
+    }
+    r = cls_client::trash_remove(&io_ctx, image_id);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error removing image " << image_id
+                 << " from rbd_trash object" << dendl;
+      return r;
+    }
+    return 0;
+  }
+
+  int trash_restore(librados::IoCtx &io_ctx, const std::string &image_id,
+                    const std::string &image_new_name) {
+    CephContext *cct((CephContext *)io_ctx.cct());
+    ldout(cct, 20) << "trash_restore " << &io_ctx << " " << image_id << " "
+                   << image_new_name << dendl;
+
+    cls::rbd::TrashImageSpec trash_spec;
+    int r = cls_client::trash_get(&io_ctx, image_id, &trash_spec);
+    if (r < 0) {
+      lderr(cct) << "error getting image id " << image_id
+                 << " info from trash: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    std::string image_name = image_new_name;
+    if (image_name.empty()) {
+      // if user didn't specify a new name, let's try using the old name
+      image_name = trash_spec.name;
+      ldout(cct, 20) << "restoring image id " << image_id << " with name "
+                     << image_name << dendl;
+    }
+
+    // check if no image exists with the same name
+    bool create_id_obj = true;
+    std::string existing_id;
+    r = cls_client::get_id(&io_ctx, util::id_obj_name(image_name), &existing_id);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error checking if image " << image_name << " exists: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    } else if (r != -ENOENT){
+      // checking if we are recovering from an incomplete restore
+      if (existing_id != image_id) {
+        ldout(cct, 2) << "an image with the same name already exists" << dendl;
+        return -EEXIST;
+      }
+      create_id_obj = false;
+    }
+
+    if (create_id_obj) {
+      ldout(cct, 2) << "adding id object" << dendl;
+      librados::ObjectWriteOperation op;
+      op.create(true);
+      cls_client::set_id(&op, image_id);
+      r = io_ctx.operate(util::id_obj_name(image_name), &op);
+      if (r < 0) {
+        lderr(cct) << "error adding id object for image " << image_name
+                   << ": " << cpp_strerror(r) << dendl;
+        return r;
+      }
+    }
+
+    ldout(cct, 2) << "adding rbd image from v2 directory..." << dendl;
+    r = cls_client::dir_add_image(&io_ctx, RBD_DIRECTORY, image_name,
+                                  image_id);
+    if (r < 0 && r != -EEXIST) {
+      lderr(cct) << "error adding image to v2 directory: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    ldout(cct, 2) << "removing image from trash..." << dendl;
+    r = cls_client::trash_remove(&io_ctx, image_id);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "error removing image id " << image_id << " from trash: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    return 0;
   }
 
   int snap_list(ImageCtx *ictx, vector<snap_info_t>& snaps)

@@ -30,10 +30,12 @@ using util::create_rados_callback;
 template<typename I>
 RemoveRequest<I>::RemoveRequest(IoCtx &ioctx, const std::string &image_name,
                                 const std::string &image_id, bool force,
+                                bool from_trash_remove,
                                 ProgressContext &prog_ctx,
                                 ContextWQ *op_work_queue, Context *on_finish)
   : m_ioctx(ioctx), m_image_name(image_name), m_image_id(image_id),
-    m_force(force), m_prog_ctx(prog_ctx), m_op_work_queue(op_work_queue),
+    m_force(force), m_from_trash_remove(from_trash_remove),
+    m_prog_ctx(prog_ctx), m_op_work_queue(op_work_queue),
     m_on_finish(on_finish) {
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 
@@ -563,6 +565,14 @@ Context *RemoveRequest<I>::handle_mirror_image_remove(int *result) {
     return m_on_finish;
   } else {
     *result = 0;
+  }
+
+  if (m_from_trash_remove) {
+    // both the id object and the directory entry have been removed in
+    // a previous call to trash_move.
+
+    *result = 0;
+    return m_on_finish;
   }
 
   remove_id_object();
