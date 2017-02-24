@@ -54,7 +54,7 @@ void write_to_sock(char *hooks_type,const char *name) {
 	log_ceph_sock1("writing to sock\n");
 	log_ceph_sock1(hooks_type);
 	char * result = concat(hooks_type,name);
-	if (write(sock, result, sizeof(result)) < 0)
+	if (write(sock, result, strlen(result)) < 0)
 		perror("writing on stream socket");
 }
 
