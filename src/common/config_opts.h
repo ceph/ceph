@@ -1628,11 +1628,21 @@ OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retryi
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
 
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
+
 OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python modules from
 OPTION(mgr_modules, OPT_STR, "rest")  // Which modules to load
 OPTION(mgr_data, OPT_STR, "/var/lib/ceph/mgr/$cluster-$id") // where to find keyring etc
 OPTION(mgr_beacon_period, OPT_INT, 5)  // How frequently to send beacon
 OPTION(mgr_stats_period, OPT_INT, 5) // How frequently to send stats
+OPTION(mgr_client_bytes, OPT_U64, 128*1048576) // bytes from clients
+OPTION(mgr_client_messages, OPT_U64, 512)      // messages from clients
+OPTION(mgr_osd_bytes, OPT_U64, 512*1048576)   // bytes from osds
+OPTION(mgr_osd_messages, OPT_U64, 8192)       // messages from osds
+OPTION(mgr_mds_bytes, OPT_U64, 128*1048576)   // bytes from mdss
+OPTION(mgr_mds_messages, OPT_U64, 128)        // messages from mdss
+OPTION(mgr_mon_bytes, OPT_U64, 128*1048576)   // bytes from mons
+OPTION(mgr_mon_messages, OPT_U64, 128)        // messages from mons
+
 OPTION(mon_mgr_digest_period, OPT_INT, 5)  // How frequently to send digests
 OPTION(mon_mgr_beacon_grace, OPT_INT, 30)  // How long to wait to failover
 

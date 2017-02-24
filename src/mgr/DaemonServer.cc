@@ -30,7 +30,25 @@ DaemonServer::DaemonServer(MonClient *monc_,
   DaemonStateIndex &daemon_state_,
   ClusterState &cluster_state_,
   PyModules &py_modules_)
-    : Dispatcher(g_ceph_context), msgr(nullptr), monc(monc_),
+    : Dispatcher(g_ceph_context),
+      client_byte_throttler(new Throttle(g_ceph_context, "mgr_client_bytes",
+					 g_conf->mgr_client_bytes)),
+      client_msg_throttler(new Throttle(g_ceph_context, "mgr_client_messages",
+					g_conf->mgr_client_messages)),
+      osd_byte_throttler(new Throttle(g_ceph_context, "mgr_osd_bytes",
+				      g_conf->mgr_osd_bytes)),
+      osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messsages",
+				     g_conf->mgr_osd_messages)),
+      mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
+				      g_conf->mgr_mds_bytes)),
+      mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messsages",
+				     g_conf->mgr_mds_messages)),
+      mon_byte_throttler(new Throttle(g_ceph_context, "mgr_mon_bytes",
+				      g_conf->mgr_mon_bytes)),
+      mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messsages",
+				     g_conf->mgr_mon_messages)),
+      msgr(nullptr),
+      monc(monc_),
       daemon_state(daemon_state_),
       cluster_state(cluster_state_),
       py_modules(py_modules_),
@@ -48,9 +66,30 @@ DaemonServer::~DaemonServer() {
 int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
 {
   // Initialize Messenger
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ?
+    g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
   msgr = Messenger::create(g_ceph_context, public_msgr_type,
-			   entity_name_t::MGR(gid), "server", getpid(), 0);
+			   entity_name_t::MGR(gid),
+			   "mgr",
+			   getpid(), 0);
+  msgr->set_default_policy(Messenger::Policy::stateless_server(0));
+
+  // throttle clients
+  msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
+			      client_byte_throttler.get(),
+			      client_msg_throttler.get());
+
+  // servers
+  msgr->set_policy_throttlers(entity_name_t::TYPE_OSD,
+			      osd_byte_throttler.get(),
+			      osd_msg_throttler.get());
+  msgr->set_policy_throttlers(entity_name_t::TYPE_MDS,
+			      mds_byte_throttler.get(),
+			      mds_msg_throttler.get());
+  msgr->set_policy_throttlers(entity_name_t::TYPE_MON,
+			      mon_byte_throttler.get(),
+			      mon_msg_throttler.get());
+
   int r = msgr->bind(g_conf->public_addr);
   if (r < 0) {
     derr << "unable to bind mgr to " << g_conf->public_addr << dendl;
