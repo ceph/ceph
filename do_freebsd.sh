@@ -12,12 +12,6 @@ fi
 if [ x"$1"x = x"--deps"x ]; then
     sudo ./install-deps.sh
 fi
-if ! grep -q ENODATA /usr/include/errno.h; then
-    echo Need ENODATA in /usr/include/errno.h for cython compilations
-    echo Please add it manually after ENOATTR with value 87
-    echo '#define ENOATTR         87'
-    exit 1
-fi
 if [ -x /usr/bin/getopt ] && [ x"`/usr/bin/getopt -v`"x == x" --"x ]; then
     echo fix getopt path
     echo Native FreeBSD getopt is not compatible with the Linux getopt that is
