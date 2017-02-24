@@ -1404,7 +1404,7 @@ public:
     unsigned mask = ~((~0)<<bits);
     switch (op->get_req()->get_type()) {
     case CEPH_MSG_OSD_OP:
-      return (static_cast<MOSDOp*>(
+      return (static_cast<const MOSDOp*>(
 		op->get_req())->get_raw_pg().m_seed & mask) == match;
     }
     return false;
@@ -2063,7 +2063,7 @@ protected:
     vector<int>& up, int up_primary,
     vector<int>& acting, int acting_primary,
     pg_history_t history,
-    pg_interval_map_t& pi,
+    const pg_interval_map_t& pi,
     ObjectStore::Transaction& t);
   PG   *_lookup_qlock_pg(spg_t pgid);
 
@@ -2074,7 +2074,7 @@ protected:
   void handle_pg_peering_evt(
     spg_t pgid,
     const pg_history_t& orig_history,
-    pg_interval_map_t& pi,
+    const pg_interval_map_t& pi,
     epoch_t epoch,
     PG::CephPeeringEvtRef evt);
   
@@ -2230,19 +2230,19 @@ protected:
 		    vector<pair<pg_notify_t, pg_interval_map_t> > >& info_map,
 		OSDMapRef map);
 
-  bool require_mon_peer(Message *m);
-  bool require_osd_peer(Message *m);
+  bool require_mon_peer(const Message *m);
+  bool require_osd_peer(const Message *m);
   /***
    * Verifies that we were alive in the given epoch, and that
    * still are.
    */
-  bool require_self_aliveness(Message *m, epoch_t alive_since);
+  bool require_self_aliveness(const Message *m, epoch_t alive_since);
   /**
    * Verifies that the OSD who sent the given op has the same
    * address as in the given map.
    * @pre op was sent by an OSD using the cluster messenger
    */
-  bool require_same_peer_instance(Message *m, OSDMapRef& map,
+  bool require_same_peer_instance(const Message *m, OSDMapRef& map,
 				  bool is_fast_dispatch);
 
   bool require_same_or_newer_map(OpRequestRef& op, epoch_t e,
@@ -2493,7 +2493,7 @@ public:
   void handle_signal(int signum);
 
   /// check if we can throw out op from a disconnected client
-  static bool op_is_discardable(MOSDOp *m);
+  static bool op_is_discardable(const MOSDOp *m);
 
 public:
   OSDService service;

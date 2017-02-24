@@ -1114,7 +1114,7 @@ public:
       data.ops++;
     }
     /// Set multiple xattrs of an object
-    void setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& attrset) {
+    void setattrs(const coll_t& cid, const ghobject_t& oid, const map<string,bufferptr>& attrset) {
       Op* _op = _get_next_op();
       _op->op = OP_SETATTRS;
       _op->cid = _get_coll_id(cid);
@@ -1123,7 +1123,7 @@ public:
       data.ops++;
     }
     /// Set multiple xattrs of an object
-    void setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferlist>& attrset) {
+    void setattrs(const coll_t& cid, const ghobject_t& oid, const map<string,bufferlist>& attrset) {
       Op* _op = _get_next_op();
       _op->op = OP_SETATTRS;
       _op->cid = _get_coll_id(cid);

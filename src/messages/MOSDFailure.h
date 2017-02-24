@@ -59,7 +59,7 @@ public:
   bool is_immediate() const { 
     return flags & FLAG_IMMEDIATE; 
   }
-  epoch_t get_epoch() { return epoch; }
+  epoch_t get_epoch() const { return epoch; }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();

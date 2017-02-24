@@ -28,7 +28,7 @@ class MOSDPGInfo : public Message {
 public:
   vector<pair<pg_notify_t,pg_interval_map_t> > pg_list;
 
-  epoch_t get_epoch() { return epoch; }
+  epoch_t get_epoch() const { return epoch; }
 
   MOSDPGInfo()
     : Message(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION) {

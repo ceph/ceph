@@ -69,12 +69,12 @@ public:
     );
   void handle_sub_read(
     pg_shard_t from,
-    ECSubRead &op,
+    const ECSubRead &op,
     ECSubReadReply *reply
     );
   void handle_sub_write_reply(
     pg_shard_t from,
-    ECSubWriteReply &op
+    const ECSubWriteReply &op
     );
   void handle_sub_read_reply(
     pg_shard_t from,
@@ -305,10 +305,10 @@ private:
     boost::optional<map<string, bufferlist> > attrs,
     RecoveryMessages *m);
   void handle_recovery_push(
-    PushOp &op,
+    const PushOp &op,
     RecoveryMessages *m);
   void handle_recovery_push_reply(
-    PushReplyOp &op,
+    const PushReplyOp &op,
     pg_shard_t from,
     RecoveryMessages *m);
 
