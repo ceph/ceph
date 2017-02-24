@@ -63,6 +63,12 @@ void log_ceph_sock(char *string){
 	fclose(fptr);
 }
 
+void char* toStr(unsigned long ino){
+	char str[256];
+	sprintf(str, "%lld", ino);
+	return str;
+}
+
 void push_to_server(int ch, const char * sentence) {
 	log_ceph_sock("in pushing to server\n");
 	static char *type;
@@ -218,8 +224,10 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
   log_ceph_sock("looking up\n");
   push_to_server(6,name);
+  push_to_server(6,toStr(parent));
   print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
+  push_to_server(6,cfuse->mountpoint);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   struct fuse_entry_param fe;
   Inode *i2, *i1 = cfuse->iget(parent); // see below
@@ -434,6 +442,7 @@ static void fuse_ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
 			  mode_t mode, dev_t rdev)
 {
   push_to_server(0,name);
+  push_to_server(0,toStr(parent));
   print_parent(parent);
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
