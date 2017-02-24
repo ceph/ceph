@@ -26,7 +26,7 @@ run_cli_tests() {
     recreate_pool rbd
     $CEPH_SRC/../qa/workunits/rbd/import_export.sh
     recreate_pool rbd
-    $CEPH_SRC/../qa/workunits/rbd/copy.sh
+    $CEPH_SRC/../qa/workunits/rbd/cli_generic.sh
     recreate_pool rbd
     $CEPH_SRC/../qa/workunits/rbd/journal.sh
 }

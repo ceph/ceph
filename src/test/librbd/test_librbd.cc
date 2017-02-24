@@ -783,6 +783,8 @@ TEST_F(TestLibRBD, TestCreateLsDelete)
   ASSERT_EQ(0, rbd_remove(ioctx, name.c_str()));
   ASSERT_EQ(1, test_ls(ioctx, 1, name2.c_str()));
 
+  ASSERT_EQ(-ENOENT, rbd_remove(ioctx, name.c_str()));
+
   rados_ioctx_destroy(ioctx);
 }
 

@@ -165,6 +165,7 @@ test_remove() {
     echo "testing remove..."
     remove_images
 
+    rbd remove "NOT_EXIST" && exit 1 || true	# remove should fail
     rbd create --image-format 1 -s 1 test1
     rbd rm test1
     rbd ls | wc -l | grep "^0$"
@@ -188,6 +189,12 @@ test_remove() {
 	rbd create --image-format 2 -s 1 test2
 	HEADER=$(rados -p rbd ls | grep '^rbd_header')
 	rados -p rbd rm $HEADER
+	rbd rm test2
+	rbd ls | wc -l | grep "^0$"
+
+        # remove with id missing
+	rbd create --image-format 2 -s 1 test2
+	rados -p rbd rm rbd_id.test2
 	rbd rm test2
 	rbd ls | wc -l | grep "^0$"
 
