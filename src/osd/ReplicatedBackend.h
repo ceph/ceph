@@ -221,6 +221,8 @@ private:
   void clear_pull(
     map<hobject_t, PullInfo>::iterator piter,
     bool clear_pull_from_peer = true);
+  void clear_pull_from(
+    map<hobject_t, PullInfo>::iterator piter);
 
   void sub_op_push(OpRequestRef op);
   void sub_op_push_reply(OpRequestRef op);
