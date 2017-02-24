@@ -11,6 +11,14 @@ tasks:
     osd.5:
     client.0:
 - ceph.restart:
-    daemons: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
+    daemons: [mon.a, mon.b, mon.c]
+    wait-for-healthy: false
+    wait-for-osds-up: false
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- ceph.restart:
+    daemons: [osd.3, osd.4, osd.5]
     wait-for-healthy: false
     wait-for-osds-up: true

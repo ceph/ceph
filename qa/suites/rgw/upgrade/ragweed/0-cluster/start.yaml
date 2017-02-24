@@ -9,6 +9,8 @@ overrides:
       mon:
         mon warn on legacy crush tunables: false
     fs: xfs
+    log-whitelist:
+    - wrongly marked me down
 roles:
 - - mon.a
   - mon.b
