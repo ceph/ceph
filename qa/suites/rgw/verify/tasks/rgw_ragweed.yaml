@@ -1,0 +1,25 @@
+os_type: centos   # xenial valgrind buggy, see http://tracker.ceph.com/issues/18126
+tasks:
+- install:
+    flavor: notcmalloc
+    debuginfo: true
+- ceph:
+- rgw:
+    client.0:
+      valgrind: [--tool=memcheck]
+- ragweed:
+    client.0:
+      force-branch: ceph-master
+      rgw_server: client.0
+      stages: prepare
+- ragweed:
+    client.0:
+      force-branch: ceph-master
+      rgw_server: client.0
+      stages: check
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_min_pg_log_entries: 10
+        osd_max_pg_log_entries: 10
