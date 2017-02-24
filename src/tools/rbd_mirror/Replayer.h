@@ -22,11 +22,14 @@
 #include "ImageDeleter.h"
 #include "types.h"
 
+namespace librbd { class ImageCtx; }
+
 namespace rbd {
 namespace mirror {
 
 struct Threads;
 class ReplayerAdminSocketHook;
+template <typename> class InstanceWatcher;
 
 /**
  * Controls mirroring for a single remote cluster.
@@ -124,6 +127,7 @@ private:
   } m_leader_listener;
 
   std::unique_ptr<LeaderWatcher<> > m_leader_watcher;
+  std::unique_ptr<InstanceWatcher<librbd::ImageCtx> > m_instance_watcher;
 };
 
 } // namespace mirror
