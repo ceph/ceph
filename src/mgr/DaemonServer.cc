@@ -221,10 +221,8 @@ struct MgrCommand {
 
 #define COMMAND(parsesig, helptext, module, perm, availability) \
   {parsesig, helptext, module, perm, availability},
-
-COMMAND("foo " \
-	"name=bar,type=CephString", \
-	"do a thing", "mgr", "rw", "cli")
+#include "MgrCommands.h"
+#undef COMMAND
 };
 
 bool DaemonServer::handle_command(MCommand *m)
