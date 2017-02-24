@@ -148,6 +148,28 @@ int extract_group_spec(const std::string &spec,
   return 0;
 }
 
+int extract_image_id_spec(const std::string &spec, std::string *pool_name,
+                          std::string *image_id) {
+  boost::regex pattern;
+  pattern = "^(?:([^/]+)/)?(.+)?$";
+
+  boost::smatch match;
+  if (!boost::regex_match(spec, match, pattern)) {
+    std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
+    return -EINVAL;
+  }
+
+  if (pool_name != nullptr && match[1].matched) {
+    *pool_name = match[1];
+  }
+  if (image_id != nullptr) {
+    *image_id = match[2];
+  }
+
+  return 0;
+ 
+}
+
 std::string get_positional_argument(const po::variables_map &vm, size_t index) {
   if (vm.count(at::POSITIONAL_ARGUMENTS) == 0) {
     return "";
@@ -269,6 +291,41 @@ int get_special_pool_image_names(const po::variables_map &vm,
 
   if (image_name->empty()) {
     std::cerr << "rbd: image name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int get_pool_image_id(const po::variables_map &vm,
+		      size_t *spec_arg_index,
+		      std::string *pool_name,
+		      std::string *image_id) {
+
+  if (vm.count(at::POOL_NAME) && pool_name != nullptr) {
+    *pool_name = vm[at::POOL_NAME].as<std::string>();
+  }
+  if (vm.count(at::IMAGE_ID) && image_id != nullptr) {
+    *image_id = vm[at::IMAGE_ID].as<std::string>();
+  }
+
+  int r;
+  if (image_id != nullptr && spec_arg_index != nullptr && image_id->empty()) {
+    std::string spec = get_positional_argument(vm, (*spec_arg_index)++);
+    if (!spec.empty()) {
+      r = extract_image_id_spec(spec, pool_name, image_id);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  if (pool_name->empty()) {
+    *pool_name = at::DEFAULT_POOL_NAME;
+  }
+
+  if (image_id != nullptr && image_id->empty()) {
+    std::cerr << "rbd: image id was not specified" << std::endl;
     return -EINVAL;
   }
 

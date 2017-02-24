@@ -96,6 +96,9 @@ int extract_group_spec(const std::string &spec,
 		       std::string *pool_name,
 		       std::string *group_name);
 
+int extract_image_id_spec(const std::string &spec, std::string *pool_name,
+                          std::string *image_id);
+
 std::string get_positional_argument(
     const boost::program_options::variables_map &vm, size_t index);
 
@@ -118,6 +121,10 @@ int get_special_pool_image_names(const boost::program_options::variables_map &vm
 				 size_t *arg_index,
 				 std::string *image_pool_name,
 				 std::string *image_name);
+
+int get_pool_image_id(const boost::program_options::variables_map &vm,
+		      size_t *arg_index, std::string *image_pool_name,
+		      std::string *image_id);
 
 int get_pool_group_names(const boost::program_options::variables_map &vm,
 			 argument_types::ArgumentModifier mod,
