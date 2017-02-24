@@ -5,7 +5,7 @@ RGW Multisite
 .. versionadded:: Jewel
 
 From Ceph release Jewel and beyond, you may configure each :term:`Ceph Object
-Gateway` to work in an active active zone configuration, allowing for writing to
+Gateway` to work in an active zone configuration, allowing for writing to
 non-master zones. Following are the basic terminologies that would be used:
 
 - **Zone**: A zone is *logical* grouping of one or more Ceph Object Gateway
