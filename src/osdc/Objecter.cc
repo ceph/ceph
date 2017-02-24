@@ -3058,8 +3058,10 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   int flags = op->target.flags;
   flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
-  if (op->onfinish)
-    flags |= CEPH_OSD_FLAG_ONDISK;
+
+  // Nothing checks this any longer, but needed for compatibility with
+  // pre-luminous osds
+  flags |= CEPH_OSD_FLAG_ONDISK;
 
   if (!honor_osdmap_full)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
