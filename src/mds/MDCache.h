@@ -258,10 +258,6 @@ public:
   void kick_discovers(mds_rank_t who);  // after a failure.
 
 
-public:
-  int get_num_dentries() { return lru.lru_get_size(); }
-
-
   // -- subtrees --
 protected:
   map<CDir*,set<CDir*> > subtrees;   // nested bounds on subtrees.
