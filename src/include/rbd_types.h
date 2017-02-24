@@ -105,6 +105,8 @@
 
 #define RBD_GROUP_DIRECTORY "rbd_group_directory"
 
+#define RBD_TRASH "rbd_trash"
+
 struct rbd_info {
 	__le64 max_id;
 } __attribute__ ((packed));

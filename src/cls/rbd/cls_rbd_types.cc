@@ -448,5 +448,36 @@ std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns) {
   return os;
 }
 
+void TrashImageSpec::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(source, bl);
+  ::encode(name, bl);
+  ::encode(deletion_time, bl);
+  ::encode(deferment_end_time, bl);
+  ENCODE_FINISH(bl);
+}
+
+void TrashImageSpec::decode(bufferlist::iterator &it) {
+  DECODE_START(1, it);
+  ::decode(source, it);
+  ::decode(name, it);
+  ::decode(deletion_time, it);
+  ::decode(deferment_end_time, it);
+  DECODE_FINISH(it);
+}
+
+void TrashImageSpec::dump(Formatter *f) const {
+  switch(source) {
+    case TRASH_IMAGE_SOURCE_USER:
+      f->dump_string("source", "user");
+      break;
+    case TRASH_IMAGE_SOURCE_MIRRORING:
+      f->dump_string("source", "rbd_mirror");
+  }
+  f->dump_string("name", name);
+  f->dump_unsigned("deletion_time", deletion_time);
+  f->dump_unsigned("deferment_end_time", deferment_end_time);
+}
+
 } // namespace rbd
 } // namespace cls

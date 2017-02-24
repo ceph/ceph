@@ -1978,5 +1978,114 @@ namespace librbd {
       return image_get_group_finish(&iter, group_spec);
     }
 
+    // rbd_trash functions
+    void trash_add(librados::ObjectWriteOperation *op,
+		   const std::string &id,
+                   const cls::rbd::TrashImageSpec &trash_spec)
+    {
+      bufferlist bl;
+      ::encode(id, bl);
+      ::encode(trash_spec, bl);
+      op->exec("rbd", "trash_add", bl);
+    }
+
+    int trash_add(librados::IoCtx *ioctx, const std::string &id,
+                  const cls::rbd::TrashImageSpec &trash_spec)
+    {
+      librados::ObjectWriteOperation op;
+      trash_add(&op, id, trash_spec);
+
+      return ioctx->operate(RBD_TRASH, &op);
+    }
+
+    void trash_remove(librados::ObjectWriteOperation *op,
+		      const std::string &id)
+    {
+      bufferlist bl;
+      ::encode(id, bl);
+      op->exec("rbd", "trash_remove", bl);
+    }
+
+    int trash_remove(librados::IoCtx *ioctx, const std::string &id)
+    {
+      librados::ObjectWriteOperation op;
+      trash_remove(&op, id);
+
+      return ioctx->operate(RBD_TRASH, &op);
+    }
+
+    void trash_list_start(librados::ObjectReadOperation *op)
+    {
+      bufferlist bl;
+      op->exec("rbd", "trash_list", bl);
+    }
+
+    int trash_list_finish(bufferlist::iterator *it,
+                          map<string, cls::rbd::TrashImageSpec> *entries)
+    {
+      assert(entries);
+
+      try {
+	::decode(*entries, *it);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int trash_list(librados::IoCtx *ioctx,
+                   map<string, cls::rbd::TrashImageSpec> *entries)
+    {
+      librados::ObjectReadOperation op;
+      trash_list_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(RBD_TRASH, &op, &out_bl);
+      if (r < 0) {
+	return r;
+      }
+
+      bufferlist::iterator iter = out_bl.begin();
+      return trash_list_finish(&iter, entries);
+    }
+
+    void trash_get_start(librados::ObjectReadOperation *op,
+		         const std::string &id)
+    {
+      bufferlist bl;
+      ::encode(id, bl);
+      op->exec("rbd", "trash_get", bl);
+    }
+
+    int trash_get_finish(bufferlist::iterator *it,
+                          cls::rbd::TrashImageSpec *trash_spec) {
+      assert(trash_spec);
+      try {
+        ::decode(*trash_spec, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+
+    int trash_get(librados::IoCtx *ioctx, const std::string &id,
+                  cls::rbd::TrashImageSpec *trash_spec)
+    {
+      librados::ObjectReadOperation op;
+      trash_get_start(&op, id);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(RBD_TRASH, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      return trash_get_finish(&it, trash_spec);
+    }
+
   } // namespace cls_client
 } // namespace librbd
