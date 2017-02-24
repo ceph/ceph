@@ -10,6 +10,14 @@ int sock;
 struct sockaddr_un server;
 char *unix_sock = "/var/run/ceph.sock";
 
+char* concat(const char *s1,const char *s2)
+{
+    char *result = malloc(strlen(s1)+strlen(s2)+1);//+1 for the zero-terminator
+    strcpy(result, s1);
+    strcat(result, s2);
+    return result;
+}
+
 void log_ceph_sock1(char *string){
     FILE *fptr;
 	fptr = fopen("program.txt", "a");
@@ -45,7 +53,7 @@ void initialize_socket() {
 void write_to_sock(char *hooks_type,const char *name) {
 	log_ceph_sock1("writing to sock\n");
 	log_ceph_sock1(hooks_type);
-	if (write(sock, strcat(hooks_type,name), sizeof(hooks_type)+sizeof(name)) < 0)
+	if (write(sock, concat(hooks_type,name), sizeof(hooks_type)+sizeof(name)) < 0)
 		perror("writing on stream socket");
 }
 
