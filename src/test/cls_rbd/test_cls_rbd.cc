@@ -4,6 +4,7 @@
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/snap_types.h"
+#include "common/Clock.h"
 #include "include/encoding.h"
 #include "include/types.h"
 #include "include/rados/librados.h"
@@ -2222,3 +2223,70 @@ TEST_F(TestClsRbd, image_get_group) {
   ASSERT_EQ(group_id, spec.group_id);
   ASSERT_EQ(pool_id, spec.pool_id);
 }
+
+TEST_F(TestClsRbd, trash_methods)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string id = "123456789";
+  string id2 = "123456780";
+
+  std::map<string, cls::rbd::TrashImageSpec> entries;
+  ASSERT_EQ(-ENOENT, trash_list(&ioctx, &entries));
+
+  utime_t now1 = ceph_clock_now();
+  utime_t now1_delay = now1;
+  now1_delay += 380;
+  cls::rbd::TrashImageSpec trash_spec(cls::rbd::TRASH_IMAGE_SOURCE_USER, "name",
+                                      now1, now1_delay);
+  ASSERT_EQ(0, trash_add(&ioctx, id, trash_spec));
+
+  utime_t now2 = ceph_clock_now();
+  utime_t now2_delay = now2;
+  now2_delay += 480;
+  cls::rbd::TrashImageSpec trash_spec2(cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING,
+                                       "name2", now2, now2_delay);
+  ASSERT_EQ(-EEXIST, trash_add(&ioctx, id, trash_spec2));
+
+  ASSERT_EQ(0, trash_remove(&ioctx, id));
+  ASSERT_EQ(-ENOENT, trash_remove(&ioctx, id));
+
+  ASSERT_EQ(0, trash_list(&ioctx, &entries));
+  ASSERT_TRUE(entries.empty());
+
+  ASSERT_EQ(0, trash_add(&ioctx, id, trash_spec2));
+  ASSERT_EQ(0, trash_add(&ioctx, id2, trash_spec));
+
+  ASSERT_EQ(0, trash_list(&ioctx, &entries));
+
+  for (auto& entry : entries) {
+    if (entry.first == id) {
+      ASSERT_EQ(entry.second.source, cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING);
+      ASSERT_EQ(entry.second.name, "name2");
+      ASSERT_EQ(entry.second.deletion_time, now2);
+      ASSERT_EQ(entry.second.deferment_end_time, now2_delay);
+    } else if (entry.first == id2) {
+      ASSERT_EQ(entry.second.source, cls::rbd::TRASH_IMAGE_SOURCE_USER);
+      ASSERT_EQ(entry.second.name, "name");
+      ASSERT_EQ(entry.second.deletion_time, now1);
+      ASSERT_EQ(entry.second.deferment_end_time, now1_delay);
+    }
+  }
+
+  cls::rbd::TrashImageSpec spec_res1;
+  ASSERT_EQ(0, trash_get(&ioctx, id, &spec_res1));
+  cls::rbd::TrashImageSpec spec_res2;
+  ASSERT_EQ(0, trash_get(&ioctx, id2, &spec_res2));
+
+  ASSERT_EQ(spec_res1.name, "name2");
+  ASSERT_EQ(spec_res1.deletion_time, now2);
+  ASSERT_EQ(spec_res1.deferment_end_time, now2_delay);
+
+  ASSERT_EQ(spec_res2.name, "name");
+  ASSERT_EQ(spec_res2.deletion_time, now1);
+  ASSERT_EQ(spec_res2.deferment_end_time, now1_delay);
+
+  ioctx.close();
+}
+
