@@ -2773,7 +2773,6 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
     dout(10) << "add_client_cap first cap, joining realm " << *containing_realm << dendl;
   }
 
-  mdcache->num_caps++;
   if (client_caps.empty())
     mdcache->num_inodes_with_caps++;
   
@@ -2815,7 +2814,6 @@ void CInode::remove_client_cap(client_t client)
     item_open_file.remove_myself();  // unpin logsegment
     mdcache->num_inodes_with_caps--;
   }
-  mdcache->num_caps--;
 
   //clean up advisory locks
   bool fcntl_removed = fcntl_locks ? fcntl_locks->remove_all_from(client) : false;
