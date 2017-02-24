@@ -123,6 +123,7 @@ target_link_libraries(ceph_test_librbd_api
 set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+if(LINUX)
 add_executable(ceph_test_librbd_fsx
   fsx.cc
   $<TARGET_OBJECTS:common_texttable_obj>
@@ -138,6 +139,7 @@ target_link_libraries(ceph_test_librbd_fsx
   ${CRYPTO_LIBS}
   ${EXTRALIBS}
   )
+endif(LINUX)
 
 install(TARGETS
   ceph_test_librbd
