@@ -91,15 +91,6 @@ private:
 
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
-  /**
-   * Dump stats from pgs stuck in specified states.
-   *
-   * @return 0 on success, negative error code on failure
-   */
-  int dump_stuck_pg_stats(stringstream &ds, Formatter *f,
-			  int threshold,
-			  vector<string>& args) const;
-
 public:
   PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name),

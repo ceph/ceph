@@ -1152,7 +1152,7 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
     cmd_getval(g_ceph_context, cmdmap, "threshold", threshold,
                int64_t(g_conf->mon_pg_stuck_threshold));
 
-    r = dump_stuck_pg_stats(ds, f.get(), (int)threshold, stuckop_vec);
+    r = pg_map.dump_stuck_pg_stats(ds, f.get(), (int)threshold, stuckop_vec);
     if (r < 0)
       ss << "failed";  
     else 
@@ -1880,43 +1880,6 @@ void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summa
       }
     }
   }
-}
-
-int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
-                                   Formatter *f,
-                                   int threshold,
-                                   vector<string>& args) const
-{
-  int stuck_types = 0;
-
-  for (vector<string>::iterator i = args.begin(); i != args.end(); ++i) {
-    if (*i == "inactive")
-      stuck_types |= PGMap::STUCK_INACTIVE;
-    else if (*i == "unclean")
-      stuck_types |= PGMap::STUCK_UNCLEAN;
-    else if (*i == "undersized")
-      stuck_types |= PGMap::STUCK_UNDERSIZED;
-    else if (*i == "degraded")
-      stuck_types |= PGMap::STUCK_DEGRADED;
-    else if (*i == "stale")
-      stuck_types |= PGMap::STUCK_STALE;
-    else {
-      ds << "Unknown type: " << *i << std::endl;
-      return -EINVAL;
-    }
-  }
-
-  utime_t now(ceph_clock_now());
-  utime_t cutoff = now - utime_t(threshold, 0);
-
-  if (!f) {
-    pg_map.dump_stuck_plain(ds, stuck_types, cutoff);
-  } else {
-    pg_map.dump_stuck(f, stuck_types, cutoff);
-    f->flush(ds);
-  }
-
-  return 0;
 }
 
 void PGMonitor::check_subs()

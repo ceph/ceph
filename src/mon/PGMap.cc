@@ -1112,6 +1112,44 @@ void PGMap::dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const
     dump_pg_stats_plain(ss, stuck_pg_stats, true);
 }
 
+int PGMap::dump_stuck_pg_stats(
+  stringstream &ds,
+  Formatter *f,
+  int threshold,
+  vector<string>& args) const
+{
+  int stuck_types = 0;
+
+  for (vector<string>::iterator i = args.begin(); i != args.end(); ++i) {
+    if (*i == "inactive")
+      stuck_types |= PGMap::STUCK_INACTIVE;
+    else if (*i == "unclean")
+      stuck_types |= PGMap::STUCK_UNCLEAN;
+    else if (*i == "undersized")
+      stuck_types |= PGMap::STUCK_UNDERSIZED;
+    else if (*i == "degraded")
+      stuck_types |= PGMap::STUCK_DEGRADED;
+    else if (*i == "stale")
+      stuck_types |= PGMap::STUCK_STALE;
+    else {
+      ds << "Unknown type: " << *i << std::endl;
+      return -EINVAL;
+    }
+  }
+
+  utime_t now(ceph_clock_now());
+  utime_t cutoff = now - utime_t(threshold, 0);
+
+  if (!f) {
+    dump_stuck_plain(ds, stuck_types, cutoff);
+  } else {
+    dump_stuck(f, stuck_types, cutoff);
+    f->flush(ds);
+  }
+
+  return 0;
+}
+
 void PGMap::dump_osd_perf_stats(Formatter *f) const
 {
   f->open_array_section("osd_perf_infos");
