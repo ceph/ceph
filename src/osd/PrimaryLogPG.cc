@@ -3654,14 +3654,6 @@ void PrimaryLogPG::snap_trimmer(epoch_t queued)
   if (deleting || pg_has_reset_since(queued)) {
     return;
   }
-  if (cct->_conf->osd_snap_trim_sleep > 0) {
-    unlock();
-    utime_t t;
-    t.set_from_double(cct->_conf->osd_snap_trim_sleep);
-    t.sleep();
-    lock();
-    dout(20) << __func__ << " slept for " << t << dendl;
-  }
 
   assert(is_primary());
 
@@ -12969,11 +12961,6 @@ void PrimaryLogPG::_scrub_finish()
 #undef dout_prefix
 #define dout_prefix *_dout << pg->gen_prefix() 
 
-PrimaryLogPG::SnapTrimmer::~SnapTrimmer()
-{
-  in_flight.clear();
-}
-
 void PrimaryLogPG::SnapTrimmer::log_enter(const char *state_name)
 {
   ldout(pg->cct, 20) << "enter " << state_name << dendl;
@@ -13007,24 +12994,40 @@ boost::statechart::result PrimaryLogPG::NotTrimming::react(const KickTrim&)
   PrimaryLogPG *pg = context< SnapTrimmer >().pg;
   ldout(pg->cct, 10) << "NotTrimming react KickTrim" << dendl;
 
-  assert(pg->is_primary() && pg->is_active());
+  if (!(pg->is_primary() && pg->is_active())) {
+    ldout(pg->cct, 10) << "NotTrimming not primary or active" << dendl;
+    return discard_event();
+  }
   if (!pg->is_clean() ||
       pg->snap_trimq.empty()) {
     ldout(pg->cct, 10) << "NotTrimming not clean or nothing to trim" << dendl;
     return discard_event();
   }
-
   if (pg->scrubber.active) {
     ldout(pg->cct, 10) << " scrubbing, will requeue snap_trimmer after" << dendl;
     pg->scrubber.queue_snap_trim = true;
     return transit< WaitScrub >();
   } else {
-    context<SnapTrimmer>().snap_to_trim = pg->snap_trimq.range_start();
-    ldout(pg->cct, 10) << "NotTrimming: trimming "
-	     << pg->snap_trimq.range_start()
-	     << dendl;
-    return transit< AwaitAsyncWork >();
+    return transit< Trimming >();
   }
+}
+
+boost::statechart::result PrimaryLogPG::WaitReservation::react(const SnapTrimReserved&)
+{
+  PrimaryLogPG *pg = context< SnapTrimmer >().pg;
+  ldout(pg->cct, 10) << "WaitReservation react SnapTrimReserved" << dendl;
+
+  pending = nullptr;
+  if (!context< SnapTrimmer >().can_trim()) {
+    post_event(KickTrim());
+    return transit< NotTrimming >();
+  }
+
+  context<Trimming>().snap_to_trim = pg->snap_trimq.range_start();
+  ldout(pg->cct, 10) << "NotTrimming: trimming "
+		     << pg->snap_trimq.range_start()
+		     << dendl;
+  return transit< AwaitAsyncWork >();
 }
 
 /* AwaitAsyncWork */
@@ -13032,27 +13035,22 @@ PrimaryLogPG::AwaitAsyncWork::AwaitAsyncWork(my_context ctx)
   : my_base(ctx),
     NamedState(context< SnapTrimmer >().pg->cct, "Trimming/AwaitAsyncWork")
 {
+  auto *pg = context< SnapTrimmer >().pg;
   context< SnapTrimmer >().log_enter(state_name);
-  context< SnapTrimmer >().pg->osd->queue_for_snap_trim(
-    context< SnapTrimmer >().pg);
-}
-
-void PrimaryLogPG::AwaitAsyncWork::exit()
-{
-  context< SnapTrimmer >().log_exit(state_name, enter_time);
+  context< SnapTrimmer >().pg->osd->queue_for_snap_trim(pg);
+  pg->state_set(PG_STATE_SNAPTRIM);
+  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 {
   PrimaryLogPGRef pg = context< SnapTrimmer >().pg;
-  ldout(pg->cct, 10) << "AwaitAsyncWork react" << dendl;
-  snapid_t snap_to_trim = context<SnapTrimmer>().snap_to_trim;
-  auto &in_flight = context<SnapTrimmer>().in_flight;
+  snapid_t snap_to_trim = context<Trimming>().snap_to_trim;
+  auto &in_flight = context<Trimming>().in_flight;
   assert(in_flight.empty());
 
   assert(pg->is_primary() && pg->is_active());
-  if (!pg->is_clean() ||
-      pg->scrubber.active) {
+  if (!context< SnapTrimmer >().can_trim()) {
     ldout(pg->cct, 10) << "something changed, reverting to NotTrimming" << dendl;
     post_event(KickTrim());
     return transit< NotTrimming >();
@@ -13109,8 +13107,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 	return transit< WaitRWLock >();
 
       } else {
-	ldout(pg->cct, 10) << "letting the ones we already started finish"
-			   << dendl;
+	ldout(pg->cct, 10) << "letting the ones we already started finish" << dendl;
 	return transit< WaitRepops >();
       }
     }
