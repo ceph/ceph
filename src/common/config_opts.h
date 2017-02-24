@@ -761,7 +761,7 @@ OPTION(osd_op_thread_suicide_timeout, OPT_INT, 150)
 OPTION(osd_recovery_thread_timeout, OPT_INT, 30)
 OPTION(osd_recovery_thread_suicide_timeout, OPT_INT, 300)
 OPTION(osd_recovery_sleep, OPT_FLOAT, 0)         // seconds to sleep between recovery ops
-OPTION(osd_snap_trim_sleep, OPT_FLOAT, 0)
+OPTION(osd_snap_trim_sleep, OPT_DOUBLE, 0)
 OPTION(osd_scrub_invalid_stats, OPT_BOOL, true)
 OPTION(osd_remove_thread_timeout, OPT_INT, 60*60)
 OPTION(osd_remove_thread_suicide_timeout, OPT_INT, 10*60*60)
@@ -778,6 +778,8 @@ OPTION(osd_heartbeat_use_min_delay_socket, OPT_BOOL, false) // prio the heartbea
 
 // max number of parallel snap trims/pg
 OPTION(osd_pg_max_concurrent_snap_trims, OPT_U64, 2)
+// max number of trimming pgs
+OPTION(osd_max_trimming_pgs, OPT_U64, 2)
 
 // minimum number of peers that must be reachable to mark ourselves
 // back up after being wrongly marked down.
