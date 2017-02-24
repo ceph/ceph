@@ -1085,7 +1085,7 @@ void Objecter::_scan_requests(OSDSession *s,
       _op_cancel_map_check(op);
       break;
     case RECALC_OP_TARGET_POOL_DNE:
-      _check_op_pool_dne(op, sl);
+      _check_op_pool_dne(op, &sl);
       break;
     }
   }
@@ -1208,11 +1208,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 	cluster_full = cluster_full || _osdmap_full_flag();
 	update_pool_full_map(pool_full_map);
+
+	// check all outstanding requests on every epoch
 	_scan_requests(homeless_session, skipped_map, cluster_full,
 		       &pool_full_map, need_resend,
 		       need_resend_linger, need_resend_command, sul);
-
-	// osd addr changes?
 	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
 	     p != osd_sessions.end(); ) {
 	  OSDSession *s = p->second;
@@ -1220,6 +1220,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 			 &pool_full_map, need_resend,
 			 need_resend_linger, need_resend_command, sul);
 	  ++p;
+	  // osd down or addr change?
 	  if (!osdmap->is_up(s->osd) ||
 	      (s->con &&
 	       s->con->get_peer_addr() != osdmap->get_inst(s->osd).addr)) {
@@ -1252,6 +1253,23 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	monc->sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
 	monc->renew_subs();
       }
+    }
+  }
+
+  // make sure need_resend targets reflect latest map
+  for (auto p = need_resend.begin(); p != need_resend.end(); ) {
+    Op *op = p->second;
+    if (op->target.epoch < osdmap->get_epoch()) {
+      ldout(cct, 10) << __func__ << "  checking op " << p->first << dendl;
+      int r = _calc_target(&op->target, nullptr);
+      if (r == RECALC_OP_TARGET_POOL_DNE) {
+	p = need_resend.erase(p);
+	_check_op_pool_dne(op, nullptr);
+      } else {
+	++p;
+      }
+    } else {
+      ++p;
     }
   }
 
@@ -1373,7 +1391,7 @@ void Objecter::C_Op_Map_Latest::finish(int r)
     op->map_dne_bound = latest;
 
   OSDSession::unique_lock sl(op->session->lock, defer_lock);
-  objecter->_check_op_pool_dne(op, sl);
+  objecter->_check_op_pool_dne(op, &sl);
 
   op->put();
 }
@@ -1436,7 +1454,7 @@ int Objecter::pool_snap_list(int64_t poolid, vector<uint64_t> *snaps)
 }
 
 // sl may be unlocked.
-void Objecter::_check_op_pool_dne(Op *op, unique_lock& sl)
+void Objecter::_check_op_pool_dne(Op *op, unique_lock *sl)
 {
   // rwlock is locked unique
 
@@ -1464,16 +1482,19 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock& sl)
       }
 
       OSDSession *s = op->session;
-      assert(s != NULL);
-      assert(sl.mutex() == &s->lock);
-
-      bool session_locked = sl.owns_lock();
-      if (!session_locked) {
-	sl.lock();
-      }
-      _finish_op(op, 0);
-      if (!session_locked) {
-	sl.unlock();
+      if (s) {
+	assert(s != NULL);
+	assert(sl->mutex() == &s->lock);
+	bool session_locked = sl->owns_lock();
+	if (!session_locked) {
+	  sl->lock();
+	}
+	_finish_op(op, 0);
+	if (!session_locked) {
+	  sl->unlock();
+	}
+      } else {
+	_finish_op(op, 0);	// no session
       }
     }
   } else {
@@ -2661,7 +2682,9 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   // rwlock is locked
   bool is_read = t->flags & CEPH_OSD_FLAG_READ;
   bool is_write = t->flags & CEPH_OSD_FLAG_WRITE;
-  ldout(cct,20) << __func__ << " base " << t->base_oid << " " << t->base_oloc
+  t->epoch = osdmap->get_epoch();
+  ldout(cct,20) << __func__ << " epoch " << t->epoch
+		<< " base " << t->base_oid << " " << t->base_oloc
 		<< " precalc_pgid " << (int)t->precalc_pgid
 		<< " pgid " << t->base_pgid
 		<< (is_read ? " is_read" : "")
@@ -2751,20 +2774,23 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     force_resend = true;
   }
 
-  bool need_resend = false;
-
-  bool paused = target_should_be_paused(t);
-  if (!paused && paused != t->paused) {
+  bool unpaused = false;
+  if (t->paused && !target_should_be_paused(t)) {
     t->paused = false;
-    need_resend = true;
+    unpaused = true;
   }
-  if (t->pgid != pgid ||
+
+  bool legacy_change =
+    t->pgid != pgid ||
       is_pg_changed(
 	t->acting_primary, t->acting, acting_primary, acting,
-	t->used_replica || any_change) ||
-      (con && con->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT) &&
-       prev_pgid.is_split(t->pg_num, pg_num, nullptr)) ||
-      force_resend) {
+	t->used_replica || any_change);
+  bool split = false;
+  if (t->pg_num) {
+    split = prev_pgid.is_split(t->pg_num, pg_num, nullptr);
+  }
+
+  if (legacy_change || split || force_resend) {
     t->pgid = pgid;
     t->acting = acting;
     t->acting_primary = acting_primary;
@@ -2824,9 +2850,11 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       }
       t->osd = osd;
     }
-    need_resend = true;
   }
-  if (need_resend) {
+  if (legacy_change || unpaused || force_resend) {
+    return RECALC_OP_TARGET_NEED_RESEND;
+  }
+  if (split && con && con->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT)) {
     return RECALC_OP_TARGET_NEED_RESEND;
   }
   return RECALC_OP_TARGET_NO_ACTION;
@@ -2987,7 +3015,7 @@ void Objecter::_finish_op(Op *op, int r)
 {
   ldout(cct, 15) << "finish_op " << op->tid << dendl;
 
-  // op->session->lock is locked unique
+  // op->session->lock is locked unique or op->session is null
 
   if (!op->ctx_budgeted && op->budgeted)
     put_op_budget(op);
@@ -2995,7 +3023,9 @@ void Objecter::_finish_op(Op *op, int r)
   if (op->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(op->ontimeout);
 
-  _session_op_remove(op->session, op);
+  if (op->session) {
+    _session_op_remove(op->session, op);
+  }
 
   logger->dec(l_osdc_op_active);
 

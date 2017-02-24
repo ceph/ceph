@@ -1182,6 +1182,9 @@ public:
 
   struct op_target_t {
     int flags = 0;
+
+    epoch_t epoch = 0;  ///< latest epoch we calculated the mapping
+
     object_t base_oid;
     object_locator_t base_oloc;
     object_t target_oid;
@@ -1844,7 +1847,7 @@ public:
   }
 
 private:
-  void _check_op_pool_dne(Op *op, unique_lock& sl);
+  void _check_op_pool_dne(Op *op, unique_lock *sl);
   void _send_op_map_check(Op *op);
   void _op_cancel_map_check(Op *op);
   void _check_linger_pool_dne(LingerOp *op, bool *need_unregister);
