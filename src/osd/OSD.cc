@@ -951,7 +951,6 @@ bool OSDService::should_share_map(entity_name_t name, Connection *con,
                                   epoch_t epoch, const OSDMapRef& osdmap,
                                   const epoch_t *sent_epoch_p)
 {
-  bool should_send = false;
   dout(20) << "should_share_map "
            << name << " " << con->get_peer_addr()
            << " " << epoch << dendl;
@@ -964,8 +963,8 @@ bool OSDService::should_share_map(entity_name_t name, Connection *con,
                << *sent_epoch_p
                << " versus osdmap epoch " << osdmap->get_epoch() << dendl;
       if (*sent_epoch_p < osdmap->get_epoch()) {
-        should_send = true;
-      } // else we don't need to send it out again
+        return true;
+      } 
     }
   }
 
@@ -982,11 +981,11 @@ bool OSDService::should_share_map(entity_name_t name, Connection *con,
       dout(10) << name << " " << con->get_peer_addr()
                << " has old map " << epoch << " < "
                << osdmap->get_epoch() << dendl;
-      should_send = true;
+      return true;
     }
   }
 
-  return should_send;
+  return false;
 }
 
 void OSDService::share_map(
