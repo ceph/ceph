@@ -965,6 +965,7 @@ bool OSDService::should_share_map(entity_name_t name, Connection *con,
                << " versus osdmap epoch " << osdmap->get_epoch() << dendl;
       if (*sent_epoch_p < osdmap->get_epoch()) {
         should_send = true;
+        return should_send;
       } // else we don't need to send it out again
     }
   }
@@ -983,6 +984,7 @@ bool OSDService::should_share_map(entity_name_t name, Connection *con,
                << " has old map " << epoch << " < "
                << osdmap->get_epoch() << dendl;
       should_send = true;
+      return should_send;
     }
   }
 
@@ -1061,6 +1063,7 @@ bool OSDService::can_inc_scrubs_pending()
     dout(20) << __func__ << " " << scrubs_pending << " -> " << (scrubs_pending+1)
 	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
     can_inc = true;
+    return can_inc;
   } else {
     dout(20) << __func__ << scrubs_pending << " + " << scrubs_active << " active >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
@@ -1071,17 +1074,17 @@ bool OSDService::can_inc_scrubs_pending()
 bool OSDService::inc_scrubs_pending()
 {
   bool result = false;
+  Mutex::Locker l(sched_scrub_lock);
 
-  sched_scrub_lock.Lock();
   if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
     dout(20) << "inc_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending+1)
 	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
     result = true;
     ++scrubs_pending;
+    return result;
   } else {
     dout(20) << "inc_scrubs_pending " << scrubs_pending << " + " << scrubs_active << " active >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
-  sched_scrub_lock.Unlock();
 
   return result;
 }
