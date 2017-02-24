@@ -163,8 +163,7 @@ public:
   }
   BmapEntry(const BmapEntry& bmap) {
     cct = bmap.cct;
-    bmap_t i = bmap.m_bits;
-    m_bits = i;
+    m_bits = bmap.m_bits;
   }
 
   void clear_bit(int bit);
