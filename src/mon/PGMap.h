@@ -401,7 +401,7 @@ public:
    */
   static void register_new_pgs(
       const OSDMap &osd_map,
-      PGMap *pg_map,
+      const PGMap &pg_map,
       PGMap::Incremental *pending_inc);
 
   /**
@@ -409,19 +409,20 @@ public:
    */
   static void update_creating_pgs(
       const OSDMap &osd_map,
-      PGMap *pg_map,
+      const PGMap &pg_map,
       PGMap::Incremental *pending_inc);
 
   static void register_pg(
       const OSDMap &osd_map,
       pg_t pgid, epoch_t epoch,
       bool new_pool,
-      PGMap *pg_map,
+      const PGMap &pg_map,
       PGMap::Incremental *pending_inc);
 
+  // mark pg's state stale if its acting primary osd is down
   static void check_down_pgs(
       const OSDMap &osd_map,
-      const PGMap *pg_map,
+      const PGMap &pg_map,
       bool check_all,
       const set<int>& need_check_down_pg_osds,
       PGMap::Incremental *pending_inc);
