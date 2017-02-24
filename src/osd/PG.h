@@ -982,6 +982,7 @@ public:
   unsigned get_backfill_priority();
 
   void mark_clean();  ///< mark an active pg clean
+  void change_recovery_force_mode(int new_mode, bool clear);
 
   /// return [start,end) bounds for required past_intervals
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
