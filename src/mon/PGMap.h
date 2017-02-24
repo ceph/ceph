@@ -299,6 +299,10 @@ public:
   bool get_stuck_counts(const utime_t cutoff, map<string, int>& note) const;
   void dump_stuck(Formatter *f, int types, utime_t cutoff) const;
   void dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const;
+  int dump_stuck_pg_stats(stringstream &ds,
+			   Formatter *f,
+			   int threshold,
+			   vector<string>& args) const;
 
   void dump(ostream& ss) const;
   void dump_basic(ostream& ss) const;
