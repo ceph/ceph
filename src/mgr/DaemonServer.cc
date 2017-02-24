@@ -243,10 +243,17 @@ bool DaemonServer::handle_command(MCommand *m)
   // block a messenger thread on python code.
 
   ConnectionRef con = m->get_connection();
+  string format;
+  boost::scoped_ptr<Formatter> f;
 
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     r = -EINVAL;
     goto out;
+  }
+
+  {
+    cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+    f.reset(Formatter::create(format));
   }
 
   dout(4) << "decoded " << cmdmap.size() << dendl;
