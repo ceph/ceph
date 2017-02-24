@@ -3096,6 +3096,7 @@ static const std::string PEER_KEY_PREFIX("mirror_peer_");
 static const std::string IMAGE_KEY_PREFIX("image_");
 static const std::string GLOBAL_KEY_PREFIX("global_");
 static const std::string STATUS_GLOBAL_KEY_PREFIX("status_global_");
+static const std::string INSTANCE_KEY_PREFIX("instance_");
 
 std::string peer_key(const std::string &uuid) {
   return PEER_KEY_PREFIX + uuid;
@@ -3111,6 +3112,10 @@ std::string global_key(const string &global_id) {
 
 std::string status_global_key(const string &global_id) {
   return STATUS_GLOBAL_KEY_PREFIX + global_id;
+}
+
+std::string instance_key(const string &instance_id) {
+  return INSTANCE_KEY_PREFIX + instance_id;
 }
 
 int uuid_get(cls_method_context_t hctx, std::string *mirror_uuid) {
@@ -3596,6 +3601,56 @@ int image_status_remove_down(cls_method_context_t hctx) {
     }
   }
 
+  return 0;
+}
+
+int instances_list(cls_method_context_t hctx,
+                   std::vector<std::string> *instance_ids) {
+  std::string last_read = INSTANCE_KEY_PREFIX;
+  int max_read = RBD_MAX_KEYS_READ;
+  int r = max_read;
+  while (r == max_read) {
+    std::map<std::string, bufferlist> vals;
+    r = cls_cxx_map_get_vals(hctx, last_read, INSTANCE_KEY_PREFIX.c_str(),
+                             max_read, &vals);
+    if (r < 0) {
+      if (r != -ENOENT) {
+	CLS_ERR("error reading mirror instances: %s", cpp_strerror(r).c_str());
+      }
+      return r;
+    }
+
+    for (auto &it : vals) {
+      instance_ids->push_back(it.first.substr(INSTANCE_KEY_PREFIX.size()));
+    }
+
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    }
+  }
+  return 0;
+}
+
+int instances_add(cls_method_context_t hctx, const string &instance_id) {
+  bufferlist bl;
+
+  int r = cls_cxx_map_set_val(hctx, instance_key(instance_id), &bl);
+  if (r < 0) {
+    CLS_ERR("error setting mirror instance %s: %s", instance_id.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+int instances_remove(cls_method_context_t hctx, const string &instance_id) {
+
+  int r = cls_cxx_map_remove_key(hctx, instance_key(instance_id));
+  if (r < 0) {
+    CLS_ERR("error removing mirror instance %s: %s", instance_id.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
   return 0;
 }
 
@@ -4269,6 +4324,75 @@ int mirror_image_status_remove_down(cls_method_context_t hctx, bufferlist *in,
 }
 
 /**
+ * Input:
+ * none
+ *
+ * Output:
+ * @param std::vector<std::string>: instance ids
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_instances_list(cls_method_context_t hctx, bufferlist *in,
+                          bufferlist *out) {
+  std::vector<std::string> instance_ids;
+
+  int r = mirror::instances_list(hctx, &instance_ids);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(instance_ids, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param instance_id (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_instances_add(cls_method_context_t hctx, bufferlist *in,
+                         bufferlist *out) {
+  std::string instance_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(instance_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = mirror::instances_add(hctx, instance_id);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param instance_id (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_instances_remove(cls_method_context_t hctx, bufferlist *in,
+                            bufferlist *out) {
+  std::string instance_id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(instance_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = mirror::instances_remove(hctx, instance_id);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
  * Initialize the header with basic metadata.
  * Everything is stored as key/value pairs as omaps in the header object.
  *
@@ -4825,6 +4949,9 @@ CLS_INIT(rbd)
   cls_method_handle_t h_mirror_image_status_list;
   cls_method_handle_t h_mirror_image_status_get_summary;
   cls_method_handle_t h_mirror_image_status_remove_down;
+  cls_method_handle_t h_mirror_instances_list;
+  cls_method_handle_t h_mirror_instances_add;
+  cls_method_handle_t h_mirror_instances_remove;
   cls_method_handle_t h_group_create;
   cls_method_handle_t h_group_dir_list;
   cls_method_handle_t h_group_dir_add;
@@ -5060,6 +5187,15 @@ CLS_INIT(rbd)
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           mirror_image_status_remove_down,
 			  &h_mirror_image_status_remove_down);
+  cls_register_cxx_method(h_class, "mirror_instances_list", CLS_METHOD_RD,
+                          mirror_instances_list, &h_mirror_instances_list);
+  cls_register_cxx_method(h_class, "mirror_instances_add",
+                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
+                          mirror_instances_add, &h_mirror_instances_add);
+  cls_register_cxx_method(h_class, "mirror_instances_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_instances_remove,
+                          &h_mirror_instances_remove);
   /* methods for the consistency groups feature */
   cls_register_cxx_method(h_class, "group_create",
 			  CLS_METHOD_RD | CLS_METHOD_WR,

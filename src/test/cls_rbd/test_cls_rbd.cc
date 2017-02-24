@@ -1905,6 +1905,38 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(0U, statuses.size());
 }
 
+TEST_F(TestClsRbd, mirror_instances) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+  ioctx.remove(RBD_MIRROR_LEADER);
+
+  std::vector<std::string> instance_ids;
+  ASSERT_EQ(-ENOENT, mirror_instances_list(&ioctx, &instance_ids));
+
+  ASSERT_EQ(0, ioctx.create(RBD_MIRROR_LEADER, true));
+  ASSERT_EQ(0, mirror_instances_list(&ioctx, &instance_ids));
+  ASSERT_EQ(0U, instance_ids.size());
+
+  ASSERT_EQ(0, mirror_instances_add(&ioctx, "instance_id1"));
+  ASSERT_EQ(0, mirror_instances_list(&ioctx, &instance_ids));
+  ASSERT_EQ(1U, instance_ids.size());
+  ASSERT_EQ(instance_ids[0], "instance_id1");
+
+  ASSERT_EQ(0, mirror_instances_add(&ioctx, "instance_id1"));
+  ASSERT_EQ(0, mirror_instances_add(&ioctx, "instance_id2"));
+  ASSERT_EQ(0, mirror_instances_list(&ioctx, &instance_ids));
+  ASSERT_EQ(2U, instance_ids.size());
+
+  ASSERT_EQ(0, mirror_instances_remove(&ioctx, "instance_id1"));
+  ASSERT_EQ(0, mirror_instances_list(&ioctx, &instance_ids));
+  ASSERT_EQ(1U, instance_ids.size());
+  ASSERT_EQ(instance_ids[0], "instance_id2");
+
+  ASSERT_EQ(0, mirror_instances_remove(&ioctx, "instance_id2"));
+  ASSERT_EQ(0, mirror_instances_list(&ioctx, &instance_ids));
+  ASSERT_EQ(0U, instance_ids.size());
+}
+
 TEST_F(TestClsRbd, group_create) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
