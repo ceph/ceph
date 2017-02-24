@@ -2130,12 +2130,12 @@ void PGMapUpdater::register_pg(
     const OSDMap &osd_map,
     pg_t pgid, epoch_t epoch,
     bool new_pool,
-    PGMap *pg_map,
+    const PGMap &pg_map,
     PGMap::Incremental *pending_inc)
 {
   pg_t parent;
   int split_bits = 0;
-  bool parent_found = false;
+  auto parent_stat = pg_map.pg_stat.end();
   if (!new_pool) {
     parent = pgid;
     while (1) {
@@ -2146,10 +2146,10 @@ void PGMapUpdater::register_pg(
       parent.set_ps(parent.ps() & ~(1<<(msb-1)));
       split_bits++;
       dout(30) << " is " << pgid << " parent " << parent << " ?" << dendl;
-      if (pg_map->pg_stat.count(parent) &&
-          pg_map->pg_stat[parent].state != PG_STATE_CREATING) {
+      parent_stat = pg_map.pg_stat.find(parent);
+      if (parent_stat != pg_map.pg_stat.end() &&
+          parent_stat->second.state != PG_STATE_CREATING) {
 	dout(10) << "  parent is " << parent << dendl;
-	parent_found = true;
 	break;
       }
     }
@@ -2162,8 +2162,8 @@ void PGMapUpdater::register_pg(
   stats.parent_split_bits = split_bits;
   stats.mapping_epoch = epoch;
 
-  if (parent_found) {
-    pg_stat_t &ps = pg_map->pg_stat[parent];
+  if (parent_stat != pg_map.pg_stat.end()) {
+    const pg_stat_t &ps = parent_stat->second;
     stats.last_fresh = ps.last_fresh;
     stats.last_active = ps.last_active;
     stats.last_change = ps.last_change;
@@ -2214,12 +2214,12 @@ void PGMapUpdater::register_pg(
 
 void PGMapUpdater::register_new_pgs(
     const OSDMap &osd_map,
-    PGMap *pg_map,
+    const PGMap &pg_map,
     PGMap::Incremental *pending_inc)
 {
   epoch_t epoch = osd_map.get_epoch();
   dout(10) << __func__ << " checking pg pools for osdmap epoch " << epoch
-           << ", last_pg_scan " << pg_map->last_pg_scan << dendl;
+           << ", last_pg_scan " << pg_map.last_pg_scan << dendl;
 
   int created = 0;
   const auto &pools = osd_map.get_pools();
@@ -2232,7 +2232,7 @@ void PGMapUpdater::register_new_pgs(
     if (ruleno < 0 || !osd_map.crush->rule_exists(ruleno))
       continue;
 
-    if (pool.get_last_change() <= pg_map->last_pg_scan ||
+    if (pool.get_last_change() <= pg_map.last_pg_scan ||
         pool.get_last_change() <= pending_inc->pg_scan) {
       dout(10) << " no change in pool " << poolid << " " << pool << dendl;
       continue;
@@ -2242,11 +2242,11 @@ void PGMapUpdater::register_new_pgs(
              << " " << pool << dendl;
 
     // first pgs in this pool
-    bool new_pool = pg_map->pg_pool_sum.count(poolid) == 0;
+    bool new_pool = pg_map.pg_pool_sum.count(poolid) == 0;
 
     for (ps_t ps = 0; ps < pool.get_pg_num(); ps++) {
       pg_t pgid(ps, poolid, -1);
-      if (pg_map->pg_stat.count(pgid)) {
+      if (pg_map.pg_stat.count(pgid)) {
 	dout(20) << "register_new_pgs  have " << pgid << dendl;
 	continue;
       }
@@ -2273,7 +2273,7 @@ void PGMapUpdater::register_new_pgs(
   }
 
   // deleted pools?
-  for (const auto &p : pg_map->pg_stat) {
+  for (const auto &p : pg_map.pg_stat) {
     if (!osd_map.have_pg_pool(p.first.pool())) {
       dout(20) << " removing pg_stat " << p.first << " because "
                << "containing pool deleted" << dendl;
@@ -2297,7 +2297,7 @@ void PGMapUpdater::register_new_pgs(
 
 void PGMapUpdater::update_creating_pgs(
     const OSDMap &osd_map,
-    PGMap *pg_map,
+    const PGMap &pg_map,
     PGMap::Incremental *pending_inc)
 {
   dout(10) << __func__ << " to " << pg_map->creating_pgs.size()
@@ -2402,7 +2402,7 @@ static void _try_mark_pg_stale(
 
 void PGMapUpdater::check_down_pgs(
     const OSDMap &osdmap,
-    const PGMap *pg_map,
+    const PGMap &pg_map,
     bool check_all,
     const set<int>& need_check_down_pg_osds,
     PGMap::Incremental *pending_inc)
@@ -2415,18 +2415,18 @@ void PGMapUpdater::check_down_pgs(
   }
 
   if (check_all) {
-    for (const auto& p : pg_map->pg_stat) {
+    for (const auto& p : pg_map.pg_stat) {
       _try_mark_pg_stale(osdmap, p.first, p.second, pending_inc);
     }
   } else {
     for (auto osd : need_check_down_pg_osds) {
       if (osdmap.is_down(osd)) {
-	auto p = pg_map->pg_by_osd.find(osd);
-	if (p == pg_map->pg_by_osd.end()) {
+	auto p = pg_map.pg_by_osd.find(osd);
+	if (p == pg_map.pg_by_osd.end()) {
 	  continue;
 	}
 	for (auto pgid : p->second) {
-	  const pg_stat_t &stat = pg_map->pg_stat.at(pgid);
+	  const pg_stat_t &stat = pg_map.pg_stat.at(pgid);
 	  assert(stat.acting_primary == osd);
 	  _try_mark_pg_stale(osdmap, pgid, stat, pending_inc);
 	}
