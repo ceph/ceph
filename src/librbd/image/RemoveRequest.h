@@ -27,11 +27,13 @@ public:
   static RemoveRequest *create(librados::IoCtx &ioctx,
                                const std::string &image_name,
                                const std::string &image_id,
-                               bool force, ProgressContext &prog_ctx,
+                               bool force, bool from_trash_remove,
+                               ProgressContext &prog_ctx,
                                ContextWQ *op_work_queue,
                                Context *on_finish) {
-    return new RemoveRequest(ioctx, image_name, image_id, force, prog_ctx,
-                             op_work_queue, on_finish);
+    return new RemoveRequest(ioctx, image_name, image_id, force,
+                             from_trash_remove, prog_ctx, op_work_queue,
+                             on_finish);
   }
 
   void send();
@@ -97,7 +99,7 @@ private:
    */
 
   RemoveRequest(librados::IoCtx &ioctx, const std::string &image_name,
-                const std::string &image_id, bool force,
+                const std::string &image_id, bool force, bool from_trash_remove,
                 ProgressContext &prog_ctx, ContextWQ *op_work_queue,
                 Context *on_finish);
 
@@ -105,6 +107,7 @@ private:
   std::string m_image_name;
   std::string m_image_id;
   bool m_force;
+  bool m_from_trash_remove;
   ProgressContext &m_prog_ctx;
   ContextWQ *m_op_work_queue;
   Context *m_on_finish;

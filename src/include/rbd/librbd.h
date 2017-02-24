@@ -183,6 +183,19 @@ enum {
   RBD_IMAGE_OPTION_DATA_POOL = 10
 };
 
+typedef enum {
+  RBD_TRASH_IMAGE_SOURCE_USER = 0,
+  RBD_TRASH_IMAGE_SOURCE_MIRRORING = 1
+} rbd_trash_image_source_t;
+
+typedef struct {
+  char *id;
+  char *name;
+  rbd_trash_image_source_t source;
+  time_t deletion_time;
+  time_t deferment_end_time;
+} rbd_trash_image_info_t;
+
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);
 CEPH_RBD_API void rbd_image_options_destroy(rbd_image_options_t opts);
 CEPH_RBD_API int rbd_image_options_set_string(rbd_image_options_t opts,
@@ -242,6 +255,19 @@ CEPH_RBD_API int rbd_remove(rados_ioctx_t io, const char *name);
 CEPH_RBD_API int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
 			                  librbd_progress_fn_t cb,
                                           void *cbdata);
+CEPH_RBD_API int rbd_trash_move(rados_ioctx_t io, const char *name,
+                                uint64_t delay);
+CEPH_RBD_API int rbd_trash_list(rados_ioctx_t io,
+                                rbd_trash_image_info_t *trash_entries,
+                                size_t *num_entries);
+CEPH_RBD_API void rbd_trash_list_cleanup(rbd_trash_image_info_t *trash_entries,
+                                         size_t num_entries);
+CEPH_RBD_API int rbd_trash_remove(rados_ioctx_t io, const char *id, bool force);
+CEPH_RBD_API int rbd_trash_remove_with_progress(rados_ioctx_t io, const char *id,
+                                                bool force, librbd_progress_fn_t cb,
+                                                void *cbdata);
+CEPH_RBD_API int rbd_trash_restore(rados_ioctx_t io, const char *id,
+                                   const char *name);
 CEPH_RBD_API int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname,
                             const char *destname);
 
