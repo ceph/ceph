@@ -43,6 +43,9 @@ private:
    *            V2_GET_ID|NAME                      |
    *                |                               |
    *                v                               |
+   *            V2_GET_NAME_FROM_TRASH              |
+   *                |                               |
+   *                v                               |
    *            V2_GET_IMMUTABLE_METADATA           |
    *                |                               |
    *                v                               |
@@ -92,6 +95,9 @@ private:
 
   void send_v2_get_name();
   Context *handle_v2_get_name(int *result);
+
+  void send_v2_get_name_from_trash();
+  Context *handle_v2_get_name_from_trash(int *result);
 
   void send_v2_get_immutable_metadata();
   Context *handle_v2_get_immutable_metadata(int *result);
