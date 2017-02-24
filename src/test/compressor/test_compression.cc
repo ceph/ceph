@@ -377,6 +377,7 @@ TEST(CompressionPlugin, all)
   EXPECT_TRUE(factory);
   stringstream ss;
   EXPECT_EQ(0, factory->factory(&compressor, &ss));
+  EXPECT_EQ(2L, compressor.use_count());
   EXPECT_TRUE(compressor.get());
   {
     Mutex::Locker l(reg->lock);
@@ -384,6 +385,7 @@ TEST(CompressionPlugin, all)
     EXPECT_EQ(0, reg->remove("compressor", "example"));
     EXPECT_EQ(0, reg->load("compressor", "example"));
   }
+  EXPECT_EQ(1L, compressor.use_count());
 }
 
 TEST(ZlibCompressor, isal_compress_zlib_decompress_random)
