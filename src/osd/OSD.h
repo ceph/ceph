@@ -962,6 +962,7 @@ public:
     _queue_for_recovery(make_pair(queued, pg), reserved_pushes);
   }
 
+  void adjust_pg_priorities(vector<PG*> pgs, int newflags);
 
   // osd map cache (past osd maps)
   Mutex map_cache_lock;
@@ -2169,6 +2170,8 @@ protected:
 
   void handle_pg_backfill_reserve(OpRequestRef op);
   void handle_pg_recovery_reserve(OpRequestRef op);
+
+  void handle_force_recovery(Message *m);
 
   void handle_pg_remove(OpRequestRef op);
   void _remove_pg(PG *pg);

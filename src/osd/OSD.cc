@@ -88,6 +88,7 @@
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
+#include "messages/MOSDForceRecovery.h"
 #include "messages/MOSDECSubOpWrite.h"
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
@@ -7063,6 +7064,10 @@ void OSD::_dispatch(Message *m)
     handle_scrub(static_cast<MOSDScrub*>(m));
     break;
 
+  case MSG_OSD_FORCE_RECOVERY:
+    handle_force_recovery(m);
+    break;
+
     // -- need OSDMap --
 
   case MSG_OSD_PG_CREATE:
@@ -8870,6 +8875,31 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
   pg->unlock();
 }
 
+void OSD::handle_force_recovery(Message *m)
+{
+  MOSDForceRecovery *msg = static_cast<MOSDForceRecovery*>(m);
+  assert(msg->get_type() == MSG_OSD_FORCE_RECOVERY);
+  RWLock::RLocker l(pg_map_lock);
+
+  vector<PG*> local_pgs;
+  local_pgs.reserve(msg->forced_pgs.size());
+
+  for (auto& i : msg->forced_pgs) {
+    spg_t locpg;
+    if (osdmap->get_primary_shard(i, &locpg)) {
+      auto pg_map_entry = pg_map.find(locpg);
+      if (pg_map_entry != pg_map.end()) {
+	local_pgs.push_back(pg_map_entry->second);
+      }
+    }
+  }
+
+  if (local_pgs.size()) {
+    service.adjust_pg_priorities(local_pgs, msg->options);
+  }
+
+  msg->put();
+}
 
 /** PGQuery
  * from primary to replica | stray
@@ -9122,6 +9152,50 @@ bool OSDService::_recover_now(uint64_t *available_pushes)
     *available_pushes = max - recovery_ops_active - recovery_ops_reserved;
 
   return true;
+}
+
+
+void OSDService::adjust_pg_priorities(vector<PG*> pgs, int newflags)
+{
+  if (!pgs.size() || !(newflags & (OFR_BACKFILL | OFR_RECOVERY)))
+    return;
+  int newstate = 0;
+
+  Mutex::Locker l(recovery_lock);
+
+  if (newflags & OFR_BACKFILL) {
+    newstate = PG_STATE_FORCED_BACKFILL;
+  } else if (newflags & OFR_RECOVERY) {
+    newstate = PG_STATE_FORCED_RECOVERY;
+  }
+
+  // debug output here may get large, don't generate it if debug level is below
+  // 10 and use abbreviated pg ids otherwise
+  if ((cct)->_conf->subsys.should_gather(ceph_subsys_osd, 10)) {
+    stringstream ss;
+
+    for (auto& i : pgs) {
+      ss << i->get_pgid() << " ";
+    }
+
+    dout(10) << __func__ << " working on " << ss.str() << dendl;
+  }
+
+  if (newflags & OFR_CANCEL) {
+    for (auto& i : pgs) {
+      i->change_recovery_force_mode(newstate, true);
+    }
+  } else {
+    for (auto& i : pgs) {
+      // make sure the PG is in correct state before forcing backfill or recovery, or
+      // else we'll make PG keeping FORCE_* flag forever, requiring osds restart
+      // or forcing somehow recovery/backfill.
+      int pgstate = i->get_state();
+      if ( ((newstate == PG_STATE_FORCED_RECOVERY) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_RECOVERY_WAIT | PG_STATE_RECOVERING))) ||
+	    ((newstate == PG_STATE_FORCED_BACKFILL) && (pgstate & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILL))) )
+        i->change_recovery_force_mode(newstate, false);
+    }
+  }
 }
 
 void OSD::do_recovery(

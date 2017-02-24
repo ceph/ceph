@@ -2037,6 +2037,19 @@ void PG::mark_clean()
   kick_snap_trim();
 }
 
+void PG::change_recovery_force_mode(int new_mode, bool clear)
+{
+  lock(true);
+  if (clear) {
+    state_clear(new_mode);
+  } else {
+    state_set(new_mode);
+  }
+  publish_stats_to_osd();
+
+  unlock();
+}
+
 inline int PG::clamp_recovery_priority(int priority)
 {
   static_assert(OSD_RECOVERY_PRIORITY_MIN < OSD_RECOVERY_PRIORITY_MAX, "Invalid priority range");
@@ -2063,7 +2076,7 @@ unsigned PG::get_recovery_priority()
     pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &ret);
     ret = clamp_recovery_priority(OSD_RECOVERY_PRIORITY_BASE + ret);
   }
-
+  dout(20) << __func__ << " recovery priority for " << *this << " is " << ret << ", state is " << state << dendl;
   return static_cast<unsigned>(ret);
 }
 
