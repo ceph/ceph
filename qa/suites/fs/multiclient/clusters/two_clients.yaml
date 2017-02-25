@@ -3,6 +3,11 @@ roles:
 - [client.1]
 - [client.0]
 
+openstack:
+- volumes: # attached to each instance
+    count: 3
+    size: 10 # GB
+
 log-rotate:
   ceph-mds: 10G
   ceph-osd: 10G
