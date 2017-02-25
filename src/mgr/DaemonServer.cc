@@ -328,7 +328,19 @@ bool DaemonServer::handle_command(MCommand *m)
 #endif
     f.close_section();	// command_descriptions
     goto out;
-  } else {
+  }
+  else {
+    cluster_state.with_pgmap(
+      [&](const PGMap& pg_map) {
+	cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    r = process_pg_map_command(prefix, cmdmap, pg_map, osdmap,
+				       f.get(), &ss, &odata);
+	  });
+      });
+  }
+
+  // fall back to registered python handlers
+  if (r == -EOPNOTSUPP) {
     // Let's find you a handler!
     MgrPyModule *handler = nullptr;
     auto py_commands = py_modules.get_commands();

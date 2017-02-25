@@ -8,21 +8,18 @@
 COMMAND("pg stat", "show placement group status.",
 	"pg", "r", "cli,rest")
 COMMAND("pg getmap", "get binary pg map to -o/stdout", "pg", "r", "cli,rest")
-COMMAND("pg dump " \
+
+COMMAND("pg dump "							\
 	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|delta|pools|osds|pgs|pgs_brief,n=N,req=false", \
 	"show human-readable versions of pg map (only 'all' valid with plain)", "pg", "r", "cli,rest")
-COMMAND("pg dump_json " \
+COMMAND("pg dump_json "							\
 	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs,n=N,req=false", \
 	"show human-readable version of pg map in json only",\
 	"pg", "r", "cli,rest")
 COMMAND("pg dump_pools_json", "show pg pools info in json only",\
 	"pg", "r", "cli,rest")
-COMMAND("pg dump_stuck " \
-	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale|undersized|degraded,n=N,req=false " \
-	"name=threshold,type=CephInt,req=false",
-	"show information about stuck pgs",\
-	"pg", "r", "cli,rest")
-COMMAND("pg ls-by-pool " \
+
+COMMAND("pg ls-by-pool "		\
         "name=poolstr,type=CephString " \
 	"name=states,type=CephChoices,strings=active|clean|down|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
 	"list pg with pool = [poolname]", "pg", "r", "cli,rest")
@@ -42,17 +39,18 @@ COMMAND("pg ls " \
 	"list pg with specific pool, osd, state", "pg", "r", "cli,rest")
 COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
 	"pg", "r", "cli,rest")
+COMMAND("pg dump_stuck " \
+	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale|undersized|degraded,n=N,req=false " \
+	"name=threshold,type=CephInt,req=false",
+	"show information about stuck pgs",\
+	"pg", "r", "cli,rest")
+COMMAND("pg debug " \
+	"name=debugop,type=CephChoices,strings=unfound_objects_exist|degraded_pgs_exist", \
+	"show debug info about pgs", "pg", "r", "cli,rest")
+
 COMMAND("pg scrub name=pgid,type=CephPgid", "start scrub on <pgid>", \
 	"pg", "rw", "cli,rest")
 COMMAND("pg deep-scrub name=pgid,type=CephPgid", "start deep-scrub on <pgid>", \
 	"pg", "rw", "cli,rest")
 COMMAND("pg repair name=pgid,type=CephPgid", "start repair on <pgid>", \
-	"pg", "rw", "cli,rest")
-COMMAND("pg debug " \
-	"name=debugop,type=CephChoices,strings=unfound_objects_exist|degraded_pgs_exist", \
-	"show debug info about pgs", "pg", "r", "cli,rest")
-COMMAND("pg set_full_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
-	"set ratio at which pgs are considered full", "pg", "rw", "cli,rest")
-COMMAND("pg set_nearfull_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
-	"set ratio at which pgs are considered nearly full", \
 	"pg", "rw", "cli,rest")
