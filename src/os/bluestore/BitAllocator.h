@@ -139,8 +139,6 @@ typedef unsigned long bmap_t;
 typedef mempool::bluestore_alloc::vector<bmap_t> bmap_mask_vec_t;
 
 class BmapEntry {
-  CephContext* cct;
-
 private:
   bmap_t m_bits;
   static bool m_bit_mask_init;
@@ -157,12 +155,11 @@ public:
   static bmap_t align_mask(int x);
   static bmap_t bit_mask(int bit_num);
   bmap_t atomic_fetch();
-  BmapEntry(CephContext* cct, bool val);
-  BmapEntry(CephContext* cct) : cct(cct) {
+  BmapEntry(CephContext*, bool val);
+  BmapEntry(CephContext*) {
     m_bits = 0;
   }
   BmapEntry(const BmapEntry& bmap) {
-    cct = bmap.cct;
     m_bits = bmap.m_bits;
   }
 
@@ -179,7 +176,7 @@ public:
   int find_first_set_bits(int64_t required_blocks, int bit_offset,
           int *start_offset, int64_t *scanned);
 
-  void dump_state(int& count);
+  void dump_state(CephContext* cct, const int& count);
   ~BmapEntry();
 
 };
