@@ -20,6 +20,7 @@
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
+#include "messages/MOSDScrub.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -329,6 +330,55 @@ bool DaemonServer::handle_command(MCommand *m)
     f.close_section();	// command_descriptions
     goto out;
   }
+
+  // -----------
+  // PG commands
+
+  else if (prefix == "pg scrub" ||
+	   prefix == "pg repair" ||
+	   prefix == "pg deep-scrub") {
+    string scrubop = prefix.substr(3, string::npos);
+    pg_t pgid;
+    string pgidstr;
+    cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      r = -EINVAL;
+      goto out;
+    }
+    bool pg_exists = false;
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	pg_exists = osdmap.pg_exists(pgid);
+      });
+    if (!pg_exists) {
+      ss << "pg " << pgid << " dne";
+      r = -ENOENT;
+      goto out;
+    }
+    int acting_primary = -1;
+    entity_inst_t inst;
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	osdmap.pg_to_acting_osds(pgid, nullptr, &acting_primary);
+	if (acting_primary >= 0) {
+	  inst = osdmap.get_inst(acting_primary);
+	}
+      });
+    if (acting_primary == -1) {
+      ss << "pg " << pgid << " has no primary osd";
+      r = -EAGAIN;
+      goto out;
+    }
+    vector<pg_t> pgs = { pgid };
+    msgr->send_message(new MOSDScrub(monc->get_fsid(),
+				     pgs,
+				     scrubop == "repair",
+				     scrubop == "deep-scrub"),
+		       inst);
+    ss << "instructing pg " << pgid << " on osd." << acting_primary
+       << " (" << inst << ") to " << scrubop;
+    r = 0;
+  }
+
   else {
     cluster_state.with_pgmap(
       [&](const PGMap& pg_map) {
