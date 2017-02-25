@@ -1444,7 +1444,10 @@ public:
     out->push_back(coll);
     return pgbackend->temp_colls(out);
   }
-  void split_colls(
+  void set_temp_coll() {
+    pgbackend->set_temp_coll();
+  }
+  bool split_colls(
     spg_t child,
     int split_bits,
     int seed,
@@ -1458,7 +1461,7 @@ public:
       seed,
       target);
     PG::_init(*t, child, pool);
-    pgbackend->split_colls(child, split_bits, seed, t);
+    return pgbackend->split_colls(child, split_bits, seed, t);
   }
 private:
   struct NotTrimming;
