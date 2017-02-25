@@ -123,8 +123,7 @@ void BmapEntry::_init_bit_mask()
   BmapEntry::m_bit_mask_init = true;
 }
 
-BmapEntry::BmapEntry(CephContext* cct, bool full)
-  : cct(cct)
+BmapEntry::BmapEntry(CephContext*, const bool full)
 {
 
   BmapEntry::_init_bit_mask();
@@ -334,7 +333,7 @@ BmapEntry::find_first_set_bits(int64_t required_blocks,
   return allocated;
 }
 
-void BmapEntry::dump_state(int& count)
+void BmapEntry::dump_state(CephContext* const cct, const int& count)
 {
   dout(0) << count << ":: 0x" << std::hex << m_bits << std::dec << dendl;
 }
@@ -628,7 +627,7 @@ void BitMapZone::dump_state(int& count)
           m_bmap_list, 0);
   dout(0) << __func__ << " zone " << count << " dump start " << dendl;
   while ((bmap = (BmapEntry *) iter.next())) {
-    bmap->dump_state(bmap_idx);
+    bmap->dump_state(cct, bmap_idx);
     bmap_idx++;
   }
   dout(0) << __func__ << " zone " << count << " dump end " << dendl;
