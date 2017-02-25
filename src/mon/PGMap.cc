@@ -2117,6 +2117,285 @@ void PGMap::dump_object_stat_sum(TextTable &tbl, Formatter *f,
 }
 
 
+int process_pg_map_command(
+  const string& orig_prefix,
+  const map<string,cmd_vartype>& orig_cmdmap,
+  const PGMap& pg_map,
+  const OSDMap& osdmap,
+  Formatter *f,
+  stringstream *ss,
+  bufferlist *odata)
+{
+  string prefix = orig_prefix;
+  map<string,cmd_vartype> cmdmap = orig_cmdmap;
+
+  // perhaps these would be better in the parsing, but it's weird
+  bool primary = false;
+  if (prefix == "pg dump_json") {
+    vector<string> v;
+    v.push_back(string("all"));
+    cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
+    cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
+    prefix = "pg dump";
+  } else if (prefix == "pg dump_pools_json") {
+    vector<string> v;
+    v.push_back(string("pools"));
+    cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
+    cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
+    prefix = "pg dump";
+  } else if (prefix == "pg ls-by-primary") {
+    primary = true;
+    prefix = "pg ls";
+  } else if (prefix == "pg ls-by-osd") {
+    prefix = "pg ls";
+  } else if (prefix == "pg ls-by-pool") {
+    prefix = "pg ls";
+    string poolstr;
+    cmd_getval(g_ceph_context, cmdmap, "poolstr", poolstr);
+    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (pool < 0) {
+      *ss << "pool " << poolstr << " does not exist";
+      return -ENOENT;
+    }
+    cmd_putval(g_ceph_context, cmdmap, "pool", pool);
+  }
+
+  int r = 0;
+  stringstream ds;
+  if (prefix == "pg stat") {
+    if (f) {
+      f->open_object_section("pg_summary");
+      pg_map.print_oneline_summary(f, NULL);
+      f->close_section();
+      f->flush(ds);
+    } else {
+      ds << pg_map;
+    }
+    odata->append(ds);
+    return 0;
+  }
+
+  if (prefix == "pg getmap") {
+    pg_map.encode(*odata);
+    *ss << "got pgmap version " << pg_map.version;
+    return 0;
+  }
+
+  if (prefix == "pg dump") {
+    string val;
+    vector<string> dumpcontents;
+    set<string> what;
+    if (cmd_getval(g_ceph_context, cmdmap, "dumpcontents", dumpcontents)) {
+      copy(dumpcontents.begin(), dumpcontents.end(),
+           inserter(what, what.end()));
+    }
+    if (what.empty())
+      what.insert("all");
+    if (f) {
+      if (what.count("all")) {
+	f->open_object_section("pg_map");
+	pg_map.dump(f);
+	f->close_section();
+      } else if (what.count("summary") || what.count("sum")) {
+	f->open_object_section("pg_map");
+	pg_map.dump_basic(f);
+	f->close_section();
+      } else {
+	if (what.count("pools")) {
+	  pg_map.dump_pool_stats(f);
+	}
+	if (what.count("osds")) {
+	  pg_map.dump_osd_stats(f);
+	}
+	if (what.count("pgs")) {
+	  pg_map.dump_pg_stats(f, false);
+	}
+	if (what.count("pgs_brief")) {
+	  pg_map.dump_pg_stats(f, true);
+	}
+	if (what.count("delta")) {
+	  f->open_object_section("delta");
+	  pg_map.dump_delta(f);
+	  f->close_section();
+	}
+      }
+      f->flush(*odata);
+    } else {
+      if (what.count("all")) {
+	pg_map.dump(ds);
+      } else if (what.count("summary") || what.count("sum")) {
+	pg_map.dump_basic(ds);
+	pg_map.dump_pg_sum_stats(ds, true);
+	pg_map.dump_osd_sum_stats(ds);
+      } else {
+	if (what.count("pgs_brief")) {
+	  pg_map.dump_pg_stats(ds, true);
+	}
+	bool header = true;
+	if (what.count("pgs")) {
+	  pg_map.dump_pg_stats(ds, false);
+	  header = false;
+	}
+	if (what.count("pools")) {
+	  pg_map.dump_pool_stats(ds, header);
+	}
+	if (what.count("osds")) {
+	  pg_map.dump_osd_stats(ds);
+	}
+      }
+      odata->append(ds);
+    }
+    *ss << "dumped " << what;
+    return 0;
+  }
+
+  if (prefix == "pg ls") {
+    int64_t osd = -1;
+    int64_t pool = -1;
+    vector<string>states;
+    set<pg_t> pgs;
+    cmd_getval(g_ceph_context, cmdmap, "pool", pool);
+    cmd_getval(g_ceph_context, cmdmap, "osd", osd);
+    cmd_getval(g_ceph_context, cmdmap, "states", states);
+    if (pool >= 0 && !osdmap.have_pg_pool(pool)) {
+      *ss << "pool " << pool << " does not exist";
+      return -ENOENT;
+    }
+    if (osd >= 0 && !osdmap.is_up(osd)) {
+      *ss << "osd " << osd << " is not up";
+      return -EAGAIN;
+    }
+    if (states.empty())
+      states.push_back("all");
+
+    uint32_t state = 0;
+
+    while (!states.empty()) {
+      string state_str = states.back();
+
+      if (state_str == "all") {
+        state = -1;
+        break;
+      } else {
+        int filter = pg_string_state(state_str);
+        assert(filter != -1);
+        state |= filter;
+      }
+
+      states.pop_back();
+    }
+
+    pg_map.get_filtered_pg_stats(state, pool, osd, primary, pgs);
+
+    if (f && !pgs.empty()) {
+      pg_map.dump_filtered_pg_stats(f, pgs);
+      f->flush(*odata);
+    } else if (!pgs.empty()) {
+      pg_map.dump_filtered_pg_stats(ds, pgs);
+      odata->append(ds);
+    }
+    return 0;
+  }
+
+  if (prefix == "pg dump_stuck") {
+    vector<string> stuckop_vec;
+    cmd_getval(g_ceph_context, cmdmap, "stuckops", stuckop_vec);
+    if (stuckop_vec.empty())
+      stuckop_vec.push_back("unclean");
+    int64_t threshold;
+    cmd_getval(g_ceph_context, cmdmap, "threshold", threshold,
+               int64_t(g_conf->mon_pg_stuck_threshold));
+
+    r = pg_map.dump_stuck_pg_stats(ds, f, (int)threshold, stuckop_vec);
+    odata->append(ds);
+    if (r < 0)
+      *ss << "failed";
+    else
+      *ss << "ok";
+    return 0;
+  }
+
+  if (prefix == "pg map") {
+    pg_t pgid;
+    string pgidstr;
+    cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
+    if (!pgid.parse(pgidstr.c_str())) {
+      *ss << "invalid pgid '" << pgidstr << "'";
+      return -EINVAL;
+    }
+    vector<int> up, acting;
+    if (!osdmap.have_pg_pool(pgid.pool())) {
+      *ss << "pg '" << pgidstr << "' does not exist";
+      return -ENOENT;
+    }
+    pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
+    osdmap.pg_to_up_acting_osds(pgid, up, acting);
+    if (f) {
+      f->open_object_section("pg_map");
+      f->dump_unsigned("epoch", osdmap.get_epoch());
+      f->dump_stream("raw_pgid") << pgid;
+      f->dump_stream("pgid") << mpgid;
+
+      f->open_array_section("up");
+      for (vector<int>::iterator it = up.begin(); it != up.end(); ++it)
+	f->dump_int("up_osd", *it);
+      f->close_section();
+
+      f->open_array_section("acting");
+      for (vector<int>::iterator it = acting.begin(); it != acting.end(); ++it)
+	f->dump_int("acting_osd", *it);
+      f->close_section();
+
+      f->close_section();
+      f->flush(*odata);
+    } else {
+      ds << "osdmap e" << osdmap.get_epoch()
+         << " pg " << pgid << " (" << mpgid << ")"
+         << " -> up " << up << " acting " << acting;
+      odata->append(ds);
+    }
+    return 0;
+  }
+
+  if (prefix == "pg debug") {
+    string debugop;
+    cmd_getval(g_ceph_context, cmdmap, "debugop", debugop,
+	       string("unfound_objects_exist"));
+    if (debugop == "unfound_objects_exist") {
+      bool unfound_objects_exist = false;
+      for (const auto& p : pg_map.pg_stat) {
+	if (p.second.stats.sum.num_objects_unfound > 0) {
+	  unfound_objects_exist = true;
+	  break;
+	}
+      }
+      if (unfound_objects_exist)
+	ds << "TRUE";
+      else
+	ds << "FALSE";
+      odata->append(ds);
+      return 0;
+    }
+    if (debugop == "degraded_pgs_exist") {
+      bool degraded_pgs_exist = false;
+      for (const auto& p : pg_map.pg_stat) {
+	if (p.second.stats.sum.num_objects_degraded > 0) {
+	  degraded_pgs_exist = true;
+	  break;
+	}
+      }
+      if (degraded_pgs_exist)
+	ds << "TRUE";
+      else
+	ds << "FALSE";
+      odata->append(ds);
+      return 0;
+    }
+  }
+
+  return -EOPNOTSUPP;
+}
+
 void PGMapUpdater::check_osd_map(const OSDMap::Incremental &osd_inc,
                                  std::set<int> *need_check_down_pg_osds,
                                  std::map<int,utime_t> *last_osd_report,
