@@ -303,7 +303,6 @@ public:
 			   Formatter *f,
 			   int threshold,
 			   vector<string>& args) const;
-
   void dump(ostream& ss) const;
   void dump_basic(ostream& ss) const;
   void dump_pg_stats(ostream& ss, bool brief) const;
@@ -389,6 +388,15 @@ inline ostream& operator<<(ostream& out, const PGMap& m) {
   m.print_oneline_summary(NULL, &out);
   return out;
 }
+
+int process_pg_map_command(
+  const string& prefix,
+  const map<string,cmd_vartype>& cmdmap,
+  const PGMap& pg_map,
+  const OSDMap& osdmap,
+  Formatter *f,
+  stringstream *ss,
+  bufferlist *odata);
 
 class PGMapUpdater
 {
