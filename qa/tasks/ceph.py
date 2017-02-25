@@ -1075,14 +1075,15 @@ def osd_scrub_pgs(ctx, config):
     loop = True
     while loop:
         stats = manager.get_pg_stats()
-        timez = [stat['last_scrub_stamp'] for stat in stats]
+        timez = [(stat['pgid'],stat['last_scrub_stamp']) for stat in stats]
         loop = False
         thiscnt = 0
-        for tmval in timez:
+        for (pgid, tmval) in timez:
             pgtm = time.strptime(tmval[0:tmval.find('.')], '%Y-%m-%d %H:%M:%S')
             if pgtm > check_time_now:
                 thiscnt += 1
             else:
+                log.info('pgid %s last_scrub_stamp %s %s <= %s', pgid, tmval, pgtm, check_time_now)
                 loop = True
         if thiscnt > prev_good:
             prev_good = thiscnt
