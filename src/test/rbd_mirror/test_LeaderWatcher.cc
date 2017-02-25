@@ -4,6 +4,7 @@
 #include "include/rados/librados.hpp"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
+#include "test/librbd/test_support.h"
 #include "test/rbd_mirror/test_fixture.h"
 #include "tools/rbd_mirror/LeaderWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
@@ -206,8 +207,10 @@ TEST_F(TestLeaderWatcher, ListenerError)
 
 TEST_F(TestLeaderWatcher, Two)
 {
+  REQUIRE(!is_librados_test_stub());
+
   Listener listener1;
-  LeaderWatcher<> leader_watcher1(m_threads, m_local_io_ctx, &listener1);
+  LeaderWatcher<> leader_watcher1(m_threads, create_connection(), &listener1);
 
   C_SaferCond on_init_acquire;
   listener1.on_acquire(0, &on_init_acquire);
@@ -215,7 +218,7 @@ TEST_F(TestLeaderWatcher, Two)
   ASSERT_EQ(0, on_init_acquire.wait());
 
   Listener listener2;
-  LeaderWatcher<> leader_watcher2(m_threads, m_local_io_ctx, &listener2);
+  LeaderWatcher<> leader_watcher2(m_threads, create_connection(), &listener2);
 
   ASSERT_EQ(0, leader_watcher2.init());
   ASSERT_TRUE(leader_watcher1.is_leader());
@@ -244,11 +247,7 @@ TEST_F(TestLeaderWatcher, Two)
 
 TEST_F(TestLeaderWatcher, Break)
 {
-  if (is_librados_test_stub()) {
-    // break_lock (blacklist) does not work on librados test stub
-    std::cout << "SKIPPING" << std::endl;
-    return SUCCEED();
-  }
+  REQUIRE(!is_librados_test_stub());
 
   Listener listener1, listener2;
   LeaderWatcher<> leader_watcher1(m_threads,
@@ -276,11 +275,7 @@ TEST_F(TestLeaderWatcher, Break)
 
 TEST_F(TestLeaderWatcher, Stress)
 {
-  if (is_librados_test_stub()) {
-    // skipping due to possible break request sent
-    std::cout << "SKIPPING" << std::endl;
-    return SUCCEED();
-  }
+  REQUIRE(!is_librados_test_stub());
 
   const int WATCHERS_COUNT = 20;
   std::list<LeaderWatcher<> *> leader_watchers;
