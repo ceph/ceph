@@ -33,23 +33,24 @@ void MgrMonitor::create_initial()
 void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_last_committed();
-  if (version == map.epoch) {
-    return;
+  if (version != map.epoch) {
+    dout(4) << "loading version " << version << dendl;
+
+    bufferlist bl;
+    int err = get_version(version, bl);
+    assert(err == 0);
+
+    bufferlist::iterator p = bl.begin();
+    map.decode(p);
+
+    dout(4) << "active server: " << map.active_addr
+	    << "(" << map.active_gid << ")" << dendl;
+
+    check_subs();
   }
 
-  dout(4) << "loading version " << version << dendl;
-
-  bufferlist bl;
-  int err = get_version(version, bl);
-  assert(err == 0);
-
-  bufferlist::iterator p = bl.begin();
-  map.decode(p);
-
-  dout(4) << "active server: " << map.active_addr
-          << "(" << map.active_gid << ")" << dendl;
-
-  check_subs();
+  // feed our pet MgrClient
+  mon->mgr_client.ms_dispatch(new MMgrMap(map));
 }
 
 void MgrMonitor::create_pending()
