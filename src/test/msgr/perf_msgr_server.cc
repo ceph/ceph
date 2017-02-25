@@ -79,7 +79,7 @@ class ServerDispatcher : public Dispatcher {
     op_tp.stop();
   }
   bool ms_can_fast_dispatch_any() const override { return true; }
-  bool ms_can_fast_dispatch(Message *m) const override {
+  bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OP:
       return true;
