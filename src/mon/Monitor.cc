@@ -84,6 +84,8 @@
 #include "include/compat.h"
 #include "perfglue/heap_profiler.h"
 
+#include "auth/none/AuthNoneClientHandler.h"
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -5231,54 +5233,78 @@ void Monitor::extract_save_mon_key(KeyRing& keyring)
   }
 }
 
-bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, bool force_new)
+bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer,
+				bool force_new)
 {
-  dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id) << dendl;
+  dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id)
+	   << dendl;
 
   if (is_shutdown())
     return false;
 
-  // we only connect to other monitors; every else connects to us.
-  if (service_id != CEPH_ENTITY_TYPE_MON)
+  // we only connect to other monitors and mgr; every else connects to us.
+  if (service_id != CEPH_ENTITY_TYPE_MON &&
+      service_id != CEPH_ENTITY_TYPE_MGR)
     return false;
 
-  if (!auth_cluster_required.is_supported_auth(CEPH_AUTH_CEPHX))
-    return false;
+  if (!auth_cluster_required.is_supported_auth(CEPH_AUTH_CEPHX)) {
+    // auth_none
+    dout(20) << __func__ << " building auth_none authorizer" << dendl;
+    AuthNoneClientHandler handler(g_ceph_context, nullptr);
+    handler.set_global_id(0);
+    *authorizer = handler.build_authorizer(service_id);
+    return true;
+  }
 
   CephXServiceTicketInfo auth_ticket_info;
   CephXSessionAuthInfo info;
   int ret;
+
   EntityName name;
   name.set_type(CEPH_ENTITY_TYPE_MON);
-
   auth_ticket_info.ticket.name = name;
   auth_ticket_info.ticket.global_id = 0;
 
-  CryptoKey secret;
-  if (!keyring.get_secret(name, secret) &&
-      !key_server.get_secret(name, secret)) {
-    dout(0) << " couldn't get secret for mon service from keyring or keyserver" << dendl;
-    stringstream ss, ds;
-    int err = key_server.list_secrets(ds);
-    if (err < 0)
-      ss << "no installed auth entries!";
-    else
-      ss << "installed auth entries:";
-    dout(0) << ss.str() << "\n" << ds.str() << dendl;
-    return false;
-  }
+  if (service_id == CEPH_ENTITY_TYPE_MON) {
+    // mon to mon authentication uses the private monitor shared key and not the
+    // rotating key
+    CryptoKey secret;
+    if (!keyring.get_secret(name, secret) &&
+	!key_server.get_secret(name, secret)) {
+      dout(0) << " couldn't get secret for mon service from keyring or keyserver"
+	      << dendl;
+      stringstream ss, ds;
+      int err = key_server.list_secrets(ds);
+      if (err < 0)
+	ss << "no installed auth entries!";
+      else
+	ss << "installed auth entries:";
+      dout(0) << ss.str() << "\n" << ds.str() << dendl;
+      return false;
+    }
 
-  /* mon to mon authentication uses the private monitor shared key and not the
-     rotating key */
-  ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info, secret, (uint64_t)-1);
-  if (ret < 0) {
-    dout(0) << "ms_get_authorizer failed to build session auth_info for use with mon ret " << ret << dendl;
-    return false;
+    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info,
+					     secret, (uint64_t)-1);
+    if (ret < 0) {
+      dout(0) << __func__ << " failed to build mon session_auth_info "
+	      << cpp_strerror(ret) << dendl;
+      return false;
+    }
+  } else if (service_id == CEPH_ENTITY_TYPE_MGR) {
+    // mgr
+    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info);
+    if (ret < 0) {
+      derr << __func__ << " failed to build mgr service session_auth_info "
+	   << cpp_strerror(ret) << dendl;
+      return false;
+    }
+  } else {
+    ceph_abort();  // see check at top of fn
   }
 
   CephXTicketBlob blob;
   if (!cephx_build_service_ticket_blob(cct, info, blob)) {
-    dout(0) << "ms_get_authorizer failed to build service ticket use with mon" << dendl;
+    dout(0) << "ms_get_authorizer failed to build service ticket" << dendl;
     return false;
   }
   bufferlist ticket_data;
@@ -5296,7 +5322,8 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
 }
 
 bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
-				   int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
+				   int protocol, bufferlist& authorizer_data,
+				   bufferlist& authorizer_reply,
 				   bool& isvalid, CryptoKey& session_key)
 {
   dout(10) << "ms_verify_authorizer " << con->get_peer_addr()
