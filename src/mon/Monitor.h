@@ -124,6 +124,7 @@ public:
   ConnectionRef con_self;
   Mutex lock;
   SafeTimer timer;
+  Finisher finisher;
   ThreadPool cpu_tp;  ///< threadpool for CPU intensive work
   
   /// true if we have ever joined a quorum.  if false, we are either a
