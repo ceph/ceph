@@ -330,8 +330,16 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 
     dout(10) << " must authpin " << *object << dendl;
 
-    if (mdr->is_auth_pinned(object)) 
-      continue;
+    if (mdr->is_auth_pinned(object)) {
+      if (object != (MDSCacheObject*)auth_pin_freeze)
+	continue;
+      if (mdr->more()->is_remote_frozen_authpin) {
+	if (mdr->more()->rename_inode == auth_pin_freeze)
+	  continue;
+	// unfreeze auth pin for the wrong inode
+	mustpin_remote[mdr->more()->rename_inode->authority().first].size();
+      }
+    }
     
     if (!object->is_auth()) {
       if (!mdr->locks.empty())
@@ -531,7 +539,8 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  remote_wrlock_start(*p, (*remote_wrlocks)[*p], mdr);
 	  goto out;
 	}
-	if (!wrlock_start(*p, mdr))
+	// nowait if we have already gotten remote wrlock
+	if (!wrlock_start(*p, mdr, need_remote_wrlock))
 	  goto out;
 	dout(10) << " got wrlock on " << **p << " " << *(*p)->get_parent() << dendl;
       }

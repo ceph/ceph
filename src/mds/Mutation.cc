@@ -211,6 +211,11 @@ bool MDRequestImpl::slave_did_prepare()
   return has_more() && more()->slave_commit;
 }
 
+bool MDRequestImpl::slave_rolling_back()
+{
+  return has_more() && more()->slave_rolling_back;
+}
+
 bool MDRequestImpl::did_ino_allocation() const
 {
   return alloc_ino || used_prealloc_ino || prealloc_inos.size();

@@ -56,6 +56,7 @@ class StrayManager
   PerfCounters *logger;
 
   bool started;
+  bool aborted;
 
   // Throttled allowances
   uint64_t ops_in_flight;
