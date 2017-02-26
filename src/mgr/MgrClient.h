@@ -66,7 +66,6 @@ protected:
   void wait_on_list(list<Cond*>& ls);
   void signal_cond_list(list<Cond*>& ls);
 
-  list<Cond*> waiting_for_session;
   Context *report_callback;
 
   // If provided, use this to compose an MPGStats to send with
