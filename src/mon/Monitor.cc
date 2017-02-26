@@ -148,7 +148,7 @@ long parse_pos_long(const char *s, ostream *pss)
 }
 
 Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
-		 Messenger *m, MonMap *map) :
+		 Messenger *m, Messenger *mgr_m, MonMap *map) :
   Dispatcher(cct_),
   name(nm),
   rank(-1), 
@@ -170,6 +170,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 			cct->_conf->auth_service_required : cct->_conf->auth_supported ),
   leader_supported_mon_commands(NULL),
   leader_supported_mon_commands_size(0),
+  mgr_messenger(mgr_m),
+  mgr_client(cct_, mgr_m),
   store(s),
   
   state(STATE_PROBING),
@@ -843,6 +845,10 @@ int Monitor::init()
   // i'm ready!
   messenger->add_dispatcher_tail(this);
 
+  mgr_client.init();
+  mgr_messenger->add_dispatcher_tail(&mgr_client);
+  mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
+
   bootstrap();
 
   // encode command sets
@@ -926,6 +932,7 @@ void Monitor::shutdown()
   dout(1) << "shutdown" << dendl;
 
   lock.Lock();
+
   wait_for_paxos_write();
 
   state = STATE_SHUTDOWN;
@@ -952,6 +959,8 @@ void Monitor::shutdown()
   }
 
   elector.shutdown();
+
+  mgr_client.shutdown();
 
   // clean up
   paxos->shutdown();
@@ -986,6 +995,7 @@ void Monitor::shutdown()
   lock.Unlock();
 
   messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
+  mgr_messenger->shutdown();
 }
 
 void Monitor::wait_for_paxos_write()
@@ -2771,7 +2781,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   // check return value. If no prefix parameter provided,
   // return value will be false, then return error info.
-  if(!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
+  if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
     reply_command(op, -EINVAL, "command prefix not found", 0);
     return;
   }

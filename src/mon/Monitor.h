@@ -23,6 +23,9 @@
 #ifndef CEPH_MONITOR_H
 #define CEPH_MONITOR_H
 
+#include <errno.h>
+#include <cmath>
+
 #include "include/types.h"
 #include "msg/Messenger.h"
 
@@ -40,8 +43,7 @@
 #include "messages/MMonCommand.h"
 #include "mon/MonitorDBStore.h"
 #include "include/memory.h"
-#include <errno.h>
-#include <cmath>
+#include "mgr/MgrClient.h"
 
 #include "mon/MonOpRequest.h"
 #include "common/WorkQueue.h"
@@ -154,6 +156,8 @@ public:
   const MonCommand *leader_supported_mon_commands;
   int leader_supported_mon_commands_size;
 
+  Messenger *mgr_messenger;
+  MgrClient mgr_client;
 private:
   void new_tick();
   friend class C_Mon_Tick;
@@ -899,7 +903,7 @@ public:
 
  public:
   Monitor(CephContext *cct_, string nm, MonitorDBStore *s,
-	  Messenger *m, MonMap *map);
+	  Messenger *m, Messenger *mgr_m, MonMap *map);
   ~Monitor() override;
 
   static int check_features(MonitorDBStore *store);
