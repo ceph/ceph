@@ -449,10 +449,10 @@ public:
   }
 };
 
-static int open_device(const char* path, bool try_load_moudle = false)
+static int open_device(const char* path, bool try_load_module = false)
 {
   int nbd = open(path, O_RDWR);
-  if (nbd < 0 && try_load_moudle && access("/sys/module/nbd", F_OK) != 0) {
+  if (nbd < 0 && try_load_module && access("/sys/module/nbd", F_OK) != 0) {
     ostringstream param;
     int r;
     if (nbds_max) {
