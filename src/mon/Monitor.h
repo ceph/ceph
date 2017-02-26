@@ -159,6 +159,8 @@ public:
 
   Messenger *mgr_messenger;
   MgrClient mgr_client;
+  uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
+
 private:
   void new_tick();
   friend class C_Mon_Tick;

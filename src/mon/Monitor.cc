@@ -2743,6 +2743,21 @@ bool Monitor::is_keyring_required()
     auth_cluster_required == "cephx";
 }
 
+struct C_MgrProxyCommand : public Context {
+  Monitor *mon;
+  MonOpRequestRef op;
+  uint64_t size;
+  bufferlist outbl;
+  string outs;
+  C_MgrProxyCommand(Monitor *mon, MonOpRequestRef op, uint64_t s)
+    : mon(mon), op(op), size(s) { }
+  void finish(int r) {
+    Mutex::Locker l(mon->lock);
+    mon->mgr_proxy_bytes -= size;
+    mon->reply_command(op, r, outs, outbl, 0);
+  }
+};
+
 void Monitor::handle_command(MonOpRequestRef op)
 {
   assert(op->is_type_command());
@@ -2918,6 +2933,30 @@ void Monitor::handle_command(MonOpRequestRef op)
     << "from='" << session->inst << "' "
     << "entity='" << session->entity_name << "' "
     << "cmd=" << m->cmd << ": dispatch";
+
+  if (mon_cmd->is_mgr() &&
+      osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    const auto& hdr = m->get_header();
+    uint64_t size = hdr.front_len + hdr.middle_len + hdr.data_len;
+    uint64_t max =
+      g_conf->mon_client_bytes * g_conf->mon_mgr_proxy_client_bytes_ratio;
+    if (mgr_proxy_bytes + size > max) {
+      dout(10) << __func__ << " current mgr proxy bytes " << mgr_proxy_bytes
+	       << " + " << size << " > max " << max << dendl;
+      reply_command(op, -EAGAIN, "hit limit on proxied mgr commands", rdata, 0);
+      return;
+    }
+    mgr_proxy_bytes += size;
+    dout(10) << __func__ << " proxying mgr command (+" << size
+	     << " -> " << mgr_proxy_bytes << ")" << dendl;
+    C_MgrProxyCommand *fin = new C_MgrProxyCommand(this, op, size);
+    mgr_client.start_command(m->cmd,
+			     m->get_data(),
+			     &fin->outbl,
+			     &fin->outs,
+			     new C_OnFinisher(fin, &finisher));
+    return;
+  }
 
   if (module == "mds" || module == "fs") {
     mdsmon()->dispatch(op);
