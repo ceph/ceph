@@ -91,19 +91,6 @@ void MgrClient::reconnect()
       timer.cancel_event(report_callback);
       report_callback = nullptr;
     }
-
-    std::vector<ceph_tid_t> erase_cmds;
-    auto commands = command_table.get_commands();
-    for (const auto &i : commands) {
-      // FIXME be nicer, retarget command on new mgr?
-      if (i.second.on_finish != nullptr) {
-	i.second.on_finish->complete(-ETIMEDOUT);
-      }
-      erase_cmds.push_back(i.first);
-    }
-    for (const auto &tid : erase_cmds) {
-      command_table.erase(tid);
-    }
   }
 
   if (map.get_available()) {
@@ -125,6 +112,13 @@ void MgrClient::reconnect()
     }
 
     signal_cond_list(waiting_for_session);
+    // resend any pending commands
+    for (const auto &p : command_table.get_commands()) {
+      MCommand *m = p.second.get_message({});
+      assert(session);
+      assert(session->con);
+      session->con->send_message(m);
+    }
   } else {
     ldout(cct, 4) << "No active mgr available yet" << dendl;
   }
@@ -286,11 +280,6 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 
   ldout(cct, 20) << "cmd: " << cmd << dendl;
 
-  if (!session) {
-    lderr(cct) << "no session, waiting" << dendl;
-    wait_on_list(waiting_for_session);
-  }
-
   assert(map.epoch > 0);
 
   auto &op = command_table.start_command();
@@ -300,11 +289,11 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
   op.outs = outs;
   op.on_finish = onfinish;
 
-  // Leaving fsid argument null because it isn't used.
-  MCommand *m = op.get_message({});
-  assert(session);
-  assert(session->con);
-  session->con->send_message(m);
+  if (session && session->con) {
+    // Leaving fsid argument null because it isn't used.
+    MCommand *m = op.get_message({});
+    session->con->send_message(m);
+  }
 
   return 0;
 }
