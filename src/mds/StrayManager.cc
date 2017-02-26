@@ -318,6 +318,11 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
 
 void StrayManager::enqueue(CDentry *dn, bool trunc)
 {
+  if (aborted) {
+    dout(10) << __func__ << ": aborted, skip purging: " << *dn << dendl;
+    return;
+  }
+
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   assert(dnl);
   CInode *in = dnl->get_inode();
@@ -372,6 +377,9 @@ public:
 
 void StrayManager::_advance()
 {
+  if (aborted)
+    return;
+
   std::map<CDir*, std::set<dentry_key_t> > to_fetch;
 
   for (auto p = ready_for_purge.begin();
@@ -850,7 +858,7 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 
 StrayManager::StrayManager(MDSRank *mds)
   : delayed_eval_stray(member_offset(CDentry, item_stray)),
-    mds(mds), logger(NULL), started(false),
+    mds(mds), logger(NULL), started(false), aborted(false),
     ops_in_flight(0), files_purging(0),
     max_purge_ops(0), 
     num_strays(0), num_strays_purging(0), num_strays_delayed(0),
@@ -886,6 +894,8 @@ void StrayManager::abort_queue()
 
   trimmed_strays.clear();
   fetching_strays.clear();
+
+  aborted = true;
 }
 
 void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
@@ -992,6 +1002,9 @@ void StrayManager::notify_stray_loaded(CDentry *dn)
   if (in->inode.nlink == 0)
     in->state_set(CInode::STATE_ORPHAN);
 
+  if (aborted)
+    return;
+
   auto p = trimmed_strays.find(dn->name);
   if (p != trimmed_strays.end()) {
     dn->state_set(CDentry::STATE_PURGING);
@@ -1010,6 +1023,9 @@ void StrayManager::notify_stray_loaded(CDentry *dn)
 void StrayManager::notify_stray_trimmed(CDentry *dn)
 {
   dout(10) << __func__ << ": " << *dn << dendl;
+
+  if (aborted)
+    return;
 
   trimmed_strays.insert(dn->name);
 }

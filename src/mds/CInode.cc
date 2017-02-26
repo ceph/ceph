@@ -1421,6 +1421,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IFILE:
     if (is_auth()) {
       ::encode(inode.version, bl);
+      ::encode(inode.ctime, bl);
       ::encode(inode.mtime, bl);
       ::encode(inode.atime, bl);
       ::encode(inode.time_warp_seq, bl);
@@ -1504,11 +1505,13 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     
   case CEPH_LOCK_IXATTR:
     ::encode(inode.version, bl);
+    ::encode(inode.ctime, bl);
     ::encode(xattrs, bl);
     break;
 
   case CEPH_LOCK_ISNAP:
     ::encode(inode.version, bl);
+    ::encode(inode.ctime, bl);
     encode_snap(bl);
     break;
 
@@ -1520,6 +1523,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
       ::encode(inode.version, bl);
+      ::encode(inode.ctime, bl);
       ::encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
       ::encode(inode.quota, bl);
     }
@@ -1617,6 +1621,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IFILE:
     if (!is_auth()) {
       ::decode(inode.version, p);
+      ::decode(tm, p);
+      if (inode.ctime < tm) inode.ctime = tm;
       ::decode(inode.mtime, p);
       ::decode(inode.atime, p);
       ::decode(inode.time_warp_seq, p);
@@ -1751,12 +1757,16 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IXATTR:
     ::decode(inode.version, p);
+    ::decode(tm, p);
+    if (inode.ctime < tm) inode.ctime = tm;
     ::decode(xattrs, p);
     break;
 
   case CEPH_LOCK_ISNAP:
     {
       ::decode(inode.version, p);
+      ::decode(tm, p);
+      if (inode.ctime < tm) inode.ctime = tm;
       snapid_t seq = 0;
       if (snaprealm)
 	seq = snaprealm->srnode.seq;
@@ -1774,6 +1784,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
       ::decode(inode.version, p);
+      ::decode(tm, p);
+      if (inode.ctime < tm) inode.ctime = tm;
       ::decode(inode.layout, p);
       ::decode(inode.quota, p);
     }
@@ -3052,18 +3064,6 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   
   bool valid = true;
 
-  // do not issue caps if inode differs from readdir snaprealm
-  SnapRealm *realm = find_snaprealm();
-  bool no_caps = session->is_stale() ||
-		 (realm && dir_realm && realm != dir_realm) ||
-		 is_frozen() || state_test(CInode::STATE_EXPORTINGCAPS);
-  if (no_caps)
-    dout(20) << "encode_inodestat no caps"
-	     << (session->is_stale()?", session stale ":"")
-	     << ((realm && dir_realm && realm != dir_realm)?", snaprealm differs ":"")
-	     << (state_test(CInode::STATE_EXPORTINGCAPS)?", exporting caps":"")
-	     << (is_frozen()?", frozen inode":"") << dendl;
-
   // pick a version!
   inode_t *oi = &inode;
   inode_t *pi = get_projected_inode();
@@ -3102,6 +3102,23 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 	      << " not match snapid " << snapid << dendl;
     }
   }
+
+  SnapRealm *realm = find_snaprealm();
+
+  bool no_caps = !valid ||
+		 session->is_stale() ||
+		 (dir_realm && realm != dir_realm) ||
+		 is_frozen() ||
+		 state_test(CInode::STATE_EXPORTINGCAPS);
+  if (no_caps)
+    dout(20) << "encode_inodestat no caps"
+	     << (!valid?", !valid":"")
+	     << (session->is_stale()?", session stale ":"")
+	     << ((dir_realm && realm != dir_realm)?", snaprealm differs ":"")
+	     << (is_frozen()?", frozen inode":"")
+	     << (state_test(CInode::STATE_EXPORTINGCAPS)?", exporting caps":"")
+	     << dendl;
+
   
   // "fake" a version that is old (stable) version, +1 if projected.
   version_t version = (oi->version * 2) + is_projected();
@@ -3224,7 +3241,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     ecap.mseq = 0;
     ecap.realm = 0;
   } else {
-    if (!no_caps && valid && !cap) {
+    if (!no_caps && !cap) {
       // add a new cap
       cap = add_client_cap(client, session, realm);
       if (is_auth()) {
@@ -3235,12 +3252,26 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       }
     }
 
-    if (!no_caps && valid && cap) {
+    int issue = 0;
+    if (!no_caps && cap) {
       int likes = get_caps_liked();
       int allowed = get_caps_allowed_for_client(session, file_i);
-      int issue = (cap->wanted() | likes) & allowed;
+      issue = (cap->wanted() | likes) & allowed;
       cap->issue_norevoke(issue);
       issue = cap->pending();
+      dout(10) << "encode_inodestat issuing " << ccap_string(issue)
+	       << " seq " << cap->get_last_seq() << dendl;
+    } else if (cap && cap->is_new() && !dir_realm) {
+      // alway issue new caps to client, otherwise the caps get lost
+      assert(cap->is_stale());
+      issue = cap->pending() | CEPH_CAP_PIN;
+      cap->issue_norevoke(issue);
+      dout(10) << "encode_inodestat issuing " << ccap_string(issue)
+	       << " seq " << cap->get_last_seq()
+	       << "(stale|new caps)" << dendl;
+    }
+
+    if (issue) {
       cap->set_last_issue();
       cap->set_last_issue_stamp(ceph_clock_now());
       cap->clear_new();
@@ -3248,13 +3279,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       ecap.wanted = cap->wanted();
       ecap.cap_id = cap->get_cap_id();
       ecap.seq = cap->get_last_seq();
-      dout(10) << "encode_inodestat issuing " << ccap_string(issue)
-	       << " seq " << cap->get_last_seq() << dendl;
       ecap.mseq = cap->get_mseq();
       ecap.realm = realm->inode->ino();
     } else {
-      if (cap)
-	cap->clear_new();
       ecap.cap_id = 0;
       ecap.caps = 0;
       ecap.seq = 0;
@@ -3595,7 +3622,8 @@ void CInode::decode_import(bufferlist::iterator& p,
 
   unsigned s;
   ::decode(s, p);
-  state |= (s & MASK_STATE_EXPORTED);
+  state_set(STATE_AUTH | (s & MASK_STATE_EXPORTED));
+
   if (is_dirty()) {
     get(PIN_DIRTY);
     _mark_dirty(ls);
@@ -3610,6 +3638,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   ::decode(replica_map, p);
   if (!replica_map.empty())
     get(PIN_REPLICATED);
+  replica_nonce = 0;
 
   // decode fragstat info on bounding cdirs
   bufferlist bounding;

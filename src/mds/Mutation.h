@@ -230,6 +230,7 @@ struct MDRequestImpl : public MutationImpl {
 
     bool has_journaled_slaves;
     bool slave_update_journaled;
+    bool slave_rolling_back;
     
     // for rename
     set<mds_rank_t> extra_witnesses; // replica list from srcdn auth (rename)
@@ -270,6 +271,7 @@ struct MDRequestImpl : public MutationImpl {
     More() : 
       slave_error(0),
       has_journaled_slaves(false), slave_update_journaled(false),
+      slave_rolling_back(false),
       srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
       is_freeze_authpin(false), is_ambiguous_auth(false),
       is_remote_frozen_authpin(false), is_inode_exporter(false),
@@ -317,6 +319,7 @@ struct MDRequestImpl : public MutationImpl {
   bool has_more() const;
   bool has_witnesses();
   bool slave_did_prepare();
+  bool slave_rolling_back();
   bool did_ino_allocation() const;
   bool freeze_auth_pin(CInode *inode);
   void unfreeze_auth_pin(bool clear_inode=false);
