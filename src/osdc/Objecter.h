@@ -1144,6 +1144,7 @@ private:
   atomic_t global_op_flags; // flags which are applied to each IO op
   bool keep_balanced_budget;
   bool honor_osdmap_full;
+  bool osdmap_full_try;
 
 public:
   void maybe_request_map();
@@ -1913,7 +1914,7 @@ private:
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
     osdmap(new OSDMap), initialized(0), last_tid(0), client_inc(-1),
     max_linger_id(0), num_in_flight(0), global_op_flags(0),
-    keep_balanced_budget(false), honor_osdmap_full(true),
+    keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
     last_seen_osdmap_version(0), last_seen_pgmap_version(0),
     logger(NULL), tick_event(0), m_request_state_hook(NULL),
     num_homeless_ops(0),
@@ -1982,6 +1983,9 @@ private:
 
   void set_honor_osdmap_full() { honor_osdmap_full = true; }
   void unset_honor_osdmap_full() { honor_osdmap_full = false; }
+
+  void set_osdmap_full_try() { osdmap_full_try = true; }
+  void unset_osdmap_full_try() { osdmap_full_try = false; }
 
   void _scan_requests(OSDSession *s,
 		      bool force_resend,
