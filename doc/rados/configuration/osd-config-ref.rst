@@ -695,7 +695,26 @@ perform well in a degraded state.
 :Type: Boolean
 :Default: ``true``
 
+Tiering
+=======
 
+``osd agent max ops``
+
+:Description: The maximum number of simultaneous flushing ops per tiering agent
+              in the high speed mode.
+:Type: 32-bit Integer
+:Default: ``4``
+
+
+``osd agent max low ops``
+
+:Description: The maximum number of simultaneous flushing ops per tiering agent
+              in the low speed mode.
+:Type: 32-bit Integer
+:Default: ``2``
+
+See `cache target dirty high ratio`_ for when the tiering agent flushes dirty
+objects within the high speed mode.
 
 Miscellaneous
 =============
@@ -788,3 +807,4 @@ Miscellaneous
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
 .. _Pool & PG Config Reference: ../pool-pg-config-ref
 .. _Journal Config Reference: ../journal-ref
+.. _cache target dirty high ratio: ../../operations/pools#cache-target-dirty-high-ratio
