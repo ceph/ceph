@@ -249,7 +249,9 @@ bool MonClient::ms_dispatch(Message *m)
   Mutex::Locker lock(monc_lock);
 
   if (_hunting()) {
-    if (!pending_cons.count(m->get_source_addr())) {
+    auto pending_con = pending_cons.find(m->get_source_addr());
+    if (pending_con == pending_cons.end() ||
+	pending_con->second.get_con() != m->get_connection()) {
       // ignore any messages outside hunting sessions
       ldout(cct, 10) << "discarding stray monitor message " << *m << dendl;
       m->put();
