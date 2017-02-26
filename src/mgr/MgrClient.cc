@@ -111,7 +111,6 @@ void MgrClient::reconnect()
       session->con->send_message(open);
     }
 
-    signal_cond_list(waiting_for_session);
     // resend any pending commands
     for (const auto &p : command_table.get_commands()) {
       MCommand *m = p.second.get_message({});
