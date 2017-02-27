@@ -275,8 +275,10 @@ int CrushWrapper::remove_unused_root(int item)
   }
 
   crush_remove_bucket(crush, b);
-  name_map.erase(item);
-  have_rmaps = false;
+  if (name_map.count(item) != 0) {
+    name_map.erase(item);
+    have_rmaps = false;
+  }
   if (class_bucket.count(item) != 0)
     class_bucket.erase(item);
   return 0;
