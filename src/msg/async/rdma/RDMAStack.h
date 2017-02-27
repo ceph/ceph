@@ -180,7 +180,7 @@ class RDMAWorker : public Worker {
   PerfCounters *perf_logger;
   explicit RDMAWorker(CephContext *c, unsigned i);
   virtual ~RDMAWorker();
-  void notify();
+  void notify_worker();
   void pass_wc(std::vector<ibv_wc> &&v);
   void get_wc(std::vector<ibv_wc> &w);
   virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
