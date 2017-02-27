@@ -166,7 +166,7 @@ class Infiniband {
       Cluster(MemoryManager& m, uint32_t s);
       ~Cluster();
 
-      int add(uint32_t num);
+      int fill(uint32_t num);
       void take_back(std::vector<Chunk*> &ck);
       int get_buffers(std::vector<Chunk*> &chunks, size_t bytes);
       Chunk *get_chunk_by_buffer(const char *c) {
@@ -174,13 +174,16 @@ class Infiniband {
         Chunk *chunk = reinterpret_cast<Chunk*>(chunk_base + sizeof(Chunk) * idx);
         return chunk;
       }
+      bool is_my_buffer(const char *c) const {
+        return c >= base && c < end;
+      }
 
       MemoryManager& manager;
       uint32_t chunk_size;
       Mutex lock;
       std::vector<Chunk*> free_chunks;
-      std::set<const char*> all_buffers;
-      char* base;
+      char *base = nullptr;
+      char *end = nullptr;
       char* chunk_base;
     };
 
@@ -193,9 +196,8 @@ class Infiniband {
     void return_tx(std::vector<Chunk*> &chunks);
     int get_send_buffers(std::vector<Chunk*> &c, size_t bytes);
     int get_channel_buffers(std::vector<Chunk*> &chunks, size_t bytes);
-    // TODO: optimize via address judgement
-    bool is_tx_buffer(const char* c) { return send->all_buffers.count(c); }
-    bool is_rx_buffer(const char* c) { return channel->all_buffers.count(c); }
+    bool is_tx_buffer(const char* c) { return send->is_my_buffer(c); }
+    bool is_rx_buffer(const char* c) { return channel->is_my_buffer(c); }
     Chunk *get_tx_chunk_by_buffer(const char *c) {
       return send->get_chunk_by_buffer(c);
     }
