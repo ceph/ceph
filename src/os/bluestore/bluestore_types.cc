@@ -729,20 +729,82 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
     return 0;
 }
 
-void bluestore_blob_t::allocated(const AllocExtentVector& allocs)
+void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const AllocExtentVector& allocs)
 {
-  assert(extents.size() == 0);
-  
-  // if blob is compressed then logical length to be already configured
-  // otherwise - to be unset.
-  assert( (is_compressed() && logical_length != 0) ||
-          (!is_compressed() && logical_length == 0));
-  extents.reserve(allocs.size());
-  for (auto& a : allocs) {
-    extents.emplace_back(a.offset, a.length);
-    if (!is_compressed()) {
-      logical_length += a.length;
+  if (extents.size() == 0) {
+    // if blob is compressed then logical length to be already configured
+    // otherwise - to be unset.
+    assert((is_compressed() && logical_length != 0) ||
+      (!is_compressed() && logical_length == 0));
+
+    extents.reserve(allocs.size() + (b_off ? 1 : 0));
+    if (b_off) {
+      extents.emplace_back(
+        bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, b_off));
     }
+    uint32_t new_len = b_off;
+    for (auto& a : allocs) {
+      extents.emplace_back(a.offset, a.length);
+      new_len += a.length;
+    }
+    if (!is_compressed()) {
+      logical_length = new_len;
+    }
+  } else {
+    assert(!is_compressed()); // partial allocations are forbidden when 
+                              // compressed
+    assert(b_off < logical_length);
+    uint32_t cur_offs = 0;
+    auto start_it = extents.begin();
+    size_t pos = 0;
+    while(true) {
+      if (cur_offs + start_it->length > b_off) {
+	break;
+      }
+      cur_offs += start_it->length;
+      ++start_it;
+      ++pos;
+    }
+    uint32_t head = b_off - cur_offs;
+    uint32_t end_off = b_off + length;
+    auto end_it = start_it;
+
+    while (true) {
+      assert(!end_it->is_valid());
+      if (cur_offs + end_it->length >= end_off) {
+	break;
+      }
+      cur_offs += end_it->length;
+      ++end_it;
+    }
+    assert(cur_offs + end_it->length >= end_off);
+    uint32_t tail = cur_offs + end_it->length - end_off;
+
+    start_it = extents.erase(start_it, end_it + 1);
+    size_t count = allocs.size();
+    count += head ? 1 : 0;
+    count += tail ? 1 : 0;
+    extents.insert(start_it,
+                   count,
+                   bluestore_pextent_t(
+                     bluestore_pextent_t::INVALID_OFFSET, 0));
+   
+    // Workaround to resolve lack of proper iterator return in vector::insert
+    // Looks like some gcc/stl implementations still lack it despite c++11
+    // support claim
+    start_it = extents.begin() + pos;
+
+    if (head) {
+      start_it->length = head;
+      ++start_it;
+    }
+    for(auto& e : allocs) {
+      *start_it = e;
+      ++start_it;
+    }
+    if (tail) {
+      start_it->length = tail;
+    } 
   }
 }
 

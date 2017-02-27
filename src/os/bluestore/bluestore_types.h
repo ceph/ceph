@@ -138,8 +138,14 @@ struct bluestore_pextent_t : public AllocExtent {
 
   bluestore_pextent_t() : AllocExtent() {}
   bluestore_pextent_t(uint64_t o, uint64_t l) : AllocExtent(o, l) {}
-  bluestore_pextent_t(AllocExtent &ext) : AllocExtent(ext.offset, ext.length) { }
+  bluestore_pextent_t(const AllocExtent &ext) :
+    AllocExtent(ext.offset, ext.length) { }
 
+  bluestore_pextent_t& operator=(const AllocExtent &ext) {
+    offset = ext.offset;
+    length = ext.length;
+    return *this;
+  }
   bool is_valid() const {
     return offset != INVALID_OFFSET;
   }
@@ -349,12 +355,45 @@ struct bluestore_blob_use_tracker_t {
       assert(_num_au <= num_au);
       if (_num_au) {
         num_au = _num_au; // bytes_per_au array is left unmodified
+
       } else {
         clear();
       }
     }
   }
-  
+  void add_tail(uint32_t new_len, uint32_t _au_size) {
+    auto full_size = au_size * (num_au ? num_au : 1);
+    assert(new_len >= full_size);
+    if (new_len == full_size) {
+      return;
+    }
+    if (!num_au) {
+      uint32_t old_total = total_bytes;
+      total_bytes = 0;
+      init(new_len, _au_size);
+      assert(num_au);
+      bytes_per_au[0] = old_total;
+    } else {
+      assert(_au_size == au_size);
+      new_len = ROUND_UP_TO(new_len, au_size);
+      uint32_t _num_au = new_len / au_size;
+      assert(_num_au >= num_au);
+      if (_num_au > num_au) {
+	auto old_bytes = bytes_per_au;
+	auto old_num_au = num_au;
+	num_au = _num_au;
+	allocate();
+	for (size_t i = 0; i < old_num_au; i++) {
+	  bytes_per_au[i] = old_bytes[i];
+	}
+	for (size_t i = old_num_au; i < num_au; i++) {
+	  bytes_per_au[i] = 0;
+	}
+	delete[] old_bytes;
+      }
+    }
+  }
+
   void init(
     uint32_t full_length,
     uint32_t _au_size);
@@ -619,6 +658,31 @@ public:
     assert(0 == "we should not get here");
   }
 
+  /// return true if the entire range is unallocated
+  ///  (not mapped to extents on disk)
+  bool is_unallocated(uint64_t b_off, uint64_t b_len) const {
+    auto p = extents.begin();
+    assert(p != extents.end());
+    while (b_off >= p->length) {
+      b_off -= p->length;
+      ++p;
+      assert(p != extents.end());
+    }
+    b_len += b_off;
+    while (b_len) {
+      assert(p != extents.end());
+      if (p->is_valid()) {
+	return false;
+      }
+      if (p->length >= b_len) {
+	return true;
+      }
+      b_len -= p->length;
+      ++p;
+    }
+    assert(0 == "we should not get here");
+  }
+
   /// return true if the logical range has never been used
   bool is_unused(uint64_t offset, uint64_t length) const {
     if (!has_unused()) {
@@ -797,6 +861,22 @@ public:
 			    get_csum_value_size());
     }
   }
+  void add_tail(uint32_t new_len) {
+    assert(is_mutable());
+    assert(new_len > logical_length);
+    extents.emplace_back(
+      bluestore_pextent_t(
+        bluestore_pextent_t::INVALID_OFFSET,
+        new_len - logical_length));
+    logical_length = new_len;
+    if (has_csum()) {
+      bufferptr t;
+      t.swap(csum_data);
+      csum_data = buffer::create(get_csum_value_size() * logical_length / get_csum_chunk_size());
+      csum_data.copy_in(0, t.length(), t.c_str());
+      csum_data.zero( t.length(), csum_data.length() - t.length());
+    }
+  }
   uint32_t get_release_size(uint32_t min_alloc_size) const {
     if (is_compressed()) {
       return get_logical_length();
@@ -809,7 +889,7 @@ public:
   }
 
   void split(uint32_t blob_offset, bluestore_blob_t& rb);
-  void allocated(const AllocExtentVector& allocs);
+  void allocated(uint32_t b_off, uint32_t length, const AllocExtentVector& allocs);
   void allocated_test(const bluestore_pextent_t& alloc); // intended for UT only
 
   /// updates blob's pextents container and return unused pextents eligible

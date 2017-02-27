@@ -476,6 +476,11 @@ public:
              get_blob().can_split_at(blob_offset);
     }
 
+    bool try_reuse_blob(uint32_t min_alloc_size,
+			uint32_t target_blob_size,
+			uint32_t b_offset,
+			uint32_t *length0);
+
     void dup(Blob& o) {
       o.shared_blob = shared_blob;
       o.blob = blob;
@@ -812,7 +817,8 @@ public:
     /// any and update references accordingly
     Extent *set_lextent(uint64_t logical_offset,
 			uint64_t offset, uint64_t length,
-                        BlobRef b, extent_map_t *old_extents);
+                        BlobRef b,
+			extent_map_t *old_extents);
 
     /// split a blob (and referring extents)
     BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
@@ -2246,6 +2252,7 @@ private:
     extent_map_t old_extents;       ///< must deref these blobs
 
     struct write_item {
+      uint64_t logical_offset;      ///< write logical offset
       BlobRef b;
       uint64_t blob_length;
       uint64_t b_off;
@@ -2254,22 +2261,28 @@ private:
       uint64_t length0; ///< original data length prior to padding
 
       bool mark_unused;
+      bool new_blob; ///< whether new blob was created
 
       write_item(
+	uint64_t logical_offs,
         BlobRef b,
         uint64_t blob_len,
         uint64_t o,
         bufferlist& bl,
         uint64_t o0,
         uint64_t l0,
-        bool _mark_unused)
-       : b(b),
+        bool _mark_unused,
+	bool _new_blob)
+       :
+         logical_offset(logical_offs),
+         b(b),
          blob_length(blob_len),
          b_off(o),
          bl(bl),
          b_off0(o0),
          length0(l0),
-         mark_unused(_mark_unused) {}
+         mark_unused(_mark_unused),
+	 new_blob(_new_blob) {}
     };
     vector<write_item> writes;                 ///< blobs we're writing
 
@@ -2281,14 +2294,31 @@ private:
       csum_order = other.csum_order;
     }
     void write(
+      uint64_t loffs,
       BlobRef b,
       uint64_t blob_len,
       uint64_t o,
       bufferlist& bl,
       uint64_t o0,
-      uint64_t len0, bool _mark_unused) {
-      writes.emplace_back(write_item(b, blob_len, o, bl, o0, len0, _mark_unused));
+      uint64_t len0,
+      bool _mark_unused,
+      bool _new_blob) {
+      writes.emplace_back(loffs,
+                          b,
+                          blob_len,
+                          o,
+                          bl,
+                          o0,
+                          len0,
+                          _mark_unused,
+                          _new_blob);
     }
+    /// Checks for writes to the same pextent within a blob
+    bool has_conflict(
+      BlobRef b,
+      uint64_t loffs,
+      uint64_t loffs_end,
+      uint64_t min_alloc_size);
   };
 
   void _do_write_small(
@@ -2308,7 +2338,7 @@ private:
   int _do_alloc_write(
     TransContext *txc,
     CollectionRef c,
-    OnodeRef& o,
+    OnodeRef o,
     WriteContext *wctx);
   void _wctx_finish(
     TransContext *txc,
