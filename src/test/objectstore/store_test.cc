@@ -5844,8 +5844,6 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     bufferlist bl;
 
     bl.append(std::string(block_size, 'b'));
-    t.zero(cid, hoid, 0, bl.length()); // Currently we are unable to reuse blob
-                                       // when overwriting  in a single step
     t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
@@ -5891,7 +5889,6 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     bl.append(std::string(block_size * 2, 'e'));
 
     // Currently we are unable to reuse blob when overwriting in a single step
-    t.zero(cid, hoid, block_size * 6, bl.length());
     t.write(cid, hoid, block_size * 6, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
