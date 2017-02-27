@@ -461,9 +461,9 @@ Notable Changes
 v11.2.0 Kraken
 ==============
 
-This is the first release of the Kraken series.  It is suitable for
-use in production deployments and will be maintained until the next
-stable release, Luminous, is completed in the Spring of 2017.
+This is the first release of the Kraken series.  It is a stable
+release that will be maintained with bugfixes and backports until the
+next stable release, Luminous, is completed in the Spring of 2017.
 
 Major Changes from Jewel
 ------------------------
