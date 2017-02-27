@@ -24,9 +24,9 @@ static string aws_object_name(const RGWBucketInfo& bucket_info, const rgw_obj_ke
   string bucket_name = aws_bucket_name(bucket_info, user_buckets);
   string object_name = bucket_name+"/";
   if (!user_buckets){
-    object_name += bucket_info.bucket.name;
+    object_name += bucket_info.owner.tenant + bucket_info.owner.id + "/";
   }
-  object_name += key.name;
+  object_name += bucket_info.bucket.name + "/" + key.name;
   return object_name;
 }
 
