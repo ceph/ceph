@@ -140,6 +140,7 @@ enum {
   l_msgr_rdma_tx_no_mem,
   l_msgr_rdma_tx_parital_mem,
   l_msgr_rdma_tx_failed,
+  l_msgr_rdma_rx_no_registered_mem,
 
   l_msgr_rdma_tx_chunks,
   l_msgr_rdma_tx_bytes,
@@ -187,9 +188,11 @@ class RDMAWorker : public Worker {
   virtual void initialize() override;
   RDMAStack *get_stack() { return stack; }
   int reserve_message_buffer(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes);
-  int post_tx_buffer(std::vector<Chunk*> &chunks);
-  void add_pending_conn(RDMAConnectedSocketImpl* o);
-  void remove_pending_conn(RDMAConnectedSocketImpl *o) { pending_sent_conns.remove(o); }
+  void post_tx_buffer(std::vector<Chunk*> &chunks);
+  void remove_pending_conn(RDMAConnectedSocketImpl *o) {
+    Mutex::Locker l(lock);
+    pending_sent_conns.remove(o);
+  }
   void handle_tx_event();
   void set_ib(Infiniband* ib) { infiniband = ib; }
   void set_stack(RDMAStack *s) { stack = s; }

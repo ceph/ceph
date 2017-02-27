@@ -43,19 +43,24 @@ RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
 {
   ldout(cct, 20) << __func__ << " destruct." << dendl;
   dispatcher->perf_logger->dec(l_msgr_rdma_active_queue_pair);
+  cleanup();
   worker->remove_pending_conn(this);
   dispatcher->erase_qpn(my_msg.qpn);
-  cleanup();
+  Mutex::Locker l(lock);
   if (notify_fd >= 0)
     ::close(notify_fd);
   if (tcp_fd >= 0)
     ::close(tcp_fd);
   error = ECONNRESET;
-  Mutex::Locker l(lock);
-  for (unsigned i=0; i < wc.size(); ++i)
-    infiniband->recall_chunk(reinterpret_cast<Chunk*>(wc[i].wr_id));
-  for (unsigned i=0; i < buffers.size(); ++i)
-    infiniband->recall_chunk(buffers[i]);
+  int ret = 0;
+  for (unsigned i=0; i < wc.size(); ++i) {
+    ret = infiniband->post_chunk(reinterpret_cast<Chunk*>(wc[i].wr_id));
+    assert(ret == 0);
+  }
+  for (unsigned i=0; i < buffers.size(); ++i) {
+    ret = infiniband->post_chunk(buffers[i]);
+    assert(ret == 0);
+  }
 }
 
 void RDMAConnectedSocketImpl::pass_wc(std::vector<ibv_wc> &&v)
@@ -266,27 +271,26 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
     Chunk* chunk = reinterpret_cast<Chunk *>(response->wr_id);
     ldout(cct, 25) << __func__ << " chunk length: " << response->byte_len << " bytes." << chunk << dendl;
     chunk->prepare_read(response->byte_len);
+    worker->perf_logger->inc(l_msgr_rdma_rx_bytes, response->byte_len);
     if (response->byte_len == 0) {
       dispatcher->perf_logger->inc(l_msgr_rdma_rx_fin);
       if (connected) {
         error = ECONNRESET;
-        assert(infiniband->post_chunk(chunk) == 0);
         ldout(cct, 20) << __func__ << " got remote close msg..." << dendl;
       }
-      break;
-    }
-    worker->perf_logger->inc(l_msgr_rdma_rx_bytes, response->byte_len);
-    //assert(response->byte_len);
-    if (read == (ssize_t)len) {
-      buffers.push_back(chunk);
-      ldout(cct, 25) << __func__ << " buffers add a chunk: " << response->byte_len << dendl;
-    } else if (read + response->byte_len > (ssize_t)len) {
-      read += chunk->read(buf+read, (ssize_t)len-read);
-      buffers.push_back(chunk);
-      ldout(cct, 25) << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound() << dendl;
-    } else {
-      read += chunk->read(buf+read, response->byte_len);
       assert(infiniband->post_chunk(chunk) == 0);
+    } else {
+      if (read == (ssize_t)len) {
+        buffers.push_back(chunk);
+        ldout(cct, 25) << __func__ << " buffers add a chunk: " << response->byte_len << dendl;
+      } else if (read + response->byte_len > (ssize_t)len) {
+        read += chunk->read(buf+read, (ssize_t)len-read);
+        buffers.push_back(chunk);
+        ldout(cct, 25) << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound() << dendl;
+      } else {
+        read += chunk->read(buf+read, response->byte_len);
+        assert(infiniband->post_chunk(chunk) == 0);
+      }
     }
   }
 
@@ -306,7 +310,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
 ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
 {
   size_t read = 0, tmp = 0;
-  vector<Chunk*>::iterator c = buffers.begin();
+  auto c = buffers.begin();
   for (; c != buffers.end() ; ++c) {
     tmp = (*c)->read(buf+read, len-read);
     read += tmp;
@@ -404,39 +408,75 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   if (error)
     return -error;
   Mutex::Locker l(lock);
-  std::vector<Chunk*> tx_buffers;
   size_t bytes = pending_bl.length();
   ldout(cct, 20) << __func__ << " we need " << bytes << " bytes. iov size: "
                  << pending_bl.buffers().size() << dendl;
   if (!bytes)
     return 0;
 
-  int ret = worker->reserve_message_buffer(this, tx_buffers, bytes);
-  if (ret == 0) {
-    ldout(cct, 1) << __func__ << " no enough buffers in worker " << worker << dendl;
-    worker->perf_logger->inc(l_msgr_rdma_tx_no_mem);
-    return -EAGAIN; // that is ok , cause send will return bytes. == 0 enough buffers, < 0 no buffer, >0 not enough
-  }
-  vector<Chunk*>::iterator current_buffer = tx_buffers.begin();
-  list<bufferptr>::const_iterator it = pending_bl.buffers().begin();
-  unsigned total = 0;
-  while (it != pending_bl.buffers().end()) {
-    const uintptr_t addr = reinterpret_cast<const uintptr_t>(it->c_str());
-    unsigned copied = 0;
-    while (copied < it->length()) {
-      uint32_t r = (*current_buffer)->write((char*)addr+copied, it->length() - copied);
-      copied += r;
-      total += r;
-      if ((*current_buffer)->full()){
-        ++current_buffer;
-        if (current_buffer == tx_buffers.end())
-          goto sending;
+  auto fill_tx_via_copy = [this](std::vector<Chunk*> &tx_buffers, unsigned bytes,
+                                 std::list<bufferptr>::const_iterator &start,
+                                 std::list<bufferptr>::const_iterator &end) -> unsigned {
+    assert(start != end);
+    auto chunk_idx = tx_buffers.size();
+    int ret = worker->reserve_message_buffer(this, tx_buffers, bytes);
+    if (ret == 0) {
+      ldout(cct, 1) << __func__ << " no enough buffers in worker " << worker << dendl;
+      worker->perf_logger->inc(l_msgr_rdma_tx_no_mem);
+      return 0;
+    }
+
+    unsigned total_copied = 0;
+    Chunk *current_chunk = tx_buffers[chunk_idx];
+    while (start != end) {
+      const uintptr_t addr = reinterpret_cast<const uintptr_t>(start->c_str());
+      unsigned copied = 0;
+      while (copied < start->length()) {
+        uint32_t r = current_chunk->write((char*)addr+copied, start->length() - copied);
+        copied += r;
+        total_copied += r;
+        bytes -= r;
+        if (current_chunk->full()){
+          current_chunk = tx_buffers[++chunk_idx];
+          if (chunk_idx == tx_buffers.size())
+            return total_copied;
+        }
       }
+      ++start;
+    }
+    assert(bytes == 0);
+    return total_copied;
+  };
+
+  std::vector<Chunk*> tx_buffers;
+  std::list<bufferptr>::const_iterator it = pending_bl.buffers().begin();
+  std::list<bufferptr>::const_iterator copy_it = it;
+  unsigned total = 0;
+  unsigned need_reserve_bytes = 0;
+  while (it != pending_bl.buffers().end()) {
+    if (infiniband->is_tx_buffer(it->raw_c_str())) {
+      if (need_reserve_bytes) {
+        unsigned copied = fill_tx_via_copy(tx_buffers, need_reserve_bytes, copy_it, it);
+        total += copied;
+        if (copied < need_reserve_bytes)
+          goto sending;
+        need_reserve_bytes = 0;
+      }
+      assert(copy_it == it);
+      tx_buffers.push_back(infiniband->get_tx_chunk_by_buffer(it->raw_c_str()));
+      total += it->length();
+      ++copy_it;
+    } else {
+      need_reserve_bytes += it->length();
     }
     ++it;
   }
+  if (need_reserve_bytes)
+    total += fill_tx_via_copy(tx_buffers, need_reserve_bytes, copy_it, it);
 
  sending:
+  if (total == 0)
+    return -EAGAIN;
   assert(total <= pending_bl.length());
   bufferlist swapped;
   if (total < pending_bl.length()) {
@@ -448,7 +488,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   }
 
   ldout(cct, 20) << __func__ << " left bytes: " << pending_bl.length() << " in buffers "
-                 << pending_bl.buffers().size() << dendl;
+                 << pending_bl.buffers().size() << " tx chunks " << tx_buffers.size() << dendl;
 
   int r = post_work_request(tx_buffers);
   if (r < 0)
@@ -506,7 +546,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
     return -errno;
   }
   worker->perf_logger->inc(l_msgr_rdma_tx_chunks, tx_buffers.size());
-  ldout(cct, 20) << __func__ << " qp state is : " << Infiniband::qp_state_string(qp->get_state()) << dendl;
+  ldout(cct, 20) << __func__ << " qp state is " << Infiniband::qp_state_string(qp->get_state()) << dendl;
   return 0;
 }
 
@@ -541,7 +581,7 @@ void RDMAConnectedSocketImpl::cleanup() {
 void RDMAConnectedSocketImpl::notify()
 {
   uint64_t i = 1;
-  assert(write(notify_fd, &i, sizeof(i)) == sizeof(i));
+  write(notify_fd, &i, sizeof(i));
 }
 
 void RDMAConnectedSocketImpl::shutdown()
