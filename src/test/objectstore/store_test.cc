@@ -5744,6 +5744,13 @@ TEST_P(StoreTestSpecificAUSize, OnodeSizeTracking) {
   ASSERT_NE(total_bytes, 0u);
   ASSERT_EQ(total_onodes, 1u);
 
+  {
+    ObjectStore::Transaction t;
+    t.truncate(cid, hoid, 0);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+ 
   for(size_t i = 0; i < 1; ++i) {
     bufferlist bl;
     bl.append(std::string(block_size * (i+1), 'a'));
