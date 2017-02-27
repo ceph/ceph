@@ -147,7 +147,6 @@ ostream &operator<<(ostream &lhs, const ECBackend::Op &rhs)
   }
   lhs << " roll_forward_to=" << rhs.roll_forward_to
       << " temp_added=" << rhs.temp_added
-      << " pending_commit=" << rhs.pending_commit
       << " temp_cleared=" << rhs.temp_cleared
       << " pending_read=" << rhs.pending_read
       << " remote_read=" << rhs.remote_read
