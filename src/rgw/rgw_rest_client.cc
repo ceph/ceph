@@ -685,10 +685,12 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
     pmanager = mgr;
   }
 
+  // Not sure if this is the place to set a send_size, curl otherwise sets
+  // chunked option and doesn't send content length anymore
   uint64_t send_size = (size_t)(outbl.length() - write_ofs);
 
   if (send_size > 0){
-    ldout(cct, 0) << "ABHI!!! set send len to " << send_size << dendl;
+    ldout(cct,20) << "Setting content length as " << send_size << dendl;
     set_send_length(send_size);
   }
 
