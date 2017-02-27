@@ -3520,7 +3520,8 @@ void PrimaryLogPG::do_backfill_remove(OpRequestRef op)
   assert(r == 0);
 }
 
-PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_t &coid)
+PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
+  bool first, const hobject_t &coid)
 {
   // load clone info
   bufferlist bl;
@@ -3713,9 +3714,17 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
   }
 
   // save head snapset
-  dout(10) << coid << " new snapset " << snapset << dendl;
-
-  if (snapset.clones.empty() && !snapset.head_exists) {
+  dout(10) << coid << " new snapset " << snapset << " on "
+	   << snapset_obc->obs.oi << dendl;
+  if (snapset.clones.empty() &&
+      (!snapset.head_exists ||
+       (snapset_obc->obs.oi.is_whiteout() &&
+	!(snapset_obc->obs.oi.is_dirty() && pool.info.is_tier()) &&
+	!snapset_obc->obs.oi.is_cache_pinned()))) {
+    // NOTE: this arguably constitutes minor interference with the
+    // tiering agent if this is a cache tier since a snap trim event
+    // is effectively evicting a whiteout we might otherwise want to
+    // keep around.
     dout(10) << coid << " removing " << snapoid << dendl;
     ctx->log.push_back(
       pg_log_entry_t(
@@ -3728,7 +3737,24 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
 	ctx->mtime,
 	0)
       );
-
+    if (snapoid.is_head()) {
+      derr << "removing snap head" << dendl;
+      object_info_t& oi = ctx->snapset_obc->obs.oi;
+      ctx->delta_stats.num_objects--;
+      if (oi.is_dirty()) {
+	ctx->delta_stats.num_objects_dirty--;
+	oi.clear_flag(object_info_t::FLAG_DIRTY);
+      }
+      if (oi.is_omap())
+	ctx->delta_stats.num_objects_omap--;
+      if (oi.is_whiteout()) {
+	dout(20) << __func__ << " trimming whiteout on " << oi.soid << dendl;
+	ctx->delta_stats.num_whiteouts--;
+	oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+      }
+      if (oi.is_cache_pinned())
+	ctx->delta_stats.num_objects_pinned--;
+    }
     ctx->snapset_obc->obs.exists = false;
     
     t->remove(snapoid);
