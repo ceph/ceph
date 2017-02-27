@@ -2060,13 +2060,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   if (r && (r != -ENOENT || !obc)) {
     // copy the reqids for copy get on ENOENT
     if (r == -ENOENT &&
-	(m->ops[0].op.op == CEPH_OSD_OP_COPY_GET_CLASSIC ||
-	 m->ops[0].op.op == CEPH_OSD_OP_COPY_GET)) {
-      bool classic = false;
-      if (m->ops[0].op.op == CEPH_OSD_OP_COPY_GET_CLASSIC) {
-	classic = true;
-      }
-      fill_in_copy_get_noent(op, oid, m->ops[0], classic);
+	(m->ops[0].op.op == CEPH_OSD_OP_COPY_GET)) {
+      fill_in_copy_get_noent(op, oid, m->ops[0]);
       return;
     }
     dout(20) << __func__ << "find_object_context got error " << r << dendl;
@@ -2173,13 +2168,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
        ((m->get_snapid() != CEPH_SNAPDIR) &&
 	obc->obs.oi.is_whiteout()))) {
     // copy the reqids for copy get on ENOENT
-    if (m->ops[0].op.op == CEPH_OSD_OP_COPY_GET_CLASSIC ||
-	m->ops[0].op.op == CEPH_OSD_OP_COPY_GET) {
-      bool classic = false;
-      if (m->ops[0].op.op == CEPH_OSD_OP_COPY_GET_CLASSIC) {
-	classic = true;
-      }
-      fill_in_copy_get_noent(op, oid, m->ops[0], classic);
+    if (m->ops[0].op.op == CEPH_OSD_OP_COPY_GET) {
+      fill_in_copy_get_noent(op, oid, m->ops[0]);
       close_op_ctx(ctx);
       return;
     }
@@ -5874,16 +5864,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       obs.oi.clear_omap_digest();
       break;
 
-    case CEPH_OSD_OP_COPY_GET_CLASSIC:
-      ++ctx->num_read;
-      tracepoint(osd, do_osd_op_pre_copy_get_classic, soid.oid.name.c_str(), soid.snap.val);
-      result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, true);
-      break;
-
     case CEPH_OSD_OP_COPY_GET:
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_copy_get, soid.oid.name.c_str(), soid.snap.val);
-      result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc, false);
+      result = fill_in_copy_get(ctx, bp, osd_op, ctx->obc);
       break;
 
     case CEPH_OSD_OP_COPY_FROM:
@@ -6875,21 +6859,16 @@ struct C_CopyFrom_AsyncReadCb : public Context {
   OSDOp *osd_op;
   object_copy_data_t reply_obj;
   uint64_t features;
-  bool classic;
   size_t len;
-  C_CopyFrom_AsyncReadCb(OSDOp *osd_op, uint64_t features, bool classic) :
-    osd_op(osd_op), features(features), classic(classic), len(0) {}
+  C_CopyFrom_AsyncReadCb(OSDOp *osd_op, uint64_t features) :
+    osd_op(osd_op), features(features), len(0) {}
   void finish(int r) override {
     assert(len > 0);
     assert(len <= reply_obj.data.length());
     bufferlist bl;
     bl.substr_of(reply_obj.data, 0, len);
     reply_obj.data.swap(bl);
-    if (classic) {
-      reply_obj.encode_classic(osd_op->outdata);
-    } else {
-      ::encode(reply_obj, osd_op->outdata, features);
-    }
+    ::encode(reply_obj, osd_op->outdata, features);
   }
 };
 
@@ -6897,8 +6876,7 @@ int PrimaryLogPG::fill_in_copy_get(
   OpContext *ctx,
   bufferlist::iterator& bp,
   OSDOp& osd_op,
-  ObjectContextRef &obc,
-  bool classic)
+  ObjectContextRef &obc)
 {
   object_info_t& oi = obc->obs.oi;
   hobject_t& soid = oi.soid;
@@ -6921,7 +6899,7 @@ int PrimaryLogPG::fill_in_copy_get(
   object_copy_data_t _reply_obj;
   C_CopyFrom_AsyncReadCb *cb = NULL;
   if (pool.info.require_rollback()) {
-    cb = new C_CopyFrom_AsyncReadCb(&osd_op, features, classic);
+    cb = new C_CopyFrom_AsyncReadCb(&osd_op, features);
   }
   object_copy_data_t &reply_obj = cb ? cb->reply_obj : _reply_obj;
   // size, mtime
@@ -7047,11 +7025,7 @@ int PrimaryLogPG::fill_in_copy_get(
 	   << dendl;
   reply_obj.cursor = cursor;
   if (!async_read_started) {
-    if (classic) {
-      reply_obj.encode_classic(osd_op.outdata);
-    } else {
-      ::encode(reply_obj, osd_op.outdata, features);
-    }
+    ::encode(reply_obj, osd_op.outdata, features);
   }
   if (cb && !async_read_started) {
     delete cb;
@@ -7061,7 +7035,7 @@ int PrimaryLogPG::fill_in_copy_get(
 }
 
 void PrimaryLogPG::fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
-                                          OSDOp& osd_op, bool classic)
+                                          OSDOp& osd_op)
 {
   // NOTE: we take non-const ref here for claim_op_out_data below; we must
   // be careful not to modify anything else that will upset a racing
@@ -7072,11 +7046,7 @@ void PrimaryLogPG::fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
 
   pg_log.get_log().get_object_reqids(oid, 10, &reply_obj.reqids);
   dout(20) << __func__ << " got reqids " << reply_obj.reqids << dendl;
-  if (classic) {
-    reply_obj.encode_classic(osd_op.outdata);
-  } else {
-    ::encode(reply_obj, osd_op.outdata, features);
-  }
+  ::encode(reply_obj, osd_op.outdata, features);
   osd_op.rval = -ENOENT;
   MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
   reply->claim_op_out_data(m->ops);

@@ -66,3 +66,6 @@
   SORTBITWISE flag enabled (Jewel and later).  (Note that this flag is
   required to be set before upgrading beyond Jewel.)
 
+* The rados copy-get-classic operation has been removed since it has not been
+  used by the OSD since before hammer.  It is unlikely any librados user is
+  using this operation explicitly since there is also the more modern copy-get.
