@@ -1223,6 +1223,7 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
   // device classes
   ::encode(class_map, bl);
   ::encode(class_name, bl);
+  ::encode(class_bucket, bl);
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
@@ -1320,6 +1321,7 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
       ::decode(class_name, blp);
       for (auto &c : class_name)
 	class_rname[c.second] = c.first;
+      ::decode(class_bucket, blp);
     }
     finalize();
   }

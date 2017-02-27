@@ -57,6 +57,7 @@ public:
   std::map<int32_t, int32_t> class_map; /* item id -> class id */
   std::map<int32_t, string> class_name; /* class id -> class name */
   std::map<string, int32_t> class_rname; /* class name -> class id */
+  std::map<int32_t, map<int32_t, int32_t> > class_bucket; /* bucket[id][class] == id */
 
 private:
   struct crush_map *crush;
