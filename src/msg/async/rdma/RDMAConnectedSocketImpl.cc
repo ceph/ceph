@@ -182,7 +182,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
   }
 
   ldout(cct, 20) << __func__ << " tcp_fd: " << tcp_fd << dendl;
-  net.set_priority(tcp_fd, opts.priority);
+  net.set_priority(tcp_fd, opts.priority, peer_addr.get_family());
   my_msg.peer_qpn = 0;
   r = infiniband->send_msg(cct, tcp_fd, my_msg);
   if (r < 0)
