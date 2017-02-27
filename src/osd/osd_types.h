@@ -3719,8 +3719,6 @@ public:
     truncate_size(0) {}
 
   static void generate_test_instances(list<object_copy_data_t*>& o);
-  void encode_classic(bufferlist& bl) const;
-  void decode_classic(bufferlist::iterator& bl);
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;

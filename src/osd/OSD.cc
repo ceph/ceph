@@ -9490,7 +9490,6 @@ int OSD::init_op_flags(OpRequestRef& op)
             (iter->op.op != CEPH_OSD_OP_SETXATTR) &&
             (iter->op.op != CEPH_OSD_OP_RMXATTR) &&
             (iter->op.op != CEPH_OSD_OP_STARTSYNC) &&
-            (iter->op.op != CEPH_OSD_OP_COPY_GET_CLASSIC) &&
             (iter->op.op != CEPH_OSD_OP_COPY_GET) &&
             (iter->op.op != CEPH_OSD_OP_COPY_FROM)) {
           op->set_promote();
