@@ -70,7 +70,8 @@ int CephxClientHandler::build_request(bufferlist& bl) const
 
     ::encode(req, bl);
 
-    ldout(cct, 10) << "get auth session key: client_challenge " << req.client_challenge << dendl;
+    ldout(cct, 10) << "get auth session key: client_challenge "
+		   << hex << req.client_challenge << dendl;
     return 0;
   }
 
@@ -117,7 +118,8 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
     CephXServerChallenge ch;
     ::decode(ch, indata);
     server_challenge = ch.server_challenge;
-    ldout(cct, 10) << " got initial server challenge " << server_challenge << dendl;
+    ldout(cct, 10) << " got initial server challenge "
+		   << hex << server_challenge << dendl;
     starting = false;
 
     tickets.invalidate_ticket(CEPH_ENTITY_TYPE_AUTH);
