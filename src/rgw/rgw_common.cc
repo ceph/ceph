@@ -34,11 +34,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-#define POLICY_ACTION           0x01
-#define POLICY_RESOURCE         0x02
-#define POLICY_ARN              0x04
-#define POLICY_STRING           0x08
-
 PerfCounters *perfcounter = NULL;
 
 const uint32_t RGWBucketInfo::NUM_SHARDS_BLIND_BUCKET(UINT32_MAX);
@@ -1749,7 +1744,7 @@ static int matchignorecase(const char& c1, const char& c2)
   return 0;
 }
 
-int match(const string& pattern, const string& input, int flag)
+int match(const string& pattern, const string& input, uint32_t flag)
 {
   auto last_pos_input = 0, last_pos_pattern = 0;
 
@@ -1761,7 +1756,7 @@ int match(const string& pattern, const string& input, int flag)
     string substr_pattern = pattern.substr(last_pos_pattern, cur_pos_pattern);
 
     int res;
-    if (flag & POLICY_ACTION || flag & POLICY_ARN) {
+    if (flag & MATCH_POLICY_ACTION || flag & MATCH_POLICY_ARN) {
       res = match_internal(substr_pattern, substr_input, &matchignorecase);
     } else {
       res = match_internal(substr_pattern, substr_input, &matchcase);
