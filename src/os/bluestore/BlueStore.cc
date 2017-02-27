@@ -3617,7 +3617,6 @@ void BlueStore::_set_alloc_sizes(void)
 
 int BlueStore::_open_bdev(bool create)
 {
-  bluestore_bdev_label_t label;
   assert(bdev == NULL);
   string p = path + "/block";
   bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this));
