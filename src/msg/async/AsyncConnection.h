@@ -207,8 +207,8 @@ class AsyncConnection : public Connection {
   AsyncMessenger *async_msgr;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
-  uint64_t out_seq;
-  uint64_t in_seq, in_seq_acked;
+  atomic64_t out_seq;
+  atomic64_t in_seq, in_seq_acked;
   int state;
   int state_after_send;
   int sd;
