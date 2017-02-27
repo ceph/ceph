@@ -2176,5 +2176,12 @@ extern string  calc_hash_sha256_close_stream(SHA256 **hash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
-int match(const string& pattern, const string& input, int flag);
+namespace {
+  constexpr uint32_t MATCH_POLICY_ACTION = 0x01;
+  constexpr uint32_t MATCH_POLICY_RESOURCE = 0x02;
+  constexpr uint32_t MATCH_POLICY_ARN = 0x04;
+  constexpr uint32_t MATCH_POLICY_STRING = 0x08;
+}
+
+int match(const std::string& pattern, const std::string& input, uint32_t flag);
 #endif
