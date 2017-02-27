@@ -189,7 +189,7 @@ class RDMAWorker : public Worker {
   int reserve_message_buffer(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes);
   void post_tx_buffer(std::vector<Chunk*> &chunks);
   void remove_pending_conn(RDMAConnectedSocketImpl *o) {
-    Mutex::Locker l(lock);
+    assert(center.in_thread());
     pending_sent_conns.remove(o);
   }
   void handle_tx_event();

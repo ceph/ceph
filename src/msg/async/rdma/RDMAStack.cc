@@ -435,6 +435,7 @@ int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
 
 int RDMAWorker::reserve_message_buffer(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes)
 {
+  assert(center.in_thread());
   int r = infiniband->get_tx_buffers(c, bytes);
   if (r > 0) {
     stack->get_dispatcher()->inflight += r;
@@ -444,11 +445,8 @@ int RDMAWorker::reserve_message_buffer(RDMAConnectedSocketImpl *o, std::vector<C
   assert(r == 0);
 
   if (o) {
-    {
-      Mutex::Locker l(lock);
-      if (pending_sent_conns.back() != o)
-        pending_sent_conns.push_back(o);
-    }
+    if (pending_sent_conns.back() != o)
+      pending_sent_conns.push_back(o);
     dispatcher->pending_buffers(this);
   }
   return r;
@@ -464,6 +462,7 @@ int RDMAWorker::reserve_message_buffer(RDMAConnectedSocketImpl *o, std::vector<C
  */
 void RDMAWorker::post_tx_buffer(std::vector<Chunk*> &chunks)
 {
+  assert(center.in_thread());
   if (chunks.empty())
     return ;
 
@@ -472,16 +471,13 @@ void RDMAWorker::post_tx_buffer(std::vector<Chunk*> &chunks)
   ldout(cct, 30) << __func__ << " release " << chunks.size() << " chunks, inflight " << stack->get_dispatcher()->inflight << dendl;
 
   std::set<RDMAConnectedSocketImpl*> done;
-  Mutex::Locker l(lock);
   while (!pending_sent_conns.empty()) {
     RDMAConnectedSocketImpl *o = pending_sent_conns.front();
     pending_sent_conns.pop_front();
     if (!done.count(o)) {
-      lock.Unlock();
       done.insert(o);
       ssize_t r = o->submit(false);
       ldout(cct, 20) << __func__ << " sent pending bl socket=" << o << " r=" << r << dendl;
-      lock.Lock();
       if (r < 0) {
         if (r == -EAGAIN) {
           pending_sent_conns.push_front(o);
