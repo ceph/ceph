@@ -247,11 +247,12 @@ void RDMADispatcher::polling()
 }
 
 void RDMADispatcher::notify_pending_workers() {
-  Mutex::Locker l(w_lock);
-  if (pending_workers.empty())
-    return ;
-  pending_workers.front()->pass_wc(std::move(vector<ibv_wc>()));
-  pending_workers.pop_front();
+  {
+    Mutex::Locker l(w_lock);
+    if (pending_workers.empty())
+      return ;
+  }
+  pending_workers.front()->notify_worker();
 }
 
 int RDMADispatcher::register_qp(QueuePair *qp, RDMAConnectedSocketImpl* csi)
@@ -380,7 +381,7 @@ void RDMAWorker::initialize()
   }
 }
 
-void RDMAWorker::notify()
+void RDMAWorker::notify_worker()
 {
   uint64_t i = 1;
   assert(write(notify_fd, &i, sizeof(i)) == sizeof(i));
@@ -393,7 +394,7 @@ void RDMAWorker::pass_wc(std::vector<ibv_wc> &&v)
     wc = std::move(v);
   else
     wc.insert(wc.end(), v.begin(), v.end());
-  notify();
+  notify_worker();
 }
 
 void RDMAWorker::get_wc(std::vector<ibv_wc> &w)
