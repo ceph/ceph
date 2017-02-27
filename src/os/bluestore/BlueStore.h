@@ -661,7 +661,30 @@ public:
   };
   typedef boost::intrusive::set<Extent> extent_map_t;
 
+
   friend ostream& operator<<(ostream& out, const Extent& e);
+
+  struct OldExtent {
+    boost::intrusive::list_member_hook<> old_extent_item;
+    Extent e;
+    PExtentVector r;
+    bool blob_empty; // flag to track the last removed extent that makes blob
+                     // empty - required to update compression stat properly
+    OldExtent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
+      : e(lo, o, l, b), blob_empty(false) {
+    }
+    static OldExtent* create(CollectionRef c,
+                             uint32_t lo,
+			     uint32_t o,
+			     uint32_t l,
+			     BlobRef& b);
+  };
+  typedef boost::intrusive::list<
+      OldExtent,
+      boost::intrusive::member_hook<
+        OldExtent,
+    boost::intrusive::list_member_hook<>,
+    &OldExtent::old_extent_item> > old_extent_map_t;
 
   struct Onode;
 
@@ -810,15 +833,17 @@ public:
     int compress_extent_map(uint64_t offset, uint64_t length);
 
     /// punch a logical hole.  add lextents to deref to target list.
-    void punch_hole(uint64_t offset, uint64_t length,
-		    extent_map_t *old_extents);
+    void punch_hole(CollectionRef &c,
+		    uint64_t offset, uint64_t length,
+		    old_extent_map_t *old_extents);
 
     /// put new lextent into lextent_map overwriting existing ones if
     /// any and update references accordingly
-    Extent *set_lextent(uint64_t logical_offset,
+    Extent *set_lextent(CollectionRef &c,
+			uint64_t logical_offset,
 			uint64_t offset, uint64_t length,
                         BlobRef b,
-			extent_map_t *old_extents);
+			old_extent_map_t *old_extents);
 
     /// split a blob (and referring extents)
     BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
@@ -862,7 +887,7 @@ public:
       uint64_t offset,
       uint64_t length,
       const ExtentMap& extent_map,
-      const extent_map_t& old_extents,
+      const old_extent_map_t& old_extents,
       uint64_t min_alloc_size);
 
     /// return a collection of extents to perform GC on
@@ -2249,7 +2274,7 @@ private:
     uint64_t target_blob_size = 0;  ///< target (max) blob size
     unsigned csum_order = 0;        ///< target checksum chunk order
 
-    extent_map_t old_extents;       ///< must deref these blobs
+    old_extent_map_t old_extents;   ///< must deref these blobs
 
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
