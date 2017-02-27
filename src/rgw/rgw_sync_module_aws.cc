@@ -66,7 +66,7 @@ public:
         // ultimately we should be using a form of  fetch obj that doesn't write to rados maybe?
 
         string obj_path = bucket_info.bucket.name + "/" + key.name;
-        ldout(store->ctx(),0) << "abhi: path=" << obj_path << dendl;
+        ldout(store->ctx(),0) << "AWS: path=" << obj_path << dendl;
 
         // Don't try this at home, very hacky, probably need a proper aws client
         // written so RESTResourceCR expects a JSON as a result, we workaround
@@ -86,13 +86,13 @@ public:
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
-      ldout(sync_env->cct,0) << "abhi: download complete, creating buckets"<< dendl;
 
       bucket_name=aws_bucket_name(bucket_info);
       if (bucket_created.find(bucket_name) == bucket_created.end()){
       //   // TODO: maybe do a head request for subsequent tries & make it configurable
         yield {
         //string bucket_name = aws_bucket_name(bucket_info);
+          ldout(sync_env->cct,0) << "AWS: creating bucket" << bucket_name << dendl;
           bufferlist bl;
           call(new RGWPutRawRESTResourceCR <int> (sync_env->cct, conf.conn,
                                                   sync_env->http_manager,
@@ -107,7 +107,7 @@ public:
 
       yield {
         string path=aws_object_name(bucket_info, key);
-        ldout(sync_env->cct,0) << "abhi sending request to " << conf.conn << " path" << path << dendl;
+        ldout(sync_env->cct,0) << "AWS creating object at path" << path << dendl;
         call(new RGWPutRawRESTResourceCR<int> (sync_env->cct, conf.conn,
                                                         sync_env->http_manager,
                                                         path, nullptr,
