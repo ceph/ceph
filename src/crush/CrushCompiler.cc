@@ -45,6 +45,20 @@ static void print_item_name(ostream& out, int t, CrushWrapper &crush)
     out << "bucket" << (-1-t);
 }
 
+static void print_bucket_class_ids(ostream& out, int t, CrushWrapper &crush)
+{
+  if (crush.class_bucket.count(t) == 0)
+    return;
+  auto &class_to_id = crush.class_bucket[t];
+  for (auto &i : class_to_id) {
+    int c = i.first;
+    int cid = i.second;
+    const char* class_name = crush.get_class_name(c);
+    assert(class_name);
+    out << "\tid " << cid << " class " << class_name << "\t\t# do not change unnecessarily\n";
+  }
+}
+
 static void print_item_class(ostream& out, int t, CrushWrapper &crush)
 {
   const char *c = crush.get_item_class(t);
@@ -79,12 +93,16 @@ static void print_fixedpoint(ostream& out, int i)
 
 int CrushCompiler::decompile_bucket_impl(int i, ostream &out)
 {
+  const char *name = crush.get_item_name(i);
+  if (name && !crush.is_valid_crush_name(name))
+    return 0;
   int type = crush.get_bucket_type(i);
   print_type_name(out, type, crush);
   out << " ";
   print_item_name(out, i, crush);
   out << " {\n";
   out << "\tid " << i << "\t\t# do not change unnecessarily\n";
+  print_bucket_class_ids(out, i, crush);
 
   out << "\t# weight ";
   print_fixedpoint(out, crush.get_bucket_weight(i));
@@ -473,14 +491,33 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   int hash = 0;
   set<int> used_items;
   int size = 0;
+  map<int32_t, int32_t> class_id;
   
   for (unsigned p=3; p<i->children.size()-1; p++) {
     iter_t sub = i->children.begin() + p;
     string tag = string_node(sub->children[0]);
     //err << "tag " << tag << std::endl;
-    if (tag == "id") 
-      id = int_node(sub->children[1]);
-    else if (tag == "alg") {
+    if (tag == "id") {
+      int maybe_id = int_node(sub->children[1]);
+      if (verbose) err << "bucket " << name << " id " << maybe_id;
+      if (sub->children.size() > 2) {
+        string class_name = string_node(sub->children[3]);
+        if (!crush.class_exists(class_name)) {
+          err << " unknown device class '" << class_name << "'" << std::endl;
+          return -EINVAL;
+        }
+        int cid = crush.get_class_id(class_name);
+        if (class_id.count(cid) != 0) {
+          err << "duplicate device class " << class_name << " for bucket " << name << std::endl;
+          return -ERANGE;
+        }
+        class_id[cid] = maybe_id;
+        if (verbose) err << " class" << " '" << class_name << "'" << std::endl;
+      } else {
+        id = maybe_id;
+        if (verbose) err << std::endl;
+      }
+    } else if (tag == "alg") {
       string a = string_node(sub->children[1]);
       if (a == "uniform")
 	alg = CRUSH_BUCKET_UNIFORM;
@@ -608,6 +645,9 @@ int CrushCompiler::parse_bucket(iter_t const& i)
     for (id=-1; id_item.count(id); id--) ;
     //err << "assigned id " << id << std::endl;
   }
+
+  for (auto &i : class_id)
+    crush.class_bucket[id][i.first] = i.second;
 
   if (verbose) err << "bucket " << name << " (" << id << ") " << size << " items and weight "
 		   << (float)bucketweight / (float)0x10000 << std::endl;
