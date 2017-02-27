@@ -219,7 +219,6 @@ int RGWAWSSyncModule::create_instance(CephContext *cct, map<string, string>& con
   if (i != config.end())
     secret = i->second;
 
-    // maybe we should just pass dictionaries around?
   instance->reset(new RGWAWSSyncModuleInstance(cct, s3_endpoint, access_key, secret));
   return 0;
 }
