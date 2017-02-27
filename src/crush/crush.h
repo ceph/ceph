@@ -168,7 +168,7 @@ enum crush_algorithm {
          * they divide and conquer in a way that either gives certain
          * items precedence (e. g., those at the beginning of a list)
          * or obviates the need to consider entire subtrees of items
-         * at all. That im- proves the performance of the replica
+         * at all. That improves the performance of the replica
          * placement process, but can also introduce suboptimal
          * reorganization behavior when the contents of a bucket
          * change due an addition, removal, or re-weighting of an
