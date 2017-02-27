@@ -12,3 +12,5 @@ usr/share/man/man8/ceph-clsinfo.8
 usr/share/man/man8/ceph-disk.8
 usr/share/man/man8/ceph-osd.8
 usr/lib/python*/dist-packages/ceph_disk*
+usr/lib/libosd_tp.so*
+usr/lib/libos_tp.so*
