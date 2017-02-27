@@ -32,7 +32,7 @@ static string aws_object_name(const RGWBucketInfo& bucket_info, const rgw_obj_ke
 
 struct AWSConfig {
   string id;
-  RGWRESTConn *conn{nullptr};
+  std::unique_ptr<RGWRESTConn> conn;
 };
 
 // maybe use Fetch Remote Obj instead?
@@ -86,7 +86,7 @@ public:
         //string bucket_name = aws_bucket_name(bucket_info);
           ldout(sync_env->cct,0) << "AWS: creating bucket" << bucket_name << dendl;
           bufferlist bl;
-          call(new RGWPutRawRESTResourceCR <int> (sync_env->cct, conf.conn,
+          call(new RGWPutRawRESTResourceCR <int> (sync_env->cct, conf.conn.get(),
                                                   sync_env->http_manager,
                                                   bucket_name, nullptr, bl, nullptr));
         }
@@ -99,8 +99,8 @@ public:
 
       yield {
         string path=aws_object_name(bucket_info, key);
-        ldout(sync_env->cct,0) << "AWS creating object at path" << path << dendl;
-        call(new RGWPutRawRESTResourceCR<int> (sync_env->cct, conf.conn,
+        ldout(sync_env->cct,0) << "AWS: creating object at path" << path << dendl;
+        call(new RGWPutRawRESTResourceCR<int> (sync_env->cct, conf.conn.get(),
                                                         sync_env->http_manager,
                                                         path, nullptr,
                                                         res, nullptr));
@@ -151,8 +151,8 @@ public:
                               << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
         string path = aws_object_name(bucket_info, key);
-        ldout(sync_env->cct, 0) << "abhi: removing aws object at" << path << dendl;
-        call(new RGWDeleteRESTResourceCR(sync_env->cct, conf.conn,
+        ldout(sync_env->cct, 0) << "AWS: removing aws object at" << path << dendl;
+        call(new RGWDeleteRESTResourceCR(sync_env->cct, conf.conn.get(),
                                          sync_env->http_manager,
                                          path, nullptr /* params */));
       }
@@ -172,15 +172,14 @@ class RGWAWSDataSyncModule: public RGWDataSyncModule {
 public:
   RGWAWSDataSyncModule(CephContext *cct, const string& s3_endpoint, const string& access_key, const string& secret){
     conf.id = string("s3:") + s3_endpoint;
-    conf.conn = new RGWRESTConn(cct,
-                                conf.id,
-                                { s3_endpoint },
-                                RGWAccessKey(access_key,secret));
+    conf.conn.reset(new RGWRESTConn(cct,
+                                    conf.id,
+                                    { s3_endpoint },
+                                    RGWAccessKey(access_key,secret)));
   }
 
-  ~RGWAWSDataSyncModule() {
-    delete conf.conn;
-  }
+  ~RGWAWSDataSyncModule() {}
+
     RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch) override {
     ldout(sync_env->cct, 0) << conf.id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
     return new RGWAWSHandleRemoteObjCR(sync_env, bucket_info, key, conf);
