@@ -59,7 +59,7 @@ private:
   static bool tpinit;
 
   static void init_tp(CephContext *_ctx);
-  static void set_message_attrs(Message *m, string& oid, string& context, bool incl_oid);
+  static void set_message_attrs(const Message *m, string& oid, string& context, bool incl_oid);
 
 public:
 
@@ -69,12 +69,12 @@ public:
 
   static void trace_oid_event(const char *oid, const char *event, const char *context,
     const char *file, const char *func, int line);
-  static void trace_oid_event(Message *m, const char *event, const char *file,
+  static void trace_oid_event(const Message *m, const char *event, const char *file,
     const char *func, int line, bool incl_oid);
 
   static void trace_oid_elapsed(const char *oid, const char *event, const char *context,
     double elapsed, const char *file, const char *func, int line);
-  static void trace_oid_elapsed(Message *m, const char *event, double elapsed, 
+  static void trace_oid_elapsed(const Message *m, const char *event, double elapsed,
     const char *file, const char *func, int line, bool incl_oid);
   
 };
