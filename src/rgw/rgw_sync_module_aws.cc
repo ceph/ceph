@@ -41,18 +41,20 @@ class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
   bufferlist res;
   unordered_map <string, bool> bucket_created;
   string bucket_name;
+  //std::unique_ptr<RGWRESTConn> rgw_conn;
+
 public:
   RGWAWSHandleRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
                             RGWBucketInfo& _bucket_info,
                             rgw_obj_key& _key,
                             const AWSConfig& _conf) : RGWStatRemoteObjCBCR(_sync_env, _bucket_info, _key),
-                                                         conf(_conf) {}
-  int operate () override {
-    auto store = sync_env->store;
-    RGWRESTConn *conn = store->rest_master_conn;
+                                                         conf(_conf)
+  {}
 
-    if (conn == nullptr)
-      return -EIO;
+  ~RGWAWSHandleRemoteObjCBCR(){
+  }
+
+  int operate () override {
 
     reenter(this) {
 
@@ -62,25 +64,15 @@ public:
                               << dendl;
 
       yield {
-        // and here be dragons!
-        // ultimately we should be using a form of  fetch obj that doesn't write to rados maybe?
-
         string obj_path = bucket_info.bucket.name + "/" + key.name;
-        ldout(store->ctx(),0) << "AWS: path=" << obj_path << dendl;
-
-        // Don't try this at home, very hacky, probably need a proper aws client
-        // written so RESTResourceCR expects a JSON as a result, we workaround
-        // by providing a bufferlist, need to rewrite the class to support RAW requests
 
         // TODO-future: And we should do a part by part get and initiate mp on the aws side
-        call(new RGWReadRESTResourceCR<bufferlist>(sync_env->cct,
-                                                   conn,
-                                                   sync_env->http_manager,
-                                                   obj_path,
-                                                   nullptr,
-                                                   &res,
-                                                   true,
-                                                   &res));
+        call(new RGWReadRawRESTResourceCR(sync_env->cct,
+                                          sync_env->store->rest_master_conn,
+                                          sync_env->http_manager,
+                                          obj_path,
+                                          nullptr,
+                                          &res));
 
       }
       if (retcode < 0) {
