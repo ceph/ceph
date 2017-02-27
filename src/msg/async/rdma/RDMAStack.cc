@@ -338,7 +338,7 @@ void RDMADispatcher::handle_post_fork()
 
 RDMAWorker::RDMAWorker(CephContext *c, unsigned i)
   : Worker(c, i), stack(nullptr), infiniband(NULL),
-    tx_handler(new C_handle_cq_tx(this)), memory_manager(NULL), lock("RDMAWorker::lock"), pended(false)
+    tx_handler(new C_handle_cq_tx(this)), memory_manager(NULL), lock("RDMAWorker::lock")
 {
   // initialize perf_logger
   char name[128];
@@ -471,7 +471,6 @@ void RDMAWorker::post_tx_buffer(std::vector<Chunk*> &chunks)
   memory_manager->return_tx(chunks);
   ldout(cct, 30) << __func__ << " release " << chunks.size() << " chunks, inflight " << stack->get_dispatcher()->inflight << dendl;
 
-  pended = false;
   std::set<RDMAConnectedSocketImpl*> done;
   Mutex::Locker l(lock);
   while (!pending_sent_conns.empty()) {

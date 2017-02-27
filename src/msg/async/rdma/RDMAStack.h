@@ -165,7 +165,6 @@ class RDMAWorker : public Worker {
   int notify_fd = -1;
   Mutex lock;
   std::vector<ibv_wc> wc;
-  bool pended;
 
   class C_handle_cq_tx : public EventCallback {
     RDMAWorker *worker;
