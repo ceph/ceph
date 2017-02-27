@@ -132,13 +132,13 @@ test_object() {
           failed=$(($failed + 1))
         fi
         numtests=$(($numtests + 1))
-        echo "failed=$failed" > $output_file
-        echo "numtests=$numtests" >> $output_file
       done
     else
       echo "skipping unrecognized type $type"
     fi
 
+    echo "failed=$failed" > $output_file
+    echo "numtests=$numtests" >> $output_file
     rm -f $tmp1 $tmp2
 }
 
