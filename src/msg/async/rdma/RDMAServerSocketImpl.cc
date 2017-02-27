@@ -31,9 +31,9 @@ int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt)
   int rc = 0;
   server_setup_socket = net.create_socket(sa.get_family(), true);
   if (server_setup_socket < 0) {
-    rc = -errno;
+    rc = server_setup_socket;
     lderr(cct) << __func__ << " failed to create server socket: "
-               << cpp_strerror(errno) << dendl;
+               << cpp_strerror(rc) << dendl;
     return rc;
   }
 
@@ -52,14 +52,14 @@ int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt)
   if (rc < 0) {
     rc = -errno;
     ldout(cct, 10) << __func__ << " unable to bind to " << sa.get_sockaddr()
-                   << " on port " << sa.get_port() << ": " << cpp_strerror(errno) << dendl;
+                   << " on port " << sa.get_port() << ": " << cpp_strerror(rc) << dendl;
     goto err;
   }
 
   rc = ::listen(server_setup_socket, 128);
   if (rc < 0) {
     rc = -errno;
-    lderr(cct) << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(errno) << dendl;
+    lderr(cct) << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(rc) << dendl;
     goto err;
   }
 
@@ -69,7 +69,7 @@ int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt)
 err:
   ::close(server_setup_socket);
   server_setup_socket = -1;
-  return -errno;
+  return rc;
 }
 
 int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w)
