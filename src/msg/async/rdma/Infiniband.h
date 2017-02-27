@@ -170,7 +170,7 @@ class Infiniband {
       void take_back(std::vector<Chunk*> &ck);
       int get_buffers(std::vector<Chunk*> &chunks, size_t bytes);
       Chunk *get_chunk_by_buffer(const char *c) {
-        uint32_t idx = (c - base) / chunk_size;
+        uint32_t idx = (c - base) / buffer_size;
         Chunk *chunk = reinterpret_cast<Chunk*>(chunk_base + sizeof(Chunk) * idx);
         return chunk;
       }
@@ -179,7 +179,7 @@ class Infiniband {
       }
 
       MemoryManager& manager;
-      uint32_t chunk_size;
+      uint32_t buffer_size;
       Mutex lock;
       std::vector<Chunk*> free_chunks;
       char *base = nullptr;
@@ -201,8 +201,8 @@ class Infiniband {
     Chunk *get_tx_chunk_by_buffer(const char *c) {
       return send->get_chunk_by_buffer(c);
     }
-    uint32_t get_tx_chunk_size() const {
-      return send->chunk_size;
+    uint32_t get_tx_buffer_size() const {
+      return send->buffer_size;
     }
 
     bool enabled_huge_page;
