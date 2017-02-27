@@ -28,7 +28,7 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* i
     active(false), detached(false)
 {
   qp = infiniband->create_queue_pair(
-				     cct, s->get_rx_cq(), s->get_rx_cq(), IBV_QPT_RC);
+				     cct, s->get_tx_cq(), s->get_rx_cq(), IBV_QPT_RC);
   my_msg.qpn = qp->get_local_qp_number();
   my_msg.psn = qp->get_initial_psn();
   my_msg.lid = infiniband->get_lid();
@@ -183,6 +183,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
   int r = net.set_socket_options(tcp_fd, opts.nodelay, opts.rcbuf_size);
   if (r < 0) {
     ::close(tcp_fd);
+    tcp_fd = -1;
     return -errno;
   }
 
@@ -419,7 +420,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
                                  std::list<bufferptr>::const_iterator &end) -> unsigned {
     assert(start != end);
     auto chunk_idx = tx_buffers.size();
-    int ret = worker->reserve_message_buffer(this, tx_buffers, bytes);
+    int ret = worker->get_reged_mem(this, tx_buffers, bytes);
     if (ret == 0) {
       ldout(cct, 1) << __func__ << " no enough buffers in worker " << worker << dendl;
       worker->perf_logger->inc(l_msgr_rdma_tx_no_mem);
@@ -495,7 +496,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
     return r;
 
   ldout(cct, 20) << __func__ << " finished sending " << bytes << " bytes." << dendl;
-  return bytes;
+  return pending_bl.length() ? -EAGAIN : 0;
 }
 
 int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
@@ -602,6 +603,7 @@ void RDMAConnectedSocketImpl::close()
 
 void RDMAConnectedSocketImpl::fault()
 {
+  ldout(cct, 1) << __func__ << " tcp fd " << tcp_fd << dendl;
   /*if (qp) {
     qp->to_dead();
     qp = NULL;
