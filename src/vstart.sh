@@ -791,7 +791,7 @@ if [ "$CEPH_NUM_MGR" -gt 0 ]; then
 
         cat <<EOF >> $conf_fn
 [mgr.$name]
-
+        host = $HOSTNAME
 EOF
 
         echo "Starting mgr.${name}"
