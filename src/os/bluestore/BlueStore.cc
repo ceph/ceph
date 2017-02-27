@@ -5841,7 +5841,7 @@ int BlueStore::_do_read(
   for (auto& p : blobs2read) {
     BlobRef bptr = p.first;
     dout(20) << __func__ << "  blob " << *bptr << std::hex
-	     << " need 0x" << p.second << std::dec << dendl;
+	     << " need " << p.second << std::dec << dendl;
     if (bptr->get_blob().is_compressed()) {
       // read the whole thing
       if (compressed_blob_bls.empty()) {
