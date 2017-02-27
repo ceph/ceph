@@ -62,6 +62,10 @@
 #include "include/types.h"
 #include "common/BackTrace.h"
 
+#ifdef HAVE_SYS_PRCTL_H
+#include <sys/prctl.h>
+#endif
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -479,6 +483,12 @@ int main(int argc, const char **argv)
   RGWRealmWatcher realm_watcher(g_ceph_context, store->realm);
   realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
+
+#if defined(HAVE_SYS_PRCTL_H)
+  if (prctl(PR_SET_DUMPABLE, 1) == -1) {
+    cerr << "warning: unable to set dumpable flag: " << cpp_strerror(errno) << std::endl;
+  }
+#endif
 
   wait_shutdown();
 
