@@ -574,18 +574,20 @@ Infiniband::MemoryManager::Cluster::~Cluster()
     delete base;
 }
 
-int Infiniband::MemoryManager::Cluster::add(uint32_t num)
+int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
 {
+  assert(!base);
   uint32_t bytes = chunk_size * num;
-  //cihar* base = (char*)malloc(bytes);
   if (manager.enabled_huge_page) {
     base = (char*)manager.malloc_huge_pages(bytes);
   } else {
     base = (char*)memalign(CEPH_PAGE_SIZE, bytes);
   }
+  end = base + bytes;
   assert(base);
   chunk_base = (char*)::malloc(sizeof(Chunk) * num);
   memset(chunk_base, 0, sizeof(Chunk) * num);
+  free_chunks.reserve(num);
   char *ptr = chunk_base;
   for (uint32_t offset = 0; offset < bytes; offset += chunk_size){
     Chunk *chunk = reinterpret_cast<Chunk*>(ptr);
@@ -593,7 +595,6 @@ int Infiniband::MemoryManager::Cluster::add(uint32_t num)
     assert(m);
     new(chunk) Chunk(m, chunk_size, base+offset);
     free_chunks.push_back(chunk);
-    all_buffers.insert(chunk->buffer);
     ptr += sizeof(Chunk);
   }
   return 0;
@@ -680,10 +681,10 @@ void Infiniband::MemoryManager::register_rx_tx(uint32_t size, uint32_t rx_num, u
   assert(device);
   assert(pd);
   channel = new Cluster(*this, size);
-  channel->add(rx_num);
+  channel->fill(rx_num);
 
   send = new Cluster(*this, size);
-  send->add(tx_num);
+  send->fill(tx_num);
 }
 
 void Infiniband::MemoryManager::return_tx(std::vector<Chunk*> &chunks)
