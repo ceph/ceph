@@ -63,9 +63,6 @@ protected:
 
   CommandTable<MgrCommand> command_table;
 
-  void wait_on_list(list<Cond*>& ls);
-  void signal_cond_list(list<Cond*>& ls);
-
   Context *report_callback;
 
   // If provided, use this to compose an MPGStats to send with

@@ -255,22 +255,6 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
   return true;
 }
 
-void MgrClient::wait_on_list(list<Cond*>& ls)
-{
-  assert(lock.is_locked_by_me());
-
-  Cond cond;
-  ls.push_back(&cond);
-  cond.Wait(lock);
-  ls.remove(&cond);
-}
-
-void MgrClient::signal_cond_list(list<Cond*>& ls)
-{
-  for (list<Cond*>::iterator it = ls.begin(); it != ls.end(); ++it)
-    (*it)->Signal();
-}
-
 int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
                   bufferlist *outbl, string *outs,
                   Context *onfinish)
