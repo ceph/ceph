@@ -1578,6 +1578,7 @@ public:
           ldout(sync_env->cct, 10) << *this << ": failed to fetch more log entries, retcode=" << retcode << dendl;
           yield lease_cr->go_down();
           drain_all();
+          *reset_backoff = false; // back off and try again later
           return retcode;
         }
         *reset_backoff = true; /* if we got to this point, all systems function */
@@ -1587,6 +1588,13 @@ public:
           yield call(new RGWReadMDLogEntriesCR(sync_env, mdlog, shard_id,
                                                &max_marker, INCREMENTAL_MAX_ENTRIES,
                                                &log_entries, &truncated));
+          if (retcode < 0) {
+            ldout(sync_env->cct, 10) << *this << ": failed to list mdlog entries, retcode=" << retcode << dendl;
+            yield lease_cr->go_down();
+            drain_all();
+            *reset_backoff = false; // back off and try again later
+            return retcode;
+          }
           for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
             if (!period_marker.empty() && period_marker < log_iter->id) {
               done_with_period = true;
@@ -1657,12 +1665,13 @@ class RGWMetaSyncShardControlCR : public RGWBackoffControlCR
   rgw_meta_sync_marker sync_marker;
   const std::string period_marker;
 
+  static constexpr bool exit_on_error = false; // retry on all errors
 public:
   RGWMetaSyncShardControlCR(RGWMetaSyncEnv *_sync_env, const rgw_bucket& _pool,
                             const std::string& period, RGWMetadataLog* mdlog,
                             uint32_t _shard_id, const rgw_meta_sync_marker& _marker,
                             std::string&& period_marker)
-    : RGWBackoffControlCR(_sync_env->cct, true), sync_env(_sync_env),
+    : RGWBackoffControlCR(_sync_env->cct, exit_on_error), sync_env(_sync_env),
       pool(_pool), period(period), mdlog(mdlog), shard_id(_shard_id),
       sync_marker(_marker), period_marker(std::move(period_marker)) {}
 
