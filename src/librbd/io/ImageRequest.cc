@@ -204,6 +204,22 @@ ImageReadRequest<I>::ImageReadRequest(I &image_ctx, AioCompletion *aio_comp,
 }
 
 template <typename I>
+int ImageReadRequest<I>::clip_request() {
+  int r = ImageRequest<I>::clip_request();
+  if (r < 0) {
+    return r;
+  }
+
+  uint64_t buffer_length = 0;
+  auto &image_extents = this->m_image_extents;
+  for (auto &image_extent : image_extents) {
+    buffer_length += image_extent.second;
+  }
+  this->m_aio_comp->read_result.set_clip_length(buffer_length);
+  return 0;
+}
+
+template <typename I>
 void ImageReadRequest<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
@@ -236,7 +252,6 @@ void ImageReadRequest<I>::send_request() {
       buffer_ofs += extent.second;
     }
   }
-  aio_comp->read_result.set_clip_length(buffer_ofs);
 
   // pre-calculate the expected number of read requests
   uint32_t request_count = 0;
