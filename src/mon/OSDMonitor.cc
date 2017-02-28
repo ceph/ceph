@@ -3010,7 +3010,7 @@ unsigned OSDMonitor::scan_for_creating_pgs(
   for (auto& p : pools) {
     int64_t poolid = p.first;
     const pg_pool_t& pool = p.second;
-    int ruleno = osdmap.crush->find_rule(pool.get_crush_ruleset(),
+    int ruleno = osdmap.crush->find_rule(pool.get_crush_rule(),
 					 pool.get_type(), pool.get_size());
     if (ruleno < 0 || !osdmap.crush->rule_exists(ruleno))
       continue;
@@ -4483,15 +4483,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 			p->get_crash_replay_interval());
 	    break;
 	  case CRUSH_RULE:
-	    if (osdmap.crush->rule_exists(p->get_crush_ruleset())) {
+	    if (osdmap.crush->rule_exists(p->get_crush_rule())) {
 	      f->dump_string("crush_rule", osdmap.crush->get_rule_name(
-			       p->get_crush_ruleset()));
+			       p->get_crush_rule()));
 	    } else {
-	      f->dump_string("crush_rule", stringify(p->get_crush_ruleset()));
+	      f->dump_string("crush_rule", stringify(p->get_crush_rule()));
 	    }
 	    break;
 	  case CRUSH_RULESET:
-	    f->dump_int("crush_ruleset", p->get_crush_ruleset());
+	    f->dump_int("crush_ruleset", p->get_crush_rule());
 	    break;
 	  case HASHPSPOOL:
 	  case NODELETE:
@@ -4647,15 +4647,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	      p->get_crash_replay_interval() << "\n";
 	    break;
 	  case CRUSH_RULE:
-	    if (osdmap.crush->rule_exists(p->get_crush_ruleset())) {
+	    if (osdmap.crush->rule_exists(p->get_crush_rule())) {
 	      ss << "crush_rule: " << osdmap.crush->get_rule_name(
-		p->get_crush_ruleset()) << "\n";
+		p->get_crush_rule()) << "\n";
 	    } else {
-	      ss << "crush_rule: " << p->get_crush_ruleset() << "\n";
+	      ss << "crush_rule: " << p->get_crush_rule() << "\n";
 	    }
 	    break;
 	  case CRUSH_RULESET:
-	    ss << "crush_ruleset: " << p->get_crush_ruleset() << "\n";
+	    ss << "crush_ruleset: " << p->get_crush_rule() << "\n";
 	    break;
 	  case HIT_SET_PERIOD:
 	    ss << "hit_set_period: " << p->hit_set_period << "\n";
@@ -5707,7 +5707,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
 
   pi->size = size;
   pi->min_size = min_size;
-  pi->crush_ruleset = crush_ruleset;
+  pi->crush_rule = crush_ruleset;
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
   pi->set_pg_num(pg_num);
@@ -5936,7 +5936,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (!osdmap.crush->check_crush_rule(id, p.get_type(), p.get_size(), ss)) {
       return -EINVAL;
     }
-    p.crush_ruleset = id;
+    p.crush_rule = id;
   } else if (var == "crush_ruleset") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -5950,7 +5950,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (!osdmap.crush->check_crush_rule(n, p.get_type(), p.get_size(), ss)) {
       return -EINVAL;
     }
-    p.crush_ruleset = n;
+    p.crush_rule = n;
   } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
 	     var == "noscrub" || var == "nodeep-scrub") {
@@ -7033,7 +7033,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
       const pg_pool_t &pool = pit->second;
-      int ruleno = pool.get_crush_ruleset();
+      int ruleno = pool.get_crush_rule();
       if (!crush.rule_exists(ruleno)) {
 	ss << " the crush rule no "<< ruleno << " for pool id " << pool_id << " is in use";
 	err = -EINVAL;

@@ -1321,7 +1321,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	pool.second.is_tier()) {
       features |= CEPH_FEATURE_OSD_CACHEPOOL;
     }
-    int ruleid = crush->find_rule(pool.second.get_crush_ruleset(),
+    int ruleid = crush->find_rule(pool.second.get_crush_rule(),
 				  pool.second.get_type(),
 				  pool.second.get_size());
     if (ruleid >= 0) {
@@ -1887,7 +1887,7 @@ void OSDMap::_pg_to_raw_osds(
   unsigned size = pool.get_size();
 
   // what crush rule?
-  int ruleno = crush->find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
+  int ruleno = crush->find_rule(pool.get_crush_rule(), pool.get_type(), size);
   if (ruleno >= 0)
     crush->do_rule(ruleno, pps, *osds, size, osd_weight, pg.pool());
 
@@ -3222,7 +3222,7 @@ void OSDMap::print_oneline_summary(ostream& out) const
 bool OSDMap::crush_ruleset_in_use(int ruleset) const
 {
   for (const auto &pool : pools) {
-    if (pool.second.crush_ruleset == ruleset)
+    if (pool.second.crush_rule == ruleset)
       return true;
   }
   return false;
@@ -3303,7 +3303,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
       pools[pool].set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
-    pools[pool].crush_ruleset = default_replicated_ruleset;
+    pools[pool].crush_rule = default_replicated_ruleset;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
     pools[pool].set_pg_num(poolbase << pg_bits);
     pools[pool].set_pgp_num(poolbase << pgp_bits);
@@ -3691,7 +3691,7 @@ bool OSDMap::try_pg_upmap(
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool)
     return false;
-  int rule = crush->find_rule(pool->get_crush_ruleset(), pool->get_type(),
+  int rule = crush->find_rule(pool->get_crush_rule(), pool->get_type(),
 			      pool->get_size());
   if (rule < 0)
     return false;
@@ -3765,7 +3765,7 @@ int OSDMap::calc_pg_upmaps(
       total_pgs += i.second.get_size() * i.second.get_pg_num();
 
       map<int,float> pmap;
-      int ruleno = tmp.crush->find_rule(i.second.get_crush_ruleset(),
+      int ruleno = tmp.crush->find_rule(i.second.get_crush_rule(),
 					i.second.get_type(),
 					i.second.get_size());
       tmp.crush->get_rule_weight_osd_map(ruleno, &pmap);

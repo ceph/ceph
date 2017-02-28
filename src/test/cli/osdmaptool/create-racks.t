@@ -797,29 +797,15 @@
   nearfull_ratio 0
   min_compat_client jewel
   
-  pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0
+  pool 0 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0
   
   max_osd 239
   
 
-  $ osdmaptool --clobber --create-from-conf --osd_pool_default_crush_replicated_ruleset 55 om -c $TESTDIR/ceph.conf.withracks  
+  $ osdmaptool --clobber --create-from-conf om -c $TESTDIR/ceph.conf.withracks
   osdmaptool: osdmap file 'om'
   osdmaptool: writing epoch 1 to om
   $ osdmaptool --print om | grep 'pool 0'
   osdmaptool: osdmap file 'om'
-  pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 55 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0
-  $ osdmaptool --clobber --create-from-conf --osd_pool_default_crush_rule 55 om -c $TESTDIR/ceph.conf.withracks 2>&1 >/dev/null | sed -e 's/^.* 0 osd_pool_//'
-  osdmaptool: osdmap file 'om'
-  default_crush_rule is deprecated use osd_pool_default_crush_replicated_ruleset instead
-  default_crush_rule = 55 overrides osd_pool_default_crush_replicated_ruleset = 0
-  $ osdmaptool --print om | grep 'pool 0'
-  osdmaptool: osdmap file 'om'
-  pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 55 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0
-  $ osdmaptool --clobber --create-from-conf --osd_pool_default_crush_replicated_ruleset 66 --osd_pool_default_crush_rule 55 om -c $TESTDIR/ceph.conf.withracks 2>&1 >/dev/null | sed -e 's/^.* 0 osd_pool_//'
-  osdmaptool: osdmap file 'om'
-  default_crush_rule is deprecated use osd_pool_default_crush_replicated_ruleset instead
-  default_crush_rule = 55 overrides osd_pool_default_crush_replicated_ruleset = 66
-  $ osdmaptool --print om | grep 'pool 0'
-  osdmaptool: osdmap file 'om'
-  pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 55 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0
+  pool 0 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0
   $ rm -f om

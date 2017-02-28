@@ -95,9 +95,9 @@ function TEST_erasure_crush_rule() {
     ceph osd crush rule ls | grep $crush_ruleset
     local poolname
     poolname=pool_erasure1
-    ! ceph --format json osd dump | grep '"crush_ruleset":1' || return 1
+    ! ceph --format json osd dump | grep '"crush_rule":1' || return 1
     ceph osd pool create $poolname 12 12 erasure default $crush_ruleset
-    ceph --format json osd dump | grep '"crush_ruleset":1' || return 1
+    ceph --format json osd dump | grep '"crush_rule":1' || return 1
     #
     # a crush ruleset by the name of the pool is implicitly created
     #
@@ -183,8 +183,8 @@ function TEST_replicated_pool_with_ruleset() {
     ceph osd pool create $poolname 12 12 replicated $ruleset 2>&1 | \
         grep "pool 'mypool' created" || return 1
     rule_id=`ceph osd crush rule dump $ruleset | grep "rule_id" | awk -F[' ':,] '{print $4}'`
-    ceph osd pool get $poolname crush_ruleset  2>&1 | \
-        grep "crush_ruleset: $rule_id" || return 1
+    ceph osd pool get $poolname crush_rule  2>&1 | \
+        grep "crush_rule: $rule_id" || return 1
     #non-existent crush ruleset
     ceph osd pool create newpool 12 12 replicated non-existent 2>&1 | \
         grep "doesn't exist" || return 1
