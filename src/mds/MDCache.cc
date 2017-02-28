@@ -6528,9 +6528,10 @@ void MDCache::send_expire_messages(map<mds_rank_t, MCacheExpire*>& expiremap)
   for (map<mds_rank_t, MCacheExpire*>::iterator it = expiremap.begin();
        it != expiremap.end();
        ++it) {
-    if (mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN ||
-	(mds->mdsmap->get_state(it->first) == MDSMap::STATE_REJOIN &&
-	 rejoin_sent.count(it->first) == 0)) {
+    if (mds->is_cluster_degraded() &&
+	(mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN ||
+	 (mds->mdsmap->get_state(it->first) == MDSMap::STATE_REJOIN &&
+	  rejoin_sent.count(it->first) == 0))) {
       it->second->put();
       continue;
     }
@@ -8159,7 +8160,8 @@ void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, MDSInternalCont
 
   mds_rank_t auth = diri->authority().first;
 
-  if (mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) {
+  if (!mds->is_cluster_degraded() ||
+      mds->mdsmap->get_state(auth) >= MDSMap::STATE_REJOIN) {
     discover_dir_frag(diri, approxfg, fin);
   } else {
     // mds is down or recovering.  forge a replica!
@@ -10755,7 +10757,7 @@ bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
     dout(7) << "can_fragment: read-only FS, no fragmenting for now" << dendl;
     return false;
   }
-  if (mds->mdsmap->is_degraded()) {
+  if (mds->is_cluster_degraded()) {
     dout(7) << "can_fragment: cluster degraded, no fragmenting for now" << dendl;
     return false;
   }

@@ -181,6 +181,8 @@ class MDSRank {
     // The state assigned to me by the MDSMap
     MDSMap::DaemonState state;
 
+    bool cluster_degraded;
+
     MDSMap::DaemonState get_state() const { return state; } 
     MDSMap::DaemonState get_want_state() const { return beacon.get_want_state(); } 
 
@@ -197,6 +199,7 @@ class MDSRank {
     bool is_stopping() const { return state == MDSMap::STATE_STOPPING; }
     bool is_any_replay() const { return (is_replay() || is_standby_replay()); }
     bool is_stopped() const { return mdsmap->is_stopped(whoami); }
+    bool is_cluster_degraded() const { return cluster_degraded; }
 
     void handle_write_error(int err);
 
