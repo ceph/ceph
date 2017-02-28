@@ -125,25 +125,27 @@ set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 if(LINUX)
-add_executable(ceph_test_librbd_fsx
-  fsx.cc
-  $<TARGET_OBJECTS:common_texttable_obj>
-  )
-target_link_libraries(ceph_test_librbd_fsx
-  librbd
-  librados
-  journal
-  krbd
-  global
-  m
-  ${CMAKE_DL_LIBS}
-  ${CRYPTO_LIBS}
-  ${EXTRALIBS}
-  )
+  add_executable(ceph_test_librbd_fsx
+    fsx.cc
+    $<TARGET_OBJECTS:common_texttable_obj>
+    )
+  target_link_libraries(ceph_test_librbd_fsx
+    librbd
+    librados
+    journal
+    krbd
+    global
+    m
+    ${CMAKE_DL_LIBS}
+    ${CRYPTO_LIBS}
+    ${EXTRALIBS}
+    )
+  install(TARGETS
+    ceph_test_librbd_fsx
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif(LINUX)
 
 install(TARGETS
   ceph_test_librbd
   ceph_test_librbd_api
-  ceph_test_librbd_fsx
   DESTINATION ${CMAKE_INSTALL_BINDIR})
