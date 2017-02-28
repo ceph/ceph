@@ -9,7 +9,6 @@
 #include <string>
 
 class Context;
-class ContextWQ;
 namespace librbd { class ImageCtx; }
 
 namespace rbd {
@@ -22,15 +21,14 @@ public:
   static OpenImageRequest* create(librados::IoCtx &io_ctx,
                                   ImageCtxT **image_ctx,
                                   const std::string &image_id,
-                                  bool read_only, ContextWQ *work_queue,
-                                  Context *on_finish) {
+                                  bool read_only, Context *on_finish) {
     return new OpenImageRequest(io_ctx, image_ctx, image_id, read_only,
-                                work_queue, on_finish);
+                                on_finish);
   }
 
   OpenImageRequest(librados::IoCtx &io_ctx, ImageCtxT **image_ctx,
                    const std::string &image_id, bool read_only,
-                   ContextWQ *m_work_queue, Context *on_finish);
+                   Context *on_finish);
 
   void send();
 
@@ -41,10 +39,10 @@ private:
    * <start>
    *    |
    *    v
-   * OPEN_IMAGE * * * * * * * *
-   *    |                     *
-   *    v                     v
-   * <finish> <---------- CLOSE_IMAGE
+   * OPEN_IMAGE
+   *    |
+   *    v
+   * <finish>
    *
    * @endverbatim
    */
@@ -52,10 +50,7 @@ private:
   ImageCtxT **m_image_ctx;
   std::string m_image_id;
   bool m_read_only;
-  ContextWQ *m_work_queue;
   Context *m_on_finish;
-
-  int m_ret_val = 0;
 
   void send_open_image();
   void handle_open_image(int r);
