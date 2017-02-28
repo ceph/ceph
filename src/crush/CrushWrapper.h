@@ -105,6 +105,15 @@ public:
     set_tunables_default();
   }
 
+  /// true if any rule has a ruleset != the rule id
+  bool has_legacy_rulesets() const;
+
+  /// fix rules whose ruleid != ruleset
+  int renumber_rules_by_ruleset();
+
+  /// true if any ruleset has more than 1 rule
+  bool has_multirule_rulesets() const;
+
   // tunables
   void set_tunables_argonaut() {
     crush->choose_local_tries = 2;

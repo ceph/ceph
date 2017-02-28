@@ -12,6 +12,65 @@
 
 #define dout_subsys ceph_subsys_crush
 
+bool CrushWrapper::has_legacy_rulesets() const
+{
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    crush_rule *r = crush->rules[i];
+    if (r &&
+	r->mask.ruleset != i) {
+      return true;
+    }
+  }
+  return false;
+}
+
+int CrushWrapper::renumber_rules_by_ruleset()
+{
+  int max_ruleset = 0;
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    crush_rule *r = crush->rules[i];
+    if (r && r->mask.ruleset >= max_ruleset) {
+      max_ruleset = r->mask.ruleset + 1;
+    }
+  }
+  struct crush_rule **newrules =
+    (crush_rule**)calloc(1, max_ruleset * sizeof(crush_rule*));
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    if (newrules[r->mask.ruleset]) {
+      // collision, we can't do it.
+      free(newrules);
+      return -EINVAL;
+    }
+    newrules[r->mask.ruleset] = r;
+  }
+
+  // success, swap!
+  free(crush->rules);
+  crush->rules = newrules;
+  crush->max_rules = max_ruleset;
+  return 0;
+}
+
+bool CrushWrapper::has_multirule_rulesets() const
+{
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j=i+1; j<crush->max_rules; j++) {
+      crush_rule *s = crush->rules[j];
+      if (!s)
+	continue;
+      if (r->mask.ruleset == s->mask.ruleset)
+	return true;
+    }
+  }
+  return false;
+}
+
 bool CrushWrapper::has_v2_rules() const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
