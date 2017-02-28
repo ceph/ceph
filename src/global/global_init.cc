@@ -171,12 +171,12 @@ global_init(std::vector < const char * > *alt_def_args,
     if (g_conf->setuser.length()) {
       cerr << "ignoring --setuser " << g_conf->setuser << " since I am not root"
 	   << std::endl;
-      g_conf->set_val("setuser", "", false, false);
+      g_conf->set_val("setuser", "", false);
     }
     if (g_conf->setgroup.length()) {
       cerr << "ignoring --setgroup " << g_conf->setgroup
 	   << " since I am not root" << std::endl;
-      g_conf->set_val("setgroup", "", false, false);
+      g_conf->set_val("setgroup", "", false);
     }
   }
 
