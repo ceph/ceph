@@ -3673,6 +3673,16 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       }
     }
 
+    if (osdmap.crush->has_multirule_rulesets()) {
+      ostringstream ss;
+      ss << "CRUSH map contains multirule rulesets";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail) {
+	ss << "; please manually fix the map";
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+
     // Not using 'sortbitwise' and should be?
     if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE) &&
         (osdmap.get_up_osd_features() &
