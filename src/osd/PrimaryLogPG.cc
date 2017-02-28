@@ -8867,6 +8867,7 @@ void PrimaryLogPG::submit_log_entries(
 	    spg_t(info.pgid.pgid, i->shard),
 	    pg_whoami.shard,
 	    get_osdmap()->get_epoch(),
+	    last_peering_reset,
 	    repop->rep_tid);
 	  osd->send_message_osd_cluster(
 	    peer.osd, m, get_osdmap()->get_epoch());
@@ -9903,6 +9904,7 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
 	    spg_t(info.pgid.pgid, primary_shard().shard),
 	    pg_whoami.shard,
 	    msg->get_epoch(),
+	    msg->min_epoch,
 	    msg->get_tid());
 	reply->set_priority(CEPH_MSG_PRIO_HIGH);
 	msg->get_connection()->send_message(reply);
