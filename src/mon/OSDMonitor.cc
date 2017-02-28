@@ -544,6 +544,23 @@ void OSDMonitor::on_active()
 void OSDMonitor::on_restart()
 {
   last_osd_report.clear();
+
+  if (mon->is_leader()) {
+    // fix ruleset != ruleid
+    if (osdmap.crush->has_legacy_rulesets() &&
+	!osdmap.crush->has_multirule_rulesets()) {
+      CrushWrapper newcrush;
+      _get_pending_crush(newcrush);
+      int r = newcrush.renumber_rules_by_ruleset();
+      if (r >= 0) {
+	dout(1) << __func__ << " crush map has ruleset != rule id; fixing" << dendl;
+	pending_inc.crush.clear();
+	newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+      } else {
+	dout(10) << __func__ << " unable to renumber rules by ruleset" << dendl;
+      }
+    }
+  }
 }
 
 void OSDMonitor::on_shutdown()
