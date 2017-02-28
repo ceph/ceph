@@ -10,6 +10,9 @@ intended to complement the existing technical terminology.
 - Defining some of these technical terms:
 "RADOS" : It stands for Reliable Autonomic Distributed Object Store (RADOS) which is an open source object storage service that is an important part of the Ceph distributed storage system. RADOS was created at the University of California at Santa Cruz. The Ceph open source community develops and maintains the software.
 
+"RBD" : It stands for Ceph’s RADOS Block Devices (RBD) interact with OSDs using kernel modules. An on-screen display (OSD) is a control panel on a computer monitor or television screen that allows you to select viewing options and/or adjust components of the display, such as brightness, contrast, and horizontal and vertical positioning.
+You can refer to this link: [](http://docs.ceph.com/docs/master/rbd/rbd/)
+
  
 
 Sometimes more than one term applies to a definition. Generally, the first
