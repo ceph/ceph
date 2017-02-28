@@ -34,7 +34,7 @@ elif [ -n "$CEPH_ROOT" ]; then
         [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
         [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
         [ -z "$CEPH_ADM" ] && CEPH_ADM=$CEPH_BIN/ceph
-        [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
+        [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BUILD_DIR/bin/init-ceph
         [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_DIR/lib
         [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
         [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
@@ -60,10 +60,10 @@ export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 [ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON=3
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD=3
 [ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS=3
-[ -z "$CEPH_NUM_MGR" ] && CEPH_NUM_MGR=0
+[ -z "$CEPH_NUM_MGR" ] && CEPH_NUM_MGR=1
 [ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS=1
 [ -z "$CEPH_MAX_MDS" ] && CEPH_MAX_MDS=1
-[ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW=1
+[ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW=0
 
 [ -z "$CEPH_DIR" ] && CEPH_DIR="$PWD"
 [ -z "$CEPH_DEV_DIR" ] && CEPH_DEV_DIR="$CEPH_DIR/dev"
@@ -78,14 +78,13 @@ else
 fi
 
 extra_conf=""
-new=0
+new=1
 standby=0
 debug=0
 start_all=1
 start_mon=0
 start_mds=0
 start_osd=0
-start_rgw=0
 ip=""
 nodaemon=0
 smallmds=0
@@ -115,8 +114,8 @@ usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
 usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-i <ip>: bind to specific ip\n"
-usage=$usage"\t-r start radosgw (needs ceph compiled with --radosgw)\n"
-usage=$usage"\t-n, --new\n"
+usage=$usage"\t-n, --new (default)\n"
+usage=$usage"\t-N, --not-new: reuse existing cluster config\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
 usage=$usage"\t--smallmds: limit mds cache size\n"
@@ -160,15 +159,15 @@ case $1 in
 	    ip="$2"
 	    shift
 	    ;;
-    -r )
-	    start_rgw=1
-	    ;;
     -e )
 	    ec=1
 	    ;;
     --new | -n )
 	    new=1
 	    ;;
+    --not-new | -N )
+	new=0
+	;;
     --short )
 	    short=1
 	    ;;
@@ -290,6 +289,10 @@ case $1 in
 esac
 shift
 done
+
+if [ "$start_all" -eq 1 ]; then
+    $SUDO $INIT_CEPH stop
+fi
 
 if [ "$overwrite_conf" -eq 0 ]; then
     MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mon 2>/dev/null` && \
@@ -423,9 +426,6 @@ fi
 # sudo if btrfs
 test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
 
-if [ "$start_all" -eq 1 ]; then
-    $SUDO $INIT_CEPH stop
-fi
 prun $SUDO rm -f core*
 
 test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
@@ -791,7 +791,7 @@ if [ "$CEPH_NUM_MGR" -gt 0 ]; then
 
         cat <<EOF >> $conf_fn
 [mgr.$name]
-
+        host = $HOSTNAME
 EOF
 
         echo "Starting mgr.${name}"
@@ -888,9 +888,12 @@ do_rgw()
 
     RGWSUDO=
     [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
-    run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+    n=$(($CEPH_NUM_RGW - 1))
+    for rgw in `seq 0 $n`; do
+	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1
+    done
 }
-if [ "$start_rgw" -eq 1 ]; then
+if [ "$CEPH_NUM_RGW" -gt 0 ]; then
     do_rgw
 fi
 
