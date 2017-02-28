@@ -7,6 +7,11 @@ Ceph is growing rapidly. As firms deploy Ceph, the technical terms such as
 that explain what each component does. The terms in this glossary are 
 intended to complement the existing technical terminology.
 
+- Defining some of these technical terms:
+"RADOS" : It stands for Reliable Autonomic Distributed Object Store (RADOS) which is an open source object storage service that is an important part of the Ceph distributed storage system. RADOS was created at the University of California at Santa Cruz. The Ceph open source community develops and maintains the software.
+
+ 
+
 Sometimes more than one term applies to a definition. Generally, the first
 term reflects a term consistent with Ceph's marketing, and secondary terms
 reflect either technical terms or legacy ways of referring to Ceph systems.
