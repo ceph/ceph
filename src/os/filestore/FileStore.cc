@@ -5332,6 +5332,11 @@ int FileStore::_omap_setkeys(const coll_t& cid, const ghobject_t &hoid,
     }
   }
 skip:
+  if (g_conf->subsys.should_gather(ceph_subsys_filestore, 20)) {
+    for (auto& p : aset) {
+      dout(20) << __func__ << "  set " << p.first << dendl;
+    }
+  }
   r = object_map->set_keys(hoid, aset, &spos);
   dout(20) << __func__ << " " << cid << "/" << hoid << " = " << r << dendl;
   return r;
