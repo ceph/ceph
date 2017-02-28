@@ -11433,7 +11433,7 @@ uint64_t PrimaryLogPG::recover_backfill(
         m = new MOSDPGBackfill(
 	  MOSDPGBackfill::OP_BACKFILL_FINISH,
 	  e,
-	  e,
+	  last_peering_reset,
 	  spg_t(info.pgid.pgid, bt.shard));
         // Use default priority here, must match sub_op priority
         /* pinfo.stats might be wrong if we did log-based recovery on the
@@ -11445,7 +11445,7 @@ uint64_t PrimaryLogPG::recover_backfill(
         m = new MOSDPGBackfill(
 	  MOSDPGBackfill::OP_BACKFILL_PROGRESS,
 	  e,
-	  e,
+	  last_peering_reset,
 	  spg_t(info.pgid.pgid, bt.shard));
         // Use default priority here, must match sub_op priority
       }
