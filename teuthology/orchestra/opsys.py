@@ -42,6 +42,9 @@ DISTRO_CODENAME_MAP = {
         "42.2": "leap",
         "42.3": "leap",
     },
+    "sle": {
+        "12.2": "sle",
+    },
     "opensuse-leap": {
         "42.2": "leap",
         "42.3": "leap",
@@ -151,6 +154,8 @@ class OS(object):
         """
         str_ = os_release_str.strip()
         name = cls._get_value(str_, 'ID').lower()
+        if name == 'sles':
+            name = 'sle'
         version = cls._get_value(str_, 'VERSION_ID')
         obj = cls(name=name, version=version)
 
