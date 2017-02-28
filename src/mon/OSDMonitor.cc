@@ -3776,7 +3776,7 @@ void OSDMonitor::dump_info(Formatter *f)
 namespace {
   enum osd_pool_get_choices {
     SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
-    PG_NUM, PGP_NUM, CRUSH_RULE, CRUSH_RULESET, HASHPSPOOL,
+    PG_NUM, PGP_NUM, CRUSH_RULE, HASHPSPOOL,
     NODELETE, NOPGCHANGE, NOSIZECHANGE,
     WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
     HIT_SET_TYPE, HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
@@ -4364,7 +4364,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"crash_replay_interval", CRASH_REPLAY_INTERVAL},
       {"pg_num", PG_NUM}, {"pgp_num", PGP_NUM},
       {"crush_rule", CRUSH_RULE},
-      {"crush_ruleset", CRUSH_RULESET},
       {"hashpspool", HASHPSPOOL}, {"nodelete", NODELETE},
       {"nopgchange", NOPGCHANGE}, {"nosizechange", NOSIZECHANGE},
       {"noscrub", NOSCRUB}, {"nodeep-scrub", NODEEP_SCRUB},
@@ -4489,9 +4488,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    } else {
 	      f->dump_string("crush_rule", stringify(p->get_crush_rule()));
 	    }
-	    break;
-	  case CRUSH_RULESET:
-	    f->dump_int("crush_ruleset", p->get_crush_rule());
 	    break;
 	  case HASHPSPOOL:
 	  case NODELETE:
@@ -4653,9 +4649,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    } else {
 	      ss << "crush_rule: " << p->get_crush_rule() << "\n";
 	    }
-	    break;
-	  case CRUSH_RULESET:
-	    ss << "crush_ruleset: " << p->get_crush_rule() << "\n";
 	    break;
 	  case HIT_SET_PERIOD:
 	    ss << "hit_set_period: " << p->hit_set_period << "\n";
@@ -5937,20 +5930,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.crush_rule = id;
-  } else if (var == "crush_ruleset") {
-    if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
-      return -EINVAL;
-    }
-    if (!osdmap.crush->ruleset_exists(n)) {
-      ss << "crush ruleset " << n << " does not exist";
-      return -ENOENT;
-    }
-
-    if (!osdmap.crush->check_crush_rule(n, p.get_type(), p.get_size(), ss)) {
-      return -EINVAL;
-    }
-    p.crush_rule = n;
   } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
 	     var == "noscrub" || var == "nodeep-scrub") {
