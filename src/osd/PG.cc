@@ -3720,6 +3720,7 @@ void PG::_request_scrub_map(
   MOSDRepScrub *repscrubop = new MOSDRepScrub(
     spg_t(info.pgid.pgid, replica.shard), version,
     get_osdmap()->get_epoch(),
+    get_last_peering_reset(),
     start, end, deep, seed);
   // default priority, we want the rep scrub processed prior to any recovery
   // or client io messages (we are holding a lock!)
