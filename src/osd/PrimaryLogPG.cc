@@ -6833,6 +6833,11 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
   ctx->new_snapset.snaps = snapc.snaps;
   ctx->new_snapset.head_exists = ctx->new_obs.exists;
   dout(20) << "make_writeable " << soid << " done, snapset=" << ctx->new_snapset << dendl;
+
+  if (!get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    // pessimistic assumption that this is a net-new legacy SnapSet
+    ctx->delta_stats.num_legacy_snapsets++;
+  }
 }
 
 
@@ -13151,6 +13156,10 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	if (oi->is_cache_pinned())
 	  ++stat.num_objects_pinned;
       }
+    } else {
+      // pessimistic assumption that this object might contain a
+      // legacy SnapSet
+      stat.num_legacy_snapsets++;
     }
 
     // Check for any problems while processing clones
@@ -13279,7 +13288,13 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	    dout(10) << " will convert legacy snapset on " << soid << dendl;
 	    snapset_to_repair[soid.get_head()] = *snapset;
 	  }
+	} else {
+	  stat.num_legacy_snapsets++;
 	}
+      } else {
+	// pessimistic assumption that this object might contain a
+	// legacy SnapSet
+	stat.num_legacy_snapsets++;
       }
     } else {
       assert(soid.is_snap());
@@ -13436,6 +13451,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
       // or extra clone.
       dout(10) << __func__ << " not writing snapset to " << p.first
 	       << " " << p.second << "; didn't convert fully" << dendl;
+      scrub_cstat.sum.num_legacy_snapsets++;
       continue;
     }
     dout(10) << __func__ << " writing snapset to " << p.first
@@ -13569,6 +13585,14 @@ void PrimaryLogPG::_scrub_finish()
       publish_stats_to_osd();
       share_pg_info();
     }
+  } else if (scrub_cstat.sum.num_legacy_snapsets !=
+	     info.stats.stats.sum.num_legacy_snapsets) {
+    osd->clog->info() << info.pgid << " " << mode << " updated num_legacy_snapsets"
+		      << " from " << info.stats.stats.sum.num_legacy_snapsets
+		      << " -> " << scrub_cstat.sum.num_legacy_snapsets << "\n";
+    info.stats.stats.sum.num_legacy_snapsets = scrub_cstat.sum.num_legacy_snapsets;
+    publish_stats_to_osd();
+    share_pg_info();
   }
 }
 
