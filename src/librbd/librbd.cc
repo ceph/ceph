@@ -81,16 +81,13 @@ struct C_OpenComplete : public Context {
   void **ictxp;
   bool reopen;
   C_OpenComplete(librbd::ImageCtx *ictx, librbd::io::AioCompletion* comp,
-		 void **ictxp, bool reopen = false)
-    : ictx(ictx), comp(comp), ictxp(ictxp), reopen(reopen) {
+		 void **ictxp)
+    : ictx(ictx), comp(comp), ictxp(ictxp) {
     comp->init_time(ictx, librbd::io::AIO_TYPE_OPEN);
     comp->get();
   }
   void finish(int r) override {
     ldout(ictx->cct, 20) << "C_OpenComplete::finish: r=" << r << dendl;
-    if (reopen) {
-      delete reinterpret_cast<librbd::ImageCtx*>(*ictxp);
-    }
     if (r < 0) {
       *ictxp = nullptr;
       comp->fail(r);
@@ -115,7 +112,10 @@ struct C_OpenAfterCloseComplete : public Context {
   void finish(int r) override {
     ldout(ictx->cct, 20) << "C_OpenAfterCloseComplete::finish: r=" << r
 			 << dendl;
-    ictx->state->open(false, new C_OpenComplete(ictx, comp, ictxp, true));
+    delete reinterpret_cast<librbd::ImageCtx*>(*ictxp);
+    *ictxp = nullptr;
+
+    ictx->state->open(false, new C_OpenComplete(ictx, comp, ictxp));
   }
 };
 
@@ -240,7 +240,6 @@ namespace librbd {
 
     int r = ictx->state->open(false);
     if (r < 0) {
-      delete ictx;
       tracepoint(librbd, open_image_exit, r);
       return r;
     }
@@ -282,7 +281,6 @@ namespace librbd {
 
     int r = ictx->state->open(false);
     if (r < 0) {
-      delete ictx;
       tracepoint(librbd, open_image_exit, r);
       return r;
     }
@@ -2116,9 +2114,7 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
   int r = ictx->state->open(false);
-  if (r < 0) {
-    delete ictx;
-  } else {
+  if (r >= 0) {
     *image = (rbd_image_t)ictx;
   }
   tracepoint(librbd, open_image_exit, r);
@@ -2152,9 +2148,7 @@ extern "C" int rbd_open_read_only(rados_ioctx_t p, const char *name,
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
   int r = ictx->state->open(false);
-  if (r < 0) {
-    delete ictx;
-  } else {
+  if (r >= 0) {
     *image = (rbd_image_t)ictx;
   }
   tracepoint(librbd, open_image_exit, r);
@@ -3550,7 +3544,6 @@ extern "C" int rbd_image_get_group(rados_ioctx_t image_p,
   librbd::ImageCtx *ictx = new librbd::ImageCtx(image_name, "", "", io_ctx, false);
   int r = ictx->state->open(false);
   if (r < 0) {
-    delete ictx;
     tracepoint(librbd, open_image_exit, r);
     return r;
   }

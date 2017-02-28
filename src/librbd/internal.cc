@@ -674,9 +674,9 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 	if (r < 0) {
 	  lderr(cct) << "error opening image: "
 		     << cpp_strerror(r) << dendl;
-          delete imctx;
 	  return r;
 	}
+
 	librbd::NoOpProgressContext prog_ctx;
 	r = imctx->operations->flatten(prog_ctx);
 	if (r < 0) {
@@ -700,7 +700,12 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 	    return r;
 	  }
 	}
-	imctx->state->close();
+
+	r = imctx->state->close();
+        if (r < 0) {
+          lderr(cct) << "failed to close image: " << cpp_strerror(r) << dendl;
+          return r;
+        }
       }
       pctx.update_progress(++i, size);
       assert(i <= size);
@@ -1045,7 +1050,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if (r < 0) {
       lderr(cct) << "error opening parent image: "
 		 << cpp_strerror(r) << dendl;
-      delete p_imctx;
       return r;
     }
 
@@ -1186,7 +1190,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     r = c_imctx->state->open(false);
     if (r < 0) {
       lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
-      delete c_imctx;
       goto err_remove;
     }
 
@@ -1289,7 +1292,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if (r < 0) {
       lderr(ictx->cct) << "error opening source image: " << cpp_strerror(r)
 		       << dendl;
-      delete ictx;
       return r;
     }
     BOOST_SCOPE_EXIT((ictx)) {
@@ -1804,7 +1806,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 					  dest_md_ctx, false);
     r = dest->state->open(false);
     if (r < 0) {
-      delete dest;
       lderr(cct) << "failed to read newly created header" << dendl;
       return r;
     }
@@ -2847,7 +2848,6 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           if (r < 0) {
             lderr(cct) << "error opening image "<< img_pair.first << ": "
                        << cpp_strerror(r) << dendl;
-            delete img_ctx;
             return r;
           }
 
@@ -2895,22 +2895,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
           if (r < 0) {
             lderr(cct) << "error opening image id "<< img_id << ": "
                        << cpp_strerror(r) << dendl;
-            delete img_ctx;
             return r;
           }
 
           r = mirror_image_disable(img_ctx, false);
+          int close_r = img_ctx->state->close();
           if (r < 0) {
             lderr(cct) << "error disabling mirroring for image id " << img_id
                        << cpp_strerror(r) << dendl;
             return r;
-          }
-
-          r = img_ctx->state->close();
-          if (r < 0) {
+          } else if (close_r < 0) {
             lderr(cct) << "failed to close image id " << img_id << ": "
-                       << cpp_strerror(r) << dendl;
-            return r;
+                       << cpp_strerror(close_r) << dendl;
+            return close_r;
           }
         }
       }

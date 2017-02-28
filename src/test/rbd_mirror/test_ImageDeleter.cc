@@ -197,7 +197,6 @@ public:
     ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                   false);
     EXPECT_EQ(-ENOENT, ictx->state->open(false));
-    delete ictx;
 
     cls::rbd::MirrorImage mirror_image;
     EXPECT_EQ(-ENOENT, cls_client::mirror_image_get(&m_local_io_ctx,
