@@ -31,7 +31,6 @@
 
 MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_)
     : Dispatcher(cct_), cct(cct_), msgr(msgr_),
-      session(nullptr),
       lock("mgrc"),
       timer(cct_, lock),
       report_callback(nullptr)
@@ -53,6 +52,7 @@ void MgrClient::shutdown()
   Mutex::Locker l(lock);
 
   timer.shutdown();
+  session.reset();
 }
 
 bool MgrClient::ms_dispatch(Message *m)
@@ -85,8 +85,7 @@ void MgrClient::reconnect()
     ldout(cct, 4) << "Terminating session with "
 		  << session->con->get_peer_addr() << dendl;
     session->con->mark_down();
-    delete session;
-    session = nullptr;
+    session.reset();
     stats_period = 0;
     if (report_callback != nullptr) {
       timer.cancel_event(report_callback);
@@ -114,7 +113,7 @@ void MgrClient::reconnect()
     inst.addr = map.get_active_addr();
     inst.name = entity_name_t::MGR(map.get_active_gid());
 
-    session = new MgrSessionState();
+    session.reset(new MgrSessionState());
     session->con = msgr->get_connection(inst);
 
     // Don't send an open if we're just a client (i.e. doing
@@ -144,7 +143,7 @@ bool MgrClient::handle_mgr_map(MMgrMap *m)
   ldout(cct, 4) << "Active mgr is now " << map.get_active_addr() << dendl;
 
   // Reset session?
-  if (session == nullptr || 
+  if (!session ||
       session->con->get_peer_addr() != map.get_active_addr()) {
     reconnect();
   }
@@ -245,7 +244,7 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
 
   ldout(cct, 20) << *m << dendl;
 
-  if (session == nullptr) {
+  if (!session) {
     lderr(cct) << "dropping unexpected configure message" << dendl;
     m->put();
     return true;
@@ -287,7 +286,7 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 
   ldout(cct, 20) << "cmd: " << cmd << dendl;
 
-  if (session == nullptr) {
+  if (!session) {
     lderr(cct) << "no session, waiting" << dendl;
     wait_on_list(waiting_for_session);
   }
