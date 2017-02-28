@@ -4,7 +4,7 @@ tasks:
 - rgw-system-test:
     test-name: test_multipart_upload_download
     config:
-       user_count: 100
-       bucket_count: 500
-       min_file_size: 1000
-       max_file_size: 1500
+       user_count: 25
+       bucket_count: 25
+       min_file_size: 50
+       max_file_size: 60

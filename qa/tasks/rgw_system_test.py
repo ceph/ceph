@@ -4,6 +4,8 @@ import logging
 from teuthology import misc as teuthology
 from teuthology.orchestra import run
 log = logging.getLogger(__name__)
+import os
+import pwd
 
 
 class Test(object):
@@ -18,14 +20,15 @@ class Test(object):
 
         log.info('test: %s' % self.script_fname)
 
+        temp_yaml_file = self.yaml_fname + "_" + str(os.getpid()) + pwd.getpwuid(os.getuid()).pw_name
+
         if self.configuration is None:
             assert isinstance(self.configuration, dict), "configuration not given"
-        clients[0].run(args=['sudo', 'rm', '-f', run.Raw('/tmp/*')],
-                       check_status=False)
+
         data = self.configuration
 
         log.info('creating yaml from the config: %s' % data)
-        local_file = '/tmp/' + self.yaml_fname
+        local_file = '/tmp/' + temp_yaml_file
         with open(local_file,  'w') as outfile:
             outfile.write(yaml.dump(data, default_flow_style=False))
 
@@ -37,6 +40,9 @@ class Test(object):
                              'rgw-tests/ceph-qe-scripts/rgw/tests/s3/yamls/'])
         clients[0].run(args=['cat',
                              'rgw-tests/ceph-qe-scripts/rgw/tests/s3/yamls/' + self.yaml_fname])
+
+        clients[0].run(args=['sudo', 'rm', '-f', run.Raw('%s' % local_file)], check_status=False)
+
         clients[0].run(
             args=[
                 run.Raw(

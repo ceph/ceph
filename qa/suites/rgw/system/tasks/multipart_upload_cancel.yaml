@@ -4,8 +4,8 @@ tasks:
 - rgw-system-test:
     test-name: test_multipart_upload_cancel
     config:
-       user_count: 100
-       bucket_count: 500
-       break_at_part_no: 90
-       min_file_size: 1000
-       max_file_size: 1500
+       user_count: 25
+       bucket_count: 25
+       break_at_part_no: 70
+       min_file_size: 800
+       max_file_size: 1000

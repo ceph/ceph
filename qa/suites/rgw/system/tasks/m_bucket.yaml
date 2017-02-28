@@ -4,5 +4,5 @@ tasks:
 - rgw-system-test:
     test-name: test_Mbuckets
     config:
-      user_count: 100
-      bucket_count: 500
+      user_count: 25
+      bucket_count: 25
