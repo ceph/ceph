@@ -11,7 +11,7 @@ import time
 import yaml
 import subprocess
 
-from teuthology import lock
+import teuthology.lock.ops
 from teuthology import misc
 from teuthology.packaging import get_builder_project
 from teuthology import report
@@ -179,7 +179,7 @@ def push_inventory(ctx, config):
     def push():
         for rem in ctx.cluster.remotes.keys():
             info = rem.inventory_info
-            lock.update_inventory(info)
+            teuthology.lock.ops.update_inventory(info)
     try:
         push()
     except Exception:

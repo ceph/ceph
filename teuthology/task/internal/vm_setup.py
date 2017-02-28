@@ -4,8 +4,6 @@ import subprocess
 
 from cStringIO import StringIO
 
-from teuthology import misc
-
 from teuthology.parallel import parallel
 from teuthology.task import ansible
 
@@ -24,7 +22,7 @@ def vm_setup(ctx, config):
     with parallel():
         editinfo = os.path.join(os.path.dirname(__file__), 'edit_sudoers.sh')
         for rem in ctx.cluster.remotes.iterkeys():
-            if misc.is_vm(rem.shortname):
+            if rem.is_vm:
                 ansible_hosts.add(rem.shortname)
                 r = rem.run(args=['test', '-e', '/ceph-qa-ready'],
                             stdout=StringIO(), check_status=False)

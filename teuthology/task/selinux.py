@@ -7,7 +7,6 @@ from teuthology.exceptions import SELinuxError
 from teuthology.misc import get_archive_dir
 from teuthology.orchestra.cluster import Cluster
 from teuthology.orchestra import run
-from teuthology.lockstatus import get_status
 
 from . import Task
 
@@ -51,8 +50,7 @@ class SELinux(Task):
         super(SELinux, self).filter_hosts()
         new_cluster = Cluster()
         for (remote, roles) in self.cluster.remotes.iteritems():
-            status_info = get_status(remote.name)
-            if status_info and status_info.get('is_vm', False):
+            if remote.is_vm:
                 msg = "Excluding {host}: VMs are not yet supported"
                 log.info(msg.format(host=remote.shortname))
             elif remote.os.package_type == 'rpm':

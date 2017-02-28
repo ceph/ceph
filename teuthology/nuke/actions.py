@@ -419,6 +419,8 @@ def check_console(hostname):
     remote = Remote(hostname)
     shortname = remote.shortname
     console = remote.console
+    if not console:
+        return
     cname = '{host}.{domain}'.format(
         host=shortname,
         domain=console.ipmidomain,

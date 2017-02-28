@@ -2,6 +2,7 @@ import docopt
 
 import teuthology
 import teuthology.lock
+import teuthology.lock.ops
 import teuthology.orchestra.remote
 
 import logging
@@ -29,5 +30,5 @@ def main():
     for rem_name in remotes:
         remote = teuthology.orchestra.remote.Remote(rem_name)
         inventory_info = remote.inventory_info
-        teuthology.lock.update_inventory(inventory_info)
+        teuthology.lock.ops.update_inventory(inventory_info)
 

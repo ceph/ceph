@@ -33,7 +33,6 @@ log = logging.getLogger(__name__)
 
 import datetime
 stamp = datetime.datetime.now().strftime("%y%m%d%H%M")
-is_vm = lambda x: x.startswith('vpm') or x.startswith('ubuntu@vpm')
 
 is_arm = lambda x: x.startswith('tala') or x.startswith(
     'ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')
@@ -348,7 +347,7 @@ def roles_of_type(roles_for_host, type_):
     Generator of ids.
 
     Each call returns the next possible role of the type specified.
-    :param roles_for host: list of roles possible
+    :param roles_for_host: list of roles possible
     :param type_: type of role
     """
     for role in cluster_roles_of_type(roles_for_host, type_, None):
@@ -361,7 +360,7 @@ def cluster_roles_of_type(roles_for_host, type_, cluster):
     Generator of roles.
 
     Each call returns the next possible role of the type specified.
-    :param roles_for host: list of roles possible
+    :param roles_for_host: list of roles possible
     :param type_: type of role
     :param cluster: cluster name
     """
@@ -389,7 +388,7 @@ def all_roles_of_type(cluster, type_):
     type specified.
 
     :param cluster: Cluster extracted from the ctx.
-    :type_: role type
+    :param type_: role type
     """
     for _, roles_for_host in cluster.remotes.iteritems():
         for id_ in roles_of_type(roles_for_host, type_):

@@ -4,15 +4,23 @@ import json
 import logging
 import os
 import subprocess
+
 import yaml
 
 import teuthology
-
-from ..config import config, FakeNamespace
-from ..lock import (
-    list_locks, locked_since_seconds, unlock_one, find_stale_locks
+from teuthology.lock.ops import unlock_one
+from teuthology.lock.query import is_vm, list_locks, \
+    find_stale_locks
+from teuthology.lock.util import locked_since_seconds
+from .actions import (
+    check_console, clear_firewall, shutdown_daemons, remove_installed_packages,
+    reboot, remove_osd_mounts, remove_osd_tmpfs, kill_hadoop,
+    remove_ceph_packages, synch_clocks, unlock_firmware_repo,
+    remove_configuration_files, undo_multipath, reset_syslog_dir,
+    remove_ceph_data, remove_testing_tree, remove_yum_timedhosts,
+    kill_valgrind,
 )
-from ..lockstatus import get_status
+from ..config import config, FakeNamespace
 from ..misc import (
     canonicalize_hostname, config_file, decanonicalize_hostname, merge_configs,
     get_user, sh
@@ -21,15 +29,6 @@ from ..openstack import OpenStack, OpenStackInstance, enforce_json_dictionary
 from ..orchestra.remote import Remote
 from ..parallel import parallel
 from ..task.internal import check_lock, add_remotes, connect
-
-from .actions import (
-    check_console, clear_firewall, shutdown_daemons, remove_installed_packages,
-    reboot, remove_osd_mounts, remove_osd_tmpfs, kill_hadoop,
-    remove_ceph_packages, synch_clocks,
-    unlock_firmware_repo, remove_configuration_files, undo_multipath,
-    reset_syslog_dir, remove_ceph_data, remove_testing_tree,
-    remove_yum_timedhosts, kill_valgrind,
-)
 
 log = logging.getLogger(__name__)
 
@@ -295,13 +294,9 @@ def nuke_helper(ctx, should_unlock):
     host = target.split('@')[-1]
     shortname = host.split('.')[0]
     if should_unlock:
-        if 'vpm' in shortname:
-            return
-        status_info = get_status(host)
-        if status_info['is_vm'] and status_info['machine_type'] == 'openstack':
+        if is_vm(shortname):
             return
     log.debug('shortname: %s' % shortname)
-    log.debug('{ctx}'.format(ctx=ctx))
     if ctx.check_locks:
         # does not check to ensure if the node is 'up'
         # we want to be able to nuke a downed node

@@ -3,6 +3,7 @@ import textwrap
 import sys
 
 import teuthology.lock
+import teuthology.lock.cli
 
 
 def _positive_int(string):
@@ -14,7 +15,7 @@ def _positive_int(string):
 
 
 def main():
-    sys.exit(teuthology.lock.main(parse_args(sys.argv[1:])))
+    sys.exit(teuthology.lock.cli.main(parse_args(sys.argv[1:])))
 
 
 def parse_args(argv):

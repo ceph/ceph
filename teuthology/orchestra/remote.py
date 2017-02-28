@@ -1,6 +1,8 @@
 """
 Support for paramiko remote objects.
 """
+import teuthology.lock.query
+import teuthology.lock.util
 from . import run
 from .opsys import OS
 import connection
@@ -9,7 +11,6 @@ import time
 import re
 import logging
 from cStringIO import StringIO
-from teuthology import lockstatus as ls
 import os
 import pwd
 import tempfile
@@ -139,7 +140,7 @@ class Remote(object):
     @property
     def machine_type(self):
         if not getattr(self, '_machine_type', None):
-            remote_info = ls.get_status(self.hostname)
+            remote_info = teuthology.lock.query.get_status(self.hostname)
             if not remote_info:
                 return None
             self._machine_type = remote_info.get("machine_type", None)
@@ -243,7 +244,7 @@ class Remote(object):
         """
         if self.os.package_type != 'rpm':
             return
-        if misc.is_vm(self.shortname):
+        if teuthology.lock.query.is_vm(self.shortname):
             return
         self.run(args="sudo chcon {con} {path}".format(
             con=context, path=file_path))
@@ -444,6 +445,12 @@ class Remote(object):
             self._console = getRemoteConsole(self.name)
         return self._console
 
+    @property
+    def is_vm(self):
+        if not hasattr(self, '_is_vm'):
+            self._is_vm = teuthology.lock.query.is_vm(self.name)
+        return self._is_vm
+
     def __del__(self):
         if self.ssh is not None:
             self.ssh.close()
@@ -463,7 +470,10 @@ def getRemoteConsole(name, ipmiuser=None, ipmipass=None, ipmidomain=None,
     """
     Return either VirtualConsole or PhysicalConsole depending on name.
     """
-    if misc.is_vm(name):
-        return console.VirtualConsole(name)
+    if teuthology.lock.query.is_vm(name):
+        try:
+            return console.VirtualConsole(name)
+        except Exception:
+            return None
     return console.PhysicalConsole(
         name, ipmiuser, ipmipass, ipmidomain, logfile, timeout)

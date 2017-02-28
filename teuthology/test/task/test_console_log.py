@@ -29,15 +29,24 @@ class TestConsoleLog(TestTask):
         self.start_patchers()
 
     def start_patchers(self):
-        self.patchers = list()
-        self.patchers.append(patch(
+        self.patchers = dict()
+        self.patchers['makedirs'] = patch(
             'teuthology.task.console_log.os.makedirs',
-        ))
-        for patcher in self.patchers:
-            patcher.start()
+        )
+        self.patchers['is_vm'] = patch(
+            'teuthology.lock.query.is_vm',
+        )
+        self.patchers['is_vm'].return_value = False
+        self.patchers['get_status'] = patch(
+            'teuthology.lock.query.get_status',
+        )
+        self.mocks = dict()
+        for name, patcher in self.patchers.items():
+            self.mocks[name] = patcher.start()
+        self.mocks['is_vm'].return_value = False
 
     def teardown(self):
-        for patcher in self.patchers:
+        for patcher in self.patchers.values():
             patcher.stop()
 
     def test_enabled(self):
