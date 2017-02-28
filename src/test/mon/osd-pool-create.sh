@@ -197,7 +197,7 @@ function TEST_replicated_pool_with_non_existent_default_ruleset_0() {
     ceph tell mon.a injectargs -- \
         --osd_pool_default_crush_replicated_ruleset 66 || return 1
     ceph osd pool create mypool 12 12 replicated 2>&1 | \
-        grep "No suitable CRUSH ruleset exists" || return 1
+        grep "No suitable CRUSH rule exists" || return 1
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     ! grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }
@@ -209,7 +209,7 @@ function TEST_replicated_pool_with_non_existent_default_ruleset_1() {
     ceph tell mon.a injectargs -- \
         --osd_pool_default_crush_rule 55 || return 1
     ceph osd pool create mypool 12 12 replicated 2>&1 | \
-        grep "No suitable CRUSH ruleset exists" || return 1
+        grep "No suitable CRUSH rule exists" || return 1
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }
@@ -221,7 +221,7 @@ function TEST_replicated_pool_with_non_existent_default_ruleset_2() {
         --osd_pool_default_crush_rule 77 \
         --osd_pool_default_crush_replicated_ruleset 33 || return 1
     ceph osd pool create mypool 12 12 replicated 2>&1 | \
-        grep "No suitable CRUSH ruleset exists" || return 1
+        grep "No suitable CRUSH rule exists" || return 1
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }
