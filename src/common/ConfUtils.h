@@ -39,8 +39,8 @@
  */
 class ConfLine {
 public:
-  ConfLine(const std::string &key_, const std::string val_,
-	   const std::string newsection_, const std::string comment_, int line_no_);
+  ConfLine(const std::string &key_, const std::string &val_,
+	   const std::string &newsection_, const std::string &comment_, int line_no_);
   bool operator<(const ConfLine &rhs) const;
   friend std::ostream &operator<<(std::ostream& oss, const ConfLine &l);
 
