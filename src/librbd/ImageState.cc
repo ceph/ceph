@@ -248,7 +248,12 @@ template <typename I>
 int ImageState<I>::open(bool skip_open_parent) {
   C_SaferCond ctx;
   open(skip_open_parent, &ctx);
-  return ctx.wait();
+
+  int r = ctx.wait();
+  if (r < 0) {
+    delete m_image_ctx;
+  }
+  return r;
 }
 
 template <typename I>
@@ -556,7 +561,7 @@ void ImageState<I>::complete_action_unlock(State next_state, int r) {
     ctx->complete(r);
   }
 
-  if (next_state != STATE_CLOSED) {
+  if (next_state != STATE_UNINITIALIZED && next_state != STATE_CLOSED) {
     m_lock.Lock();
     if (!is_transition_state() && !m_actions_contexts.empty()) {
       execute_next_action_unlock();
