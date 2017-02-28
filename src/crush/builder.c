@@ -27,7 +27,7 @@ struct crush_map *crush_create()
 	m->choose_local_tries = 2;
 	m->choose_local_fallback_tries = 5;
 	m->choose_total_tries = 19;
-	m->chooseleaf_descend_once = 0;
+	m->chooseleaf_descend_once = 0; // obsoleted in firefly
 	m->chooseleaf_vary_r = 0;
 	m->straw_calc_version = 0;
 
