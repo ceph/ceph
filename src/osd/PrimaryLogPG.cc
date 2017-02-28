@@ -1564,9 +1564,9 @@ void PrimaryLogPG::do_request(
     op->mark_delayed("waiting_for_map not empty");
     return;
   }
-  if (op_must_wait_for_map(get_osdmap()->get_epoch(), op)) {
-    dout(20) << __func__ << " queue on waiting_for_map "
-	     << op->get_source() << dendl;
+  if (!have_same_or_newer_map(op->min_epoch)) {
+    dout(20) << __func__ << " min " << op->min_epoch
+	     << ", queue on waiting_for_map " << op->get_source() << dendl;
     waiting_for_map[op->get_source()].push_back(op);
     op->mark_delayed("op must wait for map");
     return;
