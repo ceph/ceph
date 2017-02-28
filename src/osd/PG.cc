@@ -3452,7 +3452,7 @@ void PG::requeue_map_waiters()
   epoch_t epoch = get_osdmap()->get_epoch();
   auto p = waiting_for_map.begin();
   while (p != waiting_for_map.end()) {
-    if (op_must_wait_for_map(epoch, p->second.front())) {
+    if (epoch < p->second.front()->min_epoch) {
       dout(20) << __func__ << " " << p->first << " front op "
 	       << p->second.front() << " must still wait, doing nothing"
 	       << dendl;

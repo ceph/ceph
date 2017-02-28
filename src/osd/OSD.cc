@@ -6361,7 +6361,7 @@ void OSD::dispatch_session_waiting(Session *session, OSDMapRef osdmap)
     assert(ms_can_fast_dispatch(op->get_req()));
     const MOSDFastDispatchOp *m = static_cast<const MOSDFastDispatchOp*>(
       op->get_req());
-    if (m->get_map_epoch() > osdmap->get_epoch()) {
+    if (m->get_min_epoch() > osdmap->get_epoch()) {
       break;
     }
     session->waiting_on_map.erase(i++);
