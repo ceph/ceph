@@ -336,9 +336,18 @@ TYPE(rgw_cls_read_olh_log_ret)
 TYPE(rgw_cls_trim_olh_log_op)
 TYPE(rgw_cls_bucket_clear_olh_op)
 TYPE(rgw_cls_check_index_ret)
+TYPE(cls_rgw_reshard_add_op)
+TYPE(cls_rgw_reshard_list_op)
+TYPE(cls_rgw_reshard_list_ret)
+TYPE(cls_rgw_reshard_get_op)
+TYPE(cls_rgw_reshard_get_ret)
+TYPE(cls_rgw_reshard_get_head_op)
+TYPE(cls_rgw_reshard_get_head_ret)
+TYPE(cls_rgw_reshard_remove_op)
 
 #include "cls/rgw/cls_rgw_client.h"
 TYPE(rgw_bi_log_entry)
+TYPE(cls_rgw_reshard_entry)
 
 #include "cls/user/cls_user_types.h"
 TYPE(cls_user_bucket)

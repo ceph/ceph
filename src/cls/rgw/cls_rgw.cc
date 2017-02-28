@@ -3480,6 +3480,141 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
   return 0;
 }
 
+static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_reshard_add_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_reshard_add: failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  ::encode(op.entry, bl);
+
+  string key = op.entry.bucket_name + "." + op.entry.bucket_id;
+  int ret = cls_cxx_map_set_val(hctx, key, &bl);
+  if (ret < 0) {
+    CLS_ERR("error adding reshard job for bucket %s with key %s",op.entry.bucket_name.c_str(), key.c_str());
+    return ret;
+  }
+
+  return ret;
+}
+
+static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls_rgw_reshard_list_op op;
+  bufferlist::iterator in_iter = in->begin();
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_rehard_list(): failed to decode entry\n");
+    return -EINVAL;
+  }
+  cls_rgw_reshard_list_ret op_ret;
+  bufferlist::iterator iter;
+  map<string, bufferlist> vals;
+  string filter_prefix;
+  int ret = cls_cxx_map_get_vals(hctx, op.marker, filter_prefix, op.max, &vals);
+  if (ret < 0)
+    return ret;
+  map<string, bufferlist>::iterator it;
+  cls_rgw_reshard_entry entry;
+  for (it = vals.begin(); it != vals.end(); ++it) {
+    iter = it->second.begin();
+    try {
+    ::decode(entry, iter);
+    } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_rehard_list(): failed to decode entry\n");
+    return -EIO;
+   }
+    op_ret.entries.push_back(entry);
+  }
+  op_ret.is_truncated = op.max && (op_ret.entries.size() >= op.max);
+  ::encode(op_ret, *out);
+  return 0;
+}
+
+
+static int rgw_reshard_get_head(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
+{
+  bufferlist bl;
+  int ret = cls_cxx_map_read_header(hctx, &bl);
+  if (ret < 0)
+    return ret;
+  cls_rgw_reshard_entry  entry;
+  if (bl.length() != 0) {
+    bufferlist::iterator iter = bl.begin();
+    try {
+      ::decode(entry, iter);
+    } catch (buffer::error& err) {
+      CLS_LOG(0, "ERROR: rgw_reshard_get_head(): failed to decode entry %s\n",err.what());
+      return -EINVAL;
+    }
+  }
+
+  cls_rgw_reshard_get_head_ret op_ret;
+  op_ret.entry = entry;
+  ::encode(op_ret, *out);
+  return 0;
+}
+
+static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_reshard_get_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_reshard_get: failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  string key = op.entry.bucket_name + "." + op.entry.bucket_id;
+  int ret = cls_cxx_map_get_val(hctx, key, &bl);
+  if (ret < 0)
+    return ret;
+  cls_rgw_reshard_entry  entry;
+  if (bl.length() != 0) {
+    bufferlist::iterator iter = bl.begin();
+    try {
+      ::decode(entry, iter);
+    } catch (buffer::error& err) {
+      CLS_LOG(0, "ERROR: rgw_cls_reshard_get_head(): failed to decode entry %s\n",err.what());
+      return -EINVAL;
+    }
+  }
+
+  cls_rgw_reshard_get_ret op_ret;
+  op_ret.entry = entry;
+  ::encode(op_ret, *out);
+  return 0;
+}
+
+static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_reshard_remove_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_rehard_remove: failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  string key = op.bucket_name + "." + op.bucket_id;
+  int ret = cls_cxx_map_remove_key(hctx, key);
+  return ret;
+}
+
+
 CLS_INIT(rgw)
 {
   CLS_LOG(1, "Loaded rgw class!");
@@ -3519,6 +3654,11 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_lc_put_head;
   cls_method_handle_t h_rgw_lc_get_head;
   cls_method_handle_t h_rgw_lc_list_entries;
+  cls_method_handle_t h_rgw_reshard_add;
+  cls_method_handle_t h_rgw_reshard_list;
+  cls_method_handle_t h_rgw_reshard_get;
+  cls_method_handle_t h_rgw_reshard_get_head;
+  cls_method_handle_t h_rgw_reshard_remove;
 
 
   cls_register(RGW_CLASS, &h_class);
@@ -3569,7 +3709,11 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_LC_PUT_HEAD, CLS_METHOD_RD| CLS_METHOD_WR, rgw_cls_lc_put_head, &h_rgw_lc_put_head);
   cls_register_cxx_method(h_class, RGW_LC_GET_HEAD, CLS_METHOD_RD, rgw_cls_lc_get_head, &h_rgw_lc_get_head);
   cls_register_cxx_method(h_class, RGW_LC_LIST_ENTRIES, CLS_METHOD_RD, rgw_cls_lc_list_entries, &h_rgw_lc_list_entries);
-  
+  cls_register_cxx_method(h_class, "reshard_add", CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_add, &h_rgw_reshard_add);
+  cls_register_cxx_method(h_class, "reshard_list", CLS_METHOD_RD, rgw_reshard_list, &h_rgw_reshard_list);
+  cls_register_cxx_method(h_class, "reshard_get", CLS_METHOD_RD,rgw_reshard_get, &h_rgw_reshard_get);
+  cls_register_cxx_method(h_class, "reshard_get_head", CLS_METHOD_RD, rgw_reshard_get_head, &h_rgw_reshard_get_head);
+  cls_register_cxx_method(h_class, "reshard_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_remove, &h_rgw_reshard_remove);
   return;
 }
 

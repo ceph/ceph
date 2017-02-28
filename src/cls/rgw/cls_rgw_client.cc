@@ -778,3 +778,91 @@ int cls_rgw_lc_list(IoCtx& io_ctx, string& oid,
 
  return r;
 }
+
+void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
+{
+  bufferlist in;
+  struct cls_rgw_reshard_add_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  op.exec("rgw", "reshard_add", in);
+}
+
+int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& marker, uint32_t max,
+                         list<cls_rgw_reshard_entry>& entries, bool& is_truncated)
+{
+  bufferlist in, out;
+  struct cls_rgw_reshard_list_op call;
+  call.marker = marker;
+  call.max = max;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "reshard_list", in, out);
+  if (r < 0)
+    return r;
+
+  struct cls_rgw_reshard_list_ret op_ret;
+  bufferlist::iterator iter = out.begin();
+  try {
+    ::decode(op_ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  entries.swap(op_ret.entries);
+  is_truncated = op_ret.is_truncated;
+
+  return 0;
+}
+
+int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_reshard_entry& entry)
+{
+  bufferlist in, out;
+  struct cls_rgw_reshard_get_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "reshard_get", in, out);
+  if (r < 0)
+    return r;
+
+  struct cls_rgw_reshard_get_ret op_ret;
+  bufferlist::iterator iter = out.begin();
+  try {
+    ::decode(op_ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  entry = op_ret.entry;
+
+  return 0;
+}
+
+int cls_rgw_reshard_get_head(librados::IoCtx& io_ctx, const string& oid, cls_rgw_reshard_entry& entry)
+{
+  bufferlist in, out;
+  struct cls_rgw_reshard_get_head_op call;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "reshard_get_head", in, out);
+  if (r < 0)
+    return r;
+
+  struct cls_rgw_reshard_get_head_ret op_ret;
+  bufferlist::iterator iter = out.begin();
+  try {
+    ::decode(op_ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  entry = op_ret.entry;
+
+  return 0;
+}
+
+void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
+{
+  bufferlist in;
+  struct cls_rgw_reshard_remove_op call;
+  ::encode(call, in);
+  op.exec("rgw", "reshard_remove", in);
+}
