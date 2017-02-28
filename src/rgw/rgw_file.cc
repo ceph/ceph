@@ -765,8 +765,8 @@ namespace rgw {
     lsubdout(fs->get_context(), rgw, 17)
       << __func__ << " " << *this
       << dendl;
-    /* if !deleted, then object still in fh_cache */
-    if (! deleted()) {
+    /* remove if still in fh_cache */
+    if (fh_hook.is_linked()) {
       fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
     }
     return true;
