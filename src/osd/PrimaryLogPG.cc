@@ -11129,7 +11129,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	dout(10) << " scanning peer osd." << bt << " from " << pbi.end << dendl;
 	epoch_t e = get_osdmap()->get_epoch();
 	MOSDPGScan *m = new MOSDPGScan(
-	  MOSDPGScan::OP_SCAN_GET_DIGEST, pg_whoami, e, e,
+	  MOSDPGScan::OP_SCAN_GET_DIGEST, pg_whoami, e, last_peering_reset,
 	  spg_t(info.pgid.pgid, bt.shard),
 	  pbi.end, hobject_t());
 	osd->send_message_osd_cluster(bt.osd, m, get_osdmap()->get_epoch());
