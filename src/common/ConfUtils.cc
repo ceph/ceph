@@ -40,8 +40,8 @@ using std::string;
 
 ////////////////////////////// ConfLine //////////////////////////////
 ConfLine::
-ConfLine(const std::string &key_, const std::string val_,
-      const std::string newsection_, const std::string comment_, int line_no_)
+ConfLine(const std::string &key_, const std::string &val_,
+      const std::string &newsection_, const std::string &comment_, int line_no_)
   : key(key_), val(val_), newsection(newsection_)
 {
   // If you want to implement writable ConfFile support, you'll need to save
