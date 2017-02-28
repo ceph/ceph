@@ -9521,7 +9521,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     bool implicit_ruleset_creation = false;
     string ruleset_name;
-    cmd_getval(g_ceph_context, cmdmap, "ruleset", ruleset_name);
+    cmd_getval(g_ceph_context, cmdmap, "rule", ruleset_name);
     string erasure_code_profile;
     cmd_getval(g_ceph_context, cmdmap, "erasure_code_profile", erasure_code_profile);
 
