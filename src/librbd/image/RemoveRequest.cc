@@ -27,14 +27,14 @@ using util::create_context_callback;
 using util::create_async_context_callback;
 using util::create_rados_ack_callback;
 
-static const std::string IMAGE_CLIENT_ID("");
-
 template<typename I>
-RemoveRequest<I>::RemoveRequest(IoCtx &ioctx, const std::string &image_name, const std::string &image_id,
-                                bool force, ProgressContext &prog_ctx, ContextWQ *op_work_queue,
-                                Context *on_finish) :
-  m_ioctx(ioctx), m_image_name(image_name), m_image_id(image_id), m_force(force),
-  m_prog_ctx(prog_ctx), m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
+RemoveRequest<I>::RemoveRequest(IoCtx &ioctx, const std::string &image_name,
+                                const std::string &image_id, bool force,
+                                ProgressContext &prog_ctx,
+                                ContextWQ *op_work_queue, Context *on_finish)
+  : m_ioctx(ioctx), m_image_name(image_name), m_image_id(image_id),
+    m_force(force), m_prog_ctx(prog_ctx), m_op_work_queue(op_work_queue),
+    m_on_finish(on_finish) {
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 
   m_image_ctx = I::create((m_image_id.empty() ? m_image_name : std::string()),
@@ -53,7 +53,8 @@ void RemoveRequest<I>::open_image() {
   ldout(m_cct, 20) << dendl;
 
   using klass = RemoveRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_open_image>(this);
+  Context *ctx = create_context_callback<klass, &klass::handle_open_image>(
+    this);
 
   m_image_ctx->state->open(true, ctx);
 }
@@ -63,11 +64,15 @@ Context *RemoveRequest<I>::handle_open_image(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
   if (*result < 0) {
+    m_image_ctx->destroy();
+    m_image_ctx = nullptr;
+
     if (*result != -ENOENT) {
       lderr(m_cct) << "error opening image: " << cpp_strerror(*result) << dendl;
+      return m_on_finish;
     }
-    m_ret_val = *result;
-    switch_thread_context();
+
+    remove_image();
     return nullptr;
   }
 
@@ -98,10 +103,12 @@ void RemoveRequest<I>::acquire_exclusive_lock() {
 
   using klass = RemoveRequest<I>;
   if (m_force) {
-    Context *ctx = create_context_callback<klass, &klass::handle_exclusive_lock_force>(this);
+    Context *ctx = create_context_callback<
+      klass, &klass::handle_exclusive_lock_force>(this);
     m_image_ctx->exclusive_lock->shut_down(ctx);
   } else {
-    Context *ctx = create_context_callback<klass, &klass::handle_exclusive_lock>(this);
+    Context *ctx = create_context_callback<
+      klass, &klass::handle_exclusive_lock>(this);
     RWLock::WLocker owner_lock(m_image_ctx->owner_lock);
     m_image_ctx->exclusive_lock->try_acquire_lock(ctx);
   }
@@ -112,8 +119,8 @@ Context *RemoveRequest<I>::handle_exclusive_lock_force(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(m_cct) << "error shutting down exclusive lock" << cpp_strerror(*result)
-                 << dendl;
+    lderr(m_cct) << "error shutting down exclusive lock: "
+                 << cpp_strerror(*result) << dendl;
     send_close_image(*result);
     return nullptr;
   }
@@ -168,8 +175,8 @@ void RemoveRequest<I>::check_image_watchers() {
   librados::AioCompletion *rados_completion =
     create_rados_ack_callback<klass, &klass::handle_check_image_watchers>(this);
 
-  int r = m_image_ctx->md_ctx.aio_operate(m_header_oid,
-                                          rados_completion, &op, &m_out_bl);
+  int r = m_image_ctx->md_ctx.aio_operate(m_header_oid, rados_completion,
+                                          &op, &m_out_bl);
   assert(r == 0);
   rados_completion->release();
 }
@@ -185,7 +192,8 @@ void RemoveRequest<I>::filter_out_mirror_watchers() {
   }
 
   cls::rbd::MirrorImage mirror_image;
-  int r = cls_client::mirror_image_get(&m_image_ctx->md_ctx, m_image_ctx->id, &mirror_image);
+  int r = cls_client::mirror_image_get(&m_image_ctx->md_ctx, m_image_ctx->id,
+                                       &mirror_image);
   if (r < 0) {
     if (r != -ENOENT) {
       lderr(m_cct) << "failed to retrieve mirroring state: "
@@ -219,10 +227,12 @@ Context *RemoveRequest<I>::handle_check_image_watchers(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(m_cct) << "error listing image watchers: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "error listing image watchers: " << cpp_strerror(*result)
+                 << dendl;
     send_close_image(*result);
     return nullptr;
   }
+
   // If an image is being bootstrapped by rbd-mirror, it implies
   // that the rbd-mirror daemon currently has the image open.
   // Permit removal if this is the case.
@@ -246,11 +256,11 @@ void RemoveRequest<I>::check_image_consistency_group() {
   librbd::cls_client::image_get_group_start(&op);
 
   using klass = RemoveRequest<I>;
-  librados::AioCompletion *rados_completion =
-    create_rados_ack_callback<klass, &klass::handle_check_image_consistency_group>(this);
+  librados::AioCompletion *rados_completion = create_rados_ack_callback<
+    klass, &klass::handle_check_image_consistency_group>(this);
   m_out_bl.clear();
-  int r = m_image_ctx->md_ctx.aio_operate(m_header_oid,
-                                          rados_completion, &op, &m_out_bl);
+  int r = m_image_ctx->md_ctx.aio_operate(m_header_oid, rados_completion, &op,
+                                          &m_out_bl);
   assert(r == 0);
   rados_completion->release();
 }
@@ -260,8 +270,8 @@ Context *RemoveRequest<I>::handle_check_image_consistency_group(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(m_cct) << "error fetching consistency group for image" << cpp_strerror(*result)
-                 << dendl;
+    lderr(m_cct) << "error fetching consistency group for image: "
+                 << cpp_strerror(*result) << dendl;
     send_close_image(*result);
     return nullptr;
   }
@@ -274,7 +284,7 @@ Context *RemoveRequest<I>::handle_check_image_consistency_group(int *result) {
     return nullptr;
   }
   if (s.is_valid()) {
-    lderr(m_cct) << "image is in a consistency group - not removing" << dendl;
+    lderr(m_cct) << "image is in a group - not removing" << dendl;
     send_close_image(-EMLINK);
     return nullptr;
   }
@@ -290,10 +300,11 @@ void RemoveRequest<I>::trim_image() {
 
   using klass = RemoveRequest<I>;
   Context *ctx = create_async_context_callback(
-    *m_image_ctx, create_context_callback<klass, &klass::handle_trim_image>(this));
+    *m_image_ctx, create_context_callback<
+      klass, &klass::handle_trim_image>(this));
 
   RWLock::RLocker owner_lock(m_image_ctx->owner_lock);
-  librbd::operation::TrimRequest<I> *req = librbd::operation::TrimRequest<I>::create(
+  auto req = librbd::operation::TrimRequest<I>::create(
     *m_image_ctx, ctx, m_image_ctx->size, 0, m_prog_ctx);
   req->send();
 }
@@ -303,8 +314,8 @@ Context *RemoveRequest<I>::handle_trim_image(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(m_cct) << "warning: failed to remove some object(s): " << cpp_strerror(*result)
-                 << dendl;
+    lderr(m_cct) << "warning: failed to remove some object(s): "
+                 << cpp_strerror(*result) << dendl;
   }
 
   if (m_old_format) {
@@ -342,8 +353,8 @@ Context *RemoveRequest<I>::handle_remove_child(int *result) {
   if (*result == -ENOENT) {
     *result = 0;
   } else if (*result < 0) {
-    lderr(m_cct) << "error removing child from children list" << cpp_strerror(*result)
-                 << dendl;
+    lderr(m_cct) << "error removing child from children list: "
+                 << cpp_strerror(*result) << dendl;
     send_close_image(*result);
     return nullptr;
   }
@@ -358,7 +369,8 @@ void RemoveRequest<I>::send_disable_mirror() {
   ldout(m_cct, 20) << dendl;
 
   using klass = RemoveRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_disable_mirror>(this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_disable_mirror>(this);
 
   mirror::DisableRequest<I> *req =
     mirror::DisableRequest<I>::create(m_image_ctx, m_force, !m_force, ctx);
@@ -369,12 +381,11 @@ template<typename I>
 Context *RemoveRequest<I>::handle_disable_mirror(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
-
   if (*result == -EOPNOTSUPP) {
     *result = 0;
   } else if (*result < 0) {
-    lderr(m_cct) << "error disabling image  mirroring: " << cpp_strerror(*result)
-                 << dendl;
+    lderr(m_cct) << "error disabling image mirroring: "
+                 << cpp_strerror(*result) << dendl;
   }
 
   send_close_image(*result);
@@ -387,7 +398,8 @@ void RemoveRequest<I>::send_close_image(int r) {
 
   m_ret_val = r;
   using klass = RemoveRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_send_close_image>(this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_send_close_image>(this);
 
   m_image_ctx->state->close(ctx);
 }
@@ -397,15 +409,18 @@ Context *RemoveRequest<I>::handle_send_close_image(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(m_cct) << "error encountered while closing image: " << cpp_strerror(*result)
-                 << dendl;
+    lderr(m_cct) << "error encountered while closing image: "
+                 << cpp_strerror(*result) << dendl;
   }
 
+  m_image_ctx->destroy();
+  m_image_ctx = nullptr;
   if (m_ret_val < 0) {
-    switch_thread_context();
-  } else {
-    remove_header();
+    *result = m_ret_val;
+    return m_on_finish;
   }
+
+  remove_header();
   return nullptr;
 }
 
@@ -430,34 +445,8 @@ Context *RemoveRequest<I>::handle_remove_header(int *result) {
     m_ret_val = *result;
   }
 
-  switch_thread_context();
-  return nullptr;
-}
-
-template <typename I>
-void RemoveRequest<I>::switch_thread_context() {
-  ldout(m_cct, 20) << dendl;
-
-  using klass = RemoveRequest<I>;
-
-  Context *ctx = create_context_callback<klass, &klass::handle_switch_thread_context>(this);
-  m_op_work_queue->queue(ctx, 0);
-}
-
-template <typename I>
-void RemoveRequest<I>::handle_switch_thread_context(int r) {
-  ldout(m_cct, 20) << ": r=" << r << dendl;
-
-  m_image_ctx->destroy();
-  m_image_ctx = nullptr;
-
-  if (m_ret_val < 0 && m_ret_val != -ENOENT) {
-    m_on_finish->complete(m_ret_val);
-    return;
-  }
-
   remove_image();
-  return;
+  return nullptr;
 }
 
 template<typename I>
@@ -494,10 +483,11 @@ void RemoveRequest<I>::send_journal_remove() {
   ldout(m_cct, 20) << dendl;
 
   using klass = RemoveRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_journal_remove>(this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_journal_remove>(this);
 
   journal::RemoveRequest<I> *req = journal::RemoveRequest<I>::create(
-	  m_ioctx, m_image_id, IMAGE_CLIENT_ID, m_op_work_queue, ctx);
+    m_ioctx, m_image_id, Journal<>::IMAGE_CLIENT_ID, m_op_work_queue, ctx);
   req->send();
 }
 
@@ -568,8 +558,8 @@ Context *RemoveRequest<I>::handle_mirror_image_remove(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
   if (*result < 0 && *result != -ENOENT && *result != -EOPNOTSUPP) {
-    lderr(m_cct) << "failed to remove mirror image state: " << cpp_strerror(*result)
-                 << dendl;
+    lderr(m_cct) << "failed to remove mirror image state: "
+                 << cpp_strerror(*result) << dendl;
     return m_on_finish;
   } else {
     *result = 0;
@@ -614,6 +604,7 @@ void RemoveRequest<I>::handle_remove_v1_image(int r) {
     }
 
     m_on_finish->complete(r);
+    delete this;
     return;
   }
 
@@ -659,7 +650,8 @@ Context *RemoveRequest<I>::handle_dir_get_image_id(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
   if ((*result < 0) && (*result != -ENOENT)) {
-    lderr(m_cct) << "error fetching image id: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "error fetching image id: " << cpp_strerror(*result)
+                 << dendl;
     return m_on_finish;
   }
 
@@ -696,7 +688,8 @@ Context *RemoveRequest<I>::handle_dir_get_image_name(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
   if ((*result < 0) && (*result != -ENOENT)) {
-    lderr(m_cct) << "error fetching image name: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "error fetching image name: " << cpp_strerror(*result)
+                 << dendl;
     return m_on_finish;
   }
 
@@ -729,7 +722,8 @@ Context *RemoveRequest<I>::handle_remove_id_object(int *result) {
   ldout(m_cct, 20) << ": r=" << *result << dendl;
 
   if ((*result < 0) && (*result != -ENOENT)) {
-    lderr(m_cct) << "error removing id object: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "error removing id object: " << cpp_strerror(*result)
+                 << dendl;
     return m_on_finish;
   }
 
