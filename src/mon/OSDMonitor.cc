@@ -6965,7 +6965,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "Failed to parse crushmap: " << e.what();
       goto reply;
     }
-
+  
     int64_t prior_version = 0;
     if (cmd_getval(g_ceph_context, cmdmap, "prior_version", prior_version)) {
       if (prior_version == osdmap.get_crush_version() - 1) {
@@ -6992,11 +6992,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
+    if (crush.has_legacy_rulesets()) {
+      err = -EINVAL;
+      ss << "crush maps with ruleset != ruleid are no longer allowed";
+      goto reply;
+    }
     if (!validate_crush_against_features(&crush, ss)) {
       err = -EINVAL;
       goto reply;
     }
-    
+
     const auto& osdmap_pools = osdmap.get_pools();
     for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
