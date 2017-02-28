@@ -24,14 +24,14 @@ class AuthNoneServiceHandler  : public AuthServiceHandler {
 public:
   explicit AuthNoneServiceHandler(CephContext *cct_)
     : AuthServiceHandler(cct_) {}
-  ~AuthNoneServiceHandler() {}
+  ~AuthNoneServiceHandler() override {}
   
-  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) {
+  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) override {
     entity_name = name;
     caps.allow_all = true;
     return CEPH_AUTH_NONE;
   }
-  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid = NULL) {
+  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps, uint64_t *auid = NULL) override {
     return 0;
   }
   void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }
