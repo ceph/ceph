@@ -78,6 +78,19 @@ struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
     return s_instance;
   }
 
+  static ObjectRequest* create_writesame(librbd::MockTestImageCtx *ictx,
+                                         const std::string &oid,
+                                         uint64_t object_no,
+                                         uint64_t object_off,
+                                         uint64_t object_len,
+                                         const ceph::bufferlist &data,
+                                         const ::SnapContext &snapc,
+                                         Context *completion, int op_flags) {
+    assert(s_instance != nullptr);
+    s_instance->on_finish = completion;
+    return s_instance;
+  }
+
   ObjectRequest() {
     assert(s_instance == nullptr);
     s_instance = this;
@@ -146,6 +159,7 @@ struct TestMockIoImageRequest : public TestMockFixture {
   typedef ImageWriteRequest<librbd::MockTestImageCtx> MockImageWriteRequest;
   typedef ImageDiscardRequest<librbd::MockTestImageCtx> MockImageDiscardRequest;
   typedef ImageFlushRequest<librbd::MockTestImageCtx> MockImageFlushRequest;
+  typedef ImageWriteSameRequest<librbd::MockTestImageCtx> MockImageWriteSameRequest;
   typedef ObjectRequest<librbd::MockTestImageCtx> MockObjectRequest;
   typedef ObjectReadRequest<librbd::MockTestImageCtx> MockObjectReadRequest;
 
@@ -227,12 +241,15 @@ TEST_F(TestMockIoImageRequest, AioDiscardJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
-  expect_object_request_send(mock_image_ctx, mock_aio_object_request, 0);
+  if (!ictx->skip_partial_discard) {
+    expect_object_request_send(mock_image_ctx, mock_aio_object_request, 0);
+  }
 
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
     &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
-  MockImageDiscardRequest mock_aio_image_discard(mock_image_ctx, aio_comp, 0, 1);
+  MockImageDiscardRequest mock_aio_image_discard(mock_image_ctx, aio_comp,
+                                                 0, 1, ictx->skip_partial_discard);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     mock_aio_image_discard.send();
@@ -262,6 +279,37 @@ TEST_F(TestMockIoImageRequest, AioFlushJournalAppendDisabled) {
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     mock_aio_image_flush.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx.wait());
+}
+
+TEST_F(TestMockIoImageRequest, AioWriteSameJournalAppendDisabled) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockObjectRequest mock_aio_object_request;
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+
+  InSequence seq;
+  expect_is_journal_appending(mock_journal, false);
+  expect_write_to_cache(mock_image_ctx, ictx->get_object_name(0),
+                        0, 1, 0, 0);
+
+  C_SaferCond aio_comp_ctx;
+  AioCompletion *aio_comp = AioCompletion::create_and_start(
+    &aio_comp_ctx, ictx, AIO_TYPE_WRITESAME);
+
+  bufferlist bl;
+  bl.append("1");
+  MockImageWriteSameRequest mock_aio_image_writesame(mock_image_ctx, aio_comp,
+                                                     0, 1, std::move(bl), 0);
+  {
+    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    mock_aio_image_writesame.send();
   }
   ASSERT_EQ(0, aio_comp_ctx.wait());
 }

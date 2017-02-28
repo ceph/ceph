@@ -193,6 +193,7 @@ namespace librbd {
     int journal_max_concurrent_object_sets;
     bool mirroring_resync_after_disconnect;
     int mirroring_replay_delay;
+    bool skip_partial_discard;
 
     LibrbdAdminSocketHook *asok_hook;
 

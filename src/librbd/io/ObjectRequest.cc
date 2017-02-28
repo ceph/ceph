@@ -72,6 +72,19 @@ ObjectRequest<I>::create_zero(I *ictx, const std::string &oid,
 }
 
 template <typename I>
+ObjectRequest<I>*
+ObjectRequest<I>::create_writesame(I *ictx, const std::string &oid,
+                                   uint64_t object_no, uint64_t object_off,
+                                   uint64_t object_len,
+                                   const ceph::bufferlist &data,
+                                   const ::SnapContext &snapc,
+                                   Context *completion, int op_flags) {
+  return new ObjectWriteSameRequest(util::get_image_ctx(ictx), oid, object_no,
+                                    object_off, object_len, data, snapc,
+                                    completion, op_flags);
+}
+
+template <typename I>
 ObjectRequest<I>::ObjectRequest(ImageCtx *ictx, const std::string &oid,
                                 uint64_t objectno, uint64_t off,
                                 uint64_t len, librados::snap_t snap_id,
@@ -619,6 +632,29 @@ void ObjectTruncateRequest::send_write() {
   } else {
     AbstractObjectWriteRequest::send_write();
   }
+}
+
+void ObjectWriteSameRequest::add_write_ops(librados::ObjectWriteOperation *wr) {
+  RWLock::RLocker snap_locker(m_ictx->snap_lock);
+  if (m_ictx->enable_alloc_hint &&
+      (m_ictx->object_map == nullptr || !m_object_exist)) {
+    wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
+  }
+
+  wr->writesame(m_object_off, m_object_len, m_write_data);
+  wr->set_op_flags2(m_op_flags);
+}
+
+void ObjectWriteSameRequest::send_write() {
+  bool write_full = (m_object_off == 0 && m_object_len == m_ictx->get_object_size());
+  ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
+                         << m_object_off << "~" << m_object_len
+                         << " write_full " << write_full << dendl;
+  if (write_full && !has_parent()) {
+    m_guard = false;
+  }
+
+  AbstractObjectWriteRequest::send_write();
 }
 
 } // namespace io

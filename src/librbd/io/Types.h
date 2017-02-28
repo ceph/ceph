@@ -19,6 +19,7 @@ typedef enum {
   AIO_TYPE_WRITE,
   AIO_TYPE_DISCARD,
   AIO_TYPE_FLUSH,
+  AIO_TYPE_WRITESAME,
 } aio_type_t;
 
 typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
