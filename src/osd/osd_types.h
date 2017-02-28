@@ -1617,6 +1617,7 @@ struct object_stat_sum_t {
   int32_t num_evict_mode_full;  // 1 when in evict full mode, otherwise 0
   int64_t num_objects_pinned;
   int64_t num_objects_missing;
+  int64_t num_legacy_snapsets; ///< upper bound on pre-luminous-style SnapSets
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1644,7 +1645,8 @@ struct object_stat_sum_t {
       num_flush_mode_high(0), num_flush_mode_low(0),
       num_evict_mode_some(0), num_evict_mode_full(0),
       num_objects_pinned(0),
-      num_objects_missing(0)
+      num_objects_missing(0),
+      num_legacy_snapsets(0)
   {}
 
   void floor(int64_t f) {
@@ -1683,6 +1685,7 @@ struct object_stat_sum_t {
     FLOOR(num_evict_mode_some);
     FLOOR(num_evict_mode_full);
     FLOOR(num_objects_pinned);
+    FLOOR(num_legacy_snapsets);
 #undef FLOOR
   }
 
@@ -1693,7 +1696,14 @@ struct object_stat_sum_t {
       if (i < (PARAM % out.size())) {           \
 	out[i].PARAM++;                         \
       }                                         \
-    }                                           \
+    }
+#define SPLIT_PRESERVE_NONZERO(PARAM)		\
+    for (unsigned i = 0; i < out.size(); ++i) { \
+      if (PARAM)				\
+	out[i].PARAM = 1 + PARAM / out.size();	\
+      else					\
+	out[i].PARAM = 0;			\
+    }
 
     SPLIT(num_bytes);
     SPLIT(num_objects);
@@ -1729,7 +1739,9 @@ struct object_stat_sum_t {
     SPLIT(num_evict_mode_some);
     SPLIT(num_evict_mode_full);
     SPLIT(num_objects_pinned);
+    SPLIT_PRESERVE_NONZERO(num_legacy_snapsets);
 #undef SPLIT
+#undef SPLIT_PRESERVE_NONZERO
   }
 
   void clear() {
@@ -1784,7 +1796,8 @@ struct object_stat_sum_t {
         sizeof(num_evict_mode_some) +
         sizeof(num_evict_mode_full) +
         sizeof(num_objects_pinned) +
-        sizeof(num_objects_missing)
+        sizeof(num_objects_missing) +
+        sizeof(num_legacy_snapsets)
       ,
       "object_stat_sum_t have padding");
   }

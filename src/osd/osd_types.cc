@@ -1883,11 +1883,12 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_evict_mode_some", num_evict_mode_some);
   f->dump_int("num_evict_mode_full", num_evict_mode_full);
   f->dump_int("num_objects_pinned", num_objects_pinned);
+  f->dump_int("num_legacy_snapsets", num_legacy_snapsets);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(15, 14, bl);
+  ENCODE_START(16, 14, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
 #else
@@ -1925,6 +1926,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_evict_mode_full, bl);
   ::encode(num_objects_pinned, bl);
   ::encode(num_objects_missing, bl);
+  ::encode(num_legacy_snapsets, bl);
 #endif
   ENCODE_FINISH(bl);
 }
@@ -1932,9 +1934,9 @@ void object_stat_sum_t::encode(bufferlist& bl) const
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
   bool decode_finish = false;
-  DECODE_START(15, bl);
+  DECODE_START(16, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
-  if (struct_v >= 15) {
+  if (struct_v >= 16) {
     bl.copy(sizeof(object_stat_sum_t), (char*)(&num_bytes));
     decode_finish = true;
   }
@@ -1974,6 +1976,11 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
     ::decode(num_evict_mode_full, bl);
     ::decode(num_objects_pinned, bl);
     ::decode(num_objects_missing, bl);
+    if (struct_v >= 16) {
+      ::decode(num_legacy_snapsets, bl);
+    } else {
+      num_legacy_snapsets = num_object_clones;  // upper bound
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -2052,6 +2059,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_evict_mode_some += o.num_evict_mode_some;
   num_evict_mode_full += o.num_evict_mode_full;
   num_objects_pinned += o.num_objects_pinned;
+  num_legacy_snapsets += o.num_legacy_snapsets;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -2090,6 +2098,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_evict_mode_some -= o.num_evict_mode_some;
   num_evict_mode_full -= o.num_evict_mode_full;
   num_objects_pinned -= o.num_objects_pinned;
+  num_legacy_snapsets -= o.num_legacy_snapsets;
 }
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
@@ -2128,7 +2137,8 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_flush_mode_low == r.num_flush_mode_low &&
     l.num_evict_mode_some == r.num_evict_mode_some &&
     l.num_evict_mode_full == r.num_evict_mode_full &&
-    l.num_objects_pinned == r.num_objects_pinned;
+    l.num_objects_pinned == r.num_objects_pinned &&
+    l.num_legacy_snapsets == r.num_legacy_snapsets;
 }
 
 // -- object_stat_collection_t --
