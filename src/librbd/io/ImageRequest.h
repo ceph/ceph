@@ -83,6 +83,8 @@ public:
                    int op_flags);
 
 protected:
+  int clip_request() override;
+
   void send_request() override;
   void send_image_cache_request() override;
 
