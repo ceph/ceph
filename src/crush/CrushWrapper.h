@@ -62,6 +62,9 @@ public:
 
 private:
   struct crush_map *crush;
+
+  bool have_uniform_rules = false;
+
   /* reverse maps */
   mutable bool have_rmaps;
   mutable std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
@@ -1166,6 +1169,7 @@ public:
   void finalize() {
     assert(crush);
     crush_finalize(crush);
+    have_uniform_rules = !has_legacy_rulesets();
   }
 
   int update_device_class(CephContext *cct, int id, const string& class_name, const string& name);
@@ -1207,7 +1211,14 @@ public:
 
   int find_rule(int ruleset, int type, int size) const {
     if (!crush) return -1;
-    return crush_find_rule(crush, ruleset, type, size);
+    if (!have_uniform_rules) {
+      return crush_find_rule(crush, ruleset, type, size);
+    } else {
+      if (ruleset < (int)crush->max_rules &&
+	  crush->rules[ruleset])
+	return ruleset;
+      return -1;
+    }
   }
 
   bool ruleset_exists(int const ruleset) const {
