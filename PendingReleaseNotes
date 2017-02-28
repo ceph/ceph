@@ -171,3 +171,6 @@
   versions of Ceph will likely include an alternative object
   enumeration interface that makes it more natural and efficient to
   enumerate all objects along with their snapshot and clone metadata.
+
+* The deprecated 'crush_ruleset' property has finally been removed; please use
+  'crush_rule' instead for the 'osd pool get ...' and 'osd pool set ..' commands.
