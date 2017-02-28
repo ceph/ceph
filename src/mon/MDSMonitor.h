@@ -65,6 +65,10 @@ class MDSMonitor : public PaxosService {
   void dump_info(Formatter *f);
   int print_nodes(Formatter *f);
 
+  /**
+   * Return true if a blacklist was done (i.e. OSD propose needed)
+   */
+  bool fail_mds_gid(mds_gid_t gid);
  protected:
   // mds maps
   FSMap fsmap;           // current
@@ -88,10 +92,6 @@ class MDSMonitor : public PaxosService {
 		  list<pair<health_status_t,string> > *detail,
 		  CephContext *cct) const override;
   int fail_mds(std::ostream &ss, const std::string &arg);
-  /**
-   * Return true if a blacklist was done (i.e. OSD propose needed)
-   */
-  bool fail_mds_gid(mds_gid_t gid);
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
@@ -101,11 +101,6 @@ class MDSMonitor : public PaxosService {
       mds_role_t *role,
       std::ostream &ss);
 
-  int management_command(
-      MonOpRequestRef op,
-      std::string const &prefix,
-      map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss);
   void modify_legacy_filesystem(
       std::function<void(std::shared_ptr<Filesystem> )> fn);
   int legacy_filesystem_command(
@@ -152,7 +147,6 @@ class MDSMonitor : public PaxosService {
 
   map<mds_gid_t, Metadata> pending_metadata;
 
-  int _check_pool(const int64_t pool_id, std::stringstream *ss) const;
   mds_gid_t gid_from_arg(const std::string& arg, std::ostream& err);
 
   // When did the mon last call into our tick() method?  Used for detecting

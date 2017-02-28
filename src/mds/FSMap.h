@@ -171,6 +171,17 @@ public:
     return enable_multiple;
   }
 
+  void set_legacy_client_fscid(fs_cluster_id_t fscid)
+  {
+    assert(fscid == FS_CLUSTER_ID_NONE || filesystems.count(fscid));
+    legacy_client_fscid = fscid;
+  }
+
+  fs_cluster_id_t get_legacy_client_fscid() const
+  {
+    return legacy_client_fscid;
+  }
+
   /**
    * Get state of all daemons (for all filesystems, including all standbys)
    */
@@ -291,6 +302,33 @@ public:
    * from the damaged list of the filesystem `fscid`
    */
   bool undamaged(const fs_cluster_id_t fscid, const mds_rank_t rank);
+
+  /**
+   * Initialize a Filesystem and assign a fscid.  Update legacy_client_fscid
+   * to point to the new filesystem if it's the only one.
+   *
+   * Caller must already have validated all arguments vs. the existing
+   * FSMap and OSDMap contents.
+   */
+  void create_filesystem(const std::string &name,
+                         int64_t metadata_pool, int64_t data_pool,
+                         uint64_t features);
+
+  /**
+   * Remove the filesystem (it must exist).  Caller should already
+   * have failed out any MDSs that were assigned to the filesystem.
+   */
+  void erase_filesystem(fs_cluster_id_t fscid)
+  {
+    filesystems.erase(fscid);
+  }
+
+  /**
+   * Reset all the state information (not configuration information)
+   * in a particular filesystem.  Caller must have verified that
+   * the filesystem already exists.
+   */
+  void reset_filesystem(fs_cluster_id_t fscid);
 
   /**
    * Mutator helper for Filesystem objects: expose a non-const
