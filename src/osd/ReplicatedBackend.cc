@@ -824,6 +824,7 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
   reply->set_priority(m->get_priority());
   reply->pgid = get_info().pgid;
   reply->map_epoch = m->map_epoch;
+  reply->min_epoch = m->min_epoch;
   reply->replies.swap(replies);
   reply->compute_cost(cct);
 
@@ -902,6 +903,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     reply->set_priority(m->get_priority());
     reply->pgid = get_info().pgid;
     reply->map_epoch = m->map_epoch;
+    reply->min_epoch = m->min_epoch;
     reply->set_pulls(&replies);
     reply->compute_cost(cct);
 
@@ -1847,6 +1849,7 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
       msg->from = get_parent()->whoami_shard();
       msg->pgid = get_parent()->primary_spg_t();
       msg->map_epoch = get_osdmap()->get_epoch();
+      msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
       msg->set_priority(prio);
       for (;
            (j != i->second.end() &&
@@ -1882,6 +1885,7 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
     msg->set_priority(prio);
     msg->pgid = get_parent()->primary_spg_t();
     msg->map_epoch = get_osdmap()->get_epoch();
+    msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
     msg->set_pulls(&i->second);
     msg->compute_cost(cct);
     get_parent()->send_message_osd_cluster(msg, con);
