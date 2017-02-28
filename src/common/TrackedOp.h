@@ -188,6 +188,7 @@ protected:
 
   mutable string desc_str;   ///< protected by lock
   mutable const char *desc = nullptr;  ///< readable without lock
+  mutable atomic<bool> want_new_desc = {false};
 
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     tracker(_tracker),
@@ -235,7 +236,7 @@ public:
   }
 
   const char *get_desc() const {
-    if (!desc) {
+    if (!desc || want_new_desc.load()) {
       Mutex::Locker l(lock);
       _gen_desc();
     }
@@ -247,10 +248,11 @@ private:
     _dump_op_descriptor_unlocked(ss);
     desc_str = ss.str();
     desc = desc_str.c_str();
+    want_new_desc = false;
   }
 public:
   void reset_desc() {
-    desc = nullptr;
+    want_new_desc = true;
   }
 
   const utime_t& get_initiated() const {
