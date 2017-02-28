@@ -6403,8 +6403,9 @@ void OSD::ms_fast_dispatch(Message *m)
         reqid.name._num, reqid.tid, reqid.inc);
   }
 
-  // note sender epoch
+  // note sender epoch, min req'd epoch
   op->sent_epoch = static_cast<MOSDFastDispatchOp*>(m)->get_map_epoch();
+  op->min_epoch = static_cast<MOSDFastDispatchOp*>(m)->get_min_epoch();
 
   service.maybe_inject_dispatch_delay();
 
