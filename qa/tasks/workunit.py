@@ -309,23 +309,53 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
     srcdir = '{cdir}/qa/workunits'.format(cdir=clonedir)
 
     git_url = teuth_config.get_ceph_qa_suite_git_url()
-    remote.run(
-        logger=log.getChild(role),
-        args=[
-            'rm',
-            '-rf',
-            clonedir,
-            run.Raw('&&'),
-            'git',
-            'clone',
+    # if we are running an upgrade test, and ceph-ci does not have branches like
+    # `jewel`, so should use ceph.git as an alternative.
+    try:
+        remote.run(
+            logger=log.getChild(role),
+            args=[
+                'rm',
+                '-rf',
+                clonedir,
+                run.Raw('&&'),
+                'git',
+                'clone',
+                git_url,
+                clonedir,
+                run.Raw('&&'),
+                'cd', '--', clonedir,
+                run.Raw('&&'),
+                'git', 'checkout', refspec,
+            ],
+        )
+    except CommandFailedError:
+        if not git_url.endswith('/ceph-ci.git'):
+            raise
+        alt_git_url = git_url.replace('/ceph-ci.git', '/ceph.git')
+        log.info(
+            "failed to check out '%s' from %s; will also try in %s",
+            refspec,
             git_url,
-            clonedir,
-            run.Raw('&&'),
-            'cd', '--', clonedir,
-            run.Raw('&&'),
-            'git', 'checkout', refspec,
-        ],
-    )
+            alt_git_url,
+        )
+        remote.run(
+            logger=log.getChild(role),
+            args=[
+                'rm',
+                '-rf',
+                clonedir,
+                run.Raw('&&'),
+                'git',
+                'clone',
+                alt_git_url,
+                clonedir,
+                run.Raw('&&'),
+                'cd', '--', clonedir,
+                run.Raw('&&'),
+                'git', 'checkout', refspec,
+            ],
+        )
     remote.run(
         logger=log.getChild(role),
         args=[
