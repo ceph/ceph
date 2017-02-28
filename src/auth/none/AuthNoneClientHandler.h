@@ -25,16 +25,16 @@ public:
   AuthNoneClientHandler(CephContext *cct_, RotatingKeyRing *rkeys) 
     : AuthClientHandler(cct_) {}
 
-  void reset() { }
+  void reset() override { }
 
-  void prepare_build_request() {}
-  int build_request(bufferlist& bl) const { return 0; }
-  int handle_response(int ret, bufferlist::iterator& iter) { return 0; }
-  bool build_rotating_request(bufferlist& bl) const { return false; }
+  void prepare_build_request() override {}
+  int build_request(bufferlist& bl) const override { return 0; }
+  int handle_response(int ret, bufferlist::iterator& iter) override { return 0; }
+  bool build_rotating_request(bufferlist& bl) const override { return false; }
 
-  int get_protocol() const { return CEPH_AUTH_NONE; }
+  int get_protocol() const override { return CEPH_AUTH_NONE; }
   
-  AuthAuthorizer *build_authorizer(uint32_t service_id) const {
+  AuthAuthorizer *build_authorizer(uint32_t service_id) const override {
     RWLock::RLocker l(lock);
     AuthNoneAuthorizer *auth = new AuthNoneAuthorizer();
     if (auth) {
@@ -43,14 +43,14 @@ public:
     return auth;
   }
 
-  bool need_tickets() { return false; }
+  bool need_tickets() override { return false; }
 
-  void set_global_id(uint64_t id) {
+  void set_global_id(uint64_t id) override {
     RWLock::WLocker l(lock);
     global_id = id;
   }
 private:
-  void validate_tickets() {}
+  void validate_tickets() override {}
 };
 
 #endif
