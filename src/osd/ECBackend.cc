@@ -480,6 +480,7 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
     MOSDPGPush *msg = new MOSDPGPush();
     msg->set_priority(priority);
     msg->map_epoch = get_parent()->get_epoch();
+    msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
     msg->from = get_parent()->whoami_shard();
     msg->pgid = spg_t(get_parent()->get_info().pgid.pgid, i->first.shard);
     msg->pushes.swap(i->second);
@@ -496,6 +497,7 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
     MOSDPGPushReply *msg = new MOSDPGPushReply();
     msg->set_priority(priority);
     msg->map_epoch = get_parent()->get_epoch();
+    msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
     msg->from = get_parent()->whoami_shard();
     msg->pgid = spg_t(get_parent()->get_info().pgid.pgid, i->first.shard);
     msg->replies.swap(i->second);
