@@ -35,8 +35,11 @@ std::function<void ()> NetworkStack::add_thread(unsigned i)
 {
   Worker *w = workers[i];
   return [this, w]() {
-    const uint64_t EventMaxWaitUs = 30000000;
-    w->center.set_owner();
+      char tp_name[16];
+      sprintf(tp_name, "msgr-worker-%d", w->id);
+      pthread_setname_np(pthread_self(), tp_name);
+      const uint64_t EventMaxWaitUs = 30000000;
+      w->center.set_owner();
       ldout(cct, 10) << __func__ << " starting" << dendl;
       w->initialize();
       w->init_done();
