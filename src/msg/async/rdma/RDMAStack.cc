@@ -146,6 +146,7 @@ void RDMADispatcher::polling()
         while (!dead_queue_pairs.empty()) {
           ldout(cct, 10) << __func__ << " finally delete qp=" << dead_queue_pairs.back() << dendl;
           delete dead_queue_pairs.back();
+          perf_logger->dec(l_msgr_rdma_active_queue_pair);
           dead_queue_pairs.pop_back();
         }
       }
