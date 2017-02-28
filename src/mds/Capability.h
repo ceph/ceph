@@ -16,6 +16,7 @@
 #ifndef CEPH_CAPABILITY_H
 #define CEPH_CAPABILITY_H
 
+#include "include/counter.h"
 #include "include/buffer_fwd.h"
 #include "include/xlist.h"
 
@@ -63,7 +64,7 @@ namespace ceph {
   class Formatter;
 }
 
-class Capability {
+class Capability : public Counter<Capability> {
 public:
   struct Export {
     int64_t cap_id;
@@ -124,14 +125,8 @@ public:
     last_issue(0),
     mseq(0),
     suppress(0), state(0) {
-    g_num_cap++;
-    g_num_capa++;
   }
   Capability(const Capability& other);  // no copying
-  ~Capability() {
-    g_num_cap--;
-    g_num_caps++;
-  }
 
 
   static void *operator new(size_t num_bytes) {

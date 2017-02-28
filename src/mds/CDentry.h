@@ -20,6 +20,7 @@
 #include <string>
 #include <set>
 
+#include "include/counter.h"
 #include "include/types.h"
 #include "include/buffer_fwd.h"
 #include "include/lru.h"
@@ -46,7 +47,7 @@ class Session;
 bool operator<(const CDentry& l, const CDentry& r);
 
 // dentry
-class CDentry : public MDSCacheObject, public LRUObject {
+class CDentry : public MDSCacheObject, public LRUObject, public Counter<CDentry> {
 public:
   friend class CDir;
 
@@ -106,8 +107,6 @@ public:
     versionlock(this, &versionlock_type),
     dir(0),
     version(0), projected_version(0) {
-    g_num_dn++;
-    g_num_dna++;
   }
   CDentry(const std::string& n, __u32 h, inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
@@ -118,16 +117,9 @@ public:
     versionlock(this, &versionlock_type),
     dir(0),
     version(0), projected_version(0) {
-    g_num_dn++;
-    g_num_dna++;
     linkage.remote_ino = ino;
     linkage.remote_d_type = dt;
   }
-  ~CDentry() {
-    g_num_dn--;
-    g_num_dns++;
-  }
-
 
   static void *operator new(size_t num_bytes) {
     void *n = pool.malloc();

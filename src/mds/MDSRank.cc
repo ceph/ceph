@@ -546,19 +546,19 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   */
 
   if (mlogger) {
-    mlogger->set(l_mdm_ino, g_num_ino);
-    mlogger->set(l_mdm_dir, g_num_dir);
-    mlogger->set(l_mdm_dn, g_num_dn);
-    mlogger->set(l_mdm_cap, g_num_cap);
+    mlogger->set(l_mdm_ino, CInode::count());
+    mlogger->set(l_mdm_dir, CDir::count());
+    mlogger->set(l_mdm_dn, CDentry::count());
+    mlogger->set(l_mdm_cap, Capability::count());
 
-    mlogger->inc(l_mdm_inoa, g_num_inoa);  g_num_inoa = 0;
-    mlogger->inc(l_mdm_inos, g_num_inos);  g_num_inos = 0;
-    mlogger->inc(l_mdm_dira, g_num_dira);  g_num_dira = 0;
-    mlogger->inc(l_mdm_dirs, g_num_dirs);  g_num_dirs = 0;
-    mlogger->inc(l_mdm_dna, g_num_dna);  g_num_dna = 0;
-    mlogger->inc(l_mdm_dns, g_num_dns);  g_num_dns = 0;
-    mlogger->inc(l_mdm_capa, g_num_capa);  g_num_capa = 0;
-    mlogger->inc(l_mdm_caps, g_num_caps);  g_num_caps = 0;
+    mlogger->set(l_mdm_inoa, CInode::increments());
+    mlogger->set(l_mdm_inos, CInode::decrements());
+    mlogger->set(l_mdm_dira, CDir::increments());
+    mlogger->set(l_mdm_dirs, CDir::decrements());
+    mlogger->set(l_mdm_dna, CDentry::increments());
+    mlogger->set(l_mdm_dns, CDentry::decrements());
+    mlogger->set(l_mdm_capa, Capability::increments());
+    mlogger->set(l_mdm_caps, Capability::decrements());
 
     mlogger->set(l_mdm_buf, buffer::get_total_alloc());
   }
