@@ -993,4 +993,48 @@ struct cls_rgw_lc_obj_head
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_obj_head)
 
+struct cls_rgw_reshard_entry
+{
+  ceph::real_time time;
+  string tenant;
+  string bucket_name;
+  string bucket_id;
+  string old_instance_id;
+  string new_instance_id;
+  uint32_t old_num_shards;
+  uint32_t new_num_shards;
+
+  cls_rgw_reshard_entry() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+     ::encode(time, bl);
+    ::encode(tenant, bl);
+    ::encode(bucket_name, bl);
+    ::encode(bucket_id, bl);
+    ::encode(old_instance_id, bl);
+    ::encode(new_instance_id, bl);
+    ::encode(old_num_shards, bl);
+    ::encode(new_num_shards, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(time, bl);
+    ::decode(tenant, bl);
+    ::decode(bucket_name, bl);
+    ::decode(bucket_id, bl);
+    ::decode(old_instance_id, bl);
+    ::decode(new_instance_id, bl);
+    ::decode(old_num_shards, bl);
+    ::decode(new_num_shards, bl);
+    DECODE_FINISH(bl);
+  }
+
+   void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_reshard_entry*>& o);
+};
+WRITE_CLASS_ENCODER(cls_rgw_reshard_entry)
+
 #endif
