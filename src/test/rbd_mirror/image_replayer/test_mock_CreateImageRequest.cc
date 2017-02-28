@@ -118,7 +118,6 @@ struct CloseImageRequest<librbd::MockTestImageCtx> {
   Context *on_finish = nullptr;
 
   static CloseImageRequest* create(librbd::MockTestImageCtx **image_ctx,
-                                   ContextWQ *work_queue, bool destroy_only,
                                    Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->construct(*image_ctx);
@@ -147,8 +146,7 @@ struct OpenImageRequest<librbd::MockTestImageCtx> {
   static OpenImageRequest* create(librados::IoCtx &io_ctx,
                                   librbd::MockTestImageCtx **image_ctx,
                                   const std::string &image_id,
-                                  bool read_only, ContextWQ *work_queue,
-                                  Context *on_finish) {
+                                  bool read_only, Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->image_ctx = image_ctx;
     s_instance->on_finish = on_finish;

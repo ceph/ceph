@@ -1423,7 +1423,7 @@ void ImageReplayer<I>::shut_down(int r) {
   if (m_local_image_ctx) {
     ctx = new FunctionContext([this, ctx](int r) {
       CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-        &m_local_image_ctx, m_threads->work_queue, false, ctx);
+        &m_local_image_ctx, ctx);
       request->send();
     });
   }

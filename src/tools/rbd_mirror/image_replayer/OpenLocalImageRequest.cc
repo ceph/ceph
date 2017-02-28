@@ -112,7 +112,9 @@ void OpenLocalImageRequest<I>::handle_open_image(int r) {
   if (r < 0) {
     derr << ": failed to open image '" << m_local_image_id << "': "
          << cpp_strerror(r) << dendl;
-    send_close_image(true, r);
+    (*m_local_image_ctx)->destroy();
+    *m_local_image_ctx = nullptr;
+    finish(r);
     return;
   }
 
@@ -138,7 +140,7 @@ void OpenLocalImageRequest<I>::handle_is_primary(int r) {
   if (r < 0) {
     derr << ": error querying local image primary status: " << cpp_strerror(r)
          << dendl;
-    send_close_image(false, r);
+    send_close_image(r);
     return;
   }
 
@@ -146,7 +148,7 @@ void OpenLocalImageRequest<I>::handle_is_primary(int r) {
   // we aren't going to mirror peer data into this image anyway
   if (m_primary) {
     dout(10) << ": local image is primary -- skipping image replay" << dendl;
-    send_close_image(false, -EREMOTEIO);
+    send_close_image(-EREMOTEIO);
     return;
   }
 
@@ -160,7 +162,7 @@ void OpenLocalImageRequest<I>::send_lock_image() {
   RWLock::RLocker owner_locker((*m_local_image_ctx)->owner_lock);
   if ((*m_local_image_ctx)->exclusive_lock == nullptr) {
     derr << ": image does not support exclusive lock" << dendl;
-    send_close_image(false, -EINVAL);
+    send_close_image(-EINVAL);
     return;
   }
 
@@ -181,7 +183,7 @@ void OpenLocalImageRequest<I>::handle_lock_image(int r) {
   if (r < 0) {
     derr << ": failed to lock image '" << m_local_image_id << "': "
        << cpp_strerror(r) << dendl;
-    send_close_image(false, r);
+    send_close_image(r);
     return;
   }
 
@@ -190,7 +192,7 @@ void OpenLocalImageRequest<I>::handle_lock_image(int r) {
     if ((*m_local_image_ctx)->exclusive_lock == nullptr ||
 	!(*m_local_image_ctx)->exclusive_lock->is_lock_owner()) {
       derr << ": image is not locked" << dendl;
-      send_close_image(false, -EBUSY);
+      send_close_image(-EBUSY);
       return;
     }
   }
@@ -199,7 +201,7 @@ void OpenLocalImageRequest<I>::handle_lock_image(int r) {
 }
 
 template <typename I>
-void OpenLocalImageRequest<I>::send_close_image(bool destroy_only, int r) {
+void OpenLocalImageRequest<I>::send_close_image(int r) {
   dout(20) << dendl;
 
   if (m_ret_val == 0 && r < 0) {
@@ -210,7 +212,7 @@ void OpenLocalImageRequest<I>::send_close_image(bool destroy_only, int r) {
     OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_close_image>(
       this);
   CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    m_local_image_ctx, m_work_queue, destroy_only, ctx);
+    m_local_image_ctx, ctx);
   request->send();
 }
 
