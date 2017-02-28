@@ -70,7 +70,7 @@ public:
     p->set_pg_num(64);
     p->set_pgp_num(64);
     p->type = pg_pool_t::TYPE_ERASURE;
-    p->crush_ruleset = r;
+    p->crush_rule = r;
     new_pool_inc.new_pool_names[pool_id] = "ec";
     osdmap.apply_incremental(new_pool_inc);
   }
