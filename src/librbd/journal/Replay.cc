@@ -315,7 +315,7 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
                                                io::AIO_TYPE_DISCARD,
                                                &flush_required);
   io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp, event.offset,
-                                   event.length);
+                                   event.length, event.skip_partial_discard);
   if (flush_required) {
     m_lock.Lock();
     auto flush_comp = create_aio_flush_completion(nullptr);
@@ -362,6 +362,28 @@ void Replay<I>::handle_event(const journal::AioFlushEvent &event,
   io::ImageRequest<I>::aio_flush(&m_image_ctx, aio_comp);
 
   on_ready->complete(0);
+}
+
+template <typename I>
+void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
+                             Context *on_ready, Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << ": AIO writesame event" << dendl;
+
+  bufferlist data = event.data;
+  bool flush_required;
+  auto aio_comp = create_aio_modify_completion(on_ready, on_safe,
+                                               io::AIO_TYPE_WRITESAME,
+                                               &flush_required);
+  io::ImageRequest<I>::aio_writesame(&m_image_ctx, aio_comp, event.offset,
+                                     event.length, std::move(data), 0);
+  if (flush_required) {
+    m_lock.Lock();
+    auto flush_comp = create_aio_flush_completion(nullptr);
+    m_lock.Unlock();
+
+    io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp);
+  }
 }
 
 template <typename I>

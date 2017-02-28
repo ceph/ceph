@@ -175,7 +175,7 @@ TEST_F(TestJournalEntries, AioDiscard) {
   C_SaferCond cond_ctx;
   auto c = librbd::io::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->io_work_queue->aio_discard(c, 123, 234);
+  ictx->io_work_queue->aio_discard(c, 123, 234, cct->_conf->rbd_skip_partial_discard);
   ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 

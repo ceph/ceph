@@ -133,6 +133,8 @@ private:
                     Context *on_safe);
   void handle_event(const AioWriteEvent &event, Context *on_ready,
                     Context *on_safe);
+  void handle_event(const AioWriteSameEvent &event, Context *on_ready,
+                    Context *on_safe);
   void handle_event(const AioFlushEvent &event, Context *on_ready,
                     Context *on_safe);
   void handle_event(const OpFinishEvent &event, Context *on_ready,
@@ -158,7 +160,7 @@ private:
   void handle_event(const DemoteEvent &event, Context *on_ready,
                     Context *on_safe);
   void handle_event(const SnapLimitEvent &event, Context *on_ready,
-		    Context *on_safe);
+                    Context *on_safe);
   void handle_event(const UpdateFeaturesEvent &event, Context *on_ready,
                     Context *on_safe);
   void handle_event(const MetadataSetEvent &event, Context *on_ready,

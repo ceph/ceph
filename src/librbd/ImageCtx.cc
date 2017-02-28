@@ -369,6 +369,9 @@ struct C_InvalidateCache : public Context {
     plb.add_u64_counter(l_librbd_flush, "flush", "Flushes");
     plb.add_u64_counter(l_librbd_aio_flush, "aio_flush", "Async flushes");
     plb.add_time_avg(l_librbd_aio_flush_latency, "aio_flush_latency", "Latency of async flushes");
+    plb.add_u64_counter(l_librbd_ws, "ws", "WriteSames");
+    plb.add_u64_counter(l_librbd_ws_bytes, "ws_bytes", "WriteSame data");
+    plb.add_time_avg(l_librbd_ws_latency, "ws_latency", "WriteSame latency");
     plb.add_u64_counter(l_librbd_snap_create, "snap_create", "Snap creations");
     plb.add_u64_counter(l_librbd_snap_remove, "snap_remove", "Snap removals");
     plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback", "Snap rollbacks");
@@ -968,7 +971,8 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_max_payload_bytes", false)(
         "rbd_journal_max_concurrent_object_sets", false)(
         "rbd_mirroring_resync_after_disconnect", false)(
-        "rbd_mirroring_replay_delay", false);
+        "rbd_mirroring_replay_delay", false)(
+        "rbd_skip_partial_discard", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -1027,6 +1031,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_max_concurrent_object_sets);
     ASSIGN_OPTION(mirroring_resync_after_disconnect);
     ASSIGN_OPTION(mirroring_replay_delay);
+    ASSIGN_OPTION(skip_partial_discard);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

@@ -638,6 +638,8 @@ CEPH_RBD_API ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
 CEPH_RBD_API ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
                                 const char *buf, int op_flags);
 CEPH_RBD_API int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len);
+CEPH_RBD_API ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
+                                   const char *buf, size_t data_len, int op_flags);
 CEPH_RBD_API int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len,
                                const char *buf, rbd_completion_t c);
 
@@ -660,6 +662,9 @@ CEPH_RBD_API int rbd_aio_readv(rbd_image_t image, const struct iovec *iov,
                                int iovcnt, uint64_t off, rbd_completion_t c);
 CEPH_RBD_API int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
                                  rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_writesame(rbd_image_t image, uint64_t off, size_t len,
+                                   const char *buf, size_t data_len,
+                                   rbd_completion_t c, int op_flags);
 
 CEPH_RBD_API int rbd_aio_create_completion(void *cb_arg,
                                            rbd_callback_t complete_cb,
