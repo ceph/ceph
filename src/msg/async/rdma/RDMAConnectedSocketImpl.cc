@@ -42,7 +42,6 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* i
 RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
 {
   ldout(cct, 20) << __func__ << " destruct." << dendl;
-  dispatcher->perf_logger->dec(l_msgr_rdma_active_queue_pair);
   cleanup();
   worker->remove_pending_conn(this);
   dispatcher->erase_qpn(my_msg.qpn);
