@@ -376,11 +376,12 @@ public:
                                                                         \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using map = std::map<k, v, cmp,					\
-			 pool_allocator<std::pair<k,v>>>;		\
+			 pool_allocator<std::pair<const k,v>>>;		\
                                                                         \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using multimap = std::multimap<k,v,cmp,				\
-				   pool_allocator<std::pair<k,v>>>;	\
+				   pool_allocator<std::pair<const k,	\
+							    v>>>;	\
                                                                         \
     template<typename k, typename cmp = std::less<k> >			\
     using set = std::set<k,cmp,pool_allocator<k>>;			\
@@ -395,7 +396,7 @@ public:
 	     typename h=std::hash<k>,					\
 	     typename eq = std::equal_to<k>>				\
     using unordered_map =						\
-      std::unordered_map<k,v,h,eq,pool_allocator<std::pair<k,v>>>;	\
+      std::unordered_map<k,v,h,eq,pool_allocator<std::pair<const k,v>>>;\
                                                                         \
     inline size_t allocated_bytes() {					\
       return mempool::get_pool(id).allocated_bytes();			\
