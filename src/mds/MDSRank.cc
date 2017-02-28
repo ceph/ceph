@@ -66,7 +66,7 @@ MDSRank::MDSRank(
                g_conf->osd_num_op_tracker_shard),
     last_state(MDSMap::STATE_BOOT),
     state(MDSMap::STATE_BOOT),
-    stopping(false),
+    cluster_degraded(false), stopping(false),
     purge_queue(g_ceph_context, whoami_,
       mdsmap_->get_metadata_pool(), objecter,
       new FunctionContext(
@@ -1573,8 +1573,10 @@ void MDSRankDispatcher::handle_mds_map(
     }
   }
 
-  if (oldmap->is_degraded() && !mdsmap->is_degraded() && state >= MDSMap::STATE_ACTIVE)
+  cluster_degraded = mdsmap->is_degraded();
+  if (oldmap->is_degraded() && !cluster_degraded && state >= MDSMap::STATE_ACTIVE) {
     dout(1) << "cluster recovered." << dendl;
+  }
 
   // did someone go active?
   if (oldstate >= MDSMap::STATE_CLIENTREPLAY &&
