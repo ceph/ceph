@@ -5,16 +5,18 @@
 #define CEPH_TEST_MEM_IO_CTX_IMPL_H
 
 #include "test/librados_test_stub/TestIoCtxImpl.h"
-#include "test/librados_test_stub/TestMemRadosClient.h"
+#include "test/librados_test_stub/TestMemCluster.h"
 
 namespace librados {
+
+class TestMemRadosClient;
 
 class TestMemIoCtxImpl : public TestIoCtxImpl {
 public:
   TestMemIoCtxImpl();
   TestMemIoCtxImpl(TestMemRadosClient *client, int64_t m_pool_id,
                    const std::string& pool_name,
-                   TestMemRadosClient::Pool *pool);
+                   TestMemCluster::Pool *pool);
   ~TestMemIoCtxImpl() override;
 
   TestIoCtxImpl *clone() override;
@@ -43,26 +45,26 @@ public:
   int selfmanaged_snap_create(uint64_t *snapid) override;
   int selfmanaged_snap_remove(uint64_t snapid) override;
   int selfmanaged_snap_rollback(const std::string& oid,
-                                        uint64_t snapid) override;
+                                uint64_t snapid) override;
   int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
-                          std::map<uint64_t,uint64_t> *m, bufferlist *data_bl) override;
+                  std::map<uint64_t,uint64_t> *m, bufferlist *data_bl) override;
   int stat(const std::string& oid, uint64_t *psize, time_t *pmtime) override;
   int truncate(const std::string& oid, uint64_t size,
-                       const SnapContext &snapc) override;
+               const SnapContext &snapc) override;
   int write(const std::string& oid, bufferlist& bl, size_t len,
-                    uint64_t off, const SnapContext &snapc) override;
+            uint64_t off, const SnapContext &snapc) override;
   int write_full(const std::string& oid, bufferlist& bl,
-                         const SnapContext &snapc) override;
+                 const SnapContext &snapc) override;
   int writesame(const std::string& oid, bufferlist& bl, size_t len,
-                        uint64_t off, const SnapContext &snapc) override;
+                uint64_t off, const SnapContext &snapc) override;
   int xattr_get(const std::string& oid,
-                        std::map<std::string, bufferlist>* attrset) override;
+                std::map<std::string, bufferlist>* attrset) override;
   int xattr_set(const std::string& oid, const std::string &name,
-                        bufferlist& bl) override;
+                bufferlist& bl) override;
   int zero(const std::string& oid, uint64_t off, uint64_t len) override;
 
 protected:
-  TestMemRadosClient::Pool *get_pool() {
+  TestMemCluster::Pool *get_pool() {
     return m_pool;
   }
 
@@ -70,14 +72,14 @@ private:
   TestMemIoCtxImpl(const TestMemIoCtxImpl&);
 
   TestMemRadosClient *m_client;
-  TestMemRadosClient::Pool *m_pool;
+  TestMemCluster::Pool *m_pool;
 
   void append_clone(bufferlist& src, bufferlist* dest);
   size_t clip_io(size_t off, size_t len, size_t bl_len);
   void ensure_minimum_length(size_t len, bufferlist *bl);
 
-  TestMemRadosClient::SharedFile get_file(const std::string &oid, bool write,
-                                          const SnapContext &snapc);
+  TestMemCluster::SharedFile get_file(const std::string &oid, bool write,
+                                      const SnapContext &snapc);
 
 };
 
