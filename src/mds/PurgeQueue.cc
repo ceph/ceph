@@ -78,7 +78,8 @@ PurgeQueue::PurgeQueue(
     ops_in_flight(0),
     max_purge_ops(0),
     drain_initial(0),
-    draining(false)
+    draining(false),
+    delayed_flush(nullptr)
 {
   assert(cct != nullptr);
   assert(on_error != nullptr);
@@ -175,11 +176,25 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
   journaler.append_entry(bl);
   journaler.wait_for_flush(completion);
 
-  // It is not necessary to explicitly flush here, because the reader
-  // will get flushes generated inside Journaler::is_readable
-
   // Maybe go ahead and do something with it right away
-  _consume();
+  bool could_consume = _consume();
+  if (!could_consume) {
+    // Usually, it is not necessary to explicitly flush here, because the reader
+    // will get flushes generated inside Journaler::is_readable.  However,
+    // if we remain in a can_consume()==false state for a long period then
+    // we should flush in order to allow MDCache to drop its strays rather
+    // than having them wait for purgequeue to progress.
+    if (!delayed_flush) {
+      delayed_flush = new FunctionContext([this](int r){
+            delayed_flush = nullptr;
+            journaler.flush();
+          });
+
+      timer.add_event_after(
+          g_conf->mds_purge_queue_busy_flush_period,
+          delayed_flush);
+    }
+  }
 }
 
 uint32_t PurgeQueue::_calculate_ops(const PurgeItem &item) const
@@ -241,11 +256,22 @@ bool PurgeQueue::can_consume()
   }
 }
 
-void PurgeQueue::_consume()
+bool PurgeQueue::_consume()
 {
   assert(lock.is_locked_by_me());
 
+  bool could_consume = false;
   while(can_consume()) {
+    could_consume = true;
+
+    if (delayed_flush) {
+      // We are now going to read from the journal, so any proactive
+      // flush is no longer necessary.  This is not functionally necessary
+      // but it can avoid generating extra fragmented flush IOs.
+      timer.cancel_event(delayed_flush);
+      delayed_flush = nullptr;
+    }
+
     if (!journaler.is_readable()) {
       dout(10) << " not readable right now" << dendl;
       // Because we are the writer and the reader of the journal
@@ -259,7 +285,7 @@ void PurgeQueue::_consume()
         }));
       }
 
-      return;
+      return could_consume;
     }
 
     // The journaler is readable: consume an entry
@@ -283,6 +309,8 @@ void PurgeQueue::_consume()
   }
 
   dout(10) << " cannot consume right now" << dendl;
+
+  return could_consume;
 }
 
 void PurgeQueue::_execute_item(

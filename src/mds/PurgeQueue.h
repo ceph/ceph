@@ -112,7 +112,14 @@ protected:
   // Has drain() ever been called on this instance?
   bool draining;
 
-  void _consume();
+  /**
+   * @return true if we were in a position to try and consume something:
+   *         does not mean we necessarily did.
+   */
+  bool _consume();
+
+  // Do we currently have a flush timer event waiting?
+  Context *delayed_flush;
 
   void _execute_item(
       const PurgeItem &item,
