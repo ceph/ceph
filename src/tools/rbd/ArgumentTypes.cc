@@ -511,5 +511,15 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   v = boost::any(format);
 }
 
+void validate(boost::any& v, const std::vector<std::string>& values,
+              Secret *target_type, int) {
+  std::cerr << "rbd: --secret is deprecated, use --keyfile" << std::endl;
+
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+  g_conf->set_val_or_die("keyfile", s.c_str());
+  v = boost::any(s);
+}
+
 } // namespace argument_types
 } // namespace rbd

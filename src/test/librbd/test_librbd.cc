@@ -1489,7 +1489,7 @@ void aio_writesame_test_data(rbd_image_t image, const char *test_data, uint64_t 
     off += data_len;
     left -= data_len;
   }
-  ASSERT_EQ(0, left);
+  ASSERT_EQ(0U, left);
   free(result);
   printf("verified\n");
 
@@ -1528,7 +1528,7 @@ void writesame_test_data(rbd_image_t image, const char *test_data, uint64_t off,
     off += data_len;
     left -= data_len;
   }
-  ASSERT_EQ(0, left);
+  ASSERT_EQ(0U, left);
   free(result);
   printf("verified\n");
 
@@ -2103,14 +2103,15 @@ void aio_writesame_test_data(librbd::Image& image, const char *test_data, off_t 
     off += data_len;
     left -= data_len;
   }
-  ASSERT_EQ(0, left);
+  ASSERT_EQ(0U, left);
   printf("verified\n");
 
   *passed = true;
 }
 
-void writesame_test_data(librbd::Image& image, const char *test_data, off_t off, size_t len,
-                         size_t data_len, uint32_t iohint, bool *passed)
+void writesame_test_data(librbd::Image& image, const char *test_data, off_t off,
+                         ssize_t len, size_t data_len, uint32_t iohint,
+                         bool *passed)
 {
   ssize_t written;
   ceph::bufferlist bl;
@@ -2144,7 +2145,7 @@ void writesame_test_data(librbd::Image& image, const char *test_data, off_t off,
     off += data_len;
     left -= data_len;
   }
-  ASSERT_EQ(0, left);
+  ASSERT_EQ(0U, left);
   printf("verified\n");
 
   *passed = true;
