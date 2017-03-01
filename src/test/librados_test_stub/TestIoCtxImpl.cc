@@ -97,7 +97,8 @@ void TestIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
   m_pending_ops.inc();
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
-  m_client->get_watch_notify().aio_notify(oid, bl, timeout_ms, pbl, ctx);
+  m_client->get_watch_notify()->aio_notify(m_client, oid, bl, timeout_ms, pbl,
+                                           ctx);
 }
 
 int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
@@ -130,8 +131,8 @@ int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
   m_pending_ops.inc();
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
-  m_client->get_watch_notify().aio_watch(o, get_instance_id(), handle,
-                                         watch_ctx, ctx);
+  m_client->get_watch_notify()->aio_watch(m_client, o, get_instance_id(),
+                                          handle, watch_ctx, ctx);
   return 0;
 }
 
@@ -139,7 +140,7 @@ int TestIoCtxImpl::aio_unwatch(uint64_t handle, AioCompletionImpl *c) {
   m_pending_ops.inc();
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
-  m_client->get_watch_notify().aio_unwatch(handle, ctx);
+  m_client->get_watch_notify()->aio_unwatch(m_client, handle, ctx);
   return 0;
 }
 
@@ -158,18 +159,18 @@ int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
 
 int TestIoCtxImpl::list_watchers(const std::string& o,
                                  std::list<obj_watch_t> *out_watchers) {
-  return m_client->get_watch_notify().list_watchers(o, out_watchers);
+  return m_client->get_watch_notify()->list_watchers(o, out_watchers);
 }
 
 int TestIoCtxImpl::notify(const std::string& o, bufferlist& bl,
                           uint64_t timeout_ms, bufferlist *pbl) {
-  return m_client->get_watch_notify().notify(o, bl, timeout_ms, pbl);
+  return m_client->get_watch_notify()->notify(m_client, o, bl, timeout_ms, pbl);
 }
 
 void TestIoCtxImpl::notify_ack(const std::string& o, uint64_t notify_id,
                                uint64_t handle, bufferlist& bl) {
-  m_client->get_watch_notify().notify_ack(o, notify_id, handle,
-                                          m_client->get_instance_id(), bl);
+  m_client->get_watch_notify()->notify_ack(m_client, o, notify_id, handle,
+                                           m_client->get_instance_id(), bl);
 }
 
 int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops) {
@@ -291,13 +292,13 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
 }
 
 int TestIoCtxImpl::unwatch(uint64_t handle) {
-  return m_client->get_watch_notify().unwatch(handle);
+  return m_client->get_watch_notify()->unwatch(m_client, handle);
 }
 
 int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
                          librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2) {
-  return m_client->get_watch_notify().watch(o, get_instance_id(), handle, ctx,
-                                            ctx2);
+  return m_client->get_watch_notify()->watch(m_client, o, get_instance_id(),
+                                             handle, ctx, ctx2);
 }
 
 int TestIoCtxImpl::execute_operation(const std::string& oid,

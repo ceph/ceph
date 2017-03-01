@@ -9,6 +9,7 @@
 #include "common/WorkQueue.h"
 #include <boost/shared_ptr.hpp>
 #include <gmock/gmock.h>
+#include "include/assert.h"
 
 namespace librados {
 class TestRadosClient;
@@ -40,23 +41,17 @@ namespace mirror {
 
 class TestMockFixture : public TestFixture {
 public:
-  typedef boost::shared_ptr<librados::TestRadosClient> TestRadosClientPtr;
+  typedef boost::shared_ptr<librados::TestCluster> TestClusterRef;
 
   static void SetUpTestCase();
   static void TearDownTestCase();
 
-  void SetUp() override;
   void TearDown() override;
 
   void expect_test_features(librbd::MockImageCtx &mock_image_ctx);
 
-  ::testing::NiceMock<librados::MockTestMemRadosClient> &get_mock_rados_client() {
-    return *s_mock_rados_client;
-  }
-
 private:
-  static TestRadosClientPtr s_test_rados_client;
-  static ::testing::NiceMock<librados::MockTestMemRadosClient> *s_mock_rados_client;
+  static TestClusterRef s_test_cluster;
 };
 
 } // namespace mirror
