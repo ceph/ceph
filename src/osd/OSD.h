@@ -54,6 +54,7 @@ using namespace std;
 #include "common/PrioritizedQueue.h"
 #include "messages/MOSDOp.h"
 #include "include/Spinlock.h"
+#include "StateObserver.h"
 #include "common/EventTrace.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
@@ -1204,7 +1205,8 @@ public:
 };
 
 class OSD : public Dispatcher,
-	    public md_config_obs_t {
+	    public md_config_obs_t,
+	    public OSDStateNotifier {
   /** OSD **/
   Mutex osd_lock;			// global lock
   SafeTimer tick_timer;    // safe timer (osd_lock)

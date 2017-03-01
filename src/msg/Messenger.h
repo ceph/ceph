@@ -472,6 +472,7 @@ public:
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
+  virtual int send_message(Message *m, Connection *con) {return 0;}
 
   /**
    * @} // Messaging

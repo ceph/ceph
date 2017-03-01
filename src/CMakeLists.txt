@@ -454,6 +454,7 @@ set(libcommon_files
   msg/async/Stack.cc
   msg/async/PosixStack.cc
   msg/async/net_handler.cc
+  msg/direct/DirectMessenger.cc
   ${xio_common_srcs}
   ${async_rdma_common_srcs}
   ${dpdk_common_srcs}

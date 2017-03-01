@@ -873,5 +873,37 @@ add_executable(unittest_pageset test_pageset.cc)
 add_ceph_unittest(unittest_pageset ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_pageset)
 target_link_libraries(unittest_pageset global)
 
+# libosd_bench_async2
+add_executable(libosd_bench_async2 EXCLUDE_FROM_ALL libosd_bench_async2.cc)
+add_test(libosd_bench_async2 libosd_bench_async2)
+add_dependencies(check libosd_bench_async2)
+target_link_libraries(libosd_bench_async2  osd common pthread leveldb cephd_base)
+set_target_properties(libosd_bench_async2
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
+# libosd_bench_async
+add_executable(libosd_bench_async EXCLUDE_FROM_ALL libosd_bench_async.cc)
+add_test(libosd_bench_async libosd_bench_async)
+add_dependencies(check libosd_bench_async)
+target_link_libraries(libosd_bench_async  osd common pthread leveldb cephd_base)
+set_target_properties(libosd_bench_async
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
+# libosd_bench
+add_executable(libosd_bench EXCLUDE_FROM_ALL libosd_bench.cc)
+add_test(libosd_bench libosd_bench)
+add_dependencies(check libosd_bench)
+target_link_libraries(libosd_bench  osd common pthread leveldb cephd_base)
+set_target_properties(libosd_bench
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
+# libosd_test
+add_executable(test_libosd EXCLUDE_FROM_ALL test_libosd.c)
+add_test(test_libosd test_libosd)
+add_dependencies(check test_libosd)
+target_link_libraries(test_libosd  osd common pthread leveldb cephd_base)
+set_target_properties(test_libosd
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
 #make check ends here
 
