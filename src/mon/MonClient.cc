@@ -1136,11 +1136,13 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
 
 AuthAuthorizer* MonClient::build_authorizer(int service_id) const {
   Mutex::Locker l(monc_lock);
-  assert(auth || active_con->get_auth());
-  if (auth)
+  if (auth) {
     return auth->build_authorizer(service_id);
-  else
-    return active_con->get_auth()->build_authorizer(service_id);
+  } else {
+    ldout(cct, 0) << __func__ << " for " << ceph_entity_type_name(service_id)
+		  << ", but no auth is available now" << dendl;
+    return nullptr;
+  }
 }
 
 #define dout_subsys ceph_subsys_monc
