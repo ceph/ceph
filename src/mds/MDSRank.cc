@@ -1576,6 +1576,11 @@ void MDSRankDispatcher::handle_mds_map(
   cluster_degraded = mdsmap->is_degraded();
   if (oldmap->is_degraded() && !cluster_degraded && state >= MDSMap::STATE_ACTIVE) {
     dout(1) << "cluster recovered." << dendl;
+    auto it = waiting_for_active_peer.find(MDS_RANK_NONE);
+    if (it != waiting_for_active_peer.end()) {
+      queue_waiters(it->second);
+      waiting_for_active_peer.erase(it);
+    }
   }
 
   // did someone go active?

@@ -6120,7 +6120,7 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
     CDir *dir = *p;
     const fnode_t *pf = dir->get_projected_fnode();
     if (pf->fragstat.size()) {
-      dout(10) << "dir_is_nonempty_unlocked dirstat has "
+      dout(10) << "dir_is_nonempty dirstat has "
 	       << pf->fragstat.size() << " items " << *dir << dendl;
       return true;
     }
