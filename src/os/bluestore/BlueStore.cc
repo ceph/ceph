@@ -1975,7 +1975,6 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     encoded_shards.reserve(shards.size());
 
     auto p = shards.begin();
-    unsigned pos = 0;
     auto prev_p = p;
     while (p != shards.end()) {
       auto n = p;
@@ -2036,7 +2035,6 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
       }
       prev_p = p;
       p = n;
-      ++pos;
     }
     if (needs_reshard()) {
       return;
