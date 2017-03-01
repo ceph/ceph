@@ -2409,6 +2409,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
       dout(10) << "prepare_new_inode setting xattr " << p->first << dendl;
       in->xattrs[p->first] = p->second;
     }
+    in->inode.xattr_version = 1;
   }
 
   if (!mds->mdsmap->get_inline_data_enabled() ||
