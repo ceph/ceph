@@ -50,7 +50,6 @@ screenplay = [
     ('get',    '/', {}),
     ('get',    '/config/cluster', {}),
     ('get',    '/crush/rule', {}),
-    ('get',    '/crush/ruleset', {}),
     ('get',    '/doc', {}),
     ('get',    '/mon', {}),
     ('get',    '/mon/' + firstmon, {}),
