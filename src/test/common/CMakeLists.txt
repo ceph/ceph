@@ -231,6 +231,7 @@ target_link_libraries(unittest_dns_resolve global)
 add_ceph_unittest(unittest_dns_resolve
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_dns_resolve)
 
+if(NOT FREEBSD)
 add_executable(unittest_back_trace
   test_back_trace.cc)
 set_source_files_properties(test_back_trace.cc PROPERTIES
@@ -238,3 +239,5 @@ set_source_files_properties(test_back_trace.cc PROPERTIES
 target_link_libraries(unittest_back_trace ceph-common)
 add_ceph_unittest(unittest_back_trace
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_back_trace)
+endif()
+
