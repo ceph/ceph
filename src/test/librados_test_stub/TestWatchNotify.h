@@ -26,6 +26,7 @@ public:
   typedef std::map<std::pair<uint64_t, uint64_t>, bufferlist> NotifyResponses;
 
   struct NotifyHandle {
+    TestRadosClient *rados_client = nullptr;
     WatcherIDs pending_watcher_ids;
     NotifyResponses notify_responses;
     bufferlist *pbl = nullptr;
@@ -35,7 +36,7 @@ public:
   typedef std::map<uint64_t, SharedNotifyHandle> NotifyHandles;
 
   struct WatchHandle {
-    TestRadosClient *rados_client;
+    TestRadosClient *rados_client = nullptr;
     uint64_t gid;
     uint64_t handle;
     librados::WatchCtx* watch_ctx;

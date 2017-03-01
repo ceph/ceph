@@ -3,6 +3,7 @@
 
 #include "test/librados_test_stub/TestWatchNotify.h"
 #include "include/Context.h"
+#include "include/stringify.h"
 #include "common/Finisher.h"
 #include "test/librados_test_stub/TestRadosClient.h"
 #include <boost/bind.hpp>
@@ -90,6 +91,7 @@ void TestWatchNotify::aio_notify(TestRadosClient *rados_client,
   SharedWatcher watcher = get_watcher(oid);
 
   SharedNotifyHandle notify_handle(new NotifyHandle());
+  notify_handle->rados_client = rados_client;
   notify_handle->pbl = pbl;
   notify_handle->on_notify = on_notify;
   for (auto &watch_handle_pair : watcher->watch_handles) {
@@ -136,6 +138,7 @@ int TestWatchNotify::watch(TestRadosClient *rados_client,
   SharedWatcher watcher = get_watcher(o);
 
   WatchHandle watch_handle;
+  watch_handle.rados_client = rados_client;
   watch_handle.gid = gid;
   watch_handle.handle = ++m_handle;
   watch_handle.watch_ctx = ctx;
@@ -213,22 +216,24 @@ void TestWatchNotify::execute_notify(TestRadosClient *rados_client,
       assert(watch_handle.gid == watcher_id.first);
       assert(watch_handle.handle == watcher_id.second);
 
-      bufferlist notify_bl;
-      notify_bl.append(bl);
+      uint64_t notifier_id = rados_client->get_instance_id();
+      watch_handle.rados_client->get_aio_finisher()->queue(new FunctionContext(
+        [this, oid, bl, notify_id, watch_handle, notifier_id](int r) {
+          bufferlist notify_bl;
+          notify_bl.append(bl);
 
-      m_lock.Unlock();
-      if (watch_handle.watch_ctx2 != NULL) {
-        watch_handle.watch_ctx2->handle_notify(notify_id, w_it->first, 0,
-                                               notify_bl);
-      } else if (watch_handle.watch_ctx != NULL) {
-        watch_handle.watch_ctx->notify(0, 0, notify_bl);
-      }
-      m_lock.Lock();
+          if (watch_handle.watch_ctx2 != NULL) {
+            watch_handle.watch_ctx2->handle_notify(notify_id,
+                                                   watch_handle.handle,
+                                                   notifier_id, notify_bl);
+          } else if (watch_handle.watch_ctx != NULL) {
+            watch_handle.watch_ctx->notify(0, 0, notify_bl);
 
-      if (watch_handle.watch_ctx2 == NULL) {
-        // auto ack old-style watch/notify clients
-        ack_notify(rados_client, oid, notify_id, watcher_id, bufferlist());
-      }
+            // auto ack old-style watch/notify clients
+            ack_notify(watch_handle.rados_client, oid, notify_id,
+                       {watch_handle.gid, watch_handle.handle}, bufferlist());
+          }
+        }));
     }
   }
 
@@ -299,10 +304,8 @@ void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
     ::encode(notify_handle->pending_watcher_ids, *notify_handle->pbl);
   }
 
-  m_lock.Unlock();
-  notify_handle->on_notify->complete(0);
-  m_lock.Lock();
-
+  notify_handle->rados_client->get_aio_finisher()->queue(
+    notify_handle->on_notify, 0);
   watcher->notify_handles.erase(notify_id);
   if (watcher->watch_handles.empty() && watcher->notify_handles.empty()) {
     m_file_watchers.erase(oid);
