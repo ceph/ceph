@@ -7,7 +7,7 @@ import urllib
 import yaml
 
 from copy import deepcopy
-from libcloud.common.exceptions import RateLimitReachedError
+from libcloud.common.exceptions import RateLimitReachedError, BaseHTTPError
 
 from paramiko import AuthenticationException
 from paramiko.ssh_exception import NoValidConnectionsError
@@ -23,7 +23,7 @@ from teuthology.provision.cloud.base import Provider
 log = logging.getLogger(__name__)
 
 
-RETRY_EXCEPTIONS = (RateLimitReachedError, )
+RETRY_EXCEPTIONS = (RateLimitReachedError, BaseHTTPError)
 
 
 def retry(function, *args, **kwargs):
