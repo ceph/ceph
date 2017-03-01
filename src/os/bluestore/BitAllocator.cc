@@ -245,7 +245,6 @@ void BitMapZone::init(CephContext* const cct,
   m_area_index = zone_num;
   BitMapZone::total_blocks = total_blocks;
   alloc_assert(size() > 0);
-  m_type = ZONE;
 
   m_used_blocks = def? total_blocks: 0;
 
@@ -551,17 +550,6 @@ int64_t BitMapArea::get_span_size(CephContext* cct)
   return cct->_conf->bluestore_bitmapallocator_span_size;
 }
 
-bmap_area_type_t BitMapArea::level_to_type(int level)
-{
-  if (level == 0) {
-    return ZONE;
-  } else if (level == 1) {
-    return LEAF;
-  } else {
-    return NON_LEAF;
-  }
-}
-
 int BitMapArea::get_level(CephContext* cct, int64_t total_blocks)
 {
   int level = 1;
@@ -598,11 +586,6 @@ int64_t BitMapArea::get_index()
   return m_area_index;
 }
 
-bmap_area_type_t BitMapArea::get_type()
-{
-  return m_type;
-}
-
 /*
  * BitMapArea Leaf and Internal
  */
@@ -620,7 +603,6 @@ void BitMapAreaIN::init_common(CephContext* const cct,
   m_area_index = area_idx;
   m_total_blocks = total_blocks;
   m_level = BitMapArea::get_level(cct, total_blocks);
-  m_type = BitMapArea::level_to_type(m_level);
   m_reserved_blocks = 0;
 
   m_used_blocks = def? total_blocks: 0;

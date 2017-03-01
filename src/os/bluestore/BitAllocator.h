@@ -188,23 +188,14 @@ public:
 
 };
 
-typedef enum bmap_area_type {
-  UNDEFINED = 0,
-  ZONE = 1,
-  LEAF = 2,
-  NON_LEAF = 3
-} bmap_area_type_t;
-
 class BitMapArea {
 protected:
   int16_t m_area_index;
-  bmap_area_type_t m_type;
 
 public:
   MEMPOOL_CLASS_HELPERS();
   static int64_t get_zone_size(CephContext* cct);
   static int64_t get_span_size(CephContext* cct);
-  bmap_area_type_t level_to_type(int level);
   static int get_level(CephContext* cct, int64_t total_blocks);
   static int64_t get_level_factor(CephContext* cct, int level);
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks) = 0;
@@ -254,11 +245,8 @@ public:
   int64_t child_count();
   int64_t get_index();
   int64_t get_level();
-  bmap_area_type_t get_type();
   virtual void dump_state(CephContext* cct, int& count) = 0;
-  BitMapArea(CephContext*)
-    : m_type(UNDEFINED) {
-  }
+  BitMapArea(CephContext*) { }
   virtual ~BitMapArea() { }
 };
 
