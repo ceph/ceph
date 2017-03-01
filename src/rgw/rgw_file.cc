@@ -703,6 +703,11 @@ namespace rgw {
   } /* RGWLibFS::gc */
 
   RGWFileHandle::~RGWFileHandle() {
+    /* in the non-delete case, handle may still be in handle table */
+    if (fh_hook.is_linked()) {
+      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
+    }
+    /* cond-unref parent */
     if (parent && (! parent->is_root())) {
       /* safe because if parent->unref causes its deletion,
        * there are a) by refcnt, no other objects/paths pointing
