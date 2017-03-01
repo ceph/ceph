@@ -120,6 +120,7 @@ target_link_libraries(unittest_crc32c global)
 # unittest_config
 add_executable(unittest_config
   test_config.cc
+  test_hostname.cc
   )
 add_ceph_unittest(unittest_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_config)
 target_link_libraries(unittest_config global)
@@ -238,3 +239,9 @@ set_source_files_properties(test_back_trace.cc PROPERTIES
 target_link_libraries(unittest_back_trace ceph-common)
 add_ceph_unittest(unittest_back_trace
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_back_trace)
+
+add_executable(unittest_hostname
+    test_hostname.cc)
+target_link_libraries(unittest_hostname ceph-common)
+add_ceph_unittest(unittest_hostname
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_hostname)

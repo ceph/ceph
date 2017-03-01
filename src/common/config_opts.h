@@ -13,7 +13,7 @@
  */
 
 /* note: no header guard */
-OPTION(host, OPT_STR, "localhost")
+OPTION(host, OPT_STR, "") // "" means that ceph will use short hostname
 OPTION(fsid, OPT_UUID, uuid_d())
 OPTION(public_addr, OPT_ADDR, entity_addr_t())
 OPTION(cluster_addr, OPT_ADDR, entity_addr_t())
