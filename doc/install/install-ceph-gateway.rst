@@ -322,7 +322,7 @@ For ``bind``, add a wildcard to the DNS record. For example::
  *       IN      CNAME   @
 
 Restart your DNS server and ping your server with a subdomain to ensure that
-your ``ceph-radosgw`` daemon can process the subdomain requests::
+your DNS configuration works as expected::
 
  ping mybucket.{hostname}
 
