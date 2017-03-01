@@ -518,7 +518,7 @@ You need to write and run a Python test script for verifying S3 access. The S3
 access test script will connect to the ``radosgw``, create a new bucket and
 list all buckets. The values for ``aws_access_key_id`` and
 ``aws_secret_access_key`` are taken from the values of ``access_key`` and
-``secret_key`` returned by the ``radosgw_admin`` command.
+``secret_key`` returned by the ``radosgw-admin`` command.
 
 Execute the following steps:
 
