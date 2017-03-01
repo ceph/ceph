@@ -14,6 +14,8 @@
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 #include "json_spirit/json_spirit.h"
+#include "json_spirit/json_spirit_value.h"
+#include "json_spirit/json_spirit_reader.h"
 
 #include "osd/HitSet.h"
 
@@ -2249,7 +2251,6 @@ static int _get_pg_num(Rados& cluster, string pool_name)
   return -1;
 }
 
-
 TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
   assert(num_pg > 0);
@@ -2737,6 +2738,12 @@ TEST_F(LibRadosTwoPoolsPP, CachePin) {
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
 }
+
+
+
+
+
+// =======================================================================
 
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
@@ -4337,6 +4344,212 @@ TEST_F(LibRadosTwoPoolsECPP, FlushSnap) {
     "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
   cluster.wait_for_latest_osdmap();
+
+  // cleanup
+  ioctx.selfmanaged_snap_remove(my_snaps[0]);
+}
+
+static bool _have_untrimmed_snaps(Rados& cluster, string pool_name)
+{
+  int64_t poolid = cluster.pool_lookup(pool_name.c_str());
+  assert(poolid >= 0);
+
+  int pg_num = _get_pg_num(cluster, pool_name);
+  for (int ps = 0; ps < pg_num; ++ps) {
+    string pgid = stringify(poolid) + "." + stringify(ps);
+    bufferlist inbl;
+    string cmd = string("{\"prefix\": \"pg\",\"cmd\":\"query\",\"pgid\":\"");
+    cmd += pgid;
+    cmd += "\"}";
+    bufferlist outbl;
+    int r = cluster.pg_command(pgid.c_str(), cmd, inbl, &outbl, NULL);
+    // note: tolerate ENOENT/ENXIO here if hte osd is thrashing out underneath us
+    assert(r == 0 || r == -ENOENT || r == -ENXIO);
+    if (r < 0) {
+      cout << " failed to check pg " << pgid << "; assuming yes for now"
+	   << std::endl;
+      return true;
+    }
+    
+    string outstr(outbl.c_str(), outbl.length());
+    json_spirit::Value v;
+    if (!json_spirit::read(outstr, v)) {
+      cerr <<" unable to parse json " << outstr << std::endl;
+      return -1;
+    }
+
+    json_spirit::Object& pool = v.get_obj();
+    for (json_spirit::Object::size_type i=0; i<pool.size(); i++) {
+      json_spirit::Pair& p = pool[i];
+      cout << " name " << p.name_ << " type " << p.value_.type() << std::endl;
+      if (p.name_ == "snap_trimq") {
+        assert(p.value_.type() == json_spirit::str_type);
+	auto& s = p.value_.get_str();
+	cout << " pgid " << pgid << " has " << s << std::endl;
+	if (s.size() > 2) {  // empty is "[]", yuck.
+	  return true;
+	}
+	break;
+      }
+    }
+  }
+  return false;
+}
+
+
+TEST_F(LibRadosTwoPoolsECPP, FlushSnap2) {
+  // see http://tracker.ceph.com/issues/18937
+
+  bool cache = true;  // set to false to verify non-tiered behavior
+
+  // create some snapshots
+  vector<uint64_t> my_snaps(2);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[1]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+						    my_snaps));
+  
+  // create object
+  {
+    bufferlist bl;
+    bl.append("a");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  if (cache) {
+    // configure cache
+    bufferlist inbl;
+    ASSERT_EQ(0, cluster.mon_command(
+		"{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+		"\", \"tierpool\": \"" + cache_pool_name +
+		"\", \"force_nonempty\": \"--force-nonempty\" }",
+		inbl, NULL, NULL));
+    ASSERT_EQ(0, cluster.mon_command(
+		"{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+		"\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+		inbl, NULL, NULL));
+    ASSERT_EQ(0, cluster.mon_command(
+		"{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+		"\", \"mode\": \"writeback\"}",
+		inbl, NULL, NULL));
+
+    // wait for maps to settle
+    cluster.wait_for_latest_osdmap();
+  }
+  
+  // read, trigger a promote
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+  }
+
+  if (cache) {
+    // verify the object is present in the cache tier
+    {
+      NObjectIterator it = cache_ioctx.nobjects_begin();
+      ASSERT_TRUE(it != cache_ioctx.nobjects_end());
+      ASSERT_TRUE(it->get_oid() == string("foo"));
+      ++it;
+      ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+    }
+  }
+
+  // create another snap
+  my_snaps.insert(my_snaps.begin(), 0);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  cout << " " << my_snaps << std::endl;
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+						    my_snaps));
+  // delete in cache tier
+  {
+    ASSERT_EQ(0, ioctx.remove("foo"));
+  }
+
+  // delete the snap
+  ioctx.selfmanaged_snap_remove(my_snaps[0]);
+
+  if (cache) {
+    // wait for clone to get trimmed from cache
+    do {
+      cout << " sleeping" << std::endl;
+      sleep(1);
+    } while (_have_untrimmed_snaps(cluster, cache_pool_name));
+  }
+  
+  // create a new snap
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+						    my_snaps));
+
+  // overwrite
+  {
+    bufferlist bl;
+    bl.append("hola!");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+
+  if (cache) {
+    // flush on head
+    ioctx.snap_set_read(librados::SNAP_HEAD);
+    {
+      ObjectReadOperation op;
+      op.cache_flush();
+      librados::AioCompletion *completion = cluster.aio_create_completion();
+      ASSERT_EQ(0, ioctx.aio_operate(
+		  "foo", completion, &op,
+		  librados::OPERATION_IGNORE_CACHE, NULL));
+      completion->wait_for_safe();
+      ASSERT_EQ(0, completion->get_return_value());
+      completion->release();
+    }
+    {
+      ObjectReadOperation op;
+      op.cache_evict();
+      librados::AioCompletion *completion = cluster.aio_create_completion();
+      ASSERT_EQ(0, cache_ioctx.aio_operate("foo", completion, &op,
+					   librados::OPERATION_IGNORE_CACHE,
+					   NULL));
+      completion->wait_for_safe();
+      ASSERT_EQ(0, completion->get_return_value());
+      completion->release();
+    }
+
+    // cache tier should be empty
+    {
+      NObjectIterator it = cache_ioctx.nobjects_begin();
+      ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+    }
+    
+    // tear down tiers
+    bufferlist inbl;
+    ASSERT_EQ(0, cluster.mon_command(
+		"{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" +
+		pool_name + "\"}",
+		inbl, NULL, NULL));
+
+    // wait for maps to settle
+    cluster.wait_for_latest_osdmap();
+  }
+
+  // verify we can't read during the deleted period
+  ioctx.snap_set_read(my_snaps[0]);
+  {
+    bufferlist bl;
+    ASSERT_EQ(-ENOENT, ioctx.read("foo", bl, 1, 0));
+  }
+
+  if (cache) {
+    bufferlist inbl;
+    ASSERT_EQ(0, cluster.mon_command(
+		"{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+		"\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+		inbl, NULL, NULL));
+    cluster.wait_for_latest_osdmap();
+  }
 
   // cleanup
   ioctx.selfmanaged_snap_remove(my_snaps[0]);
