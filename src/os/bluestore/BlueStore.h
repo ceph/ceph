@@ -28,6 +28,8 @@
 #include <boost/intrusive/set.hpp>
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
+#include <boost/pool/object_pool.hpp>
+
 
 #include "include/assert.h"
 #include "include/unordered_map.h"
@@ -680,6 +682,12 @@ public:
     uint32_t needs_reshard_begin = 0;
     uint32_t needs_reshard_end = 0;
 
+    template <class... Args>
+    Extent* create_from_pool(Args&&... args) {
+      Extent* extent_mem = onode->extent_pool.malloc();
+      return new (extent_mem) Extent(std::forward<Args>(args)...);
+    }
+
     bool needs_reshard() const {
       return needs_reshard_end > needs_reshard_begin;
     }
@@ -696,16 +704,24 @@ public:
     }
 
     struct DeleteDisposer {
-      void operator()(Extent *e) { delete e; }
+      ExtentMap* parent;
+
+      DeleteDisposer(ExtentMap* const parent)
+        : parent(parent) {
+      }
+
+      void operator()(Extent *e) {
+        parent->onode->extent_pool.free(e);
+      }
     };
 
     ExtentMap(Onode *o);
     ~ExtentMap() {
-      extent_map.clear_and_dispose(DeleteDisposer());
+      extent_map.clear_and_dispose(DeleteDisposer(this));
     }
 
     void clear() {
-      extent_map.clear_and_dispose(DeleteDisposer());
+      extent_map.clear_and_dispose(DeleteDisposer(this));
       shards.clear();
       inline_bl.clear();
       clear_needs_reshard();
@@ -797,7 +813,7 @@ public:
 
     /// remove (and delete) an Extent
     void rm(extent_map_t::iterator p) {
-      extent_map.erase_and_dispose(p, DeleteDisposer());
+      extent_map.erase_and_dispose(p, DeleteDisposer(this));
     }
 
     bool has_any_lextents(uint64_t offset, uint64_t length);
@@ -945,6 +961,7 @@ public:
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;              ///< true if object logically exists
 
+    boost::object_pool<Extent> extent_pool{4096,4096};
     ExtentMap extent_map;
 
     std::atomic<int> flushing_count = {0};
