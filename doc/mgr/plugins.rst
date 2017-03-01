@@ -127,7 +127,7 @@ Fetch the daemon metadata for a particular service.  svc_type is one
 of osd or mds, and svc_id is a string (convert OSD integer IDs to strings
 when calling this).
 
-``get_counter(self, svc_type, svc_name, path)``
+``get_counter(self, svc_type, svc_id, path)``
 
 Fetch the latest performance counter data for a particular counter.  The
 path is a period-separated concatenation of the subsystem and the counter
