@@ -128,10 +128,6 @@ CephContext *TestRadosClient::cct() {
   return m_cct;
 }
 
-uint64_t TestRadosClient::get_instance_id() {
-  return 0;
-}
-
 int TestRadosClient::connect() {
   return 0;
 }

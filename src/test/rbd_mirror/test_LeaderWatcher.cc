@@ -209,8 +209,6 @@ TEST_F(TestLeaderWatcher, ListenerError)
 
 TEST_F(TestLeaderWatcher, Two)
 {
-  REQUIRE(!is_librados_test_stub());
-
   Listener listener1;
   LeaderWatcher<> leader_watcher1(m_threads, create_connection(), &listener1);
 
@@ -249,8 +247,6 @@ TEST_F(TestLeaderWatcher, Two)
 
 TEST_F(TestLeaderWatcher, Break)
 {
-  REQUIRE(!is_librados_test_stub());
-
   Listener listener1, listener2;
   LeaderWatcher<> leader_watcher1(m_threads,
                                   create_connection(true /* no heartbeats */),
@@ -277,8 +273,6 @@ TEST_F(TestLeaderWatcher, Break)
 
 TEST_F(TestLeaderWatcher, Stress)
 {
-  REQUIRE(!is_librados_test_stub());
-
   const int WATCHERS_COUNT = 20;
   std::list<LeaderWatcher<> *> leader_watchers;
   Listener listener;

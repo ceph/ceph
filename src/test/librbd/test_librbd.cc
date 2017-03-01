@@ -221,12 +221,6 @@ public:
     return value == "true";
   }
 
-  bool is_librados_test_stub() {
-    std::string fsid;
-    EXPECT_EQ(0, _rados.cluster_fsid(&fsid));
-    return fsid == "00000000-1111-2222-3333-444444444444";
-  }
-
   void validate_object_map(rbd_image_t image, bool *passed) {
     uint64_t flags;
     ASSERT_EQ(0, rbd_get_flags(image, &flags));
@@ -5393,7 +5387,6 @@ TEST_F(TestLibRBD, ExclusiveLock)
 TEST_F(TestLibRBD, BreakLock)
 {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
-  REQUIRE(!is_librados_test_stub());
 
   static char buf[10];
 

@@ -59,7 +59,8 @@ public:
 
   virtual CephContext *cct();
 
-  virtual uint64_t get_instance_id();
+  virtual uint32_t get_nonce() = 0;
+  virtual uint64_t get_instance_id() = 0;
 
   virtual int connect();
   virtual void shutdown();
@@ -85,6 +86,7 @@ public:
   virtual int aio_watch_flush(AioCompletionImpl *c);
   virtual int watch_flush() = 0;
 
+  virtual bool is_blacklisted() const = 0;
   virtual int blacklist_add(const std::string& client_address,
 			    uint32_t expire_seconds) = 0;
 

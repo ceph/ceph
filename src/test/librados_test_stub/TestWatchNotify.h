@@ -37,6 +37,8 @@ public:
 
   struct WatchHandle {
     TestRadosClient *rados_client = nullptr;
+    std::string addr;
+    uint32_t nonce;
     uint64_t gid;
     uint64_t handle;
     librados::WatchCtx* watch_ctx;
@@ -76,6 +78,8 @@ public:
             uint64_t *handle, librados::WatchCtx *ctx,
             librados::WatchCtx2 *ctx2);
   int unwatch(TestRadosClient *rados_client, uint64_t handle);
+
+  void blacklist(uint32_t nonce);
 
 private:
 

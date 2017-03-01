@@ -24,7 +24,7 @@ public:
     return &m_watch_notify;
   }
 
-private:
+protected:
   TestWatchNotify m_watch_notify;
 
 };

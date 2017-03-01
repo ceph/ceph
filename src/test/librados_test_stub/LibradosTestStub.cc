@@ -3,6 +3,7 @@
 
 #include "test/librados_test_stub/LibradosTestStub.h"
 #include "include/rados/librados.hpp"
+#include "include/stringify.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
@@ -16,6 +17,7 @@
 #include "test/librados_test_stub/TestMemRadosClient.h"
 #include "objclass/objclass.h"
 #include "osd/osd_types.h"
+#include <arpa/inet.h>
 #include <boost/bind.hpp>
 #include <boost/shared_ptr.hpp>
 #include <deque>
@@ -1063,7 +1065,24 @@ int cls_cxx_create(cls_method_context_t hctx, bool exclusive) {
 }
 
 int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin) {
-  //TODO
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+
+  librados::TestRadosClient *rados_client =
+    ctx->io_ctx_impl->get_rados_client();
+
+  struct sockaddr_in sin;
+  sin.sin_family = AF_INET;
+  sin.sin_port = 0;
+  inet_pton(AF_INET, "127.0.0.1", &sin.sin_addr);
+
+  entity_addr_t entity_addr(entity_addr_t::TYPE_DEFAULT,
+                            rados_client->get_nonce());
+  entity_addr.in4_addr() = sin;
+
+  *origin = entity_inst_t(
+    entity_name_t::CLIENT(rados_client->get_instance_id()),
+    entity_addr);
   return 0;
 }
 

@@ -47,7 +47,7 @@ int TestWatchNotify::list_watchers(const std::string& o,
          watcher->watch_handles.begin();
        it != watcher->watch_handles.end(); ++it) {
     obj_watch_t obj;
-    strcpy(obj.addr, "-");
+    strcpy(obj.addr, it->second.addr.c_str());
     obj.watcher_id = static_cast<int64_t>(it->second.gid);
     obj.cookie = it->second.handle;
     obj.timeout_seconds = 30;
@@ -139,6 +139,8 @@ int TestWatchNotify::watch(TestRadosClient *rados_client,
 
   WatchHandle watch_handle;
   watch_handle.rados_client = rados_client;
+  watch_handle.addr = "127.0.0.1:0/" + stringify(rados_client->get_nonce());
+  watch_handle.nonce = rados_client->get_nonce();
   watch_handle.gid = gid;
   watch_handle.handle = ++m_handle;
   watch_handle.watch_ctx = ctx;
@@ -309,6 +311,28 @@ void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
   watcher->notify_handles.erase(notify_id);
   if (watcher->watch_handles.empty() && watcher->notify_handles.empty()) {
     m_file_watchers.erase(oid);
+  }
+}
+
+void TestWatchNotify::blacklist(uint32_t nonce) {
+  Mutex::Locker locker(m_lock);
+
+  for (auto file_it = m_file_watchers.begin();
+       file_it != m_file_watchers.end(); ) {
+    auto &watcher = file_it->second;
+    for (auto w_it = watcher->watch_handles.begin();
+         w_it != watcher->watch_handles.end();) {
+      if (w_it->second.nonce == nonce) {
+        w_it = watcher->watch_handles.erase(w_it);
+      } else {
+        ++w_it;
+      }
+    }
+    if (watcher->watch_handles.empty() && watcher->notify_handles.empty()) {
+        file_it = m_file_watchers.erase(file_it);
+    } else {
+      ++file_it;
+    }
   }
 }
 
