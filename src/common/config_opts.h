@@ -106,7 +106,7 @@ OPTION(async_compressor_threads, OPT_INT, 2)
 OPTION(async_compressor_thread_timeout, OPT_INT, 5)
 OPTION(async_compressor_thread_suicide_timeout, OPT_INT, 30)
 
-OPTION(plugin_crypto_accelerator, OPT_STR, "")
+OPTION(plugin_crypto_accelerator, OPT_STR, "crypto_isal")
 
 OPTION(mempool_debug, OPT_BOOL, false)
 
