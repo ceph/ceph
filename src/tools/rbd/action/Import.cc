@@ -22,7 +22,7 @@ namespace action {
 namespace import {
 
 int do_import_diff_fd(librbd::Image &image, int fd,
-		   bool no_progress, int format)
+                      bool no_progress, int format)
 {
   int r;
   struct stat stat_buf;
@@ -445,8 +445,7 @@ static int do_import_header(int fd, int import_format, uint64_t &size, librbd::I
 }
 
 static int do_import_v2(int fd, librbd::Image &image, uint64_t size,
-			size_t imgblklen, boost::scoped_ptr<SimpleThrottle> &throttle,
-		       	utils::ProgressContext &pc)
+                        size_t imgblklen, utils::ProgressContext &pc)
 {
   int r = 0;
   char snap_buf[utils::RBD_IMAGE_DIFFS_BANNER_V2.size() + 1];
@@ -485,8 +484,7 @@ static int do_import_v2(int fd, librbd::Image &image, uint64_t size,
 }
 
 static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
-			size_t imgblklen, boost::scoped_ptr<SimpleThrottle> &throttle,
-		       	utils::ProgressContext &pc)
+                        size_t imgblklen, utils::ProgressContext &pc)
 {
   int r = 0;
   size_t reqlen = imgblklen;    // amount requested from read
@@ -495,6 +493,14 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
   char *p = new char[imgblklen];
   uint64_t image_pos = 0;
   bool from_stdin = (fd == STDIN_FILENO);
+  boost::scoped_ptr<SimpleThrottle> throttle;
+
+  if (from_stdin) {
+    throttle.reset(new SimpleThrottle(1, false));
+  } else {
+    throttle.reset(new SimpleThrottle(
+                     max(g_conf->rbd_concurrent_management_ops, 1), false));
+  }
 
   reqlen = min(reqlen, size);
   // loop body handles 0 return, as we may have a block to flush
@@ -579,15 +585,11 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   librbd::Image image;
   uint64_t size = 0;
 
-  boost::scoped_ptr<SimpleThrottle> throttle;
   bool from_stdin = !strcmp(path, "-");
   if (from_stdin) {
-    throttle.reset(new SimpleThrottle(1, false));
     fd = STDIN_FILENO;
     size = 1ULL << order;
   } else {
-    throttle.reset(new SimpleThrottle(
-      max(g_conf->rbd_concurrent_management_ops, 1), false));
     if ((fd = open(path, O_RDONLY)) < 0) {
       r = -errno;
       std::cerr << "rbd: error opening " << path << std::endl;
@@ -642,9 +644,9 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   }
 
   if (import_format == 1) {
-    r = do_import_v1(fd, image, size, imgblklen, throttle, pc);
+    r = do_import_v1(fd, image, size, imgblklen, pc);
   } else {
-    r = do_import_v2(fd, image, size, imgblklen, throttle, pc);
+    r = do_import_v2(fd, image, size, imgblklen, pc);
   }
 
   r = image.close();
