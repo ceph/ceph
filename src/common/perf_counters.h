@@ -179,6 +179,10 @@ public:
     m_name = s;
   }
 
+  typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
+
+  void with_counters(std::function<void(const perf_counter_data_vec_t &)>) const;
+
 private:
   PerfCounters(CephContext *cct, const std::string &name,
 	     int lower_bound, int upper_bound);
@@ -186,8 +190,6 @@ private:
   PerfCounters& operator=(const PerfCounters &rhs);
   void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
                               const std::string &counter = "");
-
-  typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
   CephContext *m_cct;
   int m_lower_bound;

@@ -23,6 +23,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
+#include "librbd/PerfReporter.h"
 #include "librbd/Utils.h"
 #include "librbd/LibrbdWriteback.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
@@ -229,6 +230,7 @@ struct C_InvalidateCache : public Context {
     assert(asok_hook == NULL);
 
     if (perfcounter) {
+      perf_report_stop();
       perf_stop();
     }
     if (object_cacher) {
@@ -270,6 +272,7 @@ struct C_InvalidateCache : public Context {
     }
 
     perf_start(pname);
+    perf_report_start();
 
     if (cache) {
       Mutex::Locker l(cache_lock);
@@ -394,6 +397,17 @@ struct C_InvalidateCache : public Context {
     assert(perfcounter);
     cct->get_perfcounters_collection()->remove(perfcounter);
     delete perfcounter;
+  }
+
+  void ImageCtx::perf_report_start() {
+    m_perf_reporter = new PerfReporter<ImageCtx>(*this);
+    m_perf_reporter->init(perfcounter);
+  }
+
+  void ImageCtx::perf_report_stop() {
+    m_perf_reporter->shutdown();
+    delete m_perf_reporter;
+    m_perf_reporter = nullptr;
   }
 
   void ImageCtx::set_read_flag(unsigned flag) {

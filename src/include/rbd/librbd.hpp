@@ -417,6 +417,8 @@ public:
 
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);
+  int perf_reset();
+  int perf_dump(const std::string &format, bufferlist *outbl);
 
 private:
   friend class RBD;

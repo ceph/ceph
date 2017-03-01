@@ -30,6 +30,7 @@
 #include "librbd/api/DiffIterate.h"
 #include "librbd/api/Group.h"
 #include "librbd/api/Mirror.h"
+#include "librbd/api/Perf.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -1679,6 +1680,16 @@ namespace librbd {
     int r = ictx->state->unregister_update_watcher(handle);
     tracepoint(librbd, update_unwatch_exit, r);
     return r;
+  }
+
+  int Image::perf_reset() {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Perf<>::perf_reset(ictx);
+  }
+
+  int Image::perf_dump(const std::string &format, bufferlist *outbl) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Perf<>::perf_dump(ictx, format, outbl);
   }
 
 } // namespace librbd

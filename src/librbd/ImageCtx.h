@@ -45,6 +45,7 @@ namespace librbd {
   class LibrbdAdminSocketHook;
   template <typename> class ObjectMap;
   template <typename> class Operations;
+  template <typename> class PerfReporter;
   class LibrbdWriteback;
 
   namespace cache { struct ImageCache; }
@@ -85,6 +86,8 @@ namespace librbd {
     IoCtx data_ctx, md_ctx;
     ImageWatcher<ImageCtx> *image_watcher;
     Journal<ImageCtx> *journal;
+
+    PerfReporter<ImageCtx> *m_perf_reporter;
 
     /**
      * Lock ordering:
@@ -225,6 +228,8 @@ namespace librbd {
     void init_layout();
     void perf_start(std::string name);
     void perf_stop();
+    void perf_report_start();
+    void perf_report_stop();
     void set_read_flag(unsigned flag);
     int get_read_flags(librados::snap_t snap_id);
     int snap_set(std::string in_snap_name);
