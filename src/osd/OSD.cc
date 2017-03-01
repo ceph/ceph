@@ -1010,7 +1010,7 @@ void OSDService::share_map(
 	   << name << " " << con->get_peer_addr()
 	   << " " << epoch << dendl;
 
-  if ((!osd->is_active()) && (!osd->is_stopping())) {
+  if (!osd->is_active()) {
     /*It is safe not to proceed as OSD is not in healthy state*/
     return;
   }
