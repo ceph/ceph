@@ -255,7 +255,6 @@ class BitMapAreaList {
 private:
   BitMapArea **m_items;
   int64_t m_num_items;
-  std::mutex m_marker_mutex;
 
 public:
   BitMapArea *get_nth_item(int64_t idx) {
