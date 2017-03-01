@@ -56,7 +56,6 @@ ManagedLock<MockTestImageCtx> *ManagedLock<MockTestImageCtx>::s_instance = nullp
 
 // template definitions
 #include "tools/rbd_mirror/InstanceWatcher.cc"
-template class rbd::mirror::InstanceWatcher<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {
