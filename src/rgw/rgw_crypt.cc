@@ -989,50 +989,21 @@ int get_actual_key_from_kms(CephContext *cct,
 
 static inline void set_attr(map<string, bufferlist>& attrs,
                             const char* key,
-                            const std::string& value)
-{
-  bufferlist bl;
-  ::encode(value,bl);
-  attrs.emplace(key, std::move(bl));
-}
-
-static inline void set_attr(map<string, bufferlist>& attrs,
-                            const char* key,
-                            const char* value)
-{
-  bufferlist bl;
-  ::encode(value,bl);
-  attrs.emplace(key, std::move(bl));
-}
-
-static inline void set_attr(map<string, bufferlist>& attrs,
-                            const char* key,
                             boost::string_ref value)
 {
   bufferlist bl;
-  __u32 len = value.length();
-  encode(len, bl);
-  if (len)
-    bl.append(value.data(), len);
-  attrs.emplace(key, std::move(bl));
+  bl.append(value.data(), value.size());
+  attrs[key] = std::move(bl);
 }
 
 static inline std::string get_str_attribute(map<string, bufferlist>& attrs,
-                                            const std::string& name,
-                                            const std::string& default_value="") {
-  std::string value;
+                                            const char *name)
+{
   auto iter = attrs.find(name);
-  if (iter == attrs.end() ) {
-    value = default_value;
-  } else {
-    try {
-      ::decode(value, iter->second);
-    } catch (buffer::error& err) {
-      value = default_value;
-      dout(0) << "ERROR: failed to decode attr:" << name << dendl;
-    }
+  if (iter == attrs.end()) {
+    return {};
   }
-  return value;
+  return iter->second.to_str();
 }
 
 typedef enum {
