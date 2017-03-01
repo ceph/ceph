@@ -552,7 +552,7 @@ Execute the following steps:
 
 
    Replace ``{hostname}`` with the hostname of the host where you have
-   configured the gateway service i.e., the ``gateway host``. Replace {port}
+   configured the gateway service i.e., the ``gateway host``. Replace ``{port}``
    with the port number you are using with Civetweb.
 
 #. Run the script::
