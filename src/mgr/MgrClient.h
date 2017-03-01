@@ -54,7 +54,7 @@ protected:
   MgrMap map;
   Messenger *msgr;
 
-  MgrSessionState *session;
+  unique_ptr<MgrSessionState> session;
 
   Mutex lock;
 
