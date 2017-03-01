@@ -15,6 +15,7 @@
 #include <boost/shared_ptr.hpp>
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 
 namespace librados {
@@ -77,17 +78,29 @@ public:
   Pool *get_pool(int64_t pool_id);
   Pool *get_pool(const std::string &pool_name);
 
+  void allocate_client(uint32_t *nonce, uint64_t *global_id);
+  void deallocate_client(uint32_t nonce);
+
+  bool is_blacklisted(uint32_t nonce) const;
+  void blacklist(uint32_t nonce);
+
   void transaction_start(const std::string &oid);
   void transaction_finish(const std::string &oid);
 
 private:
 
   typedef std::map<std::string, Pool*>		Pools;
+  typedef std::set<uint32_t> Blacklist;
 
   mutable Mutex m_lock;
 
   Pools	m_pools;
   int64_t m_pool_id = 0;
+
+  uint32_t m_next_nonce;
+  uint64_t m_next_global_id = 1234;
+
+  Blacklist m_blacklist;
 
   Cond m_transaction_cond;
   std::set<std::string> m_transactions;

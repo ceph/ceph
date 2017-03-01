@@ -17,9 +17,17 @@ class TestMemCluster;
 class TestMemRadosClient : public TestRadosClient {
 public:
   TestMemRadosClient(CephContext *cct, TestMemCluster *test_mem_cluster);
+  ~TestMemRadosClient() override;
 
   TestIoCtxImpl *create_ioctx(int64_t pool_id,
                                       const std::string &pool_name) override;
+
+  uint32_t get_nonce() override {
+    return m_nonce;
+  }
+  uint64_t get_instance_id() override {
+    return m_global_id;
+  }
 
   void object_list(int64_t pool_id,
                    std::list<librados::TestRadosClient::Object> *list) override;
@@ -33,6 +41,7 @@ public:
 
   int watch_flush() override;
 
+  bool is_blacklisted() const override;
   int blacklist_add(const std::string& client_address,
                     uint32_t expire_seconds) override;
 protected:
@@ -46,6 +55,8 @@ protected:
 
 private:
   TestMemCluster *m_mem_cluster;
+  uint32_t m_nonce;
+  uint64_t m_global_id;
 
 };
 

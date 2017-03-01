@@ -23,7 +23,8 @@ TestMemCluster::Pool::Pool()
 }
 
 TestMemCluster::TestMemCluster()
-  : m_lock("TestMemCluster::m_lock") {
+  : m_lock("TestMemCluster::m_lock"),
+    m_next_nonce(static_cast<uint32_t>(reinterpret_cast<uint64_t>(this))) {
 }
 
 TestMemCluster::~TestMemCluster() {
@@ -110,6 +111,29 @@ TestMemCluster::Pool *TestMemCluster::get_pool(const std::string &pool_name) {
     return iter->second;
   }
   return nullptr;
+}
+
+void TestMemCluster::allocate_client(uint32_t *nonce, uint64_t *global_id) {
+  Mutex::Locker locker(m_lock);
+  *nonce = m_next_nonce++;
+  *global_id = m_next_global_id++;
+}
+
+void TestMemCluster::deallocate_client(uint32_t nonce) {
+  Mutex::Locker locker(m_lock);
+  m_blacklist.erase(nonce);
+}
+
+bool TestMemCluster::is_blacklisted(uint32_t nonce) const {
+  Mutex::Locker locker(m_lock);
+  return (m_blacklist.find(nonce) != m_blacklist.end());
+}
+
+void TestMemCluster::blacklist(uint32_t nonce) {
+  m_watch_notify.blacklist(nonce);
+
+  Mutex::Locker locker(m_lock);
+  m_blacklist.insert(nonce);
 }
 
 void TestMemCluster::transaction_start(const std::string &oid) {
