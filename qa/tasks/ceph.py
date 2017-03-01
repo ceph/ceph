@@ -1192,11 +1192,13 @@ def healthy(ctx, config):
         cluster=ctx.cluster,
         remote=mon0_remote,
         ceph_cluster=cluster_name,
+        timeout=config.get('up_timeout', 300),
     )
     teuthology.wait_until_healthy(
         ctx,
         remote=mon0_remote,
         ceph_cluster=cluster_name,
+        timeout=config.get('healthy_timeout', 900),
     )
 
     if ctx.cluster.only(teuthology.is_type('mds', cluster_name)).remotes:
@@ -1596,9 +1598,13 @@ def task(ctx, config):
         )
 
         try:
+            # wait 5 minutes by default for all OSD to be up, and 15 minutes
+            # for an healthy cluster.
+            healthy_config = dict(cluster=config['cluster'],
+                                  up_timeout=config.get('up_timeout', 5 * 60),
+                                  healthy_timeout=config.get('healthy_timeout', 15 * 60))
             if config.get('wait-for-healthy', True):
-                healthy(ctx=ctx, config=dict(cluster=config['cluster']))
-
+                healthy(ctx=ctx, config=healthy_config)
             yield
         finally:
             if config.get('wait-for-scrub', True):
