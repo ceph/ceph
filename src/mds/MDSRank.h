@@ -352,11 +352,16 @@ class MDSRank {
       send_message(m, c.get());
     }
 
-    void wait_for_active(MDSInternalContextBase *c) { 
-      waiting_for_active.push_back(c); 
-    }
     void wait_for_active_peer(mds_rank_t who, MDSInternalContextBase *c) { 
       waiting_for_active_peer[who].push_back(c);
+    }
+    void wait_for_cluster_recovered(MDSInternalContextBase *c) {
+      assert(cluster_degraded);
+      waiting_for_active_peer[MDS_RANK_NONE].push_back(c);
+    }
+
+    void wait_for_active(MDSInternalContextBase *c) {
+      waiting_for_active.push_back(c);
     }
     void wait_for_replay(MDSInternalContextBase *c) { 
       waiting_for_replay.push_back(c); 
