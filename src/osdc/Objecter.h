@@ -2003,7 +2003,7 @@ private:
   bool ms_can_fast_dispatch_any() const {
     return true;
   }
-  bool ms_can_fast_dispatch(Message *m) const {
+  bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OPREPLY:
     case CEPH_MSG_WATCH_NOTIFY:

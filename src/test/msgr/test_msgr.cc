@@ -103,7 +103,7 @@ class FakeDispatcher : public Dispatcher {
                           is_server(s), got_new(false), got_remote_reset(false),
                           got_connect(false), loopback(false) {}
   bool ms_can_fast_dispatch_any() const override { return true; }
-  bool ms_can_fast_dispatch(Message *m) const override {
+  bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
       return true;
@@ -814,7 +814,7 @@ class SyntheticDispatcher : public Dispatcher {
       Dispatcher(g_ceph_context), lock("SyntheticDispatcher::lock"), is_server(s), got_new(false),
       got_remote_reset(false), got_connect(false), index(0), workload(wl) {}
   bool ms_can_fast_dispatch_any() const override { return true; }
-  bool ms_can_fast_dispatch(Message *m) const override {
+  bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
     case MSG_COMMAND:
@@ -1374,7 +1374,7 @@ class MarkdownDispatcher : public Dispatcher {
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
                               last_mark(false), count(0) {}
   bool ms_can_fast_dispatch_any() const override { return false; }
-  bool ms_can_fast_dispatch(Message *m) const override {
+  bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
       return true;

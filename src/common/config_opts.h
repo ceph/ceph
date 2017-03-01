@@ -853,6 +853,8 @@ OPTION(osd_backoff_on_degraded, OPT_BOOL, false) // [mainly for debug?] object u
 OPTION(osd_backoff_on_down, OPT_BOOL, true)      // pg in down/incomplete state
 OPTION(osd_backoff_on_peering, OPT_BOOL, false)  // [debug] pg peering
 OPTION(osd_debug_crash_on_ignored_backoff, OPT_BOOL, false) // crash osd if client ignores a backoff; useful for debugging
+OPTION(osd_debug_inject_dispatch_delay_probability, OPT_DOUBLE, 0)
+OPTION(osd_debug_inject_dispatch_delay_duration, OPT_DOUBLE, .1)
 OPTION(osd_debug_drop_ping_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_drop_ping_duration, OPT_INT, 0)
 OPTION(osd_debug_op_order, OPT_BOOL, false)

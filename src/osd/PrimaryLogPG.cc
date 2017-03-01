@@ -1552,7 +1552,24 @@ void PrimaryLogPG::do_request(
   OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
-  assert(!op_must_wait_for_map(get_osdmap()->get_epoch(), op));
+  // make sure we have a new enough map
+  auto p = waiting_for_map.find(op->get_source());
+  if (p != waiting_for_map.end()) {
+    // preserve ordering
+    dout(20) << __func__ << " waiting_for_map "
+	     << p->first << " not empty, queueing" << dendl;
+    p->second.push_back(op);
+    op->mark_delayed("waiting_for_map not empty");
+    return;
+  }
+  if (op_must_wait_for_map(get_osdmap()->get_epoch(), op)) {
+    dout(20) << __func__ << " queue on waiting_for_map "
+	     << op->get_source() << dendl;
+    waiting_for_map[op->get_source()].push_back(op);
+    op->mark_delayed("op must wait for map");
+    return;
+  }
+
   if (can_discard_request(op)) {
     return;
   }
@@ -8242,10 +8259,9 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
     if (scrubber.active_rep_scrub) {
       if (last_update_applied == static_cast<const MOSDRepScrub*>(
 	    scrubber.active_rep_scrub->get_req())->scrub_to) {
-	osd->op_wq.queue(
-	  make_pair(
-	    this,
-	    scrubber.active_rep_scrub));
+	osd->enqueue_back(
+	  info.pgid,
+	  PGQueueable(scrubber.active_rep_scrub, get_osdmap()->get_epoch()));
 	scrubber.active_rep_scrub = OpRequestRef();
       }
     }
@@ -9473,10 +9489,9 @@ void PrimaryLogPG::_applied_recovered_object_replica()
   if (!deleting && active_pushes == 0 &&
       scrubber.active_rep_scrub && static_cast<const MOSDRepScrub*>(
 	scrubber.active_rep_scrub->get_req())->chunky) {
-    osd->op_wq.queue(
-      make_pair(
-	this,
-	scrubber.active_rep_scrub));
+    osd->enqueue_back(
+      info.pgid,
+      PGQueueable(scrubber.active_rep_scrub, get_osdmap()->get_epoch()));
     scrubber.active_rep_scrub = OpRequestRef();
   }
 
@@ -9868,7 +9883,6 @@ void PrimaryLogPG::on_shutdown()
 
   // remove from queues
   osd->pg_stat_queue_dequeue(this);
-  osd->dequeue_pg(this, 0);
   osd->peering_wq.dequeue(this);
 
   // handles queue races
