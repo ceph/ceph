@@ -107,11 +107,21 @@ public:
   ~OpRequest() {
     request->put();
   }
-  bool send_map_update;
-  epoch_t sent_epoch;
+
+  bool check_send_map = true; ///< true until we check if sender needs a map
+  epoch_t sent_epoch = 0;     ///< client's map epoch
+
   bool hitset_inserted;
   const Message *get_req() const { return request; }
   Message *get_nonconst_req() { return request; }
+
+  entity_name_t get_source() {
+    if (request) {
+      return request->get_source();
+    } else {
+      return entity_name_t();
+    }
+  }
 
   const char *state_string() const {
     switch(latest_flag_point) {

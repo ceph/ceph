@@ -784,14 +784,20 @@ public:
   /*
    * check whether an spg_t maps to a particular osd
    */
-  bool is_acting_osd_shard(spg_t pg, int osd) const {
-    vector<int> acting;
-    _pg_to_up_acting_osds(pg.pgid, NULL, NULL, &acting, NULL, false);
-    if (pg.shard == shard_id_t::NO_SHARD)
-      return calc_pg_role(osd, acting, acting.size()) >= 0;
-    if (pg.shard >= (int)acting.size())
-      return false;
-    return acting[pg.shard] == osd;
+  bool is_up_acting_osd_shard(spg_t pg, int osd) const {
+    vector<int> up, acting;
+    _pg_to_up_acting_osds(pg.pgid, &up, NULL, &acting, NULL, false);
+    if (pg.shard == shard_id_t::NO_SHARD) {
+      if (calc_pg_role(osd, acting, acting.size()) >= 0 ||
+	  calc_pg_role(osd, up, up.size()) >= 0)
+	return true;
+    } else {
+      if (pg.shard < (int)acting.size() && acting[pg.shard] == osd)
+	return true;
+      if (pg.shard < (int)up.size() && up[pg.shard] == osd)
+	return true;
+    }
+    return false;
   }
 
 
