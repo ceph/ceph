@@ -109,7 +109,8 @@ void RDMADispatcher::handle_async_event()
       uint64_t qpn = async_event.element.qp->qp_num;
       ldout(cct, 10) << __func__ << " event associated qp=" << async_event.element.qp
                      << " evt: " << ibv_event_type_str(async_event.event_type) << dendl;
-      RDMAConnectedSocketImpl *conn = get_conn_by_qp(qpn);
+      Mutex::Locker l(lock);
+      RDMAConnectedSocketImpl *conn = get_conn_lockless(qpn);
       if (!conn) {
         ldout(cct, 1) << __func__ << " missing qp_num=" << qpn << " discard event" << dendl;
       } else {
@@ -277,17 +278,6 @@ int RDMADispatcher::register_qp(QueuePair *qp, RDMAConnectedSocketImpl* csi)
   assert(!qp_conns.count(qp->get_local_qp_number()));
   qp_conns[qp->get_local_qp_number()] = std::make_pair(qp, csi);
   return fd;
-}
-
-RDMAConnectedSocketImpl* RDMADispatcher::get_conn_by_qp(uint32_t qp)
-{
-  Mutex::Locker l(lock);
-  auto it = qp_conns.find(qp);
-  if (it == qp_conns.end())
-    return nullptr;
-  if (it->second.first->is_dead())
-    return nullptr;
-  return it->second.second;
 }
 
 RDMAConnectedSocketImpl* RDMADispatcher::get_conn_lockless(uint32_t qp)
@@ -482,7 +472,7 @@ int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c
   assert(center.in_thread());
   int r = global_infiniband->get_tx_buffers(c, bytes);
   assert(r >= 0);
-  size_t got = global_infiniband->get_memory_manager()->get_tx_chunk_size() * r;
+  size_t got = global_infiniband->get_memory_manager()->get_tx_buffer_size() * r;
   ldout(cct, 30) << __func__ << " need " << bytes << " bytes, reserve " << got << " registered  bytes, inflight " << dispatcher->inflight << dendl;
   stack->get_dispatcher()->inflight += r;
   if (got == bytes)
