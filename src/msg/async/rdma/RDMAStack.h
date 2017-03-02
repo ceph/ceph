@@ -127,7 +127,6 @@ class RDMADispatcher : public CephContext::ForkWatcher {
     }
   }
   RDMAStack* get_stack() { return stack; }
-  RDMAConnectedSocketImpl* get_conn_by_qp(uint32_t qp);
   RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp);
   void erase_qpn(uint32_t qpn);
   Infiniband::CompletionQueue* get_tx_cq() const { return tx_cq; }
@@ -222,11 +221,9 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   Mutex lock;
   std::vector<ibv_wc> wc;
   bool is_server;
-  RDMAServerSocketImpl* ssi;
   EventCallbackRef con_handler;
   int tcp_fd = -1;
   bool active;// qp is active ?
-  bool detached;
 
   void notify();
   ssize_t read_buffers(char* buf, size_t len);
