@@ -72,7 +72,7 @@ struct C_PrintTime : public Context {
   utime_t start;
   epoch_t epoch;
   C_PrintTime(epoch_t e) : start(ceph_clock_now()), epoch(e) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r >= 0) {
       utime_t end = ceph_clock_now();
       dout(10) << "osdmap epoch " << epoch << " mapping took "
@@ -1591,7 +1591,7 @@ public:
 	m->get_epoch(),
 	false));   // ACK itself does not request an ack
   }
-  ~C_AckMarkedDown() {
+  ~C_AckMarkedDown() override {
   }
 };
 
