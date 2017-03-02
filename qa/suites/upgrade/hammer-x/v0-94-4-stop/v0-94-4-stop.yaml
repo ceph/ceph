@@ -11,6 +11,10 @@ roles:
   - osd.0
   - osd.1
 - - osd.2
+openstack:
+- volumes: # attached to each instance
+    count: 2
+    size: 10 # GB
 tasks:
 - print: "**** Install version lower than v0.94.4"
 - install:
