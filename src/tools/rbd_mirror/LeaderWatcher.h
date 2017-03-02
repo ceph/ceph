@@ -11,6 +11,7 @@
 #include "librbd/ManagedLock.h"
 #include "librbd/managed_lock/Types.h"
 #include "librbd/Watcher.h"
+#include "Instances.h"
 #include "MirrorStatusWatcher.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
 
@@ -33,6 +34,7 @@ public:
   };
 
   LeaderWatcher(Threads *threads, librados::IoCtx &io_ctx, Listener *listener);
+  ~LeaderWatcher() override;
 
   int init();
   void shut_down();
@@ -42,6 +44,7 @@ public:
 
   bool is_leader();
   void release_leader();
+  void list_instances(std::vector<std::string> *instance_ids);
 
 private:
   /**
@@ -68,18 +71,21 @@ private:
    *     v    v  v  v  v  (error)        *  v           | | | |
    *  ACQUIRE_LEADER_LOCK  * * * * *> GET_LOCKER ---> <secondary>
    *     |                   *                           ^
-   * ....|...................*.............         .....|.....................
-   * .   v                   *            .         .    |       post_release .
-   * .INIT_STATUS_WATCHER  * *            .         .NOTIFY_LOCK_RELEASED     .
-   * .   |                 (error)        .         .....^.....................
-   * .   v                                .              |
-   * .NOTIFY_LISTENERS                    .          RELEASE_LEADER_LOCK
-   * .   |                                .              ^
-   * .   v                                .         .....|.....................
-   * .NOTIFY_LOCK_ACQUIRED   post_acquire .         .SHUT_DOWN_STATUS_WATCHER .
-   * ....|.................................         .    ^                    .
+   * ....|...................*....................  .....|.....................
+   * .   v                   *                   .  .    |       post_release .
+   * .INIT_STATUS_WATCHER  * * (error)           .  .NOTIFY_LOCK_RELEASED     .
+   * .   |                   ^                   .  .....^.....................
+   * .   v         (error)   |                   .       |
+   * .INIT_INSTANCES *> SHUT_DOWN_STATUS_WATCHER .   RELEASE_LEADER_LOCK
+   * .   |                                       .       ^
+   * .   v                                       .  .....|.....................
+   * .NOTIFY_LISTENER                            .  .SHUT_DOWN_STATUS_WATCHER .
+   * .   |                                       .  .    ^                    .
+   * .   v                                       .  .    |                    .
+   * .NOTIFY_LOCK_ACQUIRED          post_acquire .  .SHUT_DOWN_INSTANCES      .
+   * ....|........................................  .    ^                    .
    *     v                                          .    |                    .
-   *  <leader> -----------------------------------> .NOTIFY_LISTENERS         .
+   *  <leader> -----------------------------------> .NOTIFY_LISTENER          .
    *            (shut_down, release_leader,         .             pre_release .
    *             notify error)                      ...........................
    * @endverbatim
@@ -156,14 +162,16 @@ private:
 
   Mutex m_lock;
   uint64_t m_notifier_id;
+  LeaderLock *m_leader_lock;
   Context *m_on_finish = nullptr;
   Context *m_on_shut_down_finish = nullptr;
   int m_acquire_attempts = 0;
-  int m_notify_error = 0;
-  std::unique_ptr<LeaderLock> m_leader_lock;
-  std::unique_ptr<MirrorStatusWatcher> m_status_watcher;
+  int m_ret_val = 0;
+  MirrorStatusWatcher<ImageCtxT> *m_status_watcher = nullptr;
+  Instances<ImageCtxT> *m_instances = nullptr;
   librbd::managed_lock::Locker m_locker;
   Context *m_timer_task = nullptr;
+  bufferlist m_heartbeat_ack_bl;
 
   bool is_leader(Mutex &m_lock);
 
@@ -203,6 +211,12 @@ private:
   void shut_down_status_watcher();
   void handle_shut_down_status_watcher(int r);
 
+  void init_instances();
+  void handle_init_instances(int r);
+
+  void shut_down_instances();
+  void handle_shut_down_instances(int r);
+
   void notify_listener();
   void handle_notify_listener(int r);
 
@@ -214,6 +228,9 @@ private:
 
   void notify_heartbeat();
   void handle_notify_heartbeat(int r);
+
+  void get_instances();
+  void handle_get_instances(int r);
 
   void handle_post_acquire_leader_lock(int r, Context *on_finish);
   void handle_pre_release_leader_lock(Context *on_finish);
