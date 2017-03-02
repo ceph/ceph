@@ -1403,9 +1403,6 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
     aio_num++;
     aio_bytes += aio.len;
 
-    // need to save current aio len to update write_pos later because current
-    // aio could be ereased from aio_queue once it is done
-    uint64_t cur_len = aio.len;
     // unlock aio_lock because following io_submit might take time to return
     aio_lock.Unlock();
 
@@ -1415,7 +1412,7 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
       int r = io_submit(aio_ctx, 1, &piocb);
       dout(20) << "write_aio_bl io_submit return value: " << r << dendl;
       if (r < 0) {
-	derr << "io_submit to " << aio.off << "~" << cur_len
+	derr << "io_submit to " << aio.off << "~" << len
 	     << " got " << cpp_strerror(r) << dendl;
 	if (r == -EAGAIN && attempts-- > 0) {
 	  usleep(500);
@@ -1426,7 +1423,7 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
 	break;
       }
     } while (true);
-    pos += cur_len;
+    pos += len;
   }
   aio_lock.Lock();
   write_finish_cond.Signal();
