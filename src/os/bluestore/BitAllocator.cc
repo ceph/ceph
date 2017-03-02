@@ -643,7 +643,6 @@ void BitMapAreaIN::init(CephContext* const cct,
     children.push_back(new BitMapAreaIN(cct, total_blocks, i, def));
   }
   m_child_list = BitMapAreaList(std::move(children));
-  m_num_child = num_child;
 }
 
 BitMapAreaIN::BitMapAreaIN(CephContext* cct,int64_t total_blocks,
@@ -966,7 +965,6 @@ void BitMapAreaLeaf::init(CephContext* const cct,
   }
 
   m_child_list = BitMapAreaList(std::move(children));
-  m_num_child = num_child;
 
   BitMapAreaLeaf::incr_count();
 }

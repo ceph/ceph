@@ -388,7 +388,6 @@ protected:
   int64_t m_child_size_blocks;
   int64_t m_total_blocks;
   int16_t m_level;
-  int16_t m_num_child;
 
   int64_t m_used_blocks;
   int64_t m_reserved_blocks;
