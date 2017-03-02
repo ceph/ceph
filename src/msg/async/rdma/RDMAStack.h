@@ -222,11 +222,9 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   Mutex lock;
   std::vector<ibv_wc> wc;
   bool is_server;
-  RDMAServerSocketImpl* ssi;
   EventCallbackRef con_handler;
   int tcp_fd = -1;
   bool active;// qp is active ?
-  bool detached;
 
   void notify();
   ssize_t read_buffers(char* buf, size_t len);
