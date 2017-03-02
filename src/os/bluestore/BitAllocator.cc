@@ -590,7 +590,7 @@ int64_t BitMapArea::get_index()
  * BitMapArea Leaf and Internal
  */
 BitMapAreaIN::BitMapAreaIN(CephContext* cct)
-  : BitMapArea(cct), m_child_list(nullptr)
+  : BitMapArea(cct)
 {
   // nothing
 }
@@ -642,8 +642,7 @@ void BitMapAreaIN::init(CephContext* const cct,
   } else {
     children.push_back(new BitMapAreaIN(cct, total_blocks, i, def));
   }
-  BitMapAreaList *list = new BitMapAreaList(std::move(children));
-  m_child_list = list;
+  m_child_list = BitMapAreaList(std::move(children));
   m_num_child = num_child;
 }
 
@@ -772,7 +771,7 @@ bool BitMapAreaIN::is_allocated(int64_t start_block, int64_t num_blocks)
   }
 
   while (num_blocks) {
-    area = (BitMapArea *) m_child_list->get_nth_item(
+    area = (BitMapArea *) m_child_list.get_nth_item(
                     start_block / m_child_size_blocks);
 
     area_block_offset = start_block % m_child_size_blocks;
@@ -795,7 +794,7 @@ int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wrap, int64_t num_blocks, i
   int64_t blk_off = 0;
 
   BmapEntityListIter iter = BmapEntityListIter(
-        m_child_list, hint / m_child_size_blocks, wrap);
+        &m_child_list, hint / m_child_size_blocks, wrap);
 
   while ((child = (BitMapArea *) iter.next())) {
     if (!child_check_n_lock(child, 1)) {
@@ -848,7 +847,7 @@ void BitMapAreaIN::set_blocks_used_int(int64_t start_block, int64_t num_blocks)
   alloc_assert(start_block >= 0);
 
   while (blks) {
-    child = (BitMapArea *) m_child_list->get_nth_item(
+    child = (BitMapArea *) m_child_list.get_nth_item(
                   start_blk / m_child_size_blocks);
 
     child_block_offset = start_blk % child->size();
@@ -888,7 +887,7 @@ void BitMapAreaIN::free_blocks_int(int64_t start_block, int64_t num_blocks)
   }
 
   while (num_blocks) {
-    child = (BitMapArea *) m_child_list->get_nth_item(
+    child = (BitMapArea *) m_child_list.get_nth_item(
           start_block / m_child_size_blocks);
 
     child_block_offset = start_block % m_child_size_blocks;
@@ -920,7 +919,7 @@ void BitMapAreaIN::dump_state(CephContext* const cct, int& count)
   BitMapArea *child = NULL;
 
   BmapEntityListIter iter = BmapEntityListIter(
-        m_child_list, 0, false);
+        &m_child_list, 0, false);
 
   while ((child = (BitMapArea *) iter.next())) {
     child->dump_state(cct, count);
@@ -966,9 +965,7 @@ void BitMapAreaLeaf::init(CephContext* const cct,
     children.emplace_back(new BitMapZone(cct, m_child_size_blocks, i, def));
   }
 
-  BitMapAreaList *list = new BitMapAreaList(std::move(children));
-
-  m_child_list = list;
+  m_child_list = BitMapAreaList(std::move(children));
   m_num_child = num_child;
 
   BitMapAreaLeaf::incr_count();
@@ -978,13 +975,10 @@ BitMapAreaLeaf::~BitMapAreaLeaf()
 {
   lock_excl();
 
-  BitMapAreaList *list = m_child_list;
-  for (int64_t i = 0; i < list->size(); i++) {
-    BitMapArea *child = (BitMapArea *) list->get_nth_item(i);
+  for (int64_t i = 0; i < m_child_list.size(); i++) {
+    BitMapArea *child = (BitMapArea *) m_child_list.get_nth_item(i);
     delete child;
   }
-
-  delete list;
 
   unlock();
 }
@@ -1025,7 +1019,7 @@ int64_t BitMapAreaLeaf::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_all
   int64_t blk_off = 0;
 
   BmapEntityListIter iter = BmapEntityListIter(
-        m_child_list, hint / m_child_size_blocks, false);
+        &m_child_list, hint / m_child_size_blocks, false);
 
   /* We're sure the only element type we aggregate is BitMapZone,
    * so there is no business to go through vptr and thus prohibit
@@ -1062,7 +1056,7 @@ void BitMapAreaLeaf::free_blocks_int(int64_t start_block, int64_t num_blocks)
   }
 
   while (num_blocks) {
-    child = (BitMapArea *) m_child_list->get_nth_item(
+    child = (BitMapArea *) m_child_list.get_nth_item(
           start_block / m_child_size_blocks);
 
     child_block_offset = start_block % m_child_size_blocks;
@@ -1177,13 +1171,10 @@ BitAllocator::~BitAllocator()
 {
   lock_excl();
 
-  BitMapAreaList *list = m_child_list;
-  for (int64_t i = 0; i < list->size(); i++) {
-    BitMapArea *child = (BitMapArea *) list->get_nth_item(i);
+  for (int64_t i = 0; i < m_child_list.size(); i++) {
+    BitMapArea *child = (BitMapArea *) m_child_list.get_nth_item(i);
     delete child;
   }
-
-  delete list;
 
   unlock();
   pthread_rwlock_destroy(&m_rw_lock);
