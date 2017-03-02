@@ -16,10 +16,9 @@ namespace watcher {
 const uint64_t Notifier::NOTIFY_TIMEOUT = 5000;
 
 Notifier::Notifier(ContextWQ *work_queue, IoCtx &ioctx, const std::string &oid)
-  : m_work_queue(work_queue), m_oid(oid),
+  : m_work_queue(work_queue), m_ioctx(ioctx), m_oid(oid),
     m_aio_notify_lock(util::unique_lock_name(
       "librbd::object_watcher::Notifier::m_aio_notify_lock", this)) {
-  m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 }
 
