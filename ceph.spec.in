@@ -214,6 +214,7 @@ Requires:      util-linux
 Requires:      hdparm
 Requires:      cryptsetup
 Requires:      findutils
+Requires:      psmisc
 Requires:      which
 %if 0%{?suse_version}
 Recommends:    ntp-daemon

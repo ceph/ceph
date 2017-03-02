@@ -93,6 +93,7 @@ Depends: binutils,
          python-argparse | libpython2.7-stdlib,
          python-pkg-resources,
          sdparm | hdparm,
+         psmisc,
          xfsprogs,
          ${misc:Depends},
          ${shlibs:Depends}
