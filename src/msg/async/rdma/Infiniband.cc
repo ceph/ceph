@@ -127,16 +127,16 @@ Device::Device(CephContext *cct, ibv_device* d): device(d), device_attr(new ibv_
 
 void Device::binding_port(CephContext *cct, uint8_t port_num) {
   port_cnt = device_attr->phys_port_cnt;
-  ports = new Port*[port_cnt];
   for (uint8_t i = 0; i < port_cnt; ++i) {
-    ports[i] = new Port(cct, ctxt, i+1);
-    if (i+1 == port_num && ports[i]->get_port_attr()->state == IBV_PORT_ACTIVE) {
-      active_port = ports[i];
+    Port *port = new Port(cct, ctxt, i+1);
+    if (i + 1 == port_num && port->get_port_attr()->state == IBV_PORT_ACTIVE) {
+      active_port = port;
       ldout(cct, 1) << __func__ << " found active port " << i+1 << dendl;
-      return ;
+      break;
     } else {
-      ldout(cct, 10) << __func__ << " port " << i+1 << " is not what we want. state: " << ports[i]->get_port_attr()->state << ")"<< dendl;
+      ldout(cct, 10) << __func__ << " port " << i+1 << " is not what we want. state: " << port->get_port_attr()->state << ")"<< dendl;
     }
+    delete port;
   }
   if (nullptr == active_port) {
     lderr(cct) << __func__ << "  port not found" << dendl;
@@ -567,16 +567,24 @@ Infiniband::MemoryManager::Cluster::Cluster(MemoryManager& m, uint32_t s)
 
 Infiniband::MemoryManager::Cluster::~Cluster()
 {
+  char *p = chunk_base;
+  for (uint32_t i = 0; i < num_chunk; i++){
+    Chunk *chunk = reinterpret_cast<Chunk*>(p);
+    chunk->~Chunk();
+    p += sizeof(Chunk);
+  }
+
   ::free(chunk_base);
   if (manager.enabled_huge_page)
     manager.free_huge_pages(base);
   else
-    delete base;
+    ::free(base);
 }
 
 int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
 {
   assert(!base);
+  num_chunk = num;
   uint32_t bytes = buffer_size * num;
   if (manager.enabled_huge_page) {
     base = (char*)manager.malloc_huge_pages(bytes);
