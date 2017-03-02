@@ -3043,7 +3043,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	   << ", min is " << g_conf->mon_crush_min_required_version << ")";
 	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 	if (detail) {
-	  ss << "; see http://ceph.com/docs/master/rados/operations/crush-map/#tunables";
+	  ss << "; see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables";
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
       }
@@ -3054,7 +3054,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	ss << "crush map has straw_calc_version=0";
 	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 	if (detail) {
-	  ss << "; see http://ceph.com/docs/master/rados/operations/crush-map/#tunables";
+	  ss << "; see http://docs.ceph.com/docs/master/rados/operations/crush-map/#tunables";
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
       }
