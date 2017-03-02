@@ -283,25 +283,58 @@ public:
   }
 };
 
+/* Intensionally inlined for the sake of BitMapAreaLeaf::alloc_blocks_dis_int. */
 class BmapEntityListIter {
-  BitMapAreaList *m_list;
+  BitMapAreaList* m_list;
   int64_t m_start_idx;
   int64_t m_cur_idx;
   bool m_wrap;
   bool m_wrapped;
   bool m_end;
+
 public:
+  BmapEntityListIter(BitMapAreaList* const list,
+                     const int64_t start_idx,
+                     const bool wrap = false)
+    : m_list(list),
+      m_start_idx(start_idx),
+      m_cur_idx(start_idx),
+      m_wrap(wrap),
+      m_wrapped(false),
+      m_end(false) {
+  }
 
-  void init(BitMapAreaList *list, int64_t start_idx, bool wrap);
-  BmapEntityListIter(BitMapAreaList *list);
+  BitMapArea* next() {
+    int64_t cur_idx = m_cur_idx;
 
-  BmapEntityListIter(BitMapAreaList *list, bool wrap);
+    if (m_wrapped &&
+      cur_idx == m_start_idx) {
+      /*
+       * End of wrap cycle + 1
+       */
+      if (!m_end) {
+        m_end = true;
+        return m_list->get_nth_item(cur_idx);
+      }
+      return NULL;
+    }
+    m_cur_idx++;
 
-  BmapEntityListIter(BitMapAreaList *list, int64_t start_idx);
+    if (m_cur_idx == m_list->size() &&
+        m_wrap) {
+      m_cur_idx = 0;
+      m_wrapped = true;
+    }
+    if (cur_idx == m_list->size()) {
+      /*
+       * End of list
+       */
+      return NULL;
+    }
+    alloc_assert(cur_idx < m_list->size());
+    return m_list->get_nth_item(cur_idx);
+  }
 
-  BmapEntityListIter(BitMapAreaList *list, int64_t start_idx, bool wrap);
-
-  BitMapArea *next();
   int64_t index();
 };
 
