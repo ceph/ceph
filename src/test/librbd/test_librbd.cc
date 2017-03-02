@@ -4552,6 +4552,25 @@ TEST_F(TestLibRBD, Mirror) {
 
   ASSERT_EQ(0, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_IMAGE));
   ASSERT_EQ(0, rbd.mirror_mode_get(ioctx, &mirror_mode));
+
+  // Add some images to the pool
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, "parent", 2 << 20, &order));
+  bool old_format;
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&old_format, &features));
+  if ((features & RBD_FEATURE_LAYERING) != 0) {
+    librbd::Image parent;
+    ASSERT_EQ(0, rbd.open(ioctx, parent, "parent", NULL));
+    ASSERT_EQ(0, parent.snap_create("parent_snap"));
+    ASSERT_EQ(0, parent.close());
+    ASSERT_EQ(0, rbd.open(ioctx, parent, "parent", "parent_snap"));
+    ASSERT_EQ(0, parent.snap_protect("parent_snap"));
+    ASSERT_EQ(0, parent.close());
+    ASSERT_EQ(0, rbd.clone(ioctx, "parent", "parent_snap", ioctx, "child",
+                           features, &order));
+  }
+
   ASSERT_EQ(RBD_MIRROR_MODE_IMAGE, mirror_mode);
 
   ASSERT_EQ(0, rbd.mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL));

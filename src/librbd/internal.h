@@ -215,7 +215,7 @@ namespace librbd {
   int mirror_image_status_summary(IoCtx& io_ctx,
       std::map<mirror_image_status_state_t, int> *states);
 
-  int mirror_image_enable(ImageCtx *ictx);
+  int mirror_image_enable(ImageCtx *ictx, bool relax_same_pool_parent_check);
   int mirror_image_disable(ImageCtx *ictx, bool force);
   int mirror_image_promote(ImageCtx *ictx, bool force);
   int mirror_image_demote(ImageCtx *ictx);

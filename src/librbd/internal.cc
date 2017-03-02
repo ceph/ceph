@@ -3089,7 +3089,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return cls_client::metadata_list(&ictx->md_ctx, ictx->header_oid, start, max, pairs);
   }
 
-  int mirror_image_enable(ImageCtx *ictx) {
+  int mirror_image_enable(ImageCtx *ictx, bool relax_same_pool_parent_check) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "mirror_image_enable " << ictx << dendl;
 
@@ -3112,16 +3112,25 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -EINVAL;
     }
 
-    // is mirroring not enabled for the parent? 
+    // is mirroring not enabled for the parent?
     {
       RWLock::RLocker l(ictx->parent_lock);
       ImageCtx *parent = ictx->parent;
-      if(parent) {
-        cls::rbd::MirrorImage mirror_image_internal;
-        r = cls_client::mirror_image_get(&(parent->md_ctx), parent->id, &mirror_image_internal);
-        if (r == -ENOENT) {
-          lderr(cct) << "mirroring is not enabled for the parent" << dendl;
-          return -EINVAL;
+      if (parent) {
+        if (relax_same_pool_parent_check &&
+            parent->md_ctx.get_id() == ictx->md_ctx.get_id()) {
+          if (!parent->test_features(RBD_FEATURE_JOURNALING)) {
+            lderr(cct) << "journaling is not enabled for the parent" << dendl;
+            return -EINVAL;
+          }
+        } else {
+          cls::rbd::MirrorImage mirror_image_internal;
+          r = cls_client::mirror_image_get(&(parent->md_ctx), parent->id,
+                                           &mirror_image_internal);
+          if (r == -ENOENT) {
+            lderr(cct) << "mirroring is not enabled for the parent" << dendl;
+            return -EINVAL;
+          }
         }
       }
     }
@@ -3627,7 +3636,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
             return r;
           }
 
-          r = mirror_image_enable(img_ctx);
+          r = mirror_image_enable(img_ctx, true);
           if (r < 0) {
             lderr(cct) << "error enabling mirroring for image "
                        << img_pair.first << ": " << cpp_strerror(r) << dendl;
