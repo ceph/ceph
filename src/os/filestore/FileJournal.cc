@@ -1464,7 +1464,6 @@ void FileJournal::write_finish_thread_entry()
     }
 
     {
-      Mutex::Locker locker(aio_lock);
       for (int i=0; i<r; i++) {
 	aio_info *ai = (aio_info *)event[i].obj;
 	if (event[i].res != ai->len) {
@@ -1489,23 +1488,30 @@ void FileJournal::write_finish_thread_entry()
  */
 void FileJournal::check_aio_completion()
 {
-  assert(aio_lock.is_locked());
   dout(20) << "check_aio_completion" << dendl;
 
   bool signal = false;
   uint64_t new_journaled_seq = 0;
 
-  list<aio_info>::iterator p = aio_queue.begin();
-  while (p != aio_queue.end() && p->done) {
-    dout(20) << "check_aio_completion completed seq " << p->seq << " "
-	     << p->off << "~" << p->len << dendl;
-    if (p->seq) {
-      new_journaled_seq = p->seq;
+  {
+    Mutex::Locker locker(aio_lock);
+    list<aio_info>::iterator p = aio_queue.begin();
+    while (p != aio_queue.end() && p->done) {
+      dout(20) << "check_aio_completion completed seq " << p->seq << " "
+	<< p->off << "~" << p->len << dendl;
+      if (p->seq) {
+	new_journaled_seq = p->seq;
+      }
+      aio_num--;
+      aio_bytes -= p->len;
+      aio_queue.erase(p++);
+      signal = true;
     }
-    aio_num--;
-    aio_bytes -= p->len;
-    aio_queue.erase(p++);
-    signal = true;
+
+    if (signal) {
+      // maybe write queue was waiting for aio count to drop?
+      aio_cond.Signal();
+    }
   }
 
   if (new_journaled_seq) {
@@ -1526,11 +1532,7 @@ void FileJournal::check_aio_completion()
       }
     }
   }
-  if (signal) {
-    // maybe write queue was waiting for aio count to drop?
-    aio_cond.Signal();
   }
-}
 #endif
 
 int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) {
