@@ -12,7 +12,7 @@ explore Ceph functionality.
 As a first exercise, create a Ceph Storage Cluster with one Ceph Monitor and two
 Ceph OSD Daemons. Once the cluster reaches a ``active + clean`` state, expand it
 by adding a third Ceph OSD Daemon, a Metadata Server and two more Ceph Monitors.
-For best results, create a directory on your admin node node for maintaining the
+For best results, create a directory on your admin node for maintaining the
 configuration files and keys that ``ceph-deploy`` generates for your cluster. ::
 
 	mkdir my-cluster
@@ -56,7 +56,7 @@ configuration details, perform the following steps using ``ceph-deploy``.
 
 	ceph-deploy new {initial-monitor-node(s)}
 
-   For example::
+   Specify node(s) as hostname, fqdn or hostname:fqdn. For example::
 
 	ceph-deploy new node1
 
