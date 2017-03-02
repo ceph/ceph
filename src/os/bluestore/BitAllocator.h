@@ -253,26 +253,20 @@ public:
 class BitMapAreaList {
 
 private:
-  BitMapArea **m_items;
-  int64_t m_num_items;
+  std::vector<BitMapArea*> m_items;
 
 public:
-  BitMapArea *get_nth_item(int64_t idx) {
+  BitMapAreaList(std::vector<BitMapArea*>&& m_items)
+    : m_items(std::move(m_items)) {
+  }
+
+  BitMapArea *get_nth_item(const int64_t idx) {
     return m_items[idx];
   }
 
-   BitMapArea ** get_item_list() {
-    return m_items;
-  }
-
-  int64_t size() {
-    return m_num_items;
-  }
-  BitMapAreaList(BitMapArea **list, int64_t len);
-  BitMapAreaList(BitMapArea **list, int64_t len, int64_t marker);
-
-  BitMapArea **get_list() {
-    return m_items;
+  /* FIXME: we really should use size_t. */
+  int64_t size() const {
+    return m_items.size();
   }
 };
 

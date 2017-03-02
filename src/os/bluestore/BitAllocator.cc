@@ -624,24 +624,25 @@ void BitMapAreaIN::init(CephContext* const cct,
 
   m_child_size_blocks = level_factor;
 
-  BitMapArea **children = new BitMapArea*[num_child];
+  std::vector<BitMapArea*> children;
+  children.reserve(num_child);
   int i = 0;
   for (i = 0; i < num_child - 1; i++) {
     if (m_level <= 2) {
-      children[i] = new BitMapAreaLeaf(cct, m_child_size_blocks, i, def);
+      children.push_back(new BitMapAreaLeaf(cct, m_child_size_blocks, i, def));
     } else {
-      children[i] = new BitMapAreaIN(cct, m_child_size_blocks, i, def);
+      children.push_back(new BitMapAreaIN(cct, m_child_size_blocks, i, def));
     }
     total_blocks -= m_child_size_blocks;
   }
 
   int last_level = BitMapArea::get_level(cct, total_blocks);
   if (last_level == 1) {
-    children[i] = new BitMapAreaLeaf(cct, total_blocks, i, def);
+    children.push_back(new BitMapAreaLeaf(cct, total_blocks, i, def));
   } else {
-    children[i] = new BitMapAreaIN(cct, total_blocks, i, def);
+    children.push_back(new BitMapAreaIN(cct, total_blocks, i, def));
   }
-  BitMapAreaList *list = new BitMapAreaList(children, num_child);
+  BitMapAreaList *list = new BitMapAreaList(std::move(children));
   m_child_list = list;
   m_num_child = num_child;
 }
@@ -959,12 +960,13 @@ void BitMapAreaLeaf::init(CephContext* const cct,
   alloc_assert(num_child);
   m_child_size_blocks = total_blocks / num_child;
 
-  BitMapArea **children = new BitMapArea*[num_child];
+  std::vector<BitMapArea*> children;
+  children.reserve(num_child);
   for (int i = 0; i < num_child; i++) {
-    children[i] = new BitMapZone(cct, m_child_size_blocks, i, def);
+    children.emplace_back(new BitMapZone(cct, m_child_size_blocks, i, def));
   }
 
-  BitMapAreaList *list = new BitMapAreaList(children, num_child);
+  BitMapAreaList *list = new BitMapAreaList(std::move(children));
 
   m_child_list = list;
   m_num_child = num_child;
@@ -982,7 +984,6 @@ BitMapAreaLeaf::~BitMapAreaLeaf()
     delete child;
   }
 
-  delete [] list->get_item_list();
   delete list;
 
   unlock();
@@ -1075,16 +1076,6 @@ void BitMapAreaLeaf::free_blocks_int(int64_t start_block, int64_t num_blocks)
     start_block += falling_in_child;
     num_blocks -= falling_in_child;
   }
-}
-
-/*
- * BitMapArea List related functions
- */
-BitMapAreaList::BitMapAreaList(BitMapArea **list, int64_t len)
-{
-  m_items = list;
-  m_num_items = len;
-  return;
 }
 
 /*
@@ -1192,7 +1183,6 @@ BitAllocator::~BitAllocator()
     delete child;
   }
 
-  delete [] list->get_item_list();
   delete list;
 
   unlock();
