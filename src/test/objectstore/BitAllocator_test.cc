@@ -115,16 +115,18 @@ TEST(BitAllocator, test_bmap_iter)
   /*
    * BitMapArea Iter tests.
    */
-  BitMapArea *area = NULL;
-  BitMapArea **children = new BitMapArea*[num_items];
+  BitMapArea *area = nullptr;
+  std::vector<BitMapArea*> children;
+  children.reserve(num_items);
   for (i = 0; i < num_items; i++) {
-    children[i] = new BitMapAreaLeaf(
+    children.emplace_back(new BitMapAreaLeaf(
       g_ceph_context,
-      BitMapArea::get_span_size(g_ceph_context), i, false);
+      BitMapArea::get_span_size(g_ceph_context), i, false));
   }
 
   off = 0;
-  BitMapAreaList *area_list = new BitMapAreaList(children, num_items);
+  BitMapAreaList *area_list = \
+    new BitMapAreaList(std::vector<BitMapArea*>(children));
   BmapEntityListIter area_iter = BmapEntityListIter(
                                 area_list, (int64_t) 0);
   i = off;
@@ -160,7 +162,6 @@ TEST(BitAllocator, test_bmap_iter)
   for (i = 0; i < num_items; i++)
     delete children[i];
 
-  delete[] children;
   delete area_list;
 }
 
