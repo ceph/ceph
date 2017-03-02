@@ -67,7 +67,6 @@ class RDMADispatcher : public CephContext::ForkWatcher {
 
   std::thread t;
   CephContext *cct;
-  Infiniband* ib;
   Infiniband::CompletionQueue* tx_cq;
   Infiniband::CompletionQueue* rx_cq;
   Infiniband::CompletionChannel *tx_cc, *rx_cc;
@@ -115,7 +114,7 @@ class RDMADispatcher : public CephContext::ForkWatcher {
  public:
   PerfCounters *perf_logger;
 
-  explicit RDMADispatcher(CephContext* c, Infiniband* i, RDMAStack* s);
+  explicit RDMADispatcher(CephContext* c, RDMAStack* s);
   virtual ~RDMADispatcher();
   void handle_async_event();
   void polling();
@@ -166,9 +165,7 @@ class RDMAWorker : public Worker {
   typedef Infiniband::MemoryManager MemoryManager;
   typedef std::vector<Chunk*>::iterator ChunkIter;
   RDMAStack *stack;
-  Infiniband *infiniband;
   EventCallbackRef tx_handler;
-  MemoryManager *memory_manager;
   std::list<RDMAConnectedSocketImpl*> pending_sent_conns;
   RDMADispatcher* dispatcher = nullptr;
   Mutex lock;
@@ -196,7 +193,6 @@ class RDMAWorker : public Worker {
     pending_sent_conns.remove(o);
   }
   void handle_pending_message();
-  void set_ib(Infiniband* ib) { infiniband = ib; }
   void set_stack(RDMAStack *s) { stack = s; }
   void notify_worker() {
     center.dispatch_event_external(tx_handler);
