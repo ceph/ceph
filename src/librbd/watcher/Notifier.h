@@ -43,7 +43,7 @@ private:
   };
 
   ContextWQ *m_work_queue;
-  librados::IoCtx m_ioctx;
+  librados::IoCtx &m_ioctx;
   CephContext *m_cct;
   std::string m_oid;
 

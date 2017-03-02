@@ -22,12 +22,11 @@ namespace journal {
 
 template<typename I>
 RemoveRequest<I>::RemoveRequest(IoCtx &ioctx, const std::string &image_id,
-                                              const std::string &client_id,
-                                              ContextWQ *op_work_queue,
-                                              Context *on_finish)
-  : m_image_id(image_id), m_image_client_id(client_id),
+                                const std::string &client_id,
+                                ContextWQ *op_work_queue,
+                                Context *on_finish)
+  : m_ioctx(ioctx), m_image_id(image_id), m_image_client_id(client_id),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
-  m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 }
 
