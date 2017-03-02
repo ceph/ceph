@@ -342,6 +342,13 @@ namespace rgw {
 	break;
 	}
       }
+
+      if (mask & RGW_SETATTR_ATIME)
+	state.atime = st->st_atim;
+      if (mask & RGW_SETATTR_MTIME)
+	state.mtime = st->st_mtim;
+      if (mask & RGW_SETATTR_CTIME)
+	state.ctime = st->st_ctim;
     }
 
     int stat(struct stat* st) {
