@@ -22,7 +22,7 @@
 
 #include "unistd.h"
 
-#include <string>
+#include <array>
 #include <iostream>
 #include <stdexcept>
 #include <stdio.h>
