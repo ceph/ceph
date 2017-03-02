@@ -83,7 +83,6 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
   if (sd < 0) {
     return -errno;
   }
-  ldout(cct, 20) << __func__ << " accepted a new QP, tcp_fd: " << sd << dendl;
 
   net.set_close_on_exec(sd);
   int r = net.set_nonblock(sd);
