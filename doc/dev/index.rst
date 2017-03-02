@@ -1170,7 +1170,7 @@ tutorial called `Get Started with Docker Engine for Linux
 
 Once Docker is up and running, install ``ceph-workbench`` by following the
 `Installation instructions in the ceph-workbench documentation
-<http://ceph-workbench.readthedocs.org/en/latest/#installation>`_::
+<http://ceph-workbench.readthedocs.org/en/latest/#installation>`_.
 
 Linking ceph-workbench with your OpenStack tenant
 -------------------------------------------------

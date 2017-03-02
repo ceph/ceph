@@ -322,7 +322,7 @@ For ``bind``, add a wildcard to the DNS record. For example::
  *       IN      CNAME   @
 
 Restart your DNS server and ping your server with a subdomain to ensure that
-your ``ceph-radosgw`` daemon can process the subdomain requests::
+your DNS configuration works as expected::
 
  ping mybucket.{hostname}
 
@@ -518,7 +518,7 @@ You need to write and run a Python test script for verifying S3 access. The S3
 access test script will connect to the ``radosgw``, create a new bucket and
 list all buckets. The values for ``aws_access_key_id`` and
 ``aws_secret_access_key`` are taken from the values of ``access_key`` and
-``secret_key`` returned by the ``radosgw_admin`` command.
+``secret_key`` returned by the ``radosgw-admin`` command.
 
 Execute the following steps:
 
@@ -552,7 +552,7 @@ Execute the following steps:
 
 
    Replace ``{hostname}`` with the hostname of the host where you have
-   configured the gateway service i.e., the ``gateway host``. Replace {port}
+   configured the gateway service i.e., the ``gateway host``. Replace ``{port}``
    with the port number you are using with Civetweb.
 
 #. Run the script::
