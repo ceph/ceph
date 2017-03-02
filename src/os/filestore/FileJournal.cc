@@ -1492,7 +1492,7 @@ void FileJournal::check_aio_completion()
   assert(aio_lock.is_locked());
   dout(20) << "check_aio_completion" << dendl;
 
-  bool completed_something = false, signal = false;
+  bool signal = false;
   uint64_t new_journaled_seq = 0;
 
   list<aio_info>::iterator p = aio_queue.begin();
@@ -1501,7 +1501,6 @@ void FileJournal::check_aio_completion()
 	     << p->off << "~" << p->len << dendl;
     if (p->seq) {
       new_journaled_seq = p->seq;
-      completed_something = true;
     }
     aio_num--;
     aio_bytes -= p->len;
@@ -1509,7 +1508,7 @@ void FileJournal::check_aio_completion()
     signal = true;
   }
 
-  if (completed_something) {
+  if (new_journaled_seq) {
     // kick finisher?
     //  only if we haven't filled up recently!
     Mutex::Locker locker(finisher_lock);
