@@ -450,8 +450,7 @@ public:
     return false;
   }
 
-  bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock);
-  void child_unlock(BitMapArea *child);
+  bool child_check_n_lock(BitMapZone* child, int64_t required, bool lock);
 
   int64_t alloc_blocks_int(int64_t num_blocks, int64_t hint, int64_t *start_block);
   int64_t alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc, int64_t hint,
