@@ -785,6 +785,10 @@ TEST_F(TestMockImageReplayer, DecodeError) {
   // fire
   m_image_replayer->handle_replay_ready();
   ASSERT_EQ(0, close_ctx.wait());
+
+  while (!m_image_replayer->is_stopped()) {
+    usleep(1000);
+  }
 }
 
 TEST_F(TestMockImageReplayer, DelayedReplay) {
