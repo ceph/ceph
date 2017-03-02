@@ -10,6 +10,9 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
+#include "auth/Crypto.h"
+#include "include/ceph_fs.h"
+#include <boost/tokenizer.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 
@@ -3404,7 +3407,8 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   /* neither keystone and rados enabled; warn and exit! */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados &&
       !store->ctx()->_conf->rgw_s3_auth_use_keystone &&
-      !store->ctx()->_conf->rgw_s3_auth_use_ldap) {
+      !store->ctx()->_conf->rgw_s3_auth_use_ldap &&
+      !store->ctx()->_conf->rgw_s3_auth_use_sts) {
     dout(0) << "WARNING: no authorization backend enabled! Users will never authenticate." << dendl;
     return -EPERM;
   }
@@ -3597,7 +3601,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   uint64_t now = ceph_clock_now();
 
   /* v4 requires rados auth */
-  if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
+  if (!store->ctx()->_conf->rgw_s3_auth_use_rados &&
+      !store->ctx()->_conf->rgw_s3_auth_use_sts) {
     return -EPERM;
   }
 
@@ -3607,6 +3612,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
     return -ENOMEM;
   }
 
+  const char *session_token = nullptr;
   if ((!s->http_auth) || !(*s->http_auth)) {
 
     /* auth ships with req params ... */
@@ -3664,6 +3670,9 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
       return -EPERM;
     }
 
+    if (s->info.args.exists("X-Amz-Security-Token")) {
+      session_token = s->info.args.get("X-Amz-Security-Token").c_str();
+    }
   } else {
 
     /* auth ships in headers ... */
@@ -3722,6 +3731,9 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
       return -EACCES;
     }
     s->aws4_auth->date = d;
+    if (s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
+      session_token = s->info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
+    }
   }
 
   /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
@@ -3749,12 +3761,80 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
 
   dout(10) << "credential scope = " << s->aws4_auth->credential_scope << dendl;
 
+  if (session_token) {
+    //Decode the session token
+    std::string decoded_str = rgw::from_base64(session_token);
+    std::map<std::string, std::string> decoded_token_map;
+
+    // For the time being the key will be part of ceph.conf
+    std::string key = std::move(store->ctx()->_conf->rgw_s3_auth_sts_key);
+
+    //Decrypt the session token
+    std::string decrypted_str;
+    auto* cryptohandler = s->cct->get_crypto_handler(CEPH_CRYPTO_AES);
+    if (! cryptohandler) {
+      return -EPERM;
+    }
+    bufferptr bp(key.c_str(), key.length());
+    int ret = cryptohandler->validate_secret(bp);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "ERROR: Invalid secret key" << dendl;
+      return -EPERM;
+    }
+    string error;
+    auto* keyhandler = cryptohandler->get_key_handler(bp, error);
+    if (! keyhandler) {
+      return -EPERM;
+    }
+    error.clear();
+    bufferlist en_input, dec_output;
+    en_input.append(decoded_str);
+    ret = keyhandler->decrypt(en_input, dec_output, &error);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "ERROR: Decryption failed: " << error << dendl;
+      return -EPERM;
+    } else {
+      dec_output.append('\0');
+      decrypted_str = dec_output.c_str();
+    }
+    //Extract useful info (like expiration time, secret key) from the token
+    boost::char_separator<char> sep("&");
+    boost::tokenizer<boost::char_separator<char>> tokens(decrypted_str, sep);
+    for (const auto& t : tokens) {
+      auto pos = t.find("=");
+      if (pos != string::npos) {
+        std::string key = t.substr(0, pos);
+        std::string value = t.substr(pos + 1, t.size() - 1);
+        decoded_token_map[key] = value;
+      }
+    }
+
+    //Check if the token has expired
+    if (decoded_token_map.find("expiration") != decoded_token_map.end()) {
+      std::string expiration = decoded_token_map["expiration"];
+      if (! expiration.empty()) {
+        const time_t exp = atoll(expiration.c_str());
+        time_t now;
+        time(&now);
+
+        if (now >= exp) {
+          return -EPERM;
+        }
+      }
+    }
+
+    if (decoded_token_map.find("secret_access_key") != decoded_token_map.end()) {
+      s->aws4_auth->secret_access_key = decoded_token_map["secret_access_key"];
+    }
+
+  } else {
   /* grab user information */
 
-  if (rgw_get_user_info_by_access_key(store, s->aws4_auth->access_key_id, *s->user) < 0) {
-    dout(10) << "error reading user info, uid=" << s->aws4_auth->access_key_id
-              << " can't authenticate" << dendl;
-    return -ERR_INVALID_ACCESS_KEY;
+    if (rgw_get_user_info_by_access_key(store, s->aws4_auth->access_key_id, *s->user) < 0) {
+      dout(10) << "error reading user info, uid=" << s->aws4_auth->access_key_id
+                << " can't authenticate" << dendl;
+      return -ERR_INVALID_ACCESS_KEY;
+    }
   }
 
   /*
@@ -4012,43 +4092,46 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
 
   }
 
-  map<string, RGWAccessKey>::iterator iter = s->user->access_keys.find(s->aws4_auth->access_key_id);
-  if (iter == s->user->access_keys.end()) {
-    dout(0) << "ERROR: access key not encoded in user info" << dendl;
-    return -EPERM;
-  }
-
-  RGWAccessKey& k = iter->second;
-
-  if (!k.subuser.empty()) {
-    map<string, RGWSubUser>::iterator uiter = s->user->subusers.find(k.subuser);
-    if (uiter == s->user->subusers.end()) {
-      dout(0) << "NOTICE: could not find subuser: " << k.subuser << dendl;
+  if (s->aws4_auth->secret_access_key.empty()) {
+    map<string, RGWAccessKey>::iterator iter = s->user->access_keys.find(s->aws4_auth->access_key_id);
+    if (iter == s->user->access_keys.end()) {
+      dout(0) << "ERROR: access key not encoded in user info" << dendl;
       return -EPERM;
     }
-    RGWSubUser& subuser = uiter->second;
-    s->perm_mask = subuser.perm_mask;
+
+    RGWAccessKey& k = iter->second;
+
+    if (!k.subuser.empty()) {
+      map<string, RGWSubUser>::iterator uiter = s->user->subusers.find(k.subuser);
+      if (uiter == s->user->subusers.end()) {
+        dout(0) << "NOTICE: could not find subuser: " << k.subuser << dendl;
+        return -EPERM;
+      }
+      RGWSubUser& subuser = uiter->second;
+      s->perm_mask = subuser.perm_mask;
+    } else {
+      s->perm_mask = RGW_PERM_FULL_CONTROL;
+    }
+
+    if (s->user->system) {
+      s->system_request = true;
+      dout(20) << "system request" << dendl;
+      s->info.args.set_system();
+      string euid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
+      rgw_user effective_uid(euid);
+      RGWUserInfo effective_user;
+      if (!effective_uid.empty()) {
+        int ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
+        if (ret < 0) {
+          ldout(s->cct, 0) << "User lookup failed!" << dendl;
+          return -EACCES;
+        }
+        *(s->user) = effective_user;
+      }
+    }
   } else {
     s->perm_mask = RGW_PERM_FULL_CONTROL;
   }
-
-  if (s->user->system) {
-    s->system_request = true;
-    dout(20) << "system request" << dendl;
-    s->info.args.set_system();
-    string euid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
-    rgw_user effective_uid(euid);
-    RGWUserInfo effective_user;
-    if (!effective_uid.empty()) {
-      int ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
-      if (ret < 0) {
-        ldout(s->cct, 0) << "User lookup failed!" << dendl;
-        return -EACCES;
-      }
-      *(s->user) = effective_user;
-    }
-  }
-
   // populate the owner info
   s->owner.set_id(s->user->user_id);
   s->owner.set_name(s->user->display_name);

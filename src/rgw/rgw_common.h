@@ -1657,6 +1657,7 @@ struct rgw_aws4_auth {
   string signing_key;
   char signing_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
   bufferlist bl;
+  string secret_access_key;
 };
 
 struct req_init_state {
