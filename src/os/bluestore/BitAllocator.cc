@@ -1095,7 +1095,9 @@ BitMapAreaLeaf::~BitMapAreaLeaf()
   unlock();
 }
 
-bool BitMapAreaLeaf::child_check_n_lock(BitMapArea *child, int64_t required, bool lock)
+bool BitMapAreaLeaf::child_check_n_lock(BitMapZone* const child,
+                                        const int64_t required,
+                                        const bool lock)
 {
   /* The exhausted check can be performed without acquiring the lock. This
    * is because 1) BitMapZone::is_exhausted() actually operates atomically
@@ -1120,22 +1122,20 @@ bool BitMapAreaLeaf::child_check_n_lock(BitMapArea *child, int64_t required, boo
   return true;
 }
 
-void BitMapAreaLeaf::child_unlock(BitMapArea *child)
-{
-  child->unlock();
-}
-
 int64_t BitMapAreaLeaf::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc, 
                                  int64_t hint, int64_t area_blk_off, ExtentList *block_list)
 {
-  BitMapArea *child = NULL;
+  BitMapZone* child = nullptr;
   int64_t allocated = 0;
   int64_t blk_off = 0;
 
   BmapEntityListIter iter = BmapEntityListIter(
         m_child_list, hint / m_child_size_blocks, false);
 
-  while ((child = (BitMapArea *) iter.next())) {
+  /* We're sure the only element type we aggregate is BitMapZone,
+   * so there is no business to go through vptr and thus prohibit
+   * compiler to inline the stuff. Consult BitMapAreaLeaf::init. */
+  while ((child = static_cast<BitMapZone*>(iter.next()))) {
     if (!child_check_n_lock(child, 1, false)) {
       hint = 0;
       continue;
@@ -1144,7 +1144,7 @@ int64_t BitMapAreaLeaf::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_all
     blk_off = child->get_index() * m_child_size_blocks + area_blk_off;
     allocated += child->alloc_blocks_dis(num_blocks - allocated, min_alloc,
                                          hint % m_child_size_blocks, blk_off, block_list);
-    child_unlock(child);
+    child->unlock();
     if (allocated == num_blocks) {
       break;
     }
