@@ -331,7 +331,10 @@ public:
        */
       return NULL;
     }
-    alloc_assert(cur_idx < m_list->size());
+
+    /* This method should be *really* fast as it's being executed over
+     * and over during traversal of allocators indexes. */
+    alloc_dbg_assert(cur_idx < m_list->size());
     return m_list->get_nth_item(cur_idx);
   }
 
