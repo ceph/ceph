@@ -1537,7 +1537,7 @@ namespace librbd {
 
   int Image::mirror_image_enable() {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::mirror_image_enable(ictx);
+    return librbd::mirror_image_enable(ictx, false);
   }
 
   int Image::mirror_image_disable(bool force) {
@@ -3268,7 +3268,7 @@ extern "C" int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t 
 extern "C" int rbd_mirror_image_enable(rbd_image_t image)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::mirror_image_enable(ictx);
+  return librbd::mirror_image_enable(ictx, false);
 }
 
 extern "C" int rbd_mirror_image_disable(rbd_image_t image, bool force)
