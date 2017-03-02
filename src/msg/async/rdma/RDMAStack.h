@@ -127,7 +127,6 @@ class RDMADispatcher : public CephContext::ForkWatcher {
     }
   }
   RDMAStack* get_stack() { return stack; }
-  RDMAConnectedSocketImpl* get_conn_by_qp(uint32_t qp);
   RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp);
   void erase_qpn(uint32_t qpn);
   Infiniband::CompletionQueue* get_tx_cq() const { return tx_cq; }
