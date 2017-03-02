@@ -256,6 +256,10 @@ private:
   std::vector<BitMapArea*> m_items;
 
 public:
+  /* Must be DefaultConstructible as BitMapAreaIN and derivates employ
+   * a deferred init, sorry. */
+  BitMapAreaList() = default;
+
   BitMapAreaList(std::vector<BitMapArea*>&& m_items)
     : m_items(std::move(m_items)) {
   }
@@ -389,7 +393,7 @@ protected:
   int64_t m_used_blocks;
   int64_t m_reserved_blocks;
   std::mutex m_blocks_lock;
-  BitMapAreaList *m_child_list;
+  BitMapAreaList m_child_list;
 
   bool is_allocated(int64_t start_block, int64_t num_blocks) override;
   bool is_exhausted() override;
