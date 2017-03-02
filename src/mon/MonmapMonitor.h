@@ -44,23 +44,23 @@ class MonmapMonitor : public PaxosService {
   }
   MonMap pending_map; //the pending map awaiting passage
 
-  void create_initial();
+  void create_initial() override;
 
-  void update_from_paxos(bool *need_bootstrap);
+  void update_from_paxos(bool *need_bootstrap) override;
 
-  void create_pending();
+  void create_pending() override;
 
-  void encode_pending(MonitorDBStore::TransactionRef t);
+  void encode_pending(MonitorDBStore::TransactionRef t) override;
   // we always encode the full map; we have no use for full versions
-  virtual void encode_full(MonitorDBStore::TransactionRef t) { }
+  void encode_full(MonitorDBStore::TransactionRef t) override { }
 
-  void on_active();
+  void on_active() override;
   void apply_mon_features(const mon_feature_t& features);
 
   void dump_info(Formatter *f);
 
-  bool preprocess_query(MonOpRequestRef op);
-  bool prepare_update(MonOpRequestRef op);
+  bool preprocess_query(MonOpRequestRef op) override;
+  bool prepare_update(MonOpRequestRef op) override;
 
   bool preprocess_join(MonOpRequestRef op);
   bool prepare_join(MonOpRequestRef op);
@@ -78,9 +78,9 @@ class MonmapMonitor : public PaxosService {
    * Since monitors are pretty
    * important, this implementation will just write 0.0.
    */
-  bool should_propose(double& delay);
+  bool should_propose(double& delay) override;
 
-  void tick();
+  void tick() override;
 
   void check_sub(Subscription *sub);
 

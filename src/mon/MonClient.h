@@ -67,7 +67,7 @@ struct MonClientPinger : public Dispatcher {
     return ret;
   }
 
-  bool ms_dispatch(Message *m) {
+  bool ms_dispatch(Message *m) override {
     Mutex::Locker l(lock);
     if (m->get_type() != CEPH_MSG_PING)
       return false;
@@ -82,14 +82,14 @@ struct MonClientPinger : public Dispatcher {
     m->put();
     return true;
   }
-  bool ms_handle_reset(Connection *con) {
+  bool ms_handle_reset(Connection *con) override {
     Mutex::Locker l(lock);
     done = true;
     ping_recvd_cond.SignalAll();
     return true;
   }
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_handle_refused(Connection *con) {
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override {
     return false;
   }
 };
@@ -171,10 +171,10 @@ private:
 
   std::unique_ptr<AuthMethodList> auth_supported;
 
-  bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_handle_refused(Connection *con) { return false; }
+  bool ms_dispatch(Message *m) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override { return false; }
 
   void handle_monmap(MMonMap *m);
 
@@ -324,7 +324,7 @@ public:
   explicit MonClient(CephContext *cct_);
   MonClient(const MonClient &) = delete;
   MonClient& operator=(const MonClient &) = delete;
-  ~MonClient();
+  ~MonClient() override;
 
   int init();
   void shutdown();
