@@ -193,7 +193,7 @@ void CreateImageRequest<I>::open_remote_parent_image() {
     &CreateImageRequest<I>::handle_open_remote_parent_image>(this);
   OpenImageRequest<I> *request = OpenImageRequest<I>::create(
     m_remote_parent_io_ctx, &m_remote_parent_image_ctx,
-    m_remote_parent_spec.image_id, true, m_work_queue, ctx);
+    m_remote_parent_spec.image_id, true, ctx);
   request->send();
 }
 
@@ -218,8 +218,8 @@ void CreateImageRequest<I>::open_local_parent_image() {
     CreateImageRequest<I>,
     &CreateImageRequest<I>::handle_open_local_parent_image>(this);
   OpenImageRequest<I> *request = OpenImageRequest<I>::create(
-    m_local_parent_io_ctx, &m_local_parent_image_ctx, m_local_parent_spec.image_id,
-    true, m_work_queue, ctx);
+    m_local_parent_io_ctx, &m_local_parent_image_ctx,
+    m_local_parent_spec.image_id, true, ctx);
   request->send();
 }
 
@@ -320,7 +320,7 @@ void CreateImageRequest<I>::close_local_parent_image() {
     CreateImageRequest<I>,
     &CreateImageRequest<I>::handle_close_local_parent_image>(this);
   CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    &m_local_parent_image_ctx, m_work_queue, false, ctx);
+    &m_local_parent_image_ctx, ctx);
   request->send();
 }
 
@@ -342,7 +342,7 @@ void CreateImageRequest<I>::close_remote_parent_image() {
     CreateImageRequest<I>,
     &CreateImageRequest<I>::handle_close_remote_parent_image>(this);
   CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    &m_remote_parent_image_ctx, m_work_queue, false, ctx);
+    &m_remote_parent_image_ctx, ctx);
   request->send();
 }
 

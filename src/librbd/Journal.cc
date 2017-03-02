@@ -344,20 +344,18 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
+  ThreadPool *thread_pool;
+  ContextWQ *op_work_queue;
+  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+
   C_SaferCond cond;
   journal::TagData tag_data(LOCAL_MIRROR_UUID);
-  ContextWQ op_work_queue("librbd::op_work_queue",
-                          cct->_conf->rbd_op_thread_timeout,
-                          ImageCtx::get_thread_pool_instance(cct));
   journal::CreateRequest<I> *req = journal::CreateRequest<I>::create(
     io_ctx, image_id, order, splay_width, object_pool, cls::journal::Tag::TAG_CLASS_NEW,
-    tag_data, IMAGE_CLIENT_ID, &op_work_queue, &cond);
+    tag_data, IMAGE_CLIENT_ID, op_work_queue, &cond);
   req->send();
 
-  int r = cond.wait();
-  op_work_queue.drain();
-
-  return r;
+  return cond.wait();
 }
 
 template <typename I>
@@ -365,18 +363,16 @@ int Journal<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
+  ThreadPool *thread_pool;
+  ContextWQ *op_work_queue;
+  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+
   C_SaferCond cond;
-  ContextWQ op_work_queue("librbd::op_work_queue",
-                          cct->_conf->rbd_op_thread_timeout,
-                          ImageCtx::get_thread_pool_instance(cct));
   journal::RemoveRequest<I> *req = journal::RemoveRequest<I>::create(
-    io_ctx, image_id, IMAGE_CLIENT_ID, &op_work_queue, &cond);
+    io_ctx, image_id, IMAGE_CLIENT_ID, op_work_queue, &cond);
   req->send();
 
-  int r = cond.wait();
-  op_work_queue.drain();
-
-  return r;
+  return cond.wait();
 }
 
 template <typename I>

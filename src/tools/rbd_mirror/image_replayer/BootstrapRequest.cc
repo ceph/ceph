@@ -253,7 +253,7 @@ void BootstrapRequest<I>::open_remote_image() {
       this);
   OpenImageRequest<I> *request = OpenImageRequest<I>::create(
     m_remote_io_ctx, &m_remote_image_ctx, m_remote_image_id, false,
-    m_work_queue, ctx);
+    ctx);
   request->send();
 }
 
@@ -729,7 +729,7 @@ void BootstrapRequest<I>::close_local_image() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_close_local_image>(
       this);
   CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    m_local_image_ctx, m_work_queue, false, ctx);
+    m_local_image_ctx, ctx);
   request->send();
 }
 
@@ -755,7 +755,7 @@ void BootstrapRequest<I>::close_remote_image() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_close_remote_image>(
       this);
   CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    &m_remote_image_ctx, m_work_queue, false, ctx);
+    &m_remote_image_ctx, ctx);
   request->send();
 }
 

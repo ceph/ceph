@@ -24,10 +24,14 @@ private:
   typedef ::librbd::image::TypeTraits<ImageCtxT> TypeTraits;
   typedef typename TypeTraits::ContextWQ ContextWQ;
 public:
-  static RemoveRequest *create(librados::IoCtx &ioctx, const std::string &image_name, const std::string &image_id,
-                               bool force, ProgressContext &prog_ctx, ContextWQ *op_work_queue,
+  static RemoveRequest *create(librados::IoCtx &ioctx,
+                               const std::string &image_name,
+                               const std::string &image_id,
+                               bool force, ProgressContext &prog_ctx,
+                               ContextWQ *op_work_queue,
                                Context *on_finish) {
-    return new RemoveRequest(ioctx, image_name, image_id, force, prog_ctx, op_work_queue, on_finish);
+    return new RemoveRequest(ioctx, image_name, image_id, force, prog_ctx,
+                             op_work_queue, on_finish);
   }
 
   void send();
@@ -38,56 +42,64 @@ private:
    *
    *                                  <start>
    *                                     |
-   *                                     v                      
-   *                                OPEN IMAGE-------------------
-   *                                     |                      | 
+   *                                     v
+   *                                OPEN IMAGE------------------\
+   *                                     |                      |
    *                                     v                      |
-   *	   error		   CHECK EXCLUSIVE LOCK----     |
-   *  _______<_______                    |               |      |
-   * |               |                   v            (aquired) |
-   * |               |            AQUIRE EXCLUSIVE LOCK  |      |
-   * |               |               /   |               |      |
-   * |               |------<-------/    v               |      |
-   * |               |            VALIDATE IMAGE REMOVAL<-      |
+   *	   error		   CHECK EXCLUSIVE LOCK---\     |
+   * /-------<-------\                   |                |     |
+   * |               |                   |            (acquired)|
+   * |               |                   v                |     |
+   * |               |            AQUIRE EXCLUSIVE LOCK   |     |
+   * |               |               /   |                |     |
+   * |               |------<-------/    |                |     |
+   * |               |                   v                |     |
+   * |               |            VALIDATE IMAGE REMOVAL<-/     |
    * |               |                /  |                      v
-   * |               |------<--------/   v             		|
+   * |               \------<--------/   |             		|
+   * |                                   v                      |
    * |                              TRIM IMAGE                  |
    * |                                   |                      |
    * v                                   v                      |
    * |                            REMOVE CHILD                  |
    * |                                   |                      |
    * |                                   v                      v
-   * |--------->------------------>CLOSE IMAGE                  |
+   * \--------->------------------>CLOSE IMAGE                  |
    *                                     |                      |
    * 	   error			 v			|
-   * |------<--------|          SWITCH THREAD CONTEXT<-----------   
+   * /------<--------\              REMOVE HEADER<--------------/
    * | 		     |  	      /  |
-   * |  	     |-------<-------/   v
-   * |               |		   REMOVE HEADER
-   * | 		     |  	      /  |
-   * |  	     |-------<-------/   v
+   * |  	     |-------<-------/   |
+   * |               |                   v
    * |               |              REMOVE JOURNAL
    * | 		     |  	      /  |
-   * |  	     |-------<-------/   v
+   * |  	     |-------<-------/   |
+   * |               |                   v
    * v		     ^          REMOVE OBJECTMAP
    * | 		     |  	      /  |
-   * |  	     |-------<-------/   v
+   * |  	     |-------<-------/   |
+   * |               |                   v
    * |		     |  	  REMOVE MIRROR IMAGE
    * | 		     |  	      /  |
-   * |  	     |-------<-------/   v
+   * |  	     |-------<-------/   |
+   * |               |                   v
    * |               |            REMOVE ID OBJECT
    * | 		     |  	      /  |
-   * |  	     |-------<-------/   v
+   * |  	     |-------<-------/   |
+   * |               |                   v
    * |               |              REMOVE IMAGE
    * | 		     |  	      /  |
-   * |  	     |-------<-------/   v
-   * ------------------->------------<finish>
+   * |  	     \-------<-------/   |
+   * |                                   v
+   * \------------------>------------<finish>
    *
    * @endverbatim
    */
 
-  RemoveRequest(librados::IoCtx &ioctx, const std::string &image_name, const std::string &image_id,
-                bool force, ProgressContext &prog_ctx, ContextWQ *op_work_queue, Context *on_finish);
+  RemoveRequest(librados::IoCtx &ioctx, const std::string &image_name,
+                const std::string &image_id, bool force,
+                ProgressContext &prog_ctx, ContextWQ *op_work_queue,
+                Context *on_finish);
 
   librados::IoCtx &m_ioctx;
   std::string m_image_name;
@@ -146,9 +158,6 @@ private:
 
   void send_close_image(int r);
   Context *handle_send_close_image(int *result);
-
-  void switch_thread_context();
-  void handle_switch_thread_context(int r);
 
   void remove_header();
   Context *handle_remove_header(int *result);

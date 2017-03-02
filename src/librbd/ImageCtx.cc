@@ -54,12 +54,20 @@ namespace {
 
 class ThreadPoolSingleton : public ThreadPool {
 public:
+  ContextWQ *op_work_queue;
+
   explicit ThreadPoolSingleton(CephContext *cct)
     : ThreadPool(cct, "librbd::thread_pool", "tp_librbd", 1,
-                 "rbd_op_threads") {
+                 "rbd_op_threads"),
+      op_work_queue(new ContextWQ("librbd::op_work_queue",
+                                  cct->_conf->rbd_op_thread_timeout,
+                                  this)) {
     start();
   }
   ~ThreadPoolSingleton() override {
+    op_work_queue->drain();
+    delete op_work_queue;
+
     stop();
   }
 };
@@ -199,13 +207,11 @@ struct C_InvalidateCache : public Context {
 
     memset(&header, 0, sizeof(header));
 
-    ThreadPool *thread_pool_singleton = get_thread_pool_instance(cct);
+    ThreadPool *thread_pool;
+    get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
     io_work_queue = new io::ImageRequestWQ(
       this, "librbd::io_work_queue", cct->_conf->rbd_op_thread_timeout,
-      thread_pool_singleton);
-    op_work_queue = new ContextWQ("librbd::op_work_queue",
-                                  cct->_conf->rbd_op_thread_timeout,
-                                  thread_pool_singleton);
+      thread_pool);
 
     if (cct->_conf->rbd_auto_exclusive_lock_until_manual_request) {
       exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
@@ -241,12 +247,10 @@ struct C_InvalidateCache : public Context {
 
     md_ctx.aio_flush();
     data_ctx.aio_flush();
-    op_work_queue->drain();
     io_work_queue->drain();
 
     delete journal_policy;
     delete exclusive_lock_policy;
-    delete op_work_queue;
     delete io_work_queue;
     delete operations;
     delete state;
@@ -1092,11 +1096,14 @@ struct C_InvalidateCache : public Context {
     journal_policy = policy;
   }
 
-  ThreadPool *ImageCtx::get_thread_pool_instance(CephContext *cct) {
+  void ImageCtx::get_thread_pool_instance(CephContext *cct,
+                                          ThreadPool **thread_pool,
+                                          ContextWQ **op_work_queue) {
     ThreadPoolSingleton *thread_pool_singleton;
     cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       thread_pool_singleton, "librbd::thread_pool");
-    return thread_pool_singleton;
+    *thread_pool = thread_pool_singleton;
+    *op_work_queue = thread_pool_singleton->op_work_queue;
   }
 
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,
