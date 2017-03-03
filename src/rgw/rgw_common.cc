@@ -25,6 +25,7 @@
 #include "common/strtol.h"
 #include "include/str_list.h"
 #include "auth/Crypto.h"
+#include "rgw_crypt_sanitize.h"
 
 #include <sstream>
 
@@ -288,7 +289,7 @@ void req_info::init_meta_info(bool *found_bad_meta)
     }
   }
   for (iter = x_meta_map.begin(); iter != x_meta_map.end(); ++iter) {
-    dout(10) << "x>> " << iter->first << ":" << iter->second << dendl;
+    dout(10) << "x>> " << iter->first << ":" << rgw::crypt_sanitize::x_meta_map{iter->first, iter->second} << dendl;
   }
 }
 

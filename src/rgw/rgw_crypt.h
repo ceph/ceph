@@ -9,6 +9,7 @@
 #include <rgw/rgw_op.h>
 #include <rgw/rgw_rest_s3.h>
 #include <boost/utility/string_ref.hpp>
+
 /**
  * \brief Interface for block encryption methods
  *
