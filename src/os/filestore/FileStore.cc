@@ -1993,8 +1993,7 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
   if (cct->_conf->filestore_inject_stall) {
     int orig = cct->_conf->filestore_inject_stall;
     dout(5) << "_do_op filestore_inject_stall " << orig << ", sleeping" << dendl;
-    for (int n = 0; n < cct->_conf->filestore_inject_stall; n++)
-      sleep(1);
+    sleep(orig);
     cct->_conf->set_val("filestore_inject_stall", "0");
     dout(5) << "_do_op done stalling" << dendl;
   }
