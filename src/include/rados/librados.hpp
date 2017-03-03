@@ -1187,6 +1187,9 @@ namespace librados
 
     config_t cct();
 
+    void set_osdmap_full_try();
+    void unset_osdmap_full_try();
+
   private:
     /* You can only get IoCtx instances from Rados */
     IoCtx(IoCtxImpl *io_ctx_impl_);
