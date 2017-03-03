@@ -157,7 +157,7 @@ int ErasureCodeNonRegression::run_create()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
+			      g_conf->get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
@@ -229,7 +229,7 @@ int ErasureCodeNonRegression::run_check()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
+			      g_conf->get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
