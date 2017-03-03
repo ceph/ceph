@@ -136,13 +136,16 @@ void PurgeQueue::open(Context *completion)
       dout(1) << "Purge Queue not found, assuming this is an upgrade and "
                  "creating it." << dendl;
       create(completion);
-    } else {
+    } else if (r == 0) {
       Mutex::Locker l(lock);
       dout(4) << "open complete" << dendl;
       if (r == 0) {
         journaler.set_writeable();
       }
       completion->complete(r);
+    } else {
+      derr << "Error " << r << " loading Journaler" << dendl;
+      on_error->complete(0);
     }
   }));
 }
