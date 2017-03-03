@@ -75,7 +75,7 @@ class ServerDispatcher : public Dispatcher {
     op_wq(30, 30, &op_tp) {
     op_tp.start();
   }
-  ~ServerDispatcher() {
+  ~ServerDispatcher() override {
     op_tp.stop();
   }
   bool ms_can_fast_dispatch_any() const override { return true; }

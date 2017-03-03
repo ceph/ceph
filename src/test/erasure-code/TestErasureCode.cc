@@ -31,7 +31,7 @@ public:
 
   ErasureCodeTest(unsigned int _k, unsigned int _m, unsigned int _chunk_size) :
     k(_k), m(_m), chunk_size(_chunk_size) {}
-  ~ErasureCodeTest() {}
+  ~ErasureCodeTest() override {}
 
   int init(ErasureCodeProfile &profile, ostream *ss) override {
     return 0;

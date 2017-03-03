@@ -26,7 +26,7 @@ public:
     return m_mock_client;
   }
 
-  virtual TestIoCtxImpl *clone() {
+  TestIoCtxImpl *clone() override {
     TestIoCtxImpl *io_ctx_impl = new ::testing::NiceMock<MockTestMemIoCtxImpl>(
       m_mock_client, m_client, get_pool_id(), get_pool_name(), get_pool());
     io_ctx_impl->set_snap_read(get_snap_read());

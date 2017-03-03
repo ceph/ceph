@@ -39,7 +39,7 @@ public:
     array_lock.Unlock();
   }
 
-  ~TestContext()
+  ~TestContext() override
   {
   }
 
@@ -63,7 +63,7 @@ public:
     array_lock.Unlock();
   }
 
-  ~StrictOrderTestContext()
+  ~StrictOrderTestContext() override
   {
   }
 };
