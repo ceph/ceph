@@ -205,6 +205,18 @@ public:
     const SequencerPosition *spos=0
     );
 
+  int rename(
+    const ghobject_t &from,
+    const ghobject_t &to,
+    const SequencerPosition *spos=0
+    );
+
+  int legacy_clone(
+    const ghobject_t &oid,
+    const ghobject_t &target,
+    const SequencerPosition *spos=0
+    );
+
   /// Read initial state from backing store
   int init(bool upgrade = false);
 
