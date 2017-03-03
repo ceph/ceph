@@ -35,13 +35,6 @@ struct HealthService : public QuorumService
   }
 
   virtual bool service_dispatch_op(MonOpRequestRef op) = 0;
-
-public:
-  void get_health(Formatter *f,
-			  list<pair<health_status_t,string> >& summary,
-			  list<pair<health_status_t,string> > *detail) override = 0;
-  int get_type() override = 0;
-  string get_name() const override = 0;
 };
 
 #endif // CEPH_MON_HEALTH_SERVICE_H
