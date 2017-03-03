@@ -52,7 +52,7 @@ public:
   {
   }
 
-  ~RadosDeleteObjectsR()
+  ~RadosDeleteObjectsR() override
   {
   }
 
@@ -137,7 +137,7 @@ public:
   {
   }
 
-  ~RadosAddObjectsR()
+  ~RadosAddObjectsR() override
   {
   }
 
