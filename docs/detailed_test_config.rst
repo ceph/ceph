@@ -43,6 +43,7 @@ the nodes & use the live cluster ad hoc), might look like this::
     - ceph:
     - ceph-fuse: [client.0]
     - interactive:
+    repo: git://git.ceph.com/ceph.git
 
 The number of entries under ``roles`` and ``targets`` must match.
 
