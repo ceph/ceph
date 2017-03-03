@@ -93,19 +93,23 @@ void BreakRequest<I>::handle_get_watchers(int r) {
     return;
   }
 
+  bool found_alive_locker = false;
   for (auto &watcher : m_watchers) {
+    ldout(m_cct, 20) << "watcher=["
+                     << "addr=" << watcher.addr << ", "
+                     << "entity=client." << watcher.watcher_id << "]" << dendl;
+
     if ((strncmp(m_locker.address.c_str(),
                  watcher.addr, sizeof(watcher.addr)) == 0) &&
         (m_locker.handle == watcher.cookie)) {
       ldout(m_cct, 10) << "lock owner is still alive" << dendl;
-
-      if (m_force_break_lock) {
-        break;
-      } else {
-        finish(-EAGAIN);
-        return;
-      }
+      found_alive_locker = true;
     }
+  }
+
+  if (!m_force_break_lock && found_alive_locker) {
+    finish(-EAGAIN);
+    return;
   }
 
   send_blacklist();
