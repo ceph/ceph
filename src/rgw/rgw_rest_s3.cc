@@ -35,6 +35,7 @@
 #include "rgw_token.h"
 #include "rgw_rest_role.h"
 #include "rgw_crypt.h"
+#include "rgw_crypt_sanitize.h"
 
 #include "include/assert.h"
 
@@ -4423,11 +4424,12 @@ rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
   if (! rgw_create_s3_canonical_header(s->info, &header_time, string_to_sign,
         qsr)) {
     ldout(cct, 10) << "failed to create the canonized auth header\n"
-                   << string_to_sign << dendl;
+                   << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
     throw -EPERM;
   }
 
-  ldout(cct, 10) << "string_to_sign:\n" << string_to_sign << dendl;
+  ldout(cct, 10) << "string_to_sign:\n"
+                 << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
 
   if (! is_time_skew_ok(header_time, qsr)) {
     throw -ERR_REQUEST_TIME_SKEWED;
@@ -4552,7 +4554,6 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(const std::string& access_key
       throw -EPERM;
     }
   }*/
-
 
   const auto iter = user_info.access_keys.find(access_key_id);
   if (iter == std::end(user_info.access_keys)) {

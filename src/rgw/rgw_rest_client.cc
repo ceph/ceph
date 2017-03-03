@@ -11,6 +11,7 @@
 #include "common/armor.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
+#include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -219,7 +220,7 @@ int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info&
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
     map<string, string>::iterator i;
     for (i = m.begin(); i != m.end(); ++i) {
-      ldout(cct, 20) << "> " << i->first << " -> " << i->second << dendl;
+      ldout(cct, 20) << "> " << i->first << " -> " << rgw::crypt_sanitize::x_meta_map{i->first, i->second} << dendl;
     }
   }
 
