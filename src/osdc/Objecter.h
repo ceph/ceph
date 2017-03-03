@@ -1336,6 +1336,12 @@ public:
       return tid < other.tid;
     }
 
+    bool respects_full() const {
+      return
+	(target.flags & (CEPH_OSD_FLAG_WRITE | CEPH_OSD_FLAG_RWORDERED)) &&
+	!(target.flags & (CEPH_OSD_FLAG_FULL_TRY | CEPH_OSD_FLAG_FULL_FORCE));
+    }
+
   private:
     ~Op() {
       while (!out_handler.empty()) {
