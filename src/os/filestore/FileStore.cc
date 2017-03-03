@@ -5257,7 +5257,7 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
 
     if (r == 0) {
       // the name changed; link the omap content
-      r = object_map->clone(oldoid, o, &spos);
+      r = object_map->rename(oldoid, o, &spos);
       if (r == -ENOENT)
 	r = 0;
     }

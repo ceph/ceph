@@ -210,8 +210,28 @@ public:
     db->clone(hoid, hoid2);
   }
 
+  void rename(const string &objname, const string &target) {
+    rename(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
+	  ghobject_t(hobject_t(sobject_t(target, CEPH_NOSNAP))));
+  }
+
+  void rename(ghobject_t hoid,
+	     ghobject_t hoid2) {
+    db->rename(hoid, hoid2);
+  }
+
   void clear(const string &objname) {
     clear(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))));
+  }
+
+  void legacy_clone(const string &objname, const string &target) {
+    legacy_clone(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
+	  ghobject_t(hobject_t(sobject_t(target, CEPH_NOSNAP))));
+  }
+
+  void legacy_clone(ghobject_t hoid,
+	     ghobject_t hoid2) {
+    db->legacy_clone(hoid, hoid2);
   }
 
   void clear(ghobject_t hoid) {
@@ -776,6 +796,128 @@ TEST_F(ObjectMapTest, OddEvenClone) {
   }
 
   db->clone(hoid, hoid2);
+
+  int r = 0;
+  for (unsigned i = 0; i < 1000; ++i) {
+    string result;
+    r = tester.get_key(hoid, "foo" + num_str(i), &result);
+    ASSERT_EQ(1, r);
+    ASSERT_EQ("bar" + num_str(i), result);
+    r = tester.get_key(hoid2, "foo" + num_str(i), &result);
+    ASSERT_EQ(1, r);
+    ASSERT_EQ("bar" + num_str(i), result);
+
+    if (i % 2) {
+      tester.remove_key(hoid, "foo" + num_str(i));
+    } else {
+      tester.remove_key(hoid2, "foo" + num_str(i));
+    }
+  }
+
+  for (unsigned i = 0; i < 1000; ++i) {
+    string result;
+    string result2;
+    r = tester.get_key(hoid, "foo" + num_str(i), &result);
+    int r2 = tester.get_key(hoid2, "foo" + num_str(i), &result2);
+    if (i % 2) {
+      ASSERT_EQ(0, r);
+      ASSERT_EQ(1, r2);
+      ASSERT_EQ("bar" + num_str(i), result2);
+    } else {
+      ASSERT_EQ(0, r2);
+      ASSERT_EQ(1, r);
+      ASSERT_EQ("bar" + num_str(i), result);
+    }
+  }
+
+  {
+    ObjectMap::ObjectMapIterator iter = db->get_iterator(hoid);
+    iter->seek_to_first();
+    for (unsigned i = 0; i < 1000; ++i) {
+      if (!(i % 2)) {
+	ASSERT_TRUE(iter->valid());
+	ASSERT_EQ("foo" + num_str(i), iter->key());
+	iter->next();
+      }
+    }
+  }
+
+  {
+    ObjectMap::ObjectMapIterator iter2 = db->get_iterator(hoid2);
+    iter2->seek_to_first();
+    for (unsigned i = 0; i < 1000; ++i) {
+      if (i % 2) {
+	ASSERT_TRUE(iter2->valid());
+	ASSERT_EQ("foo" + num_str(i), iter2->key());
+	iter2->next();
+      }
+    }
+  }
+
+  db->clear(hoid);
+  db->clear(hoid2);
+}
+
+TEST_F(ObjectMapTest, Rename) {
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+  ghobject_t hoid2(hobject_t(sobject_t("foo2", CEPH_NOSNAP)));
+
+  for (unsigned i = 0; i < 1000; ++i) {
+    tester.set_key(hoid, "foo" + num_str(i), "bar" + num_str(i));
+  }
+
+  db->rename(hoid, hoid2);
+  // Verify rename where target exists
+  db->clone(hoid2, hoid);
+  db->rename(hoid, hoid2);
+
+  int r = 0;
+  for (unsigned i = 0; i < 1000; ++i) {
+    string result;
+    r = tester.get_key(hoid2, "foo" + num_str(i), &result);
+    ASSERT_EQ(1, r);
+    ASSERT_EQ("bar" + num_str(i), result);
+
+    if (i % 2) {
+      tester.remove_key(hoid2, "foo" + num_str(i));
+    }
+  }
+
+  for (unsigned i = 0; i < 1000; ++i) {
+    string result;
+    r = tester.get_key(hoid2, "foo" + num_str(i), &result);
+    if (i % 2) {
+      ASSERT_EQ(0, r);
+    } else {
+      ASSERT_EQ(1, r);
+      ASSERT_EQ("bar" + num_str(i), result);
+    }
+  }
+
+  {
+    ObjectMap::ObjectMapIterator iter = db->get_iterator(hoid2);
+    iter->seek_to_first();
+    for (unsigned i = 0; i < 1000; ++i) {
+      if (!(i % 2)) {
+	ASSERT_TRUE(iter->valid());
+	ASSERT_EQ("foo" + num_str(i), iter->key());
+	iter->next();
+      }
+    }
+  }
+
+  db->clear(hoid2);
+}
+
+TEST_F(ObjectMapTest, OddEvenOldClone) {
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+  ghobject_t hoid2(hobject_t(sobject_t("foo2", CEPH_NOSNAP)));
+
+  for (unsigned i = 0; i < 1000; ++i) {
+    tester.set_key(hoid, "foo" + num_str(i), "bar" + num_str(i));
+  }
+
+  db->legacy_clone(hoid, hoid2);
 
   int r = 0;
   for (unsigned i = 0; i < 1000; ++i) {
