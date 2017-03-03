@@ -3002,7 +3002,7 @@ CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
     ss << pg;
     auto s = ss.str();
     unsigned rl = s.length() + 1;
-    if (len >= rl) {
+    if (b && len >= rl) {
       tracepoint(librados, rados_inconsistent_pg_list_pg, s.c_str());
       strncat(b, s.c_str(), rl);
       b += rl;
