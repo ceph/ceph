@@ -480,33 +480,47 @@ private:
   uint64_t m_offset;
 };
 
+static int decode_and_set_image_option(int fd, uint64_t imageopt, librbd::ImageOptions& opts)
+{
+  int r;
+  char buf[sizeof(uint64_t)];
+
+  r = safe_read_exact(fd, buf, sizeof(buf));
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  bufferlist::iterator it;
+  it = bl.begin();
+
+  uint64_t val;
+  ::decode(val, it);
+
+  if (opts.get(imageopt, &val) != 0) {
+    opts.set(imageopt, val);
+  }
+
+  return 0;
+}
+
 static int do_import_header(int fd, int import_format, uint64_t &size, librbd::ImageOptions& opts)
 {
-  int r = 0;
-  char image_buf[utils::RBD_IMAGE_BANNER_V2.size() + 1];
-
   // There is no header in v1 image.
-  if (import_format == 1)
-    return r;
+  if (import_format == 1) {
+    return 0;
+  }
 
   if (fd == STDIN_FILENO || size < utils::RBD_IMAGE_BANNER_V2.size()) {
-    r = -EINVAL;
-    return r;
-  }
-  r = safe_read_exact(fd, image_buf, utils::RBD_IMAGE_BANNER_V2.size());
-  if (r < 0)
-    return r;
-
-  image_buf[utils::RBD_IMAGE_BANNER_V2.size()] = '\0';
-  if (strcmp(image_buf, utils::RBD_IMAGE_BANNER_V2.c_str())) {
-    // Old format
-    r = -EINVAL;
-    return r;
+    return -EINVAL;
   }
 
-  char buf[8];
-  bufferlist bl;
-  bufferlist::iterator p;
+  int r;
+  r = validate_banner(fd, utils::RBD_IMAGE_BANNER_V2);
+  if (r < 0) {
+    return r;
+  }
 
   // As V1 format for image is already deprecated, import image in V2 by default.
   uint64_t image_format = 2;
@@ -514,99 +528,26 @@ static int do_import_header(int fd, int import_format, uint64_t &size, librbd::I
     opts.set(RBD_IMAGE_OPTION_FORMAT, image_format);
   }
 
-  while (1) {
+  while (r == 0) {
     __u8 tag;
     uint64_t length;
-    r = safe_read_exact(fd, &tag, 1);
-    if (r < 0) {
-      return r;
+    r = read_tag(fd, RBD_EXPORT_IMAGE_END, image_format, &tag, &length);
+    if (r < 0 || tag == RBD_EXPORT_IMAGE_END) {
+      break;
     }
 
-    if (tag == RBD_EXPORT_IMAGE_END) {
-      break;
+    if (tag == RBD_EXPORT_IMAGE_ORDER) {
+      r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_ORDER, opts);
+    } else if (tag == RBD_EXPORT_IMAGE_FEATURES) {
+      r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_FEATURES, opts);
+    } else if (tag == RBD_EXPORT_IMAGE_STRIPE_UNIT) {
+      r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_STRIPE_UNIT, opts);
+    } else if (tag == RBD_EXPORT_IMAGE_STRIPE_COUNT) {
+      r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_STRIPE_COUNT, opts);
     } else {
-      r = safe_read_exact(fd, buf, 8);
-      if (r < 0) {
-	return r;
-      }
-      bl.clear();
-      bl.append(buf, 8);
-      p = bl.begin();
-      ::decode(length, p);
-
-      if (tag == RBD_EXPORT_IMAGE_ORDER) {
-	uint64_t order = 0;
-	r = safe_read_exact(fd, buf, 8);
-	if (r < 0) {
-	  return r;
-	}
-	bl.clear();
-	bl.append(buf, 8);
-	p = bl.begin();
-	::decode(order, p);
-
-	if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
-	  opts.set(RBD_IMAGE_OPTION_ORDER, order);
-	}
-      } else if (tag == RBD_EXPORT_IMAGE_FEATURES) {
-	uint64_t features = 0;
-	r = safe_read_exact(fd, buf, 8);
-	if (r < 0) {
-	  return r;
-	}
-	bl.clear();
-	bl.append(buf, 8);
-	p = bl.begin();
-	::decode(features, p);
-	if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
-	  opts.set(RBD_IMAGE_OPTION_FEATURES, features);
-	}
-      } else if (tag == RBD_EXPORT_IMAGE_STRIPE_UNIT) {
-	uint64_t stripe_unit = 0;
-	r = safe_read_exact(fd, buf, 8);
-	if (r < 0) {
-	  return r;
-	}
-	bl.clear();
-	bl.append(buf, 8);
-	p = bl.begin();
-	::decode(stripe_unit, p);
-	if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0) {
-	  opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
-	}
-      } else if (tag == RBD_EXPORT_IMAGE_STRIPE_COUNT) {
-	uint64_t stripe_count = 0;
-	r = safe_read_exact(fd, buf, 8);
-	if (r < 0) {
-	  return r;
-	}
-	bl.clear();
-	bl.append(buf, 8);
-	p = bl.begin();
-	::decode(stripe_count, p);
-	if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0) {
-	  opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
-	}
-      } else {
-	std::cerr << "rbd: invalid tag in image properties zone: " << tag << "Skip it." << std::endl;
-	if (fd == STDIN_FILENO) {
-	  // read the appending data out to skip this tag.
-	  char buf[4096];
-	  uint64_t len = min(length, uint64_t(4096));
-	  while (len > 0) {
-	    r = safe_read_exact(fd, buf, len);
-	    if (r < 0)
-	      return r;
-	    length -= len;
-	    len = min(length, uint64_t(4096));
-	  }
-	} else {
-	  // lseek to skip this tag
-	  off64_t offs = lseek64(fd, length, SEEK_CUR);
-	  if (offs < 0)
-	    return -errno;
-	}
-      }
+      std::cerr << "rbd: invalid tag in image properties zone: " << tag << "Skip it."
+                << std::endl;
+      r = skip_tag(fd, length);
     }
   }
 
@@ -617,27 +558,21 @@ static int do_import_v2(int fd, librbd::Image &image, uint64_t size,
                         size_t imgblklen, utils::ProgressContext &pc)
 {
   int r = 0;
-  char snap_buf[utils::RBD_IMAGE_DIFFS_BANNER_V2.size() + 1];
-  uint64_t diff_num;
-
-  r = safe_read_exact(fd, snap_buf, utils::RBD_IMAGE_DIFFS_BANNER_V2.size());
-  if (r < 0)
+  r = validate_banner(fd, utils::RBD_IMAGE_DIFFS_BANNER_V2);
+  if (r < 0) {
     return r;
-  snap_buf[utils::RBD_IMAGE_DIFFS_BANNER_V2.size()] = '\0';
-  if (strcmp(snap_buf, utils::RBD_IMAGE_DIFFS_BANNER_V2.c_str())) {
-    cerr << "Incorrect RBD_IMAGE_DIFFS_BANNER." << snap_buf <<std::endl;
-    return -EINVAL;
-  } else {
-    char buf[8];
-    r = safe_read_exact(fd, buf, 8);
-    if (r < 0) {
-      return r;
-    }
-    bufferlist bl;
-    bl.append(buf, 8);
-    bufferlist::iterator p = bl.begin();
-    ::decode(diff_num, p);
   }
+
+  char buf[sizeof(uint64_t)];
+  r = safe_read_exact(fd, buf, sizeof(buf));
+  if (r < 0) {
+    return r;
+  }
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  bufferlist::iterator p = bl.begin();
+  uint64_t diff_num;
+  ::decode(diff_num, p);
 
   for (size_t i = 0; i < diff_num; i++) {
     r = do_import_diff_fd(image, fd, true, 2);
