@@ -153,28 +153,19 @@ int main(int argc, const char **argv)
 
   cout << "starting " << g_conf->name << " at " << msgr->get_myaddr()
        << std::endl;
-  uint64_t supported =
-    CEPH_FEATURE_UID |
-    CEPH_FEATURE_NOSRCADDR |
-    CEPH_FEATURE_DIRLAYOUTHASH |
-    CEPH_FEATURE_MDS_INLINE_DATA |
-    CEPH_FEATURE_PGID64 |
-    CEPH_FEATURE_MSG_AUTH |
-    CEPH_FEATURE_EXPORT_PEER |
-    CEPH_FEATURE_MDS_QUOTA;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;
 
-  msgr->set_default_policy(Messenger::Policy::lossy_client(supported, required));
+  msgr->set_default_policy(Messenger::Policy::lossy_client(0, required));
   msgr->set_policy(entity_name_t::TYPE_MON,
-                   Messenger::Policy::lossy_client(supported,
+                   Messenger::Policy::lossy_client(0,
                                                    CEPH_FEATURE_UID |
                                                    CEPH_FEATURE_PGID64));
   msgr->set_policy(entity_name_t::TYPE_MDS,
-                   Messenger::Policy::lossless_peer(supported,
+                   Messenger::Policy::lossless_peer(0,
                                                     CEPH_FEATURE_UID));
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
-                   Messenger::Policy::stateful_server(supported, 0));
+                   Messenger::Policy::stateful_server(0, 0));
 
   int r = msgr->bind(g_conf->public_addr);
   if (r < 0)
