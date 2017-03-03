@@ -3066,6 +3066,9 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   if (!honor_osdmap_full)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
 
+  if (osdmap_full_try)
+    flags |= CEPH_OSD_FLAG_FULL_TRY;
+
   op->target.paused = false;
   op->stamp = ceph::mono_clock::now();
 
