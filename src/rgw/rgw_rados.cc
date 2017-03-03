@@ -7835,15 +7835,8 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
     if (r < 0)
       return r;
 
-    string ns;
-    std::map<string, RGWObjEnt>::iterator eiter;
-    rgw_obj_key obj;
-    string instance;
-    for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
-      obj = eiter->second.key;
-
-      if (rgw_obj::translate_raw_obj_to_obj_in_ns(obj.name, instance, ns))
-        return -ENOTEMPTY;
+    if (ent_map.size() != 0) {
+      return -ENOTEMPTY;
     }
   } while (is_truncated);
 
