@@ -789,7 +789,7 @@ if [ "$CEPH_NUM_MGR" -gt 0 ]; then
             ceph_adm -i $key_fn auth add mgr.$name mon 'allow *'
         fi
 
-        cat <<EOF >> $conf_fn
+        wconf <<EOF
 [mgr.$name]
         host = $HOSTNAME
 EOF
