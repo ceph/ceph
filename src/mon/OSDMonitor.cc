@@ -4773,7 +4773,7 @@ int OSDMonitor::normalize_profile(const string& profilename,
   ErasureCodeProfile::const_iterator plugin = profile.find("plugin");
   check_legacy_ec_plugin(plugin->second, profilename);
   int err = instance.factory(plugin->second,
-			     g_conf->erasure_code_dir,
+			     g_conf->get_val<std::string>("erasure_code_dir"),
 			     profile, &erasure_code, ss);
   if (err)
     return err;
@@ -4837,7 +4837,7 @@ int OSDMonitor::get_erasure_code(const string &erasure_code_profile,
   check_legacy_ec_plugin(plugin->second, erasure_code_profile);
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   return instance.factory(plugin->second,
-			  g_conf->erasure_code_dir,
+			  g_conf->get_val<std::string>("erasure_code_dir"),
 			  profile, erasure_code, ss);
 }
 

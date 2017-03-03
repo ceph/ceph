@@ -521,7 +521,7 @@ int global_init_preload_erasure_code(const CephContext *cct)
   stringstream ss;
   int r = ErasureCodePluginRegistry::instance().preload(
     plugins,
-    conf->erasure_code_dir,
+    conf->get_val<std::string>("erasure_code_dir"),
     &ss);
   if (r)
     derr << ss.str() << dendl;
