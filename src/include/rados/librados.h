@@ -166,7 +166,10 @@ enum {
  * -- or to the same cluster with different users -- requires
  * different cluster handles.
  */
+#ifndef VOIDPTR_RADOS_T
+#define VOIDPTR_RADOS_T
 typedef void *rados_t;
+#endif //VOIDPTR_RADOS_T
 
 /**
  * @typedef rados_config_t
@@ -965,7 +968,7 @@ CEPH_RADOS_API void rados_ioctx_set_namespace(rados_ioctx_t io,
 /** @} obj_loc */
 
 /**
- * @name New Listing Objects
+ * @name Listing Objects
  * @{
  */
 /**
@@ -999,7 +1002,7 @@ CEPH_RADOS_API uint32_t rados_nobjects_list_seek(rados_list_ctx_t ctx,
 /**
  * Get the next object name and locator in the pool
  *
- * *entry and *key are valid until next call to rados_objects_list_*
+ * *entry and *key are valid until next call to rados_nobjects_list_*
  *
  * @param ctx iterator marking where you are in the listing
  * @param entry where to store the name of the entry
@@ -1023,15 +1026,61 @@ CEPH_RADOS_API int rados_nobjects_list_next(rados_list_ctx_t ctx,
  */
 CEPH_RADOS_API void rados_nobjects_list_close(rados_list_ctx_t ctx);
 
-CEPH_RADOS_API rados_object_list_cursor rados_object_list_begin(rados_ioctx_t io);
+/**
+ * Get cursor handle pointing to the *beginning* of a pool.
+ *
+ * This is an opaque handle pointing to the start of a pool.  It must
+ * be released with rados_object_list_cursor_free().
+ *
+ * @param io ioctx for the pool
+ * @returns handle for the pool, NULL on error (pool does not exist)
+ */
+CEPH_RADOS_API rados_object_list_cursor rados_object_list_begin(
+  rados_ioctx_t io);
+
+/**
+ * Get cursor handle pointing to the *end* of a pool.
+ *
+ * This is an opaque handle pointing to the start of a pool.  It must
+ * be released with rados_object_list_cursor_free().
+ *
+ * @param io ioctx for the pool
+ * @returns handle for the pool, NULL on error (pool does not exist)
+ */
 CEPH_RADOS_API rados_object_list_cursor rados_object_list_end(rados_ioctx_t io);
 
+/**
+ * Check if a cursor has reached the end of a pool
+ *
+ * @param io ioctx
+ * @param cur cursor
+ * @returns 1 if the cursor has reached the end of the pool, 0 otherwise
+ */
 CEPH_RADOS_API int rados_object_list_is_end(rados_ioctx_t io,
     rados_object_list_cursor cur);
 
+/**
+ * Release a cursor
+ *
+ * Release a cursor.  The handle may not be used after this point.
+ *
+ * @param io ioctx
+ * @param cur cursor
+ */
 CEPH_RADOS_API void rados_object_list_cursor_free(rados_ioctx_t io,
     rados_object_list_cursor cur);
 
+/**
+ * Compare two cursor positions
+ *
+ * Compare two cursors, and indicate whether the first cursor precedes,
+ * matches, or follows the second.
+ *
+ * @param io ioctx
+ * @param lhs first cursor
+ * @param rhs second cursor
+ * @returns -1, 0, or 1 for lhs < rhs, lhs == rhs, or lhs > rhs
+ */
 CEPH_RADOS_API int rados_object_list_cursor_cmp(rados_ioctx_t io,
     rados_object_list_cursor lhs, rados_object_list_cursor rhs);
 
@@ -1072,43 +1121,6 @@ CEPH_RADOS_API void rados_object_list_slice(rados_ioctx_t io,
     rados_object_list_cursor *split_start,
     rados_object_list_cursor *split_finish);
 
-
-/** @} New Listing Objects */
-
-/**
- * @name Deprecated Listing Objects
- *
- * Older listing objects interface.  Please use the new interface.
- * @{
- */
-/**
- * @warning Deprecated: Use rados_nobjects_list_open() instead
- */
-CEPH_RADOS_API int rados_objects_list_open(rados_ioctx_t io,
-                                           rados_list_ctx_t *ctx);
-
-/**
- * @warning Deprecated: Use rados_nobjects_list_get_pg_hash_position() instead
- */
-CEPH_RADOS_API uint32_t rados_objects_list_get_pg_hash_position(rados_list_ctx_t ctx);
-
-/**
- * @warning Deprecated: Use rados_nobjects_list_seek() instead
- */
-CEPH_RADOS_API uint32_t rados_objects_list_seek(rados_list_ctx_t ctx,
-                                                uint32_t pos);
-
-/**
- * @warning Deprecated: Use rados_nobjects_list_next() instead
- */
-CEPH_RADOS_API int rados_objects_list_next(rados_list_ctx_t ctx,
-                                           const char **entry,
-                                           const char **key);
-
-/**
- * @warning Deprecated: Use rados_nobjects_list_close() instead
- */
-CEPH_RADOS_API void rados_objects_list_close(rados_list_ctx_t ctx);
 
 /** @} Listing Objects */
 
@@ -3483,6 +3495,25 @@ CEPH_RADOS_API int rados_monitor_log(rados_t cluster, const char *level,
                                      rados_log_callback_t cb, void *arg);
 
 /** @} Mon/OSD/PG commands */
+
+/*
+ * These methods are no longer supported and return -ENOTSUP where possible.
+ */
+CEPH_RADOS_API int rados_objects_list_open(
+  rados_ioctx_t io,
+  rados_list_ctx_t *ctx) __attribute__((deprecated));
+CEPH_RADOS_API uint32_t rados_objects_list_get_pg_hash_position(
+  rados_list_ctx_t ctx) __attribute__((deprecated));
+CEPH_RADOS_API uint32_t rados_objects_list_seek(
+  rados_list_ctx_t ctx,
+  uint32_t pos) __attribute__((deprecated));
+CEPH_RADOS_API int rados_objects_list_next(
+  rados_list_ctx_t ctx,
+  const char **entry,
+  const char **key) __attribute__((deprecated));
+CEPH_RADOS_API void rados_objects_list_close(
+  rados_list_ctx_t ctx) __attribute__((deprecated));
+
 
 #ifdef __cplusplus
 }

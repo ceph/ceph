@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2011 New Dream Network
+ * Copyright (C) 2017 OVH
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -50,19 +51,19 @@ class LockdepObs : public md_config_obs_t {
 public:
   explicit LockdepObs(CephContext *cct) : m_cct(cct), m_registered(false) {
   }
-  virtual ~LockdepObs() {
+  ~LockdepObs() {
     if (m_registered) {
       lockdep_unregister_ceph_context(m_cct);
     }
   }
 
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     static const char *KEYS[] = {"lockdep", NULL};
     return KEYS;
   }
 
   void handle_conf_change(const md_config_t *conf,
-                          const std::set <std::string> &changed) {
+                          const std::set <std::string> &changed) override {
     if (conf->lockdep && !m_registered) {
       lockdep_register_ceph_context(m_cct);
       m_registered = true;
@@ -96,7 +97,7 @@ public:
   }
 
   // md_config_obs_t
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     static const char *KEYS[] = {
       "mempool_debug",
       NULL
@@ -105,7 +106,7 @@ public:
   }
 
   void handle_conf_change(const md_config_t *conf,
-                          const std::set <std::string> &changed) {
+                          const std::set <std::string> &changed) override {
     if (changed.count("mempool_debug")) {
       mempool::set_debug_mode(cct->_conf->mempool_debug);
     }
@@ -113,7 +114,7 @@ public:
 
   // AdminSocketHook
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     if (command == "dump_mempools") {
       std::unique_ptr<Formatter> f(Formatter::create(format));
       f->open_object_section("mempools");
@@ -139,7 +140,7 @@ public:
 
   ~CephContextServiceThread() {}
 
-  void *entry()
+  void *entry() override
   {
     while (1) {
       Mutex::Locker l(_lock);
@@ -202,7 +203,7 @@ class LogObs : public md_config_obs_t {
 public:
   explicit LogObs(ceph::logging::Log *l) : log(l) {}
 
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     static const char *KEYS[] = {
       "log_file",
       "log_max_new",
@@ -223,7 +224,7 @@ public:
   }
 
   void handle_conf_change(const md_config_t *conf,
-                          const std::set <std::string> &changed) {
+                          const std::set <std::string> &changed) override {
     // stderr
     if (changed.count("log_to_stderr") || changed.count("err_to_stderr")) {
       int l = conf->log_to_stderr ? 99 : (conf->err_to_stderr ? -1 : -2);
@@ -286,7 +287,7 @@ class CephContextObs : public md_config_obs_t {
 public:
   explicit CephContextObs(CephContext *cct) : cct(cct) {}
 
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     static const char *KEYS[] = {
       "enable_experimental_unrecoverable_data_corrupting_features",
       "crush_location",
@@ -296,7 +297,7 @@ public:
   }
 
   void handle_conf_change(const md_config_t *conf,
-                          const std::set <std::string> &changed) {
+                          const std::set <std::string> &changed) override {
     if (changed.count(
 	  "enable_experimental_unrecoverable_data_corrupting_features")) {
       ceph_spin_lock(&cct->_feature_lock);
@@ -363,7 +364,7 @@ public:
   explicit CephContextHook(CephContext *cct) : m_cct(cct) {}
 
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     m_cct->do_command(command, cmdmap, format, &out);
     return true;
   }
@@ -392,6 +393,17 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
   else if (command == "perfcounters_schema" || command == "2" ||
     command == "perf schema") {
     _perf_counters_collection->dump_formatted(f, true);
+  }
+  else if (command == "perf histogram dump") {
+    std::string logger;
+    std::string counter;
+    cmd_getval(this, cmdmap, "logger", logger);
+    cmd_getval(this, cmdmap, "counter", counter);
+    _perf_counters_collection->dump_formatted_histograms(f, false, logger,
+                                                         counter);
+  }
+  else if (command == "perf histogram schema") {
+    _perf_counters_collection->dump_formatted_histograms(f, true);
   }
   else if (command == "perf reset") {
     std::string var;
@@ -555,8 +567,10 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
   _admin_socket->register_command("1", "1", _admin_hook, "");
   _admin_socket->register_command("perf dump", "perf dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump perfcounters value");
   _admin_socket->register_command("perfcounters_schema", "perfcounters_schema", _admin_hook, "");
+  _admin_socket->register_command("perf histogram dump", "perf histogram dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump perf histogram values");
   _admin_socket->register_command("2", "2", _admin_hook, "");
   _admin_socket->register_command("perf schema", "perf schema", _admin_hook, "dump perfcounters schema");
+  _admin_socket->register_command("perf histogram schema", "perf histogram schema", _admin_hook, "dump perf histogram schema");
   _admin_socket->register_command("perf reset", "perf reset name=var,type=CephString", _admin_hook, "perf reset <name>: perf reset all or one perfcounter name");
   _admin_socket->register_command("config show", "config show", _admin_hook, "dump current config settings");
   _admin_socket->register_command("config set", "config set name=var,type=CephString name=val,type=CephString,n=N",  _admin_hook, "config set <field> <val> [<val> ...]: set a config variable");

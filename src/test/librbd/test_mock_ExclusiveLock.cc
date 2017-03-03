@@ -43,6 +43,8 @@ struct ManagedLock<MockExclusiveLockImageCtx> {
     : m_lock("ManagedLock::m_lock") {
   }
 
+  virtual ~ManagedLock() = default;
+
   mutable Mutex m_lock;
 
   virtual void shutdown_handler(int r, Context *) = 0;
@@ -134,7 +136,6 @@ struct PreReleaseRequest<MockExclusiveLockImageCtx> : public BaseRequest<PreRele
 
 // template definitions
 #include "librbd/ExclusiveLock.cc"
-template class librbd::ExclusiveLock<librbd::MockExclusiveLockImageCtx>;
 
 ACTION_P(FinishLockUnlock, request) {
   if (request->on_lock_unlock != nullptr) {

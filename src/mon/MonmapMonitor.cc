@@ -106,7 +106,7 @@ class C_ApplyFeatures : public Context {
   public:
   C_ApplyFeatures(MonmapMonitor *s, const mon_feature_t& f) :
     svc(s), features(f) { }
-  void finish(int r) {
+  void finish(int r) override {
     if (r >= 0) {
       svc->apply_mon_features(features);
     } else if (r == -EAGAIN || r == -ECANCELED) {

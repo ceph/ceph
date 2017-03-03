@@ -120,7 +120,7 @@ void MemStore::dump(Formatter *f)
     f->close_section();
 
     f->open_array_section("objects");
-    for (map<ghobject_t,ObjectRef,ghobject_t::BitwiseComparator>::iterator q = p->second->object_map.begin();
+    for (map<ghobject_t,ObjectRef>::iterator q = p->second->object_map.begin();
 	 q != p->second->object_map.end();
 	 ++q) {
       f->open_object_section("object");
@@ -463,11 +463,9 @@ int MemStore::collection_empty(const coll_t& cid, bool *empty)
 int MemStore::collection_list(const coll_t& cid,
 			      const ghobject_t& start,
 			      const ghobject_t& end,
-			      bool sort_bitwise, int max,
+			      int max,
 			      vector<ghobject_t> *ls, ghobject_t *next)
 {
-  if (!sort_bitwise)
-    return -EOPNOTSUPP;
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
@@ -475,10 +473,10 @@ int MemStore::collection_list(const coll_t& cid,
 
   dout(10) << __func__ << " cid " << cid << " start " << start
 	   << " end " << end << dendl;
-  map<ghobject_t,ObjectRef,ghobject_t::BitwiseComparator>::iterator p = c->object_map.lower_bound(start);
+  map<ghobject_t,ObjectRef>::iterator p = c->object_map.lower_bound(start);
   while (p != c->object_map.end() &&
 	 ls->size() < (unsigned)max &&
-	 cmp_bitwise(p->first, end) < 0) {
+	 p->first < end) {
     ls->push_back(p->first);
     ++p;
   }
@@ -615,39 +613,39 @@ public:
   OmapIteratorImpl(CollectionRef c, ObjectRef o)
     : c(c), o(o), it(o->omap.begin()) {}
 
-  int seek_to_first() {
+  int seek_to_first() override {
     std::lock_guard<std::mutex>(o->omap_mutex);
     it = o->omap.begin();
     return 0;
   }
-  int upper_bound(const string &after) {
+  int upper_bound(const string &after) override {
     std::lock_guard<std::mutex>(o->omap_mutex);
     it = o->omap.upper_bound(after);
     return 0;
   }
-  int lower_bound(const string &to) {
+  int lower_bound(const string &to) override {
     std::lock_guard<std::mutex>(o->omap_mutex);
     it = o->omap.lower_bound(to);
     return 0;
   }
-  bool valid() {
+  bool valid() override {
     std::lock_guard<std::mutex>(o->omap_mutex);
     return it != o->omap.end();
   }
-  int next(bool validate=true) {
+  int next(bool validate=true) override {
     std::lock_guard<std::mutex>(o->omap_mutex);
     ++it;
     return 0;
   }
-  string key() {
+  string key() override {
     std::lock_guard<std::mutex>(o->omap_mutex);
     return it->first;
   }
-  bufferlist value() {
+  bufferlist value() override {
     std::lock_guard<std::mutex>(o->omap_mutex);
     return it->second;
   }
-  int status() {
+  int status() override {
     return 0;
   }
 };
@@ -1447,7 +1445,7 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
   RWLock::WLocker l1(MIN(&(*sc), &(*dc))->lock);
   RWLock::WLocker l2(MAX(&(*sc), &(*dc))->lock);
 
-  map<ghobject_t,ObjectRef,ghobject_t::BitwiseComparator>::iterator p = sc->object_map.begin();
+  map<ghobject_t,ObjectRef>::iterator p = sc->object_map.begin();
   while (p != sc->object_map.end()) {
     if (p->first.match(bits, match)) {
       dout(20) << " moving " << p->first << dendl;

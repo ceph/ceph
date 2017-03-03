@@ -99,7 +99,7 @@ public:
     CephContext *cct;
     bool use_page_set;
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
-    map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator> object_map;        ///< for iteration
+    map<ghobject_t, ObjectRef> object_map;        ///< for iteration
     map<string,bufferptr> xattr;
     RWLock lock;   ///< for object_{map,hash}
     bool exists;
@@ -141,7 +141,7 @@ public:
       ::encode(use_page_set, bl);
       uint32_t s = object_map.size();
       ::encode(s, bl);
-      for (map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator>::const_iterator p = object_map.begin();
+      for (map<ghobject_t, ObjectRef>::const_iterator p = object_map.begin();
 	   p != object_map.end();
 	   ++p) {
 	::encode(p->first, bl);
@@ -168,7 +168,7 @@ public:
 
     uint64_t used_bytes() const {
       uint64_t result = 0;
-      for (map<ghobject_t, ObjectRef,ghobject_t::BitwiseComparator>::const_iterator p = object_map.begin();
+      for (map<ghobject_t, ObjectRef>::const_iterator p = object_map.begin();
 	   p != object_map.end();
 	   ++p) {
         result += p->second->get_size();
@@ -255,6 +255,10 @@ public:
   int mount() override;
   int umount() override;
 
+  int fsck(bool deep) override {
+    return 0;
+  }
+
   int validate_hobject_key(const hobject_t &obj) const override {
     return 0;
   }
@@ -323,8 +327,7 @@ public:
   int collection_empty(const coll_t& c, bool *empty) override;
   using ObjectStore::collection_list;
   int collection_list(const coll_t& cid,
-		      const ghobject_t& start, const ghobject_t& end,
-		      bool sort_bitwise, int max,
+		      const ghobject_t& start, const ghobject_t& end, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
 
   using ObjectStore::omap_get;
@@ -384,6 +387,11 @@ public:
   }
 
   objectstore_perf_stat_t get_cur_stats() override;
+
+  const PerfCounters* get_perf_counters() const {
+    return nullptr;
+  }
+
 
   int queue_transactions(
     Sequencer *osr, vector<Transaction>& tls,

@@ -37,6 +37,7 @@
 #include "include/CompatSet.h"
 
 #include "OpRequest.h"
+#include "Session.h"
 
 #include <atomic>
 #include <map>
@@ -70,17 +71,21 @@ enum {
   l_osd_op_r,
   l_osd_op_r_outb,
   l_osd_op_r_lat,
+  l_osd_op_r_lat_outb_hist,
   l_osd_op_r_process_lat,
   l_osd_op_r_prepare_lat,
   l_osd_op_w,
   l_osd_op_w_inb,
   l_osd_op_w_lat,
+  l_osd_op_w_lat_inb_hist,
   l_osd_op_w_process_lat,
   l_osd_op_w_prepare_lat,
   l_osd_op_rw,
   l_osd_op_rw_inb,
   l_osd_op_rw_outb,
   l_osd_op_rw_lat,
+  l_osd_op_rw_lat_inb_hist,
+  l_osd_op_rw_lat_outb_hist,
   l_osd_op_rw_process_lat,
   l_osd_op_rw_prepare_lat,
 
@@ -208,7 +213,6 @@ class ObjectStore;
 class FuseStore;
 class OSDMap;
 class MLog;
-class MOSDPGMissing;
 class Objecter;
 
 class Watch;
@@ -722,7 +726,7 @@ private:
   bool agent_valid_iterator;
   int agent_ops;
   int flush_mode_high_count; //once have one pg with FLUSH_MODE_HIGH then flush objects with high speed
-  set<hobject_t, hobject_t::BitwiseComparator> agent_oids;
+  set<hobject_t> agent_oids;
   bool agent_active;
   struct AgentThread : public Thread {
     OSDService *osd;
@@ -929,7 +933,7 @@ private:
   uint64_t recovery_ops_reserved;
   bool recovery_paused;
 #ifdef DEBUG_RECOVERY_OIDS
-  map<spg_t, set<hobject_t, hobject_t::BitwiseComparator> > recovery_oids;
+  map<spg_t, set<hobject_t> > recovery_oids;
 #endif
   bool _recover_now(uint64_t *available_pushes);
   void _maybe_queue_recovery();
@@ -1401,7 +1405,7 @@ public:
     switch (op->get_req()->get_type()) {
     case CEPH_MSG_OSD_OP:
       return (static_cast<MOSDOp*>(
-		op->get_req())->get_pg().m_seed & mask) == match;
+		op->get_req())->get_raw_pg().m_seed & mask) == match;
     }
     return false;
   }
@@ -1436,36 +1440,6 @@ public:
     }
   }
 
-  struct Session : public RefCountedObject {
-    EntityName entity_name;
-    OSDCap caps;
-    int64_t auid;
-    ConnectionRef con;
-    WatchConState wstate;
-
-    Mutex session_dispatch_lock;
-    boost::intrusive::list<OpRequest> waiting_on_map;
-
-    OSDMapRef osdmap;  /// Map as of which waiting_for_pg is current
-    map<spg_t, boost::intrusive::list<OpRequest> > waiting_for_pg;
-
-    Spinlock sent_epoch_lock;
-    epoch_t last_sent_epoch;
-    Spinlock received_map_lock;
-    epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
-
-    explicit Session(CephContext *cct) :
-      RefCountedObject(cct),
-      auid(-1), con(0), wstate(cct),
-      session_dispatch_lock("Session::session_dispatch_lock"), 
-      last_sent_epoch(0), received_map_epoch(0)
-    {}
-    void maybe_reset_osdmap() {
-      if (waiting_for_pg.empty()) {
-	osdmap.reset();
-      }
-    }
-  };
 
 private:
   void update_waiting_for_pg(Session *session, OSDMapRef osdmap);
@@ -1556,6 +1530,8 @@ private:
 	 ++i) {
       clear_session_waiting_on_pg(session, i->first);
     }    
+
+    session->clear_backoffs();
 
     /* Messages have connection refs, we need to clear the
      * connection->session->message->connection
@@ -2393,6 +2369,7 @@ protected:
   bool ms_can_fast_dispatch(Message *m) const {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OP:
+    case CEPH_MSG_OSD_BACKOFF:
     case MSG_OSD_SUBOP:
     case MSG_OSD_REPOP:
     case MSG_OSD_SUBOPREPLY:
@@ -2491,6 +2468,7 @@ private:
   void handle_scrub(struct MOSDScrub *m);
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(OpRequestRef& op, OSDMapRef& osdmap);
+  void handle_backoff(OpRequestRef& op, OSDMapRef& osdmap);
 
   template <typename T, int MSGTYPE>
   void handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap);

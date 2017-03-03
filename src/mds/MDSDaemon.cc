@@ -56,6 +56,7 @@
 #include "messages/MCommandReply.h"
 
 #include "auth/AuthAuthorizeHandler.h"
+#include "auth/RotatingKeyRing.h"
 #include "auth/KeyRing.h"
 
 #include "common/config.h"
@@ -85,7 +86,7 @@ class C_VoidFn : public Context
     assert(fn_);
   }
 
-  void finish(int r)
+  void finish(int r) override
   {
     (mds->*fn)();
   }
@@ -96,7 +97,7 @@ class MDSDaemon::C_MDS_Tick : public Context {
     MDSDaemon *mds_daemon;
 public:
   explicit C_MDS_Tick(MDSDaemon *m) : mds_daemon(m) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert(mds_daemon->mds_lock.is_locked_by_me());
 
     mds_daemon->tick_event = 0;
@@ -155,7 +156,7 @@ class MDSSocketHook : public AdminSocketHook {
 public:
   explicit MDSSocketHook(MDSDaemon *m) : mds(m) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     stringstream ss;
     bool r = mds->asok_command(command, cmdmap, format, ss);
     out.append(ss);
@@ -716,7 +717,7 @@ int MDSDaemon::_handle_command(
 
     public:
     explicit SuicideLater(MDSDaemon *mds_) : mds(mds_) {}
-    void finish(int r) {
+    void finish(int r) override {
       // Wait a little to improve chances of caller getting
       // our response before seeing us disappear from mdsmap
       sleep(1);
@@ -733,7 +734,7 @@ int MDSDaemon::_handle_command(
     public:
 
     explicit RespawnLater(MDSDaemon *mds_) : mds(mds_) {}
-    void finish(int r) {
+    void finish(int r) override {
       // Wait a little to improve chances of caller getting
       // our response before seeing us disappear from mdsmap
       sleep(1);
@@ -1185,7 +1186,7 @@ bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bo
       return false;
   }
 
-  *authorizer = monc->auth->build_authorizer(dest_type);
+  *authorizer = monc->build_authorizer(dest_type);
   return *authorizer != NULL;
 }
 

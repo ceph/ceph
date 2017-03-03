@@ -399,7 +399,7 @@ private:
 
   int _collection_list(
     Collection *c, const ghobject_t& start, const ghobject_t& end,
-    bool sort_bitwise, int max, vector<ghobject_t> *ls, ghobject_t *next);
+    int max, vector<ghobject_t> *ls, ghobject_t *next);
 
 public:
   KStore(CephContext *cct, const string& path);
@@ -483,11 +483,11 @@ public:
 
   int collection_list(
     const coll_t& cid, const ghobject_t& start, const ghobject_t& end,
-    bool sort_bitwise, int max,
+    int max,
     vector<ghobject_t> *ls, ghobject_t *next) override;
   int collection_list(
     CollectionHandle &c, const ghobject_t& start, const ghobject_t& end,
-    bool sort_bitwise, int max,
+    int max,
     vector<ghobject_t> *ls, ghobject_t *next) override;
 
   using ObjectStore::omap_get;
@@ -553,6 +553,10 @@ public:
   objectstore_perf_stat_t get_cur_stats() {
     return objectstore_perf_stat_t();
   }
+  const PerfCounters* get_perf_counters() const {
+    return logger;
+  }
+
 
   int queue_transactions(
     Sequencer *osr,

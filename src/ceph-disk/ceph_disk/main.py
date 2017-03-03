@@ -208,6 +208,13 @@ class Ptype(object):
 DEFAULT_FS_TYPE = 'xfs'
 SYSFS = '/sys'
 
+if platform.system() == 'FreeBSD':
+    FREEBSD = True
+    PROCDIR = '/compat/linux/proc'
+else:
+    FREEBSD = False
+    PROCDIR = '/proc'
+
 """
 OSD STATUS Definition
 """
@@ -224,6 +231,7 @@ MOUNT_OPTIONS = dict(
     # that user_xattr helped
     ext4='noatime,user_xattr',
     xfs='noatime,inode64',
+    zfs='atime=off',
 )
 
 MKFS_ARGS = dict(
@@ -248,6 +256,7 @@ INIT_SYSTEMS = [
     'sysvinit',
     'systemd',
     'openrc',
+    'bsdrc',
     'auto',
     'none',
 ]
@@ -366,7 +375,7 @@ def is_systemd():
     """
     Detect whether systemd is running
     """
-    with open('/proc/1/comm', 'r') as f:
+    with open(PROCDIR + '/1/comm', 'r') as f:
         return 'systemd' in f.read()
 
 
@@ -506,25 +515,33 @@ def platform_distro():
 
 
 def platform_information():
-    distro, release, codename = platform.linux_distribution()
-    # this could be an empty string in Debian
-    if not codename and 'debian' in distro.lower():
-        debian_codenames = {
-            '8': 'jessie',
-            '7': 'wheezy',
-            '6': 'squeeze',
-        }
-        major_version = release.split('.')[0]
-        codename = debian_codenames.get(major_version, '')
+    if FREEBSD:
+        distro = platform.system()
+        release = platform.version().split()[1]
+        codename = platform.version().split()[3]
+        version = platform.version().split('-')[0]
+        major_version = version.split('.')[0]
+        major, minor = release.split('.')
+    else:
+        distro, release, codename = platform.linux_distribution()
+        # this could be an empty string in Debian
+        if not codename and 'debian' in distro.lower():
+            debian_codenames = {
+                '8': 'jessie',
+                '7': 'wheezy',
+                '6': 'squeeze',
+            }
+            major_version = release.split('.')[0]
+            codename = debian_codenames.get(major_version, '')
 
-        # In order to support newer jessie/sid or wheezy/sid strings we test
-        # this if sid is buried in the minor, we should use sid anyway.
-        if not codename and '/' in release:
-            major, minor = release.split('/')
-            if minor == 'sid':
-                codename = minor
-            else:
-                codename = major
+            # In order to support newer jessie/sid,  wheezy/sid strings we test
+            # this if sid is buried in the minor, we should use sid anyway.
+            if not codename and '/' in release:
+                major, minor = release.split('/')
+                if minor == 'sid':
+                    codename = minor
+                else:
+                    codename = major
 
     return (
         str(distro).strip(),
@@ -562,6 +579,8 @@ def platform_information():
 
 
 def block_path(dev):
+    if FREEBSD:
+        return dev
     path = os.path.realpath(dev)
     rdev = os.stat(path).st_rdev
     (M, m) = (os.major(rdev), os.minor(rdev))
@@ -582,6 +601,8 @@ def is_mpath(dev):
     """
     True if the path is managed by multipath
     """
+    if FREEBSD:
+        return True
     uuid = get_dm_uuid(dev)
     return (uuid and
             (re.match('part\d+-mpath-', uuid) or
@@ -800,7 +821,7 @@ def is_mounted(dev):
     Check if the given device is mounted.
     """
     dev = os.path.realpath(dev)
-    with open('/proc/mounts', 'rb') as proc_mounts:
+    with open(PROCDIR + '/mounts', 'rb') as proc_mounts:
         for line in proc_mounts:
             fields = line.split()
             if len(fields) < 3:
@@ -1161,8 +1182,10 @@ def get_dmcrypt_key_path(
 def get_dmcrypt_key(
     _uuid,
     key_dir,
-    luks
+    luks,
+    cluster
 ):
+
     legacy_path = get_dmcrypt_key_path(_uuid, key_dir, luks)
     if os.path.exists(legacy_path):
         return (legacy_path,)
@@ -1174,6 +1197,8 @@ def get_dmcrypt_key(
             key, stderr, ret = command(
                 [
                     'ceph',
+                    '--cluster',
+                    cluster,
                     '--name',
                     'client.osd-lockbox.' + osd_uuid,
                     '--keyring',
@@ -1739,7 +1764,7 @@ class DevicePartitionCryptPlain(DevicePartitionCrypt):
 
         self.osd_dm_key = get_dmcrypt_key(
             self.get_uuid(), self.args.dmcrypt_key_dir,
-            False)
+            False, self.args.cluster)
 
     def set_variables_ptype(self):
         self.ptype_map = PTYPE['plain']
@@ -1765,7 +1790,7 @@ class DevicePartitionCryptLuks(DevicePartitionCrypt):
 
         self.osd_dm_key = get_dmcrypt_key(
             self.get_uuid(), self.args.dmcrypt_key_dir,
-            True)
+            True, self.args.cluster)
 
     def set_variables_ptype(self):
         self.ptype_map = PTYPE['luks']
@@ -2474,6 +2499,8 @@ class Lockbox(object):
                 'ceph',
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
+                '--cluster',
+                cluster,
                 'config-key',
                 'put',
                 'dm-crypt/osd/' + self.args.osd_uuid + '/luks',
@@ -2485,6 +2512,8 @@ class Lockbox(object):
                 'ceph',
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
+                '--cluster',
+                cluster,
                 'auth',
                 'get-or-create',
                 'client.osd-lockbox.' + self.args.osd_uuid,
@@ -2918,7 +2947,7 @@ def mkfs(
                 '--osd-uuid', fsid,
                 '--keyring', os.path.join(path, 'keyring'),
                 '--setuser', get_ceph_user(),
-                '--setgroup', get_ceph_user(),
+                '--setgroup', get_ceph_group(),
             ],
         )
     else:
@@ -3110,9 +3139,21 @@ def start_daemon(
                     'start',
                 ],
             )
+        elif os.path.exists(os.path.join(path, 'bsdrc')):
+            base_script = '/usr/local/etc/rc.d/ceph'
+            osd_script = '{base} start osd.{osd_id}'.format(
+                base=base_script,
+                osd_id=osd_id
+            )
+            command_check_call(
+                [
+                    osd_script,
+                ],
+            )
         else:
-            raise Error('{cluster} osd.{osd_id} is not tagged '
-                        'with an init system'.format(
+            raise Error('{cluster} osd.{osd_id} '
+                        'is not tagged with an init system'
+                        .format(
                             cluster=cluster,
                             osd_id=osd_id,
                         ))
@@ -3175,9 +3216,18 @@ def stop_daemon(
                     'stop',
                 ],
             )
+        elif os.path.exists(os.path.join(path, 'bsdrc')):
+            command_check_call(
+                [
+                    '/usr/local/etc/rc.d/ceph stop osd.{osd_id}'
+                    .format(osd_id=osd_id),
+                    'stop',
+                ],
+            )
         else:
-            raise Error('{cluster} osd.{osd_id} is not tagged with an init '
-                        ' system'.format(cluster=cluster, osd_id=osd_id))
+            raise Error('{cluster} osd.{osd_id} '
+                        'is not tagged with an init system'
+                        .format(cluster=cluster, osd_id=osd_id))
     except subprocess.CalledProcessError as e:
         raise Error('ceph osd stop failed', e)
 
@@ -3208,7 +3258,7 @@ def dmcrypt_is_mapped(uuid):
         return None
 
 
-def dmcrypt_map(dev, dmcrypt_key_dir):
+def dmcrypt_map(dev, dmcrypt_key_dir, cluster):
     ptype = get_partition_type(dev)
     if ptype in Ptype.get_ready_by_type('plain'):
         luks = False
@@ -3220,7 +3270,7 @@ def dmcrypt_map(dev, dmcrypt_key_dir):
         raise Error('--dmcrypt called for dev %s with invalid ptype %s'
                     % (dev, ptype))
     part_uuid = get_partition_uuid(dev)
-    dmcrypt_key = get_dmcrypt_key(part_uuid, dmcrypt_key_dir, luks)
+    dmcrypt_key = get_dmcrypt_key(part_uuid, dmcrypt_key_dir, luks, cluster)
     return _dmcrypt_map(
         rawdev=dev,
         key=dmcrypt_key,
@@ -3237,12 +3287,13 @@ def mount_activate(
     init,
     dmcrypt,
     dmcrypt_key_dir,
+    cluster,
     reactivate=False,
 ):
 
     if dmcrypt:
         part_uuid = get_partition_uuid(dev)
-        dev = dmcrypt_map(dev, dmcrypt_key_dir)
+        dev = dmcrypt_map(dev, dmcrypt_key_dir, cluster)
     try:
         fstype = detect_fstype(dev=dev)
     except (subprocess.CalledProcessError,
@@ -3540,6 +3591,7 @@ def main_activate(args):
                 init=args.mark_init,
                 dmcrypt=args.dmcrypt,
                 dmcrypt_key_dir=args.dmcrypt_key_dir,
+                cluster=args.cluster,
                 reactivate=args.reactivate,
             )
             osd_data = get_mount_point(cluster, osd_id)
@@ -3777,7 +3829,7 @@ def _deallocate_osd_id(cluster, osd_id):
     ])
 
 
-def _remove_lockbox(uuid):
+def _remove_lockbox(uuid, cluster):
     command([
         'ceph',
         'auth',
@@ -3786,6 +3838,8 @@ def _remove_lockbox(uuid):
     ])
     command([
         'ceph',
+        '--cluster',
+        cluster,
         'config-key',
         'del',
         'dm-crypt/osd/' + uuid + '/luks',
@@ -3818,7 +3872,8 @@ def destroy_lookup_device(args, predicate, description):
                     unmap = False
                 else:
                     dmcrypt_path = dmcrypt_map(partition['path'],
-                                               args.dmcrypt_key_dir)
+                                               args.dmcrypt_key_dir,
+                                               args.cluster)
                     unmap = True
                 list_dev_osd(dmcrypt_path, {}, partition)
                 if unmap:
@@ -3883,7 +3938,7 @@ def main_destroy_locked(args):
         for name in Space.NAMES:
             if target_dev.get(name + '_uuid'):
                 dmcrypt_unmap(target_dev[name + '_uuid'])
-        _remove_lockbox(target_dev['uuid'])
+        _remove_lockbox(target_dev['uuid'], args.cluster)
 
     # Check zap flag. If we found zap flag, we need to find device for
     # destroy this osd data.
@@ -3937,7 +3992,7 @@ def main_activate_space(name, args):
     dev = None
     with activate_lock:
         if args.dmcrypt:
-            dev = dmcrypt_map(args.dev, args.dmcrypt_key_dir)
+            dev = dmcrypt_map(args.dev, args.dmcrypt_key_dir, args.cluster)
         else:
             dev = args.dev
         # FIXME: For an encrypted journal dev, does this return the
@@ -3963,6 +4018,7 @@ def main_activate_space(name, args):
             init=args.mark_init,
             dmcrypt=args.dmcrypt,
             dmcrypt_key_dir=args.dmcrypt_key_dir,
+            cluster=args.cluster,
             reactivate=args.reactivate,
         )
 
@@ -4006,6 +4062,7 @@ def main_activate_all(args):
                         activate_key_template=args.activate_key_template,
                         init=args.mark_init,
                         dmcrypt=False,
+                        cluster=args.cluster,
                         dmcrypt_key_dir='',
                     )
                     start_daemon(
@@ -4029,7 +4086,7 @@ def main_activate_all(args):
 
 def is_swap(dev):
     dev = os.path.realpath(dev)
-    with open('/proc/swaps', 'rb') as proc_swaps:
+    with open(PROCDIR + '/swaps', 'rb') as proc_swaps:
         for line in proc_swaps.readlines()[1:]:
             fields = line.split()
             if len(fields) < 3:

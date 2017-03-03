@@ -1,0 +1,13 @@
+tasks:
+- s3readwrite:
+    client.0:
+      rgw_server: client.0
+      readwrite:
+        bucket: rwtest
+        readers: 10
+        writers: 3
+        duration: 300
+        files:
+          num: 10
+          size: 2000
+          stddev: 500 

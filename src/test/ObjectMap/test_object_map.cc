@@ -522,7 +522,7 @@ class ObjectMapTest : public ::testing::Test {
 public:
   boost::scoped_ptr< ObjectMap > db;
   ObjectMapTester tester;
-  virtual void SetUp() {
+  void SetUp() override {
     char *path = getenv("OBJECT_MAP_PATH");
     if (!path) {
       db.reset(new DBObjectMap(g_ceph_context, new KeyValueDBMemory()));
@@ -540,7 +540,7 @@ public:
     tester.db = db.get();
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     std::cerr << "Checking..." << std::endl;
     assert(db->check(std::cerr));
   }

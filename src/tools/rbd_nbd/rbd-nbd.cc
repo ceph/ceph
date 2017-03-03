@@ -49,6 +49,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
+#include "include/stringify.h"
 #include "include/xlist.h"
 
 #define dout_context g_ceph_context
@@ -76,6 +77,8 @@ static bool readonly = false;
 static int nbds_max = 0;
 static int max_part = 255;
 static bool exclusive = false;
+
+#define RBD_NBD_BLKSIZE 512UL
 
 #ifdef CEPH_BIG_ENDIAN
 #define ntohll(a) (a)
@@ -334,7 +337,7 @@ private:
       ,func(_func)
     {}
   protected:
-    virtual void* entry()
+    void* entry() override
     {
       (server.*func)();
       server.shutdown();
@@ -425,9 +428,9 @@ public:
     , size(_size)
   { }
 
-  virtual ~NBDWatchCtx() {}
+  ~NBDWatchCtx() override {}
 
-  virtual void handle_notify()
+  void handle_notify() override
   {
     librbd::image_info_t info;
     if (image.stat(info, sizeof(info)) == 0) {
@@ -468,7 +471,29 @@ static int open_device(const char* path, bool try_load_moudle = false)
   return nbd;
 }
 
-static int do_map()
+static int check_device_size(int nbd_index, unsigned long expected_size)
+{
+  unsigned long size = 0;
+  std::string path = "/sys/block/nbd" + stringify(nbd_index) + "/size";
+  std::ifstream ifs;
+  ifs.open(path.c_str(), std::ifstream::in);
+  if (!ifs.is_open()) {
+    cerr << "rbd-nbd: failed to open " << path << std::endl;
+    return -EINVAL;
+  }
+  ifs >> size;
+  size *= RBD_NBD_BLKSIZE;
+
+  if (size != expected_size) {
+    cerr << "rbd-nbd: kernel reported invalid device size (" << size
+         << ", expected " << expected_size << ")" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+static int do_map(int argc, const char *argv[])
 {
   int r;
 
@@ -481,13 +506,22 @@ static int do_map()
   unsigned long flags;
   unsigned long size;
 
+  int index = 0;
   int fd[2];
   int nbd;
 
-  uint8_t old_format;
   librbd::image_info_t info;
 
   Preforker forker;
+
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  env_to_vec(args);
+
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_DAEMON,
+                         CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  g_ceph_context->_conf->set_val_or_die("pid_file", "");
 
   if (global_init_prefork(g_ceph_context) >= 0) {
     std::string err;
@@ -516,7 +550,6 @@ static int do_map()
 
   if (devpath.empty()) {
     char dev[64];
-    int index = 0;
     while (true) {
       snprintf(dev, sizeof(dev), "/dev/nbd%d", index);
 
@@ -538,6 +571,12 @@ static int do_map()
       break;
     }
   } else {
+    r = sscanf(devpath.c_str(), "/dev/nbd%d", &index);
+    if (r < 0) {
+      cerr << "rbd-nbd: invalid device path: " << devpath
+           << " (expected /dev/nbd{num})" << std::endl;
+      goto close_fd;
+    }
     nbd = open_device(devpath.c_str(), true);
     if (nbd < 0) {
       r = nbd;
@@ -593,24 +632,29 @@ static int do_map()
   if (r < 0)
     goto close_nbd;
 
-  r = ioctl(nbd, NBD_SET_BLKSIZE, 512UL);
+  r = ioctl(nbd, NBD_SET_BLKSIZE, RBD_NBD_BLKSIZE);
   if (r < 0) {
     r = -errno;
+    goto close_nbd;
+  }
+
+  if (info.size > ULONG_MAX) {
+    r = -EFBIG;
+    cerr << "rbd-nbd: image is too large (" << prettybyte_t(info.size)
+         << ", max is " << prettybyte_t(ULONG_MAX) << ")" << std::endl;
     goto close_nbd;
   }
 
   size = info.size;
 
-  if (size > (1UL << 32) * 512) {
-    r = -EFBIG;
-    cerr << "rbd-nbd: image is too large (" << prettybyte_t(size) << ", max is "
-         << prettybyte_t((1UL << 32) * 512) << ")" << std::endl;
-    goto close_nbd;
-  }
-
   r = ioctl(nbd, NBD_SET_SIZE, size);
   if (r < 0) {
     r = -errno;
+    goto close_nbd;
+  }
+
+  r = check_device_size(index, size);
+  if (r < 0) {
     goto close_nbd;
   }
 
@@ -622,10 +666,6 @@ static int do_map()
     r = -errno;
     goto close_nbd;
   }
-
-  r = image.old_format(&old_format);
-  if (r < 0)
-    goto close_nbd;
 
   {
     uint64_t handle;
@@ -676,8 +716,6 @@ close_ret:
 
 static int do_unmap()
 {
-  common_init_finish(g_ceph_context);
-
   int nbd = open_device(devpath.c_str());
   if (nbd < 0) {
     cerr << "rbd-nbd: failed to open device: " << devpath << std::endl;
@@ -719,8 +757,6 @@ static int do_list_mapped_devices()
   int m = 0;
   int fd[2];
 
-  common_init_finish(g_ceph_context);
-
   if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) == -1) {
     int r = -errno;
     cerr << "rbd-nbd: socketpair failed: " << cpp_strerror(-r) << std::endl;
@@ -759,11 +795,7 @@ static int rbd_nbd(int argc, const char *argv[])
   vector<const char*> args;
 
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_DAEMON,
-			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
-  g_ceph_context->_conf->set_val_or_die("pid_file", "");
+  md_config_t().parse_argv(args);
 
   std::vector<const char*>::iterator i;
   std::ostringstream err;
@@ -854,7 +886,7 @@ static int rbd_nbd(int argc, const char *argv[])
         return EXIT_FAILURE;
       }
 
-      r = do_map();
+      r = do_map(argc, argv);
       if (r < 0)
         return EXIT_FAILURE;
       break;

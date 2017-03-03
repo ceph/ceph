@@ -16,8 +16,7 @@
 #ifndef CEPH_MOSDSUBOP_H
 #define CEPH_MOSDSUBOP_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 
 #include "include/ceph_features.h"
 
@@ -25,7 +24,7 @@
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDSubOp : public Message {
+class MOSDSubOp : public MOSDFastDispatchOp {
 
   static const int HEAD_VERSION = 12;
   static const int COMPAT_VERSION = 7;
@@ -70,7 +69,7 @@ public:
   map<string,bufferlist> attrset;
 
   interval_set<uint64_t> data_subset;
-  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subsets;
+  map<hobject_t, interval_set<uint64_t>> clone_subsets;
 
   bool first, complete;
 
@@ -92,6 +91,13 @@ public:
 
   /// non-empty if this transaction involves a hit_set history update
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
+
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
 
   int get_cost() const {
     if (ops.size() == 1 && ops[0].op.op == CEPH_OSD_OP_PULL)
@@ -239,11 +245,11 @@ public:
   }
 
   MOSDSubOp()
-    : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }
+    : MOSDFastDispatchOp(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDSubOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po,  int aw,
 	    epoch_t mape, ceph_tid_t rtid, eversion_t v)
-    : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
       reqid(r),
       from(from),

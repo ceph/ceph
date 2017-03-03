@@ -47,7 +47,7 @@ public:
       return m_release_count;
     }
 
-    virtual void post_acquire_handler(Context *on_finish) {
+    void post_acquire_handler(Context *on_finish) override {
       Mutex::Locker locker(m_test_lock);
       m_acquire_count++;
       on_finish->complete(m_on_acquire_r);
@@ -58,7 +58,7 @@ public:
       }
     }
 
-    virtual void pre_release_handler(Context *on_finish) {
+    void pre_release_handler(Context *on_finish) override {
       Mutex::Locker locker(m_test_lock);
       m_release_count++;
       on_finish->complete(m_on_release_r);
@@ -86,7 +86,7 @@ public:
 
   std::list<std::unique_ptr<Connection> > m_connections;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestFixture::SetUp();
     EXPECT_EQ(0, librbd::mirror_mode_set(m_local_io_ctx, RBD_MIRROR_MODE_POOL));
 

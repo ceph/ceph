@@ -1,0 +1,6 @@
+overrides:
+  ansible.cephlab:
+    repo: https://github.com/SUSE/ceph-cm-ansible
+    branch: opensuse
+os_type: opensuse
+os_version: "42.2"

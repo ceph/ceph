@@ -1149,12 +1149,11 @@ Prepare tenant
 If you have not tried to use ``ceph-workbench`` with this tenant before,
 proceed to the next step.
 
-To start with a clean slate, login to your tenant via the Horizon dashboard and
-delete all of the following:
+To start with a clean slate, login to your tenant via the Horizon dashboard and:
 
-* ``teuthology`` and ``packages-repository`` instances, if any
-* ``teuthology`` security group
-* ``teuthology`` and ``teuthology-myself`` key pairs
+* terminate the ``teuthology`` and ``packages-repository`` instances, if any
+* delete the ``teuthology`` security group
+* delete the ``teuthology`` and ``teuthology-myself`` key pairs
 
 Also do the above if you ever get key-related errors ("invalid key", etc.) when
 trying to schedule suites.
@@ -1297,6 +1296,33 @@ where ``$RUN`` is the name of the run. It will be a string like this::
 Even if you don't providing the ``--upload`` option, however, all the logs can
 still be found on the teuthology machine in the directory
 ``/usr/share/nginx/html``.
+
+Provision VMs ad hoc
+--------------------
+
+From the teuthology VM, it is possible to provision machines on an "ad hoc"
+basis, to use however you like. The magic incantation is::
+
+    teuthology-lock --lock-many $NUMBER_OF_MACHINES \
+        --os-type $OPERATING_SYSTEM \
+        --os-version $OS_VERSION \
+        --machine-type openstack \
+        --owner $EMAIL_ADDRESS
+
+The command must be issued from the ``~/teuthology`` directory. The possible
+values for ``OPERATING_SYSTEM`` AND ``OS_VERSION`` can be found by examining
+the contents of the directory ``teuthology/openstack/``. For example::
+
+    teuthology-lock --lock-many 1 --os-type ubuntu --os-version 16.04 \
+        --machine-type openstack --owner foo@example.com
+
+When you are finished with the machine, find it in the list of machines::
+
+    openstack server list
+
+to determine the name or ID, and then terminate it with::
+
+    openstack server delete $NAME_OR_ID
 
 Deploy a cluster for manual testing
 -----------------------------------

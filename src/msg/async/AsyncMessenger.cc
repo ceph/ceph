@@ -50,7 +50,7 @@ class Processor::C_processor_accept : public EventCallback {
 
  public:
   explicit C_processor_accept(Processor *p): pro(p) {}
-  void do_request(int id) {
+  void do_request(int id) override {
     pro->accept();
   }
 };
@@ -232,7 +232,7 @@ class C_handle_reap : public EventCallback {
 
   public:
   explicit C_handle_reap(AsyncMessenger *m): msgr(m) {}
-  void do_request(int id) {
+  void do_request(int id) override {
     // judge whether is a time event
     msgr->reap_dead();
   }
@@ -393,18 +393,16 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
 
 int AsyncMessenger::client_bind(const entity_addr_t &bind_addr)
 {
-  lock.Lock();
+  Mutex::Locker l(lock);
   if (did_bind) {
     assert(my_inst.addr == bind_addr);
     return 0;
   }
   if (started) {
     ldout(cct, 10) << __func__ << " already started" << dendl;
-    lock.Unlock();
     return -1;
   }
   ldout(cct, 10) << __func__ << " " << bind_addr << dendl;
-  lock.Unlock();
 
   set_myaddr(bind_addr);
   return 0;
@@ -611,12 +609,6 @@ void AsyncMessenger::set_addr_unknowns(const entity_addr_t &addr)
     my_inst.addr.set_port(port);
     _init_local_connection();
   }
-}
-
-int AsyncMessenger::send_keepalive(Connection *con)
-{
-  con->send_keepalive();
-  return 0;
 }
 
 void AsyncMessenger::shutdown_connections(bool queue_reset)

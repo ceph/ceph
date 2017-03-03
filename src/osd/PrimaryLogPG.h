@@ -257,8 +257,7 @@ public:
   void on_peer_recover(
     pg_shard_t peer,
     const hobject_t &oid,
-    const ObjectRecoveryInfo &recovery_info,
-    const object_stat_sum_t &stat
+    const ObjectRecoveryInfo &recovery_info
     ) override;
   void begin_peer_recover(
     pg_shard_t peer,
@@ -305,7 +304,7 @@ public:
 
   std::string gen_dbg_prefix() const override { return gen_prefix(); }
   
-  const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>
+  const map<hobject_t, set<pg_shard_t>>
     &get_missing_loc_shards() const override {
     return missing_loc.get_missing_locs();
   }
@@ -395,8 +394,8 @@ public:
     assert(peer_info.count(peer));
     bool should_send =
       hoid.pool != (int64_t)info.pgid.pool() ||
-      cmp(hoid, last_backfill_started, get_sort_bitwise()) <= 0 ||
-      cmp(hoid, peer_info[peer].last_backfill, get_sort_bitwise()) <= 0;
+      hoid <= last_backfill_started ||
+      hoid <= peer_info[peer].last_backfill;
     if (!should_send)
       assert(is_backfill_targets(peer));
     return should_send;
@@ -432,9 +431,6 @@ public:
   }
   uint64_t min_peer_features() const override {
     return get_min_peer_features();
-  }
-  bool sort_bitwise() const override {
-    return get_sort_bitwise();
   }
 
   void send_message_osd_cluster(
@@ -821,9 +817,7 @@ protected:
     if (!to_req.empty()) {
       // requeue at front of scrub blocking queue if we are blocked by scrub
       for (auto &&p: to_req) {
-	if (scrubber.write_blocked_by_scrub(
-	      p.first.get_head(),
-	      get_sort_bitwise())) {
+	if (scrubber.write_blocked_by_scrub(p.first.get_head())) {
 	  waiting_for_scrub.splice(
 	    waiting_for_scrub.begin(),
 	    p.second,
@@ -937,13 +931,13 @@ protected:
   bool already_ack(eversion_t v);
 
   // projected object info
-  SharedLRU<hobject_t, ObjectContext, hobject_t::ComparatorWithDefault> object_contexts;
+  SharedLRU<hobject_t, ObjectContext> object_contexts;
   // map from oid.snapdir() to SnapSetContext *
-  map<hobject_t, SnapSetContext*, hobject_t::BitwiseComparator> snapset_contexts;
+  map<hobject_t, SnapSetContext*> snapset_contexts;
   Mutex snapset_contexts_lock;
 
   // debug order that client ops are applied
-  map<hobject_t, map<client_t, ceph_tid_t>, hobject_t::BitwiseComparator> debug_op_order;
+  map<hobject_t, map<client_t, ceph_tid_t>> debug_op_order;
 
   void populate_obc_watchers(ObjectContextRef obc);
   void check_blacklisted_obc_watchers(ObjectContextRef obc);
@@ -995,7 +989,7 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-  map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator> recovering;
+  map<hobject_t, ObjectContextRef> recovering;
 
   /*
    * Backfill
@@ -1011,8 +1005,8 @@ protected:
    *   - are not included in pg stats (yet)
    *   - have their stats in pending_backfill_updates on the primary
    */
-  set<hobject_t, hobject_t::Comparator> backfills_in_flight;
-  map<hobject_t, pg_stat_t, hobject_t::Comparator> pending_backfill_updates;
+  set<hobject_t> backfills_in_flight;
+  map<hobject_t, pg_stat_t> pending_backfill_updates;
 
   void dump_recovery_info(Formatter *f) const override {
     f->open_array_section("backfill_targets");
@@ -1045,7 +1039,7 @@ protected:
     }
     {
       f->open_array_section("backfills_in_flight");
-      for (set<hobject_t, hobject_t::BitwiseComparator>::const_iterator i = backfills_in_flight.begin();
+      for (set<hobject_t>::const_iterator i = backfills_in_flight.begin();
 	   i != backfills_in_flight.end();
 	   ++i) {
 	f->dump_stream("object") << *i;
@@ -1054,7 +1048,7 @@ protected:
     }
     {
       f->open_array_section("recovering");
-      for (map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator>::const_iterator i = recovering.begin();
+      for (map<hobject_t, ObjectContextRef>::const_iterator i = recovering.begin();
 	   i != recovering.end();
 	   ++i) {
 	f->dump_stream("object") << i->first;
@@ -1233,7 +1227,7 @@ protected:
   void recover_got(hobject_t oid, eversion_t v);
 
   // -- copyfrom --
-  map<hobject_t, CopyOpRef, hobject_t::BitwiseComparator> copy_ops;
+  map<hobject_t, CopyOpRef> copy_ops;
 
   int fill_in_copy_get(
     OpContext *ctx,
@@ -1278,7 +1272,7 @@ protected:
   friend struct C_Copyfrom;
 
   // -- flush --
-  map<hobject_t, FlushOpRef, hobject_t::BitwiseComparator> flush_ops;
+  map<hobject_t, FlushOpRef> flush_ops;
 
   /// start_flush takes ownership of on_flush iff ret == -EINPROGRESS
   int start_flush(
@@ -1300,8 +1294,7 @@ protected:
     const hobject_t &begin, const hobject_t &end) override;
   virtual void scrub_snapshot_metadata(
     ScrubMap &map,
-    const std::map<hobject_t, pair<uint32_t, uint32_t>,
-    hobject_t::BitwiseComparator> &missing_digest) override;
+    const std::map<hobject_t, pair<uint32_t, uint32_t>> &missing_digest) override;
   virtual void _scrub_clear_state() override;
   virtual void _scrub_finish() override;
   object_stat_collection_t scrub_cstat;
@@ -1320,7 +1313,7 @@ protected:
   bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
-  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator> in_progress_proxy_ops;
+  map<hobject_t, list<OpRequestRef>> in_progress_proxy_ops;
   void kick_proxy_ops_blocked(hobject_t& soid);
   void cancel_proxy_ops(bool requeue);
 
@@ -1361,7 +1354,6 @@ public:
   void do_op(OpRequestRef& op) override;
   void record_write_error(OpRequestRef op, const hobject_t &soid,
 			  MOSDOpReply *orig_reply, int r);
-  bool pg_op_must_wait(MOSDOp *op);
   void do_pg_op(OpRequestRef op);
   void do_sub_op(OpRequestRef op) override;
   void do_sub_op_reply(OpRequestRef op) override;
@@ -1369,6 +1361,8 @@ public:
     OpRequestRef op,
     ThreadPool::TPHandle &handle) override;
   void do_backfill(OpRequestRef op) override;
+
+  void handle_backoff(OpRequestRef& op);
 
   OpContextUPtr trim_object(bool first, const hobject_t &coid);
   void snap_trimmer(epoch_t e) override;
@@ -1455,7 +1449,7 @@ private:
   };
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
     PrimaryLogPG *pg;
-    set<hobject_t, hobject_t::BitwiseComparator> in_flight;
+    set<hobject_t> in_flight;
     snapid_t snap_to_trim;
     explicit SnapTrimmer(PrimaryLogPG *pg) : pg(pg) {}
     ~SnapTrimmer();

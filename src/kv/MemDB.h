@@ -86,7 +86,9 @@ public:
 
     void set(const std::string &prefix, const std::string &key,
       const bufferlist &val);
+    using KeyValueDB::TransactionImpl::set;
     void rmkey(const std::string &prefix, const std::string &k);
+    using KeyValueDB::TransactionImpl::rmkey;
     void rmkeys_by_prefix(const std::string &prefix);
 
     void merge(const std::string &prefix, const std::string &key, const bufferlist  &value);
@@ -127,10 +129,12 @@ public:
   int submit_transaction_sync(Transaction);
 
   int get(const std::string &prefix, const std::set<std::string> &key,
-    std::map<std::string, bufferlist> *out);
+    std::map<std::string, bufferlist> *out) override;
 
   int get(const std::string &prefix, const std::string &key,
           bufferlist *out) override;
+
+  using KeyValueDB::get;
 
   class MDBWholeSpaceIteratorImpl : public KeyValueDB::WholeSpaceIteratorImpl {
 

@@ -47,18 +47,18 @@ using namespace std;
 
 static void fuse_usage()
 {
-  const char **argv = (const char **) malloc((2) * sizeof(char *));
-  argv[0] = "ceph-fuse";
-  argv[1] = "-h";
+  const char* argv[] = {
+    "ceph-fuse",
+    "-h",
+  };
   struct fuse_args args = FUSE_ARGS_INIT(2, (char**)argv);
   if (fuse_parse_cmdline(&args, NULL, NULL, NULL) == -1) {
     derr << "fuse_parse_cmdline failed." << dendl;
-    fuse_opt_free_args(&args);
   }
-
-  assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
-  free(argv);
+  assert(args.allocated);
+  fuse_opt_free_args(&args);
 }
+
 void usage()
 {
   cout <<
@@ -149,8 +149,8 @@ int main(int argc, const char **argv, const char *envp[]) {
 	cfuse = cf;
 	client = cl;
       }
-      virtual ~RemountTest() {}
-      virtual void *entry() {
+      ~RemountTest() {}
+      void *entry() override {
 #if defined(__linux__)
 	int ver = get_linux_version();
 	assert(ver != 0);

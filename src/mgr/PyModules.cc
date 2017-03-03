@@ -399,7 +399,7 @@ public:
   ServeThread(MgrPyModule *mod_)
     : mod(mod_) {}
 
-  void *entry()
+  void *entry() override
   {
     PyGILState_STATE gstate;
     gstate = PyGILState_Ensure();

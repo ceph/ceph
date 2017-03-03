@@ -63,14 +63,14 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
   Messenger *client_msgr;
 
   MessengerTest(): server_msgr(NULL), client_msgr(NULL) {}
-  virtual void SetUp() {
+  void SetUp() override {
     lderr(g_ceph_context) << __func__ << " start set up " << GetParam() << dendl;
     server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
     client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid(), 0);
     server_msgr->set_default_policy(Messenger::Policy::stateless_server(0, 0));
     client_msgr->set_default_policy(Messenger::Policy::lossy_client(0, 0));
   }
-  virtual void TearDown() {
+  void TearDown() override {
     ASSERT_EQ(server_msgr->get_dispatch_queue_len(), 0);
     ASSERT_EQ(client_msgr->get_dispatch_queue_len(), 0);
     delete server_msgr;
@@ -102,8 +102,8 @@ class FakeDispatcher : public Dispatcher {
   explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
                           got_connect(false), loopback(false) {}
-  bool ms_can_fast_dispatch_any() const { return true; }
-  bool ms_can_fast_dispatch(Message *m) const {
+  bool ms_can_fast_dispatch_any() const override { return true; }
+  bool ms_can_fast_dispatch(Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
       return true;
@@ -112,7 +112,7 @@ class FakeDispatcher : public Dispatcher {
     }
   }
 
-  void ms_handle_fast_connect(Connection *con) {
+  void ms_handle_fast_connect(Connection *con) override {
     lock.Lock();
     lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Session *s = static_cast<Session*>(con->get_priv());
@@ -126,7 +126,7 @@ class FakeDispatcher : public Dispatcher {
     cond.Signal();
     lock.Unlock();
   }
-  void ms_handle_fast_accept(Connection *con) {
+  void ms_handle_fast_accept(Connection *con) override {
     Session *s = static_cast<Session*>(con->get_priv());
     if (!s) {
       s = new Session(con);
@@ -134,7 +134,7 @@ class FakeDispatcher : public Dispatcher {
     }
     s->put();
   }
-  bool ms_dispatch(Message *m) {
+  bool ms_dispatch(Message *m) override {
     Session *s = static_cast<Session*>(m->get_connection()->get_priv());
     if (!s) {
       s = new Session(m->get_connection());
@@ -152,7 +152,7 @@ class FakeDispatcher : public Dispatcher {
     m->put();
     return true;
   }
-  bool ms_handle_reset(Connection *con) {
+  bool ms_handle_reset(Connection *con) override {
     Mutex::Locker l(lock);
     lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Session *s = static_cast<Session*>(con->get_priv());
@@ -163,7 +163,7 @@ class FakeDispatcher : public Dispatcher {
     }
     return true;
   }
-  void ms_handle_remote_reset(Connection *con) {
+  void ms_handle_remote_reset(Connection *con) override {
     Mutex::Locker l(lock);
     lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Session *s = static_cast<Session*>(con->get_priv());
@@ -175,10 +175,10 @@ class FakeDispatcher : public Dispatcher {
     got_remote_reset = true;
     cond.Signal();
   }
-  bool ms_handle_refused(Connection *con) {
+  bool ms_handle_refused(Connection *con) override {
     return false;
   }
-  void ms_fast_dispatch(Message *m) {
+  void ms_fast_dispatch(Message *m) override {
     Session *s = static_cast<Session*>(m->get_connection()->get_priv());
     if (!s) {
       s = new Session(m->get_connection());
@@ -203,7 +203,7 @@ class FakeDispatcher : public Dispatcher {
 
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) {
+                            bool& isvalid, CryptoKey& session_key) override {
     isvalid = true;
     return true;
   }
@@ -813,8 +813,8 @@ class SyntheticDispatcher : public Dispatcher {
   SyntheticDispatcher(bool s, SyntheticWorkload *wl):
       Dispatcher(g_ceph_context), lock("SyntheticDispatcher::lock"), is_server(s), got_new(false),
       got_remote_reset(false), got_connect(false), index(0), workload(wl) {}
-  bool ms_can_fast_dispatch_any() const { return true; }
-  bool ms_can_fast_dispatch(Message *m) const {
+  bool ms_can_fast_dispatch_any() const override { return true; }
+  bool ms_can_fast_dispatch(Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
     case MSG_COMMAND:
@@ -824,7 +824,7 @@ class SyntheticDispatcher : public Dispatcher {
     }
   }
 
-  void ms_handle_fast_connect(Connection *con) {
+  void ms_handle_fast_connect(Connection *con) override {
     Mutex::Locker l(lock);
     list<uint64_t> c = conn_sent[con];
     for (list<uint64_t>::iterator it = c.begin();
@@ -834,7 +834,7 @@ class SyntheticDispatcher : public Dispatcher {
     got_connect = true;
     cond.Signal();
   }
-  void ms_handle_fast_accept(Connection *con) {
+  void ms_handle_fast_accept(Connection *con) override {
     Mutex::Locker l(lock);
     list<uint64_t> c = conn_sent[con];
     for (list<uint64_t>::iterator it = c.begin();
@@ -843,11 +843,11 @@ class SyntheticDispatcher : public Dispatcher {
     conn_sent.erase(con);
     cond.Signal();
   }
-  bool ms_dispatch(Message *m) {
+  bool ms_dispatch(Message *m) override {
     ceph_abort();
   }
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con) {
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override {
     Mutex::Locker l(lock);
     list<uint64_t> c = conn_sent[con];
     for (list<uint64_t>::iterator it = c.begin();
@@ -856,10 +856,10 @@ class SyntheticDispatcher : public Dispatcher {
     conn_sent.erase(con);
     got_remote_reset = true;
   }
-  bool ms_handle_refused(Connection *con) {
+  bool ms_handle_refused(Connection *con) override {
     return false;
   }
-  void ms_fast_dispatch(Message *m) {
+  void ms_fast_dispatch(Message *m) override {
     // MSG_COMMAND is used to disorganize regular message flow
     if (m->get_type() == MSG_COMMAND) {
       m->put();
@@ -893,7 +893,7 @@ class SyntheticDispatcher : public Dispatcher {
 
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) {
+                            bool& isvalid, CryptoKey& session_key) override {
     isvalid = true;
     return true;
   }
@@ -1373,8 +1373,8 @@ class MarkdownDispatcher : public Dispatcher {
   atomic_t count;
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
                               last_mark(false), count(0) {}
-  bool ms_can_fast_dispatch_any() const { return false; }
-  bool ms_can_fast_dispatch(Message *m) const {
+  bool ms_can_fast_dispatch_any() const override { return false; }
+  bool ms_can_fast_dispatch(Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
       return true;
@@ -1383,16 +1383,16 @@ class MarkdownDispatcher : public Dispatcher {
     }
   }
 
-  void ms_handle_fast_connect(Connection *con) {
+  void ms_handle_fast_connect(Connection *con) override {
     lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Mutex::Locker l(lock);
     conns.insert(con);
   }
-  void ms_handle_fast_accept(Connection *con) {
+  void ms_handle_fast_accept(Connection *con) override {
     Mutex::Locker l(lock);
     conns.insert(con);
   }
-  bool ms_dispatch(Message *m) {
+  bool ms_dispatch(Message *m) override {
     lderr(g_ceph_context) << __func__ << " conn: " << m->get_connection() << dendl;
     Mutex::Locker l(lock);
     count.inc();
@@ -1416,27 +1416,27 @@ class MarkdownDispatcher : public Dispatcher {
     m->put();
     return true;
   }
-  bool ms_handle_reset(Connection *con) {
+  bool ms_handle_reset(Connection *con) override {
     lderr(g_ceph_context) << __func__ << " " << con << dendl;
     Mutex::Locker l(lock);
     conns.erase(con);
     usleep(rand() % 500);
     return true;
   }
-  void ms_handle_remote_reset(Connection *con) {
+  void ms_handle_remote_reset(Connection *con) override {
     Mutex::Locker l(lock);
     conns.erase(con);
     lderr(g_ceph_context) << __func__ << " " << con << dendl;
   }
-  bool ms_handle_refused(Connection *con) {
+  bool ms_handle_refused(Connection *con) override {
     return false;
   }
-  void ms_fast_dispatch(Message *m) {
+  void ms_fast_dispatch(Message *m) override {
     ceph_abort();
   }
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
                             bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key) {
+                            bool& isvalid, CryptoKey& session_key) override {
     isvalid = true;
     return true;
   }
@@ -1498,7 +1498,7 @@ INSTANTIATE_TEST_CASE_P(
   Messenger,
   MessengerTest,
   ::testing::Values(
-    "async",
+    "async+posix",
     "simple"
   )
 );

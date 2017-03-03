@@ -41,7 +41,6 @@
 #include "common/snap_types.h"
 #include "HitSet.h"
 #include "Watch.h"
-#include "OpRequest.h"
 #include "include/cmp.h"
 #include "librados/ListObjectImpl.h"
 #include "compressor/Compressor.h"
@@ -98,6 +97,36 @@ string ceph_osd_flag_string(unsigned flags);
 string ceph_osd_op_flag_string(unsigned flags);
 /// conver CEPH_OSD_ALLOC_HINT_FLAG_* op flags to a string
 string ceph_osd_alloc_hint_flag_string(unsigned flags);
+
+
+/**
+ * osd request identifier
+ *
+ * caller name + incarnation# + tid to unique identify this request.
+ */
+struct osd_reqid_t {
+  entity_name_t name; // who
+  ceph_tid_t         tid;
+  int32_t       inc;  // incarnation
+
+  osd_reqid_t()
+    : tid(0), inc(0) {}
+  osd_reqid_t(const entity_name_t& a, int i, ceph_tid_t t)
+    : name(a), tid(t), inc(i) {}
+
+  DENC(osd_reqid_t, v, p) {
+    DENC_START(2, 2, p);
+    denc(v.name, p);
+    denc(v.tid, p);
+    denc(v.inc, p);
+    DENC_FINISH(p);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<osd_reqid_t*>& o);
+};
+WRITE_CLASS_DENC(osd_reqid_t)
+
+
 
 struct pg_shard_t {
   int32_t osd;
@@ -1220,6 +1249,8 @@ public:
   string erasure_code_profile; ///< name of the erasure code profile in OSDMap
   epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
   epoch_t last_force_op_resend; ///< last epoch that forced clients to resend
+  /// last epoch that forced clients to resend (pre-luminous clients only)
+  epoch_t last_force_op_resend_preluminous;
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
   uint64_t auid;            ///< who owns the pg
@@ -1334,6 +1365,7 @@ public:
       pg_num(0), pgp_num(0),
       last_change(0),
       last_force_op_resend(0),
+      last_force_op_resend_preluminous(0),
       snap_seq(0), snap_epoch(0),
       auid(0),
       crash_replay_interval(0),
@@ -1390,6 +1422,9 @@ public:
   }
   epoch_t get_last_change() const { return last_change; }
   epoch_t get_last_force_op_resend() const { return last_force_op_resend; }
+  epoch_t get_last_force_op_resend_preluminous() const {
+    return last_force_op_resend_preluminous;
+  }
   epoch_t get_snap_epoch() const { return snap_epoch; }
   snapid_t get_snap_seq() const { return snap_seq; }
   uint64_t get_auid() const { return auid; }
@@ -1460,6 +1495,11 @@ public:
   }
   uint64_t get_quota_max_objects() {
     return quota_max_objects;
+  }
+
+  void set_last_force_op_resend(uint64_t t) {
+    last_force_op_resend = t;
+    last_force_op_resend_preluminous = t;
   }
 
   void calc_pg_masks();
@@ -2210,9 +2250,9 @@ struct pg_info_t {
       last_backfill_bitwise(false)
   { }
   
-  void set_last_backfill(hobject_t pos, bool sort) {
+  void set_last_backfill(hobject_t pos) {
     last_backfill = pos;
-    last_backfill_bitwise = sort;
+    last_backfill_bitwise = true;
   }
 
   bool is_empty() const { return last_update.version == 0; }
@@ -3120,7 +3160,7 @@ ostream& operator<<(ostream& out, const pg_missing_item &item);
 
 class pg_missing_const_i {
 public:
-  virtual const map<hobject_t, pg_missing_item, hobject_t::ComparatorWithDefault> &
+  virtual const map<hobject_t, pg_missing_item> &
     get_items() const = 0;
   virtual const map<version_t, hobject_t> &get_rmissing() const = 0;
   virtual unsigned int num_missing() const = 0;
@@ -3145,7 +3185,7 @@ public:
 };
 template <>
 class ChangeTracker<true> {
-  set<hobject_t, hobject_t::BitwiseComparator> _changed;
+  set<hobject_t> _changed;
 public:
   void changed(const hobject_t &obj) {
     _changed.insert(obj);
@@ -3167,7 +3207,7 @@ public:
 template <bool TrackChanges>
 class pg_missing_set : public pg_missing_const_i {
   using item = pg_missing_item;
-  map<hobject_t, item, hobject_t::ComparatorWithDefault> missing;  // oid -> (need v, have v)
+  map<hobject_t, item> missing;  // oid -> (need v, have v)
   map<version_t, hobject_t> rmissing;  // v -> oid
   ChangeTracker<TrackChanges> tracker;
 
@@ -3184,7 +3224,7 @@ public:
       tracker.changed(i.first);
   }
 
-  const map<hobject_t, item, hobject_t::ComparatorWithDefault> &get_items() const override {
+  const map<hobject_t, item> &get_items() const override {
     return missing;
   }
   const map<version_t, hobject_t> &get_rmissing() const override {
@@ -3205,7 +3245,7 @@ public:
     return true;
   }
   bool is_missing(const hobject_t& oid, eversion_t v) const override {
-    map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m =
+    map<hobject_t, item>::const_iterator m =
       missing.find(oid);
     if (m == missing.end())
       return false;
@@ -3215,7 +3255,7 @@ public:
     return true;
   }
   eversion_t have_old(const hobject_t& oid) const override {
-    map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m =
+    map<hobject_t, item>::const_iterator m =
       missing.find(oid);
     if (m == missing.end())
       return eversion_t();
@@ -3235,7 +3275,7 @@ public:
    */
   void add_next_event(const pg_log_entry_t& e) {
     if (e.is_update()) {
-      map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator missing_it;
+      map<hobject_t, item>::iterator missing_it;
       missing_it = missing.find(e.soid);
       bool is_missing_divergent_item = missing_it != missing.end();
       if (e.prior_version == eversion_t() || e.is_clone()) {
@@ -3291,25 +3331,25 @@ public:
   }
 
   void rm(const hobject_t& oid, eversion_t v) {
-    std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
+    std::map<hobject_t, item>::iterator p = missing.find(oid);
     if (p != missing.end() && p->second.need <= v)
       rm(p);
   }
 
-  void rm(std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m) {
+  void rm(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
     rmissing.erase(m->second.need.version);
     missing.erase(m);
   }
 
   void got(const hobject_t& oid, eversion_t v) {
-    std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
+    std::map<hobject_t, item>::iterator p = missing.find(oid);
     assert(p != missing.end());
     assert(p->second.need <= v);
     got(p);
   }
 
-  void got(std::map<hobject_t, item, hobject_t::ComparatorWithDefault>::const_iterator m) {
+  void got(std::map<hobject_t, item>::const_iterator m) {
     tracker.changed(m->first);
     rmissing.erase(m->second.need.version);
     missing.erase(m);
@@ -3320,7 +3360,7 @@ public:
     unsigned split_bits,
     pg_missing_set *omissing) {
     unsigned mask = ~((~0)<<split_bits);
-    for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator i = missing.begin();
+    for (map<hobject_t, item>::iterator i = missing.begin();
 	 i != missing.end();
       ) {
       if ((i->first.get_hash() & mask) == child_pgid.m_seed) {
@@ -3339,16 +3379,6 @@ public:
     rmissing.clear();
   }
 
-  void resort(bool sort_bitwise) {
-    if (missing.key_comp().bitwise != sort_bitwise) {
-      map<hobject_t, item, hobject_t::ComparatorWithDefault> tmp;
-      tmp.swap(missing);
-      missing = map<hobject_t, item, hobject_t::ComparatorWithDefault>(
-	hobject_t::ComparatorWithDefault(sort_bitwise));
-      missing.insert(tmp.begin(), tmp.end());
-    }
-  }
-
   void encode(bufferlist &bl) const {
     ENCODE_START(3, 2, bl);
     ::encode(missing, bl);
@@ -3363,8 +3393,8 @@ public:
 
     if (struct_v < 3) {
       // Handle hobject_t upgrade
-      map<hobject_t, item, hobject_t::ComparatorWithDefault> tmp;
-      for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator i =
+      map<hobject_t, item> tmp;
+      for (map<hobject_t, item>::iterator i =
 	     missing.begin();
 	   i != missing.end();
 	) {
@@ -3380,7 +3410,7 @@ public:
       missing.insert(tmp.begin(), tmp.end());
     }
 
-    for (map<hobject_t,item, hobject_t::ComparatorWithDefault>::iterator it =
+    for (map<hobject_t,item>::iterator it =
 	   missing.begin();
 	 it != missing.end();
 	 ++it)
@@ -3390,7 +3420,7 @@ public:
   }
   void dump(Formatter *f) const {
     f->open_array_section("missing");
-    for (map<hobject_t,item, hobject_t::ComparatorWithDefault>::const_iterator p =
+    for (map<hobject_t,item>::const_iterator p =
 	   missing.begin(); p != missing.end(); ++p) {
       f->open_object_section("item");
       f->dump_stream("object") << p->first;
@@ -3462,7 +3492,7 @@ public:
     }
     if (oss && !ok) {
       *oss << "check_missing: " << check_missing << "\n";
-      set<hobject_t, hobject_t::BitwiseComparator> changed;
+      set<hobject_t> changed;
       tracker.get_changed([&](const hobject_t &hoid) { changed.insert(hoid); });
       *oss << "changed: " << changed << "\n";
     }
@@ -4091,16 +4121,6 @@ struct object_info_t {
 };
 WRITE_CLASS_ENCODER_FEATURES(object_info_t)
 
-struct ObjectState {
-  object_info_t oi;
-  bool exists;         ///< the stored object exists (i.e., we will remember the object_info_t)
-
-  ObjectState() : exists(false) {}
-
-  ObjectState(const object_info_t &oi_, bool exists_)
-    : oi(oi_), exists(exists_) {}
-};
-
 struct SnapSetContext {
   hobject_t oid;
   SnapSet snapset;
@@ -4112,499 +4132,9 @@ struct SnapSetContext {
     oid(o), ref(0), registered(false), exists(true) { }
 };
 
-/*
-  * keep tabs on object modifications that are in flight.
-  * we need to know the projected existence, size, snapset,
-  * etc., because we don't send writes down to disk until after
-  * replicas ack.
-  */
-
-struct ObjectContext;
-
-typedef ceph::shared_ptr<ObjectContext> ObjectContextRef;
-
-struct ObjectContext {
-  ObjectState obs;
-
-  SnapSetContext *ssc;  // may be null
-
-  Context *destructor_callback;
-
-private:
-  Mutex lock;
-public:
-  Cond cond;
-  int unstable_writes, readers, writers_waiting, readers_waiting;
-
-
-  // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
-  map<pair<uint64_t, entity_name_t>, WatchRef> watchers;
-
-  // attr cache
-  map<string, bufferlist> attr_cache;
-
-  struct RWState {
-    enum State {
-      RWNONE,
-      RWREAD,
-      RWWRITE,
-      RWEXCL,
-    };
-    static const char *get_state_name(State s) {
-      switch (s) {
-      case RWNONE: return "none";
-      case RWREAD: return "read";
-      case RWWRITE: return "write";
-      case RWEXCL: return "excl";
-      default: return "???";
-      }
-    }
-    const char *get_state_name() const {
-      return get_state_name(state);
-    }
-
-    list<OpRequestRef> waiters;  ///< ops waiting on state change
-    int count;              ///< number of readers or writers
-
-    State state:4;               ///< rw state
-    /// if set, restart backfill when we can get a read lock
-    bool recovery_read_marker:1;
-    /// if set, requeue snaptrim on lock release
-    bool snaptrimmer_write_marker:1;
-
-    RWState()
-      : count(0),
-	state(RWNONE),
-	recovery_read_marker(false),
-	snaptrimmer_write_marker(false)
-    {}
-    bool get_read(OpRequestRef op) {
-      if (get_read_lock()) {
-	return true;
-      } // else
-      waiters.push_back(op);
-      return false;
-    }
-    /// this function adjusts the counts if necessary
-    bool get_read_lock() {
-      // don't starve anybody!
-      if (!waiters.empty()) {
-	return false;
-      }
-      switch (state) {
-      case RWNONE:
-	assert(count == 0);
-	state = RWREAD;
-	// fall through
-      case RWREAD:
-	count++;
-	return true;
-      case RWWRITE:
-	return false;
-      case RWEXCL:
-	return false;
-      default:
-	assert(0 == "unhandled case");
-	return false;
-      }
-    }
-
-    bool get_write(OpRequestRef op, bool greedy=false) {
-      if (get_write_lock(greedy)) {
-	return true;
-      } // else
-      if (op)
-	waiters.push_back(op);
-      return false;
-    }
-    bool get_write_lock(bool greedy=false) {
-      if (!greedy) {
-	// don't starve anybody!
-	if (!waiters.empty() ||
-	    recovery_read_marker) {
-	  return false;
-	}
-      }
-      switch (state) {
-      case RWNONE:
-	assert(count == 0);
-	state = RWWRITE;
-	// fall through
-      case RWWRITE:
-	count++;
-	return true;
-      case RWREAD:
-	return false;
-      case RWEXCL:
-	return false;
-      default:
-	assert(0 == "unhandled case");
-	return false;
-      }
-    }
-    bool get_excl_lock() {
-      switch (state) {
-      case RWNONE:
-	assert(count == 0);
-	state = RWEXCL;
-	count = 1;
-	return true;
-      case RWWRITE:
-	return false;
-      case RWREAD:
-	return false;
-      case RWEXCL:
-	return false;
-      default:
-	assert(0 == "unhandled case");
-	return false;
-      }
-    }
-    bool get_excl(OpRequestRef op) {
-      if (get_excl_lock()) {
-	return true;
-      } // else
-      if (op)
-	waiters.push_back(op);
-      return false;
-    }
-    /// same as get_write_lock, but ignore starvation
-    bool take_write_lock() {
-      if (state == RWWRITE) {
-	count++;
-	return true;
-      }
-      return get_write_lock();
-    }
-    void dec(list<OpRequestRef> *requeue) {
-      assert(count > 0);
-      assert(requeue);
-      count--;
-      if (count == 0) {
-	state = RWNONE;
-	requeue->splice(requeue->end(), waiters);
-      }
-    }
-    void put_read(list<OpRequestRef> *requeue) {
-      assert(state == RWREAD);
-      dec(requeue);
-    }
-    void put_write(list<OpRequestRef> *requeue) {
-      assert(state == RWWRITE);
-      dec(requeue);
-    }
-    void put_excl(list<OpRequestRef> *requeue) {
-      assert(state == RWEXCL);
-      dec(requeue);
-    }
-    bool empty() const { return state == RWNONE; }
-  } rwstate;
-
-  bool get_read(OpRequestRef op) {
-    return rwstate.get_read(op);
-  }
-  bool get_write(OpRequestRef op) {
-    return rwstate.get_write(op, false);
-  }
-  bool get_excl(OpRequestRef op) {
-    return rwstate.get_excl(op);
-  }
-  bool get_lock_type(OpRequestRef op, RWState::State type) {
-    switch (type) {
-    case RWState::RWWRITE:
-      return get_write(op);
-    case RWState::RWREAD:
-      return get_read(op);
-    case RWState::RWEXCL:
-      return get_excl(op);
-    default:
-      assert(0 == "invalid lock type");
-      return true;
-    }
-  }
-  bool get_write_greedy(OpRequestRef op) {
-    return rwstate.get_write(op, true);
-  }
-  bool get_snaptrimmer_write(bool mark_if_unsuccessful) {
-    if (rwstate.get_write_lock()) {
-      return true;
-    } else {
-      if (mark_if_unsuccessful)
-	rwstate.snaptrimmer_write_marker = true;
-      return false;
-    }
-  }
-  bool get_recovery_read() {
-    rwstate.recovery_read_marker = true;
-    if (rwstate.get_read_lock()) {
-      return true;
-    }
-    return false;
-  }
-  bool try_get_read_lock() {
-    return rwstate.get_read_lock();
-  }
-  void drop_recovery_read(list<OpRequestRef> *ls) {
-    assert(rwstate.recovery_read_marker);
-    rwstate.put_read(ls);
-    rwstate.recovery_read_marker = false;
-  }
-  void put_read(list<OpRequestRef> *to_wake) {
-    rwstate.put_read(to_wake);
-  }
-  void put_excl(list<OpRequestRef> *to_wake,
-		 bool *requeue_recovery,
-		 bool *requeue_snaptrimmer) {
-    rwstate.put_excl(to_wake);
-    if (rwstate.empty() && rwstate.recovery_read_marker) {
-      rwstate.recovery_read_marker = false;
-      *requeue_recovery = true;
-    }
-    if (rwstate.empty() && rwstate.snaptrimmer_write_marker) {
-      rwstate.snaptrimmer_write_marker = false;
-      *requeue_snaptrimmer = true;
-    }
-  }
-  void put_write(list<OpRequestRef> *to_wake,
-		 bool *requeue_recovery,
-		 bool *requeue_snaptrimmer) {
-    rwstate.put_write(to_wake);
-    if (rwstate.empty() && rwstate.recovery_read_marker) {
-      rwstate.recovery_read_marker = false;
-      *requeue_recovery = true;
-    }
-    if (rwstate.empty() && rwstate.snaptrimmer_write_marker) {
-      rwstate.snaptrimmer_write_marker = false;
-      *requeue_snaptrimmer = true;
-    }
-  }
-  void put_lock_type(
-    ObjectContext::RWState::State type,
-    list<OpRequestRef> *to_wake,
-    bool *requeue_recovery,
-    bool *requeue_snaptrimmer) {
-    switch (type) {
-    case ObjectContext::RWState::RWWRITE:
-      return put_write(to_wake, requeue_recovery, requeue_snaptrimmer);
-    case ObjectContext::RWState::RWREAD:
-      return put_read(to_wake);
-    case ObjectContext::RWState::RWEXCL:
-      return put_excl(to_wake, requeue_recovery, requeue_snaptrimmer);
-    default:
-      assert(0 == "invalid lock type");
-    }
-  }
-  bool is_request_pending() {
-    return (rwstate.count > 0);
-  }
-
-  ObjectContext()
-    : ssc(NULL),
-      destructor_callback(0),
-      lock("PrimaryLogPG::ObjectContext::lock"),
-      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
-      blocked(false), requeue_scrub_on_unblock(false) {}
-
-  ~ObjectContext() {
-    assert(rwstate.empty());
-    if (destructor_callback)
-      destructor_callback->complete(0);
-  }
-
-  void start_block() {
-    assert(!blocked);
-    blocked = true;
-  }
-  void stop_block() {
-    assert(blocked);
-    blocked = false;
-  }
-  bool is_blocked() const {
-    return blocked;
-  }
-
-  // do simple synchronous mutual exclusion, for now.  no waitqueues or anything fancy.
-  void ondisk_write_lock() {
-    lock.Lock();
-    writers_waiting++;
-    while (readers_waiting || readers)
-      cond.Wait(lock);
-    writers_waiting--;
-    unstable_writes++;
-    lock.Unlock();
-  }
-  void ondisk_write_unlock() {
-    lock.Lock();
-    assert(unstable_writes > 0);
-    unstable_writes--;
-    if (!unstable_writes && readers_waiting)
-      cond.Signal();
-    lock.Unlock();
-  }
-  void ondisk_read_lock() {
-    lock.Lock();
-    readers_waiting++;
-    while (unstable_writes)
-      cond.Wait(lock);
-    readers_waiting--;
-    readers++;
-    lock.Unlock();
-  }
-  void ondisk_read_unlock() {
-    lock.Lock();
-    assert(readers > 0);
-    readers--;
-    if (!readers && writers_waiting)
-      cond.Signal();
-    lock.Unlock();
-  }
-
-  /// in-progress copyfrom ops for this object
-  bool blocked:1;
-  bool requeue_scrub_on_unblock:1;    // true if we need to requeue scrub on unblock
-
-};
-
-inline ostream& operator<<(ostream& out, const ObjectState& obs)
-{
-  out << obs.oi.soid;
-  if (!obs.exists)
-    out << "(dne)";
-  return out;
-}
-
-inline ostream& operator<<(ostream& out, const ObjectContext::RWState& rw)
-{
-  return out << "rwstate(" << rw.get_state_name()
-	     << " n=" << rw.count
-	     << " w=" << rw.waiters.size()
-	     << ")";
-}
-
-inline ostream& operator<<(ostream& out, const ObjectContext& obc)
-{
-  return out << "obc(" << obc.obs << " " << obc.rwstate << ")";
-}
 
 
 ostream& operator<<(ostream& out, const object_info_t& oi);
-
-class ObcLockManager {
-  struct ObjectLockState {
-    ObjectContextRef obc;
-    ObjectContext::RWState::State type;
-    ObjectLockState(
-      ObjectContextRef obc,
-      ObjectContext::RWState::State type)
-      : obc(obc), type(type) {}
-  };
-  map<hobject_t, ObjectLockState, hobject_t::BitwiseComparator> locks;
-public:
-  ObcLockManager() = default;
-  ObcLockManager(ObcLockManager &&) = default;
-  ObcLockManager(const ObcLockManager &) = delete;
-  ObcLockManager &operator=(ObcLockManager &&) = default;
-  bool empty() const {
-    return locks.empty();
-  }
-  bool get_lock_type(
-    ObjectContext::RWState::State type,
-    const hobject_t &hoid,
-    ObjectContextRef obc,
-    OpRequestRef op) {
-    assert(locks.find(hoid) == locks.end());
-    if (obc->get_lock_type(op, type)) {
-      locks.insert(make_pair(hoid, ObjectLockState(obc, type)));
-      return true;
-    } else {
-      return false;
-    }
-  }
-  /// Get write lock, ignore starvation
-  bool take_write_lock(
-    const hobject_t &hoid,
-    ObjectContextRef obc) {
-    assert(locks.find(hoid) == locks.end());
-    if (obc->rwstate.take_write_lock()) {
-      locks.insert(
-	make_pair(
-	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));
-      return true;
-    } else {
-      return false;
-    }
-  }
-  /// Get write lock for snap trim
-  bool get_snaptrimmer_write(
-    const hobject_t &hoid,
-    ObjectContextRef obc,
-    bool mark_if_unsuccessful) {
-    assert(locks.find(hoid) == locks.end());
-    if (obc->get_snaptrimmer_write(mark_if_unsuccessful)) {
-      locks.insert(
-	make_pair(
-	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));
-      return true;
-    } else {
-      return false;
-    }
-  }
-  /// Get write lock greedy
-  bool get_write_greedy(
-    const hobject_t &hoid,
-    ObjectContextRef obc,
-    OpRequestRef op) {
-    assert(locks.find(hoid) == locks.end());
-    if (obc->get_write_greedy(op)) {
-      locks.insert(
-	make_pair(
-	  hoid, ObjectLockState(obc, ObjectContext::RWState::RWWRITE)));
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  /// try get read lock
-  bool try_get_read_lock(
-    const hobject_t &hoid,
-    ObjectContextRef obc) {
-    assert(locks.find(hoid) == locks.end());
-    if (obc->try_get_read_lock()) {
-      locks.insert(
-	make_pair(
-	  hoid,
-	  ObjectLockState(obc, ObjectContext::RWState::RWREAD)));
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  void put_locks(
-    list<pair<hobject_t, list<OpRequestRef> > > *to_requeue,
-    bool *requeue_recovery,
-    bool *requeue_snaptrimmer) {
-    for (auto p: locks) {
-      list<OpRequestRef> _to_requeue;
-      p.second.obc->put_lock_type(
-	p.second.type,
-	&_to_requeue,
-	requeue_recovery,
-	requeue_snaptrimmer);
-      if (to_requeue) {
-	to_requeue->push_back(
-	  make_pair(
-	    p.second.obc->obs.oi.soid,
-	    std::move(_to_requeue)));
-      }
-    }
-    locks.clear();
-  }
-  ~ObcLockManager() {
-    assert(locks.empty());
-  }
-};
 
 
 
@@ -4616,7 +4146,7 @@ struct ObjectRecoveryInfo {
   object_info_t oi;
   SnapSet ss;
   interval_set<uint64_t> copy_subset;
-  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subset;
+  map<hobject_t, interval_set<uint64_t>> clone_subset;
 
   ObjectRecoveryInfo() : size(0) { }
 
@@ -4745,14 +4275,9 @@ struct ScrubMap {
   };
   WRITE_CLASS_ENCODER(object)
 
-  bool bitwise; // ephemeral, not encoded
-  map<hobject_t,object, hobject_t::ComparatorWithDefault> objects;
+  map<hobject_t,object> objects;
   eversion_t valid_through;
   eversion_t incr_since;
-
-  ScrubMap() : bitwise(true) {}
-  ScrubMap(bool bitwise)
-    : bitwise(bitwise), objects(hobject_t::ComparatorWithDefault(bitwise)) {}
 
   void merge_incr(const ScrubMap &l);
   void insert(const ScrubMap &r) {
@@ -4767,16 +4292,6 @@ struct ScrubMap {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl, int64_t pool=-1);
   void dump(Formatter *f) const;
-  void reset_bitwise(bool new_bitwise) {
-    if (bitwise == new_bitwise)
-      return;
-    map<hobject_t, object, hobject_t::ComparatorWithDefault> new_objects(
-      objects.begin(),
-      objects.end(),
-      hobject_t::ComparatorWithDefault(new_bitwise));
-    ::swap(new_objects, objects);
-    bitwise = new_bitwise;
-  }
   static void generate_test_instances(list<ScrubMap*>& o);
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)

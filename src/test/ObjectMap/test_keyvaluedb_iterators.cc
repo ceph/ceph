@@ -33,7 +33,7 @@ public:
   boost::scoped_ptr<KeyValueDB> db;
   boost::scoped_ptr<KeyValueDBMemory> mock;
 
-  virtual void SetUp() {
+  void SetUp() override {
     assert(!store_path.empty());
 
     KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context, "leveldb", store_path);
@@ -42,7 +42,7 @@ public:
     mock.reset(new KeyValueDBMemory());
   }
 
-  virtual void TearDown() { }
+  void TearDown() override { }
 
   ::testing::AssertionResult validate_db_clear(KeyValueDB *store) {
     KeyValueDB::WholeSpaceIterator it = store->get_iterator();
@@ -274,7 +274,7 @@ public:
     db->submit_transaction_sync(tx);
   }
 
-  virtual void SetUp() {
+  void SetUp() override {
     IteratorTest::SetUp();
 
     prefix1 = "_PREFIX_1_";
@@ -292,7 +292,7 @@ public:
     ASSERT_TRUE(validate_db_match());
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     IteratorTest::TearDown();
   }
 
@@ -543,7 +543,7 @@ public:
     db->submit_transaction_sync(tx);
   }
 
-  virtual void SetUp() {
+  void SetUp() override {
     IteratorTest::SetUp();
 
     prefix1 = "_PREFIX_1_";
@@ -560,7 +560,7 @@ public:
     ASSERT_TRUE(validate_db_match());
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     IteratorTest::TearDown();
   }
 
@@ -786,7 +786,7 @@ public:
     store->submit_transaction_sync(tx);
   }
 
-  virtual void SetUp() {
+  void SetUp() override {
     IteratorTest::SetUp();
 
     prefix1 = "_PREFIX_1_";
@@ -804,7 +804,7 @@ public:
     ASSERT_TRUE(validate_db_match());
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     IteratorTest::TearDown();
   }
 
@@ -1257,7 +1257,7 @@ public:
     store->submit_transaction_sync(tx);
   }
 
-  virtual void SetUp() {
+  void SetUp() override {
     IteratorTest::SetUp();
 
     prefix0 = "_PREFIX_0_";
@@ -1278,7 +1278,7 @@ public:
     ASSERT_TRUE(validate_db_match());
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     IteratorTest::TearDown();
   }
 
@@ -1519,7 +1519,7 @@ public:
     store->submit_transaction_sync(tx);
   }
 
-  virtual void SetUp() {
+  void SetUp() override {
     IteratorTest::SetUp();
 
     prefix1 = "_PREFIX_1_";
@@ -1535,7 +1535,7 @@ public:
     ASSERT_TRUE(validate_db_match());
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     IteratorTest::TearDown();
   }
 
@@ -1591,7 +1591,7 @@ TEST_F(KeySpaceIteration, BackwardIterationMockDB) {
 class EmptyStore : public IteratorTest
 {
 public:
-  virtual void SetUp() {
+  void SetUp() override {
     IteratorTest::SetUp();
 
     clear(db.get());

@@ -56,6 +56,8 @@ struct ManagedLock<MockTestImageCtx> {
     : m_lock("ManagedLock::m_lock") {
   }
 
+  virtual ~ManagedLock() = default;
+
   mutable Mutex m_lock;
 
   bool is_lock_owner() const {
@@ -96,7 +98,6 @@ struct ManagedLock<MockTestImageCtx> {
 
 // template definitions
 #include "tools/rbd_mirror/LeaderWatcher.cc"
-template class rbd::mirror::LeaderWatcher<librbd::MockTestImageCtx>;
 
 namespace rbd {
 namespace mirror {

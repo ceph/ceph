@@ -213,7 +213,7 @@ public:
     }
   }
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       yield {
 	char buf[16];
@@ -292,7 +292,7 @@ public:
     }
   }
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       yield {
 	char buf[16];
@@ -349,7 +349,7 @@ public:
                      map<int, RGWDataChangesLogInfo> *_datalog_info) : RGWShardCollectCR(_sync_env->cct, READ_DATALOG_MAX_CONCURRENT),
                                                                  sync_env(_sync_env), num_shards(_num_shards),
                                                                  datalog_info(_datalog_info), shard_id(0) {}
-  bool spawn_next();
+  bool spawn_next() override;
 };
 
 bool RGWReadRemoteDataLogInfoCR::spawn_next() {
@@ -377,7 +377,7 @@ public:
     : RGWSimpleCoroutine(env->store->ctx()), sync_env(env), http_op(NULL),
       shard_id(_shard_id), marker(_marker), max_entries(_max_entries), result(_result) {}
 
-  int send_request() {
+  int send_request() override {
     RGWRESTConn *conn = sync_env->conn;
     RGWRados *store = sync_env->store;
 
@@ -411,7 +411,7 @@ public:
     return 0;
   }
 
-  int request_complete() {
+  int request_complete() override {
     int ret = http_op->wait(result);
     http_op->put();
     if (ret < 0 && ret != -ENOENT) {
@@ -442,7 +442,7 @@ public:
     shards.swap(_shards);
     iter = shards.begin();
   }
-  bool spawn_next();
+  bool spawn_next() override;
 };
 
 bool RGWListRemoteDataLogCR::spawn_next() {
@@ -482,7 +482,7 @@ public:
     sync_status_oid = RGWDataSyncStatusManager::sync_status_oid(sync_env->source_zone);
   }
 
-  int operate() {
+  int operate() override {
     int ret;
     reenter(this) {
       yield {
@@ -713,7 +713,7 @@ public:
     delete entries_index;
   }
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       entries_index = new RGWShardedOmapCRManager(sync_env->async_rados, store, this, num_shards,
 						  store->get_zone_params().log_pool,
@@ -798,7 +798,7 @@ class RGWDataSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, strin
   map<string, string> key_to_marker;
   map<string, string> marker_to_key;
 
-  void handle_finish(const string& marker) {
+  void handle_finish(const string& marker) override {
     map<string, string>::iterator iter = marker_to_key.find(marker);
     if (iter == marker_to_key.end()) {
       return;
@@ -816,7 +816,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) {
+  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.marker = new_marker;
     sync_marker.pos = index_pos;
 
@@ -900,7 +900,7 @@ public:
     }
   }
 
-  int operate();
+  int operate() override;
 };
 
 class RGWDataSyncSingleEntryCR : public RGWCoroutine {
@@ -934,7 +934,7 @@ public:
     set_description() << "data sync single entry (source_zone=" << sync_env->source_zone << ") key=" <<_raw_key << " entry=" << entry_marker;
   }
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       do {
         yield {
@@ -1099,7 +1099,7 @@ public:
     marker_tracker = mt;
   }
 
-  int operate() {
+  int operate() override {
     int r;
     while (true) {
       switch (sync_marker.state) {
@@ -1353,11 +1353,11 @@ public:
 						      sync_marker(_marker) {
   }
 
-  RGWCoroutine *alloc_cr() {
+  RGWCoroutine *alloc_cr() override {
     return new RGWDataSyncShardCR(sync_env, pool, shard_id, sync_marker, backoff_ptr());
   }
 
-  RGWCoroutine *alloc_finisher_cr() {
+  RGWCoroutine *alloc_finisher_cr() override {
     RGWRados *store = sync_env->store;
     return new RGWSimpleRadosReadCR<rgw_data_sync_marker>(sync_env->async_rados, store, store->get_zone_params().log_pool,
                                                     RGWDataSyncStatusManager::shard_obj_name(sync_env->source_zone, shard_id), &sync_marker);
@@ -1404,7 +1404,7 @@ public:
     }
   }
 
-  int operate() {
+  int operate() override {
     reenter(this) {
 
       /* read sync status */
@@ -1554,7 +1554,7 @@ public:
                                                       sync_env(_sync_env), num_shards(_num_shards) {
   }
 
-  RGWCoroutine *alloc_cr() {
+  RGWCoroutine *alloc_cr() override {
     return new RGWDataSyncCR(sync_env, num_shards, backoff_ptr());
   }
 
@@ -1731,7 +1731,7 @@ public:
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       instance_key(bs.get_key()), info(_info) {}
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       yield {
         rgw_http_param_pair pairs[] = { { "type" , "bucket-index" },
@@ -1769,7 +1769,7 @@ public:
       status(_status)
   {}
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       /* fetch current position in logs */
       yield call(new RGWReadRemoteBucketIndexLogInfoCR(sync_env, bs, &info));
@@ -1857,7 +1857,7 @@ public:
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs)),
       status(_status) {}
-  int operate();
+  int operate() override;
 };
 
 int RGWReadBucketSyncStatusCoroutine::operate()
@@ -1975,7 +1975,7 @@ public:
       instance_key(bs.get_key()), marker_position(_marker_position),
       result(_result) {}
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       yield {
         rgw_http_param_pair pairs[] = { { "rgwx-bucket-instance", instance_key.c_str() },
@@ -2011,7 +2011,7 @@ public:
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       instance_key(bs.get_key()), marker(_marker), result(_result) {}
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       yield {
         rgw_http_param_pair pairs[] = { { "bucket-instance", instance_key.c_str() },
@@ -2047,7 +2047,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const rgw_obj_key& new_marker, uint64_t index_pos, const real_time& timestamp) {
+  RGWCoroutine *store_marker(const rgw_obj_key& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.position = new_marker;
     sync_marker.count = index_pos;
 
@@ -2071,7 +2071,7 @@ class RGWBucketIncSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, 
   map<rgw_obj_key, string> key_to_marker;
   map<string, rgw_obj_key> marker_to_key;
 
-  void handle_finish(const string& marker) {
+  void handle_finish(const string& marker) override {
     map<string, rgw_obj_key>::iterator iter = marker_to_key.find(marker);
     if (iter == marker_to_key.end()) {
       return;
@@ -2089,7 +2089,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) {
+  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.position = new_marker;
 
     map<string, bufferlist> attrs;
@@ -2185,7 +2185,7 @@ public:
     data_sync_module = sync_env->sync_module->get_data_handler();
   }
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       /* skip entries that are not complete */
       if (op_state != CLS_RGW_STATE_COMPLETE) {
@@ -2249,7 +2249,7 @@ public:
         sync_status = retcode;
       }
       if (!error_ss.str().empty()) {
-        yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", error_ss.str(), retcode, "failed to sync object"));
+        yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", error_ss.str(), -retcode, "failed to sync object"));
       }
 done:
       if (sync_status == 0) {
@@ -2302,7 +2302,7 @@ public:
     logger.init(sync_env, "BucketFull", bs.get_key());
   }
 
-  int operate();
+  int operate() override;
 };
 
 int RGWBucketShardFullSyncCR::operate()
@@ -2450,7 +2450,7 @@ public:
     logger.init(sync_env, "BucketInc", bs.get_key());
   }
 
-  int operate();
+  int operate() override;
 };
 
 int RGWBucketShardIncrementalSyncCR::operate()
@@ -3045,7 +3045,7 @@ class DataLogTrimPollCR : public RGWCoroutine {
       last_trim(num_shards)
   {}
 
-  int operate();
+  int operate() override;
 };
 
 int DataLogTrimPollCR::operate()

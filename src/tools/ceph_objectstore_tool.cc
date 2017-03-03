@@ -90,7 +90,6 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 				   coll,
 				   next,
 				   ghobject_t::get_max(),
-				   true,
 				   LIST_AT_A_TIME,
 				   &list,
 				   &next);
@@ -266,7 +265,7 @@ struct lookup_ghobject : public action_on_object_t {
   lookup_ghobject(const string& name, const boost::optional<std::string>& nspace, bool need_snapset = false) : _name(name),
 		  _namespace(nspace), _need_snapset(need_snapset) { }
 
-  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
+  int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) override {
     if (_need_snapset && !ghobj.hobj.has_snapset())
       return 0;
     if ((_name.length() == 0 || ghobj.hobj.oid.name == _name) &&
@@ -621,7 +620,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
 
   while (!next.is_max()) {
     vector<ghobject_t> objects;
-    int r = store->collection_list(coll, next, ghobject_t::get_max(), true, 300,
+    int r = store->collection_list(coll, next, ghobject_t::get_max(), 300,
       &objects, &next);
     if (r < 0)
       return r;
@@ -1829,8 +1828,8 @@ struct do_fix_lost : public action_on_object_t {
 
   explicit do_fix_lost(ObjectStore::Sequencer *_osr) : osr(_osr) {}
 
-  virtual int call(ObjectStore *store, coll_t coll,
-		   ghobject_t &ghobj, object_info_t &oi) {
+  int call(ObjectStore *store, coll_t coll,
+		   ghobject_t &ghobj, object_info_t &oi) override {
     if (oi.is_lost()) {
       cout << coll << "/" << ghobj << " is lost";
       if (!dry_run)

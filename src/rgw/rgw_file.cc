@@ -267,7 +267,8 @@ namespace rgw {
     }
 
     rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
-    fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh, cohort::lru::FLAG_NONE);
+    fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
+		    RGWFileHandle::FHCache::FLAG_LOCK);
 
 #if 1 /* XXX verify clear cache */
     fh_key fhk(rgw_fh->fh.fh_hk);
@@ -720,6 +721,31 @@ namespace rgw {
     } while (! (stop || shutdown));
   } /* RGWLibFS::gc */
 
+  std::ostream& operator<<(std::ostream &os,
+			   RGWFileHandle const &rgw_fh)
+  {
+    const auto& fhk = rgw_fh.get_key();
+    const auto& fh = const_cast<RGWFileHandle&>(rgw_fh).get_fh();
+    os << "<RGWFileHandle:";
+    os << "addr=" << &rgw_fh << ";";
+    switch (fh->fh_type) {
+    case RGW_FS_TYPE_DIRECTORY:
+	os << "type=DIRECTORY;";
+	break;
+    case RGW_FS_TYPE_FILE:
+	os << "type=FILE;";
+	break;
+    default:
+	os << "type=UNKNOWN;";
+	break;
+      };
+    os << "fid=" << fhk.fh_hk.bucket << ":" << fhk.fh_hk.object << ";";
+    os << "name=" << rgw_fh.object_name() << ";";
+    os << "refcnt=" << rgw_fh.get_refcnt() << ";";
+    os << ">";
+    return os;
+  }
+
   RGWFileHandle::~RGWFileHandle() {
     if (parent && (! parent->is_root())) {
       /* safe because if parent->unref causes its deletion,
@@ -754,7 +780,13 @@ namespace rgw {
   } /* RGWFileHandle::decode_attrs */
 
   bool RGWFileHandle::reclaim() {
-    fs->fh_cache.remove(fh.fh_hk.object, this, cohort::lru::FLAG_NONE);
+    lsubdout(fs->get_context(), rgw, 17)
+      << __func__ << " " << *this
+      << dendl;
+    /* if !deleted, then object still in fh_cache */
+    if (! deleted()) {
+      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
+    }
     return true;
   } /* RGWFileHandle::reclaim */
 
@@ -1383,8 +1415,12 @@ int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
-  fs->unref(rgw_fh);
 
+  lsubdout(fs->get_context(), rgw, 17)
+    << __func__ << " " << *rgw_fh
+    << dendl;
+
+  fs->unref(rgw_fh);
   return 0;
 }
 

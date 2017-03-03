@@ -476,6 +476,7 @@ int Client::init()
   messenger->add_dispatcher_tail(objecter);
   messenger->add_dispatcher_tail(this);
 
+  monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
   int r = monclient->init();
   if (r < 0) {
     // need to do cleanup because we're in an intermediate init state
@@ -487,8 +488,6 @@ int Client::init()
     return r;
   }
   objecter->start();
-
-  monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
 
   // logger
   PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
@@ -2261,17 +2260,11 @@ void Client::handle_client_reply(MClientReply *reply)
     reply->put();
     return;
   }
+  MetaRequest *request = mds_requests.at(tid);
 
   ldout(cct, 20) << "handle_client_reply got a reply. Safe:" << is_safe
 		 << " tid " << tid << dendl;
-  MetaRequest *request = mds_requests[tid];
-  if (!request) {
-    ldout(cct, 0) << "got an unknown reply (probably duplicate) on tid " << tid << " from mds "
-      << mds_num << " safe: " << is_safe << dendl;
-    reply->put();
-    return;
-  }
-    
+
   if (request->got_unsafe && !is_safe) {
     //duplicate response
     ldout(cct, 0) << "got a duplicate reply on tid " << tid << " from mds "
@@ -2985,7 +2978,7 @@ private:
   InodeRef inode;
 public:
   C_Client_FlushComplete(Client *c, Inode *in) : client(c), inode(in) { }
-  void finish(int r) {
+  void finish(int r) override {
     assert(client->client_lock.is_locked_by_me());
     if (r != 0) {
       client_t const whoami = client->whoami;  // For the benefit of ldout prefix
@@ -3633,7 +3626,7 @@ public:
     else
       ino = in->vino();
   }
-  void finish(int r) {
+  void finish(int r) override {
     // _async_invalidate takes the lock when it needs to, call this back from outside of lock.
     assert(!client->client_lock.is_locked_by_me());
     client->_async_invalidate(ino, offset, length);
@@ -3940,7 +3933,7 @@ private:
   Client *client;
 public:
   explicit C_Client_Remount(Client *c) : client(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     assert (r == 0);
     r = client->remount_cb(client->callback_handle);
     if (r != 0) {
@@ -4835,7 +4828,7 @@ public:
       if (!del)
 	ino.ino = inodeno_t();
   }
-  void finish(int r) {
+  void finish(int r) override {
     // _async_dentry_invalidate is responsible for its own locking
     assert(!client->client_lock.is_locked_by_me());
     client->_async_dentry_invalidate(dirino, ino, name);
@@ -5812,7 +5805,7 @@ class C_C_Tick : public Context {
   Client *client;
 public:
   explicit C_C_Tick(Client *c) : client(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     // Called back via Timer, which takes client_lock for us
     assert(client->client_lock.is_locked_by_me());
     client->tick();
@@ -12441,7 +12434,7 @@ public:
   C_Client_RequestInterrupt(Client *c, MetaRequest *r) : client(c), req(r) {
     req->get();
   }
-  void finish(int r) {
+  void finish(int r) override {
     Mutex::Locker l(client->client_lock);
     assert(req->head.op == CEPH_MDS_OP_SETFILELOCK);
     client->_interrupt_filelock(req);
@@ -12729,7 +12722,7 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
 {
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
-  *authorizer = monclient->auth->build_authorizer(dest_type);
+  *authorizer = monclient->build_authorizer(dest_type);
   return true;
 }
 

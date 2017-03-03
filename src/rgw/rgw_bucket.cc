@@ -133,9 +133,8 @@ int rgw_read_user_buckets(RGWRados * store,
     if (ret < 0)
       return ret;
 
-    for (list<cls_user_bucket_entry>::iterator q = entries.begin(); q != entries.end(); ++q) {
-      RGWBucketEnt e(*q);
-      buckets.add(e);
+    for (const auto& entry : entries) {
+      buckets.add(RGWBucketEnt(user_id, entry));
       total++;
     }
 
@@ -1925,9 +1924,9 @@ void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
 class RGWBucketMetadataHandler : public RGWMetadataHandler {
 
 public:
-  string get_type() { return "bucket"; }
+  string get_type() override { return "bucket"; }
 
-  int get(RGWRados *store, string& entry, RGWMetadataObject **obj) {
+  int get(RGWRados *store, string& entry, RGWMetadataObject **obj) override {
     RGWObjVersionTracker ot;
     RGWBucketEntryPoint be;
 
@@ -1949,7 +1948,7 @@ public:
   }
 
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-          real_time mtime, JSONObj *obj, sync_type_t sync_type) {
+          real_time mtime, JSONObj *obj, sync_type_t sync_type) override {
     RGWBucketEntryPoint be, old_be;
     try {
       decode_json_obj(be, obj);
@@ -1997,7 +1996,7 @@ public:
     RGWListRawObjsCtx ctx;
   };
 
-  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) {
+  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
     RGWBucketEntryPoint be;
     RGWObjectCtx obj_ctx(store);
 
@@ -2025,12 +2024,12 @@ public:
     return 0;
   }
 
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) override {
     oid = key;
     bucket = store->get_zone_params().domain_root;
   }
 
-  int list_keys_init(RGWRados *store, void **phandle)
+  int list_keys_init(RGWRados *store, void **phandle) override
   {
     list_keys_info *info = new list_keys_info;
 
@@ -2041,7 +2040,7 @@ public:
     return 0;
   }
 
-  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) {
+  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
 
     string no_filter;
@@ -2075,7 +2074,7 @@ public:
     return 0;
   }
 
-  void list_keys_complete(void *handle) {
+  void list_keys_complete(void *handle) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
     delete info;
   }
@@ -2084,9 +2083,9 @@ public:
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
 
 public:
-  string get_type() { return "bucket.instance"; }
+  string get_type() override { return "bucket.instance"; }
 
-  int get(RGWRados *store, string& oid, RGWMetadataObject **obj) {
+  int get(RGWRados *store, string& oid, RGWMetadataObject **obj) override {
     RGWBucketCompleteInfo bci;
 
     real_time mtime;
@@ -2104,7 +2103,7 @@ public:
   }
 
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-          real_time mtime, JSONObj *obj, sync_type_t sync_type) {
+          real_time mtime, JSONObj *obj, sync_type_t sync_type) override {
     RGWBucketCompleteInfo bci, old_bci;
     try {
       decode_json_obj(bci, obj);
@@ -2179,7 +2178,7 @@ public:
     RGWListRawObjsCtx ctx;
   };
 
-  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) {
+  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
     RGWBucketInfo info;
     RGWObjectCtx obj_ctx(store);
 
@@ -2190,13 +2189,13 @@ public:
     return rgw_bucket_instance_remove_entry(store, entry, &info.objv_tracker);
   }
 
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) override {
     oid = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
     rgw_bucket_instance_key_to_oid(oid);
     bucket = store->get_zone_params().domain_root;
   }
 
-  int list_keys_init(RGWRados *store, void **phandle)
+  int list_keys_init(RGWRados *store, void **phandle) override
   {
     list_keys_info *info = new list_keys_info;
 
@@ -2207,7 +2206,7 @@ public:
     return 0;
   }
 
-  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) {
+  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
 
     string no_filter;
@@ -2244,7 +2243,7 @@ public:
     return 0;
   }
 
-  void list_keys_complete(void *handle) {
+  void list_keys_complete(void *handle) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
     delete info;
   }
@@ -2254,7 +2253,7 @@ public:
    * point, so that the log entries end up at the same log shard, so that we process them
    * in order
    */
-  virtual void get_hash_key(const string& section, const string& key, string& hash_key) {
+  void get_hash_key(const string& section, const string& key, string& hash_key) override {
     string k;
     int pos = key.find(':');
     if (pos < 0)

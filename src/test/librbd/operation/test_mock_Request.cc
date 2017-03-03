@@ -41,7 +41,6 @@ struct AsyncRequest<librbd::MockTestImageCtx> {
 } // namespace librbd
 
 #include "librbd/operation/Request.cc"
-template class librbd::operation::Request<librbd::MockTestImageCtx>;
 
 namespace librbd {
 namespace journal {

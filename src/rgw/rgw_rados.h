@@ -1973,7 +1973,7 @@ class RGWRados
   int get_olh_target_state(RGWObjectCtx& rctx, rgw_obj& obj, RGWObjState *olh_state,
                            RGWObjState **target_state);
   int get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
-  int get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh);
+  int get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent = false);
   int append_atomic_test(RGWObjectCtx *rctx, rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
 
@@ -2361,7 +2361,7 @@ public:
     bool bs_initialized;
 
   protected:
-    int get_state(RGWObjState **pstate, bool follow_olh);
+    int get_state(RGWObjState **pstate, bool follow_olh, bool assume_noent = false);
     void invalidate_state();
 
     int prepare_atomic_modification(librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag,
@@ -2466,6 +2466,10 @@ public:
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
 
+      int _do_write_meta(uint64_t size, uint64_t accounted_size,
+                     map<std::string, bufferlist>& attrs,
+                     bool assume_noent,
+                     void *index_op);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
@@ -2557,17 +2561,17 @@ public:
       RGWRados::Bucket *target;
       string optag;
       rgw_obj obj;
-      RGWObjState *obj_state;
-      uint16_t bilog_flags;
+      uint16_t bilog_flags{0};
       BucketShard bs;
-      bool bs_initialized;
+      bool bs_initialized{false};
       bool blind;
+      bool prepared{false};
     public:
 
-      UpdateIndex(RGWRados::Bucket *_target, rgw_obj& _obj, RGWObjState *_state) : target(_target), obj(_obj), obj_state(_state), bilog_flags(0),
-                                                                                   bs(target->get_store()), bs_initialized(false) {
-                                                                                     blind = (target->get_bucket_info().index_type == RGWBIType_Indexless);
-                                                                                   }
+      UpdateIndex(RGWRados::Bucket *_target, rgw_obj& _obj) : target(_target), obj(_obj),
+                                                              bs(target->get_store()) {
+                                                                blind = (target->get_bucket_info().index_type == RGWBIType_Indexless);
+                                                              }
 
       int get_bucket_shard(BucketShard **pbs) {
         if (!bs_initialized) {
@@ -2585,7 +2589,7 @@ public:
         bilog_flags = flags;
       }
 
-      int prepare(RGWModifyOp);
+      int prepare(RGWModifyOp, const string *write_tag);
       int complete(int64_t poolid, uint64_t epoch, uint64_t size,
                    uint64_t accounted_size, ceph::real_time& ut,
                    const string& etag, const string& content_type,
@@ -2595,6 +2599,10 @@ public:
                        ceph::real_time& removed_mtime, /* mtime of removed object */
                        list<rgw_obj_key> *remove_objs);
       int cancel();
+
+      const string *get_optag() { return &optag; }
+
+      bool is_prepared() { return prepared; }
     };
 
     struct List {
@@ -2866,7 +2874,7 @@ public:
                         map<string, bufferlist>* rmattrs);
 
   int get_system_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
-  int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh);
+  int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, bool follow_olh, bool assume_noent = false);
   int get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state) {
     return get_obj_state(rctx, obj, state, true);
   }
@@ -3338,7 +3346,7 @@ public:
   RGWPutObjDataProcessor(){}
   virtual ~RGWPutObjDataProcessor(){}
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) = 0;
-  virtual int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait) = 0;
+  virtual int throttle_data(void *handle, const rgw_obj& obj, uint64_t size, bool need_to_wait) = 0;
 }; /* RGWPutObjDataProcessor */
 
 
@@ -3381,12 +3389,16 @@ public:
 struct put_obj_aio_info {
   void *handle;
   rgw_obj obj;
+  uint64_t size;
 };
+
+#define RGW_PUT_OBJ_MIN_WINDOW_SIZE_DEFAULT (16 * 1024 * 1024)
 
 class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
 {
   list<struct put_obj_aio_info> pending;
-  size_t max_chunks;
+  uint64_t window_size{RGW_PUT_OBJ_MIN_WINDOW_SIZE_DEFAULT};
+  uint64_t pending_size{0};
 
   struct put_obj_aio_info pop_pending();
   int wait_pending_front();
@@ -3395,7 +3407,7 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
   rgw_obj last_written_obj;
 
 protected:
-  uint64_t obj_len;
+  uint64_t obj_len{0};
 
   set<rgw_obj> written_objs;
 
@@ -3407,9 +3419,10 @@ protected:
   int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive);
 
 public:
-  int throttle_data(void *handle, const rgw_obj& obj, bool need_to_wait);
+  int prepare(RGWRados *store, string *oid_rand);
+  int throttle_data(void *handle, const rgw_obj& obj, uint64_t size, bool need_to_wait);
 
-  RGWPutObjProcessor_Aio(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info) : RGWPutObjProcessor(obj_ctx, bucket_info), max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
+  RGWPutObjProcessor_Aio(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info) : RGWPutObjProcessor(obj_ctx, bucket_info) {}
   virtual ~RGWPutObjProcessor_Aio();
 }; /* RGWPutObjProcessor_Aio */
 

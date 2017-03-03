@@ -518,13 +518,13 @@ static int get_swift_container_settings(req_state * const s,
 
   if (read_attr || write_attr) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    const bool r = swift_policy.create(store,
-                                s->user->user_id,
-                                s->user->display_name,
-                                read_list,
-                                write_list);
-    if (r != true) {
-      return -EINVAL;
+    const auto r = swift_policy.create(store,
+                                       s->user->user_id,
+                                       s->user->display_name,
+                                       read_list,
+                                       write_list);
+    if (r < 0) {
+      return r;
     }
 
     *policy = swift_policy;
@@ -603,8 +603,7 @@ static int get_swift_versioning_settings(
     swift_ver_location = boost::in_place(std::string());
   }
 
-  std::string vloc = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
-  if (vloc.size()) {
+  if (s->info.env->exists("HTTP_X_VERSIONS_LOCATION")) {
     /* If the Swift's versioning is globally disabled but someone wants to
      * enable it for a given container, new version of Swift will generate
      * the precondition failed error. */
@@ -612,7 +611,7 @@ static int get_swift_versioning_settings(
       return -ERR_PRECONDITION_FAILED;
     }
 
-    swift_ver_location = std::move(vloc);
+    swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
   }
 
   return 0;
@@ -1219,6 +1218,20 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
   } else {
     s->formatter->close_section();
     rgw_flush_formatter(s, s->formatter);
+  }
+}
+
+int RGWGetObj_ObjStore_SWIFT::verify_permission()
+{
+  op_ret = RGWGetObj_ObjStore::verify_permission();
+
+  /* We have to differentiate error codes depending on whether user is
+   * anonymous (401 Unauthorized) or he doesn't have necessary permissions
+   * (403 Forbidden). */
+  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+    return -EPERM;
+  } else {
+    return op_ret;
   }
 }
 

@@ -141,6 +141,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   con_self(m ? m->get_loopback_connection() : NULL),
   lock("Monitor::lock"),
   timer(cct_, lock),
+  cpu_tp(cct, "Monitor::cpu_tp", "cpu_tp", g_conf->mon_cpu_threads),
   has_ever_joined(false),
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
@@ -263,7 +264,7 @@ class AdminHook : public AdminSocketHook {
 public:
   explicit AdminHook(Monitor *m) : mon(m) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     stringstream ss;
     mon->do_admin_command(command, cmdmap, format, ss);
     out.append(ss);
@@ -547,7 +548,7 @@ void Monitor::read_features()
   read_features_off_disk(store, &features);
   dout(10) << "features " << features << dendl;
 
-  apply_compatset_features_to_quorum_requirements();
+  calc_quorum_requirements();
   dout(10) << "required_features " << required_features << dendl;
 }
 
@@ -939,6 +940,8 @@ int Monitor::init()
   timer.init();
   new_tick();
 
+  cpu_tp.start();
+
   // i'm ready!
   messenger->add_dispatcher_tail(this);
 
@@ -1062,6 +1065,8 @@ void Monitor::shutdown()
   finish_contexts(g_ceph_context, maybe_wait_for_quorum, -ECANCELED);
 
   timer.shutdown();
+
+  cpu_tp.stop();
 
   remove_all_sessions();
 
@@ -2146,7 +2151,7 @@ void Monitor::_apply_compatset_features(CompatSet &new_features)
     write_features(t);
     store->apply_transaction(t);
 
-    apply_compatset_features_to_quorum_requirements();
+    calc_quorum_requirements();
   }
 }
 
@@ -2188,16 +2193,19 @@ void Monitor::apply_monmap_to_compatset_features()
     assert(ceph::features::mon::get_persistent().contains_all(
            ceph::features::mon::FEATURE_KRAKEN));
     // this feature should only ever be set if the quorum supports it.
-    assert(quorum_con_features & CEPH_FEATURE_SERVER_KRAKEN);
+    assert(HAVE_FEATURE(quorum_con_features, SERVER_KRAKEN));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
   }
+
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
 }
 
-void Monitor::apply_compatset_features_to_quorum_requirements()
+void Monitor::calc_quorum_requirements()
 {
   required_features = 0;
+
+  // compatset
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES)) {
     required_features |= CEPH_FEATURE_OSD_ERASURE_CODES;
   }
@@ -2211,7 +2219,17 @@ void Monitor::apply_compatset_features_to_quorum_requirements()
     required_features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3;
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_KRAKEN)) {
-    required_features |= CEPH_FEATURE_SERVER_KRAKEN;
+    required_features |= CEPH_FEATUREMASK_SERVER_KRAKEN;
+  }
+
+  // monmap
+  if (monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_KRAKEN)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_KRAKEN;
+  }
+  if (monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_LUMINOUS;
   }
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }
@@ -4996,7 +5014,7 @@ void Monitor::scrub_event_start()
   struct C_Scrub : public Context {
     Monitor *mon;
     explicit C_Scrub(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       mon->scrub_start();
     }
   };
@@ -5030,7 +5048,7 @@ void Monitor::scrub_reset_timeout()
   struct C_ScrubTimeout : public Context {
     Monitor *mon;
     explicit C_ScrubTimeout(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       mon->scrub_timeout();
     }
   };
@@ -5045,7 +5063,7 @@ class C_Mon_Tick : public Context {
   Monitor *mon;
 public:
   explicit C_Mon_Tick(Monitor *m) : mon(m) {}
-  void finish(int r) {
+  void finish(int r) override {
     mon->tick();
   }
 };

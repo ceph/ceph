@@ -60,7 +60,7 @@ bool librados::RadosClient::ms_get_authorizer(int dest_type,
   /* monitor authorization is being handled on different layer */
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
-  *authorizer = monclient.auth->build_authorizer(dest_type);
+  *authorizer = monclient.build_authorizer(dest_type);
   return *authorizer != NULL;
 }
 
@@ -396,7 +396,7 @@ struct C_aio_watch_flush_Complete : public Context {
     c->get();
   }
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     c->lock.Lock();
     c->rval = r;
     c->complete = true;

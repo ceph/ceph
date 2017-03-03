@@ -23,16 +23,18 @@
 #define dout_prefix *_dout << "Infiniband "
 
 static const uint32_t MAX_SHARED_RX_SGE_COUNT = 1;
-static const uint32_t MAX_INLINE_DATA = 128;
+static const uint32_t MAX_INLINE_DATA = 0;
 static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000000000000000000000000000");
 static const uint32_t CQ_DEPTH = 30000;
 
 Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt), port_num(ipn), port_attr(new ibv_port_attr)
 {
+#ifdef HAVE_IBV_EXP
   union ibv_gid cgid;
   struct ibv_exp_gid_attr gid_attr;
   bool malformed = false;
 
+  ldout(cct,1) << __func__ << " using experimental verbs for gid" << dendl;
   int r = ibv_query_port(ctxt, port_num, port_attr);
   if (r == -1) {
     lderr(cct) << __func__  << " query port failed  " << cpp_strerror(errno) << dendl;
@@ -87,19 +89,33 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
     lderr(cct) << __func__ << " Requested local GID was not found in GID table" << dendl;
     ceph_abort();
   }
+#else
+  int r = ibv_query_port(ctxt, port_num, port_attr);
+  if (r == -1) {
+    lderr(cct) << __func__  << " query port failed  " << cpp_strerror(errno) << dendl;
+    ceph_abort();
+  }
+
+  lid = port_attr->lid;
+  r = ibv_query_gid(ctxt, port_num, 0, &gid);
+  if (r) {
+    lderr(cct) << __func__  << " query gid failed  " << cpp_strerror(errno) << dendl;
+    ceph_abort();
+  }
+#endif
 }
 
 
 Device::Device(CephContext *cct, ibv_device* d): device(d), device_attr(new ibv_device_attr), active_port(nullptr)
 {
   if (device == NULL) {
-    lderr(cct) << __func__ << "device == NULL" << cpp_strerror(errno) << dendl;
+    lderr(cct) << __func__ << " device == NULL" << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
   name = ibv_get_device_name(device);
   ctxt = ibv_open_device(device);
   if (ctxt == NULL) {
-    lderr(cct) << __func__ << "open rdma device failed. " << cpp_strerror(errno) << dendl;
+    lderr(cct) << __func__ << " open rdma device failed. " << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
   int r = ibv_query_device(ctxt, device_attr);
@@ -151,7 +167,7 @@ Infiniband::QueuePair::QueuePair(
 {
   initial_psn = lrand48() & 0xffffff;
   if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
-    lderr(cct) << __func__ << "invalid queue pair type" << cpp_strerror(errno) << dendl;
+    lderr(cct) << __func__ << " invalid queue pair type" << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
   pd = infiniband.pd->pd;
@@ -945,8 +961,10 @@ void Infiniband::gid_to_wire_gid(const union ibv_gid *gid, char wgid[])
 
 Infiniband::QueuePair::~QueuePair()
 {
-  if (qp)
+  if (qp) {
+    ldout(cct, 20) << __func__ << " destroy qp=" << qp << dendl;
     assert(!ibv_destroy_qp(qp));
+  }
 }
 
 /**

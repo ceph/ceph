@@ -16,6 +16,7 @@ import argparse
 import configobj
 import mock
 import os
+import platform
 import pytest
 import shutil
 import tempfile
@@ -133,6 +134,8 @@ class TestDevice(Base):
                               m_update_partition,
                               m_get_free_partition_index,
                               m_is_partition):
+        if platform.system() == 'FreeBSD':
+            return
         m_is_partition.return_value = False
         partition_number = 1
         m_get_free_partition_index.return_value = partition_number
@@ -316,7 +319,7 @@ class TestDevicePartitionCrypt(Base):
             partition.map()
             assert m['_dmcrypt_map'].called
             m['get_dmcrypt_key'].assert_called_with(
-                uuid, '/etc/ceph/dmcrypt-keys', True)
+                uuid, '/etc/ceph/dmcrypt-keys', True, 'ceph')
 
 
 class TestCryptHelpers(Base):

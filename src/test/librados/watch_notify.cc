@@ -31,7 +31,7 @@ static void watch_notify_test_cb(uint8_t opcode, uint64_t ver, void *arg)
 class WatchNotifyTestCtx : public WatchCtx
 {
 public:
-    void notify(uint8_t opcode, uint64_t ver, bufferlist& bl)
+    void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) override
     {
       std::cout << __func__ << std::endl;
       sem_post(sem);
@@ -115,7 +115,7 @@ public:
   {}
 
   void handle_notify(uint64_t notify_id, uint64_t cookie, uint64_t notifier_gid,
-		     bufferlist& bl) {
+		     bufferlist& bl) override {
     std::cout << __func__ << " cookie " << cookie << " notify_id " << notify_id
 	      << " notifier_gid " << notifier_gid << std::endl;
     notify->notify_bl = bl;
@@ -127,7 +127,7 @@ public:
     notify_ioctx->notify_ack(notify->notify_oid, notify_id, cookie, reply);
   }
 
-  void handle_error(uint64_t cookie, int err) {
+  void handle_error(uint64_t cookie, int err) override {
     std::cout << __func__ << " cookie " << cookie
 	      << " err " << err << std::endl;
     assert(cookie > 1000);

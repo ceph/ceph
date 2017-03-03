@@ -35,17 +35,17 @@ public:
 		   uint32_t index_version)
     : LFNIndex(cct, collection, base_path, index_version) {}
 
-  virtual uint32_t collection_version() {
+  uint32_t collection_version() override {
     return index_version;
   }
 
-  int cleanup() { return 0; }
+  int cleanup() override { return 0; }
 
-  virtual int _split(
+  int _split(
 		     uint32_t match,                           
 		     uint32_t bits,                            
 		     CollectionIndex* dest
-		     ) { return 0; }
+		     ) override { return 0; }
 
   void test_generate_and_parse(const ghobject_t &hoid, const std::string &mangled_expected) {
     const std::string mangled_name = lfn_generate_object_name(hoid);
@@ -56,39 +56,38 @@ public:
   }
 
 protected:
-  virtual int _init() { return 0; }
+  int _init() override { return 0; }
 
-  virtual int _created(
+  int _created(
 		       const vector<string> &path,
 		       const ghobject_t &hoid,
 		       const string &mangled_name 
-		       ) { return 0; }
+		       ) override { return 0; }
 
-  virtual int _remove(
+  int _remove(
 		      const vector<string> &path,
 		      const ghobject_t &hoid,
 		      const string &mangled_name
-		      ) { return 0; }
+		      ) override { return 0; }
 
-  virtual int _lookup(
+  int _lookup(
 		      const ghobject_t &hoid,
 		      vector<string> *path,
 		      string *mangled_name,
 		      int *exists		 
-		      ) { return 0; }
+		      ) override { return 0; }
 
-  virtual int _collection_list_partial(
+  int _collection_list_partial(
 				       const ghobject_t &start,
 				       const ghobject_t &end,
-				       bool sort_bitwise,
 				       int max_count,
 				       vector<ghobject_t> *ls,
 				       ghobject_t *next
-				       ) { return 0; }
-  virtual int _pre_hash_collection(
+				       ) override { return 0; }
+  int _pre_hash_collection(
                                    uint32_t pg_num,
                                    uint64_t expected_num_objs
-                                  ) { return 0; }
+                                  ) override { return 0; }
 
 };
 
@@ -190,13 +189,13 @@ public:
 		       CollectionIndex::HOBJECT_WITH_POOL) {
   }
 
-  virtual void SetUp() {
+  void SetUp() override {
     ::chmod("PATH_1", 0700);
     ASSERT_EQ(0, ::system("rm -fr PATH_1"));
     ASSERT_EQ(0, ::mkdir("PATH_1", 0700));
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     ASSERT_EQ(0, ::system("rm -fr PATH_1"));
   }
 };

@@ -9,6 +9,7 @@
 #include "OSD.h"
 #include "PrimaryLogPG.h"
 #include "Watch.h"
+#include "Session.h"
 
 #include "common/config.h"
 
@@ -73,7 +74,7 @@ class NotifyTimeoutCB : public CancelableContext {
   bool canceled; // protected by notif lock
 public:
   explicit NotifyTimeoutCB(NotifyRef notif) : notif(notif), canceled(false) {}
-  void finish(int) {
+  void finish(int) override {
     notif->osd->watch_lock.Unlock();
     notif->lock.Lock();
     if (!canceled)
@@ -82,7 +83,7 @@ public:
       notif->lock.Unlock();
     notif->osd->watch_lock.Lock();
   }
-  void cancel() {
+  void cancel() override {
     assert(notif->lock.is_locked_by_me());
     canceled = true;
   }
@@ -236,11 +237,11 @@ class HandleWatchTimeout : public CancelableContext {
 public:
   bool canceled; // protected by watch->pg->lock
   explicit HandleWatchTimeout(WatchRef watch) : watch(watch), canceled(false) {}
-  void cancel() {
+  void cancel() override {
     canceled = true;
   }
-  void finish(int) { ceph_abort(); /* not used */ }
-  void complete(int) {
+  void finish(int) override { ceph_abort(); /* not used */ }
+  void complete(int) override {
     OSDService *osd(watch->osd);
     ldout(osd->cct, 10) << "HandleWatchTimeout" << dendl;
     boost::intrusive_ptr<PrimaryLogPG> pg(watch->pg);
@@ -260,10 +261,10 @@ class HandleDelayedWatchTimeout : public CancelableContext {
 public:
   bool canceled;
   explicit HandleDelayedWatchTimeout(WatchRef watch) : watch(watch), canceled(false) {}
-  void cancel() {
+  void cancel() override {
     canceled = true;
   }
-  void finish(int) {
+  void finish(int) override {
     OSDService *osd(watch->osd);
     dout(10) << "HandleWatchTimeoutDelayed" << dendl;
     assert(watch->pg->is_locked());
@@ -368,7 +369,7 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
   dout(10) << __func__ << " con " << con << dendl;
   conn = con;
   will_ping = _will_ping;
-  OSD::Session* sessionref(static_cast<OSD::Session*>(con->get_priv()));
+  Session* sessionref(static_cast<Session*>(con->get_priv()));
   if (sessionref) {
     sessionref->wstate.addWatch(self.lock());
     sessionref->put();
@@ -414,7 +415,7 @@ void Watch::discard_state()
   unregister_cb();
   discarded = true;
   if (conn) {
-    OSD::Session* sessionref(static_cast<OSD::Session*>(conn->get_priv()));
+    Session* sessionref(static_cast<Session*>(conn->get_priv()));
     if (sessionref) {
       sessionref->wstate.removeWatch(self.lock());
       sessionref->put();

@@ -20,6 +20,7 @@
 #include <sys/mount.h>
 #include "os/ObjectStore.h"
 #include "os/filestore/FileStore.h"
+#include "os/bluestore/BlueStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -86,12 +87,12 @@ int apply_transaction(
 }
 
 
-bool sorted(const vector<ghobject_t> &in, bool bitwise) {
+bool sorted(const vector<ghobject_t> &in) {
   ghobject_t start;
   for (vector<ghobject_t>::const_iterator i = in.begin();
        i != in.end();
        ++i) {
-    if (cmp(start, *i, bitwise) > 0) {
+    if (start > *i) {
       cout << start << " should follow " << *i << std::endl;
       return false;
     }
@@ -1236,6 +1237,9 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     return;
   g_conf->set_val("bluestore_compression_mode", "force");
   g_conf->set_val("bluestore_min_alloc_size", "65536");
+ 
+ // just a big number to disble gc
+  g_conf->set_val("bluestore_gc_enable_total_threshold", "100000");
   g_ceph_context->_conf->apply_changes(NULL);
   int r = store->umount();
   ASSERT_EQ(r, 0);
@@ -1474,6 +1478,7 @@ TEST_P(StoreTest, BluestoreStatFSTest) {
     ASSERT_EQ( 0u, statfs.compressed);
     ASSERT_EQ( 0u, statfs.compressed_allocated);
   }
+  g_conf->set_val("bluestore_gc_enable_total_threshold", "0");
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_min_alloc_size", "0");
   g_ceph_context->_conf->apply_changes(NULL);
@@ -2218,7 +2223,7 @@ TEST_P(StoreTest, SimpleListTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  set<ghobject_t, ghobject_t::BitwiseComparator> all;
+  set<ghobject_t> all;
   {
     ObjectStore::Transaction t;
     for (int i=0; i<200; ++i) {
@@ -2234,20 +2239,16 @@ TEST_P(StoreTest, SimpleListTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  for (int bitwise=0; bitwise<2; ++bitwise) {
-    set<ghobject_t, ghobject_t::BitwiseComparator> saw;
+  {
+    set<ghobject_t> saw;
     vector<ghobject_t> objects;
     ghobject_t next, current;
     while (!next.is_max()) {
       int r = store->collection_list(cid, current, ghobject_t::get_max(),
-				     (bool)bitwise, 50,
+				     50,
 				     &objects, &next);
-      if (r == -EOPNOTSUPP) {
-	++bitwise; // skip nibblewise test
-	continue;
-      }
       ASSERT_EQ(r, 0);
-      ASSERT_TRUE(sorted(objects, (bool)bitwise));
+      ASSERT_TRUE(sorted(objects));
       cout << " got " << objects.size() << " next " << next << std::endl;
       for (vector<ghobject_t>::iterator p = objects.begin(); p != objects.end();
 	   ++p) {
@@ -2266,7 +2267,7 @@ TEST_P(StoreTest, SimpleListTest) {
   }
   {
     ObjectStore::Transaction t;
-    for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator p = all.begin(); p != all.end(); ++p)
+    for (set<ghobject_t>::iterator p = all.begin(); p != all.end(); ++p)
       t.remove(cid, *p);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
@@ -2286,7 +2287,7 @@ TEST_P(StoreTest, ListEndTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  set<ghobject_t, ghobject_t::BitwiseComparator> all;
+  set<ghobject_t> all;
   {
     ObjectStore::Transaction t;
     for (int i=0; i<200; ++i) {
@@ -2308,8 +2309,7 @@ TEST_P(StoreTest, ListEndTest) {
     end.hobj.pool = 1;
     vector<ghobject_t> objects;
     ghobject_t next;
-    int r = store->collection_list(cid, ghobject_t(), end,
-				   true, 500,
+    int r = store->collection_list(cid, ghobject_t(), end, 500,
 				   &objects, &next);
     ASSERT_EQ(r, 0);
     for (auto &p : objects) {
@@ -2318,7 +2318,7 @@ TEST_P(StoreTest, ListEndTest) {
   }
   {
     ObjectStore::Transaction t;
-    for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator p = all.begin(); p != all.end(); ++p)
+    for (set<ghobject_t>::iterator p = all.begin(); p != all.end(); ++p)
       t.remove(cid, *p);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
@@ -2334,24 +2334,24 @@ TEST_P(StoreTest, Sort) {
     ASSERT_EQ(a, b);
     b.oid.name = "b";
     ASSERT_NE(a, b);
-    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
+    ASSERT_TRUE(a < b);
     a.pool = 1;
     b.pool = 2;
-    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
+    ASSERT_TRUE(a < b);
     a.pool = 3;
-    ASSERT_TRUE(cmp_bitwise(a, b) > 0);
+    ASSERT_TRUE(a > b);
   }
   {
     ghobject_t a(hobject_t(sobject_t("a", CEPH_NOSNAP)));
     ghobject_t b(hobject_t(sobject_t("b", CEPH_NOSNAP)));
     a.hobj.pool = 1;
     b.hobj.pool = 1;
-    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
+    ASSERT_TRUE(a < b);
     a.hobj.pool = -3;
-    ASSERT_TRUE(cmp_bitwise(a, b) < 0);
+    ASSERT_TRUE(a < b);
     a.hobj.pool = 1;
     b.hobj.pool = -3;
-    ASSERT_TRUE(cmp_bitwise(a, b) > 0);
+    ASSERT_TRUE(a > b);
   }
 }
 
@@ -2367,7 +2367,7 @@ TEST_P(StoreTest, MultipoolListTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  set<ghobject_t, ghobject_t::BitwiseComparator> all, saw;
+  set<ghobject_t> all, saw;
   {
     ObjectStore::Transaction t;
     for (int i=0; i<200; ++i) {
@@ -2389,8 +2389,7 @@ TEST_P(StoreTest, MultipoolListTest) {
     vector<ghobject_t> objects;
     ghobject_t next, current;
     while (!next.is_max()) {
-      int r = store->collection_list(cid, current, ghobject_t::get_max(),
-				     true, 50,
+      int r = store->collection_list(cid, current, ghobject_t::get_max(), 50,
 				     &objects, &next);
       ASSERT_EQ(r, 0);
       cout << " got " << objects.size() << " next " << next << std::endl;
@@ -2405,7 +2404,7 @@ TEST_P(StoreTest, MultipoolListTest) {
   }
   {
     ObjectStore::Transaction t;
-    for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator p = all.begin(); p != all.end(); ++p)
+    for (set<ghobject_t>::iterator p = all.begin(); p != all.end(); ++p)
       t.remove(cid, *p);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
@@ -3019,7 +3018,7 @@ TEST_P(StoreTest, ManyObjectTest) {
   coll_t cid;
   string base = "";
   for (int i = 0; i < 100; ++i) base.append("aaaaa");
-  set<ghobject_t, ghobject_t::BitwiseComparator> created;
+  set<ghobject_t> created;
   {
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
@@ -3040,16 +3039,16 @@ TEST_P(StoreTest, ManyObjectTest) {
     ASSERT_EQ(r, 0);
   }
 
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = created.begin();
+  for (set<ghobject_t>::iterator i = created.begin();
        i != created.end();
        ++i) {
     struct stat buf;
     ASSERT_TRUE(!store->stat(cid, *i, &buf));
   }
 
-  set<ghobject_t, ghobject_t::BitwiseComparator> listed, listed2;
+  set<ghobject_t> listed, listed2;
   vector<ghobject_t> objects;
-  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, INT_MAX, &objects, 0);
+  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
 
   cerr << "objects.size() is " << objects.size() << std::endl;
@@ -3067,7 +3066,6 @@ TEST_P(StoreTest, ManyObjectTest) {
     cid,
     ghobject_t::get_max(),
     ghobject_t::get_max(),
-    true,
     50,
     &objects,
     &next
@@ -3079,28 +3077,11 @@ TEST_P(StoreTest, ManyObjectTest) {
   listed.clear();
   ghobject_t start2, next2;
   while (1) {
-    // nibblewise
-    r = store->collection_list(cid, start2, ghobject_t::get_max(), false,
-			       50,
-			       &objects,
-			       &next2);
-    if (r != -EOPNOTSUPP) {
-      ASSERT_TRUE(sorted(objects, false));
-      ASSERT_EQ(r, 0);
-      listed2.insert(objects.begin(), objects.end());
-      if (objects.size() < 50) {
-	ASSERT_TRUE(next2.is_max());
-      }
-      objects.clear();
-      start2 = next2;
-    }
-
-    // bitwise
-    r = store->collection_list(cid, start, ghobject_t::get_max(), true,
+    r = store->collection_list(cid, start, ghobject_t::get_max(),
 			       50,
 			       &objects,
 			       &next);
-    ASSERT_TRUE(sorted(objects, true));
+    ASSERT_TRUE(sorted(objects));
     ASSERT_EQ(r, 0);
     listed.insert(objects.begin(), objects.end());
     if (objects.size() < 50) {
@@ -3115,13 +3096,13 @@ TEST_P(StoreTest, ManyObjectTest) {
   ASSERT_TRUE(listed.size() == created.size());
   if (listed2.size())
     ASSERT_EQ(listed.size(), listed2.size());
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = listed.begin();
+  for (set<ghobject_t>::iterator i = listed.begin();
        i != listed.end();
        ++i) {
     ASSERT_TRUE(created.count(*i));
   }
 
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = created.begin();
+  for (set<ghobject_t>::iterator i = created.begin();
        i != created.end();
        ++i) {
     ObjectStore::Transaction t;
@@ -3150,7 +3131,7 @@ public:
   unsigned seq;
   int64_t poolid;
   explicit MixedGenerator(int64_t p) : seq(0), poolid(p) {}
-  ghobject_t create_object(gen_type *gen) {
+  ghobject_t create_object(gen_type *gen) override {
     char buf[100];
     snprintf(buf, sizeof(buf), "OBJ_%u", seq);
     string name(buf);
@@ -3184,9 +3165,9 @@ public:
   unsigned write_alignment;
   unsigned max_object_len, max_write_len;
   unsigned in_flight;
-  map<ghobject_t, Object, ghobject_t::BitwiseComparator> contents;
-  set<ghobject_t, ghobject_t::BitwiseComparator> available_objects;
-  set<ghobject_t, ghobject_t::BitwiseComparator> in_flight_objects;
+  map<ghobject_t, Object> contents;
+  set<ghobject_t> available_objects;
+  set<ghobject_t> in_flight_objects;
   ObjectGenerator *object_gen;
   gen_type *rng;
   ObjectStore *store;
@@ -3212,7 +3193,7 @@ public:
     C_SyntheticOnReadable(SyntheticWorkloadState *state, ghobject_t hoid)
       : state(state), hoid(hoid) {}
 
-    void finish(int r) {
+    void finish(int r) override {
       Mutex::Locker locker(state->lock);
       EnterExit ee("onreadable finish");
       ASSERT_TRUE(state->in_flight_objects.count(hoid));
@@ -3239,7 +3220,7 @@ public:
 		       ghobject_t oid, ghobject_t noid)
       : state(state), oid(oid), noid(noid) {}
 
-    void finish(int r) {
+    void finish(int r) override {
       Mutex::Locker locker(state->lock);
       EnterExit ee("stash finish");
       ASSERT_TRUE(state->in_flight_objects.count(oid));
@@ -3266,7 +3247,7 @@ public:
                        ghobject_t oid, ghobject_t noid)
       : state(state), oid(oid), noid(noid) {}
 
-    void finish(int r) {
+    void finish(int r) override {
       Mutex::Locker locker(state->lock);
       EnterExit ee("clone finish");
       ASSERT_TRUE(state->in_flight_objects.count(oid));
@@ -3323,7 +3304,7 @@ public:
     while (1) {
       vector<ghobject_t> objects;
       int r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
-				     true, 10, &objects, 0);
+				     10, &objects, 0);
       assert(r >= 0);
       if (objects.empty())
 	break;
@@ -3347,7 +3328,7 @@ public:
       cond.Wait(lock);
     boost::uniform_int<> choose(0, available_objects.size() - 1);
     int index = choose(*rng);
-    set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = available_objects.begin();
+    set<ghobject_t>::iterator i = available_objects.begin();
     for ( ; index > 0; --index, ++i) ;
     ghobject_t ret = *i;
     return ret;
@@ -3882,7 +3863,8 @@ public:
     while (in_flight)
       cond.Wait(lock);
     store->umount();
-    store->fsck(deep);
+    int r = store->fsck(deep);
+    assert(r == 0 || r == -EOPNOTSUPP);
     store->mount();
   }
 
@@ -3892,15 +3874,14 @@ public:
     while (in_flight)
       cond.Wait(lock);
     vector<ghobject_t> objects;
-    set<ghobject_t, ghobject_t::BitwiseComparator> objects_set, objects_set2;
+    set<ghobject_t> objects_set, objects_set2;
     ghobject_t next, current;
     while (1) {
       //cerr << "scanning..." << std::endl;
-      int r = store->collection_list(cid, current, ghobject_t::get_max(),
-				     true, 100,
+      int r = store->collection_list(cid, current, ghobject_t::get_max(), 100,
 				     &objects, &next);
       ASSERT_EQ(r, 0);
-      ASSERT_TRUE(sorted(objects, true));
+      ASSERT_TRUE(sorted(objects));
       objects_set.insert(objects.begin(), objects.end());
       objects.clear();
       if (next.is_max()) break;
@@ -3925,17 +3906,18 @@ public:
     }
 
     ASSERT_EQ(objects_set.size(), available_objects.size());
-    for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = objects_set.begin();
+    for (set<ghobject_t>::iterator i = objects_set.begin();
 	 i != objects_set.end();
 	 ++i) {
       ASSERT_GT(available_objects.count(*i), (unsigned)0);
     }
 
-    int r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, INT_MAX, &objects, 0);
+    int r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
+				   INT_MAX, &objects, 0);
     ASSERT_EQ(r, 0);
     objects_set2.insert(objects.begin(), objects.end());
     ASSERT_EQ(objects_set2.size(), available_objects.size());
-    for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = objects_set2.begin();
+    for (set<ghobject_t>::iterator i = objects_set2.begin();
 	 i != objects_set2.end();
 	 ++i) {
       ASSERT_GT(available_objects.count(*i), (unsigned)0);
@@ -4391,7 +4373,7 @@ TEST_P(StoreTest, HashCollisionTest) {
   }
   string base = "";
   for (int i = 0; i < 100; ++i) base.append("aaaaa");
-  set<ghobject_t, ghobject_t::BitwiseComparator> created;
+  set<ghobject_t> created;
   for (int n = 0; n < 10; ++n) {
     char nbuf[100];
     sprintf(nbuf, "n%d", n);
@@ -4412,19 +4394,19 @@ TEST_P(StoreTest, HashCollisionTest) {
   }
   }
   vector<ghobject_t> objects;
-  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true, INT_MAX, &objects, 0);
+  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
-  set<ghobject_t, ghobject_t::BitwiseComparator> listed(objects.begin(), objects.end());
+  set<ghobject_t> listed(objects.begin(), objects.end());
   cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
   objects.clear();
   listed.clear();
   ghobject_t current, next;
   while (1) {
-    r = store->collection_list(cid, current, ghobject_t::get_max(), true, 60,
+    r = store->collection_list(cid, current, ghobject_t::get_max(), 60,
 			       &objects, &next);
     ASSERT_EQ(r, 0);
-    ASSERT_TRUE(sorted(objects, true));
+    ASSERT_TRUE(sorted(objects));
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
@@ -4441,13 +4423,13 @@ TEST_P(StoreTest, HashCollisionTest) {
   }
   cerr << "listed.size() is " << listed.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = listed.begin();
+  for (set<ghobject_t>::iterator i = listed.begin();
        i != listed.end();
        ++i) {
     ASSERT_TRUE(created.count(*i));
   }
 
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = created.begin();
+  for (set<ghobject_t>::iterator i = created.begin();
        i != created.end();
        ++i) {
     ObjectStore::Transaction t;
@@ -4473,7 +4455,7 @@ TEST_P(StoreTest, ScrubTest) {
     ASSERT_EQ(r, 0);
   }
   string base = "aaaaa";
-  set<ghobject_t, ghobject_t::BitwiseComparator> created;
+  set<ghobject_t> created;
   for (int i = 0; i < 1000; ++i) {
     char buf[100];
     sprintf(buf, "%d", i);
@@ -4510,20 +4492,20 @@ TEST_P(StoreTest, ScrubTest) {
   }
 
   vector<ghobject_t> objects;
-  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true,
+  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
-  set<ghobject_t, ghobject_t::BitwiseComparator> listed(objects.begin(), objects.end());
+  set<ghobject_t> listed(objects.begin(), objects.end());
   cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
   objects.clear();
   listed.clear();
   ghobject_t current, next;
   while (1) {
-    r = store->collection_list(cid, current, ghobject_t::get_max(), true, 60,
+    r = store->collection_list(cid, current, ghobject_t::get_max(), 60,
 			       &objects, &next);
     ASSERT_EQ(r, 0);
-    ASSERT_TRUE(sorted(objects, true));
+    ASSERT_TRUE(sorted(objects));
     for (vector<ghobject_t>::iterator i = objects.begin();
          i != objects.end(); ++i) {
       if (listed.count(*i))
@@ -4539,13 +4521,13 @@ TEST_P(StoreTest, ScrubTest) {
   }
   cerr << "listed.size() is " << listed.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = listed.begin();
+  for (set<ghobject_t>::iterator i = listed.begin();
        i != listed.end();
        ++i) {
     ASSERT_TRUE(created.count(*i));
   }
 
-  for (set<ghobject_t, ghobject_t::BitwiseComparator>::iterator i = created.begin();
+  for (set<ghobject_t>::iterator i = created.begin();
        i != created.end();
        ++i) {
     ObjectStore::Transaction t;
@@ -4974,7 +4956,7 @@ void colsplittest(
 
   ObjectStore::Transaction t;
   vector<ghobject_t> objects;
-  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true,
+  r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(objects.size(), num_objects);
@@ -4993,7 +4975,7 @@ void colsplittest(
   }
 
   objects.clear();
-  r = store->collection_list(tid, ghobject_t(), ghobject_t::get_max(), true,
+  r = store->collection_list(tid, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(objects.size(), num_objects);
@@ -5271,7 +5253,7 @@ TEST_P(StoreTest, BigRGWObjectName) {
 
   {
     vector<ghobject_t> objects;
-    r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(), true,
+    r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
 			       INT_MAX, &objects, 0);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(objects.size(), 1u);
@@ -5750,7 +5732,7 @@ TEST_P(StoreTest, OnodeSizeTracking) {
     ASSERT_EQ(r, 0);
   }
   g_ceph_context->_conf->set_val("bluestore_cache_size", "4000000");
-  g_conf->set_val("bluestore_min_alloc_size", stringify(block_size));
+  g_conf->set_val("bluestore_min_alloc_size", "0");
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_csum_type", "crc32c");
 
@@ -5837,6 +5819,169 @@ TEST_P(StoreTest, KVDBStatsTest) {
   g_conf->set_val("rocksdb_collect_compaction_stats", "false");
   g_conf->set_val("rocksdb_collect_extended_stats","false");
   g_conf->set_val("rocksdb_collect_memory_stats","false");
+}
+
+TEST_P(StoreTest, garbageCollection) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  int buf_len = 256 * 1024;
+  int overlap_offset = 64 * 1024;
+  int write_offset = buf_len;
+  if (string(GetParam()) != "bluestore")
+    return;
+
+#define WRITE_AT(offset, _length) {\
+      ObjectStore::Transaction t;\
+      if ((uint64_t)_length != bl.length()) { \
+        buffer::ptr p(bl.c_str(), _length);\
+        bufferlist bl_tmp;\
+        bl_tmp.push_back(p);\
+        t.write(cid, hoid, offset, bl_tmp.length(), bl_tmp);\
+      } else {\
+        t.write(cid, hoid, offset, bl.length(), bl);\
+      }\
+      r = apply_transaction(store, &osr, std::move(t));\
+      ASSERT_EQ(r, 0);\
+  }
+  g_conf->set_val("bluestore_min_alloc_size", "65536");
+  g_conf->set_val("bluestore_compression_min_blob_size", "262144");
+  g_conf->set_val("bluestore_compression_mode", "force");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    bufferlist in;
+    r = store->read(cid, hoid, 0, 5, in);
+    ASSERT_EQ(-ENOENT, r);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  std::string data;
+  data.resize(buf_len);
+
+  {
+    { 
+      bool exists = store->exists(cid, hoid);
+      ASSERT_TRUE(!exists);
+
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      cerr << "Creating object " << hoid << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+
+      exists = store->exists(cid, hoid);
+      ASSERT_EQ(true, exists);
+    } 
+    bufferlist bl;
+
+    for(size_t i = 0; i < data.size(); i++)
+      data[i] = i % 256;
+
+    bl.append(data);
+
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(0, buf_len);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x10000);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(write_offset - 2 * overlap_offset, buf_len);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x20000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0u);
+    }
+
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(write_offset - overlap_offset, buf_len);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x20000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x10000u);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(write_offset - 3 * overlap_offset, buf_len);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x20000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x20000u);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(write_offset + 1, overlap_offset-1);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x20000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x20000u);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(write_offset + 1, overlap_offset);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x10000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x3ffffu);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(0, buf_len-1);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x10000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x40001u);
+    }
+    g_conf->set_val("bluestore_gc_enable_total_threshold", "1"); //forbid GC when saving = 0
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(1, overlap_offset-2);
+      WRITE_AT(overlap_offset * 2 + 1, overlap_offset-2);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x10000);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x40001u);
+    }
+    {
+      struct store_statfs_t statfs;
+      WRITE_AT(overlap_offset + 1, overlap_offset-2);
+      int r = store->statfs(&statfs);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(statfs.compressed_allocated, 0x0);
+      const PerfCounters* counters = store->get_perf_counters();
+      ASSERT_EQ(counters->get(l_bluestore_gc_merged), 0x40007u);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.remove(cid, hoid);
+      cerr << "Cleaning" << std::endl;
+      r = apply_transaction(store, &osr, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+  }
+  g_conf->set_val("bluestore_gc_enable_total_threshold", "0");
+  g_conf->set_val("bluestore_compression_min_blob_size", "131072");
+  g_conf->set_val("bluestore_compression_mode", "none");
+  g_conf->set_val("bluestore_min_blob_size", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
 }
 
 int main(int argc, char **argv) {

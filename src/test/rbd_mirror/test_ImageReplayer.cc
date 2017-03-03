@@ -62,8 +62,8 @@ public:
       : test(test), oid(oid), lock("C_WatchCtx::lock"), notified(false) {
     }
 
-    virtual void handle_notify(uint64_t notify_id, uint64_t cookie,
-                               uint64_t notifier_id, bufferlist& bl_) {
+    void handle_notify(uint64_t notify_id, uint64_t cookie,
+                               uint64_t notifier_id, bufferlist& bl_) override {
       bufferlist bl;
       test->m_remote_ioctx.notify_ack(oid, notify_id, cookie, bl);
 
@@ -72,7 +72,7 @@ public:
       cond.Signal();
     }
 
-    virtual void handle_error(uint64_t cookie, int err) {
+    void handle_error(uint64_t cookie, int err) override {
       ASSERT_EQ(0, err);
     }
   };
@@ -118,7 +118,7 @@ public:
     m_image_sync_throttler.reset(new rbd::mirror::ImageSyncThrottler<>());
   }
 
-  ~TestImageReplayer()
+  ~TestImageReplayer() override 
   {
     unwatch();
 
@@ -133,9 +133,9 @@ public:
   void create_replayer() {
     m_replayer = new ImageReplayerT(m_threads, m_image_deleter, m_image_sync_throttler,
       rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
-      rbd::mirror::RadosRef(new librados::Rados(m_remote_ioctx)),
-      m_local_mirror_uuid, m_remote_mirror_uuid, m_local_ioctx.get_id(),
-      m_remote_pool_id, m_remote_image_id, "global image id");
+      m_local_mirror_uuid, m_local_ioctx.get_id(), "global image id");
+    m_replayer->add_remote_image(m_remote_mirror_uuid, m_remote_image_id,
+                                 m_remote_ioctx);
   }
 
   void start()

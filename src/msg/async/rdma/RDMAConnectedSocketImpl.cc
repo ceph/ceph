@@ -35,10 +35,14 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* i
   my_msg.peer_qpn = 0;
   my_msg.gid = infiniband->get_gid();
   notify_fd = dispatcher->register_qp(qp, this);
+  dispatcher->perf_logger->inc(l_msgr_rdma_created_queue_pair);
+  dispatcher->perf_logger->inc(l_msgr_rdma_active_queue_pair);
 }
 
 RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
 {
+  ldout(cct, 20) << __func__ << " destruct." << dendl;
+  dispatcher->perf_logger->dec(l_msgr_rdma_active_queue_pair);
   worker->remove_pending_conn(this);
   dispatcher->erase_qpn(my_msg.qpn);
   cleanup();
@@ -192,8 +196,11 @@ void RDMAConnectedSocketImpl::handle_connection() {
   ldout(cct, 20) << __func__ << " QP: " << my_msg.qpn << " tcp_fd: " << tcp_fd << " fd: " << notify_fd << dendl;
   int r = infiniband->recv_msg(cct, tcp_fd, peer_msg);
   if (r < 0) {
-    if (r != -EAGAIN)
+    if (r != -EAGAIN) {
+      dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
+      ldout(cct, 1) << __func__ << " recv handshake msg failed." << dendl;
       fault();
+    }
     return;
   }
 
@@ -209,6 +216,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
     r = infiniband->send_msg(cct, tcp_fd, my_msg);
     if (r < 0) {
       ldout(cct, 1) << __func__ << " send client ack failed." << dendl;
+      dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
       fault();
     }
   } else {
@@ -220,6 +228,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
       r = infiniband->send_msg(cct, tcp_fd, my_msg);
       if (r < 0) {
         ldout(cct, 1) << __func__ << " server ack failed." << dendl;
+        dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
         fault();
         return ;
       }
@@ -258,6 +267,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
     ldout(cct, 25) << __func__ << " chunk length: " << response->byte_len << " bytes." << chunk << dendl;
     chunk->prepare_read(response->byte_len);
     if (response->byte_len == 0) {
+      dispatcher->perf_logger->inc(l_msgr_rdma_rx_fin);
       if (connected) {
         error = ECONNRESET;
         assert(infiniband->post_chunk(chunk) == 0);
@@ -265,6 +275,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
       }
       break;
     }
+    worker->perf_logger->inc(l_msgr_rdma_rx_bytes, response->byte_len);
     //assert(response->byte_len);
     if (read == (ssize_t)len) {
       buffers.push_back(chunk);
@@ -279,6 +290,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
     }
   }
 
+  worker->perf_logger->inc(l_msgr_rdma_rx_chunks, cqe.size());
   if (is_server && connected == 0) {
     ldout(cct, 20) << __func__ << " we do not need last handshake, QP: " << my_msg.qpn << " peer QP: " << peer_msg.qpn << dendl;
     connected = 1; //if so, we don't need the last handshake
@@ -309,7 +321,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
   }
 
   if (c != buffers.end() && (*c)->over())
-    c++;
+    ++c;
   buffers.erase(buffers.begin(), c);
   ldout(cct, 25) << __func__ << " got " << read  << " bytes, buffers size: " << buffers.size() << dendl;
   return read;
@@ -401,7 +413,8 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
 
   int ret = worker->reserve_message_buffer(this, tx_buffers, bytes);
   if (ret == 0) {
-    ldout(cct, 10) << __func__ << " no enough buffers in worker " << worker << dendl;
+    ldout(cct, 1) << __func__ << " no enough buffers in worker " << worker << dendl;
+    worker->perf_logger->inc(l_msgr_rdma_tx_no_mem);
     return -EAGAIN; // that is ok , cause send will return bytes. == 0 enough buffers, < 0 no buffer, >0 not enough
   }
   vector<Chunk*>::iterator current_buffer = tx_buffers.begin();
@@ -427,6 +440,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   assert(total <= pending_bl.length());
   bufferlist swapped;
   if (total < pending_bl.length()) {
+    worker->perf_logger->inc(l_msgr_rdma_tx_parital_mem);
     pending_bl.splice(total, pending_bl.length()-total, &swapped);
     pending_bl.swap(swapped);
   } else {
@@ -474,6 +488,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
       ldout(cct, 20) << __func__ << " send_inline." << dendl;
       }*/
 
+    worker->perf_logger->inc(l_msgr_rdma_tx_bytes, isge[current_sge].length);
     if (pre_wr)
       pre_wr->next = &iswr[current_swr];
     pre_wr = &iswr[current_swr];
@@ -484,11 +499,13 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
 
   ibv_send_wr *bad_tx_work_request;
   if (ibv_post_send(qp->get_qp(), iswr, &bad_tx_work_request)) {
-    lderr(cct) << __func__ << " failed to send data"
-               << " (most probably should be peer not ready): "
-               << cpp_strerror(errno) << dendl;
+    ldout(cct, 1) << __func__ << " failed to send data"
+                  << " (most probably should be peer not ready): "
+                  << cpp_strerror(errno) << dendl;
+    worker->perf_logger->inc(l_msgr_rdma_tx_failed);
     return -errno;
   }
+  worker->perf_logger->inc(l_msgr_rdma_tx_chunks, tx_buffers.size());
   ldout(cct, 20) << __func__ << " qp state is : " << Infiniband::qp_state_string(qp->get_state()) << dendl;
   return 0;
 }
@@ -502,15 +519,16 @@ void RDMAConnectedSocketImpl::fin() {
   wr.send_flags = IBV_SEND_SIGNALED;
   ibv_send_wr* bad_tx_work_request;
   if (ibv_post_send(qp->get_qp(), &wr, &bad_tx_work_request)) {
-    lderr(cct) << __func__ << " failed to send message="
-               << " ibv_post_send failed(most probably should be peer not ready): "
-               << cpp_strerror(errno) << dendl;
+    ldout(cct, 1) << __func__ << " failed to send message="
+                  << " ibv_post_send failed(most probably should be peer not ready): "
+                  << cpp_strerror(errno) << dendl;
+    worker->perf_logger->inc(l_msgr_rdma_tx_failed);
     return ;
   }
 }
 
 void RDMAConnectedSocketImpl::cleanup() {
-  if (con_handler) {
+  if (con_handler && tcp_fd >= 0) {
     (static_cast<C_handle_connection*>(con_handler))->close();
     worker->center.submit_to(worker->center.get_id(), [this]() {
       worker->center.delete_file_event(tcp_fd, EVENT_READABLE);

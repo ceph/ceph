@@ -1094,18 +1094,20 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   }
   mask |= CEPH_FEATURE_OSD_PRIMARY_AFFINITY;
 
-  const uint64_t jewel_features = CEPH_FEATURE_SERVER_JEWEL;
-  if (test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
-    features |= jewel_features;
-  }
-  mask |= jewel_features;
+  if (entity_type == CEPH_ENTITY_TYPE_OSD) {
+    const uint64_t jewel_features = CEPH_FEATURE_SERVER_JEWEL;
+    if (test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      features |= jewel_features;
+    }
+    mask |= jewel_features;
 
-  const uint64_t kraken_features = CEPH_FEATURE_SERVER_KRAKEN
-    | CEPH_FEATURE_MSG_ADDR2;
-  if (test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
-    features |= kraken_features;
+    const uint64_t kraken_features = CEPH_FEATUREMASK_SERVER_KRAKEN
+      | CEPH_FEATURE_MSG_ADDR2;
+    if (test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+      features |= kraken_features;
+    }
+    mask |= kraken_features;
   }
-  mask |= kraken_features;
 
   if (pmask)
     *pmask = mask;
@@ -1482,26 +1484,37 @@ int OSDMap::apply_incremental(const Incremental &inc)
 }
 
 // mapping
-int OSDMap::object_locator_to_pg(
-	const object_t& oid,
-	const object_locator_t& loc,
-	pg_t &pg) const
+int OSDMap::map_to_pg(
+  int64_t poolid,
+  const string& name,
+  const string& key,
+  const string& nspace,
+  pg_t *pg) const
 {
   // calculate ps (placement seed)
-  const pg_pool_t *pool = get_pg_pool(loc.get_pool());
+  const pg_pool_t *pool = get_pg_pool(poolid);
   if (!pool)
     return -ENOENT;
   ps_t ps;
-  if (loc.hash >= 0) {
-    ps = loc.hash;
-  } else {
-    if (!loc.key.empty())
-      ps = pool->hash_key(loc.key, loc.nspace);
-    else
-      ps = pool->hash_key(oid.name, loc.nspace);
-  }
-  pg = pg_t(ps, loc.get_pool(), -1);
+  if (!key.empty())
+    ps = pool->hash_key(key, nspace);
+  else
+    ps = pool->hash_key(name, nspace);
+  *pg = pg_t(ps, poolid);
   return 0;
+}
+
+int OSDMap::object_locator_to_pg(
+  const object_t& oid, const object_locator_t& loc, pg_t &pg) const
+{
+  if (loc.hash >= 0) {
+    if (!get_pg_pool(loc.get_pool())) {
+      return -ENOENT;
+    }
+    pg = pg_t(loc.hash, loc.get_pool());
+    return 0;
+  }
+  return map_to_pg(loc.get_pool(), oid.name, loc.key, loc.nspace, &pg);
 }
 
 ceph_object_layout OSDMap::make_object_layout(
@@ -1712,11 +1725,14 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   _apply_primary_affinity(pps, *pool, up, primary);
 }
   
-void OSDMap::_pg_to_up_acting_osds(const pg_t& pg, vector<int> *up, int *up_primary,
-                                   vector<int> *acting, int *acting_primary) const
+void OSDMap::_pg_to_up_acting_osds(
+  const pg_t& pg, vector<int> *up, int *up_primary,
+  vector<int> *acting, int *acting_primary,
+  bool raw_pg_to_pg) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
-  if (!pool) {
+  if (!pool ||
+      (!raw_pg_to_pg && pg.ps() >= pool->get_pg_num())) {
     if (up)
       up->clear();
     if (up_primary)
@@ -2410,6 +2426,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",require_jewel_osds";
   if (f & CEPH_OSDMAP_REQUIRE_KRAKEN)
     s += ",require_kraken_osds";
+  if (f & CEPH_OSDMAP_REQUIRE_LUMINOUS)
+    s += ",require_luminous_osds";
   if (s.length())
     s.erase(0, 1);
   return s;
@@ -2526,7 +2544,7 @@ public:
   }
 
 protected:
-  virtual void dump_item(const CrushTreeDumper::Item &qi, TextTable *tbl) {
+  void dump_item(const CrushTreeDumper::Item &qi, TextTable *tbl) override {
 
     *tbl << qi.id
 	 << weightf_t(qi.weight);
@@ -2579,7 +2597,7 @@ public:
   }
 
 protected:
-  virtual void dump_item_fields(const CrushTreeDumper::Item &qi, Formatter *f) {
+  void dump_item_fields(const CrushTreeDumper::Item &qi, Formatter *f) override {
     Parent::dump_item_fields(qi, f);
     if (!qi.is_bucket())
     {

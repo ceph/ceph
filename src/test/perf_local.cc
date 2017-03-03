@@ -330,7 +330,7 @@ class CondPingPong {
     CondPingPong *p;
    public:
     explicit Consumer(CondPingPong *p): p(p) {}
-    void* entry() {
+    void* entry() override {
       p->consume();
       return 0;
     }
@@ -473,7 +473,7 @@ class CenterWorker : public Thread {
     done = true;
     center.wakeup();
   }
-  void* entry() {
+  void* entry() override {
     center.set_owner();
     bind_thread_to_cpu(2);
     while (!done)
@@ -487,7 +487,7 @@ class CountEvent: public EventCallback {
 
  public:
   explicit CountEvent(atomic_t *atomic): count(atomic) {}
-  void do_request(int id) {
+  void do_request(int id) override {
     count->dec();
   }
 };
@@ -749,7 +749,7 @@ double test_spinlock()
 // Helper for spawn_thread. This is the main function that the thread executes
 // (intentionally empty).
 class ThreadHelper : public Thread {
-  void *entry() { return 0; }
+  void *entry() override { return 0; }
 };
 
 // Measure the cost of start and joining with a thread.
@@ -768,7 +768,7 @@ double spawn_thread()
 
 class FakeContext : public Context {
  public:
-  virtual void finish(int r) {}
+  void finish(int r) override {}
 };
 
 // Measure the cost of starting and stopping a Dispatch::Timer.

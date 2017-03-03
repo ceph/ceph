@@ -28,9 +28,9 @@
 class PGLogTest : public ::testing::Test, protected PGLog {
 public:
   PGLogTest() : PGLog(g_ceph_context) {}
-  virtual void SetUp() { }
+  void SetUp() override { }
 
-  virtual void TearDown() {
+  void TearDown() override {
     clear();
   }
 
@@ -92,7 +92,7 @@ public:
     pg_missing_t init;
     pg_missing_t final;
 
-    set<hobject_t, hobject_t::BitwiseComparator> toremove;
+    set<hobject_t> toremove;
     list<pg_log_entry_t> torollback;
 
   private:
@@ -153,24 +153,24 @@ public:
   };
 
   struct LogHandler : public PGLog::LogEntryHandler {
-    set<hobject_t, hobject_t::BitwiseComparator> removed;
+    set<hobject_t> removed;
     list<pg_log_entry_t> rolledback;
     
     void rollback(
-      const pg_log_entry_t &entry) {
+      const pg_log_entry_t &entry) override {
       rolledback.push_back(entry);
     }
     void rollforward(
-      const pg_log_entry_t &entry) {}
+      const pg_log_entry_t &entry) override {}
     void remove(
-      const hobject_t &hoid) {
+      const hobject_t &hoid) override {
       removed.insert(hoid);
     }
     void try_stash(const hobject_t &, version_t) override {
       // lost/unfound cases are not tested yet
     }
     void trim(
-      const pg_log_entry_t &entry) {}
+      const pg_log_entry_t &entry) override {}
   };
 
   template <typename missing_t>
@@ -204,8 +204,8 @@ public:
     }
 
     {
-      set<hobject_t, hobject_t::BitwiseComparator>::const_iterator titer = tcase.toremove.begin();
-      set<hobject_t, hobject_t::BitwiseComparator>::const_iterator hiter = handler.removed.begin();
+      set<hobject_t>::const_iterator titer = tcase.toremove.begin();
+      set<hobject_t>::const_iterator hiter = handler.removed.begin();
       for (; titer != tcase.toremove.end(); ++titer, ++hiter) {
 	EXPECT_EQ(*titer, *hiter);
       }
@@ -276,11 +276,11 @@ struct TestHandler : public PGLog::LogEntryHandler {
   explicit TestHandler(list<hobject_t> &removed) : removed(removed) {}
 
   void rollback(
-    const pg_log_entry_t &entry) {}
+    const pg_log_entry_t &entry) override {}
   void rollforward(
-    const pg_log_entry_t &entry) {}
+    const pg_log_entry_t &entry) override {}
   void remove(
-    const hobject_t &hoid) {
+    const hobject_t &hoid) override {
     removed.push_back(hoid);
   }
   void cant_rollback(const pg_log_entry_t &entry) {}
@@ -288,7 +288,7 @@ struct TestHandler : public PGLog::LogEntryHandler {
     // lost/unfound cases are not tested yet
   }
   void trim(
-    const pg_log_entry_t &entry) {}
+    const pg_log_entry_t &entry) override {}
 };
 
 TEST_F(PGLogTest, rewind_divergent_log) {
@@ -490,8 +490,9 @@ TEST_F(PGLogTest, merge_old_entry) {
     list<hobject_t> remove_snap;
 
     info.last_backfill = hobject_t();
-    info.last_backfill.set_hash(1);
+    info.last_backfill.set_hash(100);
     oe.soid.set_hash(2);
+    ASSERT_GT(oe.soid, info.last_backfill);
 
     EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());

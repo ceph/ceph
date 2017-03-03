@@ -47,7 +47,7 @@ public:
     ob->reads.push_back(&set_item);
   }
 
-  void finish(int r) {
+  void finish(int r) override {
     oc->bh_read_finish(poolid, oid, tid, start, length, bl, r, trust_enoent);
 
     // object destructor clears the list
@@ -68,7 +68,7 @@ class ObjectCacher::C_RetryRead : public Context {
 public:
   C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c)
     : oc(_oc), rd(r), oset(os), onfinish(c) {}
-  void finish(int r) {
+  void finish(int r) override {
     if (r < 0) {
       if (onfinish)
         onfinish->complete(r);
@@ -991,7 +991,7 @@ public:
     oc(c), poolid(_poolid), oid(o), tid(0) {
       ranges.swap(_ranges);
     }
-  void finish(int r) {
+  void finish(int r) override {
     oc->bh_write_commit(poolid, oid, ranges, tid, r);
   }
 };
@@ -1027,7 +1027,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
     if (bh->snapc.seq > snapc.seq)
       snapc = bh->snapc;
     if (bh->last_write > last_write)
-      bh->last_write = bh->last_write;
+      last_write = bh->last_write;
   }
 
   C_WriteCommit *oncommit = new C_WriteCommit(this, ob->oloc.pool, ob->get_soid(), ranges);
@@ -1708,7 +1708,7 @@ class ObjectCacher::C_WaitForWrite : public Context {
 public:
   C_WaitForWrite(ObjectCacher *oc, uint64_t len, Context *onfinish) :
     m_oc(oc), m_len(len), m_onfinish(onfinish) {}
-  void finish(int r);
+  void finish(int r) override;
 private:
   ObjectCacher *m_oc;
   uint64_t m_len;

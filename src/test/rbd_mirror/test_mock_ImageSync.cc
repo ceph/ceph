@@ -180,7 +180,7 @@ public:
   typedef image_sync::SyncPointCreateRequest<librbd::MockTestImageCtx> MockSyncPointCreateRequest;
   typedef image_sync::SyncPointPruneRequest<librbd::MockTestImageCtx> MockSyncPointPruneRequest;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;

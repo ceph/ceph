@@ -79,7 +79,8 @@ public:
   int init_messenger() {
     dout(1) << __func__ << dendl;
 
-    msg = Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(-1),
+    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->ms_type : cct->_conf->ms_public_type;
+    msg = Messenger::create(cct, public_msgr_type, entity_name_t::CLIENT(-1),
                             "test-mon-msg", 0, 0);
     assert(msg != NULL);
     msg->set_default_policy(Messenger::Policy::lossy_client(0,0));
@@ -182,13 +183,13 @@ fail:
     return true;
   }
 
-  bool ms_dispatch(Message *m) {
+  bool ms_dispatch(Message *m) override {
     return handle_message(m);  
   }
-  void ms_handle_connect(Connection *con) { }
-  void ms_handle_remote_reset(Connection *con) { }
-  bool ms_handle_reset(Connection *con) { return false; }
-  bool ms_handle_refused(Connection *con) { return false; }
+  void ms_handle_connect(Connection *con) override { }
+  void ms_handle_remote_reset(Connection *con) override { }
+  bool ms_handle_reset(Connection *con) override { return false; }
+  bool ms_handle_refused(Connection *con) override { return false; }
 
   bool is_wanted(Message *m) {
     dout(20) << __func__ << " " << *m << " type " << m->get_type() << dendl;
@@ -227,7 +228,7 @@ protected:
     lock("lock") { }
 
 public:
-  virtual void SetUp() {
+  void SetUp() override {
     reply_type = -1;
     if (reply_msg) {
       reply_msg->put();
@@ -236,7 +237,7 @@ public:
     ASSERT_EQ(init(), 0);
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     shutdown();
     if (reply_msg) {
       reply_msg->put();
@@ -244,7 +245,7 @@ public:
     }
   }
 
-  void handle_wanted(Message *m) {
+  void handle_wanted(Message *m) override {
     lock.Lock();
     // caller will put() after they call us, so hold on to a ref
     m->get();

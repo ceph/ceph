@@ -50,6 +50,16 @@ if [ -n "$CEPH_BIN" ] && [ -n "$CEPH_ROOT" ] && [ -n "$CEPH_BUILD_DIR" ]; then
   ASSUME_DEV=1
 fi
 
+if [ `uname` = FreeBSD ]; then
+  GETOPT=/usr/local/bin/getopt
+else
+  GETOPT=getopt
+fi
+
+if id ceph > /dev/null 2>&1; then
+  SET_CEPHUSER_ARGS=" --setuser ceph --setgroup ceph"
+fi
+
 usage_exit() {
     echo "usage: $0 [options] {start|stop|restart|condrestart} [mon|osd|mds]..."
     printf "Core options:\n"
@@ -137,7 +147,7 @@ stop_daemon() {
 ## command line options
 options=
 
-OPTS=$(getopt -n 'init-ceph' -o 'hvam:c:' -l 'help,verbose,valgrind,novalgrind,allhosts,restart,norestart,btrfs,nobtrfs,fsmount,nofsmount,btrfsumount,fsumount,conf:,cluster:,hostname:' -- "$@")
+OPTS=$(${GETOPT} -n 'init-ceph' -o 'hvam:c:' -l 'help,verbose,valgrind,novalgrind,allhosts,restart,norestart,btrfs,nobtrfs,fsmount,nofsmount,btrfsumount,fsumount,conf:,cluster:,hostname:' -- "$@")
 if [ $? != 0 ]
 then
     exit 1
@@ -352,7 +362,7 @@ for name in $what; do
 
 	    [ -n "$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES" ] && tcmalloc="TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=$TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES"
 
-	    cmd="$files $tcmalloc $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
+	    cmd="$files $tcmalloc $wrap $cmd --cluster $cluster ${SET_CEPHUSER_ARGS} $runmode"
 
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
@@ -462,7 +472,8 @@ for name in $what; do
 	status)
 	    if daemon_is_running $name ceph-$type $id $pid_file; then
 		printf "$name: running "
-		do_cmd "$BINDIR/ceph --admin-daemon $asok version 2>/dev/null" || echo unknown
+		do_cmd "$BINDIR/ceph daemon $name version 2>/dev/null" || printf unknown
+		printf "\n"
             elif [ -e "$pid_file" ]; then
                 # daemon is dead, but pid file still exists
                 echo "$name: dead."

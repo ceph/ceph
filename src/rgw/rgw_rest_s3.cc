@@ -698,7 +698,7 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
 
 class RGWSetBucketVersioningParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el) {
+  XMLObj *alloc_obj(const char *el) override {
     return new XMLObj;
   }
 
@@ -901,7 +901,7 @@ class RGWLocationConstraint : public XMLObj
 public:
   RGWLocationConstraint() {}
   ~RGWLocationConstraint() {}
-  bool xml_end(const char *el) {
+  bool xml_end(const char *el) override {
     if (!el)
       return false;
 
@@ -922,7 +922,7 @@ public:
 
 class RGWCreateBucketParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el) {
+  XMLObj *alloc_obj(const char *el) override {
     return new XMLObj;
   }
 
@@ -2545,7 +2545,7 @@ void RGWGetRequestPayment_ObjStore_S3::send_response()
 
 class RGWSetRequestPaymentParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el) {
+  XMLObj *alloc_obj(const char *el) override {
     return new XMLObj;
   }
 
@@ -3560,8 +3560,6 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
     return -EPERM;
   }
-
-  string algorithm = "AWS4-HMAC-SHA256";
 
   try {
     s->aws4_auth = std::unique_ptr<rgw_aws4_auth>(new rgw_aws4_auth);

@@ -2055,7 +2055,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
   public:
     C_CopyWrite(SimpleThrottle *throttle, bufferlist *bl)
       : m_throttle(throttle), m_bl(bl) {}
-    virtual void finish(int r) {
+    void finish(int r) override {
       delete m_bl;
       m_throttle->end_op(r);
     }
@@ -2071,7 +2071,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
       : m_throttle(throttle), m_dest(dest), m_offset(offset), m_bl(bl) {
       m_throttle->start_op();
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       if (r < 0) {
 	lderr(m_dest->cct) << "error reading from source image at offset "
 			   << m_offset << ": " << cpp_strerror(r) << dendl;
@@ -3341,7 +3341,7 @@ void filter_out_mirror_watchers(ImageCtx *ictx,
     uint64_t length;
     C_RBD_Readahead(ImageCtx *ictx, object_t oid, uint64_t offset, uint64_t length)
       : ictx(ictx), oid(oid), offset(offset), length(length) { }
-    void finish(int r) {
+    void finish(int r) override {
       ldout(ictx->cct, 20) << "C_RBD_Readahead on " << oid << ": " << offset << "+" << length << dendl;
       ictx->readahead.dec_pending();
     }
