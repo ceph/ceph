@@ -82,7 +82,7 @@ int main(int argc, const char **argv)
 	// enable timing prints
 	messenger->set_magic(MSG_MAGIC_TRACE_CTR);
 	messenger->set_default_policy(
-	  Messenger::Policy::stateless_server(CEPH_FEATURES_ALL, 0));
+	  Messenger::Policy::stateless_server(0));
 
 	r = messenger->bind(bind_addr);
 	if (r < 0)

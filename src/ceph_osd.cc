@@ -497,42 +497,40 @@ flushjournal_out:
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_OSDENC;
 
-  ms_public->set_default_policy(Messenger::Policy::stateless_server(0, 0));
+  ms_public->set_default_policy(Messenger::Policy::stateless_server(0));
   ms_public->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 				   client_byte_throttler.get(),
 				   client_msg_throttler.get());
   ms_public->set_policy(entity_name_t::TYPE_MON,
-                               Messenger::Policy::lossy_client(0,
-							       CEPH_FEATURE_UID |
+                               Messenger::Policy::lossy_client(CEPH_FEATURE_UID |
 							       CEPH_FEATURE_PGID64 |
 							       CEPH_FEATURE_OSDENC));
   ms_public->set_policy(entity_name_t::TYPE_MGR,
-                               Messenger::Policy::lossy_client(0,
-							       CEPH_FEATURE_UID |
+                               Messenger::Policy::lossy_client(CEPH_FEATURE_UID |
 							       CEPH_FEATURE_PGID64 |
 							       CEPH_FEATURE_OSDENC));
 
   //try to poison pill any OSD connections on the wrong address
   ms_public->set_policy(entity_name_t::TYPE_OSD,
-			Messenger::Policy::stateless_server(0,0));
+			Messenger::Policy::stateless_server(0));
 
-  ms_cluster->set_default_policy(Messenger::Policy::stateless_server(0, 0));
-  ms_cluster->set_policy(entity_name_t::TYPE_MON, Messenger::Policy::lossy_client(0,0));
+  ms_cluster->set_default_policy(Messenger::Policy::stateless_server(0));
+  ms_cluster->set_policy(entity_name_t::TYPE_MON, Messenger::Policy::lossy_client(0));
   ms_cluster->set_policy(entity_name_t::TYPE_OSD,
-			 Messenger::Policy::lossless_peer(0, osd_required));
+			 Messenger::Policy::lossless_peer(osd_required));
   ms_cluster->set_policy(entity_name_t::TYPE_CLIENT,
-			 Messenger::Policy::stateless_server(0, 0));
+			 Messenger::Policy::stateless_server(0));
 
   ms_hb_front_client->set_policy(entity_name_t::TYPE_OSD,
-			  Messenger::Policy::lossy_client(0, 0));
+			  Messenger::Policy::lossy_client(0));
   ms_hb_back_client->set_policy(entity_name_t::TYPE_OSD,
-			  Messenger::Policy::lossy_client(0, 0));
+			  Messenger::Policy::lossy_client(0));
   ms_hb_back_server->set_policy(entity_name_t::TYPE_OSD,
-				Messenger::Policy::stateless_server(0, 0));
+				Messenger::Policy::stateless_server(0));
   ms_hb_front_server->set_policy(entity_name_t::TYPE_OSD,
-				 Messenger::Policy::stateless_server(0, 0));
+				 Messenger::Policy::stateless_server(0));
 
-  ms_objecter->set_default_policy(Messenger::Policy::lossy_client(0, CEPH_FEATURE_OSDREPLYMUX));
+  ms_objecter->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
   r = ms_public->bind(g_conf->public_addr);
   if (r < 0)
