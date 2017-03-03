@@ -38,9 +38,11 @@ def task(ctx, config):
             if l.startswith('server')
         ]
         os.remove(ntpconf)
+        # CentOS calls it ntpd, Xenial/Trusty are ntp.  Thanks guys.
         args = [
-            'sudo',
-            'service', 'ntp', 'stop',
+            'sudo', 'service', 'ntp', 'stop',
+            run.Raw('||'),
+            'sudo', 'service', 'ntpd', 'stop',
             run.Raw(';'),
             'sudo',
             'ntpdate',
@@ -48,11 +50,12 @@ def task(ctx, config):
         args.extend(servers)
         args.extend([
             run.Raw(';'),
-            'sudo',
-            'service', 'ntp', 'start',
+            'sudo', 'service', 'ntp', 'start',
+            run.Raw('||'),
+            'sudo', 'service', 'ntpd', 'start',
             run.Raw(';'),
             'PATH=/usr/bin:/usr/sbin',
-            'ntpdc', '-p',
+            'ntpq', '-p',
         ])
         rem.run(args=args)
 
@@ -65,7 +68,7 @@ def task(ctx, config):
             rem.run(
                 args=[
                     'PATH=/usr/bin:/usr/sbin',
-                    'ntpdc', '-p',
+                    'ntpq', '-p',
                     ],
                 )
 
@@ -73,7 +76,7 @@ def task(ctx, config):
 @contextlib.contextmanager
 def check(ctx, config):
     """
-    Run ntpdc at the start and the end of the task.
+    Run ntpq at the start and the end of the task.
 
     :param ctx: Context
     :param config: Configuration
@@ -83,7 +86,7 @@ def check(ctx, config):
         rem.run(
             args=[
                 'PATH=/usr/bin:/usr/sbin',
-                'ntpdc', '-p',
+                'ntpq', '-p',
                 ],
             )
 
@@ -96,6 +99,6 @@ def check(ctx, config):
             rem.run(
                 args=[
                     'PATH=/usr/bin:/usr/sbin',
-                    'ntpdc', '-p',
+                    'ntpq', '-p',
                     ],
                 )
