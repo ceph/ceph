@@ -34,8 +34,7 @@ namespace mirror {
 namespace image_sync {
 
 using librbd::util::create_context_callback;
-using librbd::util::create_rados_ack_callback;
-using librbd::util::create_rados_safe_callback;
+using librbd::util::create_rados_callback;
 
 template <typename I>
 ObjectCopyRequest<I>::ObjectCopyRequest(I *local_image_ctx, I *remote_image_ctx,
@@ -67,7 +66,7 @@ template <typename I>
 void ObjectCopyRequest<I>::send_list_snaps() {
   dout(20) << dendl;
 
-  librados::AioCompletion *rados_completion = create_rados_ack_callback<
+  librados::AioCompletion *rados_completion = create_rados_callback<
     ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_list_snaps>(this);
 
   librados::ObjectReadOperation op;
@@ -162,7 +161,7 @@ void ObjectCopyRequest<I>::send_read_object() {
     return;
   }
 
-  librados::AioCompletion *comp = create_rados_safe_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_read_object>(this);
   int r = m_remote_io_ctx.aio_operate(m_remote_oid, comp, &op, nullptr);
   assert(r == 0);
@@ -271,7 +270,7 @@ void ObjectCopyRequest<I>::send_write_object() {
     }
   }
 
-  librados::AioCompletion *comp = create_rados_safe_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_write_object>(this);
   int r = m_local_io_ctx.aio_operate(m_local_oid, comp, &op, local_snap_seq,
                                      local_snap_ids);

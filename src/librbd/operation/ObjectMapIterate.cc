@@ -96,7 +96,7 @@ private:
     librados::ObjectReadOperation op;
     op.list_snaps(&m_snap_set, &m_snap_list_ret);
 
-    librados::AioCompletion *comp = util::create_rados_safe_callback(this);
+    librados::AioCompletion *comp = util::create_rados_callback(this);
     int r = m_io_ctx.aio_operate(m_oid, comp, &op, NULL);
     assert(r == 0);
     comp->release();

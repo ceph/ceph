@@ -23,7 +23,7 @@ namespace librbd {
 namespace operation {
 
 using util::create_context_callback;
-using util::create_rados_safe_callback;
+using util::create_rados_callback;
 
 namespace {
 
@@ -48,7 +48,7 @@ public:
     op.selfmanaged_snap_rollback(m_snap_id);
 
     librados::AioCompletion *rados_completion =
-      util::create_rados_safe_callback(this);
+      util::create_rados_callback(this);
     image_ctx.data_ctx.aio_operate(oid, rados_completion, &op);
     rados_completion->release();
     return 0;

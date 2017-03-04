@@ -27,7 +27,7 @@ using namespace image_watcher;
 using namespace watch_notify;
 using util::create_async_context_callback;
 using util::create_context_callback;
-using util::create_rados_safe_callback;
+using util::create_rados_callback;
 using librbd::watcher::HandlePayloadVisitor;
 using librbd::watcher::C_NotifyAck;
 
