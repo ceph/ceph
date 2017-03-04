@@ -25,7 +25,7 @@ namespace operation {
 
 using util::create_async_context_callback;
 using util::create_context_callback;
-using util::create_rados_ack_callback;
+using util::create_rados_callback;
 
 template <typename I>
 DisableFeaturesRequest<I>::DisableFeaturesRequest(I &image_ctx,
@@ -228,7 +228,7 @@ void DisableFeaturesRequest<I>::send_get_mirror_mode() {
 
   using klass = DisableFeaturesRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_get_mirror_mode>(this);
+    create_rados_callback<klass, &klass::handle_get_mirror_mode>(this);
   m_out_bl.clear();
   int r = image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
   assert(r == 0);
@@ -276,7 +276,7 @@ void DisableFeaturesRequest<I>::send_get_mirror_image() {
 
   using klass = DisableFeaturesRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_get_mirror_image>(this);
+    create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
   m_out_bl.clear();
   int r = image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
   assert(r == 0);
@@ -496,7 +496,7 @@ void DisableFeaturesRequest<I>::send_set_features() {
 
   using klass = DisableFeaturesRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_set_features>(this);
+    create_rados_callback<klass, &klass::handle_set_features>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, comp, &op);
   assert(r == 0);
   comp->release();

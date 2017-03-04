@@ -20,7 +20,7 @@
 namespace librbd {
 namespace managed_lock {
 
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 
 template <typename I>
 GetLockerRequest<I>::GetLockerRequest(librados::IoCtx& ioctx,
@@ -45,7 +45,7 @@ void GetLockerRequest<I>::send_get_lockers() {
 
   using klass = GetLockerRequest<I>;
   librados::AioCompletion *rados_completion =
-    create_rados_ack_callback<klass, &klass::handle_get_lockers>(this);
+    create_rados_callback<klass, &klass::handle_get_lockers>(this);
   m_out_bl.clear();
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op, &m_out_bl);
   assert(r == 0);

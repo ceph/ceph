@@ -46,7 +46,7 @@ void MirroringWatcher<I>::notify_mode_updated(librados::IoCtx &io_ctx,
   bufferlist bl;
   ::encode(NotifyMessage{ModeUpdatedPayload{mirror_mode}}, bl);
 
-  librados::AioCompletion *comp = util::create_rados_ack_callback(on_finish);
+  librados::AioCompletion *comp = util::create_rados_callback(on_finish);
   int r = io_ctx.aio_notify(RBD_MIRRORING, comp, bl, NOTIFY_TIMEOUT_MS,
                             nullptr);
   assert(r == 0);
@@ -76,7 +76,7 @@ void MirroringWatcher<I>::notify_image_updated(
   ::encode(NotifyMessage{ImageUpdatedPayload{
       mirror_image_state, image_id, global_image_id}}, bl);
 
-  librados::AioCompletion *comp = util::create_rados_ack_callback(on_finish);
+  librados::AioCompletion *comp = util::create_rados_callback(on_finish);
   int r = io_ctx.aio_notify(RBD_MIRRORING, comp, bl, NOTIFY_TIMEOUT_MS,
                             nullptr);
   assert(r == 0);

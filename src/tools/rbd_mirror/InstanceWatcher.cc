@@ -20,7 +20,7 @@ namespace mirror {
 
 using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 
 namespace {
 
@@ -74,7 +74,7 @@ void InstanceWatcher<I>::get_instances(librados::IoCtx &io_ctx,
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_instances_list_start(&op);
   C_GetInstances *ctx = new C_GetInstances(instance_ids, on_finish);
-  librados::AioCompletion *aio_comp = create_rados_ack_callback(ctx);
+  librados::AioCompletion *aio_comp = create_rados_callback(ctx);
 
   int r = io_ctx.aio_operate(RBD_MIRROR_LEADER, aio_comp, &op, &ctx->out_bl);
   assert(r == 0);
@@ -181,7 +181,7 @@ void InstanceWatcher<I>::register_instance() {
 
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_instances_add(&op, m_instance_id);
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     InstanceWatcher<I>, &InstanceWatcher<I>::handle_register_instance>(this);
 
   int r = m_ioctx.aio_operate(RBD_MIRROR_LEADER, aio_comp, &op);
@@ -219,7 +219,7 @@ void InstanceWatcher<I>::create_instance_object() {
   librados::ObjectWriteOperation op;
   op.create(true);
 
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     InstanceWatcher<I>,
     &InstanceWatcher<I>::handle_create_instance_object>(this);
   int r = m_ioctx.aio_operate(m_oid, aio_comp, &op);
@@ -372,7 +372,7 @@ void InstanceWatcher<I>::remove_instance_object() {
   librados::ObjectWriteOperation op;
   op.remove();
 
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     InstanceWatcher<I>,
     &InstanceWatcher<I>::handle_remove_instance_object>(this);
   int r = m_ioctx.aio_operate(m_oid, aio_comp, &op);
@@ -405,7 +405,7 @@ void InstanceWatcher<I>::unregister_instance() {
 
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_instances_remove(&op, m_instance_id);
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     InstanceWatcher<I>, &InstanceWatcher<I>::handle_unregister_instance>(this);
 
   int r = m_ioctx.aio_operate(RBD_MIRROR_LEADER, aio_comp, &op);

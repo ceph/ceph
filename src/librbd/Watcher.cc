@@ -20,7 +20,7 @@ namespace librbd {
 using namespace watcher;
 
 using util::create_context_callback;
-using util::create_rados_safe_callback;
+using util::create_rados_callback;
 using std::string;
 
 namespace {
@@ -43,7 +43,7 @@ struct C_UnwatchAndFlush : public Context {
     if (!flushing) {
       flushing = true;
 
-      librados::AioCompletion *aio_comp = create_rados_safe_callback(this);
+      librados::AioCompletion *aio_comp = create_rados_callback(this);
       r = rados.aio_watch_flush(aio_comp);
       assert(r == 0);
       aio_comp->release();
@@ -87,7 +87,7 @@ void Watcher::register_watch(Context *on_finish) {
   assert(m_watch_state == WATCH_STATE_UNREGISTERED);
   m_watch_state = WATCH_STATE_REGISTERING;
 
-  librados::AioCompletion *aio_comp = create_rados_safe_callback(
+  librados::AioCompletion *aio_comp = create_rados_callback(
                                          new C_RegisterWatch(this, on_finish));
   int r = m_ioctx.aio_watch(m_oid, aio_comp, &m_watch_handle, &m_watch_ctx);
   assert(r == 0);
@@ -141,7 +141,7 @@ void Watcher::unregister_watch(Context *on_finish) {
         m_watch_state == WATCH_STATE_ERROR) {
       m_watch_state = WATCH_STATE_UNREGISTERED;
 
-      librados::AioCompletion *aio_comp = create_rados_safe_callback(
+      librados::AioCompletion *aio_comp = create_rados_callback(
                         new C_UnwatchAndFlush(m_ioctx, on_finish));
       int r = m_ioctx.aio_unwatch(m_watch_handle, aio_comp);
       assert(r == 0);

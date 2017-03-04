@@ -22,7 +22,7 @@
 namespace librbd {
 namespace mirror {
 
-using util::create_rados_ack_callback;
+using util::create_rados_callback;
 
 template <typename I>
 DisableRequest<I>::DisableRequest(I *image_ctx, bool force, bool remove,
@@ -46,7 +46,7 @@ void DisableRequest<I>::send_get_mirror_image() {
 
   using klass = DisableRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_get_mirror_image>(this);
+    create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
   m_out_bl.clear();
   int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
   assert(r == 0);
@@ -128,7 +128,7 @@ void DisableRequest<I>::send_set_mirror_image() {
 
   using klass = DisableRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_set_mirror_image>(this);
+    create_rados_callback<klass, &klass::handle_set_mirror_image>(this);
   m_out_bl.clear();
   int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op);
   assert(r == 0);
@@ -364,7 +364,7 @@ void DisableRequest<I>::send_unregister_client(
   librados::ObjectWriteOperation op;
   cls::journal::client::client_unregister(&op, client_id);
   std::string header_oid = ::journal::Journaler::header_oid(m_image_ctx->id);
-  librados::AioCompletion *comp = create_rados_ack_callback(ctx);
+  librados::AioCompletion *comp = create_rados_callback(ctx);
 
   int r = m_image_ctx->md_ctx.aio_operate(header_oid, comp, &op);
   assert(r == 0);
@@ -411,7 +411,7 @@ void DisableRequest<I>::send_remove_mirror_image() {
 
   using klass = DisableRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_remove_mirror_image>(this);
+    create_rados_callback<klass, &klass::handle_remove_mirror_image>(this);
   m_out_bl.clear();
   int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op);
   assert(r == 0);

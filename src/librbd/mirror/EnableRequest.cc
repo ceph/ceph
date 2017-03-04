@@ -18,7 +18,7 @@ namespace librbd {
 namespace mirror {
 
 using util::create_context_callback;
-using util::create_rados_ack_callback;
+using util::create_rados_callback;
 
 template <typename I>
 EnableRequest<I>::EnableRequest(librados::IoCtx &io_ctx,
@@ -80,7 +80,7 @@ void EnableRequest<I>::send_get_mirror_image() {
 
   using klass = EnableRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_get_mirror_image>(this);
+    create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
   m_out_bl.clear();
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
   assert(r == 0);
@@ -136,7 +136,7 @@ void EnableRequest<I>::send_set_mirror_image() {
 
   using klass = EnableRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_set_mirror_image>(this);
+    create_rados_callback<klass, &klass::handle_set_mirror_image>(this);
   m_out_bl.clear();
   int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op);
   assert(r == 0);

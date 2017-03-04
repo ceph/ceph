@@ -16,7 +16,7 @@
 namespace rbd {
 namespace mirror {
 
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 
 template <typename I>
 MirrorStatusWatcher<I>::MirrorStatusWatcher(librados::IoCtx &io_ctx,
@@ -44,7 +44,7 @@ void MirrorStatusWatcher<I>::init(Context *on_finish) {
 
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_status_remove_down(&op);
-  librados::AioCompletion *aio_comp = create_rados_ack_callback(on_finish);
+  librados::AioCompletion *aio_comp = create_rados_callback(on_finish);
 
   int r = m_ioctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
   assert(r == 0);
