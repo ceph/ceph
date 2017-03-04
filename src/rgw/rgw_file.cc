@@ -205,6 +205,7 @@ namespace rgw {
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
 	(req.get_ret() == 0)) {
+      rgw_fh->set_atime(real_clock::to_timespec(real_clock::now()));
       *bytes_read = req.nread;
     }
 
@@ -276,6 +277,12 @@ namespace rgw {
     RGWFileHandle* nfh = get<0>(tfhr);
     assert(!nfh);
 #endif
+
+    if (! rc) {
+      real_time t = real_clock::now();
+      parent->set_mtime(real_clock::to_timespec(t));
+      parent->set_ctime(real_clock::to_timespec(t));
+    }
 
     rgw_fh->mtx.unlock();
     unref(rgw_fh);
@@ -500,6 +507,9 @@ namespace rgw {
       if (!rc)
 	rc = rc2;
     } else {
+      real_time t = real_clock::now();
+      parent->set_mtime(real_clock::to_timespec(t));
+      parent->set_ctime(real_clock::to_timespec(t));
       rgw_fh->mtx.unlock(); /* !LOCKED */
     }
 
@@ -550,9 +560,13 @@ namespace rgw {
       if (rgw_fh) {
 	if (get<1>(fhr) & RGWFileHandle::FLAG_CREATE) {
 	  /* fill in stat data */
+	  real_time t = real_clock::now();
 	  rgw_fh->create_stat(st, mask);
-	  rgw_fh->set_times(real_clock::now());
+	  rgw_fh->set_times(t);
 	  rgw_fh->open_for_create(); // XXX needed?
+
+	  parent->set_mtime(real_clock::to_timespec(t));
+	  parent->set_ctime(real_clock::to_timespec(t));
 	}
         if (st)
           (void) rgw_fh->stat(st);
@@ -633,7 +647,13 @@ namespace rgw {
       rc2 = req.get_ret();
     }
 
-    return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
+    if ((rc != 0) || (rc2 != 0)) {
+      return -EIO;
+    }
+
+    rgw_fh->set_ctime(real_clock::to_timespec(real_clock::now()));
+
+    return 0;
   } /* RGWLibFS::setattr */
 
   void RGWLibFS::close()
@@ -1185,6 +1205,7 @@ namespace rgw {
     if (! op_ret) {
       /* update stats */
       rgw_fh->set_mtime(real_clock::to_timespec(mtime));
+      rgw_fh->set_ctime(real_clock::to_timespec(mtime));
       rgw_fh->set_size(bytes_written);
     }
 
