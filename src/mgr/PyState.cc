@@ -264,6 +264,12 @@ ceph_get_version(PyObject *self, PyObject *args)
   return PyString_FromString(pretty_version_to_str().c_str());
 }
 
+static PyObject *
+ceph_get_context(PyObject *self, PyObject *args)
+{
+  return global_handle->get_context();
+}
+
 static PyObject*
 get_counter(PyObject *self, PyObject *args)
 {
@@ -305,6 +311,8 @@ PyMethodDef CephStateMethods[] = {
      "Emit a (local) log message"},
     {"get_version", ceph_get_version, METH_VARARGS,
      "Get the ceph version of this process"},
+    {"get_context", ceph_get_context, METH_NOARGS,
+      "Get a CephContext* in a python capsule"},
     {NULL, NULL, 0, NULL}
 };
 

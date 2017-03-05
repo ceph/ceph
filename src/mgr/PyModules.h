@@ -60,6 +60,7 @@ public:
   PyObject *get_counter_python(std::string const &handle,
       entity_type_t svc_type, const std::string &svc_id,
       const std::string &path);
+  PyObject *get_context();
 
   std::map<std::string, std::string> config_cache;
 
