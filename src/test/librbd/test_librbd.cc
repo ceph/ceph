@@ -93,9 +93,6 @@ static int get_features(bool *old_format, uint64_t *features)
   return 0;
 }
 
-static const uint64_t IMAGE_STRIPE_UNIT = 65536;
-static const uint64_t IMAGE_STRIPE_COUNT = 16;
-
 static int create_image_full(rados_ioctx_t ioctx, const char *name,
                              uint64_t size, int *order, int old_format,
                              uint64_t features)
