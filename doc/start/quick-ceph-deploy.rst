@@ -117,10 +117,12 @@ configuration details, perform the following steps using ``ceph-deploy``.
 
 	ssh node2
 	sudo mkdir /var/local/osd0
+	sudo chown ceph:ceph /var/local/osd0
 	exit
 
 	ssh node3
 	sudo mkdir /var/local/osd1
+	sudo chown ceph:ceph /var/local/osd1
 	exit
 
    Then, from your admin node, use ``ceph-deploy`` to prepare the OSDs. ::
