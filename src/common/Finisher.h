@@ -142,7 +142,7 @@ class Finisher {
 
   /// Construct a named Finisher that logs its queue length.
   Finisher(CephContext *cct_, string name, string tn) :
-    cct(cct_), finisher_lock("Finisher::finisher_lock"),
+    cct(cct_), finisher_lock("Finisher::" + name),
     finisher_stop(false), finisher_running(false),
     thread_name(tn), logger(0),
     finisher_thread(this) {
