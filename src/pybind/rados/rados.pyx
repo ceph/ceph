@@ -14,6 +14,7 @@ method.
 # Copyright 2016 Mehdi Abaakouk <sileht@redhat.com>
 
 from cpython cimport PyObject, ref
+from cpython.pycapsule cimport *
 from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
@@ -126,6 +127,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_version(int *major, int *minor, int *extra)
     int rados_create2(rados_t *pcluster, const char *const clustername,
                       const char * const name, uint64_t flags)
+    int rados_create_with_context(rados_t *cluster, rados_config_t cct)
     int rados_connect(rados_t cluster)
     void rados_shutdown(rados_t cluster)
     int rados_conf_read_file(rados_t cluster, const char *path)
@@ -566,7 +568,8 @@ cdef class Rados(object):
     @requires(('rados_id', opt(str_type)), ('name', opt(str_type)), ('clustername', opt(str_type)),
               ('conffile', opt(str_type)))
     def __setup(self, rados_id=None, name=None, clustername=None,
-                conf_defaults=None, conffile=None, conf=None, flags=0):
+                conf_defaults=None, conffile=None, conf=None, flags=0,
+                context=None):
         self.monitor_callback = None
         self.parsed_args = []
         self.conf_defaults = conf_defaults
@@ -590,8 +593,14 @@ cdef class Rados(object):
             int _flags = flags
             int ret
 
-        with nogil:
-            ret = rados_create2(&self.cluster, _clustername, _name, _flags)
+        if context:
+            # Unpack void* (aka rados_config_t) from capsule
+            rados_config = <rados_config_t> PyCapsule_GetPointer(context, NULL)
+            with nogil:
+                ret = rados_create_with_context(&self.cluster, rados_config)
+        else:
+            with nogil:
+                ret = rados_create2(&self.cluster, _clustername, _name, _flags)
         if ret != 0:
             raise Error("rados_initialize failed with error code: %d" % ret)
 
