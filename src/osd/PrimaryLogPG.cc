@@ -2981,13 +2981,13 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     ctx->at_version = get_next_version();
     ctx->mtime = m->get_mtime();
 
-    dout(10) << "do_op " << soid << " " << ctx->ops
+    dout(10) << __func__ << " " << soid << " " << ctx->ops
 	     << " ov " << obc->obs.oi.version << " av " << ctx->at_version 
 	     << " snapc " << ctx->snapc
 	     << " snapset " << obc->ssc->snapset
 	     << dendl;  
   } else {
-    dout(10) << "do_op " << soid << " " << ctx->ops
+    dout(10) << __func__ << " " << soid << " " << ctx->ops
 	     << " ov " << obc->obs.oi.version
 	     << dendl;  
   }
