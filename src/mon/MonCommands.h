@@ -441,22 +441,15 @@ COMMAND("mon remove " \
 COMMAND("mon rm " \
 	"name=name,type=CephString", \
 	"remove monitor named <name>", "mon", "rw", "cli,rest")
-COMMAND("mon debug set_feature" \
-        "name=feature_type,type=CephChoices,strings=persistent|optional " \
+COMMAND("mon feature list " \
+        "name=with_value,type=CephChoices,strings=--with-value,req=false", \
+        "list available mon map features to be set/unset", \
+        "mon", "r", "cli,rest")
+COMMAND("mon feature set " \
         "name=feature_name,type=CephString " \
         "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
         "set provided feature on mon map", \
-        "mon", "rw", "cli")
-COMMAND("mon debug list_features " \
-        "name=feature_type,type=CephString,req=false", \
-        "list available mon map features to be set/unset", \
-        "mon", "rw", "cli")
-COMMAND("mon debug unset_feature " \
-        "name=feature_type,type=CephChoices,strings=persistent|optional " \
-        "name=feature_name,type=CephString " \
-        "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
-        "unset provided feature from monmap", \
-        "mon", "rw", "cli")
+        "mon", "rw", "cli,rest")
 
 /*
  * OSD commands
