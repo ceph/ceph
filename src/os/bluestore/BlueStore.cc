@@ -8438,12 +8438,16 @@ void BlueStore::_do_write_small(
     // can we pad our head/tail out with zeros?
     uint64_t chunk_size = b->get_blob().get_chunk_size(block_size);
     uint64_t head_pad = P2PHASE(offset, chunk_size);
+    uint64_t tail_pad = P2NPHASE(end, chunk_size);
+    if (head_pad || tail_pad) {
+      o->extent_map.fault_range(db, offset - head_pad,
+                                length + head_pad + tail_pad);
+    }
     if (head_pad &&
 	o->extent_map.has_any_lextents(offset - head_pad, chunk_size)) {
       head_pad = 0;
     }
 
-    uint64_t tail_pad = P2NPHASE(end, chunk_size);
     if (tail_pad && o->extent_map.has_any_lextents(end, tail_pad)) {
       tail_pad = 0;
     }
