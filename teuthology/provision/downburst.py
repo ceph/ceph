@@ -42,7 +42,8 @@ class Downburst(object):
     A class that provides methods for creating and destroying virtual machine
     instances using downburst: https://github.com/ceph/downburst
     """
-    def __init__(self, name, os_type, os_version, status=None, user='ubuntu'):
+    def __init__(self, name, os_type, os_version, status=None, user='ubuntu',
+                 logfile=None):
         self.name = name
         self.shortname = decanonicalize_hostname(self.name)
         self.os_type = os_type
@@ -51,6 +52,7 @@ class Downburst(object):
         self.config_path = None
         self.user_path = None
         self.user = user
+        self.logfile = logfile
         self.host = decanonicalize_hostname(self.status['vm_host']['name'])
         self.executable = downburst_executable()
 
@@ -100,15 +102,16 @@ class Downburst(object):
         if not self.user_path:
             raise ValueError("I need a user_path!")
 
-        args = [
-            self.executable,
-            '-c', self.host,
+        args = [self.executable, '-v', '-c', self.host]
+        if self.logfile:
+            args.extend(['-l', self.logfile])
+        args.extend([
             'create',
             '--wait',
             '--meta-data=%s' % self.config_path,
             '--user-data=%s' % self.user_path,
             self.shortname,
-        ]
+        ])
         log.info("Provisioning a {distro} {distroversion} vps".format(
             distro=self.os_type,
             distroversion=self.os_version
@@ -126,7 +129,10 @@ class Downburst(object):
         if not executable:
             log.error("No downburst executable found.")
             return False
-        args = [executable, '-c', self.host, 'destroy', self.shortname]
+        args = [executable, '-v', '-c', self.host]
+        if self.logfile:
+            args.extend(['-l', self.logfile])
+        args.extend(['destroy', self.shortname])
         proc = subprocess.Popen(args, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,)
         out, err = proc.communicate()

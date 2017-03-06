@@ -6,9 +6,16 @@ from ..misc import decanonicalize_hostname, get_distro, get_distro_version
 import cloud
 import downburst
 import openstack
+import os
 
 
 log = logging.getLogger(__name__)
+
+
+def _logfile(ctx, shortname):
+    if (ctx.config.get('archive_path')):
+        return os.path.join(ctx.config['archive_path'],
+                            shortname + '.downburst.log')
 
 
 def create_if_vm(ctx, machine_name, _downburst=None):
@@ -45,7 +52,8 @@ def create_if_vm(ctx, machine_name, _downburst=None):
 
     dbrst = _downburst or \
         downburst.Downburst(name=machine_name, os_type=os_type,
-                            os_version=os_version, status=status_info)
+                            os_version=os_version, status=status_info,
+                            logfile=_logfile(ctx, shortname))
     return dbrst.create()
 
 
@@ -87,5 +95,6 @@ def destroy_if_vm(ctx, machine_name, user=None, description=None,
 
     dbrst = _downburst or \
         downburst.Downburst(name=machine_name, os_type=None,
-                            os_version=None, status=status_info)
+                            os_version=None, status=status_info,
+                            logfile=_logfile(ctx, shortname))
     return dbrst.destroy()
