@@ -73,6 +73,8 @@ class Downburst(object):
                         action="downburst create") as proceed:
             while proceed():
                 (returncode, stdout, stderr) = self._run_create()
+                log.info(stdout)
+                log.info(stderr)
                 if returncode == 0:
                     log.info("Downburst created %s: %s" % (self.name,
                                                            stdout.strip()))
@@ -136,22 +138,19 @@ class Downburst(object):
         proc = subprocess.Popen(args, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,)
         out, err = proc.communicate()
-        if err:
+        log.info(out)
+        log.info(err)
+        if proc.returncode != 0:
             not_found_msg = "no domain with matching name '%s'" % self.shortname
             if not_found_msg in err:
                 log.warn("Ignoring error during destroy: %s", err)
                 return True
-            log.error("Error destroying {machine}: {msg}".format(
-                machine=self.name, msg=err))
+            log.error("Error destroying {machine}: {msg}".format(machine=self.name))
             return False
-        elif proc.returncode == 0:
+        else:
             out_str = ': %s' % out if out else ''
             log.info("Destroyed %s%s" % (self.name, out_str))
             return True
-        else:
-            log.error("I don't know if the destroy of {node} succeded!".format(
-                node=self.name))
-            return False
 
     def build_config(self):
         """
