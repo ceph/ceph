@@ -311,7 +311,7 @@ class BitMapZone: public BitMapArea{
 
 private:
   std::atomic<int32_t> m_used_blocks;
-  BmapEntryVector *m_bmap_list;
+  BmapEntryVector m_bmap_vec;
   std::mutex m_lock;
 
 public:
