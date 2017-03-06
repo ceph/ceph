@@ -1975,7 +1975,6 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     encoded_shards.reserve(shards.size());
 
     auto p = shards.begin();
-    unsigned pos = 0;
     auto prev_p = p;
     while (p != shards.end()) {
       auto n = p;
@@ -2036,7 +2035,6 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
       }
       prev_p = p;
       p = n;
-      ++pos;
     }
     if (needs_reshard()) {
       return;
@@ -8091,9 +8089,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_CLONE:
       {
-        const ghobject_t& noid = i.get_oid(op->dest_oid);
 	OnodeRef& no = ovec[op->dest_oid];
 	if (!no) {
+          const ghobject_t& noid = i.get_oid(op->dest_oid);
 	  no = c->get_onode(noid, true);
 	}
 	r = _clone(txc, c, o, no);
@@ -8106,9 +8104,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_CLONERANGE2:
       {
-	const ghobject_t& noid = i.get_oid(op->dest_oid);
 	OnodeRef& no = ovec[op->dest_oid];
 	if (!no) {
+	  const ghobject_t& noid = i.get_oid(op->dest_oid);
 	  no = c->get_onode(noid, true);
 	}
         uint64_t srcoff = op->off;
