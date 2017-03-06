@@ -176,8 +176,6 @@ void PGMonitor::update_from_paxos(bool *need_bootstrap)
 
   // pg/osd keys in leveldb
   // read meta
-  epoch_t last_pg_scan = pg_map.last_pg_scan;
-
   while (version > pg_map.version) {
     // load full state?
     if (pg_map.version == 0) {
