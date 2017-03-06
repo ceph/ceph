@@ -953,7 +953,7 @@ void ECBackend::handle_sub_read(
       hinfo = get_hash_info(i->first);
       if (!hinfo) {
 	r = -EIO;
-	get_parent()->clog_error() << __func__ << ": No hinfo for " << i->first << "\n";
+	get_parent()->clog_error() << __func__ << ": No hinfo for " << i->first;
 	dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
 	goto error;
       }
@@ -997,7 +997,7 @@ void ECBackend::handle_sub_read(
 	  h << bl;
 	  if (h.digest() != hinfo->get_chunk_hash(shard)) {
 	    get_parent()->clog_error() << __func__ << ": Bad hash for " << i->first << " digest 0x"
-				       << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << "\n";
+				       << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec;
 	    dout(5) << __func__ << ": Bad hash for " << i->first << " digest 0x"
 		    << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << dendl;
 	    r = -EIO;
@@ -1187,7 +1187,7 @@ void ECBackend::handle_sub_read_reply(
             rop.complete[iter->first].r = err;
 	  } else {
 	    get_parent()->clog_error() << __func__ << ": Error(s) ignored for "
-				       << iter->first << " enough copies available" << "\n";
+				       << iter->first << " enough copies available";
 	    dout(10) << __func__ << " Error(s) ignored for " << iter->first
 		     << " enough copies available" << dendl;
 	    rop.complete[iter->first].errors.clear();

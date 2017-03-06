@@ -851,7 +851,7 @@ int MDSDaemon::_handle_command_legacy(std::vector<std::string> args)
   }
   else if (args[0] == "heap") {
     if (!ceph_using_tcmalloc())
-      clog->info() << "tcmalloc not enabled, can't use heap profiler commands\n";
+      clog->info() << "tcmalloc not enabled, can't use heap profiler commands";
     else {
       ostringstream ss;
       vector<std::string> cmdargs;
@@ -1368,7 +1368,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
         dout(1) << __func__ << ": auth cap parse error: " << errstr.str()
 		<< " parsing '" << auth_cap_str << "'" << dendl;
 	clog->warn() << name << " mds cap '" << auth_cap_str
-		     << "' does not parse: " << errstr.str() << "\n";
+		     << "' does not parse: " << errstr.str();
       }
     } catch (buffer::error& e) {
       // Assume legacy auth, defaults to:

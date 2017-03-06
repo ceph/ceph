@@ -1550,7 +1550,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       // [repair bad inotable updates]
       if (inotablev > mds->inotable->get_version()) {
 	mds->clog->error() << "journal replay inotablev mismatch "
-	    << mds->inotable->get_version() << " -> " << inotablev << "\n";
+	    << mds->inotable->get_version() << " -> " << inotablev;
 	mds->inotable->force_replay_version(inotablev);
       }
 
@@ -1576,7 +1576,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    inodeno_t i = session->take_ino(used_preallocated_ino);
 	    if (next != i)
 	      mds->clog->warn() << " replayed op " << client_reqs << " used ino " << i
-			       << " but session next is " << next << "\n";
+			       << " but session next is " << next;
 	    assert(i == used_preallocated_ino);
 	    session->info.used_inos.clear();
 	  }
@@ -1598,7 +1598,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       assert(sessionmapv == mds->sessionmap.get_version());
     } else {
       mds->clog->error() << "journal replay sessionmap v " << sessionmapv
-			<< " -(1|2) > table " << mds->sessionmap.get_version() << "\n";
+			<< " -(1|2) > table " << mds->sessionmap.get_version();
       assert(g_conf->mds_wipe_sessions);
       mds->sessionmap.wipe();
       mds->sessionmap.set_version(sessionmapv);
