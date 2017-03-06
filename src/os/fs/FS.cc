@@ -196,10 +196,10 @@ int FS::aio_queue_t::submit(aio_t &aio, int *retries)
     int r = io_submit(ctx, 1, &piocb);
     if (r < 0) {
       if (r == -EAGAIN && attempts-- > 0) {
-	usleep(delay);
-	delay *= 2;
-	(*retries)++;
-	continue;
+        usleep(delay);
+        delay *= 2;
+        (*retries)++;
+        continue;
       }
       return r;
     }
