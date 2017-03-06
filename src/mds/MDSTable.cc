@@ -92,7 +92,7 @@ void MDSTable::save_2(int r, version_t v)
   if (r < 0) {
     dout(1) << "save error " << r << " v " << v << dendl;
     mds->clog->error() << "failed to store table " << table_name << " object,"
-		       << " errno " << r << "\n";
+		       << " errno " << r;
     mds->handle_write_error(r);
     return;
   }

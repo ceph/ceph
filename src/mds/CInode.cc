@@ -990,7 +990,7 @@ void CInode::_stored(int r, version_t v, Context *fin)
   if (r < 0) {
     dout(1) << "store error " << r << " v " << v << " on " << *this << dendl;
     mdcache->mds->clog->error() << "failed to store ino " << ino() << " object,"
-				<< " errno " << r << "\n";
+				<< " errno " << r;
     mdcache->mds->handle_write_error(r);
     fin->complete(r);
     return;
@@ -1207,7 +1207,7 @@ void CInode::_stored_backtrace(int r, version_t v, Context *fin)
     mdcache->mds->clog->error() << "failed to store backtrace on ino "
 				<< ino() << " object"
                                 << ", pool " << get_backtrace_pool()
-                                << ", errno " << r << "\n";
+                                << ", errno " << r;
     mdcache->mds->handle_write_error(r);
     if (fin)
       fin->complete(r);
@@ -1272,7 +1272,7 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
 
   if (err) {
     MDSRank *mds = mdcache->mds;
-    mds->clog->error() << "bad backtrace on dir ino " << ino() << "\n";
+    mds->clog->error() << "bad backtrace on dir ino " << ino();
     assert(!"bad backtrace" == (g_conf->mds_verify_backtrace > 1));
 
     _mark_dirty_parent(mds->mdlog->get_current_segment(), false);
@@ -2020,7 +2020,7 @@ void CInode::finish_scatter_gather_update(int type)
 	if (pf->fragstat.nfiles < 0 ||
 	    pf->fragstat.nsubdirs < 0) {
 	  clog->error() << "bad/negative dir size on "
-	      << dir->dirfrag() << " " << pf->fragstat << "\n";
+	      << dir->dirfrag() << " " << pf->fragstat;
 	  assert(!"bad/negative fragstat" == g_conf->mds_verify_scatter);
 	  
 	  if (pf->fragstat.nfiles < 0)
@@ -2057,7 +2057,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    dout(20) << " dirstat mismatch, fixing" << dendl;
 	  } else {
 	    clog->error() << "unmatched fragstat on " << ino() << ", inode has "
-			  << pi->dirstat << ", dirfrags have " << dirstat << "\n";
+			  << pi->dirstat << ", dirfrags have " << dirstat;
 	    assert(!"unmatched fragstat" == g_conf->mds_verify_scatter);
 	  }
 	  // trust the dirfrags for now
@@ -2074,7 +2074,7 @@ void CInode::finish_scatter_gather_update(int type)
       if (pi->dirstat.nfiles < 0 ||
 	  pi->dirstat.nsubdirs < 0) {
 	clog->error() << "bad/negative fragstat on " << ino()
-	    << ", inode has " << pi->dirstat << "\n";
+	    << ", inode has " << pi->dirstat;
 	assert(!"bad/negative fragstat" == g_conf->mds_verify_scatter);
 
 	if (pi->dirstat.nfiles < 0)
@@ -2164,7 +2164,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    dout(20) << " rstat mismatch, fixing" << dendl;
 	  } else {
 	    clog->error() << "unmatched rstat on " << ino() << ", inode has "
-			  << pi->rstat << ", dirfrags have " << rstat << "\n";
+			  << pi->rstat << ", dirfrags have " << rstat;
 	    assert(!"unmatched rstat" == g_conf->mds_verify_scatter);
 	  }
 	  // trust the dirfrag for now

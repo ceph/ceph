@@ -1988,7 +1988,7 @@ void Monitor::start_election()
   logger->inc(l_mon_num_elections);
   logger->inc(l_mon_election_call);
 
-  clog->info() << "mon." << name << " calling new monitor election\n";
+  clog->info() << "mon." << name << " calling new monitor election";
   elector.call_election();
 }
 
@@ -2056,7 +2056,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   outside_quorum.clear();
 
   clog->info() << "mon." << name << "@" << rank
-		<< " won leader election with quorum " << quorum << "\n";
+		<< " won leader election with quorum " << quorum;
 
   set_leader_supported_commands(cmdset, cmdsize);
 
@@ -4415,9 +4415,9 @@ void Monitor::handle_timecheck_leader(MonOpRequestRef op)
   ostringstream ss;
   health_status_t status = timecheck_status(ss, skew_bound, latency);
   if (status == HEALTH_ERR)
-    clog->error() << other << " " << ss.str() << "\n";
+    clog->error() << other << " " << ss.str();
   else if (status == HEALTH_WARN)
-    clog->warn() << other << " " << ss.str() << "\n";
+    clog->warn() << other << " " << ss.str();
 
   dout(10) << __func__ << " from " << other << " ts " << m->timestamp
 	   << " delta " << delta << " skew_bound " << skew_bound
@@ -4759,7 +4759,7 @@ int Monitor::scrub_start()
   assert(is_leader());
 
   if (!scrub_result.empty()) {
-    clog->info() << "scrub already in progress\n";
+    clog->info() << "scrub already in progress";
     return -EBUSY;
   }
 
@@ -4947,13 +4947,13 @@ void Monitor::scrub_check_results()
       continue;
     if (p->second != mine) {
       ++errors;
-      clog->error() << "scrub mismatch" << "\n";
-      clog->error() << " mon." << rank << " " << mine << "\n";
-      clog->error() << " mon." << p->first << " " << p->second << "\n";
+      clog->error() << "scrub mismatch";
+      clog->error() << " mon." << rank << " " << mine;
+      clog->error() << " mon." << p->first << " " << p->second;
     }
   }
   if (!errors)
-    clog->info() << "scrub ok on " << quorum << ": " << mine << "\n";
+    clog->info() << "scrub ok on " << quorum << ": " << mine;
 }
 
 inline void Monitor::scrub_timeout()
