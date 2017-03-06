@@ -225,7 +225,6 @@ class MDSRank {
     bool _dispatch(Message *m, bool new_msg);
 
     ceph::heartbeat_handle_d *hb;  // Heartbeat for threads using mds_lock
-    void heartbeat_reset();
 
     bool is_stale_message(Message *m);
 
@@ -290,6 +289,12 @@ class MDSRank {
     void suicide();
     void respawn();
     // <<<
+
+    /**
+     * Call this periodically if inside a potentially long running piece
+     * of code while holding the mds_lock
+     */
+    void heartbeat_reset();
 
     /**
      * Report state DAMAGED to the mon, and then pass on to respawn().  Call
