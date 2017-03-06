@@ -19,6 +19,7 @@
 
 std::string TestFixture::_pool_name;
 librados::Rados TestFixture::_rados;
+rados_t TestFixture::_cluster;
 uint64_t TestFixture::_image_number = 0;
 std::string TestFixture::_data_pool;
 
@@ -26,6 +27,7 @@ TestFixture::TestFixture() : m_image_size(0) {
 }
 
 void TestFixture::SetUpTestCase() {
+  ASSERT_EQ("", connect_cluster(&_cluster));
   _pool_name = get_temp_pool_name("test-librbd-");
   ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados));
 
@@ -40,6 +42,7 @@ void TestFixture::SetUpTestCase() {
 }
 
 void TestFixture::TearDownTestCase() {
+  rados_shutdown(_cluster);
   if (!_data_pool.empty()) {
     ASSERT_EQ(0, _rados.pool_delete(_data_pool.c_str()));
   }
