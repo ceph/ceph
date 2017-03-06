@@ -1416,15 +1416,15 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
       int r = io_submit(aio_ctx, 1, &piocb);
       dout(20) << "write_aio_bl io_submit return value: " << r << dendl;
       if (r < 0) {
-	derr << "io_submit to " << aio.off << "~" << cur_len
-	     << " got " << cpp_strerror(r) << dendl;
-	if (r == -EAGAIN && attempts-- > 0) {
-	  usleep(500);
-	  continue;
-	}
-	assert(0 == "io_submit got unexpected error");
+        derr << "io_submit to " << aio.off << "~" << cur_len
+             << " got " << cpp_strerror(r) << dendl;
+        if (r == -EAGAIN && attempts-- > 0) {
+          usleep(500);
+          continue;
+        }
+        assert(0 == "io_submit got unexpected error");
       } else {
-	break;
+        break;
       }
     } while (true);
     pos += cur_len;
