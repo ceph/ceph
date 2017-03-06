@@ -41,10 +41,9 @@ int main(int argc, const char **argv)
   // For consumption by KeyRing::from_ceph_context in MonClient
   g_conf->set_val("keyring", "$mgr_data/keyring", false);
 
-  MgrStandby mgr;
-
   // Handle --help
   if ((args.size() == 1 && (std::string(args[0]) == "--help" || std::string(args[0]) == "-h"))) {
+    MgrStandby mgr;
     mgr.usage();
     return 0;
   }
@@ -53,6 +52,7 @@ int main(int argc, const char **argv)
   global_init_chdir(g_ceph_context);
   common_init_finish(g_ceph_context);
 
+  MgrStandby mgr;
   int rc = mgr.init();
   if (rc != 0) {
       std::cerr << "Error in initialization: " << cpp_strerror(rc) << std::endl;
