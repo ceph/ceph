@@ -7124,10 +7124,6 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       }
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
-      for (auto& sb : txc->shared_blobs_written) {
-	sb->bc.finish_write(sb->get_cache(), txc->seq);
-      }
-      txc->shared_blobs_written.clear();
       if (cct->_conf->bluestore_sync_submit_transaction &&
 	  fm->supports_parallel_transactions()) {
 	if (txc->last_nid >= nid_max ||
@@ -7383,6 +7379,11 @@ void BlueStore::_txc_finish(TransContext *txc)
 {
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes << dendl;
   assert(txc->state == TransContext::STATE_FINISHING);
+
+  for (auto& sb : txc->shared_blobs_written) {
+    sb->bc.finish_write(sb->get_cache(), txc->seq);
+  }
+  txc->shared_blobs_written.clear();
 
   for (auto ls : { &txc->onodes, &txc->modified_objects }) {
     for (auto& o : *ls) {
