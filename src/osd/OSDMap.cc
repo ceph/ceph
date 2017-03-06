@@ -3169,20 +3169,18 @@ int OSDMap::summarize_mapping_stats(
   vector<unsigned> new_by_osd(get_max_osd(), 0);
   for (int64_t pool_id : ls) {
     const pg_pool_t *pi = get_pg_pool(pool_id);
-    vector<int> up, up2, acting;
-    int up_primary, acting_primary;
+    vector<int> up, up2;
+    int up_primary;
     for (unsigned ps = 0; ps < pi->get_pg_num(); ++ps) {
       pg_t pgid(ps, pool_id, -1);
       total_pg += pi->get_size();
-      pg_to_up_acting_osds(pgid, &up, &up_primary,
-			   &acting, &acting_primary);
+      pg_to_up_acting_osds(pgid, &up, &up_primary, nullptr, nullptr);
       for (int osd : up) {
 	if (osd >= 0 && osd < get_max_osd())
 	  ++base_by_osd[osd];
       }
       if (newmap) {
-	newmap->pg_to_up_acting_osds(pgid, &up2, &up_primary,
-				     &acting, &acting_primary);
+	newmap->pg_to_up_acting_osds(pgid, &up2, &up_primary, nullptr, nullptr);
 	for (int osd : up2) {
 	  if (osd >= 0 && osd < get_max_osd())
 	    ++new_by_osd[osd];
