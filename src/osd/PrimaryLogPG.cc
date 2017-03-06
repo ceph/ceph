@@ -2101,7 +2101,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 	     << " != object's " << obc->obs.oi.soid << dendl;
     osd->clog->warn() << "bad locator " << m->get_object_locator() 
 		     << " on object " << oloc
-		     << " op " << *m << "\n";
+		      << " op " << *m;
   }
 
   // io blocked on obc?
@@ -3604,7 +3604,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
   object_info_t &coi = obc->obs.oi;
   set<snapid_t> old_snaps(coi.snaps.begin(), coi.snaps.end());
   if (old_snaps.empty()) {
-    osd->clog->error() << __func__ << " No object info snaps for " << coid << "\n";
+    osd->clog->error() << __func__ << " No object info snaps for " << coid;
     return NULL;
   }
 
@@ -3613,7 +3613,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
   dout(10) << coid << " old_snaps " << old_snaps
 	   << " old snapset " << snapset << dendl;
   if (snapset.seq == 0) {
-    osd->clog->error() << __func__ << " No snapset.seq for " << coid << "\n";
+    osd->clog->error() << __func__ << " No snapset.seq for " << coid;
     return NULL;
   }
 
@@ -3630,7 +3630,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_
   if (new_snaps.empty()) {
     p = std::find(snapset.clones.begin(), snapset.clones.end(), coid.snap);
     if (p == snapset.clones.end()) {
-      osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones" << "\n";
+      osd->clog->error() << __func__ << " Snap " << coid.snap << " not in clones";
       return NULL;
     }
   }
@@ -4256,7 +4256,7 @@ struct FillInVerifyExtent : public Context {
       if (maybe_crc != crc) {
         osd->clog->error() << std::hex << " full-object read crc 0x" << crc
 			   << " != expected 0x" << *maybe_crc
-			   << std::dec << " on " << soid << "\n";
+			   << std::dec << " on " << soid;
         if (!(flags & CEPH_OSD_OP_FLAG_FAILOK)) {
 	  *rval = -EIO;
 	  *r = 0;
@@ -4587,10 +4587,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    if (r < 0) {
 	      osd->clog->error() << coll << " " << soid
 				 << " sparse-read failed to read: "
-				 << r << "\n";
+				 << r;
 	    } else if (!t.is_zero()) {
 	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
-				<< last << "~" << len << "\n";
+				 << last << "~" << len;
 	    }
 	  }
 
@@ -4622,10 +4622,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    if (r < 0) {
 	      osd->clog->error() << coll << " " << soid
 				 << " sparse-read failed to read: "
-				 << r << "\n";
+				 << r;
 	    } else if (!t.is_zero()) {
 	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
-				<< last << "~" << len << "\n";
+				 << last << "~" << len;
 	    }
 	  }
 	}
@@ -10004,7 +10004,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
 	   << " objects unfound and apparently lost marking";
 	string rs = ss.str();
 	dout(0) << "do_command r=" << 0 << " " << rs << dendl;
-	osd->clog->info() << rs << "\n";
+	osd->clog->info() << rs;
 	if (con) {
 	  MCommandReply *reply = new MCommandReply(0, rs);
 	  reply->set_tid(tid);
@@ -10578,14 +10578,14 @@ bool PrimaryLogPG::start_recovery_ops(
   if (missing.num_missing() > 0) {
     // this shouldn't happen!
     osd->clog->error() << info.pgid << " recovery ending with " << missing.num_missing()
-		       << ": " << missing.get_items() << "\n";
+		       << ": " << missing.get_items();
     return work_in_progress;
   }
 
   if (needs_recovery()) {
     // this shouldn't happen!
     // We already checked num_missing() so we must have missing replicas
-    osd->clog->error() << info.pgid << " recovery ending with missing replicas\n";
+    osd->clog->error() << info.pgid << " recovery ending with missing replicas";
     return work_in_progress;
   }
 
@@ -10807,11 +10807,10 @@ int PrimaryLogPG::prep_object_replica_pushes(
       }
     }
     if (uhoh)
-      osd->clog->error() << info.pgid << " missing primary copy of " << soid << ", unfound\n";
+      osd->clog->error() << info.pgid << " missing primary copy of " << soid << ", unfound";
     else
       osd->clog->error() << info.pgid << " missing primary copy of " << soid
-			<< ", will try copies on " << missing_loc.get_locations(soid)
-			<< "\n";
+			 << ", will try copies on " << missing_loc.get_locations(soid);
     return 0;
   }
 
@@ -13208,7 +13207,7 @@ void PrimaryLogPG::_scrub_finish()
 		      << scrub_cstat.sum.num_objects_hit_set_archive << "/" << info.stats.stats.sum.num_objects_hit_set_archive << " hit_set_archive, "
 		      << scrub_cstat.sum.num_whiteouts << "/" << info.stats.stats.sum.num_whiteouts << " whiteouts, "
 		      << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes, "
-		      << scrub_cstat.sum.num_bytes_hit_set_archive << "/" << info.stats.stats.sum.num_bytes_hit_set_archive << " hit_set_archive bytes.\n";
+		      << scrub_cstat.sum.num_bytes_hit_set_archive << "/" << info.stats.stats.sum.num_bytes_hit_set_archive << " hit_set_archive bytes.";
     ++scrubber.shallow_errors;
 
     if (repair) {

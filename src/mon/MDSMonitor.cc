@@ -718,7 +718,7 @@ void MDSMonitor::_updated(MonOpRequestRef op)
   MMDSBeacon *m = static_cast<MMDSBeacon*>(op->get_req());
   dout(10) << "_updated " << m->get_orig_source() << " " << *m << dendl;
   mon->clog->info() << m->get_orig_source_inst() << " "
-	  << ceph_mds_state_name(m->get_state()) << "\n";
+	  << ceph_mds_state_name(m->get_state());
 
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
@@ -743,7 +743,7 @@ void MDSMonitor::on_active()
   update_logger();
 
   if (mon->is_leader())
-    mon->clog->info() << "fsmap " << fsmap << "\n";
+    mon->clog->info() << "fsmap " << fsmap;
 }
 
 void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,

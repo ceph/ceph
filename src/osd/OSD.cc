@@ -1435,8 +1435,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 	       << " pg " << m->get_pg()
 	       << " to osd." << whoami
 	       << " not " << pg->acting
-	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch()
-	       << "\n";
+	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch();
   if (g_conf->osd_enxio_on_misdirected_op) {
     reply_op_error(op, -ENXIO);
   }
@@ -5924,7 +5923,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   rs = ss.str();
   odata.append(ds);
   dout(0) << "do_command r=" << r << " " << rs << dendl;
-  clog->info() << rs << "\n";
+  clog->info() << rs;
   if (con) {
     MCommandReply *reply = new MCommandReply(r, rs);
     reply->set_tid(tid);
@@ -6938,7 +6937,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 	dout(2) << "got incremental " << e
 		<< " but failed to encode full with correct crc; requesting"
 		<< dendl;
-	clog->warn() << "failed to encode map e" << e << " with expected crc\n";
+	clog->warn() << "failed to encode map e" << e << " with expected crc";
 	dout(20) << "my encoded map was:\n";
 	fbl.hexdump(*_dout);
 	*_dout << dendl;

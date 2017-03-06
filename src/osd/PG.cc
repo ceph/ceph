@@ -3263,14 +3263,12 @@ void PG::log_weirdness()
 {
   if (pg_log.get_tail() != info.log_tail)
     osd->clog->error() << info.pgid
-		      << " info mismatch, log.tail " << pg_log.get_tail()
-		      << " != info.log_tail " << info.log_tail
-		      << "\n";
+		       << " info mismatch, log.tail " << pg_log.get_tail()
+		       << " != info.log_tail " << info.log_tail;
   if (pg_log.get_head() != info.last_update)
     osd->clog->error() << info.pgid
-		      << " info mismatch, log.head " << pg_log.get_head()
-		      << " != info.last_update " << info.last_update
-		      << "\n";
+		       << " info mismatch, log.head " << pg_log.get_head()
+		       << " != info.last_update " << info.last_update;
 
   if (!pg_log.get_log().empty()) {
     // sloppy check
@@ -3280,15 +3278,13 @@ void PG::log_weirdness()
 			<< pg_log.get_head() << "]"
 			<< " actual ["
 			<< pg_log.get_log().log.begin()->version << ","
-			<< pg_log.get_log().log.rbegin()->version << "]"
-			<< "\n";
+			 << pg_log.get_log().log.rbegin()->version << "]";
   }
   
   if (pg_log.get_log().caller_ops.size() > pg_log.get_log().log.size()) {
     osd->clog->error() << info.pgid
 		      << " caller_ops.size " << pg_log.get_log().caller_ops.size()
-		      << " > log size " << pg_log.get_log().log.size()
-		      << "\n";
+		       << " > log size " << pg_log.get_log().log.size();
   }
 }
 
@@ -4638,7 +4634,6 @@ void PG::scrub_finish()
           << " remaining deep scrub error details lost)";
     if (repair)
       oss << ", " << scrubber.fixed << " fixed";
-    oss << "\n";
     if (total_errors)
       osd->clog->error(oss);
     else
@@ -4851,7 +4846,7 @@ void PG::fulfill_log(
     if (query.since != eversion_t() && query.since < pg_log.get_tail()) {
       osd->clog->error() << info.pgid << " got broken pg_query_t::LOG since " << query.since
 			<< " when my log.tail is " << pg_log.get_tail()
-			<< ", sending full log instead\n";
+			<< ", sending full log instead";
       mlog->log = pg_log.get_log();           // primary should not have requested this!!
     } else
       mlog->log.copy_after(pg_log.get_log(), query.since);
@@ -6915,9 +6910,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
       pg->all_unfound_are_queried_or_lost(pg->get_osdmap())) {
     if (pg->cct->_conf->osd_auto_mark_unfound_lost) {
       pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound
-			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED\n";
+			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED";
     } else
-      pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound << " objects unfound and apparently lost\n";
+      pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound << " objects unfound and apparently lost";
   }
 
   if (pg->is_active()) {

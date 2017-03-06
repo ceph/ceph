@@ -2302,7 +2302,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 	if (pi->dirstat.size() != pf->fragstat.size()) {
 	  mds->clog->error() << "unmatched fragstat size on single dirfrag "
 	     << parent->dirfrag() << ", inode has " << pi->dirstat
-	     << ", dirfrag has " << pf->fragstat << "\n";
+	     << ", dirfrag has " << pf->fragstat;
 	  
 	  // trust the dirfrag for now
 	  pi->dirstat = pf->fragstat;
@@ -2350,7 +2350,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       if (pi->rstat.rbytes != pf->rstat.rbytes) {
 	mds->clog->error() << "unmatched rstat rbytes on single dirfrag "
 	  << parent->dirfrag() << ", inode has " << pi->rstat
-	  << ", dirfrag has " << pf->rstat << "\n";
+	  << ", dirfrag has " << pf->rstat;
 
 	// trust the dirfrag for now
 	pi->rstat = pf->rstat;
@@ -5623,7 +5623,7 @@ void MDCache::export_remaining_imported_caps()
   cap_reconnect_waiters.clear();
 
   if (warn_str.peek() != EOF) {
-    mds->clog->warn() << "failed to reconnect caps for missing inodes:" << "\n";
+    mds->clog->warn() << "failed to reconnect caps for missing inodes:";
     mds->clog->warn(warn_str);
   }
 }
@@ -5781,7 +5781,7 @@ void MDCache::open_snap_parents()
 	     ++q)
 	  warn_str << "  client." << q->first << " snapid " << q->second << "\n";
       }
-      mds->clog->warn() << "open_snap_parents has:" << "\n";
+      mds->clog->warn() << "open_snap_parents has:";
       mds->clog->warn(warn_str);
     }
     assert(rejoin_waiters.empty());
@@ -11586,7 +11586,7 @@ void MDCache::force_readonly()
     return;
 
   dout(1) << "force file system read-only" << dendl;
-  mds->clog->warn() << "force file system read-only\n";
+  mds->clog->warn() << "force file system read-only";
 
   set_readonly();
 
