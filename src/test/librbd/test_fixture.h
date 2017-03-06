@@ -39,6 +39,7 @@ public:
 
   static std::string _pool_name;
   static librados::Rados _rados;
+  static rados_t _cluster;
   static uint64_t _image_number;
   static std::string _data_pool;
 

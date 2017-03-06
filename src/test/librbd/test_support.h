@@ -8,6 +8,9 @@
 static const uint64_t IMAGE_STRIPE_UNIT = 65536;
 static const uint64_t IMAGE_STRIPE_COUNT = 16;
 
+#define TEST_IO_SIZE 512
+#define TEST_IO_TO_SNAP_SIZE 80
+
 bool get_features(uint64_t *features);
 bool is_feature_enabled(uint64_t feature);
 int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
