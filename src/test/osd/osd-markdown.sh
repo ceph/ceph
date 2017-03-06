@@ -56,6 +56,7 @@ function TEST_markdown_exceed_maxdown_count() {
     local dir=$1
 
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
@@ -75,6 +76,7 @@ function TEST_markdown_boot() {
     local dir=$1
 
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
@@ -96,6 +98,7 @@ function TEST_markdown_boot_exceed_time() {
     local dir=$1
 
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1

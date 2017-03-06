@@ -41,6 +41,7 @@ function TEST_copy_from() {
     local dir=$1
 
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
 
