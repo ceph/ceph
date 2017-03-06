@@ -2637,10 +2637,10 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
       respond_to_request(mdr, -EROFS);
       return 0;
     }
-    if (!diri->is_base() && diri->get_projected_parent_dir()->inode->is_stray()) {
-      respond_to_request(mdr, -ENOENT);
-      return 0;
-    }
+  }
+  if (!diri->is_base() && diri->get_projected_parent_dir()->inode->is_stray()) {
+    respond_to_request(mdr, -ENOENT);
+    return 0;
   }
 
   // make a null dentry?
