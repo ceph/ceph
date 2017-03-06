@@ -12,6 +12,7 @@ class RGWSts
   std::string role_id;
   std::string policy;
   std::map<std::string, std::string> saml_keys;
+  CephContext* cct;
 
   int generate_key(char* buf, int size);
 
@@ -39,11 +40,12 @@ public:
     void dump(Formatter *f) const;
   };
 
-  RGWSts (int duration, std::string role_id, std::string policy, std::map<std::string, std::string> saml_keys) :
+  RGWSts (int duration, std::string role_id, std::string policy, std::map<std::string, std::string> saml_keys, CephContext* cct) :
     duration(std::move(duration)),
     role_id(std::move(role_id)),
     policy(std::move(policy)),
-    saml_keys(std::move(saml_keys)) {}
+    saml_keys(std::move(saml_keys)),
+    cct(cct)  {}
 
   int validate_input();
   int build_output(struct sts& sts_output);

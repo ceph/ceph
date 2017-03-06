@@ -5,6 +5,8 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "common/ceph_time.h"
+#include "auth/Crypto.h"
+#include "include/ceph_fs.h"
 
 #include "rgw_common.h"
 #include "rgw_b64.h"
@@ -12,7 +14,7 @@
 
 using namespace std;
 
-const string RGWSts::key = "LswwdoUaIvS8ltyTt5jkRh4J50vUPVVHtR2YPi5kE";
+const string RGWSts::key = "LswwdoUaIvS8ltyT";
 
 int RGWSts::generate_key(char* buf, int size)
 {
@@ -97,7 +99,32 @@ int RGWSts::build_output(struct sts& sts_output) {
     string_to_sign = string_to_sign + "&" + it.first + "=" + it.second;
   }
   //cout << "string to sign: " << string_to_sign << std::endl;
-  sts_output.cred.session_token = rgw::to_base64(string_to_sign);
+  auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+  if (! cryptohandler) {
+    return -ERR_INTERNAL_ERROR;
+  }
+  bufferptr bp(key.c_str(), key.length());
+  ret = cryptohandler->validate_secret(bp);
+  if (ret < 0) {
+    return ret;
+  }
+  string error;
+  auto* keyhandler = cryptohandler->get_key_handler(bp, error);
+  if (! keyhandler) {
+    return -ERR_INTERNAL_ERROR;
+  }
+  error.clear();
+  bufferlist input, output, encoded_op;
+  input.append(string_to_sign);
+  ret = keyhandler->encrypt(input, output, &error);
+  if (ret < 0) {
+    cout << "Encryption failed: " << error << std::endl;
+    return ret;
+  } else {
+    output.encode_base64(encoded_op);
+    encoded_op.append('\0');
+    sts_output.cred.session_token = encoded_op.c_str();
+  }
 
   return 0;
 }

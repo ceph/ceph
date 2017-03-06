@@ -72,7 +72,7 @@ int main(int argc,char *argv[]) {
     }
   }
 
-  RGWSts rgw_sts(duration, role_id, policy, saml_map);
+  RGWSts rgw_sts(duration, role_id, policy, saml_map, g_ceph_context);
   ret = rgw_sts.validate_input();
   if (ret < 0) {
     return ret;
