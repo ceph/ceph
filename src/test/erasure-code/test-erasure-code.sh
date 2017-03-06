@@ -30,6 +30,7 @@ function run() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     grep 'load: jerasure.*lrc' $dir/mon.a.log || return 1
