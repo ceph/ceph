@@ -44,6 +44,7 @@ class Downburst(object):
     """
     def __init__(self, name, os_type, os_version, status=None, user='ubuntu'):
         self.name = name
+        self.shortname = decanonicalize_hostname(self.name)
         self.os_type = os_type
         self.os_version = os_version
         self.status = status or query.get_status(self.name)
@@ -98,7 +99,6 @@ class Downburst(object):
             raise ValueError("I need a config_path!")
         if not self.user_path:
             raise ValueError("I need a user_path!")
-        shortname = decanonicalize_hostname(self.name)
 
         args = [
             self.executable,
@@ -107,7 +107,7 @@ class Downburst(object):
             '--wait',
             '--meta-data=%s' % self.config_path,
             '--user-data=%s' % self.user_path,
-            shortname,
+            self.shortname,
         ]
         log.info("Provisioning a {distro} {distroversion} vps".format(
             distro=self.os_type,
@@ -126,12 +126,15 @@ class Downburst(object):
         if not executable:
             log.error("No downburst executable found.")
             return False
-        shortname = decanonicalize_hostname(self.name)
-        args = [executable, '-c', self.host, 'destroy', shortname]
+        args = [executable, '-c', self.host, 'destroy', self.shortname]
         proc = subprocess.Popen(args, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,)
         out, err = proc.communicate()
         if err:
+            not_found_msg = "no domain with matching name '%s'" % self.shortname
+            if not_found_msg in err:
+                log.warn("Ignoring error during destroy: %s", err)
+                return True
             log.error("Error destroying {machine}: {msg}".format(
                 machine=self.name, msg=err))
             return False
