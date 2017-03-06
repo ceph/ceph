@@ -384,7 +384,6 @@ void SharedDriverData::_aio_thread()
 
   Task *t = nullptr;
   int r = 0;
-  const int max = 4;
   uint64_t lba_off, lba_count;
   ceph::coarse_real_clock::time_point cur, start
     = ceph::coarse_real_clock::now();
@@ -393,7 +392,7 @@ void SharedDriverData::_aio_thread()
  again:
     dout(40) << __func__ << " polling" << dendl;
     if (inflight) {
-      if (!spdk_nvme_qpair_process_completions(qpair, max)) {
+      if (!spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion)) {
         dout(30) << __func__ << " idle, have a pause" << dendl;
         _mm_pause();
       }
