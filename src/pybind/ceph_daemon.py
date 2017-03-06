@@ -21,6 +21,7 @@ from ceph_argparse import parse_json_funcsigs, validate_command
 
 COUNTER = 0x8
 LONG_RUNNING_AVG = 0x4
+READ_CHUNK_SIZE = 4096
 
 
 def admin_socket(asok_path, cmd, format=''):
@@ -45,7 +46,10 @@ def admin_socket(asok_path, cmd, format=''):
 
             got = 0
             while got < l:
-                bit = sock.recv(l - got)
+                # recv() receives signed int, i.e max 2GB
+                # workaround by capping READ_CHUNK_SIZE per call.
+                want = min(l - got, READ_CHUNK_SIZE)
+                bit = sock.recv(want)
                 sock_ret += bit
                 got += len(bit)
 
