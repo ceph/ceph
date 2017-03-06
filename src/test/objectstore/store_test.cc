@@ -5723,6 +5723,94 @@ TEST_P(StoreTestSpecificAUSize, OnodeSizeTracking) {
 
 }
 
+// The test case to reproduce an issue when write happens
+// to a zero space between the extents sharing the same spanning blob
+// with unloaded shard map.
+// Second extent might be filled with zeros this way due to wrong result
+// returned by has_any_extents() call in do_write_small. The latter is caused
+// by incompletly loaded extent map.
+TEST_P(StoreTestSpecificAUSize, SmallWriteOnShardedExtents) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t block_size = 0x10000;
+  StartDeferred(block_size);
+
+  g_conf->set_val("bluestore_csum_type", "xxhash64");
+  g_conf->set_val("bluestore_max_target_blob", "524288"); // for sure
+
+  g_conf->apply_changes(NULL);
+
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t hoid1(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+   //doing some tricks to have sharded extents/spanning objects
+    ObjectStore::Transaction t;
+    bufferlist bl, bl2;
+
+    bl.append(std::string(0x80000, 'a'));
+    t.write(cid, hoid1, 0, bl.length(), bl, 0);
+    t.zero(cid, hoid1, 0x719e0, 0x75b0 );
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    bl2.append(std::string(0x70000, 'b'));
+    t.write(cid, hoid1, 0, bl2.length(), bl2, 0);
+    t.zero(cid, hoid1, 0, 0x50000);
+    r = apply_transaction(store, &osr, std::move(t));
+
+  }
+  store->umount();
+  store->mount();
+
+  {
+    // do a write to zero space in between some extents sharing the same blob
+    ObjectStore::Transaction t;
+    bufferlist bl, bl2;
+
+    bl.append(std::string(0x6520, 'c'));
+    t.write(cid, hoid1, 0x71c00, bl.length(), bl, 0);
+
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, expected;
+
+    r = store->read(cid, hoid1, 0x70000, 0x9c00, bl);
+    ASSERT_EQ(r, (int)0x9c00);
+    expected.append(string(0x19e0, 'a'));
+    expected.append(string(0x220, 0));
+    expected.append(string(0x6520, 'c'));
+    expected.append(string(0xe70, 0));
+    expected.append(string(0xc70, 'a'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    bl.clear();
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid1);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  g_conf->set_val("bluestore_max_target_blob", "524288");
+  g_conf->set_val("bluestore_csum_type", "crc32c");
+}
+
 TEST_P(StoreTest, KVDBHistogramTest) {
   if (string(GetParam()) != "bluestore")
     return;
