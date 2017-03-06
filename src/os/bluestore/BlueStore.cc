@@ -5778,7 +5778,6 @@ int BlueStore::_do_read(
   }
 
   utime_t start = ceph_clock_now();
-  o->flush();
   logger->tinc(l_bluestore_read_wait_flush_lat, ceph_clock_now() - start);
 
   start = ceph_clock_now();
