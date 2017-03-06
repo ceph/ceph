@@ -3680,7 +3680,7 @@ void OSD::handle_pg_peering_evt(
       pgid, history, epoch, up, up_primary, acting, acting_primary);
 
     if (!valid_history || epoch < history.same_interval_since) {
-      dout(10) << "get_or_create_pg " << pgid << " acting changed in "
+      dout(10) << __func__ << pgid << " acting changed in "
 	       << history.same_interval_since << " (msg from " << epoch << ")"
 	       << dendl;
       return;
@@ -3809,7 +3809,7 @@ void OSD::handle_pg_peering_evt(
   } else {
     // already had it.  did the mapping change?
     if (epoch < pg->info.history.same_interval_since) {
-      dout(10) << *pg << " get_or_create_pg acting changed in "
+      dout(10) << *pg << __func__ << " acting changed in "
 	       << pg->info.history.same_interval_since
 	       << " (msg from " << epoch << ")" << dendl;
       pg->unlock();
