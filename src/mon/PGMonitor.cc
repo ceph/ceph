@@ -60,7 +60,6 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon, const PGMap& pg
 void PGMonitor::on_restart()
 {
   // clear leader state
-  last_sent_pg_create.clear();
   last_osd_report.clear();
 }
 
@@ -203,9 +202,6 @@ void PGMonitor::update_from_paxos(bool *need_bootstrap)
   read_pgmap_meta();
 
 out:
-  if (last_pg_scan != pg_map.last_pg_scan)
-    last_sent_pg_create.clear();  // reset pg_create throttle timer
-
   assert(version == pg_map.version);
 
   update_logger();
@@ -931,7 +927,6 @@ epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
   }
 
   con->send_message(m);
-  last_sent_pg_create[osd] = ceph_clock_now();
 
   // sub is current through last + 1
   return last + 1;

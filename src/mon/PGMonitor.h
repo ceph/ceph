@@ -84,8 +84,6 @@ private:
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
-  map<int,utime_t> last_sent_pg_create;  // per osd throttle
-
   // when we last received PG stats from each osd
   map<int,utime_t> last_osd_report;
 
