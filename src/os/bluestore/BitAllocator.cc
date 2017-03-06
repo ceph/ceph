@@ -355,8 +355,7 @@ void BitMapZone::init(int64_t zone_num, int64_t total_blocks, bool def)
   alloc_assert(total_blocks < std::numeric_limits<int32_t>::max());
   alloc_assert(!(total_blocks % BmapEntry::size()));
 
-  BmapEntryVector *bmaps = new BmapEntryVector(num_bmaps, BmapEntry(cct, def));
-  m_bmap_list = bmaps;
+  m_bmap_vec.resize(num_bmaps, BmapEntry(cct, def));
   incr_count();
 }
 
@@ -412,7 +411,6 @@ void BitMapZone::shutdown()
 
 BitMapZone::~BitMapZone()
 {
-  delete m_bmap_list;
 }
 
 /*
@@ -432,7 +430,7 @@ bool BitMapZone::is_allocated(int64_t start_block, int64_t num_blocks)
 
   while (num_blocks) {
     bit = start_block % BmapEntry::size();
-    bmap = &(*m_bmap_list)[start_block / BmapEntry::size()];
+    bmap = &m_bmap_vec[start_block / BmapEntry::size()];
     falling_in_bmap = MIN(num_blocks, BmapEntry::size() - bit);
 
     if (!bmap->is_allocated(bit, falling_in_bmap)) {
@@ -455,7 +453,7 @@ void BitMapZone::set_blocks_used(int64_t start_block, int64_t num_blocks)
 
   while (blks) {
     bit = start_block % BmapEntry::size();
-    bmap = &(*m_bmap_list)[start_block / BmapEntry::size()];
+    bmap = &m_bmap_vec[start_block / BmapEntry::size()];
     falling_in_bmap = MIN(blks, BmapEntry::size() - bit);
 
     bmap->set_bits(bit, falling_in_bmap);
@@ -481,7 +479,7 @@ void BitMapZone::free_blocks_int(int64_t start_block, int64_t num_blocks)
 
   while (count) {
     bit = first_blk % BmapEntry::size();
-    bmap = &(*m_bmap_list)[first_blk / BmapEntry::size()];
+    bmap = &m_bmap_vec[first_blk / BmapEntry::size()];
     falling_in_bmap = MIN(count, BmapEntry::size() - bit);
 
     bmap->clear_bits(bit, falling_in_bmap);
@@ -541,7 +539,7 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
   alloc_assert(check_locked());
 
   BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
-          m_bmap_list, bmap_idx);
+          &m_bmap_vec, bmap_idx);
   bmap = iter.next();
   if (!bmap) {
     return 0;
@@ -624,7 +622,7 @@ void BitMapZone::dump_state(int& count)
   BmapEntry *bmap = NULL;
   int bmap_idx = 0;
   BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
-          m_bmap_list, 0);
+          &m_bmap_vec, 0);
   dout(0) << __func__ << " zone " << count << " dump start " << dendl;
   while ((bmap = (BmapEntry *) iter.next())) {
     bmap->dump_state(cct, bmap_idx);
