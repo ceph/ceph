@@ -413,8 +413,14 @@ class Filesystem(MDSCluster):
             raise RuntimeError("cannot deactivate rank 0")
         self.mon_manager.raw_cluster_cmd("mds", "deactivate", "%d:%d" % (self.id, rank))
 
+    def set_flag(self, key, value, confirm=None):
+        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, key, "%d" % value, confirm)
+
     def set_max_mds(self, max_mds):
         self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "max_mds", "%d" % max_mds)
+
+    def get_mds_health(self):
+        return self.mon_manager.raw_cluster_cmd("mds", "stat")
 
     def get_pgs_per_fs_pool(self):
         """
@@ -622,6 +628,53 @@ class Filesystem(MDSCluster):
             if mds_status['state'] == state or state is None:
                 result.append(mds_status['name'])
 
+        return result
+
+    def get_crashed_mds(self):
+        """
+        Return MDS daemon names and ranks of those daemons in the
+        crashed state
+        :return:
+        """
+        return self.get_up_and_active_mds(True)
+
+    def get_up_and_active_mds(self, invert=False):
+        """
+        Return MDS daemon names of those daemons in the up, active and non-laggy
+        state
+        :return:
+        """
+
+        if invert == True:
+            state = None
+        else:
+            state = "up:active"
+
+        is_laggy = None
+        result = {}
+        status = self.get_mds_map()
+        print "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"
+        print status
+        print "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"
+        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
+            if mds_status['state'] == state or state is None:
+                try:
+                    is_laggy = mds_status['laggy_since']
+                except KeyError:
+                    pass
+
+            if invert == True:
+                if is_laggy is not None:
+                    result[mds_status['rank']] = mds_status['name']
+            else:
+                if is_laggy is None:
+                    result[mds_status['rank']] = mds_status['name']
+            is_laggy = None
+
+        print "------------------------------"
+        print "Invert=%d" %(invert)
+        print result
+        print "------------------------------"
         return result
 
     def get_active_names(self):
