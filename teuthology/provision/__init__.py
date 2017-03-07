@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 
 def _logfile(ctx, shortname):
-    if (ctx.config.get('archive_path')):
+    if hasattr(ctx, 'config') and ctx.config.get('archive_path'):
         return os.path.join(ctx.config['archive_path'],
                             shortname + '.downburst.log')
 
