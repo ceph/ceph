@@ -391,6 +391,9 @@ class TestCephDisk(object):
         #
         # multipath data partition
         #
+        if platform.system() == "FreeBSD":
+            return
+
         partition_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
         disk = "Xda"
         partition = "Xda1"
