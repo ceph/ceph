@@ -112,7 +112,8 @@ void MgrStandby::send_beacon()
 
   bool available = active_mgr != nullptr && active_mgr->is_initialized();
   auto addr = available ? active_mgr->get_server_addr() : entity_addr_t();
-  MMgrBeacon *m = new MMgrBeacon(monc->get_global_id(),
+  MMgrBeacon *m = new MMgrBeacon(monc->get_fsid(),
+				 monc->get_global_id(),
                                  g_conf->name.get_id(),
                                  addr,
                                  available);
