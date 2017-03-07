@@ -1766,6 +1766,38 @@ TRACEPOINT_EVENT(librados, rados_nobjects_list_seek_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_nobjects_list_seek_cursor_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_seek_cursor_exit,
+    TP_ARGS(
+        uint32_t, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_get_cursor_enter,
+    TP_ARGS(
+        rados_list_ctx_t, listctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_list_ctx_t, listctx, listctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_nobjects_list_get_cursor_exit,
+    TP_ARGS(
+        uint32_t, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_nobjects_list_get_pg_hash_position_enter,
     TP_ARGS(
         rados_list_ctx_t, listctx),
