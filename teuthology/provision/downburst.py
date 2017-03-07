@@ -145,7 +145,7 @@ class Downburst(object):
             if not_found_msg in err:
                 log.warn("Ignoring error during destroy: %s", err)
                 return True
-            log.error("Error destroying {machine}: {msg}".format(machine=self.name))
+            log.error("Error destroying %s: %s", self.name, err)
             return False
         else:
             out_str = ': %s' % out if out else ''
