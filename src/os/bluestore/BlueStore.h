@@ -520,42 +520,74 @@ public:
 
 
 #ifdef CACHE_BLOB_BL
-    void _encode() const {
-      if (blob_bl.length() == 0 ) {
-	::encode(blob, blob_bl);
+    void _encode(const uint64_t struct_v) const {
+      if (blob_bl.length() == 0) {
+        size_t bound = 0;
+        denc(blob, bound, struct_v);
+        auto app = blob_bl.get_contiguous_appender(bound);
+        denc(blob, app, struct_v);
       } else {
 	assert(blob_bl.length());
       }
     }
     void bound_encode(
       size_t& p,
-      bool include_ref_map) const {
-      _encode();
+      const uint64_t struct_v,
+      const bool include_ref_map) const {
+      _encode(struct_v);
       p += blob_bl.length();
+
+      if (blob.is_shared()) {
+        denc(shared_blob->get_sbid(), p);
+      }
       if (include_ref_map) {
 	used_in_blob.bound_encode(p);
       }
     }
     void encode(
       bufferlist::contiguous_appender& p,
-      bool include_ref_map) const {
-      _encode();
+      const uint64_t struct_v,
+      const bool include_ref_map) const {
+      _encode(struct_v);
       p.append(blob_bl);
+
+      if (blob.is_shared()) {
+        denc(shared_blob->get_sbid(), p);
+      }
       if (include_ref_map) {
 	used_in_blob.encode(p);
       }
     }
     void decode(
-      Collection */*coll*/,
+      Collection* const coll,
       bufferptr::iterator& p,
-      bool include_ref_map) {
+      const uint64_t struct_v,
+      uint64_t* const sbid,
+      const bool include_ref_map) {
+
       const char *start = p.get_pos();
-      denc(blob, p);
+      denc(blob, p, struct_v);
       const char *end = p.get_pos();
       blob_bl.clear();
       blob_bl.append(start, end - start);
+
+      if (blob.is_shared()) {
+        denc(*sbid, p);
+      }
       if (include_ref_map) {
-	used_in_blob.decode(p);
+        if (struct_v > 1) {
+          used_in_blob.decode(p);
+        } else {
+          used_in_blob.clear();
+          bluestore_extent_ref_map_t legacy_ref_map;
+          legacy_ref_map.decode(p);
+          for (auto r : legacy_ref_map.ref_map) {
+            get_ref(
+              coll,
+              r.first,
+              r.second.refs * r.second.length);
+          }
+        }
       }
     }
 #else
