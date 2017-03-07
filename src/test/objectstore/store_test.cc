@@ -3150,8 +3150,9 @@ TEST_P(StoreTest, ManyObjectTest) {
   }
   cerr << "listed.size() is " << listed.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
-  if (listed2.size())
+  if (listed2.size()) {
     ASSERT_EQ(listed.size(), listed2.size());
+  }
   for (set<ghobject_t>::iterator i = listed.begin();
        i != listed.end();
        ++i) {
