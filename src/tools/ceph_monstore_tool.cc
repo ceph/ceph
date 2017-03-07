@@ -709,7 +709,7 @@ void get_name_by_pid(pid_t pid, char *task_name)
 
   if (fd < 0) {
     fd = -errno;
-    std::cerr << "Fail to open '" << proc_pid_path
+    std::cerr << "Failed to open '" << proc_pid_path
               << "' error = " << cpp_strerror(fd)
               << std::endl;
     return;
@@ -718,9 +718,10 @@ void get_name_by_pid(pid_t pid, char *task_name)
   int ret = read(fd, task_name, PATH_MAX-1);
   if (ret < 0) {
     ret = -errno;
-    std::cerr << "Fail to read '" << proc_pid_path
+    std::cerr << "Failed to read '" << proc_pid_path
               << "' error = " << cpp_strerror(ret)
               << std::endl;
+    close(fd);
   }
 
   close(fd);
@@ -747,10 +748,10 @@ int check_lock(const string &path) {
   int fd = open(lock_path.c_str(), O_RDONLY);
   if (fd < 0) {
     fd = -errno;
-    std::cerr << "Fail to open '" << lock_path
+    std::cerr << "Failed to open '" << lock_path
               << "' error = " << cpp_strerror(fd)
               << std::endl;
-    return -1;
+    return -errno;
   }
 
   struct flock f;
@@ -759,8 +760,9 @@ int check_lock(const string &path) {
   f.l_whence = SEEK_SET;
 
   if (-1 == fcntl(fd, F_GETLK, &f)) {
-    std::cerr << " Fail to get the lock " << cpp_strerror(errno) << std::endl;
-    return -1;
+    std::cerr << " Failed to get the lock " << cpp_strerror(errno) << std::endl;
+    close(fd);
+    return -errno;
   }
 
   if (f.l_type != F_UNLCK) {
@@ -771,10 +773,12 @@ int check_lock(const string &path) {
       cout << "The database have already locked by PID: '"
            << f.l_pid << "' task name: '" << task_name
            << "' please close it first!" << std::endl;
-      return -1;
+      close(fd);
+      return -EACCES;
     }
   }
 
+  close(fd);
   return 0;
 }
 
@@ -871,8 +875,9 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->apply_changes(NULL);
   g_conf = g_ceph_context->_conf;
 
-  if (check_lock(store_path))
-    return 1;
+  int ret = check_lock(store_path);
+  if (ret)
+    return ret;
   // this is where we'll write *whatever*, on a per-command basis.
   // not all commands require some place to write their things.
   MonitorDBStore st(store_path);
