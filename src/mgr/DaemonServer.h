@@ -33,6 +33,7 @@
 class MMgrReport;
 class MMgrOpen;
 class MCommand;
+struct MgrCommand;
 
 /**
  * Session state associated with the Connection.
@@ -40,6 +41,7 @@ class MCommand;
 struct MgrSession : public RefCountedObject {
   uint64_t global_id = 0;
   EntityName entity_name;
+  entity_addr_t addr;
 
   // mon caps are suitably generic for mgr
   MonCap caps;
@@ -76,6 +78,15 @@ protected:
 
   Mutex lock;
 
+  static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
+                                    map<string,string> &param_str_map);
+  static const MgrCommand *_get_mgrcommand(const string &cmd_prefix,
+                                           MgrCommand *cmds, int cmds_size);
+  bool _allowed_command(
+    MgrSession *s, const string &module, const string &prefix,
+    const map<string,cmd_vartype>& cmdmap,
+    const map<string,string>& param_str_map,
+    const MgrCommand *this_cmd);
 
 public:
   int init(uint64_t gid, entity_addr_t client_addr);

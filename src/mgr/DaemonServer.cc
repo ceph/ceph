@@ -128,6 +128,7 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
   }
 
   MgrSessionRef s(new MgrSession);
+  s->addr = con->get_peer_addr();
   AuthCapsInfo caps_info;
 
   is_valid = handler->verify_authorizer(
@@ -280,6 +281,11 @@ struct MgrCommand {
   string module;
   string perm;
   string availability;
+
+  bool requires_perm(char p) const {
+    return (perm.find(p) != string::npos);
+  }
+
 } mgr_commands[] = {
 
 #define COMMAND(parsesig, helptext, module, perm, availability) \
@@ -287,6 +293,71 @@ struct MgrCommand {
 #include "MgrCommands.h"
 #undef COMMAND
 };
+
+void DaemonServer::_generate_command_map(
+  map<string,cmd_vartype>& cmdmap,
+  map<string,string> &param_str_map)
+{
+  for (map<string,cmd_vartype>::const_iterator p = cmdmap.begin();
+       p != cmdmap.end(); ++p) {
+    if (p->first == "prefix")
+      continue;
+    if (p->first == "caps") {
+      vector<string> cv;
+      if (cmd_getval(g_ceph_context, cmdmap, "caps", cv) &&
+	  cv.size() % 2 == 0) {
+	for (unsigned i = 0; i < cv.size(); i += 2) {
+	  string k = string("caps_") + cv[i];
+	  param_str_map[k] = cv[i + 1];
+	}
+	continue;
+      }
+    }
+    param_str_map[p->first] = cmd_vartype_stringify(p->second);
+  }
+}
+
+const MgrCommand *DaemonServer::_get_mgrcommand(
+  const string &cmd_prefix,
+  MgrCommand *cmds,
+  int cmds_size)
+{
+  MgrCommand *this_cmd = NULL;
+  for (MgrCommand *cp = cmds;
+       cp < &cmds[cmds_size]; cp++) {
+    if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
+      this_cmd = cp;
+      break;
+    }
+  }
+  return this_cmd;
+}
+
+bool DaemonServer::_allowed_command(
+  MgrSession *s,
+  const string &module,
+  const string &prefix,
+  const map<string,cmd_vartype>& cmdmap,
+  const map<string,string>& param_str_map,
+  const MgrCommand *this_cmd) {
+
+  if (s->entity_name.is_mon()) {
+    // mon is all-powerful.  even when it is forwarding commands on behalf of
+    // old clients; we expect the mon is validating commands before proxying!
+    return true;
+  }
+
+  bool cmd_r = this_cmd->requires_perm('r');
+  bool cmd_w = this_cmd->requires_perm('w');
+  bool cmd_x = this_cmd->requires_perm('x');
+
+  bool capable = s->caps.is_capable(g_ceph_context, s->entity_name,
+                                    module, prefix, param_str_map,
+                                    cmd_r, cmd_w, cmd_x);
+
+  dout(10) << " " << (capable ? "" : "not ") << "capable" << dendl;
+  return capable;
+}
 
 bool DaemonServer::handle_command(MCommand *m)
 {
@@ -299,14 +370,20 @@ bool DaemonServer::handle_command(MCommand *m)
 
   cmdmap_t cmdmap;
 
-  // TODO enforce some caps
-  
   // TODO background the call into python land so that we don't
   // block a messenger thread on python code.
 
   ConnectionRef con = m->get_connection();
+  MgrSessionRef session(static_cast<MgrSession*>(con->get_priv()));
+  if (!session) {
+    return true;
+  }
+  session->put(); // SessionRef takes a ref
+
   string format;
   boost::scoped_ptr<Formatter> f;
+  const MgrCommand *mgr_cmd;
+  map<string,string> param_str_map;
 
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     r = -EINVAL;
@@ -355,12 +432,37 @@ bool DaemonServer::handle_command(MCommand *m)
     goto out;
   }
 
+  // lookup command
+  mgr_cmd = _get_mgrcommand(prefix, mgr_commands,
+                                              ARRAY_SIZE(mgr_commands));
+  _generate_command_map(cmdmap, param_str_map);
+  if (!mgr_cmd) {
+    ss << "command not supported";
+    r = -EINVAL;
+    goto out;
+  }
+
+  // validate user's permissions for requested command
+  if (!_allowed_command(session.get(), mgr_cmd->module, prefix, cmdmap,
+                        param_str_map, mgr_cmd)) {
+    dout(1) << __func__ << " access denied" << dendl;
+#if 0
+    // FIXME: audit_clog?
+    clog->info() << "from='" << session->addr << "' "
+		 << "entity='" << session->entity_name << "' "
+		 << "cmd=" << m->cmd << ":  access denied";
+#endif
+    ss << "access denied";
+    r = -EACCES;
+    goto out;
+  }
+
   // -----------
   // PG commands
 
-  else if (prefix == "pg scrub" ||
-	   prefix == "pg repair" ||
-	   prefix == "pg deep-scrub") {
+  if (prefix == "pg scrub" ||
+      prefix == "pg repair" ||
+      prefix == "pg deep-scrub") {
     string scrubop = prefix.substr(3, string::npos);
     pg_t pgid;
     string pgidstr;
