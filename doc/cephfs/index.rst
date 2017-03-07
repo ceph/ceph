@@ -98,6 +98,7 @@ authentication keyring.
     Client authentication <client-auth>
     Upgrading old filesystems <upgrading>
     Configuring directory fragmentation <dirfrags>
+    Configuring multiple active MDS daemons <multimds>
 
 .. raw:: html
 
