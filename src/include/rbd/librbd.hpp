@@ -167,6 +167,9 @@ public:
 
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
 
+  // Namespace support functions
+  int namespace_list(IoCtx& io_ctx, std::set<std::string>& namespaces);
+
   // RBD pool mirroring support functions
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);

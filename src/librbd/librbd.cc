@@ -617,6 +617,10 @@ namespace librbd {
     return r;
   }
 
+  int RBD::namespace_list(IoCtx& io_ctx, set<string>& namespaces) {
+    return librbd::namespace_list(io_ctx, namespaces);
+  }
+
   int RBD::mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode) {
     return librbd::api::Mirror<>::mode_get(io_ctx, mirror_mode);
   }

@@ -652,6 +652,19 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
+  int namespace_list(IoCtx& io_ctx, set<string>& namespaces)
+  {
+    CephContext *cct = (CephContext *)io_ctx.cct();
+    ldout(cct, 20) << "list namespaces " << &io_ctx << dendl;
+    
+    namespaces.clear();
+    int r = cls_client::namespace_list(&io_ctx, &namespaces);
+    if (r != -ENOENT) {
+      r = 0;
+    }
+    return r;
+  }
+
   int list_children(ImageCtx *ictx, set<pair<string, string> >& names)
   {
     CephContext *cct = ictx->cct;
