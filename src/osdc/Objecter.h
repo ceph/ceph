@@ -2738,6 +2738,8 @@ public:
 
   void list_nobjects(NListContext *p, Context *onfinish);
   uint32_t list_nobjects_seek(NListContext *p, uint32_t pos);
+  uint32_t list_nobjects_seek(NListContext *list_context, const hobject_t& c);
+  void list_nobjects_get_cursor(NListContext *list_context, hobject_t *c);
 
   hobject_t enumerate_objects_begin();
   hobject_t enumerate_objects_end();
