@@ -600,7 +600,7 @@ start_mgr() {
 EOF
 
         echo "Starting mgr.${name}"
-        run 'mgr' $CEPH_BIN/ceph-mgr -i $name
+        run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 }
 
