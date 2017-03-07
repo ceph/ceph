@@ -476,7 +476,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     set<mds_rank_t> s;
     if (!is_active()) break;
     mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
-    if (s.size() < 2 || mdcache->get_num_inodes() < 10)
+    if (s.size() < 2 || CInode::count() < 10)
       break;  // need peers for this to work.
     if (mdcache->migrator->get_num_exporting() > g_conf->mds_thrash_exports * 5 ||
 	mdcache->migrator->get_export_queue_size() > g_conf->mds_thrash_exports * 10)
