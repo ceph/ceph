@@ -72,6 +72,7 @@ class RDMADispatcher : public CephContext::ForkWatcher {
   Infiniband::CompletionChannel *tx_cc, *rx_cc;
   EventCallbackRef async_handler;
   bool done = false;
+  std::atomic<uint64_t> num_dead_queue_pair = {0};
   Mutex lock; // protect `qp_conns`, `dead_queue_pairs`
   // qp_num -> InfRcConnection
   // The main usage of `qp_conns` is looking up connection by qp_num,
