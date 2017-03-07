@@ -137,7 +137,25 @@ void MonCapGrant::expand_profile(EntityName name) const
     profile_grants.push_back(MonCapGrant("osd pool rmsnap"));
     profile_grants.push_back(MonCapGrant("log", MON_CAP_W));
   }
-  if (profile == "osd" || profile == "mds" || profile == "mon") {
+  if (profile == "mgr") {
+    profile_grants.push_back(MonCapGrant("mgr", MON_CAP_ALL));
+    profile_grants.push_back(MonCapGrant("log", MON_CAP_W));
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("mds", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R));
+    string prefix = string("daemon-private/mgr/");
+    profile_grants.push_back(MonCapGrant("config-key get", "key",
+					 StringConstraint("", prefix)));
+    profile_grants.push_back(MonCapGrant("config-key put", "key",
+					 StringConstraint("", prefix)));
+    profile_grants.push_back(MonCapGrant("config-key exists", "key",
+					 StringConstraint("", prefix)));
+    profile_grants.push_back(MonCapGrant("config-key delete", "key",
+					 StringConstraint("", prefix)));
+  }
+  if (profile == "osd" || profile == "mds" || profile == "mon" ||
+      profile == "mgr") {
     string prefix = string("daemon-private/") + stringify(name) + string("/");
     profile_grants.push_back(MonCapGrant("config-key get", "key", StringConstraint("", prefix)));
     profile_grants.push_back(MonCapGrant("config-key put", "key", StringConstraint("", prefix)));
