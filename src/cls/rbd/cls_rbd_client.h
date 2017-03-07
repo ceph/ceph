@@ -256,6 +256,14 @@ namespace librbd {
     void object_map_snap_remove(librados::ObjectWriteOperation *rados_op,
                                 const ceph::BitVector<2> &object_map);
 
+    // operations on rbd_namespace objects
+    void namespace_add(librados::ObjectWriteOperation *op, std::string &nspace);
+    void namespace_list_start(librados::ObjectReadOperation *op,
+                              const std::string &start, uint64_t max_return);
+    int namespace_list_finish(bufferlist::iterator *it,
+                              std::set<std::string> *namespaces);
+    int namespace_list(librados::IoCtx *ioctx,  std::set<std::string> *namespaces);
+
     // class operations on the old format, kept for
     // backwards compatability
     void old_snapshot_add(librados::ObjectWriteOperation *rados_op,
