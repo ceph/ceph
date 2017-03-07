@@ -2586,7 +2586,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	ss << "client." << session->get_client() << " does not advance its oldest_flush_tid ("
 	   << m->get_oldest_flush_tid() << "), "
 	   << session->get_num_completed_flushes()
-	   << " completed flushes recorded in session\n";
+	   << " completed flushes recorded in session";
 	mds->clog->warn() << ss.str();
 	dout(20) << __func__ << " " << ss.str() << dendl;
       }
@@ -3499,7 +3499,7 @@ void Locker::caps_tick()
       stringstream ss;
       ss << "client." << cap->get_client() << " isn't responding to mclientcaps(revoke), ino "
 	 << cap->get_inode()->ino() << " pending " << ccap_string(cap->pending())
-	 << " issued " << ccap_string(cap->issued()) << ", sent " << age << " seconds ago\n";
+	 << " issued " << ccap_string(cap->issued()) << ", sent " << age << " seconds ago";
       mds->clog->warn() << ss.str();
       dout(20) << __func__ << " " << ss.str() << dendl;
     } else {

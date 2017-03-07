@@ -181,7 +181,7 @@ void MonmapMonitor::on_active()
   }
 
   if (mon->is_leader())
-    mon->clog->info() << "monmap " << *mon->monmap << "\n";
+    mon->clog->info() << "monmap " << *mon->monmap;
 
   apply_mon_features(mon->get_quorum_mon_features());
 }
