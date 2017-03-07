@@ -4087,7 +4087,7 @@ int RGWPutACLs::verify_permission()
 int RGWGetLC::verify_permission()
 {
   bool perm;
-  perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
+  perm = verify_bucket_permission(s, RGW_PERM_READ_ACP);
   if (!perm)
     return -EACCES;
 
