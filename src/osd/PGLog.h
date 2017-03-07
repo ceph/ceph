@@ -1242,9 +1242,9 @@ public:
 	      continue;
 	    if (i.second.need > log.tail ||
 	      i.first > info.last_backfill) {
-	      lderr(dpp->get_cct()) << __func__ << ": invalid missing set entry found "
-				    << i.first
-				    << dendl;
+	      ldpp_dout(dpp, -1) << __func__ << ": invalid missing set entry found "
+				 << i.first
+				 << dendl;
 	      assert(0 == "invalid missing set entry found");
 	    }
 	    bufferlist bv;
