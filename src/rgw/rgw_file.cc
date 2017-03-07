@@ -36,7 +36,7 @@ namespace rgw {
 
   const string RGWFileHandle::root_name = "/";
 
-  atomic<uint32_t> RGWLibFS::fs_inst;
+  atomic<uint32_t> RGWLibFS::fs_inst_counter;
 
   uint32_t RGWLibFS::write_completion_interval_s = 10;
 

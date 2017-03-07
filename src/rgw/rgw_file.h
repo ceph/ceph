@@ -738,7 +738,8 @@ namespace rgw {
     RGWUserInfo user;
     RGWAccessKey key; // XXXX acc_key
 
-    static atomic<uint32_t> fs_inst;
+    static atomic<uint32_t> fs_inst_counter;
+
     static uint32_t write_completion_interval_s;
     std::string fsid;
 
@@ -789,6 +790,10 @@ namespace rgw {
       }
     } state;
 
+    uint32_t new_inst() {
+      return ++fs_inst_counter;
+    }
+
     friend class RGWFileHandle;
     friend class RGWLibProcess;
 
@@ -806,7 +811,7 @@ namespace rgw {
 
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
 	    const char* _key)
-      : cct(_cct), root_fh(this, get_inst()), invalidate_cb(nullptr),
+      : cct(_cct), root_fh(this, new_inst()), invalidate_cb(nullptr),
 	invalidate_arg(nullptr), shutdown(false), refcnt(1),
 	fh_cache(cct->_conf->rgw_nfs_fhcache_partitions,
 		 cct->_conf->rgw_nfs_fhcache_size),
@@ -814,12 +819,9 @@ namespace rgw {
 	       cct->_conf->rgw_nfs_lru_lane_hiwat),
 	uid(_uid), key(_user_id, _key) {
 
-      /* fixup fs_inst */
-      root_fh.state.dev = ++fs_inst;
-
       /* no bucket may be named rgw_fs_inst-(.*) */
       fsid = RGWFileHandle::root_name + "rgw_fs_inst-" +
-	std::to_string(fs_inst);
+	std::to_string(get_inst());
 
       root_fh.init_rootfs(fsid /* bucket */, RGWFileHandle::root_name);
 
@@ -1134,7 +1136,7 @@ namespace rgw {
 
     struct rgw_fs* get_fs() { return &fs; }
 
-    uint32_t get_inst() { return fs_inst; }
+    uint32_t get_inst() { return root_fh.state.dev; }
 
     RGWUserInfo* get_user() { return &user; }
 
