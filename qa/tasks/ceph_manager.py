@@ -448,10 +448,10 @@ class Thrasher:
         Set and unset cluster full condition
         """
         self.log('Setting full ratio to .001')
-        self.ceph_manager.raw_cluster_cmd('pg', 'set_full_ratio', '.001')
+        self.ceph_manager.raw_cluster_cmd('osd', 'set-full-ratio', '.001')
         time.sleep(1)
         self.log('Setting full ratio back to .95')
-        self.ceph_manager.raw_cluster_cmd('pg', 'set_full_ratio', '.95')
+        self.ceph_manager.raw_cluster_cmd('osd', 'set-full-ratio', '.95')
 
     def all_up(self):
         """
