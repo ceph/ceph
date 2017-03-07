@@ -42,7 +42,8 @@ class Downburst(object):
     A class that provides methods for creating and destroying virtual machine
     instances using downburst: https://github.com/ceph/downburst
     """
-    def __init__(self, name, os_type, os_version, status=None, user='ubuntu'):
+    def __init__(self, name, os_type, os_version, status=None, user='ubuntu',
+                 logfile=None):
         self.name = name
         self.shortname = decanonicalize_hostname(self.name)
         self.os_type = os_type
@@ -51,6 +52,7 @@ class Downburst(object):
         self.config_path = None
         self.user_path = None
         self.user = user
+        self.logfile = logfile
         self.host = decanonicalize_hostname(self.status['vm_host']['name'])
         self.executable = downburst_executable()
 
@@ -71,6 +73,8 @@ class Downburst(object):
                         action="downburst create") as proceed:
             while proceed():
                 (returncode, stdout, stderr) = self._run_create()
+                log.info(stdout)
+                log.info(stderr)
                 if returncode == 0:
                     log.info("Downburst created %s: %s" % (self.name,
                                                            stdout.strip()))
@@ -100,15 +104,16 @@ class Downburst(object):
         if not self.user_path:
             raise ValueError("I need a user_path!")
 
-        args = [
-            self.executable,
-            '-c', self.host,
+        args = [self.executable, '-v', '-c', self.host]
+        if self.logfile:
+            args.extend(['-l', self.logfile])
+        args.extend([
             'create',
             '--wait',
             '--meta-data=%s' % self.config_path,
             '--user-data=%s' % self.user_path,
             self.shortname,
-        ]
+        ])
         log.info("Provisioning a {distro} {distroversion} vps".format(
             distro=self.os_type,
             distroversion=self.os_version
@@ -126,26 +131,26 @@ class Downburst(object):
         if not executable:
             log.error("No downburst executable found.")
             return False
-        args = [executable, '-c', self.host, 'destroy', self.shortname]
+        args = [executable, '-v', '-c', self.host]
+        if self.logfile:
+            args.extend(['-l', self.logfile])
+        args.extend(['destroy', self.shortname])
         proc = subprocess.Popen(args, stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,)
         out, err = proc.communicate()
-        if err:
+        log.info(out)
+        log.info(err)
+        if proc.returncode != 0:
             not_found_msg = "no domain with matching name '%s'" % self.shortname
             if not_found_msg in err:
                 log.warn("Ignoring error during destroy: %s", err)
                 return True
-            log.error("Error destroying {machine}: {msg}".format(
-                machine=self.name, msg=err))
+            log.error("Error destroying {machine}: {msg}".format(machine=self.name))
             return False
-        elif proc.returncode == 0:
+        else:
             out_str = ': %s' % out if out else ''
             log.info("Destroyed %s%s" % (self.name, out_str))
             return True
-        else:
-            log.error("I don't know if the destroy of {node} succeded!".format(
-                node=self.name))
-            return False
 
     def build_config(self):
         """
