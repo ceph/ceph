@@ -466,16 +466,6 @@ bool Mgr::ms_dispatch(Message *m)
       handle_mgr_digest(static_cast<MMgrDigest*>(m));
       break;
     case CEPH_MSG_MON_MAP:
-      // FIXME: we probably never get called here because MonClient
-      // has consumed the message.  For consuming OSDMap we need
-      // to be the tail dispatcher, but to see MonMap we would
-      // need to be at the head.
-      // Result is that ClusterState has access to monmap (it reads
-      // from monclient anyway), but we don't see notifications.  Hook
-      // into MonClient to get notifications instead of messing
-      // with message delivery to achieve it?
-      ceph_abort();
-
       py_modules.notify_all("mon_map", "");
       m->put();
       break;

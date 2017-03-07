@@ -187,7 +187,8 @@ private:
   // monclient
   bool want_monmap;
   Cond map_cond;
-private:
+  bool passthrough_monmap = false;
+
   // authenticate
   std::unique_ptr<AuthClientHandler> auth;
   uint32_t want_keys = 0;
@@ -339,6 +340,21 @@ public:
   int build_initial_monmap();
   int get_monmap();
   int get_monmap_privately();
+  /**
+   * If you want to see MonMap messages, set this and
+   * the MonClient will tell the Messenger it hasn't
+   * dealt with it.
+   * Note that if you do this, *you* are of course responsible for
+   * putting the message reference!
+   */
+  void set_passthrough_monmap() {
+    Mutex::Locker l(monc_lock);
+    passthrough_monmap = true;
+  }
+  void unset_passthrough_monmap() {
+    Mutex::Locker l(monc_lock);
+    passthrough_monmap = false;
+  }
   /**
    * Ping monitor with ID @p mon_id and record the resulting
    * reply in @p result_reply.
