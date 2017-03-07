@@ -1031,6 +1031,9 @@ OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at
 OPTION(bluestore_spdk_socket_mem, OPT_STR, "512,512")
 // A hexadecimal bit mask of the cores to run on. Note the core numbering can change between platforms and should be determined beforehand.
 OPTION(bluestore_spdk_coremask, OPT_STR, "0x3")
+// Specify the maximal I/Os to be batched completed while checking queue pair completions.
+// Default value 0 means that let SPDK nvme library determine the value.
+OPTION(bluestore_spdk_max_io_completion, OPT_U32, 0)
 OPTION(bluestore_block_path, OPT_STR, "")
 OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
 OPTION(bluestore_block_create, OPT_BOOL, true)
