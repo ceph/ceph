@@ -36,6 +36,8 @@ class MgrMonitor : public PaxosService
 
   Context *digest_callback;
 
+  bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
+
 public:
   MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name), digest_callback(nullptr)

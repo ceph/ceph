@@ -67,6 +67,24 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   put_last_committed(t, pending_map.epoch);
 }
 
+bool MgrMonitor::check_caps(MonOpRequestRef op, const uuid_d& fsid)
+{
+  // check permissions
+  MonSession *session = op->get_session();
+  if (!session)
+    return false;
+  if (!session->is_capable("mgr", MON_CAP_X)) {
+    dout(1) << __func__ << " insufficient caps " << session->caps << dendl;
+    return false;
+  }
+  if (fsid != mon->monmap->fsid) {
+    dout(1) << __func__ << " op fsid " << fsid
+	    << " != " << mon->monmap->fsid << dendl;
+    return false;
+  }
+  return true;
+}
+
 bool MgrMonitor::preprocess_query(MonOpRequestRef op)
 {
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
@@ -122,6 +140,10 @@ bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
 {
   MMgrBeacon *m = static_cast<MMgrBeacon*>(op->get_req());
   dout(4) << "beacon from " << m->get_gid() << dendl;
+
+  if (!check_caps(op, m->get_fsid())) {
+    return true;
+  }
 
   last_beacon[m->get_gid()] = ceph_clock_now();
 
