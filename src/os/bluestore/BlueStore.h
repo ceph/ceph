@@ -513,8 +513,9 @@ public:
       ++nref;
     }
     void put() {
-      if (--nref == 0)
-	delete this;
+      if (--nref == 0) {
+	//delete this;
+      }
     }
 
 
@@ -961,6 +962,7 @@ public:
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;              ///< true if object logically exists
 
+    boost::object_pool<Blob> blob_pool{4096};
     boost::object_pool<Extent> extent_pool{4096,4096};
     ExtentMap extent_map;
 
@@ -1295,8 +1297,8 @@ public:
     void load_shared_blob(SharedBlobRef sb);
     void make_blob_shared(uint64_t sbid, BlobRef b);
 
-    BlobRef new_blob() {
-      BlobRef b = new Blob();
+    BlobRef new_blob(Onode* const onode) {
+      BlobRef b = onode->blob_pool.construct();
       b->shared_blob = new SharedBlob(this);
       return b;
     }

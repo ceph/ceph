@@ -2485,7 +2485,7 @@ unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
 	le->assign_blob(blobs[blobid - 1]);
 	assert(le->blob);
       } else {
-	Blob *b = new Blob();
+        Blob* const b = onode->blob_pool.construct();
         uint64_t sbid = 0;
         b->decode(onode->c, p, struct_v, &sbid, false);
 	blobs[n] = b;
@@ -2553,7 +2553,7 @@ void BlueStore::ExtentMap::decode_spanning_blobs(
   unsigned n;
   denc_varint(n, p);
   while (n--) {
-    BlobRef b(new Blob());
+    BlobRef b(onode->blob_pool.construct());
     denc_varint(b->id, p);
     spanning_blob_map[b->id] = b;
     uint64_t sbid = 0;
@@ -2861,7 +2861,7 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
   dout(20) << __func__ << " 0x" << std::hex << pos << " end 0x" << end_pos
 	   << " blob_offset 0x" << blob_offset << std::dec << " " << *lb
 	   << dendl;
-  BlobRef rb = onode->c->new_blob();
+  BlobRef rb = onode->c->new_blob(onode);
   lb->split(onode->c, blob_offset, rb.get());
 
   for (auto ep = seek_lextent(pos);
@@ -8580,7 +8580,7 @@ void BlueStore::_do_write_small(
   }
 
   // new blob.
-  b = c->new_blob();
+  b = c->new_blob(&*o);
   unsigned alloc_len = min_alloc_size;
   uint64_t b_off = P2PHASE(offset, alloc_len);
   uint64_t b_off0 = b_off;
@@ -8611,7 +8611,7 @@ void BlueStore::_do_write_big(
   logger->inc(l_bluestore_write_big);
   logger->inc(l_bluestore_write_big_bytes, length);
   while (length > 0) {
-    BlobRef b = c->new_blob();
+    BlobRef b = c->new_blob(&*o);
     auto l = MIN(wctx->target_blob_size, length);
     bufferlist t;
     blp.copy(l, t);
@@ -9679,7 +9679,7 @@ int BlueStore::_do_clone_range(
       } else {
 	c->load_shared_blob(e.blob->shared_blob);
       }
-      cb = new Blob();
+      cb = newo->blob_pool.construct();
       e.blob->last_encoded_id = n;
       id_to_blob[n] = cb;
       e.blob->dup(*cb);
