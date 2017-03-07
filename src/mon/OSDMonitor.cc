@@ -2674,7 +2674,10 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
   MonSession *session = m->get_session();
   if (!session)
     goto ignore;
-  if (!session->caps.is_capable(g_ceph_context, session->entity_name,
+  if (!session->caps.is_capable(
+	g_ceph_context,
+	CEPH_ENTITY_TYPE_MON,
+	session->entity_name,
         "osd", "osd pool rmsnap", {}, true, true, false)) {
     dout(0) << "got preprocess_remove_snaps from entity with insufficient caps "
 	    << session->caps << dendl;

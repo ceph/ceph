@@ -351,11 +351,15 @@ bool DaemonServer::_allowed_command(
   bool cmd_w = this_cmd->requires_perm('w');
   bool cmd_x = this_cmd->requires_perm('x');
 
-  bool capable = s->caps.is_capable(g_ceph_context, s->entity_name,
-                                    module, prefix, param_str_map,
-                                    cmd_r, cmd_w, cmd_x);
+  bool capable = s->caps.is_capable(
+    g_ceph_context,
+    CEPH_ENTITY_TYPE_MGR,
+    s->entity_name,
+    module, prefix, param_str_map,
+    cmd_r, cmd_w, cmd_x);
 
-  dout(10) << " " << (capable ? "" : "not ") << "capable" << dendl;
+  dout(10) << " " << s->entity_name << " "
+	   << (capable ? "" : "not ") << "capable" << dendl;
   return capable;
 }
 
