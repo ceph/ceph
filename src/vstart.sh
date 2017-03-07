@@ -516,6 +516,7 @@ start_mon() {
 			--cap mon 'allow *' \
 			--cap osd 'allow *' \
 			--cap mds 'allow *' \
+			--cap mgr 'allow *' \
 			"$keyring_fn"
 
 		# build a fresh fs monmap, mon fs
