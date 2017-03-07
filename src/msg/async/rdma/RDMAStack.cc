@@ -37,6 +37,7 @@ RDMADispatcher::~RDMADispatcher()
 
   assert(qp_conns.empty());
   assert(dead_queue_pairs.empty());
+  assert(num_dead_queue_pair == 0);
 
   tx_cc->ack_events();
   rx_cc->ack_events();
@@ -202,13 +203,14 @@ void RDMADispatcher::polling()
       // Additionally, don't delete qp while outstanding_buffers isn't empty,
       // because we need to check qp's state before sending
       perf_logger->set(l_msgr_rdma_inflight_tx_chunks, inflight);
-      if (!inflight.load()) {
+      if (num_dead_queue_pair) {
         Mutex::Locker l(lock); // FIXME reuse dead qp because creating one qp costs 1 ms
         while (!dead_queue_pairs.empty()) {
           ldout(cct, 10) << __func__ << " finally delete qp=" << dead_queue_pairs.back() << dendl;
           delete dead_queue_pairs.back();
           perf_logger->dec(l_msgr_rdma_active_queue_pair);
           dead_queue_pairs.pop_back();
+          --num_dead_queue_pair;
         }
       }
       if (done)
@@ -296,6 +298,7 @@ void RDMADispatcher::erase_qpn(uint32_t qpn)
   auto it = qp_conns.find(qpn);
   if (it == qp_conns.end())
     return ;
+  ++num_dead_queue_pair;
   dead_queue_pairs.push_back(it->second.first);
   qp_conns.erase(it);
 }
