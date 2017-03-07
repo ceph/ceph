@@ -661,7 +661,7 @@ bool StrayManager::__eval_stray(CDentry *dn, bool delay)
 		 << in->snaprealm->srnode.past_parents << dendl;
 	if (in->state_test(CInode::STATE_MISSINGOBJS)) {
 	  mds->clog->error() << "previous attempt at committing dirfrag of ino "
-			     << in->ino() << " has failed, missing object\n";
+			     << in->ino() << " has failed, missing object";
 	  mds->handle_write_error(-ENOENT);
 	}
 	return false;  // not until some snaps are deleted.

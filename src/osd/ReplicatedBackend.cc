@@ -2022,7 +2022,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 				 << recovery_info.soid << " v "
 				 << recovery_info.version
 				 << " failed because local copy is "
-				 << oi.version << "\n";
+				 << oi.version;
       return -EINVAL;
     }
 
@@ -2280,7 +2280,7 @@ void ReplicatedBackend::handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply)
   if (r != 0) {
     get_parent()->clog_error() << get_info().pgid << " "
 			       << peer << " tried to pull " << soid
-			       << " but got " << cpp_strerror(-r) << "\n";
+			       << " but got " << cpp_strerror(-r);
     prep_push_op_blank(soid, reply);
   } else {
     ObjectRecoveryInfo &recovery_info = op.recovery_info;

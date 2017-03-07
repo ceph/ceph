@@ -361,7 +361,7 @@ void OSDMonitor::on_active()
   update_logger();
 
   if (mon->is_leader())
-    mon->clog->info() << "osdmap " << osdmap << "\n";
+    mon->clog->info() << "osdmap " << osdmap;
 
   if (!mon->is_leader()) {
     list<MonOpRequestRef> ls;
@@ -1643,7 +1643,7 @@ bool OSDMonitor::prepare_mark_me_down(MonOpRequestRef op)
   assert(osdmap.is_up(target_osd));
   assert(osdmap.get_addr(target_osd) == m->get_target().addr);
 
-  mon->clog->info() << "osd." << target_osd << " marked itself down\n";
+  mon->clog->info() << "osd." << target_osd << " marked itself down";
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
   if (m->request_ack)
     wait_for_finished_proposal(op, new C_AckMarkedDown(this, op));
@@ -1813,7 +1813,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     mon->clog->info() << osdmap.get_inst(target_osd) << " failed ("
 		      << (int)reporters_by_subtree.size() << " reporters from different "
 		      << reporter_subtree_level << " after "
-		      << failed_for << " >= grace " << grace << ")\n";
+		      << failed_for << " >= grace " << grace << ")";
     return true;
   }
   return false;
@@ -1831,7 +1831,7 @@ void OSDMonitor::force_failure(utime_t now, int target_osd)
   dout(1) << " we're forcing failure of osd." << target_osd << dendl;
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
-  mon->clog->info() << osdmap.get_inst(target_osd) << " failed (forced)\n";
+  mon->clog->info() << osdmap.get_inst(target_osd) << " failed (forced)";
   return;
 }
 
@@ -1857,12 +1857,12 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
     // add a report
     if (m->is_immediate()) {
       mon->clog->debug() << m->get_target() << " reported immediately failed by "
-            << m->get_orig_source_inst() << "\n";
+            << m->get_orig_source_inst();
       force_failure(now, target_osd);
       return true;
     }
     mon->clog->debug() << m->get_target() << " reported failed by "
-		      << m->get_orig_source_inst() << "\n";
+		      << m->get_orig_source_inst();
 
     failure_info_t& fi = failure_info[target_osd];
     MonOpRequestRef old_op = fi.add_report(reporter, failed_since, op);
@@ -1874,7 +1874,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
   } else {
     // remove the report
     mon->clog->debug() << m->get_target() << " failure report canceled by "
-		       << m->get_orig_source_inst() << "\n";
+		       << m->get_orig_source_inst();
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
       MonOpRequestRef report_op = fi.cancel_report(reporter);
@@ -2001,7 +2001,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 		      << m->get_orig_source_inst()
 		      << " because the osdmap requires"
 		      << " CEPH_FEATURE_SERVER_LUMINOUS"
-		      << " but the osd lacks CEPH_FEATURE_SERVER_LUMINOUS\n";
+		      << " but the osd lacks CEPH_FEATURE_SERVER_LUMINOUS";
     goto ignore;
   }
 
@@ -2011,7 +2011,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 		      << m->get_orig_source_inst()
 		      << " because the osdmap requires"
 		      << " CEPH_FEATURE_SERVER_JEWEL"
-		      << " but the osd lacks CEPH_FEATURE_SERVER_JEWEL\n";
+		      << " but the osd lacks CEPH_FEATURE_SERVER_JEWEL";
     goto ignore;
   }
 
@@ -2021,7 +2021,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 		      << m->get_orig_source_inst()
 		      << " because the osdmap requires"
 		      << " CEPH_FEATURE_SERVER_KRAKEN"
-		      << " but the osd lacks CEPH_FEATURE_SERVER_KRAKEN\n";
+		      << " but the osd lacks CEPH_FEATURE_SERVER_KRAKEN";
     goto ignore;
   }
 
@@ -2029,7 +2029,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
       !(m->osd_features & CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
-		      << " because 'sortbitwise' osdmap flag is set and OSD lacks the OSD_BITWISE_HOBJ_SORT feature\n";
+		      << " because 'sortbitwise' osdmap flag is set and OSD lacks the OSD_BITWISE_HOBJ_SORT feature";
     goto ignore;
   }
 
@@ -2052,7 +2052,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
       !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
     mon->clog->info() << "disallowing boot of post-luminous OSD "
 		      << m->get_orig_source_inst()
-		      << " because require_luminous_osds is not set\n";
+		      << " because require_luminous_osds is not set";
     goto ignore;
   }
 
@@ -2061,7 +2061,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
       !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
     mon->clog->info() << "disallowing boot of post-jewel OSD "
 		      << m->get_orig_source_inst()
-		      << " because require_jewel_osds is not set\n";
+		      << " because require_jewel_osds is not set";
     goto ignore;
   }
 
@@ -2073,14 +2073,14 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 	!(osdmap.get_up_osd_features() & CEPH_FEATURE_HAMMER_0_94_4)) {
       mon->clog->info() << "disallowing boot of post-hammer OSD "
 			<< m->get_orig_source_inst()
-			<< " because one or more up OSDs is pre-hammer v0.94.4\n";
+			<< " because one or more up OSDs is pre-hammer v0.94.4";
       goto ignore;
     }
     if (!(m->osd_features & CEPH_FEATURE_HAMMER_0_94_4) &&
 	(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_METADATA)) {
       mon->clog->info() << "disallowing boot of pre-hammer v0.94.4 OSD "
 			<< m->get_orig_source_inst()
-			<< " because all up OSDs are post-hammer\n";
+			<< " because all up OSDs are post-hammer";
       goto ignore;
     }
   }
@@ -2289,7 +2289,7 @@ void OSDMonitor::_booted(MonOpRequestRef op, bool logit)
 	  << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
 
   if (logit) {
-    mon->clog->info() << m->get_orig_source_inst() << " boot\n";
+    mon->clog->info() << m->get_orig_source_inst() << " boot";
   }
 
   send_latest(op, m->sb.current_epoch+1);
@@ -2343,7 +2343,7 @@ bool OSDMonitor::prepare_alive(MonOpRequestRef op)
   int from = m->get_orig_source().num();
 
   if (0) {  // we probably don't care much about these
-    mon->clog->debug() << m->get_orig_source_inst() << " alive\n";
+    mon->clog->debug() << m->get_orig_source_inst() << " alive";
   }
 
   dout(7) << "prepare_alive want up_thru " << m->want << " have " << m->version
@@ -2872,7 +2872,7 @@ void OSDMonitor::tick()
 
 	  do_propose = true;
 
-	  mon->clog->info() << "osd." << o << " out (down for " << down << ")\n";
+	  mon->clog->info() << "osd." << o << " out (down for " << down << ")";
 	} else
 	  continue;
       }
@@ -2947,7 +2947,7 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
     } else if (can_mark_down(i)) {
       utime_t diff = now - t->second;
       if (diff > timeo) {
-	mon->clog->info() << "osd." << i << " marked down after no pg stats for " << diff << "seconds\n";
+	mon->clog->info() << "osd." << i << " marked down after no pg stats for " << diff << "seconds";
 	derr << "no osd or pg stats from osd." << i << " since " << t->second << ", " << diff
 	     << " seconds ago.  marking down" << dendl;
 	pending_inc.new_state[i] = CEPH_OSD_UP;
