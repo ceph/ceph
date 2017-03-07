@@ -15,7 +15,6 @@
 #include "rgw_common.h"
 #include "rgw_bucket.h"
 #include "rgw_lc.h"
-#include "rgw_lc_s3.h"
 
 
 #define dout_context g_ceph_context
