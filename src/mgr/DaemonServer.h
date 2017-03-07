@@ -24,6 +24,8 @@
 #include <msg/Messenger.h>
 #include <mon/MonClient.h>
 
+#include <mon/MonCap.h>
+
 #include "auth/AuthAuthorizeHandler.h"
 
 #include "DaemonState.h"
@@ -32,6 +34,21 @@ class MMgrReport;
 class MMgrOpen;
 class MCommand;
 
+/**
+ * Session state associated with the Connection.
+ */
+struct MgrSession : public RefCountedObject {
+  uint64_t global_id = 0;
+  EntityName entity_name;
+
+  // mon caps are suitably generic for mgr
+  MonCap caps;
+
+  MgrSession() : RefCountedObject(0) {}
+  ~MgrSession() override {}
+};
+
+typedef boost::intrusive_ptr<MgrSession> MgrSessionRef;
 
 /**
  * Server used in ceph-mgr to communicate with Ceph daemons like
