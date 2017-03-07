@@ -497,7 +497,8 @@ struct bluestore_blob_t {
     }
   }
 
-  inline void encode(bufferlist::contiguous_appender& p, uint64_t struct_v) const __attribute__((always_inline)) {
+  BLUESTORE_FORCEINLINE
+  inline void encode(bufferlist::contiguous_appender& p, uint64_t struct_v) const {
 //    assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
