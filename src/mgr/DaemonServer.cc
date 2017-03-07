@@ -127,18 +127,42 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
     return true;
   }
 
+  MgrSessionRef s(new MgrSession);
   AuthCapsInfo caps_info;
-  EntityName name;
-  uint64_t global_id = 0;
 
   is_valid = handler->verify_authorizer(
     cct, monc->rotating_secrets.get(),
     authorizer_data,
-    authorizer_reply, name,
-    global_id, caps_info,
+    authorizer_reply, s->entity_name,
+    s->global_id, caps_info,
     session_key);
 
-  // TODO: invent some caps suitable for ceph-mgr
+  if (is_valid) {
+    if (caps_info.allow_all) {
+      dout(10) << " session " << s << " " << s->entity_name
+	       << " allow_all" << dendl;
+      s->caps.set_allow_all();
+    }
+    if (caps_info.caps.length() > 0) {
+      bufferlist::iterator p = caps_info.caps.begin();
+      string str;
+      try {
+	::decode(str, p);
+      }
+      catch (buffer::error& e) {
+      }
+      bool success = s->caps.parse(str);
+      if (success) {
+	dout(10) << " session " << s << " " << s->entity_name
+		 << " has caps " << s->caps << " '" << str << "'" << dendl;
+      } else {
+	dout(10) << " session " << s << " " << s->entity_name
+		 << " failed to parse caps '" << str << "'" << dendl;
+	is_valid = false;
+      }
+    }
+    con->set_priv(s->get());
+  }
 
   return true;
 }
