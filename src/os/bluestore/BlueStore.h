@@ -562,11 +562,10 @@ public:
     void bound_encode(
       size_t& p,
       uint64_t struct_v,
-      uint64_t sbid,
       bool include_ref_map) const {
       denc(blob, p, struct_v);
       if (blob.is_shared()) {
-        denc(sbid, p);
+        denc(shared_blob->get_sbid(), p);
       }
       if (include_ref_map) {
 	used_in_blob.bound_encode(p);
@@ -575,11 +574,10 @@ public:
     void encode(
       bufferlist::contiguous_appender& p,
       uint64_t struct_v,
-      uint64_t sbid,
       bool include_ref_map) const {
       denc(blob, p, struct_v);
       if (blob.is_shared()) {
-        denc(sbid, p);
+        denc(shared_blob->get_sbid(), p);
       }
       if (include_ref_map) {
 	used_in_blob.encode(p);

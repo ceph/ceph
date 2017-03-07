@@ -2362,7 +2362,6 @@ bool BlueStore::ExtentMap::encode_some(
     p->blob->bound_encode(
       bound,
       struct_v,
-      p->blob->shared_blob->get_sbid(),
       false);
   }
   if (must_reshard) {
@@ -2418,7 +2417,7 @@ bool BlueStore::ExtentMap::encode_some(
       }
       pos = p->logical_end();
       if (include_blob) {
-	p->blob->encode(app, struct_v, p->blob->shared_blob->get_sbid(), false);
+	p->blob->encode(app, struct_v, false);
       }
     }
   }
@@ -2520,7 +2519,7 @@ void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
   denc_varint((uint32_t)0, key_size);
   p += spanning_blob_map.size() * key_size;
   for (const auto& i : spanning_blob_map) {
-    i.second->bound_encode(p, struct_v, i.second->shared_blob->get_sbid(), true);
+    i.second->bound_encode(p, struct_v, true);
   }
 }
 
@@ -2536,7 +2535,7 @@ void BlueStore::ExtentMap::encode_spanning_blobs(
   denc_varint(spanning_blob_map.size(), p);
   for (auto& i : spanning_blob_map) {
     denc_varint(i.second->id, p);
-    i.second->encode(p, struct_v, i.second->shared_blob->get_sbid(), true);
+    i.second->encode(p, struct_v, true);
   }
 }
 
