@@ -9334,8 +9334,8 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
 	r = pgbackend->objects_get_attr(oid.get_head(), SS_ATTR, &bv);
       if (r < 0) {
 	// try _snapset
-      if (!(oid.is_snapdir() && !oid_existed))
-	r = pgbackend->objects_get_attr(oid.get_snapdir(), SS_ATTR, &bv);
+	if (!(oid.is_snapdir() && !oid_existed))
+	  r = pgbackend->objects_get_attr(oid.get_snapdir(), SS_ATTR, &bv);
 	if (r < 0 && !can_create)
 	  return NULL;
       }
@@ -9598,9 +9598,31 @@ void ReplicatedPG::failed_push(const list<pg_shard_t> &from, const hobject_t &so
     obc->drop_recovery_read(&blocked_ops);
     requeue_ops(blocked_ops);
   }
+  if (missing_loc.get_locations(soid).empty()) {
+    dout(20) << __func__ << ": " << soid
+	     << " had an empty location list, reconstructing" << dendl;
+    assert(!actingbackfill.empty());
+    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+	 i != actingbackfill.end(); ++i) {
+      pg_shard_t peer = *i;
+      if (!peer_missing[peer].is_missing(soid)) {
+	missing_loc.add_location(soid, peer);
+	dout(20) << __func__ << ": " << soid
+		 << " assumed to be available in " << peer << dendl;
+      }
+    }
+  }
+  for (list<pg_shard_t>::const_iterator i = from.begin();
+       i != from.end(); i++) {
+    dout(20) << __func__ << ": " << soid
+	     << " marked as not available in " << *i
+	     << dendl;
+     missing_loc.remove_location(soid, *i);
+  }
+  /* If we were backfilling, we will retry the push from
+     recover_backfill, and its backfills_in_flight entry will only be
+     cleared when we succeed.  */
   recovering.erase(soid);
-  for (auto&& i : from)
-    missing_loc.remove_location(soid, i);
   dout(0) << __func__ << " " << soid << " from shard " << from
 	  << ", reps on " << missing_loc.get_locations(soid)
 	  << " unfound? " << missing_loc.is_unfound(soid) << dendl;
@@ -10453,6 +10475,21 @@ bool ReplicatedPG::start_recovery_ops(
     // this shouldn't happen!
     // We already checked num_missing() so we must have missing replicas
     osd->clog->error() << info.pgid << " recovery ending with missing replicas\n";
+    set<pg_shard_t>::const_iterator end = actingbackfill.end();
+    set<pg_shard_t>::const_iterator a = actingbackfill.begin();
+    for (; a != end; ++a) {
+      if (*a == get_primary()) continue;
+      pg_shard_t peer = *a;
+      map<pg_shard_t, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
+      if (pm == peer_missing.end()) {
+	continue;
+      }
+      if (pm->second.num_missing()) {
+	dout(10) << __func__ << " osd." << peer << " has "
+		 << pm->second.num_missing() << " missing: "
+		 << pm->second << dendl;
+      }
+    }
     return work_in_progress;
   }
 
@@ -10743,7 +10780,7 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
       const hobject_t soid(p->second);
 
       if (cmp(soid, pi->second.last_backfill, get_sort_bitwise()) > 0) {
-	if (!recovering.count(soid)) {
+	if (!recovering.count(soid) && !backfills_in_flight.count(soid)) {
 	  derr << __func__ << ": object added to missing set for backfill, but "
 	       << "is not in recovering, error!" << dendl;
 	  assert(0);
@@ -10911,6 +10948,29 @@ int ReplicatedPG::recover_backfill(
 	   << dendl;
   }
 
+  bool trim = true;
+  bool retrying = !backfills_in_flight.empty();
+  if (retrying) {
+    /* If we had any errors, arrange for us to retain the information
+       about the range before the first failed object, and to retry
+       it.  */
+    map<hobject_t,eversion_t,hobject_t::Comparator>::iterator p;
+    p = backfill_info.objects.find(*backfills_in_flight.begin());
+    if (p-- == backfill_info.objects.end() ||
+	p == backfill_info.objects.end()) {
+      last_backfill_started = *backfills_in_flight.begin();
+      trim = false;
+      dout(20) << "backfill retry: adjusting last_backfill_started to "
+	       << last_backfill_started
+	       << " and disabling trimming" << dendl;
+    } else {
+      last_backfill_started = MIN_HOBJ(last_backfill_started, p->first,
+				       get_sort_bitwise());
+      dout(20) << "backfill retry: adjusting last_backfill_started to "
+	       << last_backfill_started << dendl;
+    }
+  }
+
   // update our local interval to cope with recent changes
   backfill_info.begin = last_backfill_started;
   update_range(&backfill_info, handle);
@@ -10921,18 +10981,19 @@ int ReplicatedPG::recover_backfill(
   vector<boost::tuple<hobject_t, eversion_t, pg_shard_t> > to_remove;
   set<hobject_t, hobject_t::BitwiseComparator> add_to_stat;
 
-  for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-       i != backfill_targets.end();
-       ++i) {
-    peer_backfill_info[*i].trim_to(
-      MAX_HOBJ(peer_info[*i].last_backfill, last_backfill_started,
-	       get_sort_bitwise()));
+  if (trim) {
+    dout(20) << "trimming backfill interval up to "
+	     << last_backfill_started << dendl;
+    for (set<pg_shard_t>::iterator i = backfill_targets.begin();
+         i != backfill_targets.end();
+	 ++i) {
+      peer_backfill_info[*i].trim_to(
+        MAX_HOBJ(peer_info[*i].last_backfill, last_backfill_started,
+		 get_sort_bitwise()));
+    }
+    backfill_info.trim_to(last_backfill_started);
   }
-  backfill_info.trim_to(last_backfill_started);
 
-  hobject_t backfill_pos = MIN_HOBJ(backfill_info.begin,
-				    earliest_peer_backfill(),
-				    get_sort_bitwise());
   while (ops < max) {
     if (cmp(backfill_info.begin, earliest_peer_backfill(),
 	    get_sort_bitwise()) <= 0 &&
@@ -10942,9 +11003,8 @@ int ReplicatedPG::recover_backfill(
       backfill_info.end = hobject_t::get_max();
       update_range(&backfill_info, handle);
       backfill_info.trim();
+      dout(20) << "resetting and trimming backfill interval" << dendl;
     }
-    backfill_pos = MIN_HOBJ(backfill_info.begin, earliest_peer_backfill(),
-			    get_sort_bitwise());
 
     dout(20) << "   my backfill interval " << backfill_info << dendl;
 
@@ -10986,9 +11046,7 @@ int ReplicatedPG::recover_backfill(
     // Get object within set of peers to operate on and
     // the set of targets for which that object applies.
     hobject_t check = earliest_peer_backfill();
-
     if (cmp(check, backfill_info.begin, get_sort_bitwise()) < 0) {
-
       set<pg_shard_t> check_targets;
       for (set<pg_shard_t>::iterator i = backfill_targets.begin();
 	   i != backfill_targets.end();
@@ -11074,6 +11132,11 @@ int ReplicatedPG::recover_backfill(
 	  to_push.push_back(
 	    boost::tuple<hobject_t, eversion_t, ObjectContextRef, vector<pg_shard_t> >
 	    (backfill_info.begin, obj_v, obc, all_push));
+	  if (retrying && backfills_in_flight.count(backfill_info.begin))
+	    dout(20) << " BACKFILL retrying " << backfill_info.begin
+		     << " with locations "
+		     << missing_loc.get_locations(backfill_info.begin)
+		     << dendl;
 	  // Count all simultaneous pushes of the same object as a single op
 	  ops++;
 	} else {
@@ -11103,8 +11166,9 @@ int ReplicatedPG::recover_backfill(
       }
     }
   }
-  backfill_pos = MIN_HOBJ(backfill_info.begin, earliest_peer_backfill(),
-			  get_sort_bitwise());
+  hobject_t backfill_pos = MIN_HOBJ(backfill_info.begin,
+				    earliest_peer_backfill(),
+				    get_sort_bitwise());
 
   for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = add_to_stat.begin();
        i != add_to_stat.end();
@@ -11127,6 +11191,10 @@ int ReplicatedPG::recover_backfill(
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
   for (unsigned i = 0; i < to_push.size(); ++i) {
     handle.reset_tp_timeout();
+    if (retrying && backfills_in_flight.count(to_push[i].get<0>()))
+      dout(0) << "retrying backfill of " << to_push[i].get<0>()
+	      << " with locations "
+	      << missing_loc.get_locations(to_push[i].get<0>()) << dendl;
     prep_backfill_object_push(to_push[i].get<0>(), to_push[i].get<1>(),
 	    to_push[i].get<2>(), to_push[i].get<3>(), h);
   }
