@@ -1602,10 +1602,16 @@ public:
             *reset_backoff = false; // back off and try again later
             return retcode;
           }
-          for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
-            if (!period_marker.empty() && period_marker < log_iter->id) {
+          for (log_iter = log_entries.begin(); log_iter != log_entries.end() && !done_with_period; ++log_iter) {
+            if (!period_marker.empty() && period_marker <= log_iter->id) {
               done_with_period = true;
-              break;
+              if (period_marker < log_iter->id) {
+                ldout(cct, 10) << "found key=" << log_iter->id
+                    << " past period_marker=" << period_marker << dendl;
+                break;
+              }
+              ldout(cct, 10) << "found key at period_marker=" << period_marker << dendl;
+              // sync this entry, then return control to RGWMetaSyncCR
             }
             if (!mdlog_entry.convert_from(*log_iter)) {
               ldout(sync_env->cct, 0) << __func__ << ":" << __LINE__ << ": ERROR: failed to convert mdlog entry, shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << " ... skipping entry" << dendl;
