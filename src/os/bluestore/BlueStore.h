@@ -428,7 +428,6 @@ public:
   struct Blob {
     MEMPOOL_CLASS_HELPERS();
 
-    std::atomic_int nref = {0};     ///< reference count
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
@@ -442,10 +441,6 @@ public:
     bluestore_blob_use_tracker_t used_in_blob;
 
   public:
-
-    friend void intrusive_ptr_add_ref(Blob *b) { b->get(); }
-    friend void intrusive_ptr_release(Blob *b) { b->put(); }
-
     friend ostream& operator<<(ostream& out, const Blob &b);
 
     const bluestore_blob_use_tracker_t& get_blob_use_tracker() const {
@@ -509,14 +504,6 @@ public:
 
     /// split the blob
     void split(Collection *coll, uint32_t blob_offset, Blob *o);
-
-    void get() {
-      ++nref;
-    }
-    void put() {
-      if (--nref == 0)
-	delete this;
-    }
 
 
 #ifdef CACHE_BLOB_BL
@@ -593,8 +580,7 @@ public:
       bool include_ref_map);
 #endif
   };
-  typedef boost::intrusive_ptr<Blob> BlobRef;
-  typedef mempool::bluestore_meta_other::map<int,BlobRef> blob_map_t;
+  typedef mempool::bluestore_meta_other::map<int,Blob*> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
   typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
@@ -604,7 +590,7 @@ public:
     uint32_t logical_offset = 0;      ///< logical offset
     uint32_t blob_offset = 0;         ///< blob offset
     uint32_t length = 0;              ///< length
-    BlobRef  blob;                    ///< the blob with our data
+    Blob* blob = nullptr;                    ///< the blob with our data
 
     /// ctor for lookup only
     explicit Extent(uint32_t lo) : ExtentBase(), logical_offset(lo) { }
@@ -612,9 +598,8 @@ public:
     explicit Extent() : ExtentBase() {
     }
     /// ctor for general usage
-    Extent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
-      : ExtentBase(),
-        logical_offset(lo), blob_offset(o), length(l) {
+    Extent(uint32_t lo, uint32_t o, uint32_t l, Blob* const b)
+      : logical_offset(lo), blob_offset(o), length(l) {
       assign_blob(b);
     }
     ~Extent() {
@@ -623,8 +608,8 @@ public:
       }
     }
 
-    void assign_blob(const BlobRef& b) {
-      assert(!blob);
+    void assign_blob(Blob* const b) {
+      assert(! blob);
       blob = b;
       blob->shared_blob->get_cache()->add_extent();
     }
@@ -669,14 +654,14 @@ public:
     PExtentVector r;
     bool blob_empty; // flag to track the last removed extent that makes blob
                      // empty - required to update compression stat properly
-    OldExtent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
+    OldExtent(uint32_t lo, uint32_t o, uint32_t l, Blob* const b)
       : e(lo, o, l, b), blob_empty(false) {
     }
     static OldExtent* create(CollectionRef c,
                              uint32_t lo,
 			     uint32_t o,
 			     uint32_t l,
-			     BlobRef& b);
+			     Blob* b);
   };
   typedef boost::intrusive::list<
       OldExtent,
@@ -745,7 +730,7 @@ public:
     void encode_spanning_blobs(bufferlist::contiguous_appender& p);
     void decode_spanning_blobs(bufferptr::iterator& p);
 
-    BlobRef get_spanning_blob(int id) {
+    Blob* get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
       assert(p != spanning_blob_map.end());
       return p->second;
@@ -817,7 +802,7 @@ public:
     extent_map_t::const_iterator seek_lextent(uint64_t offset) const;
 
     /// add a new Extent
-    void add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
+    void add(uint32_t lo, uint32_t o, uint32_t l, Blob* const b) {
       extent_map.insert(*new Extent(lo, o, l, b));
     }
 
@@ -841,11 +826,11 @@ public:
     Extent *set_lextent(CollectionRef &c,
 			uint64_t logical_offset,
 			uint64_t offset, uint64_t length,
-                        BlobRef b,
+                        Blob* b,
 			old_extent_map_t *old_extents);
 
     /// split a blob (and referring extents)
-    BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
+    Blob* split_blob(Blob* lb, uint32_t blob_offset, uint32_t pos);
   };
 
   /// Compressed Blob Garbage collector
@@ -1315,12 +1300,12 @@ public:
     //  open = SharedBlob is instantiated
     //  shared = blob_t shared flag is set; SharedBlob is hashed.
     //  loaded = SharedBlob::shared_blob_t is loaded from kv store
-    void open_shared_blob(uint64_t sbid, BlobRef b);
+    void open_shared_blob(uint64_t sbid, Blob* b);
     void load_shared_blob(SharedBlobRef sb);
-    void make_blob_shared(uint64_t sbid, BlobRef b);
+    void make_blob_shared(uint64_t sbid, Blob* b);
 
-    BlobRef new_blob() {
-      BlobRef b = new Blob();
+    Blob* new_blob(Onode* const onode) {
+      Blob* const b = new Blob();
       b->shared_blob = new SharedBlob(this);
       return b;
     }
@@ -1937,7 +1922,7 @@ private:
 
   void _buffer_cache_write(
     TransContext *txc,
-    BlobRef b,
+    Blob* b,
     uint64_t offset,
     bufferlist& bl,
     unsigned flags) {
@@ -2277,7 +2262,7 @@ private:
 
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
-      BlobRef b;
+      Blob* b;
       uint64_t blob_length;
       uint64_t b_off;
       bufferlist bl;
@@ -2289,7 +2274,7 @@ private:
 
       write_item(
 	uint64_t logical_offs,
-        BlobRef b,
+        Blob* b,
         uint64_t blob_len,
         uint64_t o,
         bufferlist& bl,
@@ -2319,7 +2304,7 @@ private:
     }
     void write(
       uint64_t loffs,
-      BlobRef b,
+      Blob* b,
       uint64_t blob_len,
       uint64_t o,
       bufferlist& bl,
@@ -2339,7 +2324,7 @@ private:
     }
     /// Checks for writes to the same pextent within a blob
     bool has_conflict(
-      BlobRef b,
+      Blob* b,
       uint64_t loffs,
       uint64_t loffs_end,
       uint64_t min_alloc_size);
