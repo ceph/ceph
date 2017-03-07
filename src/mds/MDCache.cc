@@ -180,7 +180,6 @@ MDCache::MDCache(MDSRank *m) :
   }
 
   num_inodes_with_caps = 0;
-  num_caps = 0;
 
   max_dir_commit_size = g_conf->mds_dir_max_commit_size ?
                         (g_conf->mds_dir_max_commit_size << 20) :
@@ -227,7 +226,7 @@ void MDCache::log_stat()
   mds->logger->set(l_mds_inodes_bottom, lru.lru_get_bot());
   mds->logger->set(l_mds_inodes_pin_tail, lru.lru_get_pintail());
   mds->logger->set(l_mds_inodes_with_caps, num_inodes_with_caps);
-  mds->logger->set(l_mds_caps, num_caps);
+  mds->logger->set(l_mds_caps, Capability::count());
 }
 
 
@@ -268,7 +267,7 @@ void MDCache::add_inode(CInode *in)
       base_inodes.insert(in);
   }
 
-  if (get_num_inodes() >
+  if (CInode::count() >
         g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
     exceeded_size_limit = true;
   }
@@ -7351,10 +7350,10 @@ void MDCache::check_memory_usage()
   static MemoryModel::snap baseline = last;
 
   // check client caps
-  int num_inodes = inode_map.size();
+  assert(CInode::count() == inode_map.size());
   float caps_per_inode = 0.0;
-  if (num_inodes)
-    caps_per_inode = (float)num_caps / (float)num_inodes;
+  if (CInode::count())
+    caps_per_inode = (float)Capability::count() / (float)CInode::count();
 
   dout(2) << "check_memory_usage"
 	   << " total " << last.get_total()
@@ -7363,8 +7362,8 @@ void MDCache::check_memory_usage()
 	   << ", malloc " << last.malloc << " mmap " << last.mmap
 	   << ", baseline " << baseline.get_heap()
 	   << ", buffers " << (buffer::get_total_alloc() >> 10)
-	   << ", " << num_inodes_with_caps << " / " << inode_map.size() << " inodes have caps"
-	   << ", " << num_caps << " caps, " << caps_per_inode << " caps per inode"
+	   << ", " << num_inodes_with_caps << " / " << CInode::count() << " inodes have caps"
+	   << ", " << Capability::count() << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
 
   mds->mlogger->set(l_mdm_rss, last.get_rss());
@@ -7383,7 +7382,7 @@ void MDCache::check_memory_usage()
   // now, free any unused pool memory so that our memory usage isn't
   // permanently bloated.
   if (exceeded_size_limit
-      && get_num_inodes() <=
+      && CInode::count() <=
         g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
     // Only do this once we are back in bounds: otherwise the releases would
     // slow down whatever process caused us to exceed bounds to begin with

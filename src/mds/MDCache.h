@@ -170,7 +170,6 @@ public:
   DecayRate decayrate;
 
   int num_inodes_with_caps;
-  int num_caps;
 
   unsigned max_dir_commit_size;
 
@@ -257,11 +256,6 @@ public:
   void discover_path(CDir *base, snapid_t snap, filepath want_path, MDSInternalContextBase *onfinish,
 		     bool want_xlocked=false);
   void kick_discovers(mds_rank_t who);  // after a failure.
-
-
-public:
-  int get_num_inodes() { return inode_map.size(); }
-  int get_num_dentries() { return lru.lru_get_size(); }
 
 
   // -- subtrees --
