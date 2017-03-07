@@ -152,6 +152,7 @@ private:
 
   std::unique_ptr<MonConnection> active_con;
   std::map<entity_addr_t, MonConnection> pending_cons;
+  uint64_t global_id;
 
   EntityName entity_name;
 
@@ -397,7 +398,7 @@ public:
     if (active_con) {
       return active_con->get_global_id();
     } else {
-      return 0;
+      return global_id;
     }
   }
 
