@@ -228,6 +228,10 @@ void MDSRankDispatcher::shutdown()
   // shut down cache
   mdcache->shutdown();
 
+  mds_lock.Unlock();
+  finisher->stop(); // no flushing
+  mds_lock.Lock();
+
   if (objecter->initialized.read())
     objecter->shutdown();
 
@@ -241,7 +245,6 @@ void MDSRankDispatcher::shutdown()
   // MDSDaemon::ms_handle_reset called from Messenger).
   mds_lock.Unlock();
 
-  finisher->stop(); // no flushing
   messenger->shutdown();
 
   mds_lock.Lock();
