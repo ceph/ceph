@@ -440,7 +440,11 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    ENCODE_START(2, 1, bl); // extended, osd-only data
+    uint8_t target_v = 3;
+    if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      target_v = 2;
+    }
+    ENCODE_START(target_v, 1, bl); // extended, osd-only data
     ::encode(new_hb_back_up, bl, features);
     ::encode(new_up_thru, bl);
     ::encode(new_last_clean_interval, bl);
@@ -453,6 +457,10 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ::encode(new_xinfo, bl);
     ::encode(new_hb_front_up, bl, features);
     ::encode(features, bl);         // NOTE: features arg, not the member
+    if (target_v >= 3) {
+      ::encode(new_nearfull_ratio, bl);
+      ::encode(new_full_ratio, bl);
+    }
     ENCODE_FINISH(bl); // osd-only data
   }
 
@@ -630,7 +638,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
   }
 
   {
-    DECODE_START(2, bl); // extended, osd-only data
+    DECODE_START(3, bl); // extended, osd-only data
     ::decode(new_hb_back_up, bl);
     ::decode(new_up_thru, bl);
     ::decode(new_last_clean_interval, bl);
@@ -646,6 +654,13 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
       ::decode(encode_features, bl);
     else
       encode_features = CEPH_FEATURE_PGID64 | CEPH_FEATURE_OSDMAP_ENC;
+    if (struct_v >= 3) {
+      ::decode(new_nearfull_ratio, bl);
+      ::decode(new_full_ratio, bl);
+    } else {
+      new_nearfull_ratio = -1;
+      new_full_ratio = -1;
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -687,6 +702,8 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_stream("modified") << modified;
   f->dump_int("new_pool_max", new_pool_max);
   f->dump_int("new_flags", new_flags);
+  f->dump_float("new_full_ratio", new_full_ratio);
+  f->dump_float("new_nearfull_ratio", new_nearfull_ratio);
 
   if (fullmap.length()) {
     f->open_object_section("full_map");
@@ -948,6 +965,20 @@ int OSDMap::calc_num_osds()
     }
   }
   return num_osd;
+}
+
+void OSDMap::count_full_nearfull_osds(int *full, int *nearfull) const
+{
+  *full = 0;
+  *nearfull = 0;
+  for (int i = 0; i < max_osd; ++i) {
+    if (exists(i) && is_up(i) && is_in(i)) {
+      if (osd_state[i] & CEPH_OSD_FULL)
+	++(*full);
+      else if (osd_state[i] & CEPH_OSD_NEARFULL)
+	++(*nearfull);
+    }
+  }
 }
 
 void OSDMap::get_all_osds(set<int32_t>& ls) const
@@ -1469,6 +1500,13 @@ int OSDMap::apply_incremental(const Incremental &inc)
     cluster_snapshot_epoch = 0;
   }
 
+  if (inc.new_nearfull_ratio >= 0) {
+    nearfull_ratio = inc.new_nearfull_ratio;
+  }
+  if (inc.new_full_ratio >= 0) {
+    full_ratio = inc.new_full_ratio;
+  }
+
   // do new crush map last (after up/down stuff)
   if (inc.crush.length()) {
     bufferlist bl(inc.crush);
@@ -1972,7 +2010,11 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    ENCODE_START(1, 1, bl); // extended, osd-only data
+    uint8_t target_v = 2;
+    if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      target_v = 1;
+    }
+    ENCODE_START(target_v, 1, bl); // extended, osd-only data
     ::encode(osd_addrs->hb_back_addr, bl, features);
     ::encode(osd_info, bl);
     {
@@ -1990,6 +2032,10 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(*osd_uuid, bl);
     ::encode(osd_xinfo, bl);
     ::encode(osd_addrs->hb_front_addr, bl, features);
+    if (target_v >= 2) {
+      ::encode(nearfull_ratio, bl);
+      ::encode(full_ratio, bl);
+    }
     ENCODE_FINISH(bl); // osd-only data
   }
 
@@ -2199,7 +2245,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
   }
 
   {
-    DECODE_START(1, bl); // extended, osd-only data
+    DECODE_START(2, bl); // extended, osd-only data
     ::decode(osd_addrs->hb_back_addr, bl);
     ::decode(osd_info, bl);
     ::decode(blacklist, bl);
@@ -2209,6 +2255,13 @@ void OSDMap::decode(bufferlist::iterator& bl)
     ::decode(*osd_uuid, bl);
     ::decode(osd_xinfo, bl);
     ::decode(osd_addrs->hb_front_addr, bl);
+    if (struct_v >= 2) {
+      ::decode(nearfull_ratio, bl);
+      ::decode(full_ratio, bl);
+    } else {
+      nearfull_ratio = 0;
+      full_ratio = 0;
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -2281,6 +2334,8 @@ void OSDMap::dump(Formatter *f) const
   f->dump_stream("created") << get_created();
   f->dump_stream("modified") << get_modified();
   f->dump_string("flags", get_flag_string());
+  f->dump_float("full_ratio", full_ratio);
+  f->dump_float("nearfull_ratio", nearfull_ratio);
   f->dump_string("cluster_snapshot", get_cluster_snapshot());
   f->dump_int("pool_max", get_pool_max());
   f->dump_int("max_osd", get_max_osd());
@@ -2473,6 +2528,8 @@ void OSDMap::print(ostream& out) const
       << "modified " << get_modified() << "\n";
 
   out << "flags " << get_flag_string() << "\n";
+  out << "full_ratio " << full_ratio << "\n";
+  out << "nearfull_ratio " << nearfull_ratio << "\n";
   if (get_cluster_snapshot().length())
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
   out << "\n";

@@ -3736,6 +3736,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case CEPH_MSG_MON_GET_OSDMAP:
     case CEPH_MSG_POOLOP:
     case MSG_OSD_MARK_ME_DOWN:
+    case MSG_OSD_FULL:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
     case MSG_OSD_ALIVE:

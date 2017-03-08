@@ -60,6 +60,7 @@ using namespace std;
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDFull.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -432,6 +433,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_MARK_ME_DOWN:
     m = new MOSDMarkMeDown();
+    break;
+  case MSG_OSD_FULL:
+    m = new MOSDFull();
     break;
   case MSG_OSD_PING:
     m = new MOSDPing();
