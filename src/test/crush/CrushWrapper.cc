@@ -941,6 +941,158 @@ TEST(CrushWrapper, distance) {
   ASSERT_EQ(1, c.get_common_ancestor_distance(g_ceph_context, 3, p));
 }
 
+TEST(CrushWrapper, remove_unused_root) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "rack");
+  c.set_type_name(3, "root");
+
+  int weight = 1;
+
+  map<string,string> loc;
+  loc["host"] = "b1";
+  loc["rack"] = "r11";
+  loc["root"] = "default";
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  item = 2;
+  loc["host"] = "b2";
+  loc["rack"] = "r12";
+  loc["root"] = "default";
+  c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
+
+  assert(c.add_simple_ruleset("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
+  ASSERT_TRUE(c.name_exists("default"));
+  ASSERT_TRUE(c.name_exists("r11"));
+  ASSERT_TRUE(c.name_exists("r12"));
+  ASSERT_EQ(c.remove_unused_root(c.get_item_id("default")), 0);
+  ASSERT_FALSE(c.name_exists("default"));
+  ASSERT_TRUE(c.name_exists("r11"));
+  ASSERT_FALSE(c.name_exists("r12"));
+}
+
+TEST(CrushWrapper, trim_roots_with_class) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "root");
+
+  int weight = 1;
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  int cl = c.get_or_create_class_id("ssd");
+  c.class_map[item] = cl;
+
+
+  int root_id = c.get_item_id("default");
+  int clone_id;
+  ASSERT_EQ(c.device_class_clone(root_id, cl, &clone_id), 0);
+
+  ASSERT_TRUE(c.name_exists("default"));
+  ASSERT_TRUE(c.name_exists("default~ssd"));
+  c.trim_roots_with_class(); // do nothing because still in use
+  ASSERT_TRUE(c.name_exists("default"));
+  ASSERT_TRUE(c.name_exists("default~ssd"));
+  c.class_bucket.clear();
+  c.trim_roots_with_class(); // do nothing because still in use
+  ASSERT_TRUE(c.name_exists("default"));
+  ASSERT_FALSE(c.name_exists("default~ssd"));
+}
+
+TEST(CrushWrapper, device_class_clone) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "root");
+
+  map<string,string> loc;
+  loc["host"] = "b1";
+  loc["root"] = "default";
+  int weight = 1;
+
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  int cl = c.get_or_create_class_id("ssd");
+  c.class_map[item] = cl;
+
+  int item_no_class = 2;
+  c.insert_item(g_ceph_context, item_no_class, weight, "osd.2", loc);
+
+  c.reweight(g_ceph_context);
+
+  int root_id = c.get_item_id("default");
+  int clone_id;
+  ASSERT_EQ(c.device_class_clone(root_id, cl, &clone_id), 0);
+  ASSERT_TRUE(c.name_exists("default~ssd"));
+  ASSERT_EQ(clone_id, c.get_item_id("default~ssd"));
+  ASSERT_TRUE(c.subtree_contains(clone_id, item));
+  ASSERT_FALSE(c.subtree_contains(clone_id, item_no_class));
+  ASSERT_TRUE(c.subtree_contains(root_id, item_no_class));
+  ASSERT_EQ(c.get_item_weightf(root_id), 2);
+  ASSERT_EQ(c.get_item_weightf(clone_id), 1);
+  // cloning again does nothing and returns the existing one
+  int other_clone_id;
+  ASSERT_EQ(c.device_class_clone(root_id, cl, &other_clone_id), 0);
+  ASSERT_EQ(clone_id, other_clone_id);
+  // invalid arguments
+  ASSERT_EQ(c.device_class_clone(12345, cl, &other_clone_id), -ECHILD);
+  ASSERT_EQ(c.device_class_clone(root_id, 12345, &other_clone_id), -EBADF);
+}
+
+TEST(CrushWrapper, split_id_class) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "root");
+
+  int weight = 1;
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  int class_id = c.get_or_create_class_id("ssd");
+  c.class_map[item] = class_id;
+
+  int item_id = c.get_item_id("default");
+  int clone_id;
+  ASSERT_EQ(c.device_class_clone(item_id, class_id, &clone_id), 0);
+  int retrieved_item_id;
+  int retrieved_class_id;
+  ASSERT_EQ(c.split_id_class(clone_id, &retrieved_item_id, &retrieved_class_id), 0);
+  ASSERT_EQ(item_id, retrieved_item_id);
+  ASSERT_EQ(class_id, retrieved_class_id);
+
+  ASSERT_EQ(c.split_id_class(item_id, &retrieved_item_id, &retrieved_class_id), 0);
+  ASSERT_EQ(item_id, retrieved_item_id);
+  ASSERT_EQ(-1, retrieved_class_id);
+}
+
+TEST(CrushWrapper, populate_and_cleanup_classes) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "root");
+
+  int weight = 1;
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  int class_id = c.get_or_create_class_id("ssd");
+  c.class_map[item] = class_id;
+
+  ASSERT_EQ(c.populate_classes(), 0);
+
+  ASSERT_TRUE(c.name_exists("default~ssd"));
+
+  c.class_bucket.clear();
+  ASSERT_EQ(c.cleanup_classes(), 0);
+  ASSERT_FALSE(c.name_exists("default~ssd"));
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
@@ -954,13 +1106,3 @@ int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-
-/*
- * Local Variables:
- * compile-command: "cd ../.. ; make -j4 unittest_crush_wrapper && 
- *    valgrind \
- *    --max-stackframe=20000000 --tool=memcheck \
- *    ./unittest_crush_wrapper --log-to-stderr=true --debug-crush=20 \
- *        # --gtest_filter=CrushWrapper.insert_item"
- * End:
- */

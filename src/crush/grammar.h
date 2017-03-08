@@ -108,23 +108,23 @@ struct crush_grammar : public grammar<crush_grammar>
       tunable = str_p("tunable") >> name >> posint;
 
       // devices
-      device = str_p("device") >> posint >> name;
+      device = str_p("device") >> posint >> name >> !( str_p("class") >> name );
 
       // bucket types
       bucket_type = str_p("type") >> posint >> name;
 
       // buckets
-      bucket_id = str_p("id") >> negint;
+      bucket_id = str_p("id") >> negint >> !( str_p("class") >> name );
       bucket_alg = str_p("alg") >> name;
       bucket_hash = str_p("hash") >> ( integer |
 				       str_p("rjenkins1") );
       bucket_item = str_p("item") >> name
 				  >> !( str_p("weight") >> real_p )
 				  >> !( str_p("pos") >> posint );
-      bucket = name >> name >> '{' >> !bucket_id >> bucket_alg >> *bucket_hash >> *bucket_item >> '}';
+      bucket = name >> name >> '{' >> *bucket_id >> bucket_alg >> *bucket_hash >> *bucket_item >> '}';
 
       // rules
-      step_take = str_p("take") >> name;
+      step_take = str_p("take") >> name >> !( str_p("class") >> name );
       step_set_choose_tries = str_p("set_choose_tries") >> posint;
       step_set_choose_local_tries = str_p("set_choose_local_tries") >> posint;
       step_set_choose_local_fallback_tries = str_p("set_choose_local_fallback_tries") >> posint;
