@@ -94,6 +94,9 @@ private:
   void send_rollback_objects();
   Context *handle_rollback_objects(int *result);
 
+  Context *send_set_snap_location();
+  Context *handle_set_snap_location(int *result);
+
   Context *send_refresh_object_map();
   Context *handle_refresh_object_map(int *result);
 
