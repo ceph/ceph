@@ -536,8 +536,10 @@ function test_auth()
 
 function test_auth_profiles()
 {
-  ceph auth add client.xx-profile-ro mon 'allow profile read-only'
-  ceph auth add client.xx-profile-rw mon 'allow profile read-write'
+  ceph auth add client.xx-profile-ro mon 'allow profile read-only' \
+       mgr 'allow profile read-only'
+  ceph auth add client.xx-profile-rw mon 'allow profile read-write' \
+       mgr 'allow profile read-write'
   ceph auth add client.xx-profile-rd mon 'allow profile role-definer'
 
   ceph auth export > client.xx.keyring
