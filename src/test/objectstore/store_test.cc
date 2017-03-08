@@ -4292,6 +4292,25 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixNoCsum) {
   do_matrix(m, store, doSyntheticTest);
 }
 
+TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferWAL) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  const char *m[][10] = {
+    { "bluestore_min_alloc_size", "4096", "65536", 0 }, // to be the first!
+    { "max_write", "65536", 0 },
+    { "max_size", "1048576", 0 },
+    { "alignment", "512", 0 },
+    { "bluestore_max_blob_size", "262144", 0 },
+    { "bluestore_compression_mode", "force", "none", 0},
+    { "bluestore_prefer_wal_size", "32768", "0", 0},
+    { "bluestore_sync_wal_apply_hdd", "false", 0},
+    { "bluestore_sync_wal_apply_ssd", "false", 0},
+    { 0 },
+  };
+  do_matrix(m, store, doSyntheticTest);
+}
+
 TEST_P(StoreTest, AttrSynthetic) {
   ObjectStore::Sequencer osr("test");
   MixedGenerator gen(447);
