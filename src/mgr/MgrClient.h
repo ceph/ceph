@@ -63,7 +63,10 @@ protected:
 
   CommandTable<MgrCommand> command_table;
 
-  Context *report_callback;
+  utime_t last_connect_attempt;
+
+  Context *report_callback = nullptr;
+  Context *connect_retry_callback = nullptr;
 
   // If provided, use this to compose an MPGStats to send with
   // our reports (hook for use by OSD)
