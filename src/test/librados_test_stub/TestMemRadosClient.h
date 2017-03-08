@@ -67,25 +67,25 @@ public:
 
   TestMemRadosClient(CephContext *cct);
 
-  virtual TestIoCtxImpl *create_ioctx(int64_t pool_id,
-                                      const std::string &pool_name);
+  TestIoCtxImpl *create_ioctx(int64_t pool_id,
+                                      const std::string &pool_name) override;
 
-  virtual void object_list(int64_t pool_id, 
-			   std::list<librados::TestRadosClient::Object> *list);
+  void object_list(int64_t pool_id, 
+			   std::list<librados::TestRadosClient::Object> *list) override;
 
-  virtual int pool_create(const std::string &pool_name);
-  virtual int pool_delete(const std::string &pool_name);
-  virtual int pool_get_base_tier(int64_t pool_id, int64_t* base_tier);
-  virtual int pool_list(std::list<std::pair<int64_t, std::string> >& v);
-  virtual int64_t pool_lookup(const std::string &name);
-  virtual int pool_reverse_lookup(int64_t id, std::string *name);
+  int pool_create(const std::string &pool_name) override;
+  int pool_delete(const std::string &pool_name) override;
+  int pool_get_base_tier(int64_t pool_id, int64_t* base_tier) override;
+  int pool_list(std::list<std::pair<int64_t, std::string> >& v) override;
+  int64_t pool_lookup(const std::string &name) override;
+  int pool_reverse_lookup(int64_t id, std::string *name) override;
 
-  virtual int watch_flush();
+  int watch_flush() override;
 
-  virtual int blacklist_add(const std::string& client_address,
-			    uint32_t expire_seconds);
+  int blacklist_add(const std::string& client_address,
+			    uint32_t expire_seconds) override;
 protected:
-  ~TestMemRadosClient();
+  ~TestMemRadosClient() override;
 
   Pool *get_pool(const std::string &pool_name);
 

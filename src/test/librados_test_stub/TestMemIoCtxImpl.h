@@ -15,50 +15,51 @@ public:
   TestMemIoCtxImpl(TestMemRadosClient *client, int64_t m_pool_id,
                    const std::string& pool_name,
                    TestMemRadosClient::Pool *pool);
-  virtual ~TestMemIoCtxImpl();
+  ~TestMemIoCtxImpl() override;
 
-  virtual TestIoCtxImpl *clone();
+  TestIoCtxImpl *clone() override;
 
-  virtual int aio_remove(const std::string& oid, AioCompletionImpl *c);
+  int aio_remove(const std::string& oid, AioCompletionImpl *c) override;
 
-  virtual int append(const std::string& oid, const bufferlist &bl,
-                     const SnapContext &snapc);
-  virtual int assert_exists(const std::string &oid);
+  int append(const std::string& oid, const bufferlist &bl,
+             const SnapContext &snapc) override;
 
-  virtual int create(const std::string& oid, bool exclusive);
-  virtual int list_snaps(const std::string& o, snap_set_t *out_snaps);
-  virtual int omap_get_vals(const std::string& oid,
-                            const std::string& start_after,
-                            const std::string &filter_prefix,
-                            uint64_t max_return,
-                            std::map<std::string, bufferlist> *out_vals);
-  virtual int omap_rm_keys(const std::string& oid,
-                           const std::set<std::string>& keys);
-  virtual int omap_set(const std::string& oid, const std::map<std::string,
-                       bufferlist> &map);
-  virtual int read(const std::string& oid, size_t len, uint64_t off,
-                   bufferlist *bl);
-  virtual int remove(const std::string& oid, const SnapContext &snapc);
-  virtual int selfmanaged_snap_create(uint64_t *snapid);
-  virtual int selfmanaged_snap_remove(uint64_t snapid);
-  virtual int selfmanaged_snap_rollback(const std::string& oid,
-                                        uint64_t snapid);
-  virtual int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
-                          std::map<uint64_t,uint64_t> *m, bufferlist *data_bl);
-  virtual int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
-  virtual int truncate(const std::string& oid, uint64_t size,
-                       const SnapContext &snapc);
-  virtual int write(const std::string& oid, bufferlist& bl, size_t len,
-                    uint64_t off, const SnapContext &snapc);
-  virtual int write_full(const std::string& oid, bufferlist& bl,
-                         const SnapContext &snapc);
-  virtual int writesame(const std::string& oid, bufferlist& bl, size_t len,
-                        uint64_t off, const SnapContext &snapc);
-  virtual int xattr_get(const std::string& oid,
-                        std::map<std::string, bufferlist>* attrset);
-  virtual int xattr_set(const std::string& oid, const std::string &name,
-                        bufferlist& bl);
-  virtual int zero(const std::string& oid, uint64_t off, uint64_t len);
+  int assert_exists(const std::string &oid) override;
+
+  int create(const std::string& oid, bool exclusive) override;
+  int list_snaps(const std::string& o, snap_set_t *out_snaps) override;
+  int omap_get_vals(const std::string& oid,
+                    const std::string& start_after,
+                    const std::string &filter_prefix,
+                    uint64_t max_return,
+                    std::map<std::string, bufferlist> *out_vals) override;
+  int omap_rm_keys(const std::string& oid,
+                   const std::set<std::string>& keys) override;
+  int omap_set(const std::string& oid, const std::map<std::string,
+               bufferlist> &map) override;
+  int read(const std::string& oid, size_t len, uint64_t off,
+           bufferlist *bl) override;
+  int remove(const std::string& oid, const SnapContext &snapc) override;
+  int selfmanaged_snap_create(uint64_t *snapid) override;
+  int selfmanaged_snap_remove(uint64_t snapid) override;
+  int selfmanaged_snap_rollback(const std::string& oid,
+                                        uint64_t snapid) override;
+  int sparse_read(const std::string& oid, uint64_t off, uint64_t len,
+                          std::map<uint64_t,uint64_t> *m, bufferlist *data_bl) override;
+  int stat(const std::string& oid, uint64_t *psize, time_t *pmtime) override;
+  int truncate(const std::string& oid, uint64_t size,
+                       const SnapContext &snapc) override;
+  int write(const std::string& oid, bufferlist& bl, size_t len,
+                    uint64_t off, const SnapContext &snapc) override;
+  int write_full(const std::string& oid, bufferlist& bl,
+                         const SnapContext &snapc) override;
+  int writesame(const std::string& oid, bufferlist& bl, size_t len,
+                        uint64_t off, const SnapContext &snapc) override;
+  int xattr_get(const std::string& oid,
+                        std::map<std::string, bufferlist>* attrset) override;
+  int xattr_set(const std::string& oid, const std::string &name,
+                        bufferlist& bl) override;
+  int zero(const std::string& oid, uint64_t off, uint64_t len) override;
 
 protected:
   TestMemRadosClient::Pool *get_pool() {

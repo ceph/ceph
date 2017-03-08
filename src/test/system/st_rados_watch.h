@@ -41,8 +41,8 @@ public:
 	       int watch_retcode,
 	       const std::string &pool_name,
 	       const std::string &obj_name);
-  ~StRadosWatch();
-  virtual int run();
+  ~StRadosWatch() override;
+  int run() override;
 private:
   CrossProcessSem *m_setup_sem;
   CrossProcessSem *m_watch_sem;

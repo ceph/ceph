@@ -167,7 +167,7 @@ public:
   PausyAsyncMap() : lock("PausyAsyncMap"), doer(this) {
     doer.create("doer");
   }
-  ~PausyAsyncMap() {
+  ~PausyAsyncMap() override {
     doer.join();
   }
   int get_keys(
