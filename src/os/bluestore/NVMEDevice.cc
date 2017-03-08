@@ -146,7 +146,7 @@ class SharedDriverData {
   std::string sn;
   spdk_nvme_ctrlr *ctrlr;
   spdk_nvme_ns *ns;
-  struct spdk_nvme_qpair *qpair;
+  struct spdk_nvme_qpair *qpair[RTE_MAX_LCORE];
   std::function<void ()> run_func;
 
   uint64_t block_size = 0;
@@ -158,8 +158,11 @@ class SharedDriverData {
   bool aio_stop = false;
   void _aio_thread();
   void _aio_start() {
-    int r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&run_func), id);
-    assert(r == 0);
+    int i;
+    /* call event_work_fn on each slave lcore */
+    RTE_LCORE_FOREACH_SLAVE(i) {
+	rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&run_func), i);
+    }
   }
   void _aio_stop() {
     {
@@ -167,8 +170,7 @@ class SharedDriverData {
       aio_stop = true;
       queue_cond.Signal();
     }
-    int r = rte_eal_wait_lcore(id);
-    assert(r == 0);
+    rte_eal_mp_wait_lcore();
     aio_stop = false;
   }
   std::atomic_bool queue_empty;
@@ -201,8 +203,6 @@ class SharedDriverData {
     sector_size = spdk_nvme_ns_get_sector_size(ns);
     block_size = std::max(CEPH_PAGE_SIZE, sector_size);
     size = ((uint64_t)sector_size) * spdk_nvme_ns_get_num_sectors(ns);
-    qpair = spdk_nvme_ctrlr_alloc_io_qpair(c, SPDK_NVME_QPRIO_URGENT);
-
     PerfCountersBuilder b(g_ceph_context, string("NVMEDevice-AIOThread-"+stringify(this)),
                           l_bluestore_nvmedevice_first, l_bluestore_nvmedevice_last);
     b.add_time_avg(l_bluestore_nvmedevice_aio_write_lat, "aio_write_lat", "Average write completing latency");
@@ -220,9 +220,13 @@ class SharedDriverData {
   }
   ~SharedDriverData() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
-    if (!qpair) {
-      spdk_nvme_ctrlr_free_io_qpair(qpair); 
+    uint32_t i;
+    for (i = 0; i< RTE_MAX_LCORE; i++) {
+        if (qpair[i]) {
+            spdk_nvme_ctrlr_free_io_qpair(qpair[i]);
+        }
     }
+
     delete logger;
   }
 
@@ -369,6 +373,7 @@ static int alloc_buf_from_pool(Task *t, bool write)
 
 void SharedDriverData::_aio_thread()
 {
+  uint32_t i;
   dout(1) << __func__ << " start" << dendl;
 
   if (data_buf_mempool.empty()) {
@@ -382,6 +387,12 @@ void SharedDriverData::_aio_thread()
     }
   }
 
+  i = rte_lcore_id();
+  if(!qpair[i]) {
+      qpair[i] = spdk_nvme_ctrlr_alloc_io_qpair(ctrlr, SPDK_NVME_QPRIO_URGENT);
+      assert(qpair[i] != NULL);
+  }
+
   Task *t = nullptr;
   int r = 0;
   uint64_t lba_off, lba_count;
@@ -392,7 +403,7 @@ void SharedDriverData::_aio_thread()
  again:
     dout(40) << __func__ << " polling" << dendl;
     if (inflight) {
-      if (!spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion)) {
+      if (!spdk_nvme_qpair_process_completions(qpair[i], g_conf->bluestore_spdk_max_io_completion)) {
         dout(30) << __func__ << " idle, have a pause" << dendl;
         _mm_pause();
       }
@@ -412,7 +423,7 @@ void SharedDriverData::_aio_thread()
           }
 
           r = spdk_nvme_ns_cmd_writev(
-              ns, qpair, lba_off, lba_count, io_complete, t, 0,
+              ns, qpair[i], lba_off, lba_count, io_complete, t, 0,
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
@@ -436,7 +447,7 @@ void SharedDriverData::_aio_thread()
           }
 
           r = spdk_nvme_ns_cmd_readv(
-              ns, qpair, lba_off, lba_count, io_complete, t, 0,
+              ns, qpair[i], lba_off, lba_count, io_complete, t, 0,
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
             derr << __func__ << " failed to read" << dendl;
@@ -455,7 +466,7 @@ void SharedDriverData::_aio_thread()
         case IOCommand::FLUSH_COMMAND:
         {
           dout(20) << __func__ << " flush command issueed " << dendl;
-          r = spdk_nvme_ns_cmd_flush(ns, qpair, io_complete, t);
+          r = spdk_nvme_ns_cmd_flush(ns, qpair[i], io_complete, t);
           if (r < 0) {
             derr << __func__ << " failed to flush" << dendl;
             t->return_code = r;
