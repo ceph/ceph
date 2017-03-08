@@ -52,12 +52,12 @@ class MOSDPGNotify : public Message {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:
-  ~MOSDPGNotify() {}
+  ~MOSDPGNotify() override {}
 
 public:  
-  const char *get_type_name() const { return "PGnot"; }
+  const char *get_type_name() const override { return "PGnot"; }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     // Use query_epoch for first entry for backwards compatibility
     epoch_t query_epoch = epoch;
     if (pg_list.size())
@@ -97,7 +97,7 @@ public:
       ::encode(p->first.to, payload);
     }
   }
-  void decode_payload() {
+  void decode_payload() override {
     epoch_t query_epoch;
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
@@ -144,7 +144,7 @@ public:
       }
     }
   }
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "pg_notify(";
     for (vector<pair<pg_notify_t,pg_interval_map_t> >::const_iterator i = pg_list.begin();
          i != pg_list.end();

@@ -27,19 +27,19 @@ struct MRemoveSnaps : public PaxosServiceMessage {
     snaps.swap(s);
   }
 private:
-  ~MRemoveSnaps() {}
+  ~MRemoveSnaps() override {}
 
 public:
-  const char *get_type_name() const { return "remove_snaps"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "remove_snaps"; }
+  void print(ostream& out) const override {
     out << "remove_snaps(" << snaps << " v" << version << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(snaps, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(snaps, p);

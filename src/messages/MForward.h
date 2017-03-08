@@ -59,7 +59,7 @@ struct MForward : public Message {
     msg = (PaxosServiceMessage*)m->get();
   }
 private:
-  ~MForward() {
+  ~MForward() override {
     if (msg) {
       // message was unclaimed
       msg->put();
@@ -68,7 +68,7 @@ private:
   }
 
 public:
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(tid, payload);
     ::encode(client, payload, features);
     ::encode(client_caps, payload, features);
@@ -85,7 +85,7 @@ public:
     ::encode(entity_name, payload);
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(tid, p);
     ::decode(client, p);
@@ -116,8 +116,8 @@ public:
     return m;
   }
 
-  const char *get_type_name() const { return "forward"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "forward"; }
+  void print(ostream& o) const override {
     o << "forward(";
     if (msg) {
       o << *msg;

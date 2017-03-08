@@ -43,12 +43,12 @@ public:
 
   MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
 private:
-  ~MMDSResolve() {}
+  ~MMDSResolve() override {}
 
 public:
-  const char *get_type_name() const { return "mds_resolve"; }
+  const char *get_type_name() const override { return "mds_resolve"; }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "mds_resolve(" << subtrees.size()
 	<< "+" << ambiguous_imports.size()
 	<< " subtrees +" << slave_requests.size() << " slave requests)";
@@ -73,12 +73,12 @@ public:
     slave_requests[reqid].inode_caps.claim(bl);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(subtrees, payload);
     ::encode(ambiguous_imports, payload);
     ::encode(slave_requests, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(subtrees, p);
     ::decode(ambiguous_imports, p);

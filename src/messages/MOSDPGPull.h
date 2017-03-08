@@ -57,11 +57,11 @@ public:
     }
   }
 
-  int get_cost() const {
+  int get_cost() const override {
     return cost;
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid.pgid, p);
     ::decode(map_epoch, p);
@@ -76,7 +76,7 @@ public:
     }
   }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(pgid.pgid, payload);
     ::encode(map_epoch, payload);
     ::encode(pulls, payload, features);
@@ -85,9 +85,9 @@ public:
     ::encode(from, payload);
   }
 
-  const char *get_type_name() const { return "MOSDPGPull"; }
+  const char *get_type_name() const override { return "MOSDPGPull"; }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "MOSDPGPull(" << pgid
 	<< " e" << map_epoch
 	<< " cost " << cost

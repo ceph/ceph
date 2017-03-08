@@ -52,11 +52,11 @@ struct MClientLease : public Message {
     h.duration_ms = 0;
   }
 private:
-  ~MClientLease() {}
+  ~MClientLease() override {}
 
 public:
-  const char *get_type_name() const { return "client_lease"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "client_lease"; }
+  void print(ostream& out) const override {
     out << "client_lease(a=" << ceph_lease_op_name(get_action())
 	<< " seq " << get_seq()
 	<< " mask " << get_mask();
@@ -68,12 +68,12 @@ public:
     out << ")";
   }
   
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(h, p);
     ::decode(dname, p);
   }
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(h, payload);
     ::encode(dname, payload);
   }

@@ -27,7 +27,7 @@ public:
   epoch_t map_epoch;
   ECSubWrite op;
 
-  int get_cost() const {
+  int get_cost() const override {
     return 0;
   }
   epoch_t get_map_epoch() const override {
@@ -45,29 +45,29 @@ public:
     op.claim(in_op);
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid, p);
     ::decode(map_epoch, p);
     ::decode(op, p);
   }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(pgid, payload);
     ::encode(map_epoch, payload);
     ::encode(op, payload);
   }
 
-  const char *get_type_name() const { return "MOSDECSubOpWrite"; }
+  const char *get_type_name() const override { return "MOSDECSubOpWrite"; }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "MOSDECSubOpWrite(" << pgid
 	<< " " << map_epoch
 	<< " " << op;
     out << ")";
   }
 
-  void clear_buffers() {
+  void clear_buffers() override {
     op.t = ObjectStore::Transaction();
     op.log_entries.clear();
   }

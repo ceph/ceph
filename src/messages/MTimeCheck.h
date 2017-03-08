@@ -40,10 +40,10 @@ struct MTimeCheck : public Message
   { }
 
 private:
-  ~MTimeCheck() { }
+  ~MTimeCheck() override { }
 
 public:
-  const char *get_type_name() const { return "time_check"; }
+  const char *get_type_name() const override { return "time_check"; }
   const char *get_op_name() const {
     switch (op) {
     case OP_PING: return "ping";
@@ -52,7 +52,7 @@ public:
     }
     return "???";
   }
-  void print(ostream &o) const {
+  void print(ostream &o) const override {
     o << "time_check( " << get_op_name()
       << " e " << epoch << " r " << round;
     if (op == OP_PONG) {
@@ -64,7 +64,7 @@ public:
     o << " )";
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(epoch, p);
@@ -74,7 +74,7 @@ public:
     ::decode(latencies, p);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(op, payload);
     ::encode(epoch, payload);
     ::encode(round, payload);

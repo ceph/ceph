@@ -233,11 +233,11 @@ public:
     head.safe = 1;
   }
 private:
-  ~MClientReply() {}
+  ~MClientReply() override {}
 
 public:
-  const char *get_type_name() const { return "creply"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "creply"; }
+  void print(ostream& o) const override {
     o << "client_reply(???:" << get_tid();
     o << " = " << get_result();
     if (get_result() <= 0) {
@@ -253,7 +253,7 @@ public:
   }
 
   // serialization
-  virtual void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
     ::decode(trace_bl, p);
@@ -261,7 +261,7 @@ public:
     ::decode(snapbl, p);
     assert(p.end());
   }
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(head, payload);
     ::encode(trace_bl, payload);
     ::encode(extra_bl, payload);

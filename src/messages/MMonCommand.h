@@ -32,11 +32,11 @@ class MMonCommand : public PaxosServiceMessage {
   { }
 
 private:
-  ~MMonCommand() {}
+  ~MMonCommand() override {}
 
 public:  
-  const char *get_type_name() const { return "mon_command"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "mon_command"; }
+  void print(ostream& o) const override {
     o << "mon_command(";
     for (unsigned i=0; i<cmd.size(); i++) {
       if (i) o << ' ';
@@ -45,12 +45,12 @@ public:
     o << " v " << version << ")";
   }
   
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(cmd, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

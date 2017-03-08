@@ -28,20 +28,20 @@ class MExportCaps : public Message {
   MExportCaps() :
     Message(MSG_MDS_EXPORTCAPS) {}
 private:
-  ~MExportCaps() {}
+  ~MExportCaps() override {}
 
 public:
-  const char *get_type_name() const { return "export_caps"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "export_caps"; }
+  void print(ostream& o) const override {
     o << "export_caps(" << ino << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(ino, payload);
     ::encode(cap_bl, payload);
     ::encode(client_map, payload, features);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
     ::decode(cap_bl, p);

@@ -51,9 +51,9 @@ public:
       op(op), version(v), num_keys(num_keys)
   { }
 
-  const char *get_type_name() const { return "mon_scrub"; }
+  const char *get_type_name() const override { return "mon_scrub"; }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "mon_scrub(" << get_opname((op_type_t)op);
     out << " v " << version;
     if (op == OP_RESULT)
@@ -63,7 +63,7 @@ public:
     out << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     uint8_t o = op;
     ::encode(o, payload);
     ::encode(version, payload);
@@ -72,7 +72,7 @@ public:
     ::encode(key, payload);
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     uint8_t o;
     ::decode(o, p);

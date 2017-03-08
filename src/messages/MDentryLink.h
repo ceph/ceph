@@ -39,15 +39,15 @@ class MDentryLink : public Message {
     dn(n),
     is_primary(p) {}
 private:
-  ~MDentryLink() {}
+  ~MDentryLink() override {}
 
 public:
-  const char *get_type_name() const { return "dentry_link";}
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "dentry_link";}
+  void print(ostream& o) const override {
     o << "dentry_link(" << dirfrag << " " << dn << ")";
   }
   
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(subtree, p);
     ::decode(dirfrag, p);
@@ -55,7 +55,7 @@ public:
     ::decode(is_primary, p);
     ::decode(bl, p);
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(subtree, payload);
     ::encode(dirfrag, payload);
     ::encode(dn, payload);
