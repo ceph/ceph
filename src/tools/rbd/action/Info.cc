@@ -191,6 +191,33 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
       std::cout << "\tprotected: " << (snap_protected ? "True" : "False")
                 << std::endl;
     }
+  } else {
+    librbd::snap_info_t snap_location;
+    struct timespec timestamp;
+
+    r = image.get_snapshot_location(&snap_location);
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    } else if (r != -ENOENT){
+      image.snap_get_timestamp(snap_location.id, &timestamp);
+      string tt_str = "";
+      if(timestamp.tv_sec != 0) {
+	time_t tt = timestamp.tv_sec;
+	tt_str = ctime(&tt);
+	tt_str = tt_str.substr(0, tt_str.length() - 1);  
+      }
+      if (f) {
+	f->open_object_section("snapshot_location");
+	f->dump_unsigned("id", snap_location.id);
+	f->dump_string("name", snap_location.name);
+	f->dump_unsigned("size", snap_location.size);
+	f->dump_string("timestamp", tt_str);
+	f->close_section();
+      } else {
+	std::cout << "\tsnapshot location: " << snap_location.name << " " << tt_str
+		  << std::endl;
+      }
+    }
   }
 
   if (snap_limit < UINT64_MAX) {
