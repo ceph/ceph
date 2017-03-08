@@ -28,20 +28,20 @@ public:
 
   ESubtreeMap() : LogEvent(EVENT_SUBTREEMAP), expire_pos(0), event_seq(0) { }
   
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "ESubtreeMap " << subtrees.size() << " subtrees " 
 	<< ", " << ambiguous_subtrees.size() << " ambiguous "
 	<< metablob;
   }
 
-  EMetaBlob *get_metablob() { return &metablob; }
+  EMetaBlob *get_metablob() override { return &metablob; }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(bufferlist& bl, uint64_t features) const override;
+  void decode(bufferlist::iterator& bl) override;
+  void dump(Formatter *f) const override;
   static void generate_test_instances(list<ESubtreeMap*>& ls);
 
-  void replay(MDSRank *mds);
+  void replay(MDSRank *mds) override;
 };
 WRITE_CLASS_ENCODER_FEATURES(ESubtreeMap)
 
