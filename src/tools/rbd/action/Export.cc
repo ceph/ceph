@@ -74,7 +74,7 @@ public:
   }
 
 protected:
-  virtual void finish(int r) {
+  void finish(int r) override {
     if (r >= 0) {
       if (m_exists) {
         m_exists = !m_read_data.is_zero();
