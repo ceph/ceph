@@ -32,8 +32,7 @@
 MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_)
     : Dispatcher(cct_), cct(cct_), msgr(msgr_),
       lock("mgrc"),
-      timer(cct_, lock),
-      report_callback(nullptr)
+      timer(cct_, lock)
 {
   assert(cct != nullptr);
 }
@@ -93,33 +92,57 @@ void MgrClient::reconnect()
     }
   }
 
-  if (map.get_available()) {
-    ldout(cct, 4) << "Starting new session with " << map.get_active_addr()
-		  << dendl;
-    entity_inst_t inst;
-    inst.addr = map.get_active_addr();
-    inst.name = entity_name_t::MGR(map.get_active_gid());
-
-    session.reset(new MgrSessionState());
-    session->con = msgr->get_connection(inst);
-
-    // Don't send an open if we're just a client (i.e. doing
-    // command-sending, not stats etc)
-    if (g_conf && !g_conf->name.is_client()) {
-      auto open = new MMgrOpen();
-      open->daemon_name = g_conf->name.get_id();
-      session->con->send_message(open);
-    }
-
-    // resend any pending commands
-    for (const auto &p : command_table.get_commands()) {
-      MCommand *m = p.second.get_message({});
-      assert(session);
-      assert(session->con);
-      session->con->send_message(m);
-    }
-  } else {
+  if (!map.get_available()) {
     ldout(cct, 4) << "No active mgr available yet" << dendl;
+    return;
+  }
+
+  if (last_connect_attempt != utime_t()) {
+    utime_t now = ceph_clock_now();
+    utime_t when = last_connect_attempt;
+    when += cct->_conf->mgr_connect_retry_interval;
+    if (now < when) {
+      if (!connect_retry_callback) {
+	connect_retry_callback = new FunctionContext([this](int r){
+	    connect_retry_callback = nullptr;
+	    reconnect();
+	  });
+	timer.add_event_at(when, connect_retry_callback);
+      }
+      ldout(cct, 4) << "waiting to retry connect until " << when << dendl;
+      return;
+    }
+  }
+
+  if (connect_retry_callback) {
+    timer.cancel_event(connect_retry_callback);
+    connect_retry_callback = nullptr;
+  }
+
+  ldout(cct, 4) << "Starting new session with " << map.get_active_addr()
+		<< dendl;
+  entity_inst_t inst;
+  inst.addr = map.get_active_addr();
+  inst.name = entity_name_t::MGR(map.get_active_gid());
+  last_connect_attempt = ceph_clock_now();
+
+  session.reset(new MgrSessionState());
+  session->con = msgr->get_connection(inst);
+
+  // Don't send an open if we're just a client (i.e. doing
+  // command-sending, not stats etc)
+  if (g_conf && !g_conf->name.is_client()) {
+    auto open = new MMgrOpen();
+    open->daemon_name = g_conf->name.get_id();
+    session->con->send_message(open);
+  }
+
+  // resend any pending commands
+  for (const auto &p : command_table.get_commands()) {
+    MCommand *m = p.second.get_message({});
+    assert(session);
+    assert(session->con);
+    session->con->send_message(m);
   }
 }
 
