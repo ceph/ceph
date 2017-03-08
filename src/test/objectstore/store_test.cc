@@ -1823,7 +1823,7 @@ TEST_P(StoreTest, SmallSkipFront) {
   }
 }
 
-TEST_P(StoreTest, AppendWalVsTailCache) {
+TEST_P(StoreTest, AppendDeferredVsTailCache) {
   ObjectStore::Sequencer osr("test");
   int r;
   coll_t cid;
@@ -1836,7 +1836,7 @@ TEST_P(StoreTest, AppendWalVsTailCache) {
     ASSERT_EQ(r, 0);
   }
   unsigned min_alloc = g_conf->bluestore_min_alloc_size;
-  g_conf->set_val("bluestore_inject_wal_apply_delay", "1.0");
+  g_conf->set_val("bluestore_inject_deferred_apply_delay", "1.0");
   g_ceph_context->_conf->apply_changes(NULL);
   unsigned size = min_alloc / 3;
   bufferptr bpa(size);
@@ -1896,7 +1896,7 @@ TEST_P(StoreTest, AppendWalVsTailCache) {
     r = store->apply_transaction(&osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  g_conf->set_val("bluestore_inject_wal_apply_delay", "0");
+  g_conf->set_val("bluestore_inject_deferred_apply_delay", "0");
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
@@ -4293,7 +4293,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixNoCsum) {
   do_matrix(m, store, doSyntheticTest);
 }
 
-TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferWAL) {
+TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferDeferred) {
   if (string(GetParam()) != "bluestore")
     return;
 
@@ -4304,7 +4304,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferWAL) {
     { "alignment", "512", 0 },
     { "bluestore_max_blob_size", "262144", 0 },
     { "bluestore_compression_mode", "force", "none", 0},
-    { "bluestore_prefer_wal_size", "32768", "0", 0},
+    { "bluestore_prefer_deferred_size", "32768", "0", 0},
     { 0 },
   };
   do_matrix(m, store, doSyntheticTest);
