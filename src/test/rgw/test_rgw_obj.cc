@@ -143,11 +143,71 @@ void test_obj(const string& name, const string& ns, const string& instance)
   delete formatter;
 }
 
+
+void test_from_index_key(const string& name, const string& ns, const string& instance){
+  rgw_bucket b;
+  init_bucket(&b, "test");
+
+  JSONFormatter *formatter = new JSONFormatter(true);
+
+  formatter->open_object_section("test");
+
+  rgw_obj_key ok1(name,instance);
+
+  rgw_obj o(b, ok1);
+  rgw_obj obj1(o);
+
+  if (!instance.empty()) {
+    obj1.set_instance(instance);
+  }
+  if (!ns.empty()) {
+    obj1.set_ns(ns);
+  }
+
+  check_parsed_correctly(obj1, name, ns, instance);
+  encode_json("obj1", obj1, formatter);
+
+  bufferlist bl;
+  ::encode(obj1, bl);
+
+  rgw_obj obj2;
+  ::decode(obj2, bl);
+  check_parsed_correctly(obj2, name, ns, instance);
+
+  encode_json("obj2", obj2, formatter);
+
+  rgw_obj obj3(o);
+  bufferlist bl3;
+  ::encode(obj3, bl3);
+  ::decode(obj3, bl3);
+  encode_json("obj3", obj3, formatter);
+
+  if (!instance.empty()) {
+    obj3.set_instance(instance);
+  }
+  if (!ns.empty()) {
+    obj3.set_ns(ns);
+  }
+  check_parsed_correctly(obj3, name, ns, instance);
+
+  encode_json("obj3-2", obj3, formatter);
+
+  formatter->close_section();
+
+  formatter->flush(cout);
+
+  ASSERT_EQ(obj1, obj2);
+  ASSERT_EQ(obj1, obj3);
+  delete formatter;
+
+}
+
 TEST(TestRGWObj, underscore) {
   test_obj("_obj", "", "");
   test_obj("_obj", "ns", "");
   test_obj("_obj", "", "v1");
   test_obj("_obj", "ns", "v1");
+  test_obj("_obj_","","");
 }
 
 TEST(TestRGWObj, no_underscore) {
@@ -155,5 +215,27 @@ TEST(TestRGWObj, no_underscore) {
   test_obj("obj", "ns", "");
   test_obj("obj", "", "v1");
   test_obj("obj", "ns", "v1");
+  test_obj("obj_","","");
 }
 
+TEST(TestRGWObjKey, underscore){
+  test_from_index_key("_obj_","","");
+  test_from_index_key("_obj_","ns","");
+  test_from_index_key("_obj_","","v1");
+  test_from_index_key("_obj_","ns","v1");
+  test_from_index_key("_obj","","");
+  test_from_index_key("_obj","ns","");
+  test_from_index_key("_obj","","v1");
+  test_from_index_key("_obj","ns","v1");
+}
+
+TEST(TestRGWObjKey, end_underscore){
+  test_from_index_key("obj_","","");
+  test_from_index_key("obj_","ns","");
+  test_from_index_key("obj_","","v1");
+  test_from_index_key("obj_","ns","v1");
+  test_from_index_key("obj","","");
+  test_from_index_key("obj","ns","");
+  test_from_index_key("obj","","v1");
+  test_from_index_key("obj","ns","v1");
+}

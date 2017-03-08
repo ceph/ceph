@@ -1641,7 +1641,12 @@ public:
       return;
     }
 
-    init_ns(b, key.name.substr(pos + 1), key.name.substr(1, pos -1));
+    // skip setting ns if object itself ends with an underscore
+    if (pos != (ssize_t)(key.name.size() -1)){
+      init_ns(b, key.name.substr(pos + 1), key.name.substr(1, pos -1));
+    } else {
+      init(b, key.name);
+    }
     set_instance(key.instance);
   }
 
