@@ -4814,7 +4814,7 @@ int BlueStore::umount()
   assert(mounted);
   dout(1) << __func__ << dendl;
 
-  _sync();
+  _osr_drain_all();
 
   mempool_thread.shutdown();
 
@@ -5406,23 +5406,6 @@ int BlueStore::fsck(bool deep)
   dout(1) << __func__ << " finish with " << errors << " errors in "
 	  << duration << " seconds" << dendl;
   return errors;
-}
-
-void BlueStore::_sync()
-{
-  dout(10) << __func__ << dendl;
-
-  // flush aios in flight
-  bdev->flush();
-
-  std::unique_lock<std::mutex> l(kv_lock);
-  while (!kv_committing.empty() ||
-	 !kv_queue.empty()) {
-    dout(20) << " waiting for kv to commit" << dendl;
-    kv_sync_cond.wait(l);
-  }
-
-  dout(10) << __func__ << " done" << dendl;
 }
 
 int BlueStore::statfs(struct store_statfs_t *buf)
@@ -7510,6 +7493,26 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
 
   txc->allocated.clear();
   txc->released.clear();
+}
+
+void BlueStore::_osr_drain_all()
+{
+  dout(10) << __func__ << dendl;
+
+  // WARNING: we make a (somewhat sloppy) assumption here that
+  // no OpSequencers will be created or destroyed for the duration
+  // of this method.
+  set<OpSequencer*> s;
+  {
+    std::lock_guard<std::mutex> l(osr_lock);
+    s = osr_set;
+  }
+  for (auto osr : s) {
+    dout(20) << __func__ << " flush " << osr << dendl;
+    osr->drain();
+  }
+
+  dout(10) << __func__ << " done" << dendl;
 }
 
 void BlueStore::_kv_sync_thread()

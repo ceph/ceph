@@ -1889,6 +1889,7 @@ private:
   void _txc_release_alloc(TransContext *txc);
 
   void _osr_reap_done(OpSequencer *osr);
+  void _osr_drain_all();
 
   void _kv_sync_thread();
   void _kv_stop() {
@@ -1974,7 +1975,6 @@ public:
 
   int mount() override;
   int umount() override;
-  void _sync();
 
   int fsck(bool deep) override;
 
