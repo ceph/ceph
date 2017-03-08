@@ -474,19 +474,10 @@ int Pipe::accept()
 
     // require signatures for cephx?
     if (connect.authorizer_protocol == CEPH_AUTH_CEPHX) {
-      if (peer_type == CEPH_ENTITY_TYPE_OSD ||
-	  peer_type == CEPH_ENTITY_TYPE_MDS) {
-	if (msgr->cct->_conf->cephx_require_signatures ||
-	    msgr->cct->_conf->cephx_cluster_require_signatures) {
-	  ldout(msgr->cct,10) << "using cephx, requiring MSG_AUTH feature bit for cluster" << dendl;
-	  policy.features_required |= CEPH_FEATURE_MSG_AUTH;
-	}
-      } else {
-	if (msgr->cct->_conf->cephx_require_signatures ||
-	    msgr->cct->_conf->cephx_service_require_signatures) {
-	  ldout(msgr->cct,10) << "using cephx, requiring MSG_AUTH feature bit for service" << dendl;
-	  policy.features_required |= CEPH_FEATURE_MSG_AUTH;
-	}
+      if (msgr->cct->_conf->cephx_require_signatures ||
+	  msgr->cct->_conf->cephx_cluster_require_signatures) {
+	ldout(msgr->cct,10) << "using cephx, requiring MSG_AUTH feature bit for cluster" << dendl;
+	policy.features_required |= CEPH_FEATURE_MSG_AUTH;
       }
     }
 
