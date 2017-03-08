@@ -3392,8 +3392,13 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
 
   // write
   r = bl.write_fd(**fd, offset);
-  if (r == 0)
-    r = bl.length();
+  if (r < 0) {
+    derr << __func__ << " write_fd on " << cid << "/" << oid
+         << " error: " << cpp_strerror(r) << dendl;
+    lfn_close(fd);
+    goto out;
+  }
+  r = bl.length();
 
   if (r >= 0 && m_filestore_sloppy_crc) {
     int rc = backend->_crc_update_write(**fd, offset, len, bl);
