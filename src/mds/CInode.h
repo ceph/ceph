@@ -723,6 +723,7 @@ public:
 
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
+  const CDentry* get_parent_dn() const { return parent; }
   const CDentry* get_projected_parent_dn() const { return !projected_parent.empty() ? projected_parent.back() : parent; }
   CDentry* get_projected_parent_dn() { return !projected_parent.empty() ? projected_parent.back() : parent; }
   CDir *get_parent_dir();
@@ -911,7 +912,7 @@ public:
   // -- snap --
   void open_snaprealm(bool no_split=false);
   void close_snaprealm(bool no_join=false);
-  SnapRealm *find_snaprealm();
+  SnapRealm *find_snaprealm() const;
   void encode_snap(bufferlist& bl);
   void decode_snap(bufferlist::iterator& p);
 

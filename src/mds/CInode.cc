@@ -2603,9 +2603,9 @@ void CInode::close_snaprealm(bool nojoin)
   }
 }
 
-SnapRealm *CInode::find_snaprealm()
+SnapRealm *CInode::find_snaprealm() const
 {
-  CInode *cur = this;
+  const CInode *cur = this;
   while (!cur->snaprealm) {
     if (cur->get_parent_dn())
       cur = cur->get_parent_dn()->get_dir()->get_inode();

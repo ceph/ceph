@@ -207,6 +207,7 @@ private:
   // me
   CephContext *cct;
   std::mutex lock;
+  const std::string name;
   typedef std::lock_guard<std::mutex> lock_guard;
   typedef std::unique_lock<std::mutex> unique_lock;
   Finisher *finisher;
@@ -224,8 +225,6 @@ private:
 
   PerfCounters *logger;
   int logger_key_lat;
-
-  SafeTimer *timer;
 
   class C_DelayFlush;
   C_DelayFlush *delay_flush_event;
@@ -379,15 +378,15 @@ private:
 			 // CEPH_OSD_OP_FADIVSE_*
 
 public:
-  Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj,
-	    PerfCounters *l, int lkey, SafeTimer *tim, Finisher *f) :
+  Journaler(const std::string &name_, inodeno_t ino_, int64_t pool,
+      const char *mag, Objecter *obj, PerfCounters *l, int lkey, Finisher *f) :
     last_committed(mag),
-    cct(obj->cct), finisher(f), last_written(mag),
+    cct(obj->cct), name(name_), finisher(f), last_written(mag),
     ino(ino_), pg_pool(pool), readonly(true),
     stream_format(-1), journal_stream(-1),
     magic(mag),
     objecter(obj), filer(objecter, f), logger(l), logger_key_lat(lkey),
-    timer(tim), delay_flush_event(0),
+    delay_flush_event(0),
     state(STATE_UNDEF), error(0),
     prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0), safe_pos(0),
     waiting_for_zero(false),
@@ -440,6 +439,7 @@ public:
   void wait_for_flush(Context *onsafe = 0);
   void flush(Context *onsafe = 0);
   void wait_for_readable(Context *onfinish);
+  bool have_waiter() const;
 
   // Synchronous setters
   // ===================
@@ -466,6 +466,13 @@ public:
       lock_guard l(lock);
       trimming_pos = trimmed_pos = p;
   }
+
+  bool _write_head_needed();
+  bool write_head_needed() {
+    lock_guard l(lock);
+    return _write_head_needed();
+  }
+
 
   void trim();
   void trim_tail() {
