@@ -70,7 +70,7 @@ public:
       rx_buffers_version(0) {
   }
 
-  virtual ~Connection() {
+  ~Connection() override {
     //generic_dout(0) << "~Connection " << this << dendl;
     if (priv) {
       //generic_dout(0) << "~Connection " << this << " dropping priv " << priv << dendl;

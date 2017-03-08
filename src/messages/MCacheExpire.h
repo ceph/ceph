@@ -65,10 +65,10 @@ public:
     Message(MSG_MDS_CACHEEXPIRE),
     from(f) { }
 private:
-  ~MCacheExpire() {}
+  ~MCacheExpire() override {}
 
 public:
-  virtual const char *get_type_name() const { return "cache_expire";}
+  const char *get_type_name() const override { return "cache_expire";}
   
   void add_inode(dirfrag_t r, vinodeno_t vino, unsigned nonce) {
     realms[r].inodes[vino] = nonce;
@@ -87,13 +87,13 @@ public:
       realms[df].merge(r);
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(from, p);
     ::decode(realms, p);
   }
     
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(from, payload);
     ::encode(realms, payload);
   }

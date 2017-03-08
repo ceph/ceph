@@ -70,11 +70,11 @@ public:
     return pgid;
   }
 
-  int get_cost() const {
+  int get_cost() const override {
     return data.length();
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     p = payload.begin();
     // splitted to partial and final
     ::decode(map_epoch, p);
@@ -103,7 +103,7 @@ public:
     final_decode_needed = false;
   }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid, payload);
@@ -140,11 +140,11 @@ public:
     set_tid(rtid);
   }
 private:
-  ~MOSDRepOp() {}
+  ~MOSDRepOp() override {}
 
 public:
-  const char *get_type_name() const { return "osd_repop"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_repop"; }
+  void print(ostream& out) const override {
     out << "osd_repop(" << reqid
           << " " << pgid;
     if (!final_decode_needed) {

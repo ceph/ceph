@@ -188,7 +188,7 @@ public:
     reqid.inc = inc;
   }
 private:
-  ~MOSDOp() {}
+  ~MOSDOp() override {}
 
 public:
   void set_mtime(utime_t mt) { mtime = mt; }
@@ -243,7 +243,7 @@ public:
   }
 
   // marshalling
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
 
     OSDOp::merge_osd_op_vector_in_data(ops, data);
 
@@ -380,7 +380,7 @@ struct ceph_osd_request_head {
     }
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     assert(partial_decode_needed && final_decode_needed);
     p = payload.begin();
 
@@ -553,12 +553,12 @@ struct ceph_osd_request_head {
     return true;
   }
 
-  void clear_buffers() {
+  void clear_buffers() override {
     ops.clear();
   }
 
-  const char *get_type_name() const { return "osd_op"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_op"; }
+  void print(ostream& out) const override {
     out << "osd_op(";
     if (!partial_decode_needed) {
       out << get_reqid() << ' ';

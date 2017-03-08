@@ -161,7 +161,7 @@ class MMDSBeacon : public PaxosServiceMessage {
     standby_replay(false), mds_features(feat) {
   }
 private:
-  ~MMDSBeacon() {}
+  ~MMDSBeacon() override {}
 
 public:
   uuid_d& get_fsid() { return fsid; }
@@ -170,7 +170,7 @@ public:
   epoch_t get_last_epoch_seen() { return version; }
   MDSMap::DaemonState get_state() { return state; }
   version_t get_seq() { return seq; }
-  const char *get_type_name() const { return "mdsbeacon"; }
+  const char *get_type_name() const override { return "mdsbeacon"; }
   mds_rank_t get_standby_for_rank() { return standby_for_rank; }
   const string& get_standby_for_name() { return standby_for_name; }
   const fs_cluster_id_t& get_standby_for_fscid() { return standby_for_fscid; }
@@ -192,12 +192,12 @@ public:
   const map<string, string>& get_sys_info() const { return sys_info; }
   void set_sys_info(const map<string, string>& i) { sys_info = i; }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "mdsbeacon(" << global_id << "/" << name << " " << ceph_mds_state_name(state) 
 	<< " seq " << seq << " v" << version << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(global_id, payload);
@@ -215,7 +215,7 @@ public:
     ::encode(standby_for_fscid, payload);
     ::encode(standby_replay, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

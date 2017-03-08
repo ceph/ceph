@@ -34,15 +34,15 @@ class MClientRequestForward : public Message {
     header.tid = t;
   }
 private:
-  ~MClientRequestForward() {}
+  ~MClientRequestForward() override {}
 
 public:
   int get_dest_mds() { return dest_mds; }
   int get_num_fwd() { return num_fwd; }
   bool must_resend() { return client_must_resend; }
 
-  const char *get_type_name() const { return "client_request_forward"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "client_request_forward"; }
+  void print(ostream& o) const override {
     o << "client_request_forward(" << get_tid()
       << " to mds." << dest_mds
       << " num_fwd=" << num_fwd
@@ -50,13 +50,13 @@ public:
       << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(dest_mds, payload);
     ::encode(num_fwd, payload);
     ::encode(client_must_resend, payload);
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(dest_mds, p);
     ::decode(num_fwd, p);

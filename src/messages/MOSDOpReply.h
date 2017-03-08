@@ -150,10 +150,10 @@ public:
     }
   }
 private:
-  ~MOSDOpReply() {}
+  ~MOSDOpReply() override {}
 
 public:
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
 
     OSDOp::merge_osd_op_vector_out_data(ops, data);
 
@@ -206,7 +206,7 @@ public:
       }
     }
   }
-  virtual void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
 
     // Always keep here the newest version of decoding order/rule
@@ -297,9 +297,9 @@ public:
     }
   }
 
-  const char *get_type_name() const { return "osd_op_reply"; }
+  const char *get_type_name() const override { return "osd_op_reply"; }
   
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "osd_op_reply(" << get_tid()
 	<< " " << oid << " " << ops
 	<< " v" << get_replay_version()
