@@ -30,6 +30,7 @@ public:
   RGWGetObj_ObjStore_S3() {}
   ~RGWGetObj_ObjStore_S3() {}
 
+  int get_params() override;
   int send_response_data_error();
   int send_response_data(bufferlist& bl, off_t ofs, off_t len);
   void set_custom_http_response(int http_ret) { custom_http_ret = http_ret; }

@@ -118,7 +118,8 @@ static void set_header(T val, map<string, string>& headers, const string& header
 int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
-                         bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
+                         bool prepend_metadata, bool sync_manifest,
+                         RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
 {
   string url;
   int ret = get_url(url);
@@ -132,6 +133,9 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
   params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", self_zone_group));
   if (prepend_metadata) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "prepend-metadata", self_zone_group));
+  }
+  if (sync_manifest) {
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "sync-manifest", ""));
   }
   if (!obj.get_instance().empty()) {
     const string& instance = obj.get_instance();

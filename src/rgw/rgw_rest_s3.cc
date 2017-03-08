@@ -113,6 +113,15 @@ int RGWGetObj_ObjStore_S3Website::send_response_data_error()
   return RGWGetObj_ObjStore_S3::send_response_data_error();
 }
 
+int RGWGetObj_ObjStore_S3::get_params()
+{
+  // for multisite sync requests, only read the slo manifest itself, rather than
+  // all of the data from its parts. the parts will sync as separate objects
+  skip_manifest = s->info.args.exists(RGW_SYS_PARAM_PREFIX "sync-manifest");
+
+  return RGWGetObj_ObjStore::get_params();
+}
+
 int RGWGetObj_ObjStore_S3::send_response_data_error()
 {
   bufferlist bl;
