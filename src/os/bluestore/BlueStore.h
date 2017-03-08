@@ -948,10 +948,12 @@ public:
 
     ExtentMap extent_map;
 
+    // track txc's that have not been committed to kv store (and whose
+    // effects cannot be read via the kvdb read methods)
     std::atomic<int> flushing_count = {0};
     std::mutex flush_lock;  ///< protect flush_txns
-    std::condition_variable flush_cond;   ///< wait here for unapplied txns
-    set<TransContext*> flush_txns;   ///< committing or deferred txns
+    std::condition_variable flush_cond;   ///< wait here for uncommitted txns
+    set<TransContext*> flush_txns;        ///< unapplied txns
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_meta_other::string& k)
