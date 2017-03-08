@@ -681,6 +681,7 @@ else
         debug mon = 20
         debug paxos = 20
         debug auth = 20
+	debug mgrc = 20
         debug ms = 1'
     COSDDEBUG='
         debug ms = 1
