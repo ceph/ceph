@@ -26,23 +26,22 @@ void MemoryModel::_sample(snap *psnap)
     ldout(cct, 0) << "check_memory_usage unable to open /proc/self/status" << dendl;
     return;
   }
-
   while (!f.eof()) {
     string line;
     getline(f, line);
     
     if (strncmp(line.c_str(), "VmSize:", 7) == 0)
-      psnap->size = atoi(line.c_str() + 7);
+      psnap->size = atol(line.c_str() + 7);
     else if (strncmp(line.c_str(), "VmRSS:", 6) == 0)
-      psnap->rss = atoi(line.c_str() + 7);
+      psnap->rss = atol(line.c_str() + 7);
     else if (strncmp(line.c_str(), "VmHWM:", 6) == 0)
-      psnap->hwm = atoi(line.c_str() + 7);
+      psnap->hwm = atol(line.c_str() + 7);
     else if (strncmp(line.c_str(), "VmLib:", 6) == 0)
-      psnap->lib = atoi(line.c_str() + 7);
+      psnap->lib = atol(line.c_str() + 7);
     else if (strncmp(line.c_str(), "VmPeak:", 7) == 0)
-      psnap->peak = atoi(line.c_str() + 7);
+      psnap->peak = atol(line.c_str() + 7);
     else if (strncmp(line.c_str(), "VmData:", 7) == 0)
-      psnap->data = atoi(line.c_str() + 7);
+      psnap->data = atol(line.c_str() + 7);
   }
   f.close();
 
@@ -52,7 +51,7 @@ void MemoryModel::_sample(snap *psnap)
     return;
   }
 
-  int heap = 0;
+  long heap = 0;
   while (f.is_open() && !f.eof()) {
     string line;
     getline(f, line);
@@ -83,7 +82,7 @@ void MemoryModel::_sample(snap *psnap)
     if (*end)
       end++;
 
-    int size = ae - as;
+    long size = ae - as;
     //ldout(cct, 0) << "size " << size << " mode is '" << mode << "' end is '" << end << "'" << dendl;
 
     /*
@@ -95,13 +94,4 @@ void MemoryModel::_sample(snap *psnap)
 
   psnap->heap = heap >> 10;
 
-  // ...
-#if defined(HAVE_MALLINFO)
-  struct mallinfo mi = mallinfo();
-  
-  psnap->malloc = mi.uordblks >> 10;
-  psnap->mmap = mi.hblks >> 10;
-#else
-#warning "mallinfo not implemented"
-#endif
 }
