@@ -61,7 +61,7 @@ TEST(TestOSDScrub, scrub_time_permit) {
 				    entity_name_t::OSD(0), "make_checker",
 				    getpid(), 0);
   ms->set_cluster_protocol(CEPH_OSD_PROTOCOL);
-  ms->set_default_policy(Messenger::Policy::stateless_server(0, 0));
+  ms->set_default_policy(Messenger::Policy::stateless_server(0));
   ms->bind(g_conf->public_addr);
   MonClient mc(g_ceph_context);
   mc.build_initial_monmap();

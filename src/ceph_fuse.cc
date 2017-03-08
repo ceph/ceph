@@ -209,9 +209,9 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     // start up network
     messenger = Messenger::create_client_messenger(g_ceph_context, "client");
-    messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
+    messenger->set_default_policy(Messenger::Policy::lossy_client(0));
     messenger->set_policy(entity_name_t::TYPE_MDS,
-			  Messenger::Policy::lossless_client(0, 0));
+			  Messenger::Policy::lossless_client(0));
 
     client = new Client(messenger, mc);
     if (filer_flags) {

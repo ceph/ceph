@@ -253,7 +253,7 @@ class ClientStub : public TestStub
     assert(messenger.get() != NULL);
 
     messenger->set_default_policy(
-	Messenger::Policy::lossy_client(0, CEPH_FEATURE_OSDREPLYMUX));
+	Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
     dout(10) << "ClientStub::" << __func__ << " starting messenger at "
 	    << messenger->get_myaddr() << dendl;
 
@@ -367,21 +367,18 @@ class OSDStub : public TestStub
 
     Throttle throttler(g_ceph_context, "osd_client_bytes",
 	g_conf->osd_client_message_size_cap);
-    uint64_t supported =
-      CEPH_FEATURE_UID |
-      CEPH_FEATURE_NOSRCADDR |
-      CEPH_FEATURE_PGID64;
 
     messenger->set_default_policy(
-	Messenger::Policy::stateless_server(supported, 0));
+	Messenger::Policy::stateless_server(0));
     messenger->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 				    &throttler, NULL);
     messenger->set_policy(entity_name_t::TYPE_MON,
-	Messenger::Policy::lossy_client(supported, CEPH_FEATURE_UID |
+	Messenger::Policy::lossy_client(
+	  CEPH_FEATURE_UID |
 	  CEPH_FEATURE_PGID64 |
 	  CEPH_FEATURE_OSDENC));
     messenger->set_policy(entity_name_t::TYPE_OSD,
-	Messenger::Policy::stateless_server(0,0));
+	Messenger::Policy::stateless_server(0));
 
     dout(10) << __func__ << " public addr " << g_conf->public_addr << dendl;
     int err = messenger->bind(g_conf->public_addr);
