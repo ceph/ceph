@@ -15,6 +15,7 @@
 #include "common/debug.h"
 #include "AuthSessionHandler.h"
 #include "cephx/CephxSessionHandler.h"
+#include "gssapi/GssapiSessionHandler.h"
 #include "none/AuthNoneSessionHandler.h"
 #include "unknown/AuthUnknownSessionHandler.h"
 
@@ -31,6 +32,8 @@ AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, Cry
   switch (protocol) {
   case CEPH_AUTH_CEPHX:
     return new CephxSessionHandler(cct, key, features);
+  case CEPH_AUTH_GSSAPI:
+    return new GssapiSessionHandler(cct, key);
   case CEPH_AUTH_NONE:
     return new AuthNoneSessionHandler(cct, key);
   case CEPH_AUTH_UNKNOWN:

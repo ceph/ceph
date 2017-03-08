@@ -14,6 +14,7 @@
 
 #include "AuthServiceHandler.h"
 #include "cephx/CephxServiceHandler.h"
+#include "gssapi/GssapiServiceHandler.h"
 #include "none/AuthNoneServiceHandler.h"
 
 #define dout_subsys ceph_subsys_auth
@@ -24,6 +25,8 @@ AuthServiceHandler *get_auth_service_handler(int type, CephContext *cct, KeyServ
   switch (type) {
   case CEPH_AUTH_CEPHX:
     return new CephxServiceHandler(cct, ks);
+  case CEPH_AUTH_GSSAPI:
+    return new GssapiServiceHandler(cct, ks);
   case CEPH_AUTH_NONE:
     return new AuthNoneServiceHandler(cct);
   }

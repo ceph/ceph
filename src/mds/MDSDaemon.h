@@ -71,7 +71,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool         stopping;
 
   SafeTimer    timer;
-
+  string       client_keytab;
  protected:
   Beacon  beacon;
 

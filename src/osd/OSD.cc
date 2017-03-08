@@ -1717,6 +1717,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   tick_timer(cct, osd_lock),
   tick_timer_lock("OSD::tick_timer_lock"),
   tick_timer_without_osd_lock(cct, tick_timer_lock),
+  client_keytab(cct->_conf->krb5_client_keytab_file),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(cct,
 								      cct->_conf->auth_supported.empty() ?
 								      cct->_conf->auth_cluster_required :
@@ -1795,6 +1796,12 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     &disk_tp),
   service(this)
 {
+  int r = 0;
+  if (!client_keytab.empty()){
+    r = setenv("KRB5_CLIENT_KTNAME", client_keytab.c_str(), 1);
+    assert(!r);
+  }
+
   monc->set_messenger(client_messenger);
   op_tracker.set_complaint_and_threshold(cct->_conf->osd_op_complaint_time,
                                          cct->_conf->osd_op_log_threshold);

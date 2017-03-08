@@ -1261,6 +1261,7 @@ class OSD : public Dispatcher,
   // Tick timer for those stuff that do not need osd_lock
   Mutex tick_timer_lock;
   SafeTimer tick_timer_without_osd_lock;
+  string client_keytab;
 public:
   // config observer bits
   virtual const char** get_tracked_conf_keys() const;

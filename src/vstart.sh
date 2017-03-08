@@ -93,6 +93,7 @@ ec=0
 hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
+gssapi=0
 cache=""
 memstore=0
 bluestore=0
@@ -137,6 +138,7 @@ usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
 usage=$usage"\t--nolockdep disable lockdep\n"
 usage=$usage"\t--multimds <count> allow multimds with maximum active count\n"
+usage=$usage"\t-g, --gssapi use gssapi authentication\n"
 
 usage_exit() {
 	printf "$usage"
@@ -283,6 +285,9 @@ case $1 in
     --multimds)
         CEPH_MAX_MDS="$2"
         shift
+        ;;
+    -g | --gssapi )
+        gssapi=1
         ;;
     * )
 	    usage_exit
@@ -530,6 +535,13 @@ EOF
         auth cluster required = cephx
         auth service required = cephx
         auth client required = cephx
+EOF
+		elif [ "$gssapi" -eq 1 ] ; then
+			wconf <<EOF
+        auth cluster required = gssapi
+        auth service required = gssapi
+        auth client required = gssapi
+        krb5 client keytab file = $CEPH_DEV_DIR/krb5_\$name.keytab
 EOF
 		else
 			wconf <<EOF

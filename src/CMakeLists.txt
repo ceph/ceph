@@ -301,6 +301,9 @@ set(auth_files
   auth/cephx/CephxClientHandler.cc
   auth/cephx/CephxProtocol.cc
   auth/cephx/CephxSessionHandler.cc
+  auth/gssapi/GssapiAuthorizeHandler.cc
+  auth/gssapi/GssapiClientHandler.cc
+  auth/gssapi/GssapiProtocol.cc
   auth/none/AuthNoneAuthorizeHandler.cc
   auth/unknown/AuthUnknownAuthorizeHandler.cc
   auth/Crypto.cc
@@ -565,7 +568,7 @@ set(ceph_common_deps
   ${Boost_DATE_TIME_LIBRARY}
   ${Boost_IOSTREAMS_LIBRARY}
   ${BLKID_LIBRARIES} ${Backtrace_LIBRARIES}
-  ${CRYPTO_LIBS} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+  ${CRYPTO_LIBS} ${GSSAPI_LIBRARY} ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
 if(HAVE_RDMA)
   list(APPEND ceph_common_deps ${RDMA_LIBRARY})
 endif()
@@ -636,7 +639,7 @@ if (WITH_MGR)
                  $<TARGET_OBJECTS:heap_profiler_objs>)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
   target_link_libraries(ceph-mgr mds osdc global-static common
-      ${Boost_PYTHON_LIBRARY} ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+      ${Boost_PYTHON_LIBRARY} ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${GSSAPI_LIBRARY})
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
 
@@ -644,7 +647,7 @@ set(librados_config_srcs
   librados-config.cc)
 add_executable(librados-config ${librados_config_srcs})
 target_link_libraries(librados-config librados global ${BLKID_LIBRARIES} ${RDMA_LIBRARIES}
-  ${CMAKE_DL_LIBS})
+  ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARY})
 
 install(TARGETS librados-config DESTINATION bin)
 
@@ -728,7 +731,8 @@ add_executable(ceph-mon ${ceph_mon_srcs}
 add_dependencies(ceph-mon erasure_code_plugins)
 target_link_libraries(ceph-mon mon common os global-static common
   ${EXTRALIBS}
-  ${CMAKE_DL_LIBS})
+  ${CMAKE_DL_LIBS}
+  ${GSSAPI_LIBRARY})
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
@@ -933,7 +937,7 @@ if(WITH_LIBCEPHFS)
       ceph_fuse.cc
       client/fuse_ll.cc)
     add_executable(ceph-fuse ${ceph_fuse_srcs})
-    target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
+    target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES} ${GSSAPI_LIBRARY}
       client common global-static)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)

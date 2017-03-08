@@ -72,6 +72,7 @@ struct ceph_dir_layout {
 #define CEPH_AUTH_UNKNOWN	0x0
 #define CEPH_AUTH_NONE	 	0x1
 #define CEPH_AUTH_CEPHX	 	0x2
+#define CEPH_AUTH_GSSAPI 	0x3
 
 #define CEPH_AUTH_UID_DEFAULT ((__u64) -1)
 

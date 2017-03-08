@@ -89,6 +89,7 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
   mds_lock("MDSDaemon::mds_lock"),
   stopping(false),
   timer(m->cct, mds_lock),
+  client_keytab(m->cct->_conf->krb5_client_keytab_file),
   beacon(m->cct, mc, n),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(m->cct,
 								      m->cct->_conf->auth_supported.empty() ?
@@ -109,8 +110,14 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
 {
   orig_argc = 0;
   orig_argv = NULL;
+  int r = 0;
 
   clog = log_client.create_channel();
+
+  if (!client_keytab.empty()){
+    r = setenv("KRB5_CLIENT_KTNAME", client_keytab.c_str(), 1);
+    assert(!r);
+  }
 
   monc->set_messenger(messenger);
 

@@ -32,6 +32,8 @@ AuthMethodList::AuthMethodList(CephContext *cct, string str)
     ldout(cct, 5) << "adding auth protocol: " << *iter << dendl;
     if (iter->compare("cephx") == 0) {
       auth_supported.push_back(CEPH_AUTH_CEPHX);
+    } else if (iter->compare("gssapi") == 0) {
+      auth_supported.push_back(CEPH_AUTH_GSSAPI);
     } else if (iter->compare("none") == 0) {
       auth_supported.push_back(CEPH_AUTH_NONE);
     } else {
