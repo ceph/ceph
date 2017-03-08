@@ -3144,7 +3144,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       map<object_t,vector<ObjectExtent> > readahead_object_extents;
       Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
 			       readahead_offset, readahead_length, 0, readahead_object_extents);
-      for (map<object_t,vector<ObjectExtent> >::iterator p = readahead_object_extents.begin(); p != readahead_object_extents.end(); ++p) {
+      for (map<object_t, vector<ObjectExtent> >::iterator p = readahead_object_extents.begin(); p != readahead_object_extents.end(); ++p) {
 	for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
 	  ldout(ictx->cct, 20) << "(readahead) oid " << q->oid << " " << q->offset << "~" << q->length << dendl;
 
