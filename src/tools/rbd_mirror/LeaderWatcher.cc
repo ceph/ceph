@@ -22,7 +22,7 @@ using namespace leader_watcher;
 
 using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 
 template <typename I>
 LeaderWatcher<I>::LeaderWatcher(Threads *threads, librados::IoCtx &io_ctx,
@@ -72,7 +72,7 @@ void LeaderWatcher<I>::create_leader_object() {
   librados::ObjectWriteOperation op;
   op.create(false);
 
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     LeaderWatcher<I>, &LeaderWatcher<I>::handle_create_leader_object>(this);
   int r = m_ioctx.aio_operate(m_oid, aio_comp, &op);
   assert(r == 0);

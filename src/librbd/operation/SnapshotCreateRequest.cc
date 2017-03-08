@@ -20,7 +20,7 @@ namespace operation {
 
 using util::create_async_context_callback;
 using util::create_context_callback;
-using util::create_rados_safe_callback;
+using util::create_rados_callback;
 
 template <typename I>
 SnapshotCreateRequest<I>::SnapshotCreateRequest(I &image_ctx,
@@ -126,7 +126,7 @@ void SnapshotCreateRequest<I>::send_allocate_snap_id() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  librados::AioCompletion *rados_completion = create_rados_safe_callback<
+  librados::AioCompletion *rados_completion = create_rados_callback<
     SnapshotCreateRequest<I>,
     &SnapshotCreateRequest<I>::handle_allocate_snap_id>(this);
   image_ctx.md_ctx.aio_selfmanaged_snap_create(&m_snap_id, rados_completion);
@@ -177,7 +177,7 @@ void SnapshotCreateRequest<I>::send_create_snap() {
     cls_client::snapshot_add(&op, m_snap_id, m_snap_name, m_snap_namespace);
   }
 
-  librados::AioCompletion *rados_completion = create_rados_safe_callback<
+  librados::AioCompletion *rados_completion = create_rados_callback<
     SnapshotCreateRequest<I>,
     &SnapshotCreateRequest<I>::handle_create_snap>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid,
@@ -252,7 +252,7 @@ void SnapshotCreateRequest<I>::send_release_snap_id() {
 
   assert(m_snap_id != CEPH_NOSNAP);
 
-  librados::AioCompletion *rados_completion = create_rados_safe_callback<
+  librados::AioCompletion *rados_completion = create_rados_callback<
     SnapshotCreateRequest<I>,
     &SnapshotCreateRequest<I>::handle_release_snap_id>(this);
   image_ctx.md_ctx.aio_selfmanaged_snap_remove(m_snap_id, rados_completion);

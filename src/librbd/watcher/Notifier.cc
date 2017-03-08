@@ -48,7 +48,7 @@ void Notifier::notify(bufferlist &bl, bufferlist *out_bl, Context *on_finish) {
   }
 
   C_AioNotify *ctx = new C_AioNotify(this, on_finish);
-  librados::AioCompletion *comp = util::create_rados_ack_callback(ctx);
+  librados::AioCompletion *comp = util::create_rados_callback(ctx);
   int r = m_ioctx.aio_notify(m_oid, comp, bl, NOTIFY_TIMEOUT, out_bl);
   assert(r == 0);
   comp->release();

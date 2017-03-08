@@ -185,7 +185,7 @@ void ObjectMap<I>::aio_save(Context *on_finish) {
   cls_client::object_map_save(&op, m_object_map);
 
   std::string oid(object_map_name(m_image_ctx.id, m_snap_id));
-  librados::AioCompletion *comp = util::create_rados_safe_callback(on_finish);
+  librados::AioCompletion *comp = util::create_rados_callback(on_finish);
 
   int r = m_image_ctx.md_ctx.aio_operate(oid, comp, &op);
   assert(r == 0);

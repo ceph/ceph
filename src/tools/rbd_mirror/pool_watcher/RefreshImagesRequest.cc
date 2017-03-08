@@ -20,7 +20,7 @@ namespace pool_watcher {
 
 static const uint32_t MAX_RETURN = 1024;
 
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 
 template <typename I>
 void RefreshImagesRequest<I>::send() {
@@ -34,7 +34,7 @@ void RefreshImagesRequest<I>::mirror_image_list() {
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_image_list_start(&op, m_start_after, MAX_RETURN);
 
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     RefreshImagesRequest<I>,
     &RefreshImagesRequest<I>::handle_mirror_image_list>(this);
   int r = m_remote_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
@@ -80,7 +80,7 @@ void RefreshImagesRequest<I>::dir_list() {
   librados::ObjectReadOperation op;
   librbd::cls_client::dir_list_start(&op, m_start_after, MAX_RETURN);
 
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     RefreshImagesRequest<I>,
     &RefreshImagesRequest<I>::handle_dir_list>(this);
   int r = m_remote_io_ctx.aio_operate(RBD_DIRECTORY, aio_comp, &op, &m_out_bl);

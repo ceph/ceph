@@ -21,7 +21,7 @@ namespace operation {
 
 using util::create_async_context_callback;
 using util::create_context_callback;
-using util::create_rados_safe_callback;
+using util::create_rados_callback;
 
 template <typename I>
 ResizeRequest<I>::ResizeRequest(I &image_ctx, Context *on_finish,
@@ -391,7 +391,7 @@ void ResizeRequest<I>::send_update_header() {
     cls_client::set_size(&op, m_new_size);
   }
 
-  librados::AioCompletion *rados_completion = create_rados_safe_callback<
+  librados::AioCompletion *rados_completion = create_rados_callback<
     ResizeRequest<I>, &ResizeRequest<I>::handle_update_header>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid,
     				       rados_completion, &op);
