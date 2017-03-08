@@ -6362,3 +6362,110 @@ int RGWHandler::error_handler(int err_no, string *error_content) {
   // This is the do-nothing error handler
   return err_no;
 }
+
+
+void RGWPutBucketPolicy::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+int RGWPutBucketPolicy::verify_permission()
+{
+  if (!verify_bucket_permission(s, rgw::IAM::s3PutBucketPolicy)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+int RGWPutBucketPolicy::get_params()
+{
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  // At some point when I have more time I want to make a version of
+  // rgw_rest_read_all_input that doesn't use malloc.
+  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+  // And throws exceptions.
+  return op_ret;
+}
+
+void RGWPutBucketPolicy::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  try {
+    Policy p(s->cct, s->bucket_tenant,
+	     bufferlist::static_from_mem(data, len));
+    auto attrs = s->bucket_attrs;
+    attrs[RGW_ATTR_IAM_POLICY].append(p.text);
+    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				  &s->bucket_info.objv_tracker);
+    if (op_ret == -ECANCELED) {
+      op_ret = 0; /* lost a race, but it's ok because policies are immutable */
+    }
+  } catch (rgw::IAM::PolicyParseException& e) {
+    op_ret = -EINVAL;
+  }
+}
+
+void RGWGetBucketPolicy::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+  dump_start(s);
+  rgw_flush_formatter(s, s->formatter);
+  dump_body(s, policy);
+}
+
+int RGWGetBucketPolicy::verify_permission()
+{
+  if (!verify_bucket_permission(s, rgw::IAM::s3GetBucketPolicy)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetBucketPolicy::execute()
+{
+  auto attrs = s->bucket_attrs;
+  policy = attrs[RGW_ATTR_IAM_POLICY];
+}
+
+void RGWDeleteBucketPolicy::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+int RGWDeleteBucketPolicy::verify_permission()
+{
+  if (!verify_bucket_permission(s, rgw::IAM::s3DeleteBucketPolicy)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWDeleteBucketPolicy::execute()
+{
+  auto attrs = s->bucket_attrs;
+  attrs.erase(RGW_ATTR_IAM_POLICY);
+  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				&s->bucket_info.objv_tracker);
+  if (op_ret == -ECANCELED) {
+    op_ret = 0; /* lost a race, but it's ok because policies are immutable */
+  }
+}

@@ -2787,6 +2787,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWListBucketMultiparts_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWGetLC_ObjStore_S3;
+  } else if(is_policy_op()) {
+    return new RGWGetBucketPolicy;
   }
   return get_obj_op(true);
 }
@@ -2821,6 +2823,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWSetRequestPayment_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWPutLC_ObjStore_S3;
+  } else if(is_policy_op()) {
+    return new RGWPutBucketPolicy;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -2831,6 +2835,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteCORS_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWDeleteLC_ObjStore_S3;
+  } else if(is_policy_op()) {
+    return new RGWDeleteBucketPolicy;
   }
 
   if (s->info.args.sub_resource_exists("website")) {
@@ -3650,7 +3656,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
         case RGW_OP_DELETE_MULTI_OBJ:
         case RGW_OP_ADMIN_SET_METADATA:
         case RGW_OP_SET_BUCKET_WEBSITE:
-          break;
+        case RGW_OP_PUT_BUCKET_POLICY:
+	  break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
           return -ERR_NOT_IMPLEMENTED;
