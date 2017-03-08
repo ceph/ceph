@@ -162,7 +162,7 @@ struct librados::IoCtxImpl {
     time_t *pmtime;
     ceph::real_time mtime;
     C_aio_stat_Ack(AioCompletionImpl *_c, time_t *pm);
-    void finish(int r);
+    void finish(int r) override;
   };
 
   struct C_aio_stat2_Ack : public Context {
@@ -170,7 +170,7 @@ struct librados::IoCtxImpl {
     struct timespec *pts;
     ceph::real_time mtime;
     C_aio_stat2_Ack(AioCompletionImpl *_c, struct timespec *pts);
-    void finish(int r);
+    void finish(int r) override;
   };
 
   struct C_aio_Complete : public Context {
@@ -179,7 +179,7 @@ struct librados::IoCtxImpl {
 #endif
     AioCompletionImpl *c;
     explicit C_aio_Complete(AioCompletionImpl *_c);
-    void finish(int r);
+    void finish(int r) override;
   };
 
   int aio_read(const object_t oid, AioCompletionImpl *c,

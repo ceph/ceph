@@ -42,7 +42,7 @@ struct libradosstriper::RadosStriperImpl {
 		   librados::AioCompletionImpl *userCompletion = 0,
                    int n = 1);
     /// destructor
-    virtual ~CompletionData();
+    ~CompletionData() override;
     /// complete method
     void complete(int r);
     /// striper to be used to handle the write completion
@@ -80,7 +80,7 @@ struct libradosstriper::RadosStriperImpl {
 		       std::vector<bufferlist>* resultbl,
                        int n);
     /// destructor
-    virtual ~ReadCompletionData();
+    ~ReadCompletionData() override;
     /// complete method for when reading is over
     void complete_read(int r);
     /// complete method for when object is unlocked
@@ -105,7 +105,7 @@ struct libradosstriper::RadosStriperImpl {
 			librados::AioCompletionImpl *userCompletion,
                         int n);
     /// destructor
-    virtual ~WriteCompletionData();
+    ~WriteCompletionData() override;
     /// complete method for when writing is over
     void complete_write(int r);
     /// complete method for when object is unlocked
@@ -230,7 +230,7 @@ struct libradosstriper::RadosStriperImpl {
 			   const std::string& soid,
 			   uint64_t size);
     /// destructor
-    virtual ~TruncateCompletionData();
+    ~TruncateCompletionData() override;
     /// striper to be used
     libradosstriper::RadosStriperImpl *m_striper;
     /// striped object concerned by the truncate operation
