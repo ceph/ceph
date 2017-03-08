@@ -18,14 +18,14 @@ public:
     uint64_t offset,
     const bufferlist &bl,
     Context *on_applied,
-    Context *on_commit);
+    Context *on_commit) override;
 
   void read(
     const string &oid,
     uint64_t offset,
     uint64_t length,
     bufferlist *bl,
-    Context *on_complete);
+    Context *on_complete) override;
 };
 
 #endif

@@ -25,7 +25,7 @@ private:
   uint64_t dcount;
 public:
   explicit SimpleDispatcher(Messenger *msgr);
-  virtual ~SimpleDispatcher();
+  ~SimpleDispatcher() override;
 
   uint64_t get_dcount() { return dcount; }
 
@@ -34,7 +34,7 @@ public:
   };
 
   // how i receive messages
-  virtual bool ms_dispatch(Message *m);
+  bool ms_dispatch(Message *m) override;
 
   /**
    * This function will be called whenever a new Connection is made to the
@@ -43,14 +43,14 @@ public:
    * @param con The new Connection which has been established. You are not
    * granted a reference to it -- take one if you need one!
    */
-  virtual void ms_handle_connect(Connection *con) { };
+  void ms_handle_connect(Connection *con) override { };
 
   /**
    * Callback indicating we have accepted an incoming connection.
    *
    * @param con The (new or existing) Connection associated with the session
    */
-  virtual void ms_handle_accept(Connection *con) { };
+  void ms_handle_accept(Connection *con) override { };
 
   /*
    * this indicates that the ordered+reliable delivery semantics have
@@ -62,7 +62,7 @@ public:
    * @param con The Connection which broke. You are not granted
    * a reference to it.
    */
-  virtual bool ms_handle_reset(Connection *con);
+  bool ms_handle_reset(Connection *con) override;
 
   /**
    * This indicates that the ordered+reliable delivery semantics
@@ -73,9 +73,9 @@ public:
    * @param con The Connection which broke. You are not granted
    * a reference to it.
    */
-  virtual void ms_handle_remote_reset(Connection *con);
+  void ms_handle_remote_reset(Connection *con) override;
   
-  virtual bool ms_handle_refused(Connection *con) { return false; }
+  bool ms_handle_refused(Connection *con) override { return false; }
 
   /**
    * @defgroup Authentication
@@ -94,8 +94,8 @@ public:
    *
    * @return True if this function call properly filled in *a, false otherwise.
    */
-  virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer **a,
-				 bool force_new) { return false; };
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **a,
+				 bool force_new) override { return false; };
 
   /**
    * Verify the authorizer for a new incoming Connection.
@@ -112,10 +112,10 @@ public:
    * @return True if we were able to prove or disprove correctness of
    * authorizer, false otherwise.
    */
-  virtual bool ms_verify_authorizer(Connection *con, int peer_type,
+  bool ms_verify_authorizer(Connection *con, int peer_type,
 				    int protocol, bufferlist& authorizer,
 				    bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key) {
+				    bool& isvalid, CryptoKey& session_key) override {
     /* always succeed */
     isvalid = true;
     return true;

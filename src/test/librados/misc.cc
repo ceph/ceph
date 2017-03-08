@@ -836,7 +836,7 @@ class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
   LibRadosTwoPoolsECPP() {};
-  ~LibRadosTwoPoolsECPP() {};
+  ~LibRadosTwoPoolsECPP() override {};
 protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();

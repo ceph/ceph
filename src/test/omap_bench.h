@@ -72,7 +72,7 @@ protected:
 
 public:
   AioWriter(OmapBench *omap_bench);
-  ~AioWriter();
+  ~AioWriter() override;
   virtual librados::AioCompletion * get_aioc();
   virtual void set_aioc(librados::callback_t complete,
       librados::callback_t safe);

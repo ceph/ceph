@@ -27,7 +27,7 @@ protected:
 
 public:
   explicit WholeSpaceMemIterator(KeyValueDBMemory *db) : db(db), ready(false) { }
-  ~WholeSpaceMemIterator() { }
+  ~WholeSpaceMemIterator() override { }
 
   int seek_to_first() override {
     if (db->db.empty()) {
@@ -240,7 +240,7 @@ public:
 
   explicit WholeSpaceSnapshotMemIterator(KeyValueDBMemory *db) :
     WholeSpaceMemIterator(db) { }
-  ~WholeSpaceSnapshotMemIterator() {
+  ~WholeSpaceSnapshotMemIterator() override {
     delete db;
   }
 };
