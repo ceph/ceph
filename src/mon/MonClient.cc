@@ -480,6 +480,10 @@ void MonClient::handle_auth(MAuthReply *m)
     int ret = active_con->authenticate(m);
     m->put();
     std::swap(auth, active_con->get_auth());
+    if (global_id != active_con->get_global_id()) {
+      lderr(cct) << __func__ << " peer assigned me a different global_id: "
+		 << active_con->get_global_id() << dendl;
+    }
     if (ret != -EAGAIN) {
       _finish_auth(ret);
     }
@@ -524,8 +528,10 @@ void MonClient::handle_auth(MAuthReply *m)
       log_client->reset_session();
       send_log();
     }
-    if (active_con)
+    if (active_con) {
       std::swap(auth, active_con->get_auth());
+      global_id = active_con->get_global_id();
+    }
   }
   _finish_auth(auth_err);
   if (!auth_err) {
@@ -574,8 +580,6 @@ void MonClient::_reopen_session(int rank)
   assert(monc_lock.is_locked());
   ldout(cct, 10) << __func__ << " rank " << rank << dendl;
 
-  // save global_id if any before nuking active_con
-  const uint64_t global_id = active_con ? active_con->get_global_id() : 0;
   active_con.reset();
   pending_cons.clear();
 
