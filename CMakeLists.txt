@@ -294,10 +294,6 @@ else(ALLOCATOR)
   endif(GPERFTOOLS_FOUND)
 endif(ALLOCATOR)
 
-# jemalloc does not support mallinfo
-if(NOT JEMALLOC_FOUND)
-  CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
-endif()
 
 if(WITH_LIBCEPHFS OR WITH_KRBD)
   find_package(keyutils REQUIRED)
