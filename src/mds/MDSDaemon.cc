@@ -173,9 +173,9 @@ void MDSDaemon::dump_status(Formatter *f)
   f->open_object_section("status");
   f->dump_stream("cluster_fsid") << monc->get_fsid();
   if (mds_rank) {
-    f->dump_unsigned("whoami", mds_rank->get_nodeid());
+    f->dump_int("whoami", mds_rank->get_nodeid());
   } else {
-    f->dump_unsigned("whoami", MDS_RANK_NONE);
+    f->dump_int("whoami", MDS_RANK_NONE);
   }
 
   f->dump_int("id", monc->get_global_id());
