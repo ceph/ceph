@@ -1860,9 +1860,10 @@ public:
 private:
   void _txc_finish_io(TransContext *txc);
   void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
-  void _txc_release_alloc(TransContext *txc);
-  void _txc_finish_kv(TransContext *txc);
+  void _txc_applied_kv(TransContext *txc);
+  void _txc_committed_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
+  void _txc_release_alloc(TransContext *txc);
 
   void _osr_reap_done(OpSequencer *osr);
 
