@@ -4513,6 +4513,23 @@ def main_fix(args):
             LOG.error(daemon + ' is running, please stop it, first')
             raise Error(daemon + ' running')
 
+    # Relabel the basic system data without the ceph files
+    if args.system or args.all:
+        c = ['restorecon', '-R', '/']
+        for directory, _, _, _, _ in fix_table:
+            # Skip /var/lib/ceph subdirectories
+            if directory.startswith('/var/lib/ceph/'):
+                continue
+            c.append('-e')
+            c.append(directory)
+
+        out, err, ret = command(c)
+
+        if ret:
+            LOG.error("Failed to restore labels of the underlying system")
+            LOG.error(err)
+            raise Error("basic restore failed")
+
     # Use find to relabel + chown ~simultaenously
     if args.all:
         for directory, uid, gid, blocking, recursive in fix_table:
@@ -4619,6 +4636,11 @@ def main_fix(args):
             LOG.error("A background selinux process failed")
             LOG.error(err)
             raise Error("background failed")
+
+    LOG.info(
+        "The ceph files has been fixed, please reboot "
+        "the system for the changes to take effect."
+    )
 
 
 def setup_statedir(dir):
@@ -4733,6 +4755,12 @@ def make_fix_parser(subparsers):
         help='fix SELinux labels and/or file permissions')
 
     fix_parser.add_argument(
+        '--system',
+        action='store_true',
+        default=False,
+        help='fix SELinux labels for the non-ceph system data'
+    )
+    fix_parser.add_argument(
         '--selinux',
         action='store_true',
         default=False,
@@ -4748,7 +4776,7 @@ def make_fix_parser(subparsers):
         '--all',
         action='store_true',
         default=False,
-        help='fix file permissions as well as SELinux labels for ceph data'
+        help='perform all the fix-related operations'
     )
     fix_parser.set_defaults(
         func=main_fix,
