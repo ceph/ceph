@@ -102,12 +102,6 @@ enum {
   l_bluestore_write_small_deferred,
   l_bluestore_write_small_pre_read,
   l_bluestore_write_small_new,
-
-  l_bluestore_cur_ops_in_queue,
-  l_bluestore_cur_bytes_in_queue,
-  l_bluestore_cur_ops_in_deferred_queue,
-  l_bluestore_cur_bytes_in_deferred_queue,
-
   l_bluestore_txc,
   l_bluestore_onode_reshard,
   l_bluestore_blob_split,
@@ -2417,11 +2411,6 @@ private:
 			CollectionRef& c,
 			CollectionRef& d,
 			unsigned bits, int rem);
-
-  void _op_queue_reserve_throttle(TransContext *txc);
-  void _op_queue_release_throttle(TransContext *txc);
-  void _op_queue_reserve_deferred_throttle(TransContext *txc);
-  void _op_queue_release_deferred_throttle(TransContext *txc);
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {

@@ -3439,15 +3439,6 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_write_small_new, "bluestore_write_small_new",
 	    "Small write into new (sparse) blob");
 
-  b.add_u64(l_bluestore_cur_ops_in_queue, "bluestore_cur_ops_in_queue",
-        "Current ops in queue");
-  b.add_u64(l_bluestore_cur_bytes_in_queue, "bluestore_cur_bytes_in_queue",
-        "Current bytes in queue");
-  b.add_u64(l_bluestore_cur_ops_in_deferred_queue, "bluestore_cur_ops_in_deferred_queue",
-        "Current deferred ops in queue");
-  b.add_u64(l_bluestore_cur_bytes_in_deferred_queue, "bluestore_cur_bytes_in_deferred_queue",
-        "Current deferred bytes in queue");
-
   b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
   b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
 	    "Onode extent map reshard events");
@@ -7476,7 +7467,8 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
   if (!txc->oncommits.empty()) {
     finishers[n]->queue(txc->oncommits);
   }
-  _op_queue_release_throttle(txc);
+  throttle_ops.put(txc->ops);
+  throttle_bytes.put(txc->bytes);
 }
 
 void BlueStore::_txc_finish(TransContext *txc)
@@ -7724,7 +7716,8 @@ int BlueStore::_deferred_finish(TransContext *txc)
   std::lock_guard<std::mutex> l(kv_lock);
   txc->state = TransContext::STATE_DEFERRED_CLEANUP;
   txc->osr->qcond.notify_all();
-  _op_queue_release_deferred_throttle(txc);
+  throttle_deferred_ops.put(txc->ops);
+  throttle_deferred_bytes.put(txc->bytes);
   deferred_cleanup_queue.push_back(txc);
   kv_cond.notify_one();
   return 0;
@@ -7854,9 +7847,12 @@ int BlueStore::queue_transactions(
   if (handle)
     handle->suspend_tp_timeout();
 
-  _op_queue_reserve_throttle(txc);
-  if (txc->deferred_txn)
-    _op_queue_reserve_deferred_throttle(txc);
+  throttle_ops.get(txc->ops);
+  throttle_bytes.get(txc->bytes);
+  if (txc->deferred_txn) {
+    throttle_deferred_ops.get(txc->ops);
+    throttle_deferred_bytes.get(txc->bytes);
+  }
 
   if (handle)
     handle->reset_tp_timeout();
@@ -7868,42 +7864,6 @@ int BlueStore::queue_transactions(
 
   logger->tinc(l_bluestore_submit_lat, ceph_clock_now() - start);
   return 0;
-}
-
-void BlueStore::_op_queue_reserve_throttle(TransContext *txc)
-{
-  throttle_ops.get(txc->ops);
-  throttle_bytes.get(txc->bytes);
-
-  logger->set(l_bluestore_cur_ops_in_queue, throttle_ops.get_current());
-  logger->set(l_bluestore_cur_bytes_in_queue, throttle_bytes.get_current());
-}
-
-void BlueStore::_op_queue_release_throttle(TransContext *txc)
-{
-  throttle_ops.put(txc->ops);
-  throttle_bytes.put(txc->bytes);
-
-  logger->set(l_bluestore_cur_ops_in_queue, throttle_ops.get_current());
-  logger->set(l_bluestore_cur_bytes_in_queue, throttle_bytes.get_current());
-}
-
-void BlueStore::_op_queue_reserve_deferred_throttle(TransContext *txc)
-{
-  throttle_deferred_ops.get(txc->ops);
-  throttle_deferred_bytes.get(txc->bytes);
-
-  logger->set(l_bluestore_cur_ops_in_deferred_queue, throttle_deferred_ops.get_current());
-  logger->set(l_bluestore_cur_bytes_in_deferred_queue, throttle_deferred_bytes.get_current());
-}
-
-void BlueStore::_op_queue_release_deferred_throttle(TransContext *txc)
-{
-  throttle_deferred_ops.put(txc->ops);
-  throttle_deferred_bytes.put(txc->bytes);
-
-  logger->set(l_bluestore_cur_ops_in_deferred_queue, throttle_deferred_ops.get_current());
-  logger->set(l_bluestore_cur_bytes_in_deferred_queue, throttle_deferred_bytes.get_current());
 }
 
 void BlueStore::_txc_aio_submit(TransContext *txc)
