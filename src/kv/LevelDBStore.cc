@@ -22,7 +22,7 @@ public:
   explicit CephLevelDBLogger(CephContext *c) : cct(c) {
     cct->get();
   }
-  ~CephLevelDBLogger() {
+  ~CephLevelDBLogger() override {
     cct->put();
   }
 

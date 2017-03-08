@@ -37,7 +37,7 @@ struct C_GetClient : public Context {
       client_id(client_id), client(client), on_finish(on_finish) {
     async_op_tracker.start_op();
   }
-  ~C_GetClient() {
+  ~C_GetClient() override {
     async_op_tracker.finish_op();
   }
 
@@ -95,7 +95,7 @@ struct C_AllocateTag : public Context {
     async_op_tracker.start_op();
     tag->data = data;
   }
-  ~C_AllocateTag() {
+  ~C_AllocateTag() override {
     async_op_tracker.finish_op();
   }
 
@@ -216,7 +216,7 @@ struct C_GetTag : public Context {
       tag_tid(tag_tid), tag(tag), on_finish(on_finish) {
     async_op_tracker.start_op();
   }
-  ~C_GetTag() {
+  ~C_GetTag() override {
     async_op_tracker.finish_op();
   }
 
@@ -275,7 +275,7 @@ struct C_GetTags : public Context {
       tags(tags), on_finish(on_finish) {
     async_op_tracker.start_op();
   }
-  ~C_GetTags() {
+  ~C_GetTags() override {
     async_op_tracker.finish_op();
   }
 
@@ -357,7 +357,7 @@ struct C_AssertActiveTag : public Context {
       client_id(client_id), tag_tid(tag_tid), on_finish(on_finish) {
     async_op_tracker.start_op();
   }
-  ~C_AssertActiveTag() {
+  ~C_AssertActiveTag() override {
     async_op_tracker.finish_op();
   }
 

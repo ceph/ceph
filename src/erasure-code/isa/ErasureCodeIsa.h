@@ -64,37 +64,37 @@ public:
   {
   }
 
-  virtual
-  ~ErasureCodeIsa()
+  
+  ~ErasureCodeIsa() override
   {
   }
 
-  virtual int create_ruleset(const string &name,
+  int create_ruleset(const string &name,
                              CrushWrapper &crush,
-                             ostream *ss) const;
+                             ostream *ss) const override;
 
-  virtual unsigned int
-  get_chunk_count() const
+  unsigned int
+  get_chunk_count() const override
   {
     return k + m;
   }
 
-  virtual unsigned int
-  get_data_chunk_count() const
+  unsigned int
+  get_data_chunk_count() const override
   {
     return k;
   }
 
-  virtual unsigned int get_chunk_size(unsigned int object_size) const;
+  unsigned int get_chunk_size(unsigned int object_size) const override;
 
-  virtual int encode_chunks(const set<int> &want_to_encode,
-                            map<int, bufferlist> *encoded);
+  int encode_chunks(const set<int> &want_to_encode,
+                            map<int, bufferlist> *encoded) override;
 
-  virtual int decode_chunks(const set<int> &want_to_read,
+  int decode_chunks(const set<int> &want_to_read,
                             const map<int, bufferlist> &chunks,
-                            map<int, bufferlist> *decoded);
+                            map<int, bufferlist> *decoded) override;
 
-  virtual int init(ErasureCodeProfile &profile, ostream *ss);
+  int init(ErasureCodeProfile &profile, ostream *ss) override;
 
   virtual void isa_encode(char **data,
                           char **coding,
@@ -138,30 +138,30 @@ public:
     matrixtype = matrix;
   }
 
-  virtual
-  ~ErasureCodeIsaDefault()
+  
+  ~ErasureCodeIsaDefault() override
   {
 
   }
 
-  virtual void isa_encode(char **data,
+  void isa_encode(char **data,
                           char **coding,
-                          int blocksize);
+                          int blocksize) override;
 
   virtual bool erasure_contains(int *erasures, int i);
 
-  virtual int isa_decode(int *erasures,
+  int isa_decode(int *erasures,
                          char **data,
                          char **coding,
-                         int blocksize);
+                         int blocksize) override;
 
-  virtual unsigned get_alignment() const;
+  unsigned get_alignment() const override;
 
-  virtual void prepare();
+  void prepare() override;
 
  private:
-  virtual int parse(ErasureCodeProfile &profile,
-                    ostream *ss);
+  int parse(ErasureCodeProfile &profile,
+                    ostream *ss) override;
 };
 
 #endif

@@ -30,10 +30,10 @@ public:
   PrebufferedStreambuf(char *buf, size_t len);
 
   // called when the buffer fills up
-  int_type overflow(int_type c);
+  int_type overflow(int_type c) override;
 
   // called when we read and need more data
-  int_type underflow();
+  int_type underflow() override;
 
   /// return a string copy (inefficiently)
   std::string get_str() const;
