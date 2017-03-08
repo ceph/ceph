@@ -7326,44 +7326,6 @@ void BlueStore::BSPerfTracker::update_from_perfcounters(
       l_bluestore_commit_lat));
 }
 
-void BlueStore::_osr_reap_done(OpSequencer *osr)
-{
-  CollectionRef c;
-
-  {
-    std::lock_guard<std::mutex> l(osr->qlock);
-    dout(20) << __func__ << " osr " << osr << dendl;
-    while (!osr->q.empty()) {
-      TransContext *txc = &osr->q.front();
-      dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
-	       << dendl;
-      if (txc->state != TransContext::STATE_DONE) {
-        break;
-      }
-
-      // release to allocator only after all preceding txc's have also
-      // finished any deferred writes that potentially land in these
-      // blocks
-      _txc_release_alloc(txc);
-
-      if (!c && txc->first_collection) {
-        c = txc->first_collection;
-      }
-
-      osr->q.pop_front();
-      txc->log_state_latency(logger, l_bluestore_state_done_lat);
-      delete txc;
-      osr->qcond.notify_all();
-    }
-    if (osr->q.empty())
-      dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
-  }
-
-  if (c) {
-    c->trim_cache();
-  }
-}
-
 void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 {
   dout(20) << __func__ << " txc " << txc << std::hex
@@ -7493,6 +7455,44 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
 
   txc->allocated.clear();
   txc->released.clear();
+}
+
+void BlueStore::_osr_reap_done(OpSequencer *osr)
+{
+  CollectionRef c;
+
+  {
+    std::lock_guard<std::mutex> l(osr->qlock);
+    dout(20) << __func__ << " osr " << osr << dendl;
+    while (!osr->q.empty()) {
+      TransContext *txc = &osr->q.front();
+      dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
+	       << dendl;
+      if (txc->state != TransContext::STATE_DONE) {
+        break;
+      }
+
+      // release to allocator only after all preceding txc's have also
+      // finished any deferred writes that potentially land in these
+      // blocks
+      _txc_release_alloc(txc);
+
+      if (!c && txc->first_collection) {
+        c = txc->first_collection;
+      }
+
+      osr->q.pop_front();
+      txc->log_state_latency(logger, l_bluestore_state_done_lat);
+      delete txc;
+      osr->qcond.notify_all();
+    }
+    if (osr->q.empty())
+      dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
+  }
+
+  if (c) {
+    c->trim_cache();
+  }
 }
 
 void BlueStore::_osr_drain_all()
