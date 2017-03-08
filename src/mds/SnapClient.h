@@ -26,8 +26,8 @@ class SnapClient : public MDSTableClient {
 public:
   explicit SnapClient(MDSRank *m) : MDSTableClient(m, TABLE_SNAP) {}
 
-  void resend_queries() {}
-  void handle_query_result(MMDSTableRequest *m) {}
+  void resend_queries() override {}
+  void handle_query_result(MMDSTableRequest *m) override {}
 
   void prepare_create(inodeno_t dirino, const string& name, utime_t stamp,
 		      version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {

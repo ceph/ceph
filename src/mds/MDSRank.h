@@ -489,7 +489,7 @@ public:
     assert(m);
     this->m = m;
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     mds->retry_dispatch(m);
   }
 };

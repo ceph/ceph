@@ -1178,7 +1178,7 @@ class C_MDS_RetryRequest : public MDSInternalContext {
   MDRequestRef mdr;
  public:
   C_MDS_RetryRequest(MDCache *c, MDRequestRef& r);
-  virtual void finish(int r);
+  void finish(int r) override;
 };
 
 #endif
