@@ -7494,8 +7494,6 @@ void BlueStore::_txc_finish(TransContext *txc)
     txc->removed_collections.pop_front();
   }
 
-  _op_queue_release_deferred_throttle(txc);
-
   OpSequencerRef osr = txc->osr;
   {
     std::lock_guard<std::mutex> l(osr->qlock);
@@ -7726,6 +7724,7 @@ int BlueStore::_deferred_finish(TransContext *txc)
   std::lock_guard<std::mutex> l(kv_lock);
   txc->state = TransContext::STATE_DEFERRED_CLEANUP;
   txc->osr->qcond.notify_all();
+  _op_queue_release_deferred_throttle(txc);
   deferred_cleanup_queue.push_back(txc);
   kv_cond.notify_one();
   return 0;
@@ -7856,7 +7855,8 @@ int BlueStore::queue_transactions(
     handle->suspend_tp_timeout();
 
   _op_queue_reserve_throttle(txc);
-  _op_queue_reserve_deferred_throttle(txc);
+  if (txc->deferred_txn)
+    _op_queue_reserve_deferred_throttle(txc);
 
   if (handle)
     handle->reset_tp_timeout();
