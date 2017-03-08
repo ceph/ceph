@@ -6,10 +6,12 @@
 #include "arch/probe.h"
 #include "arch/intel.h"
 #include "arch/arm.h"
+#include "arch/ppc.h"
 #include "common/sctp_crc32.h"
 #include "common/crc32c_intel_baseline.h"
 #include "common/crc32c_intel_fast.h"
 #include "common/crc32c_aarch64.h"
+#include "common/crc32c_ppc.h"
 
 /*
  * choose best implementation based on the CPU architecture.
@@ -28,6 +30,10 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
 
   if (ceph_arch_aarch64_crc32){
     return ceph_crc32c_aarch64;
+  }
+
+  if (ceph_arch_ppc_crc32) {
+    return ceph_crc32c_ppc;
   }
 
   // default
