@@ -657,6 +657,11 @@ namespace buffer CEPH_BUFFER_API {
       reserve(prealloc);
     }
 
+    list(ptr append_buffer) : _len(0), _memcopy_count(0),
+                              append_buffer(append_buffer), last_p(this) {
+      this->append_buffer.set_length(0);   // unused, so far.
+    }
+
     list(const list& other) : _buffers(other._buffers), _len(other._len),
 			      _memcopy_count(other._memcopy_count), last_p(this) {
       make_shareable();
