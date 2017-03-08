@@ -9209,10 +9209,6 @@ int BlueStore::_do_zero(TransContext *txc,
 
   _dump_onode(o);
 
-  // ensure any deferred IO has completed before we truncate off any extents
-  // they may touch.
-  o->flush();
-
   WriteContext wctx;
   o->extent_map.fault_range(db, offset, length);
   o->extent_map.punch_hole(offset, length, &wctx.old_extents);
@@ -9244,10 +9240,6 @@ int BlueStore::_do_truncate(
     return 0;
 
   if (offset < o->onode.size) {
-    // ensure any deferred IO has completed before we truncate off any extents
-    // they may touch.
-    o->flush();
-
     WriteContext wctx;
     uint64_t length = o->onode.size - offset;
     o->extent_map.fault_range(db, offset, length);
