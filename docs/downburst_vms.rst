@@ -31,6 +31,7 @@ of libvirt (like ubuntu precise) in ~/.libvirt/libvirt.conf::
         'mira001=qemu+ssh://ubuntu@mira001.front.sepia.ceph.com/system?no_tty=1',
         'mira003=qemu+ssh://ubuntu@mira003.front.sepia.ceph.com/system?no_tty=1',
         'mira004=qemu+ssh://ubuntu@mira004.front.sepia.ceph.com/system?no_tty=1',
+        'mira005=qemu+ssh://ubuntu@mira005.front.sepia.ceph.com/system?no_tty=1',
         'mira006=qemu+ssh://ubuntu@mira006.front.sepia.ceph.com/system?no_tty=1',
         'mira007=qemu+ssh://ubuntu@mira007.front.sepia.ceph.com/system?no_tty=1',
         'mira008=qemu+ssh://ubuntu@mira008.front.sepia.ceph.com/system?no_tty=1',
@@ -51,20 +52,7 @@ of libvirt (like ubuntu precise) in ~/.libvirt/libvirt.conf::
         'mira074=qemu+ssh://ubuntu@mira074.front.sepia.ceph.com/system?no_tty=1',
         'mira079=qemu+ssh://ubuntu@mira079.front.sepia.ceph.com/system?no_tty=1',
         'mira081=qemu+ssh://ubuntu@mira081.front.sepia.ceph.com/system?no_tty=1',
-        'mira091=qemu+ssh://ubuntu@mira091.front.sepia.ceph.com/system?no_tty=1',
         'mira098=qemu+ssh://ubuntu@mira098.front.sepia.ceph.com/system?no_tty=1',
-        'vercoi01=qemu+ssh://ubuntu@vercoi01.front.sepia.ceph.com/system?no_tty=1',
-        'vercoi02=qemu+ssh://ubuntu@vercoi02.front.sepia.ceph.com/system?no_tty=1',
-        'vercoi03=qemu+ssh://ubuntu@vercoi03.front.sepia.ceph.com/system?no_tty=1',
-        'vercoi04=qemu+ssh://ubuntu@vercoi04.front.sepia.ceph.com/system?no_tty=1',
-        'vercoi05=qemu+ssh://ubuntu@vercoi05.front.sepia.ceph.com/system?no_tty=1',
-        'vercoi06=qemu+ssh://ubuntu@vercoi06.front.sepia.ceph.com/system?no_tty=1',
-        'vercoi07=qemu+ssh://ubuntu@vercoi07.front.sepia.ceph.com/system?no_tty=1',
-        'vercoi08=qemu+ssh://ubuntu@vercoi08.front.sepia.ceph.com/system?no_tty=1',
-        'senta01=qemu+ssh://ubuntu@senta01.front.sepia.ceph.com/system?no_tty=1',
-        'senta02=qemu+ssh://ubuntu@senta02.front.sepia.ceph.com/system?no_tty=1',
-        'senta03=qemu+ssh://ubuntu@senta03.front.sepia.ceph.com/system?no_tty=1',
-        'senta04=qemu+ssh://ubuntu@senta04.front.sepia.ceph.com/system?no_tty=1',
     ]
 
 Downburst:
