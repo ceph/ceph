@@ -58,7 +58,7 @@ class Continuation {
     Callback(Continuation *c, int stage) :
       continuation(c),
       stage_to_activate(stage) {}
-    void finish(int r) {
+    void finish(int r) override {
       continuation->continue_function(r, stage_to_activate);
     }
   };

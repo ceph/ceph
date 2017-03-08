@@ -153,7 +153,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 	cfuse = cf;
 	client = cl;
       }
-      ~RemountTest() {}
+      ~RemountTest() override {}
       void *entry() override {
 #if defined(__linux__)
 	int ver = get_linux_version();

@@ -259,7 +259,7 @@ class Client : public Dispatcher, public md_config_obs_t {
   public:
     explicit CommandHook(Client *client);
     bool call(std::string command, cmdmap_t &cmdmap, std::string format,
-	      bufferlist& out);
+	      bufferlist& out) override;
   };
   CommandHook m_command_hook;
 
@@ -554,13 +554,13 @@ protected:
 
   // friends
   friend class SyntheticClient;
-  bool ms_dispatch(Message *m);
+  bool ms_dispatch(Message *m) override;
 
-  void ms_handle_connect(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con);
-  bool ms_handle_refused(Connection *con);
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
+  void ms_handle_connect(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override;
+  bool ms_handle_refused(Connection *con) override;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
 
   int authenticate();
 
@@ -591,7 +591,7 @@ protected:
   void clear_filer_flags(int flags);
 
   Client(Messenger *m, MonClient *mc);
-  ~Client();
+  ~Client() override;
   void tear_down_cache();
 
   void update_metadata(std::string const &k, std::string const &v);
@@ -751,8 +751,8 @@ private:
     Client *client;
     Fh *f;
     C_Readahead(Client *c, Fh *f);
-    ~C_Readahead();
-    void finish(int r);
+    ~C_Readahead() override;
+    void finish(int r) override;
   };
 
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
@@ -1219,9 +1219,9 @@ public:
   void ll_register_callbacks(struct client_callback_args *args);
   int test_dentry_handling(bool can_invalidate);
 
-  virtual const char** get_tracked_conf_keys() const;
-  virtual void handle_conf_change(const struct md_config_t *conf,
-	                          const std::set <std::string> &changed);
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
+	                          const std::set <std::string> &changed) override;
 };
 
 #endif
