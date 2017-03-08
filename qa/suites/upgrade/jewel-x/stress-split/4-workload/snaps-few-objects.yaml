@@ -1,7 +1,7 @@
 meta:
 - desc: |
    randomized correctness test for rados operations on a replicated pool with snapshot operations
-tasks:
+stress-tasks:
 - full_sequential:
   - rados:
       clients: [client.0]

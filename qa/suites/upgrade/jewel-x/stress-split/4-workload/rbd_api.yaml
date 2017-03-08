@@ -1,7 +1,7 @@
 meta:
 - desc: |
    librbd C and C++ api tests
-tasks:
+stress-tasks:
 - workunit:
      branch: jewel
      clients:

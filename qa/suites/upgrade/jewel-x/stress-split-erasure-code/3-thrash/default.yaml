@@ -9,6 +9,9 @@ overrides:
     - objects unfound and apparently lost
     - log bound mismatch
 tasks:
+- parallel:
+  - stress-tasks
+stress-tasks:
 - thrashosds:
     timeout: 1200
     chance_pgnum_grow: 1
