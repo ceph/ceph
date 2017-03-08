@@ -66,6 +66,8 @@ struct cls_rbd_snap {
   cls_rbd_parent parent;
   uint64_t flags;
   utime_t timestamp;
+  uint64_t prev_snap;
+  set<uint64_t> next_snaps;
   cls::rbd::SnapshotNamespaceOnDisk snapshot_namespace;
 
   /// true if we have a parent
@@ -78,7 +80,7 @@ struct cls_rbd_snap {
                    flags(0), timestamp(utime_t())
     {}
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 1, bl);
+    ENCODE_START(8, 1, bl);
     ::encode(id, bl);
     ::encode(name, bl);
     ::encode(image_size, bl);
@@ -88,10 +90,12 @@ struct cls_rbd_snap {
     ::encode(flags, bl);
     ::encode(snapshot_namespace, bl);
     ::encode(timestamp, bl);
+    ::encode(prev_snap, bl);
+    ::encode(next_snaps, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
-    DECODE_START(6, p);
+    DECODE_START(8, p);
     ::decode(id, p);
     ::decode(name, p);
     ::decode(image_size, p);
@@ -112,6 +116,12 @@ struct cls_rbd_snap {
     }
     if (struct_v >= 6) {
       ::decode(timestamp, p);
+    }
+    if (struct_v >= 7) {
+      ::decode(prev_snap, p);
+    }
+    if (struct_v >= 8) {
+      ::decode(next_snaps, p);
     }
     DECODE_FINISH(p);
   }
