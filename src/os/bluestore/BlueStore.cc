@@ -7430,6 +7430,11 @@ void BlueStore::_osr_reap_done(OpSequencer *osr)
         break;
       }
 
+      // release to allocator only after all preceding txc's have also
+      // finished any deferred writes that potentially land in these
+      // blocks
+      _txc_release_alloc(txc);
+
       if (!c && txc->first_collection) {
         c = txc->first_collection;
       }
@@ -7601,12 +7606,15 @@ void BlueStore::_kv_sync_thread()
       }
 
       // cleanup sync deferred keys
-      for (std::deque<TransContext *>::iterator it = deferred_cleaning.begin();
-	    it != deferred_cleaning.end();
-	    ++it) {
-	bluestore_deferred_transaction_t& wt =*(*it)->deferred_txn;
-	// kv metadata updates
-	_txc_finalize_kv(*it, synct);
+      for (auto txc : deferred_cleaning) {
+	bluestore_deferred_transaction_t& wt = *txc->deferred_txn;
+	if (!wt.released.empty()) {
+	  // kraken replay compat only
+	  txc->released = wt.released;
+	  dout(10) << __func__ << " deferred txn has released " << txc->released
+		   << " (we just upgraded from kraken) on " << txc << dendl;
+	  _txc_finalize_kv(txc, synct);
+	}
 	// cleanup the deferred
 	string key;
 	get_deferred_key(wt.seq, &key);
@@ -7634,13 +7642,11 @@ void BlueStore::_kv_sync_thread()
       while (!kv_committing.empty()) {
 	TransContext *txc = kv_committing.front();
 	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
-	_txc_release_alloc(txc);
 	_txc_state_proc(txc);
 	kv_committing.pop_front();
       }
       while (!deferred_cleaning.empty()) {
 	TransContext *txc = deferred_cleaning.front();
-	_txc_release_alloc(txc);
 	_txc_state_proc(txc);
 	deferred_cleaning.pop_front();
       }
@@ -7711,11 +7717,6 @@ int BlueStore::_deferred_finish(TransContext *txc)
 {
   bluestore_deferred_transaction_t& wt = *txc->deferred_txn;
   dout(20) << __func__ << " txc " << " seq " << wt.seq << txc << dendl;
-
-  // move released back to txc
-  txc->deferred_txn->released.swap(txc->released);
-  assert(txc->deferred_txn->released.empty());
-
   std::lock_guard<std::mutex> l2(txc->osr->qlock);
   std::lock_guard<std::mutex> l(kv_lock);
   txc->state = TransContext::STATE_DEFERRED_CLEANUP;
@@ -7838,10 +7839,6 @@ int BlueStore::queue_transactions(
 
   // journal deferred items
   if (txc->deferred_txn) {
-    // move releases to after deferred
-    txc->deferred_txn->released.swap(txc->released);
-    assert(txc->released.empty());
-
     txc->deferred_txn->seq = ++deferred_seq;
     bufferlist bl;
     ::encode(*txc->deferred_txn, bl);
