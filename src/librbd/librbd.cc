@@ -823,6 +823,15 @@ namespace librbd {
     return r;
   }
 
+  int Image::get_snapshot_location(snap_info_t *snap_location)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, get_snapshot_location_enter, ictx);
+    int r = librbd::get_snapshot_location(ictx, snap_location);
+    tracepoint(librbd, get_snapshot_location_exit, r, snap_location->id);
+    return r;
+  }
+
   int Image::get_flags(uint64_t *flags)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;

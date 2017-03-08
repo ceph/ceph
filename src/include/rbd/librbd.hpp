@@ -236,6 +236,7 @@ public:
   int overlap(uint64_t *overlap);
   int get_flags(uint64_t *flags);
   int set_image_notification(int fd, int type);
+  int get_snapshot_location(snap_info_t *snap_location);
 
   /* exclusive lock feature */
   int is_exclusive_lock_owner(bool *is_owner);

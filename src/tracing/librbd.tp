@@ -1690,6 +1690,24 @@ TRACEPOINT_EVENT(librbd, get_parent_info_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, get_snapshot_location_enter,
+    TP_ARGS(
+        void*, imagectx),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, get_snapshot_location_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, snap_id),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, snap_id, snap_id)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, get_overlap_enter,
     TP_ARGS(
         void*, imagectx,
