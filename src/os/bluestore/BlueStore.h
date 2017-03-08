@@ -1582,28 +1582,6 @@ public:
       txc->oncommits.push_back(c);
       return false;
     }
-
-    /// if there is a wal on @seq, wait for it to apply
-    void wait_for_wal_on_seq(uint64_t seq) {
-      std::unique_lock<std::mutex> l(qlock);
-      restart:
-      for (OpSequencer::q_list_t::reverse_iterator p = q.rbegin();
-	   p != q.rend();
-	   ++p) {
-	if (p->seq == seq) {
-	  TransContext *txc = &(*p);
-	  if (txc->wal_txn) {
-	    while (txc->state < TransContext::STATE_WAL_CLEANUP) {
-	      txc->osr->qcond.wait(l);
-	      goto restart;  // txc may have gone away
-	    }
-	  }
-	  break;
-	}
-	if (p->seq < seq)
-	  break;
-      }
-    }
   };
 
   class WALWQ : public ThreadPool::WorkQueue<TransContext> {
@@ -1770,6 +1748,7 @@ private:
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
+  uint64_t prefer_wal_size = 0; ///< size threshold for forced wal writes
 
   uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
 
@@ -2304,6 +2283,7 @@ private:
   int _do_alloc_write(
     TransContext *txc,
     CollectionRef c,
+    OnodeRef& o,
     WriteContext *wctx);
   void _wctx_finish(
     TransContext *txc,
