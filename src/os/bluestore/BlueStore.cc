@@ -7341,6 +7341,21 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
 
+  for (auto ls : { &txc->onodes, &txc->modified_objects }) {
+    for (auto& o : *ls) {
+      std::lock_guard<std::mutex> l(o->flush_lock);
+      dout(20) << __func__ << " onode " << o << " had " << o->flush_txns
+	       << dendl;
+      assert(o->flush_txns.count(txc));
+      o->flush_txns.erase(txc);
+      o->flushing_count--;
+      if (o->flush_txns.empty()) {
+	o->flush_cond.notify_all();
+      }
+    }
+    ls->clear();  // clear out refs
+  }
+
   // warning: we're calling onreadable_sync inside the sequencer lock
   if (txc->onreadable_sync) {
     txc->onreadable_sync->complete(0);
@@ -7383,21 +7398,6 @@ void BlueStore::_txc_finish(TransContext *txc)
     sb->bc.finish_write(sb->get_cache(), txc->seq);
   }
   txc->shared_blobs_written.clear();
-
-  for (auto ls : { &txc->onodes, &txc->modified_objects }) {
-    for (auto& o : *ls) {
-      std::lock_guard<std::mutex> l(o->flush_lock);
-      dout(20) << __func__ << " onode " << o << " had " << o->flush_txns
-	       << dendl;
-      assert(o->flush_txns.count(txc));
-      o->flush_txns.erase(txc);
-      o->flushing_count--;
-      if (o->flush_txns.empty()) {
-	o->flush_cond.notify_all();
-      }
-    }
-    ls->clear();  // clear out refs
-  }
 
   while (!txc->removed_collections.empty()) {
     _queue_reap_collection(txc->removed_collections.front());
