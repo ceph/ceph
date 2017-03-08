@@ -198,7 +198,6 @@
                                set zone tier config keys, values
      --tier-config-rm=<k>[,...]
                                unset zone tier config keys
-     --tier_type=<type>        zone tier type
      --sync-from-all[=false]   set/reset whether zone syncs from all zonegroup peers
      --sync-from=[zone-name][,...]
                                set list of zones to sync from
