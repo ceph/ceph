@@ -78,7 +78,7 @@ else
 fi
 
 extra_conf=""
-new=1
+new=0
 standby=0
 debug=0
 start_all=1
@@ -114,8 +114,8 @@ usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
 usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-i <ip>: bind to specific ip\n"
-usage=$usage"\t-n, --new (default)\n"
-usage=$usage"\t-N, --not-new: reuse existing cluster config\n"
+usage=$usage"\t-n, --new\n"
+usage=$usage"\t-N, --not-new: reuse existing cluster config (default)\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
 usage=$usage"\t--smallmds: limit mds cache size\n"
