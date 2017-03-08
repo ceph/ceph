@@ -64,6 +64,7 @@
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDFull.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDBackoff.h"
@@ -277,7 +278,6 @@ OSDService::OSDService(OSD *osd) :
   stat_lock("OSDService::stat_lock"),
   full_status_lock("OSDService::full_status_lock"),
   cur_state(NONE),
-  last_msg(0),
   cur_ratio(0),
   epoch_lock("OSDService::epoch_lock"),
   boot_epoch(0), up_epoch(0), bind_epoch(0),
@@ -699,64 +699,115 @@ void OSDService::promote_throttle_recalibrate()
 
 // -------------------------------------
 
-float OSDService::get_full_ratio()
+float OSDService::get_failsafe_full_ratio()
 {
   float full_ratio = cct->_conf->osd_failsafe_full_ratio;
   if (full_ratio > 1.0) full_ratio /= 100.0;
   return full_ratio;
 }
 
-float OSDService::get_nearfull_ratio()
-{
-  float nearfull_ratio = cct->_conf->osd_failsafe_nearfull_ratio;
-  if (nearfull_ratio > 1.0) nearfull_ratio /= 100.0;
-  return nearfull_ratio;
-}
-
-void OSDService::check_nearfull_warning(const osd_stat_t &osd_stat)
+void OSDService::check_full_status(const osd_stat_t &osd_stat)
 {
   Mutex::Locker l(full_status_lock);
-  enum s_names new_state;
-
-  time_t now = ceph_clock_gettime();
 
   // We base ratio on kb_avail rather than kb_used because they can
   // differ significantly e.g. on btrfs volumes with a large number of
   // chunks reserved for metadata, and for our purposes (avoiding
   // completely filling the disk) it's far more important to know how
   // much space is available to use than how much we've already used.
-  float ratio = ((float)(osd_stat.kb - osd_stat.kb_avail)) / ((float)osd_stat.kb);
-  float nearfull_ratio = get_nearfull_ratio();
-  float full_ratio = get_full_ratio();
+  float ratio = ((float)(osd_stat.kb - osd_stat.kb_avail)) /
+    ((float)osd_stat.kb);
   cur_ratio = ratio;
 
-  if (full_ratio > 0 && ratio > full_ratio) {
-    new_state = FULL;
-  } else if (nearfull_ratio > 0 && ratio > nearfull_ratio) {
-    new_state = NEAR;
-  } else {
+  // The OSDMap ratios take precendence.  So if the failsafe is .95 and
+  // the admin sets the cluster full to .96, the failsafe moves up to .96
+  // too.  (Not that having failsafe == full is ideal, but it's better than
+  // dropping writes before the clusters appears full.)
+  OSDMapRef osdmap = get_osdmap();
+  if (!osdmap || osdmap->get_epoch() == 0) {
+    cur_state = NONE;
+    return;
+  }
+  float nearfull_ratio = osdmap->get_nearfull_ratio();
+  float full_ratio = std::max(osdmap->get_full_ratio(), nearfull_ratio);
+  float failsafe_ratio = std::max(get_failsafe_full_ratio(), full_ratio);
+
+  if (full_ratio <= 0 ||
+      nearfull_ratio <= 0) {
+    derr << __func__ << " full_ratio or nearfull_ratio is <= 0" << dendl;
     cur_state = NONE;
     return;
   }
 
-  if (cur_state != new_state) {
-    cur_state = new_state;
-  } else if (now - last_msg < cct->_conf->osd_op_complaint_time) {
-    return;
+  enum s_names new_state;
+  if (ratio > failsafe_ratio) {
+    new_state = FAILSAFE;
+  } else if (ratio > full_ratio) {
+    new_state = FULL;
+  } else if (ratio > nearfull_ratio) {
+    new_state = NEARFULL;
+  } else {
+    new_state = NONE;
   }
-  last_msg = now;
-  if (cur_state == FULL)
-    clog->error() << "OSD full dropping all updates " << (int)roundf(ratio * 100) << "% full";
-  else
-    clog->warn() << "OSD near full (" << (int)roundf(ratio * 100) << "%)";
+  dout(20) << __func__ << " cur ratio " << ratio
+	   << ". nearfull_ratio " << nearfull_ratio
+	   << ", full_ratio " << full_ratio
+	   << ", failsafe_ratio " << failsafe_ratio
+	   << ", new state " << get_full_state_name(new_state)
+	   << dendl;
+
+  // warn
+  if (cur_state != new_state) {
+    dout(10) << __func__ << " " << get_full_state_name(cur_state)
+	     << " -> " << get_full_state_name(new_state) << dendl;
+    if (new_state == FAILSAFE) {
+      clog->error() << "failsafe engaged, dropping updates, now "
+		    << (int)roundf(ratio * 100) << "% full";
+    } else if (cur_state == FAILSAFE) {
+      clog->error() << "failsafe disengaged, no longer dropping updates, now "
+		    << (int)roundf(ratio * 100) << "% full";
+    }
+    cur_state = new_state;
+  }
+}
+
+bool OSDService::need_fullness_update()
+{
+  OSDMapRef osdmap = get_osdmap();
+  s_names cur = NONE;
+  if (osdmap->exists(whoami)) {
+    if (osdmap->get_state(whoami) & CEPH_OSD_FULL) {
+      cur = FULL;
+    } else if (osdmap->get_state(whoami) & CEPH_OSD_NEARFULL) {
+      cur = NEARFULL;
+    }
+  }
+  s_names want = NONE;
+  if (is_full())
+    want = FULL;
+  else if (is_nearfull())
+    want = NEARFULL;
+  return want != cur;
 }
 
 bool OSDService::check_failsafe_full()
 {
   Mutex::Locker l(full_status_lock);
-  if (cur_state == FULL)
+  if (cur_state == FAILSAFE)
     return true;
   return false;
+}
+
+bool OSDService::is_nearfull()
+{
+  Mutex::Locker l(full_status_lock);
+  return cur_state == NEARFULL;
+}
+
+bool OSDService::is_full()
+{
+  Mutex::Locker l(full_status_lock);
+  return cur_state >= FULL;
 }
 
 bool OSDService::too_full_for_backfill(double *_ratio, double *_max_ratio)
@@ -799,9 +850,9 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
   osd->logger->set(l_osd_stat_bytes_used, used);
   osd->logger->set(l_osd_stat_bytes_avail, avail);
 
-  check_nearfull_warning(osd_stat);
-
   dout(20) << "update_osd_stat " << osd_stat << dendl;
+
+  check_full_status(osd_stat);
 }
 
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
@@ -4494,6 +4545,8 @@ void OSD::tick_without_osd_lock()
     if (now - last_pg_stats_sent > max) {
       osd_stat_updated = true;
       report = true;
+    } else if (service.need_fullness_update()) {
+      report = true;
     } else if ((int)outstanding_pg_stats.size() >=
 	       cct->_conf->osd_mon_report_max_in_flight) {
       dout(20) << __func__ << " have max " << outstanding_pg_stats
@@ -4515,6 +4568,7 @@ void OSD::tick_without_osd_lock()
       last_mon_report = now;
 
       // do any pending reports
+      send_full_update();
       send_failures();
       send_pg_stats(now);
     }
@@ -4882,6 +4936,7 @@ void OSD::ms_handle_connect(Connection *con)
       last_mon_report = now;
 
       // resend everything, it's a new session
+      send_full_update();
       send_alive();
       service.requeue_pg_temp();
       service.send_pg_temp();
@@ -5027,6 +5082,9 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   dout(10) << __func__ << " _preboot mon has osdmaps "
 	   << oldest << ".." << newest << dendl;
 
+  // ensure our local fullness awareness is accurate
+  heartbeat();
+
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
     derr << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
@@ -5040,6 +5098,9 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 	       ceph::features::mon::FEATURE_LUMINOUS)) {
     derr << "monmap REQUIRE_LUMINOUS is NOT set; must upgrade all monitors to "
 	 << "Luminous or later before Luminous OSDs will boot" << dendl;
+  } else if (service.need_fullness_update()) {
+    derr << "osdmap fullness state needs update" << dendl;
+    send_full_update();
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
     _send_boot();
@@ -5051,6 +5112,22 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
     osdmap_subscribe(osdmap->get_epoch() + 1, false);
   else
     osdmap_subscribe(oldest - 1, true);
+}
+
+void OSD::send_full_update()
+{
+  if (!service.need_fullness_update())
+    return;
+  unsigned state = 0;
+  if (service.is_full()) {
+    state = CEPH_OSD_FULL;
+  } else if (service.is_nearfull()) {
+    state = CEPH_OSD_NEARFULL;
+  }
+  set<string> s;
+  OSDMap::calc_state_set(state, s);
+  dout(10) << __func__ << " want state " << s << dendl;
+  monc->send_mon_message(new MOSDFull(osdmap->get_epoch(), state));
 }
 
 void OSD::start_waiting_for_healthy()

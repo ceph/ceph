@@ -33,6 +33,7 @@
 
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDFull.h"
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
 #include "messages/MOSDBoot.h"
@@ -151,6 +152,9 @@ void OSDMonitor::create_initial()
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_JEWEL);
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_KRAKEN);
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
+
+  newmap.full_ratio = g_conf->mon_osd_full_ratio;
+  newmap.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
 
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap,
@@ -977,6 +981,33 @@ void OSDMonitor::create_pending()
   // clean up pg_temp, primary_temp
   OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
   dout(10) << "create_pending  did clean_temps" << dendl;
+
+  if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    // transition nearfull ratios from PGMap to OSDMap (on upgrade)
+    PGMap *pg_map = &mon->pgmon()->pg_map;
+    if (osdmap.full_ratio != pg_map->full_ratio) {
+      dout(10) << __func__ << " full_ratio " << osdmap.full_ratio
+	       << " -> " << pg_map->full_ratio << " (from pgmap)" << dendl;
+      pending_inc.new_full_ratio = pg_map->full_ratio;
+    }
+    if (osdmap.nearfull_ratio != pg_map->nearfull_ratio) {
+      dout(10) << __func__ << " nearfull_ratio " << osdmap.nearfull_ratio
+	       << " -> " << pg_map->nearfull_ratio << " (from pgmap)" << dendl;
+      pending_inc.new_nearfull_ratio = pg_map->nearfull_ratio;
+    }
+  } else {
+    // safety check (this shouldn't really happen)
+    if (osdmap.full_ratio <= 0) {
+      dout(1) << __func__ << " setting full_ratio = "
+	      << g_conf->mon_osd_full_ratio << dendl;
+      pending_inc.new_full_ratio = g_conf->mon_osd_full_ratio;
+    }
+    if (osdmap.nearfull_ratio <= 0) {
+      dout(1) << __func__ << " setting nearfull_ratio = "
+	      << g_conf->mon_osd_nearfull_ratio << dendl;
+      pending_inc.new_nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
+    }
+  }
 }
 
 void OSDMonitor::maybe_prime_pg_temp()
@@ -1153,6 +1184,41 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   mapping_job.reset();
 
   bufferlist bl;
+
+  // set or clear full/nearfull?
+  {
+    OSDMap tmp;
+    tmp.deepish_copy_from(osdmap);
+    tmp.apply_incremental(pending_inc);
+
+    if (tmp.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      int full, nearfull;
+      tmp.count_full_nearfull_osds(&full, &nearfull);
+      if (full > 0) {
+	if (!tmp.test_flag(CEPH_OSDMAP_FULL)) {
+	  dout(10) << __func__ << " setting full flag" << dendl;
+	  add_flag(CEPH_OSDMAP_FULL);
+	  remove_flag(CEPH_OSDMAP_NEARFULL);
+	}
+      } else {
+	if (tmp.test_flag(CEPH_OSDMAP_FULL)) {
+	  dout(10) << __func__ << " clearing full flag" << dendl;
+	  remove_flag(CEPH_OSDMAP_FULL);
+	}
+	if (nearfull > 0) {
+	  if (!tmp.test_flag(CEPH_OSDMAP_NEARFULL)) {
+	    dout(10) << __func__ << " setting nearfull flag" << dendl;
+	    add_flag(CEPH_OSDMAP_NEARFULL);
+	  }
+	} else {
+	  if (tmp.test_flag(CEPH_OSDMAP_NEARFULL)) {
+	    dout(10) << __func__ << " clearing nearfull flag" << dendl;
+	    remove_flag(CEPH_OSDMAP_NEARFULL);
+	  }
+	}
+      }
+    }
+  }
 
   // tell me about it
   for (map<int32_t,uint8_t>::iterator i = pending_inc.new_state.begin();
@@ -1363,6 +1429,8 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     // damp updates
   case MSG_OSD_MARK_ME_DOWN:
     return preprocess_mark_me_down(op);
+  case MSG_OSD_FULL:
+    return preprocess_full(op);
   case MSG_OSD_FAILURE:
     return preprocess_failure(op);
   case MSG_OSD_BOOT:
@@ -1394,6 +1462,8 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     // damp updates
   case MSG_OSD_MARK_ME_DOWN:
     return prepare_mark_me_down(op);
+  case MSG_OSD_FULL:
+    return prepare_full(op);
   case MSG_OSD_FAILURE:
     return prepare_failure(op);
   case MSG_OSD_BOOT:
@@ -2297,6 +2367,97 @@ void OSDMonitor::_booted(MonOpRequestRef op, bool logit)
 
 
 // -------------
+// full
+
+bool OSDMonitor::preprocess_full(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  MOSDFull *m = static_cast<MOSDFull*>(op->get_req());
+  int from = m->get_orig_source().num();
+  set<string> state;
+  unsigned mask = CEPH_OSD_NEARFULL | CEPH_OSD_FULL;
+
+  // check permissions, ignore if failed
+  MonSession *session = m->get_session();
+  if (!session)
+    goto ignore;
+  if (!session->is_capable("osd", MON_CAP_X)) {
+    dout(0) << "MOSDFull from entity with insufficient privileges:"
+	    << session->caps << dendl;
+    goto ignore;
+  }
+
+  // ignore a full message from the osd instance that already went down
+  if (!osdmap.exists(from)) {
+    dout(7) << __func__ << " ignoring full message from nonexistent "
+	    << m->get_orig_source_inst() << dendl;
+    goto ignore;
+  }
+  if ((!osdmap.is_up(from) &&
+       osdmap.get_most_recent_inst(from) == m->get_orig_source_inst()) ||
+      (osdmap.is_up(from) &&
+       osdmap.get_inst(from) != m->get_orig_source_inst())) {
+    dout(7) << __func__ << " ignoring full message from down "
+	    << m->get_orig_source_inst() << dendl;
+    goto ignore;
+  }
+
+  OSDMap::calc_state_set(osdmap.get_state(from), state);
+
+  if ((osdmap.get_state(from) & mask) == m->state) {
+    dout(7) << __func__ << " state already " << state << " for osd." << from
+	    << " " << m->get_orig_source_inst() << dendl;
+    _reply_map(op, m->version);
+    goto ignore;
+  }
+
+  dout(10) << __func__ << " want state " << state << " for osd." << from
+	   << " " << m->get_orig_source_inst() << dendl;
+  return false;
+
+ ignore:
+  return true;
+}
+
+bool OSDMonitor::prepare_full(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  const MOSDFull *m = static_cast<MOSDFull*>(op->get_req());
+  const int from = m->get_orig_source().num();
+
+  const unsigned mask = CEPH_OSD_NEARFULL | CEPH_OSD_FULL;
+  const unsigned want_state = m->state & mask;  // safety first
+
+  unsigned cur_state = osdmap.get_state(from);
+  auto p = pending_inc.new_state.find(from);
+  if (p != pending_inc.new_state.end()) {
+    cur_state ^= p->second;
+  }
+  cur_state &= mask;
+
+  set<string> want_state_set, cur_state_set;
+  OSDMap::calc_state_set(want_state, want_state_set);
+  OSDMap::calc_state_set(cur_state, cur_state_set);
+
+  if (cur_state != want_state) {
+    if (p != pending_inc.new_state.end()) {
+      p->second &= ~mask;
+    } else {
+      pending_inc.new_state[from] = 0;
+    }
+    pending_inc.new_state[from] |= (osdmap.get_state(from) & mask) ^ want_state;
+    dout(7) << __func__ << " osd." << from << " " << cur_state_set
+	    << " -> " << want_state_set << dendl;
+  } else {
+    dout(7) << __func__ << " osd." << from << " " << cur_state_set
+	    << " = wanted " << want_state_set << ", just waiting" << dendl;
+  }
+
+  wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
+  return true;
+}
+
+// -------------
 // alive
 
 bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
@@ -2894,8 +3055,10 @@ void OSDMonitor::tick()
     }
   }
 
-  //if map full setting has changed, get that info out there!
-  if (mon->pgmon()->is_readable()) {
+  // if map full setting has changed, get that info out there!
+  if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) &&
+      mon->pgmon()->is_readable()) {
+    // for pre-luminous compat only!
     if (!mon->pgmon()->pg_map.full_osds.empty()) {
       dout(5) << "There are full osds, setting full flag" << dendl;
       add_flag(CEPH_OSDMAP_FULL);
@@ -3008,7 +3171,25 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
         ss << " osds: [" << osds << "]";
         detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
-    } 
+    }
+
+    if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      int full, nearfull;
+      osdmap.count_full_nearfull_osds(&full, &nearfull);
+      if (full > 0) {
+	ostringstream ss;
+	ss << full << " full osds(s)";
+	summary.push_back(make_pair(HEALTH_ERR, ss.str()));
+      }
+      if (nearfull > 0) {
+	ostringstream ss;
+	ss << nearfull << " nearfull osds(s)";
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+    // note: we leave it to ceph-mgr to generate details health warnings
+    // with actual osd utilizations
+
     // warn about flags
     uint64_t warn_flags =
       CEPH_OSDMAP_FULL |
@@ -6554,6 +6735,30 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
 
+  } else if (prefix == "osd set-full-ratio" ||
+             prefix == "osd set-nearfull-ratio") {
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must complete the upgrade and set require_luminous_osds before"
+	 << " using the new interface";
+      err = -EPERM;
+      goto reply;
+    }
+    double n;
+    if (!cmd_getval(g_ceph_context, cmdmap, "ratio", n)) {
+      ss << "unable to parse 'ratio' value '"
+         << cmd_vartype_stringify(cmdmap["who"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (prefix == "osd set-full-ratio")
+      pending_inc.new_full_ratio = n;
+    else if (prefix == "osd set-nearfull-ratio")
+      pending_inc.new_nearfull_ratio = n;
+    ss << prefix << " " << n;
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd pause") {
     return prepare_set_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
 
