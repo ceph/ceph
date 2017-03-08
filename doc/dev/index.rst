@@ -1341,12 +1341,18 @@ engineer can then ssh into the running cluster. Simply add the following
 snippet in the desired place within the test YAML and schedule a run with the
 test::
 
+    tasks:
     - exec:
         client.0:
           - sleep 1000000000 # forever
 
 (Make sure you have a ``client.0`` defined in your ``roles`` stanza or adapt
 accordingly.)
+
+The same effect can be achieved using the ``interactive`` task::
+
+    tasks:
+    - interactive
 
 By following the test log, you can determine when the test cluster has entered
 the "sleep forever" condition. At that point, you can ssh to the teuthology
