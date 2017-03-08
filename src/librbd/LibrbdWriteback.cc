@@ -216,7 +216,7 @@ namespace librbd {
     int flags = m_ictx->get_read_flags(snapid);
 
     librados::AioCompletion *rados_completion =
-      util::create_rados_ack_callback(req);
+      util::create_rados_callback(req);
     int r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
 					 flags, NULL);
     rados_completion->release();

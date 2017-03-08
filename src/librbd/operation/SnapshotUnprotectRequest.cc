@@ -102,7 +102,7 @@ public:
     cls_client::get_children_start(&op, m_pspec);
 
     librados::AioCompletion *rados_completion =
-      util::create_rados_ack_callback(this);
+      util::create_rados_callback(this);
     r = m_pool_ioctx.aio_operate(RBD_CHILDREN, rados_completion, &op,
                                  &m_children_bl);
     assert(r == 0);

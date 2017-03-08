@@ -21,7 +21,7 @@
                            << this << " " << __func__
 
 using librbd::util::create_context_callback;
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 
 namespace rbd {
 namespace mirror {
@@ -102,7 +102,7 @@ void CreateImageRequest<I>::get_parent_global_image_id() {
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_image_get_start(&op, m_remote_parent_spec.image_id);
 
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     CreateImageRequest<I>,
     &CreateImageRequest<I>::handle_get_parent_global_image_id>(this);
   m_out_bl.clear();
@@ -149,7 +149,7 @@ void CreateImageRequest<I>::get_local_parent_image_id() {
   librbd::cls_client::mirror_image_get_image_id_start(
     &op, m_parent_global_image_id);
 
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     CreateImageRequest<I>,
     &CreateImageRequest<I>::handle_get_local_parent_image_id>(this);
   m_out_bl.clear();

@@ -61,7 +61,7 @@ public:
   void send() {
     C_OrderedThrottle *ctx = m_diff_context.throttle.start_op(this);
     librados::AioCompletion *rados_completion =
-      util::create_rados_safe_callback(ctx);
+      util::create_rados_callback(ctx);
 
     librados::ObjectReadOperation op;
     op.list_snaps(&m_snap_set, &m_snap_ret);

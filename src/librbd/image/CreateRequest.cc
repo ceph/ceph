@@ -23,7 +23,7 @@
 namespace librbd {
 namespace image {
 
-using util::create_rados_ack_callback;
+using util::create_rados_callback;
 using util::create_context_callback;
 
 namespace {
@@ -276,7 +276,7 @@ void CreateRequest<I>::validate_pool() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_validate_pool>(this);
+    create_rados_callback<klass, &klass::handle_validate_pool>(this);
 
   librados::ObjectReadOperation op;
   op.stat(NULL, NULL, NULL);
@@ -340,7 +340,7 @@ void CreateRequest<I>::create_id_object() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_create_id_object>(this);
+    create_rados_callback<klass, &klass::handle_create_id_object>(this);
   int r = m_ioctx.aio_operate(m_id_obj, comp, &op);
   assert(r == 0);
   comp->release();
@@ -368,7 +368,7 @@ void CreateRequest<I>::add_image_to_directory() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_add_image_to_directory>(this);
+    create_rados_callback<klass, &klass::handle_add_image_to_directory>(this);
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, comp, &op);
   assert(r == 0);
   comp->release();
@@ -404,7 +404,7 @@ void CreateRequest<I>::negotiate_features() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_negotiate_features>(this);
+    create_rados_callback<klass, &klass::handle_negotiate_features>(this);
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_outbl);
   assert(r == 0);
   comp->release();
@@ -456,7 +456,7 @@ void CreateRequest<I>::create_image() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_create_image>(this);
+    create_rados_callback<klass, &klass::handle_create_image>(this);
   int r = m_ioctx.aio_operate(m_header_obj, comp, &op);
   assert(r == 0);
   comp->release();
@@ -492,7 +492,7 @@ void CreateRequest<I>::set_stripe_unit_count() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_set_stripe_unit_count>(this);
+    create_rados_callback<klass, &klass::handle_set_stripe_unit_count>(this);
   int r = m_ioctx.aio_operate(m_header_obj, comp, &op);
   assert(r == 0);
   comp->release();
@@ -528,7 +528,7 @@ void CreateRequest<I>::object_map_resize() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_object_map_resize>(this);
+    create_rados_callback<klass, &klass::handle_object_map_resize>(this);
   int r = m_ioctx.aio_operate(m_objmap_name, comp, &op);
   assert(r == 0);
   comp->release();
@@ -564,7 +564,7 @@ void CreateRequest<I>::fetch_mirror_mode() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_fetch_mirror_mode>(this);
+    create_rados_callback<klass, &klass::handle_fetch_mirror_mode>(this);
   m_outbl.clear();
   int r = m_ioctx.aio_operate(RBD_MIRRORING, comp, &op, &m_outbl);
   assert(r == 0);
@@ -738,7 +738,7 @@ void CreateRequest<I>::remove_object_map() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_remove_object_map>(this);
+    create_rados_callback<klass, &klass::handle_remove_object_map>(this);
   int r = m_ioctx.aio_remove(m_objmap_name, comp);
   assert(r == 0);
   comp->release();
@@ -763,7 +763,7 @@ void CreateRequest<I>::remove_header_object() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_remove_header_object>(this);
+    create_rados_callback<klass, &klass::handle_remove_header_object>(this);
   int r = m_ioctx.aio_remove(m_header_obj, comp);
   assert(r == 0);
   comp->release();
@@ -791,7 +791,7 @@ void CreateRequest<I>::remove_from_dir() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_remove_from_dir>(this);
+    create_rados_callback<klass, &klass::handle_remove_from_dir>(this);
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, comp, &op);
   assert(r == 0);
   comp->release();
@@ -816,7 +816,7 @@ void CreateRequest<I>::remove_id_object() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_remove_id_object>(this);
+    create_rados_callback<klass, &klass::handle_remove_id_object>(this);
   int r = m_ioctx.aio_remove(m_id_obj, comp);
   assert(r == 0);
   comp->release();

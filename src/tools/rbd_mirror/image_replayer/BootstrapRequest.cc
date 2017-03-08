@@ -35,7 +35,7 @@ namespace mirror {
 namespace image_replayer {
 
 using librbd::util::create_context_callback;
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 using librbd::util::unique_lock_name;
 
 template <typename I>
@@ -102,7 +102,7 @@ void BootstrapRequest<I>::get_local_image_id() {
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_image_get_image_id_start(&op, m_global_image_id);
 
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_local_image_id>(
       this);
   int r = m_local_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
