@@ -1540,7 +1540,7 @@ struct WatchInfo : public Objecter::WatchContext {
     : ioctx(io), oid(o), ctx(c), ctx2(c2), internal(inter) {
     ioctx->get();
   }
-  ~WatchInfo() {
+  ~WatchInfo() override {
     ioctx->put();
     if (internal) {
       delete ctx;
