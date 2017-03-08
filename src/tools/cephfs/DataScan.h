@@ -119,19 +119,19 @@ class LocalFileDriver : public RecoveryDriver
     int init(
         librados::Rados &rados,
         const FSMap *fsmap,
-        fs_cluster_id_t fscid);
+        fs_cluster_id_t fscid) override;
 
     int inject_with_backtrace(
         const inode_backtrace_t &bt,
-        const InodeStore &dentry);
+        const InodeStore &dentry) override;
 
     int inject_lost_and_found(
         inodeno_t ino,
-        const InodeStore &dentry);
+        const InodeStore &dentry) override;
 
-    int init_roots(int64_t data_pool_id);
+    int init_roots(int64_t data_pool_id) override;
 
-    int check_roots(bool *result);
+    int check_roots(bool *result) override;
 };
 
 /**
@@ -212,7 +212,7 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
     int init(
         librados::Rados &rados,
         const FSMap *fsmap,
-        fs_cluster_id_t fscid);
+        fs_cluster_id_t fscid) override;
 
     int inject_linkage(
         inodeno_t dir_ino, const std::string &dname,
@@ -220,15 +220,15 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
 
     int inject_with_backtrace(
         const inode_backtrace_t &bt,
-        const InodeStore &dentry);
+        const InodeStore &dentry) override;
 
     int inject_lost_and_found(
         inodeno_t ino,
-        const InodeStore &dentry);
+        const InodeStore &dentry) override;
 
-    int init_roots(int64_t data_pool_id);
+    int init_roots(int64_t data_pool_id) override;
 
-    int check_roots(bool *result);
+    int check_roots(bool *result) override;
 };
 
 class DataScan : public MDSUtility, public MetadataTool
@@ -322,7 +322,7 @@ class DataScan : public MDSUtility, public MetadataTool
     {
     }
 
-    ~DataScan()
+    ~DataScan() override
     {
       delete driver;
     }
