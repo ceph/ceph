@@ -37,7 +37,6 @@ protected:
   MonClient *monc;
 
   Mutex lock;
-  SafeTimer timer;
   Finisher finisher;
 
   Context *waiting_for_mds_map;

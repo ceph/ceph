@@ -24,7 +24,7 @@
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() \
-  << ".journaler" << (readonly ? "(ro) ":"(rw) ")
+  << ".journaler." << name << (readonly ? "(ro) ":"(rw) ")
 
 using std::chrono::seconds;
 
@@ -164,7 +164,7 @@ void Journaler::recover(Context *onread)
   assert(readonly);
 
   if (onread)
-    waitfor_recover.push_back(onread);
+    waitfor_recover.push_back(wrap_finisher(onread));
 
   if (state != STATE_UNDEF) {
     ldout(cct, 1) << "recover - already recovering" << dendl;
@@ -717,28 +717,20 @@ void Journaler::_flush(C_OnFinisher *onsafe)
       onsafe->complete(0);
     }
   } else {
-    // maybe buffer
-    if (write_buf.length() < cct->_conf->journaler_batch_max) {
-      // delay!  schedule an event.
-      ldout(cct, 20) << "flush delaying flush" << dendl;
-      if (delay_flush_event) {
-	timer->cancel_event(delay_flush_event);
-      }
-      delay_flush_event = new C_DelayFlush(this);
-      timer->add_event_after(cct->_conf->journaler_batch_interval,
-			     delay_flush_event);
-    } else {
-      ldout(cct, 20) << "flush not delaying flush" << dendl;
-      _do_flush();
-    }
+    _do_flush();
     _wait_for_flush(onsafe);
   }
 
   // write head?
-  if (last_wrote_head + seconds(cct->_conf->journaler_write_head_interval)
-      < ceph::real_clock::now()) {
+  if (_write_head_needed()) {
     _write_head();
   }
+}
+
+bool Journaler::_write_head_needed()
+{
+  return last_wrote_head + seconds(cct->_conf->journaler_write_head_interval)
+      < ceph::real_clock::now();
 }
 
 
@@ -946,7 +938,9 @@ void Journaler::_assimilate_prefetch()
 
   if ((got_any && !was_readable && readable) || read_pos == write_pos) {
     // readable!
-    ldout(cct, 10) << "_finish_read now readable (or at journal end)" << dendl;
+    ldout(cct, 10) << "_finish_read now readable (or at journal end) readable="
+                   << readable << " read_pos=" << read_pos << " write_pos="
+                   << write_pos << dendl;
     if (on_readable) {
       C_OnFinisher *f = on_readable;
       on_readable = 0;
@@ -957,9 +951,6 @@ void Journaler::_assimilate_prefetch()
 
 void Journaler::_issue_read(uint64_t len)
 {
-  // make sure we're fully flushed
-  _do_flush();
-
   // stuck at safe_pos?  (this is needed if we are reading the tail of
   // a journal we are also writing to)
   assert(requested_pos <= safe_pos);
@@ -970,7 +961,6 @@ void Journaler::_issue_read(uint64_t len)
     if (flush_pos == safe_pos) {
       _flush(NULL);
     }
-    assert(flush_pos > safe_pos);
     waitfor_safe[flush_pos].push_back(new C_RetryRead(this));
     return;
   }
@@ -1036,6 +1026,19 @@ void Journaler::_prefetch()
     ldout(cct, 10) << "_prefetch " << pf << " requested_pos " << requested_pos
 		   << " < target " << target << " (" << raw_target
 		   << "), prefetching " << len << dendl;
+
+    if (flush_pos == safe_pos && write_pos > safe_pos) {
+      // If we are reading and writing the journal, then we may need
+      // to issue a flush if one isn't already in progress.
+      // Avoid doing a flush every time so that if we do write/read/write/read
+      // we don't end up flushing after every write.
+      ldout(cct, 10) << "_prefetch: requested_pos=" << requested_pos
+                     << ", read_pos=" << read_pos
+                     << ", write_pos=" << write_pos
+                     << ", safe_pos=" << safe_pos << dendl;
+      _do_flush();
+    }
+
     _issue_read(len);
   }
 }
@@ -1215,6 +1218,11 @@ void Journaler::wait_for_readable(Context *onreadable)
     // race with OSD reply
     finisher->queue(onreadable, 0);
   }
+}
+
+bool Journaler::have_waiter() const
+{
+  return on_readable != nullptr;
 }
 
 

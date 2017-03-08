@@ -1680,10 +1680,6 @@ CDentry *CDir::_load_dentry(
         if (in->inode.is_dirty_rstat())
           in->mark_dirty_rstat();
 
-        if (inode->is_stray()) {
-	  cache->notify_stray_loaded(dn);
-        }
-
         //in->hack_accessed = false;
         //in->hack_load_stamp = ceph_clock_now();
         //num_new_inodes_loaded++;

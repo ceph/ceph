@@ -11,6 +11,7 @@ set(mds_srcs
   MDCache.cc
   RecoveryQueue.cc
   StrayManager.cc
+  PurgeQueue.cc
   Locker.cc
   Migrator.cc
   MDBalancer.cc

@@ -162,12 +162,12 @@ public:
   explicit MDCacheLogContext(MDCache *mdc_) : mdcache(mdc_) {}
 };
 
-MDCache::MDCache(MDSRank *m) :
+MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   mds(m),
   filer(m->objecter, m->finisher),
   exceeded_size_limit(false),
   recovery_queue(m),
-  stray_manager(m)
+  stray_manager(m, purge_queue_)
 {
   migrator.reset(new Migrator(mds, this));
   root = NULL;
@@ -584,8 +584,13 @@ void MDCache::open_root_inode(MDSInternalContextBase *c)
 
 void MDCache::open_mydir_inode(MDSInternalContextBase *c)
 {
+  MDSGatherBuilder gather(g_ceph_context);
+
   CInode *in = create_system_inode(MDS_INO_MDSDIR(mds->get_nodeid()), S_IFDIR|0755);  // initially inaccurate!
-  in->fetch(c);
+  in->fetch(gather.new_sub());
+
+  gather.set_finisher(c);
+  gather.activate();
 }
 
 void MDCache::open_root()
@@ -6582,11 +6587,7 @@ bool MDCache::trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap
     assert(dnl->is_null());
   }
 
-  if (dn->is_auth()) {
-    if (dn->state_test(CDentry::STATE_PURGING)) {
-      stray_manager.notify_stray_trimmed(dn);
-    }
-  } else {
+  if (!dn->is_auth()) {
     // notify dentry authority.
     mds_authority_t auth = dn->authority();
     
@@ -7600,7 +7601,7 @@ bool MDCache::shutdown_pass()
     show_cache();
     //dump();
     return false;
-  } 
+  }
   
   // done!
   dout(2) << "shutdown done." << dendl;
@@ -7624,8 +7625,6 @@ bool MDCache::shutdown_export_strays()
     strays[i]->get_dirfrags(dfs);
   }
 
-  stray_manager.abort_queue();
-  
   for (std::list<CDir*>::iterator dfs_i = dfs.begin();
        dfs_i != dfs.end(); ++dfs_i)
   {
@@ -12303,14 +12302,15 @@ void MDCache::register_perfcounters()
     /* Stray/purge statistics */
     pcb.add_u64(l_mdc_num_strays, "num_strays",
         "Stray dentries", "stry");
-    pcb.add_u64(l_mdc_num_strays_purging, "num_strays_purging", "Stray dentries purging");
     pcb.add_u64(l_mdc_num_strays_delayed, "num_strays_delayed", "Stray dentries delayed");
-    pcb.add_u64(l_mdc_num_purge_ops, "num_purge_ops", "Purge operations");
+    pcb.add_u64(l_mdc_num_strays_enqueuing, "num_strays_enqueuing", "Stray dentries enqueuing for purge");
+
     pcb.add_u64_counter(l_mdc_strays_created, "strays_created", "Stray dentries created");
-    pcb.add_u64_counter(l_mdc_strays_purged, "strays_purged",
-        "Stray dentries purged", "purg");
+    pcb.add_u64_counter(l_mdc_strays_enqueued, "strays_enqueued",
+        "Stray dentries enqueued for purge");
     pcb.add_u64_counter(l_mdc_strays_reintegrated, "strays_reintegrated", "Stray dentries reintegrated");
     pcb.add_u64_counter(l_mdc_strays_migrated, "strays_migrated", "Stray dentries migrated");
+
 
     /* Recovery queue statistics */
     pcb.add_u64(l_mdc_num_recovering_processing, "num_recovering_processing", "Files currently being recovered");
@@ -12357,23 +12357,3 @@ void MDCache::maybe_eval_stray(CInode *in, bool delay) {
   }
 }
 
-void MDCache::notify_mdsmap_changed()
-{
-  stray_manager.update_op_limit();
-}
-
-void MDCache::notify_osdmap_changed()
-{
-  stray_manager.update_op_limit();
-}
-
-void MDCache::handle_conf_change(const struct md_config_t *conf,
-			     const std::set <std::string> &changed)
-{
-  assert(mds->mds_lock.is_locked_by_me());
-
-  if (changed.count("mds_max_purge_ops")
-      || changed.count("mds_max_purge_ops_per_pg")) {
-    stray_manager.update_op_limit();
-  }
-}
