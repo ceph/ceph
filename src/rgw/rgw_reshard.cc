@@ -1,0 +1,185 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
+#include "rgw_rados.h"
+#include "rgw_reshard.h"
+#include "cls/rgw/cls_rgw_client.h"
+#include "cls/lock/cls_lock_client.h"
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_rgw
+
+const string reshard_oid = "reshard";
+const string reshard_lock_name = "reshard_process";
+
+RGWReshard::RGWReshard(CephContext *_cct, RGWRados* _store):cct(_cct), store(_store)
+{
+    max_jobs = cct->_conf->rgw_reshard_max_jobs;
+}
+
+int RGWReshard::get_io_ctx(librados::IoCtx& io_ctx)
+{
+  string reshard_pool = store->get_zone_params().reshard_pool.name;
+  librados::Rados *rad = store->get_rados_handle();
+  int r = rad->ioctx_create(reshard_pool.c_str(), io_ctx);
+  if (r == -ENOENT) {
+    r = store->create_pool(store->get_zone_params().reshard_pool);
+    if (r < 0)
+      return r;
+
+    // retry
+    r = rad->ioctx_create(reshard_pool.c_str(), io_ctx);
+  }
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWReshard::add(cls_rgw_reshard_entry& entry)
+{
+  rados::cls::lock::Lock l(reshard_lock_name);
+  librados::IoCtx io_ctx;
+
+  int ret = get_io_ctx(io_ctx);
+  if (ret < 0)
+    return ret;
+
+  ret = l.lock_exclusive(&io_ctx, reshard_oid);
+  if (ret == -EBUSY) {
+    dout(0) << "RGWReshard::add failed to acquire lock on " << reshard_oid << dendl;
+    return 0;
+  }
+  if (ret < 0)
+    return ret;
+
+  librados::ObjectWriteOperation op;
+  cls_rgw_reshard_add(op, entry);
+
+  ret = io_ctx.operate(reshard_oid, &op);
+
+  l.unlock(&io_ctx, reshard_oid);
+  return ret;
+}
+
+
+int RGWReshard::list(string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool& is_truncated)
+{
+  rados::cls::lock::Lock l(reshard_lock_name);
+  librados::IoCtx io_ctx;
+
+  int ret = get_io_ctx(io_ctx);
+  if (ret < 0)
+    return ret;
+
+  ret = l.lock_shared(&io_ctx, reshard_oid);
+  if (ret == -EBUSY) {
+    dout(0) << "RGWReshard::list failed to acquire lock on " << reshard_oid << dendl;
+    return 0;
+  }
+  if (ret < 0)
+    return ret;
+
+  ret =  cls_rgw_reshard_list(io_ctx, reshard_oid, marker, max, entries, is_truncated);
+
+  l.unlock(&io_ctx, reshard_oid);
+  return ret;
+}
+
+int RGWReshard::get_head(cls_rgw_reshard_entry& entry)
+{
+  rados::cls::lock::Lock l(reshard_lock_name);
+  librados::IoCtx io_ctx;
+
+  int ret = get_io_ctx(io_ctx);
+  if (ret < 0)
+    return ret;
+
+  ret = l.lock_shared(&io_ctx, reshard_oid);
+  if (ret == -EBUSY) {
+    dout(0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
+    return 0;
+  }
+  if (ret < 0)
+    return ret;
+
+  ret = cls_rgw_reshard_get_head(io_ctx, reshard_oid, entry);
+
+  l.unlock(&io_ctx, reshard_oid);
+  return ret;
+}
+
+int RGWReshard::get(cls_rgw_reshard_entry& entry)
+{
+  rados::cls::lock::Lock l(reshard_lock_name);
+  librados::IoCtx io_ctx;
+
+  int ret = get_io_ctx(io_ctx);
+  if (ret < 0)
+    return ret;
+
+  ret = l.lock_shared(&io_ctx, reshard_oid);
+  if (ret == -EBUSY) {
+    dout(0) << "RGWReshardLog::get failed to acquire lock on " << reshard_oid << dendl;
+    return 0;
+  }
+  if (ret < 0)
+    return ret;
+
+  ret = cls_rgw_reshard_get(io_ctx, reshard_oid, entry);
+
+  l.unlock(&io_ctx, reshard_oid);
+  return ret;
+}
+
+int RGWReshard::remove(cls_rgw_reshard_entry& entry)
+{
+  rados::cls::lock::Lock l(reshard_lock_name);
+  librados::IoCtx io_ctx;
+
+  int ret = get_io_ctx(io_ctx);
+  if (ret < 0)
+    return ret;
+
+  ret = l.lock_exclusive(&io_ctx, reshard_oid);
+  if (ret == -EBUSY) {
+    dout(0) << "RGWReshardLog::remove failed to acquire lock on " << reshard_oid << dendl;
+    return 0;
+  }
+  if (ret < 0)
+    return ret;
+
+  librados::ObjectWriteOperation op;
+  cls_rgw_reshard_remove(op, entry);
+
+  ret =  io_ctx.operate(reshard_oid, &op);
+
+  l.unlock(&io_ctx, reshard_oid);
+  return ret;
+}
+
+int RGWReshard::remove(cls_rgw_reshard_entry& entry)
+{
+  rados::cls::lock::Lock l(reshard_lock_name);
+  librados::IoCtx io_ctx;
+
+  int ret = get_io_ctx(io_ctx);
+  if (ret < 0)
+    return ret;
+
+  ret = l.lock_exclusive(&io_ctx, reshard_oid);
+  if (ret == -EBUSY) {
+    dout(0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
+    return 0;
+  }
+  if (ret < 0)
+    return ret;
+
+  librados::ObjectWriteOperation op;
+  cls_rgw_reshard_remove(op);
+
+  ret =  io_ctx.operate(reshard_oid, &op);
+
+  l.unlock(&io_ctx, reshard_oid);
+  return ret;
+}
