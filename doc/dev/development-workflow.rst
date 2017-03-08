@@ -139,15 +139,15 @@ results are posted on `pulpito <http://pulpito.ceph.com/>`_ and the
 The ``quality engineer`` is either a developer or a member of the QE
 team. There is at least one integration test suite per project:
 
-* `rgw <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rgw>`_ suite
-* `CephFS <https://github.com/ceph/ceph-qa-suite/tree/master/suites/fs>`_ suite
-* `rados <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados>`_ suite
-* `rbd <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rbd>`_ suite
+* `rgw <https://github.com/ceph/ceph/tree/master/qa/suites/rgw>`_ suite
+* `CephFS <https://github.com/ceph/ceph/tree/master/qa/suites/fs>`_ suite
+* `rados <https://github.com/ceph/ceph/tree/master/qa/suites/rados>`_ suite
+* `rbd <https://github.com/ceph/ceph/tree/master/qa/suites/rbd>`_ suite
 
-and a many others such as
+and many others such as
 
-* `upgrade <https://github.com/ceph/ceph-qa-suite/tree/master/suites/upgrade>`_ suites
-* `power-cyle <https://github.com/ceph/ceph-qa-suite/tree/master/suites/powercycle>`_ suite
+* `upgrade <https://github.com/ceph/ceph/tree/master/qa/suites/upgrade>`_ suites
+* `power-cyle <https://github.com/ceph/ceph/tree/master/qa/suites/powercycle>`_ suite
 * ...
 
 Preparing a new release
