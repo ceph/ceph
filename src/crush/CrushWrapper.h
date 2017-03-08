@@ -54,6 +54,10 @@ public:
   std::map<int32_t, string> type_map; /* bucket/device type names */
   std::map<int32_t, string> name_map; /* bucket/device names */
   std::map<int32_t, string> rule_name_map;
+  std::map<int32_t, int32_t> class_map; /* item id -> class id */
+  std::map<int32_t, string> class_name; /* class id -> class name */
+  std::map<string, int32_t> class_rname; /* class name -> class id */
+  std::map<int32_t, map<int32_t, int32_t> > class_bucket; /* bucket[id][class] == id */
 
 private:
   struct crush_map *crush;
@@ -370,7 +374,7 @@ public:
     build_rmaps();
     return name_rmap.count(name);
   }
-  bool item_exists(int i) {
+  bool item_exists(int i) const {
     return name_map.count(i);
   }
   int get_item_id(const string& name) const {
@@ -392,6 +396,59 @@ public:
     if (have_rmaps)
       name_rmap[name] = i;
     return 0;
+  }
+  bool id_has_class(int i) {
+    int idout;
+    int classout;
+    if (split_id_class(i, &idout, &classout) != 0)
+      return false;
+    return classout != -1;
+  }
+  int split_id_class(int i, int *idout, int *classout) const;
+
+  bool class_exists(const string& name) const {
+    return class_rname.count(name);
+  }
+  const char *get_class_name(int i) const {
+    std::map<int,string>::const_iterator p = class_name.find(i);
+    if (p != class_name.end())
+      return p->second.c_str();
+    return 0;
+  }
+  int get_class_id(const string& name) const {
+    std::map<string,int>::const_iterator p = class_rname.find(name);
+    if (p != class_rname.end())
+      return p->second;
+    else
+      return -EINVAL;
+  }
+  int get_or_create_class_id(const string& name) {
+    int c = get_class_id(name);
+    if (c < 0) {
+      int i = class_name.size();
+      class_name[i] = name;
+      class_rname[name] = i;
+      return i;
+    } else {
+      return c;
+    }
+  }
+
+  const char *get_item_class(int t) const {
+    std::map<int,int>::const_iterator p = class_map.find(t);
+    if (p == class_map.end())
+      return 0;
+    return get_class_name(p->second);
+  }
+  int set_item_class(int i, const string& name) {
+    if (!is_valid_crush_name(name))
+      return -EINVAL;
+    class_map[i] = get_or_create_class_id(name);
+    return 0;
+  }
+  int set_item_class(int i, int c) {
+    class_map[i] = c;
+    return c;
   }
 
   int can_rename_item(const string& srcname,
@@ -630,6 +687,15 @@ public:
   int remove_item(CephContext *cct, int id, bool unlink_only);
 
   /**
+   * recursively remove buckets starting at item and stop removing
+   * when a bucket is in use.
+   *
+   * @param item id to remove
+   * @return 0 on success, negative on error
+   */
+  int remove_unused_root(int item);
+
+  /**
    * remove all instances of an item nested beneath a certain point from the map
    *
    * @param cct cct
@@ -641,7 +707,7 @@ public:
 private:
   bool _maybe_remove_last_instance(CephContext *cct, int id, bool unlink_only);
   int _remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
-  bool _bucket_is_in_use(CephContext *cct, int id);
+  bool _bucket_is_in_use(int id);
 public:
   int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 
@@ -1021,6 +1087,12 @@ public:
     assert(crush);
     crush_finalize(crush);
   }
+
+  int device_class_clone(int original, int device_class, int *clone);
+  int populate_classes();
+  /* remove unused roots generated for class devices */
+  int trim_roots_with_class();
+  int cleanup_classes();
 
   void start_choose_profile() {
     free(crush->choose_tries);
