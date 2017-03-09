@@ -4445,7 +4445,12 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       }
     } else if (p->first == "osd_pg_creates") {
       if ((int)s->is_capable("osd", MON_CAP_W)) {
-	pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
+	if (monmap->get_required_features().contains_all(
+	      ceph::features::mon::FEATURE_LUMINOUS)) {
+	  osdmon()->check_pg_creates_sub(s->sub_map["osd_pg_creates"]);
+	} else {
+	  pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
+	}
       }
     } else if (p->first == "monmap") {
       monmon()->check_sub(s->sub_map[p->first]);
