@@ -1653,6 +1653,7 @@ public:
 private:
   BlueFS *bluefs = nullptr;
   unsigned bluefs_shared_bdev = 0;  ///< which bluefs bdev we are sharing
+  bool bluefs_single_shared_device = true;
   KeyValueDB *db = nullptr;
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
@@ -1698,7 +1699,8 @@ private:
   deque<TransContext*> kv_queue;             ///< ready, already submitted
   deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
   deque<TransContext*> kv_committing;        ///< currently syncing
-  deque<TransContext*> deferred_cleanup_queue;    ///< deferred done, ready for cleanup
+  deque<TransContext*> deferred_done_queue;    ///< deferred ios done
+  deque<TransContext*> deferred_stable_queue;  ///< deferred ios done + stable
 
   PerfCounters *logger = nullptr;
 
