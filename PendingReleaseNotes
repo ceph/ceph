@@ -88,3 +88,7 @@
 * The rados copy-get-classic operation has been removed since it has not been
   used by the OSD since before hammer.  It is unlikely any librados user is
   using this operation explicitly since there is also the more modern copy-get.
+
+* The RGW api for getting object torrent has changed its params from 'get_torrent'
+  to 'torrent' so that it can be compatible with Amazon S3. Now the request for 
+  object torrent is like 'GET /ObjectName?torrent'.
