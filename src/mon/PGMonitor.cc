@@ -231,6 +231,11 @@ void PGMonitor::post_paxos_update()
 {
   dout(10) << __func__ << dendl;
   OSDMap& osdmap = mon->osdmon()->osdmap;
+  if (mon->monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS)) {
+    // let OSDMonitor take care of the pg-creates subscriptions.
+    return;
+  }
   if (osdmap.get_epoch()) {
     if (osdmap.get_num_up_osds() > 0) {
       assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);

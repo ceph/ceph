@@ -32,6 +32,7 @@ using namespace std;
 #include "osd/OSDMap.h"
 #include "osd/OSDMapMapping.h"
 
+#include "CreatingPGs.h"
 #include "PaxosService.h"
 
 class Monitor;
@@ -148,6 +149,8 @@ public:
   // svc
 public:  
   void create_initial() override;
+  void get_store_prefixes(std::set<string>& s) override;
+
 private:
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;  // prepare a new pending
@@ -420,6 +423,24 @@ private:
   bool preprocess_beacon(MonOpRequestRef op);
   bool prepare_beacon(MonOpRequestRef op);
 
+  friend class C_UpdateCreatingPGs;
+  std::map<int, std::map<epoch_t, std::set<pg_t>>> creating_pgs_by_osd_epoch;
+  std::vector<pg_t> pending_created_pgs;
+  // the epoch when the pg mapping was calculated
+  epoch_t creating_pgs_epoch = 0;
+  creating_pgs_t creating_pgs;
+  Spinlock creating_pgs_lock;
+
+  creating_pgs_t update_pending_creatings(const OSDMap::Incremental& inc);
+  void trim_creating_pgs(creating_pgs_t *creating_pgs, const PGMap& pgm);
+  void scan_for_creating_pgs(const std::map<int64_t,pg_pool_t>& pools,
+			     const std::set<int64_t>& removed_pools,
+			     creating_pgs_t* creating_pgs) const;
+  pair<int32_t, pg_t> get_parent_pg(pg_t pgid) const;
+  void update_creating_pgs();
+  void check_pg_creates_subs();
+  epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
+
 public:
   OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name);
 
@@ -456,6 +477,7 @@ public:
   void print_nodes(Formatter *f);
 
   void check_osdmap_sub(Subscription *sub);
+  void check_pg_creates_sub(Subscription *sub);
 
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {
