@@ -7139,6 +7139,9 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	} else {
 	  _txc_finalize_kv(txc, txc->t);
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
+	  if (txc->osr->kv_submitted_waiters) {
+	    txc->osr->qcond.notify_all();
+	  }
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	  _txc_applied_kv(txc);
@@ -7577,6 +7580,10 @@ void BlueStore::_kv_sync_thread()
 	_txc_applied_kv(txc);
 	--txc->osr->kv_committing_serially;
 	txc->state = TransContext::STATE_KV_SUBMITTED;
+	if (txc->osr->kv_submitted_waiters) {
+	  std::lock_guard<std::mutex> l(txc->osr->qlock);
+	  txc->osr->qcond.notify_all();
+	}
       }
       for (auto txc : kv_committing) {
 	if (txc->had_ios) {

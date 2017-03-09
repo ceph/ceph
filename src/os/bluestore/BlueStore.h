@@ -1539,6 +1539,8 @@ public:
 
     std::atomic_int kv_committing_serially = {0};
 
+    std::atomic_int kv_submitted_waiters = {0};
+
     OpSequencer(CephContext* cct)
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
       : Sequencer_impl(cct),
@@ -1554,16 +1556,26 @@ public:
       q.push_back(*txc);
     }
 
-    void flush() override {
+    void drain() {
       std::unique_lock<std::mutex> l(qlock);
       while (!q.empty())
 	qcond.wait(l);
     }
 
-    void drain() {
+    void flush() override {
       std::unique_lock<std::mutex> l(qlock);
-      while (!q.empty())
+      while (true) {
+	if (q.empty()) {
+	  return;
+	}
+	TransContext *txc = &q.back();
+	if (txc->state >= TransContext::STATE_KV_SUBMITTED) {
+	  return;
+	}
+	++kv_submitted_waiters;
 	qcond.wait(l);
+	--kv_submitted_waiters;
+      }
     }
 
     bool flush_commit(Context *c) override {
