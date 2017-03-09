@@ -4,6 +4,10 @@ overrides:
       client:
         fuse_default_permissions: 0
 tasks:
+- check-counter:
+    counters:
+      mds:
+        - "mds.dir_split"
 - workunit:
     clients:
       all:
