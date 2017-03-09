@@ -2986,7 +2986,7 @@ public:
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(rgw_bucket& bucket, int shard_id, string *bucket_ver, string *master_ver,
-      map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker);
+      map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool* syncstopped = NULL);
   int get_bucket_stats_async(rgw_bucket& bucket, int shard_id, RGWGetBucketStats_CB *cb);
   int get_user_stats(const rgw_user& user, RGWStorageStats& stats);
   int get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *cb);
@@ -3032,6 +3032,8 @@ public:
   int cls_bucket_head_async(rgw_bucket& bucket, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
   int list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
   int trim_bi_log_entries(rgw_bucket& bucket, int shard_id, string& marker, string& end_marker);
+  int resync_bi_log_entries(rgw_bucket& bucket, int shard_id);
+  int stop_bi_log_entries(rgw_bucket& bucket, int shard_id);
   int get_bi_log_status(rgw_bucket& bucket, int shard_id, map<int, string>& max_marker);
 
   int bi_get_instance(rgw_obj& obj, rgw_bucket_dir_entry *dirent);

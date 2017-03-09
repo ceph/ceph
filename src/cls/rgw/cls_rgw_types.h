@@ -35,6 +35,8 @@ enum RGWModifyOp {
   CLS_RGW_OP_LINK_OLH        = 4,
   CLS_RGW_OP_LINK_OLH_DM     = 5, /* creation of delete marker */
   CLS_RGW_OP_UNLINK_INSTANCE = 6,
+  CLS_RGW_OP_SYNCSTOP        = 7,
+  CLS_RGW_OP_RESYNC          = 8,
 };
 
 enum RGWBILogFlags {
@@ -589,16 +591,18 @@ struct rgw_bucket_dir_header {
   uint64_t ver;
   uint64_t master_ver;
   string max_marker;
+  bool syncstopped;
 
-  rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0) {}
+  rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0), syncstopped(false) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(5, 2, bl);
+    ENCODE_START(6, 2, bl);
     ::encode(stats, bl);
     ::encode(tag_timeout, bl);
     ::encode(ver, bl);
     ::encode(master_ver, bl);
     ::encode(max_marker, bl);
+    ::encode(syncstopped,bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -617,6 +621,9 @@ struct rgw_bucket_dir_header {
     }
     if (struct_v >= 5) {
       ::decode(max_marker, bl);
+    }
+    if (struct_v >= 6) {
+      ::decode(syncstopped,bl);
     }
     DECODE_FINISH(bl);
   }

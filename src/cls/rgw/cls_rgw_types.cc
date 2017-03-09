@@ -365,6 +365,10 @@ void rgw_bi_log_entry::decode_json(JSONObj *obj)
     op = CLS_RGW_OP_LINK_OLH_DM;
   } else if (op_str == "unlink_instance") {
     op = CLS_RGW_OP_UNLINK_INSTANCE;
+  } else if (op_str == "syncstop") {
+    op = CLS_RGW_OP_SYNCSTOP;
+  } else if (op_str == "resync") {
+    op = CLS_RGW_OP_RESYNC;
   } else {
     op = CLS_RGW_OP_UNKNOWN;
   }
@@ -416,6 +420,12 @@ void rgw_bi_log_entry::dump(Formatter *f) const
       break;
     case CLS_RGW_OP_UNLINK_INSTANCE:
       f->dump_string("op", "unlink_instance");
+      break;
+    case CLS_RGW_OP_SYNCSTOP:
+      f->dump_string("op", "syncstop");
+      break;
+    case CLS_RGW_OP_RESYNC:
+      f->dump_string("op", "resync");
       break;
     default:
       f->dump_string("op", "invalid");

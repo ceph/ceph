@@ -203,6 +203,16 @@ RGWAsyncUnlockSystemObj::RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCom
 {
 }
 
+int RGWAsyncDeleteSystemObj::_send_request()
+{
+    return store->delete_system_obj(obj);  
+}
+
+RGWAsyncDeleteSystemObj::RGWAsyncDeleteSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+                            RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj) : RGWAsyncRadosRequest(caller, cn), store(_store), 
+    objv_tracker(_objv_tracker), obj(_obj)
+{
+}
 
 RGWRadosSetOmapKeysCR::RGWRadosSetOmapKeysCR(RGWRados *_store,
                       rgw_bucket& _pool, const string& _oid,
@@ -399,6 +409,19 @@ int RGWSimpleRadosUnlockCR::request_complete()
   return req->get_ret_status();
 }
 
+int RGWSimpleRadosDeleteCR::send_request()
+{
+  rgw_obj obj = rgw_obj(pool, oid);
+  req = new RGWAsyncDeleteSystemObj(this, stack->create_completion_notifier(),
+				    store, NULL, obj);
+  async_rados->queue(req);
+  return 0;
+}
+
+int RGWSimpleRadosDeleteCR::request_complete()
+{
+    return req->get_ret_status();
+}
 
 int RGWOmapAppend::operate() {
   reenter(this) {

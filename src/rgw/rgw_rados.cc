@@ -8275,10 +8275,12 @@ int RGWRados::Object::Delete::delete_obj()
       return r;
     }
 
-    r = store->data_log->add_entry(bs->bucket, bs->shard_id);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
-      return r;
+    if (target->bucket_info.datasync_flag_enabled()) {
+      r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+      if (r < 0) {
+        lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+        return r;
+      }
     }
 
     return 0;
@@ -9437,9 +9439,11 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
 
   ret = store->cls_obj_complete_add(*bs, optag, poolid, epoch, ent, category, remove_objs, bilog_flags);
 
-  int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
-  if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+  if (target->bucket_info.datasync_flag_enabled()) {
+    int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+    }
   }
 
   return ret;
@@ -9462,9 +9466,11 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
 
   ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags);
 
-  int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
-  if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+  if (target->bucket_info.datasync_flag_enabled()) {
+    int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+    }
   }
 
   return ret;
@@ -9491,9 +9497,11 @@ int RGWRados::Bucket::UpdateIndex::cancel()
    * for following the specific bucket shard log. Otherwise they end up staying behind, and users
    * have no way to tell that they're all caught up
    */
-  int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
-  if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+  if (target->bucket_info.datasync_flag_enabled()) {
+    int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+    }
   }
 
   return ret;
@@ -10934,7 +10942,7 @@ int RGWRados::raw_obj_stat(rgw_obj& obj, uint64_t *psize, real_time *pmtime, uin
 }
 
 int RGWRados::get_bucket_stats(rgw_bucket& bucket, int shard_id, string *bucket_ver, string *master_ver,
-    map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker)
+    map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool *syncstopped)
 {
   map<string, rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
@@ -10962,6 +10970,8 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, int shard_id, string *bucket_
     } else {
       marker_mgr.add(viter->first, iter->second.max_marker);
     }
+    if (syncstopped != NULL)
+      *syncstopped = iter->second.syncstopped;
   }
   ver_mgr.to_string(bucket_ver);
   master_ver_mgr.to_string(master_ver);
@@ -11759,6 +11769,28 @@ int RGWRados::trim_bi_log_entries(rgw_bucket& bucket, int shard_id, string& star
 
   return CLSRGWIssueBILogTrim(index_ctx, start_marker_mgr, end_marker_mgr, bucket_objs,
       cct->_conf->rgw_bucket_index_max_aio)();
+}
+
+int RGWRados::resync_bi_log_entries(rgw_bucket& bucket, int shard_id)
+{
+  librados::IoCtx index_ctx;
+  map<int, string> bucket_objs;
+  int r = open_bucket_index(bucket, index_ctx, bucket_objs, shard_id);
+  if (r < 0)
+    return r;
+
+  return CLSRGWIssueResyncBucketBILog(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+}
+
+int RGWRados::stop_bi_log_entries(rgw_bucket& bucket, int shard_id)
+{
+  librados::IoCtx index_ctx;
+  map<int, string> bucket_objs;
+  int r = open_bucket_index(bucket, index_ctx, bucket_objs, shard_id);
+  if (r < 0)
+    return r;
+
+  return CLSRGWIssueBucketBILogStop(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
 int RGWRados::bi_get_instance(rgw_obj& obj, rgw_bucket_dir_entry *dirent)
