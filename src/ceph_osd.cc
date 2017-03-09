@@ -268,6 +268,11 @@ int main(int argc, const char **argv)
     if (mc.get_monmap_privately() < 0)
       return -1;
 
+    if (mc.monmap.fsid.is_zero()) {
+      derr << "must specify cluster fsid" << dendl;
+      return -EINVAL;
+    }
+
     int err = OSD::mkfs(g_ceph_context, store, g_conf->osd_data,
 			mc.monmap.fsid, whoami);
     if (err < 0) {
