@@ -7326,7 +7326,7 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
   dout(20) << __func__ << " txc " << txc << dendl;
 
   // warning: we're calling onreadable_sync inside the sequencer lock
-  if (txc->onreadable_sync) {
+  if (txc->onreadable_sync && !txc->wal_txn) {
     txc->onreadable_sync->complete(0);
     txc->onreadable_sync = NULL;
   }
@@ -7336,7 +7336,7 @@ void BlueStore::_txc_finish_kv(TransContext *txc)
     finishers[n]->queue(txc->oncommit);
     txc->oncommit = NULL;
   }
-  if (txc->onreadable) {
+  if (txc->onreadable && !txc->wal_txn) {
     finishers[n]->queue(txc->onreadable);
     txc->onreadable = NULL;
   }
@@ -7701,6 +7701,18 @@ int BlueStore::_wal_finish(TransContext *txc)
   txc->osr->qcond.notify_all();
   wal_cleanup_queue.push_back(txc);
   kv_cond.notify_one();
+
+  if (txc->onreadable_sync) {
+    txc->onreadable_sync->complete(0);
+    txc->onreadable_sync = NULL;
+  }
+
+  if (txc->onreadable) {
+    unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
+    finishers[n]->queue(txc->onreadable);
+    txc->onreadable = NULL;
+  }
+
   return 0;
 }
 
