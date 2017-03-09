@@ -2524,8 +2524,20 @@ We recommend that all v10.2.x users upgrade.
 
 For more detailed information, see :download:`the complete changelog <changelog/v10.2.6.txt>`.
 
-Notable Changes
----------------
+OSDs No Longer Send ENXIO by Default
+------------------------------------
+
+In previous versions, if a client sent an op to the wrong OSD, the OSD
+would reply with ENXIO.  The rationale here is that the client or OSD is
+clearly buggy and we want to surface the error as clearly as possible.
+We now only send the ENXIO reply if the osd_enxio_on_misdirected_op option
+is enabled (it's off by default).  This means that a VM using librbd that
+previously would have gotten an EIO and gone read-only will now see a
+blocked/hung IO instead.
+
+Other Notable Changes
+---------------------
+
 * build/ops: add hostname sanity check to run-{c}make-check.sh (`issue#18134 <http://tracker.ceph.com/issues/18134>`_, `pr#12302 <http://github.com/ceph/ceph/pull/12302>`_, Nathan Cutler)
 * build/ops: add ldap lib to rgw lib deps based on build config (`issue#17313 <http://tracker.ceph.com/issues/17313>`_, `pr#13183 <http://github.com/ceph/ceph/pull/13183>`_, Nathan Cutler)
 * build/ops: ceph-create-keys loops forever (`issue#17753 <http://tracker.ceph.com/issues/17753>`_, `pr#11884 <http://github.com/ceph/ceph/pull/11884>`_, Alfredo Deza)
