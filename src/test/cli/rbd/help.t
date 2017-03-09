@@ -56,6 +56,7 @@
       mirror image promote        Promote an image to primary for RBD mirroring.
       mirror image resync         Force resync to primary image for RBD mirroring.
       mirror image status         Show RDB mirroring status for an image.
+      mirror pool demote          Demote all primary images in the pool.
       mirror pool disable         Disable RBD mirroring by default within a pool.
       mirror pool enable          Enable RBD mirroring by default within a pool.
       mirror pool info            Show information about the pool mirroring
@@ -63,6 +64,7 @@
       mirror pool peer add        Add a mirroring peer to a pool.
       mirror pool peer remove     Remove a mirroring peer from a pool.
       mirror pool peer set        Update mirroring peer settings.
+      mirror pool promote         Promote all non-primary images in the pool.
       mirror pool status          Show status for all mirrored images in the pool.
       nbd list (nbd ls)           List the nbd devices already used.
       nbd map                     Map image to a nbd device.
@@ -981,6 +983,18 @@
     --format arg         output format [plain, json, or xml]
     --pretty-format      pretty formatting (json and xml)
   
+  rbd help mirror pool demote
+  usage: rbd mirror pool demote [--pool <pool>] 
+                                <pool-name> 
+  
+  Demote all primary images in the pool.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
   rbd help mirror pool disable
   usage: rbd mirror pool disable [--pool <pool>] 
                                  <pool-name> 
@@ -1065,6 +1079,19 @@
     <value>              new client or cluster name
   
   Optional arguments
+    -p [ --pool ] arg    pool name
+  
+  rbd help mirror pool promote
+  usage: rbd mirror pool promote [--force] [--pool <pool>] 
+                                 <pool-name> 
+  
+  Promote all non-primary images in the pool.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    --force              promote even if not cleanly demoted by remote cluster
     -p [ --pool ] arg    pool name
   
   rbd help mirror pool status

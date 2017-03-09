@@ -1,16 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "librbd/api/Group.h"
 #include "common/errno.h"
-
-#include "librbd/Group.h"
 #include "librbd/ImageState.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::Group: "
+#define dout_prefix *_dout << "librbd::api::Group: " << __func__ << ": "
 
 using std::map;
 using std::pair;
@@ -25,10 +24,12 @@ using librados::IoCtx;
 using librados::Rados;
 
 namespace librbd {
+namespace api {
 
 // Consistency groups functions
 
-int group_create(librados::IoCtx& io_ctx, const char *group_name)
+template <typename I>
+int Group<I>::create(librados::IoCtx& io_ctx, const char *group_name)
 {
   CephContext *cct = (CephContext *)io_ctx.cct();
 
@@ -42,7 +43,8 @@ int group_create(librados::IoCtx& io_ctx, const char *group_name)
 
   ldout(cct, 2) << "adding consistency group to directory..." << dendl;
 
-  int r = cls_client::group_dir_add(&io_ctx, RBD_GROUP_DIRECTORY, group_name, id);
+  int r = cls_client::group_dir_add(&io_ctx, RBD_GROUP_DIRECTORY, group_name,
+                                    id);
   if (r < 0) {
     lderr(cct) << "error adding consistency group to directory: "
 	       << cpp_strerror(r)
@@ -71,13 +73,14 @@ err_remove_from_dir:
   return r;
 }
 
-int group_remove(librados::IoCtx& io_ctx, const char *group_name)
+template <typename I>
+int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
 {
   CephContext *cct((CephContext *)io_ctx.cct());
-  ldout(cct, 20) << "group_remove " << &io_ctx << " " << group_name << dendl;
+  ldout(cct, 20) << "io_ctx=" << &io_ctx << " " << group_name << dendl;
 
   std::vector<group_image_status_t> images;
-  int r = group_image_list(io_ctx, group_name, &images);
+  int r = image_list(io_ctx, group_name, &images);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "error listing group images" << dendl;
     return r;
@@ -87,7 +90,7 @@ int group_remove(librados::IoCtx& io_ctx, const char *group_name)
     librados::Rados rados(io_ctx);
     IoCtx image_ioctx;
     rados.ioctx_create2(i.pool, image_ioctx);
-    r = group_image_remove(io_ctx, group_name, image_ioctx, i.name.c_str());
+    r = image_remove(io_ctx, group_name, image_ioctx, i.name.c_str());
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error removing image from a group" << dendl;
       return r;
@@ -110,8 +113,8 @@ int group_remove(librados::IoCtx& io_ctx, const char *group_name)
     return r;
   }
 
-  r = cls_client::group_dir_remove(&io_ctx, RBD_GROUP_DIRECTORY,
-				       group_name, group_id);
+  r = cls_client::group_dir_remove(&io_ctx, RBD_GROUP_DIRECTORY, group_name,
+                                   group_id);
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "error removing group from directory" << dendl;
     return r;
@@ -120,10 +123,11 @@ int group_remove(librados::IoCtx& io_ctx, const char *group_name)
   return 0;
 }
 
-int group_list(IoCtx& io_ctx, vector<string> *names)
+template <typename I>
+int Group<I>::list(IoCtx& io_ctx, vector<string> *names)
 {
   CephContext *cct = (CephContext *)io_ctx.cct();
-  ldout(cct, 20) << "group_list " << &io_ctx << dendl;
+  ldout(cct, 20) << "io_ctx=" << &io_ctx << dendl;
 
   int max_read = 1024;
   string last_read = "";
@@ -149,17 +153,19 @@ int group_list(IoCtx& io_ctx, vector<string> *names)
   return 0;
 }
 
-int group_image_add(librados::IoCtx& group_ioctx, const char *group_name,
+template <typename I>
+int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
 		    librados::IoCtx& image_ioctx, const char *image_name)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
-  ldout(cct, 20) << "group_image_add " << &group_ioctx
+  ldout(cct, 20) << "io_ctx=" << &group_ioctx
 		 << " group name " << group_name << " image "
 		 << &image_ioctx << " name " << image_name << dendl;
 
   string group_id;
 
-  int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name, &group_id);
+  int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name,
+                                 &group_id);
   if (r < 0) {
     lderr(cct) << "error reading consistency group id object: "
 	       << cpp_strerror(r)
@@ -174,7 +180,8 @@ int group_image_add(librados::IoCtx& group_ioctx, const char *group_name,
 
   string image_id;
 
-  r = cls_client::dir_get_id(&image_ioctx, RBD_DIRECTORY, image_name, &image_id);
+  r = cls_client::dir_get_id(&image_ioctx, RBD_DIRECTORY, image_name,
+                             &image_id);
   if (r < 0) {
     lderr(cct) << "error reading image id object: "
 	       << cpp_strerror(-r) << dendl;
@@ -186,10 +193,11 @@ int group_image_add(librados::IoCtx& group_ioctx, const char *group_name,
   ldout(cct, 20) << "adding image " << image_name
 		 << " image id " << image_header_oid << dendl;
 
-  cls::rbd::GroupImageStatus incomplete_st(image_id, image_ioctx.get_id(),
-				cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE);
-  cls::rbd::GroupImageStatus attached_st(image_id, image_ioctx.get_id(),
-				  cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED);
+  cls::rbd::GroupImageStatus incomplete_st(
+    image_id, image_ioctx.get_id(),
+    cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE);
+  cls::rbd::GroupImageStatus attached_st(
+    image_id, image_ioctx.get_id(), cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED);
 
   r = cls_client::group_image_set(&group_ioctx, group_header_oid,
 				  incomplete_st);
@@ -202,8 +210,7 @@ int group_image_add(librados::IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
-  r = cls_client::image_add_group(&image_ioctx, image_header_oid,
-					 group_spec);
+  r = cls_client::image_add_group(&image_ioctx, image_header_oid, group_spec);
   if (r < 0) {
     lderr(cct) << "error adding group reference to image: "
 	       << cpp_strerror(-r) << dendl;
@@ -219,17 +226,19 @@ int group_image_add(librados::IoCtx& group_ioctx, const char *group_name,
   return r;
 }
 
-int group_image_remove(librados::IoCtx& group_ioctx, const char *group_name,
-		       librados::IoCtx& image_ioctx, const char *image_name)
+template <typename I>
+int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
+		           librados::IoCtx& image_ioctx, const char *image_name)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
-  ldout(cct, 20) << "group_remove_image " << &group_ioctx
+  ldout(cct, 20) << "io_ctx=" << &group_ioctx
 		 << " group name " << group_name << " image "
 		 << &image_ioctx << " name " << image_name << dendl;
 
   string group_id;
 
-  int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name, &group_id);
+  int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name,
+                                 &group_id);
   if (r < 0) {
     lderr(cct) << "error reading consistency group id object: "
 	       << cpp_strerror(r)
@@ -242,7 +251,8 @@ int group_image_remove(librados::IoCtx& group_ioctx, const char *group_name,
 		 << " group id " << group_header_oid << dendl;
 
   string image_id;
-  r = cls_client::dir_get_id(&image_ioctx, RBD_DIRECTORY, image_name, &image_id);
+  r = cls_client::dir_get_id(&image_ioctx, RBD_DIRECTORY, image_name,
+                             &image_id);
   if (r < 0) {
     lderr(cct) << "error reading image id object: "
 	       << cpp_strerror(-r) << dendl;
@@ -256,8 +266,9 @@ int group_image_remove(librados::IoCtx& group_ioctx, const char *group_name,
 
   cls::rbd::GroupSpec group_spec(group_id, group_ioctx.get_id());
 
-  cls::rbd::GroupImageStatus incomplete_st(image_id, image_ioctx.get_id(),
-				cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE);
+  cls::rbd::GroupImageStatus incomplete_st(
+    image_id, image_ioctx.get_id(),
+    cls::rbd::GROUP_IMAGE_LINK_STATE_INCOMPLETE);
 
   cls::rbd::GroupImageSpec spec(image_id, image_ioctx.get_id());
 
@@ -288,12 +299,13 @@ int group_image_remove(librados::IoCtx& group_ioctx, const char *group_name,
   return 0;
 }
 
-int group_image_list(librados::IoCtx& group_ioctx,
+template <typename I>
+int Group<I>::image_list(librados::IoCtx& group_ioctx,
 		     const char *group_name,
 		     std::vector<group_image_status_t> *images)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
-  ldout(cct, 20) << "group_image_list " << &group_ioctx
+  ldout(cct, 20) << "io_ctx=" << &group_ioctx
 		 << " group name " << group_name << dendl;
 
   string group_id;
@@ -319,7 +331,7 @@ int group_image_list(librados::IoCtx& group_ioctx,
     cls::rbd::GroupImageSpec start_last;
 
     r = cls_client::group_image_list(&group_ioctx, group_header_oid,
-	start_last, max_read, &image_ids_page);
+                                     start_last, max_read, &image_ids_page);
 
     if (r < 0) {
       lderr(cct) << "error reading image list from consistency group: "
@@ -356,7 +368,8 @@ int group_image_list(librados::IoCtx& group_ioctx,
   return 0;
 }
 
-int image_get_group(ImageCtx *ictx, group_spec_t *group_spec)
+template <typename I>
+int Group<I>::image_get_group(I *ictx, group_spec_t *group_spec)
 {
   int r = ictx->state->refresh_if_required();
   if (r < 0)
@@ -382,4 +395,7 @@ int image_get_group(ImageCtx *ictx, group_spec_t *group_spec)
   return 0;
 }
 
+} // namespace api
 } // namespace librbd
+
+template class librbd::api::Group<librbd::ImageCtx>;

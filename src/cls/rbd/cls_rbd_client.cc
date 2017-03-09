@@ -83,7 +83,7 @@ namespace librbd {
                                     std::map<rados::cls::lock::locker_id_t,
                                              rados::cls::lock::locker_info_t> *lockers,
                                     bool *exclusive_lock, std::string *lock_tag,
-				    ::SnapContext *snapc, parent_info *parent) {
+				    ::SnapContext *snapc, ParentInfo *parent) {
       assert(size);
       assert(features);
       assert(incompatible_features);
@@ -132,7 +132,7 @@ namespace librbd {
                              bool *exclusive_lock,
 			     string *lock_tag,
 			     ::SnapContext *snapc,
-			     parent_info *parent)
+			     ParentInfo *parent)
     {
       librados::ObjectReadOperation op;
       get_mutable_metadata_start(&op, read_only);
@@ -297,7 +297,7 @@ namespace librbd {
     }
 
     int get_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   snapid_t snap_id, parent_spec *pspec, 
+		   snapid_t snap_id, ParentSpec *pspec,
 		   uint64_t *parent_overlap)
     {
       bufferlist inbl, outbl;
@@ -321,7 +321,7 @@ namespace librbd {
     }
 
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
-		   parent_spec pspec, uint64_t parent_overlap)
+		   const ParentSpec &pspec, uint64_t parent_overlap)
     {
       librados::ObjectWriteOperation op;
       set_parent(&op, pspec, parent_overlap);
@@ -329,7 +329,7 @@ namespace librbd {
     }
 
     void set_parent(librados::ObjectWriteOperation *op,
-                    parent_spec pspec, uint64_t parent_overlap) {
+                    const ParentSpec &pspec, uint64_t parent_overlap) {
       bufferlist in_bl;
       ::encode(pspec.pool_id, in_bl);
       ::encode(pspec.image_id, in_bl);
@@ -409,7 +409,7 @@ namespace librbd {
     }
 
     int add_child(librados::IoCtx *ioctx, const std::string &oid,
-		  parent_spec pspec, const std::string &c_imageid)
+		  const ParentSpec &pspec, const std::string &c_imageid)
     {
       bufferlist in, out;
       ::encode(pspec.pool_id, in);
@@ -421,7 +421,7 @@ namespace librbd {
     }
 
     void remove_child(librados::ObjectWriteOperation *op,
-		      parent_spec pspec, const std::string &c_imageid)
+		      const ParentSpec &pspec, const std::string &c_imageid)
     {
       bufferlist in;
       ::encode(pspec.pool_id, in);
@@ -432,7 +432,7 @@ namespace librbd {
     }
 
     int remove_child(librados::IoCtx *ioctx, const std::string &oid,
-		     parent_spec pspec, const std::string &c_imageid)
+		     const ParentSpec &pspec, const std::string &c_imageid)
     {
       librados::ObjectWriteOperation op;
       remove_child(&op, pspec, c_imageid);
@@ -440,7 +440,7 @@ namespace librbd {
     }
 
     void get_children_start(librados::ObjectReadOperation *op,
-                            const parent_spec &pspec) {
+                            const ParentSpec &pspec) {
       bufferlist in_bl;
       ::encode(pspec.pool_id, in_bl);
       ::encode(pspec.image_id, in_bl);
@@ -459,7 +459,7 @@ namespace librbd {
     }
 
     int get_children(librados::IoCtx *ioctx, const std::string &oid,
-		     parent_spec pspec, set<string>& children)
+		     const ParentSpec &pspec, set<string>& children)
     {
       librados::ObjectReadOperation op;
       get_children_start(&op, pspec);
@@ -542,7 +542,7 @@ namespace librbd {
                              const std::vector<snapid_t> &ids,
                              std::vector<string> *names,
                              std::vector<uint64_t> *sizes,
-                             std::vector<parent_info> *parents,
+                             std::vector<ParentInfo> *parents,
                              std::vector<uint8_t> *protection_statuses)
     {
       names->resize(ids.size());
@@ -575,7 +575,7 @@ namespace librbd {
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
-		      std::vector<parent_info> *parents,
+		      std::vector<ParentInfo> *parents,
 		      std::vector<uint8_t> *protection_statuses)
     {
       librados::ObjectReadOperation op;

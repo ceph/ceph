@@ -133,4 +133,11 @@ struct rbd_obj_header_ondisk {
 	struct rbd_obj_snap_ondisk snaps[0];
 } __attribute__((packed));
 
+enum {
+  RBD_PROTECTION_STATUS_UNPROTECTED  = 0,
+  RBD_PROTECTION_STATUS_UNPROTECTING = 1,
+  RBD_PROTECTION_STATUS_PROTECTED    = 2,
+  RBD_PROTECTION_STATUS_LAST         = 3
+};
+
 #endif

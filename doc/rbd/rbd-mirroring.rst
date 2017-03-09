@@ -182,7 +182,7 @@ image on the alternate cluster.
    failover of an image. An external mechanism is required to coordinate the
    full failover process (e.g. closing the image before demotion).
 
-To demote an image to non-primary with ``rbd``, specify the
+To demote a specific image to non-primary with ``rbd``, specify the
 ``mirror image demote`` command along with the pool and image name::
 
         rbd mirror image demote {pool-name}/{image-name}
@@ -191,14 +191,32 @@ For example::
 
         rbd --cluster local mirror image demote image-pool/image-1
 
-To promote an image to primary with ``rbd``, specify the ``mirror image promote``
-command along with the pool and image name::
+To demote all primary images within a pool to non-primary with ``rbd``, specify
+the ``mirror pool demote`` command along with the pool name::
 
-        rbd mirror image promote {pool-name}/{image-name}
+        rbd mirror pool demote {pool-name}
+
+For example::
+
+        rbd --cluster local mirror pool demote image-pool
+
+To promote a specific image to primary with ``rbd``, specify the
+``mirror image promote`` command along with the pool and image name::
+
+        rbd mirror image promote [--force] {pool-name}/{image-name}
 
 For example::
 
         rbd --cluster remote mirror image promote image-pool/image-1
+
+To promote all non-primary images within a pool to primary with ``rbd``, specify
+the ``mirror pool promote`` command along with the pool name::
+
+        rbd mirror pool promote [--force] {pool-name}
+
+For example::
+
+        rbd --cluster local mirror pool promote image-pool
 
 .. tip:: Since the primary / non-primary status is per-image, it is possible to
    have two clusters split the IO load and stage failover / failback.

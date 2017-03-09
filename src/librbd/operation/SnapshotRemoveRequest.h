@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_OPERATION_SNAPSHOT_REMOVE_REQUEST_H
 
 #include "librbd/operation/Request.h"
-#include "librbd/parent_types.h"
+#include "librbd/Types.h"
 #include <string>
 
 class Context;
@@ -85,7 +85,7 @@ private:
   void send_release_snap_id();
 
   void remove_snap_context();
-  int scan_for_parents(parent_spec &pspec);
+  int scan_for_parents(ParentSpec &pspec);
 
 };
 

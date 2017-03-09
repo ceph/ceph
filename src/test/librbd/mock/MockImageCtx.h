@@ -147,7 +147,7 @@ struct MockImageCtx {
   MOCK_CONST_METHOD2(get_snap_namespace, int(librados::snap_t,
 					     cls::rbd::SnapshotNamespace *out_snap_namespace));
   MOCK_CONST_METHOD2(get_parent_spec, int(librados::snap_t in_snap_id,
-                                          parent_spec *pspec));
+                                          ParentSpec *pspec));
 
   MOCK_CONST_METHOD2(is_snap_protected, int(librados::snap_t in_snap_id,
                                             bool *is_protected));
@@ -157,7 +157,7 @@ struct MockImageCtx {
   MOCK_METHOD8(add_snap, void(std::string in_snap_name,
 			      cls::rbd::SnapshotNamespace in_snap_namespace,
 			      librados::snap_t id,
-			      uint64_t in_size, parent_info parent,
+			      uint64_t in_size, const ParentInfo &parent,
 			      uint8_t protection_status, uint64_t flags, utime_t timestamp));
   MOCK_METHOD2(rm_snap, void(std::string in_snap_name, librados::snap_t id));
 
@@ -239,7 +239,7 @@ struct MockImageCtx {
   std::string header_oid;
   std::string id;
   std::string name;
-  parent_info parent_md;
+  ParentInfo parent_md;
   char *format_string;
   cls::rbd::GroupSpec group_spec;
 
