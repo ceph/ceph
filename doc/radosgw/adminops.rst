@@ -1481,9 +1481,16 @@ Request Parameters
 
 ``bucket``
 
-:Description: The bucket to unlink.
+:Description: The bucket name to unlink.
 :Type: String
 :Example: ``foo_bucket``
+:Required: Yes
+
+``bucket-id``
+
+:Description: The bucket id to unlink.
+:Type: String
+:Example: ``dev.6607669.420``
 :Required: Yes
 
 ``uid``
