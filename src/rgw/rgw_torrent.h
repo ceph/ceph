@@ -29,7 +29,7 @@ struct req_state;
 #define PIECE_LENGTH       "piece length"
 #define PIECES             "pieces"
 #define INFO_PIECES        "info"
-#define GET_TORRENT        "get_torrent"
+#define GET_TORRENT        "torrent"
 
 class TorrentBencode
 {
