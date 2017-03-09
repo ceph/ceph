@@ -2784,6 +2784,43 @@ int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
   return rc;
 }
 
+int get_head_location(cls_method_context_t hctx, bufferlist *in,
+		      bufferlist *out)
+{
+  uint64_t head_location;
+  int r = read_key(hctx, "head_location", &head_location);
+  if (r < 0) {
+    CLS_ERR("error retrieving head location: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  CLS_LOG(20, "read head location %lu", head_location);
+  ::encode(head_location, *out);
+
+  return 0;
+}
+
+int set_head_location(cls_method_context_t hctx, bufferlist *in,
+		      bufferlist *out)
+{
+  int rc;
+  uint64_t new_location;
+  bufferlist bl;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(new_location, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "set head location to %lu\n", new_location);
+  ::encode(new_location, bl);
+  rc = cls_cxx_map_set_val(hctx, "head_location", &bl);
+
+  return rc;
+}
+
 
 /****************************** Old format *******************************/
 
@@ -4925,6 +4962,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_metadata_get;
   cls_method_handle_t h_snapshot_get_limit;
   cls_method_handle_t h_snapshot_set_limit;
+  cls_method_handle_t h_get_head_location;
+  cls_method_handle_t h_set_head_location;
   cls_method_handle_t h_old_snapshots_list;
   cls_method_handle_t h_old_snapshot_add;
   cls_method_handle_t h_old_snapshot_remove;
@@ -5056,6 +5095,12 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "snapshot_set_limit",
 			  CLS_METHOD_WR,
 			  snapshot_set_limit, &h_snapshot_set_limit);
+  cls_register_cxx_method(h_class, "get_head_location",
+			  CLS_METHOD_RD,
+			  get_head_location, &h_get_head_location);
+  cls_register_cxx_method(h_class, "set_head_location",
+			  CLS_METHOD_WR,
+			  set_head_location, &h_set_head_location);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",
