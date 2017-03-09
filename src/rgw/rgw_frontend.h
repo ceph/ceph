@@ -160,6 +160,10 @@ public:
     return 0;
   }
 
+  void detach() {
+    thread->detach();
+  }
+
   void stop();
 
   void join() {
