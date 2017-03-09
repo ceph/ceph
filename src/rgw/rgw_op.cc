@@ -1173,6 +1173,29 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
   MD5 etag_sum;
   total_len = 0;
 
+  if (skip_manifest) {
+    auto fmt = new JSONFormatter;
+
+    fmt->open_array_section("slo_entries");
+    for (const auto& entry : slo_info.entries) {
+      entry.dump(fmt, raw_manifest_format);
+    }
+    fmt->close_section();
+
+    bufferlist manifest_json_dump;
+    fmt->flush(manifest_json_dump);
+
+    string outs = manifest_json_dump.c_str();
+
+    etag_sum.Update((const byte*) outs.c_str(), outs.length());
+    complete_etag(etag_sum, &lo_etag);
+    total_len = outs.length();
+
+    delete fmt;
+
+    return send_response_data(manifest_json_dump, 0, manifest_json_dump.length());
+  }
+
   for (const auto& entry : slo_info.entries) {
     const string& path = entry.path;
 
@@ -1449,6 +1472,7 @@ void RGWGetObj::execute()
   attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
   if (attr_iter != attrs.end()) {
     is_slo = true;
+
     op_ret = handle_slo_manifest(attr_iter->second);
     if (op_ret < 0) {
       ldout(s->cct, 0) << "ERROR: failed to handle slo manifest ret=" << op_ret

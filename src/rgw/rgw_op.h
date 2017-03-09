@@ -130,6 +130,7 @@ protected:
   bool partial_content;
   bool range_parsed;
   bool skip_manifest;
+  bool raw_manifest_format;
   rgw_obj obj;
   utime_t gc_invalidate_time;
   bool is_slo;
@@ -164,6 +165,7 @@ public:
     partial_content = false;
     range_parsed = false;
     skip_manifest = false;
+    raw_manifest_format = false;
     is_slo = false;
     first_block = 0;
     last_block = 0;
@@ -657,9 +659,9 @@ struct rgw_slo_entry {
   }
 
   void decode_json(JSONObj *obj);
+  void dump(Formatter* f, bool raw_format) const;
 };
 WRITE_CLASS_ENCODER(rgw_slo_entry)
-
 struct RGWSLOInfo {
   vector<rgw_slo_entry> entries;
   uint64_t total_size;

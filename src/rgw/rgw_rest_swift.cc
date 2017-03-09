@@ -1240,6 +1240,9 @@ int RGWGetObj_ObjStore_SWIFT::get_params()
   const string& mm = s->info.args.get("multipart-manifest");
   skip_manifest = (mm.compare("get") == 0);
 
+  const string& fmt = s->info.args.get("format");
+  raw_manifest_format = (fmt.compare("raw") == 0);
+
   return RGWGetObj_ObjStore::get_params();
 }
 
@@ -1262,7 +1265,6 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
                                                  const off_t bl_len)
 {
   string content_type;
-
   if (sent_header) {
     goto send_data;
   }
@@ -1311,14 +1313,18 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
     dump_object_metadata(s, attrs);
   }
 
-  end_header(s, this, !content_type.empty() ? content_type.c_str()
+  if (is_slo && skip_manifest && !raw_manifest_format)
+    end_header(s, this, "application/json; charset=utf-8");
+  else
+    end_header(s, this, !content_type.empty() ? content_type.c_str()
 	     : "binary/octet-stream");
 
   sent_header = true;
 
 send_data:
   if (get_data && !op_ret) {
-    const auto r = dump_body(s, bl.c_str() + bl_ofs, bl_len);
+    int r = dump_body(s, bl.c_str() + bl_ofs, bl_len);
+
     if (r < 0) {
       return r;
     }

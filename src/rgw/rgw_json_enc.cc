@@ -1419,3 +1419,18 @@ void RGWOrphanSearchState::dump(Formatter *f) const
   encode_json("stage", stage, f);
   f->close_section();
 }
+
+void rgw_slo_entry::dump(Formatter *f, bool raw_format) const
+{
+  f->open_object_section("rgw_slo_manifest_entry");
+  if (raw_format) {
+    encode_json("path", path, f);
+    encode_json("size_bytes", size_bytes, f);
+    encode_json("etag", etag, f);
+  } else {
+    encode_json("name", path, f);
+    encode_json("bytes", size_bytes, f);
+    encode_json("hash", etag, f);
+  }
+  f->close_section();
+}
