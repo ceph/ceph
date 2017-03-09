@@ -36,6 +36,7 @@ RDMADispatcher::~RDMADispatcher()
   ldout(cct, 20) << __func__ << " destructing rdma dispatcher" << dendl;
 
   assert(qp_conns.empty());
+  assert(num_qp_conn == 0);
   assert(dead_queue_pairs.empty());
   assert(num_dead_queue_pair == 0);
 
@@ -213,7 +214,7 @@ void RDMADispatcher::polling()
           --num_dead_queue_pair;
         }
       }
-      if (done)
+      if (!num_qp_conn && done)
         break;
 
       if ((ceph_clock_now() - last_inactive).to_nsec() / 1000 > cct->_conf->ms_async_rdma_polling_us) {
@@ -279,6 +280,7 @@ int RDMADispatcher::register_qp(QueuePair *qp, RDMAConnectedSocketImpl* csi)
   Mutex::Locker l(lock);
   assert(!qp_conns.count(qp->get_local_qp_number()));
   qp_conns[qp->get_local_qp_number()] = std::make_pair(qp, csi);
+  ++num_qp_conn;
   return fd;
 }
 
@@ -301,6 +303,7 @@ void RDMADispatcher::erase_qpn(uint32_t qpn)
   ++num_dead_queue_pair;
   dead_queue_pairs.push_back(it->second.first);
   qp_conns.erase(it);
+  --num_qp_conn;
 }
 
 void RDMADispatcher::handle_pre_fork()
