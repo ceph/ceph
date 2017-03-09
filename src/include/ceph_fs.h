@@ -239,6 +239,8 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDSMAP_ALLOW_CLASSICS (CEPH_MDSMAP_ALLOW_SNAPS | CEPH_MDSMAP_ALLOW_MULTIMDS | \
 				    CEPH_MDSMAP_ALLOW_DIRFRAGS)
 
+#define CEPH_MDSMAP_DEFAULTS CEPH_MDSMAP_ALLOW_DIRFRAGS
+
 /*
  * mds states
  *   > 0 -> in
