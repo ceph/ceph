@@ -71,7 +71,7 @@ function TEST_classes() {
     #
     ceph osd getcrushmap > $dir/map || return 1
     crushtool -d $dir/map -o $dir/map.txt || return 1
-    sed -i \
+    ${SED} -i \
         -e '/device 0 osd.0/s/$/ class ssd/' \
         -e '/step take default/s/$/ class ssd/' \
         $dir/map.txt || return 1

@@ -16,7 +16,7 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
-    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    local funcs=${@:-$(set | ${SED} -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
         $func $dir || return 1
     done
@@ -33,12 +33,12 @@ function TEST_crush_bucket() {
 
     ceph osd getcrushmap -o "$dir/map1" || return 1
     crushtool -d "$dir/map1" -o "$dir/map1.txt"|| return 1
-    local var=`ceph osd crush dump|grep -w id|grep '-'|grep -Eo '[0-9]+'|sort|uniq|sed -n '$p'`
+    local var=`ceph osd crush dump|grep -w id|grep '-'|grep -Eo '[0-9]+'|sort|uniq|${SED} -n '$p'`
     local id=`expr  $var + 1`
-    local item=`sed -n '/^root/,/}/p' $dir/map1.txt|grep  'item'|head -1`
-    local weight=`sed -n '/^root/,/}/p' $dir/map1.txt|grep  'item'|head -1|awk '{print $4}'`
+    local item=`${SED} -n '/^root/,/}/p' $dir/map1.txt|grep  'item'|head -1`
+    local weight=`${SED} -n '/^root/,/}/p' $dir/map1.txt|grep  'item'|head -1|awk '{print $4}'`
     local bucket="host test {\n id -$id\n # weight $weight\n alg straw \n hash 0  # rjenkins1 \n $item\n}\n"
-    sed -i "/# buckets/a\ $bucket" "$dir/map1.txt"
+    ${SED} -i "/# buckets/a\ $bucket" "$dir/map1.txt"
     crushtool  -c "$dir/map1.txt" -o "$dir/map1.bin" 2>"$dir/rev"
     local result=$(cat "$dir/rev")
     if [ "$result" != "" ];

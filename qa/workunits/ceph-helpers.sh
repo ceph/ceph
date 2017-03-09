@@ -29,6 +29,11 @@ else
 	echo "Missing xmlstarlet binary!"
 	exit 1
 fi
+if [ `uname` = FreeBSD ]; then
+    SED=gsed
+else
+    SED=sed
+fi 
 
 #! @file ceph-helpers.sh
 #  @brief Toolbox to manage Ceph cluster dedicated to testing
