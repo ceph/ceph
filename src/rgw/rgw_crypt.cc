@@ -21,9 +21,9 @@
 #endif
 
 #ifdef USE_CRYPTOPP
-#include <crypto++/cryptlib.h>
-#include <crypto++/modes.h>
-#include <crypto++/aes.h>
+#include <cryptopp/cryptlib.h>
+#include <cryptopp/modes.h>
+#include <cryptopp/aes.h>
 using namespace CryptoPP;
 #endif
 
@@ -34,6 +34,7 @@ using namespace rgw;
 
 /**
  * Encryption in CTR mode. offset is used as IV for each block.
+ * TODO: move this code to auth/Crypto for others to reuse.
  */
 class AES_256_CTR : public BlockCrypt {
 public:
@@ -219,6 +220,8 @@ CryptoAccelRef get_crypto_accel(CephContext *cct)
 
 /**
  * Encryption in CBC mode. Chunked to 4K blocks. Offset is used as IV for each 4K block.
+ * TODO: use auth/Crypto instead of reimplementing.
+ *
  *
  * A. Encryption
  * 1. Input is split to 4K chunks + remainder in one, smaller chunk
