@@ -1962,13 +1962,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     wait_for_degraded_object(snapdir, op);
     return;
   }
- 
-  // asking for SNAPDIR is only ok for reads
-  if (m->get_snapid() == CEPH_SNAPDIR && op->may_write()) {
-    dout(20) << __func__ << ": write to snapdir not valid " << *m << dendl;
-    osd->reply_op_error(op, -EINVAL);
-    return;
-  }
 
   // dup/resent?
   if (op->may_write() || op->may_cache()) {
