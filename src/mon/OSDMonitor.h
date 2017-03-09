@@ -414,7 +414,12 @@ private:
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
 
- public:
+  // when we last received PG stats from each osd
+  map<int,utime_t> last_osd_report;
+  bool preprocess_beacon(MonOpRequestRef op);
+  bool prepare_beacon(MonOpRequestRef op);
+
+public:
   OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name);
 
   void tick() override;  // check state, take actions
@@ -431,7 +436,7 @@ private:
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
 
-  void handle_osd_timeouts(const utime_t &now,
+  bool handle_osd_timeouts(const utime_t &now,
 			   std::map<int,utime_t> &last_osd_report);
 
   void send_latest(MonOpRequestRef op, epoch_t start=0);

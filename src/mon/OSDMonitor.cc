@@ -31,6 +31,7 @@
 #include "crush/CrushTester.h"
 #include "crush/CrushTreeDumper.h"
 
+#include "messages/MOSDBeacon.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDFull.h"
@@ -1434,6 +1435,8 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_alive(op);
   case MSG_OSD_PGTEMP:
     return preprocess_pgtemp(op);
+  case MSG_OSD_BEACON:
+    return preprocess_beacon(op);
 
   case CEPH_MSG_POOLOP:
     return preprocess_pool_op(op);
@@ -1467,6 +1470,8 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     return prepare_alive(op);
   case MSG_OSD_PGTEMP:
     return prepare_pgtemp(op);
+  case MSG_OSD_BEACON:
+    return prepare_beacon(op);
 
   case MSG_MON_COMMAND:
     return prepare_command(op);
@@ -1476,6 +1481,7 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
 
   case MSG_REMOVE_SNAPS:
     return prepare_remove_snaps(op);
+
 
   default:
     ceph_abort();
@@ -2734,6 +2740,47 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
   return true;
 }
 
+// osd beacon
+bool OSDMonitor::preprocess_beacon(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto beacon = static_cast<MOSDBeacon*>(op->get_req());
+  // check caps
+  auto session = beacon->get_session();
+  if (!session) {
+    dout(10) << __func__ << " no monitor session!" << dendl;
+    return true;
+  }
+  if (!session->is_capable("osd", MON_CAP_X)) {
+    derr << __func__ << " received from entity "
+         << "with insufficient privileges " << session->caps << dendl;
+    return true;
+  }
+  // Always forward the beacon to the leader, even if they are the same as
+  // the old one. The leader will mark as down osds that haven't sent
+  // beacon for a few minutes.
+  return false;
+}
+
+bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  const auto beacon = static_cast<MOSDBeacon*>(op->get_req());
+  const auto src = beacon->get_orig_source();
+  dout(10) << __func__ << " " << *beacon
+	   << " from " << src << dendl;
+  int from = src.num();
+
+  if (!src.is_osd() ||
+      !osdmap.is_up(from) ||
+      beacon->get_orig_source_inst() != osdmap.get_inst(from)) {
+    dout(1) << " ignoring beacon from non-active osd." << dendl;
+    return false;
+  }
+
+  last_osd_report[from] = ceph_clock_now();
+  return false;
+}
 
 // ---------------
 // map helpers
@@ -2957,6 +3004,9 @@ void OSDMonitor::tick()
   bool do_propose = false;
   utime_t now = ceph_clock_now();
 
+  if (handle_osd_timeouts(now, last_osd_report))
+    do_propose = true;
+
   // mark osds down?
   if (check_failures(now))
     do_propose = true;
@@ -3088,15 +3138,20 @@ void OSDMonitor::tick()
     propose_pending();
 }
 
-void OSDMonitor::handle_osd_timeouts(const utime_t &now,
+bool OSDMonitor::handle_osd_timeouts(const utime_t &now,
 				     std::map<int,utime_t> &last_osd_report)
 {
   utime_t timeo(g_conf->mon_osd_report_timeout, 0);
+  if (now - mon->get_leader_since() < timeo) {
+    // We haven't been the leader for long enough to consider OSD timeouts
+    return false;
+  }
+
   int max_osd = osdmap.get_max_osd();
   bool new_down = false;
 
   for (int i=0; i < max_osd; ++i) {
-    dout(30) << "handle_osd_timeouts: checking up on osd " << i << dendl;
+    dout(30) << __func__ << ": checking up on osd " << i << dendl;
     if (!osdmap.is_up(i))
       continue;
     const std::map<int,utime_t>::const_iterator t = last_osd_report.find(i);
@@ -3114,9 +3169,7 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
       }
     }
   }
-  if (new_down) {
-    propose_pending();
-  }
+  return new_down;
 }
 
 void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
