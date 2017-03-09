@@ -1108,6 +1108,7 @@ OPTION(bluestore_max_ops, OPT_U64, 512)
 OPTION(bluestore_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(bluestore_deferred_max_ops, OPT_U64, 512)
 OPTION(bluestore_deferred_max_bytes, OPT_U64, 128*1024*1024)
+OPTION(bluestore_deferred_batch_ops, OPT_U64, 8)
 OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
 OPTION(bluestore_blobid_prealloc, OPT_U64, 10240)
 OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones

@@ -7441,7 +7441,12 @@ void BlueStore::_osr_drain_all()
     s = osr_set;
   }
 
-  deferred_aggressive_cleanup = true;
+  deferred_aggressive = true;
+  {
+    // submit anything pending
+    std::lock_guard<std::mutex> l(deferred_lock);
+    _deferred_try_submit();
+  }
   {
     // wake up any previously finished deferred events
     std::lock_guard<std::mutex> l(kv_lock);
@@ -7451,7 +7456,7 @@ void BlueStore::_osr_drain_all()
     dout(20) << __func__ << " drain " << osr << dendl;
     osr->drain();
   }
-  deferred_aggressive_cleanup = false;
+  deferred_aggressive = false;
 
   dout(10) << __func__ << " done" << dendl;
 }
@@ -7609,6 +7614,13 @@ void BlueStore::_kv_sync_thread()
 	deferred_cleaning.pop_front();
       }
 
+      if (!deferred_aggressive) {
+	std::lock_guard<std::mutex> l(deferred_lock);
+	if (deferred_queue_size >= (int)g_conf->bluestore_deferred_batch_ops) {
+	  _deferred_try_submit();
+	}
+      }
+
       // this is as good a place as any ...
       _reap_collections();
 
@@ -7652,14 +7664,17 @@ void BlueStore::_deferred_queue(TransContext *txc)
     deferred_queue.push_back(*txc->osr);
   }
   txc->osr->deferred_pending.push_back(*txc);
-  if (txc->osr->deferred_running.empty()) {
+  ++deferred_queue_size;
+  if (deferred_aggressive &&
+      txc->osr->deferred_running.empty()) {
     _deferred_try_submit(txc->osr.get());
   }
 }
 
 void BlueStore::_deferred_try_submit()
 {
-  dout(20) << __func__ << " " << deferred_queue.size() << " osrs" << dendl;
+  dout(20) << __func__ << " " << deferred_queue.size() << " osrs, "
+	   << deferred_queue_size << " txcs" << dendl;
   for (auto& osr : deferred_queue) {
     if (osr.deferred_running.empty()) {
       _deferred_try_submit(&osr);
@@ -7671,8 +7686,12 @@ void BlueStore::_deferred_try_submit(OpSequencer *osr)
 {
   dout(10) << __func__ << " osr " << osr << " " << osr->deferred_pending.size()
 	   << " pending " << dendl;
+  assert(!osr->deferred_pending.empty());
   assert(osr->deferred_running.empty());
-  osr->deferred_pending.swap(osr->deferred_running);
+
+  deferred_queue_size -= osr->deferred_pending.size();
+  assert(deferred_queue_size >= 0);
+  osr->deferred_running.swap(osr->deferred_pending);
 
   // attach all IO to the last in the batch
   TransContext *last = &osr->deferred_running.back();
@@ -7729,11 +7748,11 @@ int BlueStore::_deferred_finish(TransContext *txc)
     assert(txc->osr->deferred_txc == txc);
     txc->osr->deferred_blocks.clear();
     finished.swap(txc->osr->deferred_running);
-    if (!txc->osr->deferred_pending.empty()) {
-      _deferred_try_submit(txc->osr.get());
-    } else {
+    if (txc->osr->deferred_pending.empty()) {
       auto q = deferred_queue.iterator_to(*txc->osr);
       deferred_queue.erase(q);
+    } else if (deferred_aggressive) {
+      _deferred_try_submit(txc->osr.get());
     }
   }
 
@@ -7751,7 +7770,7 @@ int BlueStore::_deferred_finish(TransContext *txc)
 
   // in the normal case, do not bother waking up the kv thread; it will
   // catch us on the next commit anyway.
-  if (deferred_aggressive_cleanup) {
+  if (deferred_aggressive) {
     kv_cond.notify_one();
   }
   return 0;

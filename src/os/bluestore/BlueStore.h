@@ -1684,8 +1684,9 @@ private:
 
   std::mutex deferred_lock;
   std::atomic<uint64_t> deferred_seq = {0};
-  deferred_osr_queue_t deferred_queue;      ///< osr's with deferred io pending
-  bool deferred_aggressive_cleanup = false; ///< aggressive wakeup of kv thread
+  deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
+  int deferred_queue_size = 0;         ///< num txc's queued across all osrs
+  bool deferred_aggressive = false;    ///< aggressive wakeup of kv thread
 
   int m_finisher_num = 1;
   vector<Finisher*> finishers;
