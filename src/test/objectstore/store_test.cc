@@ -4304,8 +4304,6 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferWAL) {
     { "bluestore_max_blob_size", "262144", 0 },
     { "bluestore_compression_mode", "force", "none", 0},
     { "bluestore_prefer_wal_size", "32768", "0", 0},
-    { "bluestore_sync_wal_apply_hdd", "false", 0},
-    { "bluestore_sync_wal_apply_ssd", "false", 0},
     { 0 },
   };
   do_matrix(m, store, doSyntheticTest);
