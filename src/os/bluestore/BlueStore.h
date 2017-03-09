@@ -1651,19 +1651,19 @@ public:
   // --------------------------------------------------------
   // members
 private:
-  BlueFS *bluefs;
-  unsigned bluefs_shared_bdev;  ///< which bluefs bdev we are sharing
-  KeyValueDB *db;
-  BlockDevice *bdev;
+  BlueFS *bluefs = nullptr;
+  unsigned bluefs_shared_bdev = 0;  ///< which bluefs bdev we are sharing
+  KeyValueDB *db = nullptr;
+  BlockDevice *bdev = nullptr;
   std::string freelist_type;
-  FreelistManager *fm;
-  Allocator *alloc;
+  FreelistManager *fm = nullptr;
+  Allocator *alloc = nullptr;
   uuid_d fsid;
-  int path_fd;  ///< open handle to $path
-  int fsid_fd;  ///< open handle (locked) to $path/fsid
-  bool mounted;
+  int path_fd = -1;  ///< open handle to $path
+  int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
+  bool mounted = false;
 
-  RWLock coll_lock;    ///< rwlock to protect coll_map
+  RWLock coll_lock = {"BlueStore::coll_lock"};  ///< rwlock to protect coll_map
   mempool::bluestore_meta_other::unordered_map<coll_t, CollectionRef> coll_map;
 
   vector<Cache*> cache_shards;
@@ -1686,28 +1686,28 @@ private:
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue;      ///< osr's with deferred io pending
 
-  int m_finisher_num;
+  int m_finisher_num = 1;
   vector<Finisher*> finishers;
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
   std::condition_variable kv_cond, kv_sync_cond;
-  bool kv_stop;
+  bool kv_stop = false;
   deque<TransContext*> kv_queue;             ///< ready, already submitted
   deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
   deque<TransContext*> kv_committing;        ///< currently syncing
   deque<TransContext*> deferred_cleanup_queue;    ///< deferred done, ready for cleanup
 
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
 
   std::mutex reap_lock;
   list<CollectionRef> removed_collections;
 
-  RWLock debug_read_error_lock;
+  RWLock debug_read_error_lock = {"BlueStore::debug_read_error_lock"};
   set<ghobject_t> debug_data_error_objects;
   set<ghobject_t> debug_mdata_error_objects;
 
-  std::atomic<int> csum_type;
+  std::atomic<int> csum_type = {Checksummer::CSUM_CRC32C};
 
   uint64_t block_size = 0;     ///< block size of block device (power of 2)
   uint64_t block_mask = 0;     ///< mask to get just the block offset
