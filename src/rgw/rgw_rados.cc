@@ -3329,7 +3329,7 @@ int RGWRados::replace_region_with_zonegroup()
 
   int ret = rgw_get_system_obj(this, obj_ctx, pool ,oid, bl, NULL,  NULL);
   if (ret < 0 && ret !=  -ENOENT) {
-    ldout(cct, 0) << "failed to read converted: ret "<< ret << " " << cpp_strerror(-ret)
+    ldout(cct, 0) << __func__ << " failed to read converted: ret "<< ret << " " << cpp_strerror(-ret)
 		  << dendl;
     return ret;
   } else if (ret != -ENOENT) {
@@ -3340,12 +3340,12 @@ int RGWRados::replace_region_with_zonegroup()
   string default_region;
   ret = default_zonegroup.init(cct, this, false, true);
   if (ret < 0) {
-    ldout(cct, 0) << "failed init default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) <<  __func__ << " failed init default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }    
   ret  = default_zonegroup.read_default_id(default_region, true);
   if (ret < 0 && ret != -ENOENT) {
-    ldout(cct, 0) << "failed reading old default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) <<  __func__ << " failed reading old default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -3353,7 +3353,7 @@ int RGWRados::replace_region_with_zonegroup()
   list<string> regions;
   ret = list_regions(regions);
   if (ret < 0 && ret != -ENOENT) {
-    ldout(cct, 0) << "failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) <<  __func__ << " failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   } else if (ret == -ENOENT || regions.empty()) {
     RGWZoneParams zoneparams(default_zone_name);
@@ -3382,7 +3382,7 @@ int RGWRados::replace_region_with_zonegroup()
       RGWZoneGroup region(*iter);
       int ret = region.init(cct, this, true, true);
       if (ret < 0) {
-	  ldout(cct, 0) << "failed init region "<< *iter << ": " << cpp_strerror(-ret) << dendl;
+	  ldout(cct, 0) <<  __func__ << " failed init region "<< *iter << ": " << cpp_strerror(-ret) << dendl;
 	  return ret;
       }
       if (region.is_master) {
@@ -3407,27 +3407,27 @@ int RGWRados::replace_region_with_zonegroup()
     RGWRealm new_realm(new_realm_id,new_realm_name);
     ret = new_realm.init(cct, this, false);
     if (ret < 0) {
-      ldout(cct, 0) << "Error initing new realm: " << cpp_strerror(-ret)  << dendl;
+      ldout(cct, 0) <<  __func__ << " Error initing new realm: " << cpp_strerror(-ret)  << dendl;
       return ret;
     }
     ret = new_realm.create();
     if (ret < 0 && ret != -EEXIST) {
-      ldout(cct, 0) << "Error creating new realm: " << cpp_strerror(-ret)  << dendl;
+      ldout(cct, 0) <<  __func__ << " Error creating new realm: " << cpp_strerror(-ret)  << dendl;
       return ret;
     }
     ret = new_realm.set_as_default();
     if (ret < 0) {
-      ldout(cct, 0) << "Error setting realm as default: " << cpp_strerror(-ret)  << dendl;
+      ldout(cct, 0) << __func__ << " Error setting realm as default: " << cpp_strerror(-ret)  << dendl;
       return ret;
     }
     ret = realm.init(cct, this);
     if (ret < 0) {
-      ldout(cct, 0) << "Error initing realm: " << cpp_strerror(-ret)  << dendl;
+      ldout(cct, 0) << __func__ << " Error initing realm: " << cpp_strerror(-ret)  << dendl;
       return ret;
     }
     ret = current_period.init(cct, this, realm.get_id(), realm.get_name());
     if (ret < 0) {
-      ldout(cct, 0) << "Error initing current period: " << cpp_strerror(-ret)  << dendl;
+      ldout(cct, 0) << __func__ << " Error initing current period: " << cpp_strerror(-ret)  << dendl;
       return ret;
     }
   }
@@ -3436,12 +3436,12 @@ int RGWRados::replace_region_with_zonegroup()
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
   {
-    ldout(cct, 0) << "Converting  " << *iter << dendl;
+    ldout(cct, 0) << __func__ << "Converting  " << *iter << dendl;
     /* check to see if we don't have already a zonegroup with this name */
     RGWZoneGroup new_zonegroup(*iter);
     ret = new_zonegroup.init(cct , this);
     if (ret == 0 && new_zonegroup.get_id() != *iter) {
-      ldout(cct, 0) << "zonegroup  "<< *iter << " already exists id " << new_zonegroup.get_id () <<
+      ldout(cct, 0) << __func__ << " zonegroup  "<< *iter << " already exists id " << new_zonegroup.get_id () <<
 	" skipping conversion " << dendl;
       continue;
     }
@@ -3449,55 +3449,55 @@ int RGWRados::replace_region_with_zonegroup()
     zonegroup.set_id(*iter);
     int ret = zonegroup.init(cct, this, true, true);
     if (ret < 0) {
-      ldout(cct, 0) << "failed init zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 0) << __func__ << " failed init zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
       return ret;
     }
     zonegroup.realm_id = realm.get_id();
     /* fix default region master zone */
     if (*iter == default_zonegroup_name && zonegroup.master_zone.empty()) {
-      ldout(cct, 0) << "Setting default zone as master for default region" << dendl;
+      ldout(cct, 0) << __func__ << " Setting default zone as master for default region" << dendl;
       zonegroup.master_zone = default_zone_name;
     }
     ret = zonegroup.update();
     if (ret < 0 && ret != -EEXIST) {
-      ldout(cct, 0) << "failed to update zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+      ldout(cct, 0) << __func__ << " failed to update zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
       return ret;
     }
     ret = zonegroup.update_name();
     if (ret < 0 && ret != -EEXIST) {
-      ldout(cct, 0) << "failed to update_name for zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+      ldout(cct, 0) << __func__ << " failed to update_name for zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
       return ret;
     }
     if (zonegroup.get_name() == default_region) {
       ret = zonegroup.set_as_default();
       if (ret < 0) {
-        ldout(cct, 0) << "failed to set_as_default " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+        ldout(cct, 0) << __func__ << " failed to set_as_default " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
           << dendl;
         return ret;
       }
     }
     for (map<string, RGWZone>::const_iterator iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
          ++iter) {
-      ldout(cct, 0) << "Converting zone" << iter->first << dendl;
+      ldout(cct, 0) << __func__ << " Converting zone" << iter->first << dendl;
       RGWZoneParams zoneparams(iter->first, iter->first);
       zoneparams.set_id(iter->first);
       zoneparams.realm_id = realm.get_id();
       ret = zoneparams.init(cct, this);
       if (ret < 0) {
-        ldout(cct, 0) << "failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
+        ldout(cct, 0) << __func__ << " failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
         return ret;
       }
       zonegroup.realm_id = realm.get_id();
       ret = zoneparams.update();
       if (ret < 0 && ret != -EEXIST) {
-        ldout(cct, 0) << "failed to update zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
+        ldout(cct, 0) << __func__ << " failed to update zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
         return ret;
       }
       ret = zoneparams.update_name();
       if (ret < 0 && ret != -EEXIST) {
-        ldout(cct, 0) << "failed to init zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
+        ldout(cct, 0) << __func__ << " failed to init zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
         return ret;
       }
     }
@@ -3505,7 +3505,7 @@ int RGWRados::replace_region_with_zonegroup()
     if (!current_period.get_id().empty()) {
       ret = current_period.add_zonegroup(zonegroup);
       if (ret < 0) {
-        ldout(cct, 0) << "failed to add zonegroup to current_period: " << cpp_strerror(-ret) << dendl;
+        ldout(cct, 0) << __func__ << " failed to add zonegroup to current_period: " << cpp_strerror(-ret) << dendl;
         return ret;
       }
     }
@@ -3514,17 +3514,17 @@ int RGWRados::replace_region_with_zonegroup()
   if (!current_period.get_id().empty()) {
     ret = current_period.update();
     if (ret < 0) {
-      ldout(cct, 0) << "failed to update new period: " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 0) << __func__ << " failed to update new period: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
     ret = current_period.store_info(false);
     if (ret < 0) {
-      ldout(cct, 0) << "failed to store new period: " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 0) << __func__ << " failed to store new period: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
     ret = current_period.reflect();
     if (ret < 0) {
-      ldout(cct, 0) << "failed to update local objects: " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 0) << __func__ << " failed to update local objects: " << cpp_strerror(-ret) << dendl;
       return ret;
     }
   }
@@ -3533,12 +3533,12 @@ int RGWRados::replace_region_with_zonegroup()
     RGWZoneGroup zonegroup(iter);
     int ret = zonegroup.init(cct, this, true, true);
     if (ret < 0) {
-      ldout(cct, 0) << "failed init zonegroup" << iter << ": ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+      ldout(cct, 0) << __func__ << " failed init zonegroup" << iter << ": ret "<< ret << " " << cpp_strerror(-ret) << dendl;
       return ret;
     }
     ret = zonegroup.delete_obj(true);
     if (ret < 0 && ret != -ENOENT) {
-      ldout(cct, 0) << "failed to delete region " << iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+      ldout(cct, 0) << __func__ << " failed to delete region " << iter << ": ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
       return ret;
     }
@@ -3548,7 +3548,7 @@ int RGWRados::replace_region_with_zonegroup()
   ret = rgw_put_system_obj(this, pool, oid, bl.c_str(), bl.length(),
 			   true, NULL, real_time(), NULL);
   if (ret < 0 ) {
-    ldout(cct, 0) << "failed to mark cluster as converted: ret "<< ret << " " << cpp_strerror(-ret)
+    ldout(cct, 0) << __func__ << " failed to mark cluster as converted: ret "<< ret << " " << cpp_strerror(-ret)
 		  << dendl;
     return ret;
   }
