@@ -203,7 +203,7 @@ CryptoAccelRef get_crypto_accel(CephContext *cct)
   PluginRegistry *reg = cct->get_plugin_registry();
   string crypto_accel_type = cct->_conf->plugin_crypto_accelerator;
 
-  CryptoPlugin *factory = dynamic_cast<CryptoPlugin*>(reg->get_with_load("cryptoaccel", crypto_accel_type));
+  CryptoPlugin *factory = dynamic_cast<CryptoPlugin*>(reg->get_with_load("crypto", crypto_accel_type));
   if (factory == nullptr) {
     lderr(cct) << __func__ << " cannot load crypto accelerator of type " << crypto_accel_type << dendl;
     return nullptr;
