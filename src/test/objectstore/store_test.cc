@@ -1776,6 +1776,61 @@ TEST_P(StoreTest, ManySmallWrite) {
   }
 }
 
+TEST_P(StoreTest, MultiSmallWriteSameBlock) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl;
+  bl.append("short");
+  C_SaferCond c, d;
+  // touch same block in both same transaction, tls, and pipelined txns
+  {
+    ObjectStore::Transaction t, u;
+    t.write(cid, a, 0, 5, bl, 0);
+    t.write(cid, a, 5, 5, bl, 0);
+    t.write(cid, a, 4094, 5, bl, 0);
+    t.write(cid, a, 9000, 5, bl, 0);
+    u.write(cid, a, 10, 5, bl, 0);
+    u.write(cid, a, 7000, 5, bl, 0);
+    vector<ObjectStore::Transaction> v = {t, u};
+    store->queue_transactions(&osr, v, nullptr, &c);
+  }
+  {
+    ObjectStore::Transaction t, u;
+    t.write(cid, a, 40, 5, bl, 0);
+    t.write(cid, a, 45, 5, bl, 0);
+    t.write(cid, a, 4094, 5, bl, 0);
+    t.write(cid, a, 6000, 5, bl, 0);
+    u.write(cid, a, 610, 5, bl, 0);
+    u.write(cid, a, 11000, 5, bl, 0);
+    vector<ObjectStore::Transaction> v = {t, u};
+    store->queue_transactions(&osr, v, nullptr, &d);
+  }
+  c.wait();
+  d.wait();
+  {
+    bufferlist bl2;
+    r = store->read(cid, a, 0, 16000, bl2);
+    ASSERT_GE(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, SmallSkipFront) {
   ObjectStore::Sequencer osr("test");
   int r;
