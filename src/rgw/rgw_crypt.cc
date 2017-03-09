@@ -34,8 +34,9 @@ using namespace rgw;
 
 /**
  * Encryption in CTR mode. offset is used as IV for each block.
- * TODO: move this code to auth/Crypto for others to reuse.
  */
+#warning "TODO: move this code to auth/Crypto for others to reuse."
+
 class AES_256_CTR : public BlockCrypt {
 public:
   static const size_t AES_256_KEYSIZE = 256 / 8;
@@ -220,7 +221,7 @@ CryptoAccelRef get_crypto_accel(CephContext *cct)
 
 /**
  * Encryption in CBC mode. Chunked to 4K blocks. Offset is used as IV for each 4K block.
- * TODO: use auth/Crypto instead of reimplementing.
+ *
  *
  *
  * A. Encryption
@@ -243,7 +244,7 @@ CryptoAccelRef get_crypto_accel(CephContext *cct)
  * 6. (Special case) If m == 0 then last n bytes are xor-ed with pattern
  *    obtained by CBC ENCRYPTION of {0} with IV derived from offset
  */
-
+#warning "TODO: use auth/Crypto instead of reimplementing."
 class AES_256_CBC : public BlockCrypt {
 public:
   static const size_t AES_256_KEYSIZE = 256 / 8;
