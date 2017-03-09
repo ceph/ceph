@@ -1016,15 +1016,14 @@ int bucket_stats(rgw_bucket& bucket, int shard_id, Formatter *formatter)
   map<RGWObjCategory, RGWStorageStats> stats;
   string bucket_ver, master_ver;
   string max_marker;
-  int ret = store->get_bucket_stats(bucket, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
+  int ret = store->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats ret=" << ret << std::endl;
     return ret;
   }
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
-  formatter->dump_string("pool", bucket.data_pool);
-  formatter->dump_string("index_pool", bucket.index_pool);
+  ::encode_json("explicit_placement", bucket.explicit_placement, formatter);
 
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
@@ -1293,10 +1292,9 @@ int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
 
 static bool bucket_object_check_filter(const string& name)
 {
-  string ns;
-  string obj = name;
-  string instance;
-  return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, instance, ns);
+  rgw_obj_key k;
+  string ns; /* empty namespace */
+  return rgw_obj_key::oid_to_key_in_ns(name, &k, ns);
 }
 
 int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
@@ -1362,7 +1360,7 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
   string oid;
   string locator;
 
-  get_obj_bucket_and_oid_loc(obj, obj.bucket, oid, locator);
+  get_obj_bucket_and_oid_loc(obj, oid, locator);
 
   f->dump_string("oid", oid);
   f->dump_string("locator", locator);
@@ -1381,7 +1379,7 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
   string status = (needs_fixing ? "needs_fixing" : "ok");
 
   if ((needs_fixing || remove_bad) && fix) {
-    ret = store->fix_head_obj_locator(obj.bucket, needs_fixing, remove_bad, key);
+    ret = store->fix_head_obj_locator(bucket_info, needs_fixing, remove_bad, key);
     if (ret < 0) {
       cerr << "ERROR: fix_head_object_locator() returned ret=" << ret << std::endl;
       goto done;
@@ -1408,7 +1406,7 @@ int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, 
   bool needs_fixing;
   string status;
 
-  int ret = store->fix_tail_obj_locator(obj.bucket, key, fix, &needs_fixing);
+  int ret = store->fix_tail_obj_locator(bucket_info, key, fix, &needs_fixing);
   if (ret < 0) {
     cerr << "ERROR: fix_tail_object_locator_underscore() returned ret=" << ret << std::endl;
     status = "failed";
@@ -1450,7 +1448,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
   string prefix;
   string delim;
-  vector<RGWObjEnt> result;
+  vector<rgw_bucket_dir_entry> result;
   map<string, bool> common_prefixes;
   string ns;
 
@@ -1476,7 +1474,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
     count += result.size();
 
-    for (vector<RGWObjEnt>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+    for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
       rgw_obj_key key = iter->key;
       rgw_obj obj(bucket, key);
 
@@ -1718,12 +1716,6 @@ static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
   RGWBucketInfo bucket_info;
 
   int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-  if (ret == -ENOENT) {
-    if (bucket_id.empty()) {
-      cerr << "ERROR: bucket id specified" << std::endl;
-      return EINVAL;
-    }
-  }
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return -ret;
@@ -2349,6 +2341,7 @@ int main(int argc, const char **argv)
   string tenant;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
+  rgw_pool pool;
   std::string date, subuser, access, format;
   std::string start_date, end_date;
   std::string key_type_str;
@@ -2509,6 +2502,7 @@ int main(int argc, const char **argv)
       bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       pool_name = val;
+      pool = rgw_pool(pool_name);
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
       object = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--object-version", (char*)NULL)) {
@@ -4832,7 +4826,7 @@ int main(int argc, const char **argv)
 
       string prefix;
       string delim;
-      vector<RGWObjEnt> result;
+      vector<rgw_bucket_dir_entry> result;
       map<string, bool> common_prefixes;
       string ns;
 
@@ -4855,8 +4849,8 @@ int main(int argc, const char **argv)
 
         count += result.size();
 
-        for (vector<RGWObjEnt>::iterator iter = result.begin(); iter != result.end(); ++iter) {
-          RGWObjEnt& entry = *iter;
+        for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+          rgw_bucket_dir_entry& entry = *iter;
           encode_json("entry", entry, formatter);
         }
         formatter->flush(cout);
@@ -5030,7 +5024,7 @@ next:
       return usage();
     }
 
-    int ret = store->add_bucket_placement(pool_name);
+    int ret = store->add_bucket_placement(pool);
     if (ret < 0)
       cerr << "failed to add bucket placement: " << cpp_strerror(-ret) << std::endl;
   }
@@ -5041,13 +5035,13 @@ next:
       return usage();
     }
 
-    int ret = store->remove_bucket_placement(pool_name);
+    int ret = store->remove_bucket_placement(pool);
     if (ret < 0)
       cerr << "failed to remove bucket placement: " << cpp_strerror(-ret) << std::endl;
   }
 
   if (opt_cmd == OPT_POOLS_LIST) {
-    set<string> pools;
+    set<rgw_pool> pools;
     int ret = store->list_placement_set(pools);
     if (ret < 0) {
       cerr << "could not list placement set: " << cpp_strerror(-ret) << std::endl;
@@ -5055,10 +5049,9 @@ next:
     }
     formatter->reset();
     formatter->open_array_section("pools");
-    set<string>::iterator siter;
-    for (siter = pools.begin(); siter != pools.end(); ++siter) {
+    for (auto siter = pools.begin(); siter != pools.end(); ++siter) {
       formatter->open_object_section("pool");
-      formatter->dump_string("name",  *siter);
+      formatter->dump_string("name",  siter->to_str());
       formatter->close_section();
     }
     formatter->close_section();
@@ -5149,9 +5142,15 @@ next:
   }
 
   if (opt_cmd == OPT_OLH_GET) {
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
     RGWOLHInfo olh;
     rgw_obj obj(bucket, object);
-    int ret = store->get_olh(obj, &olh);
+    ret = store->get_olh(bucket_info, obj, &olh);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -5161,6 +5160,12 @@ next:
   }
 
   if (opt_cmd == OPT_OLH_READLOG) {
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
     map<uint64_t, vector<rgw_bucket_olh_log_entry> > log;
     bool is_truncated;
 
@@ -5169,12 +5174,12 @@ next:
 
     RGWObjState *state;
 
-    int ret = store->get_obj_state(&rctx, obj, &state, false); /* don't follow olh */
+    ret = store->get_obj_state(&rctx, bucket_info, obj, &state, false); /* don't follow olh */
     if (ret < 0) {
       return -ret;
     }
 
-    ret = store->bucket_index_read_olh_log(*state, obj, 0, &log, &is_truncated);
+    ret = store->bucket_index_read_olh_log(bucket_info, *state, obj, 0, &log, &is_truncated);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -5195,7 +5200,7 @@ next:
     }
     rgw_obj obj(bucket, object);
     if (!object_version.empty()) {
-      obj.set_instance(object_version);
+      obj.key.set_instance(object_version);
     }
 
     rgw_cls_bi_entry entry;
@@ -5225,8 +5230,7 @@ next:
       return 1;
     }
 
-    rgw_obj obj(bucket, key.name);
-    obj.set_instance(key.instance);
+    rgw_obj obj(bucket, key);
 
     ret = store->bi_put(bucket, obj, entry);
     if (ret < 0) {
@@ -5369,7 +5373,7 @@ next:
     }
 
     rgw_obj obj(bucket, object);
-    obj.set_instance(object_version);
+    obj.key.set_instance(object_version);
     bool need_rewrite = true;
     if (min_rewrite_stripe_size > 0) {
       ret = check_min_obj_stripe_size(store, bucket_info, obj, min_rewrite_stripe_size, &need_rewrite);
@@ -5429,15 +5433,15 @@ next:
 
     bool is_truncated = true;
 
-    rgw_obj_key marker;
+    rgw_obj_index_key marker;
     string prefix;
 
     formatter->open_object_section("result");
     formatter->dump_string("bucket", bucket_name);
     formatter->open_array_section("objects");
     while (is_truncated) {
-      map<string, RGWObjEnt> result;
-      int r = store->cls_bucket_list(bucket, RGW_NO_SHARD, marker, prefix, 1000, true,
+      map<string, rgw_bucket_dir_entry> result;
+      int r = store->cls_bucket_list(bucket_info, RGW_NO_SHARD, marker, prefix, 1000, true,
                                      result, &is_truncated, &marker,
                                      bucket_object_check_filter);
 
@@ -5448,26 +5452,25 @@ next:
       if (r == -ENOENT)
         break;
 
-      map<string, RGWObjEnt>::iterator iter;
+      map<string, rgw_bucket_dir_entry>::iterator iter;
       for (iter = result.begin(); iter != result.end(); ++iter) {
         rgw_obj_key key = iter->second.key;
-        RGWObjEnt& entry = iter->second;
+        rgw_bucket_dir_entry& entry = iter->second;
 
         formatter->open_object_section("object");
         formatter->dump_string("name", key.name);
         formatter->dump_string("instance", key.instance);
-        formatter->dump_int("size", entry.size);
-        utime_t ut(entry.mtime);
+        formatter->dump_int("size", entry.meta.size);
+        utime_t ut(entry.meta.mtime);
         ut.gmtime(formatter->dump_stream("mtime"));
 
-        if ((entry.size < min_rewrite_size) ||
-            (entry.size > max_rewrite_size) ||
+        if ((entry.meta.size < min_rewrite_size) ||
+            (entry.meta.size > max_rewrite_size) ||
             (start_epoch > 0 && start_epoch > (uint64_t)ut.sec()) ||
             (end_epoch > 0 && end_epoch < (uint64_t)ut.sec())) {
           formatter->dump_string("status", "Skipped");
         } else {
-          rgw_obj obj(bucket, key.name);
-          obj.set_instance(key.instance);
+          rgw_obj obj(bucket, key);
 
           bool need_rewrite = true;
           if (min_rewrite_stripe_size > 0) {
@@ -5542,7 +5545,7 @@ next:
     cout << "old bucket instance id: " << bucket_info.bucket.bucket_id << std::endl;
     cout << "new bucket instance id: " << new_bucket_info.bucket.bucket_id << std::endl;
 
-    ret = store->init_bucket_index(new_bucket_info.bucket, new_bucket_info.num_shards);
+    ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
     if (ret < 0) {
       cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -5657,10 +5660,12 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    list<rgw_obj_key> oid_list;
+    list<rgw_obj_index_key> oid_list;
     rgw_obj_key key(object, object_version);
-    oid_list.push_back(key);
-    ret = store->remove_objs_from_index(bucket, oid_list);
+    rgw_obj_index_key index_key;
+    key.get_index_key(&index_key);
+    oid_list.push_back(index_key);
+    ret = store->remove_objs_from_index(bucket_info, oid_list);
     if (ret < 0) {
       cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
@@ -5675,7 +5680,7 @@ next:
       return -ret;
     }
     rgw_obj obj(bucket, object);
-    obj.set_instance(object_version);
+    obj.key.set_instance(object_version);
 
     uint64_t obj_size;
     map<string, bufferlist> attrs;
@@ -5840,7 +5845,7 @@ next:
 
     RGWOrphanSearchInfo info;
 
-    info.pool = pool_name;
+    info.pool = pool;
     info.job_name = job_id;
     info.num_shards = num_shards;
 
@@ -6396,7 +6401,7 @@ next:
 
     do {
       list<rgw_bi_log_entry> entries;
-      ret = store->list_bi_log_entries(bucket, shard_id, marker, max_entries - count, entries, &truncated);
+      ret = store->list_bi_log_entries(bucket_info, shard_id, marker, max_entries - count, entries, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -6505,7 +6510,7 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->trim_bi_log_entries(bucket, shard_id, start_marker, end_marker);
+    ret = store->trim_bi_log_entries(bucket_info, shard_id, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6524,7 +6529,7 @@ next:
       return -ret;
     }
     map<int, string> markers;
-    ret = store->get_bi_log_status(bucket, shard_id, markers);
+    ret = store->get_bi_log_status(bucket_info, shard_id, markers);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6711,7 +6716,7 @@ next:
         return EINVAL;
       }
 
-      RGWReplicaObjectLogger logger(store, pool_name, META_REPLICA_LOG_OBJ_PREFIX);
+      RGWReplicaObjectLogger logger(store, pool, META_REPLICA_LOG_OBJ_PREFIX);
       int ret = logger.get_bounds(shard_id, bounds);
       if (ret < 0)
         return -ret;
@@ -6720,7 +6725,7 @@ next:
         cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
         return EINVAL;
       }
-      RGWReplicaObjectLogger logger(store, pool_name, DATA_REPLICA_LOG_OBJ_PREFIX);
+      RGWReplicaObjectLogger logger(store, pool, DATA_REPLICA_LOG_OBJ_PREFIX);
       int ret = logger.get_bounds(shard_id, bounds);
       if (ret < 0)
         return -ret;
@@ -6758,7 +6763,7 @@ next:
         cerr << "ERROR: daemon-id must be specified for delete operation" << std::endl;
         return EINVAL;
       }
-      RGWReplicaObjectLogger logger(store, pool_name, META_REPLICA_LOG_OBJ_PREFIX);
+      RGWReplicaObjectLogger logger(store, pool, META_REPLICA_LOG_OBJ_PREFIX);
       int ret = logger.delete_bound(shard_id, daemon_id, false);
       if (ret < 0)
         return -ret;
@@ -6771,7 +6776,7 @@ next:
         cerr << "ERROR: daemon-id must be specified for delete operation" << std::endl;
         return EINVAL;
       }
-      RGWReplicaObjectLogger logger(store, pool_name, DATA_REPLICA_LOG_OBJ_PREFIX);
+      RGWReplicaObjectLogger logger(store, pool, DATA_REPLICA_LOG_OBJ_PREFIX);
       int ret = logger.delete_bound(shard_id, daemon_id, false);
       if (ret < 0)
         return -ret;
@@ -6820,7 +6825,7 @@ next:
         return EINVAL;
       }
 
-      RGWReplicaObjectLogger logger(store, pool_name, META_REPLICA_LOG_OBJ_PREFIX);
+      RGWReplicaObjectLogger logger(store, pool, META_REPLICA_LOG_OBJ_PREFIX);
       int ret = logger.update_bound(shard_id, daemon_id, marker, time, &entries);
       if (ret < 0) {
         cerr << "ERROR: failed to update bounds: " << cpp_strerror(-ret) << std::endl;
@@ -6831,7 +6836,7 @@ next:
         cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
         return EINVAL;
       }
-      RGWReplicaObjectLogger logger(store, pool_name, DATA_REPLICA_LOG_OBJ_PREFIX);
+      RGWReplicaObjectLogger logger(store, pool, DATA_REPLICA_LOG_OBJ_PREFIX);
       int ret = logger.update_bound(shard_id, daemon_id, marker, time, &entries);
       if (ret < 0) {
         cerr << "ERROR: failed to update bounds: " << cpp_strerror(-ret) << std::endl;

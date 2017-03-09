@@ -144,8 +144,8 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
   if (rgwx_stat) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "stat", "true"));
   }
-  if (!obj.get_instance().empty()) {
-    const string& instance = obj.get_instance();
+  if (!obj.key.instance.empty()) {
+    const string& instance = obj.key.instance;
     params.push_back(param_pair_t("versionId", instance));
   }
   if (get_op) {
