@@ -83,6 +83,44 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
   return 0;
 }
 
+int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>&buckets_usage_map)
+{
+  CephContext *cct = store->ctx();
+  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
+  bool done;
+  bool is_truncated;
+  string marker;
+  int ret;
+
+  do {
+    RGWUserBuckets user_buckets;
+    ret = rgw_read_user_buckets(store, user_id, user_buckets, marker,
+				string(), max_entries, false, &is_truncated);
+    if (ret < 0) {
+      ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
+      return ret;
+    }
+    map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
+    for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
+         i != buckets.end();
+         ++i) {
+      marker = i->first;
+
+      RGWBucketEnt& bucket_ent = i->second;
+      cls_user_bucket_entry entry;
+      ret = store->cls_user_get_bucket_stats(bucket_ent.bucket, entry);
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
+        return ret;
+      }
+      buckets_usage_map.insert(pair<string, cls_user_bucket_entry>(bucket_ent.bucket.name, entry));
+    }
+    done = (buckets.size() < max_entries);
+  } while (!done);
+
+  return 0;
+}
+
 /**
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.

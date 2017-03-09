@@ -12469,6 +12469,31 @@ int RGWRados::cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket)
   return 0;
 }
 
+int RGWRados::cls_user_get_bucket_stats(rgw_bucket& bucket, cls_user_bucket_entry& entry)
+{
+  map<string, struct rgw_bucket_dir_header> headers;
+  int r = cls_bucket_head(bucket, RGW_NO_SHARD, headers);
+  if (r < 0) {
+    ldout(cct, 20) << "cls_bucket_header() returned " << r << dendl;
+    return r;
+  }
+  
+  bucket.convert(&entry.bucket);
+
+  map<string, struct rgw_bucket_dir_header>::iterator hiter = headers.begin();
+  for (; hiter != headers.end(); ++hiter) {
+    map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = hiter->second.stats.begin();
+    for (; iter != hiter->second.stats.end(); ++iter) {
+      struct rgw_bucket_category_stats& header_stats = iter->second;
+      entry.size += header_stats.total_size;
+      entry.size_rounded += header_stats.total_size_rounded;
+      entry.count += header_stats.num_entries;
+    }
+  }
+
+  return 0;
+}
+
 int RGWRados::update_user_bucket_stats(const string& user_id, rgw_bucket& bucket, RGWStorageStats& stats)
 {
   cls_user_bucket_entry entry;

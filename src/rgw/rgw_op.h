@@ -376,6 +376,7 @@ protected:
   map<string, bool> categories;
   map<rgw_user_bucket, rgw_usage_log_entry> usage;
   map<string, rgw_usage_log_entry> summary_map;
+  map<string, cls_user_bucket_entry> buckets_usage;
   cls_user_header header;
 public:
   RGWGetUsage() : sent_data(false), show_log_entries(true), show_log_sum(true){
