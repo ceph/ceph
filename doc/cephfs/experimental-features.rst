@@ -12,18 +12,6 @@ what is required to enable them. Note that doing so will *irrevocably* flag maps
 in the monitor as having once enabled this flag to improve debugging and
 support processes.
 
-
-Directory Fragmentation
------------------------
-CephFS directories are generally stored within a single RADOS object. But this has
-certain negative results once they become large enough. The filesystem is capable
-of "fragmenting" these directories into multiple objects. There are no known bugs
-with doing so but it is not sufficiently tested to support at this time.
-
-Directory fragmentation has always been off by default and required setting
-```mds bal frag = true`` in the MDS' config file. It has been further protected
-by requiring the user to set the "allow_dirfrags" flag for Jewel.
-
 Inline data
 -----------
 By default, all CephFS file data is stored in RADOS objects. The inline data
@@ -97,3 +85,20 @@ and may not work together; see above.
 
 Multiple filesystems were available starting in the Jewel release candidates
 but were protected behind the "enable_multiple" flag before the final release.
+
+
+Previously experimental features
+================================
+
+Directory Fragmentation
+-----------------------
+
+Directory fragmentation was considered experimental prior to the *Luminous*
+(12.2.x).  It is now enabled by default on new filesystems.  To enable directory
+fragmentation on filesystems created with older versions of Ceph, set
+the ``allow_dirfrags`` flag on the filesystem:
+
+::
+
+    ceph fs set <filesystem name> allow_dirfrags
+
