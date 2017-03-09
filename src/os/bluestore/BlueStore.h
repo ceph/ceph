@@ -57,7 +57,6 @@ enum {
   l_bluestore_state_kv_committing_lat,
   l_bluestore_state_kv_done_lat,
   l_bluestore_state_deferred_queued_lat,
-  l_bluestore_state_deferred_applying_lat,
   l_bluestore_state_deferred_aio_wait_lat,
   l_bluestore_state_deferred_cleanup_lat,
   l_bluestore_state_finishing_lat,
@@ -1337,9 +1336,8 @@ public:
       STATE_KV_QUEUED,     // queued for kv_sync_thread submission
       STATE_KV_SUBMITTED,  // submitted to kv; not yet synced
       STATE_KV_DONE,
-      STATE_DEFERRED_QUEUED,
-      STATE_DEFERRED_APPLYING,
-      STATE_DEFERRED_AIO_WAIT,
+      STATE_DEFERRED_QUEUED,    // in deferred_queue
+      STATE_DEFERRED_AIO_WAIT,  // aio in flight, waiting for completion
       STATE_DEFERRED_CLEANUP,   // remove deferred kv record
       STATE_DEFERRED_DONE,
       STATE_FINISHING,
@@ -1357,7 +1355,6 @@ public:
       case STATE_KV_SUBMITTED: return "kv_submitted";
       case STATE_KV_DONE: return "kv_done";
       case STATE_DEFERRED_QUEUED: return "deferred_queued";
-      case STATE_DEFERRED_APPLYING: return "deferred_applying";
       case STATE_DEFERRED_AIO_WAIT: return "deferred_aio_wait";
       case STATE_DEFERRED_CLEANUP: return "deferred_cleanup";
       case STATE_DEFERRED_DONE: return "deferred_done";
@@ -1377,7 +1374,6 @@ public:
       case l_bluestore_state_kv_committing_lat: return "kv_committing";
       case l_bluestore_state_kv_done_lat: return "kv_done";
       case l_bluestore_state_deferred_queued_lat: return "deferred_queued";
-      case l_bluestore_state_deferred_applying_lat: return "deferred_applying";
       case l_bluestore_state_deferred_aio_wait_lat: return "deferred_aio_wait";
       case l_bluestore_state_deferred_cleanup_lat: return "deferred_cleanup";
       case l_bluestore_state_finishing_lat: return "finishing";
@@ -1530,14 +1526,15 @@ public:
 	TransContext,
 	boost::intrusive::list_member_hook<>,
 	&TransContext::deferred_queue_item> > deferred_queue_t;
-    deferred_queue_t deferred_q; ///< transactions
+    deferred_queue_t deferred_pending;      ///< waiting
+    deferred_queue_t deferred_running;      ///< in flight ios
+    interval_set<uint64_t> deferred_blocks; ///< blocks in flight
+    TransContext *deferred_txc;             ///< txc carrying this batch
 
     boost::intrusive::list_member_hook<> deferred_osr_queue_item;
 
     Sequencer *parent;
     BlueStore *store;
-
-    std::mutex deferred_apply_mutex;
 
     uint64_t last_seq = 0;
 
@@ -1612,73 +1609,12 @@ public:
     }
   };
 
-  class DeferredWQ : public ThreadPool::WorkQueue<TransContext> {
-    // We need to order DEFERRED items within each Sequencer.  To do that,
-    // queue each txc under osr, and queue the osr's here.  When we
-    // dequeue an txc, requeue the osr if there are more pending, and
-    // do it at the end of the list so that the next thread does not
-    // get a conflicted txc.  Hold an osr mutex while doing the deferred to
-    // preserve the ordering.
-  public:
-    typedef boost::intrusive::list<
+  typedef boost::intrusive::list<
+    OpSequencer,
+    boost::intrusive::member_hook<
       OpSequencer,
-      boost::intrusive::member_hook<
-	OpSequencer,
-	boost::intrusive::list_member_hook<>,
-	&OpSequencer::deferred_osr_queue_item> > deferred_osr_queue_t;
-
-  private:
-    BlueStore *store;
-    deferred_osr_queue_t deferred_queue;
-
-  public:
-    DeferredWQ(BlueStore *s, time_t ti, time_t sti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<TransContext>("BlueStore::DeferredWQ", ti, sti,
-					    tp),
-	store(s) {
-    }
-    bool _empty() {
-      return deferred_queue.empty();
-    }
-    bool _enqueue(TransContext *i) {
-      if (i->osr->deferred_q.empty()) {
-	deferred_queue.push_back(*i->osr);
-      }
-      i->osr->deferred_q.push_back(*i);
-      return true;
-    }
-    void _dequeue(TransContext *p) {
-      assert(0 == "not needed, not implemented");
-    }
-    TransContext *_dequeue() {
-      if (deferred_queue.empty())
-	return NULL;
-      OpSequencer *osr = &deferred_queue.front();
-      TransContext *i = &osr->deferred_q.front();
-      osr->deferred_q.pop_front();
-      deferred_queue.pop_front();
-      if (!osr->deferred_q.empty()) {
-	// requeue at the end to minimize contention
-	deferred_queue.push_back(*i->osr);
-      }
-
-      // preserve deferred ordering for this sequencer by taking the lock
-      // while still holding the queue lock
-      i->osr->deferred_apply_mutex.lock();
-      return i;
-    }
-    void _process(TransContext *i, ThreadPool::TPHandle &) override {
-      store->_deferred_apply(i);
-      i->osr->deferred_apply_mutex.unlock();
-    }
-    void _clear() {
-      assert(deferred_queue.empty());
-    }
-
-    void flush() {
-      drain();
-    }
-  };
+      boost::intrusive::list_member_hook<>,
+      &OpSequencer::deferred_osr_queue_item> > deferred_osr_queue_t;
 
   struct KVSyncThread : public Thread {
     BlueStore *store;
@@ -1748,8 +1684,7 @@ private:
 
   std::mutex deferred_lock;
   std::atomic<uint64_t> deferred_seq = {0};
-  ThreadPool deferred_tp;
-  DeferredWQ deferred_wq;
+  deferred_osr_queue_t deferred_queue;      ///< osr's with deferred io pending
 
   int m_finisher_num;
   vector<Finisher*> finishers;
@@ -1783,8 +1718,6 @@ private:
   uint64_t prefer_deferred_size = 0; ///< size threshold for forced deferred writes
 
   uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
-
-  bool sync_deferred_apply;	  ///< see config option bluestore_sync_deferred_apply
 
   std::atomic<Compressor::CompressionMode> comp_mode = {Compressor::COMP_NONE}; ///< compression mode
   CompressorRef compressor;
@@ -1919,7 +1852,9 @@ private:
   }
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
-  int _deferred_apply(TransContext *txc);
+  void _deferred_queue(TransContext *txc);
+  void _deferred_try_submit();
+  void _deferred_try_submit(OpSequencer *osr);
   int _deferred_finish(TransContext *txc);
   int _do_deferred_op(TransContext *txc, bluestore_deferred_op_t& wo);
   int _deferred_replay();

@@ -3135,22 +3135,12 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     throttle_deferred_bytes(cct, "bluestore_deferred_max_bytes",
 		       cct->_conf->bluestore_max_bytes +
 		       cct->_conf->bluestore_deferred_max_bytes),
-    deferred_tp(cct,
-	   "BlueStore::deferred_tp",
-           "tp_deferred",
-	   cct->_conf->bluestore_sync_deferred_apply ? 0 : cct->_conf->bluestore_deferred_threads,
-	   "bluestore_deferred_threads"),
-    deferred_wq(this,
-	     cct->_conf->bluestore_deferred_thread_timeout,
-	     cct->_conf->bluestore_deferred_thread_suicide_timeout,
-	     &deferred_tp),
     m_finisher_num(1),
     kv_sync_thread(this),
     kv_stop(false),
     logger(NULL),
     debug_read_error_lock("BlueStore::debug_read_error_lock"),
     csum_type(Checksummer::CSUM_CRC32C),
-    sync_deferred_apply(cct->_conf->bluestore_sync_deferred_apply),
     mempool_thread(this)
 {
   _init_logger();
@@ -3191,15 +3181,6 @@ BlueStore::BlueStore(CephContext *cct,
     throttle_deferred_bytes(cct, "bluestore_deferred_max_bytes",
 		       cct->_conf->bluestore_max_bytes +
 		       cct->_conf->bluestore_deferred_max_bytes),
-    deferred_tp(cct,
-	   "BlueStore::deferred_tp",
-           "tp_deferred",
-	   cct->_conf->bluestore_sync_deferred_apply ? 0 : cct->_conf->bluestore_deferred_threads,
-	   "bluestore_deferred_threads"),
-    deferred_wq(this,
-	     cct->_conf->bluestore_deferred_thread_timeout,
-	     cct->_conf->bluestore_deferred_thread_suicide_timeout,
-	     &deferred_tp),
     m_finisher_num(1),
     kv_sync_thread(this),
     kv_stop(false),
@@ -3208,7 +3189,6 @@ BlueStore::BlueStore(CephContext *cct,
     csum_type(Checksummer::CSUM_CRC32C),
     min_alloc_size(_min_alloc_size),
     min_alloc_size_order(ctz(_min_alloc_size)),
-    sync_deferred_apply(cct->_conf->bluestore_sync_deferred_apply),
     mempool_thread(this)
 {
   _init_logger();
@@ -3345,8 +3325,6 @@ void BlueStore::_init_logger()
     "Average kv_done state latency");
   b.add_time_avg(l_bluestore_state_deferred_queued_lat, "state_deferred_queued_lat",
     "Average deferred_queued state latency");
-  b.add_time_avg(l_bluestore_state_deferred_applying_lat, "state_deferred_applying_lat",
-    "Average deferred_applying state latency");
   b.add_time_avg(l_bluestore_state_deferred_aio_wait_lat, "state_deferred_aio_wait_lat",
     "Average aio_wait state latency");
   b.add_time_avg(l_bluestore_state_deferred_cleanup_lat, "state_deferred_cleanup_lat",
@@ -4769,7 +4747,6 @@ int BlueStore::mount()
   for (auto f : finishers) {
     f->start();
   }
-  deferred_tp.start();
   kv_sync_thread.create("bstore_kv_sync");
 
   r = _deferred_replay();
@@ -4786,8 +4763,6 @@ int BlueStore::mount()
 
  out_stop:
   _kv_stop();
-  deferred_wq.drain();
-  deferred_tp.stop();
   for (auto f : finishers) {
     f->wait_for_empty();
     f->stop();
@@ -4822,10 +4797,6 @@ int BlueStore::umount()
 
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
-  dout(20) << __func__ << " draining deferred_wq" << dendl;
-  deferred_wq.drain();
-  dout(20) << __func__ << " stopping deferred_tp" << dendl;
-  deferred_tp.stop();
   for (auto f : finishers) {
     dout(20) << __func__ << " draining finisher" << dendl;
     f->wait_for_empty();
@@ -7152,24 +7123,11 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       txc->log_state_latency(logger, l_bluestore_state_kv_done_lat);
       if (txc->deferred_txn) {
 	txc->state = TransContext::STATE_DEFERRED_QUEUED;
-	if (sync_deferred_apply) {
-	  _deferred_apply(txc);
-	} else {
-	  deferred_wq.queue(txc);
-	}
+	_deferred_queue(txc);
 	return;
       }
       txc->state = TransContext::STATE_FINISHING;
       break;
-
-    case TransContext::STATE_DEFERRED_APPLYING:
-      txc->log_state_latency(logger, l_bluestore_state_deferred_applying_lat);
-      if (txc->ioc.has_pending_aios()) {
-	txc->state = TransContext::STATE_DEFERRED_AIO_WAIT;
-	_txc_aio_submit(txc);
-	return;
-      }
-      // ** fall-thru **
 
     case TransContext::STATE_DEFERRED_AIO_WAIT:
       txc->log_state_latency(logger, l_bluestore_state_deferred_aio_wait_lat);
@@ -7691,7 +7649,8 @@ void BlueStore::_kv_sync_thread()
   dout(10) << __func__ << " finish" << dendl;
 }
 
-bluestore_deferred_op_t *BlueStore::_get_deferred_op(TransContext *txc, OnodeRef o)
+bluestore_deferred_op_t *BlueStore::_get_deferred_op(
+  TransContext *txc, OnodeRef o)
 {
   if (!txc->deferred_txn) {
     txc->deferred_txn = new bluestore_deferred_transaction_t;
@@ -7700,46 +7659,111 @@ bluestore_deferred_op_t *BlueStore::_get_deferred_op(TransContext *txc, OnodeRef
   return &txc->deferred_txn->ops.back();
 }
 
-int BlueStore::_deferred_apply(TransContext *txc)
+void BlueStore::_deferred_queue(TransContext *txc)
 {
-  bluestore_deferred_transaction_t& wt = *txc->deferred_txn;
-  dout(20) << __func__ << " txc " << txc << " seq " << wt.seq << dendl;
-  txc->log_state_latency(logger, l_bluestore_state_deferred_queued_lat);
-  txc->state = TransContext::STATE_DEFERRED_APPLYING;
-
-  if (cct->_conf->bluestore_inject_deferred_apply_delay) {
-    dout(20) << __func__ << " bluestore_inject_deferred_apply_delay "
-	     << cct->_conf->bluestore_inject_deferred_apply_delay
-	     << dendl;
-    utime_t t;
-    t.set_from_double(cct->_conf->bluestore_inject_deferred_apply_delay);
-    t.sleep();
-    dout(20) << __func__ << " finished sleep" << dendl;
+  dout(20) << __func__ << " txc " << txc << " on " << txc->osr << dendl;
+  std::lock_guard<std::mutex> l(deferred_lock);
+  if (txc->osr->deferred_pending.empty() &&
+      txc->osr->deferred_running.empty()) {
+    deferred_queue.push_back(*txc->osr);
   }
-
-  assert(txc->ioc.pending_aios.empty());
-  for (list<bluestore_deferred_op_t>::iterator p = wt.ops.begin();
-       p != wt.ops.end();
-       ++p) {
-    int r = _do_deferred_op(txc, *p);
-    assert(r == 0);
+  txc->osr->deferred_pending.push_back(*txc);
+  if (txc->osr->deferred_running.empty()) {
+    _deferred_try_submit(txc->osr.get());
   }
+}
 
-  _txc_state_proc(txc);
-  return 0;
+void BlueStore::_deferred_try_submit()
+{
+  dout(20) << __func__ << " " << deferred_queue.size() << " osrs" << dendl;
+  for (auto& osr : deferred_queue) {
+    if (osr.deferred_running.empty()) {
+      _deferred_try_submit(&osr);
+    }
+  }
+}
+
+void BlueStore::_deferred_try_submit(OpSequencer *osr)
+{
+  dout(10) << __func__ << " osr " << osr << " " << osr->deferred_pending.size()
+	   << " pending " << dendl;
+  assert(osr->deferred_running.empty());
+  osr->deferred_pending.swap(osr->deferred_running);
+
+  // attach all IO to the last in the batch
+  TransContext *last = &osr->deferred_running.back();
+
+  // reverse order
+  for (auto i = osr->deferred_running.rbegin();
+       i != osr->deferred_running.rend();
+       ++i) {
+    TransContext *txc = &*i;
+    bluestore_deferred_transaction_t& wt = *txc->deferred_txn;
+    dout(20) << __func__ << "  txc " << txc << " seq " << wt.seq << dendl;
+    txc->log_state_latency(logger, l_bluestore_state_deferred_queued_lat);
+    txc->state = TransContext::STATE_DEFERRED_AIO_WAIT;
+    for (auto opi = wt.ops.rbegin(); opi != wt.ops.rend(); ++opi) {
+      const auto& op = *opi;
+      uint64_t bl_offset = 0;
+      for (auto e : op.extents) {
+	interval_set<uint64_t> cur;
+	cur.insert(e.offset, e.length);
+	interval_set<uint64_t> overlap;
+	overlap.intersection_of(cur, osr->deferred_blocks);
+	cur.subtract(overlap);
+	dout(20) << __func__ << "  txc " << txc << " " << e << std::hex
+		 << " overlap 0x" << overlap << " new 0x" << cur
+		 << " from bl_offset 0x" << bl_offset << std::dec << dendl;
+	for (auto j = cur.begin(); j != cur.end(); ++j) {
+	  bufferlist bl;
+	  bl.substr_of(op.data, bl_offset + j.get_start() - e.offset,
+		       j.get_len());
+	  if (!g_conf->bluestore_debug_omit_block_device_write) {
+	    int r = bdev->aio_write(j.get_start(), bl, &last->ioc, false);
+	    assert(r == 0);
+	  }
+	  txc->osr->deferred_blocks.insert(j.get_start(), j.get_len());
+	}
+        bl_offset += e.length;
+      }
+    }
+  }
+  osr->deferred_txc = last;
+  dout(20) << " osr " << osr << " deferred_blocks 0x" << std::hex
+	   << osr->deferred_blocks << std::dec << dendl;
+  _txc_aio_submit(last);
 }
 
 int BlueStore::_deferred_finish(TransContext *txc)
 {
   bluestore_deferred_transaction_t& wt = *txc->deferred_txn;
-  dout(20) << __func__ << " txc " << " seq " << wt.seq << txc << dendl;
+  dout(20) << __func__ << " txc " << txc << " seq " << wt.seq << dendl;
+
+  OpSequencer::deferred_queue_t finished;
+  {
+    std::lock_guard<std::mutex> l(deferred_lock);
+    assert(txc->osr->deferred_txc == txc);
+    txc->osr->deferred_blocks.clear();
+    finished.swap(txc->osr->deferred_running);
+    if (!txc->osr->deferred_pending.empty()) {
+      _deferred_try_submit(txc->osr.get());
+    } else {
+      auto q = deferred_queue.iterator_to(*txc->osr);
+      deferred_queue.erase(q);
+    }
+  }
+
   std::lock_guard<std::mutex> l2(txc->osr->qlock);
   std::lock_guard<std::mutex> l(kv_lock);
-  txc->state = TransContext::STATE_DEFERRED_CLEANUP;
-  txc->osr->qcond.notify_all();
-  throttle_deferred_ops.put(txc->ops);
-  throttle_deferred_bytes.put(txc->bytes);
-  deferred_cleanup_queue.push_back(txc);
+  for (auto& i : finished) {
+    TransContext *txc = &i;
+    txc->state = TransContext::STATE_DEFERRED_CLEANUP;
+    txc->osr->qcond.notify_all();
+    throttle_deferred_ops.put(txc->ops);
+    throttle_deferred_bytes.put(txc->bytes);
+    deferred_cleanup_queue.push_back(txc);
+  }
+  finished.clear();
   kv_cond.notify_one();
   return 0;
 }
@@ -7760,6 +7784,7 @@ int BlueStore::_do_deferred_op(TransContext *txc, bluestore_deferred_op_t& wo)
 	  int r = bdev->aio_write(e.offset, bl, &txc->ioc, false);
 	  assert(r == 0);
         }
+	txc->osr->deferred_blocks.insert(e.offset, e.length);
       }
     }
     break;
@@ -8488,7 +8513,7 @@ void BlueStore::_do_write_small(
 
       if (!g_conf->bluestore_debug_omit_block_device_write) {
         if (b_len <= prefer_deferred_size) {
-	  dout(20) << __func__ << " defering small 0x" << std::hex
+	  dout(20) << __func__ << " deferring small 0x" << std::hex
 		   << b_len << std::dec << " unused write via deferred" << dendl;
 	  bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
 	  op->op = bluestore_deferred_op_t::OP_WRITE;
@@ -8836,7 +8861,7 @@ int BlueStore::_do_alloc_write(
     // queue io
     if (!g_conf->bluestore_debug_omit_block_device_write) {
       if (l->length() <= prefer_deferred_size) {
-	dout(20) << __func__ << " defering small 0x" << std::hex
+	dout(20) << __func__ << " deferring small 0x" << std::hex
 		 << l->length() << std::dec << " write via deferred" << dendl;
 	bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
 	op->op = bluestore_deferred_op_t::OP_WRITE;
