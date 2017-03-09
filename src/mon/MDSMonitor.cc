@@ -2272,7 +2272,6 @@ int MDSMonitor::filesystem_command(
       pending_fsmap.modify_daemon(gid, [state](MDSMap::mds_info_t *info) {
         info->state = state;
       });
-      stringstream ss;
       ss << "set mds gid " << gid << " to state " << state << " "
          << ceph_mds_state_name(state);
       return 0;
@@ -2303,7 +2302,6 @@ int MDSMonitor::filesystem_command(
         return -EBUSY;
       } else {
         pending_fsmap.erase(gid, {});
-        stringstream ss;
         ss << "removed mds gid " << gid;
         return 0;
       }
@@ -2333,7 +2331,6 @@ int MDSMonitor::filesystem_command(
       fs->mds_map.failed.erase(role.rank);
     });
 
-    stringstream ss;
     ss << "removed failed mds." << role;
     return 0;
   } else if (prefix == "mds compat rm_compat") {
