@@ -3583,9 +3583,12 @@ int RGWRados::replace_region_with_zonegroup()
       zoneparams.set_id(iter->first);
       zoneparams.realm_id = realm.get_id();
       ret = zoneparams.init(cct, this);
-      if (ret < 0) {
+      if (ret < 0 && ret != -ENOENT) {
         ldout(cct, 0) << __func__ << " failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
         return ret;
+      } else if (ret == -ENOENT) {
+        ldout(cct, 0) << __func__ << " zone is part of another cluster " << iter->first <<  " skipping " << dendl;
+        continue;
       }
       zonegroup.realm_id = realm.get_id();
       ret = zoneparams.update();
