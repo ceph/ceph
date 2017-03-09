@@ -8615,9 +8615,9 @@ void BlueStore::_do_write_small(
   unsigned alloc_len = min_alloc_size;
   uint64_t b_off = P2PHASE(offset, alloc_len);
   uint64_t b_off0 = b_off;
-  _buffer_cache_write(txc, b, b_off, bl,
-		      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   _pad_zeros(&bl, &b_off0, block_size);
+  _buffer_cache_write(txc, b, b_off0, bl,
+		      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
   Extent *le = o->extent_map.set_lextent(offset, b_off,
 			 length, b, &wctx->old_extents);
   txc->statfs_delta.stored() += le->length;
