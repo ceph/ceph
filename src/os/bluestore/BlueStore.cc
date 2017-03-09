@@ -7434,10 +7434,18 @@ void BlueStore::_osr_drain_all()
     std::lock_guard<std::mutex> l(osr_lock);
     s = osr_set;
   }
+
+  deferred_aggressive_cleanup = true;
+  {
+    // wake up any previously finished deferred events
+    std::lock_guard<std::mutex> l(kv_lock);
+    kv_cond.notify_one();
+  }
   for (auto osr : s) {
     dout(20) << __func__ << " drain " << osr << dendl;
     osr->drain();
   }
+  deferred_aggressive_cleanup = false;
 
   dout(10) << __func__ << " done" << dendl;
 }
@@ -7699,7 +7707,7 @@ void BlueStore::_deferred_try_submit(OpSequencer *osr)
     }
   }
   osr->deferred_txc = last;
-  dout(20) << " osr " << osr << " deferred_blocks 0x" << std::hex
+  dout(20) << __func__ << " osr " << osr << " deferred_blocks 0x" << std::hex
 	   << osr->deferred_blocks << std::dec << dendl;
   _txc_aio_submit(last);
 }
@@ -7734,7 +7742,12 @@ int BlueStore::_deferred_finish(TransContext *txc)
     deferred_cleanup_queue.push_back(txc);
   }
   finished.clear();
-  kv_cond.notify_one();
+
+  // in the normal case, do not bother waking up the kv thread; it will
+  // catch us on the next commit anyway.
+  if (deferred_aggressive_cleanup) {
+    kv_cond.notify_one();
+  }
   return 0;
 }
 
@@ -7775,7 +7788,8 @@ int BlueStore::_deferred_replay()
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
     dout(20) << __func__ << " replay " << pretty_binary_string(it->key())
 	     << dendl;
-    bluestore_deferred_transaction_t *deferred_txn = new bluestore_deferred_transaction_t;
+    bluestore_deferred_transaction_t *deferred_txn =
+      new bluestore_deferred_transaction_t;
     bufferlist bl = it->value();
     bufferlist::iterator p = bl.begin();
     try {
