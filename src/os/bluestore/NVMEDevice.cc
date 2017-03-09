@@ -613,6 +613,13 @@ static void attach_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid,
   struct spdk_pci_device *pci_dev = NULL;
 
   spdk_pci_addr_parse(&pci_addr, trid->traddr);
+
+  pci_dev = spdk_pci_get_device(&pci_addr);
+  if (!pci_dev) {
+    dout(0) << __func__ << " failed to get pci device" << dendl; 
+    assert(pci_dev);
+  }
+
   NVMEManager::ProbeContext *ctx = static_cast<NVMEManager::ProbeContext*>(cb_ctx);
   ctx->manager->register_ctrlr(ctx->sn_tag, ctrlr, pci_dev, &ctx->driver);
 }
