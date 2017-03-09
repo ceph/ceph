@@ -375,11 +375,16 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
       }
     }
 
-    // FIXME: why not tx?
+    //Tx completion
     if (global_infiniband->get_memory_manager()->is_tx_buffer(chunk->buffer))
       tx_chunks.push_back(chunk);
+    //Rx zcopy - replication message
+    else if (global_infiniband->get_memory_manager()->is_rx_buffer(chunk->buffer)) {
+      global_infiniband->post_chunk(chunk);
+      ldout(cct, 20) << __func__ << " zcopy: replication cqe, posting chunk back to SRQ " << chunk << dendl;
+    }
     else
-      ldout(cct, 1) << __func__ << " not tx buffer, chunk " << chunk << dendl;
+      ldout(cct, 1) << __func__ << " not a registered buffer, chunk " << chunk << dendl;
   }
 
   perf_logger->inc(l_msgr_rdma_tx_total_wc, n);
