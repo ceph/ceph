@@ -237,7 +237,7 @@ void RDMADispatcher::polling()
         r = 0;
         perf_logger->set(l_msgr_rdma_polling, 0);
         while (!done && r == 0) {
-          r = poll(channel_poll, 2, 1);
+          r = poll(channel_poll, 2, 100);
           if (r < 0) {
             r = -errno;
             lderr(cct) << __func__ << " poll failed " << r << dendl;
