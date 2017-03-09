@@ -191,7 +191,7 @@ private:
    */
   bool validate_crush_against_features(const CrushWrapper *newcrush,
                                       stringstream &ss);
-
+  void check_osdmap_subs();
   void share_map_with_random_osd();
 
   Mutex prime_pg_temp_lock = {"OSDMonitor::prime_pg_temp_lock"};
@@ -449,8 +449,7 @@ private:
   int dump_osd_metadata(int osd, Formatter *f, ostream *err);
   void print_nodes(Formatter *f);
 
-  void check_subs();
-  void check_sub(Subscription *sub);
+  void check_osdmap_sub(Subscription *sub);
 
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {

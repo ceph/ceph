@@ -325,7 +325,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mon->pgmon()->check_osd_map(osdmap.epoch);
   }
 
-  check_subs();
+  check_osdmap_subs();
 
   share_map_with_random_osd();
   update_logger();
@@ -2912,21 +2912,22 @@ epoch_t OSDMonitor::blacklist(const entity_addr_t& a, utime_t until)
 }
 
 
-void OSDMonitor::check_subs()
+void OSDMonitor::check_osdmap_subs()
 {
   dout(10) << __func__ << dendl;
-  string type = "osdmap";
-  if (mon->session_map.subs.count(type) == 0)
+  auto osdmap_subs = mon->session_map.subs.find("osdmap");
+  if (osdmap_subs == mon->session_map.subs.end()) {
     return;
-  xlist<Subscription*>::iterator p = mon->session_map.subs[type]->begin();
+  }
+  auto p = osdmap_subs->second->begin();
   while (!p.end()) {
-    Subscription *sub = *p;
+    auto sub = *p;
     ++p;
-    check_sub(sub);
+    check_osdmap_sub(sub);
   }
 }
 
-void OSDMonitor::check_sub(Subscription *sub)
+void OSDMonitor::check_osdmap_sub(Subscription *sub)
 {
   dout(10) << __func__ << " " << sub << " next " << sub->next
 	   << (sub->onetime ? " (onetime)":" (ongoing)") << dendl;

@@ -4430,7 +4430,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 	  // client needs earlier osdmaps on purpose, so reset the sent epoch
 	  s->osd_epoch = 0;
 	}
-        osdmon()->check_sub(s->sub_map["osdmap"]);
+        osdmon()->check_osdmap_sub(s->sub_map["osdmap"]);
       }
     } else if (p->first == "osd_pg_creates") {
       if ((int)s->is_capable("osd", MON_CAP_W)) {
