@@ -137,7 +137,6 @@ class RemoteProcess(object):
             greenlet.get()
 
         status = self._get_exitstatus()
-        self.exitstatus = self.returncode = status
         for stream in ('stdout', 'stderr'):
             if hasattr(self, stream):
                 stream_obj = getattr(self, stream)
@@ -173,13 +172,17 @@ class RemoteProcess(object):
                   signal, this returns None instead of paramiko's -1.
         """
         status = self._stdout_buf.channel.recv_exit_status()
+        self.exitstatus = self.returncode = status
         if status == -1:
             status = None
         return status
 
     @property
     def finished(self):
-        return self._stdout_buf.channel.exit_status_ready()
+        ready = self._stdout_buf.channel.exit_status_ready()
+        if ready:
+            self._get_exitstatus()
+        return ready
 
     def poll(self):
         """
