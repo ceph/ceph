@@ -231,6 +231,40 @@ Context *SnapshotRollbackRequest<I>::handle_rollback_objects(int *result) {
     return this->create_context_finisher(*result);
   }
 
+  return send_set_head_location();
+}
+
+template <typename I>
+Context *SnapshotRollbackRequest<I>::send_set_head_location() {
+  I &image_ctx = this->m_image_ctx;
+
+  RWLock::RLocker md_locker(image_ctx.md_lock);
+  RWLock::RLocker snap_locker(image_ctx.snap_lock);
+
+  librados::ObjectWriteOperation op;
+  cls_client::set_head_location(&op, m_snap_id);
+
+  using klass = SnapshotRollbackRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_safe_callback<klass, &klass::handle_set_head_location>(this);
+  int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, comp,&op);
+  assert(r == 0);
+  comp->release();
+  return nullptr;
+}
+
+template <typename I>
+Context *SnapshotRollbackRequest<I>::handle_set_head_location(int *result) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to set snapshot location: " << cpp_strerror(*result)
+               << dendl;
+    return this->create_context_finisher(*result);
+  }
+  
   return send_refresh_object_map();
 }
 
