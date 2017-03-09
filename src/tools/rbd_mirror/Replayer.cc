@@ -13,10 +13,12 @@
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "global/global_context.h"
+#include "librbd/internal.h"
 #include "librbd/Utils.h"
 #include "librbd/Watcher.h"
-#include "librbd/internal.h"
+#include "librbd/api/Mirror.h"
 #include "InstanceWatcher.h"
+#include "LeaderWatcher.h"
 #include "Replayer.h"
 #include "Threads.h"
 
@@ -389,7 +391,7 @@ int Replayer::init_rados(const std::string &cluster_name,
 
 void Replayer::init_local_mirroring_images() {
   rbd_mirror_mode_t mirror_mode;
-  int r = librbd::mirror_mode_get(m_local_io_ctx, &mirror_mode);
+  int r = librbd::api::Mirror<>::mode_get(m_local_io_ctx, &mirror_mode);
   if (r < 0) {
     derr << "could not tell whether mirroring was enabled for "
          << m_local_io_ctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;

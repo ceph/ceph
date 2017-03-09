@@ -7,9 +7,7 @@ set(librbd_internal_srcs
   AsyncObjectThrottle.cc
   AsyncOperation.cc
   AsyncRequest.cc
-  DiffIterate.cc
   ExclusiveLock.cc
-  Group.cc
   ImageCtx.cc
   ImageState.cc
   ImageWatcher.cc
@@ -22,9 +20,13 @@ set(librbd_internal_srcs
   ObjectMap.cc
   Operations.cc
   Utils.cc
+  Watcher.cc
+  api/DiffIterate.cc
+  api/Group.cc
+  api/Image.cc
+  api/Mirror.cc
   cache/ImageWriteback.cc
   cache/PassthroughImageCache.cc
-  Watcher.cc
   exclusive_lock/AutomaticPolicy.cc
   exclusive_lock/PreAcquireRequest.cc
   exclusive_lock/PostAcquireRequest.cc
@@ -45,10 +47,11 @@ set(librbd_internal_srcs
   io/ImageRequestWQ.cc
   io/ObjectRequest.cc
   io/ReadResult.cc
-  journal/RemoveRequest.cc
   journal/CreateRequest.cc
+  journal/DemoteRequest.cc
   journal/OpenRequest.cc
   journal/PromoteRequest.cc
+  journal/RemoveRequest.cc
   journal/Replay.cc
   journal/StandardPolicy.cc
   journal/Utils.cc
@@ -58,8 +61,12 @@ set(librbd_internal_srcs
   managed_lock/ReacquireRequest.cc
   managed_lock/ReleaseRequest.cc
   managed_lock/Utils.cc
+  mirror/DemoteRequest.cc
   mirror/DisableRequest.cc
   mirror/EnableRequest.cc
+  mirror/GetInfoRequest.cc
+  mirror/GetStatusRequest.cc
+  mirror/PromoteRequest.cc
   object_map/CreateRequest.cc
   object_map/InvalidateRequest.cc
   object_map/LockRequest.cc
@@ -72,7 +79,6 @@ set(librbd_internal_srcs
   object_map/SnapshotRollbackRequest.cc
   object_map/UnlockRequest.cc
   object_map/UpdateRequest.cc
-  watcher/Notifier.cc
   operation/DisableFeaturesRequest.cc
   operation/EnableFeaturesRequest.cc
   operation/FlattenRequest.cc
@@ -91,6 +97,7 @@ set(librbd_internal_srcs
   operation/SnapshotUnprotectRequest.cc
   operation/SnapshotLimitRequest.cc
   operation/TrimRequest.cc
+  watcher/Notifier.cc
   watcher/RewatchRequest.cc
   watcher/Types.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)

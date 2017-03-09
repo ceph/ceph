@@ -4,8 +4,8 @@
 #define CEPH_LIBRBD_OPERATION_FLATTEN_REQUEST_H
 
 #include "librbd/operation/Request.h"
-#include "librbd/parent_types.h"
 #include "common/snap_types.h"
+#include "librbd/Types.h"
 
 namespace librbd {
 
@@ -75,7 +75,7 @@ private:
   ProgressContext &m_prog_ctx;
   State m_state;
 
-  parent_spec m_parent_spec;
+  ParentSpec m_parent_spec;
   bool m_ignore_enoent;
 
   bool send_update_header();

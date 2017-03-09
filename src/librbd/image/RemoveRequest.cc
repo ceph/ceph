@@ -332,7 +332,7 @@ void RemoveRequest<I>::remove_child() {
   ldout(m_cct, 20) << dendl;
 
   m_image_ctx->parent_lock.get_read();
-  parent_info parent_info = m_image_ctx->parent_md;
+  ParentInfo parent_info = m_image_ctx->parent_md;
   m_image_ctx->parent_lock.put_read();
 
   librados::ObjectWriteOperation op;

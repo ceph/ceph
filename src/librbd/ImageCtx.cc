@@ -480,7 +480,7 @@ struct C_InvalidateCache : public Context {
   }
 
   int ImageCtx::get_parent_spec(snap_t in_snap_id,
-				parent_spec *out_pspec) const
+				ParentSpec *out_pspec) const
   {
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
@@ -551,7 +551,7 @@ struct C_InvalidateCache : public Context {
   void ImageCtx::add_snap(string in_snap_name,
 			  cls::rbd::SnapshotNamespace in_snap_namespace,
 			  snap_t id, uint64_t in_size,
-			  parent_info parent, uint8_t protection_status,
+			  const ParentInfo &parent, uint8_t protection_status,
                           uint64_t flags, utime_t timestamp)
   {
     assert(snap_lock.is_wlocked());
@@ -658,7 +658,7 @@ struct C_InvalidateCache : public Context {
     return 0;
   }
 
-  const parent_info* ImageCtx::get_parent_info(snap_t in_snap_id) const
+  const ParentInfo* ImageCtx::get_parent_info(snap_t in_snap_id) const
   {
     assert(snap_lock.is_locked());
     assert(parent_lock.is_locked());
@@ -672,7 +672,7 @@ struct C_InvalidateCache : public Context {
 
   int64_t ImageCtx::get_parent_pool_id(snap_t in_snap_id) const
   {
-    const parent_info *info = get_parent_info(in_snap_id);
+    const ParentInfo *info = get_parent_info(in_snap_id);
     if (info)
       return info->spec.pool_id;
     return -1;
@@ -680,7 +680,7 @@ struct C_InvalidateCache : public Context {
 
   string ImageCtx::get_parent_image_id(snap_t in_snap_id) const
   {
-    const parent_info *info = get_parent_info(in_snap_id);
+    const ParentInfo *info = get_parent_info(in_snap_id);
     if (info)
       return info->spec.image_id;
     return "";
@@ -688,7 +688,7 @@ struct C_InvalidateCache : public Context {
 
   uint64_t ImageCtx::get_parent_snap_id(snap_t in_snap_id) const
   {
-    const parent_info *info = get_parent_info(in_snap_id);
+    const ParentInfo *info = get_parent_info(in_snap_id);
     if (info)
       return info->spec.snap_id;
     return CEPH_NOSNAP;
@@ -697,7 +697,7 @@ struct C_InvalidateCache : public Context {
   int ImageCtx::get_parent_overlap(snap_t in_snap_id, uint64_t *overlap) const
   {
     assert(snap_lock.is_locked());
-    const parent_info *info = get_parent_info(in_snap_id);
+    const ParentInfo *info = get_parent_info(in_snap_id);
     if (info) {
       *overlap = info->overlap;
       return 0;

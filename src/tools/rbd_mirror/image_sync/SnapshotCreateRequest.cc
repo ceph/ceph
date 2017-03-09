@@ -28,7 +28,7 @@ SnapshotCreateRequest<I>::SnapshotCreateRequest(I *local_image_ctx,
                                                 const std::string &snap_name,
 						const cls::rbd::SnapshotNamespace &snap_namespace,
                                                 uint64_t size,
-                                                const librbd::parent_spec &spec,
+                                                const librbd::ParentSpec &spec,
                                                 uint64_t parent_overlap,
                                                 Context *on_finish)
   : m_local_image_ctx(local_image_ctx), m_snap_name(snap_name),

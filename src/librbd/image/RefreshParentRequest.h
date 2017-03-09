@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_IMAGE_REFRESH_PARENT_REQUEST_H
 
 #include "include/int_types.h"
-#include "librbd/parent_types.h"
+#include "librbd/Types.h"
 
 class Context;
 
@@ -19,13 +19,13 @@ template <typename ImageCtxT = ImageCtx>
 class RefreshParentRequest {
 public:
   static RefreshParentRequest *create(ImageCtxT &child_image_ctx,
-                                      const parent_info &parent_md,
+                                      const ParentInfo &parent_md,
                                       Context *on_finish) {
     return new RefreshParentRequest(child_image_ctx, parent_md, on_finish);
   }
 
   static bool is_refresh_required(ImageCtxT &child_image_ctx,
-                                  const parent_info &parent_md);
+                                  const ParentInfo &parent_md);
 
   void send();
   void apply();
@@ -55,11 +55,11 @@ private:
    * @endverbatim
    */
 
-  RefreshParentRequest(ImageCtxT &child_image_ctx, const parent_info &parent_md,
+  RefreshParentRequest(ImageCtxT &child_image_ctx, const ParentInfo &parent_md,
                        Context *on_finish);
 
   ImageCtxT &m_child_image_ctx;
-  parent_info m_parent_md;
+  ParentInfo m_parent_md;
   Context *m_on_finish;
 
   ImageCtxT *m_parent_image_ctx;
@@ -68,9 +68,9 @@ private:
   int m_error_result;
 
   static bool is_close_required(ImageCtxT &child_image_ctx,
-                                const parent_info &parent_md);
+                                const ParentInfo &parent_md);
   static bool is_open_required(ImageCtxT &child_image_ctx,
-                               const parent_info &parent_md);
+                               const ParentInfo &parent_md);
 
   void send_open_parent();
   Context *handle_open_parent(int *result);

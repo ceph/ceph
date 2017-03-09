@@ -9,7 +9,8 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "include/rbd_types.h"
 #include "librbd/internal.h"
-
+#include "librbd/api/Image.h"
+#include "librbd/api/Mirror.h"
 #include "PoolWatcher.h"
 
 #define dout_context g_ceph_context
@@ -88,7 +89,7 @@ int PoolWatcher::refresh(ImageIds *image_ids) {
 
   std::string pool_name = m_remote_io_ctx.get_pool_name();
   rbd_mirror_mode_t mirror_mode;
-  int r = librbd::mirror_mode_get(m_remote_io_ctx, &mirror_mode);
+  int r = librbd::api::Mirror<>::mode_get(m_remote_io_ctx, &mirror_mode);
   if (r < 0) {
     derr << "could not tell whether mirroring was enabled for "
          << pool_name << ": " << cpp_strerror(r) << dendl;
@@ -100,7 +101,7 @@ int PoolWatcher::refresh(ImageIds *image_ids) {
   }
 
   std::map<std::string, std::string> images_map;
-  r = librbd::list_images_v2(m_remote_io_ctx, images_map);
+  r = librbd::api::Image<>::list_images(m_remote_io_ctx, &images_map);
   if (r < 0) {
     derr << "error retrieving image names from pool " << pool_name << ": "
          << cpp_strerror(r) << dendl;

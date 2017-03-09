@@ -408,6 +408,12 @@ public:
                             size_t info_size);
   int mirror_image_get_status(mirror_image_status_t *mirror_image_status,
 			      size_t status_size);
+  int aio_mirror_image_promote(bool force, RBD::AioCompletion *c);
+  int aio_mirror_image_demote(RBD::AioCompletion *c);
+  int aio_mirror_image_get_info(mirror_image_info_t *mirror_image_info,
+                                size_t info_size, RBD::AioCompletion *c);
+  int aio_mirror_image_get_status(mirror_image_status_t *mirror_image_status,
+                                  size_t status_size, RBD::AioCompletion *c);
 
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);
