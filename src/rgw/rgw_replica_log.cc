@@ -35,25 +35,16 @@ void RGWReplicaBounds::decode_json(JSONObj *obj) {
 RGWReplicaLogger::RGWReplicaLogger(RGWRados *_store) :
     cct(_store->cct), store(_store) {}
 
-int RGWReplicaLogger::open_ioctx(librados::IoCtx& ctx, const string& pool)
+int RGWReplicaLogger::open_ioctx(librados::IoCtx& ctx, const rgw_pool& pool)
 {
-  int r = store->get_rados_handle()->ioctx_create(pool.c_str(), ctx);
-  if (r == -ENOENT) {
-    rgw_bucket p(pool.c_str());
-    r = store->create_pool(p);
-    if (r < 0)
-      return r;
-
-    // retry
-    r = store->get_rados_handle()->ioctx_create(pool.c_str(), ctx);
-  }
+  int r = rgw_init_ioctx(store->get_rados_handle(), pool, ctx, true);
   if (r < 0) {
     lderr(cct) << "ERROR: could not open rados pool " << pool << dendl;
   }
   return r;
 }
 
-int RGWReplicaLogger::update_bound(const string& oid, const string& pool,
+int RGWReplicaLogger::update_bound(const string& oid, const rgw_pool& pool,
                                    const string& daemon_id,
                                    const string& marker, const utime_t& time,
                                    const list<RGWReplicaItemMarker> *entries,
@@ -79,7 +70,7 @@ int RGWReplicaLogger::update_bound(const string& oid, const string& pool,
   return ioctx.operate(oid, &opw);
 }
 
-int RGWReplicaLogger::write_bounds(const string& oid, const string& pool,
+int RGWReplicaLogger::write_bounds(const string& oid, const rgw_pool& pool,
                                    RGWReplicaBounds& bounds)
 {
   librados::IoCtx ioctx;
@@ -103,7 +94,7 @@ int RGWReplicaLogger::write_bounds(const string& oid, const string& pool,
   return 0;
 }
 
-int RGWReplicaLogger::delete_bound(const string& oid, const string& pool,
+int RGWReplicaLogger::delete_bound(const string& oid, const rgw_pool& pool,
                                    const string& daemon_id, bool purge_all,
                                    bool need_to_exist)
 {
@@ -125,7 +116,7 @@ int RGWReplicaLogger::delete_bound(const string& oid, const string& pool,
   return ioctx.operate(oid, &opw);
 }
 
-int RGWReplicaLogger::get_bounds(const string& oid, const string& pool,
+int RGWReplicaLogger::get_bounds(const string& oid, const rgw_pool& pool,
                                  RGWReplicaBounds& bounds)
 {
   librados::IoCtx ioctx;
@@ -139,11 +130,11 @@ int RGWReplicaLogger::get_bounds(const string& oid, const string& pool,
 
 RGWReplicaObjectLogger::
 RGWReplicaObjectLogger(RGWRados *_store,
-                       const string& _pool,
+                       const rgw_pool& _pool,
                        const string& _prefix) : RGWReplicaLogger(_store),
                        pool(_pool), prefix(_prefix) {
   if (pool.empty())
-    store->get_log_pool_name(pool);
+    store->get_log_pool(pool);
 }
 
 int RGWReplicaObjectLogger::create_log_objects(int shards)
@@ -166,7 +157,7 @@ int RGWReplicaObjectLogger::create_log_objects(int shards)
 RGWReplicaBucketLogger::RGWReplicaBucketLogger(RGWRados *_store) :
   RGWReplicaLogger(_store)
 {
-  store->get_log_pool_name(pool);
+  store->get_log_pool(pool);
   prefix = _store->ctx()->_conf->rgw_replica_log_obj_prefix;
   prefix.append(".");
 }

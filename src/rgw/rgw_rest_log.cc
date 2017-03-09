@@ -414,7 +414,7 @@ void RGWOp_BILog_List::execute() {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = store->list_bi_log_entries(bucket_info.bucket, shard_id,
+    int ret = store->list_bi_log_entries(bucket_info, shard_id,
                                           marker, max_entries - count, 
                                           entries, &truncated);
     if (ret < 0) {
@@ -496,7 +496,7 @@ void RGWOp_BILog_Info::execute() {
     }
   }
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->get_bucket_stats(bucket_info.bucket, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
+  int ret =  store->get_bucket_stats(bucket_info, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0 && ret != -ENOENT) {
     http_ret = ret;
     return;
@@ -558,7 +558,7 @@ void RGWOp_BILog_Delete::execute() {
       return;
     }
   }
-  http_ret = store->trim_bi_log_entries(bucket_info.bucket, shard_id, start_marker, end_marker);
+  http_ret = store->trim_bi_log_entries(bucket_info, shard_id, start_marker, end_marker);
   if (http_ret < 0) {
     dout(5) << "ERROR: trim_bi_log_entries() " << dendl;
   }

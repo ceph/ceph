@@ -562,7 +562,7 @@ extern void end_header(struct req_state *s,
 		       bool force_no_error = false);
 extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
-extern void dump_owner(struct req_state *s, rgw_user& id, string& name,
+extern void dump_owner(struct req_state *s, const rgw_user& id, string& name,
 		       const char *section = NULL);
 extern void dump_header(struct req_state* s,
                         const boost::string_ref& name,

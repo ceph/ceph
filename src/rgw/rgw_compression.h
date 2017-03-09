@@ -43,7 +43,7 @@ public:
                      RGWPutObjDataProcessor* next)
     : RGWPutObj_Filter(next), cct(cct_), compressor(compressor) {}
   virtual ~RGWPutObj_Compress(){}
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) override;
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override;
 
   bool is_compressed() { return compressed; }
   vector<compression_block>& get_compression_blocks() { return blocks; }
