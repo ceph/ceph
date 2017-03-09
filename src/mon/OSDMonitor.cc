@@ -191,16 +191,14 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
   if (get_first_committed() > 1 &&
       latest_full < get_first_committed()) {
-    /* a bug introduced in 7fb3804fb860dcd0340dd3f7c39eec4315f8e4b6 would lead
-     * us to not update the on-disk latest_full key.  Upon trim, the actual
-     * version would cease to exist but we would still point to it.  This
-     * makes sure we get it pointing to a proper version.
-     */
+    // the monitor could be just sync'ed with its peer, and the latest_full key
+    // is not encoded in the paxos commits in encode_pending(), so we need to
+    // make sure we get it pointing to a proper version.
     version_t lc = get_last_committed();
     version_t fc = get_first_committed();
 
     dout(10) << __func__ << " looking for valid full map in interval"
-             << " [" << fc << ", " << lc << "]" << dendl;
+	     << " [" << fc << ", " << lc << "]" << dendl;
 
     latest_full = 0;
     for (version_t v = lc; v >= fc; v--) {
@@ -212,9 +210,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       }
     }
 
-    // if we trigger this, then there's something else going with the store
-    // state, and we shouldn't want to work around it without knowing what
-    // exactly happened.
     assert(latest_full > 0);
     auto t(std::make_shared<MonitorDBStore::Transaction>());
     put_version_latest_full(t, latest_full);
