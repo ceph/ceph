@@ -610,14 +610,14 @@ static inline bool looks_like_ip_address(const char *bucket)
   return (num_periods == 3);
 }
 
-static inline bool valid_s3_object_name(const string& name) {
+static inline int valid_s3_object_name(const string& name) {
   if (name.size() > 1024) {
-    return false;
+    return -ERR_INVALID_OBJECT_NAME;
   }
   if (check_utf8(name.c_str(), name.size())) {
-    return false;
+    return -ERR_INVALID_OBJECT_NAME;
   }
-  return true;
+  return 0;
 }
 
 static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
