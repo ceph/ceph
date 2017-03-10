@@ -167,6 +167,6 @@ void rgw_create_s3_v4_string_to_sign(CephContext *cct, const string& algorithm,
 int rgw_calculate_s3_v4_aws_signature(struct req_state *s, const string& access_key_id,
                                       const string &date, const string& region,
                                       const string& service, const string& string_to_sign,
-                                      string& signature);
+                                      string& signature, const std::string& access_key_secret="");
 
 #endif
