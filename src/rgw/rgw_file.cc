@@ -44,6 +44,26 @@ namespace rgw {
   ceph::timer<ceph::mono_clock> RGWLibFS::write_timer{
     ceph::construct_suspended};
 
+  inline int valid_fs_bucket_name(const string& name) {
+    int rc = valid_s3_bucket_name(name, false /* relaxed */);
+    if (rc != 0) {
+      if (name.size() > 255)
+        return -ENAMETOOLONG;
+      return -EINVAL;
+    }
+    return 0;
+  }
+
+  inline int valid_fs_object_name(const string& name) {
+    int rc = valid_s3_object_name(name);
+    if (rc != 0) {
+      if (name.size() > 1024)
+        return -ENAMETOOLONG;
+      return -EINVAL;
+    }
+    return 0;
+  }
+
   LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent,
 				       const char *path, uint32_t flags)
   {
@@ -441,7 +461,7 @@ namespace rgw {
       /* bucket */
       string bname{name};
       /* enforce S3 name restrictions */
-      rc = valid_s3_bucket_name(bname, false /* relaxed */);
+      rc = valid_fs_bucket_name(bname);
       if (rc != 0) {
 	rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
 	fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
@@ -449,6 +469,7 @@ namespace rgw {
 	rgw_fh->mtx.unlock();
 	unref(rgw_fh);
 	get<0>(mkr) = nullptr;
+	get<1>(mkr) = rc;
 	return mkr;
       }
 
@@ -475,13 +496,15 @@ namespace rgw {
       dir_name += "/";
 
       /* need valid S3 name (characters, length <= 1024, etc) */
-      if (! valid_s3_object_name(dir_name)) {
+      rc = valid_fs_object_name(dir_name);
+      if (rc != 0) {
 	rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
 	fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
 			RGWFileHandle::FHCache::FLAG_LOCK);
 	rgw_fh->mtx.unlock();
 	unref(rgw_fh);
 	get<0>(mkr) = nullptr;
+	get<1>(mkr) = rc;
 	return mkr;
       }
 
@@ -540,8 +563,9 @@ namespace rgw {
 	(obj_name.back() != '/'))
       obj_name += "/";
     obj_name += name;
-    if (! valid_s3_object_name(obj_name)) {
-      return MkObjResult{nullptr, -EINVAL};
+    rc = valid_fs_object_name(obj_name);
+    if (rc != 0) {
+      return MkObjResult{nullptr, rc};
     }
 
     /* create it */
