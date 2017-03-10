@@ -14,13 +14,23 @@ struct Locker {
   entity_name_t entity;
   std::string cookie;
   std::string address;
-  uint64_t handle;
+  uint64_t handle = 0;
+
+  Locker() {
+  }
+  Locker(const entity_name_t& entity, const std::string &cookie,
+         const std::string &address, uint64_t handle)
+    : entity(entity), cookie(cookie), address(address), handle(handle) {
+  }
 
   inline bool operator==(const Locker &rhs) const {
     return (entity == rhs.entity &&
             cookie == rhs.cookie &&
             address == rhs.address &&
             handle == rhs.handle);
+  }
+  inline bool operator!=(const Locker &rhs) const {
+    return !(*this == rhs);
   }
 };
 

@@ -434,6 +434,7 @@ TEST_F(TestMockLeaderWatcher, InitShutdown) {
 
   // Inint
   C_SaferCond on_heartbeat_finish;
+  expect_is_leader(mock_managed_lock, false, false);
   expect_try_acquire_lock(mock_managed_lock, 0);
   expect_init(mock_mirror_status_watcher, 0);
   expect_init(mock_instances, 0);
@@ -450,6 +451,7 @@ TEST_F(TestMockLeaderWatcher, InitShutdown) {
   expect_is_leader(mock_managed_lock, false, false);
   expect_release_lock(mock_managed_lock, 0);
   expect_shut_down(mock_managed_lock, true, 0);
+  expect_is_leader(mock_managed_lock, false, false);
 
   leader_watcher.shut_down();
 }
@@ -470,6 +472,7 @@ TEST_F(TestMockLeaderWatcher, InitReleaseShutdown) {
 
   // Inint
   C_SaferCond on_heartbeat_finish;
+  expect_is_leader(mock_managed_lock, false, false);
   expect_try_acquire_lock(mock_managed_lock, 0);
   expect_init(mock_mirror_status_watcher, 0);
   expect_init(mock_instances, 0);
@@ -493,6 +496,7 @@ TEST_F(TestMockLeaderWatcher, InitReleaseShutdown) {
 
   // Shutdown
   expect_shut_down(mock_managed_lock, false, 0);
+  expect_is_leader(mock_managed_lock, false, false);
 
   leader_watcher.shut_down();
 }
@@ -514,6 +518,7 @@ TEST_F(TestMockLeaderWatcher, AcquireError) {
 
   // Inint
   C_SaferCond on_get_locker_finish;
+  expect_is_leader(mock_managed_lock, false, false);
   expect_try_acquire_lock(mock_managed_lock, -EAGAIN);
   expect_get_locker(mock_managed_lock, librbd::managed_lock::Locker(), 0,
                     &on_get_locker_finish);
@@ -522,6 +527,7 @@ TEST_F(TestMockLeaderWatcher, AcquireError) {
 
   // Shutdown
   expect_shut_down(mock_managed_lock, false, 0);
+  expect_is_leader(mock_managed_lock, false, false);
 
   leader_watcher.shut_down();
 }
@@ -542,6 +548,7 @@ TEST_F(TestMockLeaderWatcher, ReleaseError) {
 
   // Inint
   C_SaferCond on_heartbeat_finish;
+  expect_is_leader(mock_managed_lock, false, false);
   expect_try_acquire_lock(mock_managed_lock, 0);
   expect_init(mock_mirror_status_watcher, 0);
   expect_init(mock_instances, 0);
@@ -565,6 +572,7 @@ TEST_F(TestMockLeaderWatcher, ReleaseError) {
 
   // Shutdown
   expect_shut_down(mock_managed_lock, false, 0);
+  expect_is_leader(mock_managed_lock, false, false);
 
   leader_watcher.shut_down();
 }
@@ -594,11 +602,10 @@ TEST_F(TestMockLeaderWatcher, Break) {
   MockLeaderWatcher leader_watcher(m_threads, m_local_io_ctx, &listener);
 
   // Init
-  for (int i = 0; i <= max_acquire_attempts; i++) {
+  expect_is_leader(mock_managed_lock, false, false);
+  for (int i = 0; i < max_acquire_attempts; i++) {
     expect_try_acquire_lock(mock_managed_lock, -EAGAIN);
-    if (i < max_acquire_attempts) {
-      expect_get_locker(mock_managed_lock, locker, 0);
-    }
+    expect_get_locker(mock_managed_lock, locker, 0);
   }
   C_SaferCond on_break;
   expect_break_lock(mock_managed_lock, locker, 0, &on_break);
@@ -619,6 +626,7 @@ TEST_F(TestMockLeaderWatcher, Break) {
   expect_is_leader(mock_managed_lock, false, false);
   expect_release_lock(mock_managed_lock, 0);
   expect_shut_down(mock_managed_lock, true, 0);
+  expect_is_leader(mock_managed_lock, false, false);
 
   leader_watcher.shut_down();
 }

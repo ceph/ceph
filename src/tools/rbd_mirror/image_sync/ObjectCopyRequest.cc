@@ -451,8 +451,11 @@ template <typename I>
 void ObjectCopyRequest<I>::finish(int r) {
   dout(20) << ": r=" << r << dendl;
 
-  m_on_finish->complete(r);
+  // ensure IoCtxs are closed prior to proceeding
+  auto on_finish = m_on_finish;
   delete this;
+
+  on_finish->complete(r);
 }
 
 } // namespace image_sync

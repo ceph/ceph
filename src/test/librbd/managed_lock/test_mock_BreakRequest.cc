@@ -62,7 +62,8 @@ public:
   }
 
   void expect_blacklist_add(MockTestImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(get_mock_rados_client(), blacklist_add(_, _))
+    EXPECT_CALL(*get_mock_io_ctx(mock_image_ctx.md_ctx).get_mock_rados_client(),
+                blacklist_add(_, _))
                   .WillOnce(Return(r));
   }
 
