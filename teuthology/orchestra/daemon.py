@@ -135,6 +135,16 @@ class DaemonState(object):
             finally:
                 self.proc = None
 
+    def check_status(self):
+        """
+        Check to see if the process has exited.
+
+        :returns: The exit status, if any
+        :raises:  CommandFailedError, if the process was run with
+                  check_status=True
+        """
+        return self.proc.poll()
+
 
 class DaemonGroup(object):
     """
