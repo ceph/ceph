@@ -326,7 +326,7 @@ void ImageReplayer<I>::add_remote_image(const std::string &mirror_uuid,
                                         librados::IoCtx &io_ctx) {
   Mutex::Locker locker(m_lock);
 
-  RemoteImage remote_image(mirror_uuid, image_id, io_ctx);
+  PeerImage remote_image(mirror_uuid, io_ctx, image_id);
   auto it = m_remote_images.find(remote_image);
   if (it == m_remote_images.end()) {
     m_remote_images.insert(remote_image);
@@ -338,6 +338,12 @@ void ImageReplayer<I>::remove_remote_image(const std::string &mirror_uuid,
                                            const std::string &image_id) {
   Mutex::Locker locker(m_lock);
   m_remote_images.erase({mirror_uuid, image_id});
+}
+
+template <typename I>
+void ImageReplayer<I>::set_remote_images(const PeerImages &remote_images) {
+  Mutex::Locker locker(m_lock);
+  m_remote_images = remote_images;
 }
 
 template <typename I>
