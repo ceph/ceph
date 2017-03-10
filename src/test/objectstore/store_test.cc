@@ -3568,11 +3568,8 @@ public:
     ++in_flight;
     in_flight_objects.insert(old_obj);
 
-    // *copy* the data buffer, since we may modify it later.
     contents[new_obj].attrs = contents[old_obj].attrs;
-    contents[new_obj].data.clear();
-    contents[new_obj].data.append(contents[old_obj].data.c_str(),
-				  contents[old_obj].data.length());
+    contents[new_obj].data = contents[old_obj].data;
     contents.erase(old_obj);
     int status = store->queue_transaction(
       osr, std::move(t),
@@ -3605,12 +3602,12 @@ public:
     ++in_flight;
     in_flight_objects.insert(old_obj);
 
-    // *copy* the data buffer, since we may modify it later.
     contents[new_obj].attrs = contents[old_obj].attrs;
-    contents[new_obj].data.clear();
-    contents[new_obj].data.append(contents[old_obj].data.c_str(),
-				  contents[old_obj].data.length());
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnClone(this, old_obj, new_obj));
+    contents[new_obj].data = contents[old_obj].data;
+
+    int status = store->queue_transaction(
+      osr, std::move(t),
+      new C_SyntheticOnClone(this, old_obj, new_obj));
     return status;
   }
 
@@ -3673,13 +3670,6 @@ public:
       }
     }
 
-    // *copy* the data buffer, since we may modify it later.
-    {
-      bufferlist t;
-      t.append(bl.c_str(), bl.length());
-      t.swap(bl);
-    }
-
     bufferlist& dstdata = contents[new_obj].data;
     if (dstdata.length() <= dstoff) {
       if (bl.length() > 0) {
@@ -3697,8 +3687,173 @@ public:
       value.swap(dstdata);
     }
 
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnClone(this, old_obj, new_obj));
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnClone(this, old_obj, new_obj));
     return status;
+  }
+
+
+  int write() {
+    Mutex::Locker locker(lock);
+    EnterExit ee("write");
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready();
+
+    ghobject_t new_obj = get_uniform_random_object();
+    available_objects.erase(new_obj);
+    ObjectStore::Transaction t;
+
+    boost::uniform_int<> u1(0, max_object_len - max_write_len);
+    boost::uniform_int<> u2(0, max_write_len);
+    uint64_t offset = u1(*rng);
+    uint64_t len = u2(*rng);
+    bufferlist bl;
+    if (write_alignment) {
+      offset = ROUND_UP_TO(offset, write_alignment);
+      len = ROUND_UP_TO(len, write_alignment);
+    }
+
+    filled_byte_array(bl, len);
+
+    bufferlist& data = contents[new_obj].data;
+    if (data.length() <= offset) {
+      if (len > 0) {
+        data.append_zero(offset-data.length());
+        data.append(bl);
+      }
+    } else {
+      bufferlist value;
+      assert(data.length() > offset);
+      data.copy(0, offset, value);
+      value.append(bl);
+      if (value.length() < data.length())
+        data.copy(value.length(),
+		  data.length()-value.length(), value);
+      value.swap(data);
+    }
+
+    t.write(cid, new_obj, offset, len, bl);
+    ++in_flight;
+    in_flight_objects.insert(new_obj);
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnReadable(this, new_obj));
+    return status;
+  }
+
+  int truncate() {
+    Mutex::Locker locker(lock);
+    EnterExit ee("truncate");
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready();
+
+    ghobject_t obj = get_uniform_random_object();
+    available_objects.erase(obj);
+    ObjectStore::Transaction t;
+
+    boost::uniform_int<> choose(0, max_object_len);
+    size_t len = choose(*rng);
+    if (write_alignment) {
+      len = ROUND_UP_TO(len, write_alignment);
+    }
+
+    t.truncate(cid, obj, len);
+    ++in_flight;
+    in_flight_objects.insert(obj);
+    bufferlist& data = contents[obj].data;
+    if (data.length() <= len) {
+      data.append_zero(len - data.length());
+    } else {
+      bufferlist bl;
+      data.copy(0, len, bl);
+      bl.swap(data);
+    }
+
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnReadable(this, obj));
+    return status;
+  }
+
+  int zero() {
+    Mutex::Locker locker(lock);
+    EnterExit ee("zero");
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready();
+
+    ghobject_t new_obj = get_uniform_random_object();
+    available_objects.erase(new_obj);
+    ObjectStore::Transaction t;
+
+    boost::uniform_int<> u1(0, max_object_len - max_write_len);
+    boost::uniform_int<> u2(0, max_write_len);
+    uint64_t offset = u1(*rng);
+    uint64_t len = u2(*rng);
+    if (write_alignment) {
+      offset = ROUND_UP_TO(offset, write_alignment);
+      len = ROUND_UP_TO(len, write_alignment);
+    }
+
+    auto& data = contents[new_obj].data;
+    if (data.length() < offset + len) {
+      data.append_zero(offset+len-data.length());
+    }
+    bufferlist n;
+    n.substr_of(data, 0, offset);
+    n.append_zero(len);
+    if (data.length() > offset + len)
+      data.copy(offset + len, data.length() - offset - len, n);
+    data.swap(n);
+
+    t.zero(cid, new_obj, offset, len);
+    ++in_flight;
+    in_flight_objects.insert(new_obj);
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnReadable(this, new_obj));
+    return status;
+  }
+
+  void read() {
+    EnterExit ee("read");
+    boost::uniform_int<> u1(0, max_object_len/2);
+    boost::uniform_int<> u2(0, max_object_len);
+    uint64_t offset = u1(*rng);
+    uint64_t len = u2(*rng);
+    if (offset > len)
+      swap(offset, len);
+
+    ghobject_t obj;
+    bufferlist expected;
+    int r;
+    {
+      Mutex::Locker locker(lock);
+      EnterExit ee("read locked");
+      if (!can_unlink())
+        return ;
+      wait_for_ready();
+
+      obj = get_uniform_random_object();
+      expected = contents[obj].data;
+    }
+    bufferlist bl, result;
+    if (0) cout << " obj " << obj
+	 << " size " << expected.length()
+	 << " offset " << offset
+	 << " len " << len << std::endl;
+    r = store->read(cid, obj, offset, len, result);
+    if (offset >= expected.length()) {
+      ASSERT_EQ(r, 0);
+    } else {
+      size_t max_len = expected.length() - offset;
+      if (len > max_len)
+        len = max_len;
+      assert(len == result.length());
+      ASSERT_EQ(len, result.length());
+      expected.copy(offset, len, bl);
+      ASSERT_EQ(r, (int)len);
+      ASSERT_TRUE(bl_eq(bl, result));
+    }
   }
 
   int setattrs() {
@@ -3744,7 +3899,8 @@ public:
     t.setattrs(cid, obj, attrs);
     ++in_flight;
     in_flight_objects.insert(obj);
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, obj));
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnReadable(this, obj));
     return status;
   }
 
@@ -3842,130 +3998,8 @@ public:
     contents[obj].attrs.erase(it->first);
     ++in_flight;
     in_flight_objects.insert(obj);
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, obj));
-    return status;
-  }
-
-  int write() {
-    Mutex::Locker locker(lock);
-    EnterExit ee("write");
-    if (!can_unlink())
-      return -ENOENT;
-    wait_for_ready();
-
-    ghobject_t new_obj = get_uniform_random_object();
-    available_objects.erase(new_obj);
-    ObjectStore::Transaction t;
-
-    boost::uniform_int<> u1(0, max_object_len - max_write_len);
-    boost::uniform_int<> u2(0, max_write_len);
-    uint64_t offset = u1(*rng);
-    uint64_t len = u2(*rng);
-    bufferlist bl;
-    if (write_alignment) {
-      offset = ROUND_UP_TO(offset, write_alignment);
-      len = ROUND_UP_TO(len, write_alignment);
-    }
-
-    filled_byte_array(bl, len);
-
-    bufferlist& data = contents[new_obj].data;
-    if (data.length() <= offset) {
-      if (len > 0) {
-        data.append_zero(offset-data.length());
-        data.append(bl);
-      }
-    } else {
-      bufferlist value;
-      assert(data.length() > offset);
-      data.copy(0, offset, value);
-      value.append(bl);
-      if (value.length() < data.length())
-        data.copy(value.length(),
-		  data.length()-value.length(), value);
-      value.swap(data);
-    }
-
-    t.write(cid, new_obj, offset, len, bl);
-    ++in_flight;
-    in_flight_objects.insert(new_obj);
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, new_obj));
-    return status;
-  }
-
-  void read() {
-    EnterExit ee("read");
-    boost::uniform_int<> u1(0, max_object_len/2);
-    boost::uniform_int<> u2(0, max_object_len);
-    uint64_t offset = u1(*rng);
-    uint64_t len = u2(*rng);
-    if (offset > len)
-      swap(offset, len);
-
-    ghobject_t obj;
-    bufferlist expected;
-    int r;
-    {
-      Mutex::Locker locker(lock);
-      EnterExit ee("read locked");
-      if (!can_unlink())
-        return ;
-      wait_for_ready();
-
-      obj = get_uniform_random_object();
-      expected = contents[obj].data;
-    }
-    bufferlist bl, result;
-    if (0) cout << " obj " << obj
-	 << " size " << expected.length()
-	 << " offset " << offset
-	 << " len " << len << std::endl;
-    r = store->read(cid, obj, offset, len, result);
-    if (offset >= expected.length()) {
-      ASSERT_EQ(r, 0);
-    } else {
-      size_t max_len = expected.length() - offset;
-      if (len > max_len)
-        len = max_len;
-      assert(len == result.length());
-      ASSERT_EQ(len, result.length());
-      expected.copy(offset, len, bl);
-      ASSERT_EQ(r, (int)len);
-      ASSERT_TRUE(bl_eq(bl, result));
-    }
-  }
-
-  int truncate() {
-    Mutex::Locker locker(lock);
-    EnterExit ee("truncate");
-    if (!can_unlink())
-      return -ENOENT;
-    wait_for_ready();
-
-    ghobject_t obj = get_uniform_random_object();
-    available_objects.erase(obj);
-    ObjectStore::Transaction t;
-
-    boost::uniform_int<> choose(0, max_object_len);
-    size_t len = choose(*rng);
-    if (write_alignment) {
-      len = ROUND_UP_TO(len, write_alignment);
-    }
-
-    bufferlist bl;
-
-    t.truncate(cid, obj, len);
-    ++in_flight;
-    in_flight_objects.insert(obj);
-    bufferlist& data = contents[obj].data;
-    if (data.length() <= len)
-      data.append_zero(len - data.length());
-    else {
-      data.copy(0, len, bl);
-      bl.swap(data);
-    }
-
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, obj));
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnReadable(this, obj));
     return status;
   }
 
@@ -4082,38 +4116,6 @@ public:
     in_flight_objects.insert(to_remove);
     contents.erase(to_remove);
     int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, to_remove));
-    return status;
-  }
-
-  int zero() {
-    Mutex::Locker locker(lock);
-    EnterExit ee("zero");
-    if (!can_unlink())
-      return -ENOENT;
-    wait_for_ready();
-
-    ghobject_t new_obj = get_uniform_random_object();
-    available_objects.erase(new_obj);
-    ObjectStore::Transaction t;
-
-    boost::uniform_int<> u1(0, max_object_len - max_write_len);
-    boost::uniform_int<> u2(0, max_write_len);
-    uint64_t offset = u1(*rng);
-    uint64_t len = u2(*rng);
-    if (write_alignment) {
-      offset = ROUND_UP_TO(offset, write_alignment);
-      len = ROUND_UP_TO(len, write_alignment);
-    }
-
-    if (contents[new_obj].data.length() < offset + len) {
-      contents[new_obj].data.append_zero(offset+len-contents[new_obj].data.length());
-    }
-    contents[new_obj].data.zero(offset, len);
-
-    t.zero(cid, new_obj, offset, len);
-    ++in_flight;
-    in_flight_objects.insert(new_obj);
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, new_obj));
     return status;
   }
 
