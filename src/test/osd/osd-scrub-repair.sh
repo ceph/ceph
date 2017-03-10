@@ -313,6 +313,11 @@ function TEST_unfound_erasure_coded() {
     #
     # 3) check pg state
     #
+    # it may take a bit to appear due to mon/mgr asynchrony
+    for f in `seq 1 60`; do
+	ceph -s | grep "1/1 unfound" && break
+	sleep 1
+    done
     ceph -s|grep "4 osds: 4 up, 4 in" || return 1
     ceph -s|grep "1/1 unfound" || return 1
 
