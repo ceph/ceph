@@ -199,45 +199,45 @@ void MgrClient::send_report()
   pcc->with_counters([this, report](
         const PerfCountersCollection::CounterMap &by_path)
   {
-    bool const declared_all = (session->declared.size() == by_path.size());
-
-    if (!declared_all) {
-      for (const auto &i : by_path) {
-        auto path = i.first;
-        auto data = *(i.second);
-        
-        if (session->declared.count(path) == 0) {
-          PerfCounterType type;
-          type.path = path;
-          if (data.description) {
-            type.description = data.description;
-          }
-          if (data.nick) {
-            type.nick = data.nick;
-          }
-          type.type = data.type;
-          report->declare_types.push_back(std::move(type));
-          session->declared.insert(path);
-        }
+    ENCODE_START(1, 1, report->packed);
+    for (auto p = session->declared.begin(); p != session->declared.end(); ) {
+      if (by_path.count(*p) == 0) {
+	report->undeclare_types.push_back(*p);
+	ldout(cct,20) << __func__ << " undeclare " << *p << dendl;
+	p = session->declared.erase(p);
+      } else {
+	++p;
       }
     }
+    for (const auto &i : by_path) {
+      auto& path = i.first;
+      auto& data = *(i.second);
 
-    ldout(cct, 20) << by_path.size() << " counters, of which "
-             << report->declare_types.size() << " new" << dendl;
+      if (session->declared.count(path) == 0) {
+	ldout(cct,20) << __func__ << " declare " << path << dendl;
+	PerfCounterType type;
+	type.path = path;
+	if (data.description) {
+	  type.description = data.description;
+	}
+	if (data.nick) {
+	  type.nick = data.nick;
+	}
+	type.type = data.type;
+	report->declare_types.push_back(std::move(type));
+	session->declared.insert(path);
+      }
 
-    ENCODE_START(1, 1, report->packed);
-    for (const auto &path : session->declared) {
-      auto data = by_path.at(path);
-      ::encode(static_cast<uint64_t>(data->u64.read()),
-          report->packed);
-      if (data->type & PERFCOUNTER_LONGRUNAVG) {
-        ::encode(static_cast<uint64_t>(data->avgcount.read()),
-            report->packed);
-        ::encode(static_cast<uint64_t>(data->avgcount2.read()),
-            report->packed);
+      ::encode(static_cast<uint64_t>(data.u64.read()), report->packed);
+      if (data.type & PERFCOUNTER_LONGRUNAVG) {
+        ::encode(static_cast<uint64_t>(data.avgcount.read()), report->packed);
+        ::encode(static_cast<uint64_t>(data.avgcount2.read()), report->packed);
       }
     }
     ENCODE_FINISH(report->packed);
+
+    ldout(cct, 20) << by_path.size() << " counters, of which "
+		   << report->declare_types.size() << " new" << dendl;
   });
 
   ldout(cct, 20) << "encoded " << report->packed.length() << " bytes" << dendl;

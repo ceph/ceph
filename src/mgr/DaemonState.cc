@@ -110,12 +110,18 @@ void DaemonStateIndex::cull(entity_type_t daemon_type,
 void DaemonPerfCounters::update(MMgrReport *report)
 {
   dout(20) << "loading " << report->declare_types.size() << " new types, "
+	   << report->undeclare_types.size() << " old types, had "
+	   << types.size() << " types, got "
            << report->packed.length() << " bytes of data" << dendl;
 
   // Load any newly declared types
   for (const auto &t : report->declare_types) {
     types.insert(std::make_pair(t.path, t));
     declared_types.insert(t.path);
+  }
+  // Remove any old types
+  for (const auto &t : report->undeclare_types) {
+    declared_types.erase(t);
   }
 
   const auto now = ceph_clock_now();
