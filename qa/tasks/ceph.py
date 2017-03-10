@@ -39,6 +39,7 @@ def generate_caps(type_):
     defaults = dict(
         osd=dict(
             mon='allow *',
+            mgr='allow *',
             osd='allow *',
         ),
         mgr=dict(
@@ -46,11 +47,13 @@ def generate_caps(type_):
         ),
         mds=dict(
             mon='allow *',
+            mgr='allow *',
             osd='allow *',
             mds='allow',
         ),
         client=dict(
             mon='allow rw',
+            mgr='allow r',
             osd='allow rwx',
             mds='allow',
         ),
@@ -542,6 +545,7 @@ def cluster(ctx, config):
             '--cap', 'mon', 'allow *',
             '--cap', 'osd', 'allow *',
             '--cap', 'mds', 'allow *',
+            '--cap', 'mgr', 'allow *',
             keyring_path,
         ],
     )
