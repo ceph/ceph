@@ -4,6 +4,7 @@ overrides:
     log-whitelist:
       - OSD full dropping all updates
       - OSD near full
+      - failsafe engaged, dropping updates
       - is full \(reached quota
     conf:
       osd:
