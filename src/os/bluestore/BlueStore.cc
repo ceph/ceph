@@ -7697,14 +7697,33 @@ void BlueStore::_kv_sync_thread()
 
       {
 	std::unique_lock<std::mutex> m(kv_finalize_lock);
-	while (true) {
-	  if (!(kv_committing_to_finalize.empty() && wal_cleaning_to_finalize.empty()))
-	    kv_cond1.wait(m);
-	  else
-	    break;
+	if (kv_committing_to_finalize.empty()) {
+	  kv_committing_to_finalize.swap(kv_committing);
+	} else {
+	  TransContext* dummy = nullptr;
+	  auto new_it = kv_committing_to_finalize.insert(
+	    kv_committing_to_finalize.end(),
+	    kv_committing.size(),
+	    dummy);
+	  std::swap_ranges(
+	    kv_committing.begin(),
+	    kv_committing.end(),
+	    new_it);
+            kv_committing.clear();
 	}
-	kv_committing_to_finalize.swap(kv_committing);
-	wal_cleaning_to_finalize.swap(wal_cleaning);
+	if (wal_cleaning_to_finalize.empty()) {
+	  wal_cleaning_to_finalize.swap(wal_cleaning);
+	} else {
+	  TransContext* dummy = nullptr;
+	  auto new_it = wal_cleaning_to_finalize.insert(
+	    wal_cleaning_to_finalize.end(),
+	    wal_cleaning.size(),
+	    dummy);
+	  std::swap_ranges(wal_cleaning.begin(),
+	    wal_cleaning.end(),
+	    new_it);
+          wal_cleaning.clear();
+	}
 	kv_cond1.notify_one();
       }
 
