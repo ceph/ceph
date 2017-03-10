@@ -242,8 +242,50 @@ WRITE_INT_DENC(bool, uint8_t);
 // high bit of each byte indicates another byte follows.
 template<typename T>
 inline void denc_varint(T v, size_t& p) {
-  p += sizeof(T) + 1;
+  p += sizeof(v) + 1;
 }
+
+template<typename T>
+inline void denc_varint_exact(T v, size_t& p) {
+  static_assert(std::is_unsigned<T>::value,
+                "denc_varint() operates on unsigned integers only");
+  register size_t i;
+  for (i = 1; v; i++) {
+    v >>= 7;
+  }
+  p += i;
+}
+
+#if 1
+template<>
+inline void denc_varint_exact<unsigned>(const unsigned v, size_t& p) {
+  if (v == 0) {
+    p++;
+  } else {
+    p += (sizeof(v) * CHAR_BIT - clz(v) + 6) / (CHAR_BIT - 1);
+  }
+}
+
+template<>
+inline void denc_varint_exact<unsigned long>(const unsigned long v, size_t& p) {
+  if (v == 0) {
+    p++;
+  } else {
+    p += (sizeof(v) * CHAR_BIT - clzl(v) + 6) / (CHAR_BIT - 1);
+  }
+}
+
+template<>
+inline void denc_varint_exact<unsigned long long>(const unsigned long long v,
+                                            size_t& p) {
+
+  if (v == 0) {
+    p++;
+  } else {
+    p += (sizeof(v) * CHAR_BIT - clzll(v) + 6) / (CHAR_BIT - 1);
+  }
+}
+#endif
 
 template<typename T>
 inline void denc_varint(T v, bufferlist::contiguous_appender& p) {
