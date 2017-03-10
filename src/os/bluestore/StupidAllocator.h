@@ -39,7 +39,7 @@ public:
     uint64_t want_size, uint64_t alloc_unit, int64_t hint,
     uint64_t *offset, uint32_t *length);
 
-  int release(
+  void release(
     uint64_t offset, uint64_t length) override;
 
   uint64_t get_free() override;
