@@ -422,7 +422,7 @@ void Mgr::handle_osd_map()
 
 bool Mgr::ms_dispatch(Message *m)
 {
-  derr << *m << dendl;
+  dout(4) << *m << dendl;
   Mutex::Locker l(lock);
 
   switch (m->get_type()) {
