@@ -1823,98 +1823,92 @@ int RGWPostObj_ObjStore_S3::get_policy()
       RGWLDAPAuthEngine ldap(s->cct, store, extr, &aplfact);
         // try external authenticators
       if (store->ctx()->_conf->rgw_s3_auth_use_keystone &&
-	  store->ctx()->_conf->rgw_keystone_url.empty())
+          store->ctx()->_conf->rgw_keystone_url.empty())
       {
-	// keystone
-	int external_auth_result = -EINVAL;
-	dout(20) << "s3 keystone: trying keystone auth" << dendl;
+        // keystone
+        int external_auth_result = -EINVAL;
+        dout(20) << "s3 keystone: trying keystone auth" << dendl;
 
-	RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
-	external_auth_result =
-	  keystone_validator.validate_s3token(s3_access_key,
-					      string(encoded_policy.c_str(),
-						    encoded_policy.length()),
-					      received_signature_str);
+        RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
+        external_auth_result = keystone_validator.validate_s3token(
+            s3_access_key,
+            string(encoded_policy.c_str(), encoded_policy.length()),
+            received_signature_str);
 
-	if (external_auth_result < 0) {
-	  ldout(s->cct, 0) << "User lookup failed!" << dendl;
-	  err_msg = "Bad access key / signature";
-	  return -EACCES;
-	}
+        if (external_auth_result < 0) {
+          ldout(s->cct, 0) << "User lookup failed!" << dendl;
+          err_msg = "Bad access key / signature";
+          return -EACCES;
+        }
 
-	string project_id = keystone_validator.response.get_project_id();
-	rgw_user uid(project_id);
+        string project_id = keystone_validator.response.get_project_id();
+        rgw_user uid(project_id);
 
-	user_info.user_id = project_id;
-	user_info.display_name = keystone_validator.response.get_project_name();
+        user_info.user_id = project_id;
+        user_info.display_name = keystone_validator.response.get_project_name();
 
-	/* try to store user if it not already exists */
-	if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
-	  int ret = rgw_store_user_info(store, user_info, NULL, NULL, real_time(), true);
-	  if (ret < 0) {
-	    ldout(store->ctx(), 10)
-	      << "NOTICE: failed to store new user's info: ret="
-	      << ret << dendl;
-	  }
-	  s->perm_mask = RGW_PERM_FULL_CONTROL;
-	}
-  } else if (ldap.is_applicable()) {
-    try {
-      auto applier = ldap.authenticate();
-      if (! applier) {
-        return -EACCES;
-      }
+        /* try to store user if it not already exists */
+        if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
+          int ret = rgw_store_user_info(store, user_info, NULL, NULL,
+              real_time(), true);
+          if (ret < 0) {
+            ldout(store->ctx(), 10) << "NOTICE: failed to store new user's info: ret=" << ret << dendl;
+          }
+          s->perm_mask = RGW_PERM_FULL_CONTROL;
+        }
 
-      try {
-        applier->load_acct_info(*s->user);
-        s->perm_mask = applier->get_perm_mask();
-        applier->modify_request_state(s);
-        s->auth_identity = std::move(applier);
-      } catch (int err) {
-        return -EACCES;
-      }
-    } catch (int err) {
-      return -EACCES;
-    }
+      } else if (ldap.is_applicable()) {
+        try {
+          auto applier = ldap.authenticate();
+          if (!applier) {
+            return -EACCES;
+          }
+          try {
+            applier->load_acct_info(*s->user);
+            s->perm_mask = applier->get_perm_mask();
+            applier->modify_request_state(s);
+            s->auth_identity = std::move(applier);
+          } catch (int err) {
+            return -EACCES;
+          }
+        } catch (int err) {
+          return -EACCES;
+        }
       } else {
-	return -EACCES;
+        return -EACCES;
       }
     } else {
-      map<string, RGWAccessKey> access_keys  = user_info.access_keys;
-
-      map<string, RGWAccessKey>::const_iterator iter =
-	access_keys.find(s3_access_key);
+      map<string, RGWAccessKey> access_keys = user_info.access_keys;
+      map<string, RGWAccessKey>::const_iterator iter = access_keys.find(s3_access_key);
       // We know the key must exist, since the user was returned by
       // rgw_get_user_info_by_access_key, but it doesn't hurt to check!
       if (iter == access_keys.end()) {
-	ldout(s->cct, 0) << "Secret key lookup failed!" << dendl;
-	err_msg = "No secret key for matching access key";
-	return -EACCES;
+        ldout(s->cct, 0)
+              << "Secret key lookup failed!" << dendl;
+        err_msg = "No secret key for matching access key";
+        return -EACCES;
       }
       string s3_secret_key = (iter->second).key;
 
       char expected_signature_char[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
 
       calc_hmac_sha1(s3_secret_key.c_str(), s3_secret_key.size(),
-		     encoded_policy.c_str(), encoded_policy.length(),
-		     expected_signature_char);
+          encoded_policy.c_str(), encoded_policy.length(),
+          expected_signature_char);
       bufferlist expected_signature_hmac_raw;
       bufferlist expected_signature_hmac_encoded;
       expected_signature_hmac_raw.append(expected_signature_char,
-					 CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-      expected_signature_hmac_raw.encode_base64(
-	expected_signature_hmac_encoded);
-      expected_signature_hmac_encoded.append((char)0); /* null terminate */
+      CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+      expected_signature_hmac_raw.encode_base64(expected_signature_hmac_encoded);
+      expected_signature_hmac_encoded.append((char) 0); /* null terminate */
 
       if (received_signature_str.compare(
-	    expected_signature_hmac_encoded.c_str()) != 0) {
-	ldout(s->cct, 0) << "Signature verification failed!" << dendl;
-	ldout(s->cct, 0) << "received: " << received_signature_str.c_str()
-			 << dendl;
-	ldout(s->cct, 0) << "expected: "
-			 << expected_signature_hmac_encoded.c_str() << dendl;
-	err_msg = "Bad access key / signature";
-	return -EACCES;
+          expected_signature_hmac_encoded.c_str()) != 0) {
+        ldout(s->cct, 0) << "Signature verification failed!" << dendl;
+        ldout(s->cct, 0) << "received: " << received_signature_str.c_str() << dendl;
+        ldout(s->cct, 0) << "expected: " << expected_signature_hmac_encoded.c_str() << dendl;
+        err_msg = "Bad access key / signature";
+        return -EACCES;
       }
     }
 
@@ -1935,7 +1929,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
     int r = post_policy.from_json(decoded_policy, err_msg);
     if (r < 0) {
       if (err_msg.empty()) {
-	err_msg = "Failed to parse policy";
+        err_msg = "Failed to parse policy";
       }
       ldout(s->cct, 0) << "failed to parse policy" << dendl;
       return -EINVAL;
@@ -1948,7 +1942,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
     r = post_policy.check(&env, err_msg);
     if (r < 0) {
       if (err_msg.empty()) {
-	err_msg = "Policy check failed";
+        err_msg = "Policy check failed";
       }
       ldout(s->cct, 0) << "policy check failed" << dendl;
       return r;
