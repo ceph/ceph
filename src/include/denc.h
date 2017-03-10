@@ -349,6 +349,14 @@ inline void denc_signed_varint(T& v, bufferptr::iterator& p)
 inline void denc_varint_lowz(uint64_t v, size_t& p) {
   p += sizeof(v) + 2;
 }
+
+inline void denc_varint_lowz_exact(uint64_t v, size_t& p) {
+  int lowznib = v ? (ctz(v) / 4) : 0;
+  if (lowznib > 3)
+    lowznib = 3;
+  v >>= lowznib * 4 - 2;
+  denc_varint_exact(v, p);
+}
 inline void denc_varint_lowz(uint64_t v, bufferlist::contiguous_appender& p) {
   int lowznib = v ? (ctz(v) / 4) : 0;
   if (lowznib > 3)
