@@ -179,6 +179,7 @@ class RemoteProcess(object):
 
     @property
     def finished(self):
+        gevent.wait(self.greenlets, timeout=0.1)
         ready = self._stdout_buf.channel.exit_status_ready()
         if ready:
             self._get_exitstatus()
