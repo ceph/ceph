@@ -7516,6 +7516,7 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
 
 void BlueStore::_kv_sync_thread1()
 {
+  deque<TransContext*> wal_cleaning2, kv_committing2;
   dout(10) << __func__ << " start" << dendl;
   std::unique_lock<std::mutex> l(kv_lock1);
   while (true) {

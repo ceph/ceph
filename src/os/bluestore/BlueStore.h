@@ -1740,7 +1740,6 @@ private:
   deque<TransContext*> kv_committing;        ///< currently syncing
   deque<TransContext*> wal_cleanup_queue;    ///< wal done, ready for cleanup
   deque<TransContext*> wal_cleaning1, kv_committing1;
-  deque<TransContext*> wal_cleaning2, kv_committing2;
 
 
   PerfCounters *logger;
