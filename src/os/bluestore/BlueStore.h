@@ -1548,7 +1548,6 @@ public:
     bool registered = true;
 
     OpSequencer(CephContext* cct, BlueStore *store)
-	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
       : Sequencer_impl(cct),
 	parent(NULL), store(store) {
       std::lock_guard<std::mutex> l(register_lock);
