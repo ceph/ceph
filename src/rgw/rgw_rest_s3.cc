@@ -1801,19 +1801,90 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
   if (part_bl("policy", &encoded_policy)) {
 
-    // check that the signature matches the encoded policy
+    bool aws4_auth = false;
+
     string s3_access_key;
-    if (!part_str("AWSAccessKeyId", &s3_access_key)) {
-      ldout(s->cct, 0) << "No S3 access key found!" << dendl;
-      err_msg = "Missing access key";
-      return -EINVAL;
-    }
+
+    string received_credential_str;
+    string date_cs;
+    string region_cs;
+    string service_cs;
+
     string received_signature_str;
-    if (!part_str("signature", &received_signature_str)) {
-      ldout(s->cct, 0) << "No signature found!" << dendl;
-      err_msg = "Missing signature";
-      return -EINVAL;
+    string received_date_str;
+
+    /* x-amz-algorithm handling */
+    string x_amz_algorithm;
+    if ((part_str("x-amz-algorithm", &x_amz_algorithm)) &&
+        (x_amz_algorithm.compare("AWS4-HMAC-SHA256") == 0)) {
+      ldout(s->cct, 0) << "Signature verification algorithm AWS v4 (AWS4-HMAC-SHA256)" << dendl;
+      aws4_auth = true;
+    } else {
+      ldout(s->cct, 0) << "Signature verification algorithm AWS v2" << dendl;
     }
+
+    // check that the signature matches the encoded policy
+
+    if (aws4_auth) {
+
+      /* AWS4 */
+
+      /* x-amz-credential handling */
+      if (!part_str("x-amz-credential", &received_credential_str)) {
+        ldout(s->cct, 0) << "No S3 aws4 credential found!" << dendl;
+        err_msg = "Missing aws4 credential";
+        return -EINVAL;
+      }
+      size_t pos;
+      string cs_aux = received_credential_str;
+      /* s3_access_key */
+      s3_access_key = cs_aux;
+      pos = s3_access_key.find("/");
+      s3_access_key = s3_access_key.substr(0, pos);
+      cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
+      /* date cred */
+      date_cs = cs_aux;
+      pos = date_cs.find("/");
+      date_cs = date_cs.substr(0, pos);
+      cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
+      /* region cred */
+      region_cs = cs_aux;
+      pos = region_cs.find("/");
+      region_cs = region_cs.substr(0, pos);
+      cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
+      /* service cred */
+      service_cs = cs_aux;
+      pos = service_cs.find("/");
+      service_cs = service_cs.substr(0, pos);
+      /* x-amz-signature handling */
+      if (!part_str("x-amz-signature", &received_signature_str)) {
+        ldout(s->cct, 0) << "No aws4 signature found!" << dendl;
+        err_msg = "Missing aws4 signature";
+        return -EINVAL;
+      }
+      /* x-amz-date handling */
+      if (!part_str("x-amz-date", &received_date_str)) {
+        ldout(s->cct, 0) << "No aws4 date found!" << dendl;
+        err_msg = "Missing aws4 date";
+        return -EINVAL;
+      }
+
+    } else {
+
+      /* AWS2 */
+
+      if (!part_str("AWSAccessKeyId", &s3_access_key)) {
+        ldout(s->cct, 0) << "No S3 aws2 access key found!" << dendl;
+        err_msg = "Missing aws2 access key";
+        return -EINVAL;
+      }
+      if (!part_str("signature", &received_signature_str)) {
+        ldout(s->cct, 0) << "No aws2 signature found!" << dendl;
+        err_msg = "Missing aws2 signature";
+        return -EINVAL;
+      }
+    }
+
     RGWUserInfo user_info;
 
     op_ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
@@ -1883,32 +1954,63 @@ int RGWPostObj_ObjStore_S3::get_policy()
       // We know the key must exist, since the user was returned by
       // rgw_get_user_info_by_access_key, but it doesn't hurt to check!
       if (iter == access_keys.end()) {
-        ldout(s->cct, 0)
-              << "Secret key lookup failed!" << dendl;
+        ldout(s->cct, 0) << "Secret key lookup failed!" << dendl;
         err_msg = "No secret key for matching access key";
         return -EACCES;
       }
       string s3_secret_key = (iter->second).key;
 
-      char expected_signature_char[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+      if (aws4_auth) {
 
-      calc_hmac_sha1(s3_secret_key.c_str(), s3_secret_key.size(),
-          encoded_policy.c_str(), encoded_policy.length(),
-          expected_signature_char);
-      bufferlist expected_signature_hmac_raw;
-      bufferlist expected_signature_hmac_encoded;
-      expected_signature_hmac_raw.append(expected_signature_char,
-      CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-      expected_signature_hmac_raw.encode_base64(expected_signature_hmac_encoded);
-      expected_signature_hmac_encoded.append((char) 0); /* null terminate */
+        /* AWS4 */
 
-      if (received_signature_str.compare(
-          expected_signature_hmac_encoded.c_str()) != 0) {
-        ldout(s->cct, 0) << "Signature verification failed!" << dendl;
-        ldout(s->cct, 0) << "received: " << received_signature_str.c_str() << dendl;
-        ldout(s->cct, 0) << "expected: " << expected_signature_hmac_encoded.c_str() << dendl;
-        err_msg = "Bad access key / signature";
-        return -EACCES;
+        try {
+          s->aws4_auth = std::unique_ptr<rgw_aws4_auth>(new rgw_aws4_auth);
+        } catch (std::bad_alloc&) {
+          return -ENOMEM;
+        }
+
+        std::string encoded_policy_str(encoded_policy.c_str(), encoded_policy.length());
+        std::string new_signature_str;
+
+        int err = rgw_calculate_s3_v4_aws_signature(s, s3_access_key,
+                                                    date_cs, region_cs, service_cs,
+                                                    encoded_policy_str, new_signature_str,
+                                                    s3_secret_key);
+        if (err) {
+          return err;
+        }
+
+        ldout(s->cct, 10) << "----------------------------- Verifying signatures" << dendl;
+        ldout(s->cct, 10) << "Signature     = " << received_signature_str << dendl;
+        ldout(s->cct, 10) << "New Signature = " << new_signature_str << dendl;
+        ldout(s->cct, 10) << "-----------------------------" << dendl;
+
+        if (received_signature_str != new_signature_str) {
+          return -ERR_SIGNATURE_NO_MATCH;
+        }
+
+      } else {
+
+        /* AWS2 */
+
+        char expected_signature_char[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+        calc_hmac_sha1(s3_secret_key.c_str(), s3_secret_key.size(),
+            encoded_policy.c_str(), encoded_policy.length(),
+            expected_signature_char);
+        bufferlist expected_signature_hmac_raw;
+        bufferlist expected_signature_hmac_encoded;
+        expected_signature_hmac_raw.append(expected_signature_char, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+        expected_signature_hmac_raw.encode_base64(expected_signature_hmac_encoded);
+        expected_signature_hmac_encoded.append((char) 0); /* null terminate */
+
+        if (received_signature_str.compare(expected_signature_hmac_encoded.c_str()) != 0) {
+          ldout(s->cct, 0) << "Signature verification failed!" << dendl;
+          ldout(s->cct, 0) << "received: " << received_signature_str.c_str() << dendl;
+          ldout(s->cct, 0) << "expected: " << expected_signature_hmac_encoded.c_str() << dendl;
+          err_msg = "Bad access key / signature";
+          return -EACCES;
+        }
       }
     }
 
@@ -1935,9 +2037,15 @@ int RGWPostObj_ObjStore_S3::get_policy()
       return -EINVAL;
     }
 
-    post_policy.set_var_checked("AWSAccessKeyId");
+    if (aws4_auth) {
+      /* AWS4 */
+      post_policy.set_var_checked("x-amz-signature");
+    } else {
+      /* AWS2 */
+      post_policy.set_var_checked("AWSAccessKeyId");
+      post_policy.set_var_checked("signature");
+    }
     post_policy.set_var_checked("policy");
-    post_policy.set_var_checked("signature");
 
     r = post_policy.check(&env, err_msg);
     if (r < 0) {
@@ -3100,7 +3208,7 @@ RGWOp *RGWHandler_REST_Obj_S3::op_post()
   if (s->info.args.exists("uploads"))
     return new RGWInitMultipart_ObjStore_S3;
 
-  return NULL;
+  return new RGWPostObj_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_REST_Obj_S3::op_options()
