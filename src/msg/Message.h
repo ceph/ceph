@@ -72,6 +72,8 @@
 
 #define MSG_OSD_PGTEMP       78
 
+#define MSG_OSD_BEACON       79
+
 #define MSG_OSD_PG_NOTIFY      80
 #define MSG_OSD_PG_QUERY       81
 #define MSG_OSD_PG_LOG         83

@@ -57,6 +57,7 @@ using namespace std;
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
+#include "messages/MOSDBeacon.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
@@ -424,6 +425,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_ALIVE:
     m = new MOSDAlive();
+    break;
+  case MSG_OSD_BEACON:
+    m = new MOSDBeacon();
     break;
   case MSG_OSD_PGTEMP:
     m = new MOSDPGTemp;
