@@ -802,7 +802,7 @@ RGWPutObj_BlockEncrypt::~RGWPutObj_BlockEncrypt() {
 int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
                                         off_t in_ofs,
                                         void **phandle,
-                                        rgw_obj *pobj,
+                                        rgw_raw_obj *pobj,
                                         bool *again) {
   int res = 0;
   ldout(cct, 25) << "Encrypt " << bl.length() << " bytes" << dendl;
@@ -872,7 +872,7 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
 }
 
 int RGWPutObj_BlockEncrypt::throttle_data(void *handle,
-                                          const rgw_obj& obj,
+                                          const rgw_raw_obj& obj,
                                           uint64_t size,
                                           bool need_to_wait) {
   return next->throttle_data(handle, obj, size, need_to_wait);
