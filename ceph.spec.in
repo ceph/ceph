@@ -413,7 +413,7 @@ and providing access to them over the network.
 %package -n librados2
 Summary:	RADOS distributed object store client library
 %if 0%{?suse_version}
-Group:		System/Libraries/C and C++
+Group:		System/Libraries
 %endif
 License:	LGPL-2.0
 %if 0%{?rhel} || 0%{?fedora}
@@ -442,7 +442,7 @@ that use RADOS object store.
 %package -n librgw2
 Summary:	RADOS gateway client library
 %if 0%{?suse_version}
-Group:		System/Libraries/C and C++
+Group:		System/Libraries
 %endif
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
@@ -684,7 +684,7 @@ This package contains Ceph benchmarks and test tools.
 %package -n libcephfs_jni1
 Summary:	Java Native Interface library for CephFS Java bindings
 %if 0%{?suse_version}
-Group:		System/Libraries/Java
+Group:		System/Libraries
 %endif
 License:	LGPL-2.0
 Requires:	java
@@ -711,7 +711,7 @@ library.
 %package -n cephfs-java
 Summary:	Java libraries for the Ceph File System
 %if 0%{?suse_version}
-Group:		System/Libraries/Java
+Group:		System/Libraries
 %endif
 License:	LGPL-2.0
 Requires:	java
