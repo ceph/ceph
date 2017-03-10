@@ -16,21 +16,21 @@ const char* x_amz_server_side_encryption_customer_key = "x-amz-server-side-encry
 const char* dollar_x_amz_server_side_encryption_customer_key = "$x-amz-server-side-encryption-customer-key";
 const char* suppression_message = "=suppressed due to key presence=";
 
-std::ostream& operator<<(std::ostream& out, const rgw::crypt_sanitize::env& e) {
+std::ostream& operator<<(std::ostream& out, const env& e) {
   if (g_ceph_context->_conf->rgw_crypt_suppress_logs) {
     if (boost::algorithm::iequals(
         e.name,
-        rgw::crypt_sanitize::HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY))
+        HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY))
     {
-      out << rgw::crypt_sanitize::suppression_message;
+      out << suppression_message;
       return out;
     }
     if (boost::algorithm::iequals(e.name, "QUERY_STRING") &&
         boost::algorithm::ifind_first(
             e.value,
-            rgw::crypt_sanitize::x_amz_server_side_encryption_customer_key))
+            x_amz_server_side_encryption_customer_key))
     {
-      out << rgw::crypt_sanitize::suppression_message;
+      out << suppression_message;
       return out;
     }
   }
@@ -38,43 +38,43 @@ std::ostream& operator<<(std::ostream& out, const rgw::crypt_sanitize::env& e) {
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const rgw::crypt_sanitize::x_meta_map& x) {
+std::ostream& operator<<(std::ostream& out, const x_meta_map& x) {
   if (g_ceph_context->_conf->rgw_crypt_suppress_logs &&
-      boost::algorithm::iequals(x.name, rgw::crypt_sanitize::x_amz_server_side_encryption_customer_key))
+      boost::algorithm::iequals(x.name, x_amz_server_side_encryption_customer_key))
   {
-    out << rgw::crypt_sanitize::suppression_message;
+    out << suppression_message;
     return out;
   }
   out << x.value;
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const rgw::crypt_sanitize::s3_policy& x) {
+std::ostream& operator<<(std::ostream& out, const s3_policy& x) {
   if (g_ceph_context->_conf->rgw_crypt_suppress_logs &&
-      boost::algorithm::iequals(x.name, rgw::crypt_sanitize::dollar_x_amz_server_side_encryption_customer_key))
+      boost::algorithm::iequals(x.name, dollar_x_amz_server_side_encryption_customer_key))
   {
-    out << rgw::crypt_sanitize::suppression_message;
+    out << suppression_message;
     return out;
   }
   out << x.value;
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const rgw::crypt_sanitize::auth& x) {
+std::ostream& operator<<(std::ostream& out, const auth& x) {
   if (g_ceph_context->_conf->rgw_crypt_suppress_logs &&
-      x.s->info.env->get(rgw::crypt_sanitize::HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY, nullptr) != nullptr)
+      x.s->info.env->get(HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY, nullptr) != nullptr)
   {
-    out << rgw::crypt_sanitize::suppression_message;
+    out << suppression_message;
     return out;
   }
   out << x.value;
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const rgw::crypt_sanitize::log_content& x) {
+std::ostream& operator<<(std::ostream& out, const log_content& x) {
   if (g_ceph_context->_conf->rgw_crypt_suppress_logs &&
-      boost::algorithm::ifind_first(x.buf, rgw::crypt_sanitize::x_amz_server_side_encryption_customer_key)) {
-    out << rgw::crypt_sanitize::suppression_message;
+      boost::algorithm::ifind_first(x.buf, x_amz_server_side_encryption_customer_key)) {
+    out << suppression_message;
     return out;
   }
   out << x.buf;
