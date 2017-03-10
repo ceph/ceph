@@ -1,7 +1,7 @@
 roles:
-- [mon.0, mds.a, osd.0]
-- [mon.1, osd.1]
-- [mon.2, osd.2]
+- [mon.a, mds.a, osd.0]
+- [mon.b, mgr.x, osd.1]
+- [mon.c, osd.2]
 - [osd.3]
 - [osd.4]
 - [osd.5]

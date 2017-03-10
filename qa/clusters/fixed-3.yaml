@@ -1,6 +1,6 @@
 roles:
-- [mon.a, mon.c, osd.0, osd.1, osd.2]
-- [mon.b, osd.3, osd.4, osd.5]
+- [mon.a, mon.c, mgr.x, osd.0, osd.1, osd.2]
+- [mon.b, mgr.y, osd.3, osd.4, osd.5]
 - [client.0]
 openstack:
 - volumes: # attached to each instance

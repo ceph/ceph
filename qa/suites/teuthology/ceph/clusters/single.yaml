@@ -1,2 +1,2 @@
 roles:
-    - [mon.0, client.0]
+    - [mon.a, mgr.x, client.0]
