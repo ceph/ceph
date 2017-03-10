@@ -5,73 +5,32 @@
 #define CEPH_TEST_MEM_RADOS_CLIENT_H
 
 #include "test/librados_test_stub/TestRadosClient.h"
-#include "include/atomic.h"
 #include "include/assert.h"
-#include "include/buffer.h"
-#include "include/interval_set.h"
-#include "common/RefCountedObj.h"
-#include "common/RWLock.h"
-#include <boost/shared_ptr.hpp>
 #include <list>
-#include <map>
-#include <set>
 #include <string>
 
 namespace librados {
 
 class AioCompletionImpl;
+class TestMemCluster;
 
 class TestMemRadosClient : public TestRadosClient {
 public:
-
-  typedef std::map<std::string, bufferlist> OMap;
-  typedef std::map<std::string, OMap> FileOMaps;
-  typedef std::map<std::string, bufferlist> FileTMaps;
-  typedef std::map<std::string, bufferlist> XAttrs;
-  typedef std::map<std::string, XAttrs> FileXAttrs;
-
-  struct File {
-    File();
-    File(const File &rhs);
-
-    bufferlist data;
-    time_t mtime;
-
-    uint64_t snap_id;
-    std::vector<uint64_t> snaps;
-    interval_set<uint64_t> snap_overlap;
-
-    bool exists;
-    RWLock lock;
-  };
-  typedef boost::shared_ptr<File> SharedFile;
-
-  typedef std::list<SharedFile> FileSnapshots;
-  typedef std::map<std::string, FileSnapshots> Files;
-
-  typedef std::set<uint64_t> SnapSeqs;
-  struct Pool : public RefCountedObject {
-    Pool();
-
-    int64_t pool_id;
-
-    SnapSeqs snap_seqs;
-    uint64_t snap_id;
-
-    RWLock file_lock;
-    Files files;
-    FileOMaps file_omaps;
-    FileTMaps file_tmaps;
-    FileXAttrs file_xattrs;
-  };
-
-  TestMemRadosClient(CephContext *cct);
+  TestMemRadosClient(CephContext *cct, TestMemCluster *test_mem_cluster);
+  ~TestMemRadosClient() override;
 
   TestIoCtxImpl *create_ioctx(int64_t pool_id,
                                       const std::string &pool_name) override;
 
-  void object_list(int64_t pool_id, 
-			   std::list<librados::TestRadosClient::Object> *list) override;
+  uint32_t get_nonce() override {
+    return m_nonce;
+  }
+  uint64_t get_instance_id() override {
+    return m_global_id;
+  }
+
+  void object_list(int64_t pool_id,
+                   std::list<librados::TestRadosClient::Object> *list) override;
 
   int pool_create(const std::string &pool_name) override;
   int pool_delete(const std::string &pool_name) override;
@@ -82,19 +41,22 @@ public:
 
   int watch_flush() override;
 
+  bool is_blacklisted() const override;
   int blacklist_add(const std::string& client_address,
-			    uint32_t expire_seconds) override;
+                    uint32_t expire_seconds) override;
 protected:
-  ~TestMemRadosClient() override;
+  TestMemCluster *get_mem_cluster() {
+    return m_mem_cluster;
+  }
 
-  Pool *get_pool(const std::string &pool_name);
+protected:
+  void transaction_start(const std::string &oid) override;
+  void transaction_finish(const std::string &oid) override;
 
 private:
-
-  typedef std::map<std::string, Pool*>		Pools;
-
-  Pools	m_pools;
-  int64_t m_pool_id;
+  TestMemCluster *m_mem_cluster;
+  uint32_t m_nonce;
+  uint64_t m_global_id;
 
 };
 

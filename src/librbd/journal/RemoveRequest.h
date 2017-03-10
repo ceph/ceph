@@ -49,7 +49,7 @@ private:
                        const std::string &client_id,
                        ContextWQ *op_work_queue, Context *on_finish);
 
-  IoCtx m_ioctx;
+  IoCtx &m_ioctx;
   std::string m_image_id;
   std::string m_image_client_id;
   ContextWQ *m_op_work_queue;

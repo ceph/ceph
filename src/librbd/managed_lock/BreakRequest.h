@@ -34,7 +34,8 @@ public:
                               uint32_t blacklist_expire_seconds,
                               bool force_break_lock, Context *on_finish) {
     return new BreakRequest(ioctx, work_queue, oid, locker, blacklist_locker,
-                            blacklist_expire_seconds, force_break_lock, on_finish);
+                            blacklist_expire_seconds, force_break_lock,
+                            on_finish);
   }
 
   void send();

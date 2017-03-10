@@ -10,9 +10,12 @@
 
 namespace librados {
 
+class TestMemCluster;
+
 class MockTestMemRadosClient : public TestMemRadosClient {
 public:
-  MockTestMemRadosClient(CephContext *cct) : TestMemRadosClient(cct) {
+  MockTestMemRadosClient(CephContext *cct, TestMemCluster *test_mem_cluster)
+    : TestMemRadosClient(cct, test_mem_cluster) {
     default_to_dispatch();
   }
 
@@ -21,7 +24,8 @@ public:
   TestIoCtxImpl *do_create_ioctx(int64_t pool_id,
                                  const std::string &pool_name) {
     return new ::testing::NiceMock<MockTestMemIoCtxImpl>(
-      this, this, pool_id, pool_name, get_pool(pool_name));
+      this, this, pool_id, pool_name,
+      get_mem_cluster()->get_pool(pool_name));
   }
 
   MOCK_METHOD2(blacklist_add, int(const std::string& client_address,

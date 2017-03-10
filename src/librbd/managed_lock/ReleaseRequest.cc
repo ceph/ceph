@@ -55,7 +55,8 @@ void ReleaseRequest<I>::send() {
 template <typename I>
 void ReleaseRequest<I>::send_unlock() {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
-  ldout(cct, 10) << "cookie=" << m_cookie << dendl;
+  ldout(cct, 10) << "entity=client." << m_ioctx.get_instance_id() << ", "
+                 << "cookie=" << m_cookie << dendl;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::unlock(&op, RBD_LOCK_NAME, m_cookie);

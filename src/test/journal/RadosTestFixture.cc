@@ -22,10 +22,10 @@ void RadosTestFixture::SetUpTestCase() {
 }
 
 void RadosTestFixture::TearDownTestCase() {
-  ASSERT_EQ(0, destroy_one_pool_pp(_pool_name, _rados));
-
   _thread_pool->stop();
   delete _thread_pool;
+
+  ASSERT_EQ(0, destroy_one_pool_pp(_pool_name, _rados));
 }
 
 std::string RadosTestFixture::get_temp_oid() {
