@@ -1485,7 +1485,7 @@ public:
 	  using WriteMarkerCR = RGWSimpleRadosWriteCR<rgw_meta_sync_marker>;
 	  yield call(new WriteMarkerCR(sync_env->async_rados, sync_env->store,
 				       rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
-				       sync_marker));
+				       *temp_marker));
         }
 
         if (retcode < 0) {
