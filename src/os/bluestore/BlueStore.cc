@@ -4815,6 +4815,8 @@ int BlueStore::umount()
   dout(1) << __func__ << dendl;
 
   _osr_drain_all();
+  _osr_discard_all();
+  assert(osr_set.empty());  // nobody should be creating sequencers!
 
   mempool_thread.shutdown();
 
@@ -7499,20 +7501,30 @@ void BlueStore::_osr_drain_all()
 {
   dout(10) << __func__ << dendl;
 
-  // WARNING: we make a (somewhat sloppy) assumption here that
-  // no OpSequencers will be created or destroyed for the duration
-  // of this method.
-  set<OpSequencer*> s;
+  set<OpSequencerRef> s;
   {
     std::lock_guard<std::mutex> l(osr_lock);
     s = osr_set;
   }
   for (auto osr : s) {
-    dout(20) << __func__ << " flush " << osr << dendl;
+    dout(20) << __func__ << " drain " << osr << dendl;
     osr->drain();
   }
 
   dout(10) << __func__ << " done" << dendl;
+}
+
+void BlueStore::_osr_discard_all()
+{
+  dout(10) << __func__ << " " << osr_set << dendl;
+  set<OpSequencerRef> s;
+  {
+    std::lock_guard<std::mutex> l(osr_lock);
+    s = osr_set;
+  }
+  for (auto osr : s) {
+    osr->discard();
+  }
 }
 
 void BlueStore::_kv_sync_thread()
@@ -7785,7 +7797,8 @@ int BlueStore::_deferred_replay()
     _txc_state_proc(txc);
   }
   dout(20) << __func__ << " draining osr" << dendl;
-  osr->drain();
+  _osr_drain_all();
+  osr->discard();
   dout(10) << __func__ << " completed " << count << " events" << dendl;
   return 0;
 }

@@ -1547,15 +1547,27 @@ public:
 
     std::atomic_int kv_submitted_waiters = {0};
 
+    std::mutex register_lock;
+    bool registered = true;
+
     OpSequencer(CephContext* cct, BlueStore *store)
 	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
       : Sequencer_impl(cct),
 	parent(NULL), store(store) {
+      std::lock_guard<std::mutex> l(register_lock);
       store->register_osr(this);
     }
     ~OpSequencer() {
       assert(q.empty());
-      store->unregister_osr(this);
+      discard();
+    }
+
+    void discard() override {
+      std::lock_guard<std::mutex> l(register_lock);
+      if (registered) {
+	registered = false;
+	store->unregister_osr(this);
+      }
     }
 
     void queue_new(TransContext *txc) {
@@ -1720,8 +1732,8 @@ private:
 
   vector<Cache*> cache_shards;
 
-  std::mutex osr_lock;            ///< protect osd_set
-  std::set<OpSequencer*> osr_set; ///< set of all OpSequencers
+  std::mutex osr_lock;              ///< protect osd_set
+  std::set<OpSequencerRef> osr_set; ///< set of all OpSequencers
 
   std::atomic<uint64_t> nid_last = {0};
   std::atomic<uint64_t> nid_max = {0};
@@ -1890,6 +1902,7 @@ private:
 
   void _osr_reap_done(OpSequencer *osr);
   void _osr_drain_all();
+  void _osr_discard_all();
 
   void _kv_sync_thread();
   void _kv_stop() {
