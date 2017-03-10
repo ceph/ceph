@@ -3146,7 +3146,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 	     &wal_tp),
     m_finisher_num(1),
     kv_sync_thread(this),
-    kv_sync_thread1(this),
+    kv_finalize_thread(this),
     kv_stop(false),
     logger(NULL),
     debug_read_error_lock("BlueStore::debug_read_error_lock"),
@@ -3203,7 +3203,7 @@ BlueStore::BlueStore(CephContext *cct,
 	     &wal_tp),
     m_finisher_num(1),
     kv_sync_thread(this),
-    kv_sync_thread1(this),
+    kv_finalize_thread(this),
     kv_stop(false),
     logger(NULL),
     debug_read_error_lock("BlueStore::debug_read_error_lock"),
@@ -4782,7 +4782,7 @@ int BlueStore::mount()
   }
   wal_tp.start();
   kv_sync_thread.create("bstore_kv_sync");
-  kv_sync_thread1.create("bstore_kv_sync1");
+  kv_finalize_thread.create("bstore_kv_sync1");
 
   r = _wal_replay();
   if (r < 0)
@@ -7514,15 +7514,15 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   txc->released.clear();
 }
 
-void BlueStore::_kv_sync_thread1()
+void BlueStore::_kv_finalize_thread()
 {
-  deque<TransContext*> wal_cleaning2, kv_committing2;
+  deque<TransContext*> wal_cleaning, kv_committing;
   dout(10) << __func__ << " start" << dendl;
-  std::unique_lock<std::mutex> l(kv_lock1);
+  std::unique_lock<std::mutex> l(kv_finalize_lock);
   while (true) {
-    assert(kv_committing2.empty());
-    assert(wal_cleaning2.empty());
-    if (kv_committing1.empty() && wal_cleaning1.empty()) {
+    assert(kv_committing.empty());
+    assert(wal_cleaning.empty());
+    if (kv_committing_to_finalize.empty() && wal_cleaning_to_finalize.empty()) {
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
@@ -7530,23 +7530,23 @@ void BlueStore::_kv_sync_thread1()
       kv_cond1.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
-      kv_committing2.swap(kv_committing1);
-      wal_cleaning2.swap(wal_cleaning1);
+      kv_committing.swap(kv_committing_to_finalize);
+      wal_cleaning.swap(wal_cleaning_to_finalize);
       kv_cond1.notify_one();
       l.unlock();
 
-     while (!kv_committing2.empty()) {
-	TransContext *txc = kv_committing2.front();
+     while (!kv_committing.empty()) {
+	TransContext *txc = kv_committing.front();
 	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
 	_txc_release_alloc(txc);
 	_txc_state_proc(txc);
-	kv_committing2.pop_front();
+	kv_committing.pop_front();
       }
-      while (!wal_cleaning2.empty()) {
-	TransContext *txc = wal_cleaning2.front();
+      while (!wal_cleaning.empty()) {
+	TransContext *txc = wal_cleaning.front();
 	_txc_release_alloc(txc);
 	_txc_state_proc(txc);
-	wal_cleaning2.pop_front();
+	wal_cleaning.pop_front();
       }
 
       // this is as good a place as any ...
@@ -7696,15 +7696,15 @@ void BlueStore::_kv_sync_thread()
       }
 
       {
-	std::unique_lock<std::mutex> m(kv_lock1);
+	std::unique_lock<std::mutex> m(kv_finalize_lock);
 	while (true) {
-	  if (!(kv_committing1.empty() && wal_cleaning1.empty()))
+	  if (!(kv_committing_to_finalize.empty() && wal_cleaning_to_finalize.empty()))
 	    kv_cond1.wait(m);
 	  else
 	    break;
 	}
-	kv_committing1.swap(kv_committing);
-	wal_cleaning1.swap(wal_cleaning);
+	kv_committing_to_finalize.swap(kv_committing);
+	wal_cleaning_to_finalize.swap(wal_cleaning);
 	kv_cond1.notify_one();
       }
 

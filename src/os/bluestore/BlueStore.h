@@ -1659,11 +1659,11 @@ public:
       return NULL;
     }
   };
-  struct KVSyncThread1 : public Thread {
+  struct KVFinalizeThread : public Thread {
     BlueStore *store;
-    explicit KVSyncThread1(BlueStore *s) : store(s) {}
+    explicit KVFinalizeThread(BlueStore *s) : store(s) {}
     void *entry() {
-      store->_kv_sync_thread1();
+      store->_kv_finalize_thread();
       return NULL;
     }
   };
@@ -1731,15 +1731,16 @@ private:
   vector<Finisher*> finishers;
 
   KVSyncThread kv_sync_thread;
-  KVSyncThread1 kv_sync_thread1;
-  std::mutex kv_lock, kv_lock1;
+  KVFinalizeThread kv_finalize_thread;
+  std::mutex kv_lock, kv_finalize_lock;
   std::condition_variable kv_cond, kv_sync_cond, kv_cond1;
   bool kv_stop;
   deque<TransContext*> kv_queue;             ///< ready, already submitted
   deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
   deque<TransContext*> kv_committing;        ///< currently syncing
   deque<TransContext*> wal_cleanup_queue;    ///< wal done, ready for cleanup
-  deque<TransContext*> wal_cleaning1, kv_committing1;
+  deque<TransContext*> wal_cleaning_to_finalize;  ///< wal cleanup pending finalization
+  deque<TransContext*> kv_committing_to_finalize;    ///< commits pending finalization
 
 
   PerfCounters *logger;
@@ -1881,7 +1882,7 @@ private:
   void _osr_reap_done(OpSequencer *osr);
 
   void _kv_sync_thread();
-  void _kv_sync_thread1();
+  void _kv_finalize_thread();
   void _kv_stop() {
     {
       std::lock_guard<std::mutex> l(kv_lock);
@@ -1889,12 +1890,12 @@ private:
       kv_cond.notify_all();
     }
     {
-      std::lock_guard<std::mutex> l(kv_lock1);
+      std::lock_guard<std::mutex> l(kv_finalize_lock);
       kv_cond1.notify_all();
     }
 
     kv_sync_thread.join();
-    kv_sync_thread1.join();
+    kv_finalize_thread.join();
     {
       std::lock_guard<std::mutex> l(kv_lock);
       kv_stop = false;
