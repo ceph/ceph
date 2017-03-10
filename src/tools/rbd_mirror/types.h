@@ -51,6 +51,57 @@ std::ostream &operator<<(std::ostream &, const ImageId &image_id);
 
 typedef std::set<ImageId> ImageIds;
 
+struct Peer {
+  std::string mirror_uuid;
+  librados::IoCtx io_ctx;
+
+  Peer() {
+  }
+
+  Peer(const std::string &mirror_uuid) : mirror_uuid(mirror_uuid) {
+  }
+
+  Peer(const std::string &mirror_uuid, librados::IoCtx &io_ctx)
+    : mirror_uuid(mirror_uuid), io_ctx(io_ctx) {
+  }
+
+  inline bool operator<(const Peer &rhs) const {
+    return mirror_uuid < rhs.mirror_uuid;
+  }
+  inline bool operator==(const Peer &rhs) const {
+    return mirror_uuid == rhs.mirror_uuid;
+  }
+};
+
+typedef std::set<Peer> Peers;
+
+struct PeerImage : public Peer {
+  std::string image_id;
+
+  PeerImage() {
+  }
+  PeerImage(const std::string &mirror_uuid, const std::string &image_id)
+    : Peer(mirror_uuid), image_id(image_id) {
+  }
+  PeerImage(const std::string &mirror_uuid, librados::IoCtx &io_ctx,
+            const std::string &image_id)
+    : Peer(mirror_uuid, io_ctx), image_id(image_id) {
+  }
+
+  inline bool operator<(const PeerImage &rhs) const {
+    if (mirror_uuid != rhs.mirror_uuid) {
+      return mirror_uuid < rhs.mirror_uuid;
+    } else {
+      return image_id < rhs.image_id;
+    }
+  }
+  inline bool operator==(const PeerImage &rhs) const {
+    return (mirror_uuid == rhs.mirror_uuid && image_id == rhs.image_id);
+  }
+};
+
+typedef std::set<PeerImage> PeerImages;
+
 struct peer_t {
   peer_t() = default;
   peer_t(const std::string &uuid, const std::string &cluster_name,
