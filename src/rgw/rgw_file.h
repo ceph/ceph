@@ -1522,8 +1522,9 @@ public:
     RGWOp::init(rados_ctx->store, get_state(), this);
     op = this; // assign self as op: REQUIRED
 
-    if (! valid_s3_object_name(obj_name))
-      return -ERR_INVALID_OBJECT_NAME;
+    int rc = valid_s3_object_name(obj_name);
+    if (rc != 0)
+      return rc;
 
     return 0;
   }
@@ -2169,8 +2170,9 @@ public:
     dest_object = dst_parent->format_child_name(dst_name);
     // need s->object_name?
 
-    if (! valid_s3_object_name(dest_object))
-      return -ERR_INVALID_OBJECT_NAME;
+    int rc = valid_s3_object_name(dest_object);
+    if (rc != 0)
+      return rc;
 
     /* XXX and fixup key attr (could optimize w/string ref and
      * dest_object) */
