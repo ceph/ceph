@@ -1248,18 +1248,19 @@ struct denc_traits<boost::none_t> {
 // Write denc_traits<> for a class that defines bound_encode/encode/decode
 // methods.
 
-#define WRITE_CLASS_DENC(T) _DECLARE_CLASS_DENC(T, false)
-#define WRITE_CLASS_DENC_BOUNDED(T) _DECLARE_CLASS_DENC(T, true)
-#define _DECLARE_CLASS_DENC(T, b)					\
+#define WRITE_CLASS_DENC(T) _DECLARE_CLASS_DENC(T, false, )
+#define WRITE_CLASS_DENC_ATTR(T, attr) _DECLARE_CLASS_DENC(T, false, attr)
+#define WRITE_CLASS_DENC_BOUNDED(T) _DECLARE_CLASS_DENC(T, true, )
+#define _DECLARE_CLASS_DENC(T, b, attr)					\
   template<> struct denc_traits<T> {					\
     static constexpr bool supported = true;				\
     static constexpr bool featured = false;				\
     static constexpr bool bounded = b;					\
-    static void bound_encode(const T& v, size_t& p, uint64_t f=0) {	\
+    static void bound_encode(const T& v, size_t& p, uint64_t f=0) attr { \
       v.bound_encode(p);						\
     }									\
     static void encode(const T& v, buffer::list::contiguous_appender& p, \
-		       uint64_t f=0) {					\
+		       uint64_t f=0) attr {				\
       v.encode(p);							\
     }									\
     static void decode(T& v, buffer::ptr::iterator& p, uint64_t f=0) {	\
@@ -1267,18 +1268,19 @@ struct denc_traits<boost::none_t> {
     }									\
   };
 
-#define WRITE_CLASS_DENC_FEATURED(T) _DECLARE_CLASS_DENC_FEATURED(T, false)
-#define WRITE_CLASS_DENC_FEATURED_BOUNDED(T) _DECLARE_CLASS_DENC_FEATURED(T, true)
-#define _DECLARE_CLASS_DENC_FEATURED(T, b)				\
+#define WRITE_CLASS_DENC_FEATURED(T) _DECLARE_CLASS_DENC_FEATURED(T, false, )
+#define WRITE_CLASS_DENC_FEATURED_ATTR(T, attr) _DECLARE_CLASS_DENC_FEATURED(T, false, attr)
+#define WRITE_CLASS_DENC_FEATURED_BOUNDED(T) _DECLARE_CLASS_DENC_FEATURED(T, true, )
+#define _DECLARE_CLASS_DENC_FEATURED(T, b, attr)			\
   template<> struct denc_traits<T> {					\
     static constexpr bool supported = true;				\
     static constexpr bool featured = true;				\
     static constexpr bool bounded = b;					\
-    static void bound_encode(const T& v, size_t& p, uint64_t f) {	\
+    static void bound_encode(const T& v, size_t& p, uint64_t f) attr {	\
       v.bound_encode(p, f);						\
     }									\
     static void encode(const T& v, buffer::list::contiguous_appender& p, \
-		       uint64_t f) {					\
+		       uint64_t f) attr {				\
       v.encode(p, f);							\
     }									\
     static void decode(T& v, buffer::ptr::iterator& p, uint64_t f=0) {	\
