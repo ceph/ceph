@@ -252,7 +252,6 @@ void _usage()
   cout << "                             set zone tier config keys, values\n";
   cout << "   --tier-config-rm=<k>[,...]\n";
   cout << "                             unset zone tier config keys\n";
-  cout << "   --tier_type=<type>        zone tier type\n";
   cout << "   --sync-from-all[=false]   set/reset whether zone syncs from all zonegroup peers\n";
   cout << "   --sync-from=[zone-name][,...]\n";
   cout << "                             set list of zones to sync from\n";
