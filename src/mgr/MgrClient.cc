@@ -31,7 +31,6 @@
 
 MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_)
     : Dispatcher(cct_), cct(cct_), msgr(msgr_),
-      lock("mgrc"),
       timer(cct_, lock)
 {
   assert(cct != nullptr);

@@ -56,7 +56,7 @@ protected:
 
   unique_ptr<MgrSessionState> session;
 
-  Mutex lock;
+  Mutex lock = {"MgrClient::lock"};
 
   uint32_t stats_period;
   SafeTimer     timer;
