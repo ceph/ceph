@@ -59,11 +59,11 @@ struct log_content {
   : buf(buf) {}
 };
 
-std::ostream& operator<<(std::ostream& out, const rgw::crypt_sanitize::env& e);
-std::ostream& operator<<(std::ostream& out, const rgw::crypt_sanitize::x_meta_map& x);
-std::ostream& operator<<(std::ostream& out, const rgw::crypt_sanitize::s3_policy& x);
-std::ostream& operator<<(std::ostream& out, const rgw::crypt_sanitize::auth& x);
-std::ostream& operator<<(std::ostream& out, const rgw::crypt_sanitize::log_content& x);
+std::ostream& operator<<(std::ostream& out, const env& e);
+std::ostream& operator<<(std::ostream& out, const x_meta_map& x);
+std::ostream& operator<<(std::ostream& out, const s3_policy& x);
+std::ostream& operator<<(std::ostream& out, const auth& x);
+std::ostream& operator<<(std::ostream& out, const log_content& x);
 }
 }
 #endif /* RGW_RGW_CRYPT_SANITIZE_H_ */
