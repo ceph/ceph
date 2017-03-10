@@ -145,15 +145,23 @@ struct bluestore_pextent_t : public AllocExtent {
     return offset != INVALID_OFFSET;
   }
 
-  DENC(bluestore_pextent_t, v, p) {
-    denc_lba(v.offset, p);
-    denc_varint_lowz(v.length, p);
+  void bound_encode(size_t& p) const {
+    denc_lba(offset, p);
+    denc_varint_lowz(length, p);
+  }
+  void encode(bufferlist::contiguous_appender& p) const {
+    denc_lba(offset, p);
+    denc_varint_lowz(length, p);
+  }
+  void decode(bufferptr::iterator& p) {
+    denc_lba(offset, p);
+    denc_varint_lowz(length, p);
   }
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_pextent_t*>& ls);
 };
-WRITE_CLASS_DENC(bluestore_pextent_t)
+WRITE_CLASS_DENC_ATTR(bluestore_pextent_t, __attribute__((always_inline)))
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
