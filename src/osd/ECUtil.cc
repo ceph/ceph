@@ -201,14 +201,12 @@ void ECUtil::HashInfo::generate_test_instances(list<HashInfo*>& o)
   o.push_back(new HashInfo(4));
 }
 
-const string HINFO_KEY = "hinfo_key";
-
 bool ECUtil::is_hinfo_key_string(const string &key)
 {
-  return key == HINFO_KEY;
+  return key == ECUtil::HINFO_KEY;
 }
 
 const string &ECUtil::get_hinfo_key()
 {
-  return HINFO_KEY;
+  return ECUtil::HINFO_KEY;
 }
