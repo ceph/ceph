@@ -1876,10 +1876,12 @@ public:
       typedef boost::mpl::list<
 	boost::statechart::transition< RecoveryDone, RepNotRecovering >,
 	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,
-	boost::statechart::custom_reaction< BackfillTooFull >
+	boost::statechart::custom_reaction< BackfillTooFull >,
+	boost::statechart::custom_reaction< RequestBackfillPrio >
 	> reactions;
       explicit RepRecovering(my_context ctx);
       boost::statechart::result react(const BackfillTooFull &evt);
+	  boost::statechart::result react(const RequestBackfillPrio &evt);
       void exit();
     };
 
