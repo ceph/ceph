@@ -2131,6 +2131,9 @@ protected:
   void handle_pg_stats_ack(class MPGStatsAck *ack);
   void flush_pg_stats();
 
+  ceph::coarse_mono_clock::time_point last_sent_beacon;
+  void send_beacon(const ceph::coarse_mono_clock::time_point& now);
+
   void pg_stat_queue_enqueue(PG *pg) {
     pg_stat_queue_lock.Lock();
     if (pg->is_primary() && !pg->stat_queue_item.is_on_list()) {

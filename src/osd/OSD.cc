@@ -68,6 +68,7 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDBackoff.h"
+#include "messages/MOSDBeacon.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDSubOp.h"
@@ -4514,6 +4515,15 @@ void OSD::tick()
   do_waiters();
 
   tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
+
+  if (is_active()) {
+    const auto now = ceph::coarse_mono_clock::now();
+    const auto elapsed = now - last_sent_beacon;
+    if (chrono::duration_cast<chrono::seconds>(elapsed).count() >
+	cct->_conf->osd_beacon_report_interval) {
+      send_beacon(now);
+    }
+  }
 }
 
 void OSD::tick_without_osd_lock()
@@ -4964,6 +4974,7 @@ void OSD::ms_handle_connect(Connection *con)
       send_pg_stats(now);
 
       map_lock.put_read();
+      send_beacon(ceph::coarse_mono_clock::now());
     }
 
     // full map requests may happen while active or pre-boot
@@ -5538,6 +5549,19 @@ void OSD::flush_pg_stats()
   osd_lock.Lock();
 }
 
+void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
+{
+  dout(20) << __func__ << dendl;
+  last_sent_beacon = now;
+  const auto& monmap = monc->monmap;
+  // send beacon to mon even if we are just connected, and the monmap is not
+  // initialized yet by then.
+  if (monmap.epoch == 0 &&
+      monmap.get_required_features().contains_all(
+        ceph::features::mon::FEATURE_LUMINOUS)) {
+    monc->send_mon_message(new MOSDBeacon());
+  }
+}
 
 void OSD::handle_command(MMonCommand *m)
 {
