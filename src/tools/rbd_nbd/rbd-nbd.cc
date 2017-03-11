@@ -557,10 +557,12 @@ static int do_map(int argc, const char *argv[])
 
   if (devpath.empty()) {
     char dev[64];
+    bool try_load_module = true;
     while (true) {
       snprintf(dev, sizeof(dev), "/dev/nbd%d", index);
 
-      nbd = open_device(dev, true);
+      nbd = open_device(dev, try_load_module);
+      try_load_module = false;
       if (nbd < 0) {
         r = nbd;
         cerr << "rbd-nbd: failed to find unused device" << std::endl;
