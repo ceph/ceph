@@ -970,12 +970,13 @@ protected:
       this);
   }
 public:
-  void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
-                            pg_info_t &info, LogEntryHandler *rollbacker,
-                            bool &dirty_info, bool &dirty_big_info);
+  void rewind_divergent_log(eversion_t newhead,
+                            pg_info_t &info,
+                            LogEntryHandler *rollbacker,
+                            bool &dirty_info,
+                            bool &dirty_big_info);
 
-  void merge_log(ObjectStore::Transaction& t,
-		 pg_info_t &oinfo,
+  void merge_log(pg_info_t &oinfo,
 		 pg_log_t &olog,
 		 pg_shard_t from,
 		 pg_info_t &info, LogEntryHandler *rollbacker,

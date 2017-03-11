@@ -452,14 +452,14 @@ void PG::merge_log(
 {
   PGLogEntryHandler rollbacker{this, &t};
   pg_log.merge_log(
-    t, oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
+    oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
 }
 
 void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 {
   PGLogEntryHandler rollbacker{this, &t};
   pg_log.rewind_divergent_log(
-    t, newhead, info, &rollbacker, dirty_info, dirty_big_info);
+    newhead, info, &rollbacker, dirty_info, dirty_big_info);
 }
 
 /*
