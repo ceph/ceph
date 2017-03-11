@@ -3799,6 +3799,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 
     // Mgrs
     case MSG_MGR_BEACON:
+    case MSG_MON_MGR_REPORT:
       paxos_service[PAXOS_MGR]->dispatch(op);
       break;
 
