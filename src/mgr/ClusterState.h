@@ -22,6 +22,7 @@
 #include "mon/PGMap.h"
 
 class MMgrDigest;
+class MMonMgrReport;
 class MPGStats;
 
 
@@ -56,6 +57,8 @@ public:
   void set_fsmap(FSMap const &new_fsmap);
 
   void notify_osdmap(const OSDMap &osd_map);
+
+  void tick(MMonMgrReport *m);
 
   bool have_fsmap() const {
     Mutex::Locker l(lock);

@@ -12,6 +12,7 @@
  */
 
 #include "messages/MMgrDigest.h"
+#include "messages/MMonMgrReport.h"
 #include "messages/MPGStats.h"
 
 #include "mgr/ClusterState.h"
@@ -113,3 +114,7 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
   // while the full-blown PGMap lives only here.
 }
 
+void ClusterState::tick(MMonMgrReport *m)
+{
+  dout(0) << __func__ << dendl;
+}
