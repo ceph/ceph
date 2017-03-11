@@ -72,6 +72,7 @@ using namespace std;
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
 
+#include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
@@ -461,6 +462,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_REPOPREPLY:
     m = new MOSDRepOpReply();
+    break;
+  case MSG_OSD_PG_CREATED:
+    m = new MOSDPGCreated();
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
     m = new MOSDPGUpdateLogMissing();
