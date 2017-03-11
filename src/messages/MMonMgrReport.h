@@ -33,7 +33,7 @@ private:
   ~MMonMgrReport() override {}
 
 public:
-
+  bool needs_send = false;
   const char *get_type_name() const override { return "monmgrreport"; }
 
   void print(ostream& out) const override {
