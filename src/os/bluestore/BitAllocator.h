@@ -406,7 +406,8 @@ protected:
 
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks);
   virtual bool is_exhausted();
-  
+
+  using BitMapArea::child_check_n_lock;
   bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
     ceph_abort();
     return false;
