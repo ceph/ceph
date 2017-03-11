@@ -159,7 +159,12 @@ void MgrStandby::send_beacon()
 
 void MgrStandby::tick()
 {
+  dout(0) << __func__ << dendl;
   send_beacon();
+
+  if (active_mgr) {
+    active_mgr->tick();
+  }
 
   timer.add_event_after(g_conf->mgr_tick_period, new FunctionContext(
         [this](int r){
