@@ -69,6 +69,9 @@ public:
   bool preprocess_beacon(MonOpRequestRef op);
   bool prepare_beacon(MonOpRequestRef op);
 
+  bool preprocess_report(MonOpRequestRef op);
+  bool prepare_report(MonOpRequestRef op);
+
   void check_sub(Subscription *sub);
   void check_subs();
   void send_digests();
