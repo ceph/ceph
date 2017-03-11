@@ -32,6 +32,7 @@
 
 class MMgrReport;
 class MMgrOpen;
+class MMonMgrReport;
 class MCommand;
 struct MgrCommand;
 
@@ -111,6 +112,7 @@ public:
   bool handle_open(MMgrOpen *m);
   bool handle_report(MMgrReport *m);
   bool handle_command(MCommand *m);
+  void tick(MMonMgrReport *m) {}
 };
 
 #endif
