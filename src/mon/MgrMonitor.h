@@ -15,6 +15,7 @@
 #include "include/Context.h"
 #include "MgrMap.h"
 #include "PaxosService.h"
+#include "PGMap.h"
 
 
 class MgrMonitor : public PaxosService
@@ -42,6 +43,7 @@ class MgrMonitor : public PaxosService
   bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
 
 public:
+  PGMap pg_map;
   MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name)
   {}
