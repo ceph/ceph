@@ -130,7 +130,6 @@ void PGLog::trim(
 }
 
 void PGLog::proc_replica_log(
-  ObjectStore::Transaction& t,
   pg_info_t &oinfo,
   const pg_log_t &olog,
   pg_missing_t& omissing,
