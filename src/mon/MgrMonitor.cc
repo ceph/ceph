@@ -14,6 +14,7 @@
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrMap.h"
 #include "messages/MMgrDigest.h"
+#include "messages/MMonMgrReport.h"
 
 #include "PGMap.h"
 #include "PGMonitor.h"
@@ -107,6 +108,8 @@ bool MgrMonitor::preprocess_query(MonOpRequestRef op)
       return preprocess_beacon(op);
     case MSG_MON_COMMAND:
       return preprocess_command(op);
+    case MSG_MON_MGR_REPORT:
+      return preprocess_report(op);
     default:
       mon->no_reply(op);
       derr << "Unhandled message type " << m->get_type() << dendl;
@@ -123,6 +126,9 @@ bool MgrMonitor::prepare_update(MonOpRequestRef op)
 
     case MSG_MON_COMMAND:
       return prepare_command(op);
+
+    case MSG_MON_MGR_REPORT:
+      return prepare_report(op);
 
     default:
       mon->no_reply(op);
@@ -237,6 +243,14 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
   }
 
   return updated;
+}
+
+bool MgrMonitor::preprocess_report(MonOpRequestRef op) { return false; }
+
+bool MgrMonitor::prepare_report(MonOpRequestRef op)
+{
+  MMonMgrReport *m = static_cast<MMonMgrReport*>(op->get_req());
+  return true;
 }
 
 void MgrMonitor::check_subs()
