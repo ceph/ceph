@@ -237,7 +237,6 @@ public:
   };
   void test_proc_replica_log(const TestCase &tcase) {
     clear();
-    ObjectStore::Transaction t;
     log = tcase.get_fullauth();
     pg_info_t info = tcase.get_authinfo();
 
@@ -248,7 +247,7 @@ public:
     pg_info_t oinfo = tcase.get_divinfo();
 
     proc_replica_log(
-       t, oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)));
+       oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)));
 
     assert(oinfo.last_update >= log.tail);
 
@@ -1223,7 +1222,6 @@ TEST_F(PGLogTest, proc_replica_log) {
   {
     clear();
 
-    ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
@@ -1234,14 +1232,12 @@ TEST_F(PGLogTest, proc_replica_log) {
     eversion_t last_complete(1, 1);
     oinfo.last_complete = last_complete;
 
-    EXPECT_TRUE(t.empty());
     EXPECT_FALSE(omissing.have_missing());
     EXPECT_EQ(last_update, oinfo.last_update);
     EXPECT_EQ(last_complete, oinfo.last_complete);
 
-    proc_replica_log(t, oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from);
 
-    EXPECT_TRUE(t.empty());
     EXPECT_FALSE(omissing.have_missing());
     EXPECT_EQ(last_update, oinfo.last_update);
     EXPECT_EQ(last_update, oinfo.last_complete);
@@ -1275,7 +1271,6 @@ TEST_F(PGLogTest, proc_replica_log) {
   {
     clear();
 
-    ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
@@ -1310,21 +1305,18 @@ TEST_F(PGLogTest, proc_replica_log) {
       oinfo.last_complete = olog.head;
     }
 
-    EXPECT_TRUE(t.empty());
     EXPECT_FALSE(omissing.have_missing());
     EXPECT_EQ(olog.head, oinfo.last_update);
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
-    proc_replica_log(t, oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from);
 
-    EXPECT_TRUE(t.empty());
     EXPECT_FALSE(omissing.have_missing());
   }
 
  {
     clear();
 
-    ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
@@ -1414,14 +1406,12 @@ TEST_F(PGLogTest, proc_replica_log) {
       oinfo.last_complete = olog.head;
     }
 
-    EXPECT_TRUE(t.empty());
     EXPECT_FALSE(omissing.have_missing());
     EXPECT_EQ(olog.head, oinfo.last_update);
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
-    proc_replica_log(t, oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from);
 
-    EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
     EXPECT_EQ(eversion_t(1, 2), omissing.get_items().at(divergent_object).need);
@@ -1456,7 +1446,6 @@ TEST_F(PGLogTest, proc_replica_log) {
   {
     clear();
 
-    ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
@@ -1503,14 +1492,12 @@ TEST_F(PGLogTest, proc_replica_log) {
       oinfo.last_complete = olog.head;
     }
 
-    EXPECT_TRUE(t.empty());
     EXPECT_FALSE(omissing.have_missing());
     EXPECT_EQ(olog.head, oinfo.last_update);
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
-    proc_replica_log(t, oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from);
 
-    EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
     EXPECT_EQ(omissing.get_items().at(divergent_object).have, eversion_t(0, 0));
@@ -1545,7 +1532,6 @@ TEST_F(PGLogTest, proc_replica_log) {
   {
     clear();
 
-    ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
@@ -1593,16 +1579,14 @@ TEST_F(PGLogTest, proc_replica_log) {
       oinfo.last_complete = olog.head;
     }
 
-    EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
     EXPECT_EQ(eversion_t(1, 3), omissing.get_items().at(divergent_object).need);
     EXPECT_EQ(olog.head, oinfo.last_update);
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
-    proc_replica_log(t, oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from);
 
-    EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
     EXPECT_EQ(omissing.get_items().at(divergent_object).have, eversion_t(0, 0));
@@ -1638,7 +1622,6 @@ TEST_F(PGLogTest, proc_replica_log) {
   {
     clear();
 
-    ObjectStore::Transaction t;
     pg_log_t olog;
     pg_info_t oinfo;
     pg_missing_t omissing;
@@ -1689,16 +1672,14 @@ TEST_F(PGLogTest, proc_replica_log) {
       oinfo.last_complete = olog.head;
     }
 
-    EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
     EXPECT_EQ(divergent_version, omissing.get_items().at(divergent_object).need);
     EXPECT_EQ(olog.head, oinfo.last_update);
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
-    proc_replica_log(t, oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from);
 
-    EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.get_items().begin()->second.need == eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);

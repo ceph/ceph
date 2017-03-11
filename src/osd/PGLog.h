@@ -703,8 +703,7 @@ public:
     log.last_requested = 0;
   }
 
-  void proc_replica_log(ObjectStore::Transaction& t,
-			pg_info_t &oinfo,
+  void proc_replica_log(pg_info_t &oinfo,
 			const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from) const;
 
