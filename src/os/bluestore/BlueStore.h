@@ -1217,11 +1217,13 @@ public:
   };
 
   struct OnodeSpace {
+  private:
     Cache *cache;
 
     /// forward lookups
     mempool::bluestore_meta_other::unordered_map<ghobject_t,OnodeRef> onode_map;
 
+  public:
     OnodeSpace(Cache *c) : cache(c) {}
     ~OnodeSpace() {
       clear();
@@ -1229,6 +1231,9 @@ public:
 
     OnodeRef add(const ghobject_t& oid, OnodeRef o);
     OnodeRef lookup(const ghobject_t& o);
+    void remove(const ghobject_t& oid) {
+      onode_map.erase(oid);
+    }
     void rename(OnodeRef& o, const ghobject_t& old_oid,
 		const ghobject_t& new_oid,
 		const mempool::bluestore_meta_other::string& new_okey);
