@@ -883,7 +883,7 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       assert(num == 1);
     }
     o->get();  // paranoia
-    o->c->onode_map.onode_map.erase(o->oid);
+    o->c->onode_map.remove(o->oid);
     o->put();
     --num;
   }
@@ -1150,7 +1150,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       assert(num == 1);
     }
     o->get();  // paranoia
-    o->c->onode_map.onode_map.erase(o->oid);
+    o->c->onode_map.remove(o->oid);
     o->put();
     --num;
   }
