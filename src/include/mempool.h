@@ -253,6 +253,9 @@ public:
 void dump(ceph::Formatter *f, size_t skip=2);
 
 
+// Object pool.
+// FIXME(rzarzynski): provide an implementation based on boost::object_pool.
+
 // STL allocator for use with containers.  All actual state
 // is stored in the static pool_allocator_base_t, which saves us from
 // passing the allocator to container constructors.
@@ -439,6 +442,8 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 //
 #define MEMPOOL_CLASS_HELPERS()						\
   void *operator new(size_t size);					\
+  /* The placement-new is necessary is for boost::object_pool. */       \
+  void *operator new(size_t size, void* where) { return where; }        \
   void *operator new[](size_t size) noexcept {				\
     assert(0 == "no array new");					\
     return nullptr; }							\
