@@ -29,6 +29,8 @@
 #include <climits>
 #include <typeinfo>
 
+#include <boost/pool/object_pool.hpp>
+
 #include <common/Formatter.h>
 #include "include/assert.h"
 
@@ -253,8 +255,83 @@ public:
 void dump(ceph::Formatter *f, size_t skip=2);
 
 
-// Object pool.
-// FIXME(rzarzynski): provide an implementation based on boost::object_pool.
+// Object pool for placing storing instances in continuous memory. The class
+// is a thin wrapper over boost::object_pool providing account facilities on
+// the top of Ceph mempool's concepts.
+template <pool_index_t pool_ix,
+          typename T,
+          typename UserAllocator>
+class object_pool : private boost::object_pool<T, UserAllocator> {
+  pool_t *pool;
+  type_t *type = nullptr;
+
+public:
+  using base_t = boost::object_pool<T, UserAllocator>;
+
+  using typename base_t::element_type;
+  using typename base_t::size_type;
+
+  object_pool(const size_type arg_next_size = 32,
+              const size_type arg_max_size = 0,
+              const bool force_register = false)
+    : base_t(arg_next_size, arg_max_size),
+      pool(&get_pool(pool_ix)) {
+
+    if (debug_mode || force_register) {
+      type = pool->get_type(typeid(element_type), sizeof(element_type));
+    }
+  }
+
+  element_type* malloc() {
+    shard_t* const shard = pool->pick_a_shard();
+
+    shard->bytes += sizeof(element_type);
+    shard->items++;
+    if (type) {
+      type->items++;
+    }
+
+    return base_t::malloc();
+  }
+
+  bool is_from(element_type* const objmem) const {
+    return base_t::is_from(objmem);
+  }
+
+  void free(element_type* const objmem) {
+    shard_t* const shard = pool->pick_a_shard();
+
+    shard->bytes -= sizeof(element_type);
+    shard->items--;
+    if (type) {
+      type->items--;
+    }
+
+    return base_t::free(objmem);
+  }
+
+  // construct() from boost::object_pool is totally unaware about
+  // the C++11's variadic templates & perfect forwarding, so let's
+  // provide our own implementation.
+  template <class... Args>
+  element_type* construct(Args&&... args) {
+    element_type* const mem = this->malloc();
+    return new (mem) element_type(std::forward<Args>(args)...);
+  }
+
+  void destroy(element_type* const obj) {
+    return base_t::destroy(obj);
+  }
+
+  size_type get_next_size() const {
+    return base_t::get_next_size();
+  }
+
+  void set_next_size(const size_type next_size) {
+    return base_t::set_next_size(next_size);
+  }
+};
+
 
 // STL allocator for use with containers.  All actual state
 // is stored in the static pool_allocator_base_t, which saves us from
@@ -373,6 +450,9 @@ public:
     static const mempool::pool_index_t id = mempool::mempool_##x;	\
     template<typename v>						\
     using pool_allocator = mempool::pool_allocator<id,v>;		\
+                                                                        \
+    template<typename v, typename UserAllocator>			\
+    using object_pool = object_pool<id,v,UserAllocator>;		\
                                                                         \
     using string = std::basic_string<char,std::char_traits<char>,       \
                                      pool_allocator<char>>;             \

@@ -949,6 +949,11 @@ public:
   struct Onode {
     MEMPOOL_CLASS_HELPERS();
 
+    template <class T>
+    using object_pool_t = mempool::bluestore_meta_other::object_pool<T,
+      /* The allocator is going to be replaced with a HugeTLB-aware one. */
+      boost::default_user_allocator_new_delete>;
+
     std::atomic_int nref;  ///< reference count
     Collection *c;
 
@@ -962,8 +967,15 @@ public:
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool exists;              ///< true if object logically exists
 
-    boost::object_pool<Blob> blob_pool{4096};
-    boost::object_pool<Extent> extent_pool{4096,4096};
+    object_pool_t<Blob> blob_pool{32, 4096 / sizeof(Blob), true};
+
+    /* Start from 1024 / sizeof(Extent) instances in the first slab, double
+     * that when getting a new one but stop multiplying after reaching page
+     * size bytes long slabs. The bool parameter controls whether register
+     * the Extent within mempools accounting mechanism. */
+    object_pool_t<Extent> extent_pool{1024 / sizeof(Extent),
+                                      4096 / sizeof(Extent), true};
+
     ExtentMap extent_map;
 
     std::atomic<int> flushing_count = {0};
