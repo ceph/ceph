@@ -3748,6 +3748,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_OSD_BOOT:
     case MSG_OSD_ALIVE:
     case MSG_OSD_PGTEMP:
+    case MSG_OSD_PG_CREATED:
     case MSG_REMOVE_SNAPS:
       paxos_service[PAXOS_OSDMAP]->dispatch(op);
       break;

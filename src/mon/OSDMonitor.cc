@@ -42,6 +42,7 @@
 #include "messages/MPoolOp.h"
 #include "messages/MPoolOpReply.h"
 #include "messages/MOSDPGCreate.h"
+#include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
@@ -1524,6 +1525,8 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_boot(op);
   case MSG_OSD_ALIVE:
     return preprocess_alive(op);
+  case MSG_OSD_PG_CREATED:
+    return preprocess_pg_created(op);
   case MSG_OSD_PGTEMP:
     return preprocess_pgtemp(op);
   case MSG_OSD_BEACON:
@@ -1559,6 +1562,8 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     return prepare_boot(op);
   case MSG_OSD_ALIVE:
     return prepare_alive(op);
+  case MSG_OSD_PG_CREATED:
+    return prepare_pg_created(op);
   case MSG_OSD_PGTEMP:
     return prepare_pgtemp(op);
   case MSG_OSD_BEACON:
@@ -2614,6 +2619,43 @@ void OSDMonitor::_reply_map(MonOpRequestRef op, epoch_t e)
 	  << " from " << op->get_req()->get_orig_source_inst()
 	  << dendl;
   send_latest(op, e);
+}
+
+// pg_created
+bool OSDMonitor::preprocess_pg_created(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = static_cast<MOSDPGCreated*>(op->get_req());
+  dout(10) << __func__ << " " << *m << dendl;
+  auto session = m->get_session();
+  if (!session) {
+    dout(10) << __func__ << ": no monitor session!" << dendl;
+    return true;
+  }
+  if (!session->is_capable("osd", MON_CAP_X)) {
+    derr << __func__ << " received from entity "
+         << "with insufficient privileges " << session->caps << dendl;
+    return true;
+  }
+  // always forward the "created!" to the leader
+  return false;
+}
+
+bool OSDMonitor::prepare_pg_created(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = static_cast<MOSDPGCreated*>(op->get_req());
+  dout(10) << __func__ << " " << *m << dendl;
+  auto src = m->get_orig_source();
+  auto from = src.num();
+  if (!src.is_osd() ||
+      !mon->osdmon()->osdmap.is_up(from) ||
+      m->get_orig_source_inst() != mon->osdmon()->osdmap.get_inst(from)) {
+    dout(1) << __func__ << " ignoring stats from non-active osd." << dendl;
+    return false;
+  }
+  pending_created_pgs.push_back(m->pgid);
+  return true;
 }
 
 // -------------
