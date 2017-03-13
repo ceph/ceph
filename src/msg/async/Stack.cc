@@ -14,6 +14,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "PosixStack.h"
@@ -37,7 +38,7 @@ std::function<void ()> NetworkStack::add_thread(unsigned i)
   return [this, w]() {
       char tp_name[16];
       sprintf(tp_name, "msgr-worker-%d", w->id);
-      pthread_setname_np(pthread_self(), tp_name);
+      ceph_pthread_setname(pthread_self(), tp_name);
       const uint64_t EventMaxWaitUs = 30000000;
       w->center.set_owner();
       ldout(cct, 10) << __func__ << " starting" << dendl;
