@@ -1642,6 +1642,9 @@ ostream& operator<<(ostream& out, const BlueStore::Blob& b)
 
 void BlueStore::Blob::discard_unallocated(Collection *coll)
 {
+  if (blob.is_shared()) {
+    return;
+  }
   if (blob.is_compressed()) {
     bool discard = false;
     bool all_invalid = true;
@@ -1661,6 +1664,9 @@ void BlueStore::Blob::discard_unallocated(Collection *coll)
     size_t pos = 0;
     for (auto e : blob.extents) {
       if (!e.is_valid()) {
+	ldout(coll->store->cct, 20) << __func__ << " 0x" << std::hex << pos
+				    << "~" << e.length
+				    << std::dec << dendl;
 	shared_blob->bc.discard(shared_blob->get_cache(), pos, e.length);
       }
       pos += e.length;
