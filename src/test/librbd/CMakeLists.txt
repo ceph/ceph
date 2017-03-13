@@ -24,10 +24,9 @@ set_target_properties(rbd_test_mock PROPERTIES COMPILE_FLAGS
 # doesn't use add_ceph_test because it is called by run-rbd-unit-tests.sh
 set(unittest_librbd_srcs
   test_BlockGuard.cc
-  test_ConsistencyGroups.cc
+  test_Groups.cc
   test_main.cc
   test_mock_fixture.cc
-  test_mock_AioImageRequest.cc
   test_mock_ExclusiveLock.cc
   test_mock_Journal.cc
   test_mock_ManagedLock.cc
@@ -36,6 +35,8 @@ set(unittest_librbd_srcs
   exclusive_lock/test_mock_PostAcquireRequest.cc
   exclusive_lock/test_mock_PreReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
+  image/test_mock_RemoveRequest.cc
+  io/test_mock_ImageRequest.cc
   journal/test_mock_OpenRequest.cc
   journal/test_mock_PromoteRequest.cc
   journal/test_mock_Replay.cc
@@ -123,24 +124,28 @@ target_link_libraries(ceph_test_librbd_api
 set_target_properties(ceph_test_librbd_api PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
-add_executable(ceph_test_librbd_fsx
-  fsx.cc
-  $<TARGET_OBJECTS:common_texttable_obj>
-  )
-target_link_libraries(ceph_test_librbd_fsx
-  librbd
-  librados
-  journal
-  krbd
-  global
-  m
-  ${CMAKE_DL_LIBS}
-  ${CRYPTO_LIBS}
-  ${EXTRALIBS}
-  )
+if(LINUX)
+  add_executable(ceph_test_librbd_fsx
+    fsx.cc
+    $<TARGET_OBJECTS:common_texttable_obj>
+    )
+  target_link_libraries(ceph_test_librbd_fsx
+    librbd
+    librados
+    journal
+    krbd
+    global
+    m
+    ${CMAKE_DL_LIBS}
+    ${CRYPTO_LIBS}
+    ${EXTRALIBS}
+    )
+  install(TARGETS
+    ceph_test_librbd_fsx
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif(LINUX)
 
 install(TARGETS
   ceph_test_librbd
   ceph_test_librbd_api
-  ceph_test_librbd_fsx
   DESTINATION ${CMAKE_INSTALL_BINDIR})

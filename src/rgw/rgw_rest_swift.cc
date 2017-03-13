@@ -271,7 +271,7 @@ static void dump_container_metadata(struct req_state *,
 
 void RGWListBucket_ObjStore_SWIFT::send_response()
 {
-  vector<RGWObjEnt>::iterator iter = objs.begin();
+  vector<rgw_bucket_dir_entry>::iterator iter = objs.begin();
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
@@ -283,15 +283,18 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   while (iter != objs.end() || pref_iter != common_prefixes.end()) {
     bool do_pref = false;
     bool do_objs = false;
-    rgw_obj_key& key = iter->key;
+    rgw_obj_key key;
+    if (iter != objs.end()) {
+      key = iter->key;
+    }
     if (pref_iter == common_prefixes.end())
       do_objs = true;
     else if (iter == objs.end())
       do_pref = true;
-    else if (key.name.compare(pref_iter->first) == 0) {
+    else if (!key.empty() && key.name.compare(pref_iter->first) == 0) {
       do_objs = true;
       ++pref_iter;
-    } else if (key.name.compare(pref_iter->first) <= 0)
+    } else if (!key.empty() && key.name.compare(pref_iter->first) <= 0)
       do_objs = true;
     else
       do_pref = true;
@@ -302,12 +305,12 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
 
       s->formatter->open_object_section("object");
       s->formatter->dump_string("name", key.name);
-      s->formatter->dump_string("hash", iter->etag);
-      s->formatter->dump_int("bytes", iter->accounted_size);
-      string single_content_type = iter->content_type;
-      if (iter->content_type.size()) {
+      s->formatter->dump_string("hash", iter->meta.etag);
+      s->formatter->dump_int("bytes", iter->meta.accounted_size);
+      string single_content_type = iter->meta.content_type;
+      if (iter->meta.content_type.size()) {
         // content type might hold multiple values, just dump the last one
-        ssize_t pos = iter->content_type.rfind(',');
+        ssize_t pos = iter->meta.content_type.rfind(',');
         if (pos > 0) {
           ++pos;
           while (single_content_type[pos] == ' ')
@@ -316,7 +319,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
         }
         s->formatter->dump_string("content_type", single_content_type);
       }
-      dump_time(s, "last_modified", &iter->mtime);
+      dump_time(s, "last_modified", &iter->meta.mtime);
       s->formatter->close_section();
     }
 
@@ -1775,7 +1778,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
         htmler.dump_subdir(subdir_name);
       }
 
-      for (const RGWObjEnt& obj : objs) {
+      for (const rgw_bucket_dir_entry& obj : objs) {
         if (! common_prefixes.count(obj.key.name + '/')) {
           htmler.dump_object(obj);
         }
@@ -1814,10 +1817,11 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
 
   /* First, get attrset of the object we'll try to retrieve. */
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.set_atomic(obj);
+  obj_ctx.obj.set_atomic(obj);
+  obj_ctx.obj.set_prefetch_data(obj);
 
   RGWObjState* state = nullptr;
-  if (store->get_obj_state(&obj_ctx, obj, &state, false) < 0) {
+  if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false) < 0) {
     return false;
   }
 
@@ -1843,10 +1847,11 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index)
   rgw_obj obj(s->bucket, index);
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.set_atomic(obj);
+  obj_ctx.obj.set_atomic(obj);
+  obj_ctx.obj.set_prefetch_data(obj);
 
   RGWObjState* state = nullptr;
-  if (store->get_obj_state(&obj_ctx, obj, &state, false) < 0) {
+  if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false) < 0) {
     return false;
   }
 

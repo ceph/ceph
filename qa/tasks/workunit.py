@@ -308,7 +308,9 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
     clonedir = '{tdir}/clone.{role}'.format(tdir=testdir, role=role)
     srcdir = '{cdir}/qa/workunits'.format(cdir=clonedir)
 
-    git_url = teuth_config.get_ceph_git_url()
+    git_url = teuth_config.get_ceph_qa_suite_git_url()
+    # if we are running an upgrade test, and ceph-ci does not have branches like
+    # `jewel`, so should use ceph.git as an alternative.
     try:
         remote.run(
             logger=log.getChild(role),
@@ -328,7 +330,9 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
             ],
         )
     except CommandFailedError:
-        alt_git_url = git_url.replace('ceph-ci', 'ceph')
+        if not git_url.endswith('/ceph-ci.git'):
+            raise
+        alt_git_url = git_url.replace('/ceph-ci.git', '/ceph.git')
         log.info(
             "failed to check out '%s' from %s; will also try in %s",
             refspec,
@@ -352,7 +356,6 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                 'git', 'checkout', refspec,
             ],
         )
-
     remote.run(
         logger=log.getChild(role),
         args=[

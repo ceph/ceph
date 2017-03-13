@@ -28,7 +28,7 @@ class MOSDPGInfo : public Message {
 public:
   vector<pair<pg_notify_t,pg_interval_map_t> > pg_list;
 
-  epoch_t get_epoch() { return epoch; }
+  epoch_t get_epoch() const { return epoch; }
 
   MOSDPGInfo()
     : Message(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION) {
@@ -40,11 +40,11 @@ public:
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:
-  ~MOSDPGInfo() {}
+  ~MOSDPGInfo() override {}
 
 public:
-  const char *get_type_name() const { return "pg_info"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "pg_info"; }
+  void print(ostream& out) const override {
     out << "pg_info(" << pg_list.size() << " pgs e" << epoch << ":";
 
     for (vector<pair<pg_notify_t,pg_interval_map_t> >::const_iterator i = pg_list.begin();
@@ -60,7 +60,7 @@ public:
     out << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(epoch, payload);
 
     // v1 was vector<pg_info_t>
@@ -92,7 +92,7 @@ public:
       ::encode(p->first.to, payload);
     }
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
 

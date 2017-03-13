@@ -37,7 +37,7 @@ class FSStatus(object):
     """
     def __init__(self, mon_manager):
         self.mon = mon_manager
-        self.map = json.loads(self.mon.raw_cluster_cmd("fs", "dump", "--format=json-pretty"))
+        self.map = json.loads(self.mon.raw_cluster_cmd("fs", "dump", "--format=json"))
 
     def __str__(self):
         return json.dumps(self.map, indent = 2, sort_keys = True)
@@ -415,6 +415,12 @@ class Filesystem(MDSCluster):
 
     def set_max_mds(self, max_mds):
         self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "max_mds", "%d" % max_mds)
+
+    def set_allow_dirfrags(self, yes):
+        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
+
+    def set_allow_multimds(self, yes):
+        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "allow_multimds", str(yes).lower(), '--yes-i-really-mean-it')
 
     def get_pgs_per_fs_pool(self):
         """
@@ -965,6 +971,14 @@ class Filesystem(MDSCluster):
             return False
         else:
             log.info("All objects for ino {0} size {1} are absent".format(ino, size))
+            return True
+
+    def dirfrag_exists(self, ino, frag):
+        try:
+            self.rados(["stat", "{0:x}.{1:08x}".format(ino, frag)])
+        except CommandFailedError as e:
+            return False
+        else:
             return True
 
     def rados(self, args, pool=None, namespace=None, stdin_data=None):

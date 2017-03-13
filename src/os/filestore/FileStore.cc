@@ -718,6 +718,14 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   }
   buf0->total = buf.f_blocks * buf.f_bsize;
   buf0->available = buf.f_bavail * buf.f_bsize;
+  // Adjust for writes pending in the journal
+  if (journal) {
+    uint64_t estimate = journal->get_journal_size_estimate();
+    if (buf0->available > estimate)
+      buf0->available -= estimate;
+    else
+      buf0->available = 0;
+  }
   return 0;
 }
 
@@ -1993,8 +2001,7 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
   if (cct->_conf->filestore_inject_stall) {
     int orig = cct->_conf->filestore_inject_stall;
     dout(5) << "_do_op filestore_inject_stall " << orig << ", sleeping" << dendl;
-    for (int n = 0; n < cct->_conf->filestore_inject_stall; n++)
-      sleep(1);
+    sleep(orig);
     cct->_conf->set_val("filestore_inject_stall", "0");
     dout(5) << "_do_op done stalling" << dendl;
   }
@@ -3006,7 +3013,7 @@ void FileStore::_do_transaction(
 	} else if (r == -ENOSPC) {
 	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
 	  // by partially applying transactions.
-	  msg = "ENOSPC handling not implemented";
+	  msg = "ENOSPC from disk filesystem, misconfigured cluster";
 	} else if (r == -ENOTEMPTY) {
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
 	} else if (r == -EPERM) {
@@ -5332,6 +5339,11 @@ int FileStore::_omap_setkeys(const coll_t& cid, const ghobject_t &hoid,
     }
   }
 skip:
+  if (g_conf->subsys.should_gather(ceph_subsys_filestore, 20)) {
+    for (auto& p : aset) {
+      dout(20) << __func__ << "  set " << p.first << dendl;
+    }
+  }
   r = object_map->set_keys(hoid, aset, &spos);
   dout(20) << __func__ << " " << cid << "/" << hoid << " = " << r << dendl;
   return r;

@@ -45,6 +45,36 @@ static void print_item_name(ostream& out, int t, CrushWrapper &crush)
     out << "bucket" << (-1-t);
 }
 
+static void print_bucket_class_ids(ostream& out, int t, CrushWrapper &crush)
+{
+  if (crush.class_bucket.count(t) == 0)
+    return;
+  auto &class_to_id = crush.class_bucket[t];
+  for (auto &i : class_to_id) {
+    int c = i.first;
+    int cid = i.second;
+    const char* class_name = crush.get_class_name(c);
+    assert(class_name);
+    out << "\tid " << cid << " class " << class_name << "\t\t# do not change unnecessarily\n";
+  }
+}
+
+static void print_item_class(ostream& out, int t, CrushWrapper &crush)
+{
+  const char *c = crush.get_item_class(t);
+  if (c)
+    out << " class " << c;
+}
+
+static void print_class(ostream& out, int t, CrushWrapper &crush)
+{
+  const char *c = crush.get_class_name(t);
+  if (c)
+    out << " class " << c;
+  else
+    out << " # unexpected class " << t;
+}
+
 static void print_rule_name(ostream& out, int t, CrushWrapper &crush)
 {
   const char *name = crush.get_rule_name(t);
@@ -63,12 +93,16 @@ static void print_fixedpoint(ostream& out, int i)
 
 int CrushCompiler::decompile_bucket_impl(int i, ostream &out)
 {
+  const char *name = crush.get_item_name(i);
+  if (name && !crush.is_valid_crush_name(name))
+    return 0;
   int type = crush.get_bucket_type(i);
   print_type_name(out, type, crush);
   out << " ";
   print_item_name(out, i, crush);
   out << " {\n";
   out << "\tid " << i << "\t\t# do not change unnecessarily\n";
+  print_bucket_class_ids(out, i, crush);
 
   out << "\t# weight ";
   print_fixedpoint(out, crush.get_bucket_weight(i));
@@ -183,6 +217,8 @@ int CrushCompiler::decompile_bucket(int cur,
 
 int CrushCompiler::decompile(ostream &out)
 {
+  crush.cleanup_classes();
+
   out << "# begin crush map\n";
 
   // only dump tunables if they differ from the defaults
@@ -208,6 +244,7 @@ int CrushCompiler::decompile(ostream &out)
   for (int i=0; i<crush.get_max_devices(); i++) {
     out << "device " << i << " ";
     print_item_name(out, i, crush);
+    print_item_class(out, i, crush);
     out << "\n";
   }
   
@@ -262,7 +299,19 @@ int CrushCompiler::decompile(ostream &out)
 	break;
       case CRUSH_RULE_TAKE:
 	out << "\tstep take ";
-	print_item_name(out, crush.get_rule_arg1(i, j), crush);
+	{
+          int step_item = crush.get_rule_arg1(i, j);
+          int original_item;
+          int c;
+          int res = crush.split_id_class(step_item, &original_item, &c);
+          if (res < 0)
+            return res;
+	  if (c >= 0)
+            step_item = original_item;
+          print_item_name(out, step_item, crush);
+	  if (c >= 0)
+	    print_class(out, c, crush);
+	}
 	out << "\n";
 	break;
       case CRUSH_RULE_EMIT:
@@ -361,7 +410,15 @@ int CrushCompiler::parse_device(iter_t const& i)
   item_id[name] = id;
   id_item[id] = name;
 
-  if (verbose) err << "device " << id << " '" << name << "'" << std::endl;
+  if (verbose) err << "device " << id << " '" << name << "'";
+
+  if (i->children.size() > 3) {
+    string c = string_node(i->children[4]);
+    crush.set_item_class(id, c);
+    if (verbose) err << " class" << " '" << c << "'" << std::endl;
+  } else {
+    if (verbose) err << std::endl;
+  }
   return 0;
 }
 
@@ -436,14 +493,33 @@ int CrushCompiler::parse_bucket(iter_t const& i)
   int hash = 0;
   set<int> used_items;
   int size = 0;
+  map<int32_t, int32_t> class_id;
   
   for (unsigned p=3; p<i->children.size()-1; p++) {
     iter_t sub = i->children.begin() + p;
     string tag = string_node(sub->children[0]);
     //err << "tag " << tag << std::endl;
-    if (tag == "id") 
-      id = int_node(sub->children[1]);
-    else if (tag == "alg") {
+    if (tag == "id") {
+      int maybe_id = int_node(sub->children[1]);
+      if (verbose) err << "bucket " << name << " id " << maybe_id;
+      if (sub->children.size() > 2) {
+        string class_name = string_node(sub->children[3]);
+        if (!crush.class_exists(class_name)) {
+          err << " unknown device class '" << class_name << "'" << std::endl;
+          return -EINVAL;
+        }
+        int cid = crush.get_class_id(class_name);
+        if (class_id.count(cid) != 0) {
+          err << "duplicate device class " << class_name << " for bucket " << name << std::endl;
+          return -ERANGE;
+        }
+        class_id[cid] = maybe_id;
+        if (verbose) err << " class" << " '" << class_name << "'" << std::endl;
+      } else {
+        id = maybe_id;
+        if (verbose) err << std::endl;
+      }
+    } else if (tag == "alg") {
       string a = string_node(sub->children[1]);
       if (a == "uniform")
 	alg = CRUSH_BUCKET_UNIFORM;
@@ -572,6 +648,9 @@ int CrushCompiler::parse_bucket(iter_t const& i)
     //err << "assigned id " << id << std::endl;
   }
 
+  for (auto &i : class_id)
+    crush.class_bucket[id][i.first] = i.second;
+
   if (verbose) err << "bucket " << name << " (" << id << ") " << size << " items and weight "
 		   << (float)bucketweight / (float)0x10000 << std::endl;
   id_item[id] = name;
@@ -593,6 +672,8 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 
 int CrushCompiler::parse_rule(iter_t const& i)
 {
+  crush.populate_classes();
+
   int start;  // rule name is optional!
  
   string rname = string_node(i->children[1]);
@@ -642,7 +723,35 @@ int CrushCompiler::parse_rule(iter_t const& i)
 	  err << "in rule '" << rname << "' item '" << item << "' not defined" << std::endl;
 	  return -1;
 	}
-	crush.set_rule_step_take(ruleno, step++, item_id[item]);
+        int id = item_id[item];
+        int c = -1;
+        string class_name;
+        if (s->children.size() > 2) {
+          class_name = string_node(s->children[3]);
+          c = crush.get_class_id(class_name);
+          if (c < 0)
+            return c;
+          if (crush.class_bucket.count(id) == 0) {
+            err << "in rule '" << rname << "' step take " << item
+                << " has no class information" << std::endl;
+            return -EINVAL;
+          }
+          if (crush.class_bucket[id].count(c) == 0) {
+            err << "in rule '" << rname << "' step take " << item
+                << " no matching bucket for class " << class_name << std::endl;
+            return -EINVAL;
+          }
+          id = crush.class_bucket[id][c];
+        }
+        if (verbose) {
+          err << "rule " << rname << " take " << item;
+          if (c < 0)
+            err << std::endl;
+          else
+            err << " remapped to " << crush.get_item_name(id) << std::endl;
+        }
+
+	crush.set_rule_step_take(ruleno, step++, id);
       }
       break;
 
@@ -773,6 +882,7 @@ int CrushCompiler::parse_crush(iter_t const& i)
   }
 
   //err << "max_devices " << crush.get_max_devices() << std::endl;
+  crush.cleanup_classes();
   crush.finalize();
   
   return 0;

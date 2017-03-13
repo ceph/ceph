@@ -19,7 +19,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::ManagedLock: " << this << " " <<  __func__
+#define dout_prefix *_dout << "librbd::ManagedLock: " << this << " " \
+                           <<  __func__
 
 namespace librbd {
 
@@ -663,7 +664,6 @@ void ManagedLock<I>::send_shutdown() {
     return;
   }
 
-  ldout(m_cct, 10) << dendl;
   assert(m_state == STATE_LOCKED);
   m_state = STATE_PRE_SHUTTING_DOWN;
 

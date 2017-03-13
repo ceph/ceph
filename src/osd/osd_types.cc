@@ -822,6 +822,10 @@ std::string pg_state_string(int state)
     oss << "incomplete+";
   if (state & PG_STATE_PEERED)
     oss << "peered+";
+  if (state & PG_STATE_SNAPTRIM)
+    oss << "snaptrim+";
+  if (state & PG_STATE_SNAPTRIM_WAIT)
+    oss << "snaptrim_wait+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -875,6 +879,10 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_ACTIVATING;
   else if (state == "peered")
     type = PG_STATE_PEERED;
+  else if (state == "snaptrim")
+    type = PG_STATE_SNAPTRIM;
+  else if (state == "snaptrim_wait")
+    type = PG_STATE_SNAPTRIM_WAIT;
   else
     type = -1;
   return type;
@@ -3919,37 +3927,6 @@ void object_copy_cursor_t::generate_test_instances(list<object_copy_cursor_t*>& 
 
 // -- object_copy_data_t --
 
-void object_copy_data_t::encode_classic(bufferlist& bl) const
-{
-  ::encode(size, bl);
-  ::encode(mtime, bl);
-  ::encode(attrs, bl);
-  ::encode(data, bl);
-  if (omap_data.length())
-    bl.append(omap_data);
-  else
-    ::encode((__u32)0, bl);
-  ::encode(cursor, bl);
-}
-
-void object_copy_data_t::decode_classic(bufferlist::iterator& bl)
-{
-  ::decode(size, bl);
-  ::decode(mtime, bl);
-  ::decode(attrs, bl);
-  ::decode(data, bl);
-  {
-    map<string,bufferlist> omap;
-    ::decode(omap, bl);
-    omap_data.clear();
-    if (!omap.empty())
-      ::encode(omap, omap_data);
-  }
-  ::decode(cursor, bl);
-  flags = 0;
-  data_digest = omap_digest = 0;
-}
-
 void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(7, 5, bl);
@@ -5365,7 +5342,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << " cookie " << op.op.notify.cookie;
       break;
     case CEPH_OSD_OP_COPY_GET:
-    case CEPH_OSD_OP_COPY_GET_CLASSIC:
       out << " max " << op.op.copy_get.max;
       break;
     case CEPH_OSD_OP_COPY_FROM:

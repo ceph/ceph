@@ -240,7 +240,7 @@ struct SignalHandler : public Thread {
     create("signal_handler");
   }
 
-  ~SignalHandler() {
+  ~SignalHandler() override {
     shutdown();
   }
 

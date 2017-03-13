@@ -219,7 +219,7 @@ void DataHealthService::service_tick()
     if (ours.fs_stats.avail_percent != last_warned_percent)
       mon->clog->warn()
 	<< "reached concerning levels of available space on local monitor storage"
-	<< " (" << ours.fs_stats.avail_percent << "% free)\n";
+	<< " (" << ours.fs_stats.avail_percent << "% free)";
     last_warned_percent = ours.fs_stats.avail_percent;
   } else {
     last_warned_percent = 0;

@@ -104,7 +104,7 @@ public:
     : m_object(new T),
       stray_okay(stray_okay),
       nondeterministic(nondeterministic) {}
-  ~DencoderBase() {
+  ~DencoderBase() override {
     delete m_object;
   }
 
@@ -220,7 +220,7 @@ public:
   MessageDencoderImpl() {
     m_object = new T;
   }
-  ~MessageDencoderImpl() {
+  ~MessageDencoderImpl() override {
     m_object->put();
   }
 

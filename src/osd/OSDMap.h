@@ -150,6 +150,9 @@ public:
 
     string cluster_snapshot;
 
+    float new_nearfull_ratio = -1;
+    float new_full_ratio = -1;
+
     mutable bool have_crc;      ///< crc values are defined
     uint32_t full_crc;  ///< crc of the resulting OSDMap
     mutable uint32_t inc_crc;   ///< crc of this incremental
@@ -243,6 +246,8 @@ private:
   string cluster_snapshot;
   bool new_blacklist_entries;
 
+  float full_ratio = 0, nearfull_ratio = 0;
+
   mutable uint64_t cached_up_osd_features;
 
   mutable bool crc_defined;
@@ -319,6 +324,14 @@ public:
       return cluster_snapshot;
     return string();
   }
+
+  float get_full_ratio() const {
+    return full_ratio;
+  }
+  float get_nearfull_ratio() const {
+    return nearfull_ratio;
+  }
+  void count_full_nearfull_osds(int *full, int *nearfull) const;
 
   /***** cluster state *****/
   /* osds */
@@ -784,14 +797,20 @@ public:
   /*
    * check whether an spg_t maps to a particular osd
    */
-  bool is_acting_osd_shard(spg_t pg, int osd) const {
-    vector<int> acting;
-    _pg_to_up_acting_osds(pg.pgid, NULL, NULL, &acting, NULL, false);
-    if (pg.shard == shard_id_t::NO_SHARD)
-      return calc_pg_role(osd, acting, acting.size()) >= 0;
-    if (pg.shard >= (int)acting.size())
-      return false;
-    return acting[pg.shard] == osd;
+  bool is_up_acting_osd_shard(spg_t pg, int osd) const {
+    vector<int> up, acting;
+    _pg_to_up_acting_osds(pg.pgid, &up, NULL, &acting, NULL, false);
+    if (pg.shard == shard_id_t::NO_SHARD) {
+      if (calc_pg_role(osd, acting, acting.size()) >= 0 ||
+	  calc_pg_role(osd, up, up.size()) >= 0)
+	return true;
+    } else {
+      if (pg.shard < (int)acting.size() && acting[pg.shard] == osd)
+	return true;
+      if (pg.shard < (int)up.size() && up[pg.shard] == osd)
+	return true;
+    }
+    return false;
   }
 
 

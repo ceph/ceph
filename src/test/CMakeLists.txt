@@ -502,6 +502,7 @@ endif(HAVE_BLKID)
 #following dependencies are run inside make check unit tests
 add_dependencies(tests
   ceph-mon
+  ceph-mgr
   ceph
   ceph-authtool
   get_command_descriptions

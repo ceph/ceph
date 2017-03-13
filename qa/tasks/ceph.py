@@ -15,6 +15,7 @@ import time
 import gevent
 import socket
 
+from paramiko import SSHException
 from ceph_manager import CephManager, write_conf
 from tasks.cephfs.filesystem import Filesystem
 from teuthology import misc as teuthology
@@ -132,6 +133,8 @@ def ceph_log(ctx, config):
                     # ConnectionLostError, we ignore this because nodes
                     # are allowed to get power cycled during tests.
                     log.debug("Missed logrotate, EOFError")
+                except SSHException as e:
+                    log.debug("Missed logrotate, SSHException")
                 except socket.error as e:
                     if e.errno == errno.EHOSTUNREACH:
                         log.debug("Missed logrotate, host unreachable")
@@ -334,39 +337,15 @@ def cephfs_setup(ctx, config):
     if mdss.remotes:
         log.info('Setting up CephFS filesystem...')
 
-        Filesystem(ctx, create='cephfs') # TODO: make Filesystem cluster-aware
+        fs = Filesystem(ctx, create='cephfs')
 
         is_active_mds = lambda role: 'mds.' in role and not role.endswith('-s') and '-s-' not in role
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
         num_active = len([r for r in all_roles if is_active_mds(r)])
-        mon_remote.run(
-            args=[
-                'sudo',
-                'adjust-ulimits',
-                'ceph-coverage',
-                coverage_dir,
-                'ceph', 'mds', 'set', 'allow_multimds', 'true',
-                '--yes-i-really-mean-it'],
-	    check_status=False,  # probably old version, upgrade test
-        )
-        mon_remote.run(args=[
-            'sudo',
-            'adjust-ulimits',
-            'ceph-coverage',
-            coverage_dir,
-            'ceph',
-            '--cluster', cluster_name,
-            'mds', 'set_max_mds', str(num_active)])
-        mon_remote.run(
-            args=[
-                'sudo',
-                'adjust-ulimits',
-                'ceph-coverage',
-                coverage_dir,
-                'ceph', 'mds', 'set', 'allow_dirfrags', 'true',
-                '--yes-i-really-mean-it'],
-	    check_status=False,  # probably old version, upgrade test
-        )
+
+        fs.set_allow_multimds(True)
+        fs.set_max_mds(num_active)
+        fs.set_allow_dirfrags(True)
 
     yield
 
@@ -1072,14 +1051,15 @@ def osd_scrub_pgs(ctx, config):
     loop = True
     while loop:
         stats = manager.get_pg_stats()
-        timez = [stat['last_scrub_stamp'] for stat in stats]
+        timez = [(stat['pgid'],stat['last_scrub_stamp']) for stat in stats]
         loop = False
         thiscnt = 0
-        for tmval in timez:
+        for (pgid, tmval) in timez:
             pgtm = time.strptime(tmval[0:tmval.find('.')], '%Y-%m-%d %H:%M:%S')
             if pgtm > check_time_now:
                 thiscnt += 1
             else:
+                log.info('pgid %s last_scrub_stamp %s %s <= %s', pgid, tmval, pgtm, check_time_now)
                 loop = True
         if thiscnt > prev_good:
             prev_good = thiscnt
@@ -1301,12 +1281,6 @@ def restart(ctx, config):
         ctx.daemons.get_daemon(type_, id_, cluster).restart()
         clusters.add(cluster)
 
-    if config.get('wait-for-healthy', True):
-        for cluster in clusters:
-            healthy(ctx=ctx, config=dict(cluster=cluster))
-    if config.get('wait-for-osds-up', False):
-        for cluster in clusters:
-            wait_for_osds_up(ctx=ctx, config=dict(cluster=cluster))
     manager = ctx.managers['ceph']
     for dmon in daemons:
         if '.' in dmon:
@@ -1314,6 +1288,13 @@ def restart(ctx, config):
             if dm_parts[1].isdigit():
                 if dm_parts[0] == 'osd':
                     manager.mark_down_osd(int(dm_parts[1]))
+
+    if config.get('wait-for-healthy', True):
+        for cluster in clusters:
+            healthy(ctx=ctx, config=dict(cluster=cluster))
+    if config.get('wait-for-osds-up', False):
+        for cluster in clusters:
+            wait_for_osds_up(ctx=ctx, config=dict(cluster=cluster))
     yield
 
 

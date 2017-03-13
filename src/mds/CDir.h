@@ -17,6 +17,7 @@
 #ifndef CEPH_CDIR_H
 #define CEPH_CDIR_H
 
+#include "include/counter.h"
 #include "include/types.h"
 #include "include/buffer_fwd.h"
 #include "common/bloom_filter.hpp"
@@ -41,7 +42,7 @@ class MDCache;
 struct ObjectOperation;
 
 ostream& operator<<(ostream& out, const class CDir& dir);
-class CDir : public MDSCacheObject {
+class CDir : public MDSCacheObject, public Counter<CDir> {
   friend ostream& operator<<(ostream& out, const class CDir& dir);
 
   /*
@@ -75,7 +76,7 @@ public:
   static const int PIN_EXPORTBOUND = 10;
   static const int PIN_STICKY =      11;
   static const int PIN_SUBTREETEMP = 12;  // used by MDCache::trim_non_auth()
-  const char *pin_name(int p) const {
+  const char *pin_name(int p) const override {
     switch (p) {
     case PIN_DNWAITER: return "dnwaiter";
     case PIN_INOWAITER: return "inowaiter";
@@ -168,7 +169,7 @@ public:
   CInode          *inode;  // my inode
   frag_t           frag;   // my frag
 
-  bool is_lt(const MDSCacheObject *r) const {
+  bool is_lt(const MDSCacheObject *r) const override {
     return dirfrag() < (static_cast<const CDir*>(r))->dirfrag();
   }
 
@@ -404,10 +405,6 @@ protected:
 
  public:
   CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth);
-  ~CDir() {
-    g_num_dir--;
-    g_num_dirs++;
-  }
 
   const scrub_info_t *scrub_info() const {
     if (!scrub_infop) {
@@ -521,7 +518,7 @@ private:
   std::string get_path() const;
 
  public:
-  mds_authority_t authority() const;
+  mds_authority_t authority() const override;
   mds_authority_t get_dir_auth() const { return dir_auth; }
   void set_dir_auth(mds_authority_t a);
   void set_dir_auth(mds_rank_t a) { set_dir_auth(mds_authority_t(a, CDIR_AUTH_UNKNOWN)); }
@@ -667,8 +664,8 @@ public:
 
 
   // -- reference counting --
-  void first_get();
-  void last_put();
+  void first_get() override;
+  void last_put() override;
 
   void request_pin_get() {
     if (request_pins == 0) get(PIN_REQUEST);
@@ -691,8 +688,8 @@ public:
   void take_dentry_waiting(const std::string& dentry, snapid_t first, snapid_t last, std::list<MDSInternalContextBase*>& ls);
   void take_sub_waiting(std::list<MDSInternalContextBase*>& ls);  // dentry or ino
 
-  void add_waiter(uint64_t mask, MDSInternalContextBase *c);
-  void take_waiting(uint64_t mask, std::list<MDSInternalContextBase*>& ls);  // may include dentry waiters
+  void add_waiter(uint64_t mask, MDSInternalContextBase *c) override;
+  void take_waiting(uint64_t mask, std::list<MDSInternalContextBase*>& ls) override;  // may include dentry waiters
   void finish_waiting(uint64_t mask, int result = 0);    // ditto
   
 
@@ -705,13 +702,13 @@ public:
   void decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls);
 
   // -- auth pins --
-  bool can_auth_pin() const { return is_auth() && !(is_frozen() || is_freezing()); }
+  bool can_auth_pin() const override { return is_auth() && !(is_frozen() || is_freezing()); }
   int get_cum_auth_pins() const { return auth_pins + nested_auth_pins; }
   int get_auth_pins() const { return auth_pins; }
   int get_nested_auth_pins() const { return nested_auth_pins; }
   int get_dir_auth_pins() const { return dir_auth_pins; }
-  void auth_pin(void *who);
-  void auth_unpin(void *who);
+  void auth_pin(void *who) override;
+  void auth_unpin(void *who) override;
 
   void adjust_nested_auth_pins(int inc, int dirinc, void *by);
   void verify_fragstat();
@@ -727,12 +724,12 @@ public:
 
   void maybe_finish_freeze();
 
-  bool is_freezing() const { return is_freezing_tree() || is_freezing_dir(); }
+  bool is_freezing() const override { return is_freezing_tree() || is_freezing_dir(); }
   bool is_freezing_tree() const;
   bool is_freezing_tree_root() const { return state & STATE_FREEZINGTREE; }
   bool is_freezing_dir() const { return state & STATE_FREEZINGDIR; }
 
-  bool is_frozen() const { return is_frozen_dir() || is_frozen_tree(); }
+  bool is_frozen() const override { return is_frozen_dir() || is_frozen_tree(); }
   bool is_frozen_tree() const;
   bool is_frozen_tree_root() const { return state & STATE_FROZENTREE; }
   bool is_frozen_dir() const { return state & STATE_FROZENDIR; }
@@ -762,8 +759,8 @@ public:
   CDir *get_frozen_tree_root();
 
 
-  ostream& print_db_line_prefix(ostream& out);
-  void print(ostream& out);
+  ostream& print_db_line_prefix(ostream& out) override;
+  void print(ostream& out) override;
   void dump(Formatter *f) const;
 };
 

@@ -131,7 +131,9 @@ void PGLog::trim(
 
 void PGLog::proc_replica_log(
   ObjectStore::Transaction& t,
-  pg_info_t &oinfo, const pg_log_t &olog, pg_missing_t& omissing,
+  pg_info_t &oinfo,
+  const pg_log_t &olog,
+  pg_missing_t& omissing,
   pg_shard_t from) const
 {
   dout(10) << "proc_replica_log for osd." << from << ": "

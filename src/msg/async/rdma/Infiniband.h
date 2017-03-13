@@ -67,14 +67,13 @@ class Device {
   ibv_device *device;
   const char* name;
   uint8_t  port_cnt;
-  Port** ports;
  public:
   explicit Device(CephContext *c, ibv_device* d);
   ~Device() {
-    for (uint8_t i = 0; i < port_cnt; ++i)
-      delete ports[i];
-    delete []ports;
-    assert(ibv_close_device(ctxt) == 0);
+    if (active_port) {
+      delete active_port;
+      assert(ibv_close_device(ctxt) == 0);
+    }
   }
   const char* get_name() { return name;}
   uint16_t get_lid() { return active_port->get_lid(); }
@@ -138,7 +137,7 @@ class Infiniband {
    public:
     class Chunk {
      public:
-      Chunk(char* b, uint32_t len, ibv_mr* m);
+      Chunk(ibv_mr* m, uint32_t len, char* b);
       ~Chunk();
 
       void set_offset(uint32_t o);
@@ -152,34 +151,40 @@ class Infiniband {
       bool over();
       void clear();
       void post_srq(Infiniband *ib);
-      void set_owner(uint64_t o);
-      uint64_t get_owner();
 
      public:
-      char* buffer;
+      ibv_mr* mr;
       uint32_t bytes;
       uint32_t bound;
       uint32_t offset;
-      ibv_mr* mr;
-      uint64_t owner;
+      char* buffer;
     };
 
     class Cluster {
      public:
       Cluster(MemoryManager& m, uint32_t s);
-      Cluster(MemoryManager& m, uint32_t s, uint32_t n);
       ~Cluster();
 
-      int add(uint32_t num);
-      void take_back(Chunk* ck);
+      int fill(uint32_t num);
+      void take_back(std::vector<Chunk*> &ck);
       int get_buffers(std::vector<Chunk*> &chunks, size_t bytes);
+      Chunk *get_chunk_by_buffer(const char *c) {
+        uint32_t idx = (c - base) / buffer_size;
+        Chunk *chunk = reinterpret_cast<Chunk*>(chunk_base + sizeof(Chunk) * idx);
+        return chunk;
+      }
+      bool is_my_buffer(const char *c) const {
+        return c >= base && c < end;
+      }
 
       MemoryManager& manager;
-      uint32_t chunk_size;
+      uint32_t buffer_size;
+      uint32_t num_chunk;
       Mutex lock;
       std::vector<Chunk*> free_chunks;
-      std::set<Chunk*> all_chunks;
-      char* base;
+      char *base = nullptr;
+      char *end = nullptr;
+      char* chunk_base;
     };
 
     MemoryManager(Device *d, ProtectionDomain *p, bool hugepage);
@@ -191,8 +196,14 @@ class Infiniband {
     void return_tx(std::vector<Chunk*> &chunks);
     int get_send_buffers(std::vector<Chunk*> &c, size_t bytes);
     int get_channel_buffers(std::vector<Chunk*> &chunks, size_t bytes);
-    int is_tx_chunk(Chunk* c) { return send->all_chunks.count(c);}
-    int is_rx_chunk(Chunk* c) { return channel->all_chunks.count(c);}
+    bool is_tx_buffer(const char* c) { return send->is_my_buffer(c); }
+    bool is_rx_buffer(const char* c) { return channel->is_my_buffer(c); }
+    Chunk *get_tx_chunk_by_buffer(const char *c) {
+      return send->get_chunk_by_buffer(c);
+    }
+    uint32_t get_tx_buffer_size() const {
+      return send->buffer_size;
+    }
 
     bool enabled_huge_page;
 
@@ -352,9 +363,9 @@ class Infiniband {
   MemoryManager* get_memory_manager() { return memory_manager; }
   Device* get_device() { return device; }
   int get_async_fd() { return device->ctxt->async_fd; }
-  int recall_chunk(Chunk* c);
-  int is_tx_chunk(Chunk* c) { return memory_manager->is_tx_chunk(c); }
-  int is_rx_chunk(Chunk* c) { return memory_manager->is_rx_chunk(c); }
+  bool is_tx_buffer(const char* c) { return memory_manager->is_tx_buffer(c);}
+  bool is_rx_buffer(const char* c) { return memory_manager->is_rx_buffer(c);}
+  Chunk *get_tx_chunk_by_buffer(const char *c) { return memory_manager->get_tx_chunk_by_buffer(c); }
   static const char* wc_status_to_string(int status);
   static const char* qp_state_string(int status);
 };

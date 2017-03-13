@@ -107,7 +107,7 @@ public:
                                             const std::string &snap_name,
 					    const cls::rbd::SnapshotNamespace &snap_namespace,
                                             uint64_t size,
-                                            const librbd::parent_spec &spec,
+                                            const librbd::ParentSpec &spec,
                                             uint64_t parent_overlap,
                                             Context *on_finish) {
     return new MockSnapshotCreateRequest(&mock_local_image_ctx, snap_name, snap_namespace, size,

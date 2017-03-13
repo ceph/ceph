@@ -402,6 +402,9 @@ struct pg_t {
   bool contains(int bits, const ghobject_t& oid) {
     return oid.match(bits, ps());
   }
+  bool contains(int bits, const hobject_t& oid) {
+    return oid.match(bits, ps());
+  }
 
   hobject_t get_hobj_start() const;
   hobject_t get_hobj_end(unsigned pg_num) const;
@@ -972,6 +975,8 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_UNDERSIZED    (1<<23) // pg acting < pool size
 #define PG_STATE_ACTIVATING   (1<<24) // pg is peered but not yet active
 #define PG_STATE_PEERED        (1<<25) // peered, cannot go active, can recover
+#define PG_STATE_SNAPTRIM      (1<<26) // trimming snaps
+#define PG_STATE_SNAPTRIM_WAIT (1<<27) // queued to trim snaps
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);
@@ -3714,8 +3719,6 @@ public:
     truncate_size(0) {}
 
   static void generate_test_instances(list<object_copy_data_t*>& o);
-  void encode_classic(bufferlist& bl) const;
-  void decode_classic(bufferlist::iterator& bl);
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;

@@ -68,7 +68,7 @@ struct MonSession : public RefCountedObject {
     proxy_con(NULL), proxy_tid(0) {
     time_established = ceph_clock_now();
   }
-  ~MonSession() {
+  ~MonSession() override {
     //generic_dout(0) << "~MonSession " << this << dendl;
     // we should have been removed before we get destructed; see MonSessionMap::remove_session()
     assert(!item.is_on_list());

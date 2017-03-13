@@ -109,6 +109,7 @@ static bool check_conds(list<obj_version_cond>& conds, obj_version& objv)
   for (list<obj_version_cond>::iterator iter = conds.begin(); iter != conds.end(); ++iter) {
     obj_version_cond& cond = *iter;
     obj_version& v = cond.ver;
+    CLS_LOG(20, "cls_version: check_version %s:%d (cond=%d)", v.tag.c_str(), (int)v.ver, (int)cond.cond);
 
     switch (cond.cond) {
       case VER_COND_NONE:

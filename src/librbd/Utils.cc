@@ -41,8 +41,8 @@ std::string unique_lock_name(const std::string &name, void *address) {
   return name + " (" + stringify(address) + ")";
 }
 
-librados::AioCompletion *create_rados_ack_callback(Context *on_finish) {
-  return create_rados_ack_callback<Context, &Context::complete>(on_finish);
+librados::AioCompletion *create_rados_callback(Context *on_finish) {
+  return create_rados_callback<Context, &Context::complete>(on_finish);
 }
 
 std::string generate_image_id(librados::IoCtx &ioctx) {

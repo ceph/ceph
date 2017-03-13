@@ -32,7 +32,7 @@ class ImageWatcher : public Watcher {
 
 public:
   ImageWatcher(ImageCtxT& image_ctx);
-  virtual ~ImageWatcher();
+  ~ImageWatcher() override;
 
   void unregister_watch(Context *on_finish);
 
@@ -104,7 +104,7 @@ private:
     {
     }
 
-    virtual int update_progress(uint64_t offset, uint64_t total) {
+    int update_progress(uint64_t offset, uint64_t total) override {
       m_image_watcher.schedule_async_progress(m_async_request_id, offset,
                                               total);
       return 0;
@@ -125,11 +125,11 @@ private:
     {
     }
 
-    virtual ~RemoteContext() {
+    ~RemoteContext() override {
       delete m_prog_ctx;
     }
 
-    virtual void finish(int r);
+    void finish(int r) override;
 
   private:
     ImageWatcher &m_image_watcher;
@@ -149,7 +149,7 @@ private:
         payload(payload) {
     }
 
-    virtual void finish(int r) override {
+    void finish(int r) override {
       image_watcher->process_payload(notify_id, handle, payload, r);
     }
   };
@@ -159,7 +159,7 @@ private:
 
     C_ResponseMessage(watcher::C_NotifyAck *notify_ack) : notify_ack(notify_ack) {
     }
-    virtual void finish(int r);
+    void finish(int r) override;
   };
 
   ImageCtxT &m_image_ctx;
@@ -245,10 +245,10 @@ private:
   void process_payload(uint64_t notify_id, uint64_t handle,
                              const watch_notify::Payload &payload, int r);
 
-  virtual void handle_notify(uint64_t notify_id, uint64_t handle,
-                             uint64_t notifier_id, bufferlist &bl);
-  virtual void handle_error(uint64_t cookie, int err);
-  virtual void handle_rewatch_complete(int r);
+  void handle_notify(uint64_t notify_id, uint64_t handle,
+                     uint64_t notifier_id, bufferlist &bl) override;
+  void handle_error(uint64_t cookie, int err) override;
+  void handle_rewatch_complete(int r) override;
 
   void send_notify(const watch_notify::Payload& payload,
                    Context *ctx = nullptr);

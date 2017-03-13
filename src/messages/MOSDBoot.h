@@ -37,12 +37,12 @@ class MOSDBoot : public PaxosServiceMessage {
     : PaxosServiceMessage(MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION),
       boot_epoch(0), osd_features(0)
   { }
-  MOSDBoot(OSDSuperblock& s, epoch_t be,
+  MOSDBoot(OSDSuperblock& s, epoch_t e, epoch_t be,
 	   const entity_addr_t& hb_back_addr_ref,
 	   const entity_addr_t& hb_front_addr_ref,
            const entity_addr_t& cluster_addr_ref,
 	   uint64_t feat)
-    : PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch, HEAD_VERSION, COMPAT_VERSION),
+    : PaxosServiceMessage(MSG_OSD_BOOT, e, HEAD_VERSION, COMPAT_VERSION),
       sb(s),
       hb_back_addr(hb_back_addr_ref),
       hb_front_addr(hb_front_addr_ref),
@@ -52,17 +52,17 @@ class MOSDBoot : public PaxosServiceMessage {
   { }
   
 private:
-  ~MOSDBoot() { }
+  ~MOSDBoot() override { }
 
 public:
-  const char *get_type_name() const { return "osd_boot"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_boot"; }
+  void print(ostream& out) const override {
     out << "osd_boot(osd." << sb.whoami << " booted " << boot_epoch
 	<< " features " << osd_features
 	<< " v" << version << ")";
   }
   
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(sb, payload);
     ::encode(hb_back_addr, payload, features);
@@ -72,7 +72,7 @@ public:
     ::encode(metadata, payload);
     ::encode(osd_features, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(sb, p);

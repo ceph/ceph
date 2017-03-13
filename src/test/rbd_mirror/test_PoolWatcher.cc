@@ -12,6 +12,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Mirror.h"
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "common/Mutex.h"
@@ -48,7 +49,7 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
     EXPECT_EQ("", connect_cluster_pp(*m_cluster));
   }
 
-  ~TestPoolWatcher() {
+  ~TestPoolWatcher() override {
     m_cluster->wait_for_latest_osdmap();
     for (auto& pool : m_pools) {
       EXPECT_EQ(0, m_cluster->pool_delete(pool.c_str()));
@@ -68,11 +69,12 @@ TestPoolWatcher() : m_lock("TestPoolWatcherLock"),
 
     m_pool_watcher.reset(new PoolWatcher(ioctx, 30, m_lock, m_cond));
     if (enable_mirroring) {
-      ASSERT_EQ(0, librbd::mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL));
+      ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(ioctx,
+                                                   RBD_MIRROR_MODE_POOL));
       std::string uuid;
-      ASSERT_EQ(0, librbd::mirror_peer_add(ioctx, &uuid,
-					   peer.cluster_name,
-					   peer.client_name));
+      ASSERT_EQ(0, librbd::api::Mirror<>::peer_add(ioctx, &uuid,
+                                                   peer.cluster_name,
+                                                   peer.client_name));
     }
     if (name != nullptr) {
       *name = pool_name;

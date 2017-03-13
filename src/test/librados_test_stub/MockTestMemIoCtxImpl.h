@@ -5,6 +5,7 @@
 #define LIBRADOS_TEST_STUB_MOCK_TEST_MEM_IO_CTX_IMPL_H
 
 #include "test/librados_test_stub/TestMemIoCtxImpl.h"
+#include "test/librados_test_stub/TestMemCluster.h"
 #include "gmock/gmock.h"
 
 namespace librados {
@@ -16,7 +17,7 @@ public:
   MockTestMemIoCtxImpl(MockTestMemRadosClient *mock_client,
                        TestMemRadosClient *client, int64_t pool_id,
                        const std::string& pool_name,
-                       TestMemRadosClient::Pool *pool)
+                       TestMemCluster::Pool *pool)
     : TestMemIoCtxImpl(client, pool_id, pool_name, pool),
       m_mock_client(mock_client), m_client(client) {
     default_to_parent();
@@ -26,7 +27,7 @@ public:
     return m_mock_client;
   }
 
-  virtual TestIoCtxImpl *clone() {
+  TestIoCtxImpl *clone() override {
     TestIoCtxImpl *io_ctx_impl = new ::testing::NiceMock<MockTestMemIoCtxImpl>(
       m_mock_client, m_client, get_pool_id(), get_pool_name(), get_pool());
     io_ctx_impl->set_snap_read(get_snap_read());
@@ -84,6 +85,10 @@ public:
     return TestMemIoCtxImpl::notify(o, bl, timeout_ms, pbl);
   }
 
+  MOCK_METHOD1(set_snap_read, void(snap_t));
+  void do_set_snap_read(snap_t snap_id) {
+    return TestMemIoCtxImpl::set_snap_read(snap_id);
+  }
   MOCK_METHOD5(sparse_read, int(const std::string& oid,
                                uint64_t off,
                                size_t len,
@@ -158,6 +163,7 @@ public:
     ON_CALL(*this, list_watchers(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_list_watchers));
     ON_CALL(*this, notify(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_notify));
     ON_CALL(*this, read(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_read));
+    ON_CALL(*this, set_snap_read(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_set_snap_read));
     ON_CALL(*this, sparse_read(_, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_sparse_read));
     ON_CALL(*this, remove(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_remove));
     ON_CALL(*this, selfmanaged_snap_create(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_selfmanaged_snap_create));

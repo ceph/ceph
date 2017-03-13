@@ -40,7 +40,7 @@ class AdminSocket : public Thread
 {
 public:
   AdminSocket(CephContext *cct);
-  virtual ~AdminSocket();
+  ~AdminSocket() override;
 
   /**
    * register an admin socket command
@@ -89,7 +89,7 @@ private:
   std::string destroy_shutdown_pipe();
   std::string bind_and_listen(const std::string &sock_path, int *fd);
 
-  void *entry();
+  void *entry() override;
   bool do_accept();
 
   CephContext *m_cct;

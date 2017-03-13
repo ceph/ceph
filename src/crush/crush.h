@@ -168,7 +168,7 @@ enum crush_algorithm {
          * they divide and conquer in a way that either gives certain
          * items precedence (e. g., those at the beginning of a list)
          * or obviates the need to consider entire subtrees of items
-         * at all. That im- proves the performance of the replica
+         * at all. That improves the performance of the replica
          * placement process, but can also introduce suboptimal
          * reorganization behavior when the contents of a bucket
          * change due an addition, removal, or re-weighting of an
@@ -376,13 +376,36 @@ struct crush_map {
 
 
 /* crush.c */
+/** @ingroup API
+ *
+ * Return the 16.16 fixed point weight of the item at __pos__ (zero
+ * based index) within the bucket __b__. If __pos__ is negative or
+ * greater or equal to the number of items in the bucket, return 0.
+ *
+ * @param b the bucket containing items
+ * @param pos the zero based index of the item
+ *
+ * @returns the 16.16 fixed point item weight
+ */
 extern int crush_get_bucket_item_weight(const struct crush_bucket *b, int pos);
 extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b);
 extern void crush_destroy_bucket_list(struct crush_bucket_list *b);
 extern void crush_destroy_bucket_tree(struct crush_bucket_tree *b);
 extern void crush_destroy_bucket_straw(struct crush_bucket_straw *b);
 extern void crush_destroy_bucket_straw2(struct crush_bucket_straw2 *b);
+/** @ingroup API
+ *
+ * Deallocate a bucket created via crush_add_bucket().
+ *
+ * @param bucket the bucket to deallocate
+ */
 extern void crush_destroy_bucket(struct crush_bucket *b);
+/** @ingroup API
+ *
+ * Deallocate a rule created via crush_add_rule().
+ *
+ * @param r the rule to deallocate
+ */
 extern void crush_destroy_rule(struct crush_rule *r);
 /** @ingroup API
  *

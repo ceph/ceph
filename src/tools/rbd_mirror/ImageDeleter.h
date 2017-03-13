@@ -68,7 +68,7 @@ private:
   public:
     ImageDeleterThread(ImageDeleter *image_deleter) :
       m_image_deleter(image_deleter) {}
-    void *entry() {
+    void *entry() override {
       m_image_deleter->run();
       return 0;
     }

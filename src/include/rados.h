@@ -114,6 +114,8 @@ struct ceph_eversion {
 #define CEPH_OSD_UP      (1<<1)
 #define CEPH_OSD_AUTOOUT (1<<2)  /* osd was automatically marked out */
 #define CEPH_OSD_NEW     (1<<3)  /* osd is new, never marked in */
+#define CEPH_OSD_FULL    (1<<4)  /* osd is at or above full threshold */
+#define CEPH_OSD_NEARFULL (1<<5) /* osd is at or above nearfull threshold */
 
 extern const char *ceph_osd_state_name(int s);
 
@@ -240,7 +242,7 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* tiering */							    \
 	f(COPY_FROM,	__CEPH_OSD_OP(WR, DATA, 26),	"copy-from")	    \
-	f(COPY_GET_CLASSIC, __CEPH_OSD_OP(RD, DATA, 27), "copy-get-classic") \
+	/* was copy-get-classic */					\
 	f(UNDIRTY,	__CEPH_OSD_OP(WR, DATA, 28),	"undirty")	    \
 	f(ISDIRTY,	__CEPH_OSD_OP(RD, DATA, 29),	"isdirty")	    \
 	f(COPY_GET,	__CEPH_OSD_OP(RD, DATA, 30),	"copy-get")	    \

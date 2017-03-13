@@ -28,6 +28,7 @@
 #include "MDCache.h"
 #include "Migrator.h"
 #include "MDLog.h"
+#include "PurgeQueue.h"
 #include "osdc/Journaler.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
@@ -87,7 +88,6 @@ enum {
   l_mdm_caps,
   l_mdm_rss,
   l_mdm_heap,
-  l_mdm_malloc,
   l_mdm_buf,
   l_mdm_last,
 };
@@ -159,6 +159,7 @@ class MDSRank {
     ScrubStack   *scrubstack;
     DamageTable  damage_table;
 
+
     InoTable     *inotable;
 
     SnapServer   *snapserver;
@@ -199,10 +200,20 @@ class MDSRank {
 
     void handle_write_error(int err);
 
+    void handle_conf_change(const struct md_config_t *conf,
+                            const std::set <std::string> &changed)
+    {
+      purge_queue.handle_conf_change(conf, changed, *mdsmap);
+    }
+
   protected:
     // Flag to indicate we entered shutdown: anyone seeing this to be true
     // after taking mds_lock must drop out.
     bool stopping;
+
+    // PurgeQueue is only used by StrayManager, but it is owned by MDSRank
+    // because its init/shutdown happens at the top level.
+    PurgeQueue   purge_queue;
 
     class ProgressThread : public Thread {
       MDSRank *mds;
@@ -477,7 +488,7 @@ public:
     assert(m);
     this->m = m;
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     mds->retry_dispatch(m);
   }
 };

@@ -217,10 +217,8 @@ class TestStandbyReplay(CephFSTestCase):
 
         # Create FS alpha and get mds_a to come up as active
         fs_a = self.mds_cluster.newfs("alpha")
-        fs_a.mon_manager.raw_cluster_cmd('fs', 'set', fs_a.name,
-                                         'allow_multimds', "true",
-                                         "--yes-i-really-mean-it")
-        fs_a.mon_manager.raw_cluster_cmd('fs', 'set', fs_a.name, 'max_mds', "2")
+        fs_a.set_allow_multimds(True)
+        fs_a.set_max_mds(2)
 
         self.mds_cluster.mds_restart(mds_a)
         self.wait_until_equal(lambda: fs_a.get_active_names(), [mds_a], 30)
@@ -239,7 +237,7 @@ class TestStandbyReplay(CephFSTestCase):
         self.assertEqual(info_a_s['state'], "up:standby-replay")
 
         # Shrink the cluster
-        fs_a.mon_manager.raw_cluster_cmd('fs', 'set', fs_a.name, 'max_mds', "1")
+        fs_a.set_max_mds(1)
         fs_a.mon_manager.raw_cluster_cmd("mds", "stop", "{0}:1".format(fs_a.name))
         self.wait_until_equal(
             lambda: fs_a.get_active_names(), [mds_a],
@@ -374,32 +372,27 @@ class TestMultiFilesystems(CephFSTestCase):
     def test_grow_shrink(self):
         # Usual setup...
         fs_a, fs_b = self._setup_two()
-        fs_a.mon_manager.raw_cluster_cmd("fs", "set", fs_a.name,
-                                         "allow_multimds", "true",
-                                         "--yes-i-really-mean-it")
-
-        fs_b.mon_manager.raw_cluster_cmd("fs", "set", fs_b.name,
-                                         "allow_multimds", "true",
-                                         "--yes-i-really-mean-it")
+        fs_a.set_allow_multimds(True)
+        fs_b.set_allow_multimds(True)
 
         # Increase max_mds on fs_b, see a standby take up the role
-        fs_b.mon_manager.raw_cluster_cmd('fs', 'set', fs_b.name, 'max_mds', "2")
+        fs_b.set_max_mds(2)
         self.wait_until_equal(lambda: len(fs_b.get_active_names()), 2, 30,
                               reject_fn=lambda v: v > 2 or v < 1)
 
         # Increase max_mds on fs_a, see a standby take up the role
-        fs_a.mon_manager.raw_cluster_cmd('fs', 'set', fs_a.name, 'max_mds', "2")
+        fs_a.set_max_mds(2)
         self.wait_until_equal(lambda: len(fs_a.get_active_names()), 2, 30,
                               reject_fn=lambda v: v > 2 or v < 1)
 
         # Shrink fs_b back to 1, see a daemon go back to standby
-        fs_b.mon_manager.raw_cluster_cmd('fs', 'set', fs_b.name, 'max_mds', "1")
-        fs_b.mon_manager.raw_cluster_cmd('mds', 'deactivate', "{0}:1".format(fs_b.name))
+        fs_b.set_max_mds(1)
+        fs_b.deactivate(1)
         self.wait_until_equal(lambda: len(fs_b.get_active_names()), 1, 30,
                               reject_fn=lambda v: v > 2 or v < 1)
 
         # Grow fs_a up to 3, see the former fs_b daemon join it.
-        fs_a.mon_manager.raw_cluster_cmd('fs', 'set', fs_a.name, 'max_mds', "3")
+        fs_a.set_max_mds(3)
         self.wait_until_equal(lambda: len(fs_a.get_active_names()), 3, 60,
                               reject_fn=lambda v: v > 3 or v < 2)
 
@@ -537,19 +530,13 @@ class TestMultiFilesystems(CephFSTestCase):
 
         # Create two filesystems which should have two ranks each
         fs_a = self.mds_cluster.newfs("alpha")
-        fs_a.mon_manager.raw_cluster_cmd("fs", "set", fs_a.name,
-                                         "allow_multimds", "true",
-                                         "--yes-i-really-mean-it")
+        fs_a.set_allow_multimds(True)
 
         fs_b = self.mds_cluster.newfs("bravo")
-        fs_b.mon_manager.raw_cluster_cmd("fs", "set", fs_b.name,
-                                         "allow_multimds", "true",
-                                         "--yes-i-really-mean-it")
+        fs_b.set_allow_multimds(True)
 
-        fs_a.mon_manager.raw_cluster_cmd('fs', 'set', fs_a.name,
-                                         'max_mds', "2")
-        fs_b.mon_manager.raw_cluster_cmd('fs', 'set', fs_b.name,
-                                         'max_mds', "2")
+        fs_a.set_max_mds(2)
+        fs_b.set_max_mds(2)
 
         # Set all the daemons to have a FSCID assignment but no other
         # standby preferences.

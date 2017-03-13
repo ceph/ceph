@@ -94,11 +94,11 @@ namespace librados {
     explicit C_PoolAsync_Safe(PoolAsyncCompletionImpl *_c) : c(_c) {
       c->get();
     }
-    ~C_PoolAsync_Safe() {
+    ~C_PoolAsync_Safe() override {
       c->put();
     }
   
-    void finish(int r) {
+    void finish(int r) override {
       c->lock.Lock();
       c->rval = r;
       c->done = true;

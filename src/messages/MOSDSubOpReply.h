@@ -60,7 +60,7 @@ public:
     return pgid;
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
@@ -95,7 +95,7 @@ public:
 
   void finish_decode() { }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid.pgid, payload);
@@ -116,8 +116,8 @@ public:
 
   epoch_t get_map_epoch() { return map_epoch; }
 
-  spg_t get_pg() { return pgid; }
-  hobject_t get_poid() { return poid; }
+  spg_t get_pg() const { return pgid; }
+  const hobject_t& get_poid() const { return poid; }
 
   int get_ack_type() { return ack_type; }
   bool is_ondisk() { return ack_type & CEPH_OSD_FLAG_ONDISK; }
@@ -136,7 +136,7 @@ public:
 
 public:
   MOSDSubOpReply(
-    MOSDSubOp *req, pg_shard_t from, int result_, epoch_t e, int at)
+    const MOSDSubOp *req, pg_shard_t from, int result_, epoch_t e, int at)
     : MOSDFastDispatchOp(MSG_OSD_SUBOPREPLY, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(e),
       reqid(req->reqid),
@@ -152,12 +152,12 @@ public:
   MOSDSubOpReply()
     : MOSDFastDispatchOp(MSG_OSD_SUBOPREPLY, HEAD_VERSION, COMPAT_VERSION) {}
 private:
-  ~MOSDSubOpReply() {}
+  ~MOSDSubOpReply() override {}
 
 public:
-  const char *get_type_name() const { return "osd_subop_reply"; }
+  const char *get_type_name() const override { return "osd_subop_reply"; }
   
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "osd_sub_op_reply(" << reqid
 	<< " " << pgid 
 	<< " " << poid << " " << ops;

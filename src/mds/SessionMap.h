@@ -329,7 +329,7 @@ public:
     completed_requests_dirty(false),
     num_trim_flushes_warnings(0),
     num_trim_requests_warnings(0) { }
-  ~Session() {
+  ~Session() override {
     assert(!item_session_list.is_on_list());
     while (!preopen_out_queue.empty()) {
       preopen_out_queue.front()->put();
@@ -450,7 +450,7 @@ public:
                        loaded_legacy(false)
   { }
 
-  ~SessionMap()
+  ~SessionMap() override
   {
     for (auto p : by_state)
       delete p.second;
@@ -490,7 +490,7 @@ public:
   }
 
   // sessions
-  void decode_legacy(bufferlist::iterator& blp);
+  void decode_legacy(bufferlist::iterator& blp) override;
   bool empty() const { return session_map.empty(); }
   const ceph::unordered_map<entity_name_t, Session*> &get_sessions() const
   {

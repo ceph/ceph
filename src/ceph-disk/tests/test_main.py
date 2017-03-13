@@ -14,6 +14,7 @@
 #
 from mock import patch, DEFAULT
 import os
+import platform
 import io
 import shutil
 import subprocess
@@ -283,6 +284,9 @@ class TestCephDisk(object):
         # a data partition that fails to mount is silently
         # ignored
         #
+        if platform.system() == "FreeBSD":
+            return
+
         partition_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
         disk = "Xda"
         partition = "Xda1"
@@ -315,6 +319,9 @@ class TestCephDisk(object):
             assert expect == main.list_devices()
 
     def test_list_dmcrypt_data(self):
+        if platform.system() == "FreeBSD":
+            return
+
         partition_type2type = {
             main.PTYPE['plain']['osd']['ready']: 'plain',
             main.PTYPE['luks']['osd']['ready']: 'LUKS',
@@ -589,6 +596,9 @@ class TestCephDisk(object):
         #
         # not swap, unknown fs type, not mounted, with uuid
         #
+        if platform.system() == "FreeBSD":
+            return
+
         partition_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
         partition_type = "e51adfb9-e9fd-4718-9fc1-7a0cb03ea3f4"
         disk = "Xda"

@@ -52,6 +52,7 @@
 #define MDS_INO_LOG_OFFSET        (2*MAX_MDS)
 #define MDS_INO_LOG_BACKUP_OFFSET (3*MAX_MDS)
 #define MDS_INO_LOG_POINTER_OFFSET    (4*MAX_MDS)
+#define MDS_INO_PURGE_QUEUE       (5*MAX_MDS)
 
 #define MDS_INO_SYSTEM_BASE       ((6*MAX_MDS) + (MAX_MDS * NUM_STRAY))
 
@@ -111,11 +112,6 @@ class mds_role_t
   }
 };
 std::ostream& operator<<(std::ostream &out, const mds_role_t &role);
-
-
-extern long g_num_ino, g_num_dir, g_num_dn, g_num_cap;
-extern long g_num_inoa, g_num_dira, g_num_dna, g_num_capa;
-extern long g_num_inos, g_num_dirs, g_num_dns, g_num_caps;
 
 
 // CAPS

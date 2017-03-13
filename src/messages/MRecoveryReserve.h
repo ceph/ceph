@@ -40,11 +40,11 @@ public:
       pgid(pgid), query_epoch(query_epoch),
       type(type) {}
 
-  const char *get_type_name() const {
+  const char *get_type_name() const override {
     return "MRecoveryReserve";
   }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "MRecoveryReserve ";
     switch (type) {
     case REQUEST:
@@ -61,7 +61,7 @@ public:
     return;
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid.pgid, p);
     ::decode(query_epoch, p);
@@ -72,7 +72,7 @@ public:
       pgid.shard = shard_id_t::NO_SHARD;
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(pgid.pgid, payload);
     ::encode(query_epoch, payload);
     ::encode(type, payload);

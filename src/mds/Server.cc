@@ -672,7 +672,7 @@ void Server::find_idle_sessions()
     utime_t age = now;
     age -= session->last_cap_renew;
     mds->clog->info() << "closing stale session " << session->info.inst
-	<< " after " << age << "\n";
+	<< " after " << age;
     dout(10) << "autoclosing stale session " << session->info.inst << " last " << session->last_cap_renew << dendl;
     kill_session(session, NULL);
   }
@@ -779,17 +779,17 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     mds->clog->info() << "denied reconnect attempt (mds is "
        << ceph_mds_state_name(mds->get_state())
        << ") from " << m->get_source_inst()
-       << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")\n";
+       << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")";
     deny = true;
   } else if (session->is_closed()) {
     dout(1) << " session is closed, ignoring reconnect, sending close" << dendl;
     mds->clog->info() << "denied reconnect attempt (mds is "
 	<< ceph_mds_state_name(mds->get_state())
-	<< ") from " << m->get_source_inst() << " (session is closed)\n";
+	<< ") from " << m->get_source_inst() << " (session is closed)";
     deny = true;
   } else if (mdcache->is_readonly()) {
     dout(1) << " read-only FS, ignoring reconnect, sending close" << dendl;
-    mds->clog->info() << "denied reconnect attempt (mds is read-only)\n";
+    mds->clog->info() << "denied reconnect attempt (mds is read-only)";
     deny = true;
   }
 
@@ -801,7 +801,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 
   // notify client of success with an OPEN
   m->get_connection()->send_message(new MClientSession(CEPH_SESSION_OPEN));
-  mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay << "\n";
+  mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
   
   // snaprealms
   for (vector<ceph_mds_snaprealm_reconnect>::iterator p = m->realms.begin();
@@ -1503,7 +1503,6 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
         req->get_op() == CEPH_MDS_OP_SETLAYOUT ||
         req->get_op() == CEPH_MDS_OP_RMXATTR ||
         req->get_op() == CEPH_MDS_OP_SETXATTR ||
-        req->get_op() == CEPH_MDS_OP_SETFILELOCK ||
         req->get_op() == CEPH_MDS_OP_CREATE ||
         req->get_op() == CEPH_MDS_OP_SYMLINK ||
         req->get_op() == CEPH_MDS_OP_MKSNAP ||
@@ -1738,8 +1737,9 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
   
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
     metareqid_t r = m->get_reqid();
-    if (!mdcache->have_uncommitted_master(r)) {
-      dout(10) << "handle_slave_request_reply ignoring reply from unknown reqid " << r << dendl;
+    if (!mdcache->have_uncommitted_master(r, from)) {
+      dout(10) << "handle_slave_request_reply ignoring slave reply from mds."
+	       << from << " reqid " << r << dendl;
       m->put();
       return;
     }
@@ -2075,10 +2075,9 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
     MDSCacheObjectInfo info;
     (*p)->set_object_info(info);
     reply->get_authpins().push_back(info);
+    if (*p == (MDSCacheObject*)auth_pin_freeze)
+      auth_pin_freeze->set_object_info(reply->get_authpin_freeze());
   }
-
-  if (auth_pin_freeze)
-    auth_pin_freeze->set_object_info(reply->get_authpin_freeze());
 
   if (wouldblock)
     reply->mark_error_wouldblock();
@@ -2112,6 +2111,16 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack)
     if (*p == ack->get_authpin_freeze())
       mdr->set_remote_frozen_auth_pin(static_cast<CInode *>(object));
     pinned.insert(object);
+  }
+
+  // removed frozen auth pin ?
+  if (mdr->more()->is_remote_frozen_authpin &&
+      ack->get_authpin_freeze() == MDSCacheObjectInfo()) {
+    auto p = mdr->remote_auth_pins.find(mdr->more()->rename_inode);
+    assert(p != mdr->remote_auth_pins.end());
+    if (p->second == from) {
+      mdr->more()->is_remote_frozen_authpin = false;
+    }
   }
 
   // removed auth pins?
@@ -2336,7 +2345,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     dout(0) << "WARNING: client specified " << useino << " and i allocated " << in->inode.ino << dendl;
     mds->clog->error() << mdr->client_request->get_source()
        << " specified ino " << useino
-       << " but mds." << mds->get_nodeid() << " allocated " << in->inode.ino << "\n";
+       << " but mds." << mds->get_nodeid() << " allocated " << in->inode.ino;
     //ceph_abort(); // just for now.
   }
     
@@ -5324,7 +5333,8 @@ void Server::_commit_slave_link(MDRequestRef& mdr, int r, CInode *targeti)
     // write a commit to the journal
     ESlaveUpdate *le = new ESlaveUpdate(mdlog, "slave_link_commit", mdr->reqid, mdr->slave_to_mds,
 					ESlaveUpdate::OP_COMMIT, ESlaveUpdate::LINK);
-    mdlog->start_submit_entry(le, new C_MDS_CommittedSlave(this, mdr));
+    mdlog->start_entry(le);
+    submit_mdlog_entry(le, new C_MDS_CommittedSlave(this, mdr), mdr, __func__);
     mdlog->flush();
   } else {
     do_link_rollback(mdr->more()->rollback_bl, mdr->slave_to_mds, mdr);
@@ -6484,7 +6494,8 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     // are involved in the rename operation.
     if (srcdnl->is_primary() && !mdr->more()->is_ambiguous_auth) {
       dout(10) << " preparing ambiguous auth for srci" << dendl;
-      mdr->set_ambiguous_auth(srci);
+      assert(mdr->more()->is_remote_frozen_authpin);
+      assert(mdr->more()->rename_inode == srci);
       _rename_prepare_witness(mdr, last, witnesses, srctrace, desttrace, straydn);
       return;
     }
@@ -7805,12 +7816,22 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
     le->commit.add_primary_dentry(target->get_projected_parent_dn(), target, true);
   }
 
-  if (force_journal_dest) {
-    dout(10) << " noting rename target ino " << target->ino() << " in metablob" << dendl;
-    le->commit.renamed_dirino = target->ino();
-  } else if (force_journal_src || (in && in->is_dir() && srcdn->authority().first == whoami)) {
+  if (in && in->is_dir() && (srcdn->authority().first == whoami || force_journal_src)) {
     dout(10) << " noting renamed dir ino " << in->ino() << " in metablob" << dendl;
     le->commit.renamed_dirino = in->ino();
+    if (srcdn->authority().first == whoami) {
+      list<CDir*> ls;
+      in->get_dirfrags(ls);
+      for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+	CDir *dir = *p;
+	if (!dir->is_auth())
+	  le->commit.renamed_dir_frags.push_back(dir->get_frag());
+      }
+      dout(10) << " noting renamed dir open frags " << le->commit.renamed_dir_frags << dendl;
+    }
+  } else if (force_journal_dest) {
+    dout(10) << " noting rename target ino " << target->ino() << " in metablob" << dendl;
+    le->commit.renamed_dirino = target->ino();
   }
   
   if (target && target->is_dir()) {
@@ -7901,8 +7922,10 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
       mdr->more()->is_ambiguous_auth = false;
     }
     mds->queue_waiters(finished);
-    if (finish_mdr)
+    if (finish_mdr || mdr->aborted)
       mdcache->request_finish(mdr);
+    else
+      mdr->more()->slave_rolling_back = false;
   }
 
   mdcache->finish_rollback(mut->reqid);
@@ -7920,6 +7943,11 @@ void Server::handle_slave_rename_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *a
 
   // note slave
   mdr->more()->slaves.insert(from);
+  if (mdr->more()->srcdn_auth_mds == from &&
+      mdr->more()->is_remote_frozen_authpin &&
+      !mdr->more()->is_ambiguous_auth) {
+    mdr->set_ambiguous_auth(mdr->more()->rename_inode);
+  }
 
   // witnessed?  or add extra witnesses?
   assert(mdr->more()->witnessed.count(from) == 0);

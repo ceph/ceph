@@ -110,6 +110,8 @@ struct librados::IoCtxImpl {
   // io
   int nlist(Objecter::NListContext *context, int max_entries);
   uint32_t nlist_seek(Objecter::NListContext *context, uint32_t pos);
+  uint32_t nlist_seek(Objecter::NListContext *context, const rados_object_list_cursor& cursor);
+  rados_object_list_cursor nlist_get_cursor(Objecter::NListContext *context);
   void object_list_slice(
     const hobject_t start,
     const hobject_t finish,
@@ -160,7 +162,7 @@ struct librados::IoCtxImpl {
     time_t *pmtime;
     ceph::real_time mtime;
     C_aio_stat_Ack(AioCompletionImpl *_c, time_t *pm);
-    void finish(int r);
+    void finish(int r) override;
   };
 
   struct C_aio_stat2_Ack : public Context {
@@ -168,7 +170,7 @@ struct librados::IoCtxImpl {
     struct timespec *pts;
     ceph::real_time mtime;
     C_aio_stat2_Ack(AioCompletionImpl *_c, struct timespec *pts);
-    void finish(int r);
+    void finish(int r) override;
   };
 
   struct C_aio_Complete : public Context {
@@ -177,7 +179,7 @@ struct librados::IoCtxImpl {
 #endif
     AioCompletionImpl *c;
     explicit C_aio_Complete(AioCompletionImpl *_c);
-    void finish(int r);
+    void finish(int r) override;
   };
 
   int aio_read(const object_t oid, AioCompletionImpl *c,

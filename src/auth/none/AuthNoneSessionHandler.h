@@ -21,28 +21,28 @@ class AuthNoneSessionHandler  : public AuthSessionHandler {
 public:
   AuthNoneSessionHandler(CephContext *cct_, CryptoKey session_key)
     : AuthSessionHandler(cct_, CEPH_AUTH_NONE, session_key) {}
-  ~AuthNoneSessionHandler() {}
+  ~AuthNoneSessionHandler() override {}
   
-  bool no_security() {
+  bool no_security() override {
     return true;
   }
 
   // The None suite neither signs nor encrypts messages, so these functions just return success.
   // Since nothing was signed or encrypted, don't increment the stats.  PLR
 
-  int sign_message(Message *m) {
+  int sign_message(Message *m) override {
     return 0;
   }
 
-  int check_message_signature(Message *m) {
+  int check_message_signature(Message *m) override {
     return 0;
   }
 
-  int encrypt_message(Message *m) {
+  int encrypt_message(Message *m) override {
     return 0;
   }
 
-  int decrypt_message(Message *m) {
+  int decrypt_message(Message *m) override {
     return 0;
   }
 

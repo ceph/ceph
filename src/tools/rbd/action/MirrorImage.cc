@@ -229,7 +229,8 @@ int execute_status(const po::variables_map &vm) {
   }
 
   std::string state = utils::mirror_image_status_state(status);
-  std::string last_update = utils::timestr(status.last_update);
+  std::string last_update = (
+    status.last_update == 0 ? "" : utils::timestr(status.last_update));
 
   if (formatter != nullptr) {
     formatter->open_object_section("image");

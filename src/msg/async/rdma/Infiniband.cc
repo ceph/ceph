@@ -127,16 +127,16 @@ Device::Device(CephContext *cct, ibv_device* d): device(d), device_attr(new ibv_
 
 void Device::binding_port(CephContext *cct, uint8_t port_num) {
   port_cnt = device_attr->phys_port_cnt;
-  ports = new Port*[port_cnt];
   for (uint8_t i = 0; i < port_cnt; ++i) {
-    ports[i] = new Port(cct, ctxt, i+1);
-    if (i+1 == port_num && ports[i]->get_port_attr()->state == IBV_PORT_ACTIVE) {
-      active_port = ports[i];
+    Port *port = new Port(cct, ctxt, i+1);
+    if (i + 1 == port_num && port->get_port_attr()->state == IBV_PORT_ACTIVE) {
+      active_port = port;
       ldout(cct, 1) << __func__ << " found active port " << i+1 << dendl;
-      return ;
+      break;
     } else {
-      ldout(cct, 10) << __func__ << " port " << i+1 << " is not what we want. state: " << ports[i]->get_port_attr()->state << ")"<< dendl;
+      ldout(cct, 10) << __func__ << " port " << i+1 << " is not what we want. state: " << port->get_port_attr()->state << ")"<< dendl;
     }
+    delete port;
   }
   if (nullptr == active_port) {
     lderr(cct) << __func__ << "  port not found" << dendl;
@@ -190,8 +190,11 @@ int Infiniband::QueuePair::init()
   qp = ibv_create_qp(pd, &qpia);
   if (qp == NULL) {
     lderr(cct) << __func__ << " failed to create queue pair" << cpp_strerror(errno) << dendl;
-    lderr(cct) << __func__ << " try reducing ms_async_rdma_receive_buffers or"
-	" ms_async_rdma_send_buffers" << dendl;
+    if (errno == ENOMEM) {
+      lderr(cct) << __func__ << " try reducing ms_async_rdma_receive_buffers, "
+				" ms_async_rdma_send_buffers or"
+				" ms_async_rdma_buffer_size" << dendl;
+    }
     return -1;
   }
 
@@ -471,8 +474,8 @@ Infiniband::ProtectionDomain::~ProtectionDomain()
 }
 
 
-Infiniband::MemoryManager::Chunk::Chunk(char* b, uint32_t len, ibv_mr* m)
-  : buffer(b), bytes(len), offset(0), mr(m)
+Infiniband::MemoryManager::Chunk::Chunk(ibv_mr* m, uint32_t len, char* b)
+  : mr(m), bytes(len), offset(0), buffer(b)
 {
 }
 
@@ -557,79 +560,77 @@ void Infiniband::MemoryManager::Chunk::post_srq(Infiniband *ib)
   ib->post_chunk(this);
 }
 
-void Infiniband::MemoryManager::Chunk::set_owner(uint64_t o)
-{
-  owner = o;
-}
-
-uint64_t Infiniband::MemoryManager::Chunk::get_owner()
-{
-  return owner;
-}
-
-
 Infiniband::MemoryManager::Cluster::Cluster(MemoryManager& m, uint32_t s)
-  : manager(m), chunk_size(s), lock("cluster_lock")
+  : manager(m), buffer_size(s), lock("cluster_lock")
 {
-}
-
-Infiniband::MemoryManager::Cluster::Cluster(MemoryManager& m, uint32_t s, uint32_t n)
-  : manager(m), chunk_size(s), lock("cluster_lock")
-{
-  add(n);
 }
 
 Infiniband::MemoryManager::Cluster::~Cluster()
 {
-  set<Chunk*>::iterator c = all_chunks.begin();
-  while(c != all_chunks.end()) {
-    delete *c;
-    ++c;
+  char *p = chunk_base;
+  for (uint32_t i = 0; i < num_chunk; i++){
+    Chunk *chunk = reinterpret_cast<Chunk*>(p);
+    chunk->~Chunk();
+    p += sizeof(Chunk);
   }
+
+  ::free(chunk_base);
   if (manager.enabled_huge_page)
     manager.free_huge_pages(base);
   else
-    delete base;
+    ::free(base);
 }
 
-int Infiniband::MemoryManager::Cluster::add(uint32_t num)
+int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
 {
-  uint32_t bytes = chunk_size * num;
-  //cihar* base = (char*)malloc(bytes);
+  assert(!base);
+  num_chunk = num;
+  uint32_t bytes = buffer_size * num;
   if (manager.enabled_huge_page) {
     base = (char*)manager.malloc_huge_pages(bytes);
   } else {
     base = (char*)memalign(CEPH_PAGE_SIZE, bytes);
   }
+  end = base + bytes;
   assert(base);
-  for (uint32_t offset = 0; offset < bytes; offset += chunk_size){
-    ibv_mr* m = ibv_reg_mr(manager.pd->pd, base+offset, chunk_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
+  chunk_base = (char*)::malloc(sizeof(Chunk) * num);
+  memset(chunk_base, 0, sizeof(Chunk) * num);
+  free_chunks.reserve(num);
+  char *ptr = chunk_base;
+  for (uint32_t offset = 0; offset < bytes; offset += buffer_size){
+    Chunk *chunk = reinterpret_cast<Chunk*>(ptr);
+    ibv_mr* m = ibv_reg_mr(manager.pd->pd, base+offset, buffer_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
     assert(m);
-    Chunk* c = new Chunk(base+offset,chunk_size,m);
-    free_chunks.push_back(c);
-    all_chunks.insert(c);
+    new(chunk) Chunk(m, buffer_size, base+offset);
+    free_chunks.push_back(chunk);
+    ptr += sizeof(Chunk);
   }
   return 0;
 }
 
-void Infiniband::MemoryManager::Cluster::take_back(Chunk* ck)
+void Infiniband::MemoryManager::Cluster::take_back(std::vector<Chunk*> &ck)
 {
   Mutex::Locker l(lock);
-  free_chunks.push_back(ck);
+  for (auto c : ck) {
+    c->clear();
+    free_chunks.push_back(c);
+  }
 }
 
 int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk*> &chunks, size_t bytes)
 {
-  uint32_t num = bytes / chunk_size + 1;
-  if (bytes % chunk_size == 0)
+  uint32_t num = bytes / buffer_size + 1;
+  if (bytes % buffer_size == 0)
     --num;
   int r = num;
   Mutex::Locker l(lock);
   if (free_chunks.empty())
     return 0;
   if (!bytes) {
-    free_chunks.swap(chunks);
-    r = chunks.size();
+    r = free_chunks.size();
+    for (auto c : free_chunks)
+      chunks.push_back(c);
+    free_chunks.clear();
     return r;
   }
   if (free_chunks.size() < num) {
@@ -688,18 +689,15 @@ void Infiniband::MemoryManager::register_rx_tx(uint32_t size, uint32_t rx_num, u
   assert(device);
   assert(pd);
   channel = new Cluster(*this, size);
-  channel->add(rx_num);
+  channel->fill(rx_num);
 
   send = new Cluster(*this, size);
-  send->add(tx_num);
+  send->fill(tx_num);
 }
 
 void Infiniband::MemoryManager::return_tx(std::vector<Chunk*> &chunks)
 {
-  for (auto c : chunks) {
-    c->clear();
-    send->take_back(c);
-  }
+  send->take_back(chunks);
 }
 
 int Infiniband::MemoryManager::get_send_buffers(std::vector<Chunk*> &c, size_t bytes)
@@ -782,20 +780,6 @@ int Infiniband::get_tx_buffers(std::vector<Chunk*> &c, size_t bytes)
   return memory_manager->get_send_buffers(c, bytes);
 }
 
-int Infiniband::recall_chunk(Chunk* c)
-{
-  if (memory_manager->is_rx_chunk(c)) {
-    post_chunk(c);  
-    return 1;
-  } else if (memory_manager->is_tx_chunk(c)) {
-    vector<Chunk*> v;
-    v.push_back(c);
-    memory_manager->return_tx(v);  
-    return 2;
-  }
-  return -1;
-}
-
 /**
  * Create a new QueuePair. This factory should be used in preference to
  * the QueuePair constructor directly, since this lets derivatives of
@@ -834,7 +818,7 @@ int Infiniband::post_chunk(Chunk* chunk)
   ibv_recv_wr *badWorkRequest;
   int ret = ibv_post_srq_recv(srq, &rx_work_request, &badWorkRequest);
   if (ret)
-    return -1;
+    return -errno;
   return 0;
 }
 
@@ -888,12 +872,12 @@ int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
   }
   if (r < 0) {
     r = -errno;
-    lderr(cct) << __func__ << " got error " << errno << ": "
-               << cpp_strerror(errno) << dendl;
+    lderr(cct) << __func__ << " got error " << r << ": "
+               << cpp_strerror(r) << dendl;
   } else if (r == 0) { // valid disconnect message of length 0
     ldout(cct, 10) << __func__ << " got disconnect message " << dendl;
   } else if ((size_t)r != sizeof(msg)) { // invalid message
-    ldout(cct, 1) << __func__ << " got bad length (" << r << "): " << cpp_strerror(errno) << dendl;
+    ldout(cct, 1) << __func__ << " got bad length (" << r << ") " << dendl;
     r = -EINVAL;
   } else { // valid message
     sscanf(msg, "%hu:%x:%x:%x:%s", &(im.lid), &(im.qpn), &(im.psn), &(im.peer_qpn),gid);

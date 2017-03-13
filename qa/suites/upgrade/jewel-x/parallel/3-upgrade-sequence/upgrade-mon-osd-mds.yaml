@@ -13,6 +13,11 @@ upgrade-sequence:
    - sleep:
        duration: 60
    - ceph.restart:
+       daemons: [mon.b, mon.c]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
        daemons: [osd.0, osd.1]
        wait-for-healthy: true
    - sleep:
@@ -25,18 +30,9 @@ upgrade-sequence:
       mon.b:
         - sudo ceph osd crush tunables jewel
    - print: "**** done ceph osd crush tunables jewel"
-   - ceph.restart:
-       daemons: [mon.b, mon.c]
-       wait-for-healthy: true
    - sleep:
        duration: 60
    - ceph.restart:
        daemons: [osd.2, osd.3]
        wait-for-healthy: false
        wait-for-osds-up: true
-   - exec:
-       mon.a:
-         - ceph osd set require_kraken_osds
-   - ceph.restart: [osd.3]
-   - sleep:
-       duration: 60

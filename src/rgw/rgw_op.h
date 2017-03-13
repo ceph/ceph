@@ -182,7 +182,7 @@ public:
   void pre_exec();
   void execute();
   int read_user_manifest_part(rgw_bucket& bucket,
-                              const RGWObjEnt& ent,
+                              const rgw_bucket_dir_entry& ent,
                               RGWAccessControlPolicy *bucket_policy,
                               off_t start_ofs,
                               off_t end_ofs);
@@ -429,7 +429,7 @@ protected:
   string encoding_type;
   bool list_versions;
   int max;
-  vector<RGWObjEnt> objs;
+  vector<rgw_bucket_dir_entry> objs;
   map<string, bool> common_prefixes;
 
   int default_max;
@@ -776,10 +776,10 @@ public:
   RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
   next(next){}
   virtual ~RGWPutObj_Filter() {}
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again) override {
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override {
     return next->handle_data(bl, ofs, phandle, pobj, again);
   }
-  virtual int throttle_data(void *handle, const rgw_obj& obj, uint64_t size, bool need_to_wait) override {
+  virtual int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override {
     return next->throttle_data(handle, obj, size, need_to_wait);
   }
 }; /* RGWPutObj_Filter */
@@ -1429,7 +1429,7 @@ public:
 };
 
 struct RGWMultipartUploadEntry {
-  RGWObjEnt obj;
+  rgw_bucket_dir_entry obj;
   RGWMPObj mp;
 };
 
@@ -1604,7 +1604,7 @@ static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
   bool again = false;
   do {
     void *handle;
-    rgw_obj obj;
+    rgw_raw_obj obj;
 
     uint64_t size = data.length();
 
@@ -1765,5 +1765,33 @@ public:
   virtual RGWOpType get_type() { return RGW_OP_SET_ATTRS; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
+
+class RGWGetObjLayout : public RGWOp {
+protected:
+  RGWRados::Object *target{nullptr};
+  RGWObjManifest *manifest{nullptr};
+  rgw_raw_obj head_obj;
+
+public:
+  RGWGetObjLayout() {
+    delete target;
+  }
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("admin", RGW_CAP_READ);
+  }
+  int verify_permission() {
+    return check_caps(s->user->caps);
+  }
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_obj_layout"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_OBJ_LAYOUT; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
+
 
 #endif /* CEPH_RGW_OP_H */

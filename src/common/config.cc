@@ -27,6 +27,7 @@
 #include "msg/msg_types.h"
 #include "osd/osd_types.h"
 #include "common/errno.h"
+#include "common/hostname.h"
 
 #include "include/assert.h"
 
@@ -1267,9 +1268,14 @@ bool md_config_t::expand_meta(std::string &origval,
 	else if (var == "cluster")
 	  out += cluster;
 	else if (var == "name")
-	  out += name.to_cstr();
+          out += name.to_cstr();
 	else if (var == "host")
-	  out += host;
+        {
+          if (host == "")
+            out += ceph_get_short_hostname();
+          else
+	    out += host;
+        }
 	else if (var == "num")
 	  out += name.get_id().c_str();
 	else if (var == "id")

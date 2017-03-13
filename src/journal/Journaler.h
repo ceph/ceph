@@ -123,7 +123,7 @@ private:
     C_InitJournaler(Journaler *_journaler, Context *_on_safe)
       : journaler(_journaler), on_safe(_on_safe) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       if (r == 0) {
 	r = journaler->init_complete();
       }

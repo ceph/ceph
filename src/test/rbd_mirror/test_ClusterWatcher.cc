@@ -5,6 +5,7 @@
 #include "common/errno.h"
 #include "common/Mutex.h"
 #include "librbd/internal.h"
+#include "librbd/api/Mirror.h"
 #include "tools/rbd_mirror/ClusterWatcher.h"
 #include "tools/rbd_mirror/types.h"
 #include "test/rbd_mirror/test_fixture.h"
@@ -36,7 +37,7 @@ public:
     m_cluster_watcher.reset(new ClusterWatcher(m_cluster, m_lock));
   }
 
-  ~TestClusterWatcher() {
+  ~TestClusterWatcher() override {
     m_cluster->wait_for_latest_osdmap();
     for (auto& pool : m_pools) {
       EXPECT_EQ(0, m_cluster->pool_delete(pool.c_str()));
@@ -54,13 +55,15 @@ public:
     if (enable_mirroring) {
       librados::IoCtx ioctx;
       ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
-      ASSERT_EQ(0, librbd::mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL));
+      ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(ioctx,
+                                                   RBD_MIRROR_MODE_POOL));
 
       std::string gen_uuid;
-      ASSERT_EQ(0, librbd::mirror_peer_add(ioctx,
-                                           uuid != nullptr ? uuid : &gen_uuid,
-					   peer.cluster_name,
-					   peer.client_name));
+      ASSERT_EQ(0, librbd::api::Mirror<>::peer_add(ioctx,
+                                                   uuid != nullptr ? uuid :
+                                                                     &gen_uuid,
+					           peer.cluster_name,
+					           peer.client_name));
       m_pool_peers[pool_id].insert(peer);
       m_mirrored_pools.insert(pool_name);
     }

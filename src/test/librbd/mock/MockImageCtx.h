@@ -5,7 +5,6 @@
 #define CEPH_TEST_LIBRBD_MOCK_IMAGE_CTX_H
 
 #include "include/rados/librados.hpp"
-#include "test/librbd/mock/MockAioImageRequestWQ.h"
 #include "test/librbd/mock/MockContextWQ.h"
 #include "test/librbd/mock/MockExclusiveLock.h"
 #include "test/librbd/mock/MockImageState.h"
@@ -14,6 +13,7 @@
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librbd/mock/MockOperations.h"
 #include "test/librbd/mock/MockReadahead.h"
+#include "test/librbd/mock/io/MockImageRequestWQ.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
@@ -36,6 +36,8 @@ struct MockImageCtx {
     assert(s_instance != nullptr);
     return s_instance;
   }
+  MOCK_METHOD0(destroy, void());
+
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),
       cct(image_ctx.cct),
@@ -51,6 +53,7 @@ struct MockImageCtx {
       object_set(image_ctx.object_set),
       old_format(image_ctx.old_format),
       read_only(image_ctx.read_only),
+      clone_copy_on_read(image_ctx.clone_copy_on_read),
       lockers(image_ctx.lockers),
       exclusive_locked(image_ctx.exclusive_locked),
       lock_tag(image_ctx.lock_tag),
@@ -75,7 +78,7 @@ struct MockImageCtx {
       format_string(image_ctx.format_string),
       group_spec(image_ctx.group_spec),
       layout(image_ctx.layout),
-      aio_work_queue(new MockAioImageRequestWQ()),
+      io_work_queue(new io::MockImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
       readahead_max_bytes(image_ctx.readahead_max_bytes),
       parent(NULL), operations(new MockOperations()),
@@ -116,7 +119,7 @@ struct MockImageCtx {
     delete operations;
     delete image_watcher;
     delete op_work_queue;
-    delete aio_work_queue;
+    delete io_work_queue;
   }
 
   void wait_for_async_requests() {
@@ -144,7 +147,7 @@ struct MockImageCtx {
   MOCK_CONST_METHOD2(get_snap_namespace, int(librados::snap_t,
 					     cls::rbd::SnapshotNamespace *out_snap_namespace));
   MOCK_CONST_METHOD2(get_parent_spec, int(librados::snap_t in_snap_id,
-                                          parent_spec *pspec));
+                                          ParentSpec *pspec));
 
   MOCK_CONST_METHOD2(is_snap_protected, int(librados::snap_t in_snap_id,
                                             bool *is_protected));
@@ -154,7 +157,7 @@ struct MockImageCtx {
   MOCK_METHOD8(add_snap, void(std::string in_snap_name,
 			      cls::rbd::SnapshotNamespace in_snap_namespace,
 			      librados::snap_t id,
-			      uint64_t in_size, parent_info parent,
+			      uint64_t in_size, const ParentInfo &parent,
 			      uint8_t protection_status, uint64_t flags, utime_t timestamp));
   MOCK_METHOD2(rm_snap, void(std::string in_snap_name, librados::snap_t id));
 
@@ -208,6 +211,8 @@ struct MockImageCtx {
   bool old_format;
   bool read_only;
 
+  bool clone_copy_on_read;
+
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> lockers;
   bool exclusive_locked;
@@ -234,7 +239,7 @@ struct MockImageCtx {
   std::string header_oid;
   std::string id;
   std::string name;
-  parent_info parent_md;
+  ParentInfo parent_md;
   char *format_string;
   cls::rbd::GroupSpec group_spec;
 
@@ -244,7 +249,7 @@ struct MockImageCtx {
   xlist<AsyncRequest<MockImageCtx>*> async_requests;
   std::list<Context*> async_requests_waiters;
 
-  MockAioImageRequestWQ *aio_work_queue;
+  io::MockImageRequestWQ *io_work_queue;
   MockContextWQ *op_work_queue;
 
   cache::MockImageCache *image_cache = nullptr;

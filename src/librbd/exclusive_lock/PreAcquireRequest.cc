@@ -19,9 +19,7 @@ namespace exclusive_lock {
 
 using util::create_async_context_callback;
 using util::create_context_callback;
-using util::create_rados_ack_callback;
-using util::create_rados_safe_callback;
-
+using util::create_rados_callback;
 
 template <typename I>
 PreAcquireRequest<I>* PreAcquireRequest<I>::create(I &image_ctx,

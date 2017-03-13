@@ -46,7 +46,7 @@ public:
     }
   }
 
-  ~PyFormatter()
+  ~PyFormatter() override
   {
     cursor = NULL;
     Py_DECREF(root);
@@ -54,12 +54,12 @@ public:
   }
 
   // Obscure, don't care.
-  void open_array_section_in_ns(const char *name, const char *ns)
+  void open_array_section_in_ns(const char *name, const char *ns) override
   {ceph_abort();}
-  void open_object_section_in_ns(const char *name, const char *ns)
+  void open_object_section_in_ns(const char *name, const char *ns) override
   {ceph_abort();}
 
-  void reset()
+  void reset() override
   {
     const bool array = PyList_Check(root);
     Py_DECREF(root);
@@ -70,42 +70,42 @@ public:
     }
   }
 
-  virtual void set_status(int status, const char* status_name) {}
-  virtual void output_header() {};
-  virtual void output_footer() {};
+  void set_status(int status, const char* status_name) override {}
+  void output_header() override {};
+  void output_footer() override {};
 
 
-  virtual void open_array_section(const char *name);
-  void open_object_section(const char *name);
-  void close_section()
+  void open_array_section(const char *name) override;
+  void open_object_section(const char *name) override;
+  void close_section() override
   {
     assert(cursor != root);
     assert(!stack.empty());
     cursor = stack.top();
     stack.pop();
   }
-  void dump_bool(const char *name, bool b);
-  void dump_unsigned(const char *name, uint64_t u);
-  void dump_int(const char *name, int64_t u);
-  void dump_float(const char *name, double d);
-  void dump_string(const char *name, const std::string& s);
-  std::ostream& dump_stream(const char *name);
-  void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap);
+  void dump_bool(const char *name, bool b) override;
+  void dump_unsigned(const char *name, uint64_t u) override;
+  void dump_int(const char *name, int64_t u) override;
+  void dump_float(const char *name, double d) override;
+  void dump_string(const char *name, const std::string& s) override;
+  std::ostream& dump_stream(const char *name) override;
+  void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
 
-  void flush(std::ostream& os)
+  void flush(std::ostream& os) override
   {
       // This class is not a serializer: this doens't make sense
       ceph_abort();
   }
 
-  int get_len() const
+  int get_len() const override
   {
       // This class is not a serializer: this doens't make sense
       ceph_abort();
       return 0;
   }
 
-  void write_raw_data(const char *data)
+  void write_raw_data(const char *data) override
   {
       // This class is not a serializer: this doens't make sense
       ceph_abort();

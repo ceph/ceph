@@ -130,9 +130,6 @@ struct Session : public RefCountedObject {
   Mutex session_dispatch_lock;
   boost::intrusive::list<OpRequest> waiting_on_map;
 
-  OSDMapRef osdmap;  /// Map as of which waiting_for_pg is current
-  map<spg_t, boost::intrusive::list<OpRequest> > waiting_for_pg;
-
   Spinlock sent_epoch_lock;
   epoch_t last_sent_epoch;
   Spinlock received_map_lock;
@@ -153,11 +150,6 @@ struct Session : public RefCountedObject {
     last_sent_epoch(0), received_map_epoch(0),
     backoff_lock("Session::backoff_lock")
     {}
-  void maybe_reset_osdmap() {
-    if (waiting_for_pg.empty()) {
-      osdmap.reset();
-    }
-  }
 
   void ack_backoff(
     CephContext *cct,
@@ -195,7 +187,7 @@ struct Session : public RefCountedObject {
   }
 
   bool check_backoff(
-    CephContext *cct, spg_t pgid, const hobject_t& oid, Message *m);
+    CephContext *cct, spg_t pgid, const hobject_t& oid, const Message *m);
 
   void add_backoff(BackoffRef b) {
     Mutex::Locker l(backoff_lock);

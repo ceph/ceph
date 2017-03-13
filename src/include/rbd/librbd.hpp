@@ -339,11 +339,14 @@ public:
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   ssize_t write2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
   int discard(uint64_t ofs, uint64_t len);
+  ssize_t writesame(uint64_t ofs, size_t len, ceph::bufferlist &bl, int op_flags);
 
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
   int aio_write2(uint64_t off, size_t len, ceph::bufferlist& bl,
 		  RBD::AioCompletion *c, int op_flags);
+  int aio_writesame(uint64_t off, size_t len, ceph::bufferlist& bl,
+                    RBD::AioCompletion *c, int op_flags);
   /**
    * read async from image
    *
@@ -405,6 +408,12 @@ public:
                             size_t info_size);
   int mirror_image_get_status(mirror_image_status_t *mirror_image_status,
 			      size_t status_size);
+  int aio_mirror_image_promote(bool force, RBD::AioCompletion *c);
+  int aio_mirror_image_demote(RBD::AioCompletion *c);
+  int aio_mirror_image_get_info(mirror_image_info_t *mirror_image_info,
+                                size_t info_size, RBD::AioCompletion *c);
+  int aio_mirror_image_get_status(mirror_image_status_t *mirror_image_status,
+                                  size_t status_size, RBD::AioCompletion *c);
 
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);

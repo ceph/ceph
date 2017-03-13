@@ -8138,16 +8138,16 @@ void Client::_put_fh(Fh *f)
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
 		  const UserPerm& perms)
 {
+  if (in->snapid != CEPH_NOSNAP &&
+      (flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND))) {
+    return -EROFS;
+  }
+
   int cmode = ceph_flags_to_mode(flags);
   if (cmode < 0)
     return -EINVAL;
   int want = ceph_caps_for_mode(cmode);
   int result = 0;
-
-  if (in->snapid != CEPH_NOSNAP &&
-      (flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND))) {
-    return -EROFS;
-  }
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
@@ -10277,6 +10277,8 @@ int Client::fremovexattr(int fd, const char *name, const UserPerm& perms)
 int Client::setxattr(const char *path, const char *name, const void *value,
 		     size_t size, int flags, const UserPerm& perms)
 {
+  _setxattr_maybe_wait_for_osdmap(name, value, size);
+
   Mutex::Locker lock(client_lock);
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, true);
@@ -10288,6 +10290,8 @@ int Client::setxattr(const char *path, const char *name, const void *value,
 int Client::lsetxattr(const char *path, const char *name, const void *value,
 		      size_t size, int flags, const UserPerm& perms)
 {
+  _setxattr_maybe_wait_for_osdmap(name, value, size);
+
   Mutex::Locker lock(client_lock);
   InodeRef in;
   int r = Client::path_walk(path, &in, perms, false);
@@ -10299,6 +10303,8 @@ int Client::lsetxattr(const char *path, const char *name, const void *value,
 int Client::fsetxattr(int fd, const char *name, const void *value, size_t size,
 		      int flags, const UserPerm& perms)
 {
+  _setxattr_maybe_wait_for_osdmap(name, value, size);
+
   Mutex::Locker lock(client_lock);
   Fh *f = get_filehandle(fd);
   if (!f)
@@ -10550,7 +10556,7 @@ int Client::_setxattr(InodeRef &in, const char *name, const void *value,
   return _setxattr(in.get(), name, value, size, flags, perms);
 }
 
-int Client::check_data_pool_exist(string name, string value, const OSDMap *osdmap)
+int Client::_setxattr_check_data_pool(string& name, string& value, const OSDMap *osdmap)
 {
   string tmp;
   if (name == "layout") {
@@ -10590,18 +10596,17 @@ int Client::check_data_pool_exist(string name, string value, const OSDMap *osdma
   return 0;
 }
 
-int Client::ll_setxattr(Inode *in, const char *name, const void *value,
-			size_t size, int flags, const UserPerm& perms)
+void Client::_setxattr_maybe_wait_for_osdmap(const char *name, const void *value, size_t size)
 {
   // For setting pool of layout, MetaRequest need osdmap epoch.
   // There is a race which create a new data pool but client and mds both don't have.
   // Make client got the latest osdmap which make mds quickly judge whether get newer osdmap.
-  if (strcmp(name, "ceph.file.layout.pool") == 0 ||  strcmp(name, "ceph.dir.layout.pool") == 0 ||
+  if (strcmp(name, "ceph.file.layout.pool") == 0 || strcmp(name, "ceph.dir.layout.pool") == 0 ||
       strcmp(name, "ceph.file.layout") == 0 || strcmp(name, "ceph.dir.layout") == 0) {
     string rest(strstr(name, "layout"));
-    string v((const char*)value);
+    string v((const char*)value, size);
     int r = objecter->with_osdmap([&](const OSDMap& o) {
-      return check_data_pool_exist(rest, v, &o);
+      return _setxattr_check_data_pool(rest, v, &o);
     });
 
     if (r == -ENOENT) {
@@ -10610,6 +10615,12 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
       ctx.wait();
     }
   }
+}
+
+int Client::ll_setxattr(Inode *in, const char *name, const void *value,
+			size_t size, int flags, const UserPerm& perms)
+{
+  _setxattr_maybe_wait_for_osdmap(name, value, size);
 
   Mutex::Locker lock(client_lock);
 

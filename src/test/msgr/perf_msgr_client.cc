@@ -39,7 +39,7 @@ class MessengerClient {
    public:
     ClientDispatcher(uint64_t delay, ClientThread *t): Dispatcher(g_ceph_context), think_time(delay), thread(t) {}
     bool ms_can_fast_dispatch_any() const override { return true; }
-    bool ms_can_fast_dispatch(Message *m) const override {
+    bool ms_can_fast_dispatch(const Message *m) const override {
       switch (m->get_type()) {
       case CEPH_MSG_OSD_OPREPLY:
         return true;
@@ -134,7 +134,7 @@ class MessengerClient {
     addr.set_nonce(0);
     for (int i = 0; i < jobs; ++i) {
       Messenger *msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(0), "client", getpid()+i, 0);
-      msgr->set_default_policy(Messenger::Policy::lossless_client(0, 0));
+      msgr->set_default_policy(Messenger::Policy::lossless_client(0));
       entity_inst_t inst(entity_name_t::OSD(0), addr);
       ConnectionRef conn = msgr->get_connection(inst);
       ClientThread *t = new ClientThread(msgr, c, conn, msg_len, ops, think_time_us);

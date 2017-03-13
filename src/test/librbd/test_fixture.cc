@@ -3,11 +3,11 @@
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "include/stringify.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Operations.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "cls/rbd/cls_rbd_types.h"
@@ -19,6 +19,7 @@
 
 std::string TestFixture::_pool_name;
 librados::Rados TestFixture::_rados;
+rados_t TestFixture::_cluster;
 uint64_t TestFixture::_image_number = 0;
 std::string TestFixture::_data_pool;
 
@@ -26,6 +27,7 @@ TestFixture::TestFixture() : m_image_size(0) {
 }
 
 void TestFixture::SetUpTestCase() {
+  ASSERT_EQ("", connect_cluster(&_cluster));
   _pool_name = get_temp_pool_name("test-librbd-");
   ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados));
 
@@ -40,6 +42,7 @@ void TestFixture::SetUpTestCase() {
 }
 
 void TestFixture::TearDownTestCase() {
+  rados_shutdown(_cluster);
   if (!_data_pool.empty()) {
     ASSERT_EQ(0, _rados.pool_delete(_data_pool.c_str()));
   }
@@ -123,7 +126,7 @@ int TestFixture::unlock_image() {
 }
 
 int TestFixture::acquire_exclusive_lock(librbd::ImageCtx &ictx) {
-  int r = ictx.aio_work_queue->write(0, 0, "", 0);
+  int r = ictx.io_work_queue->write(0, 0, {}, 0);
   if (r != 0) {
     return r;
   }

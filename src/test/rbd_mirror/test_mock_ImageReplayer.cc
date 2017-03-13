@@ -147,7 +147,6 @@ struct CloseImageRequest<librbd::MockTestImageCtx> {
   Context *on_finish = nullptr;
 
   static CloseImageRequest* create(librbd::MockTestImageCtx **image_ctx,
-                                   ContextWQ *work_queue, bool destroy_only,
                                    Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->image_ctx = image_ctx;
@@ -786,6 +785,10 @@ TEST_F(TestMockImageReplayer, DecodeError) {
   // fire
   m_image_replayer->handle_replay_ready();
   ASSERT_EQ(0, close_ctx.wait());
+
+  while (!m_image_replayer->is_stopped()) {
+    usleep(1000);
+  }
 }
 
 TEST_F(TestMockImageReplayer, DelayedReplay) {
@@ -847,7 +850,7 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   // process with delay
   EXPECT_CALL(mock_replay_entry, get_data());
   librbd::journal::EventEntry event_entry(
-    librbd::journal::AioDiscardEvent(123, 345), ceph_clock_now());
+    librbd::journal::AioDiscardEvent(123, 345, false), ceph_clock_now());
   EXPECT_CALL(mock_local_replay, decode(_, _))
     .WillOnce(DoAll(SetArgPointee<1>(event_entry),
                     Return(0)));
