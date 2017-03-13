@@ -235,7 +235,7 @@ void RGWLocalAuthApplier::to_str(std::ostream& out) const
       << ", acct_name=" << user_info.display_name
       << ", subuser=" << subuser
       << ", perm_mask=" << get_perm_mask()
-      << ", is_admin=" << user_info.admin << ")";
+      << ", is_admin=" << static_cast<int>(user_info.admin) << ")";
 }
 
 uint32_t RGWLocalAuthApplier::get_perm_mask(const std::string& subuser_name,
