@@ -17,6 +17,7 @@
 
 #include <ostream>
 #include <bitset>
+#include <boost/container/small_vector.hpp>
 #include "include/types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
@@ -156,7 +157,7 @@ WRITE_CLASS_DENC(bluestore_pextent_t)
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
-typedef mempool::bluestore_meta_other::vector<bluestore_pextent_t> PExtentVector;
+typedef boost::container::small_vector<bluestore_pextent_t, 1> PExtentVector;
 
 template<>
 struct denc_traits<PExtentVector> {
