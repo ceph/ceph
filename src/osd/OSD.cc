@@ -93,6 +93,7 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 
@@ -973,6 +974,11 @@ void OSDService::send_pg_temp()
   _sent_pg_temp();
 }
 
+void OSDService::send_pg_created(pg_t pgid)
+{
+  dout(20) << __func__ << dendl;
+  monc->send_mon_message(new MOSDPGCreated(pgid));
+}
 
 // --------------------------------------
 // dispatch
@@ -3723,7 +3729,7 @@ void OSD::build_past_intervals_parallel()
  * look up a pg.  if we have it, great.  if not, consider creating it IF the pg mapping
  * hasn't changed since the given epoch and we are the primary.
  */
-void OSD::handle_pg_peering_evt(
+int OSD::handle_pg_peering_evt(
   spg_t pgid,
   const pg_history_t& orig_history,
   const pg_interval_map_t& pi,
@@ -3732,14 +3738,14 @@ void OSD::handle_pg_peering_evt(
 {
   if (service.splitting(pgid)) {
     peering_wait_for_split[pgid].push_back(evt);
-    return;
+    return -EEXIST;
   }
 
   PG *pg = _lookup_lock_pg(pgid);
   if (!pg) {
     // same primary?
     if (!osdmap->have_pg_pool(pgid.pool()))
-      return;
+      return -EINVAL;
     int up_primary, acting_primary;
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(
@@ -3753,7 +3759,7 @@ void OSD::handle_pg_peering_evt(
       dout(10) << __func__ << pgid << " acting changed in "
 	       << history.same_interval_since << " (msg from " << epoch << ")"
 	       << dendl;
-      return;
+      return -EINVAL;
     }
 
     if (service.splitting(pgid)) {
@@ -3797,7 +3803,7 @@ void OSD::handle_pg_peering_evt(
       pg->queue_peering_event(evt);
       wake_pg_waiters(pg);
       pg->unlock();
-      return;
+      return 0;
     }
     case RES_SELF: {
       old_pg_state->lock();
@@ -3832,7 +3838,7 @@ void OSD::handle_pg_peering_evt(
       pg->queue_peering_event(evt);
       wake_pg_waiters(pg);
       pg->unlock();
-      return;
+      return 0;
     }
     case RES_PARENT: {
       assert(old_pg_state);
@@ -3873,8 +3879,11 @@ void OSD::handle_pg_peering_evt(
       parent->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
       wake_pg_waiters(parent);
       parent->unlock();
-      return;
+      return 0;
     }
+    default:
+      assert(0);
+      return 0;
     }
   } else {
     // already had it.  did the mapping change?
@@ -3882,12 +3891,11 @@ void OSD::handle_pg_peering_evt(
       dout(10) << *pg << __func__ << " acting changed in "
 	       << pg->info.history.same_interval_since
 	       << " (msg from " << epoch << ")" << dendl;
-      pg->unlock();
-      return;
+    } else {
+      pg->queue_peering_event(evt);
     }
-    pg->queue_peering_event(evt);
     pg->unlock();
-    return;
+    return -EEXIST;
   }
 }
 
@@ -5426,6 +5434,7 @@ void OSD::send_pg_stats(const utime_t &now)
     had_for -= had_map_since;
 
     MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
+
     uint64_t tid = ++pg_stat_tid;
     m->set_tid(tid);
     m->osd_stat = cur_stat;
@@ -7794,19 +7803,20 @@ void OSD::handle_pg_create(OpRequestRef op)
       continue;
     }
 
-    handle_pg_peering_evt(
-      pgid,
-      history,
-      pi,
-      osdmap->get_epoch(),
-      PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
-	  osdmap->get_epoch(),
-	  osdmap->get_epoch(),
-	  PG::NullEvt()))
-      );
+    if (handle_pg_peering_evt(
+          pgid,
+          history,
+          pi,
+          osdmap->get_epoch(),
+          PG::CephPeeringEvtRef(
+	    new PG::CephPeeringEvt(
+	      osdmap->get_epoch(),
+	      osdmap->get_epoch(),
+	      PG::NullEvt()))
+          ) == -EEXIST) {
+      service.send_pg_created(pgid.pgid);
+    }
   }
-
   last_pg_create_epoch = m->epoch;
 
   maybe_update_heartbeat_peers();
