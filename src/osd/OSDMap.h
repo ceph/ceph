@@ -647,8 +647,9 @@ private:
   /// pg -> (raw osd list)
   int _pg_to_raw_osds(
     const pg_pool_t& pool, pg_t pg,
-    vector<int> *osds, int *primary,
+    vector<int> *osds,
     ps_t *ppps) const;
+  int _pick_primary(const vector<int>& osds) const;
   void _remove_nonexistent_osds(const pg_pool_t& pool, vector<int>& osds) const;
 
   void _apply_primary_affinity(ps_t seed, const pg_pool_t& pool,
@@ -656,7 +657,8 @@ private:
 
   /// pg -> (up osd list)
   void _raw_to_up_osds(const pg_pool_t& pool, const vector<int>& raw,
-                       vector<int> *up, int *primary) const;
+                       vector<int> *up) const;
+
 
   /**
    * Get the pg and primary temp, if they are specified.
