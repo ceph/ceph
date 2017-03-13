@@ -268,7 +268,7 @@ Options
 
 .. option:: --key-type=<type>
 
-	key type, options are: swift, S3.
+	key type, options are: swift, s3.
 
 .. option:: --temp-url-key[-2]=<key>
 
