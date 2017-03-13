@@ -6193,8 +6193,10 @@ void OSD::ms_fast_dispatch(Message *m)
 #ifdef WITH_LTTNG
     osd_reqid_t reqid = op->get_reqid();
 #endif
-    tracepoint(osd, ms_fast_dispatch, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc);
+    int64_t num = reqid.name.num();
+    int type = reqid.name.type();
+
+    tracepoint(osd, ms_fast_dispatch, type, num, reqid.tid, reqid.inc);
   }
 
   // note sender epoch
@@ -9392,8 +9394,10 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       reqid = (*_op)->get_reqid();
     }
 #endif
-    tracepoint(osd, opwq_process_start, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc);
+    int64_t num = reqid.name.num();
+    int type = reqid.name.type();
+
+    tracepoint(osd, opwq_process_start, type, num, reqid.tid, reqid.inc);
   }
 
   lgeneric_subdout(osd->cct, osd, 30) << "dequeue status: ";
@@ -9416,8 +9420,10 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       reqid = (*_op)->get_reqid();
     }
 #endif
-    tracepoint(osd, opwq_process_finish, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc);
+    int64_t num = reqid.name.num();
+    int type = reqid.name.type();
+
+    tracepoint(osd, opwq_process_finish, type, num, reqid.tid, reqid.inc);
   }
 
   pg->unlock();
