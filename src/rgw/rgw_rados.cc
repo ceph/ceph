@@ -7684,7 +7684,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
       if (ret < 0) {
         return ret;
       }
-      ret = processor.throttle_data(handle, obj, end - ofs + 1, false);
+      ret = processor.throttle_data(handle, obj, read_len, false);
       if (ret < 0)
         return ret;
     } while (again);
