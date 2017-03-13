@@ -148,6 +148,10 @@ public:
     map<int32_t, entity_addr_t> new_hb_back_up;
     map<int32_t, entity_addr_t> new_hb_front_up;
 
+    map<pg_t,vector<int32_t>> new_pg_remap;
+    map<pg_t,vector<pair<int32_t,int32_t>>> new_pg_remap_items;
+    set<pg_t> old_pg_remap, old_pg_remap_items;
+
     string cluster_snapshot;
 
     float new_nearfull_ratio = -1;
@@ -231,6 +235,10 @@ private:
   ceph::shared_ptr< map<pg_t,vector<int32_t> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
   ceph::shared_ptr< map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
   ceph::shared_ptr< vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
+
+  // remap (post-CRUSH, pre-up)
+  map<pg_t,vector<int32_t>> pg_remap; ///< remap pg
+  map<pg_t,vector<pair<int32_t,int32_t>>> pg_remap_items; ///< remap osds in up set
 
   map<int64_t,pg_pool_t> pools;
   map<int64_t,string> pool_name;
@@ -654,6 +662,9 @@ private:
 
   void _apply_primary_affinity(ps_t seed, const pg_pool_t& pool,
 			       vector<int> *osds, int *primary) const;
+
+  /// apply pg_remap[_items] mappings
+  void _apply_remap(const pg_pool_t& pi, pg_t pg, vector<int> *raw) const;
 
   /// pg -> (up osd list)
   void _raw_to_up_osds(const pg_pool_t& pool, const vector<int>& raw,

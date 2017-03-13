@@ -415,7 +415,11 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
-    ENCODE_START(3, 1, bl); // client-usable data
+    uint8_t v = 4;
+    if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      v = 3;
+    }
+    ENCODE_START(v, 1, bl); // client-usable data
     ::encode(fsid, bl);
     ::encode(epoch, bl);
     ::encode(modified, bl);
@@ -436,6 +440,12 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ::encode(new_primary_affinity, bl);
     ::encode(new_erasure_code_profiles, bl);
     ::encode(old_erasure_code_profiles, bl);
+    if (v >= 4) {
+      ::encode(new_pg_remap, bl);
+      ::encode(old_pg_remap, bl);
+      ::encode(new_pg_remap_items, bl);
+      ::encode(old_pg_remap_items, bl);
+    }
     ENCODE_FINISH(bl); // client-usable data
   }
 
@@ -605,7 +615,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     return;
   }
   {
-    DECODE_START(3, bl); // client-usable data
+    DECODE_START(4, bl); // client-usable data
     ::decode(fsid, bl);
     ::decode(epoch, bl);
     ::decode(modified, bl);
@@ -633,6 +643,12 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     } else {
       new_erasure_code_profiles.clear();
       old_erasure_code_profiles.clear();
+    }
+    if (struct_v >= 4) {
+      ::decode(new_pg_remap, bl);
+      ::decode(old_pg_remap, bl);
+      ::decode(new_pg_remap_items, bl);
+      ::decode(old_pg_remap_items, bl);
     }
     DECODE_FINISH(bl); // client-usable data
   }
@@ -805,6 +821,45 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->dump_int("osd", p->second);
   }
   f->close_section(); // primary_temp
+
+  f->open_array_section("new_pg_remap");
+  for (auto& i : new_pg_remap) {
+    f->open_object_section("mapping");
+    f->dump_stream("pgid") << i.first;
+    f->open_array_section("osds");
+    for (auto osd : i.second) {
+      f->dump_int("osd", osd);
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("old_pg_remap");
+  for (auto& i : old_pg_remap) {
+    f->dump_stream("pgid") << i;
+  }
+  f->close_section();
+
+  f->open_array_section("new_pg_remap_items");
+  for (auto& i : new_pg_remap_items) {
+    f->open_object_section("mapping");
+    f->dump_stream("pgid") << i.first;
+    f->open_array_section("mappings");
+    for (auto& p : i.second) {
+      f->open_object_section("mapping");
+      f->dump_int("from", p.first);
+      f->dump_int("to", p.second);
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("old_pg_remap_items");
+  for (auto& i : old_pg_remap_items) {
+    f->dump_stream("pgid") << i;
+  }
+  f->close_section();
 
   f->open_array_section("new_up_thru");
   for (map<int32_t,uint32_t>::const_iterator p = new_up_thru.begin(); p != new_up_thru.end(); ++p) {
@@ -1072,6 +1127,10 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   if (crush->has_nondefault_tunables5())
     features |= CEPH_FEATURE_CRUSH_TUNABLES5;
   mask |= CEPH_FEATURES_CRUSH;
+
+  if (!pg_remap.empty() || !pg_remap_items.empty())
+    features |= CEPH_FEATUREMASK_OSDMAP_REMAP;
+  mask |= CEPH_FEATUREMASK_OSDMAP_REMAP;
 
   for (auto p = pools.begin(); p != pools.end(); ++p) {
     if (p->second.has_flag(pg_pool_t::FLAG_HASHPSPOOL)) {
@@ -1481,6 +1540,19 @@ int OSDMap::apply_incremental(const Incremental &inc)
       (*primary_temp)[p->first] = p->second;
   }
 
+  for (auto& p : inc.new_pg_remap) {
+    pg_remap[p.first] = p.second;
+  }
+  for (auto& pg : inc.old_pg_remap) {
+    pg_remap.erase(pg);
+  }
+  for (auto& p : inc.new_pg_remap_items) {
+    pg_remap_items[p.first] = p.second;
+  }
+  for (auto& pg : inc.old_pg_remap_items) {
+    pg_remap_items.erase(pg);
+  }
+
   // blacklist
   if (!inc.new_blacklist.empty()) {
     blacklist.insert(inc.new_blacklist.begin(),inc.new_blacklist.end());
@@ -1620,6 +1692,40 @@ int OSDMap::_pick_primary(const vector<int>& osds) const
     }
   }
   return -1;
+}
+
+void OSDMap::_apply_remap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) const
+{
+  pg_t pg = pi.raw_pg_to_pg(raw_pg);
+  auto p = pg_remap.find(pg);
+  if (p != pg_remap.end()) {
+    *raw = p->second;
+    return;
+  }
+
+  auto q = pg_remap_items.find(pg);
+  if (q != pg_remap_items.end()) {
+    // NOTE: this approach does not allow a bidirectional swap,
+    // e.g., [[1,2],[2,1]] applied to [0,1,2] -> [0,2,1].
+    for (auto& r : q->second) {
+      // make sure the replacement value doesn't already appear
+      bool exists = false;
+      ssize_t pos = -1;
+      for (unsigned i = 0; i < raw->size(); ++i) {
+	if ((*raw)[i] == r.second) {
+	  exists = true;
+	  break;
+	}
+	if ((*raw)[i] == r.first && pos < 0) {
+	  pos = i;
+	}
+      }
+      if (!exists && pos >= 0) {
+	(*raw)[pos] = r.second;
+	return;
+      }
+    }
+  }
 }
 
 // pg -> (up osd list)
@@ -1762,6 +1868,7 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   vector<int> raw;
   ps_t pps;
   _pg_to_raw_osds(*pool, pg, &raw, &pps);
+  _apply_remap(*pool, pg, &raw);
   _raw_to_up_osds(*pool, raw, up);
   *primary = _pick_primary(raw);
   _apply_primary_affinity(pps, *pool, up, primary);
@@ -1794,6 +1901,7 @@ void OSDMap::_pg_to_up_acting_osds(
   _get_temp_osds(*pool, pg, &_acting, &_acting_primary);
   if (_acting.empty() || up || up_primary) {
     _pg_to_raw_osds(*pool, pg, &raw, &pps);
+    _apply_remap(*pool, pg, &raw);
     _raw_to_up_osds(*pool, raw, &_up);
     _up_primary = _pick_primary(_up);
     _apply_primary_affinity(pps, *pool, &_up, &_up_primary);
@@ -1980,7 +2088,11 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
-    ENCODE_START(3, 1, bl); // client-usable data
+    uint8_t v = 4;
+    if (!HAVE_FEATURE(features, OSDMAP_REMAP)) {
+      v = 3;
+    }
+    ENCODE_START(v, 1, bl); // client-usable data
     // base
     ::encode(fsid, bl);
     ::encode(epoch, bl);
@@ -2012,6 +2124,14 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     crush->encode(cbl, features);
     ::encode(cbl, bl);
     ::encode(erasure_code_profiles, bl);
+
+    if (v >= 4) {
+      ::encode(pg_remap, bl);
+      ::encode(pg_remap_items, bl);
+    } else {
+      assert(pg_remap.empty());
+      assert(pg_remap_items.empty());
+    }
     ENCODE_FINISH(bl); // client-usable data
   }
 
@@ -2208,7 +2328,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(3, bl); // client-usable data
+    DECODE_START(4, bl); // client-usable data
     // base
     ::decode(fsid, bl);
     ::decode(epoch, bl);
@@ -2246,6 +2366,13 @@ void OSDMap::decode(bufferlist::iterator& bl)
       ::decode(erasure_code_profiles, bl);
     } else {
       erasure_code_profiles.clear();
+    }
+    if (struct_v >= 4) {
+      ::decode(pg_remap, bl);
+      ::decode(pg_remap_items, bl);
+    } else {
+      pg_remap.clear();
+      pg_remap_items.clear();
     }
     DECODE_FINISH(bl); // client-usable data
   }
@@ -2398,6 +2525,33 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section();
 
+  f->open_array_section("pg_remap");
+  for (auto& p : pg_remap) {
+    f->open_object_section("mapping");
+    f->dump_stream("pgid") << p.first;
+    f->open_array_section("osds");
+    for (auto q : p.second) {
+      f->dump_int("osd", q);
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("pg_remap_items");
+  for (auto& p : pg_remap_items) {
+    f->open_object_section("mapping");
+    f->dump_stream("pgid") << p.first;
+    f->open_array_section("mappings");
+    for (auto& q : p.second) {
+      f->open_object_section("mapping");
+      f->dump_int("from", q.first);
+      f->dump_int("to", q.second);
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
   f->open_array_section("pg_temp");
   for (map<pg_t,vector<int32_t> >::const_iterator p = pg_temp->begin();
        p != pg_temp->end();
@@ -2564,6 +2718,13 @@ void OSDMap::print(ostream& out) const
     }
   }
   out << std::endl;
+
+  for (auto& p : pg_remap) {
+    out << "pg_remap " << p.first << " " << p.second << "\n";
+  }
+  for (auto& p : pg_remap_items) {
+    out << "pg_remap_items " << p.first << " " << p.second << "\n";
+  }
 
   for (map<pg_t,vector<int32_t> >::const_iterator p = pg_temp->begin();
        p != pg_temp->end();
