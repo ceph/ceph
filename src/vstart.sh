@@ -592,7 +592,7 @@ start_mgr() {
             mkdir -p $CEPH_DEV_DIR/mgr.$name
             key_fn=$CEPH_DEV_DIR/mgr.$name/keyring
             $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mgr.$name $key_fn
-            ceph_adm -i $key_fn auth add mgr.$name mon 'allow *'
+            ceph_adm -i $key_fn auth add mgr.$name mon 'allow profile mgr'
         fi
 
         wconf <<EOF
@@ -652,7 +652,7 @@ EOF
 			    prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.${name}s" \
 				     "$CEPH_DEV_DIR/mds.${name}s/keyring"
 			    ceph_adm -i "$CEPH_DEV_DIR/mds.${name}s/keyring" auth add "mds.${name}s" \
-				         mon 'allow *' osd 'allow *' mds 'allow' mgr 'allow profile mds'
+				         mon 'allow profile mds' osd 'allow *' mds 'allow' mgr 'allow profile mds'
 	        fi
 	    fi
 
