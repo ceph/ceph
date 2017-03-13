@@ -127,7 +127,7 @@ public:
    * @param name Our service's name.
    */
   PaxosService(Monitor *mn, Paxos *p, string name) 
-    : mon(mn), paxos(p), service_name(name),
+    : mon(mn), paxos(p), service_name(std::move(name)),
       proposing(false),
       service_version(0), proposal_timer(0), have_pending(false),
       format_version(0),

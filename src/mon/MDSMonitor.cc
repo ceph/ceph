@@ -2163,7 +2163,7 @@ bool MDSMonitor::try_standby_replay(
 }
 
 MDSMonitor::MDSMonitor(Monitor *mn, Paxos *p, string service_name)
-  : PaxosService(mn, p, service_name)
+  : PaxosService(mn, p, std::move(service_name))
 {
   handlers = FileSystemCommandHandler::load();
 }
