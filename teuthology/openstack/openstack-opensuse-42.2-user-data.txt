@@ -1,1 +1,28 @@
-openstack-opensuse-42.1-user-data.txt
+#cloud-config
+bootcmd:
+ - echo nameserver {nameserver} | tee /etc/resolv.conf
+ - echo search {lab_domain} | tee -a /etc/resolv.conf
+ - sed -i -e 's/PEERDNS="yes"/PEERDNS="no"/' /etc/sysconfig/network/ifcfg-eth0
+ - ( curl --silent http://169.254.169.254/2009-04-04/meta-data/hostname | sed -e 's/[\.-].*//' ; eval printf "%03d%03d%03d%03d.{lab_domain}" $(curl --silent http://169.254.169.254/2009-04-04/meta-data/local-ipv4 | tr . ' ' ) ) | tee /etc/hostname
+ - hostname $(cat /etc/hostname)
+ - ( echo ; echo "MaxSessions 1000" ) >> /etc/ssh/sshd_config
+# See https://github.com/ceph/ceph-cm-ansible/blob/master/roles/cobbler/templates/snippets/cephlab_user
+ - ( echo 'Defaults !requiretty' ; echo 'Defaults visiblepw' ) | tee /etc/sudoers.d/cephlab_sudo ; chmod 0440 /etc/sudoers.d/cephlab_sudo
+preserve_hostname: true
+users:
+  - name: {username}
+    gecos: User
+    sudo: ["ALL=(ALL) NOPASSWD:ALL"]
+    groups: users
+runcmd:
+ - ( MYHOME=/home/{username} ; mkdir $MYHOME/.ssh ; chmod 700 $MYHOME/.ssh ; cp /root/.ssh/authorized_keys $MYHOME/.ssh ; chown -R {username}.users $MYHOME/.ssh )
+ - 'zypper rr openSUSE-Leap-Cloud-Tools || :'
+ - zypper --non-interactive --no-gpg-checks refresh
+ - zypper --non-interactive remove systemd-logger
+ - zypper --non-interactive install --no-recommends python wget git ntp rsyslog
+   lsb-release salt-minion salt-master make
+ - sed -i -e "s/^#master:.*$/master:\ $(curl --silent http://169.254.169.254/2009-04-04/meta-data/hostname | sed -e 's/[\.-].*//')$(eval printf "%03d%03d%03d%03d.{lab_domain}" $(echo "{nameserver}" | tr . ' '))/" /etc/salt/minion
+ - ( if ! grep '^server' /etc/ntp.conf ; then for i in 0 1 2 3 ; do echo "server $i.opensuse.pool.ntp.org iburst" >> /etc/ntp.conf ; done ; fi )
+ - systemctl enable salt-minion.service ntpd.service
+ - systemctl restart ntpd.service
+final_message: "{up}, after $UPTIME seconds"
