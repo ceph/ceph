@@ -62,7 +62,7 @@ enum crush_opcodes {
 	CRUSH_RULE_CHOOSELEAF_INDEP = 7,
 
 	CRUSH_RULE_SET_CHOOSE_TRIES = 8, /* override choose_total_tries */
-	CRUSH_RULE_SET_CHOOSELEAF_TRIES = 9, /* override chooseleaf_descend_once */
+	CRUSH_RULE_SET_CHOOSELEAF_TRIES = 9, /* noop, obsolete */
 	CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES = 10,
 	CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES = 11,
 	CRUSH_RULE_SET_CHOOSELEAF_VARY_R = 12,
@@ -322,10 +322,7 @@ struct crush_map {
 	__u32 choose_local_fallback_tries;
 	/*! choose attempts before giving up */
 	__u32 choose_total_tries;
-	/*! attempt chooseleaf inner descent once for firstn mode; on
-	 *! reject retry outer descent.  Note that this does *not*
-	 *! apply to a collision: in that case we will retry as we used
-	 *! to. */
+        /* obsoleted in firefly */
 	__u32 chooseleaf_descend_once;
 
 	/*! if non-zero, feed r into chooseleaf, bit-shifted right by (r-1)

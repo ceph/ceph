@@ -18,7 +18,6 @@
  *       m->choose_local_tries = 0;
  *       m->choose_local_fallback_tries = 0;
  *       m->choose_total_tries = 50;
- *       m->chooseleaf_descend_once = 1;
  *       m->chooseleaf_vary_r = 1;
  *       m->chooseleaf_stable = 1;
  *       m->allowed_bucket_algs =
