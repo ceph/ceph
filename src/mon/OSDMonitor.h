@@ -280,6 +280,9 @@ private:
   bool preprocess_pgtemp(MonOpRequestRef op);
   bool prepare_pgtemp(MonOpRequestRef op);
 
+  bool preprocess_pg_created(MonOpRequestRef op);
+  bool prepare_pg_created(MonOpRequestRef op);
+
   int _check_remove_pool(int64_t pool, const pg_pool_t *pi, ostream *ss);
   bool _check_become_tier(
       int64_t tier_pool_id, const pg_pool_t *tier_pool,
