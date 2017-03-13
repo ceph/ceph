@@ -7763,16 +7763,12 @@ boost::statechart::result PG::RecoveryState::Incomplete::react(const AdvMap &adv
 boost::statechart::result PG::RecoveryState::Incomplete::react(const MNotifyRec& notevt) {
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 7) << "handle_pg_notify from osd." << notevt.from << dendl;
-  if (pg->peer_info.count(notevt.from) &&
-      pg->peer_info[notevt.from].last_update == notevt.notify.info.last_update) {
-    ldout(pg->cct, 10) << *pg << " got dup osd." << notevt.from << " info " << notevt.notify.info
-		       << ", identical to ours" << dendl;
-    return discard_event();
-  } else {
-    pg->proc_replica_info(
-      notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
-    // try again!
+  if (pg->proc_replica_info(
+    notevt.from, notevt.notify.info, notevt.notify.epoch_sent)) {
+    // We got something new, try again!
     return transit< GetLog >();
+  } else {
+    return discard_event();
   }
 }
 
