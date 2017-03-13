@@ -554,6 +554,8 @@ public:
           denc(shared_blob->get_sbid(), p_blob_shared, struct_v);
         }
 
+        blob_cache.size = p_blob + p_blob_shared;
+
         if (likely((p_blob + p_blob_shared) <= sizeof(blob_cache.buffer))) {
           /* Great, data is small enough to fit in the cache. It is a part
            * of the Blob object itself to allow CPU's prefetchers do their
@@ -564,12 +566,11 @@ public:
           if (unlikely(blob.is_shared())) {
             denc(shared_blob->get_sbid(), ap, struct_v);
           }
-
-          /* The real size can be smaller than the bound. The rationale is
-           * to make the computations optimizable at compile-time. */
-          blob_cache.size = ap.get_pos() - blob_cache.buffer;
-        } else {
-          blob_cache.size = p_blob + p_blob_shared;
+        } else if (unlikely(p_blob + p_blob_shared >
+                   std::numeric_limits<decltype(blob_cache.size)>::max())) {
+          /* Ouch, the blob is so big that we can't even cache its size. */
+          blob_cache.size = 0;
+          return p_blob + p_blob_shared;
         }
       }
 

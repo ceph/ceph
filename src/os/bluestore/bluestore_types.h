@@ -147,8 +147,8 @@ struct bluestore_pextent_t : public AllocExtent {
   }
 
   void bound_encode(size_t& p) const {
-    denc_lba(offset, p);
-    denc_varint_lowz(length, p);
+    denc_lba_exact(offset, p);
+    denc_varint_lowz_exact(length, p);
   }
   void encode(bufferlist::contiguous_appender& p) const {
     denc_lba(offset, p);
@@ -171,15 +171,15 @@ typedef boost::container::small_vector<bluestore_pextent_t, 1> PExtentVector;
 template<>
 struct denc_traits<PExtentVector> {
   static constexpr bool supported = true;
-  static constexpr bool bounded = false;
+  static constexpr bool bounded = true;
   static constexpr bool featured = false;
 
   BLUESTORE_FORCEINLINE
   static void bound_encode(const PExtentVector& v, size_t& p) {
-    p += sizeof(uint32_t);
-    size_t per = 0;
-    denc(*(bluestore_pextent_t*)nullptr, per);
-    p += per * v.size();
+    denc_varint_exact(v.size(), p);
+    for (auto& i : v) {
+      i.bound_encode(p);
+    }
   }
 
   BLUESTORE_FORCEINLINE
@@ -475,7 +475,6 @@ struct bluestore_blob_t {
 
   BLUESTORE_FORCEINLINE
   void bound_encode(size_t& p, uint64_t struct_v) const {
- //   assert(struct_v == 1 || struct_v == 2);
     size_t p_ct = 0;
     size_t p_cco = 0;
     size_t p_cdi = 0;
@@ -484,7 +483,7 @@ struct bluestore_blob_t {
       denc(csum_type, p_ct);
       denc(csum_chunk_order, p_cco);
 
-      denc_varint(csum_data.length(), p_cdi);
+      denc_varint_exact(csum_data.length(), p_cdi);
       p_cdl += csum_data.length();
     }
     p += p_ct + p_cdl + p_cdi + p_cco;
@@ -494,21 +493,21 @@ struct bluestore_blob_t {
     p += p_extents;
 
     size_t p_flags = 0;
-    denc_varint(flags, p_flags);
+    denc_varint_exact(flags, p_flags);
     p += p_flags;
 
     if (is_compressed()) {
       size_t p_clo = 0;
-      denc_varint_lowz(compressed_length_orig, p_clo);
+      denc_varint_lowz_exact(compressed_length_orig, p_clo);
       p += p_clo;
 
       size_t p_cl = 0;
-      denc_varint_lowz(compressed_length, p_cl);
+      denc_varint_lowz_exact(compressed_length, p_cl);
       p += p_cl;
     }
 
     if (has_unused()) {
-      p += sizeof(unused);
+      denc(unused, p);
     }
   }
 

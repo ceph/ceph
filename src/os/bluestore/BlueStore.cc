@@ -2339,25 +2339,26 @@ bool BlueStore::ExtentMap::encode_some(
                      // handling at ExtentMap level.
 
   unsigned n = 0;
-  size_t bound = 0;
+  register size_t bound = 0;
   denc(struct_v, bound);
-  denc_varint(0, bound);
+  denc_varint(0ul, bound);
   bool must_reshard = false;
   for (auto p = start;
        p != extent_map.end() && p->logical_offset < end;
        ++p, ++n) {
     assert(p->logical_offset >= offset);
     p->blob->last_encoded_id = -1;
-    if (!p->blob->is_spanning() && p->blob_escapes_range(offset, length)) {
+    if (unlikely(p->blob_escapes_range(offset, length)) &&
+        likely(!p->blob->is_spanning())) {
       dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	       << std::dec << " hit new spanning blob " << *p << dendl;
       request_reshard(p->blob_start(), p->blob_end());
       must_reshard = true;
     }
-    denc_varint(0, bound); // blobid
-    denc_varint(0, bound); // logical_offset
-    denc_varint(0, bound); // len
-    denc_varint(0, bound); // blob_offset
+    denc_varint(0ul, bound); // blobid
+    denc_varint(0ul, bound); // logical_offset
+    denc_varint(0ul, bound); // len
+    denc_varint(0ul, bound); // blob_offset
 
     p->blob->bound_encode(
       bound,
