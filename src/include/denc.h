@@ -436,6 +436,42 @@ inline void denc_lba(uint64_t v, size_t& p) {
   p += sizeof(v) + 2;
 }
 
+inline void denc_lba_exact(uint64_t v, size_t& p) {
+  p += 4;
+
+  /* This check shouldn't be duplicative. A compiler will get a chance
+   * to skip the ones in ctz() and cbits(). */
+  if (! v) {
+    return;
+  }
+
+  const uint8_t low_zero_nibbles = ctz(v) / 4;
+  /* Assumption: if v != 0, then ctz(v) + 1 <= cbits(v). */
+  uint8_t nbits = cbitsl(static_cast<unsigned long>(v));
+
+  const int8_t t = low_zero_nibbles - 3;
+  if (t < 0) {
+    /* The byte (*111) case. */
+    nbits += 3;
+  } else if (t < 3) {
+    /* 12 or 16 zeros. */
+    nbits = nbits - low_zero_nibbles * 4 + (t + 1);
+  } else {
+    /* The 20 zeros case. Need to reserve place for trailing 011 bits. */
+    nbits = nbits - 20 + 3;
+  }
+
+  /* We're always encoding the first 32 bits of v. */
+  if (nbits < sizeof(uint32_t) * CHAR_BIT) {
+    /* p is already incremented enough -- see the first instruction. */
+    return;
+  } else {
+    nbits -= sizeof(uint32_t) * CHAR_BIT - 1; /* The cont mark. */
+  }
+
+  p += (nbits + 6) / (CHAR_BIT - 1);
+}
+
 inline void denc_lba(uint64_t v, bufferlist::contiguous_appender& p) {
   int low_zero_nibbles = v ? (int)(ctz(v) / 4) : 0;
   int pos;
