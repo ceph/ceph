@@ -102,31 +102,31 @@ public:
 	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
 	features_required(0) {}
   private:
-    Policy(bool l, bool s, bool st, bool r, uint64_t sup, uint64_t req)
+    Policy(bool l, bool s, bool st, bool r, uint64_t req)
       : lossy(l), server(s), standby(st), resetcheck(r),
 	throttler_bytes(NULL),
 	throttler_messages(NULL),
-	features_supported(sup | CEPH_FEATURES_SUPPORTED_DEFAULT),
+	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
 	features_required(req) {}
 
   public:
-    static Policy stateful_server(uint64_t sup, uint64_t req) {
-      return Policy(false, true, true, true, sup, req);
+    static Policy stateful_server(uint64_t req) {
+      return Policy(false, true, true, true, req);
     }
-    static Policy stateless_server(uint64_t sup, uint64_t req) {
-      return Policy(true, true, false, false, sup, req);
+    static Policy stateless_server(uint64_t req) {
+      return Policy(true, true, false, false, req);
     }
-    static Policy lossless_peer(uint64_t sup, uint64_t req) {
-      return Policy(false, false, true, false, sup, req);
+    static Policy lossless_peer(uint64_t req) {
+      return Policy(false, false, true, false, req);
     }
-    static Policy lossless_peer_reuse(uint64_t sup, uint64_t req) {
-      return Policy(false, false, true, true, sup, req);
+    static Policy lossless_peer_reuse(uint64_t req) {
+      return Policy(false, false, true, true, req);
     }
-    static Policy lossy_client(uint64_t sup, uint64_t req) {
-      return Policy(true, false, false, false, sup, req);
+    static Policy lossy_client(uint64_t req) {
+      return Policy(true, false, false, false, req);
     }
-    static Policy lossless_client(uint64_t sup, uint64_t req) {
-      return Policy(false, false, false, true, sup, req);
+    static Policy lossless_client(uint64_t req) {
+      return Policy(false, false, false, true, req);
     }
   };
 
@@ -547,7 +547,7 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(Message *m) {
+  bool ms_can_fast_dispatch(const Message *m) {
     for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
 	 p != fast_dispatchers.end();
 	 ++p) {

@@ -1,7 +1,7 @@
 #
 # spec file for package ceph
 #
-# Copyright (C) 2004-2016 The Ceph Project Developers. See COPYING file
+# Copyright (C) 2004-2017 The Ceph Project Developers. See COPYING file
 # at the top-level directory of this distribution and at
 # https://github.com/ceph/ceph/blob/master/COPYING
 #
@@ -13,6 +13,7 @@
 #
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 # 
+%bcond_without ocf
 %bcond_with cephfs_java
 %if 0%{?suse_version}
 %bcond_with ceph_test_package
@@ -62,9 +63,10 @@
 # unify libexec for all targets
 %global _libexecdir %{_exec_prefix}/lib
 
-
+# disable dwz which compresses the debuginfo
+%global _find_debuginfo_dwz_opts %{nil}
 #################################################################################
-# common
+# main package definition
 #################################################################################
 Name:		ceph
 Version:	@VERSION@
@@ -138,6 +140,7 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
+BuildRequires:	libibverbs-devel
 
 #################################################################################
 # distro-conditional dependencies
@@ -214,7 +217,7 @@ on commodity hardware and delivers object, block and file system storage.
 
 
 #################################################################################
-# packages
+# subpackages
 #################################################################################
 %package base
 Summary:       Ceph Base Package
@@ -238,6 +241,7 @@ Requires:      logrotate
 Requires:      util-linux
 Requires:      cryptsetup
 Requires:      findutils
+Requires:      psmisc
 Requires:      which
 %if 0%{?suse_version}
 Recommends:    ntp-daemon

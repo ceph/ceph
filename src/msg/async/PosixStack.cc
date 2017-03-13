@@ -278,7 +278,7 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
     ::close(sd);
     return -errno;
   }
-  handler.set_priority(sd, opt.priority);
+  handler.set_priority(sd, opt.priority, out->get_family());
 
   std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, *out, sd, true));
   *sock = ConnectedSocket(std::move(csi));
@@ -348,7 +348,7 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
     return -errno;
   }
 
-  net.set_priority(sd, opts.priority);
+  net.set_priority(sd, opts.priority, addr.get_family());
   *socket = ConnectedSocket(
       std::unique_ptr<PosixConnectedSocketImpl>(new PosixConnectedSocketImpl(net, addr, sd, !opts.nonblock)));
   return 0;

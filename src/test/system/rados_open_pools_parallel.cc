@@ -59,7 +59,7 @@ public:
   {
   }
 
-  ~StRadosOpenPool()
+  ~StRadosOpenPool() override
   {
   }
 

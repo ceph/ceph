@@ -122,6 +122,7 @@ class Thrasher:
         self.optrack_toggle_delay = self.config.get('optrack_toggle_delay')
         self.dump_ops_enable = self.config.get('dump_ops_enable')
         self.noscrub_toggle_delay = self.config.get('noscrub_toggle_delay')
+        self.chance_thrash_cluster_full = self.config.get('chance_thrash_cluster_full', .05)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -494,6 +495,16 @@ class Thrasher:
         self.ceph_manager.raw_cluster_cmd('osd', 'primary-affinity',
                                           str(osd), str(pa))
 
+    def thrash_cluster_full(self):
+        """
+        Set and unset cluster full condition
+        """
+        self.log('Setting full ratio to .001')
+        self.ceph_manager.raw_cluster_cmd('osd', 'set-full-ratio', '.001')
+        time.sleep(1)
+        self.log('Setting full ratio back to .95')
+        self.ceph_manager.raw_cluster_cmd('osd', 'set-full-ratio', '.95')
+
     def all_up(self):
         """
         Make sure all osds are up and not out.
@@ -531,10 +542,9 @@ class Thrasher:
         pool = self.ceph_manager.get_pool()
         orig_pg_num = self.ceph_manager.get_pool_pg_num(pool)
         self.log("Growing pool %s" % (pool,))
-        self.ceph_manager.expand_pool(pool,
-                                      self.config.get('pool_grow_by', 10),
-                                      self.max_pgs)
-        if orig_pg_num < self.ceph_manager.get_pool_pg_num(pool):
+        if self.ceph_manager.expand_pool(pool,
+                                         self.config.get('pool_grow_by', 10),
+                                         self.max_pgs):
             self.pools_to_fix_pgp_num.add(pool)
 
     def fix_pgp_num(self, pool=None):
@@ -544,9 +554,8 @@ class Thrasher:
         if pool is None:
             pool = self.ceph_manager.get_pool()
         self.log("fixing pg num pool %s" % (pool,))
-        self.ceph_manager.set_pool_pgpnum(pool)
-        if pool in self.pools_to_fix_pgp_num:
-            self.pools_to_fix_pgp_num.remove(pool)
+        if self.ceph_manager.set_pool_pgpnum(pool):
+            self.pools_to_fix_pgp_num.discard(pool)
 
     def test_pool_min_size(self):
         """
@@ -712,6 +721,8 @@ class Thrasher:
                         chance_test_min_size,))
         actions.append((self.test_backfill_full,
                         chance_test_backfill_full,))
+        if self.chance_thrash_cluster_full > 0:
+            actions.append((self.thrash_cluster_full, self.chance_thrash_cluster_full,))
         for key in ['heartbeat_inject_failure', 'filestore_inject_stall']:
             for scenario in [
                 (lambda:
@@ -1536,13 +1547,14 @@ class CephManager:
             assert isinstance(by, int)
             assert pool_name in self.pools
             if self.get_num_creating() > 0:
-                return
+                return False
             if (self.pools[pool_name] + by) > max_pgs:
-                return
+                return False
             self.log("increase pool size by %d" % (by,))
             new_pg_num = self.pools[pool_name] + by
             self.set_pool_property(pool_name, "pg_num", new_pg_num)
             self.pools[pool_name] = new_pg_num
+            return True
 
     def set_pool_pgpnum(self, pool_name):
         """
@@ -1552,8 +1564,9 @@ class CephManager:
             assert isinstance(pool_name, basestring)
             assert pool_name in self.pools
             if self.get_num_creating() > 0:
-                return
+                return False
             self.set_pool_property(pool_name, 'pgp_num', self.pools[pool_name])
+            return True
 
     def list_pg_missing(self, pgid):
         """
@@ -1649,6 +1662,33 @@ class CephManager:
                     self.log("WARNING: Resubmitted a non-idempotent repair")
             time.sleep(SLEEP_TIME)
             timer += SLEEP_TIME
+
+    def wait_snap_trimming_complete(self, pool):
+        """
+        Wait for snap trimming on pool to end
+        """
+        POLL_PERIOD = 10
+        FATAL_TIMEOUT = 600
+        start = time.time()
+        poolnum = self.get_pool_num(pool)
+        poolnumstr = "%s." % (poolnum,)
+        while (True):
+            now = time.time()
+            if (now - start) > FATAL_TIMEOUT:
+                assert (now - start) < FATAL_TIMEOUT, \
+                    'failed to complete snap trimming before timeout'
+            all_stats = self.get_pg_stats()
+            trimming = False
+            for pg in all_stats:
+                if (poolnumstr in pg['pgid']) and ('snaptrim' in pg['state']):
+                    self.log("pg {pg} in trimming, state: {state}".format(
+                        pg=pg['pgid'],
+                        state=pg['state']))
+                    trimming = True
+            if not trimming:
+                break
+            self.log("{pool} still trimming, waiting".format(pool=pool))
+            time.sleep(POLL_PERIOD)
 
     def get_single_pg_stats(self, pgid):
         """

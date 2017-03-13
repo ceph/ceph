@@ -79,7 +79,7 @@ public:
   void generate_header(const std::string& dir_path,
                        const std::string& css_path);
   void generate_footer();
-  void dump_object(const RGWObjEnt& objent);
+  void dump_object(const rgw_bucket_dir_entry& objent);
   void dump_subdir(const std::string& name);
 };
 

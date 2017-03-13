@@ -98,7 +98,7 @@ private:
                 bool skip_mirror_enable,
                 ContextWQ *op_work_queue, Context *on_finish);
 
-  IoCtx m_ioctx;
+  IoCtx &m_ioctx;
   std::string m_image_name;
   std::string m_image_id;
   uint64_t m_size;

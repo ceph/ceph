@@ -31,19 +31,19 @@ class MInodeFileCaps : public Message {
     this->caps = caps;
   }
 private:
-  ~MInodeFileCaps() {}
+  ~MInodeFileCaps() override {}
 
 public:
-  const char *get_type_name() const { return "inode_file_caps";}
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "inode_file_caps";}
+  void print(ostream& out) const override {
     out << "inode_file_caps(" << ino << " " << ccap_string(caps) << ")";
   }
   
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(ino, payload);
     ::encode(caps, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
     ::decode(caps, p);

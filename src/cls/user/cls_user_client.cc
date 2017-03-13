@@ -97,7 +97,7 @@ class ClsUserGetHeaderCtx : public ObjectOperationCompletion {
   int *pret;
 public:
   ClsUserGetHeaderCtx(cls_user_header *_h, RGWGetUserHeader_CB *_ctx, int *_pret) : header(_h), ret_ctx(_ctx), pret(_pret) {}
-  ~ClsUserGetHeaderCtx() {
+  ~ClsUserGetHeaderCtx() override {
     if (ret_ctx) {
       ret_ctx->put();
     }

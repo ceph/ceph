@@ -1975,7 +1975,6 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     encoded_shards.reserve(shards.size());
 
     auto p = shards.begin();
-    unsigned pos = 0;
     auto prev_p = p;
     while (p != shards.end()) {
       auto n = p;
@@ -2036,7 +2035,6 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
       }
       prev_p = p;
       p = n;
-      ++pos;
     }
     if (needs_reshard()) {
       return;
@@ -3257,6 +3255,8 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_compression_algorithm",
     "bluestore_compression_min_blob_size",
     "bluestore_compression_max_blob_size",
+    "bluestore_max_alloc_size",
+    "bluestore_prefer_wal_size",
     NULL
   };
   return KEYS;
@@ -3273,6 +3273,13 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("bluestore_compression_min_blob_size") ||
       changed.count("bluestore_compression_max_blob_size")) {
     _set_compression();
+  }
+  if (changed.count("bluestore_prefer_wal_size") ||
+      changed.count("bluestore_max_alloc_size")) {
+    if (bdev) {
+      // only after startup
+      _set_alloc_sizes();
+    }
   }
 }
 
@@ -3609,6 +3616,17 @@ void BlueStore::_set_alloc_sizes(void)
 
   max_alloc_size = cct->_conf->bluestore_max_alloc_size;
 
+  if (cct->_conf->bluestore_prefer_wal_size) {
+    prefer_wal_size = cct->_conf->bluestore_prefer_wal_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      prefer_wal_size = cct->_conf->bluestore_prefer_wal_size_hdd;
+    } else {
+      prefer_wal_size = cct->_conf->bluestore_prefer_wal_size_ssd;
+    }
+  }
+
   dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
 	   << std::dec << " order " << min_alloc_size_order
 	   << " max_alloc_size 0x" << std::hex << max_alloc_size
@@ -3617,7 +3635,6 @@ void BlueStore::_set_alloc_sizes(void)
 
 int BlueStore::_open_bdev(bool create)
 {
-  bluestore_bdev_label_t label;
   assert(bdev == NULL);
   string p = path + "/block";
   bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this));
@@ -5424,8 +5441,10 @@ int BlueStore::statfs(struct store_statfs_t *buf)
   buf->available = alloc->get_free();
 
   if (bluefs) {
-    // part of our shared device is "free" accordingly to BlueFS
-    buf->available += bluefs->get_free(bluefs_shared_bdev);
+    // part of our shared device is "free" according to BlueFS
+    // Don't include bluestore_bluefs_min because that space can't
+    // be used for any other purpose.
+    buf->available += bluefs->get_free(bluefs_shared_bdev) - cct->_conf->bluestore_bluefs_min;
 
     // include dedicated db, too, if that isn't the shared device.
     if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
@@ -8092,9 +8111,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_CLONE:
       {
-        const ghobject_t& noid = i.get_oid(op->dest_oid);
 	OnodeRef& no = ovec[op->dest_oid];
 	if (!no) {
+          const ghobject_t& noid = i.get_oid(op->dest_oid);
 	  no = c->get_onode(noid, true);
 	}
 	r = _clone(txc, c, o, no);
@@ -8107,9 +8126,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_CLONERANGE2:
       {
-	const ghobject_t& noid = i.get_oid(op->dest_oid);
 	OnodeRef& no = ovec[op->dest_oid];
 	if (!no) {
+	  const ghobject_t& noid = i.get_oid(op->dest_oid);
 	  no = c->get_onode(noid, true);
 	}
         uint64_t srcoff = op->off;
@@ -8224,7 +8243,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 	if (r == -ENOSPC)
 	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
 	  // by partially applying transactions.
-	  msg = "ENOSPC handling not implemented";
+	  msg = "ENOSPC from bluestore, misconfigured cluster";
 
 	if (r == -ENOTEMPTY) {
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
@@ -8439,12 +8458,16 @@ void BlueStore::_do_write_small(
     // can we pad our head/tail out with zeros?
     uint64_t chunk_size = b->get_blob().get_chunk_size(block_size);
     uint64_t head_pad = P2PHASE(offset, chunk_size);
+    uint64_t tail_pad = P2NPHASE(end, chunk_size);
+    if (head_pad || tail_pad) {
+      o->extent_map.fault_range(db, offset - head_pad,
+                                length + head_pad + tail_pad);
+    }
     if (head_pad &&
 	o->extent_map.has_any_lextents(offset - head_pad, chunk_size)) {
       head_pad = 0;
     }
 
-    uint64_t tail_pad = P2NPHASE(end, chunk_size);
     if (tail_pad && o->extent_map.has_any_lextents(end, tail_pad)) {
       tail_pad = 0;
     }
@@ -8480,12 +8503,26 @@ void BlueStore::_do_write_small(
 			  wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
       if (!g_conf->bluestore_debug_omit_block_device_write) {
-        b->get_blob().map_bl(
-	  b_off, padded,
-	  [&](uint64_t offset, bufferlist& t) {
-	    bdev->aio_write(offset, t,
-			    &txc->ioc, wctx->buffered);
-	  });
+        if (b_len <= prefer_wal_size) {
+	  dout(20) << __func__ << " defering small 0x" << std::hex
+		   << b_len << std::dec << " unused write via wal" << dendl;
+	  bluestore_wal_op_t *op = _get_wal_op(txc, o);
+	  op->op = bluestore_wal_op_t::OP_WRITE;
+	  b->get_blob().map(
+	    b_off, b_len,
+	    [&](uint64_t offset, uint64_t length) {
+	      op->extents.emplace_back(bluestore_pextent_t(offset, length));
+	      return 0;
+	    });
+	  op->data = padded;
+	} else {
+	  b->get_blob().map_bl(
+	    b_off, padded,
+	    [&](uint64_t offset, bufferlist& t) {
+	      bdev->aio_write(offset, t,
+			      &txc->ioc, wctx->buffered);
+	    });
+	}
       }
       b->dirty_blob().calc_csum(b_off, padded);
       dout(20) << __func__ << "  lex old " << *ep << dendl;
@@ -8627,6 +8664,7 @@ void BlueStore::_do_write_big(
 int BlueStore::_do_alloc_write(
   TransContext *txc,
   CollectionRef coll,
+  OnodeRef& o,
   WriteContext *wctx)
 {
   dout(20) << __func__ << " txc " << txc
@@ -8813,11 +8851,25 @@ int BlueStore::_do_alloc_write(
 
     // queue io
     if (!g_conf->bluestore_debug_omit_block_device_write) {
-      b->get_blob().map_bl(
-        b_off, *l,
-        [&](uint64_t offset, bufferlist& t) {
-  	  bdev->aio_write(offset, t, &txc->ioc, false);
-        });
+      if (l->length() <= prefer_wal_size) {
+	dout(20) << __func__ << " defering small 0x" << std::hex
+		 << l->length() << std::dec << " write via wal" << dendl;
+	bluestore_wal_op_t *op = _get_wal_op(txc, o);
+	op->op = bluestore_wal_op_t::OP_WRITE;
+	b->get_blob().map(
+	  b_off, l->length(),
+	  [&](uint64_t offset, uint64_t length) {
+	    op->extents.emplace_back(bluestore_pextent_t(offset, length));
+	    return 0;
+	  });
+	op->data = *l;
+      } else {
+	b->get_blob().map_bl(
+	  b_off, *l,
+	  [&](uint64_t offset, bufferlist& t) {
+	    bdev->aio_write(offset, t, &txc->ioc, false);
+	  });
+      }
     }
   }
   if (need > 0) {
@@ -9086,7 +9138,7 @@ int BlueStore::_do_write(
 
   _do_garbage_collection(txc, c, o, offset, length, &wctx);
 
-  r = _do_alloc_write(txc, c, &wctx);
+  r = _do_alloc_write(txc, c, o, &wctx);
   if (r < 0) {
     derr << __func__ << " _do_alloc_write failed with " << cpp_strerror(r)
 	 << dendl;

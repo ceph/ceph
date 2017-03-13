@@ -135,7 +135,7 @@ public:
    public:
     explicit C_OnFinished(TestObjectStoreState *state) : m_state(state) { }
 
-    void finish(int r) {
+    void finish(int r) override {
       Mutex::Locker locker(m_state->m_finished_lock);
       m_state->dec_in_flight();
       m_state->m_finished_cond.Signal();

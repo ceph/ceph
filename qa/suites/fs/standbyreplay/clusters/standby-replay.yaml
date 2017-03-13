@@ -8,6 +8,10 @@ overrides:
 roles:
 - [mon.a, mds.a, mds.b-s-0, osd.0, osd.1, client.0]
 - [mon.b, mds.c-s-0, mds.d-s-0, mon.c, osd.2, osd.3]
+openstack:
+- volumes: # attached to each instance
+    count: 2
+    size: 10 # GB
 log-rotate:
   ceph-mds: 10G
   ceph-osd: 10G

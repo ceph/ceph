@@ -139,8 +139,6 @@ typedef unsigned long bmap_t;
 typedef mempool::bluestore_alloc::vector<bmap_t> bmap_mask_vec_t;
 
 class BmapEntry {
-  CephContext* cct;
-
 private:
   bmap_t m_bits;
   static bool m_bit_mask_init;
@@ -157,14 +155,12 @@ public:
   static bmap_t align_mask(int x);
   static bmap_t bit_mask(int bit_num);
   bmap_t atomic_fetch();
-  BmapEntry(CephContext* cct, bool val);
-  BmapEntry(CephContext* cct) : cct(cct) {
+  BmapEntry(CephContext*, bool val);
+  BmapEntry(CephContext*) {
     m_bits = 0;
   }
   BmapEntry(const BmapEntry& bmap) {
-    cct = bmap.cct;
-    bmap_t i = bmap.m_bits;
-    m_bits = i;
+    m_bits = bmap.m_bits;
   }
 
   void clear_bit(int bit);
@@ -180,7 +176,7 @@ public:
   int find_first_set_bits(int64_t required_blocks, int bit_offset,
           int *start_offset, int64_t *scanned);
 
-  void dump_state(int& count);
+  void dump_state(CephContext* cct, const int& count);
   ~BmapEntry();
 
 };
@@ -209,11 +205,11 @@ public:
   static int64_t get_level_factor(CephContext* cct, int level);
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks) = 0;
   virtual bool is_exhausted() = 0;
-  virtual bool child_check_n_lock(BitMapArea *child) {
+  virtual bool child_check_n_lock(BitMapArea *child, int64_t required) {
       ceph_abort();
       return true;
   }
-  virtual bool child_check_n_lock(BitMapArea *child, bool lock) {
+  virtual bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
       ceph_abort();
       return true;
   }
@@ -287,25 +283,61 @@ public:
   }
 };
 
+/* Intensionally inlined for the sake of BitMapAreaLeaf::alloc_blocks_dis_int. */
 class BmapEntityListIter {
-  BitMapAreaList *m_list;
+  BitMapAreaList* m_list;
   int64_t m_start_idx;
   int64_t m_cur_idx;
   bool m_wrap;
   bool m_wrapped;
   bool m_end;
+
 public:
+  BmapEntityListIter(BitMapAreaList* const list,
+                     const int64_t start_idx,
+                     const bool wrap = false)
+    : m_list(list),
+      m_start_idx(start_idx),
+      m_cur_idx(start_idx),
+      m_wrap(wrap),
+      m_wrapped(false),
+      m_end(false) {
+  }
 
-  void init(BitMapAreaList *list, int64_t start_idx, bool wrap);
-  BmapEntityListIter(BitMapAreaList *list);
+  BitMapArea* next() {
+    int64_t cur_idx = m_cur_idx;
 
-  BmapEntityListIter(BitMapAreaList *list, bool wrap);
+    if (m_wrapped &&
+      cur_idx == m_start_idx) {
+      /*
+       * End of wrap cycle + 1
+       */
+      if (!m_end) {
+        m_end = true;
+        return m_list->get_nth_item(cur_idx);
+      }
+      return NULL;
+    }
+    m_cur_idx++;
 
-  BmapEntityListIter(BitMapAreaList *list, int64_t start_idx);
+    if (m_cur_idx == m_list->size() &&
+        m_wrap) {
+      m_cur_idx = 0;
+      m_wrapped = true;
+    }
+    if (cur_idx == m_list->size()) {
+      /*
+       * End of list
+       */
+      return NULL;
+    }
 
-  BmapEntityListIter(BitMapAreaList *list, int64_t start_idx, bool wrap);
+    /* This method should be *really* fast as it's being executed over
+     * and over during traversal of allocators indexes. */
+    alloc_dbg_assert(cur_idx < m_list->size());
+    return m_list->get_nth_item(cur_idx);
+  }
 
-  BitMapArea *next();
   int64_t index();
 };
 
@@ -315,7 +347,7 @@ class BitMapZone: public BitMapArea{
 
 private:
   std::atomic<int32_t> m_used_blocks;
-  BmapEntryVector *m_bmap_list;
+  BmapEntryVector m_bmap_vec;
   std::mutex m_lock;
 
 public:
@@ -375,12 +407,12 @@ protected:
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks);
   virtual bool is_exhausted();
   
-  bool child_check_n_lock(BitMapArea *child, bool lock) {
+  bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
     ceph_abort();
     return false;
   }
 
-  virtual bool child_check_n_lock(BitMapArea *child);
+  virtual bool child_check_n_lock(BitMapArea *child, int64_t required);
   virtual void child_unlock(BitMapArea *child);
 
   virtual void lock_excl() {
@@ -449,13 +481,12 @@ public:
   BitMapAreaLeaf(CephContext* cct, int64_t zone_num, int64_t total_blocks,
 		 bool def);
 
-  bool child_check_n_lock(BitMapArea *child) {
+  bool child_check_n_lock(BitMapArea *child, int64_t required) {
     ceph_abort();
     return false;
   }
 
-  bool child_check_n_lock(BitMapArea *child, bool lock);
-  void child_unlock(BitMapArea *child);
+  bool child_check_n_lock(BitMapZone* child, int64_t required, bool lock);
 
   int64_t alloc_blocks_int(int64_t num_blocks, int64_t hint, int64_t *start_block);
   int64_t alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc, int64_t hint,
@@ -485,7 +516,7 @@ private:
   }
 
   using BitMapArea::child_check_n_lock;
-  bool child_check_n_lock(BitMapArea *child);
+  bool child_check_n_lock(BitMapArea *child, int64_t required);
   virtual void child_unlock(BitMapArea *child);
 
   void serial_lock();

@@ -8,12 +8,12 @@
 #include "include/assert.h"
 #include "librbd/Utils.h"
 #include "common/ceph_context.h"
-#include "librbd/AioCompletion.h"
 #include "librbd/Journal.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/mirror/EnableRequest.h"
+#include "librbd/io/AioCompletion.h"
 #include "journal/Journaler.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -23,7 +23,7 @@
 namespace librbd {
 namespace image {
 
-using util::create_rados_ack_callback;
+using util::create_rados_callback;
 using util::create_context_callback;
 
 namespace {
@@ -125,12 +125,11 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
                                 const std::string &primary_mirror_uuid,
                                 bool skip_mirror_enable,
                                 ContextWQ *op_work_queue, Context *on_finish)
-  : m_image_name(image_name), m_image_id(image_id), m_size(size),
-    m_non_primary_global_image_id(non_primary_global_image_id),
+  : m_ioctx(ioctx), m_image_name(image_name), m_image_id(image_id),
+    m_size(size), m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
     m_skip_mirror_enable(skip_mirror_enable),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
-  m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 
   m_id_obj = util::id_obj_name(m_image_name);
@@ -276,7 +275,7 @@ void CreateRequest<I>::validate_pool() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_validate_pool>(this);
+    create_rados_callback<klass, &klass::handle_validate_pool>(this);
 
   librados::ObjectReadOperation op;
   op.stat(NULL, NULL, NULL);
@@ -294,7 +293,8 @@ Context* CreateRequest<I>::handle_validate_pool(int *result) {
     create_id_object();
     return nullptr;
   } else if ((*result < 0) && (*result != -ENOENT)) {
-    lderr(m_cct) << "failed to stat RBD directory: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "failed to stat RBD directory: " << cpp_strerror(*result)
+                 << dendl;
     return m_on_finish;
   }
 
@@ -340,7 +340,7 @@ void CreateRequest<I>::create_id_object() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_create_id_object>(this);
+    create_rados_callback<klass, &klass::handle_create_id_object>(this);
   int r = m_ioctx.aio_operate(m_id_obj, comp, &op);
   assert(r == 0);
   comp->release();
@@ -351,7 +351,8 @@ Context *CreateRequest<I>::handle_create_id_object(int *result) {
   ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(m_cct) << "error creating RBD id object: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "error creating RBD id object: " << cpp_strerror(*result)
+                 << dendl;
     return m_on_finish;
   }
 
@@ -368,7 +369,7 @@ void CreateRequest<I>::add_image_to_directory() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_add_image_to_directory>(this);
+    create_rados_callback<klass, &klass::handle_add_image_to_directory>(this);
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, comp, &op);
   assert(r == 0);
   comp->release();
@@ -379,7 +380,8 @@ Context *CreateRequest<I>::handle_add_image_to_directory(int *result) {
   ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(m_cct) << "error adding image to directory: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "error adding image to directory: " << cpp_strerror(*result)
+                 << dendl;
 
     m_r_saved = *result;
     remove_id_object();
@@ -404,7 +406,7 @@ void CreateRequest<I>::negotiate_features() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_negotiate_features>(this);
+    create_rados_callback<klass, &klass::handle_negotiate_features>(this);
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_outbl);
   assert(r == 0);
   comp->release();
@@ -456,7 +458,7 @@ void CreateRequest<I>::create_image() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_create_image>(this);
+    create_rados_callback<klass, &klass::handle_create_image>(this);
   int r = m_ioctx.aio_operate(m_header_obj, comp, &op);
   assert(r == 0);
   comp->release();
@@ -492,7 +494,7 @@ void CreateRequest<I>::set_stripe_unit_count() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_set_stripe_unit_count>(this);
+    create_rados_callback<klass, &klass::handle_set_stripe_unit_count>(this);
   int r = m_ioctx.aio_operate(m_header_obj, comp, &op);
   assert(r == 0);
   comp->release();
@@ -503,7 +505,8 @@ Context *CreateRequest<I>::handle_set_stripe_unit_count(int *result) {
   ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(m_cct) << "error setting stripe unit/count: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "error setting stripe unit/count: "
+                 << cpp_strerror(*result) << dendl;
     m_r_saved = *result;
     remove_header_object();
     return nullptr;
@@ -528,7 +531,7 @@ void CreateRequest<I>::object_map_resize() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_object_map_resize>(this);
+    create_rados_callback<klass, &klass::handle_object_map_resize>(this);
   int r = m_ioctx.aio_operate(m_objmap_name, comp, &op);
   assert(r == 0);
   comp->release();
@@ -539,7 +542,8 @@ Context *CreateRequest<I>::handle_object_map_resize(int *result) {
   ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(m_cct) << "error creating initial object map: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "error creating initial object map: "
+                 << cpp_strerror(*result) << dendl;
 
     m_r_saved = *result;
     remove_header_object();
@@ -564,7 +568,7 @@ void CreateRequest<I>::fetch_mirror_mode() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_fetch_mirror_mode>(this);
+    create_rados_callback<klass, &klass::handle_fetch_mirror_mode>(this);
   m_outbl.clear();
   int r = m_ioctx.aio_operate(RBD_MIRRORING, comp, &op, &m_outbl);
   assert(r == 0);
@@ -576,7 +580,8 @@ Context *CreateRequest<I>::handle_fetch_mirror_mode(int *result) {
   ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
 
   if ((*result < 0) && (*result != -ENOENT)) {
-    lderr(m_cct) << "failed to retrieve mirror mode: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "failed to retrieve mirror mode: " << cpp_strerror(*result)
+                 << dendl;
 
     m_r_saved = *result;
     remove_object_map();
@@ -621,7 +626,8 @@ void CreateRequest<I>::journal_create() {
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
 
   using klass = CreateRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_journal_create>(this);
+  Context *ctx = create_context_callback<klass, &klass::handle_journal_create>(
+    this);
 
   librbd::journal::TagData tag_data;
   tag_data.mirror_uuid = (m_force_non_primary ? m_primary_mirror_uuid :
@@ -629,9 +635,9 @@ void CreateRequest<I>::journal_create() {
 
   librbd::journal::CreateRequest<I> *req =
     librbd::journal::CreateRequest<I>::create(
-      m_ioctx, m_image_id, m_journal_order, m_journal_splay_width, m_journal_pool,
-      cls::journal::Tag::TAG_CLASS_NEW, tag_data, librbd::Journal<I>::IMAGE_CLIENT_ID,
-      m_op_work_queue, ctx);
+      m_ioctx, m_image_id, m_journal_order, m_journal_splay_width,
+      m_journal_pool, cls::journal::Tag::TAG_CLASS_NEW, tag_data,
+      librbd::Journal<I>::IMAGE_CLIENT_ID, m_op_work_queue, ctx);
   req->send();
 }
 
@@ -640,7 +646,8 @@ Context* CreateRequest<I>::handle_journal_create(int *result) {
   ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(m_cct) << "error creating journal: " << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "error creating journal: " << cpp_strerror(*result)
+                 << dendl;
 
     m_r_saved = *result;
     remove_object_map();
@@ -706,11 +713,13 @@ void CreateRequest<I>::journal_remove() {
   ldout(m_cct, 20) << this << " " <<__func__ << dendl;
 
   using klass = CreateRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_journal_remove>(this);
+  Context *ctx = create_context_callback<klass, &klass::handle_journal_remove>(
+    this);
 
   librbd::journal::RemoveRequest<I> *req =
     librbd::journal::RemoveRequest<I>::create(
-      m_ioctx, m_image_id, librbd::Journal<I>::IMAGE_CLIENT_ID, m_op_work_queue, ctx);
+      m_ioctx, m_image_id, librbd::Journal<I>::IMAGE_CLIENT_ID, m_op_work_queue,
+      ctx);
   req->send();
 }
 
@@ -738,7 +747,7 @@ void CreateRequest<I>::remove_object_map() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_remove_object_map>(this);
+    create_rados_callback<klass, &klass::handle_remove_object_map>(this);
   int r = m_ioctx.aio_remove(m_objmap_name, comp);
   assert(r == 0);
   comp->release();
@@ -763,7 +772,7 @@ void CreateRequest<I>::remove_header_object() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_remove_header_object>(this);
+    create_rados_callback<klass, &klass::handle_remove_header_object>(this);
   int r = m_ioctx.aio_remove(m_header_obj, comp);
   assert(r == 0);
   comp->release();
@@ -791,7 +800,7 @@ void CreateRequest<I>::remove_from_dir() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_remove_from_dir>(this);
+    create_rados_callback<klass, &klass::handle_remove_from_dir>(this);
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, comp, &op);
   assert(r == 0);
   comp->release();
@@ -816,7 +825,7 @@ void CreateRequest<I>::remove_id_object() {
 
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_remove_id_object>(this);
+    create_rados_callback<klass, &klass::handle_remove_id_object>(this);
   int r = m_ioctx.aio_remove(m_id_obj, comp);
   assert(r == 0);
   comp->release();

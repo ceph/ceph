@@ -332,7 +332,7 @@ private:
   struct C_SyncTimeout : public Context {
     Monitor *mon;
     explicit C_SyncTimeout(Monitor *m) : mon(m) {}
-    void finish(int r) {
+    void finish(int r) override {
       mon->sync_timeout();
     }
   };
@@ -499,7 +499,7 @@ private:
   struct C_TimeCheck : public Context {
     Monitor *mon;
     explicit C_TimeCheck(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       mon->timecheck_start_round();
     }
   };
@@ -544,7 +544,7 @@ private:
   struct C_ProbeTimeout : public Context {
     Monitor *mon;
     explicit C_ProbeTimeout(Monitor *m) : mon(m) {}
-    void finish(int r) {
+    void finish(int r) override {
       mon->probe_timeout(r);
     }
   };
@@ -702,7 +702,7 @@ public:
   struct C_HealthToClogTick : public Context {
     Monitor *mon;
     explicit C_HealthToClogTick(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       if (r < 0)
         return;
       mon->do_health_to_clog();
@@ -713,7 +713,7 @@ public:
   struct C_HealthToClogInterval : public Context {
     Monitor *mon;
     explicit C_HealthToClogInterval(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       if (r < 0)
         return;
       mon->do_health_to_clog_interval();
@@ -812,7 +812,7 @@ public:
     C_Command(Monitor *_mm, MonOpRequestRef _op, int r, string s, bufferlist rd, version_t v) :
       C_MonOp(_op), mon(_mm), rc(r), rs(s), rdata(rd), version(v){}
 
-    virtual void _finish(int r) {
+    void _finish(int r) override {
       MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
       if (r >= 0) {
         ostringstream ss;
@@ -850,7 +850,7 @@ public:
     C_RetryMessage(Monitor *m, MonOpRequestRef op) :
       C_MonOp(op), mon(m) { }
 
-    virtual void _finish(int r) {
+    void _finish(int r) override {
       if (r == -EAGAIN || r >= 0)
         mon->dispatch_op(op);
       else if (r == -ECANCELED)
@@ -872,10 +872,10 @@ public:
   void dispatch_op(MonOpRequestRef op);
   //mon_caps is used for un-connected messages from monitors
   MonCap * mon_caps;
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key);
+			    bool& isvalid, CryptoKey& session_key) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
@@ -900,7 +900,7 @@ public:
  public:
   Monitor(CephContext *cct_, string nm, MonitorDBStore *s,
 	  Messenger *m, MonMap *map);
-  ~Monitor();
+  ~Monitor() override;
 
   static int check_features(MonitorDBStore *store);
 

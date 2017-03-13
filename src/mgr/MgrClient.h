@@ -54,7 +54,7 @@ protected:
   MgrMap map;
   Messenger *msgr;
 
-  MgrSessionState *session;
+  unique_ptr<MgrSessionState> session;
 
   Mutex lock;
 
@@ -83,10 +83,10 @@ public:
   void init();
   void shutdown();
 
-  bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_handle_refused(Connection *con);
+  bool ms_dispatch(Message *m) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override;
 
   bool handle_mgr_map(MMgrMap *m);
   bool handle_mgr_configure(MMgrConfigure *m);

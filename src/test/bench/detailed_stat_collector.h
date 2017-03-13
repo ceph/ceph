@@ -84,12 +84,12 @@ public:
     AdditionalPrinting *details = 0
     );
 
-  uint64_t next_seq();
-  void start_write(uint64_t seq, uint64_t size);
-  void start_read(uint64_t seq, uint64_t size);
-  void write_applied(uint64_t seq);
-  void write_committed(uint64_t seq);
-  void read_complete(uint64_t seq);
+  uint64_t next_seq() override;
+  void start_write(uint64_t seq, uint64_t size) override;
+  void start_read(uint64_t seq, uint64_t size) override;
+  void write_applied(uint64_t seq) override;
+  void write_committed(uint64_t seq) override;
+  void read_complete(uint64_t seq) override;
 
 };
 

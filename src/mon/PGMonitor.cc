@@ -74,7 +74,7 @@ void PGMonitor::on_active()
   update_logger();
 
   if (mon->is_leader())
-    mon->clog->info() << "pgmap " << pg_map << "\n";
+    mon->clog->info() << "pgmap " << pg_map;
 }
 
 void PGMonitor::update_logger()
@@ -1344,6 +1344,12 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
     goto update;
   } else if (prefix == "pg set_full_ratio" ||
              prefix == "pg set_nearfull_ratio") {
+    if (mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "please use the new luminous interfaces"
+	 << " ('osd set-full-ratio' and 'osd set-nearfull-ratio')";
+      r = -EPERM;
+      goto reply;
+    }
     double n;
     if (!cmd_getval(g_ceph_context, cmdmap, "ratio", n)) {
       ss << "unable to parse 'ratio' value '"
@@ -1697,6 +1703,27 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
   }
 
+  if (g_conf->mon_warn_osd_usage_percent) {
+    float max_osd_perc_avail = 0.0, min_osd_perc_avail = 1.0;
+    for (auto p = pg_map.osd_stat.begin(); p != pg_map.osd_stat.end(); ++p) {
+      // kb should never be 0, but avoid divide by zero in case of corruption
+      if (p->second.kb <= 0)
+        continue;
+      float perc_avail = ((float)(p->second.kb - p->second.kb_avail)) / ((float)p->second.kb);
+      if (perc_avail > max_osd_perc_avail)
+        max_osd_perc_avail = perc_avail;
+      if (perc_avail < min_osd_perc_avail)
+        min_osd_perc_avail = perc_avail;
+    }
+    if ((max_osd_perc_avail - min_osd_perc_avail) > g_conf->mon_warn_osd_usage_percent) {
+      ostringstream ss;
+      ss << "Difference in osd space utilization " << ((max_osd_perc_avail - min_osd_perc_avail) *100) << "% greater than " << (g_conf->mon_warn_osd_usage_percent * 100) << "%";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail)
+        detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+  }
+
   // recovery
   list<string> sl;
   pg_map.overall_recovery_summary(NULL, &sl);
@@ -1707,8 +1734,12 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   // full/nearfull
-  check_full_osd_health(summary, detail, pg_map.full_osds, "full", HEALTH_ERR);
-  check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full", HEALTH_WARN);
+  if (!mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    check_full_osd_health(summary, detail, pg_map.full_osds, "full",
+			  HEALTH_ERR);
+    check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full",
+			  HEALTH_WARN);
+  }
 
   // near-target max pools
   const map<int64_t,pg_pool_t>& pools = mon->osdmon()->osdmap.get_pools();

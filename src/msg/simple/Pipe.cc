@@ -85,7 +85,7 @@ public:
       stop_delayed_delivery(false),
       delay_dispatching(false),
       stop_fast_dispatching_flag(false) { }
-  ~DelayedDelivery() {
+  ~DelayedDelivery() override {
     discard();
   }
   void *entry() override;

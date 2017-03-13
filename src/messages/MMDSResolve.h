@@ -20,19 +20,35 @@
 #include "include/types.h"
 
 class MMDSResolve : public Message {
- public:
+public:
   map<dirfrag_t, vector<dirfrag_t> > subtrees;
   map<dirfrag_t, vector<dirfrag_t> > ambiguous_imports;
-  map<metareqid_t, bufferlist> slave_requests;
+
+  struct slave_request {
+    bufferlist inode_caps;
+    bool committing;
+    slave_request() : committing(false) {}
+    void encode(bufferlist &bl) const {
+      ::encode(inode_caps, bl);
+      ::encode(committing, bl);
+    }
+    void decode(bufferlist::iterator &bl) {
+      ::decode(inode_caps, bl);
+      ::decode(committing, bl);
+    }
+  };
+  WRITE_CLASS_ENCODER(slave_request)
+
+  map<metareqid_t, slave_request> slave_requests;
 
   MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
 private:
-  ~MMDSResolve() {}
+  ~MMDSResolve() override {}
 
 public:
-  const char *get_type_name() const { return "mds_resolve"; }
+  const char *get_type_name() const override { return "mds_resolve"; }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "mds_resolve(" << subtrees.size()
 	<< "+" << ambiguous_imports.size()
 	<< " subtrees +" << slave_requests.size() << " slave requests)";
@@ -49,20 +65,20 @@ public:
     ambiguous_imports[im] = m;
   }
 
-  void add_slave_request(metareqid_t reqid) {
-    slave_requests[reqid].clear();
+  void add_slave_request(metareqid_t reqid, bool committing) {
+    slave_requests[reqid].committing = committing;
   }
 
   void add_slave_request(metareqid_t reqid, bufferlist& bl) {
-    slave_requests[reqid].claim(bl);
+    slave_requests[reqid].inode_caps.claim(bl);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(subtrees, payload);
     ::encode(ambiguous_imports, payload);
     ::encode(slave_requests, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(subtrees, p);
     ::decode(ambiguous_imports, p);
@@ -70,4 +86,9 @@ public:
   }
 };
 
+inline ostream& operator<<(ostream& out, const MMDSResolve::slave_request) {
+    return out;
+}
+
+WRITE_CLASS_ENCODER(MMDSResolve::slave_request)
 #endif

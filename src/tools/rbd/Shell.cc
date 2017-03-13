@@ -23,18 +23,6 @@ static const std::string APP_NAME("rbd");
 static const std::string HELP_SPEC("help");
 static const std::string BASH_COMPLETION_SPEC("bash-completion");
 
-struct Secret {};
-
-void validate(boost::any& v, const std::vector<std::string>& values,
-              Secret *target_type, int) {
-  std::cerr << "rbd: --secret is deprecated, use --keyfile" << std::endl;
-
-  po::validators::check_first_occurrence(v);
-  const std::string &s = po::validators::get_single_string(values);
-  g_conf->set_val_or_die("keyfile", s.c_str());
-  v = boost::any(s);
-}
-
 std::string format_command_spec(const Shell::CommandSpec &spec) {
   return joinify<std::string>(spec.begin(), spec.end(), " ");
 }
@@ -252,7 +240,7 @@ void Shell::get_global_options(po::options_description *opts) {
     ("user", po::value<std::string>(), "client id (without 'client.' prefix)")
     ("name,n", po::value<std::string>(), "client name")
     ("mon_host,m", po::value<std::string>(), "monitor host")
-    ("secret", po::value<Secret>(), "path to secret key (deprecated)")
+    ("secret", po::value<at::Secret>(), "path to secret key (deprecated)")
     ("keyfile,K", po::value<std::string>(), "path to secret key")
     ("keyring,k", po::value<std::string>(), "path to keyring");
 }

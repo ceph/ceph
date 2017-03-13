@@ -71,16 +71,21 @@ private:
 void AioDiscardEvent::encode(bufferlist& bl) const {
   ::encode(offset, bl);
   ::encode(length, bl);
+  ::encode(skip_partial_discard, bl);
 }
 
 void AioDiscardEvent::decode(__u8 version, bufferlist::iterator& it) {
   ::decode(offset, it);
   ::decode(length, it);
+  if (version >= 5) {
+    ::decode(skip_partial_discard, it);
+  }
 }
 
 void AioDiscardEvent::dump(Formatter *f) const {
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
+  f->dump_bool("skip_partial_discard", skip_partial_discard);
 }
 
 uint32_t AioWriteEvent::get_fixed_size() {
@@ -100,6 +105,23 @@ void AioWriteEvent::decode(__u8 version, bufferlist::iterator& it) {
 }
 
 void AioWriteEvent::dump(Formatter *f) const {
+  f->dump_unsigned("offset", offset);
+  f->dump_unsigned("length", length);
+}
+
+void AioWriteSameEvent::encode(bufferlist& bl) const {
+  ::encode(offset, bl);
+  ::encode(length, bl);
+  ::encode(data, bl);
+}
+
+void AioWriteSameEvent::decode(__u8 version, bufferlist::iterator& it) {
+  ::decode(offset, it);
+  ::decode(length, it);
+  ::decode(data, it);
+}
+
+void AioWriteSameEvent::dump(Formatter *f) const {
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
 }
@@ -318,7 +340,7 @@ EventType EventEntry::get_event_type() const {
 }
 
 void EventEntry::encode(bufferlist& bl) const {
-  ENCODE_START(4, 1, bl);
+  ENCODE_START(5, 1, bl);
   boost::apply_visitor(EncodeVisitor(bl), event);
   ENCODE_FINISH(bl);
   encode_metadata(bl);
@@ -383,6 +405,9 @@ void EventEntry::decode(bufferlist::iterator& it) {
   case EVENT_TYPE_METADATA_REMOVE:
     event = MetadataRemoveEvent();
     break;
+  case EVENT_TYPE_AIO_WRITESAME:
+    event = AioWriteSameEvent();
+    break;
   default:
     event = UnknownEvent();
     break;
@@ -414,7 +439,7 @@ void EventEntry::decode_metadata(bufferlist::iterator& it) {
 
 void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(AioDiscardEvent()));
-  o.push_back(new EventEntry(AioDiscardEvent(123, 345), utime_t(1, 1)));
+  o.push_back(new EventEntry(AioDiscardEvent(123, 345, false), utime_t(1, 1)));
 
   bufferlist bl;
   bl.append(std::string(32, '1'));
@@ -723,6 +748,9 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
     break;
   case EVENT_TYPE_METADATA_REMOVE:
     out << "MetadataRemove";
+    break;
+  case EVENT_TYPE_AIO_WRITESAME:
+    out << "AioWriteSame";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(type) << ")";

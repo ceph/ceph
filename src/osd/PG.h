@@ -218,26 +218,15 @@ public:
     return get_pgbackend()->get_is_recoverable_predicate();
   }
 protected:
-  // Ops waiting for map, should be queued at back
-  Mutex map_lock;
-  list<OpRequestRef> waiting_for_map;
   OSDMapRef osdmap_ref;
   OSDMapRef last_persisted_osdmap_ref;
   PGPool pool;
 
-  void queue_op(OpRequestRef& op);
-  void take_op_map_waiters();
+  void requeue_map_waiters();
 
   void update_osdmap_ref(OSDMapRef newmap) {
     assert(_lock.is_locked_by_me());
-    Mutex::Locker l(map_lock);
     osdmap_ref = std::move(newmap);
-  }
-
-  OSDMapRef get_osdmap_with_maplock() const {
-    assert(map_lock.is_locked());
-    assert(osdmap_ref);
-    return osdmap_ref;
   }
 
 public:
@@ -813,9 +802,64 @@ public:
 
 protected:
 
+  /*
+   * blocked request wait hierarchy
+   *
+   * In order to preserve request ordering we need to be careful about the
+   * order in which blocked requests get requeued.  Generally speaking, we
+   * push the requests back up to the op_wq in reverse order (most recent
+   * request first) so that they come back out again in the original order.
+   * However, because there are multiple wait queues, we need to requeue
+   * waitlists in order.  Generally speaking, we requeue the wait lists
+   * that are checked first.
+   *
+   * Here are the various wait lists, in the order they are used during
+   * request processing, with notes:
+   *
+   *  - waiting_for_map
+   *    - may start or stop blocking at any time (depending on client epoch)
+   *  - waiting_for_peered
+   *    - !is_peered() or flushes_in_progress
+   *    - only starts blocking on interval change; never restarts
+   *  - waiting_for_active
+   *    - !is_active()
+   *    - only starts blocking on interval change; never restarts
+   *  - waiting_for_scrub
+   *    - starts and stops blocking for varying intervals during scrub
+   *  - waiting_for_unreadable_object
+   *    - never restarts once object is readable (* except for EIO?)
+   *  - waiting_for_degraded_object
+   *    - never restarts once object is writeable (* except for EIO?)
+   *  - waiting_for_blocked_object
+   *    - starts and stops based on proxied op activity
+   *  - obc rwlocks
+   *    - starts and stops based on read/write activity
+   *
+   * Notes:
+   *
+   *  1. During and interval change, we requeue *everything* in the above order.
+   *
+   *  2. When an obc rwlock is released, we check for a scrub block and requeue
+   *     the op there if it applies.  We ignore the unreadable/degraded/blocked
+   *     queues because we assume they cannot apply at that time (this is
+   *     probably mostly true).
+   *
+   *  3. The requeue_ops helper will push ops onto the waiting_for_map list if
+   *     it is non-empty.
+   *
+   * These three behaviors are generally sufficient to maintain ordering, with
+   * the possible exception of cases where we make an object degraded or
+   * unreadable that was previously okay, e.g. when scrub or op processing
+   * encounter an unexpected error.  FIXME.
+   */
 
   // pg waiters
   unsigned flushes_in_progress;
+
+  // ops with newer maps than our (or blocked behind them)
+  // track these by client, since inter-request ordering doesn't otherwise
+  // matter.
+  unordered_map<entity_name_t,list<OpRequestRef>> waiting_for_map;
 
   // ops waiting on peered
   list<OpRequestRef>            waiting_for_peered;
@@ -924,7 +968,8 @@ public:
 
   virtual void calc_trim_to() = 0;
 
-  void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
+  void proc_replica_log(ObjectStore::Transaction& t,
+			pg_info_t &oinfo, const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 		       pg_missing_t& omissing, pg_shard_t from);
@@ -1356,7 +1401,7 @@ public:
     pg_shard_t from;
     pg_info_t info;
     epoch_t msg_epoch;
-    MInfoRec(pg_shard_t from, pg_info_t &info, epoch_t msg_epoch) :
+    MInfoRec(pg_shard_t from, const pg_info_t &info, epoch_t msg_epoch) :
       from(from), info(info), msg_epoch(msg_epoch) {}
     void print(std::ostream *out) const {
       *out << "MInfoRec from " << from << " info: " << info;
@@ -1377,7 +1422,7 @@ public:
     pg_shard_t from;
     pg_notify_t notify;
     uint64_t features;
-    MNotifyRec(pg_shard_t from, pg_notify_t &notify, uint64_t f) :
+    MNotifyRec(pg_shard_t from, const pg_notify_t &notify, uint64_t f) :
       from(from), notify(notify), features(f) {}
     void print(std::ostream *out) const {
       *out << "MNotifyRec from " << from << " notify: " << notify
@@ -2183,7 +2228,7 @@ public:
     const vector<int>& acting,
     int acting_primary,
     const pg_history_t& history,
-    pg_interval_map_t& pim,
+    const pg_interval_map_t& pim,
     bool backfill,
     ObjectStore::Transaction *t);
 

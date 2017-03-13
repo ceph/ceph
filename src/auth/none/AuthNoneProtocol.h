@@ -26,7 +26,7 @@ struct AuthNoneAuthorizer : public AuthAuthorizer {
     ::encode(global_id, bl);
     return 0;
   }
-  bool verify_reply(bufferlist::iterator& reply) { return true; }
+  bool verify_reply(bufferlist::iterator& reply) override { return true; }
 };
 
 #endif

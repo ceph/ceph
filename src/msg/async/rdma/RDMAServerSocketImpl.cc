@@ -83,7 +83,6 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
   if (sd < 0) {
     return -errno;
   }
-  ldout(cct, 20) << __func__ << " accepted a new QP, tcp_fd: " << sd << dendl;
 
   net.set_close_on_exec(sd);
   int r = net.set_nonblock(sd);
@@ -97,7 +96,7 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
     ::close(sd);
     return -errno;
   }
-  net.set_priority(sd, opt.priority);
+  net.set_priority(sd, opt.priority, out->get_family());
 
   RDMAConnectedSocketImpl* server;
   //Worker* w = dispatcher->get_stack()->get_worker();

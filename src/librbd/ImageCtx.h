@@ -26,8 +26,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AsyncRequest.h"
-#include "librbd/SnapInfo.h"
-#include "librbd/parent_types.h"
+#include "librbd/Types.h"
 
 class CephContext;
 class ContextWQ;
@@ -38,10 +37,7 @@ class SafeTimer;
 
 namespace librbd {
 
-  class AioCompletion;
-  class AioImageRequestWQ;
   class AsyncOperation;
-  class CopyupRequest;
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
   template <typename> class ImageWatcher;
@@ -53,6 +49,11 @@ namespace librbd {
 
   namespace cache { struct ImageCache; }
   namespace exclusive_lock { struct Policy; }
+  namespace io {
+  class AioCompletion;
+  class ImageRequestWQ;
+  class CopyupRequest;
+  }
   namespace journal { struct Policy; }
 
   namespace operation {
@@ -120,7 +121,7 @@ namespace librbd {
     char *format_string;
     std::string header_oid;
     std::string id; // only used for new-format images
-    parent_info parent_md;
+    ParentInfo parent_md;
     ImageCtx *parent;
     cls::rbd::GroupSpec group_spec;
     uint64_t stripe_unit, stripe_count;
@@ -136,7 +137,7 @@ namespace librbd {
     Readahead readahead;
     uint64_t total_bytes_read;
 
-    std::map<uint64_t, CopyupRequest*> copyup_list;
+    std::map<uint64_t, io::CopyupRequest*> copyup_list;
 
     xlist<AsyncOperation*> async_ops;
     xlist<AsyncRequest<>*> async_requests;
@@ -150,8 +151,8 @@ namespace librbd {
 
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
-    AioImageRequestWQ *aio_work_queue;
-    xlist<AioCompletion*> completed_reqs;
+    io::ImageRequestWQ *io_work_queue;
+    xlist<io::AioCompletion*> completed_reqs;
     EventSocket event_socket;
 
     ContextWQ *op_work_queue;
@@ -191,6 +192,7 @@ namespace librbd {
     int journal_max_concurrent_object_sets;
     bool mirroring_resync_after_disconnect;
     int mirroring_replay_delay;
+    bool skip_partial_discard;
 
     LibrbdAdminSocketHook *asok_hook;
 
@@ -234,7 +236,7 @@ namespace librbd {
     int get_snap_namespace(librados::snap_t in_snap_id,
 			   cls::rbd::SnapshotNamespace *out_snap_namespace) const;
     int get_parent_spec(librados::snap_t in_snap_id,
-			parent_spec *pspec) const;
+			ParentSpec *pspec) const;
     int is_snap_protected(librados::snap_t in_snap_id,
 			  bool *is_protected) const;
     int is_snap_unprotected(librados::snap_t in_snap_id,
@@ -250,7 +252,7 @@ namespace librbd {
     void add_snap(std::string in_snap_name,
 		  cls::rbd::SnapshotNamespace in_snap_namespace,
 		  librados::snap_t id,
-		  uint64_t in_size, parent_info parent,
+		  uint64_t in_size, const ParentInfo &parent,
 		  uint8_t protection_status, uint64_t flags, utime_t timestamp);
     void rm_snap(std::string in_snap_name, librados::snap_t id);
     uint64_t get_image_size(librados::snap_t in_snap_id) const;
@@ -263,7 +265,7 @@ namespace librbd {
     bool test_flags(uint64_t test_flags, const RWLock &in_snap_lock) const;
     int update_flags(librados::snap_t in_snap_id, uint64_t flag, bool enabled);
 
-    const parent_info* get_parent_info(librados::snap_t in_snap_id) const;
+    const ParentInfo* get_parent_info(librados::snap_t in_snap_id) const;
     int64_t get_parent_pool_id(librados::snap_t in_snap_id) const;
     std::string get_parent_image_id(librados::snap_t in_snap_id) const;
     uint64_t get_parent_snap_id(librados::snap_t in_snap_id) const;
@@ -314,7 +316,9 @@ namespace librbd {
     journal::Policy *get_journal_policy() const;
     void set_journal_policy(journal::Policy *policy);
 
-    static ThreadPool *get_thread_pool_instance(CephContext *cct);
+    static void get_thread_pool_instance(CephContext *cct,
+                                         ThreadPool **thread_pool,
+                                         ContextWQ **op_work_queue);
     static void get_timer_instance(CephContext *cct, SafeTimer **timer,
                                    Mutex **timer_lock);
   };

@@ -6,8 +6,8 @@ script_root=`dirname $0`
 script_root=`(cd $script_root;pwd)`
 if [ -e CMakeCache.txt ]; then
     script_root=$PWD
-elif [ -e $root_path/../build/CMakeCache.txt ]; then
-    cd $root_path/../build
+elif [ -e $script_root/../build/CMakeCache.txt ]; then
+    cd $script_root/../build
     script_root=$PWD
 fi
 vstart_path=`dirname $0`

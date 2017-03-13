@@ -4,17 +4,10 @@ add_library(rbd_types STATIC
   WatchNotifyTypes.cc)
 
 set(librbd_internal_srcs
-  AioCompletion.cc
-  AioImageRequest.cc
-  AioImageRequestWQ.cc
-  AioObjectRequest.cc
   AsyncObjectThrottle.cc
   AsyncOperation.cc
   AsyncRequest.cc
-  CopyupRequest.cc
-  DiffIterate.cc
   ExclusiveLock.cc
-  Group.cc
   ImageCtx.cc
   ImageState.cc
   ImageWatcher.cc
@@ -27,17 +20,13 @@ set(librbd_internal_srcs
   ObjectMap.cc
   Operations.cc
   Utils.cc
+  Watcher.cc
+  api/DiffIterate.cc
+  api/Group.cc
+  api/Image.cc
+  api/Mirror.cc
   cache/ImageWriteback.cc
   cache/PassthroughImageCache.cc
-  Watcher.cc
-  watcher/Types.cc
-  watcher/RewatchRequest.cc
-  managed_lock/AcquireRequest.cc
-  managed_lock/BreakRequest.cc
-  managed_lock/GetLockerRequest.cc
-  managed_lock/ReleaseRequest.cc
-  managed_lock/ReacquireRequest.cc
-  managed_lock/Utils.cc
   exclusive_lock/AutomaticPolicy.cc
   exclusive_lock/PreAcquireRequest.cc
   exclusive_lock/PostAcquireRequest.cc
@@ -48,18 +37,36 @@ set(librbd_internal_srcs
   image/OpenRequest.cc
   image/RefreshParentRequest.cc
   image/RefreshRequest.cc
+  image/RemoveRequest.cc
   image/SetFlagsRequest.cc
   image/SetSnapRequest.cc
   image_watcher/NotifyLockOwner.cc
-  journal/RemoveRequest.cc
+  io/AioCompletion.cc
+  io/CopyupRequest.cc
+  io/ImageRequest.cc
+  io/ImageRequestWQ.cc
+  io/ObjectRequest.cc
+  io/ReadResult.cc
   journal/CreateRequest.cc
+  journal/DemoteRequest.cc
   journal/OpenRequest.cc
   journal/PromoteRequest.cc
+  journal/RemoveRequest.cc
   journal/Replay.cc
   journal/StandardPolicy.cc
   journal/Utils.cc
+  managed_lock/AcquireRequest.cc
+  managed_lock/BreakRequest.cc
+  managed_lock/GetLockerRequest.cc
+  managed_lock/ReacquireRequest.cc
+  managed_lock/ReleaseRequest.cc
+  managed_lock/Utils.cc
+  mirror/DemoteRequest.cc
   mirror/DisableRequest.cc
   mirror/EnableRequest.cc
+  mirror/GetInfoRequest.cc
+  mirror/GetStatusRequest.cc
+  mirror/PromoteRequest.cc
   object_map/CreateRequest.cc
   object_map/InvalidateRequest.cc
   object_map/LockRequest.cc
@@ -72,7 +79,6 @@ set(librbd_internal_srcs
   object_map/SnapshotRollbackRequest.cc
   object_map/UnlockRequest.cc
   object_map/UpdateRequest.cc
-  watcher/Notifier.cc
   operation/DisableFeaturesRequest.cc
   operation/EnableFeaturesRequest.cc
   operation/FlattenRequest.cc
@@ -91,6 +97,9 @@ set(librbd_internal_srcs
   operation/SnapshotUnprotectRequest.cc
   operation/SnapshotLimitRequest.cc
   operation/TrimRequest.cc
+  watcher/Notifier.cc
+  watcher/RewatchRequest.cc
+  watcher/Types.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
 
 add_library(rbd_api STATIC librbd.cc)
@@ -124,7 +133,7 @@ endif()
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES
     OUTPUT_NAME rbd
-    VERSION 1.0.0
+    VERSION 1.12.0
     SOVERSION 1
     COMPILE_FLAGS "-fvisibility=hidden -fvisibility-inlines-hidden"
     LINK_FLAGS "-Wl,--exclude-libs,ALL")

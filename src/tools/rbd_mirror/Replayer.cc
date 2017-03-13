@@ -13,9 +13,11 @@
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "global/global_context.h"
+#include "librbd/internal.h"
 #include "librbd/Utils.h"
 #include "librbd/Watcher.h"
-#include "librbd/internal.h"
+#include "librbd/api/Mirror.h"
+#include "InstanceWatcher.h"
 #include "LeaderWatcher.h"
 #include "Replayer.h"
 #include "Threads.h"
@@ -236,6 +238,9 @@ Replayer::~Replayer()
   if (m_leader_watcher) {
     m_leader_watcher->shut_down();
   }
+  if (m_instance_watcher) {
+    m_instance_watcher->shut_down();
+  }
 }
 
 bool Replayer::is_blacklisted() const {
@@ -289,6 +294,14 @@ int Replayer::init()
   r = m_leader_watcher->init();
   if (r < 0) {
     derr << "error initializing leader watcher: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  m_instance_watcher.reset(InstanceWatcher<>::create(m_local_io_ctx,
+                                                     m_threads->work_queue));
+  r = m_instance_watcher->init();
+  if (r < 0) {
+    derr << "error initializing instance watcher: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -378,7 +391,7 @@ int Replayer::init_rados(const std::string &cluster_name,
 
 void Replayer::init_local_mirroring_images() {
   rbd_mirror_mode_t mirror_mode;
-  int r = librbd::mirror_mode_get(m_local_io_ctx, &mirror_mode);
+  int r = librbd::api::Mirror<>::mode_get(m_local_io_ctx, &mirror_mode);
   if (r < 0) {
     derr << "could not tell whether mirroring was enabled for "
          << m_local_io_ctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
@@ -469,26 +482,37 @@ void Replayer::print_status(Formatter *f, stringstream *ss)
 {
   dout(20) << "enter" << dendl;
 
+  if (!f) {
+    return;
+  }
+
   Mutex::Locker l(m_lock);
 
-  if (f) {
-    f->open_object_section("replayer_status");
-    f->dump_string("pool", m_local_io_ctx.get_pool_name());
-    f->dump_stream("peer") << m_peer;
-    f->dump_bool("leader", m_leader_watcher->is_leader());
-    f->open_array_section("image_replayers");
-  };
+  f->open_object_section("replayer_status");
+  f->dump_string("pool", m_local_io_ctx.get_pool_name());
+  f->dump_stream("peer") << m_peer;
+
+  bool leader = m_leader_watcher->is_leader();
+  f->dump_bool("leader", leader);
+  if (leader) {
+    std::vector<std::string> instance_ids;
+    m_leader_watcher->list_instances(&instance_ids);
+    f->open_array_section("instances");
+    for (auto instance_id : instance_ids) {
+      f->dump_string("instance_id", instance_id);
+    }
+    f->close_section();
+  }
+  f->open_array_section("image_replayers");
 
   for (auto &kv : m_image_replayers) {
     auto &image_replayer = kv.second;
     image_replayer->print_status(f, ss);
   }
 
-  if (f) {
-    f->close_section();
-    f->close_section();
-    f->flush(*ss);
-  }
+  f->close_section();
+  f->close_section();
+  f->flush(*ss);
 }
 
 void Replayer::start()

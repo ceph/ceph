@@ -6,6 +6,8 @@
 
 #include "gmock/gmock.h"
 
+struct Context;
+
 namespace librbd {
 
 struct MockContextWQ {

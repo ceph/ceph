@@ -39,6 +39,9 @@ public:
     return new ManagedLock(ioctx, work_queue, oid, watcher, mode,
                            blacklist_on_break_lock, blacklist_expire_seconds);
   }
+  void destroy() {
+    delete this;
+  }
 
   ManagedLock(librados::IoCtx& ioctx, ContextWQ *work_queue,
               const std::string& oid, Watcher *watcher,
@@ -199,7 +202,7 @@ private:
     C_ShutDownRelease(ManagedLock *lock)
       : lock(lock) {
     }
-    virtual void finish(int r) override {
+    void finish(int r) override {
       lock->send_shutdown_release();
     }
   };

@@ -232,7 +232,7 @@ class RGWMetaSyncStatusManager {
 
   RGWRemoteMetaLog master_log;
 
-  map<int, rgw_obj> shard_objs;
+  map<int, rgw_raw_obj> shard_objs;
 
   struct utime_shard {
     real_time ts;

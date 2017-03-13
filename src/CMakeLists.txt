@@ -508,6 +508,7 @@ set(libcommon_files
   common/Graylog.cc
   common/fs_types.cc
   common/dns_resolve.cc
+  common/hostname.cc
   ${arch_files}
   ${auth_files}
   ${mds_files})
@@ -751,6 +752,11 @@ if (NOT WITH_SYSTEM_ROCKSDB)
     list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
   endif(WITH_CCACHE AND CCACHE_FOUND)
 
+  # We really want to have the CRC32 calculation in RocksDB accelerated
+  # with SSE 4.2. For details refer to rocksdb/util/crc32c.cc.
+  if (HAVE_INTEL_SSE4_2)
+    list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_CXX_FLAGS=${SIMD_COMPILE_FLAGS})
+  endif()
   list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_AR=${CMAKE_AR})
   list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 

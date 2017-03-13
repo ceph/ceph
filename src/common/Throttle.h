@@ -264,7 +264,7 @@ public:
   }
 
 protected:
-  virtual void finish(int r);
+  void finish(int r) override;
 
 private:
   OrderedThrottle *m_ordered_throttle;

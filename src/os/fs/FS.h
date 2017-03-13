@@ -65,7 +65,6 @@ public:
     boost::intrusive::list_member_hook<> queue_item;
 
     aio_t(void *p, int f) : priv(p), fd(f), offset(0), length(0), rval(-1000) {
-      memset(&iocb, 0, sizeof(iocb));
     }
 
     void pwritev(uint64_t _offset, uint64_t len) {

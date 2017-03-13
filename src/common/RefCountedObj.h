@@ -23,7 +23,7 @@
 
 struct RefCountedObject {
 private:
-  atomic_t nref;
+  mutable atomic_t nref;
   CephContext *cct;
 public:
   RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
@@ -31,6 +31,14 @@ public:
     assert(nref.read() == 0);
   }
   
+  const RefCountedObject *get() const {
+    int v = nref.inc();
+    if (cct)
+      lsubdout(cct, refs, 1) << "RefCountedObject::get " << this << " "
+			     << (v - 1) << " -> " << v
+			     << dendl;
+    return this;
+  }
   RefCountedObject *get() {
     int v = nref.inc();
     if (cct)
@@ -39,7 +47,7 @@ public:
 			     << dendl;
     return this;
   }
-  void put() {
+  void put() const {
     CephContext *local_cct = cct;
     int v = nref.dec();
     if (v == 0) {
@@ -151,7 +159,7 @@ struct RefCountedWaitObject {
   }
 };
 
-void intrusive_ptr_add_ref(RefCountedObject *p);
-void intrusive_ptr_release(RefCountedObject *p);
+void intrusive_ptr_add_ref(const RefCountedObject *p);
+void intrusive_ptr_release(const RefCountedObject *p);
 
 #endif

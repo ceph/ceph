@@ -6,16 +6,34 @@ function die() {
 }
 
 function usage() {
-    echo "bt: $0 -c core_path [-d distro] [-C directory]"
+    echo "bt: $0 -c core_path [-d distro] [-C directory] [-v]"
     exit 1
 }
 
-while getopts  "j:c:v:d:s:" opt
+function log() {
+    if [ -n "$verbose" ]; then
+        echo $*
+    fi
+}
+
+function get_machine() {
+    local core_path=$1
+    local machine=${core_path%/coredump/*}
+    echo $(basename $machine)
+}
+
+function get_t_dir() {
+    local core_path=$1
+    echo ${core_path%/remote/*}
+}
+
+while getopts  "c:C:d:v" opt
 do
     case $opt in
         c) core_path=$OPTARG;;
         C) wd=$OPTARG;;
         d) codename=$OPTARG;;
+        v) verbose=1;;
         *) usage;;
     esac
 done
@@ -25,11 +43,14 @@ if [ -z $core_path ]; then
 fi
 
 sha1=$(strings $core_path | gawk 'BEGIN{ FS = "=" } /^CEPH_REF/{print $2}')
+if [ -z $sha1 ]; then
+    teuthology_log=$(get_t_dir $core_path)/teuthology.log
+    sha1=$(grep -m1 -A1 "Running command: sudo ceph --version" ${teuthology_log} | tail -n1 | grep -oP "ceph version [^ ]+ \(\K[^\) ]+")
+fi
 
 if [ -z $distro ]; then
-    machine=${core_path%/coredump/*}
-    machine=$(basename $machine)
-    teuthology_log=${core_path%/remote/*}/teuthology.log
+    machine=$(get_machine $core_path)
+    teuthology_log=$(get_t_dir $core_path)/teuthology.log
     if [ ! -r ${teuthology_log} ]; then
         die "missing distro, and unable to read it from ${teuthology_log}"
     fi
@@ -38,6 +59,12 @@ if [ -z $distro ]; then
     distro=$(echo $distro | tr '[:upper:]' '[:lower:]')
     distro_ver=$(echo $ld | gawk -F ", " '{print $2}' | sed s/\'//g)
     codename=$(echo $ld | gawk -F ", " '{print $3}' | sed s/\'//g)
+    if [ "$distro" == "centos linux" ]; then
+        # there is chance that it's actually something different,
+        # but we take it as centos7 anyway.
+        distro=centos
+        distro_ver=7
+    fi
 else
     case $codename in
         xenial)
@@ -69,15 +96,16 @@ if [ -z $wd ]; then
 fi
 
 if [ -z $wd ]; then
-   echo "unable to figure out the working directory, using core's basename"
    wd=$(basename $core_path)
    wd=${wd%.*}
+   echo "unable to figure out the working directory, using ${wd}"
 fi
 
+log "creating ${wd}"
 mkdir -p $wd
 cd $wd
 
-prog=$(file $core_path | grep -oP "from '\K[^']+")
+prog=$(file $core_path | grep -oP "from '\K[^']+" | cut -d' ' -f1)
 case $prog in
     ceph_test_*)
         pkgs="ceph-test librados2"
@@ -86,6 +114,7 @@ case $prog in
         pkgs=$prog
         ;;
     */python*)
+        prog=$(basename $prog)
         pkgs=librados2
         ;;
     rados)
@@ -100,6 +129,11 @@ flavor=default
 arch=x86_64
 
 release=$(strings $core_path | grep -m1  -oP '/build/ceph-\K[^/]+')
+if [ -z $release ]; then
+    teuthology_log=$(get_t_dir $core_path)/teuthology.log
+    release=$(grep -m1 -A1 "Running command: sudo ceph --version" ${teuthology_log} | tail -n1 | grep -oP "ceph version \K[^ ]+")
+fi
+
 case $distro in
     ubuntu)
         pkg_path=pool/main/c/ceph/%s_%s-1${codename}_amd64.deb
@@ -109,7 +143,7 @@ case $distro in
         pkgs="$t"
         ;;
     centos)
-        pkg_path=${arch}/%s-%s.x86_64.rpm
+        pkg_path=${arch}/%s-%s.el7.x86_64.rpm
         # 11.0.2-1022-g5b25cd3 => 11.0.2-1022.g5b25cd3
         release=$(echo $release | sed s/-/./2)
         pkgs="$pkgs ceph-debuginfo"
@@ -122,9 +156,11 @@ esac
 query_url="https://shaman.ceph.com/api/search?status=ready&project=ceph&flavor=${flavor}&distros=${distro}%2F${distro_ver}%2F${arch}&sha1=${sha1}"
 repo_url=`curl -L -s "${query_url}" | jq -r '.[0] | .url'`
 pkg_url=${repo_url}/${pkg_path}
+log "repo url is ${repo_url}"
 
 for pkg in ${pkgs}; do
     url=`printf $pkg_url $pkg $release`
+    log "downloading ${url}"
     curl -O -L -C - --silent --fail --insecure $url
     fname=`basename $url`
     case $fname in
@@ -139,6 +175,7 @@ done
 cat > preclude.gdb <<EOF
 set sysroot .
 set debug-file-directory ./usr/lib/debug
+set solib-search-path ./usr/lib64
 file ./usr/bin/$prog
 core $core_path
 EOF

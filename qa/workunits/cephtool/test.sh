@@ -1045,6 +1045,12 @@ function test_mon_mon()
   [ -s $TEMP_DIR/monmap.$$ ]
   # ceph mon tell
   ceph mon_status
+
+  # test mon features
+  ceph mon feature list
+  ceph mon feature set kraken --yes-i-really-mean-it
+  expect_false ceph mon feature set abcd
+  expect_false ceph mon feature set abcd --yes-i-really-mean-it
 }
 
 function test_mon_osd()
@@ -1395,12 +1401,11 @@ function test_mon_pg()
   ceph pg repair 0.0
   ceph pg scrub 0.0
 
-  ceph pg set_full_ratio 0.90
-  ceph pg dump --format=plain | grep '^full_ratio 0.9'
-  ceph pg set_full_ratio 0.95
-  ceph pg set_nearfull_ratio 0.90
-  ceph pg dump --format=plain | grep '^nearfull_ratio 0.9'
-  ceph pg set_nearfull_ratio 0.85
+  ceph osd set-full-ratio .962
+  ceph osd dump | grep '^full_ratio 0.962'
+  ceph osd set-nearfull-ratio .892
+  ceph osd dump | grep '^nearfull_ratio 0.892'
+
   ceph pg stat | grep 'pgs:'
   ceph pg 0.0 query
   ceph tell 0.0 query

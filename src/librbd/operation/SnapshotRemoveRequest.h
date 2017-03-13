@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_OPERATION_SNAPSHOT_REMOVE_REQUEST_H
 
 #include "librbd/operation/Request.h"
-#include "librbd/parent_types.h"
+#include "librbd/Types.h"
 #include <string>
 
 class Context;
@@ -60,10 +60,10 @@ public:
 		        const std::string &snap_name, uint64_t snap_id);
 
 protected:
-  virtual void send_op();
-  virtual bool should_complete(int r);
+  void send_op() override;
+  bool should_complete(int r) override;
 
-  virtual journal::Event create_event(uint64_t op_tid) const {
+  journal::Event create_event(uint64_t op_tid) const override {
     return journal::SnapRemoveEvent(op_tid, m_snap_name);
   }
 
@@ -85,7 +85,7 @@ private:
   void send_release_snap_id();
 
   void remove_snap_context();
-  int scan_for_parents(parent_spec &pspec);
+  int scan_for_parents(ParentSpec &pspec);
 
 };
 

@@ -25,6 +25,7 @@
 #include "librbd/Journal.h"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Mirror.h"
 #include "test/rbd_mirror/test_fixture.h"
 
 #include "test/librados/test.h"
@@ -61,7 +62,7 @@ public:
   void SetUp() override {
     TestFixture::SetUp();
 
-    librbd::mirror_mode_set(m_local_io_ctx, RBD_MIRROR_MODE_IMAGE);
+    librbd::api::Mirror<>::mode_set(m_local_io_ctx, RBD_MIRROR_MODE_IMAGE);
 
     m_deleter = new rbd::mirror::ImageDeleter(m_threads->work_queue,
                                               m_threads->timer,
@@ -120,7 +121,7 @@ public:
     EXPECT_EQ(1, r == 0 || r == -ENOENT);
 
     if (r == 0) {
-        int r2 = librbd::mirror_image_promote(ictx, true);
+        int r2 = librbd::api::Mirror<>::image_promote(ictx, true);
         EXPECT_EQ(1, r2 == 0 || r2 == -EINVAL);
     }
 
@@ -138,7 +139,7 @@ public:
       close = true;
     }
 
-    EXPECT_EQ(0, librbd::mirror_image_demote(ictx));
+    EXPECT_EQ(0, librbd::api::Mirror<>::image_demote(ictx));
 
     if (close) {
       EXPECT_EQ(0, ictx->state->close());
@@ -197,7 +198,6 @@ public:
     ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                   false);
     EXPECT_EQ(-ENOENT, ictx->state->open(false));
-    delete ictx;
 
     cls::rbd::MirrorImage mirror_image;
     EXPECT_EQ(-ENOENT, cls_client::mirror_image_get(&m_local_io_ctx,

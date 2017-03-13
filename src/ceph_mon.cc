@@ -660,27 +660,20 @@ int main(int argc, const char **argv)
   msgr->set_cluster_protocol(CEPH_MON_PROTOCOL);
   msgr->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
 
-  uint64_t supported =
-    CEPH_FEATURE_UID |
-    CEPH_FEATURE_NOSRCADDR |
-    CEPH_FEATURE_PGID64 |
-    CEPH_FEATURE_MSG_AUTH;
-  msgr->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
+  msgr->set_default_policy(Messenger::Policy::stateless_server(0));
   msgr->set_policy(entity_name_t::TYPE_MON,
                    Messenger::Policy::lossless_peer_reuse(
-                       supported,
-                       CEPH_FEATURE_UID |
-                       CEPH_FEATURE_PGID64 |
-                       CEPH_FEATURE_MON_SINGLE_PAXOS));
+		     CEPH_FEATURE_UID |
+		     CEPH_FEATURE_PGID64 |
+		     CEPH_FEATURE_MON_SINGLE_PAXOS));
   msgr->set_policy(entity_name_t::TYPE_OSD,
                    Messenger::Policy::stateless_server(
-                       supported,
-                       CEPH_FEATURE_PGID64 |
-                       CEPH_FEATURE_OSDENC));
+		     CEPH_FEATURE_PGID64 |
+		     CEPH_FEATURE_OSDENC));
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
-                   Messenger::Policy::stateless_server(supported, 0));
+                   Messenger::Policy::stateless_server(0));
   msgr->set_policy(entity_name_t::TYPE_MDS,
-                   Messenger::Policy::stateless_server(supported, 0));
+                   Messenger::Policy::stateless_server(0));
 
   // throttle client traffic
   Throttle *client_throttler = new Throttle(g_ceph_context, "mon_client_bytes",

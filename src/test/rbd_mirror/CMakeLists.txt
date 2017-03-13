@@ -4,6 +4,8 @@ set(rbd_mirror_test_srcs
   test_ImageReplayer.cc
   test_ImageDeleter.cc
   test_ImageSync.cc
+  test_InstanceWatcher.cc
+  test_Instances.cc
   test_LeaderWatcher.cc
   test_fixture.cc
   )
@@ -17,6 +19,7 @@ add_executable(unittest_rbd_mirror
   test_mock_ImageReplayer.cc
   test_mock_ImageSync.cc
   test_mock_ImageSyncThrottler.cc
+  test_mock_InstanceWatcher.cc
   test_mock_LeaderWatcher.cc
   image_replayer/test_mock_BootstrapRequest.cc
   image_replayer/test_mock_CreateImageRequest.cc

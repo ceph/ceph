@@ -14,6 +14,24 @@
 namespace rbd {
 namespace utils {
 
+namespace detail {
+
+template <typename T, void(T::*MF)(int)>
+void aio_completion_callback(librbd::completion_t completion,
+                                    void *arg) {
+  librbd::RBD::AioCompletion *aio_completion =
+    reinterpret_cast<librbd::RBD::AioCompletion*>(completion);
+
+  // complete the AIO callback in separate thread context
+  T *t = reinterpret_cast<T *>(arg);
+  int r = aio_completion->get_return_value();
+  aio_completion->release();
+
+  (t->*MF)(r);
+}
+
+} // namespace detail
+
 static const std::string RBD_DIFF_BANNER ("rbd diff v1\n");
 
 static const std::string RBD_IMAGE_BANNER_V2 ("rbd image v2\n");
@@ -54,10 +72,16 @@ struct ProgressContext : public librbd::ProgressContext {
     : operation(o), progress(!no_progress), last_pc(0) {
   }
 
-  int update_progress(uint64_t offset, uint64_t total);
+  int update_progress(uint64_t offset, uint64_t total) override;
   void finish();
   void fail();
 };
+
+template <typename T, void(T::*MF)(int)>
+librbd::RBD::AioCompletion *create_aio_completion(T *t) {
+  return new librbd::RBD::AioCompletion(
+    t, &detail::aio_completion_callback<T, MF>);
+}
 
 void aio_context_callback(librbd::completion_t completion, void *arg);
 

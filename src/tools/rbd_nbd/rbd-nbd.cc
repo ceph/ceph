@@ -76,6 +76,7 @@ static std::string devpath, poolname("rbd"), imgname, snapname;
 static bool readonly = false;
 static int nbds_max = 0;
 static int max_part = 255;
+static bool set_max_part = false;
 static bool exclusive = false;
 
 #define RBD_NBD_BLKSIZE 512UL
@@ -449,10 +450,12 @@ public:
   }
 };
 
-static int open_device(const char* path, bool try_load_moudle = false)
+static int open_device(const char* path, bool try_load_module = false)
 {
   int nbd = open(path, O_RDWR);
-  if (nbd < 0 && try_load_moudle && access("/sys/module/nbd", F_OK) != 0) {
+  bool loaded_module = false;
+  
+  if (nbd < 0 && try_load_module && access("/sys/module/nbd", F_OK) != 0) {
     ostringstream param;
     int r;
     if (nbds_max) {
@@ -465,9 +468,18 @@ static int open_device(const char* path, bool try_load_moudle = false)
     if (r < 0) {
       cerr << "rbd-nbd: failed to load nbd kernel module: " << cpp_strerror(-r) << std::endl;
       return r;
+    } else {
+      loaded_module = true;
     }
     nbd = open(path, O_RDWR);
   }
+
+  if ((nbds_max || set_max_part) && 
+      try_load_module && !loaded_module) {
+    cerr << "rbd-nbd: ignoring kernel module parameter options: nbd module already loaded" 
+         << std::endl;
+  }
+  
   return nbd;
 }
 
@@ -550,10 +562,12 @@ static int do_map(int argc, const char *argv[])
 
   if (devpath.empty()) {
     char dev[64];
+    bool try_load_module = true;
     while (true) {
       snprintf(dev, sizeof(dev), "/dev/nbd%d", index);
 
-      nbd = open_device(dev, true);
+      nbd = open_device(dev, try_load_module);
+      try_load_module = false;
       if (nbd < 0) {
         r = nbd;
         cerr << "rbd-nbd: failed to find unused device" << std::endl;
@@ -823,6 +837,7 @@ static int rbd_nbd(int argc, const char *argv[])
         cerr << "rbd-nbd: Invalid argument for max_part(0~255)!" << std::endl;
         return EXIT_FAILURE;
       }
+      set_max_part = true;
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
       readonly = true;
     } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {

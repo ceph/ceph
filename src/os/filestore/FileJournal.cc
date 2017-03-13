@@ -189,9 +189,8 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
   }
 
   if (create && (oldsize < conf_journal_sz)) {
-    uint64_t newsize(cct->_conf->osd_journal_size);
-    newsize <<= 20;
-    dout(10) << "_open extending to " << newsize << " bytes" << dendl;
+    uint64_t newsize(conf_journal_sz);
+    dout(10) <<  __func__ << " _open extending to " << newsize << " bytes" << dendl;
     ret = ::ftruncate(fd, newsize);
     if (ret < 0) {
       int err = errno;
@@ -2159,4 +2158,16 @@ void FileJournal::corrupt_header_magic(
     pos +
     (reinterpret_cast<char*>(&h.magic2) - reinterpret_cast<char*>(&h));
   corrupt(wfd, corrupt_at);
+}
+
+off64_t FileJournal::get_journal_size_estimate()
+{
+  off64_t size, start = header.start;
+  if (write_pos < start) {
+    size = (max_size - start) + write_pos;
+  } else {
+    size = write_pos - start;
+  }
+  dout(20) << __func__ << " journal size=" << size << dendl;
+  return size;
 }

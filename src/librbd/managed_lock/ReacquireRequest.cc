@@ -21,7 +21,7 @@ using std::string;
 namespace librbd {
 namespace managed_lock {
 
-using librbd::util::create_rados_safe_callback;
+using librbd::util::create_rados_callback;
 
 template <typename I>
 ReacquireRequest<I>::ReacquireRequest(librados::IoCtx& ioctx,
@@ -51,7 +51,7 @@ void ReacquireRequest<I>::set_cookie() {
                                m_old_cookie, util::get_watcher_lock_tag(),
                                m_new_cookie);
 
-  librados::AioCompletion *rados_completion = create_rados_safe_callback<
+  librados::AioCompletion *rados_completion = create_rados_callback<
     ReacquireRequest, &ReacquireRequest::handle_set_cookie>(this);
   int r = m_ioctx.aio_operate(m_oid, rados_completion, &op);
   assert(r == 0);

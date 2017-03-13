@@ -223,7 +223,7 @@ class EventCenter {
    public:
     C_submit_event(func &&_f, bool nw)
       : f(std::move(_f)), nonwait(nw) {}
-    void do_request(int id) {
+    void do_request(int id) override {
       f();
       lock.lock();
       cond.notify_all();

@@ -327,7 +327,6 @@ bool DaemonServer::handle_command(MCommand *m)
   rs = ss.str();
   odata.append(ds);
   dout(1) << "do_command r=" << r << " " << rs << dendl;
-  //clog->info() << rs << "\n";
   if (con) {
     MCommandReply *reply = new MCommandReply(r, rs);
     reply->set_tid(m->get_tid());

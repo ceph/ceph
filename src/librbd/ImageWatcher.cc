@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/ImageWatcher.h"
-#include "librbd/AioCompletion.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -12,6 +11,7 @@
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/image_watcher/NotifyLockOwner.h"
+#include "librbd/io/AioCompletion.h"
 #include "include/encoding.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
@@ -27,7 +27,7 @@ using namespace image_watcher;
 using namespace watch_notify;
 using util::create_async_context_callback;
 using util::create_context_callback;
-using util::create_rados_safe_callback;
+using util::create_rados_callback;
 using librbd::watcher::HandlePayloadVisitor;
 using librbd::watcher::C_NotifyAck;
 

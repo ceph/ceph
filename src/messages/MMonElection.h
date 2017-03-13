@@ -73,15 +73,15 @@ public:
     m->encode(monmap_bl, CEPH_FEATURES_ALL);
   }
 private:
-  ~MMonElection() {}
+  ~MMonElection() override {}
 
 public:  
-  const char *get_type_name() const { return "election"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "election"; }
+  void print(ostream& out) const override {
     out << "election(" << fsid << " " << get_opname(op) << " " << epoch << ")";
   }
   
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     if (monmap_bl.length() && (features != CEPH_FEATURES_ALL)) {
       // reencode old-format monmap
       MonMap t;
@@ -101,7 +101,7 @@ public:
     ::encode(sharing_bl, payload);
     ::encode(mon_features, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     if (header.version >= 2)
       ::decode(fsid, p);
