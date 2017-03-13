@@ -347,7 +347,7 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw content length compat``
 
-:Description: Enable compatability handling of FCGI requests with both CONTENT_LENGTH AND HTTP_CONTENT_LENGTH set.
+:Description: Enable compatibility handling of FCGI requests with both CONTENT_LENGTH AND HTTP_CONTENT_LENGTH set.
 :Type: Boolean
 :Default: ``false``
 

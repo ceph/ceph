@@ -253,7 +253,7 @@ user version assert on ec for now (I think?  Only user is rgw bucket
 indices iirc, and those will always be on replicated because they use
 omap).
 
-We can avoid (1) by maintaining the missing set explicitely.  It's
+We can avoid (1) by maintaining the missing set explicitly.  It's
 already possible for there to be a missing object without a
 corresponding log entry (Consider the case where the most recent write
 is to an object which has not been updated in weeks.  If that write
