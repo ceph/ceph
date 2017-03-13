@@ -250,11 +250,11 @@ extern int crush_bucket_adjust_item_weight(struct crush_map *map, struct crush_b
  * - return -ERANGE if the sum of the weight of the items in __bucket__ overflows.
  * - return -1 if the value of __bucket->alg__ is unknown.
  *
- * @param crush a crush_map containing __bucket__
+ * @param map a crush_map containing __bucket__
  * @param bucket the root of the tree to reweight
  * @returns 0 on success, < 0 on error
  */
-extern int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *bucket);
+extern int crush_reweight_bucket(struct crush_map *map, struct crush_bucket *bucket);
 /** @ingroup API
  *
  * Remove __bucket__ from __map__ and deallocate it via crush_destroy_bucket().
