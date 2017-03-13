@@ -6819,7 +6819,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     session->put();
 
   // share with the objecter
-  service.objecter->handle_osd_map(m);
+  if (!is_preboot())
+    service.objecter->handle_osd_map(m);
 
   epoch_t first = m->get_first();
   epoch_t last = m->get_last();
