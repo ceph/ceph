@@ -1263,7 +1263,7 @@ int crush_bucket_adjust_item_weight(struct crush_map *map,
 
 /************************************************/
 
-static int crush_reweight_uniform_bucket(struct crush_map *crush, struct crush_bucket_uniform *bucket)
+static int crush_reweight_uniform_bucket(struct crush_map *map, struct crush_bucket_uniform *bucket)
 {
 	unsigned i;
 	unsigned sum = 0, n = 0, leaves = 0;
@@ -1271,8 +1271,8 @@ static int crush_reweight_uniform_bucket(struct crush_map *crush, struct crush_b
 	for (i = 0; i < bucket->h.size; i++) {
 		int id = bucket->h.items[i];
 		if (id < 0) {
-			struct crush_bucket *c = crush->buckets[-1-id];
-			crush_reweight_bucket(crush, c);
+			struct crush_bucket *c = map->buckets[-1-id];
+			crush_reweight_bucket(map, c);
 
 			if (crush_addition_is_unsafe(sum, c->weight))
                                 return -ERANGE;
@@ -1291,7 +1291,7 @@ static int crush_reweight_uniform_bucket(struct crush_map *crush, struct crush_b
 	return 0;
 }
 
-static int crush_reweight_list_bucket(struct crush_map *crush, struct crush_bucket_list *bucket)
+static int crush_reweight_list_bucket(struct crush_map *map, struct crush_bucket_list *bucket)
 {
 	unsigned i;
 
@@ -1299,8 +1299,8 @@ static int crush_reweight_list_bucket(struct crush_map *crush, struct crush_buck
 	for (i = 0; i < bucket->h.size; i++) {
 		int id = bucket->h.items[i];
 		if (id < 0) {
-			struct crush_bucket *c = crush->buckets[-1-id];
-			crush_reweight_bucket(crush, c);
+			struct crush_bucket *c = map->buckets[-1-id];
+			crush_reweight_bucket(map, c);
 			bucket->item_weights[i] = c->weight;
 		}
 
@@ -1313,7 +1313,7 @@ static int crush_reweight_list_bucket(struct crush_map *crush, struct crush_buck
 	return 0;
 }
 
-static int crush_reweight_tree_bucket(struct crush_map *crush, struct crush_bucket_tree *bucket)
+static int crush_reweight_tree_bucket(struct crush_map *map, struct crush_bucket_tree *bucket)
 {
 	unsigned i;
 
@@ -1322,8 +1322,8 @@ static int crush_reweight_tree_bucket(struct crush_map *crush, struct crush_buck
 		int node = crush_calc_tree_node(i);
 		int id = bucket->h.items[i];
 		if (id < 0) {
-			struct crush_bucket *c = crush->buckets[-1-id];
-			crush_reweight_bucket(crush, c);
+			struct crush_bucket *c = map->buckets[-1-id];
+			crush_reweight_bucket(map, c);
 			bucket->node_weights[node] = c->weight;
 		}
 
@@ -1338,7 +1338,7 @@ static int crush_reweight_tree_bucket(struct crush_map *crush, struct crush_buck
 	return 0;
 }
 
-static int crush_reweight_straw_bucket(struct crush_map *crush, struct crush_bucket_straw *bucket)
+static int crush_reweight_straw_bucket(struct crush_map *map, struct crush_bucket_straw *bucket)
 {
 	unsigned i;
 
@@ -1346,8 +1346,8 @@ static int crush_reweight_straw_bucket(struct crush_map *crush, struct crush_buc
 	for (i = 0; i < bucket->h.size; i++) {
 		int id = bucket->h.items[i];
 		if (id < 0) {
-			struct crush_bucket *c = crush->buckets[-1-id];
-			crush_reweight_bucket(crush, c);
+			struct crush_bucket *c = map->buckets[-1-id];
+			crush_reweight_bucket(map, c);
 			bucket->item_weights[i] = c->weight;
 		}
 
@@ -1356,12 +1356,12 @@ static int crush_reweight_straw_bucket(struct crush_map *crush, struct crush_buc
 
                 bucket->h.weight += bucket->item_weights[i];
 	}
-	crush_calc_straw(crush, bucket);
+	crush_calc_straw(map, bucket);
 
 	return 0;
 }
 
-static int crush_reweight_straw2_bucket(struct crush_map *crush, struct crush_bucket_straw2 *bucket)
+static int crush_reweight_straw2_bucket(struct crush_map *map, struct crush_bucket_straw2 *bucket)
 {
 	unsigned i;
 
@@ -1369,8 +1369,8 @@ static int crush_reweight_straw2_bucket(struct crush_map *crush, struct crush_bu
 	for (i = 0; i < bucket->h.size; i++) {
 		int id = bucket->h.items[i];
 		if (id < 0) {
-			struct crush_bucket *c = crush->buckets[-1-id];
-			crush_reweight_bucket(crush, c);
+			struct crush_bucket *c = map->buckets[-1-id];
+			crush_reweight_bucket(map, c);
 			bucket->item_weights[i] = c->weight;
 		}
 
@@ -1383,19 +1383,19 @@ static int crush_reweight_straw2_bucket(struct crush_map *crush, struct crush_bu
 	return 0;
 }
 
-int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *b)
+int crush_reweight_bucket(struct crush_map *map, struct crush_bucket *b)
 {
 	switch (b->alg) {
 	case CRUSH_BUCKET_UNIFORM:
-		return crush_reweight_uniform_bucket(crush, (struct crush_bucket_uniform *)b);
+		return crush_reweight_uniform_bucket(map, (struct crush_bucket_uniform *)b);
 	case CRUSH_BUCKET_LIST:
-		return crush_reweight_list_bucket(crush, (struct crush_bucket_list *)b);
+		return crush_reweight_list_bucket(map, (struct crush_bucket_list *)b);
 	case CRUSH_BUCKET_TREE:
-		return crush_reweight_tree_bucket(crush, (struct crush_bucket_tree *)b);
+		return crush_reweight_tree_bucket(map, (struct crush_bucket_tree *)b);
 	case CRUSH_BUCKET_STRAW:
-		return crush_reweight_straw_bucket(crush, (struct crush_bucket_straw *)b);
+		return crush_reweight_straw_bucket(map, (struct crush_bucket_straw *)b);
 	case CRUSH_BUCKET_STRAW2:
-		return crush_reweight_straw2_bucket(crush, (struct crush_bucket_straw2 *)b);
+		return crush_reweight_straw2_bucket(map, (struct crush_bucket_straw2 *)b);
 	default:
 		return -1;
 	}
