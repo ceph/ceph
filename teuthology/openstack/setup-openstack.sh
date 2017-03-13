@@ -117,6 +117,18 @@ function setup_docker() {
     fi
 }
 
+function setup_fail2ban() {
+    if test -f /usr/bin/fail2ban-server; then
+        echo "OK fail2ban is installed"
+    else
+        sudo apt-get -qq install -y fail2ban
+        echo "INSTALLED fail2ban"
+    fi
+    sudo systemctl restart fail2ban
+    sudo systemctl enable fail2ban
+    echo "STARTED fail2ban"
+}
+
 function setup_salt_master() {
     if test -f /etc/salt/master ; then
         echo "OK salt-master is installed"
@@ -597,6 +609,9 @@ function main() {
             --setup-dnsmasq)
                 do_setup_dnsmasq=true
                 ;;
+            --setup-fail2ban)
+                do_setup_fail2ban=true
+                ;;
             --setup-paddles)
                 do_setup_paddles=true
                 ;;
@@ -615,6 +630,7 @@ function main() {
                 do_setup_docker=true
                 do_setup_salt_master=true
                 do_setup_dnsmasq=true
+                do_setup_fail2ban=true
                 do_setup_paddles=true
                 do_setup_pulpito=true
                 do_populate_paddles=true
@@ -701,6 +717,10 @@ function main() {
 
     if $do_setup_salt_master ; then
         setup_salt_master || return 1
+    fi
+
+    if $do_setup_fail2ban ; then
+        setup_fail2ban || return 1
     fi
 
     if $do_setup_dnsmasq ; then
