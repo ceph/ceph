@@ -1856,6 +1856,10 @@ private:
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
   void _deferred_queue(TransContext *txc);
+  void deferred_try_submit() {
+    std::lock_guard<std::mutex> l(deferred_lock);
+    _deferred_try_submit();
+  }
   void _deferred_try_submit();
   void _deferred_try_submit(OpSequencer *osr);
   int _deferred_finish(TransContext *txc);

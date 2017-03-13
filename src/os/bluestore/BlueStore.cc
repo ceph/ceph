@@ -7665,7 +7665,9 @@ void BlueStore::_kv_sync_thread()
 
       if (!deferred_aggressive) {
 	std::lock_guard<std::mutex> l(deferred_lock);
-	if (deferred_queue_size >= (int)g_conf->bluestore_deferred_batch_ops) {
+	if (deferred_queue_size >= (int)g_conf->bluestore_deferred_batch_ops ||
+	    throttle_deferred_ops.past_midpoint() ||
+	    throttle_deferred_bytes.past_midpoint()) {
 	  _deferred_try_submit();
 	}
       }
@@ -7958,8 +7960,15 @@ int BlueStore::queue_transactions(
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
   if (txc->deferred_txn) {
-    throttle_deferred_ops.get(txc->ops);
-    throttle_deferred_bytes.get(txc->bytes);
+    // ensure we do not block here because of deferred writes
+    if (!throttle_deferred_ops.get_or_fail(txc->ops)) {
+      deferred_try_submit();
+      throttle_deferred_ops.get(txc->ops);
+    }
+    if (!throttle_deferred_bytes.get_or_fail(txc->bytes)) {
+      deferred_try_submit();
+      throttle_deferred_bytes.get(txc->bytes);
+    }
   }
 
   if (handle)
