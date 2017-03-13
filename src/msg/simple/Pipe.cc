@@ -2664,7 +2664,7 @@ ssize_t Pipe::buffered_recv(char *buf, size_t len, int flags)
 
 
   ssize_t got = do_recv(recv_buf, recv_max_prefetch, flags);
-  if (got <= 0) {
+  if (got < 0) {
     if (total_recv > 0)
       return total_recv;
 
