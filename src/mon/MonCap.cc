@@ -218,6 +218,14 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.back().command_args["caps_osd"] = StringConstraint("allow rwx", "");
     profile_grants.back().command_args["caps_mds"] = StringConstraint("allow", "");
   }
+  if (profile == "bootstrap-mgr") {
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
+    profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));  // read osdmap
+    profile_grants.push_back(MonCapGrant("mon getmap"));
+    profile_grants.push_back(MonCapGrant("auth get-or-create"));  // FIXME: this can expose other mgr keys
+    profile_grants.back().command_args["entity"] = StringConstraint("", "mgr.");
+    profile_grants.back().command_args["caps_mon"] = StringConstraint("allow profile mgr", "");
+  }
   if (profile == "bootstrap-rgw") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));  // read osdmap
