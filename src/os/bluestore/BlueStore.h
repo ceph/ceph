@@ -539,6 +539,7 @@ public:
     }
 
 #ifdef CACHE_BLOB_BL
+    BLUESTORE_FORCEINLINE
     size_t _encode_blob_to_cache(const uint64_t struct_v) const {
       /* XXX: we don't memorize struct_v in the cache as it's supposed that
        * value doesn't change. */
@@ -575,6 +576,7 @@ public:
       return blob_cache.size;
     }
 
+    BLUESTORE_FORCEINLINE
     void bound_encode(
       size_t& p,
       const uint64_t struct_v,

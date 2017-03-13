@@ -27,6 +27,7 @@
 #include "common/Checksummer.h"
 #include "include/mempool.h"
 
+#define BLUESTORE_FORCEINLINE __attribute__((always_inline))
 namespace ceph {
   class Formatter;
 }
@@ -161,7 +162,7 @@ struct bluestore_pextent_t : public AllocExtent {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluestore_pextent_t*>& ls);
 };
-WRITE_CLASS_DENC_ATTR(bluestore_pextent_t, __attribute__((always_inline)))
+WRITE_CLASS_DENC(bluestore_pextent_t)
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
@@ -172,12 +173,16 @@ struct denc_traits<PExtentVector> {
   static constexpr bool supported = true;
   static constexpr bool bounded = false;
   static constexpr bool featured = false;
+
+  BLUESTORE_FORCEINLINE
   static void bound_encode(const PExtentVector& v, size_t& p) {
     p += sizeof(uint32_t);
     size_t per = 0;
     denc(*(bluestore_pextent_t*)nullptr, per);
     p += per * v.size();
   }
+
+  BLUESTORE_FORCEINLINE
   static void encode(const PExtentVector& v,
 		     bufferlist::contiguous_appender& p) {
     denc_varint(v.size(), p);
@@ -400,7 +405,7 @@ struct bluestore_blob_use_tracker_t {
       }
     }
   }
-  void encode(bufferlist::contiguous_appender& p) const {
+  void encode(bufferlist::contiguous_appender& p) const __attribute__((always_inline)) {
     denc_varint(au_size, p);
     if (au_size) {
       denc_varint(num_au, p);
@@ -467,6 +472,8 @@ struct bluestore_blob_t {
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
   DENC_HELPERS;
+
+  BLUESTORE_FORCEINLINE
   void bound_encode(size_t& p, uint64_t struct_v) const {
  //   assert(struct_v == 1 || struct_v == 2);
     size_t p_ct = 0;
@@ -835,7 +842,8 @@ struct bluestore_blob_t {
     return res;
   }
 };
-WRITE_CLASS_DENC_FEATURED(bluestore_blob_t)
+WRITE_CLASS_DENC_FEATURED_ATTR(bluestore_blob_t,
+                               __attribute__((always_inline)))
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o);
 
