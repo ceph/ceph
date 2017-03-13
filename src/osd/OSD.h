@@ -945,6 +945,8 @@ public:
   void requeue_pg_temp();
   void send_pg_temp();
 
+  void send_pg_created(pg_t pgid);
+
   void queue_for_peering(PG *pg);
 
   Mutex snap_sleep_lock;
@@ -2029,7 +2031,7 @@ protected:
   void add_newly_split_pg(PG *pg,
 			  PG::RecoveryCtx *rctx);
 
-  void handle_pg_peering_evt(
+  int handle_pg_peering_evt(
     spg_t pgid,
     const pg_history_t& orig_history,
     const pg_interval_map_t& pi,
