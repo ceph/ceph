@@ -207,8 +207,8 @@ public:
       case STATE_KV_DONE: return "kv_done";
       case STATE_FINISHING: return "finishing";
       case STATE_DONE: return "done";
+      default: return "???";
       }
-      return "???";
     }
 
     void log_state_latency(PerfCounters *logger, int state) {
@@ -422,7 +422,6 @@ public:
   void _sync();
 
   int fsck(bool deep) override;
-
 
   int validate_hobject_key(const hobject_t &obj) const override {
     return 0;
