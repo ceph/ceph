@@ -222,9 +222,9 @@ bool ReplicatedBackend::handle_message(
 
   case MSG_OSD_SUBOP: {
     const MOSDSubOp *m = static_cast<const MOSDSubOp*>(op->get_req());
-    if (m->ops.size() >= 1) {
-      const OSDOp *first = &m->ops[0];
-      switch (first->op.op) {
+    assert(m->ops.size() >= 1);
+    const OSDOp *first = &m->ops[0];
+    switch (first->op.op) {
       case CEPH_OSD_OP_PULL:
 	sub_op_pull(op);
 	return true;
@@ -233,12 +233,7 @@ bool ReplicatedBackend::handle_message(
 	return true;
       default:
 	break;
-      }
-    } else {
-      sub_op_modify(op);
-      return true;
     }
-    break;
   }
 
   case MSG_OSD_REPOP: {
