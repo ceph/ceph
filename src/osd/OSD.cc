@@ -2117,6 +2117,20 @@ bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
     store->generate_db_histogram(f);
   } else if (admin_command == "flush_store_cache") {
     store->flush_cache();
+  } else if (admin_command == "dump_pgstate_history") {
+    f->open_object_section("pgstate_history");
+    RWLock::RLocker l2(pg_map_lock);
+    for (ceph::unordered_map<spg_t,PG*>::iterator it = pg_map.begin();
+        it != pg_map.end();
+        ++it) {
+
+      PG *pg = it->second;
+      f->dump_stream("pg") << pg->get_pgid();
+      pg->lock();
+      pg->pgstate_history.dump(f);
+      pg->unlock();
+    }
+    f->close_section();
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2627,6 +2641,10 @@ void OSD::final_init()
                                      asok_hook,
                                      "Flush bluestore internal cache");
   assert(r == 0);
+  r = admin_socket->register_command("dump_pgstate_history", "dump_pgstate_history",
+				     asok_hook,
+				     "show recent state history");
+  assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   // Note: pools are CephString instead of CephPoolname because
@@ -3001,6 +3019,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
   cct->get_admin_socket()->unregister_command("calc_objectstore_db_histogram");
   cct->get_admin_socket()->unregister_command("flush_store_cache");
+  cct->get_admin_socket()->unregister_command("dump_pgstate_history");
   delete asok_hook;
   asok_hook = NULL;
 

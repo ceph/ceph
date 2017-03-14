@@ -13270,7 +13270,7 @@ void PrimaryLogPG::SnapTrimmer::log_exit(const char *state_name, utime_t enter_t
 /* NotTrimming */
 PrimaryLogPG::NotTrimming::NotTrimming(my_context ctx)
   : my_base(ctx), 
-    NamedState(context< SnapTrimmer >().pg->cct, "NotTrimming")
+    NamedState(context< SnapTrimmer >().pg, "NotTrimming")
 {
   context< SnapTrimmer >().log_enter(state_name);
 }
@@ -13324,7 +13324,7 @@ boost::statechart::result PrimaryLogPG::WaitReservation::react(const SnapTrimRes
 /* AwaitAsyncWork */
 PrimaryLogPG::AwaitAsyncWork::AwaitAsyncWork(my_context ctx)
   : my_base(ctx),
-    NamedState(context< SnapTrimmer >().pg->cct, "Trimming/AwaitAsyncWork")
+    NamedState(context< SnapTrimmer >().pg, "Trimming/AwaitAsyncWork")
 {
   auto *pg = context< SnapTrimmer >().pg;
   context< SnapTrimmer >().log_enter(state_name);
