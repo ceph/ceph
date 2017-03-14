@@ -2576,7 +2576,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     osdmon()->osdmap.print_summary(f, cout);
     f->close_section();
     f->open_object_section("pgmap");
-    mgrmon()->pg_map.print_summary(f, NULL);
+    pgservice.print_summary(f, NULL);
     f->close_section();
     f->open_object_section("fsmap");
     mdsmon()->get_fsmap().print_summary(f, NULL);
@@ -2620,7 +2620,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     osdmon()->osdmap.print_summary(NULL, ss);
 
     ss << "\n \n  data:\n";
-    mgrmon()->pg_map.print_summary(NULL, &ss);
+    pgservice.print_summary(NULL, &ss);
     ss << "\n ";
   }
 }
@@ -3086,10 +3086,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       if (f)
         f->open_object_section("stats");
 
-      mgrmon()->pg_map.dump_fs_stats(&ds, f.get(), verbose);
+      pgservice.dump_fs_stats(&ds, f.get(), verbose);
       if (!f)
         ds << '\n';
-      mgrmon()->pg_map.dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
+      pgservice.dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
 
       if (f) {
         f->close_section();
