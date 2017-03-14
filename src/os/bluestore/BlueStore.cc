@@ -7445,6 +7445,11 @@ void BlueStore::_osr_drain_all()
   {
     // submit anything pending
     std::lock_guard<std::mutex> l(deferred_lock);
+    // include deferred osrs in our wait list; these may have been
+    // deregistered already!
+    for (auto& osr : deferred_queue) {
+      s.insert(&osr);
+    }
     _deferred_try_submit();
   }
   {
