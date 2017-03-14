@@ -284,7 +284,8 @@ bool RGWKeystoneAuthEngine::is_applicable() const noexcept
   return ! cct->_conf->rgw_keystone_url.empty();
 }
 
-KeystoneToken RGWKeystoneAuthEngine::decode_pki_token(const std::string& token) const
+rgw::keystone::TokenEnvelope
+RGWKeystoneAuthEngine::decode_pki_token(const std::string& token) const
 {
   bufferlist token_body_bl;
   int ret = rgw_decode_b64_cms(cct, token, token_body_bl);
@@ -295,8 +296,9 @@ KeystoneToken RGWKeystoneAuthEngine::decode_pki_token(const std::string& token) 
     ldout(cct, 20) << "successfully decoded pki token" << dendl;
   }
 
-  KeystoneToken token_body;
-  ret = token_body.parse(cct, token, token_body_bl);
+  rgw::keystone::TokenEnvelope token_body;
+  ret = token_body.parse(cct, token, token_body_bl,
+                         rgw::keystone::CephCtxConfig::get_instance().get_api_version());
   if (ret < 0) {
     throw ret;
   }
@@ -304,28 +306,35 @@ KeystoneToken RGWKeystoneAuthEngine::decode_pki_token(const std::string& token) 
   return token_body;
 }
 
-KeystoneToken RGWKeystoneAuthEngine::get_from_keystone(const std::string& token) const
+rgw::keystone::TokenEnvelope
+RGWKeystoneAuthEngine::get_from_keystone(const std::string& token) const
 {
-  using RGWValidateKeystoneToken = KeystoneService::RGWValidateKeystoneToken;
+  using RGWValidateKeystoneToken
+    = rgw::keystone::Service::RGWValidateKeystoneToken;
 
   bufferlist token_body_bl;
   RGWValidateKeystoneToken validate(cct, &token_body_bl);
 
-  std::string url;
-  if (KeystoneService::get_keystone_url(cct, url) < 0) {
+  std::string url
+    = rgw::keystone::CephCtxConfig::get_instance().get_endpoint_url();
+  if (url.empty()) {
     throw -EINVAL;
   }
 
-  const auto keystone_version = KeystoneService::get_api_version();
-  if (keystone_version == KeystoneApiVersion::VER_2) {
+  const auto keystone_version = rgw::keystone::CephCtxConfig::get_instance().get_api_version();
+  if (keystone_version == rgw::keystone::ApiVersion::VER_2) {
     url.append("v2.0/tokens/" + token);
-  } else if (keystone_version == KeystoneApiVersion::VER_3) {
+  } else if (keystone_version == rgw::keystone::ApiVersion::VER_3) {
     url.append("v3/auth/tokens");
     validate.append_header("X-Subject-Token", token);
   }
 
   std::string admin_token;
-  if (KeystoneService::get_keystone_admin_token(cct, admin_token) < 0) {
+  if (rgw::keystone::Service::get_admin_token(
+          cct,
+          rgw::keystone::TokenCache::get_instance<rgw::keystone::CephCtxConfig>(),
+          rgw::keystone::CephCtxConfig::get_instance(),
+          admin_token) < 0) {
     throw -EINVAL;
   }
 
@@ -355,8 +364,8 @@ KeystoneToken RGWKeystoneAuthEngine::get_from_keystone(const std::string& token)
     throw -EACCES;
   }
 
-  KeystoneToken token_body;
-  ret = token_body.parse(cct, token, token_body_bl);
+  rgw::keystone::TokenEnvelope token_body;
+  ret = token_body.parse(cct, token, token_body_bl, keystone_version);
   if (ret < 0) {
     throw ret;
   }
@@ -365,7 +374,7 @@ KeystoneToken RGWKeystoneAuthEngine::get_from_keystone(const std::string& token)
 }
 
 RGWRemoteAuthApplier::AuthInfo
-RGWKeystoneAuthEngine::get_creds_info(const KeystoneToken& token,
+RGWKeystoneAuthEngine::get_creds_info(const rgw::keystone::TokenEnvelope& token,
                                       const std::vector<std::string>& admin_roles
                                     ) const noexcept
 {
@@ -399,7 +408,7 @@ static inline const std::string make_spec_item(const std::string& tenant,
 }
 
 RGWKeystoneAuthEngine::acl_strategy_t
-RGWKeystoneAuthEngine::get_acl_strategy(const KeystoneToken& token) const
+RGWKeystoneAuthEngine::get_acl_strategy(const rgw::keystone::TokenEnvelope& token) const
 {
   /* The primary identity is constructed upon UUIDs. */
   const auto& tenant_uuid = token.get_project_id();
@@ -439,7 +448,7 @@ RGWKeystoneAuthEngine::get_acl_strategy(const KeystoneToken& token) const
 
 RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
 {
-  KeystoneToken t;
+  rgw::keystone::TokenEnvelope t;
 
   /* This will be initialized on the first call to this method. In C++11 it's
    * also thread-safe. */
@@ -462,7 +471,7 @@ RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
   ldout(cct, 20) << "token_id=" << token_id << dendl;
 
   /* Check cache first. */
-  if (RGWKeystoneTokenCache::get_instance().find(token_id, t)) {
+  if (rgw::keystone::TokenCache::get_instance<rgw::keystone::CephCtxConfig>().find(token_id, t)) {
     ldout(cct, 20) << "cached token.project.id=" << t.get_project_id()
                    << dendl;
       return apl_factory->create_apl_remote(cct,
@@ -497,7 +506,7 @@ RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
       ldout(cct, 0) << "validated token: " << t.get_project_name()
                     << ":" << t.get_user_name()
                     << " expires: " << t.get_expires() << dendl;
-      RGWKeystoneTokenCache::get_instance().add(token_id, t);
+      rgw::keystone::TokenCache::get_instance<rgw::keystone::CephCtxConfig>().add(token_id, t);
       return apl_factory->create_apl_remote(cct,
                                             get_acl_strategy(t),
                                             get_creds_info(t, roles.admin));
@@ -508,4 +517,45 @@ RGWAuthApplier::aplptr_t RGWKeystoneAuthEngine::authenticate() const
                 << g_conf->rgw_keystone_accepted_roles << dendl;
 
   return nullptr;
+}
+
+rgw::auth::Engine::result_t
+rgw::auth::Strategy::authenticate(const req_state* const s) const
+{
+  for (const stack_item_t& kv : auth_stack) {
+    const rgw::auth::Engine& engine = kv.first;
+    const auto& policy = kv.second;
+
+    auto&& res = engine.authenticate(s);
+    const auto& applier = res.first;
+    if (! applier) {
+      /* The current auth engine denied authenticate the request returning
+       * a null rgw::auth::Applier. As it has been included into strategy
+       * as an obligatory one, we quite immediately. */
+      switch (policy) {
+        case Control::REQUISITE:
+          goto auth_fail;
+        case Control::SUFFICIENT:
+          /* Just try next. */
+          continue;
+        default:
+          /* Huh, memory corruption? */
+          abort();
+      }
+    } else {
+      /* Success. */
+      return std::move(res);
+    }
+  }
+
+auth_fail:
+  /* Returning nullptr as the rgw::auth::Applier means access denied. */
+  return Engine::result_t(nullptr, nullptr);
+}
+
+void
+rgw::auth::Strategy::add_engine(const Control ctrl_flag,
+                                const Engine& engine) noexcept
+{
+  auth_stack.push_back(std::make_pair(std::cref(engine), ctrl_flag));
 }
