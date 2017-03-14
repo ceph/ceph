@@ -6052,14 +6052,8 @@ boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& no
 {
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 7) << "handle_pg_notify from osd." << notevt.from << dendl;
-  if (pg->peer_info.count(notevt.from) &&
-      pg->peer_info[notevt.from].last_update == notevt.notify.info.last_update) {
-    ldout(pg->cct, 10) << *pg << " got dup osd." << notevt.from << " info "
-		       << notevt.notify.info << ", identical to ours" << dendl;
-  } else {
-    pg->proc_replica_info(
-      notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
-  }
+  pg->proc_replica_info(
+    notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
   return discard_event();
 }
 
