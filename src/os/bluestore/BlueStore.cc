@@ -2344,7 +2344,7 @@ bool BlueStore::ExtentMap::encode_some(
   denc_varint(0ul, bound);
   bool must_reshard = false;
   for (auto p = start;
-       p != extent_map.end() && p->logical_offset < end;
+       unlikely(p != extent_map.end()) && p->logical_offset < end;
        ++p, ++n) {
     assert(p->logical_offset >= offset);
     p->blob->last_encoded_id = -1;
@@ -2385,7 +2385,7 @@ bool BlueStore::ExtentMap::encode_some(
 	 ++p, ++n) {
       unsigned blobid;
       bool include_blob = false;
-      if (p->blob->is_spanning()) {
+      if (unlikely(p->blob->is_spanning())) {
 	blobid = p->blob->id << BLOBID_SHIFT_BITS;
 	blobid |= BLOBID_FLAG_SPANNING;
       } else if (p->blob->last_encoded_id < 0) {

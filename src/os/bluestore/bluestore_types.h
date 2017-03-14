@@ -756,10 +756,10 @@ struct bluestore_blob_t {
   }
 
   uint32_t get_logical_length() const {
-    if (is_compressed()) {
-      return compressed_length_orig;
-    } else {
+    if (! is_compressed()) {
       return get_ondisk_length();
+    } else {
+      return compressed_length_orig;
     }
   }
   size_t get_csum_value_size() const;
