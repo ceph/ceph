@@ -35,6 +35,7 @@
 #include "Elector.h"
 #include "Paxos.h"
 #include "Session.h"
+#include "PGStatService.h"
 
 #include "common/LogClient.h"
 #include "auth/cephx/CephxKeyServer.h"
@@ -168,6 +169,8 @@ public:
   Messenger *mgr_messenger;
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
+
+  PGStatService pgservice;
 
 private:
   void new_tick();
