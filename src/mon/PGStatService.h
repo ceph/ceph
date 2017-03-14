@@ -62,6 +62,7 @@ public:
   float get_nearfull_ratio() const { return parent.nearfull_ratio; }
 
   bool have_creating_pgs() const { return !parent.creating_pgs.empty(); }
+  bool is_creating_pg(pg_t pgid) const { return parent.creating_pgs.count(pgid); }
   epoch_t get_min_last_epoch_clean() const { return parent.get_min_last_epoch_clean(); }
 
   bool have_full_osds() const { return !parent.full_osds.empty(); }
