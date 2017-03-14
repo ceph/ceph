@@ -1481,10 +1481,38 @@ void CDir::fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys)
   _omap_fetch(c, keys);
 }
 
+class C_IO_Dir_OMAP_FetchedMore : public CDirIOContext {
+  MDSInternalContextBase *fin;
+public:
+  bufferlist hdrbl;
+  bool more = false;
+  map<string, bufferlist> omap;      ///< carry-over from before
+  map<string, bufferlist> omap_more; ///< new batch
+  int ret;
+  C_IO_Dir_OMAP_FetchedMore(CDir *d, MDSInternalContextBase *f) :
+    CDirIOContext(d), fin(f), ret(0) { }
+  void finish(int r) {
+    // merge results
+    if (omap.empty()) {
+      omap.swap(omap_more);
+    } else {
+      omap.insert(omap_more.begin(), omap_more.end());
+    }
+    if (more) {
+      dir->_omap_fetch_more(hdrbl, omap, fin);
+    } else {
+      dir->_omap_fetched(hdrbl, omap, !fin, r);
+      if (fin)
+	fin->complete(r);
+    }
+  }
+};
+
 class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
   MDSInternalContextBase *fin;
 public:
   bufferlist hdrbl;
+  bool more = false;
   map<string, bufferlist> omap;
   bufferlist btbl;
   int ret1, ret2, ret3;
@@ -1497,9 +1525,13 @@ public:
       dir->inode->verify_diri_backtrace(btbl, ret3);
     if (r >= 0) r = ret1;
     if (r >= 0) r = ret2;
-    dir->_omap_fetched(hdrbl, omap, !fin, r);
-    if (fin)
-      fin->complete(r);
+    if (more) {
+      dir->_omap_fetch_more(hdrbl, omap, fin);
+    } else {
+      dir->_omap_fetched(hdrbl, omap, !fin, r);
+      if (fin)
+	fin->complete(r);
+    }
   }
 };
 
@@ -1512,8 +1544,8 @@ void CDir::_omap_fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& 
   rd.omap_get_header(&fin->hdrbl, &fin->ret1);
   if (keys.empty()) {
     assert(!c);
-#warning use the pmore arg
-    rd.omap_get_vals("", "", (uint64_t)-1, &fin->omap, nullptr, &fin->ret2);
+    rd.omap_get_vals("", "", g_conf->mds_dir_keys_per_op,
+		     &fin->omap, &fin->more, &fin->ret2);
   } else {
     assert(c);
     std::set<std::string> str_keys;
@@ -1532,6 +1564,28 @@ void CDir::_omap_fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& 
     fin->ret3 = -ECANCELED;
   }
 
+  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
+			     new C_OnFinisher(fin, cache->mds->finisher));
+}
+
+void CDir::_omap_fetch_more(
+  bufferlist& hdrbl,
+  map<string, bufferlist>& omap,
+  MDSInternalContextBase *c)
+{
+  // we have more omap keys to fetch!
+  object_t oid = get_ondisk_object();
+  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
+  C_IO_Dir_OMAP_FetchedMore *fin = new C_IO_Dir_OMAP_FetchedMore(this, c);
+  fin->hdrbl.claim(hdrbl);
+  fin->omap.swap(omap);
+  ObjectOperation rd;
+  rd.omap_get_vals(fin->omap.rbegin()->first,
+		   "", /* filter prefix */
+		   g_conf->mds_dir_keys_per_op,
+		   &fin->omap_more,
+		   &fin->more,
+		   &fin->ret);
   cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
 			     new C_OnFinisher(fin, cache->mds->finisher));
 }
