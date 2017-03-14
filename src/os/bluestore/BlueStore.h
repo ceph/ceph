@@ -1554,13 +1554,19 @@ public:
       q.push_back(*txc);
     }
 
-    void flush() {
+    void flush() override {
       std::unique_lock<std::mutex> l(qlock);
       while (!q.empty())
 	qcond.wait(l);
     }
 
-    bool flush_commit(Context *c) {
+    void drain() {
+      std::unique_lock<std::mutex> l(qlock);
+      while (!q.empty())
+	qcond.wait(l);
+    }
+
+    bool flush_commit(Context *c) override {
       std::lock_guard<std::mutex> l(qlock);
       if (q.empty()) {
 	return true;
