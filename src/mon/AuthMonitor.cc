@@ -1134,6 +1134,26 @@ void AuthMonitor::upgrade_format()
 	auth_inc.op = KeyServerData::AUTH_INC_ADD;
 	push_cephx_inc(auth_inc);
       }
+
+      if (n.find("mgr.") == 0 &&
+	  p->second.caps.count("mon")) {
+	// the kraken ceph-mgr@.service set the mon cap to 'allow *'.
+	auto blp = p->second.caps["mon"].begin();
+	string oldcaps;
+	::decode(oldcaps, blp);
+	if (oldcaps == "allow *") {
+	  dout(5) << " fixing " << n << " mon cap to 'allow profile mgr'"
+		  << dendl;
+	  bufferlist bl;
+	  ::encode("allow profile mgr", bl);
+	  KeyServerData::Incremental auth_inc;
+	  auth_inc.name = p->first;
+	  auth_inc.auth = p->second;
+	  auth_inc.auth.caps["mon"] = bl;
+	  auth_inc.op = KeyServerData::AUTH_INC_ADD;
+	  push_cephx_inc(auth_inc);
+	}
+      }
     }
 
     // add bootstrap key
