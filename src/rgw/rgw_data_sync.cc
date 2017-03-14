@@ -2523,10 +2523,10 @@ int RGWBucketShardIncrementalSyncCR::operate()
         }
         inc_marker.position = cur_id;
 
-        if (!key.set(rgw_obj_index_key(entries_iter->object))) {
-          set_status() << "parse_raw_oid() on " << entries_iter->object << " returned false, skipping entry";
-          ldout(sync_env->cct, 20) << "parse_raw_oid() on " << entries_iter->object << " returned false, skipping entry" << dendl;
-          marker_tracker.try_update_high_marker(cur_id, 0, entries_iter->timestamp);
+        if (!key.set(rgw_obj_index_key{entry->object, entry->instance})) {
+          set_status() << "parse_raw_oid() on " << entry->object << " returned false, skipping entry";
+          ldout(sync_env->cct, 20) << "parse_raw_oid() on " << entry->object << " returned false, skipping entry" << dendl;
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
 
