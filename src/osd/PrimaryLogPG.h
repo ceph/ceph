@@ -1482,7 +1482,7 @@ private:
 
     explicit Trimming(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming") {
       context< SnapTrimmer >().log_enter(state_name);
       assert(context< SnapTrimmer >().can_trim());
       assert(in_flight.empty());
@@ -1507,7 +1507,7 @@ private:
     Context *wakeup = nullptr;
     explicit WaitTrimTimer(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitTrimTimer") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitTrimTimer") {
       context< SnapTrimmer >().log_enter(state_name);
       assert(context<Trimming>().in_flight.empty());
       struct OnTimer : Context {
@@ -1557,7 +1557,7 @@ private:
       > reactions;
     explicit WaitRWLock(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRWLock") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRWLock") {
       context< SnapTrimmer >().log_enter(state_name);
       assert(context<Trimming>().in_flight.empty());
     }
@@ -1580,7 +1580,7 @@ private:
       > reactions;
     explicit WaitRepops(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRepops") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRepops") {
       context< SnapTrimmer >().log_enter(state_name);
       assert(!context<Trimming>().in_flight.empty());
     }
@@ -1634,7 +1634,7 @@ private:
 
     explicit WaitReservation(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitReservation") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitReservation") {
       context< SnapTrimmer >().log_enter(state_name);
       assert(context<Trimming>().in_flight.empty());
       auto *pg = context< SnapTrimmer >().pg;
@@ -1666,7 +1666,7 @@ private:
       > reactions;
     explicit WaitScrub(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitScrub") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitScrub") {
       context< SnapTrimmer >().log_enter(state_name);
     }
     void exit() {
