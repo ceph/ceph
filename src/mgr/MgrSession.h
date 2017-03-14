@@ -16,7 +16,7 @@
 struct MgrSession : public RefCountedObject {
   uint64_t global_id = 0;
   EntityName entity_name;
-  entity_addr_t addr;
+  entity_inst_t inst;
 
   // mon caps are suitably generic for mgr
   MonCap caps;
