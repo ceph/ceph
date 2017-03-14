@@ -1863,7 +1863,6 @@ private:
   void _deferred_try_submit();
   void _deferred_try_submit(OpSequencer *osr);
   int _deferred_finish(TransContext *txc);
-  int _do_deferred_op(TransContext *txc, bluestore_deferred_op_t& wo);
   int _deferred_replay();
 
   int _fsck_check_extents(

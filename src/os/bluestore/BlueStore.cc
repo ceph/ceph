@@ -7846,34 +7846,6 @@ int BlueStore::_deferred_finish(TransContext *txc)
   return 0;
 }
 
-int BlueStore::_do_deferred_op(TransContext *txc, bluestore_deferred_op_t& wo)
-{
-  switch (wo.op) {
-  case bluestore_deferred_op_t::OP_WRITE:
-    {
-      dout(20) << __func__ << " write " << wo.extents << dendl;
-      logger->inc(l_bluestore_deferred_write_ops);
-      logger->inc(l_bluestore_deferred_write_bytes, wo.data.length());
-      bufferlist::iterator p = wo.data.begin();
-      for (auto& e : wo.extents) {
-	bufferlist bl;
-	p.copy(e.length, bl);
-        if (!g_conf->bluestore_debug_omit_block_device_write) {
-	  int r = bdev->aio_write(e.offset, bl, &txc->ioc, false);
-	  assert(r == 0);
-        }
-	txc->osr->deferred_blocks.insert(e.offset, e.length);
-      }
-    }
-    break;
-
-  default:
-    assert(0 == "unrecognized deferred op");
-  }
-
-  return 0;
-}
-
 int BlueStore::_deferred_replay()
 {
   dout(10) << __func__ << " start" << dendl;
