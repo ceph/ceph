@@ -70,11 +70,12 @@ def get_user_successful_ops(out, user):
     return get_user_summary(out, user)['total']['successful_ops']
 
 def get_zone_host_and_port(ctx, client, zone):
-    _, region_map = rgwadmin(ctx, client, check_status=True,
-                             cmd=['-n', client, 'region-map', 'get'])
-    regions = region_map['zonegroups']
-    for region in regions:
-        for zone_info in region['val']['zones']:
+    _, period = rgwadmin(ctx, client, check_status=True,
+                         cmd=['-n', client, 'period', 'get'])
+    period_map = period['period_map']
+    zonegroups = period_map['zonegroups']
+    for zonegroup in zonegroups:
+        for zone_info in zonegroup['zones']:
             if zone_info['name'] == zone:
                 endpoint = urlparse(zone_info['endpoints'][0])
                 host, port = endpoint.hostname, endpoint.port
@@ -84,17 +85,18 @@ def get_zone_host_and_port(ctx, client, zone):
     assert False, 'no endpoint for zone {zone} found'.format(zone=zone)
 
 def get_master_zone(ctx, client):
-    _, region_map = rgwadmin(ctx, client, check_status=True,
-                             cmd=['-n', client, 'region-map', 'get'])
-    regions = region_map['zonegroups']
-    for region in regions:
-        is_master = (region['val']['is_master'] == "true")
-        log.info('region={r} is_master={ism}'.format(r=region, ism=is_master))
+    _, period = rgwadmin(ctx, client, check_status=True,
+                         cmd=['-n', client, 'period', 'get'])
+    period_map = period['period_map']
+    zonegroups = period_map['zonegroups']
+    for zonegroup in zonegroups:
+        is_master = (zonegroup['is_master'] == "true")
+        log.info('zonegroup={z} is_master={ism}'.format(z=zonegroup, ism=is_master))
         if not is_master:
           continue
-        master_zone = region['val']['master_zone']
+        master_zone = zonegroup['master_zone']
         log.info('master_zone=%s' % master_zone)
-        for zone_info in region['val']['zones']:
+        for zone_info in zonegroup['zones']:
             if zone_info['name'] == master_zone:
                 return master_zone
     log.info('couldn\'t find master zone')
