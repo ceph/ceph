@@ -256,9 +256,19 @@ namespace rgw {
 	rgw_fh->mtx.lock(); /* LOCKED */
       }
 
+      /* to preserve attributes, avoid deleting the directory vnode
+       * if children exist */
+      if (rgw_fh->has_children(RGWFileHandle::HC_FLAG_SKIP_BUCKETS)) {
+	rgw_fh->mtx.unlock();
+	unref(rgw_fh);
+	return -ENOTEMPTY;
+      }
+
       std::string oname = rgw_fh->relative_object_name();
-      if (rgw_fh->is_dir())
+      if (rgw_fh->is_dir()) {
 	oname += "/";
+      }
+
       RGWDeleteObjRequest req(cct, get_user(), parent->bucket_name(),
 			      oname);
       rc = rgwlib.get_fe()->execute_req(&req);
@@ -845,6 +855,41 @@ namespace rgw {
     return true;
   } /* RGWFileHandle::reclaim */
 
+  static bool has_children_cb(const char *name, void *arg, uint64_t off)
+  {
+    bool& cb_result = *(static_cast<bool*>(arg));
+    cb_result = true;
+    return true;
+  }
+
+  bool RGWFileHandle::has_children(uint32_t flags) const
+  {
+    if (! is_dir())
+      return false;
+
+    int rc = 0;
+    bool cb_result = false;
+    uint64_t offset = 0;
+
+    if (is_root() &&
+	(flags & HC_FLAG_SKIP_BUCKETS)) {
+      return false;
+
+      RGWListBucketsRequest req(fs->get_context(), fs->get_user(),
+				const_cast<RGWFileHandle*>(this),
+				has_children_cb, &cb_result, &offset);
+      rc = rgwlib.get_fe()->execute_req(&req);
+    } else {
+      RGWReaddirRequest req(fs->get_context(), fs->get_user(),
+			    const_cast<RGWFileHandle*>(this), has_children_cb,
+			    &cb_result, &offset);
+      req.set_default_max(1);
+      rc = rgwlib.get_fe()->execute_req(&req);
+    }
+
+    return rc;
+  } /* RGWFileHandle::has_children*/
+
   int RGWFileHandle::readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset,
 			     bool *eof, uint32_t flags)
   {
@@ -874,7 +919,7 @@ namespace rgw {
 	fs->state.push_event(ev);
       }
     } else {
-      rgw_obj_key marker{"", ""};
+      //rgw_obj_key marker{"", ""};
       RGWReaddirRequest req(cct, fs->get_user(), this, rcb, cb_arg, offset);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {

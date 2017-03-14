@@ -485,6 +485,11 @@ namespace rgw {
     bool deleted() const { return flags & FLAG_DELETED; }
     bool stateless_open() const { return flags & FLAG_STATELESS_OPEN; }
 
+    static constexpr uint32_t HC_FLAG_NONE = 0x0000;
+    static constexpr uint32_t HC_FLAG_SKIP_BUCKETS = 0x0001;
+
+    bool has_children(uint32_t flags = HC_FLAG_NONE) const;
+
     uint32_t open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
       if (! (flags & FLAG_OPEN)) {
@@ -1215,8 +1220,8 @@ public:
   read directory content (bucket objects)
 */
 
-  class RGWReaddirRequest : public RGWLibRequest,
-			    public RGWListBucket /* RGWOp */
+class RGWReaddirRequest : public RGWLibRequest,
+			  public RGWListBucket /* RGWOp */
 {
 public:
   RGWFileHandle* rgw_fh;
@@ -1236,6 +1241,10 @@ public:
     }
     default_max = 1000; // XXX was being omitted
     op = this;
+  }
+
+  void set_default_max(uint32_t _default_max) {
+    default_max = _default_max;
   }
 
   virtual bool only_bucket() { return false; }
