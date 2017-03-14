@@ -7776,6 +7776,7 @@ void BlueStore::_deferred_try_submit(OpSequencer *osr)
     txc->log_state_latency(logger, l_bluestore_state_deferred_queued_lat);
     txc->state = TransContext::STATE_DEFERRED_AIO_WAIT;
     for (auto opi = wt.ops.rbegin(); opi != wt.ops.rend(); ++opi) {
+      assert(opi->op == bluestore_deferred_op_t::OP_WRITE);
       const auto& op = *opi;
       uint64_t bl_offset = 0;
       for (auto e : op.extents) {
@@ -7792,6 +7793,8 @@ void BlueStore::_deferred_try_submit(OpSequencer *osr)
 	  bl.substr_of(op.data, bl_offset + j.get_start() - e.offset,
 		       j.get_len());
 	  if (!g_conf->bluestore_debug_omit_block_device_write) {
+	    logger->inc(l_bluestore_deferred_write_ops);
+	    logger->inc(l_bluestore_deferred_write_bytes, bl.length());
 	    int r = bdev->aio_write(j.get_start(), bl, &last->ioc, false);
 	    assert(r == 0);
 	  }
