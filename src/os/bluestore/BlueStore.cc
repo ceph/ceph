@@ -3407,6 +3407,12 @@ void BlueStore::_init_logger()
     "Average finishing state latency");
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat",
     "Average done state latency");
+  b.add_time_avg(l_bluestore_kv_flush_lat, "kv_flush_lat",
+		 "Average kv_thread flush latency", "kflat");
+  b.add_time_avg(l_bluestore_kv_commit_lat, "kv_commit_lat",
+		 "Average kv_thread commit latency", "kclat");
+  b.add_time_avg(l_bluestore_kv_lat, "kv_lat",
+		 "Average kv_thread sync latency", "klat");
   b.add_time_avg(l_bluestore_submit_lat, "submit_lat",
     "Average submit latency");
   b.add_time_avg(l_bluestore_commit_lat, "commit_lat",
@@ -7675,6 +7681,7 @@ void BlueStore::_kv_sync_thread()
 			       deferred_done.end());
 	deferred_done.clear();
       }
+      utime_t after_flush = ceph_clock_now();
 
       // we will use one final transaction to force a sync
       KeyValueDB::Transaction synct = db->get_transaction();
@@ -7772,10 +7779,19 @@ void BlueStore::_kv_sync_thread()
       }
 
       utime_t finish = ceph_clock_now();
+      utime_t dur_flush = after_flush - start;
+      utime_t dur_kv = finish - after_flush;
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing.size()
 	       << " cleaned " << deferred_stable.size()
-	       << " in " << dur << dendl;
+	       << " in " << dur
+	       << " (" << dur_flush << " flush + " << dur_kv << " kv commit)"
+	       << dendl;
+      if (logger) {
+	logger->tinc(l_bluestore_kv_flush_lat, dur_flush);
+	logger->tinc(l_bluestore_kv_commit_lat, dur_kv);
+	logger->tinc(l_bluestore_kv_lat, dur);
+      }
       while (!kv_committing.empty()) {
 	TransContext *txc = kv_committing.front();
 	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
