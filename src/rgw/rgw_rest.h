@@ -424,7 +424,7 @@ public:
   virtual ~RGWHandler_REST() {}
 
   static int validate_tenant_name(const string& bucket);
-  static int validate_bucket_name(const string& bucket);
+  static rgw_ret validate_bucket_name(const string& bucket);
   static int validate_object_name(const string& object);
 
   int init_permissions(RGWOp* op);
@@ -547,8 +547,8 @@ public:
 static constexpr int64_t NO_CONTENT_LENGTH = -1;
 static constexpr int64_t CHUNKED_TRANSFER_ENCODING = -2;
 
-extern void set_req_state_err(struct rgw_err &err, int err_no, int prot_flags);
-extern void set_req_state_err(struct req_state *s, int err_no);
+extern void set_req_state_err(struct rgw_err &err, rgw_ret err_no, int prot_flags);
+extern void set_req_state_err(struct req_state *s, rgw_ret err_no);
 extern void dump_errno(int http_ret, string& out);
 extern void dump_errno(const struct rgw_err &err, string& out);
 extern void dump_errno(struct req_state *s);
@@ -621,8 +621,10 @@ extern void dump_etag(struct req_state *s,
 extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
 extern void dump_time_header(struct req_state *s, const char *name, real_time t);
 extern void dump_last_modified(struct req_state *s, real_time t);
-extern void abort_early(struct req_state* s, RGWOp* op, int err,
-			RGWHandler* handler);
+extern void abort_early(struct req_state* s,
+                        RGWOp* op,
+                        rgw_ret err,
+                        RGWHandler* handler);
 extern void dump_range(struct req_state* s, uint64_t ofs, uint64_t end,
 		       uint64_t total_size);
 extern void dump_continue(struct req_state *s);

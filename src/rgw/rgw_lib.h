@@ -134,7 +134,7 @@ namespace rgw {
 
     RGWUserInfo* get_user() { return user; }
 
-  virtual int postauth_init() { return 0; }
+    rgw_ret postauth_init() override { return 0; }
 
     /* descendant equivalent of *REST*::init_from_header(...):
      * prepare request for execute()--should mean, fixup URI-alikes

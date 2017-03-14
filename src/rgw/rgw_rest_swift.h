@@ -267,11 +267,11 @@ public:
   RGWHandler_REST_SWIFT() {}
   virtual ~RGWHandler_REST_SWIFT() {}
 
-  static int validate_bucket_name(const string& bucket);
+  static rgw_ret validate_bucket_name(const std::string& bucket);
 
   int init(RGWRados *store, struct req_state *s, rgw::io::BasicClient *cio);
   int authorize() override;
-  int postauth_init() override;
+  rgw_ret postauth_init() override;
 
   RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
@@ -420,7 +420,7 @@ public:
     return 0;
   }
 
-  int postauth_init() override {
+  rgw_ret postauth_init() override {
     return 0;
   }
 
@@ -475,7 +475,7 @@ public:
     return 0;
   }
 
-  int postauth_init() override {
+  rgw_ret postauth_init() override {
     return 0;
   }
 
@@ -530,7 +530,7 @@ public:
     return 0;
   }
 
-  int postauth_init() override {
+  rgw_ret postauth_init() override {
     return 0;
   }
 

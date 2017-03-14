@@ -116,7 +116,7 @@ int process_request(RGWRados* const store,
                     RGWRestfulIO* const client_io,
                     OpsLogSocket* const olog)
 {
-  int ret = 0;
+  rgw_ret ret = 0;
 
   client_io->init(g_ceph_context);
 
@@ -232,5 +232,5 @@ done:
 	  << " ======"
 	  << dendl;
 
-  return (ret < 0 ? ret : s->err.ret);
+  return (ret < 0 ? static_cast<int>(ret) : s->err.ret);
 } /* process_request */

@@ -59,7 +59,7 @@ protected:
   bool cors_exist;
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
-  int op_ret;
+  rgw_ret op_ret;
 
   int do_aws4_auth_completion();
 
@@ -823,7 +823,7 @@ public:
   void pre_exec();
   void execute();
 
-  virtual int get_params() = 0;
+  virtual rgw_ret get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
   virtual const string name() { return "post_obj"; }
@@ -1589,7 +1589,7 @@ public:
 
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
-  virtual int postauth_init() = 0;
+  virtual rgw_ret postauth_init() = 0;
   virtual int error_handler(int err_no, string *error_content);
 };
 

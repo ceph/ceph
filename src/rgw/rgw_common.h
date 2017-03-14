@@ -266,6 +266,45 @@ enum RGWObjCategory {
   RGW_OBJ_CATEGORY_MULTIMETA = 3,
 };
 
+
+class rgw_ret {
+  int ret;
+  boost::optional<std::string> message;
+
+  rgw_ret(const int ret, std::string message)
+    : ret(ret),
+      message(std::move(message)) {
+  }
+
+public:
+  rgw_ret()
+    : ret(0) {
+  }
+
+  rgw_ret(const int ret)
+    : ret(ret) {
+  }
+
+  rgw_ret& operator=(const int ret) {
+    this->ret = ret;
+    return *this;
+  }
+
+  operator int() const {
+    return ret;
+  }
+
+  boost::optional<std::string> get_err_msg() const {
+    return message;
+  }
+
+  /* Make a ret value with a customized status message. */
+  static rgw_ret make_custom(const int ret, std::string message) {
+    return rgw_ret(ret, std::move(message));
+  }
+};
+
+
 /** Store error returns for output at a different point in the program */
 struct rgw_err {
   rgw_err();

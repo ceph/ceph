@@ -197,7 +197,6 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   map<string, post_form_part, const ltstr_nocase> parts;  
   RGWPolicyEnv env;
   RGWPolicy post_policy;
-  string err_msg;
 
   int read_with_boundary(bufferlist& bl, uint64_t max, bool check_eol,
                          bool *reached_boundary,
@@ -213,13 +212,13 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   bool part_str(const string& name, string *val);
   bool part_bl(const string& name, bufferlist *pbl);
 
-  int get_policy();
+  rgw_ret get_policy();
   void rebuild_key(string& key);
 public:
   RGWPostObj_ObjStore_S3() {}
   ~RGWPostObj_ObjStore_S3() {}
 
-  int get_params();
+  rgw_ret get_params();
   int complete_get_params();
   void send_response();
   int get_data(bufferlist& bl);
@@ -475,16 +474,13 @@ public:
   RGWHandler_Auth_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_Auth_S3() {}
 
-  static int validate_bucket_name(const string& bucket);
-  static int validate_object_name(const string& bucket);
-
   virtual int init(RGWRados *store,
                    struct req_state *s,
                    rgw::io::BasicClient *cio);
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
-  int postauth_init() { return 0; }
+  rgw_ret postauth_init() override { return 0; }
 };
 
 class RGWHandler_REST_S3 : public RGWHandler_REST {
@@ -501,7 +497,7 @@ public:
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
-  int postauth_init();
+  rgw_ret postauth_init() override;
 };
 
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
