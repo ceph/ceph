@@ -102,7 +102,7 @@ class FsNewHandler : public FileSystemCommandHandler
 
     string force;
     cmd_getval(g_ceph_context,cmdmap, "force", force);
-    int64_t metadata_num_objects = mon->pgmon()->pg_map.pg_pool_sum[metadata].stats.sum.num_objects;
+    int64_t metadata_num_objects = mon->pgservice.get_pool_stat(metadata).stats.sum.num_objects;
     if (force != "--force" && metadata_num_objects > 0) {
       ss << "pool '" << metadata_name
 	 << "' already contains some objects. Use an empty pool instead.";
