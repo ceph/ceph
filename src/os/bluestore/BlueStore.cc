@@ -3383,12 +3383,18 @@ void BlueStore::_set_csum()
 
 void BlueStore::_init_logger()
 {
-  PerfCountersBuilder b(cct, "BlueStore",
+  PerfCountersBuilder b(cct, "bluestore",
                         l_bluestore_first, l_bluestore_last);
+  b.add_time_avg(l_bluestore_kv_flush_lat, "kv_flush_lat",
+		 "Average kv_thread flush latency", "kflat");
+  b.add_time_avg(l_bluestore_kv_commit_lat, "kv_commit_lat",
+		 "Average kv_thread commit latency");
+  b.add_time_avg(l_bluestore_kv_lat, "kv_lat",
+		 "Average kv_thread sync latency", "klat");
   b.add_time_avg(l_bluestore_state_prepare_lat, "state_prepare_lat",
     "Average prepare state latency");
   b.add_time_avg(l_bluestore_state_aio_wait_lat, "state_aio_wait_lat",
-    "Average aio_wait state latency");
+		 "Average aio_wait state latency", "iolat");
   b.add_time_avg(l_bluestore_state_io_done_lat, "state_io_done_lat",
     "Average io_done state latency");
   b.add_time_avg(l_bluestore_state_kv_queued_lat, "state_kv_queued_lat",
@@ -3407,18 +3413,14 @@ void BlueStore::_init_logger()
     "Average finishing state latency");
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat",
     "Average done state latency");
-  b.add_time_avg(l_bluestore_kv_flush_lat, "kv_flush_lat",
-		 "Average kv_thread flush latency", "kflat");
-  b.add_time_avg(l_bluestore_kv_commit_lat, "kv_commit_lat",
-		 "Average kv_thread commit latency", "kclat");
-  b.add_time_avg(l_bluestore_kv_lat, "kv_lat",
-		 "Average kv_thread sync latency", "klat");
+  b.add_time_avg(l_bluestore_throttle_lat, "throttle_lat",
+		 "Average submit throttle latency", "tlat");
   b.add_time_avg(l_bluestore_submit_lat, "submit_lat",
-    "Average submit latency");
+		 "Average submit latency", "slat");
   b.add_time_avg(l_bluestore_commit_lat, "commit_lat",
-    "Average commit latency");
+		 "Average commit latency", "clat");
   b.add_time_avg(l_bluestore_read_lat, "read_lat",
-    "Average read latency");
+		 "Average read latency", "rlat");
   b.add_time_avg(l_bluestore_read_onode_meta_lat, "read_onode_meta_lat",
     "Average read onode metadata latency");
   b.add_time_avg(l_bluestore_read_wait_flush_lat, "read_wait_flush_lat",
@@ -3438,9 +3440,9 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_write_pad_bytes, "write_pad_bytes",
     "Sum for write-op padded bytes");
   b.add_u64(l_bluestore_deferred_write_ops, "deferred_write_ops",
-    "Sum for deferred write op");
+	    "Sum for deferred write op");
   b.add_u64(l_bluestore_deferred_write_bytes, "deferred_write_bytes",
-    "Sum for deferred write bytes");
+	    "Sum for deferred write bytes", "def");
   b.add_u64(l_bluestore_write_penalty_read_ops, "write_penalty_read_ops",
     "Sum for write penalty read ops");
   b.add_u64(l_bluestore_allocated, "bluestore_allocated",
@@ -8066,6 +8068,7 @@ int BlueStore::queue_transactions(
   if (handle)
     handle->suspend_tp_timeout();
 
+  utime_t tstart = ceph_clock_now();
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
   if (txc->deferred_txn) {
@@ -8079,6 +8082,7 @@ int BlueStore::queue_transactions(
       throttle_deferred_bytes.get(txc->bytes);
     }
   }
+  utime_t tend = ceph_clock_now();
 
   if (handle)
     handle->reset_tp_timeout();
@@ -8089,6 +8093,7 @@ int BlueStore::queue_transactions(
   _txc_state_proc(txc);
 
   logger->tinc(l_bluestore_submit_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_throttle_lat, tend - tstart);
   return 0;
 }
 
