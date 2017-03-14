@@ -3186,6 +3186,8 @@ int KStore::_clone_range(TransContext *txc,
     goto out;
 
   r = _do_write(txc, newo, dstoff, bl.length(), bl, 0);
+  if (r < 0)
+    goto out;
 
   txc->write_onode(newo);
 
