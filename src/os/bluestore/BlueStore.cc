@@ -3213,6 +3213,10 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_compression_max_blob_size",
     "bluestore_max_alloc_size",
     "bluestore_prefer_deferred_size",
+    "bluestore_max_ops",
+    "bluestore_max_bytes",
+    "bluestore_deferred_max_ops",
+    "bluestore_deferred_max_bytes",
     NULL
   };
   return KEYS;
@@ -3236,6 +3240,18 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
       // only after startup
       _set_alloc_sizes();
     }
+  }
+  if (changed.count("bluestore_max_ops")) {
+    throttle_ops.reset_max(conf->bluestore_max_ops);
+  }
+  if (changed.count("bluestore_max_bytes")) {
+    throttle_bytes.reset_max(conf->bluestore_max_bytes);
+  }
+  if (changed.count("bluestore_deferred_max_ops")) {
+    throttle_deferred_ops.reset_max(conf->bluestore_deferred_max_ops);
+  }
+  if (changed.count("bluestore_deferred_max_bytes")) {
+    throttle_deferred_bytes.reset_max(conf->bluestore_deferred_max_bytes);
   }
 }
 
