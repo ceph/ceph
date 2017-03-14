@@ -7775,8 +7775,8 @@ int BlueStore::_deferred_replay()
     txc->state = TransContext::STATE_KV_DONE;
     _txc_state_proc(txc);
   }
-  dout(20) << __func__ << " flushing osr" << dendl;
-  osr->flush();
+  dout(20) << __func__ << " draining osr" << dendl;
+  osr->drain();
   dout(10) << __func__ << " completed " << count << " events" << dendl;
   return 0;
 }
