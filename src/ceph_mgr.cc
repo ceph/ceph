@@ -53,6 +53,8 @@ int main(int argc, const char **argv)
   global_init_chdir(g_ceph_context);
   common_init_finish(g_ceph_context);
 
+  // null comment for no reason other than source change
+
   int rc = mgr.init();
   if (rc != 0) {
       std::cerr << "Error in initialization: " << cpp_strerror(rc) << std::endl;
