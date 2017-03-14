@@ -851,7 +851,7 @@ public:
 
 void OSDMonitor::print_utilization(ostream &out, Formatter *f, bool tree) const
 {
-  const PGMap *pgm = &mon->pgmon()->pg_map;
+  const PGMap *pgm = &mon->pgservice.get_pg_map();
   const CrushWrapper *crush = osdmap.crush.get();
 
   if (f) {
@@ -1087,12 +1087,12 @@ void OSDMonitor::prime_pg_temp(
 {
   if (mon->monmap->get_required_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
+    // TODO: remove this creating_pgs direct access?
     if (creating_pgs.pgs.count(pgid)) {
       return;
     }
   } else {
-    const auto& pg_map = mon->pgmon()->pg_map;
-    if (pg_map.creating_pgs.count(pgid)) {
+    if (mon->pgservice.is_creating_pg(pgid)) {
       return;
     }
   }
@@ -3963,9 +3963,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   }
   else if (prefix == "osd perf" ||
 	   prefix == "osd blocked-by") {
-    const PGMap &pgm = mon->pgmon()->pg_map;
-    r = process_pg_map_command(prefix, cmdmap, pgm, osdmap,
-			       f.get(), &ss, &rdata);
+    r = process_pg_map_command(prefix, cmdmap, mon->pgservice.get_pg_map(),
+			       osdmap, f.get(), &ss, &rdata);
   }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
