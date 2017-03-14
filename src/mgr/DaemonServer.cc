@@ -128,7 +128,7 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
   }
 
   MgrSessionRef s(new MgrSession);
-  s->addr = con->get_peer_addr();
+  s->inst.addr = con->get_peer_addr();
   AuthCapsInfo caps_info;
 
   is_valid = handler->verify_authorizer(
@@ -383,6 +383,8 @@ bool DaemonServer::handle_command(MCommand *m)
     return true;
   }
   session->put(); // SessionRef takes a ref
+  if (session->inst.name == entity_name_t())
+    session->inst.name = m->get_source();
 
   string format;
   boost::scoped_ptr<Formatter> f;
