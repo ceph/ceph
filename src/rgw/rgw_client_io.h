@@ -322,7 +322,7 @@ class RGWRestfulIO : public rgw::io::AccountingFilter<rgw::io::RestfulClient*> {
   SHA256 *sha256_hash;
 
 public:
-  virtual ~RGWRestfulIO() {}
+  ~RGWRestfulIO() override {}
 
   RGWRestfulIO(rgw::io::RestfulClient* engine)
     : AccountingFilter<rgw::io::RestfulClient*>(std::move(engine)),
@@ -374,7 +374,7 @@ public:
     setg(nullptr, nullptr, nullptr);
   }
 
-  std::streambuf::int_type underflow() {
+  std::streambuf::int_type underflow() override {
     if (gptr() < egptr()) {
       return traits_type::to_int_type(*gptr());
     }

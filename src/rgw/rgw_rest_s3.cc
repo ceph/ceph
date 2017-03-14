@@ -706,7 +706,7 @@ class RGWSetBucketVersioningParser : public RGWXMLParser
 
 public:
   RGWSetBucketVersioningParser() {}
-  ~RGWSetBucketVersioningParser() {}
+  ~RGWSetBucketVersioningParser() override {}
 
   int get_versioning_status(bool *status) {
     XMLObj *config = find_first("VersioningConfiguration");
@@ -902,7 +902,7 @@ class RGWLocationConstraint : public XMLObj
 {
 public:
   RGWLocationConstraint() {}
-  ~RGWLocationConstraint() {}
+  ~RGWLocationConstraint() override {}
   bool xml_end(const char *el) override {
     if (!el)
       return false;
@@ -919,7 +919,7 @@ class RGWCreateBucketConfig : public XMLObj
 {
 public:
   RGWCreateBucketConfig() {}
-  ~RGWCreateBucketConfig() {}
+  ~RGWCreateBucketConfig() override {}
 };
 
 class RGWCreateBucketParser : public RGWXMLParser
@@ -930,7 +930,7 @@ class RGWCreateBucketParser : public RGWXMLParser
 
 public:
   RGWCreateBucketParser() {}
-  ~RGWCreateBucketParser() {}
+  ~RGWCreateBucketParser() override {}
 
   bool get_location_constraint(string& zone_group) {
     XMLObj *config = find_first("CreateBucketConfiguration");
@@ -2553,7 +2553,7 @@ class RGWSetRequestPaymentParser : public RGWXMLParser
 
 public:
   RGWSetRequestPaymentParser() {}
-  ~RGWSetRequestPaymentParser() {}
+  ~RGWSetRequestPaymentParser() override {}
 
   int get_request_payment_payer(bool *requester_pays) {
     XMLObj *config = find_first("RequestPaymentConfiguration");

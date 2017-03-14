@@ -10,13 +10,13 @@
 
 class RGWHandler_Usage : public RGWHandler_Auth_S3 {
 protected:
-  RGWOp *op_get();
-  RGWOp *op_delete();
+  RGWOp *op_get() override;
+  RGWOp *op_delete() override;
 public:
   RGWHandler_Usage() {}
-  virtual ~RGWHandler_Usage() {}
+  ~RGWHandler_Usage() override {}
 
-  int read_permissions(RGWOp*) {
+  int read_permissions(RGWOp*) override {
     return 0;
   }
 };
@@ -24,7 +24,7 @@ public:
 class RGWRESTMgr_Usage : public RGWRESTMgr {
 public:
   RGWRESTMgr_Usage() = default;
-  virtual ~RGWRESTMgr_Usage() = default;
+  ~RGWRESTMgr_Usage() override = default;
 
   RGWHandler_REST* get_handler(struct req_state*,
                                const std::string&) override {

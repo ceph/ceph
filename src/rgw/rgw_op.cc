@@ -2785,7 +2785,7 @@ class RGWPutObj_CB : public RGWGetDataCB
   RGWPutObj *op;
 public:
   RGWPutObj_CB(RGWPutObj *_op) : op(_op) {}
-  ~RGWPutObj_CB() {}
+  ~RGWPutObj_CB() override {}
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
     return op->get_data_cb(bl, bl_ofs, bl_len);

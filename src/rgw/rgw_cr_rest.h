@@ -25,11 +25,11 @@ public:
       path(_path), params(make_param_list(params)), result(_result)
   {}
 
-  ~RGWReadRESTResourceCR() {
+  ~RGWReadRESTResourceCR() override {
     request_cleanup();
   }
 
-  int send_request() {
+  int send_request() override {
     auto op = boost::intrusive_ptr<RGWRESTReadResource>(
         new RGWRESTReadResource(conn, path, params, NULL, http_manager));
 
@@ -46,7 +46,7 @@ public:
     return 0;
   }
 
-  int request_complete() {
+  int request_complete() override {
     int ret = http_op->wait(result);
     auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
@@ -59,7 +59,7 @@ public:
     return 0;
   }
 
-  void request_cleanup() {
+  void request_cleanup() override {
     if (http_op) {
       http_op->put();
       http_op = NULL;
@@ -89,11 +89,11 @@ public:
       input(_input)
   {}
 
-  ~RGWSendRESTResourceCR() {
+  ~RGWSendRESTResourceCR() override {
     request_cleanup();
   }
 
-  int send_request() {
+  int send_request() override {
     auto op = boost::intrusive_ptr<RGWRESTSendResource>(
         new RGWRESTSendResource(conn, method, path, params, NULL, http_manager));
 
@@ -116,7 +116,7 @@ public:
     return 0;
   }
 
-  int request_complete() {
+  int request_complete() override {
     int ret;
     if (result) {
       ret = http_op->wait(result);
@@ -137,7 +137,7 @@ public:
     return 0;
   }
 
-  void request_cleanup() {
+  void request_cleanup() override {
     if (http_op) {
       http_op->put();
       http_op = NULL;
@@ -186,11 +186,11 @@ public:
       path(_path), params(make_param_list(_params))
   {}
 
-  ~RGWDeleteRESTResourceCR() {
+  ~RGWDeleteRESTResourceCR() override {
     request_cleanup();
   }
 
-  int send_request() {
+  int send_request() override {
     auto op = boost::intrusive_ptr<RGWRESTDeleteResource>(
         new RGWRESTDeleteResource(conn, path, params, nullptr, http_manager));
 
@@ -208,7 +208,7 @@ public:
     return 0;
   }
 
-  int request_complete() {
+  int request_complete() override {
     int ret;
     bufferlist bl;
     ret = http_op->wait_bl(&bl);
@@ -225,7 +225,7 @@ public:
     return 0;
   }
 
-  void request_cleanup() {
+  void request_cleanup() override {
     if (http_op) {
       http_op->put();
       http_op = NULL;
