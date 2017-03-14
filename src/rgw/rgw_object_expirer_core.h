@@ -60,7 +60,7 @@ protected:
         lock("OEWorker") {
     }
 
-    void *entry();
+    void *entry() override;
     void stop();
   };
 

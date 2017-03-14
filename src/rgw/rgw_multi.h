@@ -11,8 +11,8 @@ class RGWMultiCompleteUpload : public XMLObj
 {
 public:
   RGWMultiCompleteUpload() {}
-  ~RGWMultiCompleteUpload() {}
-  bool xml_end(const char *el);
+  ~RGWMultiCompleteUpload() override {}
+  bool xml_end(const char *el) override;
 
   std::map<int, string> parts;
 };
@@ -23,8 +23,8 @@ class RGWMultiPart : public XMLObj
   int num;
 public:
   RGWMultiPart() : num(0) {}
-  ~RGWMultiPart() {}
-  bool xml_end(const char *el);
+  ~RGWMultiPart() override {}
+  bool xml_end(const char *el) override;
 
   string& get_etag() { return etag; }
   int get_num() { return num; }
@@ -34,22 +34,22 @@ class RGWMultiPartNumber : public XMLObj
 {
 public:
   RGWMultiPartNumber() {}
-  ~RGWMultiPartNumber() {}
+  ~RGWMultiPartNumber() override {}
 };
 
 class RGWMultiETag : public XMLObj
 {
 public:
   RGWMultiETag() {}
-  ~RGWMultiETag() {}
+  ~RGWMultiETag() override {}
 };
 
 class RGWMultiXMLParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el);
+  XMLObj *alloc_obj(const char *el) override;
 public:
   RGWMultiXMLParser() {}
-  ~RGWMultiXMLParser() {}
+  ~RGWMultiXMLParser() override {}
 };
 
 #endif

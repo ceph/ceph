@@ -46,7 +46,7 @@ class RGWAsioClientIO : public rgw::io::RestfulClient,
 
  public:
   RGWAsioClientIO(tcp::socket&& socket, request_type&& request);
-  ~RGWAsioClientIO();
+  ~RGWAsioClientIO() override;
 
   void init_env(CephContext *cct) override;
   size_t complete_request() override;

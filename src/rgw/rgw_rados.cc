@@ -3033,7 +3033,7 @@ class RGWSyncProcessorThread : public RGWRadosThread {
 public:
   RGWSyncProcessorThread(RGWRados *_store, const string& thread_name = "radosgw") : RGWRadosThread(_store, thread_name) {}
   RGWSyncProcessorThread(RGWRados *_store) : RGWRadosThread(_store) {}
-  ~RGWSyncProcessorThread() {}
+  ~RGWSyncProcessorThread() override {}
   int init() override = 0 ;
   int process() override = 0;
 };
@@ -9680,7 +9680,7 @@ struct get_obj_data : public RefCountedObject {
       total_read(0), lock("get_obj_data"), data_lock("get_obj_data::data_lock"),
       client_cb(NULL),
       throttle(cct, "get_obj_data", cct->_conf->rgw_get_obj_window_size, false) {}
-  ~get_obj_data() { } 
+  ~get_obj_data() override { } 
   void set_cancelled(int r) {
     cancelled.set(1);
     err_code.set(r);

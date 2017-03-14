@@ -207,7 +207,7 @@ public:
                                                       shard_info(_shard_info) {
   }
 
-  ~RGWReadRemoteDataLogShardInfoCR() {
+  ~RGWReadRemoteDataLogShardInfoCR() override {
     if (http_op) {
       http_op->put();
     }
@@ -286,7 +286,7 @@ public:
                                                       entries(_entries),
                                                       truncated(_truncated) {
   }
-  ~RGWReadRemoteDataLogShardCR() {
+  ~RGWReadRemoteDataLogShardCR() override {
     if (http_op) {
       http_op->put();
     }
@@ -738,7 +738,7 @@ public:
     path = "/admin/metadata/bucket.instance";
     num_shards = sync_status->sync_info.num_shards;
   }
-  ~RGWListBucketIndexesCR() {
+  ~RGWListBucketIndexesCR() override {
     delete entries_index;
   }
 
@@ -925,7 +925,7 @@ public:
       status_oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs)) {
     logger.init(sync_env, "Bucket", bs.get_key());
   }
-  ~RGWRunBucketSyncCoroutine() {
+  ~RGWRunBucketSyncCoroutine() override {
     if (lease_cr) {
       lease_cr->abort();
     }
@@ -1109,7 +1109,7 @@ public:
     logger.init(sync_env, "DataShard", status_oid);
   }
 
-  ~RGWDataSyncShardCR() {
+  ~RGWDataSyncShardCR() override {
     delete marker_tracker;
     if (lease_cr) {
       lease_cr->abort();
@@ -1436,7 +1436,7 @@ public:
                                                       reset_backoff(_reset_backoff), logger(sync_env, "Data", "all") {
   }
 
-  ~RGWDataSyncCR() {
+  ~RGWDataSyncCR() override {
     for (auto iter : shard_crs) {
       iter.second->put();
     }

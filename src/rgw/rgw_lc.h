@@ -223,7 +223,7 @@ class RGWLC {
 
   public:
     LCWorker(CephContext *_cct, RGWLC *_lc) : cct(_cct), lc(_lc), lock("LCWorker") {}
-    void *entry();
+    void *entry() override;
     void stop();
     bool should_work(utime_t& now);
     int schedule_next_start_time(utime_t& start, utime_t& now);

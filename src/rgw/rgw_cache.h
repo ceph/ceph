@@ -194,7 +194,7 @@ class RGWCache  : public T
     return normal_name(obj.pool, obj.oid);
   }
 
-  int init_rados() {
+  int init_rados() override {
     int ret;
     cache.set_ctx(T::cct);
     ret = T::init_rados();
@@ -204,7 +204,7 @@ class RGWCache  : public T
     return 0;
   }
 
-  bool need_watch_notify() {
+  bool need_watch_notify() override {
     return true;
   }
 
@@ -212,15 +212,15 @@ class RGWCache  : public T
   int watch_cb(uint64_t notify_id,
 	       uint64_t cookie,
 	       uint64_t notifier_id,
-	       bufferlist& bl);
+	       bufferlist& bl) override;
 
-  void set_cache_enabled(bool state) {
+  void set_cache_enabled(bool state) override {
     cache.set_enabled(state);
   }
 public:
   RGWCache() {}
 
-  void register_chained_cache(RGWChainedCache *cc) {
+  void register_chained_cache(RGWChainedCache *cc) override {
     cache.chain_cache(cc);
   }
 
@@ -232,21 +232,21 @@ public:
               map<std::string, bufferlist>& attrs, int flags,
               bufferlist& data,
               RGWObjVersionTracker *objv_tracker,
-              real_time set_mtime);
-  int put_system_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl, off_t ofs, bool exclusive);
+              real_time set_mtime) override;
+  int put_system_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl, off_t ofs, bool exclusive) override;
 
   int get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
                      RGWObjVersionTracker *objv_tracker, rgw_raw_obj& obj,
                      bufferlist& bl, off_t ofs, off_t end,
                      map<string, bufferlist> *attrs,
-                     rgw_cache_entry_info *cache_info);
+                     rgw_cache_entry_info *cache_info) override;
 
   int raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs,
-                   bufferlist *first_chunk, RGWObjVersionTracker *objv_tracker);
+                   bufferlist *first_chunk, RGWObjVersionTracker *objv_tracker) override;
 
-  int delete_system_obj(rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker);
+  int delete_system_obj(rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker) override;
 
-  bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) {
+  bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) override {
     return cache.chain_cache_entry(cache_info_entries, chained_entry);
   }
 };

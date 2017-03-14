@@ -553,7 +553,7 @@ public:
       user_sync_thread = NULL;
     }
   }
-  ~RGWUserStatsCache() {
+  ~RGWUserStatsCache() override {
     stop();
   }
 
