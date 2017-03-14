@@ -50,6 +50,9 @@ class BlueFS;
 
 enum {
   l_bluestore_first = 732430,
+  l_bluestore_kv_flush_lat,
+  l_bluestore_kv_commit_lat,
+  l_bluestore_kv_lat,
   l_bluestore_state_prepare_lat,
   l_bluestore_state_aio_wait_lat,
   l_bluestore_state_io_done_lat,
@@ -61,9 +64,7 @@ enum {
   l_bluestore_state_deferred_cleanup_lat,
   l_bluestore_state_finishing_lat,
   l_bluestore_state_done_lat,
-  l_bluestore_kv_flush_lat,
-  l_bluestore_kv_commit_lat,
-  l_bluestore_kv_lat,
+  l_bluestore_throttle_lat,
   l_bluestore_submit_lat,
   l_bluestore_commit_lat,
   l_bluestore_read_lat,
