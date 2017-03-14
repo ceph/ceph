@@ -768,8 +768,10 @@ void AsyncConnection::process()
                                     << message->get_seq() << " " << message
 				    << " " << *message << dendl;
 
-          ack_left.inc();
-          need_dispatch_writer = true;
+          if (!policy.lossy) {
+            ack_left.inc();
+            need_dispatch_writer = true;
+          }
           state = STATE_OPEN;
 
           logger->inc(l_msgr_recv_messages);
