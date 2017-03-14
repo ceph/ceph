@@ -198,7 +198,7 @@ bool DaemonServer::ms_dispatch(Message *m)
 {
   Mutex::Locker l(lock);
 
-  switch(m->get_type()) {
+  switch (m->get_type()) {
     case MSG_PGSTATS:
       cluster_state.ingest_pgstats(static_cast<MPGStats*>(m));
       m->put();
