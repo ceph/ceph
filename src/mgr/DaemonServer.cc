@@ -458,16 +458,18 @@ bool DaemonServer::handle_command(MCommand *m)
   if (!_allowed_command(session.get(), mgr_cmd->module, prefix, cmdmap,
                         param_str_map, mgr_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
-#if 0
-    // FIXME: audit_clog?
-    clog->info() << "from='" << session->addr << "' "
-		 << "entity='" << session->entity_name << "' "
-		 << "cmd=" << m->cmd << ":  access denied";
-#endif
+    audit_clog->info() << "from='" << session->inst << "' "
+		       << "entity='" << session->entity_name << "' "
+		       << "cmd=" << m->cmd << ":  access denied";
     ss << "access denied";
     r = -EACCES;
     goto out;
   }
+
+  audit_clog->debug()
+    << "from='" << session->inst << "' "
+    << "entity='" << session->entity_name << "' "
+    << "cmd=" << m->cmd << ": dispatch";
 
   // -----------
   // PG commands
