@@ -8811,6 +8811,7 @@ int BlueStore::_do_alloc_write(
     // counting machinery.
     assert(!b->is_referenced());
     b->get_ref(coll.get(), wi.b_off0, wi.length0); 
+    b->_encode_blob_to_cache(3);
                                                
 
     // queue io
