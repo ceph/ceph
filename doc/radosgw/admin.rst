@@ -288,7 +288,7 @@ usage (utilization). For example::
 
 For example::
 
-	radosgw-admin caps add --uid=johndoe --caps="users=*"
+	radosgw-admin caps add --uid=johndoe --caps="users=*;buckets=*"
 
 
 To remove administrative capabilities from a user, execute the following:: 
