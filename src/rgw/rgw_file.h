@@ -391,11 +391,11 @@ namespace rgw {
 
     const std::string& object_name() const { return name; }
 
-    std::string full_object_name(bool omit_bucket = false) {
+    std::string full_object_name(bool omit_bucket = false) const {
       std::string path;
       std::vector<const std::string*> segments;
       int reserve = 0;
-      RGWFileHandle* tfh = this;
+      const RGWFileHandle* tfh = this;
       while (tfh && !tfh->is_root() && !(tfh->is_bucket() && omit_bucket)) {
 	segments.push_back(&tfh->object_name());
 	reserve += (1 + tfh->object_name().length());
@@ -416,11 +416,11 @@ namespace rgw {
       return path;
     }
 
-    inline std::string relative_object_name() {
+    inline std::string relative_object_name() const {
       return full_object_name(true /* omit_bucket */);
     }
 
-    inline std::string format_child_name(const std::string& cbasename) {
+    inline std::string format_child_name(const std::string& cbasename) const {
       std::string child_name{relative_object_name()};
       if ((child_name.size() > 0) &&
 	  (child_name.back() != '/'))
@@ -429,7 +429,7 @@ namespace rgw {
       return child_name;
     }
 
-    inline std::string make_key_name(const char *name) {
+    inline std::string make_key_name(const char *name) const {
       std::string key_name{full_object_name()};
       if (key_name.length() > 0)
 	key_name += "/";
@@ -437,7 +437,7 @@ namespace rgw {
       return key_name;
     }
 
-    fh_key make_fhk(const std::string& name) {
+    fh_key make_fhk(const std::string& name) const {
       if (depth <= 1)
 	return fh_key(fhk.fh_hk.object, name.c_str());
       else {
@@ -457,9 +457,9 @@ namespace rgw {
       }
     }
 
-    const rgw_obj_key* find_marker(uint64_t off) {
+    const rgw_obj_key* find_marker(uint64_t off) const {
       using std::get;
-      directory* d = get<directory>(&variant_type);
+      const directory* d = get<directory>(&variant_type);
       if (d) {
 	const auto& iter = d->marker_cache.find(off);
 	if (iter != d->marker_cache.end())
@@ -477,6 +477,7 @@ namespace rgw {
     bool creating() const { return flags & FLAG_CREATING; }
     bool deleted() const { return flags & FLAG_DELETED; }
     bool stateless_open() const { return flags & FLAG_STATELESS_OPEN; }
+    bool has_children() const;
 
     uint32_t open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
@@ -1341,6 +1342,89 @@ public:
   }
 
 }; /* RGWReaddirRequest */
+
+/*
+  dir has-children predicate (bucket objects)
+*/
+
+class RGWRMdirCheck : public RGWLibRequest,
+		      public RGWListBucket /* RGWOp */
+{
+public:
+  const RGWFileHandle* rgw_fh;
+  bool valid;
+  bool has_children;
+
+  RGWRMdirCheck (CephContext* _cct, RGWUserInfo *_user,
+		 const RGWFileHandle* _rgw_fh)
+    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), valid(false),
+      has_children(false) {
+    default_max = 2;
+    op = this;
+  }
+
+  virtual bool only_bucket() override { return false; }
+
+  virtual int op_init() override {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() override {
+    struct req_state* s = get_state();
+    s->info.method = "GET";
+    s->op = OP_GET;
+
+    std::string uri = "/" + rgw_fh->bucket_name() + "/";
+    s->relative_uri = uri;
+    s->info.request_uri = uri;
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    s->user = user;
+
+    prefix = rgw_fh->relative_object_name();
+    if (prefix.length() > 0)
+      prefix += "/";
+    delimiter = '/';
+
+    return 0;
+  }
+
+  virtual int get_params() override {
+    max = default_max;
+    return 0;
+  }
+
+  virtual void send_response() override {
+    valid = true;
+    if ((objs.size() > 1) ||
+	(! objs.empty() &&
+	 (objs.front().key.name != prefix))) {
+      has_children = true;
+      return;
+    }
+    for (auto& iter : common_prefixes) {
+      /* readdir never produces a name for this case */
+      if (iter.first == "/")
+	continue;
+      has_children = true;
+      break;
+    }
+  }
+
+  virtual void send_versioned_response() {
+    send_response();
+  }
+
+}; /* RGWRMdirCheck */
 
 /*
   create bucket

@@ -256,8 +256,14 @@ namespace rgw {
       }
 
       std::string oname = rgw_fh->relative_object_name();
-      if (rgw_fh->is_dir())
+      if (rgw_fh->is_dir()) {
+	/* for the duration of our cache timer, trust positive
+	 * child cache */
+	if (rgw_fh->has_children()) {
+	  return(-ENOTEMPTY);
+	}
 	oname += "/";
+      }
       RGWDeleteObjRequest req(cct, get_user(), parent->bucket_name(),
 			      oname);
       rc = rgwlib.get_fe()->execute_req(&req);
@@ -757,6 +763,28 @@ namespace rgw {
     return true;
   } /* RGWFileHandle::reclaim */
 
+  bool RGWFileHandle::has_children() const
+  {
+    if (unlikely(! is_dir()))
+      return false;
+
+#if 0
+    /* XXX pretty, but unsafe w/o consistent caching */
+    const directory* d = get<directory>(&variant_type);
+    if ((d->flags & RGWFileHandle::directory::FLAG_CACHED) &&
+	(state.nlink > 2 /* . and .. */))
+      return true;
+#endif /* 0 */
+
+    RGWRMdirCheck req(fs->get_context(), fs->get_user(), this);
+    int rc = rgwlib.get_fe()->execute_req(&req);
+    if (! rc) {
+      return req.valid && req.has_children;
+    }
+
+    return false;
+  }
+
   int RGWFileHandle::readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset,
 			     bool *eof, uint32_t flags)
   {
@@ -780,7 +808,7 @@ namespace rgw {
       if (! rc) {
 	lock_guard guard(mtx);
 	state.atime = now;
-	set_nlink(2 + 1);
+	set_nlink(2 + 1); // XXXX
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
 	fs->state.push_event(ev);
@@ -792,7 +820,7 @@ namespace rgw {
       if (! rc) {
 	lock_guard guard(mtx);
 	state.atime = now;
-	set_nlink(2 + 1);
+	set_nlink(2 + 1); // XXXX
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
 	fs->state.push_event(ev);
@@ -951,6 +979,7 @@ namespace rgw {
 
   void RGWFileHandle::directory::clear_state()
   {
+    flags &= ~RGWFileHandle::directory::FLAG_CACHED;
     marker_cache.clear();
   }
 
