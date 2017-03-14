@@ -378,7 +378,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
         f->dump_string("description", "");
       }
 
-      if (d->nick != NULL) {
+      if (d->nick != NULL && !suppress_nicks) {
         f->dump_string("nick", d->nick);
       } else {
         f->dump_string("nick", "");
