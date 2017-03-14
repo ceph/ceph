@@ -59,15 +59,15 @@
 
 static void usage()
 {
-  std::cout << "Usage: rbd-nbd [options] map <image-or-snap-spec>  Map a image to nbd device\n"
+  std::cout << "Usage: rbd-nbd [options] map <image-or-snap-spec>  Map an image to nbd device\n"
             << "               unmap <device path>                 Unmap nbd device\n"
             << "               list-mapped                         List mapped nbd devices\n"
             << "Options:\n"
-            << "  --device <device path>                    Specify nbd device path\n"
-            << "  --read-only                               Map readonly\n"
-            << "  --nbds_max <limit>                        Override for module param nbds_max\n"
-            << "  --max_part <limit>                        Override for module param max_part\n"
-            << "  --exclusive                               Forbid other clients write\n"
+            << "  --device <device path>  Specify nbd device path\n"
+            << "  --read-only             Map readonly\n"
+            << "  --nbds_max <limit>      Override for module param nbds_max\n"
+            << "  --max_part <limit>      Override for module param max_part\n"
+            << "  --exclusive             Forbid other clients write\n"
             << std::endl;
   generic_server_usage();
 }
