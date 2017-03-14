@@ -1077,9 +1077,17 @@ namespace rgw {
     /* early quota check skipped--we don't have size yet */
     /* skipping user-supplied etag--we might have one in future, but
      * like data it and other attrs would arrive after open */
-    processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-				 &multipart);
-    op_ret = processor->prepare(get_store(), NULL);
+    processor.emplace(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+                      s->bucket_info,
+                      s->bucket,
+                      s->object.name,
+                      /* part_size */
+                      s->cct->_conf->rgw_obj_stripe_size,
+                      s->req_id,
+                      s->bucket_info.versioning_enabled());
+    processor->set_olh_epoch(olh_epoch);
+    processor->set_version_id(version_id);
+    op_ret = processor->prepare(get_store(), nullptr);
 
   done:
     return op_ret;
@@ -1107,7 +1115,7 @@ namespace rgw {
       orig_data = data;
     }
     hash.Update((const byte *)data.c_str(), data.length());
-    op_ret = put_data_and_throttle(processor, data, ofs,
+    op_ret = put_data_and_throttle(&(*processor), data, ofs,
 				   need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
@@ -1122,9 +1130,17 @@ namespace rgw {
       data.swap(orig_data);
 
       /* restart processing with different oid suffix */
-      dispose_processor(processor);
-      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-				   &multipart);
+      processor = boost::none;
+      processor.emplace(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+                        s->bucket_info,
+                        s->bucket,
+                        s->object.name,
+                        /* part_size */
+                        s->cct->_conf->rgw_obj_stripe_size,
+                        s->req_id,
+                        s->bucket_info.versioning_enabled());
+      processor->set_olh_epoch(olh_epoch);
+      processor->set_version_id(version_id);
 
       string oid_rand;
       char buf[33];
@@ -1138,7 +1154,7 @@ namespace rgw {
 	goto done;
       }
 
-      op_ret = put_data_and_throttle(processor, data, ofs, false);
+      op_ret = put_data_and_throttle(&(*processor), data, ofs, false);
       if (op_ret < 0) {
 	goto done;
       }
@@ -1210,7 +1226,6 @@ namespace rgw {
     }
 
   done:
-    dispose_processor(processor);
     perfcounter->tinc(l_rgw_put_lat,
 		      (ceph_clock_now() - s->time));
     return op_ret;

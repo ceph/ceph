@@ -2010,7 +2010,7 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
   RGWFileHandle* rgw_fh;
-  RGWPutObjProcessor *processor;
+  boost::optional<RGWPutObjProcessor_Atomic> processor;
   buffer::list data;
   uint64_t timer_id;
   MD5 hash;
@@ -2022,7 +2022,7 @@ public:
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      rgw_fh(_fh), processor(nullptr), real_ofs(0), bytes_written(0),
+      rgw_fh(_fh), real_ofs(0), bytes_written(0),
       multipart(false), eio(false) {
 
     int ret = header_init();
@@ -2063,19 +2063,6 @@ public:
     s->user = user;
 
     return 0;
-  }
-
-  virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx,
-					       bool *is_multipart) {
-    struct req_state* s = get_state();
-    uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
-    RGWPutObjProcessor_Atomic *processor =
-      new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket,
-				    s->object.name, part_size, s->req_id,
-				    s->bucket_info.versioning_enabled());
-    processor->set_olh_epoch(olh_epoch);
-    processor->set_version_id(version_id);
-    return processor;
   }
 
   virtual int get_params() {
