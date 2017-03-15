@@ -179,7 +179,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   leader_supported_mon_commands_size(0),
   mgr_messenger(mgr_m),
   mgr_client(cct_, mgr_m),
-  pgservice(new PGMapStatService),
+  pgservice(nullptr),
   store(s),
   
   state(STATE_PROBING),
@@ -243,6 +243,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   int cmdsize;
   get_locally_supported_monitor_commands(&cmds, &cmdsize);
   set_leader_supported_commands(cmds, cmdsize);
+
+  pgservice = mgrmon()->get_pg_stat_service();
 }
 
 PaxosService *Monitor::get_paxos_service_by_name(const string& name)

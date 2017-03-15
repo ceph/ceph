@@ -19,6 +19,7 @@
 #include "Monitor.h"
 #include "OSDMonitor.h"
 #include "MonitorDBStore.h"
+#include "PGStatService.h"
 
 #include "messages/MPGStats.h"
 #include "messages/MPGStatsAck.h"
@@ -1669,4 +1670,16 @@ bool PGMonitor::check_sub(Subscription *sub)
     }
   }
   return true;
+}
+
+PGStatService *PGMonitor::get_pg_stat_service()
+{
+  if (!pgservice) {
+    pgservice = new PGMapStatService(pg_map);
+  }
+  return pgservice;
+}
+PGMonitor::~PGMonitor()
+{
+  delete pgservice;
 }
