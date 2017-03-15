@@ -400,6 +400,22 @@ function test_tiering()
 
   ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
   ceph osd pool delete slow slow --yes-i-really-really-mean-it
+  
+  # check add-cache whether work
+  ceph osd pool create datapool 2
+  ceph osd pool create cachepool 2
+  ceph osd tier add-cache datapool cachepool 1024000
+  ceph osd tier cache-mode cachepool writeback
+  dd if=/dev/zero of=/tmp/add-cache bs=4K count=1
+  rados -p datapool put object /tmp/add-cache
+  rados -p cachepool stat object
+  rados -p cachepool cache-flush object
+  rados -p datapool stat object
+  ceph osd tier remove-overlay datapool
+  ceph osd tier remove datapool cachepool
+  ceph osd pool delete cachepool cachepool --yes-i-really-really-mean-it
+  ceph osd pool delete datapool datapool --yes-i-really-really-mean-it
+  rm -rf /tmp/add-cache
 
   # check add-cache whether work
   ceph osd pool create datapool 2
