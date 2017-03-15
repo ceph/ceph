@@ -22,6 +22,7 @@
 #include <set>
 #include <boost/variant.hpp>
 
+#include "common/code_environment.h"
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
 #include "common/Mutex.h"
@@ -190,7 +191,7 @@ public:
   void parse_env();
 
   // Absorb config settings from argv
-  int parse_argv(std::vector<const char*>& args);
+  int parse_argv(std::vector<const char*>& args, enum code_environment_t code_env);
 
   // Expand all metavariables. Make any pending observer callbacks.
   void apply_changes(std::ostream *oss);

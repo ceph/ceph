@@ -154,7 +154,7 @@ extern "C" int rados_conf_parse_env(rados_t cluster, const char *var) {
   md_config_t *conf = client->cct()->_conf;
   std::vector<const char*> args;
   env_to_vec(args, var);
-  int ret = conf->parse_argv(args);
+  int ret = conf->parse_argv(args, CODE_ENVIRONMENT_LIBRARY);
   if (ret == 0) {
     conf->apply_changes(NULL);
   }

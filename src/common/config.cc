@@ -443,7 +443,7 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
   }
 }
 
-int md_config_t::parse_argv(std::vector<const char*>& args)
+int md_config_t::parse_argv(std::vector<const char*>& args, enum code_environment_t code_env)
 {
   Mutex::Locker l(lock);
   if (internal_safe_to_start_threads) {
@@ -465,7 +465,22 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
        * argument parses will still need to see it. */
       break;
     }
-    else if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
+
+    /* Parse for daemonize flags only if we are a daemon, they are not needed
+       for libraries or clients */
+    if (code_env == CODE_ENVIRONMENT_DAEMON) {
+      if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
+      set_val_or_die("daemonize", "false");
+      } else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
+      set_val_or_die("daemonize", "false");
+      set_val_or_die("log_file", "");
+      set_val_or_die("log_to_stderr", "true");
+      set_val_or_die("err_to_stderr", "true");
+      set_val_or_die("log_to_syslog", "false");
+      }
+    }
+
+    if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
       cerr << cf << std::endl;
       _exit(0);
     }
@@ -475,16 +490,6 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
     else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", (char*)NULL)) {
       show_config_value = true;
       show_config_value_arg = val;
-    }
-    else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
-      set_val_or_die("daemonize", "false");
-    }
-    else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
-      set_val_or_die("daemonize", "false");
-      set_val_or_die("log_file", "");
-      set_val_or_die("log_to_stderr", "true");
-      set_val_or_die("err_to_stderr", "true");
-      set_val_or_die("log_to_syslog", "false");
     }
     // Some stuff that we wanted to give universal single-character options for
     // Careful: you can burn through the alphabet pretty quickly by adding

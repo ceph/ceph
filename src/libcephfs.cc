@@ -190,7 +190,7 @@ public:
     int ret;
     vector<const char*> args;
     argv_to_vec(argc, argv, args);
-    ret = cct->_conf->parse_argv(args);
+    ret = cct->_conf->parse_argv(args,CODE_ENVIRONMENT_LIBRARY);
     if (ret)
 	return ret;
     cct->_conf->apply_changes(NULL);
@@ -202,7 +202,7 @@ public:
     md_config_t *conf = cct->_conf;
     vector<const char*> args;
     env_to_vec(args, name);
-    int ret = conf->parse_argv(args);
+    int ret = conf->parse_argv(args, CODE_ENVIRONMENT_LIBRARY);
     if (ret)
       return ret;
     conf->apply_changes(NULL);

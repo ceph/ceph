@@ -136,7 +136,7 @@ TEST(DaemonConfig, ArgV) {
   size_t argc = (sizeof(argv) / sizeof(argv[0])) - 1;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  g_ceph_context->_conf->parse_argv(args);
+  g_ceph_context->_conf->parse_argv(args, CODE_ENVIRONMENT_DAEMON);
   g_ceph_context->_conf->apply_changes(NULL);
 
   char buf[128];

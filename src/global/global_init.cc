@@ -97,7 +97,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   md_config_t *conf = cct->_conf;
 
   if (alt_def_args)
-    conf->parse_argv(*alt_def_args);  // alternative default args
+    conf->parse_argv(*alt_def_args, code_env);  // alternative default args
 
   int ret = conf->parse_config_files(c_str_or_null(conf_file_list),
 				     &cerr, flags);
@@ -125,7 +125,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
 
   conf->parse_env(); // environment variables override
 
-  conf->parse_argv(args); // argv override
+  conf->parse_argv(args, code_env); // argv override
 
   // Now we're ready to complain about config file parse errors
   g_conf->complain_about_parse_errors(g_ceph_context);

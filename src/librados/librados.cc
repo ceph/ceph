@@ -2810,7 +2810,7 @@ extern "C" int rados_conf_parse_argv(rados_t cluster, int argc, const char **arg
   md_config_t *conf = client->cct->_conf;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  int ret = conf->parse_argv(args);
+  int ret = conf->parse_argv(args, CODE_ENVIRONMENT_LIBRARY);
   if (ret) {
     tracepoint(librados, rados_conf_parse_argv_exit, ret);
     return ret;
@@ -2839,7 +2839,7 @@ extern "C" int rados_conf_parse_argv_remainder(rados_t cluster, int argc,
   vector<const char*> args;
   for (int i=0; i<argc; i++)
     args.push_back(argv[i]);
-  int ret = conf->parse_argv(args);
+  int ret = conf->parse_argv(args, CODE_ENVIRONMENT_LIBRARY);
   if (ret) {
     tracepoint(librados, rados_conf_parse_argv_remainder_exit, ret);
     return ret;
@@ -2864,7 +2864,7 @@ extern "C" int rados_conf_parse_env(rados_t cluster, const char *env)
   md_config_t *conf = client->cct->_conf;
   vector<const char*> args;
   env_to_vec(args, env);
-  int ret = conf->parse_argv(args);
+  int ret = conf->parse_argv(args, CODE_ENVIRONMENT_LIBRARY);
   if (ret) {
     tracepoint(librados, rados_conf_parse_env_exit, ret);
     return ret;
