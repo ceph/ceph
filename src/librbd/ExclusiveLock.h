@@ -31,7 +31,7 @@ public:
     //make sure any member variable of ExclusiveLock not being used
     while (!m_can_delete.load())
       usleep(1000);
-      delete this;
+    delete this;
   }
 
   bool is_lock_owner() const;
