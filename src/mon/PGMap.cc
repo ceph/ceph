@@ -11,6 +11,7 @@
 
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
+#include "mon/CreatingPGs.h"
 
 #define dout_context g_ceph_context
 
@@ -358,20 +359,18 @@ void PGMap::calc_stats()
   min_last_epoch_clean = calc_min_last_epoch_clean();
 }
 
-void PGMap::update_pg(pg_t pgid, bufferlist& bl)
+void PGMap::update_pg(pg_t pgid, pg_stat_t&& stat)
 {
-  bufferlist::iterator p = bl.begin();
   ceph::unordered_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);
   epoch_t old_lec = 0, lec;
   if (s != pg_stat.end()) {
     old_lec = s->second.get_effective_last_epoch_clean();
-    stat_pg_update(pgid, s->second, p);
+    stat_pg_update(pgid, s->second, std::move(stat));
     lec = s->second.get_effective_last_epoch_clean();
   } else {
-    pg_stat_t& r = pg_stat[pgid];
-    ::decode(r, p);
-    stat_pg_add(pgid, r);
-    lec = r.get_effective_last_epoch_clean();
+    stat_pg_add(pgid, stat);
+    lec = stat.get_effective_last_epoch_clean();
+    pg_stat[pgid] = std::move(stat);
   }
 
   if (min_last_epoch_clean &&
@@ -382,16 +381,18 @@ void PGMap::update_pg(pg_t pgid, bufferlist& bl)
     min_last_epoch_clean = 0;
 }
 
-void PGMap::remove_pg(pg_t pgid)
+bool PGMap::remove_pg(pg_t pgid, pg_stat_t* stat)
 {
   ceph::unordered_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);
-  if (s != pg_stat.end()) {
-    if (min_last_epoch_clean &&
-        s->second.get_effective_last_epoch_clean() == min_last_epoch_clean)
-      min_last_epoch_clean = 0;
-    stat_pg_sub(pgid, s->second);
-    pg_stat.erase(s);
-  }
+  if (s == pg_stat.end())
+    return false;
+  if (min_last_epoch_clean &&
+      s->second.get_effective_last_epoch_clean() == min_last_epoch_clean)
+    min_last_epoch_clean = 0;
+  *stat = std::move(s->second);
+  stat_pg_sub(pgid, *stat);
+  pg_stat.erase(s);
+  return true;
 }
 
 void PGMap::update_osd(int osd, bufferlist& bl)
@@ -449,14 +450,6 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
   num_pg++;
   num_pg_by_state[s.state]++;
 
-  if ((s.state & PG_STATE_CREATING) &&
-      s.parent_split_bits == 0) {
-    creating_pgs.insert(pgid);
-    if (s.acting_primary >= 0) {
-      creating_pgs_by_osd_epoch[s.acting_primary][s.mapping_epoch].insert(pgid);
-    }
-  }
-
   if (sameosds)
     return;
 
@@ -487,19 +480,6 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
   if (end == 0)
     num_pg_by_state.erase(s.state);
 
-  if ((s.state & PG_STATE_CREATING) &&
-      s.parent_split_bits == 0) {
-    creating_pgs.erase(pgid);
-    if (s.acting_primary >= 0) {
-      map<epoch_t,set<pg_t> >& r = creating_pgs_by_osd_epoch[s.acting_primary];
-      r[s.mapping_epoch].erase(pgid);
-      if (r[s.mapping_epoch].empty())
-	r.erase(s.mapping_epoch);
-      if (r.empty())
-	creating_pgs_by_osd_epoch.erase(s.acting_primary);
-    }
-  }
-
   if (sameosds)
     return;
 
@@ -528,19 +508,16 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 }
 
 void PGMap::stat_pg_update(const pg_t pgid, pg_stat_t& s,
-                           bufferlist::iterator& blp)
+                           pg_stat_t&& n)
 {
-  pg_stat_t n;
-  ::decode(n, blp);
-
   bool sameosds =
     s.acting == n.acting &&
     s.up == n.up &&
     s.blocked_by == n.blocked_by;
 
   stat_pg_sub(pgid, s, sameosds);
-  s = n;
   stat_pg_add(pgid, n, sameosds);
+  s = std::move(n);
 }
 
 void PGMap::stat_osd_add(const osd_stat_t &s)
@@ -2130,12 +2107,12 @@ void PGMapUpdater::register_pg(
     const OSDMap &osd_map,
     pg_t pgid, epoch_t epoch,
     bool new_pool,
-    PGMap *pg_map,
+    const PGMap &pg_map,
     PGMap::Incremental *pending_inc)
 {
   pg_t parent;
   int split_bits = 0;
-  bool parent_found = false;
+  auto parent_stat = pg_map.pg_stat.end();
   if (!new_pool) {
     parent = pgid;
     while (1) {
@@ -2146,10 +2123,10 @@ void PGMapUpdater::register_pg(
       parent.set_ps(parent.ps() & ~(1<<(msb-1)));
       split_bits++;
       dout(30) << " is " << pgid << " parent " << parent << " ?" << dendl;
-      if (pg_map->pg_stat.count(parent) &&
-          pg_map->pg_stat[parent].state != PG_STATE_CREATING) {
+      parent_stat = pg_map.pg_stat.find(parent);
+      if (parent_stat != pg_map.pg_stat.end() &&
+          parent_stat->second.state != PG_STATE_CREATING) {
 	dout(10) << "  parent is " << parent << dendl;
-	parent_found = true;
 	break;
       }
     }
@@ -2162,8 +2139,8 @@ void PGMapUpdater::register_pg(
   stats.parent_split_bits = split_bits;
   stats.mapping_epoch = epoch;
 
-  if (parent_found) {
-    pg_stat_t &ps = pg_map->pg_stat[parent];
+  if (parent_stat != pg_map.pg_stat.end()) {
+    const pg_stat_t &ps = parent_stat->second;
     stats.last_fresh = ps.last_fresh;
     stats.last_active = ps.last_active;
     stats.last_change = ps.last_change;
@@ -2214,12 +2191,12 @@ void PGMapUpdater::register_pg(
 
 void PGMapUpdater::register_new_pgs(
     const OSDMap &osd_map,
-    PGMap *pg_map,
+    const PGMap &pg_map,
     PGMap::Incremental *pending_inc)
 {
   epoch_t epoch = osd_map.get_epoch();
   dout(10) << __func__ << " checking pg pools for osdmap epoch " << epoch
-           << ", last_pg_scan " << pg_map->last_pg_scan << dendl;
+           << ", last_pg_scan " << pg_map.last_pg_scan << dendl;
 
   int created = 0;
   const auto &pools = osd_map.get_pools();
@@ -2232,7 +2209,7 @@ void PGMapUpdater::register_new_pgs(
     if (ruleno < 0 || !osd_map.crush->rule_exists(ruleno))
       continue;
 
-    if (pool.get_last_change() <= pg_map->last_pg_scan ||
+    if (pool.get_last_change() <= pg_map.last_pg_scan ||
         pool.get_last_change() <= pending_inc->pg_scan) {
       dout(10) << " no change in pool " << poolid << " " << pool << dendl;
       continue;
@@ -2242,11 +2219,11 @@ void PGMapUpdater::register_new_pgs(
              << " " << pool << dendl;
 
     // first pgs in this pool
-    bool new_pool = pg_map->pg_pool_sum.count(poolid) == 0;
+    bool new_pool = pg_map.pg_pool_sum.count(poolid) == 0;
 
     for (ps_t ps = 0; ps < pool.get_pg_num(); ps++) {
       pg_t pgid(ps, poolid, -1);
-      if (pg_map->pg_stat.count(pgid)) {
+      if (pg_map.pg_stat.count(pgid)) {
 	dout(20) << "register_new_pgs  have " << pgid << dendl;
 	continue;
       }
@@ -2257,23 +2234,9 @@ void PGMapUpdater::register_new_pgs(
   }
 
   int removed = 0;
-  for (const auto &p : pg_map->creating_pgs) {
-    if (p.preferred() >= 0) {
-      dout(20) << " removing creating_pg " << p
-               << " because it is localized and obsolete" << dendl;
-      pending_inc->pg_remove.insert(p);
-      removed++;
-    }
-    if (!osd_map.have_pg_pool(p.pool())) {
-      dout(20) << " removing creating_pg " << p
-               << " because containing pool deleted" << dendl;
-      pending_inc->pg_remove.insert(p);
-      ++removed;
-    }
-  }
 
   // deleted pools?
-  for (const auto &p : pg_map->pg_stat) {
+  for (const auto &p : pg_map.pg_stat) {
     if (!osd_map.have_pg_pool(p.first.pool())) {
       dout(20) << " removing pg_stat " << p.first << " because "
                << "containing pool deleted" << dendl;
@@ -2297,22 +2260,20 @@ void PGMapUpdater::register_new_pgs(
 
 void PGMapUpdater::update_creating_pgs(
     const OSDMap &osd_map,
-    PGMap *pg_map,
+    const PGMap &pg_map,
+    const CreatingPGs& creating_pgs,
     PGMap::Incremental *pending_inc)
 {
-  dout(10) << __func__ << " to " << pg_map->creating_pgs.size()
+  dout(10) << __func__ << " to " << creating_pgs.size()
            << " pgs, osdmap epoch " << osd_map.get_epoch()
            << dendl;
 
   unsigned changed = 0;
-  for (set<pg_t>::const_iterator p = pg_map->creating_pgs.begin();
-       p != pg_map->creating_pgs.end();
-       ++p) {
-    pg_t pgid = *p;
+  creating_pgs.with_pg([&](const pg_t& pgid) {
     pg_t on = pgid;
     ceph::unordered_map<pg_t,pg_stat_t>::const_iterator q =
-      pg_map->pg_stat.find(pgid);
-    assert(q != pg_map->pg_stat.end());
+      pg_map.pg_stat.find(pgid);
+    assert(q != pg_map.pg_stat.end());
     const pg_stat_t *s = &q->second;
 
     if (s->parent_split_bits)
@@ -2361,7 +2322,7 @@ void PGMapUpdater::update_creating_pgs(
 		 << dendl;
       }
     }
-  }
+  });
   if (changed) {
     dout(10) << __func__ << " " << changed << " pgs changed primary" << dendl;
   }
@@ -2402,7 +2363,7 @@ static void _try_mark_pg_stale(
 
 void PGMapUpdater::check_down_pgs(
     const OSDMap &osdmap,
-    const PGMap *pg_map,
+    const PGMap &pg_map,
     bool check_all,
     const set<int>& need_check_down_pg_osds,
     PGMap::Incremental *pending_inc)
@@ -2415,18 +2376,18 @@ void PGMapUpdater::check_down_pgs(
   }
 
   if (check_all) {
-    for (const auto& p : pg_map->pg_stat) {
+    for (const auto& p : pg_map.pg_stat) {
       _try_mark_pg_stale(osdmap, p.first, p.second, pending_inc);
     }
   } else {
     for (auto osd : need_check_down_pg_osds) {
       if (osdmap.is_down(osd)) {
-	auto p = pg_map->pg_by_osd.find(osd);
-	if (p == pg_map->pg_by_osd.end()) {
+	auto p = pg_map.pg_by_osd.find(osd);
+	if (p == pg_map.pg_by_osd.end()) {
 	  continue;
 	}
 	for (auto pgid : p->second) {
-	  const pg_stat_t &stat = pg_map->pg_stat.at(pgid);
+	  const pg_stat_t &stat = pg_map.pg_stat.at(pgid);
 	  assert(stat.acting_primary == osd);
 	  _try_mark_pg_stale(osdmap, pgid, stat, pending_inc);
 	}
