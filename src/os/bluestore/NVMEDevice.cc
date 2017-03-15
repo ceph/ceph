@@ -418,10 +418,10 @@ void SharedDriverData::_aio_thread()
               ns, qpair, lba_off, lba_count, io_complete, t, 0,
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
+            derr << __func__ << " failed to do write command" << dendl;
             t->ctx->nvme_task_first = t->ctx->nvme_task_last = nullptr;
             t->release_segs();
             delete t;
-            derr << __func__ << " failed to do write command" << dendl;
             ceph_abort();
           }
           cur = ceph::coarse_real_clock::now();
@@ -431,7 +431,7 @@ void SharedDriverData::_aio_thread()
         }
         case IOCommand::READ_COMMAND:
         {
-          dout(20) << __func__ << " read command issueed " << lba_off << "~" << lba_count << dendl;
+          dout(20) << __func__ << " read command issued " << lba_off << "~" << lba_count << dendl;
           r = alloc_buf_from_pool(t, false);
           if (r < 0) {
             logger->inc(l_bluestore_nvmedevice_buffer_alloc_failed);
@@ -443,11 +443,9 @@ void SharedDriverData::_aio_thread()
               data_buf_reset_sgl, data_buf_next_sge);
           if (r < 0) {
             derr << __func__ << " failed to read" << dendl;
-            --t->ctx->num_reading;
-            t->return_code = r;
             t->release_segs();
-            std::unique_lock<std::mutex> l(t->ctx->lock);
-            t->ctx->cond.notify_all();
+            delete t;
+            ceph_abort();
           } else {
             cur = ceph::coarse_real_clock::now();
             auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
@@ -461,10 +459,9 @@ void SharedDriverData::_aio_thread()
           r = spdk_nvme_ns_cmd_flush(ns, qpair, io_complete, t);
           if (r < 0) {
             derr << __func__ << " failed to flush" << dendl;
-            t->return_code = r;
             t->release_segs();
-            std::unique_lock<std::mutex> l(t->ctx->lock);
-            t->ctx->cond.notify_all();
+            delete t;
+            ceph_abort();
           } else {
             cur = ceph::coarse_real_clock::now();
             auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(cur - start);
@@ -717,6 +714,8 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
   Task *task = static_cast<Task*>(t);
   IOContext *ctx = task->ctx;
   SharedDriverData *driver = task->device->get_driver();
+
+  assert(ctx != NULL);
   ++driver->completed_op_seq;
   auto dur = std::chrono::duration_cast<std::chrono::nanoseconds>(
       ceph::coarse_real_clock::now() - task->start);
@@ -727,7 +726,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
              << driver->queue_op_seq - driver->completed_op_seq << dendl;
     // check waiting count before doing callback (which may
     // destroy this ioc).
-    if (ctx && !--ctx->num_running) {
+    if (!--ctx->num_running) {
       ctx->aio_wake();
       if (task->device->aio_callback && ctx->priv) {
         task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
@@ -737,31 +736,32 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     delete task;
   } else if (task->command == IOCommand::READ_COMMAND) {
     driver->logger->tinc(l_bluestore_nvmedevice_read_lat, dur);
-    --ctx->num_reading;
     assert(!spdk_nvme_cpl_is_error(completion));
     dout(20) << __func__ << " read op successfully" << dendl;
-    if (spdk_nvme_cpl_is_error(completion))
-      task->return_code = -1; // FIXME
-    else
-      task->return_code = 0;
     task->fill_cb();
     task->release_segs();
-    {
-      std::unique_lock<std::mutex> l(ctx->lock);
-      ctx->cond.notify_all();
+    // read submitted by AIO
+    if(!task->return_code) {
+      if (!--ctx->num_running) {
+        ctx->aio_wake();
+        if (task->device->aio_callback && ctx->priv) {
+          task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
+        }
+      }
+      delete task;
+    } else {
+      task->return_code = 0;
+      if(!--ctx->num_reading) {
+        ctx->aio_wake();
+      }
     }
   } else {
     assert(task->command == IOCommand::FLUSH_COMMAND);
+    assert(!spdk_nvme_cpl_is_error(completion));
     driver->logger->tinc(l_bluestore_nvmedevice_flush_lat, dur);
     dout(20) << __func__ << " flush op successfully" << dendl;
-    if (spdk_nvme_cpl_is_error(completion))
-      task->return_code = -1; // FIXME
-    else
-      task->return_code = 0;
-    {
-      std::unique_lock<std::mutex> l(ctx->lock);
-      ctx->cond.notify_all();
-    }
+    task->return_code = 0;
+    ctx->aio_wake();
   }
 }
 
@@ -938,15 +938,12 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   ++ioc->num_reading;
   driver->queue_task(t);
 
-  {
-    std::unique_lock<std::mutex> l(ioc->lock);
-    while (t->return_code > 0)
-      ioc->cond.wait(l);
+  while(t->return_code > 0) {
+    ioc->aio_wait();
   }
   pbl->push_back(std::move(p));
   r = t->return_code;
   delete t;
-  ioc->aio_wake();
   return r;
 }
 
@@ -1007,14 +1004,11 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   ++ioc.num_reading;
   driver->queue_task(t);
 
-  {
-    std::unique_lock<std::mutex> l(ioc.lock);
-    while (t->return_code > 0)
-      ioc.cond.wait(l);
+  while(t->return_code > 0) {
+    ioc.aio_wait();
   }
   r = t->return_code;
   delete t;
-  ioc.aio_wake();
   return r;
 }
 
