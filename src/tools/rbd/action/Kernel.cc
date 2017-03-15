@@ -185,7 +185,7 @@ static int do_kernel_showmapped(Formatter *f)
 /*
  * hint user to check syslog for krbd related messages and provide suggestions
  * based on errno return by krbd_map(). also note that even if some librbd calls
- * fail, we atleast dump the "try dmesg..." message to aid debugging.
+ * fail, we at least dump the "try dmesg..." message to aid debugging.
  */
 static void print_error_description(const char *poolname, const char *imgname,
 				    const char *snapname, int maperrno)
