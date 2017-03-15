@@ -100,14 +100,16 @@ You may also restrict clients from writing data by using 'r' instead of
 to update filesystem metadata for these files, but it will prevent them
 from persistently writing data in a way that would be visible to other clients.
 
-Layout modification restriction
-===============================
+Layout and Quota restriction (the 'p' flag)
+===========================================
 
-To prevent clients from modifying the data pool used for files or
-directories, use the 'p' modifier in MDS authentication capabilities.
+To set layouts or quotas, clients require the 'p' flag in addition to 'rw'.
+This restricts all the attributes that are set by special extended attributes
+with a "ceph." prefix, as well as restricting other means of setting
+these fields (such as openc operations with layouts).
 
-For example, in the following snippet client.0 can modify the pool used
-for files, but client.1 cannot.
+For example, in the following snippet client.0 can modify layouts and quotas, 
+but client.1 cannot.
 
 ::
 

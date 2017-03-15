@@ -16,6 +16,11 @@
   object_list_begin (C++) API is only usable on clusters with the
   SORTBITWISE flag enabled (Jewel and later).  (Note that this flag is
   required to be set before upgrading beyond Jewel.)
+* CephFS clients without the 'p' flag in their authentication capability
+  string will no longer be able to set quotas or any layout fields.  This
+  flag previously only restricted modification of the pool and namespace
+  fields in layouts.
+
 
 12.0.0
 ------
