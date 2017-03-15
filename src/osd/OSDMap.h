@@ -862,6 +862,22 @@ public:
   }
 
 
+  bool try_pg_remap(
+    CephContext *cct,
+    pg_t pg,                       ///< pg to potentially remap
+    const set<int>& overfull,      ///< osds we'd want to evacuate
+    const vector<int>& underfull,  ///< osds to move to, in order of preference
+    vector<int> *orig,
+    vector<int> *out);             ///< resulting alternative mapping
+
+  int remap_pgs(
+    CephContext *cct,
+    float max_deviation, ///< max deviation from target (value < 1.0)
+    int max_iterations,  ///< max iterations to run
+    const set<int64_t>& pools,        ///< [optional] restrict to pool
+    OSDMap::Incremental *pending_inc
+    );
+
   /*
    * handy helpers to build simple maps...
    */

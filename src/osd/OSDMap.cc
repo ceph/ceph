@@ -3314,3 +3314,208 @@ int OSDMap::summarize_mapping_stats(
     *out = ss.str();
   return 0;
 }
+
+bool OSDMap::try_pg_remap(
+  CephContext *cct,
+  pg_t pg,                       ///< pg to potentially remap
+  const set<int>& overfull,      ///< osds we'd want to evacuate
+  const vector<int>& underfull,  ///< osds to move to, in order of preference
+  vector<int> *orig,
+  vector<int> *out)              ///< resulting alternative mapping
+{
+  const pg_pool_t *pool = get_pg_pool(pg.pool());
+  if (!pool)
+    return false;
+  int rule = crush->find_rule(pool->get_crush_ruleset(), pool->get_type(),
+			      pool->get_size());
+  if (rule < 0)
+    return false;
+
+  // get original mapping
+  _pg_to_raw_osds(*pool, pg, orig, NULL);
+
+  // make sure there is something there to remap
+  bool any = false;
+  for (auto osd : *orig) {
+    if (overfull.count(osd)) {
+      any = true;
+      break;
+    }
+  }
+  if (!any) {
+    return false;
+  }
+
+  int r = crush->try_remap_rule(
+    cct,
+    rule,
+    pool->get_size(),
+    overfull, underfull,
+    *orig,
+    out);
+  if (r < 0)
+    return false;
+  if (*out == *orig)
+    return false;
+  return true;
+}
+
+int OSDMap::remap_pgs(
+  CephContext *cct,
+  float max_deviation,
+  int max,
+  const set<int64_t>& only_pools,
+  OSDMap::Incremental *pending_inc)
+{
+  OSDMap tmp;
+  tmp.deepish_copy_from(*this);
+  int num_changed = 0;
+  while (true) {
+    map<int,set<pg_t>> pgs_by_osd;
+    int total_pgs = 0;
+    for (auto& i : pools) {
+      if (!only_pools.empty() && !only_pools.count(i.first))
+	continue;
+      for (unsigned ps = 0; ps < i.second.get_pg_num(); ++ps) {
+	pg_t pg(ps, i.first);
+	vector<int> up;
+	tmp.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
+	for (auto osd : up) {
+	  if (osd != CRUSH_ITEM_NONE)
+	    pgs_by_osd[osd].insert(pg);
+	}
+      }
+      total_pgs += i.second.get_size() * i.second.get_pg_num();
+    }
+    float osd_weight_total = 0;
+    map<int,float> osd_weight;
+    for (auto& i : pgs_by_osd) {
+      float w = crush->get_item_weightf(i.first);
+      osd_weight[i.first] = w;
+      osd_weight_total += w;
+      ldout(cct, 20) << " osd." << i.first << " weight " << w
+		     << " pgs " << i.second.size() << dendl;
+    }
+
+    // NOTE: we assume we touch all osds with CRUSH!
+    float pgs_per_weight = total_pgs / osd_weight_total;
+    ldout(cct, 10) << " osd_weight_total " << osd_weight_total << dendl;
+    ldout(cct, 10) << " pgs_per_weight " << pgs_per_weight << dendl;
+
+    // osd deviation
+    map<int,float> osd_deviation;       // osd, deviation(pgs)
+    multimap<float,int> deviation_osd;  // deviation(pgs), osd
+    set<int> overfull;
+    for (auto& i : pgs_by_osd) {
+      float target = osd_weight[i.first] * pgs_per_weight;
+      float deviation = (float)i.second.size() - target;
+      ldout(cct, 20) << " osd." << i.first
+		     << "\tpgs " << i.second.size()
+		     << "\ttarget " << target
+		     << "\tdeviation " << deviation
+		     << dendl;
+      osd_deviation[i.first] = deviation;
+      deviation_osd.insert(make_pair(deviation, i.first));
+      if (deviation > 0)
+	overfull.insert(i.first);
+    }
+
+    // build underfull, sorted from least-full to most-average
+    vector<int> underfull;
+    for (auto i = deviation_osd.begin();
+	 i != deviation_osd.end();
+	 ++i) {
+      if (i->first >= -.999)
+	break;
+      underfull.push_back(i->second);
+    }
+    ldout(cct, 10) << " overfull " << overfull
+		   << " underfull " << underfull << dendl;
+    if (overfull.empty() || underfull.empty())
+      break;
+
+    // pick fullest
+    bool restart = false;
+    for (auto p = deviation_osd.rbegin(); p != deviation_osd.rend(); ++p) {
+      int osd = p->second;
+      float target = osd_weight[osd] * pgs_per_weight;
+      float deviation = deviation_osd.rbegin()->first;
+      if (deviation/target < max_deviation) {
+	ldout(cct, 10) << " osd." << osd
+		       << " target " << target
+		       << " deviation " << deviation
+		       << " -> " << deviation/target
+		       << " < max " << max_deviation << dendl;
+	break;
+      }
+      int num_to_move = deviation;
+      ldout(cct, 10) << " osd." << osd << " move " << num_to_move << dendl;
+      if (num_to_move < 1)
+	break;
+
+      set<pg_t>& pgs = pgs_by_osd[osd];
+
+      // look for remaps we can un-remap
+      for (auto pg : pgs) {
+	auto p = tmp.pg_remap_items.find(pg);
+	if (p != tmp.pg_remap_items.end()) {
+	  for (auto q : p->second) {
+	    if (q.second == osd) {
+	      ldout(cct, 10) << "  dropping pg_remap_items " << pg
+			     << " " << p->second << dendl;
+	      tmp.pg_remap_items.erase(p);
+	      pending_inc->old_pg_remap_items.insert(pg);
+	      ++num_changed;
+	      restart = true;
+	    }
+	  }
+	}
+	if (restart)
+	  break;
+      } // pg loop
+      if (restart)
+	break;
+
+      for (auto pg : pgs) {
+	if (tmp.pg_remap.count(pg) ||
+	    tmp.pg_remap_items.count(pg)) {
+	  ldout(cct, 20) << "  already remapped " << pg << dendl;
+	  continue;
+	}
+	ldout(cct, 10) << "  trying " << pg << dendl;
+	vector<int> orig, out;
+	if (!try_pg_remap(cct, pg, overfull, underfull, &orig, &out)) {
+	  continue;
+	}
+	ldout(cct, 10) << "  " << pg << " " << orig << " -> " << out << dendl;
+	if (orig.size() != out.size()) {
+	  continue;
+	}
+	assert(orig != out);
+	vector<pair<int,int>>& rmi = tmp.pg_remap_items[pg];
+	for (unsigned i = 0; i < out.size(); ++i) {
+	  if (orig[i] != out[i]) {
+	    rmi.push_back(make_pair(orig[i], out[i]));
+	  }
+	}
+	pending_inc->new_pg_remap_items[pg] = rmi;
+	ldout(cct, 10) << "  " << pg << " pg_remap_items " << rmi << dendl;
+	restart = true;
+	++num_changed;
+	break;
+      } // pg loop
+      if (restart)
+	break;
+    } // osd loop
+
+    if (!restart) {
+      ldout(cct, 10) << " failed to find any changes to make" << dendl;
+      break;
+    }
+    if (--max == 0) {
+      ldout(cct, 10) << " hit max iterations, stopping" << dendl;
+      break;
+    }
+  }
+  return num_changed;
+}
