@@ -554,7 +554,7 @@ public:
    * FIXME: ambiguous for items that occur multiple times in the map
    */
   pair<string,string> get_immediate_parent(int id, int *ret = NULL);
-  int get_immediate_parent_id(int id, int *parent);
+  int get_immediate_parent_id(int id, int *parent) const;
 
   /**
    * get the fully qualified location of a device by successively finding
