@@ -5035,10 +5035,10 @@ bool OSDMonitor::update_pools_status()
 
   auto& pools = osdmap.get_pools();
   for (auto it = pools.begin(); it != pools.end(); ++it) {
-    if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
+    const pool_stat_t *pstat = mon->pgservice.get_pool_stat(it->first);
+    if (!pstat)
       continue;
-    pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
-    object_stat_sum_t& sum = stats.stats.sum;
+    const object_stat_sum_t& sum = pstat->stats.sum;
     const pg_pool_t &pool = it->second;
     const string& pool_name = osdmap.get_pool_name(it->first);
 
@@ -5084,10 +5084,10 @@ void OSDMonitor::get_pools_health(
 {
   auto& pools = osdmap.get_pools();
   for (auto it = pools.begin(); it != pools.end(); ++it) {
-    if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
+    const pool_stat_t *pstat = mon->pgservice.get_pool_stat(it->first);
+    if (!pstat)
       continue;
-    pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
-    object_stat_sum_t& sum = stats.stats.sum;
+    const object_stat_sum_t& sum = pstat->stats.sum;
     const pg_pool_t &pool = it->second;
     const string& pool_name = osdmap.get_pool_name(it->first);
 
@@ -8712,9 +8712,8 @@ done:
     // make sure new tier is empty
     string force_nonempty;
     cmd_getval(g_ceph_context, cmdmap, "force_nonempty", force_nonempty);
-    const pool_stat_t& tier_stats =
-      mon->pgmon()->pg_map.get_pg_pool_sum_stat(tierpool_id);
-    if (tier_stats.stats.sum.num_objects != 0 &&
+    const pool_stat_t *pstats = mon->pgservice.get_pool_stat(tierpool_id);
+    if (pstats && pstats->stats.sum.num_objects != 0 &&
 	force_nonempty != "--force-nonempty") {
       ss << "tier pool '" << tierpoolstr << "' is not empty; --force-nonempty to force";
       err = -ENOTEMPTY;
@@ -9026,10 +9025,10 @@ done:
 	  mode != pg_pool_t::CACHEMODE_PROXY &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY))) {
 
-      const pool_stat_t& tier_stats =
-        mon->pgmon()->pg_map.get_pg_pool_sum_stat(pool_id);
+      const pool_stat_t* pstats =
+        mon->pgservice.get_pool_stat(pool_id);
 
-      if (tier_stats.stats.sum.num_objects_dirty > 0) {
+      if (pstats && pstats->stats.sum.num_objects_dirty > 0) {
         ss << "unable to set cache-mode '"
            << pg_pool_t::get_cache_mode_name(mode) << "' on pool '" << poolstr
            << "': dirty objects found";
@@ -9094,9 +9093,9 @@ done:
       goto reply;
     }
     // make sure new tier is empty
-    const pool_stat_t& tier_stats =
-      mon->pgmon()->pg_map.get_pg_pool_sum_stat(tierpool_id);
-    if (tier_stats.stats.sum.num_objects != 0) {
+    const pool_stat_t *pstats =
+      mon->pgservice.get_pool_stat(tierpool_id);
+    if (pstats && pstats->stats.sum.num_objects != 0) {
       ss << "tier pool '" << tierpoolstr << "' is not empty";
       err = -ENOTEMPTY;
       goto reply;
