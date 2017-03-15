@@ -1828,7 +1828,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (!_buffers.empty()) {
       ptr &l = _buffers.back();
       if (l.get_raw() == bp.get_raw() &&
-	  l.end() == bp.start() + off) {
+	  l.end() == off) {
 	// yay contiguous with tail bp!
 	l.set_length(l.length()+len);
 	_len += len;
