@@ -185,9 +185,6 @@ public:
 
  public:
 
-  set<pg_t> creating_pgs;
-  map<int,map<epoch_t,set<pg_t> > > creating_pgs_by_osd_epoch;
-
   // Bits that use to be enum StuckPG
   static const int STUCK_INACTIVE = (1<<0);
   static const int STUCK_UNCLEAN = (1<<1);
@@ -253,7 +250,7 @@ public:
     return pool_stat_t();
   }
 
-  void update_pg(pg_t pgid, bufferlist& bl);
+  void update_pg(pg_t pgid, pg_stat_t&& s);
   void remove_pg(pg_t pgid);
   void update_osd(int osd, bufferlist& bl);
   void remove_osd(int osd);
@@ -266,7 +263,7 @@ public:
 		   bool sameosds=false);
   void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
-  void stat_pg_update(const pg_t pgid, pg_stat_t &prev, bufferlist::iterator& blp);
+  void stat_pg_update(const pg_t pgid, pg_stat_t &prev, pg_stat_t&& updated);
   void stat_osd_add(const osd_stat_t &s);
   void stat_osd_sub(const osd_stat_t &s);
   
@@ -386,6 +383,8 @@ inline ostream& operator<<(ostream& out, const PGMap& m) {
   return out;
 }
 
+class CreatingPGs;
+
 class PGMapUpdater
 {
 public:
@@ -401,7 +400,7 @@ public:
    */
   static void register_new_pgs(
       const OSDMap &osd_map,
-      PGMap *pg_map,
+      const PGMap &pg_map,
       PGMap::Incremental *pending_inc);
 
   /**
@@ -409,19 +408,21 @@ public:
    */
   static void update_creating_pgs(
       const OSDMap &osd_map,
-      PGMap *pg_map,
+      const PGMap &pg_map,
+      const CreatingPGs& creating_pgs,
       PGMap::Incremental *pending_inc);
 
   static void register_pg(
       const OSDMap &osd_map,
       pg_t pgid, epoch_t epoch,
       bool new_pool,
-      PGMap *pg_map,
+      const PGMap &pg_map,
       PGMap::Incremental *pending_inc);
 
+  // mark pg's state stale if its acting primary osd is down
   static void check_down_pgs(
       const OSDMap &osd_map,
-      const PGMap *pg_map,
+      const PGMap &pg_map,
       bool check_all,
       const set<int>& need_check_down_pg_osds,
       PGMap::Incremental *pending_inc);

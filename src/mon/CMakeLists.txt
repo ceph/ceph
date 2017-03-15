@@ -20,6 +20,7 @@ set(lib_mon_srcs
   HealthMonitor.cc
   DataHealthService.cc
   PGMonitor.cc
+  CreatingPGs.cc
   PGMap.cc
   ConfigKeyService.cc)
 add_library(mon STATIC ${lib_mon_srcs} $<TARGET_OBJECTS:mon_common_objs>

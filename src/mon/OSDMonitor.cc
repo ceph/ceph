@@ -1115,8 +1115,7 @@ void OSDMonitor::prime_pg_temp(
   const OSDMap& next,
   pg_t pgid)
 {
-  PGMap *pg_map = &mon->pgmon()->pg_map;  // FIMXE: use new creating_pgs map
-  if (!pg_map->creating_pgs.count(pgid)) {
+  if (!mon->pgmon()->is_creating(pgid)) {
     return;
   }
 
@@ -1381,7 +1380,7 @@ void OSDMonitor::share_map_with_random_osd()
 version_t OSDMonitor::get_trim_to()
 {
   if (mon->pgmon()->is_readable() &&
-      mon->pgmon()->pg_map.creating_pgs.empty()) {
+      !mon->pgmon()->is_creating_pgs()) {
     epoch_t floor = mon->pgmon()->pg_map.get_min_last_epoch_clean();
     dout(10) << " min_last_epoch_clean " << floor << dendl;
     if (g_conf->mon_osd_force_trim_to > 0 &&
