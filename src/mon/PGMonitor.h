@@ -38,10 +38,12 @@ class MGetPoolStats;
 
 class TextTable;
 class MPGStats;
+class PGStatService;
 
 class PGMonitor : public PaxosService {
 public:
   PGMap pg_map;
+  PGStatService *pgservice;
 
 private:
   PGMap::Incremental pending_inc;
@@ -92,11 +94,12 @@ private:
 public:
   PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name),
+      pgservice(nullptr),
       pgmap_meta_prefix("pgmap_meta"),
       pgmap_pg_prefix("pgmap_pg"),
       pgmap_osd_prefix("pgmap_osd")
   { }
-  ~PGMonitor() override { }
+  ~PGMonitor() override;
 
   void get_store_prefixes(set<string>& s) override {
     s.insert(get_service_name());
@@ -139,6 +142,8 @@ public:
 
   void check_subs();
   bool check_sub(Subscription *sub);
+
+  PGStatService *get_pg_stat_service();
 
 private:
   // no copying allowed
