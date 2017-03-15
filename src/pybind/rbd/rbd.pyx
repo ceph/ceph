@@ -2333,7 +2333,7 @@ written." % (self.name, ret, length))
         :type oncomplete: completion
         :param fadvise_flags: fadvise flags for this read
         :type fadvise_flags: int
-        :returns: str - the data read
+        :returns: :class:`Completion` - the completion object
         :raises: :class:`InvalidArgument`, :class:`IOError`
         """
 
@@ -2375,20 +2375,19 @@ written." % (self.name, ret, length))
         Raises :class:`InvalidArgument` if part of the write would fall outside
         the image.
 
-        oncomplete will be called with the returned read value as
-        well as the completion:
+        oncomplete will be called with the completion:
 
-        oncomplete(completion, data_read)
+        oncomplete(completion)
 
-        :param offset: the offset to start reading at
+        :param data: the data to be written
+        :type data: bytes
+        :param offset: the offset to start writing at
         :type offset: int
-        :param length: how many bytes to read
-        :type length: int
-        :param oncomplete: what to do when the read is complete
+        :param oncomplete: what to do when the write is complete
         :type oncomplete: completion
-        :param fadvise_flags: fadvise flags for this read
+        :param fadvise_flags: fadvise flags for this write
         :type fadvise_flags: int
-        :returns: str - the data read
+        :returns: :class:`Completion` - the completion object
         :raises: :class:`InvalidArgument`, :class:`IOError`
         """
 
