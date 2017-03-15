@@ -3315,6 +3315,49 @@ int OSDMap::summarize_mapping_stats(
   return 0;
 }
 
+
+int OSDMap::clean_remaps(
+  CephContext *cct,
+  Incremental *pending_inc)
+{
+  ldout(cct, 10) << __func__ << dendl;
+  int changed = 0;
+  for (auto& p : pg_remap) {
+    vector<int> raw;
+    int primary;
+    pg_to_raw_osds(p.first, &raw, &primary);
+    if (raw == p.second) {
+      ldout(cct, 10) << " removing redundant pg_remap " << p.first << " "
+		     << p.second << dendl;
+      pending_inc->old_pg_remap.insert(p.first);
+      ++changed;
+    }
+  }
+  for (auto& p : pg_remap_items) {
+    vector<int> raw;
+    int primary;
+    pg_to_raw_osds(p.first, &raw, &primary);
+    vector<pair<int,int>> newmap;
+    for (auto& q : p.second) {
+      if (std::find(raw.begin(), raw.end(), q.first) != raw.end()) {
+	newmap.push_back(q);
+      }
+    }
+    if (newmap.empty()) {
+      ldout(cct, 10) << " removing no-op pg_remap_items " << p.first << " "
+		     << p.second << dendl;
+      pending_inc->old_pg_remap_items.insert(p.first);
+      ++changed;
+    } else if (newmap != p.second) {
+      ldout(cct, 10) << " simplifying partially no-op pg_remap_items "
+		     << p.first << " " << p.second << " -> " << newmap << dendl;
+      pending_inc->new_pg_remap_items[p.first] = newmap;
+      ++changed;
+    }
+  }
+  return changed;
+}
+
 bool OSDMap::try_pg_remap(
   CephContext *cct,
   pg_t pg,                       ///< pg to potentially remap

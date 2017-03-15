@@ -861,6 +861,9 @@ public:
     return calc_pg_role(osd, group, nrep) >= 0;
   }
 
+  int clean_remaps(
+    CephContext *cct,
+    Incremental *pending_inc);
 
   bool try_pg_remap(
     CephContext *cct,
