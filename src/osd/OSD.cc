@@ -8796,6 +8796,40 @@ int OSD::init_op_flags(OpRequestRef& op)
     if (ceph_osd_op_mode_cache(iter->op.op))
       op->set_cache();
 
+    // check for ec base pool
+    int64_t poolid = m->get_pg().pool();
+    const pg_pool_t *pool = osdmap->get_pg_pool(poolid);
+    if (pool && pool->is_tier()) {
+      const pg_pool_t *base_pool = osdmap->get_pg_pool(pool->tier_of);
+      if (base_pool && base_pool->require_rollback()) {
+        if ((iter->op.op != CEPH_OSD_OP_READ) &&
+            (iter->op.op != CEPH_OSD_OP_STAT) &&
+            (iter->op.op != CEPH_OSD_OP_ISDIRTY) &&
+            (iter->op.op != CEPH_OSD_OP_UNDIRTY) &&
+            (iter->op.op != CEPH_OSD_OP_GETXATTR) &&
+            (iter->op.op != CEPH_OSD_OP_GETXATTRS) &&
+            (iter->op.op != CEPH_OSD_OP_CMPXATTR) &&
+            (iter->op.op != CEPH_OSD_OP_SRC_CMPXATTR) &&
+            (iter->op.op != CEPH_OSD_OP_ASSERT_VER) &&
+            (iter->op.op != CEPH_OSD_OP_LIST_WATCHERS) &&
+            (iter->op.op != CEPH_OSD_OP_LIST_SNAPS) &&
+            (iter->op.op != CEPH_OSD_OP_ASSERT_SRC_VERSION) &&
+            (iter->op.op != CEPH_OSD_OP_SETALLOCHINT) &&
+            (iter->op.op != CEPH_OSD_OP_WRITEFULL) &&
+            (iter->op.op != CEPH_OSD_OP_ROLLBACK) &&
+            (iter->op.op != CEPH_OSD_OP_CREATE) &&
+            (iter->op.op != CEPH_OSD_OP_DELETE) &&
+            (iter->op.op != CEPH_OSD_OP_SETXATTR) &&
+            (iter->op.op != CEPH_OSD_OP_RMXATTR) &&
+            (iter->op.op != CEPH_OSD_OP_STARTSYNC) &&
+            (iter->op.op != CEPH_OSD_OP_COPY_GET_CLASSIC) &&
+            (iter->op.op != CEPH_OSD_OP_COPY_GET) &&
+            (iter->op.op != CEPH_OSD_OP_COPY_FROM)) {
+          op->set_promote();
+        }
+      }
+    }
+
     switch (iter->op.op) {
     case CEPH_OSD_OP_CALL:
       {
