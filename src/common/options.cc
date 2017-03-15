@@ -6090,6 +6090,38 @@ static std::vector<Option> get_rbd_options() {
     Option("rbd_qos_iops_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("the desired limit of IO operations per second"),
+
+    Option("rbd_persistent_cache_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description(""),
+
+    Option("rbd_persistent_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1073741824)
+    .set_description(""),
+
+    Option("rbd_persistent_cache_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/tmp")
+    .set_description(""),
+
+    Option("rbd_persistent_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(4096)
+    .set_description(""),
+
+    Option("rbd_persistent_cache_journal_ring_buffer_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(131072)
+    .set_description(""),
+
+    Option("rbd_persistent_cache_journal_block_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(4096)
+    .set_description(""),
+
+    Option("rbd_persistent_cache_journal_event_ref_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1048576)
+    .set_description(""),
+
+    Option("rbd_persistent_cache_metadata_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(5242880)
+    .set_description(""),
   });
 }
 

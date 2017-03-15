@@ -55,8 +55,9 @@ CaptureImpl<T, F> make_capture(T &&t, F &&f) {
 template <typename I>
 AioFile<I>::AioFile(I &image_ctx, ContextWQ &work_queue,
                     const std::string &name)
-  : m_image_ctx(image_ctx), m_work_queue(work_queue),
-    m_name("/fast/rbd_cache." + name) /* TODO */ {
+  : m_image_ctx(image_ctx), m_work_queue(work_queue){
+  CephContext *cct = m_image_ctx.cct;
+  m_name = cct->_conf->get_val<std::string>("rbd_persistent_cache_path") + "/rbd_cache." + name;
 }
 
 template <typename I>

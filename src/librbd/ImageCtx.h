@@ -132,6 +132,7 @@ namespace librbd {
     uint64_t op_features = 0;
     bool operations_disabled = false;
     utime_t create_timestamp;
+    uint64_t ssd_cache_size;
 
     file_layout_t layout;
 
