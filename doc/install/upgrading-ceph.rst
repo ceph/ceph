@@ -337,7 +337,7 @@ you may need to uninstall, auto remove dependencies and reinstall.
 
 See `v0.65`_ for details on the new command line interface.
 
-.. _v0.65: http://ceph.com/docs/master/release-notes/#v0-65
+.. _v0.65: http://docs.ceph.com/docs/master/release-notes/#v0-65
 
 
 Monitor
@@ -409,7 +409,7 @@ you may need to uninstall, auto remove dependencies and reinstall.
 
 See `v0.65`_ for details on the new command line interface.
 
-.. _v0.65: http://ceph.com/docs/master/release-notes/#v0-65
+.. _v0.65: http://docs.ceph.com/docs/master/release-notes/#v0-65
 
 
 Upgrade Sequence

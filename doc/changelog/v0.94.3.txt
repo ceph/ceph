@@ -1947,7 +1947,7 @@ Date:   Wed Apr 29 13:12:38 2015 +1000
     This adds SuSEfirewall2 service files for Ceph MON, OSD and MDS, for use
     on SLES and openSUSE.  The MON template opens port 6789 and the OSD/MDS
     template opens the range 6800-7300 as per
-    http://ceph.com/docs/master/rados/configuration/network-config-ref/
+    http://docs.ceph.com/docs/master/rados/configuration/network-config-ref/
     
     Signed-off-by: Tim Serong <tserong@suse.com>
     (cherry picked from commit 77685f5b787c56bcb1c4d9f1e058e25312fa62fe)
