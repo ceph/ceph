@@ -128,6 +128,7 @@ public:
 
   struct BufferSpace;
   struct Collection;
+  typedef boost::intrusive_ptr<Collection> CollectionRef;
 
   /// cached buffer
   struct Buffer {
@@ -327,7 +328,7 @@ public:
     std::atomic_int nref = {0}; ///< reference count
     bool loaded = false;
 
-    Collection *coll = nullptr;
+    CollectionRef coll;
     union {
       uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
       bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
@@ -1304,7 +1305,6 @@ public:
 
     Collection(BlueStore *ns, Cache *ca, coll_t c);
   };
-  typedef boost::intrusive_ptr<Collection> CollectionRef;
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     CollectionRef c;
