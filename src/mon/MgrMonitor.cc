@@ -250,7 +250,7 @@ bool MgrMonitor::preprocess_report(MonOpRequestRef op) { return false; }
 bool MgrMonitor::prepare_report(MonOpRequestRef op)
 {
   MMonMgrReport *m = static_cast<MMonMgrReport*>(op->get_req());
-  mon->pgservice.reset(m->pg_map);
+  mon->pgservice->reset(m->pg_map);
   return true;
 }
 
