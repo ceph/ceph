@@ -71,7 +71,7 @@ private:
     }
   };
 
-  int init_local_mirroring_images();
+  struct C_RefreshLocalImages;
 
   void handle_update(const ImageIds &added_image_ids,
                      const ImageIds &removed_image_ids);
@@ -88,6 +88,11 @@ private:
   void handle_post_acquire_leader(Context *on_finish);
   void handle_pre_release_leader(Context *on_finish);
 
+  void refresh_local_images(Context *on_finish);
+  void handle_refresh_local_images(int r, ImageIds &&image_ids,
+                                   Context *on_finish);
+
+  void init_pool_watcher(Context *on_finish);
   void shut_down_pool_watcher(Context *on_finish);
   void handle_shut_down_pool_watcher(int r, Context *on_finish);
 
