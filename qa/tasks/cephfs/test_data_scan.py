@@ -157,13 +157,11 @@ class StripedStashedLayout(Workload):
         # Create a dir with a striped layout set on it
         self._mount.run_shell(["mkdir", "stripey"])
 
-        self._mount.run_shell([
-            "setfattr", "-n", "ceph.dir.layout", "-v",
-            "stripe_unit={ss} stripe_count={sc} object_size={os} pool={pool}".format(
-                ss=self.ss, os=self.os, sc=self.sc,
-                pool=self._filesystem.get_data_pool_name()
-            ),
-            "./stripey"])
+        self._mount.setfattr("./stripey", "ceph.dir.layout",
+             "stripe_unit={ss} stripe_count={sc} object_size={os} pool={pool}".format(
+                 ss=self.ss, os=self.os, sc=self.sc,
+                 pool=self._filesystem.get_data_pool_name()
+             ))
 
         # Write files, then flush metadata so that its layout gets written into an xattr
         for i, n_bytes in enumerate(self.interesting_sizes):
@@ -288,15 +286,14 @@ class NonDefaultLayout(Workload):
     """
     def write(self):
         self._mount.run_shell(["touch", "datafile"])
-        self._mount.run_shell(["setfattr", "-n", "ceph.file.layout.object_size", "-v", "8388608", "./datafile"])
+        self._mount.setfattr("./datafile", "ceph.file.layout.object_size", "8388608")
         self._mount.run_shell(["dd", "if=/dev/urandom", "of=./datafile", "bs=1M", "count=32"])
         self._initial_state = self._mount.stat("datafile")
 
     def validate(self):
-        p = self._mount.run_shell(["getfattr", "--only-values", "-n", "ceph.file.layout.object_size", "./datafile"])
-
         # Check we got the layout reconstructed properly
-        object_size = int(p.stdout.getvalue().strip())
+        object_size = int(self._mount.getfattr(
+            "./datafile", "ceph.file.layout.object_size"))
         self.assert_equal(object_size, 8388608)
 
         # Check we got the file size reconstructed properly

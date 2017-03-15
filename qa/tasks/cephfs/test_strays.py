@@ -671,7 +671,7 @@ class TestStrays(CephFSTestCase):
         self.mount_a.run_shell(["touch", file_name])
 
         file_layout = "stripe_unit=1048576 stripe_count=4 object_size=8388608"
-        self.mount_a.run_shell(["setfattr", "-n", "ceph.file.layout", "-v", file_layout, file_name])
+        self.mount_a.setfattr(file_name, "ceph.file.layout", file_layout)
 
         # 35MB requires 7 objects
         size_mb = 35
