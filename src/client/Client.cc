@@ -10341,10 +10341,21 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
   if (vxattr) {
     r = -ENODATA;
 
-    char buf[256];
+    // Do a force getattr to get the latest quota before returning
+    // a value to userspace.
+    r = _getattr(in, 0, perms, true);
+    if (r != 0) {
+      // Error from getattr!
+      return r;
+    }
+
     // call pointer-to-member function
-    if (!(vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in)))
+    char buf[256];
+    if (!(vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in))) {
       r = (this->*(vxattr->getxattr_cb))(in, buf, sizeof(buf));
+    } else {
+      r = -ENODATA;
+    }
 
     if (size != 0) {
       if (r > (int)size) {
