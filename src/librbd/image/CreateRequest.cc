@@ -113,10 +113,6 @@ int get_image_option(const ImageOptions &image_options, int option,
 
 } // anonymous namespace
 
-// TODO: do away with @m_op_work_queue
-// This is used as a temporary measure to execute synchronous calls in
-// worker thread (see callers of ->queue()). Once everything is made
-// fully asynchronous this can be done away with.
 template<typename I>
 CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
                                 const std::string &image_id, uint64_t size,
@@ -286,16 +282,17 @@ void CreateRequest<I>::validate_pool() {
 }
 
 template<typename I>
-Context* CreateRequest<I>::handle_validate_pool(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_validate_pool(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result == 0) {
+  if (r == 0) {
     create_id_object();
-    return nullptr;
-  } else if ((*result < 0) && (*result != -ENOENT)) {
-    lderr(m_cct) << "failed to stat RBD directory: " << cpp_strerror(*result)
+    return;
+  } else if ((r < 0) && (r != -ENOENT)) {
+    lderr(m_cct) << "failed to stat RBD directory: " << cpp_strerror(r)
                  << dendl;
-    return m_on_finish;
+    complete(r);
+    return;
   }
 
   // allocate a self-managed snapshot id if this a new pool to force
@@ -305,17 +302,17 @@ Context* CreateRequest<I>::handle_validate_pool(int *result) {
   // deadlocks).
 
   uint64_t snap_id;
-  int r = m_ioctx.selfmanaged_snap_create(&snap_id);
+  r = m_ioctx.selfmanaged_snap_create(&snap_id);
   if (r == -EINVAL) {
     lderr(m_cct) << "pool not configured for self-managed RBD snapshot support"
                  << dendl;
-    *result = r;
-    return m_on_finish;
+    complete(r);
+    return;
   } else if (r < 0) {
     lderr(m_cct) << "failed to allocate self-managed snapshot: "
                  << cpp_strerror(r) << dendl;
-    *result = r;
-    return m_on_finish;
+    complete(r);
+    return;
   }
 
   r = m_ioctx.selfmanaged_snap_remove(snap_id);
@@ -327,7 +324,6 @@ Context* CreateRequest<I>::handle_validate_pool(int *result) {
   }
 
   create_id_object();
-  return nullptr;
 }
 
 template<typename I>
@@ -347,17 +343,17 @@ void CreateRequest<I>::create_id_object() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_create_id_object(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_create_id_object(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
-    lderr(m_cct) << "error creating RBD id object: " << cpp_strerror(*result)
+  if (r < 0) {
+    lderr(m_cct) << "error creating RBD id object: " << cpp_strerror(r)
                  << dendl;
-    return m_on_finish;
+    complete(r);
+    return;
   }
 
   add_image_to_directory();
-  return nullptr;
 }
 
 template<typename I>
@@ -376,20 +372,18 @@ void CreateRequest<I>::add_image_to_directory() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_add_image_to_directory(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_add_image_to_directory(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
-    lderr(m_cct) << "error adding image to directory: " << cpp_strerror(*result)
+  if (r < 0) {
+    lderr(m_cct) << "error adding image to directory: " << cpp_strerror(r)
                  << dendl;
 
-    m_r_saved = *result;
+    m_r_saved = r;
     remove_id_object();
-    return nullptr;
   }
 
   negotiate_features();
-  return nullptr;
 }
 
 template<typename I>
@@ -413,17 +407,17 @@ void CreateRequest<I>::negotiate_features() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_negotiate_features(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_negotiate_features(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
   uint64_t all_features;
-  if (*result >= 0) {
+  if (r >= 0) {
     bufferlist::iterator it = m_outbl.begin();
-    *result = cls_client::get_all_features_finish(&it, &all_features);
+    r = cls_client::get_all_features_finish(&it, &all_features);
   }
-  if (*result < 0) {
+  if (r < 0) {
     ldout(m_cct, 10) << "error retrieving server supported features set: "
-                     << cpp_strerror(*result) << dendl;
+                     << cpp_strerror(r) << dendl;
   } else if ((m_features & all_features) != m_features) {
     m_features &= all_features;
     ldout(m_cct, 10) << "limiting default features set to server supported: "
@@ -431,7 +425,6 @@ Context *CreateRequest<I>::handle_negotiate_features(int *result) {
   }
 
   create_image();
-  return nullptr;
 }
 
 template<typename I>
@@ -465,18 +458,17 @@ void CreateRequest<I>::create_image() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_create_image(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_create_image(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
-    lderr(m_cct) << "error writing header: " << cpp_strerror(*result) << dendl;
-    m_r_saved = *result;
+  if (r < 0) {
+    lderr(m_cct) << "error writing header: " << cpp_strerror(r) << dendl;
+    m_r_saved = r;
     remove_from_dir();
-    return nullptr;
+    return;
   }
 
   set_stripe_unit_count();
-  return nullptr;
 }
 
 template<typename I>
@@ -501,19 +493,18 @@ void CreateRequest<I>::set_stripe_unit_count() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_set_stripe_unit_count(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_set_stripe_unit_count(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
+  if (r < 0) {
     lderr(m_cct) << "error setting stripe unit/count: "
-                 << cpp_strerror(*result) << dendl;
-    m_r_saved = *result;
+                 << cpp_strerror(r) << dendl;
+    m_r_saved = r;
     remove_header_object();
-    return nullptr;
+    return;
   }
 
   object_map_resize();
-  return nullptr;
 }
 
 template<typename I>
@@ -538,20 +529,19 @@ void CreateRequest<I>::object_map_resize() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_object_map_resize(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_object_map_resize(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
+  if (r < 0) {
     lderr(m_cct) << "error creating initial object map: "
-                 << cpp_strerror(*result) << dendl;
+                 << cpp_strerror(r) << dendl;
 
-    m_r_saved = *result;
+    m_r_saved = r;
     remove_header_object();
-    return nullptr;
+    return;
   }
 
   fetch_mirror_mode();
-  return nullptr;
 }
 
 template<typename I>
@@ -576,28 +566,28 @@ void CreateRequest<I>::fetch_mirror_mode() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_fetch_mirror_mode(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_fetch_mirror_mode(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if ((*result < 0) && (*result != -ENOENT)) {
-    lderr(m_cct) << "failed to retrieve mirror mode: " << cpp_strerror(*result)
+  if ((r < 0) && (r != -ENOENT)) {
+    lderr(m_cct) << "failed to retrieve mirror mode: " << cpp_strerror(r)
                  << dendl;
 
-    m_r_saved = *result;
+    m_r_saved = r;
     remove_object_map();
-    return nullptr;
+    return;
   }
 
   cls::rbd::MirrorMode mirror_mode_internal = cls::rbd::MIRROR_MODE_DISABLED;
-  if (*result == 0) {
+  if (r == 0) {
     bufferlist::iterator it = m_outbl.begin();
-    *result = cls_client::mirror_mode_get_finish(&it, &mirror_mode_internal);
-    if (*result < 0) {
+    r = cls_client::mirror_mode_get_finish(&it, &mirror_mode_internal);
+    if (r < 0) {
       lderr(m_cct) << "Failed to retrieve mirror mode" << dendl;
 
-      m_r_saved = *result;
+      m_r_saved = r;
       remove_object_map();
-      return nullptr;
+      return;
     }
   }
 
@@ -612,13 +602,12 @@ Context *CreateRequest<I>::handle_fetch_mirror_mode(int *result) {
     lderr(m_cct) << "Unknown mirror mode ("
                << static_cast<uint32_t>(mirror_mode_internal) << ")"
                << dendl;
-    *result = -EINVAL;
+    r = -EINVAL;
     remove_object_map();
-    return nullptr;
+    return;
   }
 
   journal_create();
-  return nullptr;
 }
 
 template<typename I>
@@ -642,20 +631,19 @@ void CreateRequest<I>::journal_create() {
 }
 
 template<typename I>
-Context* CreateRequest<I>::handle_journal_create(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_journal_create(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
-    lderr(m_cct) << "error creating journal: " << cpp_strerror(*result)
+  if (r < 0) {
+    lderr(m_cct) << "error creating journal: " << cpp_strerror(r)
                  << dendl;
 
-    m_r_saved = *result;
+    m_r_saved = r;
     remove_object_map();
-    return nullptr;
+    return;
   }
 
   mirror_image_enable();
-  return nullptr;
 }
 
 template<typename I>
@@ -676,18 +664,19 @@ void CreateRequest<I>::mirror_image_enable() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_mirror_image_enable(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_mirror_image_enable(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
-    lderr(m_cct) << "cannot enable mirroring: " << cpp_strerror(*result)
+  if (r < 0) {
+    lderr(m_cct) << "cannot enable mirroring: " << cpp_strerror(r)
                  << dendl;
 
-    m_r_saved = *result;
+    m_r_saved = r;
     journal_remove();
-    return nullptr;
+    return;
   }
-  return m_on_finish;
+
+  complete(0);
 }
 
 template<typename I>
@@ -724,16 +713,15 @@ void CreateRequest<I>::journal_remove() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_journal_remove(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_journal_remove(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
+  if (r < 0) {
     lderr(m_cct) << "error cleaning up journal after creation failed: "
-                 << cpp_strerror(*result) << dendl;
+                 << cpp_strerror(r) << dendl;
   }
 
   remove_object_map();
-  return nullptr;
 }
 
 template<typename I>
@@ -754,16 +742,15 @@ void CreateRequest<I>::remove_object_map() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_remove_object_map(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_remove_object_map(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
+  if (r < 0) {
     lderr(m_cct) << "error cleaning up object map after creation failed: "
-                 << cpp_strerror(*result) << dendl;
+                 << cpp_strerror(r) << dendl;
   }
 
   remove_header_object();
-  return nullptr;
 }
 
 template<typename I>
@@ -779,16 +766,15 @@ void CreateRequest<I>::remove_header_object() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_remove_header_object(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_remove_header_object(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
+  if (r < 0) {
     lderr(m_cct) << "error cleaning up image header after creation failed: "
-                 << cpp_strerror(*result) << dendl;
+                 << cpp_strerror(r) << dendl;
   }
 
   remove_from_dir();
-  return nullptr;
 }
 
 template<typename I>
@@ -807,16 +793,15 @@ void CreateRequest<I>::remove_from_dir() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_remove_from_dir(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_remove_from_dir(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
+  if (r < 0) {
     lderr(m_cct) << "error cleaning up image from rbd_directory object "
-                 << "after creation failed: " << cpp_strerror(*result) << dendl;
+                 << "after creation failed: " << cpp_strerror(r) << dendl;
   }
 
   remove_id_object();
-  return nullptr;
 }
 
 template<typename I>
@@ -832,16 +817,15 @@ void CreateRequest<I>::remove_id_object() {
 }
 
 template<typename I>
-Context *CreateRequest<I>::handle_remove_id_object(int *result) {
-  ldout(m_cct, 20) << __func__ << ": r=" << *result << dendl;
+void CreateRequest<I>::handle_remove_id_object(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
 
-  if (*result < 0) {
+  if (r < 0) {
     lderr(m_cct) << "error cleaning up id object after creation failed: "
-                 << cpp_strerror(*result) << dendl;
+                 << cpp_strerror(r) << dendl;
   }
 
-  *result = m_r_saved;
-  return m_on_finish;
+  complete(m_r_saved);
 }
 
 } //namespace image
