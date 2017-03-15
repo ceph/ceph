@@ -657,10 +657,11 @@ void RDMAConnTCP::cleanup() {
 void RDMAConnectedSocketImpl::notify()
 {
   uint64_t i = 1;
-  int ret;
-
-  ret = write(notify_fd, &i, sizeof(i));
-  assert(ret = sizeof(i));
+  int ret = write(notify_fd, &i, sizeof(i));
+  if (ret == -1) {
+     lderr(cct) <<__func__ << " failed to write to fd=" << notify_fd << ", error: " << cpp_strerror(errno) <<dendl;
+     assert(errno != EAGAIN);
+  }
 }
 
 void RDMAConnMgr::shutdown()
