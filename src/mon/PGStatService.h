@@ -58,6 +58,23 @@ public:
 
   PGMap& get_pg_map() { return parent; }
 
+  const pool_stat_t& get_pg_sum() const { return parent.pg_sum; }
+  const osd_stat_t& get_osd_sum() const { return parent.osd_sum; }
+
+  typedef ceph::unordered_map<pg_t,pg_stat_t>::const_iterator PGStatIter;
+  typedef ceph::unordered_map<int32_t,osd_stat_t>::const_iterator OSDStatIter;
+  PGStatIter pg_stat_iter_begin() const { return parent.pg_stat.begin(); }
+  PGStatIter pg_stat_iter_end() const { return parent.pg_stat.end(); }
+  OSDStatIter osd_stat_iter_begin() const { return parent.osd_stat.begin(); }
+  OSDStatIter osd_stat_iter_end() const { return parent.osd_stat.end(); }
+  const osd_stat_t *get_osd_stat(int osd) const {
+    auto i = parent.osd_stat.find(osd);
+    if (i == parent.osd_stat.end()) {
+      return NULL;
+    }
+    return &i->second;
+  }
+
   float get_full_ratio() const { return parent.full_ratio; }
   float get_nearfull_ratio() const { return parent.nearfull_ratio; }
 
@@ -67,6 +84,8 @@ public:
 
   bool have_full_osds() const { return !parent.full_osds.empty(); }
   bool have_nearfull_osds() const { return !parent.nearfull_osds.empty(); }
+
+  size_t get_num_pg_by_osd(int osd) const { return parent.get_num_pg_by_osd(osd); }
 
   void print_summary(Formatter *f, ostream *out) const { parent.print_summary(f, out); }
   void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const {
