@@ -209,6 +209,8 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
  private:
   CephContext *cct;
   Infiniband::QueuePair *qp;
+  Device *ibdev;
+  int ibport;
   IBSYNMsg peer_msg;
   IBSYNMsg my_msg;
   int connected;

@@ -44,83 +44,9 @@ struct IBSYNMsg {
 
 class RDMAStack;
 class CephContext;
-
-class Port {
-  struct ibv_context* ctxt;
-  int port_num;
-  struct ibv_port_attr* port_attr;
-  uint16_t lid;
-  int gid_idx;
-  union ibv_gid gid;
-
- public:
-  explicit Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn);
-  uint16_t get_lid() { return lid; }
-  ibv_gid  get_gid() { return gid; }
-  int get_port_num() { return port_num; }
-  ibv_port_attr* get_port_attr() { return port_attr; }
-  int get_gid_idx() { return gid_idx; }
-};
-
-
-class Device {
-  ibv_device *device;
-  const char* name;
-  uint8_t  port_cnt;
- public:
-  explicit Device(CephContext *c, ibv_device* d);
-  ~Device() {
-    if (active_port) {
-      delete active_port;
-      assert(ibv_close_device(ctxt) == 0);
-    }
-  }
-  const char* get_name() { return name;}
-  uint16_t get_lid() { return active_port->get_lid(); }
-  ibv_gid get_gid() { return active_port->get_gid(); }
-  int get_gid_idx() { return active_port->get_gid_idx(); }
-  void binding_port(CephContext *c, int port_num);
-  struct ibv_context *ctxt;
-  ibv_device_attr *device_attr;
-  Port* active_port;
-};
-
-
-class DeviceList {
-  struct ibv_device ** device_list;
-  int num;
-  Device** devices;
- public:
-  DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)) {
-    if (device_list == NULL || num == 0) {
-      lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
-      ceph_abort();
-    }
-    devices = new Device*[num];
-
-    for (int i = 0;i < num; ++i) {
-      devices[i] = new Device(cct, device_list[i]);
-    }
-  }
-  ~DeviceList() {
-    for (int i=0; i < num; ++i) {
-      delete devices[i];
-    }
-    delete []devices;
-    ibv_free_device_list(device_list);
-  }
-
-  Device* get_device(const char* device_name) {
-    assert(devices);
-    for (int i = 0; i < num; ++i) {
-      if (!strlen(device_name) || !strcmp(device_name, devices[i]->get_name())) {
-        return devices[i];
-      }
-    }
-    return NULL;
-  }
-};
-
+class Port;
+class Device;
+class DeviceList;
 
 class Infiniband {
  public:
@@ -223,7 +149,7 @@ class Infiniband {
   ibv_srq* srq;             // shared receive work queue
   Device *device;
   ProtectionDomain *pd;
-  DeviceList device_list;
+  DeviceList *device_list;
   void wire_gid_to_gid(const char *wgid, union ibv_gid *gid);
   void gid_to_wire_gid(const union ibv_gid *gid, char wgid[]);
 
@@ -358,11 +284,8 @@ class Infiniband {
   uint8_t get_ib_physical_port() { return ib_physical_port; }
   int send_msg(CephContext *cct, int sd, IBSYNMsg& msg);
   int recv_msg(CephContext *cct, int sd, IBSYNMsg& msg);
-  uint16_t get_lid() { return device->get_lid(); }
-  ibv_gid get_gid() { return device->get_gid(); }
   MemoryManager* get_memory_manager() { return memory_manager; }
   Device* get_device() { return device; }
-  int get_async_fd() { return device->ctxt->async_fd; }
   bool is_tx_buffer(const char* c) { return memory_manager->is_tx_buffer(c);}
   bool is_rx_buffer(const char* c) { return memory_manager->is_rx_buffer(c);}
   Chunk *get_tx_chunk_by_buffer(const char *c) { return memory_manager->get_tx_chunk_by_buffer(c); }
