@@ -551,6 +551,59 @@ class TeuthologyOpenStack(OpenStack):
                 self.teardown()
         return exit_code
 
+    def _upload_yaml_file(self, fp):
+        """
+        Given an absolute path fp, assume it is a YAML file existing
+        on the local machine and upload it to the remote teuthology machine
+        (see https://github.com/SUSE/teuthology/issues/56 for details)
+        """
+        f = open(fp, 'r') # will throw exception on failure
+        f.close()
+        log.info("Detected local YAML file {}".format(fp))
+        machine = self.username + "@" + self.instance.get_floating_ip_or_ip()
+
+        def ssh_command(s):
+            return "ssh -i {k} {m} sh -c \\\"{s}\\\"".format(
+                k=self.key_filename,
+                m=machine,
+                s=s,
+            )
+
+        log.info("Uploading local file {} to teuthology machine".format(fp))
+        remote_fp=os.path.normpath(
+            '/home/{un}/yaml/{fp}'.format(
+                un=self.username,
+                fp=fp,
+            )
+        )
+        command = ssh_command("stat {aug_fp}".format(
+            aug_fp=remote_fp,
+        ))
+        try:
+            misc.sh(command)
+        except:
+            pass
+        else:
+            log.warning(
+                ('{fp} probably already exists remotely as {aug_fp}; '
+                 'the remote one will be clobbered').format(
+                fp=fp,
+                aug_fp=remote_fp,
+            ))
+        remote_dn=os.path.dirname(remote_fp)
+        command = ssh_command("mkdir -p {aug_dn}".format(
+            aug_dn=remote_dn,
+        ))
+        misc.sh(command) # will throw exception on failure
+        command = "scp -i {k} {yamlfile} {m}:{dn}".format(
+            k=self.key_filename,
+            yamlfile=fp,
+            m=machine,
+            dn=remote_dn,
+        )
+        misc.sh(command) # will throw exception on failure
+        return remote_fp
+
     def run_suite(self):
         """
         Delegate running teuthology-suite to the OpenStack instance
@@ -573,6 +626,10 @@ class TeuthologyOpenStack(OpenStack):
             elif original_argv[0] in ('--teardown',
                                       '--upload'):
                 del original_argv[0]
+            elif os.path.isabs(original_argv[0]):
+                remote_path = self._upload_yaml_file(original_argv[0])
+                argv.append(remote_path)
+                original_argv.pop(0)
             else:
                 argv.append(original_argv.pop(0))
         #
