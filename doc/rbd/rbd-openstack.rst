@@ -507,6 +507,6 @@ dashboard, you can boot from that volume by performing the following steps:
 #. Select the volume you created.
 
 .. _qemu-img: ../qemu-rbd/#running-qemu-with-rbd
-.. _Block Devices and OpenStack (Dumpling): http://ceph.com/docs/dumpling/rbd/rbd-openstack
+.. _Block Devices and OpenStack (Dumpling): http://docs.ceph.com/docs/dumpling/rbd/rbd-openstack
 .. _stable/havana: https://github.com/jdurgin/nova/tree/havana-ephemeral-rbd
 .. _stable/icehouse: https://github.com/angdraug/nova/tree/rbd-ephemeral-clone-stable-icehouse

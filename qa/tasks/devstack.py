@@ -51,7 +51,7 @@ def install(ctx, config):
 
     This was created using documentation found here:
         https://github.com/openstack-dev/devstack/blob/master/README.md
-        http://ceph.com/docs/master/rbd/rbd-openstack/
+        http://docs.ceph.com/docs/master/rbd/rbd-openstack/
     """
     if config is None:
         config = {}
