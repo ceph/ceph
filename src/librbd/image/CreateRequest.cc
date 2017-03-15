@@ -281,6 +281,7 @@ void CreateRequest<I>::validate_pool() {
   librados::ObjectReadOperation op;
   op.stat(NULL, NULL, NULL);
 
+  m_outbl.clear();
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_outbl);
   assert(r == 0);
   comp->release();
@@ -291,7 +292,7 @@ void CreateRequest<I>::handle_validate_pool(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
   if (r == 0) {
-    create_id_object();
+    validate_overwrite();
     return;
   } else if ((r < 0) && (r != -ENOENT)) {
     lderr(m_cct) << "failed to stat RBD directory: " << cpp_strerror(r)
@@ -326,6 +327,73 @@ void CreateRequest<I>::handle_validate_pool(int r) {
     // error out in case of failure here.
     ldout(m_cct, 10) << "failed to release self-managed snapshot " << snap_id
                      << ": " << cpp_strerror(r) << dendl;
+  }
+
+  validate_overwrite();
+}
+
+template <typename I>
+void CreateRequest<I>::validate_overwrite() {
+  ldout(m_cct, 20) << dendl;
+
+  m_data_io_ctx = m_ioctx;
+  if (m_data_pool_id != -1) {
+    librados::Rados rados(m_ioctx);
+    int r = rados.ioctx_create2(m_data_pool_id, m_data_io_ctx);
+    if (r < 0) {
+      lderr(m_cct) << "data pool " << m_data_pool << " does not exist" << dendl;
+      complete(r);
+      return;
+    }
+  }
+
+  using klass = CreateRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_ack_callback<klass, &klass::handle_validate_overwrite>(this);
+
+  librados::ObjectReadOperation op;
+  op.read(0, 0, nullptr, nullptr);
+
+  m_outbl.clear();
+  int r = m_data_io_ctx.aio_operate(RBD_INFO, comp, &op, &m_outbl);
+  assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void CreateRequest<I>::handle_validate_overwrite(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+
+  bufferlist bl;
+  bl.append("overwrite validated");
+
+  if (r == 0 && m_outbl.contents_equal(bl)) {
+    create_id_object();
+    return;
+  } else if ((r < 0) && (r != -ENOENT)) {
+    lderr(m_cct) << "failed to read RBD info: " << cpp_strerror(r) << dendl;
+    complete(r);
+    return;
+  }
+
+  // validate the pool supports overwrites. We cannot use rbd_directory
+  // since the v1 images store the directory as tmap data within the object.
+  ldout(m_cct, 10) << "validating overwrite support" << dendl;
+  bufferlist initial_bl;
+  initial_bl.append("validate");
+  r = m_data_io_ctx.write(RBD_INFO, initial_bl, initial_bl.length(), 0);
+  if (r >= 0) {
+    r = m_data_io_ctx.write(RBD_INFO, bl, bl.length(), 0);
+  }
+  if (r == -EOPNOTSUPP) {
+    lderr(m_cct) << "pool missing required overwrite support" << dendl;
+    complete(-EINVAL);
+    return;
+  } else if (r < 0) {
+    lderr(m_cct) << "failed to validate overwrite support: " << cpp_strerror(r)
+                 << dendl;
+    complete(r);
+    return;
   }
 
   create_id_object();
@@ -406,6 +474,8 @@ void CreateRequest<I>::negotiate_features() {
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
     create_rados_ack_callback<klass, &klass::handle_negotiate_features>(this);
+
+  m_outbl.clear();
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_outbl);
   assert(r == 0);
   comp->release();

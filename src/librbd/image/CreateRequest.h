@@ -54,8 +54,11 @@ private:
    *                                  <start> . . . . > . . . . .
    *                                     |                      .
    *                                     v                      .
-   *                                VALIDATE POOL               v (pool validation
-   *                                     |                      . disabled)
+   *                               VALIDATE POOL                v (pool validation
+   *                                     |                      .  disabled)
+   *                                     v                      .
+   *                             VALIDATE OVERWRITE             .
+   *                                     |                      .
    *                                     v                      .
    * (error: bottom up)           CREATE ID OBJECT. . < . . . . .
    *  _______<_______                    |
@@ -99,6 +102,7 @@ private:
                 ContextWQ *op_work_queue, Context *on_finish);
 
   IoCtx &m_ioctx;
+  IoCtx m_data_io_ctx;
   std::string m_image_name;
   std::string m_image_id;
   uint64_t m_size;
@@ -131,6 +135,9 @@ private:
 
   void validate_pool();
   void handle_validate_pool(int r);
+
+  void validate_overwrite();
+  void handle_validate_overwrite(int r);
 
   void create_id_object();
   void handle_create_id_object(int r);
