@@ -144,7 +144,7 @@ int64_t BitMapAllocator::allocate_dis(
   return num * m_block_size;
 }
 
-int BitMapAllocator::release(
+void BitMapAllocator::release(
   uint64_t offset, uint64_t length)
 {
   std::lock_guard<std::mutex> l(m_lock);
@@ -152,7 +152,6 @@ int BitMapAllocator::release(
            << std::hex << offset << "~" << length << std::dec
            << dendl;
   insert_free(offset, length);
-  return 0;
 }
 
 uint64_t BitMapAllocator::get_free()
