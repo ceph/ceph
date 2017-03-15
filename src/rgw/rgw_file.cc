@@ -795,7 +795,8 @@ namespace rgw {
 
     (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 
-    if (flags & RGW_READDIR_FLAG_DOTDOT) {
+    if ((*offset == 0) &&
+	(flags & RGW_READDIR_FLAG_DOTDOT)) {
       /* send '.' and '..' with their NFS-defined offsets */
       rcb(".", cb_arg, 1);
       rcb("..", cb_arg, 2);
