@@ -3123,7 +3123,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
       if (m && !ctx->sent_reply) {
 	MOSDOpReply *reply = ctx->reply;
 	if (reply)
-	  ctx->reply = NULL;
+	  ctx->reply = nullptr;
 	else {
 	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
 	  reply->set_reply_versions(ctx->at_version,
@@ -6815,7 +6815,7 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
   ctx->reply->get_header().data_off = ctx->data_off;
 
   MOSDOpReply *reply = ctx->reply;
-  ctx->reply = NULL;
+  ctx->reply = nullptr;
 
   if (result >= 0) {
     if (!ctx->ignore_log_op_stats) {
