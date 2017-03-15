@@ -1170,6 +1170,25 @@ public:
       out[i] = rawout[i];
   }
 
+  int _choose_type_stack(
+    CephContext *cct,
+    const vector<pair<int,int>>& stack,
+    const set<int>& overfull,
+    const vector<int>& underfull,
+    const vector<int>& orig,
+    vector<int>::const_iterator& i,
+    set<int>& used,
+    vector<int> *pw) const;
+
+  int try_remap_rule(
+    CephContext *cct,
+    int rule,
+    int maxout,
+    const set<int>& overfull,
+    const vector<int>& underfull,
+    const vector<int>& orig,
+    vector<int> *out) const;
+
   bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
     assert(crush);
 
