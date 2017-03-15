@@ -213,6 +213,12 @@ public:
     ASSERT_NE("", m_pool_name = create_pool());
   }
 
+  bool is_rbd_persistent_cache_enabled() {
+    std::string value;
+    EXPECT_EQ(0, _rados.conf_get("rbd_persistent_cache_enabled", value));
+    return value == "true";
+  }
+
   bool is_skip_partial_discard_enabled() {
     std::string value;
     EXPECT_EQ(0, _rados.conf_get("rbd_skip_partial_discard", value));
@@ -3241,8 +3247,7 @@ TYPED_TEST(DiffIterateTest, DiffIterate)
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   bool skip_discard = this->is_skip_partial_discard_enabled();
-  CephContext* cct = reinterpret_cast<CephContext*>(this->_rados.cct());
-  REQUIRE(!cct->_conf->rbd_persistent_cache_enabled);
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   {
     librbd::RBD rbd;
@@ -3320,8 +3325,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateDiscard)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
-  CephContext* cct = reinterpret_cast<CephContext*>(this->_rados.cct());
-  REQUIRE(!cct->_conf->rbd_persistent_cache_enabled);
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   librbd::RBD rbd;
   librbd::Image image;
@@ -3396,8 +3400,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateStress)
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   bool skip_discard = this->is_skip_partial_discard_enabled();
-  CephContext* cct = reinterpret_cast<CephContext*>(this->_rados.cct());
-  REQUIRE(!cct->_conf->rbd_persistent_cache_enabled);
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   librbd::RBD rbd;
   librbd::Image image;
@@ -3472,8 +3475,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateRegression6926)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
-  CephContext* cct = reinterpret_cast<CephContext*>(this->_rados.cct());
-  REQUIRE(!cct->_conf->rbd_persistent_cache_enabled);
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   librbd::RBD rbd;
   librbd::Image image;
@@ -3522,8 +3524,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   bool skip_discard = this->is_skip_partial_discard_enabled();
-  CephContext* cct = reinterpret_cast<CephContext*>(this->_rados.cct());
-  REQUIRE(!cct->_conf->rbd_persistent_cache_enabled);
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   librbd::RBD rbd;
   librbd::Image image;
@@ -3575,8 +3576,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateCallbackError)
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   bool skip_discard = this->is_skip_partial_discard_enabled();
-  CephContext* cct = reinterpret_cast<CephContext*>(this->_rados.cct());
-  REQUIRE(!cct->_conf->rbd_persistent_cache_enabled);
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   {
     librbd::RBD rbd;
@@ -3609,8 +3609,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateParentDiscard)
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   bool skip_discard = this->is_skip_partial_discard_enabled();
-  CephContext* cct = reinterpret_cast<CephContext*>(this->_rados.cct());
-  REQUIRE(!cct->_conf->rbd_persistent_cache_enabled);
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   librbd::RBD rbd;
   librbd::Image image;

@@ -129,6 +129,7 @@ namespace librbd {
     uint64_t stripe_unit, stripe_count;
     uint64_t flags;
     utime_t create_timestamp;
+    uint64_t ssd_cache_size;
 
     file_layout_t layout;
 

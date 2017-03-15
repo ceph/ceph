@@ -36,8 +36,13 @@ JournalStore<I>::JournalStore(I &image_ctx, BlockGuard &block_guard,
                  image_ctx.id + ".journal_events"),
     m_block_file(image_ctx, *image_ctx.op_work_queue,
                  image_ctx.id + ".journal_blocks"),
-    m_lock("librbd::cache::file::JournalStore::m_lock"),
-    m_event_ref_pool(EVENT_REF_COUNT) {
+    m_lock("librbd::cache::file::JournalStore::m_lock") {
+  CephContext *cct = m_image_ctx.cct;
+  m_ring_buf_cnt = cct->_conf->get_val<uint64_t>("rbd_persistent_cache_journal_ring_buffer_count");
+  m_event_ref_cnt = cct->_conf->get_val<uint64_t>("rbd_persistent_cache_journal_event_ref_count");
+  m_block_size = cct->_conf->get_val<uint64_t>("rbd_persistent_cache_journal_block_size");
+
+  m_event_ref_pool.resize(m_event_ref_cnt);
   for (auto it = m_event_ref_pool.rbegin(); it != m_event_ref_pool.rend();
        ++it) {
     m_event_refs.push_front(*it);
@@ -104,10 +109,10 @@ void JournalStore<I>::reset(Context *on_finish) {
             next_ctx->complete(r);
           });
       }
-      m_event_file.truncate(RING_BUFFER_COUNT * Event::ENCODED_SIZE, false,
+      m_event_file.truncate(m_ring_buf_cnt * Event::ENCODED_SIZE, false,
                             next_ctx);
     });
-  m_block_file.truncate(RING_BUFFER_COUNT * BLOCK_SIZE, false, ctx);
+  m_block_file.truncate(m_ring_buf_cnt * m_block_size, false, ctx);
 }
 
 template <typename I>
@@ -223,12 +228,12 @@ void JournalStore<I>::demote_block(uint64_t block, bufferlist &&bl,
   }
 
   assert(event_ref->io_type == IO_TYPE_WRITE);
-  assert(bl.length() == BLOCK_SIZE);
+  assert(bl.length() == m_block_size);
 
   // ring-buffer event offset can be calculated
   size_t event_idx = event_ref - &m_event_ref_pool.front();
   uint64_t event_offset = event_idx * Event::ENCODED_SIZE;
-  uint64_t block_offset = event_idx * BLOCK_SIZE;
+  uint64_t block_offset = event_idx * m_block_size;
 
   Context *ctx = new FunctionContext(
     [this, event_ref, event_offset, on_finish](int r) {
@@ -326,8 +331,8 @@ void JournalStore<I>::get_writeback_block(uint64_t tid, bufferlist *bl,
 
   // ring-buffer event offset can be calculated
   size_t event_idx = event_ref - &m_event_ref_pool.front();
-  uint64_t block_offset = event_idx * BLOCK_SIZE;
-  m_block_file.read(block_offset, BLOCK_SIZE, bl, on_finish);
+  uint64_t block_offset = event_idx * m_block_size;
+  m_block_file.read(block_offset, m_block_size, bl, on_finish);
 }
 
 template <typename I>
@@ -423,7 +428,7 @@ void JournalStore<I>::commit_event(uint64_t tid, Context *on_finish) {
               next_ctx->complete(r);
             });
         }
-        m_block_file.discard(block * BLOCK_SIZE, BLOCK_SIZE, true, next_ctx);
+        m_block_file.discard(block * m_block_size, m_block_size, true, next_ctx);
       });
   }
 

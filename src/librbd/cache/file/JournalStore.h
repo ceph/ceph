@@ -126,6 +126,10 @@ private:
   mutable Mutex m_lock;
   uint64_t m_tid = 0;
   uint64_t m_committed_tid = 0;
+  uint32_t m_ring_buf_cnt = 0;
+  uint32_t m_event_ref_cnt = 0;
+  uint32_t m_block_size = 0;
+
 
   EventRefPool m_event_ref_pool;
   EventRefs m_event_refs;   ///< ring-buffer of events

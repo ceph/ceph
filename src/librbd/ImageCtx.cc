@@ -189,6 +189,7 @@ struct C_InvalidateCache : public Context {
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
+      ssd_cache_size(0),
       format_string(NULL),
       id(image_id), parent(NULL),
       stripe_unit(0), stripe_count(0), flags(0),
@@ -312,6 +313,10 @@ struct C_InvalidateCache : public Context {
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
       object_set->return_enoent = true;
       object_cacher->start();
+    }
+
+    if (persistent_cache_enabled) {
+      ssd_cache_size = cct->_conf->get_val<uint64_t>("rbd_persistent_cache_size");
     }
 
     readahead.set_trigger_requests(readahead_trigger_requests);
@@ -1061,7 +1066,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(mirroring_replay_delay, int64_t);
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(blkin_trace_all, bool);
-    ASSIGN_OPTION(persistent_cache_enabled, true);
+    ASSIGN_OPTION(persistent_cache_enabled, bool);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {
