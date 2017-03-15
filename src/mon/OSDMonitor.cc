@@ -556,10 +556,10 @@ public:
   typedef CrushTreeDumper::Dumper<F> Parent;
 
   OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
-		       const PGMap *pgm_, bool tree_) :
+		       const PGStatService *pgs_, bool tree_) :
     Parent(crush),
     osdmap(osdmap_),
-    pgm(pgm_),
+    pgs(pgs_),
     tree(tree_),
     average_util(average_utilization()),
     min_var(-1),
@@ -591,7 +591,7 @@ protected:
     if (average_util)
       var = util / average_util;
 
-    size_t num_pgs = qi.is_bucket() ? 0 : pgm->get_num_pg_by_osd(qi.id);
+    size_t num_pgs = qi.is_bucket() ? 0 : pgs->get_num_pg_by_osd(qi.id);
 
     dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, num_pgs, f);
 
@@ -638,13 +638,11 @@ protected:
 
   bool get_osd_utilization(int id, int64_t* kb, int64_t* kb_used,
 			   int64_t* kb_avail) const {
-    typedef ceph::unordered_map<int32_t,osd_stat_t> OsdStat;
-    OsdStat::const_iterator p = pgm->osd_stat.find(id);
-    if (p == pgm->osd_stat.end())
-      return false;
-    *kb = p->second.kb;
-    *kb_used = p->second.kb_used;
-    *kb_avail = p->second.kb_avail;
+    const osd_stat_t *p = pgs->get_osd_stat(id);
+    if (!p) return false;
+    *kb = p->kb;
+    *kb_used = p->kb_used;
+    *kb_avail = p->kb_avail;
     return *kb > 0;
   }
 
@@ -678,7 +676,7 @@ protected:
 
 protected:
   const OSDMap *osdmap;
-  const PGMap *pgm;
+  const PGStatService *pgs;
   bool tree;
   double average_util;
   double min_var;
@@ -692,8 +690,8 @@ public:
   typedef OSDUtilizationDumper<TextTable> Parent;
 
   OSDUtilizationPlainDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-		     const PGMap *pgm, bool tree) :
-    Parent(crush, osdmap, pgm, tree) {}
+		     const PGStatService *pgs, bool tree) :
+    Parent(crush, osdmap, pgs, tree) {}
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
@@ -713,9 +711,9 @@ public:
     dump_stray(tbl);
 
     *tbl << "" << "" << "TOTAL"
-	 << si_t(pgm->osd_sum.kb << 10)
-	 << si_t(pgm->osd_sum.kb_used << 10)
-	 << si_t(pgm->osd_sum.kb_avail << 10)
+	 << si_t(pgs->get_osd_sum().kb << 10)
+	 << si_t(pgs->get_osd_sum().kb_used << 10)
+	 << si_t(pgs->get_osd_sum().kb_avail << 10)
 	 << lowprecision_t(average_util)
 	 << ""
 	 << TextTable::endrow;
@@ -798,8 +796,8 @@ public:
   typedef OSDUtilizationDumper<Formatter> Parent;
 
   OSDUtilizationFormatDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-			     const PGMap *pgm, bool tree) :
-    Parent(crush, osdmap, pgm, tree) {}
+			     const PGStatService *pgs, bool tree) :
+    Parent(crush, osdmap, pgs, tree) {}
 
   void dump(Formatter *f) {
     f->open_array_section("nodes");
@@ -838,9 +836,9 @@ protected:
 public:
   void summary(Formatter *f) {
     f->open_object_section("summary");
-    f->dump_int("total_kb", pgm->osd_sum.kb);
-    f->dump_int("total_kb_used", pgm->osd_sum.kb_used);
-    f->dump_int("total_kb_avail", pgm->osd_sum.kb_avail);
+    f->dump_int("total_kb", pgs->get_osd_sum().kb);
+    f->dump_int("total_kb_used", pgs->get_osd_sum().kb_used);
+    f->dump_int("total_kb_avail", pgs->get_osd_sum().kb_avail);
     f->dump_float("average_utilization", average_util);
     f->dump_float("min_var", min_var);
     f->dump_float("max_var", max_var);
@@ -851,18 +849,17 @@ public:
 
 void OSDMonitor::print_utilization(ostream &out, Formatter *f, bool tree) const
 {
-  const PGMap *pgm = &mon->pgservice.get_pg_map();
   const CrushWrapper *crush = osdmap.crush.get();
 
   if (f) {
     f->open_object_section("df");
-    OSDUtilizationFormatDumper d(crush, &osdmap, pgm, tree);
+    OSDUtilizationFormatDumper d(crush, &osdmap, &mon->pgservice, tree);
     d.dump(f);
     d.summary(f);
     f->close_section();
     f->flush(out);
   } else {
-    OSDUtilizationPlainDumper d(crush, &osdmap, pgm, tree);
+    OSDUtilizationPlainDumper d(crush, &osdmap, &mon->pgservice, tree);
     TextTable tbl;
     d.dump(&tbl);
     out << tbl
