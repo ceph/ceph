@@ -4854,9 +4854,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     r = 0;
   } else if (prefix == "osd pool stats") {
-    const auto &pgm = mon->pgmon()->pg_map;
-    r = process_pg_map_command(prefix, cmdmap, pgm, osdmap,
-			       f.get(), &ss, &rdata);
+    r = process_pg_map_command(prefix, cmdmap, mon->pgservice.get_pg_map(),
+			       osdmap, f.get(), &ss, &rdata);
   } else if (prefix == "osd pool get-quota") {
     string pool_name;
     cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
