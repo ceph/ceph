@@ -17,7 +17,7 @@
 #include "messages/MMonMgrReport.h"
 
 #include "PGMap.h"
-#include "PGMonitor.h"
+#include "PGStatService.h"
 #include "include/stringify.h"
 #include "mgr/MgrContext.h"
 #include "OSDMonitor.h"
@@ -250,7 +250,7 @@ bool MgrMonitor::preprocess_report(MonOpRequestRef op) { return false; }
 bool MgrMonitor::prepare_report(MonOpRequestRef op)
 {
   MMonMgrReport *m = static_cast<MMonMgrReport*>(op->get_req());
-  mon->pgservice->reset(m->pg_map);
+  pgservice->reset(m->pg_map);
   return true;
 }
 
@@ -565,3 +565,15 @@ void MgrMonitor::on_shutdown()
   }
 }
 
+PGStatService *MgrMonitor::get_pg_stat_service()
+{
+  if (!pgservice) {
+    pgservice = new PGMapStatService();
+  }
+  return pgservice;
+}
+
+MgrMonitor::~MgrMonitor()
+{
+  delete pgservice;
+}
