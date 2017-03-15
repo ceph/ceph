@@ -179,6 +179,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   leader_supported_mon_commands_size(0),
   mgr_messenger(mgr_m),
   mgr_client(cct_, mgr_m),
+  pgservice(new PGStatService),
   store(s),
   
   state(STATE_PROBING),
@@ -2576,7 +2577,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     osdmon()->osdmap.print_summary(f, cout);
     f->close_section();
     f->open_object_section("pgmap");
-    pgservice.print_summary(f, NULL);
+    pgservice->print_summary(f, NULL);
     f->close_section();
     f->open_object_section("fsmap");
     mdsmon()->get_fsmap().print_summary(f, NULL);
@@ -2602,7 +2603,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     }
 
     osdmon()->osdmap.print_summary(NULL, ss);
-    pgservice.print_summary(NULL, &ss);
+    pgservice->print_summary(NULL, &ss);
   }
 }
 
@@ -3067,10 +3068,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       if (f)
         f->open_object_section("stats");
 
-      pgservice.dump_fs_stats(&ds, f.get(), verbose);
+      pgservice->dump_fs_stats(&ds, f.get(), verbose);
       if (!f)
         ds << '\n';
-      pgservice.dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
+      pgservice->dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
 
       if (f) {
         f->close_section();
