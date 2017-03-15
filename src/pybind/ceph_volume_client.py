@@ -1029,7 +1029,7 @@ class CephFSVolumeClient(object):
         # permissions to access the share
         client_entity = "client.{0}".format(auth_id)
         want_access_level = 'r' if readonly else 'rw'
-        want_mds_cap = 'allow {0} path={1}'.format(want_access_level, path)
+        want_mds_cap = 'allow r,allow {0} path={1}'.format(want_access_level, path)
         want_osd_cap = 'allow {0} pool={1} namespace={2}'.format(
             want_access_level, pool_name, namespace)
 
