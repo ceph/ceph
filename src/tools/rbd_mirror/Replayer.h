@@ -22,13 +22,14 @@
 #include "ImageDeleter.h"
 #include "types.h"
 
+class AdminSocketHook;
+
 namespace librbd { class ImageCtx; }
 
 namespace rbd {
 namespace mirror {
 
 template <typename> struct Threads;
-class ReplayerAdminSocketHook;
 template <typename> class InstanceWatcher;
 
 /**
@@ -124,7 +125,7 @@ private:
   std::map<std::string, std::unique_ptr<ImageReplayer<> > > m_image_replayers;
 
   std::string m_asok_hook_name;
-  ReplayerAdminSocketHook *m_asok_hook;
+  AdminSocketHook *m_asok_hook;
 
   std::set<ImageId> m_init_image_ids;
 

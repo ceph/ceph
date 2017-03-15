@@ -127,8 +127,6 @@ private:
   Replayer *replayer;
 };
 
-} // anonymous namespace
-
 class ReplayerAdminSocketHook : public AdminSocketHook {
 public:
   ReplayerAdminSocketHook(CephContext *cct, const std::string &name,
@@ -206,6 +204,8 @@ private:
   AdminSocket *admin_socket;
   Commands commands;
 };
+
+} // anonymous namespace
 
 struct Replayer::C_RefreshLocalImages : public Context {
   Replayer *replayer;
