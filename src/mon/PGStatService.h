@@ -67,6 +67,15 @@ public:
 
   bool have_full_osds() const { return !parent.full_osds.empty(); }
   bool have_nearfull_osds() const { return !parent.nearfull_osds.empty(); }
+
+  void print_summary(Formatter *f, ostream *out) const { parent.print_summary(f, out); }
+  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const {
+    parent.dump_fs_stats(ss, f, verbose);
+  }
+  void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
+		       bool verbose) const {
+    parent.dump_pool_stats(osdm, ss, f, verbose);
+  }
 };
 
 
