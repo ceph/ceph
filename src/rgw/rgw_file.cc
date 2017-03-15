@@ -815,7 +815,6 @@ namespace rgw {
 	fs->state.push_event(ev);
       }
     } else {
-      rgw_obj_key marker{"", ""};
       RGWReaddirRequest req(cct, fs->get_user(), this, rcb, cb_arg, offset);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
