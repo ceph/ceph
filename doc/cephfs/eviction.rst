@@ -80,8 +80,16 @@ output:
 That's it!  The client has now been evicted, and any resources it had locked will
 now be available for other clients.
 
-Background: OSD epoch barrier
------------------------------
+Background: blacklisting and OSD epoch barrier
+----------------------------------------------
+
+After a client is blacklisted, it is necessary to make sure that 
+other clients and MDS daemons have the latest OSDMap (including
+the blacklist entry) before they try to access any data objects
+that the blacklisted client might have been accessing.
+
+This is ensured using an internal "osdmap epoch barrier" mechanism.
+See :doc:
 
 The purpose of the barrier is to ensure that when we hand out any
 capabilities which might allow touching the same RADOS objects, the
