@@ -11,6 +11,7 @@
 #include <list>
 #include <string>
 #include <utility>
+#include <atomic>
 
 namespace librbd {
 
@@ -27,6 +28,12 @@ public:
 
   ExclusiveLock(ImageCtxT &image_ctx);
   ~ExclusiveLock();
+  void destroy(){
+    //make sure any member variable of ExclusiveLock not being used
+    while (!m_can_delete.load())
+      usleep(1000);
+    delete this;
+  }
 
   bool is_lock_owner() const;
   bool accept_requests(int *ret_val) const;
@@ -153,6 +160,7 @@ private:
 
   bool m_request_blocked = false;
   int m_request_blocked_ret_val = 0;
+  std::atomic_bool m_can_delete;
 
   std::string encode_lock_cookie() const;
 
