@@ -26,13 +26,18 @@
 
 void usage()
 {
-  cout << " usage: [--print] [--createsimple <numosd> [--clobber] [--pg_bits <bitsperosd>]] <mapfilename>" << std::endl;
+  cout << " usage: [--print] <mapfilename>" << std::endl;
+  cout << "   --create-from-conf      creates an osd map with default configurations" << std::endl;
+  cout << "   --createsimple <numosd> [--clobber] [--pg-bits <bitsperosd>] [--pgp-bits <bits>] creates a relatively generic OSD map with <numosd> devices" << std::endl;
+  cout << "   --pgp-bits <bits>       pgp_num map attribute will be shifted by <bits>" << std::endl;
+  cout << "   --pg-bits <bits>        pg_num map attribute will be shifted by <bits>" << std::endl;
+  cout << "   --clobber               allows osdmaptool to overwrite <mapfilename> if it already exists" << std::endl;
   cout << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
   cout << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
-  cout << "   --test-map-pgs [--pool <poolid>] [--pg_num <pg_num>] map all pgs" << std::endl;
-  cout << "   --test-map-pgs-dump [--pool <poolid>] map all pgs" << std::endl;
-  cout << "   --test-map-pgs-dump-all [--pool <poolid>] map all pgs to osds" << std::endl;
   cout << "   --health                dump health checks" << std::endl;
+  cout << "   --test-map-pgs [--pool <poolid>] [--pg_num <pg_num>] [--range-first <first> --range-last <last>] map all pgs" << std::endl;
+  cout << "   --test-map-pgs-dump [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs" << std::endl;
+  cout << "   --test-map-pgs-dump-all [--pool <poolid>] [--range-first <first> --range-last <last>] map all pgs to osds" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
   cout << "   --mark-out <osdid>      mark an osd as out (but do not persist)" << std::endl;
   cout << "   --with-default-pool     include default pool when creating map" << std::endl;
@@ -50,6 +55,9 @@ void usage()
   cout << "                           max deviation from target [default: .01]" << std::endl;
   cout << "   --upmap-pool <poolname> restrict upmap balancing to 1 or more pools" << std::endl;
   cout << "   --upmap-save            write modified OSDMap with upmap changes" << std::endl;
+  cout << "   --dump <format>         displays the map in plain text when <format> is 'plain', 'json' if specified format is not supported" << std::endl;
+  cout << "   --tree                  displays a tree of the map" << std::endl;
+  cout << "   --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds" << std::endl;
   exit(1);
 }
 
