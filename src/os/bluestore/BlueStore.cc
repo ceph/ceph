@@ -4762,6 +4762,7 @@ int BlueStore::mount()
     f->stop();
   }
  out_coll:
+  flush_cache();
   coll_map.clear();
  out_alloc:
   _close_alloc();
@@ -4798,6 +4799,7 @@ int BlueStore::umount()
     f->stop();
   }
   _reap_collections();
+  flush_cache();
   coll_map.clear();
   dout(20) << __func__ << " closing" << dendl;
 
@@ -4960,6 +4962,7 @@ int BlueStore::fsck(bool deep)
     }
     r = bluefs->fsck();
     if (r < 0) {
+      flush_cache();
       coll_map.clear();
       goto out_alloc;
     }
@@ -5341,6 +5344,7 @@ int BlueStore::fsck(bool deep)
   }
 
  out_scan:
+  flush_cache();
   coll_map.clear();
  out_alloc:
   _close_alloc();
@@ -10250,6 +10254,7 @@ void BlueStore::generate_db_histogram(Formatter *f)
 
 void BlueStore::flush_cache()
 {
+  dout(10) << __func__ << dendl;
   for (auto i : cache_shards) {
     i->trim_all();
   }
