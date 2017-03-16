@@ -2917,7 +2917,7 @@ void BlueStore::Onode::flush()
 // Collection
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << ") "
+#define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << " " << this << ") "
 
 BlueStore::Collection::Collection(BlueStore *ns, Cache *c, coll_t cid)
   : store(ns),
@@ -4349,7 +4349,7 @@ int BlueStore::_open_collections(int *errors)
              << pretty_binary_string(it->key()) << dendl;
         return -EIO;
       }   
-      dout(20) << __func__ << " opened " << cid << dendl;
+      dout(20) << __func__ << " opened " << cid << " " << c << dendl;
       coll_map[cid] = c;
     } else {
       derr << __func__ << " unrecognized collection " << it->key() << dendl;
@@ -5436,7 +5436,7 @@ BlueStore::CollectionRef BlueStore::_get_collection(const coll_t& cid)
 
 void BlueStore::_queue_reap_collection(CollectionRef& c)
 {
-  dout(10) << __func__ << " " << c->cid << dendl;
+  dout(10) << __func__ << " " << c << " " << c->cid << dendl;
   std::lock_guard<std::mutex> l(reap_lock);
   removed_collections.push_back(c);
 }
@@ -5455,11 +5455,11 @@ void BlueStore::_reap_collections()
        p != removed_colls.end();
        ++p) {
     CollectionRef c = *p;
-    dout(10) << __func__ << " " << c->cid << dendl;
+    dout(10) << __func__ << " " << c << " " << c->cid << dendl;
     if (c->onode_map.map_any([&](OnodeRef o) {
 	  assert(!o->exists);
 	  if (!o->flush_txns.empty()) {
-	    dout(10) << __func__ << " " << c->cid << " " << o->oid
+	    dout(10) << __func__ << " " << c << " " << c->cid << " " << o->oid
 		     << " flush_txns " << o->flush_txns << dendl;
 	    return false;
 	  }
@@ -5469,7 +5469,7 @@ void BlueStore::_reap_collections()
       continue;
     }
     c->onode_map.clear();
-    dout(10) << __func__ << " " << c->cid << " done" << dendl;
+    dout(10) << __func__ << " " << c << " " << c->cid << " done" << dendl;
   }
 
   if (all_reaped) {
