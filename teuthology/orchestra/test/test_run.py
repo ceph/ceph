@@ -148,7 +148,7 @@ class TestRun(object):
             args=['foo'],
             check_status=False,
         )
-        assert proc.exitstatus is None
+        assert proc.exitstatus == -1
 
     def test_status_lost(self):
         m_transport = MagicMock()
@@ -185,7 +185,7 @@ class TestRun(object):
             args=['foo'],
             check_status=False,
         )
-        assert proc.exitstatus is None
+        assert proc.exitstatus == -1
 
     def test_status_bad_nowait(self):
         self.m_stdout_buf.channel.recv_exit_status.return_value = 42
@@ -207,7 +207,7 @@ class TestRun(object):
             stdin=run.PIPE,
             wait=False
         )
-        assert proc.poll() is None
+        assert proc.poll() == 0
         code = proc.wait()
         assert code == 0
         assert proc.exitstatus == 0
@@ -222,7 +222,7 @@ class TestRun(object):
             stdout=run.PIPE,
             wait=False
         )
-        assert proc.poll() is None
+        assert proc.poll() == 0
         assert proc.stdout.readline() == lines[0]
         assert proc.stdout.readline() == lines[1]
         assert proc.stdout.readline() == lines[2]
@@ -240,7 +240,7 @@ class TestRun(object):
             stderr=run.PIPE,
             wait=False
         )
-        assert proc.poll() is None
+        assert proc.poll() == 0
         assert proc.stderr.readline() == lines[0]
         assert proc.stderr.readline() == lines[1]
         assert proc.stderr.readline() == lines[2]

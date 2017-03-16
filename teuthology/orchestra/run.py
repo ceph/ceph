@@ -137,7 +137,6 @@ class RemoteProcess(object):
             greenlet.get()
 
         status = self._get_exitstatus()
-        self.exitstatus = self.returncode = status
         for stream in ('stdout', 'stderr'):
             if hasattr(self, stream):
                 stream_obj = getattr(self, stream)
@@ -147,8 +146,14 @@ class RemoteProcess(object):
                         not isinstance(stream_obj, ChannelFile):
                     stream_obj.seek(0)
 
+        self._raise_for_status()
+        return status
+
+    def _raise_for_status(self):
+        if self.returncode is None:
+            self._get_exitstatus()
         if self.check_status:
-            if status is None:
+            if self.returncode in (None, -1):
                 # command either died due to a signal, or the connection
                 # was lost
                 transport = self.client.get_transport()
@@ -160,11 +165,11 @@ class RemoteProcess(object):
                 # connection seems healthy still, assuming it was a
                 # signal; sadly SSH does not tell us which signal
                 raise CommandCrashedError(command=self.command)
-            if status != 0:
-                raise CommandFailedError(command=self.command,
-                                         exitstatus=status, node=self.hostname,
-                                         label=self.label)
-        return status
+            if self.returncode != 0:
+                raise CommandFailedError(
+                    command=self.command, exitstatus=self.returncode,
+                    node=self.hostname, label=self.label
+                )
 
     def _get_exitstatus(self):
         """
@@ -173,19 +178,25 @@ class RemoteProcess(object):
                   signal, this returns None instead of paramiko's -1.
         """
         status = self._stdout_buf.channel.recv_exit_status()
+        self.exitstatus = self.returncode = status
         if status == -1:
             status = None
         return status
 
     @property
     def finished(self):
-        return self._stdout_buf.channel.exit_status_ready()
+        gevent.wait(self.greenlets, timeout=0.1)
+        ready = self._stdout_buf.channel.exit_status_ready()
+        if ready:
+            self._get_exitstatus()
+        return ready
 
     def poll(self):
         """
         :returns: self.returncode if the process is finished; else None
         """
         if self.finished:
+            self._raise_for_status()
             return self.returncode
         return None
 
