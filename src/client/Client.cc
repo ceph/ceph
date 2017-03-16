@@ -139,25 +139,24 @@ Client::CommandHook::CommandHook(Client *client) :
 bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 			       std::string format, bufferlist& out)
 {
-  Formatter *f = Formatter::create(format);
+  std::unique_ptr<Formatter> f(Formatter::create(format));
   f->open_object_section("result");
   m_client->client_lock.Lock();
   if (command == "mds_requests")
-    m_client->dump_mds_requests(f);
+    m_client->dump_mds_requests(f.get());
   else if (command == "mds_sessions")
-    m_client->dump_mds_sessions(f);
+    m_client->dump_mds_sessions(f.get());
   else if (command == "dump_cache")
-    m_client->dump_cache(f);
+    m_client->dump_cache(f.get());
   else if (command == "kick_stale_sessions")
     m_client->_kick_stale_sessions();
   else if (command == "status")
-    m_client->dump_status(f);
+    m_client->dump_status(f.get());
   else
     assert(0 == "bad command registered");
   m_client->client_lock.Unlock();
   f->close_section();
   f->flush(out);
-  delete f;
   return true;
 }
 
