@@ -12971,6 +12971,7 @@ int RGWRados::delete_raw_obj_aio(const rgw_raw_obj& obj, list<librados::AioCompl
   ret = ref.ioctx.aio_operate(ref.oid, c, &op);
   if (ret < 0) {
     lderr(cct) << "ERROR: AioOperate failed with ret=" << ret << dendl;
+    c->release();
     return ret;
   }
 
@@ -13009,6 +13010,7 @@ int RGWRados::delete_obj_aio(const rgw_obj& obj,
   ret = ref.ioctx.aio_operate(ref.oid, c, &op);
   if (ret < 0) {
     lderr(cct) << "ERROR: AioOperate failed with ret=" << ret << dendl;
+    c->release();
     return ret;
   }
 
