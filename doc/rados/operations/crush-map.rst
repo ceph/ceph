@@ -488,7 +488,7 @@ default pools.
    you create a new pool, its default ruleset is ``0``.
 
 
-CRUSH rules deﬁnes placement and replication strategies or distribution policies
+CRUSH rules define placement and replication strategies or distribution policies
 that allow you to specify exactly how CRUSH places object replicas. For
 example, you might create a rule selecting a pair of targets for 2-way
 mirroring, another rule for selecting three targets in two different data
