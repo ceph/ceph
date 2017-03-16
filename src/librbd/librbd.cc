@@ -1199,6 +1199,16 @@ namespace librbd {
     return r;
   }
 
+  int Image::snap_get_location(uint64_t snap_id, uint64_t *prev_snap,
+                               set<uint64_t> *next_snaps)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, snap_get_location_enter, ictx, ictx->name.c_str());
+    int r = librbd::snap_get_location(ictx, snap_id, prev_snap, next_snaps);
+    tracepoint(librbd, snap_get_location_exit, r);
+    return r;
+  }
+
   int Image::snap_get_limit(uint64_t *limit)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;

@@ -1795,6 +1795,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     return 0;
   }
 
+  int snap_get_location(ImageCtx *ictx, uint64_t snap_id, uint64_t *prev_snap,
+			set<uint64_t> *next_snaps)
+  {
+    std::map<librados::snap_t, SnapInfo>::iterator snap_it = ictx->snap_info.find(snap_id);
+    assert(snap_it != ictx->snap_info.end());
+    *prev_snap = snap_it->second.prev_snap;
+    next_snaps->clear();
+    for (auto snap_id : snap_it->second.next_snaps) {
+      next_snaps->insert(snap_id);
+    }
+    return 0;
+  }
+
   int snap_get_limit(ImageCtx *ictx, uint64_t *limit)
   {
     int r = cls_client::snapshot_get_limit(&ictx->md_ctx, ictx->header_oid,

@@ -298,6 +298,8 @@ public:
   int snap_get_limit(uint64_t *limit);
   int snap_set_limit(uint64_t limit);
   int snap_get_timestamp(uint64_t snap_id, struct timespec *timestamp);
+  int snap_get_location(uint64_t snap_id, uint64_t *prev_snap,
+			std::set<uint64_t> *next_snaps);
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
