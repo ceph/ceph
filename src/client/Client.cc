@@ -9755,12 +9755,12 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
       ceph_lock_state_t *lock_state;
       if (lock_type == CEPH_LOCK_FCNTL) {
 	if (!in->fcntl_locks)
-	  in->fcntl_locks = new ceph_lock_state_t(cct, CEPH_LOCK_FCNTL);
-	lock_state = in->fcntl_locks;
+	  in->fcntl_locks.reset(new ceph_lock_state_t(cct, CEPH_LOCK_FCNTL));
+	lock_state = in->fcntl_locks.get();
       } else if (lock_type == CEPH_LOCK_FLOCK) {
 	if (!in->flock_locks)
-	  in->flock_locks = new ceph_lock_state_t(cct, CEPH_LOCK_FLOCK);
-	lock_state = in->flock_locks;
+	  in->flock_locks.reset(new ceph_lock_state_t(cct, CEPH_LOCK_FLOCK));
+	lock_state = in->flock_locks.get();
       } else {
 	ceph_abort();
 	return -EINVAL;
@@ -9770,12 +9770,12 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
       if (!removing) {
 	if (lock_type == CEPH_LOCK_FCNTL) {
 	  if (!fh->fcntl_locks)
-	    fh->fcntl_locks = new ceph_lock_state_t(cct, CEPH_LOCK_FCNTL);
-	  lock_state = fh->fcntl_locks;
+	    fh->fcntl_locks.reset(new ceph_lock_state_t(cct, CEPH_LOCK_FCNTL));
+	  lock_state = fh->fcntl_locks.get();
 	} else {
 	  if (!fh->flock_locks)
-	    fh->flock_locks = new ceph_lock_state_t(cct, CEPH_LOCK_FLOCK);
-	  lock_state = fh->flock_locks;
+	    fh->flock_locks.reset(new ceph_lock_state_t(cct, CEPH_LOCK_FLOCK));
+	  lock_state = fh->flock_locks.get();
 	}
 	_update_lock_state(fl, owner, lock_state);
       }
@@ -9826,7 +9826,7 @@ void Client::_encode_filelocks(Inode *in, bufferlist& bl)
   unsigned nr_fcntl_locks = in->fcntl_locks ? in->fcntl_locks->held_locks.size() : 0;
   ::encode(nr_fcntl_locks, bl);
   if (nr_fcntl_locks) {
-    ceph_lock_state_t* lock_state = in->fcntl_locks;
+    auto &lock_state = in->fcntl_locks;
     for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
 	p != lock_state->held_locks.end();
 	++p)
@@ -9836,7 +9836,7 @@ void Client::_encode_filelocks(Inode *in, bufferlist& bl)
   unsigned nr_flock_locks = in->flock_locks ? in->flock_locks->held_locks.size() : 0;
   ::encode(nr_flock_locks, bl);
   if (nr_flock_locks) {
-    ceph_lock_state_t* lock_state = in->flock_locks;
+    auto &lock_state = in->flock_locks;
     for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
 	p != lock_state->held_locks.end();
 	++p)
@@ -9858,20 +9858,20 @@ void Client::_release_filelocks(Fh *fh)
   list<pair<int, ceph_filelock> > to_release;
 
   if (fh->fcntl_locks) {
-    ceph_lock_state_t* lock_state = fh->fcntl_locks;
+    auto &lock_state = fh->fcntl_locks;
     for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
 	p != lock_state->held_locks.end();
 	++p)
       to_release.push_back(pair<int, ceph_filelock>(CEPH_LOCK_FCNTL, p->second));
-    delete fh->fcntl_locks;
+    lock_state.reset();
   }
   if (fh->flock_locks) {
-    ceph_lock_state_t* lock_state = fh->flock_locks;
+    auto &lock_state = fh->flock_locks;
     for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
 	p != lock_state->held_locks.end();
 	++p)
       to_release.push_back(pair<int, ceph_filelock>(CEPH_LOCK_FLOCK, p->second));
-    delete fh->flock_locks;
+    lock_state.reset();
   }
 
   if (to_release.empty())
