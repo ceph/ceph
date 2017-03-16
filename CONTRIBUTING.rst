@@ -2,7 +2,7 @@ For the general process of submitting patches to ceph, read the below
 
 `Submitting Patches`_
 
-For documentation patches the the following guide will help you get started
+For documentation patches the following guide will help you get started
 
 `Documenting Ceph`_
 

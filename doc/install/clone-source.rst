@@ -55,7 +55,7 @@ assumes you used the default file path)::
 
 Copy the public key.
 
-Go to your your ``github`` account, click on "Account Settings" (i.e., the
+Go to your ``github`` account, click on "Account Settings" (i.e., the
 'tools' icon); then, click "SSH Keys" on the left side navbar.
 
 Click "Add SSH key" in the "SSH Keys" list, enter a name for the key, paste the
