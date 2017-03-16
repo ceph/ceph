@@ -732,11 +732,18 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
   float full_ratio = std::max(osdmap->get_full_ratio(), nearfull_ratio);
   float failsafe_ratio = std::max(get_failsafe_full_ratio(), full_ratio);
 
-  if (full_ratio <= 0 ||
-      nearfull_ratio <= 0) {
+  if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    // use the failsafe for nearfull and full; the mon isn't using the
+    // flags anyway because we're mid-upgrade.
+    full_ratio = failsafe_ratio;
+    nearfull_ratio = failsafe_ratio;
+  } else if (full_ratio <= 0 ||
+	     nearfull_ratio <= 0) {
     derr << __func__ << " full_ratio or nearfull_ratio is <= 0" << dendl;
-    cur_state = NONE;
-    return;
+    // use failsafe flag.  ick.  the monitor did something wrong or the user
+    // did something stupid.
+    full_ratio = failsafe_ratio;
+    nearfull_ratio = failsafe_ratio;
   }
 
   enum s_names new_state;
