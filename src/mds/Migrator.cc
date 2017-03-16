@@ -2396,12 +2396,17 @@ void Migrator::import_remove_pins(CDir *dir, set<CDir*>& bounds)
     in->put_stickydirs();
   }
 
-  if (stat.state >= IMPORT_PREPPED) {
+  if (stat.state == IMPORT_PREPPING) {
+    for (auto bd : bounds) {
+      if (bd->state_test(CDir::STATE_IMPORTBOUND)) {
+	bd->put(CDir::PIN_IMPORTBOUND);
+	bd->state_clear(CDir::STATE_IMPORTBOUND);
+      }
+    }
+  } else if (stat.state >= IMPORT_PREPPED) {
     // bounding dirfrags
-    for (set<CDir*>::iterator it = bounds.begin();
-	 it != bounds.end();
-	 ++it) {
-      CDir *bd = *it;
+    for (auto bd : bounds) {
+      assert(bd->state_test(CDir::STATE_IMPORTBOUND));
       bd->put(CDir::PIN_IMPORTBOUND);
       bd->state_clear(CDir::STATE_IMPORTBOUND);
     }
