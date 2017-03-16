@@ -1580,7 +1580,8 @@ int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist
   }
   // footer
   ebl.append((const char*)&h, sizeof(h));
-  ebl.rebuild_aligned(CEPH_DIRECTIO_ALIGNMENT);
+  if (directio)
+    ebl.rebuild_aligned(CEPH_DIRECTIO_ALIGNMENT);
   tbl->claim(ebl);
   return h.len;
 }
