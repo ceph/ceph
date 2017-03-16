@@ -821,9 +821,9 @@ public:
     return (((uint64_t)cur_epoch) << 32) | ((uint64_t)(next_notif_id++));
   }
 
-  // -- Backfill Request Scheduling --
-  Mutex backfill_request_lock;
-  SafeTimer backfill_request_timer;
+  // -- Recovery/Backfill Request Scheduling --
+  Mutex recovery_request_lock;
+  SafeTimer recovery_request_timer;
 
   // -- tids --
   // for ops i issue

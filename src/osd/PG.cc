@@ -3758,8 +3758,8 @@ void PG::reject_reservation()
 
 void PG::schedule_backfill_full_retry()
 {
-  Mutex::Locker lock(osd->backfill_request_lock);
-  osd->backfill_request_timer.add_event_after(
+  Mutex::Locker lock(osd->recovery_request_lock);
+  osd->recovery_request_timer.add_event_after(
     cct->_conf->osd_backfill_retry_interval,
     new QueuePeeringEvt<RequestBackfill>(
       this, get_osdmap()->get_epoch(),

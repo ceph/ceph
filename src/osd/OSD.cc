@@ -247,8 +247,8 @@ OSDService::OSDService(OSD *osd) :
   watch_lock("OSDService::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
-  backfill_request_lock("OSDService::backfill_request_lock"),
-  backfill_request_timer(cct, backfill_request_lock, false),
+  recovery_request_lock("OSDService::recovery_request_lock"),
+  recovery_request_timer(cct, recovery_request_lock, false),
   last_tid(0),
   reserver_finisher(cct),
   local_reserver(&reserver_finisher, cct->_conf->osd_max_backfills,
@@ -489,8 +489,8 @@ void OSDService::shutdown()
   objecter_finisher.stop();
 
   {
-    Mutex::Locker l(backfill_request_lock);
-    backfill_request_timer.shutdown();
+    Mutex::Locker l(recovery_request_lock);
+    recovery_request_timer.shutdown();
   }
 
   {
@@ -2032,7 +2032,7 @@ int OSD::init()
 
   tick_timer.init();
   tick_timer_without_osd_lock.init();
-  service.backfill_request_timer.init();
+  service.recovery_request_timer.init();
 
   // mount.
   dout(2) << "mounting " << dev_path << " "
