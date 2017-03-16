@@ -592,6 +592,26 @@ namespace librbd {
                                   protection_statuses);
     }
 
+    void get_snapshot_timestamp_start(librados::ObjectReadOperation *op,
+				      const snapid_t snap_id)
+    {
+      bufferlist bl;
+      ::encode(snap_id, bl);
+      op->exec("rbd", "get_snapshot_timestamp", bl);
+    }
+
+    int get_snapshot_timestamp_finish(bufferlist::iterator *it,
+				      utime_t *timestamp)
+    {
+      try {
+        ::decode(*timestamp, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+
+      return 0;
+    }
+
     void snapshot_timestamp_list_start(librados::ObjectReadOperation *op,
                                        const std::vector<snapid_t> &ids)
     {
