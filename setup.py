@@ -62,7 +62,7 @@ setup(
                       'httplib2',
                       'paramiko',
                       'pexpect',
-                      'requests',
+                      'requests != 2.13.0',
                       'raven',
                       'web.py',
                       'docopt',
