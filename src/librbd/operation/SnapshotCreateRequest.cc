@@ -201,6 +201,41 @@ Context *SnapshotCreateRequest<I>::handle_create_snap(int *result) {
     return nullptr;
   }
 
+  return send_get_timestamp();
+}
+
+template <typename I>
+Context *SnapshotCreateRequest<I>::send_get_timestamp() {
+  I &image_ctx = this->m_image_ctx;
+
+  librados::ObjectReadOperation op;
+  cls_client::get_snapshot_timestamp_start(&op, m_snap_id);
+
+  m_out_bl.clear();
+  librados::AioCompletion *rados_completion = create_rados_safe_callback<
+    SnapshotCreateRequest<I>,
+    &SnapshotCreateRequest<I>::handle_get_timestamp>(this);
+  int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid,
+                                       rados_completion, &op,
+				       &m_out_bl);
+
+  assert(r == 0);
+  rados_completion->release();
+  return nullptr;
+}
+
+template <typename I>
+Context *SnapshotCreateRequest<I>::handle_get_timestamp(int *result) {
+  if (*result >= 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::get_snapshot_timestamp_finish(&it, &m_snap_timestamp);
+  }
+
+  if (*result < 0) {
+    save_result(result);
+    send_release_snap_id();
+    return nullptr;
+  }
   return send_create_object_map();
 }
 
@@ -294,9 +329,8 @@ void SnapshotCreateRequest<I>::update_snap_context() {
          image_ctx.exclusive_lock->is_lock_owner());
 
   // immediately add a reference to the new snapshot
-  utime_t snap_time = ceph_clock_now();
   image_ctx.add_snap(m_snap_name, m_snap_namespace, m_snap_id, m_size, m_parent_info,
-                     RBD_PROTECTION_STATUS_UNPROTECTED, 0, snap_time);
+                     RBD_PROTECTION_STATUS_UNPROTECTED, 0, m_snap_timestamp);
 
   // immediately start using the new snap context if we
   // own the exclusive lock

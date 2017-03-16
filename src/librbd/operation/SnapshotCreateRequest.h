@@ -87,6 +87,8 @@ private:
   uint64_t m_snap_id;
   uint64_t m_size;
   parent_info m_parent_info;
+  utime_t m_snap_timestamp;
+  bufferlist m_out_bl;
 
   void send_suspend_requests();
   Context *handle_suspend_requests(int *result);
@@ -102,6 +104,9 @@ private:
 
   void send_create_snap();
   Context *handle_create_snap(int *result);
+
+  Context *send_get_timestamp();
+  Context *handle_get_timestamp(int *result);
 
   Context *send_create_object_map();
   Context *handle_create_object_map(int *result);
