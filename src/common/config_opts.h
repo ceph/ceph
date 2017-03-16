@@ -1446,7 +1446,7 @@ OPTION(rgw_dns_name, OPT_STR, "") // hostname suffix on buckets
 OPTION(rgw_dns_s3website_name, OPT_STR, "") // hostname suffix on buckets for s3-website endpoint
 OPTION(rgw_content_length_compat, OPT_BOOL, false) // Check both HTTP_CONTENT_LENGTH and CONTENT_LENGTH in fcgi env
 OPTION(rgw_lifecycle_work_time, OPT_STR, "00:00-06:00") //job process lc  at 00:00-06:00s
-OPTION(rgw_lc_lock_max_time, OPT_INT, 60)  // total run time for a single gc processor work
+OPTION(rgw_lc_lock_max_time, OPT_INT, 60)  // total run time for a single lc processor work
 OPTION(rgw_lc_max_objs, OPT_INT, 32)
 OPTION(rgw_lc_debug_interval, OPT_INT, -1)  // Debug run interval, in seconds
 OPTION(rgw_script_uri, OPT_STR, "") // alternative value for SCRIPT_URI if not set in request
