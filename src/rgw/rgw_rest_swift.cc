@@ -2228,6 +2228,8 @@ int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
   for (int i = 0; i < len; ++i, ++s) {
     if (*(unsigned char *)s == 0xff)
       return -ERR_INVALID_BUCKET_NAME;
+    if (*(unsigned char *)s == '/')
+      return -ERR_INVALID_BUCKET_NAME;
   }
 
   return 0;
