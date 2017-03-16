@@ -636,7 +636,7 @@ def move_file(remote, from_path, to_path, sudo=False, preserve_perms=True):
         )
 
 
-def delete_file(remote, path, sudo=False, force=False):
+def delete_file(remote, path, sudo=False, force=False, check=True):
     """
     rm a file on a remote site. Use force=True if the call should succeed even
     if the file is absent or rm path would otherwise fail.
@@ -654,6 +654,7 @@ def delete_file(remote, path, sudo=False, force=False):
     remote.run(
         args=args,
         stdout=StringIO(),
+        check_status=check
     )
 
 
