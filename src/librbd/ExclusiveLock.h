@@ -43,6 +43,8 @@ public:
 
   void reacquire_lock(Context *on_reacquired = nullptr);
 
+  int assert_header_locked();
+
   void handle_peer_notification(int r);
 
   static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
