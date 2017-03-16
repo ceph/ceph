@@ -97,7 +97,7 @@ class C_tick_wakeup : public EventCallback {
   }
 };
 
-static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
+static void alloc_aligned_buffer(ConnectedSocket &cs, bufferlist& data, unsigned len, unsigned off)
 {
   // create a buffer to read into that matches the data alignment
   unsigned left = len;
@@ -110,7 +110,7 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
   unsigned middle = left & CEPH_PAGE_MASK;
   if (middle > 0) {
-    data.push_back(buffer::create_page_aligned(middle));
+    cs.alloc_shared_registered_memory(data, middle);
     left -= middle;
   }
   if (left) {
@@ -481,11 +481,6 @@ void AsyncConnection::process()
             goto fail;
           }
 
-          // Reset state
-          data_buf.clear();
-          front.clear();
-          middle.clear();
-          data.clear();
           recv_stamp = ceph_clock_now();
           current_header = header;
           state = STATE_OPEN_MESSAGE_THROTTLE_MESSAGE;
@@ -620,7 +615,7 @@ void AsyncConnection::process()
               data_blp = data_buf.begin();
             } else {
               ldout(async_msgr->cct,20) << __func__ << " allocating new rx buffer at offset " << data_off << dendl;
-              alloc_aligned_buffer(data_buf, data_len, data_off);
+              alloc_aligned_buffer(cs, data_buf, data_len, data_off);
               data_blp = data_buf.begin();
             }
           }
@@ -797,6 +792,12 @@ void AsyncConnection::process()
           } else {
             dispatch_queue->enqueue(message, message->get_priority(), conn_id);
           }
+
+          // Reset state
+          data_buf.clear();
+          front.clear();
+          middle.clear();
+          data.clear();
 
           break;
         }
@@ -2324,6 +2325,12 @@ void AsyncConnection::reset_recv_state()
                                << dispatch_queue->dispatch_throttler.get_max() << dendl;
     dispatch_queue->dispatch_throttle_release(cur_msg_size);
   }
+
+  // Reset state
+  data_buf.clear();
+  front.clear();
+  middle.clear();
+  data.clear();
 }
 
 void AsyncConnection::handle_ack(uint64_t seq)
