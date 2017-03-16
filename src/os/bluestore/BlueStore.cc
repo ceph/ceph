@@ -2899,17 +2899,17 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 // Onode
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.onode(" << this << ") "
+#define dout_prefix *_dout << "bluestore.onode(" << this << ")." << __func__ << " "
 
 void BlueStore::Onode::flush()
 {
   if (flushing_count) {
     std::unique_lock<std::mutex> l(flush_lock);
-    ldout(c->store->cct, 20) << __func__ << " " << flush_txns << dendl;
+    ldout(c->store->cct, 20) << flush_txns << dendl;
     while (!flush_txns.empty())
       flush_cond.wait(l);
   }
-  ldout(c->store->cct, 20) << __func__ << " done" << dendl;
+  ldout(c->store->cct, 20) << "done" << dendl;
 }
 
 // =======================================================
