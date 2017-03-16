@@ -376,6 +376,6 @@ Shell::Action action_remove_image(
 Shell::Action action_list_images(
   {"group", "image", "list"}, {}, "List images in a consistency group.",
   "", &get_list_images_arguments, &execute_list_images);
-} // namespace snap
+} // namespace group
 } // namespace action
 } // namespace rbd
