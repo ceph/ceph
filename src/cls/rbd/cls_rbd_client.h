@@ -111,6 +111,17 @@ namespace librbd {
     int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
 			::SnapContext *snapc);
 
+    void get_snapshot_location_start(librados::ObjectReadOperation *op,
+				     const snapid_t snap_id);
+    int get_snapshot_location_finish(bufferlist::iterator *it,
+				     snapid_t *prev_snap,
+				     set<snapid_t> *next_snaps);
+    void snapshot_location_list_start(librados::ObjectReadOperation *op,
+				      const std::vector<snapid_t> &ids);
+    int snapshot_location_list_finish(bufferlist::iterator *it,
+                                      const std::vector<snapid_t> &ids,
+                                      std::vector<snapid_t> *prev_snaps,
+				      std::vector<std::set<snapid_t>> *next_snaps_vec);
     void get_snapshot_timestamp_start(librados::ObjectReadOperation *op,
 				      const snapid_t snap_id);
     int get_snapshot_timestamp_finish(bufferlist::iterator *it,

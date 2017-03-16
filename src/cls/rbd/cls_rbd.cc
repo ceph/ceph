@@ -1484,6 +1484,36 @@ int get_snapshot_timestamp(cls_method_context_t hctx, bufferlist *in, bufferlist
   return 0;
 }
 
+int get_snapshot_location(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+  
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "get_snapshot_location snap_id=%llu", (unsigned long long)snap_id);
+
+  if (snap_id == CEPH_NOSNAP) {
+    return -EINVAL;
+  }
+  
+  cls_rbd_snap snap;
+  string snapshot_key;
+  key_from_snap_id(snap_id, &snapshot_key);
+  int r = read_key(hctx, snapshot_key, &snap);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(snap.prev_snap, *out);
+  ::encode(snap.next_snaps, *out);
+  return 0;
+}
+
 /**
  * Retrieve namespace of a snapshot.
  *
@@ -5079,6 +5109,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_get_snapshot_name;
   cls_method_handle_t h_get_snapshot_namespace;
   cls_method_handle_t h_get_snapshot_timestamp;
+  cls_method_handle_t h_get_snapshot_location;
   cls_method_handle_t h_snapshot_add;
   cls_method_handle_t h_snapshot_remove;
   cls_method_handle_t h_snapshot_rename;
@@ -5177,6 +5208,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "get_snapshot_timestamp",
 			  CLS_METHOD_RD,
 			  get_snapshot_timestamp, &h_get_snapshot_timestamp);
+  cls_register_cxx_method(h_class, "get_snapshot_location",
+			  CLS_METHOD_RD,
+			  get_snapshot_location, &h_get_snapshot_location);
   cls_register_cxx_method(h_class, "snapshot_add",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  snapshot_add, &h_snapshot_add);

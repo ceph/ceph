@@ -592,6 +592,60 @@ namespace librbd {
                                   protection_statuses);
     }
 
+    void get_snapshot_location_start(librados::ObjectReadOperation *op,
+				     const snapid_t snap_id)
+    {
+      bufferlist bl;
+      ::encode(snap_id, bl);
+      op->exec("rbd", "get_snapshot_location", bl);
+    }
+
+    int get_snapshot_location_finish(bufferlist::iterator *it,
+				     snapid_t *prev_snap,
+				     set<snapid_t> *next_snaps)
+    {
+      try {
+        ::decode(*prev_snap, *it);
+        ::decode(*next_snaps, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    void snapshot_location_list_start(librados::ObjectReadOperation *op,
+				      const std::vector<snapid_t> &ids)
+    {
+      for (auto snap_id : ids) {
+	get_snapshot_location_start(op, snap_id);
+      }
+    }
+
+    int snapshot_location_list_finish(bufferlist::iterator *it,
+                                      const std::vector<snapid_t> &ids,
+                                      std::vector<snapid_t> *prev_snaps,
+				      std::vector<std::set<snapid_t>> *next_snaps_vec)
+    {
+      prev_snaps->resize(ids.size());
+      next_snaps_vec->resize(ids.size());
+      try {
+        for (size_t i = 0; i < prev_snaps->size(); ++i) {
+	  snapid_t prev_snap;
+	  std::set<snapid_t> next_snaps;
+          ::decode(prev_snap, *it);
+          (*prev_snaps)[i] = prev_snap;
+          ::decode(next_snaps, *it);
+	  for (auto snap_id : next_snaps) {
+	    (*next_snaps_vec)[i].insert(snap_id);
+	  }
+        }
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
     void get_snapshot_timestamp_start(librados::ObjectReadOperation *op,
 				      const snapid_t snap_id)
     {
