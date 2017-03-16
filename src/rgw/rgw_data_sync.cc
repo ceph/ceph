@@ -1432,6 +1432,8 @@ class RGWDataSyncCR : public RGWCoroutine {
   bool *reset_backoff;
 
   RGWDataSyncDebugLogger logger;
+
+  RGWDataSyncModule *data_sync_module{nullptr};
 public:
   RGWDataSyncCR(RGWDataSyncEnv *_sync_env, uint32_t _num_shards, bool *_reset_backoff) : RGWCoroutine(_sync_env->cct),
                                                       sync_env(_sync_env),
@@ -1439,6 +1441,7 @@ public:
                                                       marker_tracker(NULL),
                                                       shard_crs_lock("RGWDataSyncCR::shard_crs_lock"),
                                                       reset_backoff(_reset_backoff), logger(sync_env, "Data", "all") {
+
   }
 
   ~RGWDataSyncCR() override {
@@ -1474,6 +1477,9 @@ public:
       }
 
       if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateBuildingFullSyncMaps) {
+        /* call sync module init here */
+        data_sync_module = sync_env->sync_module->get_data_handler();
+        call(data_sync_module->init_sync(sync_env));
         /* state: building full sync maps */
         ldout(sync_env->cct, 20) << __func__ << "(): building full sync maps" << dendl;
         yield call(new RGWListBucketIndexesCR(sync_env, &sync_status));
