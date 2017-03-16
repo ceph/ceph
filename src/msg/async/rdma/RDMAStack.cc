@@ -22,6 +22,7 @@
 #include "common/deleter.h"
 #include "common/Tub.h"
 #include "RDMAStack.h"
+#include "Device.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix

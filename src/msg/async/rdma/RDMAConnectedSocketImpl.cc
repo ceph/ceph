@@ -15,6 +15,7 @@
  */
 
 #include "RDMAStack.h"
+#include "Device.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -27,13 +28,16 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* i
     is_server(false), con_handler(new C_handle_connection(this)),
     active(false)
 {
+  ibdev = ib->get_device();
+  ibport = ib->get_ib_physical_port();
+
   qp = infiniband->create_queue_pair(
 				     cct, s->get_tx_cq(), s->get_rx_cq(), IBV_QPT_RC);
   my_msg.qpn = qp->get_local_qp_number();
   my_msg.psn = qp->get_initial_psn();
-  my_msg.lid = infiniband->get_lid();
+  my_msg.lid = ibdev->get_lid();
   my_msg.peer_qpn = 0;
-  my_msg.gid = infiniband->get_gid();
+  my_msg.gid = ibdev->get_gid();
   notify_fd = dispatcher->register_qp(qp, this);
   dispatcher->perf_logger->inc(l_msgr_rdma_created_queue_pair);
   dispatcher->perf_logger->inc(l_msgr_rdma_active_queue_pair);
@@ -581,7 +585,10 @@ void RDMAConnectedSocketImpl::cleanup() {
 void RDMAConnectedSocketImpl::notify()
 {
   uint64_t i = 1;
-  write(notify_fd, &i, sizeof(i));
+  int ret;
+
+  ret = write(notify_fd, &i, sizeof(i));
+  assert(ret = sizeof(i));
 }
 
 void RDMAConnectedSocketImpl::shutdown()
