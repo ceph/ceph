@@ -177,6 +177,133 @@ int do_clear_limit(librbd::Image& image)
   return image.snap_set_limit(UINT64_MAX);
 }
 
+class SnapTreeNode {
+public:
+  string m_name;
+  uint64_t m_id;
+  uint64_t m_parent_id;
+
+  SnapTreeNode *m_parent;
+  std::vector<struct SnapTreeNode *> m_children;
+
+  SnapTreeNode(string name, uint64_t id, uint64_t parent_id)
+    : m_name(name), m_id(id), m_parent_id(parent_id), m_parent(NULL) {
+    m_children.clear();
+  }
+
+  void add_child(class SnapTreeNode *child) {
+    m_children.push_back(child);
+    child->m_parent = this;
+  }
+
+  bool operator() (const SnapTreeNode &a, const SnapTreeNode &b) const {
+    if (a.m_id <= b.m_id) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
+void print_tree_node(class SnapTreeNode *node, string prefix, Formatter *f)
+{
+  unsigned int size = 0;
+
+  if (f) {
+    f->open_object_section("children");
+  }
+
+  for (auto child : node->m_children) {
+    string tmpprefix = prefix;
+    if (size == (node->m_children.size() - 1)) {
+      tmpprefix.replace(tmpprefix.size()-3, 3, "└─");
+      prefix.replace(prefix.size()-3, 3, " ");
+    } else {
+      tmpprefix.replace(tmpprefix.size()-3, 3, "├─");
+    }
+    if (f) {
+      f->open_object_section("child");
+      f->dump_unsigned("id", child->m_id);
+      f->dump_string("name", child->m_name);
+      f->close_section();
+    } else {
+      cout << tmpprefix << child->m_name << endl;
+    }
+    print_tree_node(child, prefix + "   │", f);
+
+    size++;
+  }
+
+  if (f) {
+    f->close_section();
+  }
+
+  return;
+}
+
+int do_show_tree(librbd::Image& image, Formatter *f)
+{
+  set<uint64_t> next_snaps;
+  uint64_t prev_snap;
+  std::vector<librbd::snap_info_t> snaps;
+  TextTable t;
+  int r;
+
+  r = image.snap_list(snaps);
+  if (r < 0)
+    return r;
+
+  std::set<SnapTreeNode *> tree_node_set;
+  std::set<SnapTreeNode *> ophan_node_set;
+
+  SnapTreeNode init("[INIT]", 0, 0);
+  tree_node_set.insert(&init);
+
+  librbd::snap_info_t head_location;
+  r = image.get_head_location(&head_location);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+  SnapTreeNode head("[HEAD]", UINT_MAX, head_location.id);
+  ophan_node_set.insert(&head);
+
+  for (auto snap : snaps) {
+    r = image.snap_get_location(snap.id, &prev_snap, &next_snaps);
+    ophan_node_set.insert(new SnapTreeNode(snap.name, snap.id, prev_snap));
+  }
+
+  unsigned int ophan_size = ophan_node_set.size();
+  do {
+    for (auto ophan : ophan_node_set) {
+      for (auto node : tree_node_set) {
+	if (node->m_id == ophan->m_parent_id) {
+	  node->add_child(ophan);
+	  tree_node_set.insert(ophan);
+	  ophan_node_set.erase(ophan);
+	}
+      }
+    }
+    if (ophan_size <= ophan_node_set.size()) {
+      break;
+    }
+    ophan_size = ophan_node_set.size();
+  } while (!ophan_node_set.empty());
+
+  if (f) {
+    f->open_array_section("tree");
+  } else {
+    cout << init.m_name << endl;
+  }
+
+  print_tree_node(&init, "   │", f);
+
+  if (f) {
+    f->close_section();
+    f->flush(std::cout);
+  }
+  return 0;
+}
+
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -619,6 +746,49 @@ int execute_rename(const po::variables_map &vm) {
   return 0;
 }
 
+void get_tree_arguments(po::options_description *pos,
+			po::options_description *opt) {
+  at::add_image_spec_options(pos, opt, at::ARGUMENT_MODIFIER_NONE);
+  at::add_format_options(opt);
+}
+
+int execute_tree(const po::variables_map &vm) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string image_name;
+  std::string snap_name;
+
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
+    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
+
+  at::Format::Formatter formatter;
+  r = utils::get_formatter(vm, &formatter);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  librbd::Image image;
+  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
+				 &io_ctx, &image);
+  if (r < 0) {
+      return r;
+  }
+
+  r = do_show_tree(image, formatter.get());
+  if (r < 0) {
+    std::cerr << "rbd: show the snapshot tree failed: " << cpp_strerror(r)
+	      << std::endl;
+    return r;
+  }
+  return 0;
+}
+
 Shell::Action action_list(
   {"snap", "list"}, {"snap", "ls"}, "Dump list of image snapshots.", "",
   &get_list_arguments, &execute_list);
@@ -649,6 +819,9 @@ Shell::Action action_clear_limit(
 Shell::Action action_rename(
   {"snap", "rename"}, {}, "Rename a snapshot.", "",
   &get_rename_arguments, &execute_rename);
+Shell::Action action_tree(
+  {"snap", "tree"}, {}, "Show the snapshot tree.", "",
+  &get_tree_arguments, &execute_tree);
 
 } // namespace snap
 } // namespace action
