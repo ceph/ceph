@@ -370,7 +370,7 @@ addresses.
 ``ms bind ipv6``
 
 :Description: Enables Ceph daemons to bind to IPv6 addresses. Currently the
-messenger *either* uses IPv4 or IPv6, but it can't do both.
+              messenger *either* uses IPv4 or IPv6, but it can't do both.
 :Type: Boolean
 :Default: ``false``
 :Required: No
