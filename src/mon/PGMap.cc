@@ -1423,7 +1423,6 @@ void PGMap::cache_io_rate_summary(Formatter *f, ostream *out,
       if (have_output)
 	*out << ", ";
       *out << pretty_si_t(pos_delta.stats.sum.num_evict_mode_full) << "PG(s) evicting (full)";
-      have_output = true;
     }
   }
 }
