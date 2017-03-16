@@ -921,6 +921,16 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
   check_full_status(osd_stat);
 }
 
+bool OSDService::check_osdmap_full(const set<pg_shard_t> &missing_on)
+{
+  OSDMapRef osdmap = get_osdmap();
+  for (auto shard : missing_on) {
+    if (osdmap->get_state(shard.osd) & CEPH_OSD_FULL)
+      return true;
+  }
+  return false;
+}
+
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
 {
   OSDMapRef next_map = get_nextmap_reserved();

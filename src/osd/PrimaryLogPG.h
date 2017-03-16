@@ -1732,6 +1732,7 @@ public:
   void on_removal(ObjectStore::Transaction *t) override;
   void on_shutdown() override;
   bool check_failsafe_full(ostream &ss) override;
+  bool check_osdmap_full(const set<pg_shard_t> &missing_on) override;
 
   // attr cache handling
   void setattr_maybe_cache(

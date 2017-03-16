@@ -13031,6 +13031,11 @@ void PrimaryLogPG::_scrub_finish()
   }
 }
 
+bool PrimaryLogPG::check_osdmap_full(const set<pg_shard_t> &missing_on)
+{
+    return osd->check_osdmap_full(missing_on);
+}
+
 /*---SnapTrimmer Logging---*/
 #undef dout_prefix
 #define dout_prefix *_dout << pg->gen_prefix() 
