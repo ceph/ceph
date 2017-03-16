@@ -80,6 +80,8 @@ private:
   // State for while in reconnect
   MDSInternalContext *reconnect_done;
   int failed_reconnects;
+  bool reconnect_evicting;  // true if I am waiting for evictions to complete
+                            // before proceeding to reconnect_gather_finish
 
   friend class MDSContinuation;
   friend class ServerContext;
