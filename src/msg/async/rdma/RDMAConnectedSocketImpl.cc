@@ -14,6 +14,8 @@
  *
  */
 
+#include "common/deleter.h"
+
 #include "RDMAStack.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -481,8 +483,11 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
           goto sending;
         need_reserve_bytes = 0;
       }
+      ldout(cct, 30) << __func__ << " this is registered memory." << dendl;
       assert(copy_it == it);
-      tx_buffers.push_back(infiniband->get_tx_chunk_by_buffer(it->raw_c_str()));
+      auto chunk = infiniband->get_tx_chunk_by_buffer(it->raw_c_str());
+      ++chunk->shared;
+      tx_buffers.push_back(chunk);
       total += it->length();
       ++copy_it;
     } else {
@@ -611,7 +616,6 @@ void RDMAConnectedSocketImpl::shutdown()
   if (!error)
     fin();
   error = ECONNRESET;
-  active = false;
 }
 
 void RDMAConnectedSocketImpl::close()
@@ -620,6 +624,36 @@ void RDMAConnectedSocketImpl::close()
     fin();
   error = ECONNRESET;
   active = false;
+}
+
+void RDMAConnectedSocketImpl::alloc_shared_registered_memory(bufferlist &bl, unsigned len)
+{
+  assert(worker->center.in_thread());
+  std::vector<Chunk*> buffers;
+  int r = ibdev->get_tx_buffers(buffers, len);
+  assert(r >= 0);
+  dispatcher->inflight += r;
+  unsigned got = ibdev->get_memory_manager()->get_tx_buffer_size() * r;
+  ldout(cct, 30) << __func__ << " need " << len << " bytes, reserve " << got
+                 << " registered  bytes, inflight " << dispatcher->inflight << dendl;
+  // must keep the reference to the device, since bufferptr may be destruct
+  // after connection down
+  Device *dev = ibdev;
+  RDMADispatcher *dpt = dispatcher;
+  for (auto c : buffers) {
+    auto del = std::bind([dpt, c, dev] {
+                         std::vector<Chunk*> buffers;
+                         buffers.push_back(c);
+                         dpt->post_tx_buffer(dev, buffers); });
+    bl.push_back(buffer::claim_buffer(
+            c->bytes, c->buffer,
+            make_deleter(std::move(del))));
+  }
+
+  if (got < len) {
+    dispatcher->perf_logger->inc(l_msgr_rdma_tx_no_registered_mem);
+    bl.push_back(buffer::create_page_aligned(len - got));
+  }
 }
 
 void RDMAConnectedSocketImpl::fault()

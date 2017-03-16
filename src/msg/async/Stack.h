@@ -34,6 +34,11 @@ class ConnectedSocketImpl {
   virtual void shutdown() = 0;
   virtual void close() = 0;
   virtual int fd() const = 0;
+
+  // backend need to override this method if providing registered memory
+  virtual void alloc_shared_registered_memory(bufferlist &bl, unsigned len) {
+    bl.push_back(buffer::create_page_aligned(len));
+  }
 };
 
 class ConnectedSocket;
@@ -129,6 +134,10 @@ class ConnectedSocket {
 
   explicit operator bool() const {
     return _csi.get();
+  }
+
+  void alloc_shared_registered_memory(bufferlist &bl, unsigned len) {
+    _csi->alloc_shared_registered_memory(bl, len);
   }
 };
 /// @}
