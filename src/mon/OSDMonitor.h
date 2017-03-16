@@ -114,7 +114,7 @@ class OSDMonitor : public PaxosService {
   CephContext *cct;
 
   ParallelPGMapper mapper;                        ///< for background pg work
-  unique_ptr<OSDMapMapping> mapping;              ///< pg <-> osd mappings
+  OSDMapMapping mapping;                          ///< pg <-> osd mappings
   unique_ptr<ParallelPGMapper::Job> mapping_job;  ///< background mapping job
 
 public:
