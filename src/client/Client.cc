@@ -8329,15 +8329,10 @@ int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 }
 
 
- Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
+Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
 {
   assert(in);
-  Fh *f = new Fh(in);
-  f->mode = cmode;
-  f->flags = flags;
-
-  // inode
-  f->actor_perms = perms;
+  Fh *f = new Fh(in, flags, cmode, perms);
 
   ldout(cct, 10) << "_create_fh " << in->ino << " mode " << cmode << dendl;
 

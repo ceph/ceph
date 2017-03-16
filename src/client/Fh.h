@@ -44,7 +44,8 @@ struct Fh {
       return e;
   }
   
-  Fh(Inode *in);
+  Fh() = delete;
+  Fh(InodeRef in, int flags, int cmode, const UserPerm &perms);
   ~Fh();
   void get() { ++_ref; }
   int put() { return --_ref; }
