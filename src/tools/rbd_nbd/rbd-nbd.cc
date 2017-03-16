@@ -59,15 +59,15 @@
 
 static void usage()
 {
-  std::cout << "Usage: rbd-nbd [options] map <image-or-snap-spec>  Map a image to nbd device\n"
+  std::cout << "Usage: rbd-nbd [options] map <image-or-snap-spec>  Map an image to nbd device\n"
             << "               unmap <device path>                 Unmap nbd device\n"
             << "               list-mapped                         List mapped nbd devices\n"
             << "Options:\n"
-            << "  --device <device path>                    Specify nbd device path\n"
-            << "  --read-only                               Map readonly\n"
-            << "  --nbds_max <limit>                        Override for module param nbds_max\n"
-            << "  --max_part <limit>                        Override for module param max_part\n"
-            << "  --exclusive                               Forbid other clients write\n"
+            << "  --device <device path>  Specify nbd device path\n"
+            << "  --read-only             Map readonly\n"
+            << "  --nbds_max <limit>      Override for module param nbds_max\n"
+            << "  --max_part <limit>      Override for module param max_part\n"
+            << "  --exclusive             Forbid other clients write\n"
             << std::endl;
   generic_server_usage();
 }
@@ -514,7 +514,7 @@ static int do_map(int argc, const char *argv[])
   librados::IoCtx io_ctx;
   librbd::Image image;
 
-  int read_only;
+  int read_only = 0;
   unsigned long flags;
   unsigned long size;
 
@@ -608,8 +608,10 @@ static int do_map(int argc, const char *argv[])
   }
 
   flags = NBD_FLAG_SEND_FLUSH | NBD_FLAG_SEND_TRIM | NBD_FLAG_HAS_FLAGS;
-  if (!snapname.empty() || readonly)
+  if (!snapname.empty() || readonly) {
     flags |= NBD_FLAG_READ_ONLY;
+    read_only = 1;
+  }
 
   r = rados.init_with_context(g_ceph_context);
   if (r < 0)
@@ -674,7 +676,6 @@ static int do_map(int argc, const char *argv[])
 
   ioctl(nbd, NBD_SET_FLAGS, flags);
 
-  read_only = snapname.empty() ? 0 : 1;
   r = ioctl(nbd, BLKROSET, (unsigned long) &read_only);
   if (r < 0) {
     r = -errno;
