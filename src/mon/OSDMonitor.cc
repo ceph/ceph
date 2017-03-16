@@ -380,15 +380,12 @@ void OSDMonitor::on_active()
 	     << dendl;
     mapping_job->abort();
   }
-  if (g_conf->mon_osd_prime_pg_temp) {
-    C_PrintTime *fin = new C_PrintTime(osdmap.get_epoch());
-    mapping.reset(new OSDMapMapping);
-    mapping_job = mapping->start_update(osdmap, mapper,
-					g_conf->mon_osd_mapping_pgs_per_chunk);
-    dout(10) << __func__ << " started mapping job " << mapping_job.get()
-	     << " at " << fin->start << dendl;
-    mapping_job->set_finish_event(fin);
-  }
+  C_PrintTime *fin = new C_PrintTime(osdmap.get_epoch());
+  mapping_job = mapping.start_update(osdmap, mapper,
+				     g_conf->mon_osd_mapping_pgs_per_chunk);
+  dout(10) << __func__ << " started mapping job " << mapping_job.get()
+	   << " at " << fin->start << dendl;
+  mapping_job->set_finish_event(fin);
 }
 
 void OSDMonitor::on_shutdown()
@@ -1047,13 +1044,13 @@ void OSDMonitor::maybe_prime_pg_temp()
 
   if (!all) {
     unsigned estimate =
-      mapping->get_osd_acting_pgs(*osds.begin()).size() * osds.size();
-    if (estimate > mapping->get_num_pgs() *
+      mapping.get_osd_acting_pgs(*osds.begin()).size() * osds.size();
+    if (estimate > mapping.get_num_pgs() *
 	g_conf->mon_osd_prime_pg_temp_max_estimate) {
       dout(10) << __func__ << " estimate " << estimate << " pgs on "
 	       << osds.size() << " osds >= "
 	       << g_conf->mon_osd_prime_pg_temp_max_estimate << " of total "
-	       << mapping->get_num_pgs() << " pgs, all"
+	       << mapping.get_num_pgs() << " pgs, all"
 	       << dendl;
       all = true;
     } else {
@@ -1085,7 +1082,7 @@ void OSDMonitor::maybe_prime_pg_temp()
     int n = chunk;
     std::unordered_set<pg_t> did_pgs;
     for (auto osd : osds) {
-      auto& pgs = mapping->get_osd_acting_pgs(osd);
+      auto& pgs = mapping.get_osd_acting_pgs(osd);
       dout(20) << __func__ << " osd." << osd << " " << pgs << dendl;
       for (auto pgid : pgs) {
 	if (!did_pgs.insert(pgid).second) {
@@ -1117,7 +1114,7 @@ void OSDMonitor::prime_pg_temp(
   }
 
   vector<int> up, acting;
-  mapping->get(pgid, &up, nullptr, &acting, nullptr);
+  mapping.get(pgid, &up, nullptr, &acting, nullptr);
 
   vector<int> next_up, next_acting;
   int next_up_primary, next_acting_primary;
@@ -1158,16 +1155,16 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   int r = pending_inc.propagate_snaps_to_tiers(g_ceph_context, osdmap);
   assert(r == 0);
 
-  if (mapping && mapping_job) {
+  if (mapping_job) {
     if (!mapping_job->is_done()) {
       dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
 	      << mapping_job.get() << " did not complete, "
 	      << mapping_job->shards << " left" << dendl;
       mapping_job->abort();
-    } else if (mapping->get_epoch() == osdmap.get_epoch()) {
+    } else if (mapping.get_epoch() == osdmap.get_epoch()) {
       dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
 	      << mapping_job.get() << " is prior epoch "
-	      << mapping->get_epoch() << dendl;
+	      << mapping.get_epoch() << dendl;
     } else {
       if (g_conf->mon_osd_prime_pg_temp) {
 	maybe_prime_pg_temp();
