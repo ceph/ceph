@@ -853,6 +853,42 @@ namespace librbd {
       op->exec("rbd", "snapshot_set_limit", in);
     }
 
+    int get_snapshot_location(librados::IoCtx *ioctx, const std::string &oid,
+			      uint64_t *snap_location)
+    {
+      bufferlist in, out;
+      int r =  ioctx->exec(oid, "rbd", "get_snapshot_location", in, out);
+
+      if (r < 0) {
+	return r;
+      }
+
+      try {
+	bufferlist::iterator iter = out.begin();
+	::decode(*snap_location, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    void set_snapshot_location(librados::ObjectWriteOperation *op,
+			       uint64_t snap_id)
+    {
+      bufferlist in;
+      ::encode(snap_id, in);
+      op->exec("rbd", "set_snapshot_location", in);
+    }
+
+    int set_snapshot_location(librados::IoCtx *ioctx, const std::string &oid,
+			      uint64_t snap_id)
+    {
+      librados::ObjectWriteOperation op;
+      set_snapshot_location(&op, snap_id);
+      return ioctx->operate(oid, &op);
+    }
+
     void get_stripe_unit_count_start(librados::ObjectReadOperation *op) {
       bufferlist empty_bl;
       op->exec("rbd", "get_stripe_unit_count", empty_bl);

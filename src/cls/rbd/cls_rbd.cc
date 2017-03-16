@@ -1524,6 +1524,42 @@ int get_snapshot_namespace(cls_method_context_t hctx, bufferlist *in, bufferlist
   return 0;
 }
 
+int snapshot_add_next(cls_method_context_t hctx, uint64_t snap_id, uint64_t next)
+{
+  cls_rbd_snap snap;
+  string snapshot_key;
+  key_from_snap_id(snap_id, &snapshot_key);
+  int r = read_key(hctx, snapshot_key, &snap);
+  if (r < 0) {
+    CLS_ERR("error read previeus snapshot metadatas: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  snap.next_snaps.insert(next);
+
+  bufferlist snap_metabl;
+  ::encode(snap, snap_metabl);
+
+  map<string, bufferlist> vals;
+  vals[snapshot_key] = snap_metabl;
+  r = cls_cxx_map_set_vals(hctx, &vals);
+  if (r < 0) {
+    CLS_ERR("error writing previous snapshot metadatas: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+int snapshot_set_location(cls_method_context_t hctx, uint64_t snap_id)
+{
+  bufferlist bl;
+  ::encode(snap_id, bl);
+  int r = cls_cxx_map_set_val(hctx, "snap_location", &bl);
+
+  return r;
+}
+
 /**
  * Adds a snapshot to an rbd header. Ensures the id and name are unique.
  *
@@ -1571,6 +1607,18 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   // snap_seq must be monotonically increasing.
   if (snap_meta.id < cur_snap_seq)
     return -ESTALE;
+
+  r = read_key(hctx, "snap_location", &snap_meta.prev_snap);
+  if (r == -ENOENT) {
+    r = 0;
+    snap_meta.prev_snap = 0;
+  }
+  if (r < 0) {
+    CLS_ERR("Could not read prev_snap off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  snap_meta.next_snaps.clear();
 
   r = read_key(hctx, "size", &snap_meta.image_size);
   if (r < 0) {
@@ -1664,6 +1712,20 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  r = snapshot_set_location(hctx, snap_meta.id);
+  if (r < 0) {
+    CLS_ERR("error set snap_location to snap: %llu : %s", (unsigned long long)snap_meta.id.val,
+	    cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (snap_meta.prev_snap != 0) {
+    r = snapshot_add_next(hctx, snap_meta.prev_snap, snap_meta.id);
+    CLS_ERR("error add %llu as next to %lu : %s", (unsigned long long)snap_meta.id.val, snap_meta.prev_snap,
+	    cpp_strerror(r).c_str());
+    return r;
+  }
+
   return 0;
 }
 
@@ -1744,6 +1806,66 @@ int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   return 0;
 }
+
+int snapshot_remove_prev(cls_method_context_t hctx, set<uint64_t> next_snaps, uint64_t prev_snap)
+{
+  cls_rbd_snap snap;
+  string snapshot_key;
+  bufferlist snap_metabl;
+  map<string, bufferlist> vals;
+
+  for (auto snap_id : next_snaps) {
+    CLS_ERR("error ydsyds next: %lu", snap_id);
+    key_from_snap_id(snap_id, &snapshot_key);
+    int r = read_key(hctx, snapshot_key, &snap);
+    if (r < 0) {
+      CLS_ERR("error read next snapshot %lu metadatas: %s", snap_id, cpp_strerror(r).c_str());
+      return r;
+    }
+
+    snap.prev_snap = prev_snap;
+
+    snap_metabl.clear();
+    vals.clear();
+    ::encode(snap, snap_metabl);
+    vals[snapshot_key] = snap_metabl;
+    r = cls_cxx_map_set_vals(hctx, &vals);
+    if (r < 0) {
+      CLS_ERR("error writing next snapshot %lu metadatas: %s", snap_id, cpp_strerror(r).c_str());
+      return r;
+    }
+  }
+
+  return 0;
+}
+
+int snapshot_remove_next(cls_method_context_t hctx, uint64_t prev_snap, set<uint64_t> next_snaps)
+{
+  cls_rbd_snap snap;
+  string snapshot_key;
+  key_from_snap_id(prev_snap, &snapshot_key);
+  int r = read_key(hctx, snapshot_key, &snap);
+  if (r < 0) {
+    CLS_ERR("error read previeus snapshot %lu metadatas: %s", prev_snap, cpp_strerror(r).c_str());
+    return r;
+  }
+
+  snap.next_snaps.insert(next_snaps.begin(), next_snaps.end());
+
+  bufferlist snap_metabl;
+  ::encode(snap, snap_metabl);
+
+  map<string, bufferlist> vals;
+  vals[snapshot_key] = snap_metabl;
+  r = cls_cxx_map_set_vals(hctx, &vals);
+  if (r < 0) {
+    CLS_ERR("error writing previous snapshot metadatas: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
 /**
  * Removes a snapshot from an rbd header.
  *
@@ -1755,6 +1877,7 @@ int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  */
 int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  CLS_ERR("error ydsyds into snapshot_remove");
   snapid_t snap_id;
 
   try {
@@ -1783,6 +1906,27 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   r = cls_cxx_map_remove_key(hctx, snapshot_key);
   if (r < 0) {
     CLS_ERR("error writing snapshot metadata: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  r = snapshot_remove_prev(hctx, snap.next_snaps, snap.prev_snap);
+  if (r < 0) {
+    CLS_ERR("error setting the .prev_snap of next_snaps to this.prev_snap: %s",
+	    cpp_strerror(r).c_str());
+    return r;
+  }
+
+  r = snapshot_remove_next(hctx, snap.prev_snap, snap.next_snaps);
+  if (r < 0) {
+    CLS_ERR("error appending this.next_snaps to prev_snap.next_snaps: %s",
+	    cpp_strerror(r).c_str());
+    return r;
+  }
+
+  r = snapshot_set_location(hctx, snap.prev_snap);
+  if (r < 0) {
+    CLS_ERR("error set snap_location to this.prev_snap: %s",
+	    cpp_strerror(r).c_str());
     return r;
   }
 
@@ -2780,6 +2924,43 @@ int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
     ::encode(new_limit, bl);
     rc = cls_cxx_map_set_val(hctx, "snap_limit", &bl);
   }
+
+  return rc;
+}
+
+int get_snapshot_location(cls_method_context_t hctx, bufferlist *in,
+		          bufferlist *out)
+{
+  uint64_t snap_location;
+  int r = read_key(hctx, "snap_location", &snap_location);
+  if (r < 0) {
+    CLS_ERR("error retrieving snapshot location: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  CLS_LOG(20, "read snapshot location %lu", snap_location);
+  ::encode(snap_location, *out);
+
+  return 0;
+}
+
+int set_snapshot_location(cls_method_context_t hctx, bufferlist *in,
+		          bufferlist *out)
+{
+  int rc;
+  uint64_t new_location;
+  bufferlist bl;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(new_location, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "set snapshot location to %lu\n", new_location);
+  ::encode(new_location, bl);
+  rc = cls_cxx_map_set_val(hctx, "snap_location", &bl);
 
   return rc;
 }
@@ -4925,6 +5106,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_metadata_get;
   cls_method_handle_t h_snapshot_get_limit;
   cls_method_handle_t h_snapshot_set_limit;
+  cls_method_handle_t h_get_snapshot_location;
+  cls_method_handle_t h_set_snapshot_location;
   cls_method_handle_t h_old_snapshots_list;
   cls_method_handle_t h_old_snapshot_add;
   cls_method_handle_t h_old_snapshot_remove;
@@ -5056,6 +5239,12 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "snapshot_set_limit",
 			  CLS_METHOD_WR,
 			  snapshot_set_limit, &h_snapshot_set_limit);
+  cls_register_cxx_method(h_class, "get_snapshot_location",
+			  CLS_METHOD_RD,
+			  get_snapshot_location, &h_get_snapshot_location);
+  cls_register_cxx_method(h_class, "set_snapshot_location",
+			  CLS_METHOD_WR,
+			  set_snapshot_location, &h_set_snapshot_location);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",

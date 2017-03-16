@@ -165,6 +165,13 @@ namespace librbd {
     void snapshot_set_limit(librados::ObjectWriteOperation *op,
 			    uint64_t limit);
 
+    int get_snapshot_location(librados::IoCtx *ioctx, const std::string &oid,
+			      uint64_t *snap_location);
+    void set_snapshot_location(librados::ObjectWriteOperation *op,
+			       uint64_t snap_id);
+    int set_snapshot_location(librados::IoCtx *ioctx, const std::string &oid,
+			      uint64_t snap_id);
+
     void get_stripe_unit_count_start(librados::ObjectReadOperation *op);
     int get_stripe_unit_count_finish(bufferlist::iterator *it,
                                      uint64_t *stripe_unit,

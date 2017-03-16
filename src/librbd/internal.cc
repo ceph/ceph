@@ -1261,6 +1261,68 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
+  int get_snapshot_location(ImageCtx *ictx, snap_info_t *snap_location)
+  {
+    uint64_t snap_id;
+    int r = cls_client::get_snapshot_location(&ictx->md_ctx, ictx->header_oid,
+					      &snap_id);
+    if (r < 0) {
+      return r;
+    }
+
+    r = ictx->state->refresh_if_required();
+    if (r < 0)
+      return r;
+
+    RWLock::RLocker l(ictx->snap_lock);
+    std::map<librados::snap_t, SnapInfo>::iterator snap_it =
+      ictx->snap_info.find(snap_id);
+    if (snap_it != ictx->snap_info.end()) {
+      snap_location->name = snap_it->second.name;
+      snap_location->id = snap_it->first;
+      snap_location->size = snap_it->second.size;
+    } else {
+      return -ENOENT;
+    }
+
+    return 0;
+  }
+
+  int set_snapshot_location(ImageCtx *ictx, uint64_t snap_id)
+  {
+    if (ictx->read_only) {
+      return -EROFS;
+    }
+
+    int r = ictx->state->refresh_if_required();
+    if (r < 0) {
+      return r;
+    }
+
+    {
+      RWLock::RLocker owner_lock(ictx->owner_lock);
+      C_SaferCond ctx;
+
+      if (ictx->exclusive_lock != nullptr &&
+	  !ictx->exclusive_lock->is_lock_owner()) {
+	C_SaferCond lock_ctx;
+
+	ictx->exclusive_lock->acquire_lock(&lock_ctx);
+	r = lock_ctx.wait();
+	if (r < 0) {
+	  return r;
+	}
+      }
+
+      RWLock::RLocker md_locker(ictx->md_lock);
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      r = cls_client::set_snapshot_location(&ictx->md_ctx, ictx->header_oid, 
+					    snap_id);
+    }
+
+    return r;
+  }
+
   int get_flags(ImageCtx *ictx, uint64_t *flags)
   {
     int r = ictx->state->refresh_if_required();
