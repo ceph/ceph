@@ -224,7 +224,7 @@ public:
 
   void expect_add_snap(MockRefreshImageCtx &mock_image_ctx,
                        const std::string &snap_name, uint64_t snap_id) {
-    EXPECT_CALL(mock_image_ctx, add_snap(snap_name, _, snap_id, _, _, _, _, _));
+    EXPECT_CALL(mock_image_ctx, add_snap(snap_name, _, snap_id, _, _, _, _, _, _, _));
   }
 
   void expect_init_exclusive_lock(MockRefreshImageCtx &mock_image_ctx,

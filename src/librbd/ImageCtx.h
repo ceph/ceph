@@ -254,7 +254,8 @@ namespace librbd {
 		  cls::rbd::SnapshotNamespace in_snap_namespace,
 		  librados::snap_t id,
 		  uint64_t in_size, parent_info parent,
-		  uint8_t protection_status, uint64_t flags, utime_t timestamp);
+		  uint8_t protection_status, uint64_t flags,
+		  utime_t timestamp, snapid_t prev_snap, set<snapid_t> next_snaps);
     void rm_snap(std::string in_snap_name, librados::snap_t id);
     uint64_t get_image_size(librados::snap_t in_snap_id) const;
     uint64_t get_object_count(librados::snap_t in_snap_id) const;

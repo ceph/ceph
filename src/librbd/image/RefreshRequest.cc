@@ -531,6 +531,52 @@ Context *RefreshRequest<I>::handle_v2_get_snap_namespaces(int *result) {
     return m_on_finish;
   }
 
+  send_v2_get_snap_location();
+  return nullptr;
+}
+
+template <typename I>
+void RefreshRequest<I>::send_v2_get_snap_location() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::snapshot_location_list_start(&op, m_snapc.snaps);
+
+  using klass = RefreshRequest<I>;
+  librados::AioCompletion *comp = create_rados_ack_callback<
+    klass, &klass::handle_v2_get_snap_location>(this);
+  m_out_bl.clear();
+  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
+                                         &m_out_bl);
+  assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+Context *RefreshRequest<I>::handle_v2_get_snap_location(int *result) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": "
+                 << "r=" << *result << dendl;
+
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::snapshot_location_list_finish(&it, m_snapc.snaps,
+                                                         &m_snap_prev_snaps,
+							 &m_snap_next_snaps_vec);
+  }
+  if (*result == -ENOENT) {
+    ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
+    send_v2_get_mutable_metadata();
+    return nullptr;
+  } else if (*result == -EOPNOTSUPP) {
+    m_snap_prev_snaps = std::vector<snapid_t>(m_snap_names.size(), 0);
+  } else if (*result < 0) {
+    lderr(cct) << "failed to retrieve snapshot locationss: " << cpp_strerror(*result)
+               << dendl;
+    return m_on_finish;
+  }
+
   send_v2_refresh_parent();
   return nullptr;
 }
@@ -1050,7 +1096,8 @@ void RefreshRequest<I>::apply() {
       }
 
       m_image_ctx.add_snap(m_snap_names[i], m_snap_namespaces[i], m_snapc.snaps[i].val,
-                           m_snap_sizes[i], parent, protection_status, flags, m_snap_timestamps[i]);
+                           m_snap_sizes[i], parent, protection_status, flags, m_snap_timestamps[i],
+			   m_snap_prev_snaps[i], m_snap_next_snaps_vec[i]);
     }
     m_image_ctx.snapc = m_snapc;
 

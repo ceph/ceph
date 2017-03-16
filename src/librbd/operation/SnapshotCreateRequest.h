@@ -89,6 +89,8 @@ private:
   parent_info m_parent_info;
   utime_t m_snap_timestamp;
   bufferlist m_out_bl;
+  snapid_t m_prev_snap;
+  set<snapid_t> m_next_snaps;
 
   void send_suspend_requests();
   Context *handle_suspend_requests(int *result);
@@ -107,6 +109,9 @@ private:
 
   Context *send_get_timestamp();
   Context *handle_get_timestamp(int *result);
+
+  Context *send_get_location();
+  Context *handle_get_location(int *result);
 
   Context *send_create_object_map();
   Context *handle_create_object_map(int *result);

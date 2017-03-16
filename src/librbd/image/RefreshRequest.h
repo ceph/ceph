@@ -139,6 +139,8 @@ private:
   std::vector<uint8_t> m_snap_protection;
   std::vector<uint64_t> m_snap_flags;
   std::vector<utime_t> m_snap_timestamps;
+  std::vector<snapid_t> m_snap_prev_snaps;
+  std::vector<set<snapid_t>> m_snap_next_snaps_vec;
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> m_lockers;
@@ -177,6 +179,9 @@ private:
 
   void send_v2_get_snap_timestamps();
   Context *handle_v2_get_snap_timestamps(int *result);
+
+  void send_v2_get_snap_location();
+  Context *handle_v2_get_snap_location(int *result);
 
   void send_v2_refresh_parent();
   Context *handle_v2_refresh_parent(int *result);
