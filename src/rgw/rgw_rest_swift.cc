@@ -2749,10 +2749,8 @@ int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
   if (check_utf8(bucket.c_str(), len))
     return -ERR_INVALID_UTF8;
 
-  const char *s = bucket.c_str();
-
-  for (size_t i = 0; i < len; ++i, ++s) {
-    if (*(unsigned char *)s == 0xff)
+  if (g_conf->rgw_swift_enforce_bucket_names) {
+    if (bucket.find_first_of("/") != string::npos)
       return -ERR_INVALID_BUCKET_NAME;
   }
 

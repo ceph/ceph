@@ -4379,6 +4379,10 @@ std::vector<Option> get_rgw_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("rgw_swift_enforce_bucket_names", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(true)
+    .set_description("Enforce adherence to swift container name restrictions"),
+
     Option("rgw_keystone_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description(""),
