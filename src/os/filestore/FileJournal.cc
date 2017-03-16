@@ -988,7 +988,7 @@ int FileJournal::prepare_single_write(write_item &next_write, bufferlist& bl, of
   return 0;
 }
 
-void FileJournal::align_bl(off64_t pos, bufferlist& bl)
+void FileJournal::check_align(off64_t pos, bufferlist& bl)
 {
   // make sure list segments are page aligned
   if (directio && !bl.is_aligned_size_and_memory(block_size, CEPH_DIRECTIO_ALIGNMENT)) {
@@ -1047,7 +1047,7 @@ void FileJournal::do_write(bufferlist& bl)
   off64_t pos = write_pos;
 
   // Adjust write_pos
-  align_bl(pos, bl);
+  check_align(pos, bl);
   write_pos += bl.length();
   if (write_pos >= header.max_size)
     write_pos = write_pos - header.max_size + get_top();
@@ -1367,7 +1367,7 @@ void FileJournal::do_aio_write(bufferlist& bl)
  */
 int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
 {
-  align_bl(pos, bl);
+  check_align(pos, bl);
 
   dout(20) << "write_aio_bl " << pos << "~" << bl.length() << " seq " << seq << dendl;
 
