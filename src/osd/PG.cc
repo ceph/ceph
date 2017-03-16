@@ -3871,7 +3871,7 @@ void PG::_scan_snaps(ScrubMap &smap)
       bl.push_back(o.attrs[OI_ATTR]);
       object_info_t oi;
       try {
-	oi = bl;
+	oi.decode(bl);
       } catch(...) {
 	o.nlinks = 0;
 	continue;
