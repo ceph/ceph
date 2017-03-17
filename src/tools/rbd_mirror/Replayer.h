@@ -22,13 +22,14 @@
 #include "ImageDeleter.h"
 #include "types.h"
 
+class AdminSocketHook;
+
 namespace librbd { class ImageCtx; }
 
 namespace rbd {
 namespace mirror {
 
-struct Threads;
-class ReplayerAdminSocketHook;
+template <typename> struct Threads;
 template <typename> class InstanceWatcher;
 
 /**
@@ -36,7 +37,8 @@ template <typename> class InstanceWatcher;
  */
 class Replayer {
 public:
-  Replayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+  Replayer(Threads<librbd::ImageCtx> *threads,
+           std::shared_ptr<ImageDeleter> image_deleter,
            ImageSyncThrottlerRef<> image_sync_throttler,
            int64_t local_pool_id, const peer_t &peer,
            const std::vector<const char*> &args);
@@ -58,19 +60,44 @@ public:
   void release_leader();
 
 private:
-  void init_local_mirroring_images();
-  void set_sources(const ImageIds &image_ids);
+  struct PoolWatcherListener : public PoolWatcher<>::Listener {
+    Replayer *replayer;
+
+    PoolWatcherListener(Replayer *replayer) : replayer(replayer) {
+    }
+
+    void handle_update(const ImageIds &added_image_ids,
+                       const ImageIds &removed_image_ids) override {
+      replayer->handle_update(added_image_ids, removed_image_ids);
+    }
+  };
+
+  struct C_RefreshLocalImages;
+
+  void handle_update(const ImageIds &added_image_ids,
+                     const ImageIds &removed_image_ids);
 
   void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
   bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
+  void stop_image_replayers();
+  void stop_image_replayers(Context *on_finish);
 
-  int init_rados(const std::string &cluster_name, const std::string &client_name,
+  int init_rados(const std::string &cluster_name,
+                 const std::string &client_name,
                  const std::string &description, RadosRef *rados_ref);
 
   void handle_post_acquire_leader(Context *on_finish);
   void handle_pre_release_leader(Context *on_finish);
 
-  Threads *m_threads;
+  void refresh_local_images(Context *on_finish);
+  void handle_refresh_local_images(int r, ImageIds &&image_ids,
+                                   Context *on_finish);
+
+  void init_pool_watcher(Context *on_finish);
+  void shut_down_pool_watcher(Context *on_finish);
+  void handle_shut_down_pool_watcher(int r, Context *on_finish);
+
+  Threads<librbd::ImageCtx> *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<> m_image_sync_throttler;
   mutable Mutex m_lock;
@@ -90,11 +117,15 @@ private:
   int64_t m_local_pool_id = -1;
   int64_t m_remote_pool_id = -1;
 
-  std::unique_ptr<PoolWatcher> m_pool_watcher;
+  std::string m_remote_mirror_uuid;
+
+  PoolWatcherListener m_pool_watcher_listener;
+  std::unique_ptr<PoolWatcher<> > m_pool_watcher;
+
   std::map<std::string, std::unique_ptr<ImageReplayer<> > > m_image_replayers;
 
   std::string m_asok_hook_name;
-  ReplayerAdminSocketHook *m_asok_hook;
+  AdminSocketHook *m_asok_hook;
 
   std::set<ImageId> m_init_image_ids;
 

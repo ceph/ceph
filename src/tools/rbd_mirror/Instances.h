@@ -18,19 +18,20 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
-struct Threads;
+template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class Instances {
 public:
-  static Instances *create(Threads *threads, librados::IoCtx &ioctx) {
+  static Instances *create(Threads<ImageCtxT> *threads,
+                           librados::IoCtx &ioctx) {
     return new Instances(threads, ioctx);
   }
   void destroy() {
     delete this;
   }
 
-  Instances(Threads *threads, librados::IoCtx &ioctx);
+  Instances(Threads<ImageCtxT> *threads, librados::IoCtx &ioctx);
   virtual ~Instances();
 
   void init(Context *on_finish);
@@ -81,7 +82,7 @@ private:
     }
   };
 
-  Threads *m_threads;
+  Threads<ImageCtxT> *m_threads;
   librados::IoCtx &m_ioctx;
   CephContext *m_cct;
 

@@ -28,6 +28,7 @@ public:
   void unregister_watch(Context *on_finish);
   void flush(Context *on_finish);
 
+  std::string get_oid() const;
   void set_oid(const string& oid);
 
   uint64_t get_watch_handle() const {
