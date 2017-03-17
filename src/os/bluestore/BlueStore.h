@@ -993,6 +993,7 @@ public:
 
     virtual void _add_buffer(Buffer *b, int level, Buffer *near) = 0;
     virtual void _rm_buffer(Buffer *b) = 0;
+    virtual void _move_buffer(Cache *src, Buffer *b) = 0;
     virtual void _adjust_buffer_size(Buffer *b, int64_t delta) = 0;
     virtual void _touch_buffer(Buffer *b) = 0;
 
@@ -1092,6 +1093,10 @@ public:
       auto q = buffer_lru.iterator_to(*b);
       buffer_lru.erase(q);
     }
+    void _move_buffer(Cache *src, Buffer *b) override {
+      src->_rm_buffer(b);
+      _add_buffer(b, 0, nullptr);
+    }
     void _adjust_buffer_size(Buffer *b, int64_t delta) override {
       assert((int64_t)buffer_size + delta >= 0);
       buffer_size += delta;
@@ -1178,6 +1183,7 @@ public:
     }
     void _add_buffer(Buffer *b, int level, Buffer *near) override;
     void _rm_buffer(Buffer *b) override;
+    void _move_buffer(Cache *src, Buffer *b) override;
     void _adjust_buffer_size(Buffer *b, int64_t delta) override;
     void _touch_buffer(Buffer *b) override {
       switch (b->cache_private) {
@@ -1223,6 +1229,8 @@ public:
     /// forward lookups
     mempool::bluestore_meta_other::unordered_map<ghobject_t,OnodeRef> onode_map;
 
+    friend class Collection; // for split_cache()
+
   public:
     OnodeSpace(Cache *c) : cache(c) {}
     ~OnodeSpace() {
@@ -1238,7 +1246,6 @@ public:
 		const ghobject_t& new_oid,
 		const mempool::bluestore_meta_other::string& new_okey);
     void clear();
-    void clear_pre_split(SharedBlobSet& sbset, uint32_t ps, int bits);
     bool empty();
 
     /// return true if f true for any item
@@ -1301,6 +1308,7 @@ public:
       return false;
     }
 
+    void split_cache(Collection *dest);
     void trim_cache();
 
     Collection(BlueStore *ns, Cache *ca, coll_t c);
@@ -1886,7 +1894,8 @@ private:
     uint64_t offset,
     bufferlist& bl,
     unsigned flags) {
-    b->shared_blob->bc.write(b->shared_blob->get_cache(), txc->seq, offset, bl, flags);
+    b->shared_blob->bc.write(b->shared_blob->get_cache(), txc->seq, offset, bl,
+			     flags);
     txc->shared_blobs_written.insert(b->shared_blob);
   }
 
