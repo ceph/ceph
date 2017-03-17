@@ -15,6 +15,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 #include <iostream>
 #include <string>
@@ -89,6 +90,8 @@ static void handle_mds_signal(int signum)
 
 int main(int argc, const char **argv) 
 {
+  pthread_setname_np(pthread_self(), "ceph-mds");
+
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
