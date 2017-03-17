@@ -150,7 +150,25 @@ class DaemonGroup(object):
     def add_daemon(self, remote, type_, id_, *args, **kwargs):
         """
         Add a daemon.  If there already is a daemon for this id_ and role, stop
-        that daemon and.  Restart the damon once the new value is set.
+        that daemon.  (Re)start the daemon once the new value is set.
+
+        :param remote: Remote site
+        :param type_: type of daemon (osd, mds, mon, rgw,  for example)
+        :param id_: Id (index into role dictionary)
+        :param args: Daemonstate positional parameters
+        :param kwargs: Daemonstate keyword parameters
+        """
+        # for backwards compatibility with older ceph-qa-suite branches,
+        # we can only get optional args from unused kwargs entries
+        self.register_daemon(remote, type_, id_, *args, **kwargs)
+        cluster = kwargs.pop('cluster', 'ceph')
+        role = cluster + '.' + type_
+        self.daemons[role][id_].restart()
+
+    def register_daemon(self, remote, type_, id_, *args, **kwargs):
+        """
+        Add a daemon.  If there already is a daemon for this id_ and role, stop
+        that daemon.
 
         :param remote: Remote site
         :param type_: type of daemon (osd, mds, mon, rgw,  for example)
@@ -169,7 +187,6 @@ class DaemonGroup(object):
             self.daemons[role][id_] = None
         self.daemons[role][id_] = DaemonState(remote, role, id_, *args,
                                               **kwargs)
-        self.daemons[role][id_].restart()
 
     def get_daemon(self, type_, id_, cluster='ceph'):
         """
