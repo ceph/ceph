@@ -7093,9 +7093,6 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	} else {
 	  _txc_finalize_kv(txc, txc->t);
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
-	  if (txc->osr->kv_submitted_waiters) {
-	    txc->osr->qcond.notify_all();
-	  }
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
 	  _txc_applied_kv(txc);
@@ -7181,6 +7178,11 @@ void BlueStore::_txc_finish_io(TransContext *txc)
     _txc_state_proc(&*p++);
   } while (p != osr->q.end() &&
 	   p->state == TransContext::STATE_IO_DONE);
+
+  if (osr->kv_submitted_waiters &&
+      osr->_is_all_kv_submitted()) {
+    osr->qcond.notify_all();
+  }
 }
 
 void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
@@ -7610,7 +7612,9 @@ void BlueStore::_kv_sync_thread()
 	txc->state = TransContext::STATE_KV_SUBMITTED;
 	if (txc->osr->kv_submitted_waiters) {
 	  std::lock_guard<std::mutex> l(txc->osr->qlock);
-	  txc->osr->qcond.notify_all();
+	  if (txc->osr->_is_all_kv_submitted()) {
+	    txc->osr->qcond.notify_all();
+	  }
 	}
       }
       if (num_aios) {
