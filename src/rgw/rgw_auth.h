@@ -470,7 +470,7 @@ public:
   Engine::result_t authenticate(const req_state* s) const override final;
 
 protected:
-  virtual bool is_applicable() const noexcept {
+  virtual bool is_applicable(const req_state*) const noexcept {
     return true;
   }
 };

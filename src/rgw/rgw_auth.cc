@@ -421,7 +421,7 @@ void rgw::auth::LocalApplier::load_acct_info(RGWUserInfo& user_info) const /* ou
 rgw::auth::Engine::result_t
 rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
 {
-  if (! is_applicable()) {
+  if (! is_applicable(s)) {
     return result_t::deny();
   } else {
     RGWUserInfo user_info;
