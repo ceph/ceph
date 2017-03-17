@@ -1234,6 +1234,7 @@ void rgw_meta_sync_marker::decode_json(JSONObj *obj)
   utime_t ut;
   JSONDecoder::decode_json("timestamp", ut, obj);
   timestamp = ut.to_real_time();
+  JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
 }
 
 void rgw_meta_sync_marker::dump(Formatter *f) const
@@ -1244,6 +1245,7 @@ void rgw_meta_sync_marker::dump(Formatter *f) const
   encode_json("total_entries", total_entries, f);
   encode_json("pos", pos, f);
   encode_json("timestamp", utime_t(timestamp), f);
+  encode_json("realm_epoch", realm_epoch, f);
 }
 
 void rgw_meta_sync_status::decode_json(JSONObj *obj)
