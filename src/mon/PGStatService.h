@@ -43,6 +43,11 @@ public:
     parent = o;
   }
 
+  /** returns true if the underlying data is readable. Always true
+   * post-luminous, but not when we are redirecting to the PGMonitor
+   */
+  bool is_readable() { return true; }
+
   const pool_stat_t* get_pool_stat(int poolid) const {
     auto i = parent.pg_pool_sum.find(poolid);
     if (i != parent.pg_pool_sum.end()) {
@@ -50,6 +55,17 @@ public:
     }
     return NULL;
   }
+
+  PGMap& get_pg_map() { return parent; }
+
+  float get_full_ratio() const { return parent.full_ratio; }
+  float get_nearfull_ratio() const { return parent.nearfull_ratio; }
+
+  bool have_creating_pgs() const { return !parent.creating_pgs.empty(); }
+  epoch_t get_min_last_epoch_clean() const { return parent.get_min_last_epoch_clean(); }
+
+  bool have_full_osds() const { return !parent.full_osds.empty(); }
+  bool have_nearfull_osds() const { return !parent.nearfull_osds.empty(); }
 };
 
 
