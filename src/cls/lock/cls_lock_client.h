@@ -80,6 +80,8 @@ namespace rados {
 
 	Lock(const std::string& _n) : name(_n), flags(0) {}
 
+        ~Lock() {}
+
 	void set_cookie(const std::string& c) { cookie = c; }
 	void set_tag(const std::string& t) { tag = t; }
 	void set_description(const std::string& desc) { description = desc; }
