@@ -1717,7 +1717,7 @@ static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
   int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
+    return ret;
   }
 
   return 0;
