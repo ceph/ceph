@@ -237,6 +237,10 @@ struct UserSnapshotNamespace {
     return true;
   }
 
+  inline bool operator<(const UserSnapshotNamespace& usn) const {
+    return false;
+  }
+
 };
 
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
@@ -267,6 +271,16 @@ struct GroupSnapshotNamespace {
 	   snapshot_id == gsn.snapshot_id;
   }
 
+  inline bool operator<(const GroupSnapshotNamespace& gsn) const {
+    if (group_pool < gsn.group_pool) {
+      return true;
+    } else if (group_id < gsn.group_id) {
+      return true;
+    } else {
+      return snapshot_id < gsn.snapshot_id;
+    }
+  }
+
 };
 
 std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
@@ -281,6 +295,10 @@ struct UnknownSnapshotNamespace {
   void dump(Formatter *f) const {}
   inline bool operator==(const UnknownSnapshotNamespace& gsn) const {
     return true;
+  }
+
+  inline bool operator<(const UnknownSnapshotNamespace& usn) const {
+    return false;
   }
 };
 

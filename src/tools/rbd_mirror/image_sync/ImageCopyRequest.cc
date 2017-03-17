@@ -364,7 +364,8 @@ int ImageCopyRequest<I>::compute_snap_map() {
   librados::snap_t snap_id_end;
   {
     RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
-    snap_id_end = m_remote_image_ctx->get_snap_id(m_sync_point->snap_name);
+    snap_id_end = m_remote_image_ctx->get_snap_id(
+	cls::rbd::UserSnapshotNamespace(), m_sync_point->snap_name);
     if (snap_id_end == CEPH_NOSNAP) {
       derr << ": failed to locate snapshot: "
            << m_sync_point->snap_name << dendl;
@@ -373,7 +374,7 @@ int ImageCopyRequest<I>::compute_snap_map() {
 
     if (!m_sync_point->from_snap_name.empty()) {
       snap_id_start = m_remote_image_ctx->get_snap_id(
-        m_sync_point->from_snap_name);
+        cls::rbd::UserSnapshotNamespace(), m_sync_point->from_snap_name);
       if (snap_id_start == CEPH_NOSNAP) {
         derr << ": failed to locate from snapshot: "
              << m_sync_point->from_snap_name << dendl;

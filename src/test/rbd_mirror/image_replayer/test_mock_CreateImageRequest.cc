@@ -218,9 +218,10 @@ public:
 						    "", "", m_remote_io_ctx,
                                                     false);
       ictx->state->open(false);
-      EXPECT_EQ(0, ictx->operations->snap_create(snap_name.c_str(),
-						 cls::rbd::UserSnapshotNamespace()));
-      EXPECT_EQ(0, ictx->operations->snap_protect(snap_name.c_str()));
+      EXPECT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
+						 snap_name.c_str()));
+      EXPECT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
+						  snap_name.c_str()));
       ictx->state->close();
     }
 
@@ -289,8 +290,8 @@ public:
 
   void expect_snap_set(librbd::MockTestImageCtx &mock_image_ctx,
                        const std::string &snap_name, int r) {
-    EXPECT_CALL(*mock_image_ctx.state, snap_set(StrEq(snap_name), _))
-      .WillOnce(WithArg<1>(Invoke([this, r](Context *on_finish) {
+    EXPECT_CALL(*mock_image_ctx.state, snap_set(_, StrEq(snap_name), _))
+      .WillOnce(WithArg<2>(Invoke([this, r](Context *on_finish) {
           m_threads->work_queue->queue(on_finish, r);
         })));
   }

@@ -458,7 +458,7 @@ Context *OpenRequest<I>::send_set_snap(int *result) {
 
   using klass = OpenRequest<I>;
   SetSnapRequest<I> *req = SetSnapRequest<I>::create(
-    *m_image_ctx, m_image_ctx->snap_name,
+    *m_image_ctx, m_image_ctx->snap_namespace, m_image_ctx->snap_name,
     create_context_callback<klass, &klass::handle_set_snap>(this));
   req->send();
   return nullptr;

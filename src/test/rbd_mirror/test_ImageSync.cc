@@ -264,7 +264,9 @@ TEST_F(TestImageSync, SnapshotStress) {
     uint64_t remote_size;
     {
       C_SaferCond ctx;
-      m_remote_image_ctx->state->snap_set(snap_name, &ctx);
+      m_remote_image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace(),
+					  snap_name,
+					  &ctx);
       ASSERT_EQ(0, ctx.wait());
 
       RWLock::RLocker remote_snap_locker(m_remote_image_ctx->snap_lock);
@@ -275,7 +277,9 @@ TEST_F(TestImageSync, SnapshotStress) {
     uint64_t local_size;
     {
       C_SaferCond ctx;
-      m_local_image_ctx->state->snap_set(snap_name, &ctx);
+      m_local_image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace(),
+					 snap_name,
+					 &ctx);
       ASSERT_EQ(0, ctx.wait());
 
       RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
