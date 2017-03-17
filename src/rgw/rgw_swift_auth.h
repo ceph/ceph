@@ -135,6 +135,28 @@ public:
   }
 };
 
+
+class SwiftAnonymousEngine : public rgw::auth::AnonymousEngine {
+  const rgw::auth::TokenExtractor* const extractor;
+
+  bool is_applicable(const req_state* s) const noexcept override {
+    return extractor->get_token(s).empty();
+  }
+
+public:
+  SwiftAnonymousEngine(CephContext* const cct,
+                       const rgw::auth::LocalApplier::Factory* const apl_factory,
+                       const rgw::auth::TokenExtractor* const extractor)
+    : AnonymousEngine(cct, apl_factory),
+      extractor(extractor) {
+  }
+
+  const char* get_name() const noexcept override {
+    return "rgw::auth::swift::SwiftAnonymousEngine";
+  }
+};
+
+
 class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::TokenExtractor,
                         public rgw::auth::RemoteApplier::Factory,
@@ -147,7 +169,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
   const rgw::auth::swift::SignedTokenEngine signed_engine;
   const rgw::auth::keystone::TokenEngine keystone_engine;
   const rgw::auth::swift::ExternalTokenEngine external_engine;
-  const rgw::auth::AnonymousEngine anon_engine;
+  const rgw::auth::swift::SwiftAnonymousEngine anon_engine;
 
   using keystone_config_t = rgw::keystone::CephCtxConfig;
   using keystone_cache_t = rgw::keystone::TokenCache;
@@ -216,7 +238,8 @@ public:
                       static_cast<rgw::auth::TokenExtractor*>(this),
                       static_cast<rgw::auth::LocalApplier::Factory*>(this)),
       anon_engine(cct,
-                  static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
+                  static_cast<rgw::auth::LocalApplier::Factory*>(this),
+                  static_cast<rgw::auth::TokenExtractor*>(this)) {
     /* When the constructor's body is being executed, all member engines
      * should be initialized. Thus, we can safely add them. */
     using Control = rgw::auth::Strategy::Control;
