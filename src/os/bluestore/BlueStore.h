@@ -1017,9 +1017,7 @@ public:
     void trim(uint64_t target_bytes, float target_meta_ratio,
 	      float bytes_per_onode);
 
-    void trim_all() {
-      _trim(0, 0);
-    }
+    void trim_all();
 
     virtual void _trim(uint64_t onode_max, uint64_t buffer_max) = 0;
 

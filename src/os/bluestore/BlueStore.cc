@@ -742,6 +742,14 @@ BlueStore::Cache *BlueStore::Cache::create(CephContext* cct, string type,
   return c;
 }
 
+void BlueStore::Cache::trim_all()
+{
+  std::lock_guard<std::recursive_mutex> l(lock);
+  _trim(0, 0);
+  assert(_get_num_onodes() == 0);
+  assert(_get_buffer_bytes() == 0);
+}
+
 void BlueStore::Cache::trim(
   uint64_t target_bytes,
   float target_meta_ratio,
@@ -1152,6 +1160,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
   int max_skipped = g_conf->bluestore_cache_trim_max_skip_pinned;
   while (num > 0) {
     Onode *o = &*p;
+    dout(20) << __func__ << " considering " << o << dendl;
     int refs = o->nref.load();
     if (refs > 1) {
       dout(20) << __func__ << "  " << o->oid << " has " << refs
@@ -4836,7 +4845,6 @@ int BlueStore::mount()
   }
  out_coll:
   flush_cache();
-  coll_map.clear();
  out_alloc:
   _close_alloc();
  out_fm:
@@ -4873,7 +4881,6 @@ int BlueStore::umount()
   }
   _reap_collections();
   flush_cache();
-  coll_map.clear();
   dout(20) << __func__ << " closing" << dendl;
 
   mounted = false;
@@ -5036,7 +5043,6 @@ int BlueStore::fsck(bool deep)
     r = bluefs->fsck();
     if (r < 0) {
       flush_cache();
-      coll_map.clear();
       goto out_alloc;
     }
     if (r > 0)
@@ -5418,7 +5424,6 @@ int BlueStore::fsck(bool deep)
 
  out_scan:
   flush_cache();
-  coll_map.clear();
  out_alloc:
   _close_alloc();
  out_fm:
@@ -10344,5 +10349,10 @@ void BlueStore::flush_cache()
   for (auto i : cache_shards) {
     i->trim_all();
   }
+  for (auto& p : coll_map) {
+    assert(p.second->onode_map.empty());
+    assert(p.second->shared_blob_set.empty());
+  }
+  coll_map.clear();
 }
 // ===========================================
