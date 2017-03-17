@@ -42,10 +42,13 @@ public:
   void reset(const PGMap& o) {
     parent = o;
   }
-  const pool_stat_t& get_pool_stat(int poolid) const {
+
+  const pool_stat_t* get_pool_stat(int poolid) const {
     auto i = parent.pg_pool_sum.find(poolid);
-    assert(i != parent.pg_pool_sum.end());
-    return i->second;
+    if (i != parent.pg_pool_sum.end()) {
+      return &i->second;
+    }
+    return NULL;
   }
 };
 
