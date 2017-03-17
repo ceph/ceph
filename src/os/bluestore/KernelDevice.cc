@@ -29,7 +29,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
-#define dout_prefix *_dout << "bdev(" << path << ") "
+#define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
 
 KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
   : BlockDevice(cct),
@@ -183,11 +183,23 @@ void KernelDevice::close()
 
 int KernelDevice::flush()
 {
-  bool ret = io_since_flush.compare_and_swap(1, 0);
-  if (!ret) {
-    dout(10) << __func__ << " no-op (no ios since last flush)" << dendl;
+  // protect flush with a mutex.  not that we are not really protected
+  // data here.  instead, we're ensuring that if any flush() caller
+  // sees that io_since_flush is true, they block any racing callers
+  // until the flush is observed.  that allows racing threads to be
+  // calling flush while still ensuring that *any* of them that got an
+  // aio completion notification will not return before that aio is
+  // stable on disk: whichever thread sees the flag first will block
+  // followers until the aio is stable.
+  std::lock_guard<std::mutex> l(flush_mutex);
+
+  bool expect = true;
+  if (!io_since_flush.compare_exchange_strong(expect, false)) {
+    dout(10) << __func__ << " no-op (no ios since last flush), flag is "
+	     << (int)io_since_flush.load() << dendl;
     return 0;
   }
+
   dout(10) << __func__ << " start" << dendl;
   if (cct->_conf->bdev_inject_crash) {
     ++injecting_crash;
@@ -259,12 +271,22 @@ void KernelDevice::_aio_thread()
 	  std::lock_guard<std::mutex> l(debug_queue_lock);
 	  debug_aio_unlink(*aio[i]);
 	}
+
+	// set flag indicating new ios have completed.  we do this *before*
+	// any completion or notifications so that any user flush() that
+	// follows the observed io completion will include this io.  Note
+	// that an earlier, racing flush() could observe and clear this
+	// flag, but that also ensures that the IO will be stable before the
+	// later flush() occurs.
+	io_since_flush.store(true);
+
 	int r = aio[i]->get_return_value();
 	dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
 		 << " ioc " << ioc
 		 << " with " << (ioc->num_running.load() - 1)
 		 << " aios left" << dendl;
 	assert(r >= 0);
+
 	int left = --ioc->num_running;
 	// NOTE: once num_running is decremented we can no longer
 	// trust aio[] values; they my be freed (e.g., by BlueFS::_fsync)
@@ -511,8 +533,6 @@ int KernelDevice::aio_write(
       }
     }
   }
-
-  io_since_flush.set(1);
   return 0;
 }
 
