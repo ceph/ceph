@@ -91,6 +91,7 @@ void GetStatusRequest<I>::handle_get_status(int r) {
     lderr(cct) << "failed to retrieve mirror image status: " << cpp_strerror(r)
                << dendl;
     finish(r);
+    return;
   }
 
   finish(0);

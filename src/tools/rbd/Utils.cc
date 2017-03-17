@@ -368,7 +368,7 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
     }
   }
 
-  if (pool_name->empty()) {
+  if (pool_name != nullptr && pool_name->empty()) {
     *pool_name = at::DEFAULT_POOL_NAME;
   }
 
