@@ -559,7 +559,7 @@ class NVMEManager {
     // only support one device per osd now!
     assert(shared_driver_datas.empty());
     // index 0 is occured by master thread
-    shared_driver_datas.push_back(new SharedDriverData(shared_driver_datas.size()+1, rte_get_next_lcore(-1, 0, 0), sn_tag, c, ns));
+    shared_driver_datas.push_back(new SharedDriverData(shared_driver_datas.size()+1, rte_get_next_lcore(-1, 1, 0), sn_tag, c, ns));
     *driver = shared_driver_datas.back();
   }
 };
