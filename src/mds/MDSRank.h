@@ -515,7 +515,6 @@ public:
   void handle_osd_map();
   bool kill_session(int64_t session_id, bool wait, std::stringstream& ss);
   void update_log_config();
-  bool handle_command_legacy(std::vector<std::string> args);
 
   bool handle_command(
     const cmdmap_t &cmdmap,
