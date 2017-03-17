@@ -2,6 +2,7 @@
 #include <map>
 #include <string>
 #include <iostream>
+#include <boost/algorithm/string.hpp>
 
 #include "common/ceph_json.h"
 #include "rgw_common.h"
@@ -150,6 +151,12 @@ public:
   virtual bool init(ESQueryStack *s) = 0;
 
   virtual void dump(Formatter *f) const = 0;
+
+  virtual bool leaf_field_name(string *name) {
+    return false;
+  }
+
+  virtual void leaf_field_rename(const string& new_name) {}
 };
 
 static bool alloc_node(ESQueryStack *s, ESQueryNode **pnode);
@@ -180,12 +187,13 @@ public:
   void dump(Formatter *f) const {
     f->open_object_section("bool");
     const char *section = (op == "and" ? "must" : "should");
-    f->open_object_section(section);
-    first->dump(f);
-    second->dump(f);
+    f->open_array_section(section);
+    encode_json("entry", *first, f);
+    encode_json("entry", *second, f);
     f->close_section();
     f->close_section();
   }
+
 };
 
 class ESQueryNode_Op : public ESQueryNode {
@@ -206,6 +214,14 @@ public:
   }
 
   virtual void dump(Formatter *f) const = 0;
+  bool leaf_field_name(string *name) override {
+    *name = field;
+    return true;
+  }
+
+  void leaf_field_rename(const string& new_name) override {
+    field = new_name;
+  }
 };
 
 class ESQueryNode_Op_Equal : public ESQueryNode_Op {
@@ -228,6 +244,34 @@ public:
     f->open_object_section("range");
     f->open_object_section(field.c_str());
     encode_json(range_str.c_str(), val.c_str(), f);
+    f->close_section();
+    f->close_section();
+  }
+};
+
+class ESQueryNode_Op_Nested : public ESQueryNode_Op {
+  string name;
+  ESQueryNode *next;
+public:
+  ESQueryNode_Op_Nested(const string& _name, ESQueryNode *_next) : name(_name), next(_next) {}
+  ~ESQueryNode_Op_Nested() {
+    delete next;
+  }
+
+  virtual void dump(Formatter *f) const {
+    f->open_object_section("nested");
+    encode_json("path", "meta.custom-string", f);
+    f->open_object_section("query");
+    f->open_object_section("bool");
+    f->open_array_section("must");
+    f->open_object_section("entry");
+    f->open_object_section("match");
+    encode_json("meta.custom-string.name", name.c_str(), f);
+    f->close_section();
+    f->close_section();
+    encode_json("entry", *next, f);
+    f->close_section();
+    f->close_section();
     f->close_section();
     f->close_section();
   }
@@ -271,6 +315,14 @@ static bool alloc_node(ESQueryStack *s, ESQueryNode **pnode)
   if (!node->init(s)) {
     delete node;
     return false;
+  }
+  string field_name;
+  if (node->leaf_field_name(&field_name) &&
+      boost::algorithm::starts_with(field_name, "meta.custom.")) {
+    node->leaf_field_rename("meta.custom-string.value");
+    field_name = field_name.substr(sizeof("meta.custom.")-1);
+    node = new ESQueryNode_Op_Nested(field_name, node);
+    
   }
   *pnode = node;
   return true;
