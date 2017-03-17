@@ -1578,14 +1578,22 @@ public:
 	qcond.wait(l);
     }
 
+    bool _is_all_kv_submitted() {
+      // caller must hold qlock
+      if (q.empty()) {
+	return true;
+      }
+      TransContext *txc = &q.back();
+      if (txc->state >= TransContext::STATE_KV_SUBMITTED) {
+	return true;
+      }
+      return false;
+    }
+
     void flush() override {
       std::unique_lock<std::mutex> l(qlock);
       while (true) {
-	if (q.empty()) {
-	  return;
-	}
-	TransContext *txc = &q.back();
-	if (txc->state >= TransContext::STATE_KV_SUBMITTED) {
+	if (_is_all_kv_submitted()) {
 	  return;
 	}
 	++kv_submitted_waiters;
