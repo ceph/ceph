@@ -498,7 +498,8 @@ void Mgr::handle_fs_map(MFSMap* m)
       // FIXME: nothing stopping old daemons being here, they won't have
       // addr: need to handle case of pre-ceph-mgr daemons that don't have
       // the fields we expect
-      if (metadata->metadata.empty()) {
+      if (metadata->metadata.empty() ||
+	  metadata->metadata.count("addr") == 0) {
         update = true;
       } else {
         auto metadata_addr = metadata->metadata.at("addr");
