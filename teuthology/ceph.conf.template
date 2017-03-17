@@ -19,6 +19,7 @@
 	osd pool default size = 2
 
 	mon osd allow primary affinity = true
+	mon osd allow pg remap = true
 	mon warn on legacy crush tunables = false
 	mon warn on crush straw calc version zero = false
 	mon warn on no sortbitwise = false
