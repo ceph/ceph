@@ -24,6 +24,7 @@ from ceph_detect_init import suse
 from ceph_detect_init import gentoo
 from ceph_detect_init import freebsd
 from ceph_detect_init import docker
+from ceph_detect_init import oracle
 import os
 import logging
 import platform
@@ -44,7 +45,7 @@ def get(use_rhceph=False):
     module.normalized_name = _normalized_distro_name(distro_name)
     module.distro = module.normalized_name
     module.is_el = module.normalized_name in ['redhat', 'centos',
-                                              'fedora', 'scientific']
+                                              'fedora', 'scientific', 'oracle']
     module.release = release
     module.codename = codename
     module.init = module.choose_init()
@@ -72,6 +73,7 @@ def _get_distro(distro, use_rhceph=False):
         'exherbo': gentoo,
         'freebsd': freebsd,
         'docker': docker,
+        'oracle': oracle,
     }
 
     if distro == 'redhat' and use_rhceph:
@@ -92,6 +94,8 @@ def _normalized_distro_name(distro):
         return 'centos'
     elif distro.startswith(('gentoo', 'funtoo', 'exherbo')):
         return 'gentoo'
+    elif distro.startswith('oracle'):
+        return 'oracle'
     return distro
 
 
@@ -146,6 +150,9 @@ def platform_information():
                 codename = minor
             else:
                 codename = major
+    if not codename and 'oracle' in distro.lower():
+        major_version = release.split('.')[0]
+        codename = 'OL' + major_version
 
     return (
         str(distro).rstrip(),
