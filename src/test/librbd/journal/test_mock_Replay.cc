@@ -183,7 +183,7 @@ public:
   void expect_snap_create(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, const char *snap_name,
                           uint64_t op_tid) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _, _,
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(_, StrEq(snap_name), _,
                                                                 op_tid, false))
                   .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
@@ -191,8 +191,8 @@ public:
 
   void expect_snap_remove(MockReplayImageCtx &mock_image_ctx,
                           Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(StrEq(snap_name), _))
-                  .WillOnce(DoAll(SaveArg<1>(on_finish),
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(_, StrEq(snap_name), _))
+                  .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
@@ -206,22 +206,22 @@ public:
 
   void expect_snap_protect(MockReplayImageCtx &mock_image_ctx,
                            Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_protect(StrEq(snap_name), _))
-                  .WillOnce(DoAll(SaveArg<1>(on_finish),
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_protect(_, StrEq(snap_name), _))
+                  .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
   void expect_snap_unprotect(MockReplayImageCtx &mock_image_ctx,
                              Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_unprotect(StrEq(snap_name), _))
-                  .WillOnce(DoAll(SaveArg<1>(on_finish),
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_unprotect(_, StrEq(snap_name), _))
+                  .WillOnce(DoAll(SaveArg<2>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
   void expect_snap_rollback(MockReplayImageCtx &mock_image_ctx,
                             Context **on_finish, const char *snap_name) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_rollback(StrEq(snap_name), _, _))
-                  .WillOnce(DoAll(SaveArg<2>(on_finish),
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_rollback(_, StrEq(snap_name), _, _))
+                  .WillOnce(DoAll(SaveArg<3>(on_finish),
                                   NotifyInvoke(&m_invoke_lock, &m_invoke_cond)));
   }
 
@@ -582,8 +582,12 @@ TEST_F(TestMockJournalReplay, OpFinishError) {
   InSequence seq;
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapRemoveEvent(123, "snap")},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapRemoveEvent(123,
+					  cls::rbd::UserSnapshotNamespace(),
+					  "snap")},
+               &on_start_ready,
+	       &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
   C_SaferCond on_finish_ready;
@@ -613,9 +617,12 @@ TEST_F(TestMockJournalReplay, BlockedOpFinishError) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap",
-								 cls::rbd::UserSnapshotNamespace())},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapCreateEvent(123,
+					  cls::rbd::UserSnapshotNamespace(),
+					  "snap")},
+               &on_start_ready,
+	       &on_start_safe);
 
   C_SaferCond on_resume;
   when_replay_op_ready(mock_journal_replay, 123, &on_resume);
@@ -654,15 +661,22 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
 
   C_SaferCond on_snap_remove_ready;
   C_SaferCond on_snap_remove_safe;
-  when_process(mock_journal_replay, EventEntry{SnapRemoveEvent(122, "snap")},
-               &on_snap_remove_ready, &on_snap_remove_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapRemoveEvent(122,
+					  cls::rbd::UserSnapshotNamespace(),
+					  "snap")},
+               &on_snap_remove_ready,
+	       &on_snap_remove_safe);
   ASSERT_EQ(0, on_snap_remove_ready.wait());
 
   C_SaferCond on_snap_create_ready;
   C_SaferCond on_snap_create_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap",
-							       cls::rbd::UserSnapshotNamespace())},
-               &on_snap_create_ready, &on_snap_create_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapCreateEvent(123,
+					  cls::rbd::UserSnapshotNamespace(),
+					  "snap")},
+               &on_snap_create_ready,
+	       &on_snap_create_safe);
 
   C_SaferCond on_shut_down;
   mock_journal_replay.shut_down(false, &on_shut_down);
@@ -696,14 +710,22 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
 
   C_SaferCond on_snap_remove_ready;
   C_SaferCond on_snap_remove_safe;
-  when_process(mock_journal_replay, EventEntry{SnapRemoveEvent(122, "snap")},
-               &on_snap_remove_ready, &on_snap_remove_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapRemoveEvent(122,
+					  cls::rbd::UserSnapshotNamespace(),
+					  "snap")},
+               &on_snap_remove_ready,
+	       &on_snap_remove_safe);
   ASSERT_EQ(0, on_snap_remove_ready.wait());
 
   C_SaferCond on_snap_create_ready;
   C_SaferCond on_snap_create_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap", cls::rbd::UserSnapshotNamespace())},
-               &on_snap_create_ready, &on_snap_create_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapCreateEvent(123,
+					  cls::rbd::UserSnapshotNamespace(),
+					  "snap")},
+               &on_snap_create_ready,
+	       &on_snap_create_safe);
 
   C_SaferCond on_resume;
   when_replay_op_ready(mock_journal_replay, 123, &on_resume);
@@ -755,8 +777,12 @@ TEST_F(TestMockJournalReplay, OpEventError) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapRemoveEvent(123, "snap")},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapRemoveEvent(123,
+					  cls::rbd::UserSnapshotNamespace(),
+					  "snap")},
+               &on_start_ready,
+	       &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
   C_SaferCond on_finish_ready;
@@ -787,8 +813,12 @@ TEST_F(TestMockJournalReplay, SnapCreateEvent) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap", cls::rbd::UserSnapshotNamespace())},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapCreateEvent(123,
+					  cls::rbd::UserSnapshotNamespace(),
+					  "snap")},
+               &on_start_ready,
+	       &on_start_safe);
 
   C_SaferCond on_resume;
   when_replay_op_ready(mock_journal_replay, 123, &on_resume);
@@ -824,8 +854,12 @@ TEST_F(TestMockJournalReplay, SnapCreateEventExists) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapCreateEvent(123, "snap", cls::rbd::UserSnapshotNamespace())},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapCreateEvent(123,
+					  cls::rbd::UserSnapshotNamespace(),
+					  "snap")},
+               &on_start_ready,
+	       &on_start_safe);
 
   wait_for_op_invoked(&on_finish, -EEXIST);
   ASSERT_EQ(0, on_start_ready.wait());
@@ -857,8 +891,12 @@ TEST_F(TestMockJournalReplay, SnapRemoveEvent) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapRemoveEvent(123, "snap")},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapRemoveEvent(123,
+					  cls::rbd::UserSnapshotNamespace(),
+					  "snap")},
+               &on_start_ready,
+	       &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
   C_SaferCond on_finish_ready;
@@ -889,8 +927,12 @@ TEST_F(TestMockJournalReplay, SnapRemoveEventDNE) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapRemoveEvent(123, "snap")},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapRemoveEvent(123,
+					  cls::rbd::UserSnapshotNamespace(),
+					  "snap")},
+               &on_start_ready,
+	       &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
   C_SaferCond on_finish_ready;
@@ -987,8 +1029,12 @@ TEST_F(TestMockJournalReplay, SnapProtectEvent) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapProtectEvent(123, "snap")},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapProtectEvent(123,
+					   cls::rbd::UserSnapshotNamespace(),
+					   "snap")},
+               &on_start_ready,
+	       &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
   C_SaferCond on_finish_ready;
@@ -1019,8 +1065,12 @@ TEST_F(TestMockJournalReplay, SnapProtectEventBusy) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapProtectEvent(123, "snap")},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapProtectEvent(123,
+					   cls::rbd::UserSnapshotNamespace(),
+					   "snap")},
+               &on_start_ready,
+	       &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
   C_SaferCond on_finish_ready;
@@ -1051,8 +1101,12 @@ TEST_F(TestMockJournalReplay, SnapUnprotectEvent) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapUnprotectEvent(123, "snap")},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapUnprotectEvent(123,
+					     cls::rbd::UserSnapshotNamespace(),
+					     "snap")},
+               &on_start_ready,
+	       &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
   C_SaferCond on_finish_ready;
@@ -1079,8 +1133,12 @@ TEST_F(TestMockJournalReplay, SnapUnprotectOpFinishBusy) {
   InSequence seq;
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapUnprotectEvent(123, "snap")},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapUnprotectEvent(123,
+					     cls::rbd::UserSnapshotNamespace(),
+					     "snap")},
+               &on_start_ready,
+	       &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
   // aborts the snap unprotect op if image had children
@@ -1111,8 +1169,12 @@ TEST_F(TestMockJournalReplay, SnapUnprotectEventInvalid) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapUnprotectEvent(123, "snap")},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapUnprotectEvent(123,
+					     cls::rbd::UserSnapshotNamespace(),
+					     "snap")},
+               &on_start_ready,
+	       &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
   C_SaferCond on_finish_ready;
@@ -1143,8 +1205,12 @@ TEST_F(TestMockJournalReplay, SnapRollbackEvent) {
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
-  when_process(mock_journal_replay, EventEntry{SnapRollbackEvent(123, "snap")},
-               &on_start_ready, &on_start_safe);
+  when_process(mock_journal_replay,
+	       EventEntry{SnapRollbackEvent(123,
+					    cls::rbd::UserSnapshotNamespace(),
+					    "snap")},
+               &on_start_ready,
+	       &on_start_safe);
   ASSERT_EQ(0, on_start_ready.wait());
 
   C_SaferCond on_finish_ready;

@@ -39,17 +39,19 @@ public:
   };
 
   SnapshotProtectRequest(ImageCtxT &image_ctx, Context *on_finish,
-		         const std::string &snap_name);
+		         const cls::rbd::SnapshotNamespace &snap_namespace,
+			 const std::string &snap_name);
 
 protected:
   void send_op() override;
   bool should_complete(int r) override;
 
   journal::Event create_event(uint64_t op_tid) const override {
-    return journal::SnapProtectEvent(op_tid, m_snap_name);
+    return journal::SnapProtectEvent(op_tid, m_snap_namespace, m_snap_name);
   }
 
 private:
+  cls::rbd::SnapshotNamespace m_snap_namespace;
   std::string m_snap_name;
   State m_state;
 

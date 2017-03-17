@@ -224,7 +224,7 @@ public:
 
   void expect_add_snap(MockRefreshImageCtx &mock_image_ctx,
                        const std::string &snap_name, uint64_t snap_id) {
-    EXPECT_CALL(mock_image_ctx, add_snap(snap_name, _, snap_id, _, _, _, _, _));
+    EXPECT_CALL(mock_image_ctx, add_snap(_, snap_name, snap_id, _, _, _, _, _));
   }
 
   void expect_init_exclusive_lock(MockRefreshImageCtx &mock_image_ctx,
@@ -324,8 +324,10 @@ public:
   }
 
   void expect_get_snap_id(MockRefreshImageCtx &mock_image_ctx,
-                          const std::string &snap_name, uint64_t snap_id) {
-    EXPECT_CALL(mock_image_ctx, get_snap_id(snap_name)).WillOnce(Return(snap_id));
+                          const std::string &snap_name,
+			  uint64_t snap_id) {
+    EXPECT_CALL(mock_image_ctx,
+		get_snap_id(_, snap_name)).WillOnce(Return(snap_id));
   }
 
   void expect_block_writes(MockImageCtx &mock_image_ctx, int r) {
@@ -456,7 +458,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessSetSnapshotV2) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, snap_create(*ictx, "snap"));
-  ASSERT_EQ(0, librbd::snap_set(ictx, "snap"));
+  ASSERT_EQ(0, librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(), "snap"));
 
   MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
@@ -503,7 +505,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessChild) {
 
     librbd::NoOpProgressContext no_op;
     ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name, "", no_op));
-    ASSERT_EQ(0, ictx->operations->snap_unprotect("snap"));
+    ASSERT_EQ(0, ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), "snap"));
   };
 
   int order = ictx->order;
@@ -554,7 +556,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessChildDontOpenParent) {
 
     librbd::NoOpProgressContext no_op;
     ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name, "", no_op));
-    ASSERT_EQ(0, ictx->operations->snap_unprotect("snap"));
+    ASSERT_EQ(0, ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), "snap"));
   };
 
   int order = ictx->order;

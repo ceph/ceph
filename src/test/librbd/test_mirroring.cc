@@ -270,7 +270,7 @@ public:
     ASSERT_EQ(0, get_image_id(image, &image_id));
 
     librbd::journal::MirrorPeerClientMeta peer_client_meta(
-      "remote-image-id", {{"sync-point-snap", boost::none}}, {});
+      "remote-image-id", {{{}, "sync-point-snap", boost::none}}, {});
     librbd::journal::ClientData client_data(peer_client_meta);
 
     journal::Journaler journaler(io_ctx, image_id, "peer-client", {});

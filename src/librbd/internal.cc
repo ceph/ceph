@@ -555,7 +555,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(cct, 20) << "children flatten " << ictx->name << dendl;
 
     RWLock::RLocker l(ictx->snap_lock);
-    snap_t snap_id = ictx->get_snap_id(snap_name);
+    snap_t snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), snap_name);
     ParentSpec parent_spec(ictx->md_ctx.get_id(), ictx->id, snap_id);
     map< pair<int64_t, string>, set<string> > image_info;
 
@@ -674,17 +674,15 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
-
     RWLock::RLocker l(ictx->snap_lock);
-    snap_t snap_id = ictx->get_snap_id(snap_name);
+    snap_t snap_id = ictx->get_snap_id(*snap_namespace, snap_name);
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
     r = ictx->get_snap_namespace(snap_id, snap_namespace);
     return r;
   }
 
-  int snap_is_protected(ImageCtx *ictx, const char *snap_name,
-			bool *is_protected)
+  int snap_is_protected(ImageCtx *ictx, const char *snap_name, bool *is_protected)
   {
     ldout(ictx->cct, 20) << "snap_is_protected " << ictx << " " << snap_name
 			 << dendl;
@@ -694,7 +692,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
 
     RWLock::RLocker l(ictx->snap_lock);
-    snap_t snap_id = ictx->get_snap_id(snap_name);
+    snap_t snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), snap_name);
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
     bool is_unprotected;
@@ -1503,7 +1501,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
-  int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists)
+  int snap_exists(ImageCtx *ictx, const cls::rbd::SnapshotNamespace& snap_namespace,
+		  const char *snap_name, bool *exists)
   {
     ldout(ictx->cct, 20) << "snap_exists " << ictx << " " << snap_name << dendl;
 
@@ -1512,24 +1511,16 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
 
     RWLock::RLocker l(ictx->snap_lock);
-    *exists = ictx->get_snap_id(snap_name) != CEPH_NOSNAP; 
+    *exists = ictx->get_snap_id(snap_namespace, snap_name) != CEPH_NOSNAP;
     return 0;
   }
 
-  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags, ProgressContext& pctx)
+  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags,
+		  ProgressContext& pctx)
   {
     ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << " flags: " << flags << dendl;
 
     int r = 0;
-
-    cls::rbd::SnapshotNamespace snap_namespace;
-    r = get_snap_namespace(ictx, snap_name, &snap_namespace);
-    if (r < 0) {
-      return r;
-    }
-    if (boost::get<cls::rbd::UserSnapshotNamespace>(&snap_namespace) == nullptr) {
-      return -EINVAL;
-    }
 
     r = ictx->state->refresh_if_required();
     if (r < 0)
@@ -1549,7 +1540,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     if (is_protected && flags & RBD_SNAP_REMOVE_UNPROTECT) {
-      r = ictx->operations->snap_unprotect(snap_name);
+      r = ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), snap_name);
       if (r < 0) {
 	lderr(ictx->cct) << "failed to unprotect snapshot: " << snap_name << dendl;
 	return r;
@@ -1566,7 +1557,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     C_SaferCond ctx;
-    ictx->operations->snap_remove(snap_name, &ctx);
+    ictx->operations->snap_remove(cls::rbd::UserSnapshotNamespace(), snap_name, &ctx);
 
     r = ctx.wait();
     return r;
@@ -1774,7 +1765,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return r;
   }
 
-  int snap_set(ImageCtx *ictx, const char *snap_name)
+  int snap_set(ImageCtx *ictx, const cls::rbd::SnapshotNamespace &snap_namespace,
+	       const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
 			 << (snap_name ? snap_name : "NULL") << dendl;
@@ -1785,7 +1777,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond ctx;
     std::string name(snap_name == nullptr ? "" : snap_name);
-    ictx->state->snap_set(name, &ctx);
+    ictx->state->snap_set(snap_namespace, name, &ctx);
 
     int r = ctx.wait();
     if (r < 0) {

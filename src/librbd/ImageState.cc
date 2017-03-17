@@ -381,11 +381,14 @@ ImageState<I>::find_pending_refresh() const {
 }
 
 template <typename I>
-void ImageState<I>::snap_set(const std::string &snap_name, Context *on_finish) {
+void ImageState<I>::snap_set(const cls::rbd::SnapshotNamespace &snap_namespace,
+			     const std::string &snap_name,
+			     Context *on_finish) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << __func__ << ": snap_name=" << snap_name << dendl;
 
   Action action(ACTION_TYPE_SET_SNAP);
+  action.snap_namespace = snap_namespace;
   action.snap_name = snap_name;
 
   m_lock.Lock();
@@ -694,7 +697,7 @@ void ImageState<I>::send_set_snap_unlock() {
     *m_image_ctx, create_context_callback<
       ImageState<I>, &ImageState<I>::handle_set_snap>(this));
   image::SetSnapRequest<I> *req = image::SetSnapRequest<I>::create(
-    *m_image_ctx, action_contexts.first.snap_name, ctx);
+    *m_image_ctx, action_contexts.first.snap_namespace, action_contexts.first.snap_name, ctx);
 
   m_lock.Unlock();
   req->send();
