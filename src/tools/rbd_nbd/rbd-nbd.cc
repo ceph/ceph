@@ -440,11 +440,13 @@ public:
       if (new_size != size) {
         if (ioctl(fd, BLKFLSBUF, NULL) < 0)
             derr << "invalidate page cache failed: " << cpp_strerror(errno) << dendl;
-        if (ioctl(fd, NBD_SET_SIZE, new_size) < 0)
+        if (ioctl(fd, NBD_SET_SIZE, new_size) < 0) {
             derr << "resize failed: " << cpp_strerror(errno) << dendl;
+        } else {
+          size = new_size;
+        }
         if (image.invalidate_cache() < 0)
             derr << "invalidate rbd cache failed" << dendl;
-        size = new_size;
       }
     }
   }
