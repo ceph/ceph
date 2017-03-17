@@ -21,8 +21,8 @@ namespace pool_watcher {
 template <typename ImageCtxT = librbd::ImageCtx>
 class RefreshImagesRequest {
 public:
-  RefreshImagesRequest *create(librados::IoCtx &remote_io_ctx,
-                               ImageIds *image_ids, Context *on_finish) {
+  static RefreshImagesRequest *create(librados::IoCtx &remote_io_ctx,
+                                      ImageIds *image_ids, Context *on_finish) {
     return new RefreshImagesRequest(remote_io_ctx, image_ids, on_finish);
   }
 

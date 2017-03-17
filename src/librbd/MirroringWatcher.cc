@@ -114,7 +114,7 @@ bool MirroringWatcher<I>::handle_payload(const ModeUpdatedPayload &payload,
                                          Context *on_notify_ack) {
   CephContext *cct = this->m_cct;
   ldout(cct, 20) << ": mode updated: " << payload.mirror_mode << dendl;
-  handle_mode_updated(payload.mirror_mode, on_notify_ack);
+  handle_mode_updated(payload.mirror_mode);
   return true;
 }
 
@@ -124,7 +124,7 @@ bool MirroringWatcher<I>::handle_payload(const ImageUpdatedPayload &payload,
   CephContext *cct = this->m_cct;
   ldout(cct, 20) << ": image state updated" << dendl;
   handle_image_updated(payload.mirror_image_state, payload.image_id,
-                       payload.global_image_id, on_notify_ack);
+                       payload.global_image_id);
   return true;
 }
 

@@ -81,8 +81,7 @@ TEST_F(TestMockPoolWatcherRefreshImagesRequest, Success) {
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
-  ImageIds expected_image_ids = {{"global id", "local id",
-                                  boost::optional<std::string>{"image name"}}};
+  ImageIds expected_image_ids = {{"global id", "local id", "image name"}};
   ASSERT_EQ(expected_image_ids, image_ids);
 }
 
@@ -114,8 +113,7 @@ TEST_F(TestMockPoolWatcherRefreshImagesRequest, LargeDirectory) {
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
-  expected_image_ids.insert({"global id", "local id",
-                             boost::optional<std::string>{"image name"}});
+  expected_image_ids.insert({"global id", "local id", "image name"});
   ASSERT_EQ(expected_image_ids, image_ids);
 }
 

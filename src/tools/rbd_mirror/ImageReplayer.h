@@ -46,7 +46,7 @@ namespace journal { template <typename> class Replay; }
 namespace rbd {
 namespace mirror {
 
-struct Threads;
+template <typename> struct Threads;
 
 namespace image_replayer { template <typename> class BootstrapRequest; }
 namespace image_replayer { template <typename> class EventPreprocessor; }
@@ -69,7 +69,8 @@ public:
     STATE_STOPPED,
   };
 
-  ImageReplayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+  ImageReplayer(Threads<librbd::ImageCtx> *threads,
+                std::shared_ptr<ImageDeleter> image_deleter,
                 ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
                 RadosRef local, const std::string &local_mirror_uuid,
                 int64_t local_pool_id, const std::string &global_image_id);
@@ -269,7 +270,7 @@ private:
     ImageReplayer<ImageCtxT> *replayer;
   };
 
-  Threads *m_threads;
+  Threads<librbd::ImageCtx> *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
 

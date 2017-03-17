@@ -264,13 +264,13 @@ void ImageReplayer<I>::RemoteJournalerListener::handle_update(
 }
 
 template <typename I>
-ImageReplayer<I>::ImageReplayer(Threads *threads,
-                             shared_ptr<ImageDeleter> image_deleter,
-                             ImageSyncThrottlerRef<I> image_sync_throttler,
-                             RadosRef local,
-                             const std::string &local_mirror_uuid,
-                             int64_t local_pool_id,
-                             const std::string &global_image_id) :
+ImageReplayer<I>::ImageReplayer(Threads<librbd::ImageCtx> *threads,
+                                shared_ptr<ImageDeleter> image_deleter,
+                                ImageSyncThrottlerRef<I> image_sync_throttler,
+                                RadosRef local,
+                                const std::string &local_mirror_uuid,
+                                int64_t local_pool_id,
+                                const std::string &global_image_id) :
   m_threads(threads),
   m_image_deleter(image_deleter),
   m_image_sync_throttler(image_sync_throttler),
@@ -295,8 +295,9 @@ ImageReplayer<I>::ImageReplayer(Threads *threads,
 	 << ": " << cpp_strerror(r) << dendl;
     pool_name = stringify(m_local_pool_id);
   }
-  m_name = pool_name + "/" + m_global_image_id;
 
+  m_name = pool_name + "/" + m_global_image_id;
+  dout(20) << "registered asok hook: " << m_name << dendl;
   m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
                                                     this);
 }
@@ -515,6 +516,7 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
       }
     }
     if (!m_asok_hook) {
+      dout(20) << "registered asok hook: " << m_name << dendl;
       m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
                                                         this);
     }
