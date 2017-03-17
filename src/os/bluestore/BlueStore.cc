@@ -1001,6 +1001,34 @@ void BlueStore::TwoQCache::_rm_buffer(Buffer *b)
   }
 }
 
+void BlueStore::TwoQCache::_move_buffer(Cache *srcc, Buffer *b)
+{
+  TwoQCache *src = static_cast<TwoQCache*>(srcc);
+  src->_rm_buffer(b);
+
+  // preserve which list we're on (even if we can't preserve the order!)
+  switch (b->cache_private) {
+  case BUFFER_WARM_IN:
+    assert(!b->is_empty());
+    buffer_warm_in.push_back(*b);
+    break;
+  case BUFFER_WARM_OUT:
+    assert(b->is_empty());
+    buffer_warm_out.push_back(*b);
+    break;
+  case BUFFER_HOT:
+    assert(!b->is_empty());
+    buffer_hot.push_back(*b);
+    break;
+  default:
+    assert(0 == "bad cache_private");
+  }
+  if (!b->is_empty()) {
+    buffer_bytes += b->length;
+    buffer_list_bytes[b->cache_private] += b->length;
+  }
+}
+
 void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
 {
   dout(20) << __func__ << " delta " << delta << " on " << *b << dendl;
@@ -1089,8 +1117,8 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       }
 
       Buffer *b = &*p;
-      assert(b->is_clean());
       dout(20) << __func__ << " buffer_hot rm " << *b << dendl;
+      assert(b->is_clean());
       // adjust evict size before buffer goes invalid
       to_evict_bytes -= b->length;
       evicted += b->length;
@@ -1356,16 +1384,17 @@ void BlueStore::BufferSpace::finish_write(Cache* cache, uint64_t seq)
     }
 
     Buffer *b = &*i;
-    ldout(cache->cct, 20) << __func__ << " " << *b << dendl;
     assert(b->is_writing());
 
     if (b->flags & Buffer::FLAG_NOCACHE) {
       writing.erase(i++);
+      ldout(cache->cct, 20) << __func__ << " discard " << *b << dendl;
       buffer_map.erase(b->offset);
     } else {
       b->state = Buffer::STATE_CLEAN;
       writing.erase(i++);
       cache->_add_buffer(b, 1, nullptr);
+      ldout(cache->cct, 20) << __func__ << " added " << *b << dendl;
     }
   }
 
@@ -1468,34 +1497,6 @@ void BlueStore::OnodeSpace::clear()
     cache->_rm_onode(p.second);
   }
   onode_map.clear();
-}
-
-void BlueStore::OnodeSpace::clear_pre_split(SharedBlobSet& sbset,
-					    uint32_t ps, int bits)
-{
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
-  ldout(cache->cct, 10) << __func__ << dendl;
-
-  auto p = onode_map.begin();
-  while (p != onode_map.end()) {
-    if (p->second->oid.match(bits, ps)) {
-      // this onode stays in the collection post-split
-      ++p;
-    } else {
-      // We have an awkward race here: previous pipelined transactions may
-      // still reference blobs and their shared_blobs.  They will be flushed
-      // shortly by _osr_reap_done, but it's awkward to block for that (and
-      // a waste of time).  Instead, explicitly remove them from the shared blob
-      // map.
-      for (auto& e : p->second->extent_map.extent_map) {
-	if (e.blob->get_blob().is_shared()) {
-	  sbset.remove(e.blob->shared_blob.get());
-	}
-      }
-      cache->_rm_onode(p->second);
-      p = onode_map.erase(p);
-    }
-  }
 }
 
 bool BlueStore::OnodeSpace::empty()
@@ -3057,6 +3058,78 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   }
   o.reset(on);
   return onode_map.add(oid, o);
+}
+
+void BlueStore::Collection::split_cache(
+  Collection *dest)
+{
+  ldout(store->cct, 10) << __func__ << " to " << dest << dendl;
+
+  // lock (one or both) cache shards
+  std::lock(cache->lock, dest->cache->lock);
+  std::lock_guard<std::recursive_mutex> l(cache->lock, std::adopt_lock);
+  std::lock_guard<std::recursive_mutex> l2(dest->cache->lock, std::adopt_lock);
+
+  int destbits = dest->cnode.bits;
+  spg_t destpg;
+  bool is_pg = dest->cid.is_pg(&destpg);
+  assert(is_pg);
+
+  auto p = onode_map.onode_map.begin();
+  while (p != onode_map.onode_map.end()) {
+    if (!p->second->oid.match(destbits, destpg.pgid.ps())) {
+      // onode does not belong to this child
+      ++p;
+    } else {
+      OnodeRef o = p->second;
+      ldout(store->cct, 20) << __func__ << " moving " << o << " " << o->oid
+			    << dendl;
+
+      cache->_rm_onode(p->second);
+      p = onode_map.onode_map.erase(p);
+
+      o->c = dest;
+      dest->cache->_add_onode(o, 1);
+      dest->onode_map.onode_map[o->oid] = o;
+      dest->onode_map.cache = dest->cache;
+
+      // move over shared blobs and buffers.  cover shared blobs from
+      // both extent map and spanning blob map (the full extent map
+      // may not be faulted in)
+      vector<SharedBlob*> sbvec;
+      for (auto& e : o->extent_map.extent_map) {
+	sbvec.push_back(e.blob->shared_blob.get());
+      }
+      for (auto& b : o->extent_map.spanning_blob_map) {
+	sbvec.push_back(b.second->shared_blob.get());
+      }
+      for (auto sb : sbvec) {
+	if (sb->coll == dest) {
+	  ldout(store->cct, 20) << __func__ << "  already moved " << *sb
+				<< dendl;
+	  continue;
+	}
+	ldout(store->cct, 20) << __func__ << "  moving " << *sb << dendl;
+	sb->coll = dest;
+	if (dest->cache != cache) {
+	  if (sb->get_sbid()) {
+	    ldout(store->cct, 20) << __func__ << "   moving registration " << *sb << dendl;
+	    shared_blob_set.remove(sb);
+	    dest->shared_blob_set.add(dest, sb);
+	  }
+	  for (auto& i : sb->bc.buffer_map) {
+	    if (!i.second->is_writing()) {
+	      ldout(store->cct, 20) << __func__ << "   moving " << *i.second
+				    << dendl;
+	      dest->cache->_move_buffer(cache, i.second.get());
+	    }
+	  }
+	}
+      }
+
+
+    }
+  }
 }
 
 void BlueStore::Collection::trim_cache()
@@ -10063,18 +10136,27 @@ int BlueStore::_split_collection(TransContext *txc,
   RWLock::WLocker l2(d->lock);
   int r;
 
-  // drop any cached items (onodes and referenced shared blobs) that will
-  // not belong to this collection post-split.
-  spg_t pgid;
+  // move any cached items (onodes and referenced shared blobs) that will
+  // belong to the child collection post-split.  leave everything else behind.
+  // this may include things that don't strictly belong to the now-smaller
+  // parent split, but the OSD will always send us a split for every new
+  // child.
+
+  spg_t pgid, dest_pgid;
   bool is_pg = c->cid.is_pg(&pgid);
   assert(is_pg);
-  c->onode_map.clear_pre_split(c->shared_blob_set, pgid.ps(), bits);
+  is_pg = d->cid.is_pg(&dest_pgid);
+  assert(is_pg);
 
-  // the destination should be empty.
+  // the destination should initially be empty.
   assert(d->onode_map.empty());
   assert(d->shared_blob_set.empty());
+  assert(d->cnode.bits == bits);
 
-  // adjust bits
+  c->split_cache(d.get());
+
+  // adjust bits.  note that this will be redundant for all but the first
+  // split call for this parent (first child).
   c->cnode.bits = bits;
   assert(d->cnode.bits == bits);
   r = 0;

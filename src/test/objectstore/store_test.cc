@@ -4974,7 +4974,8 @@ void colsplittest(
 		     CEPH_NOSNAP,
 		     i<<common_suffix_size,
 		     52, ""));
-      t.write(cid, a, 0, small.length(), small);
+      t.write(cid, a, 0, small.length(), small,
+	      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
       if (clones) {
 	objname << "-clone";
 	ghobject_t b(hobject_t(
