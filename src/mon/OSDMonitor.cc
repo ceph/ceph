@@ -892,16 +892,17 @@ void OSDMonitor::create_pending()
   }
   if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
     // transition full ratios from PGMap to OSDMap (on upgrade)
-    PGMap *pg_map = &mon->pgmon()->pg_map;
-    if (osdmap.full_ratio != pg_map->full_ratio) {
+    float full_ratio = mon->pgservice.get_full_ratio();
+    float nearfull_ratio = mon->pgservice.get_nearfull_ratio();
+    if (osdmap.full_ratio != full_ratio) {
       dout(10) << __func__ << " full_ratio " << osdmap.full_ratio
-	       << " -> " << pg_map->full_ratio << " (from pgmap)" << dendl;
-      pending_inc.new_full_ratio = pg_map->full_ratio;
+	       << " -> " << full_ratio << " (from pgmap)" << dendl;
+      pending_inc.new_full_ratio = full_ratio;
     }
-    if (osdmap.nearfull_ratio != pg_map->nearfull_ratio) {
+    if (osdmap.nearfull_ratio != nearfull_ratio) {
       dout(10) << __func__ << " nearfull_ratio " << osdmap.nearfull_ratio
-	       << " -> " << pg_map->nearfull_ratio << " (from pgmap)" << dendl;
-      pending_inc.new_nearfull_ratio = pg_map->nearfull_ratio;
+	       << " -> " << nearfull_ratio << " (from pgmap)" << dendl;
+      pending_inc.new_nearfull_ratio = nearfull_ratio;
     }
   } else {
     // safety check (this shouldn't really happen)
@@ -1450,6 +1451,7 @@ version_t OSDMonitor::get_trim_to()
   if (mon->monmap->get_required_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
     {
+      // TODO: Get this hidden in PGStatService
       std::lock_guard<std::mutex> l(creating_pgs_lock);
       if (!creating_pgs.pgs.empty()) {
 	return 0;
@@ -1457,12 +1459,12 @@ version_t OSDMonitor::get_trim_to()
     }
     floor = get_min_last_epoch_clean();
   } else {
-    if (!mon->pgmon()->is_readable())
+    if (!mon->pgservice.is_readable())
       return 0;
-    if (mon->pgmon()->pg_map.creating_pgs.empty()) {
+    if (mon->pgservice.creating_pgs.empty()) {
       return 0;
     }
-    floor = mon->pgmon()->pg_map.get_min_last_epoch_clean();
+    floor = mon->pgservice.get_min_last_epoch_clean();
   }
   {
     dout(10) << " min_last_epoch_clean " << floor << dendl;
@@ -3417,9 +3419,9 @@ void OSDMonitor::tick()
 
   // if map full setting has changed, get that info out there!
   if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS &&
-      mon->pgmon()->is_readable()) {
+      mon->pgservice.is_readable()) {
     // for pre-luminous compat only!
-    if (!mon->pgmon()->pg_map.full_osds.empty()) {
+    if (mon->pgservice.have_full_osds()) {
       dout(5) << "There are full osds, setting full flag" << dendl;
       add_flag(CEPH_OSDMAP_FULL);
     } else if (osdmap.test_flag(CEPH_OSDMAP_FULL)){
@@ -3427,7 +3429,7 @@ void OSDMonitor::tick()
       remove_flag(CEPH_OSDMAP_FULL);
     }
 
-    if (!mon->pgmon()->pg_map.nearfull_osds.empty()) {
+    if (mon->pgservice.have_nearfull_osds()) {
       dout(5) << "There are near full osds, setting nearfull flag" << dendl;
       add_flag(CEPH_OSDMAP_NEARFULL);
     } else if (osdmap.test_flag(CEPH_OSDMAP_NEARFULL)){
