@@ -2143,6 +2143,10 @@ public:
     return num_objects * 300; //assuming per-object overhead is 300 bytes
   }
 
+  bool op_commit_equal_applied() const override {
+    return true;
+  }
+
   struct BSPerfTracker {
     PerfCounters::avg_tracker<uint64_t> os_commit_latency;
     PerfCounters::avg_tracker<uint64_t> os_apply_latency;

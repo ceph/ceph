@@ -550,6 +550,10 @@ public:
     return num_objects * 300; //assuming per-object overhead is 300 bytes
   }
 
+  bool op_commit_equal_applied() const override {
+    return true;
+  }
+
   objectstore_perf_stat_t get_cur_stats() {
     return objectstore_perf_stat_t();
   }

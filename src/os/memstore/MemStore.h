@@ -386,6 +386,10 @@ public:
     return 0; //do not care
   }
 
+  bool op_commit_equal_applied() const override {
+    return true;
+  }
+
   objectstore_perf_stat_t get_cur_stats() override;
 
   const PerfCounters* get_perf_counters() const {

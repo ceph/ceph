@@ -1974,6 +1974,10 @@ public:
   */
   virtual uint64_t estimate_objects_overhead(uint64_t num_objects) = 0;
 
+  /**
+   *mean the callback op_commit & op_applied can return at the same time.
+   */
+  virtual bool op_commit_equal_applied() const { return false; }
 
   // DEBUG
   virtual void inject_data_error(const ghobject_t &oid) {}
