@@ -69,9 +69,10 @@ function TEST_pidfile() {
     # if the pid in the file is different from the pid of the daemon
     # the file is not removed because it is assumed to be owned by
     # another daemon
-    cp $dir/osd.0.pid $dir/osd.0.pid.old  # so that kill_daemon finds the pid
+    mkdir $dir/old
+    cp $dir/osd.0.pid $dir/old/osd.0.pid  # so that kill_daemon finds the pid
     echo 123 > $dir/osd.0.pid
-    kill_daemons $dir TERM osd.0 || return 1
+    kill_daemons $dir/old TERM osd.0 || return 1
     test -f $dir/osd.0.pid || return 1
 
     # when the daemon shutdown, it removes its own pid file
