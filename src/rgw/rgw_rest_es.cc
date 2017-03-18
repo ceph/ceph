@@ -357,14 +357,8 @@ public:
   }
 };
 
-void skip_whitespace(const char *str, int size, int& pos)
-{
-  while (pos < size && isspace(str[pos])) {
-    ++pos;
-  }
-}
 
-static bool is_key_char(char c)
+bool is_key_char(char c)
 {
   switch (c) {
     case '(':
@@ -410,107 +404,114 @@ static bool is_val_char(char c)
   return (c != ')');
 }
 
-static bool get_next_token(const char *str, int size, int& pos, list<string> *args, bool (*filter)(char))
-{
-  skip_whitespace(str, size, pos);
-  int token_start = pos;
-  while (pos < size && filter(str[pos])) {
-    ++pos;
-  }
-  if (pos == token_start) {
-    return false;
-  }
-  string token = string(str + token_start, pos - token_start);
-  args->push_back(token);
-  return true;
-}
+class ESInfixQueryParser {
+  string query;
+  int size;
+  const char *str;
+  int pos{0};
+  list<string> args;
 
-static bool parse_condition(const char *str, int size, int& pos, list<string> *args)
-{
-  /*
-   * condition: <key> <operator> <val>
-   *
-   * whereas key: needs to conform to http header field restrictions
-   *         operator: one of the following: < <= == >= >
-   *         val: ascii, terminated by either space or ')' (or end of string)
-   */
-
-  /* parse key */
-  bool valid = get_next_token(str, size, pos, args, is_key_char) &&
-    get_next_token(str, size, pos, args, is_op_char) &&
-    get_next_token(str, size, pos, args, is_val_char);
-
-  if (!valid) {
-    return false;
+  void skip_whitespace(const char *str, int size, int& pos) {
+    while (pos < size && isspace(str[pos])) {
+      ++pos;
+    }
   }
 
-  return true;
-}
-
-static bool parse_and_or(const char *str, int size, int& pos, list<string> *args)
-{
-  skip_whitespace(str, size, pos);
-  if (pos + 3 <= size && strncmp(str + pos, "and", 3) == 0) {
-    pos += 3;
-    args->push_back("and");
-    return true;
-  }
-
-  if (pos + 2 <= size && strncmp(str + pos, "or", 2) == 0) {
-    pos += 2;
-    args->push_back("or");
-    return true;
-  }
-
-  return false;
-}
-
-static bool parse_specific_char(const char *str, int size, int& pos, list<string> *args, const char *pchar)
-{
-  skip_whitespace(str, size, pos);
-  if (pos >= size) {
-    return false;
-  }
-  if (str[pos] != *pchar) {
-    return false;
-  }
-
-  args->push_back(pchar);
-  ++pos;
-  return true;
-}
-
-static bool parse_open_bracket(const char *str, int size, int& pos, list<string> *args)
-{
-  return parse_specific_char(str, size, pos, args, "(");
-}
-
-static bool parse_close_bracket(const char *str, int size, int& pos, list<string> *args)
-{
-  return parse_specific_char(str, size, pos, args, ")");
-}
-
-static bool parse_expression(const string& s, list<string> *args)
-{
-  /*
-   * expression: [(]<condition>[[and/or]<condition>][)][and/or]...
-   */
-
-  int pos = 0;
-  int size = s.size();
-  const char *str = s.c_str();
-
-  while (pos < size) {
-    parse_open_bracket(str, size, pos, args);
-    if (!parse_condition(str, size, pos, args)) {
+  bool get_next_token(bool (*filter)(char)) {
+    skip_whitespace(str, size, pos);
+    int token_start = pos;
+    while (pos < size && filter(str[pos])) {
+      ++pos;
+    }
+    if (pos == token_start) {
       return false;
     }
-    parse_close_bracket(str, size, pos, args);
-    parse_and_or(str, size, pos, args);
+    string token = string(str + token_start, pos - token_start);
+    args.push_back(token);
+    return true;
   }
 
-  return true;
-}
+  bool parse_condition() {
+    /*
+     * condition: <key> <operator> <val>
+     *
+     * whereas key: needs to conform to http header field restrictions
+     *         operator: one of the following: < <= == >= >
+     *         val: ascii, terminated by either space or ')' (or end of string)
+     */
+
+    /* parse key */
+    bool valid = get_next_token(is_key_char) &&
+      get_next_token(is_op_char) &&
+      get_next_token(is_val_char);
+
+    if (!valid) {
+      return false;
+    }
+
+    return true;
+  }
+
+  bool parse_and_or() {
+    skip_whitespace(str, size, pos);
+    if (pos + 3 <= size && strncmp(str + pos, "and", 3) == 0) {
+      pos += 3;
+      args.push_back("and");
+      return true;
+    }
+
+    if (pos + 2 <= size && strncmp(str + pos, "or", 2) == 0) {
+      pos += 2;
+      args.push_back("or");
+      return true;
+    }
+
+    return false;
+  }
+
+  bool parse_specific_char(const char *pchar) {
+    skip_whitespace(str, size, pos);
+    if (pos >= size) {
+      return false;
+    }
+    if (str[pos] != *pchar) {
+      return false;
+    }
+
+    args.push_back(pchar);
+    ++pos;
+    return true;
+  }
+
+  bool parse_open_bracket() {
+    return parse_specific_char("(");
+  }
+
+  bool parse_close_bracket() {
+    return parse_specific_char(")");
+  }
+
+public:
+  ESInfixQueryParser(const string& _query) : query(_query), size(query.size()), str(query.c_str()) {}
+  bool parse(list<string> *result) {
+    /*
+     * expression: [(]<condition>[[and/or]<condition>][)][and/or]...
+     */
+
+    while (pos < size) {
+      parse_open_bracket();
+      if (!parse_condition()) {
+        return false;
+      }
+      parse_close_bracket();
+      parse_and_or();
+    }
+
+    result->swap(args);
+
+    return true;
+  }
+};
 
 
 int main(int argc, char *argv[])
@@ -525,7 +526,8 @@ int main(int argc, char *argv[])
     expr = "age >= 30";
   }
 
-  if (!parse_expression(expr, &infix)) {
+  ESInfixQueryParser parser(expr);
+  if (!parser.parse(&infix)) {
     cout << "ERROR: failed to parse : " << expr << std::endl;
     return EINVAL;
   }
