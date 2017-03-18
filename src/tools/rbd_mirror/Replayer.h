@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 
+#include "common/AsyncOpTracker.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
@@ -16,7 +17,6 @@
 #include "include/rados/librados.hpp"
 
 #include "ClusterWatcher.h"
-#include "ImageReplayer.h"
 #include "LeaderWatcher.h"
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
@@ -30,6 +30,7 @@ namespace rbd {
 namespace mirror {
 
 template <typename> struct Threads;
+template <typename> class InstanceReplayer;
 template <typename> class InstanceWatcher;
 
 /**
@@ -79,11 +80,6 @@ private:
                      const ImageIds &added_image_ids,
                      const ImageIds &removed_image_ids);
 
-  void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
-  bool stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
-  void stop_image_replayers();
-  void stop_image_replayers(Context *on_finish);
-
   int init_rados(const std::string &cluster_name,
                  const std::string &client_name,
                  const std::string &description, RadosRef *rados_ref);
@@ -98,6 +94,9 @@ private:
   void init_pool_watcher(Context *on_finish);
   void shut_down_pool_watcher(Context *on_finish);
   void handle_shut_down_pool_watcher(int r, Context *on_finish);
+
+  void wait_for_update_ops(Context *on_finish);
+  void handle_wait_for_update_ops(int r, Context *on_finish);
 
   Threads<librbd::ImageCtx> *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
@@ -117,12 +116,11 @@ private:
   librados::IoCtx m_remote_io_ctx;
 
   int64_t m_local_pool_id = -1;
-  int64_t m_remote_pool_id = -1;
 
   PoolWatcherListener m_pool_watcher_listener;
   std::unique_ptr<PoolWatcher<> > m_pool_watcher;
 
-  std::map<std::string, std::unique_ptr<ImageReplayer<> > > m_image_replayers;
+  std::unique_ptr<InstanceReplayer<librbd::ImageCtx>> m_instance_replayer;
 
   std::string m_asok_hook_name;
   AdminSocketHook *m_asok_hook;
@@ -159,6 +157,7 @@ private:
 
   std::unique_ptr<LeaderWatcher<> > m_leader_watcher;
   std::unique_ptr<InstanceWatcher<librbd::ImageCtx> > m_instance_watcher;
+  AsyncOpTracker m_update_op_tracker;
 };
 
 } // namespace mirror
