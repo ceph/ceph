@@ -1116,7 +1116,7 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   assert(mdr.get());
   MClientRequest *req = mdr->client_request;
   
-  dout(10) << "reply_client_request " << reply->get_result() 
+  dout(7) << "reply_client_request " << reply->get_result()
 	   << " (" << cpp_strerror(reply->get_result())
 	   << ") " << *req << dendl;
 
