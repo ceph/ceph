@@ -407,7 +407,6 @@ protected:
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks);
   virtual bool is_exhausted();
 
-  using BitMapArea::child_check_n_lock;
   bool child_check_n_lock(BitMapArea *child, int64_t required, bool lock) {
     ceph_abort();
     return false;
@@ -482,6 +481,7 @@ public:
   BitMapAreaLeaf(CephContext* cct, int64_t zone_num, int64_t total_blocks,
 		 bool def);
 
+  using BitMapAreaIN::child_check_n_lock;
   bool child_check_n_lock(BitMapArea *child, int64_t required) {
     ceph_abort();
     return false;
