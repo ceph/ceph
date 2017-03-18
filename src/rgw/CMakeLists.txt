@@ -195,7 +195,7 @@ target_link_libraries(radosgw-admin rgw_a librados
 install(TARGETS radosgw-admin DESTINATION bin)
 
 set(radosgw_es_srcs
-  rgw_rest_es.cc)
+  rgw_es_query.cc)
 add_executable(radosgw-es ${radosgw_es_srcs})
 target_link_libraries(radosgw-es rgw_a librados
   cls_rgw_client cls_lock_client cls_refcount_client
