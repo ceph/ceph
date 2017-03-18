@@ -305,6 +305,10 @@ public:
 
   Engine::result_t authenticate(const req_state* s) const override final;
 
+  bool is_empty() const {
+    return auth_stack.empty();
+  }
+
 private:
   /* Using the reference wrapper here to explicitly point out we are not
    * interested in storing nulls while preserving the dynamic polymorphism. */
