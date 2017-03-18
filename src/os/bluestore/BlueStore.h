@@ -1550,25 +1550,40 @@ public:
 
     std::atomic_int kv_submitted_waiters = {0};
 
-    std::mutex register_lock;
-    bool registered = true;
+    std::atomic_bool registered = {true}; ///< registered in BlueStore's osr_set
+    std::atomic_bool zombie = {false};    ///< owning Sequencer has gone away
 
     OpSequencer(CephContext* cct, BlueStore *store)
       : Sequencer_impl(cct),
 	parent(NULL), store(store) {
-      std::lock_guard<std::mutex> l(register_lock);
       store->register_osr(this);
     }
     ~OpSequencer() {
       assert(q.empty());
-      discard();
+      _unregister();
     }
 
     void discard() override {
-      std::lock_guard<std::mutex> l(register_lock);
+      // Note that we may have txc's in flight when the parent Sequencer
+      // goes away.  Reflect this with zombie==registered==true and let
+      // _osr_reap_done or _osr_drain_all clean up later.
+      assert(!zombie);
+      zombie = true;
+      parent = nullptr;
+      bool empty;
+      {
+	std::lock_guard<std::mutex> l(qlock);
+	empty = q.empty();
+      }
+      if (empty) {
+	_unregister();
+      }
+    }
+
+    void _unregister() {
       if (registered) {
-	registered = false;
 	store->unregister_osr(this);
+	registered = false;
       }
     }
 
@@ -1850,9 +1865,9 @@ private:
   void _txc_finish(TransContext *txc);
   void _txc_release_alloc(TransContext *txc);
 
-  void _osr_reap_done(OpSequencer *osr);
+  bool _osr_reap_done(OpSequencer *osr);
   void _osr_drain_all();
-  void _osr_discard_all();
+  void _osr_unregister_all();
 
   void _kv_sync_thread();
   void _kv_stop() {
