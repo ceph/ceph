@@ -105,10 +105,18 @@ public:
       external_engines(cct, store, &extractor),
       local_engine(cct, store, extractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
-    add_engine(Control::SUFFICIENT, external_engines);
+
+    Control local_engine_mode;
+    if (! external_engines.is_empty()) {
+      add_engine(Control::SUFFICIENT, external_engines);
+
+      local_engine_mode = Control::FALLBACK;
+    } else {
+      local_engine_mode = Control::SUFFICIENT;
+    }
 
     if (cct->_conf->rgw_s3_auth_use_rados) {
-      add_engine(Control::FALLBACK, local_engine);
+      add_engine(local_engine_mode, local_engine);
     }
   }
 
