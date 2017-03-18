@@ -328,35 +328,6 @@ static bool alloc_node(ESQueryStack *s, ESQueryNode **pnode)
   return true;
 }
 
-class ESQuery {
-  ESQueryStack stack;
-  ESQueryNode *query_root{nullptr};
-public:
-  ESQuery() {}
-  ~ESQuery() {
-    delete query_root;
-  }
-  
-  bool init(list<string>& infix) {
-    list<string> prefix;
-    if (!infix_to_prefix(infix, &prefix)) {
-      return false;
-    }
-    stack.assign(prefix);
-    if (!alloc_node(&stack, &query_root)) {
-      return false;
-    }
-    if (!stack.done()) {
-      return false;
-    }
-    return true;
-  }
-
-  void dump(Formatter *f) const {
-    encode_json("query", *query_root, f);
-  }
-};
-
 
 bool is_key_char(char c)
 {
@@ -513,6 +484,50 @@ public:
   }
 };
 
+class ESQueryCompiler {
+  ESInfixQueryParser parser;
+  ESQueryStack stack;
+  ESQueryNode *query_root{nullptr};
+
+  bool convert(list<string>& infix) {
+    list<string> prefix;
+    if (!infix_to_prefix(infix, &prefix)) {
+      return false;
+    }
+    stack.assign(prefix);
+    if (!alloc_node(&stack, &query_root)) {
+      return false;
+    }
+    if (!stack.done()) {
+      return false;
+    }
+    return true;
+  }
+
+public:
+  ESQueryCompiler(const string& query) : parser(query) {}
+  ~ESQueryCompiler() {
+    delete query_root;
+  }
+
+  bool compile() {
+    list<string> infix;
+    if (!parser.parse(&infix)) {
+      return false;
+    }
+
+    if (!convert(infix)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  void dump(Formatter *f) const {
+    encode_json("query", *query_root, f);
+  }
+};
+
 
 int main(int argc, char *argv[])
 {
@@ -526,15 +541,9 @@ int main(int argc, char *argv[])
     expr = "age >= 30";
   }
 
-  ESInfixQueryParser parser(expr);
-  if (!parser.parse(&infix)) {
-    cout << "ERROR: failed to parse : " << expr << std::endl;
-    return EINVAL;
-  }
-
-  ESQuery es_query;
+  ESQueryCompiler es_query(expr);
   
-  bool valid = es_query.init(infix);
+  bool valid = es_query.compile();
   if (!valid) {
     cout << "invalid query, failed generating request json" << std::endl;
     return EINVAL;
