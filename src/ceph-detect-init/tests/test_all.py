@@ -35,6 +35,7 @@ from ceph_detect_init import suse
 from ceph_detect_init import gentoo
 from ceph_detect_init import freebsd
 from ceph_detect_init import docker
+from ceph_detect_init import oraclevms
 
 logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
                     level=logging.DEBUG)
@@ -53,6 +54,9 @@ class TestCephDetectInit(testtools.TestCase):
 
     def test_docker(self):
         self.assertEqual('none', docker.choose_init())
+
+    def test_oraclevms(self):
+        self.assertEqual('sysvinit', oraclevms.choose_init())
 
     def test_centos(self):
         with mock.patch('ceph_detect_init.centos.release',
@@ -207,6 +211,8 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual(debian, g('ubuntu'))
         self.assertEqual(centos, g('centos'))
         self.assertEqual(centos, g('scientific'))
+        self.assertEqual(centos, g('Oracle Linux Server'))
+        self.assertEqual(oraclevms, g('Oracle VM server'))
         self.assertEqual(fedora, g('fedora'))
         self.assertEqual(suse, g('suse'))
         self.assertEqual(rhel, g('redhat', use_rhceph=True))
@@ -222,6 +228,8 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual('scientific', n('Scientific'))
         self.assertEqual('scientific', n('Scientific Linux'))
         self.assertEqual('scientific', n('scientific linux'))
+        self.assertEqual('oraclel', n('Oracle Linux Server'))
+        self.assertEqual('oraclevms', n('Oracle VM server'))
         self.assertEqual('suse', n('SUSE'))
         self.assertEqual('suse', n('suse'))
         self.assertEqual('suse', n('openSUSE'))
@@ -264,6 +272,16 @@ class TestCephDetectInit(testtools.TestCase):
         with mock.patch('platform.linux_distribution',
                         lambda **kwargs: (('debian', 'sid/jessie', ''))):
             self.assertEqual(('debian', 'sid/jessie', 'sid'),
+                             ceph_detect_init.platform_information())
+
+        with mock.patch('platform.linux_distribution',
+                        lambda **kwargs: (('Oracle Linux Server', '7.3', ''))):
+            self.assertEqual(('Oracle Linux Server', '7.3', 'OL7.3'),
+                             ceph_detect_init.platform_information())
+
+        with mock.patch('platform.linux_distribution',
+                        lambda **kwargs: (('Oracle VM server', '3.4.2', ''))):
+            self.assertEqual(('Oracle VM server', '3.4.2', 'OVS3.4.2'),
                              ceph_detect_init.platform_information())
 
     @mock.patch('platform.linux_distribution')
