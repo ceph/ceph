@@ -166,7 +166,8 @@ struct denc_traits<PExtentVector> {
   static void bound_encode(const PExtentVector& v, size_t& p) {
     p += sizeof(uint32_t);
     size_t per = 0;
-    denc(*(bluestore_pextent_t*)nullptr, per);
+    bluestore_pextent_t tmp;
+    denc(tmp, per);
     p += per * v.size();
   }
   static void encode(const PExtentVector& v,
