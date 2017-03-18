@@ -28,7 +28,7 @@ public:
   ssize_t read(uint64_t off, uint64_t len, ReadResult &&read_result,
                int op_flags);
   ssize_t write(uint64_t off, uint64_t len, bufferlist &&bl, int op_flags);
-  int discard(uint64_t off, uint64_t len, bool skip_partial_discard);
+  ssize_t discard(uint64_t off, uint64_t len, bool skip_partial_discard);
   ssize_t writesame(uint64_t off, uint64_t len, bufferlist &&bl, int op_flags);
 
   void aio_read(AioCompletion *c, uint64_t off, uint64_t len,
