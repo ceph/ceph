@@ -165,9 +165,12 @@ struct denc_traits<PExtentVector> {
   static constexpr bool featured = false;
   static void bound_encode(const PExtentVector& v, size_t& p) {
     p += sizeof(uint32_t);
-    size_t per = 0;
-    denc(*(bluestore_pextent_t*)nullptr, per);
-    p += per * v.size();
+    const auto size = v.size();
+    if (size) {
+      size_t per = 0;
+      denc(v.front(), per);
+      p +=  per * size;
+    }
   }
   static void encode(const PExtentVector& v,
 		     bufferlist::contiguous_appender& p) {
