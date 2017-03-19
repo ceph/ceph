@@ -259,9 +259,9 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
   return true;
 }
 
-int CrushWrapper::remove_unused_root(int item)
+int CrushWrapper::remove_root(int item, bool unused)
 {
-  if (_bucket_is_in_use(item))
+  if (unused && _bucket_is_in_use(item))
     return 0;
 
   crush_bucket *b = get_bucket(item);
@@ -271,7 +271,7 @@ int CrushWrapper::remove_unused_root(int item)
   for (unsigned n = 0; n < b->size; n++) {
     if (b->items[n] >= 0)
       continue;
-    int r = remove_unused_root(b->items[n]);
+    int r = remove_root(b->items[n], unused);
     if (r < 0)
       return r;
   }
@@ -1035,10 +1035,10 @@ int CrushWrapper::populate_classes()
 
 int CrushWrapper::cleanup_classes()
 {
-  return trim_roots_with_class();
+  return trim_roots_with_class(true);
 }
 
-int CrushWrapper::trim_roots_with_class()
+int CrushWrapper::trim_roots_with_class(bool unused)
 {
   set<int> roots;
   find_roots(roots);
@@ -1047,7 +1047,7 @@ int CrushWrapper::trim_roots_with_class()
       continue;
     if (!id_has_class(r))
       continue;
-    int res = remove_unused_root(r);
+    int res = remove_root(r, unused);
     if (res)
       return res;
   }

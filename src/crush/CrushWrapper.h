@@ -691,9 +691,10 @@ public:
    * when a bucket is in use.
    *
    * @param item id to remove
+   * @param unused true if only unused items should be removed
    * @return 0 on success, negative on error
    */
-  int remove_unused_root(int item);
+  int remove_root(int item, bool unused);
 
   /**
    * remove all instances of an item nested beneath a certain point from the map
@@ -1091,7 +1092,7 @@ public:
   int device_class_clone(int original, int device_class, int *clone);
   int populate_classes();
   /* remove unused roots generated for class devices */
-  int trim_roots_with_class();
+  int trim_roots_with_class(bool unused);
   int cleanup_classes();
 
   void start_choose_profile() {
