@@ -6286,6 +6286,52 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     pending_inc.crush = data;
     ss << "set crush map";
     goto update;
+
+  } else if (prefix == "osd crush set-device-class") {
+    if (!osdmap.exists(osdid)) {
+      err = -ENOENT;
+      ss << name << " does not exist.  create it before updating the crush map";
+      goto reply;
+    }
+
+    string device_class;
+    if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
+      err = -EINVAL; // no value!
+      goto reply;
+    }
+
+    if (!_get_stable_crush().item_exists(osdid)) {
+      err = -ENOENT;
+      ss << "unable to set-device-class for item id " << osdid << " name '" << name
+         << "' device_class " << device_class << ": does not exist";
+      goto reply;
+    }
+
+    dout(5) << "updating crush item id " << osdid << " name '"
+	    << name << "' device_class " << device_class << dendl;
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    err = newcrush.update_device_class(g_ceph_context, osdid, device_class, name);
+
+    if (err < 0)
+      goto reply;
+
+    if (err == 0 && !_have_pending_crush()) {
+      ss << "set-device-class item id " << osdid << " name '" << name << "' device_class "
+        << device_class << " : no change";
+      goto reply;
+    }
+
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    ss << "set-device-class item id " << osdid << " name '" << name << "' device_class "
+       << device_class;
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+						      get_last_committed() + 1));
+    return true;
+
   } else if (prefix == "osd crush add-bucket") {
     // os crush add-bucket <name> <type>
     string name, typestr;
