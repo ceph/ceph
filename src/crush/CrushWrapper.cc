@@ -1040,8 +1040,6 @@ int CrushWrapper::cleanup_classes()
 
 int CrushWrapper::trim_roots_with_class()
 {
-  set<int> takes;
-  find_takes(takes);
   set<int> roots;
   find_roots(roots);
   for (auto &r : roots) {
