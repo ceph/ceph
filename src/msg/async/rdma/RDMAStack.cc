@@ -119,7 +119,7 @@ void RDMADispatcher::handle_async_event()
       } else {
         ldout(cct, 1) << __func__ << " it's not forwardly stopped by us, reenable=" << conn << dendl;
         conn->fault();
-        erase_qpn(qpn);
+        erase_qpn_lockless(qpn);
       }
     } else {
       ldout(cct, 1) << __func__ << " ibv_get_async_event: dev=" << global_infiniband->get_device()->ctxt
@@ -295,9 +295,8 @@ RDMAConnectedSocketImpl* RDMADispatcher::get_conn_lockless(uint32_t qp)
   return it->second.second;
 }
 
-void RDMADispatcher::erase_qpn(uint32_t qpn)
+void RDMADispatcher::erase_qpn_lockless(uint32_t qpn)
 {
-  Mutex::Locker l(lock);
   auto it = qp_conns.find(qpn);
   if (it == qp_conns.end())
     return ;
@@ -305,6 +304,12 @@ void RDMADispatcher::erase_qpn(uint32_t qpn)
   dead_queue_pairs.push_back(it->second.first);
   qp_conns.erase(it);
   --num_qp_conn;
+}
+
+void RDMADispatcher::erase_qpn(uint32_t qpn)
+{
+  Mutex::Locker l(lock);
+  erase_qpn_lockless(qpn);
 }
 
 void RDMADispatcher::handle_pre_fork()
