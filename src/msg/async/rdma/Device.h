@@ -30,6 +30,14 @@
 #include "msg/async/net_handler.h"
 #include "common/Mutex.h"
 
+typedef Infiniband::QueuePair QueuePair;
+typedef Infiniband::CompletionChannel CompletionChannel;
+typedef Infiniband::CompletionQueue CompletionQueue;
+typedef Infiniband::ProtectionDomain ProtectionDomain;
+typedef Infiniband::MemoryManager::Cluster Cluster;
+typedef Infiniband::MemoryManager::Chunk Chunk;
+typedef Infiniband::MemoryManager MemoryManager;
+
 class Port {
   struct ibv_context* ctxt;
   int port_num;
@@ -49,33 +57,85 @@ class Port {
 
 
 class Device {
+  CephContext *cct;
   ibv_device *device;
-  const char* name;
+  const char *name;
   uint8_t  port_cnt;
+
+  uint32_t max_send_wr;
+  uint32_t max_recv_wr;
+  uint32_t max_sge;
+
+  Mutex lock; // Protects from concurrent intialization of the device
+  bool initialized = false;
+
  public:
   explicit Device(CephContext *c, ibv_device* d);
   ~Device();
 
-  const char* get_name() { return name;}
+  void init();
+  void uninit();
+
+  const char* get_name() const { return name;}
   uint16_t get_lid() { return active_port->get_lid(); }
   ibv_gid get_gid() { return active_port->get_gid(); }
   int get_gid_idx() { return active_port->get_gid_idx(); }
   void binding_port(CephContext *c, int port_num);
+
+  QueuePair* create_queue_pair(CephContext *c, ibv_qp_type type);
+  ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
+  CompletionChannel *create_comp_channel(CephContext *c);
+  CompletionQueue *create_comp_queue(CephContext *c, CompletionChannel *cc=NULL);
+  int post_chunk(Chunk* chunk);
+  int post_channel_cluster();
+
+  MemoryManager* get_memory_manager() { return memory_manager; }
+  bool is_tx_buffer(const char* c) { return memory_manager->is_tx_buffer(c);}
+  bool is_rx_buffer(const char* c) { return memory_manager->is_rx_buffer(c);}
+  Chunk *get_tx_chunk_by_buffer(const char *c) { return memory_manager->get_tx_chunk_by_buffer(c); }
+  int get_tx_buffers(std::vector<Chunk*> &c, size_t bytes);
+  int poll_tx_cq(int n, ibv_wc *wc);
+  int poll_rx_cq(int n, ibv_wc *wc);
+  void rearm_cqs();
+
   struct ibv_context *ctxt;
   ibv_device_attr *device_attr;
   Port* active_port;
+
+  MemoryManager* memory_manager = nullptr;
+  ibv_srq *srq = nullptr;
+  Infiniband::CompletionQueue *rx_cq = nullptr;
+  Infiniband::CompletionChannel *rx_cc = nullptr;
+  Infiniband::CompletionQueue *tx_cq = nullptr;
+  Infiniband::CompletionChannel *tx_cc = nullptr;
+  ProtectionDomain *pd = nullptr;
 };
+
+inline ostream& operator<<(ostream& out, const Device &d)
+{
+    return out << d.get_name();
+}
 
 
 class DeviceList {
+  CephContext *cct;
   struct ibv_device ** device_list;
   int num;
   Device** devices;
+
+  int last_poll_dev;
+  struct pollfd *poll_fds;
+
  public:
   DeviceList(CephContext *cct);
   ~DeviceList();
 
   Device* get_device(const char* device_name);
+
+  void rearm_notify();
+  int poll_tx(int n, Device **d, ibv_wc *wc);
+  int poll_rx(int n, Device **d, ibv_wc *wc);
+  int poll_blocking(bool &done);
 };
 
 #endif
