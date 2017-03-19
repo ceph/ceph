@@ -89,8 +89,6 @@ private:
   // when we last received PG stats from each osd
   map<int,utime_t> last_osd_report;
 
-  void register_new_pgs();
-
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
   /**
