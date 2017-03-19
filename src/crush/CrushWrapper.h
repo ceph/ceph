@@ -1091,6 +1091,7 @@ public:
 
   int device_class_clone(int original, int device_class, int *clone);
   int populate_classes();
+  int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
   int trim_roots_with_class(bool unused);
   int cleanup_classes();
