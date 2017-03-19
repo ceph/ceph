@@ -113,10 +113,6 @@ struct failure_info_t {
 class OSDMonitor : public PaxosService {
   CephContext *cct;
 
-  ParallelPGMapper mapper;                        ///< for background pg work
-  OSDMapMapping mapping;                          ///< pg <-> osd mappings
-  unique_ptr<ParallelPGMapper::Job> mapping_job;  ///< background mapping job
-
 public:
   OSDMap osdmap;
 
@@ -209,6 +205,11 @@ private:
   };
   void maybe_prime_pg_temp();
   void prime_pg_temp(const OSDMap& next, pg_t pgid);
+
+  ParallelPGMapper mapper;                        ///< for background pg work
+  OSDMapMapping mapping;                          ///< pg <-> osd mappings
+  unique_ptr<ParallelPGMapper::Job> mapping_job;  ///< background mapping job
+  void start_mapping();
 
   void update_logger();
 
