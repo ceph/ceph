@@ -1289,6 +1289,17 @@ int CrushWrapper::device_class_clone(int original_id, int device_class, int *clo
   return 0;
 }
 
+int CrushWrapper::rebuild_roots_with_classes()
+{
+  int r = trim_roots_with_class(false);
+  if (r < 0)
+    return r;
+  r = populate_classes();
+  if (r < 0)
+    return r;
+  return trim_roots_with_class(true);
+}
+
 void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
 {
   assert(crush);
