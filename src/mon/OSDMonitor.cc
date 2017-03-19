@@ -98,10 +98,10 @@ OSDMonitor::OSDMonitor(
   const string& service_name)
  : PaxosService(mn, p, service_name),
    cct(cct),
-   mapper(mn->cct, &mn->cpu_tp),
    inc_osd_cache(g_conf->mon_osd_cache_size),
    full_osd_cache(g_conf->mon_osd_cache_size),
    last_attempted_minwait_time(utime_t()),
+   mapper(mn->cct, &mn->cpu_tp),
    op_tracker(cct, true, 1)
 {}
 
@@ -335,6 +335,27 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
   // make sure our feature bits reflect the latest map
   update_msgr_features();
+
+  if (!mon->is_leader()) {
+    // will be called by on_active() on the leader, avoid doing so twice
+    start_mapping();
+  }
+}
+
+void OSDMonitor::start_mapping()
+{
+  // initiate mapping job
+  if (mapping_job) {
+    dout(10) << __func__ << " canceling previous mapping_job " << mapping_job.get()
+	     << dendl;
+    mapping_job->abort();
+  }
+  auto *fin = new C_PrintTime(osdmap.get_epoch());
+  mapping_job = mapping.start_update(osdmap, mapper,
+				     g_conf->mon_osd_mapping_pgs_per_chunk);
+  dout(10) << __func__ << " started mapping job " << mapping_job.get()
+	   << " at " << fin->start << dendl;
+  mapping_job->set_finish_event(fin);
 }
 
 void OSDMonitor::update_msgr_features()
@@ -360,10 +381,9 @@ void OSDMonitor::on_active()
 {
   update_logger();
 
-  if (mon->is_leader())
+  if (mon->is_leader()) {
     mon->clog->info() << "osdmap " << osdmap;
-
-  if (!mon->is_leader()) {
+  } else {
     list<MonOpRequestRef> ls;
     take_all_failures(ls);
     while (!ls.empty()) {
@@ -373,19 +393,7 @@ void OSDMonitor::on_active()
       ls.pop_front();
     }
   }
-
-  // initiate mapping job
-  if (mapping_job) {
-    dout(10) << __func__ << " canceling previous mapping_job " << mapping_job.get()
-	     << dendl;
-    mapping_job->abort();
-  }
-  C_PrintTime *fin = new C_PrintTime(osdmap.get_epoch());
-  mapping_job = mapping.start_update(osdmap, mapper,
-				     g_conf->mon_osd_mapping_pgs_per_chunk);
-  dout(10) << __func__ << " started mapping job " << mapping_job.get()
-	   << " at " << fin->start << dendl;
-  mapping_job->set_finish_event(fin);
+  start_mapping();
 }
 
 void OSDMonitor::on_shutdown()
