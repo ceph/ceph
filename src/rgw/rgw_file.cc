@@ -402,7 +402,7 @@ namespace rgw {
 	    << dendl;
 	}
       }
-      break;
+      goto out;
       default:
 	abort();
       } /* switch */
