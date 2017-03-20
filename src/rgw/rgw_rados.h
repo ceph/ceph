@@ -1444,7 +1444,7 @@ class RGWPeriod
   const string get_period_oid_prefix();
 
   // gather the metadata sync status for each shard; only for use on master zone
-  int update_sync_status();
+  int update_sync_status(const RGWPeriod &current_period);
 
 public:
   RGWPeriod() : epoch(0) {}
