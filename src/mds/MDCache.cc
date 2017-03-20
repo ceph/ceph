@@ -3649,42 +3649,36 @@ void MDCache::remove_inode_recursive(CInode *in)
 
 bool MDCache::expire_recursive(
   CInode *in,
-  map<mds_rank_t, MCacheExpire*>& expiremap,
-  CDir *subtree)
+  map<mds_rank_t, MCacheExpire*>& expiremap)
 {
   assert(!in->is_auth());
 
   dout(10) << __func__ << ":" << *in << dendl;
 
-  mds_rank_t owner = subtree->dir_auth.first;
-  MCacheExpire *expire_msg = expiremap[owner];
-  assert(expire_msg);
-
   // Recurse into any dirfrags beneath this inode
   list<CDir*> ls;
   in->get_dirfrags(ls);
-  for (std::list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-    CDir *subdir = *p;
+  for (auto subdir : ls) {
+    if (!in->is_mdsdir() && subdir->is_subtree_root()) {
+      dout(10) << __func__ << ": stray still has subtree " << *in << dendl;
+      return true;
+    }
 
-    dout(10) << __func__ << ": entering dirfrag " << subdir << dendl;
-    for (CDir::map_t::iterator q = subdir->items.begin();
-         q != subdir->items.end(); ++q) {
-      CDentry *dn = q->second;
+    for (auto &it : subdir->items) {
+      CDentry *dn = it.second;
       CDentry::linkage_t *dnl = dn->get_linkage();
       if (dnl->is_primary()) {
 	CInode *tin = dnl->get_inode();
-        dout(10) << __func__ << ": tin="
-          << *tin << dendl;
 
         /* Remote strays with linkage (i.e. hardlinks) should not be
          * expired, because they may be the target of
          * a rename() as the owning MDS shuts down */
-        if (!tin->is_dir() && tin->inode.nlink) {
-          dout(10) << __func__ << ": child still has linkage" << dendl;
+        if (!tin->is_stray() && tin->inode.nlink) {
+          dout(10) << __func__ << ": stray still has linkage " << *tin << dendl;
           return true;
         }
 
-	const bool abort = expire_recursive(tin, expiremap, subtree);
+	const bool abort = expire_recursive(tin, expiremap);
         if (abort) {
           return true;
         }
@@ -3692,7 +3686,7 @@ bool MDCache::expire_recursive(
       if (dn->lru_is_expireable()) {
         trim_dentry(dn, expiremap);
       } else {
-        dout(10) << __func__ << ": dn still has linkage " << *dn << dendl;
+        dout(10) << __func__ << ": stray dn is not expireable " << *dn << dendl;
         return true;
       }
     }
@@ -6461,45 +6455,33 @@ bool MDCache::trim(int max, int count)
       trim_inode(0, root, 0, expiremap);
   }
 
-  // Trim remote stray dirs for stopping MDS ranks
-  std::list<CDir*> subtree_list;
-  list_subtrees(subtree_list);  // Take copy because will modify in loop
-  for (std::list<CDir*>::iterator s = subtree_list.begin();
-       s != subtree_list.end(); ++s) {
-    CDir *subtree = *s;
-    if (subtree->inode->is_mdsdir()) {
-      mds_rank_t owner = mds_rank_t(MDS_INO_MDSDIR_OWNER(subtree->inode->ino()));
-      if (owner == mds->get_nodeid() || !mds->mdsmap->is_up(owner)) {
-        continue;
+  std::set<mds_rank_t> stopping;
+  mds->mdsmap->get_mds_set(stopping, MDSMap::STATE_STOPPING);
+  stopping.erase(mds->get_nodeid());
+  for (auto rank : stopping) {
+    CInode* mdsdir_in = get_inode(MDS_INO_MDSDIR(rank));
+    if (!mdsdir_in)
+      continue;
+
+    if (expiremap.count(rank) == 0)  {
+      expiremap[rank] = new MCacheExpire(mds->get_nodeid());
+    }
+
+    dout(20) << __func__ << ": try expiring " << *mdsdir_in << " for stopping mds." << mds <<  dendl;
+
+    const bool aborted = expire_recursive(mdsdir_in, expiremap);
+    if (!aborted) {
+      dout(20) << __func__ << ": successfully expired mdsdir" << dendl;
+      list<CDir*> ls;
+      mdsdir_in->get_dirfrags(ls);
+      for (auto dir : ls) {
+	if (dir->get_num_ref() == 1)  // subtree pin
+	  trim_dirfrag(dir, dir, expiremap);
       }
-
-      dout(20) << __func__ << ": checking remote MDS dir " << *(subtree) << dendl;
-
-      const MDSMap::mds_info_t &owner_info = mds->mdsmap->get_mds_info(owner);
-      if (owner_info.state == MDSMap::STATE_STOPPING) {
-        dout(20) << __func__ << ": it's stopping, remove it" << dendl;
-        if (expiremap.count(owner) == 0)  {
-          expiremap[owner] = new MCacheExpire(mds->get_nodeid());
-        }
-
-	const bool aborted = expire_recursive(
-            subtree->inode, expiremap, subtree);
-        if (!aborted) {
-          dout(20) << __func__ << ": successfully expired mdsdir" << dendl;
-          CInode *subtree_in = subtree->inode;
-          list<CDir*> ls;
-          subtree->inode->get_dirfrags(ls);
-          for (std::list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-            CDir *frag = *p;
-            trim_dirfrag(frag, subtree, expiremap);
-          }
-          trim_inode(NULL, subtree_in, NULL, expiremap);
-        } else {
-          dout(20) << __func__ << ": some unexpirable contents in mdsdir" << dendl;
-        }
-      } else {
-        dout(20) << __func__ << ": not stopping, leaving it alone" << dendl;
-      }
+      if (mdsdir_in->get_num_ref() == 0)
+	trim_inode(NULL, mdsdir_in, NULL, expiremap);
+    } else {
+      dout(20) << __func__ << ": some unexpirable contents in mdsdir" << dendl;
     }
   }
 

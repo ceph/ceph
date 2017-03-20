@@ -694,8 +694,7 @@ public:
    */
   bool expire_recursive(
     CInode *in,
-    std::map<mds_rank_t, MCacheExpire*>& expiremap,
-    CDir *subtree);
+    std::map<mds_rank_t, MCacheExpire*>& expiremap);
 
   void trim_client_leases();
   void check_memory_usage();
