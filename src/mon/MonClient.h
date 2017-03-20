@@ -191,6 +191,7 @@ private:
   // authenticate
   std::unique_ptr<AuthClientHandler> auth;
   uint32_t want_keys = 0;
+  uint64_t global_id = 0;
   Cond auth_cond;
   int authenticate_err = 0;
 
@@ -394,11 +395,7 @@ public:
 
   uint64_t get_global_id() const {
     Mutex::Locker l(monc_lock);
-    if (active_con) {
-      return active_con->get_global_id();
-    } else {
-      return 0;
-    }
+    return global_id;
   }
 
   void set_messenger(Messenger *m) { messenger = m; }
