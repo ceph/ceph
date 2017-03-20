@@ -339,7 +339,6 @@ void PG::proc_master_log(
 }
     
 void PG::proc_replica_log(
-  ObjectStore::Transaction& t,
   pg_info_t &oinfo,
   const pg_log_t &olog,
   pg_missing_t& omissing,
@@ -348,7 +347,7 @@ void PG::proc_replica_log(
   dout(10) << "proc_replica_log for osd." << from << ": "
 	   << oinfo << " " << olog << " " << omissing << dendl;
 
-  pg_log.proc_replica_log(t, oinfo, olog, omissing, from);
+  pg_log.proc_replica_log(oinfo, olog, omissing, from);
 
   peer_info[from] = oinfo;
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
@@ -452,14 +451,14 @@ void PG::merge_log(
 {
   PGLogEntryHandler rollbacker{this, &t};
   pg_log.merge_log(
-    t, oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
+    oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
 }
 
 void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 {
   PGLogEntryHandler rollbacker{this, &t};
   pg_log.rewind_divergent_log(
-    t, newhead, info, &rollbacker, dirty_info, dirty_big_info);
+    newhead, info, &rollbacker, dirty_info, dirty_big_info);
 }
 
 /*
@@ -6958,7 +6957,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt
   ldout(pg->cct, 10) << "searching osd." << logevt.from
 		     << " log for unfound items" << dendl;
   pg->proc_replica_log(
-    *context<RecoveryMachine>().get_cur_transaction(),
     logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
   bool got_missing = pg->search_for_missing(
     pg->peer_info[logevt.from],
@@ -7887,8 +7885,7 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
   PG *pg = context< RecoveryMachine >().pg;
 
   peer_missing_requested.erase(logevt.from);
-  pg->proc_replica_log(*context<RecoveryMachine>().get_cur_transaction(),
-		       logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
+  pg->proc_replica_log(logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
   
   if (peer_missing_requested.empty()) {
     if (pg->need_up_thru) {
