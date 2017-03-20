@@ -349,7 +349,7 @@ private:
   int write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq);
 
 
-  void align_bl(off64_t pos, bufferlist& bl);
+  void check_align(off64_t pos, bufferlist& bl);
   int write_bl(off64_t& pos, bufferlist& bl);
 
   /// read len from journal starting at in_pos and wrapping up to len
