@@ -255,7 +255,6 @@ public:
     : store(_store), master_log(store, async_rados, this),
       ts_to_shard_lock("ts_to_shard_lock") {}
   int init();
-  void finish();
 
   int read_sync_status(rgw_meta_sync_status *sync_status) {
     return master_log.read_sync_status(sync_status);
