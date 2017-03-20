@@ -1089,6 +1089,7 @@ public:
     crush_finalize(crush);
   }
 
+  int update_device_class(CephContext *cct, int id, const string& class_name, const string& name);
   int device_class_clone(int original, int device_class, int *clone);
   int populate_classes();
   int rebuild_roots_with_classes();

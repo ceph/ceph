@@ -1230,6 +1230,32 @@ int CrushWrapper::remove_rule(int ruleno)
   return 0;
 }
 
+int CrushWrapper::update_device_class(CephContext *cct, int id, const string& class_name, const string& name)
+{
+  int class_id = get_class_id(class_name);
+  if (class_id < 0) {
+    ldout(cct, 0) << "update_device_class class " << class_name << " does not exist " << dendl;
+    return -ENOENT;
+  }
+  if (id < 0) {
+    ldout(cct, 0) << "update_device_class " << name << " id " << id << " is negative " << dendl;
+    return -EINVAL;
+  }
+  assert(item_exists(id));
+
+  if (class_map.count(id) != 0 && class_map[id] == class_id) {
+    ldout(cct, 5) << "update_device_class " << name << " already set to class " << class_name << dendl;
+    return 0;
+  }
+
+  set_item_class(id, class_id);
+
+  int r = rebuild_roots_with_classes();
+  if (r < 0)
+    return r;
+  return 1;
+}
+
 int CrushWrapper::device_class_clone(int original_id, int device_class, int *clone)
 {
   const char *item_name = get_item_name(original_id);
