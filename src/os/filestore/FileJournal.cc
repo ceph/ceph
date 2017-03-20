@@ -1217,7 +1217,10 @@ void FileJournal::write_thread_entry()
       // but should be fine given that we will have plenty of aios in
       // flight if we hit this limit to ensure we keep the device
       // saturated.
-      while (aio_num > 0) {
+      // Because every filejournal entry at least 4k(aling w/ header.align)
+      // So only aio_num > 6(min_new=1<< (6*2) = 4096), the condition cur >= min_new
+      // maybe false. So change it.
+      while (aio_num > 6) {
 	int exp = MIN(aio_num * 2, 24);
 	long unsigned min_new = 1ull << exp;
 	uint64_t cur = aio_write_queue_bytes;
