@@ -19,6 +19,7 @@
 #include "rgw_acl_s3.h"
 #include "rgw_policy_s3.h"
 #include "rgw_lc_s3.h"
+#include "rgw_bl_s3.h"
 #include "rgw_keystone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_ldap.h"
@@ -122,13 +123,25 @@ public:
   void send_versioned_response();
 };
 
-class RGWGetBucketLogging_ObjStore_S3 : public RGWGetBucketLogging {
+class RGWGetBL_ObjStore_S3 : public RGWGetBL_ObjStore {
+protected:
+  RGWBucketLoggingStatus_S3 status;
 public:
-  RGWGetBucketLogging_ObjStore_S3() {}
-  ~RGWGetBucketLogging_ObjStore_S3() override {}
+  RGWGetBL_ObjStore_S3() {}
+  ~RGWGetBL_ObjStore_S3() override {}
 
+  void execute() override;
   void send_response() override;
 };
+
+class RGWPutBL_ObjStore_S3 : public RGWPutBL_ObjStore {
+public:
+  RGWPutBL_ObjStore_S3() {}
+  ~RGWPutBL_ObjStore_S3() override {}
+
+ void send_response() override;
+};
+
 
 class RGWGetBucketLocation_ObjStore_S3 : public RGWGetBucketLocation {
 public:

@@ -40,6 +40,7 @@
 #include "rgw_quota.h"
 
 #include "rgw_lc.h"
+#include "rgw_bl.h"
 #include "rgw_torrent.h"
 #include "rgw_tag.h"
 #include "cls/lock/cls_lock_client.h"
@@ -724,16 +725,51 @@ public:
   virtual bool need_container_stats() { return false; }
 };
 
-class RGWGetBucketLogging : public RGWOp {
+class RGWGetBL : public RGWOp {
 public:
-  RGWGetBucketLogging() {}
+  RGWGetBL() {}
   int verify_permission() override;
+  void pre_exec() override;
   void execute() override { }
 
   void send_response() override = 0;
   const string name() override { return "get_bucket_logging"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOGGING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+};
+
+class RGWPutBL : public RGWOp {
+protected:
+  size_t len;
+  char *data;
+  string cookie;
+
+public:
+  RGWPutBL() {
+    len = 0;
+    data = NULL;
+  }
+  ~RGWPutBL() override {
+    free(data);
+  }
+
+  void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) override {
+#define BL_COOKIE_LEN 16
+    char buf[BL_COOKIE_LEN + 1];
+
+    RGWOp::init(store, s, dialect_handler);
+    gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
+    cookie = buf;
+  }
+
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+
+  virtual int get_params() = 0;
+  void send_response() override = 0;
+  const string name() override { return "put_bucket_logging"; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWGetBucketLocation : public RGWOp {
@@ -1424,8 +1460,8 @@ public:
   }
 
   void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) override {
-#define COOKIE_LEN 16
-    char buf[COOKIE_LEN + 1];
+#define LC_COOKIE_LEN 16
+    char buf[LC_COOKIE_LEN + 1];
 
     RGWOp::init(store, s, dialect_handler);
     gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);

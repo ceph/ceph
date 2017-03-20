@@ -2319,13 +2319,137 @@ void RGWListBucket::execute()
   }
 }
 
-int RGWGetBucketLogging::verify_permission()
+void RGWGetBL::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+int RGWGetBL::verify_permission()
 {
   if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
+  bool perm;
+  perm = verify_bucket_permission(s, RGW_PERM_READ_ACP);
+  if (!perm)
+    return -EACCES;
+
   return 0;
+}
+
+void RGWPutBL::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+int RGWPutBL::verify_permission()
+{
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return -EACCES;
+  }
+
+  bool perm;
+  perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
+  if (!perm)
+    return -EACCES;
+
+  return 0;
+}
+
+static void get_bl_oid(struct req_state *s, string& oid)
+{
+  string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
+  int max_objs = (s->cct->_conf->rgw_bl_max_objs > HASH_PRIME)?HASH_PRIME:s->cct->_conf->rgw_bl_max_objs;
+  int index = ceph_str_hash_linux(shard_id.c_str(), shard_id.size()) % max_objs;
+  oid = bl_oid_prefix;
+  char buf[32];
+  snprintf(buf, 32, ".%d", index);
+  oid.append(buf);
+  return;
+}
+
+void RGWPutBL::execute()
+{
+  bufferlist bl;
+  RGWBucketLoggingStatus_S3 *status = NULL;
+  RGWBLXMLParser_S3 parser(s->cct);
+  RGWBucketLoggingStatus_S3 new_status(s->cct);
+
+  if (!parser.init()) {
+    op_ret = -EINVAL;
+    return;
+  }
+
+  op_ret = get_params();
+  if (op_ret < 0)
+    return;
+
+  ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
+
+  if (!parser.parse(data, len, 1)) {
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  status = static_cast<RGWBucketLoggingStatus_S3*>(parser.find_first("BucketLoggingStatus"));
+  if (!status) {
+    op_ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    ldout(s->cct, 15) << "Old BucketLoggingStatus:";
+    status->to_xml(*_dout);
+    *_dout << dendl;
+  }
+
+  op_ret = status->rebuild(store, new_status);
+  if (op_ret < 0)
+    return;
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    ldout(s->cct, 15) << "New BucketLoggingStatus:";
+    new_status.to_xml(*_dout);
+    *_dout << dendl;
+  }
+  
+  new_status.encode(bl);
+  map<string, bufferlist> attrs;
+  attrs = s->bucket_attrs;
+  attrs[RGW_ATTR_BL] = bl;
+  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  if (op_ret < 0)
+    return;
+  string shard_id = s->bucket.tenant + ':' + s->bucket.name + ':' + s->bucket.bucket_id;  
+  string oid; 
+  get_bl_oid(s, oid);
+  pair<string, int> entry(shard_id, bl_uninitial);
+  int max_lock_secs = s->cct->_conf->rgw_bl_lock_max_time;
+  rados::cls::lock::Lock l(bl_index_lock_name); 
+  utime_t time(max_lock_secs, 0);
+  l.set_duration(time);
+  l.set_cookie(cookie);
+  librados::IoCtx *ctx = store->get_bl_pool_ctx();
+  do {
+    op_ret = l.lock_exclusive(ctx, oid);
+    if (op_ret == -EBUSY) {
+      dout(0) << "RGWPutBL() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      sleep(5);
+      continue;
+    }
+    if (op_ret < 0) {
+      dout(0) << "RGWPutBL() failed to acquire lock " << oid << op_ret << dendl;
+      break;
+    }
+    op_ret = cls_rgw_lc_set_entry(*ctx, oid, entry);
+    if (op_ret < 0) {
+      dout(0) << "RGWPutBL() failed to set entry " << oid << op_ret << dendl;     
+    }
+    break;
+  } while(1);
+  l.unlock(ctx, oid);
+  return;
 }
 
 int RGWGetBucketLocation::verify_permission()
@@ -4918,7 +5042,7 @@ void RGWDeleteLC::execute()
   op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
   if (op_ret < 0)
     return;
-    
+
   for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
       const string& name = iter->first;
       dout(10) << "DeleteLC : attr: " << name << dendl;
@@ -4936,7 +5060,7 @@ void RGWDeleteLC::execute()
   }
   string shard_id = s->bucket.tenant + ':' + s->bucket.name + ':' + s->bucket.bucket_id;
   pair<string, int> entry(shard_id, lc_uninitial);
-  string oid; 
+  string oid;
   get_lc_oid(s, oid);
   int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;
   librados::IoCtx *ctx = store->get_lc_pool_ctx();

@@ -140,9 +140,63 @@ int RGWBL::bucket_bl_prepare(int index)
   return 0;
 }
 
+static vector<string> &split_shard_id(const string &s, char delim,
+				      vector<string> &elems) {
+  stringstream ss(s);
+  string item;
+  while (getline(ss, item, delim)) {
+    elems.push_back(item);
+  }
+  return elems;
+}
+
+static vector<string> split_shard_id(const string &s, char delim) {
+  vector<std::string> elems;
+  split_shard_id(s, delim, elems);
+  return elems;
+}
+
 int RGWBL::bucket_bl_process(string& shard_id)
 {
-  return 0;
+  RGWBucketLoggingStatus status(cct);
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> bucket_attrs;
+  RGWObjectCtx obj_ctx(store);
+
+  vector<std::string> result;
+  result = split_shard_id(shard_id, ':');
+  string bucket_tenant = result[0];
+  string bucket_name = result[1];
+  string bucket_id = result[2];
+
+  int ret = store->get_bucket_info(obj_ctx, bucket_tenant, bucket_name,
+                                   bucket_info, NULL, &bucket_attrs);
+  if (ret < 0) {
+    ldout(cct, 0) << "RGWBL:get_bucket_info failed, bucket_name="
+                  << bucket_name << dendl;
+    return ret;
+  }
+
+  ret = bucket_info.bucket.bucket_id.compare(bucket_id) ;
+  if (ret != 0) {
+    ldout(cct, 0) << "RGWBL:old bucket id found, bucket_name=" << bucket_name
+                  << "should be deleted." << dendl;
+    return -ENOENT;
+  }
+
+  map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_BL);
+  if (aiter == bucket_attrs.end())
+    return 0;
+
+  bufferlist::iterator iter(&aiter->second);
+  try {
+    status.decode(iter);
+  } catch (const buffer::error& e) {
+    ldout(cct, 0) << __func__ <<  "decode bucket logging status failed" << dendl;
+    return -1;
+  }
+
+  return ret;
 }
 
 int RGWBL::bucket_bl_post(int index, int max_lock_sec,

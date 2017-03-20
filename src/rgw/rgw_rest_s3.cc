@@ -834,16 +834,55 @@ void RGWListBucket_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void RGWGetBucketLogging_ObjStore_S3::send_response()
+void RGWGetBL_ObjStore_S3::execute()
+{
+  status.set_ctx(s->cct);
+
+  map<string, bufferlist>::iterator aiter = s->bucket_attrs.find(RGW_ATTR_BL);
+  if (aiter == s->bucket_attrs.end()) {
+    op_ret = -ENOENT;
+    return;
+  }
+
+  bufferlist::iterator iter(&aiter->second);
+  try {
+      status.decode(iter);
+    } catch (const buffer::error& e) {
+      ldout(s->cct, 0) << __func__ <<  " decode bucket logging status failed" << dendl;
+      op_ret = -EIO;
+      return;
+    }
+}
+
+void RGWGetBL_ObjStore_S3::send_response()
 {
   dump_errno(s);
   end_header(s, this, "application/xml");
   dump_start(s);
 
-  s->formatter->open_object_section_in_ns("BucketLoggingStatus", XMLNS_AWS_S3);
-  s->formatter->close_section();
-  rgw_flush_formatter_and_reset(s, s->formatter);
+  if (op_ret) {
+    if (op_ret == -ENOENT) {
+      s->formatter->open_object_section_in_ns("BucketLoggingStatus", XMLNS_AWS_S3);
+      s->formatter->close_section();
+      rgw_flush_formatter_and_reset(s, s->formatter);
+    } else {
+      set_req_state_err(s, op_ret);
+    }
+  } else {
+    status.dump_xml(s->formatter);
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
 }
+
+void RGWPutBL_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+}
+
 
 void RGWGetBucketLocation_ObjStore_S3::send_response()
 {
@@ -2952,7 +2991,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
 RGWOp *RGWHandler_REST_Bucket_S3::op_get()
 {
   if (s->info.args.sub_resource_exists("logging"))
-    return new RGWGetBucketLogging_ObjStore_S3;
+    return new RGWGetBL_ObjStore_S3;
 
   if (s->info.args.sub_resource_exists("location"))
     return new RGWGetBucketLocation_ObjStore_S3;
@@ -3000,7 +3039,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_head()
 RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 {
   if (s->info.args.sub_resource_exists("logging"))
-    return NULL;
+    return new RGWPutBL_ObjStore_S3;
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
   if (s->info.args.sub_resource_exists("website")) {

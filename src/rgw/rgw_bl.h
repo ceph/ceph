@@ -94,4 +94,110 @@ class RGWBL {
 
 };
 
+class BLLoggingEnabled
+{
+protected:
+  CephContext *cct;
+  bool status;
+  string target_bucket;
+  string target_prefix;
+
+public:
+
+  BLLoggingEnabled() : cct(nullptr), status(false) {};
+  BLLoggingEnabled(CephContext *_cct) : cct(_cct), status(false) {};
+  ~BLLoggingEnabled(){};
+
+  void set_true() {
+    status = true;
+  }
+
+  void set_false() {
+    status = false;
+  }
+
+  bool is_true() const {
+    return status == true;
+  }
+
+  string get_target_bucket() const {
+    return target_bucket;
+  }
+
+  string get_target_prefix() const {
+    return target_prefix;
+  }
+
+  void set_target_bucket(string _bucket) {
+    target_bucket =  _bucket;
+  }
+
+  void set_target_prefix(string _prefix) {
+    target_prefix =  _prefix;
+  }
+
+  void encode(bufferlist& bl) const {
+     ENCODE_START(1, 1, bl);
+     ::encode(status, bl);
+     ::encode(target_bucket, bl);
+     ::encode(target_prefix, bl);
+     ENCODE_FINISH(bl);
+   }
+   void decode(bufferlist::iterator& bl) {
+     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
+     ::decode(status, bl);
+     ::decode(target_bucket, bl);
+     ::decode(target_prefix, bl);
+     DECODE_FINISH(bl);
+   }
+};
+WRITE_CLASS_ENCODER(BLLoggingEnabled)
+
+class RGWBucketLoggingStatus
+{
+ protected:
+  CephContext *cct;
+
+ public:
+  BLLoggingEnabled enabled;
+
+  RGWBucketLoggingStatus(CephContext *_cct) : cct(_cct), enabled(_cct) {}
+  RGWBucketLoggingStatus() : cct(nullptr), enabled(nullptr) {}
+
+  void set_ctx(CephContext *ctx) {
+    cct = ctx;
+  }
+
+  virtual ~RGWBucketLoggingStatus() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(enabled, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
+    ::decode(enabled, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+
+  bool is_enabled() const {
+    return enabled.is_true();
+  }
+
+  string get_target_prefix() const {
+    return enabled.get_target_prefix();
+  }
+
+  string get_target_bucket() const {
+    return enabled.get_target_bucket();
+  }
+
+};
+WRITE_CLASS_ENCODER(RGWBucketLoggingStatus)
+
+
 #endif
