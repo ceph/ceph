@@ -19,9 +19,6 @@ map is ``active + clean``.
 *Down*
   A replica with necessary data is down, so the placement group is offline.
 
-*Replay*
-  The placement group is waiting for clients to replay operations after an OSD crashed.
-
 *Scrubbing*
   Ceph is checking the placement group for inconsistencies.
 
