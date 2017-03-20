@@ -702,6 +702,9 @@ public:
   utime_t last_recall_state;
 
   // shutdown
+private:
+  set<inodeno_t> shutdown_exported_strays;
+public:
   void shutdown_start();
   void shutdown_check();
   bool shutdown_pass();
