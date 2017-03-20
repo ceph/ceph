@@ -7470,9 +7470,7 @@ bool MDCache::shutdown_pass()
   int num_auth_subtree = 0;
   if (!subtrees.empty() &&
       mds->get_nodeid() != 0 && 
-      !migrator->is_exporting() //&&
-      //!migrator->is_importing()
-      ) {
+      migrator->get_export_queue_size() == 0) {
     dout(7) << "looking for subtrees to export to mds0" << dendl;
     list<CDir*> ls;
     for (map<CDir*, set<CDir*> >::iterator it = subtrees.begin();
@@ -7485,21 +7483,19 @@ bool MDCache::shutdown_pass()
 	num_auth_subtree++;
 	if (dir->is_frozen() ||
 	    dir->is_freezing() ||
-	    dir->is_ambiguous_dir_auth())
+	    dir->is_ambiguous_dir_auth() ||
+	    dir->state_test(CDir::STATE_EXPORTING))
 	  continue;
 	ls.push_back(dir);
       }
     }
-    int max = 5; // throttle shutdown exports.. hack!
     for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
       CDir *dir = *p;
       mds_rank_t dest = dir->get_inode()->authority().first;
       if (dest > 0 && !mds->mdsmap->is_active(dest))
 	dest = 0;
       dout(7) << "sending " << *dir << " back to mds." << dest << dendl;
-      migrator->export_dir(dir, dest);
-      if (--max == 0)
-	break;
+      migrator->export_dir_nicely(dir, dest);
     }
   }
 
