@@ -709,7 +709,6 @@ public:
   void shutdown_check();
   bool shutdown_pass();
   bool shutdown_export_strays();
-  bool shutdown_export_caps();
   bool shutdown();                    // clear cache (ie at shutodwn)
 
   bool did_shutdown_log_cap;
