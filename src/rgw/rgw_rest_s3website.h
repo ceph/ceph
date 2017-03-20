@@ -34,8 +34,8 @@ protected:
 
   int serve_errordoc(int http_ret, const string &errordoc_key);
 public:
-  RGWHandler_REST_S3Website() : RGWHandler_REST_S3() {}
-  ~RGWHandler_REST_S3Website() override {}
+  using RGWHandler_REST_S3::RGWHandler_REST_S3;
+  ~RGWHandler_REST_S3Website() override = default;
   int error_handler(int err_no, string *error_content) override;
 };
 
@@ -43,16 +43,16 @@ class RGWHandler_REST_Service_S3Website : public RGWHandler_REST_S3Website {
 protected:
   RGWOp *get_obj_op(bool get_data) override;
 public:
-  RGWHandler_REST_Service_S3Website() {}
-  ~RGWHandler_REST_Service_S3Website() override {}
+  using RGWHandler_REST_S3Website::RGWHandler_REST_S3Website;
+  ~RGWHandler_REST_Service_S3Website() override = default;
 };
 
 class RGWHandler_REST_Obj_S3Website : public RGWHandler_REST_S3Website {
 protected:
   RGWOp *get_obj_op(bool get_data) override;
 public:
-  RGWHandler_REST_Obj_S3Website() {}
-  ~RGWHandler_REST_Obj_S3Website() override {}
+  using RGWHandler_REST_S3Website::RGWHandler_REST_S3Website;
+  ~RGWHandler_REST_Obj_S3Website() override = default;
 };
 
 /* The cross-inheritance from Obj to Bucket is deliberate!
@@ -62,8 +62,8 @@ class RGWHandler_REST_Bucket_S3Website : public RGWHandler_REST_S3Website {
 protected:
   RGWOp *get_obj_op(bool get_data) override;
 public:
-  RGWHandler_REST_Bucket_S3Website() {}
-  ~RGWHandler_REST_Bucket_S3Website() override {}
+  using RGWHandler_REST_S3Website::RGWHandler_REST_S3Website;
+  ~RGWHandler_REST_Bucket_S3Website() override = default;
 };
 
 // TODO: do we actually need this?

@@ -2329,14 +2329,18 @@ int RGWHandler_REST_SWIFT::init(RGWRados* store, struct req_state* s,
   return RGWHandler_REST::init(store, s, cio);
 }
 
-RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
-                                               const std::string& frontend_prefix)
+RGWHandler_REST*
+RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
+                              const rgw::auth::StrategyRegistry& auth_registry,
+                              const std::string& frontend_prefix)
 {
   int ret = RGWHandler_REST_SWIFT::init_from_header(s, frontend_prefix);
   if (ret < 0) {
     ldout(s->cct, 10) << "init_from_header returned err=" << ret <<  dendl;
     return nullptr;
   }
+
+  const auto& auth_strategy = auth_registry.get_swift();
 
   if (s->init_state.url_bucket.empty()) {
     return new RGWHandler_REST_Service_SWIFT(auth_strategy);
@@ -2351,8 +2355,10 @@ RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
 
 RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(
   struct req_state* const s,
+  const rgw::auth::StrategyRegistry& auth_registry,
   const std::string& frontend_prefix)
 {
   s->prot_flags |= RGW_REST_SWIFT;
+  const auto& auth_strategy = auth_registry.get_swift();
   return new RGWHandler_REST_SWIFT_Info(auth_strategy);
 }

@@ -47,6 +47,18 @@ using ceph::crypto::SHA1;
 struct req_state;
 class RGWOp;
 
+
+namespace rgw {
+namespace auth {
+namespace registry {
+
+class StrategyRegistry;
+
+}
+}
+}
+
+
 class RGWHandler {
 protected:
   RGWRados* store;
@@ -140,7 +152,7 @@ public:
    * authentication. The alternative is to duplicate parts of the method-
    * dispatch logic in RGWHandler::authorize() and pollute it with a lot
    * of special cases. */
-  virtual int verify_requester() {
+  virtual int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) {
     /* TODO(rzarzynski): rename RGWHandler::authorize to generic_authenticate. */
     return dialect_handler->authorize();
   }

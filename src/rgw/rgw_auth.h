@@ -279,7 +279,10 @@ public:
  * Engine. It is responsible for ordering its sub-engines and managing
  * fall-backs between them. Derivatee is supposed to encapsulate engine
  * instances and add them using the add_engine() method in the order it
- * wants to be tried during the call to authenticate(). */
+ * wants to be tried during the call to authenticate().
+ *
+ * Each new Strategy should be exposed to StrategyRegistry for handling
+ * the dynamic reconfiguration. */
 class Strategy : public Engine {
 public:
   /* Specifiers controlling what happens when an associated engine fails.
@@ -320,6 +323,13 @@ protected:
   void add_engine(Control ctrl_flag, const Engine& engine) noexcept;
 };
 
+
+/* A class aggregating the knowledge about all Strategies in RadosGW. It is
+ * responsible for handling the dynamic reconfiguration on e.g. realm update.
+ * The definition is in rgw/rgw_auth_registry.h,
+ *
+ * Each new Strategy should be exposed to it. */
+class StrategyRegistry;
 
 /* rgw::auth::RemoteApplier targets those authentication engines which don't
  * need to ask the RADOS store while performing the auth process. Instead,

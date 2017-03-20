@@ -99,8 +99,8 @@ class AsioConnection : public std::enable_shared_from_this<AsioConnection> {
                                 rgw::io::add_conlen_controlling(
                                   &real_client))));
     RGWRestfulIO client(&real_client_io);
-    process_request(env.store, env.rest, &req, env.uri_prefix, &client,
-                    env.olog);
+    process_request(env.store, env.rest, &req, env.uri_prefix,
+                    *env.auth_registry, &client, env.olog);
   }
 
   void write_bad_request() {
@@ -160,7 +160,7 @@ class AsioFrontend {
   void stop();
   void join();
   void pause();
-  void unpause(RGWRados *store);
+  void unpause(RGWRados* store, rgw_auth_registry_ptr_t);
 };
 
 int AsioFrontend::init()
@@ -253,9 +253,11 @@ void AsioFrontend::pause()
   ldout(ctx(), 4) << "frontend paused" << dendl;
 }
 
-void AsioFrontend::unpause(RGWRados *store)
+void AsioFrontend::unpause(RGWRados* const store,
+                           rgw_auth_registry_ptr_t auth_registry)
 {
   env.store = store;
+  env.auth_registry = std::move(auth_registry);
   ldout(ctx(), 4) << "frontend unpaused" << dendl;
   service.reset();
   acceptor.async_accept(peer_socket,
@@ -304,7 +306,9 @@ void RGWAsioFrontend::pause_for_new_config()
   impl->pause();
 }
 
-void RGWAsioFrontend::unpause_with_new_config(RGWRados *store)
-{
-  impl->unpause(store);
+void RGWAsioFrontend::unpause_with_new_config(
+  RGWRados* const store,
+  rgw_auth_registry_ptr_t auth_registry
+) {
+  impl->unpause(store, std::move(auth_registry));
 }

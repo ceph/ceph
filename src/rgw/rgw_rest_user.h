@@ -15,8 +15,8 @@ protected:
   RGWOp *op_post() override;
   RGWOp *op_delete() override;
 public:
-  RGWHandler_User() {}
-  ~RGWHandler_User() override {}
+  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
+  ~RGWHandler_User() override = default;
 
   int read_permissions(RGWOp*) override {
     return 0;
@@ -29,8 +29,9 @@ public:
   ~RGWRESTMgr_User() override = default;
 
   RGWHandler_REST *get_handler(struct req_state*,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
-    return new RGWHandler_User;
+    return new RGWHandler_User(auth_registry);
   }
 };
 

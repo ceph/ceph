@@ -200,6 +200,8 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   RGWPolicy post_policy;
   string err_msg;
 
+  const rgw::auth::StrategyRegistry* auth_registry_ptr = nullptr;
+
   int read_with_boundary(bufferlist& bl, uint64_t max, bool check_eol,
                          bool *reached_boundary,
 			 bool *done);
@@ -219,6 +221,11 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
 public:
   RGWPostObj_ObjStore_S3() {}
   ~RGWPostObj_ObjStore_S3() override {}
+
+  int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) {
+    auth_registry_ptr = &auth_registry;
+    return RGWPostObj_ObjStore::verify_requester(auth_registry);
+  }
 
   int get_params() override;
   int complete_get_params();
@@ -410,21 +417,31 @@ public:
 
 class RGW_Auth_S3 {
 private:
-  static int authorize_v2(RGWRados *store, struct req_state *s);
+  static int authorize_v2(RGWRados *store,
+                          const rgw::auth::StrategyRegistry& auth_registry,
+                          struct req_state *s);
   static int authorize_v4(RGWRados *store, struct req_state *s, bool force_boto2_compat = true);
   static int authorize_v4_complete(RGWRados *store, struct req_state *s,
 				  const string& request_payload,
 				  bool unsigned_payload);
 public:
-  static int authorize(RGWRados *store, struct req_state *s);
+  static int authorize(RGWRados *store,
+                       const rgw::auth::StrategyRegistry& auth_registry,
+                       struct req_state *s);
   static int authorize_aws4_auth_complete(RGWRados *store, struct req_state *s);
 };
 
 class RGWHandler_Auth_S3 : public RGWHandler_REST {
   friend class RGWRESTMgr_S3;
+
+  const rgw::auth::StrategyRegistry& auth_registry;
+
 public:
-  RGWHandler_Auth_S3() : RGWHandler_REST() {}
-  ~RGWHandler_Auth_S3() override {}
+  RGWHandler_Auth_S3(const rgw::auth::StrategyRegistry& auth_registry)
+    : RGWHandler_REST(),
+      auth_registry(auth_registry) {
+  }
+  ~RGWHandler_Auth_S3() override = default;
 
   static int validate_bucket_name(const string& bucket);
   static int validate_object_name(const string& bucket);
@@ -433,24 +450,29 @@ public:
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize() override {
-    return RGW_Auth_S3::authorize(store, s);
+    return RGW_Auth_S3::authorize(store, auth_registry, s);
   }
   int postauth_init() override { return 0; }
 };
 
 class RGWHandler_REST_S3 : public RGWHandler_REST {
   friend class RGWRESTMgr_S3;
+
+  const rgw::auth::StrategyRegistry& auth_registry;
 public:
   static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
 
-  RGWHandler_REST_S3() : RGWHandler_REST() {}
-  ~RGWHandler_REST_S3() override {}
+  RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
+    : RGWHandler_REST(),
+      auth_registry(auth_registry) {
+  }
+  ~RGWHandler_REST_S3() override = default;
 
   int init(RGWRados *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize() override {
-    return RGW_Auth_S3::authorize(store, s);
+    return RGW_Auth_S3::authorize(store, auth_registry, s);
   }
   int postauth_init() override;
 };
@@ -464,8 +486,8 @@ protected:
   RGWOp *op_head() override;
   RGWOp *op_post() override;
 public:
-  RGWHandler_REST_Service_S3() {}
-  ~RGWHandler_REST_Service_S3() override {}
+  using RGWHandler_REST_S3::RGWHandler_REST_S3;
+  ~RGWHandler_REST_Service_S3() override = default;
 };
 
 class RGWHandler_REST_Bucket_S3 : public RGWHandler_REST_S3 {
@@ -494,8 +516,8 @@ protected:
   RGWOp *op_post() override;
   RGWOp *op_options() override;
 public:
-  RGWHandler_REST_Bucket_S3() {}
-  ~RGWHandler_REST_Bucket_S3() override {}
+  using RGWHandler_REST_S3::RGWHandler_REST_S3;
+  ~RGWHandler_REST_Bucket_S3() override = default;
 };
 
 class RGWHandler_REST_Obj_S3 : public RGWHandler_REST_S3 {
@@ -518,8 +540,8 @@ protected:
   RGWOp *op_post() override;
   RGWOp *op_options() override;
 public:
-  RGWHandler_REST_Obj_S3() {}
-  ~RGWHandler_REST_Obj_S3() override {}
+  using RGWHandler_REST_S3::RGWHandler_REST_S3;
+  ~RGWHandler_REST_Obj_S3() override = default;
 };
 
 class RGWRESTMgr_S3 : public RGWRESTMgr {
@@ -533,6 +555,7 @@ public:
   ~RGWRESTMgr_S3() override = default;
 
   RGWHandler_REST *get_handler(struct req_state* s,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
 
