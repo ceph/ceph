@@ -2262,9 +2262,8 @@ void PGMapUpdater::register_new_pgs(
       dout(20) << " removing creating_pg " << p
                << " because it is localized and obsolete" << dendl;
       pending_inc->pg_remove.insert(p);
-      removed++;
-    }
-    if (!osd_map.have_pg_pool(p.pool())) {
+      ++removed;
+    } else if (!osd_map.have_pg_pool(p.pool())) {
       dout(20) << " removing creating_pg " << p
                << " because containing pool deleted" << dendl;
       pending_inc->pg_remove.insert(p);
@@ -2279,8 +2278,7 @@ void PGMapUpdater::register_new_pgs(
                << "containing pool deleted" << dendl;
       pending_inc->pg_remove.insert(p.first);
       ++removed;
-    }
-    if (p.first.preferred() >= 0) {
+    } else if (p.first.preferred() >= 0) {
       dout(20) << " removing localized pg " << p.first << dendl;
       pending_inc->pg_remove.insert(p.first);
       ++removed;
