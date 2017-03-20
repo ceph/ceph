@@ -431,9 +431,9 @@ private:
 
   struct C_OSD_RepModifyApply;
   struct C_OSD_RepModifyCommit;
+  struct C_OSD_RepModifyCommitApply;
 
-  void sub_op_modify_applied(RepModifyRef rm);
-  void sub_op_modify_commit(RepModifyRef rm);
+  void sub_op_modify_commit_or_applied(RepModifyRef rm, bool op_commited, bool op_applied);
   bool scrub_supported() { return true; }
   bool auto_repair_supported() const { return false; }
 

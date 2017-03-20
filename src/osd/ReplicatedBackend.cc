@@ -66,7 +66,7 @@ struct ReplicatedBackend::C_OSD_RepModifyApply : public Context {
   C_OSD_RepModifyApply(ReplicatedBackend *pg, RepModifyRef r)
     : pg(pg), rm(r) {}
   void finish(int r) override {
-    pg->sub_op_modify_applied(rm);
+    pg->sub_op_modify_commit_or_applied(rm, false, true);
   }
 };
 
@@ -76,7 +76,17 @@ struct ReplicatedBackend::C_OSD_RepModifyCommit : public Context {
   C_OSD_RepModifyCommit(ReplicatedBackend *pg, RepModifyRef r)
     : pg(pg), rm(r) {}
   void finish(int r) override {
-    pg->sub_op_modify_commit(rm);
+    pg->sub_op_modify_commit_or_applied(rm, true, false);
+  }
+};
+
+struct ReplicatedBackend::C_OSD_RepModifyCommitApply : public Context {
+  ReplicatedBackend *pg;
+  RepModifyRef rm;
+  C_OSD_RepModifyCommitApply(ReplicatedBackend *pg, RepModifyRef r)
+    : pg(pg), rm(r) {}
+  void finish(int r) override {
+    pg->sub_op_modify_commit_or_applied(rm, true, true);
   }
 };
 
@@ -1171,13 +1181,19 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
     m->pg_roll_forward_to,
     update_snaps,
     rm->localt);
+  if (store->op_commit_equal_applied()) {
+    rm->opt.register_on_commit(
+	parent->bless_context(
+	  new C_OSD_RepModifyCommitApply(this, rm)));
+  } else {
+    rm->opt.register_on_commit(
+	parent->bless_context(
+	  new C_OSD_RepModifyCommit(this, rm)));
+    rm->localt.register_on_applied(
+	parent->bless_context(
+	  new C_OSD_RepModifyApply(this, rm)));
+  }
 
-  rm->opt.register_on_commit(
-    parent->bless_context(
-      new C_OSD_RepModifyCommit(this, rm)));
-  rm->localt.register_on_applied(
-    parent->bless_context(
-      new C_OSD_RepModifyApply(this, rm)));
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(rm->localt));
@@ -1186,89 +1202,91 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
   // op is cleaned up by oncommit/onapply when both are executed
 }
 
-void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
+void ReplicatedBackend::sub_op_modify_commit_or_applied(
+  RepModifyRef rm, bool op_commited, bool op_applied)
 {
-  rm->op->mark_event("sub_op_applied");
-  rm->applied = true;
+  if (op_commited) {
+    rm->op->mark_commit_sent();
+    rm->committed = true;
 
-  dout(10) << "sub_op_modify_applied on " << rm << " op "
-	   << *rm->op->get_req() << dendl;
-  const Message *m = rm->op->get_req();
+    // send commit.
+    dout(10) << "sub_op_modify_commit on op " << *rm->op->get_req()
+      << ", sending commit to osd." << rm->ackerosd
+      << dendl;
 
-  Message *ack = NULL;
-  eversion_t version;
+    assert(get_osdmap()->is_up(rm->ackerosd));
+    get_parent()->update_last_complete_ondisk(rm->last_complete);
 
-  if (m->get_type() == MSG_OSD_SUBOP) {
-    // doesn't have CLIENT SUBOP feature ,use Subop
-    const MOSDSubOp *req = static_cast<const MOSDSubOp*>(m);
-    version = req->version;
-    if (!rm->committed)
-      ack = new MOSDSubOpReply(
-	req, parent->whoami_shard(),
-	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
-  } else if (m->get_type() == MSG_OSD_REPOP) {
-    const MOSDRepOp *req = static_cast<const MOSDRepOp*>(m);
-    version = req->version;
-    if (!rm->committed)
-      ack = new MOSDRepOpReply(
-	static_cast<const MOSDRepOp*>(m), parent->whoami_shard(),
-	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
-  } else {
-    ceph_abort();
-  }
+    const Message *m = rm->op->get_req();
+    Message *commit = NULL;
+    if (m->get_type() == MSG_OSD_SUBOP) {
+      // doesn't have CLIENT SUBOP feature ,use Subop
+      MOSDSubOpReply  *reply = new MOSDSubOpReply(
+	  static_cast<const MOSDSubOp*>(m),
+	  get_parent()->whoami_shard(),
+	  0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
+      reply->set_last_complete_ondisk(rm->last_complete);
+      commit = reply;
+    } else if (m->get_type() == MSG_OSD_REPOP) {
+      MOSDRepOpReply *reply = new MOSDRepOpReply(
+	  static_cast<const MOSDRepOp*>(m),
+	  get_parent()->whoami_shard(),
+	  0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
+      reply->set_last_complete_ondisk(rm->last_complete);
+      commit = reply;
+    }
+    else {
+      ceph_abort();
+    }
 
-  // send ack to acker only if we haven't sent a commit already
-  if (ack) {
-    ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
+    commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
     get_parent()->send_message_osd_cluster(
-      rm->ackerosd, ack, get_osdmap()->get_epoch());
+	rm->ackerosd, commit, get_osdmap()->get_epoch());
+
+    log_subop_stats(get_parent()->get_logger(), rm->op, l_osd_sop_w);
+
   }
 
-  parent->op_applied(version);
-}
+  if (op_applied) {
+    rm->op->mark_event("sub_op_applied");
+    rm->applied = true;
 
-void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
-{
-  rm->op->mark_commit_sent();
-  rm->committed = true;
+    dout(10) << "sub_op_modify_applied on " << rm << " op "
+      << *rm->op->get_req() << dendl;
+    const Message *m = rm->op->get_req();
 
-  // send commit.
-  dout(10) << "sub_op_modify_commit on op " << *rm->op->get_req()
-	   << ", sending commit to osd." << rm->ackerosd
-	   << dendl;
+    Message *ack = NULL;
+    eversion_t version;
 
-  assert(get_osdmap()->is_up(rm->ackerosd));
-  get_parent()->update_last_complete_ondisk(rm->last_complete);
+    if (m->get_type() == MSG_OSD_SUBOP) {
+      // doesn't have CLIENT SUBOP feature ,use Subop
+      const MOSDSubOp *req = static_cast<const MOSDSubOp*>(m);
+      version = req->version;
+      if (!rm->committed)
+	ack = new MOSDSubOpReply(
+	    req, parent->whoami_shard(),
+	    0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
+    } else if (m->get_type() == MSG_OSD_REPOP) {
+      const MOSDRepOp *req = static_cast<const MOSDRepOp*>(m);
+      version = req->version;
+      if (!rm->committed)
+	ack = new MOSDRepOpReply(
+	    static_cast<const MOSDRepOp*>(m), parent->whoami_shard(),
+	    0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
+    } else {
+      ceph_abort();
+    }
 
-  const Message *m = rm->op->get_req();
-  Message *commit = NULL;
-  if (m->get_type() == MSG_OSD_SUBOP) {
-    // doesn't have CLIENT SUBOP feature ,use Subop
-    MOSDSubOpReply  *reply = new MOSDSubOpReply(
-      static_cast<const MOSDSubOp*>(m),
-      get_parent()->whoami_shard(),
-      0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
-    reply->set_last_complete_ondisk(rm->last_complete);
-    commit = reply;
-  } else if (m->get_type() == MSG_OSD_REPOP) {
-    MOSDRepOpReply *reply = new MOSDRepOpReply(
-      static_cast<const MOSDRepOp*>(m),
-      get_parent()->whoami_shard(),
-      0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
-    reply->set_last_complete_ondisk(rm->last_complete);
-    commit = reply;
+    // send ack to acker only if we haven't sent a commit already
+    if (ack) {
+      ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
+      get_parent()->send_message_osd_cluster(
+	  rm->ackerosd, ack, get_osdmap()->get_epoch());
+    }
+
+    parent->op_applied(version);
   }
-  else {
-    ceph_abort();
-  }
-
-  commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
-  get_parent()->send_message_osd_cluster(
-    rm->ackerosd, commit, get_osdmap()->get_epoch());
-
-  log_subop_stats(get_parent()->get_logger(), rm->op, l_osd_sop_w);
-}
-
+ }
 
 // ===========================================================
 
