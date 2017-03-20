@@ -7450,14 +7450,6 @@ bool MDCache::shutdown_pass()
   }
 
 
-  // flush what we can from the log
-  mds->mdlog->trim(0);
-
-  if (mds->mdlog->get_num_segments() > 1) {
-    dout(7) << "still >1 segments, waiting for log to trim" << dendl;
-    return false;
-  }
-
   // empty stray dir
   if (!shutdown_export_strays()) {
     dout(7) << "waiting for strays to migrate" << dendl;
@@ -7545,6 +7537,13 @@ bool MDCache::shutdown_pass()
     // We do this because otherwise acks to locks could come in after
     // we cap the log.
     dout(7) << "waiting for mydir replicas to release: " << *mydir << dendl;
+    return false;
+  }
+
+  // flush what we can from the log
+  mds->mdlog->trim(0);
+  if (mds->mdlog->get_num_segments() > 1) {
+    dout(7) << "still >1 segments, waiting for log to trim" << dendl;
     return false;
   }
 
