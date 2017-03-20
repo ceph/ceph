@@ -367,7 +367,7 @@ public:
   C_OSD_OnOpCommit(ReplicatedBackend *pg, ReplicatedBackend::InProgressOp *op) 
     : pg(pg), op(op) {}
   void finish(int) override {
-    pg->op_commit(op);
+    pg->op_reply(op, true, false);
   }
 };
 
@@ -378,7 +378,18 @@ public:
   C_OSD_OnOpApplied(ReplicatedBackend *pg, ReplicatedBackend::InProgressOp *op) 
     : pg(pg), op(op) {}
   void finish(int) override {
-    pg->op_applied(op);
+    pg->op_reply(op, false, true);
+  }
+};
+
+class C_OSD_OnOpCommitApplied : public Context {
+  ReplicatedBackend *pg;
+  ReplicatedBackend::InProgressOp *op;
+public:
+  C_OSD_OnOpCommitApplied(ReplicatedBackend *pg, ReplicatedBackend::InProgressOp *op)
+    : pg(pg), op(op) {}
+  void finish(int) override {
+    pg->op_reply(op, true, true);
   }
 };
 
@@ -606,12 +617,18 @@ void ReplicatedBackend::submit_transaction(
     op_t);
   
   op_t.register_on_applied_sync(on_local_applied_sync);
-  op_t.register_on_applied(
-    parent->bless_context(
-      new C_OSD_OnOpApplied(this, &op)));
-  op_t.register_on_commit(
-    parent->bless_context(
-      new C_OSD_OnOpCommit(this, &op)));
+  if (store->op_commit_equal_applied()) {
+    op_t.register_on_commit(
+	parent->bless_context(
+	  new C_OSD_OnOpCommitApplied(this, &op)));
+  } else {
+    op_t.register_on_applied(
+	parent->bless_context(
+	  new C_OSD_OnOpApplied(this, &op)));
+    op_t.register_on_commit(
+	parent->bless_context(
+	  new C_OSD_OnOpCommit(this, &op)));
+  }
 
   vector<ObjectStore::Transaction> tls;
   tls.push_back(std::move(op_t));
@@ -619,43 +636,38 @@ void ReplicatedBackend::submit_transaction(
   parent->queue_transactions(tls, op.op);
 }
 
-void ReplicatedBackend::op_applied(
-  InProgressOp *op)
+void ReplicatedBackend::op_reply(
+  InProgressOp *op, bool op_commited, bool op_applied)
 {
   FUNCTRACE();
-  OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_APPLIED_BEGIN", true);
-  dout(10) << __func__ << ": " << op->tid << dendl;
-  if (op->op)
-    op->op->mark_event("op_applied");
+  dout(10) << __func__ << ": " << op->tid << " op_commited: " << " op_applied: " << dendl;
+  if (op_commited) {
+    OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
+    if (op->op)
+      op->op->mark_event("op_commit");
 
-  op->waiting_for_applied.erase(get_parent()->whoami_shard());
-  parent->op_applied(op->v);
+    op->waiting_for_commit.erase(get_parent()->whoami_shard());
 
-  if (op->waiting_for_applied.empty()) {
-    op->on_applied->complete(0);
-    op->on_applied = 0;
+    if (op->waiting_for_commit.empty()) {
+      op->on_commit->complete(0);
+      op->on_commit = 0;
+    }
   }
-  if (op->done()) {
-    assert(!op->on_commit && !op->on_applied);
-    in_progress_ops.erase(op->tid);
+
+  if (op_applied) {
+    OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_APPLIED_BEGIN", true);
+    if (op->op)
+      op->op->mark_event("op_applied");
+
+    op->waiting_for_applied.erase(get_parent()->whoami_shard());
+    parent->op_applied(op->v);
+
+    if (op->waiting_for_applied.empty()) {
+      op->on_applied->complete(0);
+      op->on_applied = 0;
+    }
   }
-}
 
-void ReplicatedBackend::op_commit(
-  InProgressOp *op)
-{
-  FUNCTRACE();
-  OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
-  dout(10) << __func__ << ": " << op->tid << dendl;
-  if (op->op)
-    op->op->mark_event("op_commit");
-
-  op->waiting_for_commit.erase(get_parent()->whoami_shard());
-
-  if (op->waiting_for_commit.empty()) {
-    op->on_commit->complete(0);
-    op->on_commit = 0;
-  }
   if (op->done()) {
     assert(!op->on_commit && !op->on_applied);
     in_progress_ops.erase(op->tid);

@@ -358,6 +358,7 @@ private:
 public:
   friend class C_OSD_OnOpCommit;
   friend class C_OSD_OnOpApplied;
+  friend class C_OSD_OnOpCommitApplied;
 
   void call_write_ordered(std::function<void(void)> &&cb) override {
     // ReplicatedBackend submits writes inline in submit_transaction, so
@@ -410,8 +411,7 @@ private:
     boost::optional<pg_hit_set_history_t> &hset_history,
     InProgressOp *op,
     ObjectStore::Transaction &op_t);
-  void op_applied(InProgressOp *op);
-  void op_commit(InProgressOp *op);
+  void op_reply(InProgressOp *op, bool op_commited, bool op_applied);
   void sub_op_modify_reply(OpRequestRef op);
   void sub_op_modify(OpRequestRef op);
 
