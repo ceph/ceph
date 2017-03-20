@@ -41,8 +41,6 @@ int64_t BitMapAreaLeaf::count = 0;
 int64_t BitMapZone::count = 0;
 int64_t BitMapZone::total_blocks = 0;
 
-bool BmapEntry::m_bit_mask_init = false;
-bmap_mask_vec_t BmapEntry::m_bit_to_mask;
 
 
 int64_t BmapEntityListIter::index()
@@ -50,30 +48,8 @@ int64_t BmapEntityListIter::index()
   return m_cur_idx;
 }
 
-/*
- * Bitmap Entry functions.
- */
-void BmapEntry::_init_bit_mask()
-{
-
-  if (m_bit_mask_init) {
-    return;
-  }
-
-  m_bit_to_mask.reserve(BmapEntry::size());
-
-  uint64_t bmask = ((bmap_t) 0x1 << (BmapEntry::size() - 1));
-  for (int i = 0; i < BmapEntry::size(); i++) {
-    m_bit_to_mask[i] = bmask >> i;
-  }
-  BmapEntry::m_bit_mask_init = true;
-}
-
 BmapEntry::BmapEntry(CephContext*, const bool full)
 {
-
-  BmapEntry::_init_bit_mask();
-
   if (full) {
     m_bits = BmapEntry::full_bmask();
   } else {
@@ -86,35 +62,9 @@ BmapEntry::~BmapEntry()
 
 }
 
-bmap_t BmapEntry::full_bmask() {
-  return (bmap_t) -1;
-}
-
-int64_t BmapEntry::size() {
-  return (sizeof(bmap_t) * 8);
-}
-
-bmap_t BmapEntry::empty_bmask() {
-  return (bmap_t) 0;
-}
-
-bmap_t BmapEntry::align_mask(int x)
-{
-  return ((x) >= BmapEntry::size()? (bmap_t) -1 : (~(((bmap_t) -1) >> (x))));
-}
-
-bmap_t BmapEntry::bit_mask(int bit)
-{
-  return m_bit_to_mask[bit];
-}
 bool BmapEntry::check_bit(int bit)
 {
   return (atomic_fetch() & bit_mask(bit));
-}
-
-bmap_t BmapEntry::atomic_fetch()
-{
-  return m_bits;
 }
 
 bool BmapEntry::is_allocated(int64_t offset, int64_t num_bits)

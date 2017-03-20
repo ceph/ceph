@@ -141,20 +141,27 @@ typedef mempool::bluestore_alloc::vector<bmap_t> bmap_mask_vec_t;
 class BmapEntry {
 private:
   bmap_t m_bits;
-  static bool m_bit_mask_init;
-  static bmap_mask_vec_t m_bit_to_mask;
-
-
-  static void _init_bit_mask();
 
 public:
   MEMPOOL_CLASS_HELPERS();
-  static bmap_t full_bmask();
-  static int64_t size();
-  static bmap_t empty_bmask();
-  static bmap_t align_mask(int x);
-  static bmap_t bit_mask(int bit_num);
-  bmap_t atomic_fetch();
+  static bmap_t full_bmask() {
+    return (bmap_t) -1;
+  }
+  static int64_t size() {
+    return (sizeof(bmap_t) * 8);
+  }
+  static bmap_t empty_bmask() {
+    return (bmap_t) 0;
+  }
+  static bmap_t align_mask(int x) {
+    return ((x) >= BmapEntry::size()? (bmap_t) -1 : (~(((bmap_t) -1) >> (x))));
+  }
+  static bmap_t bit_mask(int bit_num) {
+    return (bmap_t) 0x1 << ((BmapEntry::size() - 1) - bit_num);
+  }
+  bmap_t atomic_fetch() {
+    return m_bits;
+  }
   BmapEntry(CephContext*, bool val);
   BmapEntry(CephContext*) {
     m_bits = 0;
