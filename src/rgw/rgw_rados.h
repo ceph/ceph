@@ -2621,12 +2621,14 @@ public:
                string *petag,
                struct rgw_err *err);
 
+  int check_bucket_empty(rgw_bucket& bucket);
+
   /**
    * Delete a bucket.
    * bucket: the name of the bucket to delete
    * Returns 0 on success, -ERR# otherwise.
    */
-  virtual int delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_tracker);
+  virtual int delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_tracker, bool check_empty = true);
 
   bool is_meta_master();
 

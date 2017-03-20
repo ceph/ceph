@@ -7388,20 +7388,9 @@ bool RGWRados::is_syncing_bucket_meta(rgw_bucket& bucket)
 
   return true;
 }
-  
-/**
- * Delete a bucket.
- * bucket: the name of the bucket to delete
- * Returns 0 on success, -ERR# otherwise.
- */
-int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_tracker)
-{
-  librados::IoCtx index_ctx;
-  map<int, string> bucket_objs;
-  int r = open_bucket_index(bucket, index_ctx, bucket_objs);
-  if (r < 0)
-    return r;
 
+int RGWRados::check_bucket_empty(rgw_bucket& bucket)
+{
   std::map<string, RGWObjEnt> ent_map;
   rgw_obj_key marker;
   string prefix;
@@ -7409,7 +7398,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
 
   do {
 #define NUM_ENTRIES 1000
-    r = cls_bucket_list(bucket, RGW_NO_SHARD, marker, prefix, NUM_ENTRIES, true, ent_map,
+    int r = cls_bucket_list(bucket, RGW_NO_SHARD, marker, prefix, NUM_ENTRIES, true, ent_map,
                         &is_truncated, &marker);
     if (r < 0)
       return r;
@@ -7425,7 +7414,29 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
         return -ENOTEMPTY;
     }
   } while (is_truncated);
+  return 0;
+}
 
+/**
+ * Delete a bucket.
+ * bucket: the name of the bucket to delete
+ * Returns 0 on success, -ERR# otherwise.
+ */
+int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_tracker, bool check_empty)
+{
+  librados::IoCtx index_ctx;
+  map<int, string> bucket_objs;
+  int r = open_bucket_index(bucket, index_ctx, bucket_objs);
+  if (r < 0)
+    return r;
+
+  if (check_empty) {
+    r = check_bucket_empty(bucket);
+    if (r < 0) {
+      return r;
+    }
+  }
+  
   r = rgw_bucket_delete_bucket_obj(this, bucket.tenant, bucket.name, objv_tracker);
   if (r < 0)
     return r;
@@ -7446,7 +7457,6 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
   }
   return 0;
 }
-
 
 int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
 {
