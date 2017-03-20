@@ -1103,7 +1103,7 @@ public:
 
   void send_response() override = 0;
   const string name() override { return "get_lifecycle"; }
-  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
 class RGWPutLC : public RGWOp {
