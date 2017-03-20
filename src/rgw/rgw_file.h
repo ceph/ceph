@@ -486,7 +486,7 @@ namespace rgw {
     bool stateless_open() const { return flags & FLAG_STATELESS_OPEN; }
     bool has_children() const;
 
-    uint32_t open(uint32_t gsh_flags) {
+    int open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
       if (! (flags & FLAG_OPEN)) {
 	if (gsh_flags & RGW_OPEN_FLAG_V3) {
@@ -495,7 +495,7 @@ namespace rgw {
 	flags |= FLAG_OPEN;
 	return 0;
       }
-      return EPERM;
+      return -EPERM;
     }
 
     int readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset, bool *eof,
