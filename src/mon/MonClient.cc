@@ -47,6 +47,7 @@
 MonClient::MonClient(CephContext *cct_) :
   Dispatcher(cct_),
   messenger(NULL),
+  global_id(0),
   monc_lock("MonClient::monc_lock"),
   timer(cct_, monc_lock), finisher(cct_),
   initialized(false),
@@ -575,7 +576,8 @@ void MonClient::_reopen_session(int rank)
   ldout(cct, 10) << __func__ << " rank " << rank << dendl;
 
   // save global_id if any before nuking active_con
-  const uint64_t global_id = active_con ? active_con->get_global_id() : 0;
+  if (active_con)
+    global_id = active_con->get_global_id();
   active_con.reset();
   pending_cons.clear();
 
