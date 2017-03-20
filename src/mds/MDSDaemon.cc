@@ -223,6 +223,10 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "show slowest recent ops");
   assert(r == 0);
+  r = admin_socket->register_command("dump_historic_ops_by_duration", "dump_historic_ops_by_duration",
+				     asok_hook,
+				     "show slowest recent ops, sorted by op duration");
+  assert(r == 0);
   r = admin_socket->register_command("scrub_path",
 				     "scrub_path name=path,type=CephString "
 				     "name=scrubops,type=CephChoices,"
@@ -321,6 +325,7 @@ void MDSDaemon::clean_up_admin_socket()
   admin_socket->unregister_command("ops");
   admin_socket->unregister_command("dump_blocked_ops");
   admin_socket->unregister_command("dump_historic_ops");
+  admin_socket->unregister_command("dump_historic_ops_by_duration");
   admin_socket->unregister_command("scrub_path");
   admin_socket->unregister_command("tag path");
   admin_socket->unregister_command("flush_path");
