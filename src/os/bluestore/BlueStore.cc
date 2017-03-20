@@ -6919,7 +6919,7 @@ int BlueStore::_open_super_meta()
   }
 
   // bluefs alloc
-  {
+  if (cct->_conf->bluestore_bluefs) {
     bluefs_extents.clear();
     bufferlist bl;
     db->get(PREFIX_SUPER, "bluefs_extents", &bl);
