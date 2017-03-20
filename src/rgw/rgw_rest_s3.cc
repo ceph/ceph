@@ -27,6 +27,7 @@
 
 #include "rgw_keystone.h"
 #include "rgw_auth_keystone.h"
+#include "rgw_auth_registry.h"
 
 #include <typeinfo> // for 'typeid'
 
@@ -1818,8 +1819,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
     /* FIXME: this is a makeshift solution. The browser upload authentication will be
      * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
      * method. */
-    static const rgw::auth::s3::AWSv2AuthStrategy<
-                   rgw::auth::s3::RGWGetPolicyV2Extractor> strategy(g_ceph_context, store);
+    const auto& strategy = auth_registry_ptr->get_s3_post();
     try {
       auto result = strategy.authenticate(s);
       if (result.get_status() != decltype(result)::Status::GRANTED) {
@@ -3220,7 +3220,9 @@ static void init_anon_user(struct req_state *s)
  *
  * it tries AWS v4 before AWS v2
  */
-int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
+int RGW_Auth_S3::authorize(RGWRados* const store,
+                           const rgw::auth::StrategyRegistry& auth_registry,
+                           struct req_state* const s)
 {
 
   /* neither keystone and rados enabled; warn and exit! */
@@ -3259,7 +3261,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 
     string auth_id = s->info.args.get("AWSAccessKeyId");
     if (auth_id.size()) {
-      return authorize_v2(store, s);
+      return authorize_v2(store, auth_registry, s);
     }
 
     /* anonymous access */
@@ -3279,7 +3281,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     /* AWS2 */
 
     if (!strncmp(s->http_auth, "AWS ", 4)) {
-      return authorize_v2(store, s);
+      return authorize_v2(store, auth_registry, s);
     }
 
   }
@@ -3881,13 +3883,13 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
 /*
  * handle v2 signatures
  */
-int RGW_Auth_S3::authorize_v2(RGWRados *store, struct req_state *s)
+int RGW_Auth_S3::authorize_v2(RGWRados* const store,
+                              const rgw::auth::StrategyRegistry& auth_registry,
+                              struct req_state* const s)
 {
-  /* TODO(rzarzynski): this will be moved to the S3 handlers -- in exactly
-   * way like we currently have in the case of Swift API. */
-  static const rgw::auth::s3::AWSv2AuthStrategy<rgw::auth::s3::RGWS3V2Extractor> strategy(g_ceph_context, store);
+  const auto& auth_strategy = auth_registry.get_s3_main();
   try {
-    auto result = strategy.authenticate(s);
+    auto result = auth_strategy.authenticate(s);
     if (result.get_status() != decltype(result)::Status::GRANTED) {
       ldout(s->cct, 5) << "Failed the S3 auth strategy, reason="
                        << result.get_reason() << dendl;
@@ -3931,6 +3933,7 @@ int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state,
 }
 
 RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
+                                            const rgw::auth::StrategyRegistry& auth_registry,
                                             const std::string& frontend_prefix)
 {
   bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_WEBSITE);
@@ -3945,19 +3948,19 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
   // TODO: Make this more readable
   if (is_s3website) {
     if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_REST_Service_S3Website;
+      handler = new RGWHandler_REST_Service_S3Website(auth_registry);
     } else if (s->object.empty()) {
-      handler = new RGWHandler_REST_Bucket_S3Website;
+      handler = new RGWHandler_REST_Bucket_S3Website(auth_registry);
     } else {
-      handler = new RGWHandler_REST_Obj_S3Website;
+      handler = new RGWHandler_REST_Obj_S3Website(auth_registry);
     }
   } else {
     if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_REST_Service_S3;
+      handler = new RGWHandler_REST_Service_S3(auth_registry);
     } else if (s->object.empty()) {
-      handler = new RGWHandler_REST_Bucket_S3;
+      handler = new RGWHandler_REST_Bucket_S3(auth_registry);
     } else {
-      handler = new RGWHandler_REST_Obj_S3;
+      handler = new RGWHandler_REST_Obj_S3(auth_registry);
     }
   }
 

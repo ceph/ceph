@@ -107,8 +107,8 @@ protected:
     return 0;
   }
 public:
-  RGWHandler_Metadata() : RGWHandler_Auth_S3() {}
-  ~RGWHandler_Metadata() override {}
+  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
+  ~RGWHandler_Metadata() override = default;
 };
 
 class RGWRESTMgr_Metadata : public RGWRESTMgr {
@@ -117,8 +117,9 @@ public:
   ~RGWRESTMgr_Metadata() override = default;
 
   RGWHandler_REST* get_handler(struct req_state* const s,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override {
-    return new RGWHandler_Metadata;
+    return new RGWHandler_Metadata(auth_registry);
   }
 };
 

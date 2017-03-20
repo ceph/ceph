@@ -368,8 +368,6 @@ public:
 };
 
 class RGWRESTMgr_SWIFT : public RGWRESTMgr {
-  const rgw::auth::Strategy& auth_strategy;
-
 protected:
   RGWRESTMgr* get_resource_mgr_as_default(struct req_state* const s,
                                           const std::string& uri,
@@ -378,12 +376,11 @@ protected:
   }
 
 public:
-  RGWRESTMgr_SWIFT(const rgw::auth::Strategy* const auth_strategy)
-    : auth_strategy(*auth_strategy) {
-  }
+  RGWRESTMgr_SWIFT() = default;
   ~RGWRESTMgr_SWIFT() override = default;
 
   RGWHandler_REST *get_handler(struct req_state *s,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
 
@@ -454,6 +451,7 @@ public:
   ~RGWRESTMgr_SWIFT_CrossDomain() override = default;
 
   RGWHandler_REST* get_handler(struct req_state* const s,
+                               const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
     return new RGWHandler_SWIFT_CrossDomain;
@@ -509,6 +507,7 @@ public:
   ~RGWRESTMgr_SWIFT_HealthCheck() override = default;
 
   RGWHandler_REST* get_handler(struct req_state* const s,
+                               const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
     return new RGWHandler_SWIFT_HealthCheck;
@@ -518,10 +517,7 @@ public:
 
 class RGWHandler_REST_SWIFT_Info : public RGWHandler_REST_SWIFT {
 public:
-  //using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
-  RGWHandler_REST_SWIFT_Info(const rgw::auth::Strategy& auth_strategy)
-    : RGWHandler_REST_SWIFT(auth_strategy) {
-  }
+  using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
   ~RGWHandler_REST_SWIFT_Info() override = default;
 
   RGWOp *op_get() override {
@@ -552,15 +548,12 @@ public:
 };
 
 class RGWRESTMgr_SWIFT_Info : public RGWRESTMgr {
-  const rgw::auth::Strategy& auth_strategy;
-
 public:
-  RGWRESTMgr_SWIFT_Info(const rgw::auth::Strategy* const auth_strategy)
-    : auth_strategy(*auth_strategy) {
-  }
+  RGWRESTMgr_SWIFT_Info() = default;
   ~RGWRESTMgr_SWIFT_Info() override = default;
 
   RGWHandler_REST *get_handler(struct req_state* s,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
 

@@ -306,6 +306,7 @@ public:
   }
 
   RGWHandler_REST* get_handler(struct req_state*,
+                               const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     return new RGWHandler_SWIFT_Auth;
   }

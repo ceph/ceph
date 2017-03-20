@@ -315,8 +315,8 @@ protected:
     return 0;
   }
 public:
-  RGWHandler_Log() : RGWHandler_Auth_S3() {}
-  ~RGWHandler_Log() override {}
+  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
+  ~RGWHandler_Log() override = default;
 };
 
 class RGWRESTMgr_Log : public RGWRESTMgr {
@@ -325,8 +325,9 @@ public:
   ~RGWRESTMgr_Log() override = default;
 
   RGWHandler_REST* get_handler(struct req_state* const,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefixs) override {
-    return new RGWHandler_Log;
+    return new RGWHandler_Log(auth_registry);
   }
 };
 
