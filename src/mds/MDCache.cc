@@ -2998,6 +2998,10 @@ void MDCache::handle_mds_failure(mds_rank_t who)
     fragment_unmark_unfreeze_dirs(dirs);
   }
 
+  // MDCache::shutdown_export_strays() always exports strays to mds.0
+  if (who == mds_rank_t(0))
+    shutdown_exported_strays.clear();
+
   show_subtrees();  
 }
 
@@ -7592,12 +7596,14 @@ bool MDCache::shutdown_pass()
 
 bool MDCache::shutdown_export_strays()
 {
-  if (mds->get_nodeid() == 0) return true;
+  if (mds->get_nodeid() == 0)
+    return true;
   
   dout(10) << "shutdown_export_strays" << dendl;
 
+  bool mds0_active = mds->mdsmap->is_active(mds_rank_t(0));
+
   bool done = true;
-  static set<inodeno_t> exported_strays;
 
   list<CDir*> dfs;
   for (int i = 0; i < NUM_STRAY; ++i) {
@@ -7615,6 +7621,8 @@ bool MDCache::shutdown_export_strays()
     if (!dir->is_complete()) {
       dir->fetch(0);
       done = false;
+      if (!mds0_active)
+	break;
     }
     
     for (CDir::map_t::iterator p = dir->items.begin();
@@ -7622,8 +7630,11 @@ bool MDCache::shutdown_export_strays()
 	 ++p) {
       CDentry *dn = p->second;
       CDentry::linkage_t *dnl = dn->get_linkage();
-      if (dnl->is_null()) continue;
+      if (dnl->is_null())
+	continue;
       done = false;
+      if (!mds0_active)
+	break;
       
       if (dn->state_test(CDentry::STATE_PURGING)) {
         // Don't try to migrate anything that is actually
@@ -7631,9 +7642,8 @@ bool MDCache::shutdown_export_strays()
         continue;
       }
 
-      // FIXME: we'll deadlock if a rename fails.
-      if (exported_strays.count(dnl->get_inode()->ino()) == 0) {
-	exported_strays.insert(dnl->get_inode()->ino());
+      if (shutdown_exported_strays.count(dnl->get_inode()->ino()) == 0) {
+	shutdown_exported_strays.insert(dnl->get_inode()->ino());
 	stray_manager.migrate_stray(dn, mds_rank_t(0));  // send to root!
       } else {
 	dout(10) << "already exporting " << *dn << dendl;
