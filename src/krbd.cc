@@ -42,6 +42,8 @@
 
 using namespace std;
 
+const static int POLL_TIMEOUT=120000;
+
 struct krbd_ctx {
   CephContext *cct;
   struct udev *udev;
@@ -189,7 +191,7 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
 
     fds[0].fd = udev_monitor_get_fd(mon);
     fds[0].events = POLLIN;
-    if (poll(fds, 1, -1) < 0)
+    if (poll(fds, 1, POLL_TIMEOUT) < 0)
       return -errno;
 
     dev = udev_monitor_receive_device(mon);
@@ -473,7 +475,7 @@ static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
 
     fds[0].fd = udev_monitor_get_fd(mon);
     fds[0].events = POLLIN;
-    if (poll(fds, 1, -1) < 0)
+    if (poll(fds, 1, POLL_TIMEOUT) < 0)
       return -errno;
 
     dev = udev_monitor_receive_device(mon);
