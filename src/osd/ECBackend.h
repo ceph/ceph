@@ -57,10 +57,11 @@ public:
     );
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
-  void sub_write_applied(
-    ceph_tid_t tid, eversion_t version);
-  void sub_write_committed(
-    ceph_tid_t tid, eversion_t version, eversion_t last_complete);
+  friend struct SubWriteCommittedApplied;
+  void sub_write_committed_or_applied(
+    ceph_tid_t tid, eversion_t version, eversion_t last_complete,
+    bool op_commited, bool op_applied);
+
   void handle_sub_write(
     pg_shard_t from,
     OpRequestRef msg,

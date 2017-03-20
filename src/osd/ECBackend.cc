@@ -805,34 +805,9 @@ struct SubWriteCommitted : public Context {
   void finish(int) override {
     if (msg)
       msg->mark_event("sub_op_committed");
-    pg->sub_write_committed(tid, version, last_complete);
+    pg->sub_write_committed_or_applied(tid, version, last_complete, true, false);
   }
 };
-void ECBackend::sub_write_committed(
-  ceph_tid_t tid, eversion_t version, eversion_t last_complete) {
-  if (get_parent()->pgb_is_primary()) {
-    ECSubWriteReply reply;
-    reply.tid = tid;
-    reply.last_complete = last_complete;
-    reply.committed = true;
-    reply.from = get_parent()->whoami_shard();
-    handle_sub_write_reply(
-      get_parent()->whoami_shard(),
-      reply);
-  } else {
-    get_parent()->update_last_complete_ondisk(last_complete);
-    MOSDECSubOpWriteReply *r = new MOSDECSubOpWriteReply;
-    r->pgid = get_parent()->primary_spg_t();
-    r->map_epoch = get_parent()->get_epoch();
-    r->op.tid = tid;
-    r->op.last_complete = last_complete;
-    r->op.committed = true;
-    r->op.from = get_parent()->whoami_shard();
-    r->set_priority(CEPH_MSG_PRIO_HIGH);
-    get_parent()->send_message_osd_cluster(
-      get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
-  }
-}
 
 struct SubWriteApplied : public Context {
   ECBackend *pg;
@@ -848,30 +823,87 @@ struct SubWriteApplied : public Context {
   void finish(int) override {
     if (msg)
       msg->mark_event("sub_op_applied");
-    pg->sub_write_applied(tid, version);
+    pg->sub_write_committed_or_applied(tid, version, eversion_t(), false, true);
   }
 };
-void ECBackend::sub_write_applied(
-  ceph_tid_t tid, eversion_t version) {
-  parent->op_applied(version);
-  if (get_parent()->pgb_is_primary()) {
-    ECSubWriteReply reply;
-    reply.from = get_parent()->whoami_shard();
-    reply.tid = tid;
-    reply.applied = true;
-    handle_sub_write_reply(
-      get_parent()->whoami_shard(),
-      reply);
-  } else {
-    MOSDECSubOpWriteReply *r = new MOSDECSubOpWriteReply;
-    r->pgid = get_parent()->primary_spg_t();
-    r->map_epoch = get_parent()->get_epoch();
-    r->op.from = get_parent()->whoami_shard();
-    r->op.tid = tid;
-    r->op.applied = true;
-    r->set_priority(CEPH_MSG_PRIO_HIGH);
-    get_parent()->send_message_osd_cluster(
-      get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
+
+struct SubWriteCommittedApplied : public Context {
+  ECBackend *pg;
+  OpRequestRef msg;
+  ceph_tid_t tid;
+  eversion_t version;
+  eversion_t last_complete;
+  SubWriteCommittedApplied(
+    ECBackend *pg,
+    OpRequestRef msg,
+    ceph_tid_t tid,
+    eversion_t version,
+    eversion_t last_complete)
+    : pg(pg), msg(msg), tid(tid),
+      version(version), last_complete(last_complete) {}
+  void finish(int) override {
+    if (msg)
+      msg->mark_event("sub_op_committed_applied");
+    pg->sub_write_committed_or_applied(tid, version, last_complete, true, true);
+  }
+};
+
+void ECBackend::sub_write_committed_or_applied(
+  ceph_tid_t tid, eversion_t version, eversion_t last_complete,
+  bool op_commited, bool op_applied) {
+  if (op_commited) {
+    if (get_parent()->pgb_is_primary()) {
+      ECSubWriteReply reply;
+      reply.tid = tid;
+      reply.last_complete = last_complete;
+      reply.committed = true;
+      reply.applied = op_applied;
+      reply.from = get_parent()->whoami_shard();
+      handle_sub_write_reply(
+	  get_parent()->whoami_shard(),
+	  reply);
+    } else {
+      get_parent()->update_last_complete_ondisk(last_complete);
+      MOSDECSubOpWriteReply *r = new MOSDECSubOpWriteReply;
+      r->pgid = get_parent()->primary_spg_t();
+      r->map_epoch = get_parent()->get_epoch();
+      r->op.tid = tid;
+      r->op.last_complete = last_complete;
+      r->op.committed = true;
+      r->op.applied = op_applied;
+      r->op.from = get_parent()->whoami_shard();
+      r->set_priority(CEPH_MSG_PRIO_HIGH);
+      get_parent()->send_message_osd_cluster(
+	  get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
+    }
+
+    if (op_applied) {
+      parent->op_applied(version);
+      op_applied = false;
+    }
+  }
+
+  if (op_applied) {
+    parent->op_applied(version);
+    if (get_parent()->pgb_is_primary()) {
+      ECSubWriteReply reply;
+      reply.from = get_parent()->whoami_shard();
+      reply.tid = tid;
+      reply.applied = true;
+      handle_sub_write_reply(
+	  get_parent()->whoami_shard(),
+	  reply);
+    } else {
+      MOSDECSubOpWriteReply *r = new MOSDECSubOpWriteReply;
+      r->pgid = get_parent()->primary_spg_t();
+      r->map_epoch = get_parent()->get_epoch();
+      r->op.from = get_parent()->whoami_shard();
+      r->op.tid = tid;
+      r->op.applied = true;
+      r->set_priority(CEPH_MSG_PRIO_HIGH);
+      get_parent()->send_message_osd_cluster(
+	  get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
+    }
   }
 }
 
@@ -922,15 +954,24 @@ void ECBackend::handle_sub_write(
     dout(10) << "Queueing onreadable_sync: " << on_local_applied_sync << dendl;
     localt.register_on_applied_sync(on_local_applied_sync);
   }
-  localt.register_on_commit(
-    get_parent()->bless_context(
-      new SubWriteCommitted(
-	this, msg, op.tid,
-	op.at_version,
-	get_parent()->get_info().last_complete)));
-  localt.register_on_applied(
-    get_parent()->bless_context(
-      new SubWriteApplied(this, msg, op.tid, op.at_version)));
+  if (store->op_commit_equal_applied()) {
+    localt.register_on_commit(
+	get_parent()->bless_context(
+	  new SubWriteCommittedApplied(
+	    this, msg, op.tid,
+	    op.at_version,
+	    get_parent()->get_info().last_complete)));
+  } else {
+    localt.register_on_commit(
+	get_parent()->bless_context(
+	  new SubWriteCommitted(
+	    this, msg, op.tid,
+	    op.at_version,
+	    get_parent()->get_info().last_complete)));
+    localt.register_on_applied(
+	get_parent()->bless_context(
+	  new SubWriteApplied(this, msg, op.tid, op.at_version)));
+  }
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(op.t));
