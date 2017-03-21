@@ -8,12 +8,13 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-class RGWMetadataSearch : public RGWOp {
+class RGWMetadataSearchOp : public RGWOp {
+  RGWElasticSyncModuleInstance *es_module;
 protected:
   string expression;
 
 public:
-  RGWMetadataSearch() {}
+  RGWMetadataSearchOp(RGWElasticSyncModuleInstance *_es_module) : es_module(_es_module) {}
 
   int verify_permission() {
     return 0;
@@ -49,11 +50,13 @@ void RGWMetadataSearch::execute()
     return;
   }
 
+  RGWRESTConn *conn = es_module->get_rest_conn();
+  // conn->
 }
 
 class RGWMetadataSearch_ObjStore_S3 : public RGWMetadataSearch {
 public:
-  RGWMetadataSearch_ObjStore_S3() {}
+  RGWMetadataSearch_ObjStore_S3(RGWElasticSyncModuleInstance *_es_module) : RGWMetadataSearch(_es_module) {}
 
   int get_params() override {
     expression = s->info.args.get("query");
@@ -75,6 +78,7 @@ public:
 };
 
 class RGWHandler_REST_MDSearch_S3 : public RGWHandler_REST_S3 {
+  RGWElasticSyncModuleInstance *es_module;
 protected:
   RGWOp *op_get() {
     if (!s->info.args.exists("query")) {
@@ -89,7 +93,8 @@ protected:
     return nullptr;
   }
 public:
-  RGWHandler_REST_MDSearch_S3() {}
+  RGWHandler_REST_MDSearch_S3(const rgw::auth::StrategyRegistry& auth_registry,
+                              RGWElasticSyncModuleInstance *_es_module) : RGWHandler_REST_S3(auth_registry), es_module(_es_module) {}
   virtual ~RGWHandler_REST_MDSearch_S3() {}
 };
 
@@ -109,7 +114,7 @@ RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(struct req_state* const s,
     return nullptr;
   }
 
-  RGWHandler_REST *handler = new RGWHandler_REST_MDSearch_S3;
+  RGWHandler_REST *handler = new RGWHandler_REST_MDSearch_S3(auth_registry, es_module);
 
   ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name()
 		    << dendl;
