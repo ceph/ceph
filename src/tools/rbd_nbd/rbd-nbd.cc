@@ -554,6 +554,12 @@ static int do_map(int argc, const char *argv[])
     }
   }
 
+  if (g_conf->daemonize) {
+    forker.daemonize();
+    global_init_postfork_start(g_ceph_context);
+    global_init_postfork_finish(g_ceph_context);
+  }
+
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
 
@@ -693,12 +699,6 @@ static int do_map(int argc, const char *argv[])
       goto close_nbd;
 
     cout << devpath << std::endl;
-
-    if (g_conf->daemonize) {
-      forker.daemonize();
-      global_init_postfork_start(g_ceph_context);
-      global_init_postfork_finish(g_ceph_context);
-    }
 
     {
       NBDServer server(fd[1], image);
