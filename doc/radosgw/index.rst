@@ -34,21 +34,23 @@ you may write data with one API and retrieve it with the other.
 
 
 .. toctree::
-	:maxdepth: 1
+   :maxdepth: 1
 
-	Manual Install <../../install/install-ceph-gateway>
-	Simple Configuration with FastCGI <config-fcgi>
-	Federated Configuration <federated-config>
-	Multisite Configuration <multisite>
-	Config Reference <config-ref>
-	Admin Guide <admin>
-	S3 API <s3>
-	Swift API <swift>
-	Admin Ops API <adminops>
-	OpenStack Keystone Integration <keystone>
-	Multi-tenancy <multitenancy>
-	Compression <compression>
-	troubleshooting
-	Manpage radosgw <../../man/8/radosgw>
-	Manpage radosgw-admin <../../man/8/radosgw-admin>
-	
+   Manual Install <../../install/install-ceph-gateway>
+   Simple Configuration with FastCGI <config-fcgi>
+   Federated Configuration <federated-config>
+   Multisite Configuration <multisite>
+   Config Reference <config-ref>
+   Admin Guide <admin>
+   S3 API <s3>
+   Swift API <swift>
+   Admin Ops API <adminops>
+   Python binding <api>
+   OpenStack Keystone Integration <keystone>
+   Multi-tenancy <multitenancy>
+   Compression <compression>
+   Data Layout in RADOS <layout>
+   Upgrade to Older Versions of Jewel <upgrade_to_jewel>
+   troubleshooting
+   Manpage radosgw <../../man/8/radosgw>
+   Manpage radosgw-admin <../../man/8/radosgw-admin>

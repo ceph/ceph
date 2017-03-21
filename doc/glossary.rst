@@ -84,6 +84,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		proper term is "Ceph OSD".
 		
 	Ceph OSD Daemon
+	Ceph OSD Daemons
 	Ceph OSD
 		The Ceph OSD software, which interacts with a logical
 		disk (:term:`OSD`). Sometimes, Ceph users use the
@@ -93,7 +94,12 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph Monitor
 	MON
 		The Ceph monitor software.
-	
+
+	Ceph Manager
+	MGR
+		The Ceph manager software, which collects all the state from the whole
+		cluster in one place.
+
 	Ceph Metadata Server
 	MDS
 		The Ceph metadata software.

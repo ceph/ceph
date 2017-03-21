@@ -804,7 +804,7 @@ if you decide to go this route.
 
 If you have access to an OpenStack tenant, you have another option: the
 `teuthology framework`_ has an OpenStack backend, which is documented `here
-<https://github.com/dachary/teuthology/tree/openstack#openstack-backend>`_.
+<https://github.com/dachary/teuthology/tree/openstack#openstack-backend>`__.
 This OpenStack backend can build packages from a given git commit or
 branch, provision VMs, install the packages and run integration tests
 on those VMs. This process is controlled using a tool called
@@ -823,6 +823,8 @@ A detailed and up-to-date description of each `teuthology-suite`_ option is
 available by running the following command on the teuthology machine::
 
    $ teuthology-suite --help
+
+.. _teuthology-suite: http://docs.ceph.com/teuthology/docs/teuthology.suite.html
 
 How integration tests are defined
 ---------------------------------
@@ -885,7 +887,7 @@ task is `found in the python file
 (search for "def task").
 
 The ``ceph`` task, which is documented `here
-<https://github.com/ceph/ceph/blob/master/qa/tasks/ceph.py>`_ (again,
+<https://github.com/ceph/ceph/blob/master/qa/tasks/ceph.py>`__ (again,
 search for "def task"), starts OSDs and MONs (and possibly MDSs as well)
 as required by the ``roles`` array. In this example, it will start one MON
 (``mon.a``) and two OSDs (``osd.0`` and ``osd.1``), all on the same
