@@ -1188,15 +1188,6 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
     }
   }
 
-  if (prefix == "mds newfs") {
-    // newfs is the legacy command that in single-filesystem times
-    // used to be equivalent to doing an "fs rm ; fs new".  We
-    // can't do this in a sane way in multi-filesystem world.
-    ss << "'newfs' no longer available.  Please use 'fs new'.";
-    r = -EINVAL;
-    goto out;
-  } 
-
   r = filesystem_command(op, prefix, cmdmap, ss);
   if (r >= 0) {
     goto out;
