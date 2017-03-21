@@ -67,6 +67,13 @@ public:
   int64_t get_max() const { return max.read(); }
 
   /**
+   * return true if past midpoint
+   */
+  bool past_midpoint() const {
+    return count.read() >= max.read() / 2;
+  }
+
+  /**
    * set the new max number, and wait until the number of taken slots drains
    * and drops below this limit.
    *

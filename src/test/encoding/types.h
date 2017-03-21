@@ -129,8 +129,8 @@ TYPE(bluestore_pextent_t)
 // approach.
 // TYPE_FEATUREFUL(bluestore_blob_t)
 TYPE(bluestore_onode_t)
-TYPE(bluestore_wal_op_t)
-TYPE(bluestore_wal_transaction_t)
+TYPE(bluestore_deferred_op_t)
+TYPE(bluestore_deferred_transaction_t)
 #endif
 
 #include "common/hobject.h"

@@ -56,10 +56,9 @@ enum {
   l_bluestore_state_kv_queued_lat,
   l_bluestore_state_kv_committing_lat,
   l_bluestore_state_kv_done_lat,
-  l_bluestore_state_wal_queued_lat,
-  l_bluestore_state_wal_applying_lat,
-  l_bluestore_state_wal_aio_wait_lat,
-  l_bluestore_state_wal_cleanup_lat,
+  l_bluestore_state_deferred_queued_lat,
+  l_bluestore_state_deferred_aio_wait_lat,
+  l_bluestore_state_deferred_cleanup_lat,
   l_bluestore_state_finishing_lat,
   l_bluestore_state_done_lat,
   l_bluestore_submit_lat,
@@ -74,8 +73,8 @@ enum {
   l_bluestore_compress_success_count,
   l_bluestore_compress_rejected_count,
   l_bluestore_write_pad_bytes,
-  l_bluestore_wal_write_ops,
-  l_bluestore_wal_write_bytes,
+  l_bluestore_deferred_write_ops,
+  l_bluestore_deferred_write_bytes,
   l_bluestore_write_penalty_read_ops,
   l_bluestore_allocated,
   l_bluestore_stored,
@@ -99,15 +98,9 @@ enum {
   l_bluestore_write_small,
   l_bluestore_write_small_bytes,
   l_bluestore_write_small_unused,
-  l_bluestore_write_small_wal,
+  l_bluestore_write_small_deferred,
   l_bluestore_write_small_pre_read,
   l_bluestore_write_small_new,
-
-  l_bluestore_cur_ops_in_queue,
-  l_bluestore_cur_bytes_in_queue,
-  l_bluestore_cur_ops_in_wal_queue,
-  l_bluestore_cur_bytes_in_wal_queue,
-
   l_bluestore_txc,
   l_bluestore_onode_reshard,
   l_bluestore_blob_split,
@@ -135,6 +128,7 @@ public:
 
   struct BufferSpace;
   struct Collection;
+  typedef boost::intrusive_ptr<Collection> CollectionRef;
 
   /// cached buffer
   struct Buffer {
@@ -286,7 +280,8 @@ public:
     }
     int _discard(Cache* cache, uint32_t offset, uint32_t length);
 
-    void write(Cache* cache, uint64_t seq, uint32_t offset, bufferlist& bl, unsigned flags) {
+    void write(Cache* cache, uint64_t seq, uint32_t offset, bufferlist& bl,
+	       unsigned flags) {
       std::lock_guard<std::recursive_mutex> l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
 			     flags);
@@ -333,7 +328,7 @@ public:
     std::atomic_int nref = {0}; ///< reference count
     bool loaded = false;
 
-    Collection *coll = nullptr;
+    CollectionRef coll;
     union {
       uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
       bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
@@ -947,10 +942,12 @@ public:
 
     ExtentMap extent_map;
 
+    // track txc's that have not been committed to kv store (and whose
+    // effects cannot be read via the kvdb read methods)
     std::atomic<int> flushing_count = {0};
     std::mutex flush_lock;  ///< protect flush_txns
-    std::condition_variable flush_cond;   ///< wait here for unapplied txns
-    set<TransContext*> flush_txns;   ///< committing or wal txns
+    std::condition_variable flush_cond;   ///< wait here for uncommitted txns
+    set<TransContext*> flush_txns;        ///< unapplied txns
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_meta_other::string& k)
@@ -996,6 +993,7 @@ public:
 
     virtual void _add_buffer(Buffer *b, int level, Buffer *near) = 0;
     virtual void _rm_buffer(Buffer *b) = 0;
+    virtual void _move_buffer(Cache *src, Buffer *b) = 0;
     virtual void _adjust_buffer_size(Buffer *b, int64_t delta) = 0;
     virtual void _touch_buffer(Buffer *b) = 0;
 
@@ -1019,9 +1017,7 @@ public:
     void trim(uint64_t target_bytes, float target_meta_ratio,
 	      float bytes_per_onode);
 
-    void trim_all() {
-      _trim(0, 0);
-    }
+    void trim_all();
 
     virtual void _trim(uint64_t onode_max, uint64_t buffer_max) = 0;
 
@@ -1094,6 +1090,10 @@ public:
       buffer_size -= b->length;
       auto q = buffer_lru.iterator_to(*b);
       buffer_lru.erase(q);
+    }
+    void _move_buffer(Cache *src, Buffer *b) override {
+      src->_rm_buffer(b);
+      _add_buffer(b, 0, nullptr);
     }
     void _adjust_buffer_size(Buffer *b, int64_t delta) override {
       assert((int64_t)buffer_size + delta >= 0);
@@ -1181,6 +1181,7 @@ public:
     }
     void _add_buffer(Buffer *b, int level, Buffer *near) override;
     void _rm_buffer(Buffer *b) override;
+    void _move_buffer(Cache *src, Buffer *b) override;
     void _adjust_buffer_size(Buffer *b, int64_t delta) override;
     void _touch_buffer(Buffer *b) override {
       switch (b->cache_private) {
@@ -1220,11 +1221,15 @@ public:
   };
 
   struct OnodeSpace {
+  private:
     Cache *cache;
 
     /// forward lookups
     mempool::bluestore_meta_other::unordered_map<ghobject_t,OnodeRef> onode_map;
 
+    friend class Collection; // for split_cache()
+
+  public:
     OnodeSpace(Cache *c) : cache(c) {}
     ~OnodeSpace() {
       clear();
@@ -1232,11 +1237,13 @@ public:
 
     OnodeRef add(const ghobject_t& oid, OnodeRef o);
     OnodeRef lookup(const ghobject_t& o);
+    void remove(const ghobject_t& oid) {
+      onode_map.erase(oid);
+    }
     void rename(OnodeRef& o, const ghobject_t& old_oid,
 		const ghobject_t& new_oid,
 		const mempool::bluestore_meta_other::string& new_okey);
     void clear();
-    void clear_pre_split(SharedBlobSet& sbset, uint32_t ps, int bits);
     bool empty();
 
     /// return true if f true for any item
@@ -1299,11 +1306,11 @@ public:
       return false;
     }
 
+    void split_cache(Collection *dest);
     void trim_cache();
 
     Collection(BlueStore *ns, Cache *ca, coll_t c);
   };
-  typedef boost::intrusive_ptr<Collection> CollectionRef;
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     CollectionRef c;
@@ -1335,16 +1342,15 @@ public:
       STATE_KV_QUEUED,     // queued for kv_sync_thread submission
       STATE_KV_SUBMITTED,  // submitted to kv; not yet synced
       STATE_KV_DONE,
-      STATE_WAL_QUEUED,
-      STATE_WAL_APPLYING,
-      STATE_WAL_AIO_WAIT,
-      STATE_WAL_CLEANUP,   // remove wal kv record
-      STATE_WAL_DONE,
+      STATE_DEFERRED_QUEUED,    // in deferred_queue
+      STATE_DEFERRED_AIO_WAIT,  // aio in flight, waiting for completion
+      STATE_DEFERRED_CLEANUP,   // remove deferred kv record
+      STATE_DEFERRED_DONE,
       STATE_FINISHING,
       STATE_DONE,
     } state_t;
 
-    state_t state;
+    state_t state = STATE_PREPARE;
 
     const char *get_state_name() {
       switch (state) {
@@ -1354,11 +1360,10 @@ public:
       case STATE_KV_QUEUED: return "kv_queued";
       case STATE_KV_SUBMITTED: return "kv_submitted";
       case STATE_KV_DONE: return "kv_done";
-      case STATE_WAL_QUEUED: return "wal_queued";
-      case STATE_WAL_APPLYING: return "wal_applying";
-      case STATE_WAL_AIO_WAIT: return "wal_aio_wait";
-      case STATE_WAL_CLEANUP: return "wal_cleanup";
-      case STATE_WAL_DONE: return "wal_done";
+      case STATE_DEFERRED_QUEUED: return "deferred_queued";
+      case STATE_DEFERRED_AIO_WAIT: return "deferred_aio_wait";
+      case STATE_DEFERRED_CLEANUP: return "deferred_cleanup";
+      case STATE_DEFERRED_DONE: return "deferred_done";
       case STATE_FINISHING: return "finishing";
       case STATE_DONE: return "done";
       }
@@ -1374,10 +1379,9 @@ public:
       case l_bluestore_state_kv_queued_lat: return "kv_queued";
       case l_bluestore_state_kv_committing_lat: return "kv_committing";
       case l_bluestore_state_kv_done_lat: return "kv_done";
-      case l_bluestore_state_wal_queued_lat: return "wal_queued";
-      case l_bluestore_state_wal_applying_lat: return "wal_applying";
-      case l_bluestore_state_wal_aio_wait_lat: return "wal_aio_wait";
-      case l_bluestore_state_wal_cleanup_lat: return "wal_cleanup";
+      case l_bluestore_state_deferred_queued_lat: return "deferred_queued";
+      case l_bluestore_state_deferred_aio_wait_lat: return "deferred_aio_wait";
+      case l_bluestore_state_deferred_cleanup_lat: return "deferred_cleanup";
       case l_bluestore_state_finishing_lat: return "finishing";
       case l_bluestore_state_done_lat: return "done";
       }
@@ -1401,7 +1405,7 @@ public:
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
-    uint64_t ops, bytes;
+    uint64_t ops = 0, bytes = 0;
 
     set<OnodeRef> onodes;     ///< these need to be updated/written
     set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
@@ -1409,14 +1413,14 @@ public:
     set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
     KeyValueDB::Transaction t; ///< then we will commit this
-    Context *oncommit;         ///< signal on commit
-    Context *onreadable;         ///< signal on readable
-    Context *onreadable_sync;         ///< signal on readable
+    Context *oncommit = nullptr;         ///< signal on commit
+    Context *onreadable = nullptr;       ///< signal on readable
+    Context *onreadable_sync = nullptr;  ///< signal on readable
     list<Context*> oncommits;  ///< more commit completions
     list<CollectionRef> removed_collections; ///< colls we removed
 
-    boost::intrusive::list_member_hook<> wal_queue_item;
-    bluestore_wal_transaction_t *wal_txn; ///< wal transaction (if any)
+    boost::intrusive::list_member_hook<> deferred_queue_item;
+    bluestore_deferred_transaction_t *deferred_txn = nullptr; ///< if any
 
     interval_set<uint64_t> allocated, released;
     struct volatile_statfs{
@@ -1484,20 +1488,13 @@ public:
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
 
     explicit TransContext(CephContext* cct, OpSequencer *o)
-      : state(STATE_PREPARE),
-	osr(o),
-	ops(0),
-	bytes(0),
-	oncommit(NULL),
-	onreadable(NULL),
-	onreadable_sync(NULL),
-	wal_txn(NULL),
+      : osr(o),
 	ioc(cct, this),
 	start(ceph_clock_now()) {
-        last_stamp = start;
+      last_stamp = start;
     }
     ~TransContext() {
-      delete wal_txn;
+      delete deferred_txn;
     }
 
     void write_onode(OnodeRef &o) {
@@ -1534,14 +1531,16 @@ public:
       boost::intrusive::member_hook<
 	TransContext,
 	boost::intrusive::list_member_hook<>,
-	&TransContext::wal_queue_item> > wal_queue_t;
-    wal_queue_t wal_q; ///< transactions
+	&TransContext::deferred_queue_item> > deferred_queue_t;
+    deferred_queue_t deferred_pending;      ///< waiting
+    deferred_queue_t deferred_running;      ///< in flight ios
+    interval_set<uint64_t> deferred_blocks; ///< blocks in flight
+    TransContext *deferred_txc;             ///< txc carrying this batch
 
-    boost::intrusive::list_member_hook<> wal_osr_queue_item;
+    boost::intrusive::list_member_hook<> deferred_osr_queue_item;
 
     Sequencer *parent;
-
-    std::mutex wal_apply_mutex;
+    BlueStore *store;
 
     uint64_t last_seq = 0;
 
@@ -1549,13 +1548,43 @@ public:
 
     std::atomic_int kv_committing_serially = {0};
 
-    OpSequencer(CephContext* cct)
-	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
+    std::atomic_int kv_submitted_waiters = {0};
+
+    std::atomic_bool registered = {true}; ///< registered in BlueStore's osr_set
+    std::atomic_bool zombie = {false};    ///< owning Sequencer has gone away
+
+    OpSequencer(CephContext* cct, BlueStore *store)
       : Sequencer_impl(cct),
-	parent(NULL) {
+	parent(NULL), store(store) {
+      store->register_osr(this);
     }
     ~OpSequencer() {
       assert(q.empty());
+      _unregister();
+    }
+
+    void discard() override {
+      // Note that we may have txc's in flight when the parent Sequencer
+      // goes away.  Reflect this with zombie==registered==true and let
+      // _osr_reap_done or _osr_drain_all clean up later.
+      assert(!zombie);
+      zombie = true;
+      parent = nullptr;
+      bool empty;
+      {
+	std::lock_guard<std::mutex> l(qlock);
+	empty = q.empty();
+      }
+      if (empty) {
+	_unregister();
+      }
+    }
+
+    void _unregister() {
+      if (registered) {
+	store->unregister_osr(this);
+	registered = false;
+      }
     }
 
     void queue_new(TransContext *txc) {
@@ -1564,13 +1593,37 @@ public:
       q.push_back(*txc);
     }
 
-    void flush() {
+    void drain() {
       std::unique_lock<std::mutex> l(qlock);
       while (!q.empty())
 	qcond.wait(l);
     }
 
-    bool flush_commit(Context *c) {
+    bool _is_all_kv_submitted() {
+      // caller must hold qlock
+      if (q.empty()) {
+	return true;
+      }
+      TransContext *txc = &q.back();
+      if (txc->state >= TransContext::STATE_KV_SUBMITTED) {
+	return true;
+      }
+      return false;
+    }
+
+    void flush() override {
+      std::unique_lock<std::mutex> l(qlock);
+      while (true) {
+	if (_is_all_kv_submitted()) {
+	  return;
+	}
+	++kv_submitted_waiters;
+	qcond.wait(l);
+	--kv_submitted_waiters;
+      }
+    }
+
+    bool flush_commit(Context *c) override {
       std::lock_guard<std::mutex> l(qlock);
       if (q.empty()) {
 	return true;
@@ -1584,72 +1637,12 @@ public:
     }
   };
 
-  class WALWQ : public ThreadPool::WorkQueue<TransContext> {
-    // We need to order WAL items within each Sequencer.  To do that,
-    // queue each txc under osr, and queue the osr's here.  When we
-    // dequeue an txc, requeue the osr if there are more pending, and
-    // do it at the end of the list so that the next thread does not
-    // get a conflicted txc.  Hold an osr mutex while doing the wal to
-    // preserve the ordering.
-  public:
-    typedef boost::intrusive::list<
+  typedef boost::intrusive::list<
+    OpSequencer,
+    boost::intrusive::member_hook<
       OpSequencer,
-      boost::intrusive::member_hook<
-	OpSequencer,
-	boost::intrusive::list_member_hook<>,
-	&OpSequencer::wal_osr_queue_item> > wal_osr_queue_t;
-
-  private:
-    BlueStore *store;
-    wal_osr_queue_t wal_queue;
-
-  public:
-    WALWQ(BlueStore *s, time_t ti, time_t sti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<TransContext>("BlueStore::WALWQ", ti, sti, tp),
-	store(s) {
-    }
-    bool _empty() {
-      return wal_queue.empty();
-    }
-    bool _enqueue(TransContext *i) {
-      if (i->osr->wal_q.empty()) {
-	wal_queue.push_back(*i->osr);
-      }
-      i->osr->wal_q.push_back(*i);
-      return true;
-    }
-    void _dequeue(TransContext *p) {
-      assert(0 == "not needed, not implemented");
-    }
-    TransContext *_dequeue() {
-      if (wal_queue.empty())
-	return NULL;
-      OpSequencer *osr = &wal_queue.front();
-      TransContext *i = &osr->wal_q.front();
-      osr->wal_q.pop_front();
-      wal_queue.pop_front();
-      if (!osr->wal_q.empty()) {
-	// requeue at the end to minimize contention
-	wal_queue.push_back(*i->osr);
-      }
-
-      // preserve wal ordering for this sequencer by taking the lock
-      // while still holding the queue lock
-      i->osr->wal_apply_mutex.lock();
-      return i;
-    }
-    void _process(TransContext *i, ThreadPool::TPHandle &) override {
-      store->_wal_apply(i);
-      i->osr->wal_apply_mutex.unlock();
-    }
-    void _clear() {
-      assert(wal_queue.empty());
-    }
-
-    void flush() {
-      drain();
-    }
-  };
+      boost::intrusive::list_member_hook<>,
+      &OpSequencer::deferred_osr_queue_item> > deferred_osr_queue_t;
 
   struct KVSyncThread : public Thread {
     BlueStore *store;
@@ -1686,22 +1679,26 @@ public:
   // --------------------------------------------------------
   // members
 private:
-  BlueFS *bluefs;
-  unsigned bluefs_shared_bdev;  ///< which bluefs bdev we are sharing
-  KeyValueDB *db;
-  BlockDevice *bdev;
+  BlueFS *bluefs = nullptr;
+  unsigned bluefs_shared_bdev = 0;  ///< which bluefs bdev we are sharing
+  bool bluefs_single_shared_device = true;
+  KeyValueDB *db = nullptr;
+  BlockDevice *bdev = nullptr;
   std::string freelist_type;
-  FreelistManager *fm;
-  Allocator *alloc;
+  FreelistManager *fm = nullptr;
+  Allocator *alloc = nullptr;
   uuid_d fsid;
-  int path_fd;  ///< open handle to $path
-  int fsid_fd;  ///< open handle (locked) to $path/fsid
-  bool mounted;
+  int path_fd = -1;  ///< open handle to $path
+  int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
+  bool mounted = false;
 
-  RWLock coll_lock;    ///< rwlock to protect coll_map
+  RWLock coll_lock = {"BlueStore::coll_lock"};  ///< rwlock to protect coll_map
   mempool::bluestore_meta_other::unordered_map<coll_t, CollectionRef> coll_map;
 
   vector<Cache*> cache_shards;
+
+  std::mutex osr_lock;              ///< protect osd_set
+  std::set<OpSequencerRef> osr_set; ///< set of all OpSequencers
 
   std::atomic<uint64_t> nid_last = {0};
   std::atomic<uint64_t> nid_max = {0};
@@ -1709,38 +1706,40 @@ private:
   std::atomic<uint64_t> blobid_max = {0};
 
   Throttle throttle_ops, throttle_bytes;          ///< submit to commit
-  Throttle throttle_wal_ops, throttle_wal_bytes;  ///< submit to wal complete
+  Throttle throttle_deferred_ops, throttle_deferred_bytes;  ///< submit to deferred complete
 
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
 
-  std::mutex wal_lock;
-  std::atomic<uint64_t> wal_seq = {0};
-  ThreadPool wal_tp;
-  WALWQ wal_wq;
+  std::mutex deferred_lock;
+  std::atomic<uint64_t> deferred_seq = {0};
+  deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
+  int deferred_queue_size = 0;         ///< num txc's queued across all osrs
+  bool deferred_aggressive = false;    ///< aggressive wakeup of kv thread
 
-  int m_finisher_num;
+  int m_finisher_num = 1;
   vector<Finisher*> finishers;
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
   std::condition_variable kv_cond, kv_sync_cond;
-  bool kv_stop;
+  bool kv_stop = false;
   deque<TransContext*> kv_queue;             ///< ready, already submitted
   deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
   deque<TransContext*> kv_committing;        ///< currently syncing
-  deque<TransContext*> wal_cleanup_queue;    ///< wal done, ready for cleanup
+  deque<TransContext*> deferred_done_queue;    ///< deferred ios done
+  deque<TransContext*> deferred_stable_queue;  ///< deferred ios done + stable
 
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
 
   std::mutex reap_lock;
   list<CollectionRef> removed_collections;
 
-  RWLock debug_read_error_lock;
+  RWLock debug_read_error_lock = {"BlueStore::debug_read_error_lock"};
   set<ghobject_t> debug_data_error_objects;
   set<ghobject_t> debug_mdata_error_objects;
 
-  std::atomic<int> csum_type;
+  std::atomic<int> csum_type = {Checksummer::CSUM_CRC32C};
 
   uint64_t block_size = 0;     ///< block size of block device (power of 2)
   uint64_t block_mask = 0;     ///< mask to get just the block offset
@@ -1748,11 +1747,9 @@ private:
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
-  uint64_t prefer_wal_size = 0; ///< size threshold for forced wal writes
+  uint64_t prefer_deferred_size = 0; ///< size threshold for forced deferred writes
 
   uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
-
-  bool sync_wal_apply;	  ///< see config option bluestore_sync_wal_apply
 
   std::atomic<Compressor::CompressionMode> comp_mode = {Compressor::COMP_NONE}; ///< compression mode
   CompressorRef compressor;
@@ -1863,11 +1860,14 @@ public:
 private:
   void _txc_finish_io(TransContext *txc);
   void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
-  void _txc_release_alloc(TransContext *txc);
-  void _txc_finish_kv(TransContext *txc);
+  void _txc_applied_kv(TransContext *txc);
+  void _txc_committed_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
+  void _txc_release_alloc(TransContext *txc);
 
-  void _osr_reap_done(OpSequencer *osr);
+  bool _osr_reap_done(OpSequencer *osr);
+  void _osr_drain_all();
+  void _osr_unregister_all();
 
   void _kv_sync_thread();
   void _kv_stop() {
@@ -1883,11 +1883,16 @@ private:
     }
   }
 
-  bluestore_wal_op_t *_get_wal_op(TransContext *txc, OnodeRef o);
-  int _wal_apply(TransContext *txc);
-  int _wal_finish(TransContext *txc);
-  int _do_wal_op(TransContext *txc, bluestore_wal_op_t& wo);
-  int _wal_replay();
+  bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
+  void _deferred_queue(TransContext *txc);
+  void deferred_try_submit() {
+    std::lock_guard<std::mutex> l(deferred_lock);
+    _deferred_try_submit();
+  }
+  void _deferred_try_submit();
+  void _deferred_try_submit(OpSequencer *osr);
+  int _deferred_finish(TransContext *txc);
+  int _deferred_replay();
 
   int _fsck_check_extents(
     const ghobject_t& oid,
@@ -1902,7 +1907,8 @@ private:
     uint64_t offset,
     bufferlist& bl,
     unsigned flags) {
-    b->shared_blob->bc.write(b->shared_blob->get_cache(), txc->seq, offset, bl, flags);
+    b->shared_blob->bc.write(b->shared_blob->get_cache(), txc->seq, offset, bl,
+			     flags);
     txc->shared_blobs_written.insert(b->shared_blob);
   }
 
@@ -1953,7 +1959,6 @@ public:
 
   int mount() override;
   int umount() override;
-  void _sync();
 
   int fsck(bool deep) override;
 
@@ -1978,6 +1983,15 @@ public:
     f->open_object_section("perf_counters");
     logger->dump_formatted(f, false);
     f->close_section();
+  }
+
+  void register_osr(OpSequencer *osr) {
+    std::lock_guard<std::mutex> l(osr_lock);
+    osr_set.insert(osr);
+  }
+  void unregister_osr(OpSequencer *osr) {
+    std::lock_guard<std::mutex> l(osr_lock);
+    osr_set.erase(osr);
   }
 
 public:
@@ -2419,11 +2433,6 @@ private:
 			CollectionRef& c,
 			CollectionRef& d,
 			unsigned bits, int rem);
-
-  void _op_queue_reserve_throttle(TransContext *txc);
-  void _op_queue_release_throttle(TransContext *txc);
-  void _op_queue_reserve_wal_throttle(TransContext *txc);
-  void _op_queue_release_wal_throttle(TransContext *txc);
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {

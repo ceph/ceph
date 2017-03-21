@@ -33,7 +33,6 @@ class KernelDevice : public BlockDevice {
   Mutex debug_lock;
   interval_set<uint64_t> debug_inflight;
 
-  Mutex flush_lock;
   std::atomic<bool> io_since_flush;
   std::mutex flush_mutex;
 
