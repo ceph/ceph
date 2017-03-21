@@ -913,7 +913,7 @@ WRITE_CLASS_DENC(bluestore_onode_t)
 ostream& operator<<(ostream& out, const bluestore_onode_t::shard_info& si);
 
 /// writeahead-logged op
-struct bluestore_wal_op_t {
+struct bluestore_deferred_op_t {
   typedef enum {
     OP_WRITE = 1,
   } type_t;
@@ -922,7 +922,7 @@ struct bluestore_wal_op_t {
   PExtentVector extents;
   bufferlist data;
 
-  DENC(bluestore_wal_op_t, v, p) {
+  DENC(bluestore_deferred_op_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.op, p);
     denc(v.extents, p);
@@ -930,20 +930,20 @@ struct bluestore_wal_op_t {
     DENC_FINISH(p);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_wal_op_t*>& o);
+  static void generate_test_instances(list<bluestore_deferred_op_t*>& o);
 };
-WRITE_CLASS_DENC(bluestore_wal_op_t)
+WRITE_CLASS_DENC(bluestore_deferred_op_t)
 
 
 /// writeahead-logged transaction
-struct bluestore_wal_transaction_t {
+struct bluestore_deferred_transaction_t {
   uint64_t seq = 0;
-  list<bluestore_wal_op_t> ops;
-  interval_set<uint64_t> released;  ///< allocations to release after wal
+  list<bluestore_deferred_op_t> ops;
+  interval_set<uint64_t> released;  ///< allocations to release after tx
 
-  bluestore_wal_transaction_t() : seq(0) {}
+  bluestore_deferred_transaction_t() : seq(0) {}
 
-  DENC(bluestore_wal_transaction_t, v, p) {
+  DENC(bluestore_deferred_transaction_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.seq, p);
     denc(v.ops, p);
@@ -951,9 +951,9 @@ struct bluestore_wal_transaction_t {
     DENC_FINISH(p);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<bluestore_wal_transaction_t*>& o);
+  static void generate_test_instances(list<bluestore_deferred_transaction_t*>& o);
 };
-WRITE_CLASS_DENC(bluestore_wal_transaction_t)
+WRITE_CLASS_DENC(bluestore_deferred_transaction_t)
 
 struct bluestore_compression_header_t {
   uint8_t type = Compressor::COMP_ALG_NONE;

@@ -134,7 +134,14 @@ public:
    */
   struct Sequencer_impl : public RefCountedObject {
     CephContext* cct;
+
+    // block until any previous transactions are visible.  specifically,
+    // collection_list and collection_empty need to reflect prior operations.
     virtual void flush() = 0;
+
+    // called when we are done with the impl.  the impl may have a different
+    // (longer) lifecycle than the Sequencer.
+    virtual void discard() {}
 
     /**
      * Async flush_commit
@@ -165,8 +172,11 @@ public:
     Sequencer_implRef p;
 
     explicit Sequencer(string n)
-      : name(n), shard_hint(spg_t()), p(NULL) {}
+      : name(n), shard_hint(spg_t()), p(NULL) {
+    }
     ~Sequencer() {
+      if (p)
+	p->discard();  // tell impl we are done with it
     }
 
     /// return a unique string identifier for this sequencer

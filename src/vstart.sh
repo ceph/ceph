@@ -602,7 +602,7 @@ $DAEMONOPTS
 	bluestore block create = true
 	bluestore block db size = 67108864
 	bluestore block db create = true
-	bluestore block wal size = 134217728
+	bluestore block wal size = 1048576000
 	bluestore block wal create = true
 $COSDDEBUG
 $COSDMEMSTORE

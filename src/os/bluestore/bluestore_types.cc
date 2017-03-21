@@ -793,9 +793,9 @@ void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
   // FIXME
 }
 
-// bluestore_wal_op_t
+// bluestore_deferred_op_t
 
-void bluestore_wal_op_t::dump(Formatter *f) const
+void bluestore_deferred_op_t::dump(Formatter *f) const
 {
   f->dump_unsigned("op", (int)op);
   f->dump_unsigned("data_len", data.length());
@@ -806,21 +806,21 @@ void bluestore_wal_op_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void bluestore_wal_op_t::generate_test_instances(list<bluestore_wal_op_t*>& o)
+void bluestore_deferred_op_t::generate_test_instances(list<bluestore_deferred_op_t*>& o)
 {
-  o.push_back(new bluestore_wal_op_t);
-  o.push_back(new bluestore_wal_op_t);
+  o.push_back(new bluestore_deferred_op_t);
+  o.push_back(new bluestore_deferred_op_t);
   o.back()->op = OP_WRITE;
   o.back()->extents.push_back(bluestore_pextent_t(1, 2));
   o.back()->extents.push_back(bluestore_pextent_t(100, 5));
   o.back()->data.append("my data");
 }
 
-void bluestore_wal_transaction_t::dump(Formatter *f) const
+void bluestore_deferred_transaction_t::dump(Formatter *f) const
 {
   f->dump_unsigned("seq", seq);
   f->open_array_section("ops");
-  for (list<bluestore_wal_op_t>::const_iterator p = ops.begin(); p != ops.end(); ++p) {
+  for (list<bluestore_deferred_op_t>::const_iterator p = ops.begin(); p != ops.end(); ++p) {
     f->dump_object("op", *p);
   }
   f->close_section();
@@ -835,14 +835,14 @@ void bluestore_wal_transaction_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void bluestore_wal_transaction_t::generate_test_instances(list<bluestore_wal_transaction_t*>& o)
+void bluestore_deferred_transaction_t::generate_test_instances(list<bluestore_deferred_transaction_t*>& o)
 {
-  o.push_back(new bluestore_wal_transaction_t());
-  o.push_back(new bluestore_wal_transaction_t());
+  o.push_back(new bluestore_deferred_transaction_t());
+  o.push_back(new bluestore_deferred_transaction_t());
   o.back()->seq = 123;
-  o.back()->ops.push_back(bluestore_wal_op_t());
-  o.back()->ops.push_back(bluestore_wal_op_t());
-  o.back()->ops.back().op = bluestore_wal_op_t::OP_WRITE;
+  o.back()->ops.push_back(bluestore_deferred_op_t());
+  o.back()->ops.push_back(bluestore_deferred_op_t());
+  o.back()->ops.back().op = bluestore_deferred_op_t::OP_WRITE;
   o.back()->ops.back().extents.push_back(bluestore_pextent_t(1,7));
   o.back()->ops.back().data.append("foodata");
 }
