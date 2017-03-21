@@ -57,6 +57,7 @@ static void append_escaped(const string &in, string *out)
 int DBObjectMap::check(std::ostream &out, bool repair)
 {
   int errors = 0;
+  bool repaired = false;
   map<uint64_t, uint64_t> parent_to_num_children;
   map<uint64_t, uint64_t> parent_to_actual_num_children;
   KeyValueDB::Iterator iter = db->get_iterator(HOBJECT_TO_SEQ);
@@ -89,6 +90,7 @@ int DBObjectMap::check(std::ostream &out, bool repair)
           out << complete_iter->key() << " -> " << string(complete_iter->value().c_str(), complete_iter->value().length() - 1) << std::endl;
         }
         if (repair) {
+          repaired = true;
           KeyValueDB::Transaction t = db->get_transaction();
           t->rmkeys_by_prefix(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
           db->submit_transaction(t);
@@ -134,6 +136,8 @@ int DBObjectMap::check(std::ostream &out, bool repair)
     }
     parent_to_actual_num_children.erase(i->first);
   }
+  if (errors == 0 && repaired)
+    return -1;
   return errors;
 }
 
@@ -1060,8 +1064,9 @@ int DBObjectMap::init(bool do_upgrade)
   ostringstream ss;
   int errors = check(ss, true);
   if (errors) {
-    dout(5) << ss.str() << dendl;
-    return -EINVAL;
+    derr << ss.str() << dendl;
+    if (errors > 0)
+      return -EINVAL;
   }
   dout(20) << "(init)dbobjectmap: seq is " << state.seq << dendl;
   return 0;
