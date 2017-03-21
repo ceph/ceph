@@ -184,17 +184,13 @@ To build the documentation, navigate to the ``ceph`` repository directory::
 
 	cd ceph
 
-To build the documentation on Debian/Ubuntu, execute::
+To build the documentation on Debian/Ubuntu, Fedora, or CentOS/RHEL, execute::
 
 	admin/build-doc
 
-To build the documentation on Fedora, execute::
+To scan for the reachablity of external links, execute::
 
-	admin/build-doc
-
-To build the documentation on CentOS/RHEL, execute::
-
-	admin/build-doc
+	admin/build-doc linkcheck
 
 Executing ``admin/build-doc`` will create a ``build-doc`` directory under ``ceph``.
 You may need to create a directory under ``ceph/build-doc`` for output of Javadoc
