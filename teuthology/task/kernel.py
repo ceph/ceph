@@ -10,6 +10,7 @@ import shlex
 import urlparse
 
 from teuthology import misc as teuthology
+from teuthology.parallel import parallel
 from teuthology.config import config as teuth_config
 from ..orchestra import run
 from ..exceptions import (
@@ -439,6 +440,41 @@ def _no_grub_link(in_file, remote, kernel_ver):
     remote.run(
         args=['sudo', 'ln', '-s', '%s-%s' % (in_file, kernel_ver) , boot1, ],
     )
+
+
+def install_latest_rh_kernel(ctx, config):
+    """
+    Installs the lastest z stream kernel
+    Reboot for the new kernel to take effect
+    """
+    if config is None:
+        config = {}
+    if config.get('skip'):
+        return
+    with parallel() as p:
+        for remote in ctx.cluster.remotes.iterkeys():
+            p.spawn(update_rh_kernel, remote)
+
+
+def update_rh_kernel(remote):
+    package_type = remote.os.package_type
+    output = StringIO()
+    remote.run(args=['uname', '-a'])
+    import time
+    if package_type == 'rpm':
+        remote.run(args=['sudo', 'yum', 'update', '-y', 'kernel'],
+                   stdout=output)
+        log.info(output.getvalue())
+        if not output.getvalue().find("Installed") == -1:
+            log.info("Kernel updated to latest z stream on %s", remote.shortname)
+            log.info("Rebooting %s", remote.shortname)
+            remote.run(args=['sudo', 'shutdown', '-r', 'now'], wait=False)
+            time.sleep(40)
+            log.info("Reconnecting after reboot")
+            remote.reconnect(timeout=300)
+            remote.run(args=['uname', '-a'])
+        elif not output.getvalue().find('No packages marked for update') == -1:
+            log.info("Latest version already installed on %s", remote.shortname)
 
 
 def install_and_reboot(ctx, config):
