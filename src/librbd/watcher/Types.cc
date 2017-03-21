@@ -22,6 +22,18 @@ void ClientId::dump(Formatter *f) const {
   f->dump_unsigned("handle", handle);
 }
 
+WRITE_CLASS_ENCODER(ClientId);
+
+void NotifyResponse::encode(bufferlist& bl) const {
+  ::encode(acks, bl);
+  ::encode(timeouts, bl);
+}
+
+void NotifyResponse::decode(bufferlist::iterator& iter) {
+  ::decode(acks, iter);
+  ::decode(timeouts, iter);
+}
+
 } // namespace watcher
 } // namespace librbd
 
