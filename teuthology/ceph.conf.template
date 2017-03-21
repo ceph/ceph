@@ -57,6 +57,12 @@
 	bdev debug aio = true
 	osd debug misdirected ops = true
 
+[mgr]
+	debug ms = 1
+	debug mgr = 20
+	debug mon = 20
+	debug auth = 20
+
 [mon]
 	debug ms = 1
 	debug mon = 20
