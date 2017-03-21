@@ -642,6 +642,11 @@ namespace librbd {
     librbd::image_options_create_ref(&opts, opts_);
   }
 
+  ImageOptions::ImageOptions(const ImageOptions &imgopts)
+  {
+    librbd::image_options_copy(&opts, imgopts);
+  }
+
   ImageOptions::~ImageOptions()
   {
     librbd::image_options_destroy(opts);

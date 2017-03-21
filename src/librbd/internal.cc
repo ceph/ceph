@@ -33,6 +33,7 @@
 #include "librbd/api/Image.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
+#include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/io/AioCompletion.h"
@@ -381,6 +382,31 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     image_options_ref* opts_ = new image_options_ref(*orig_);
 
     *opts = static_cast<rbd_image_options_t>(opts_);
+  }
+
+  void image_options_copy(rbd_image_options_t* opts,
+			  const ImageOptions &orig)
+  {
+    image_options_ref* opts_ = new image_options_ref(new image_options_t());
+
+    *opts = static_cast<rbd_image_options_t>(opts_);
+
+    std::string str_val;
+    uint64_t uint64_val;
+    for (auto &i : IMAGE_OPTIONS_TYPE_MAPPING) {
+      switch (i.second) {
+      case STR:
+	if (orig.get(i.first, &str_val) == 0) {
+	  image_options_set(*opts, i.first, str_val);
+	}
+	continue;
+      case UINT64:
+	if (orig.get(i.first, &uint64_val) == 0) {
+	  image_options_set(*opts, i.first, uint64_val);
+	}
+	continue;
+      }
+    }
   }
 
   void image_options_destroy(rbd_image_options_t opts)
@@ -917,214 +943,19 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
             const std::string &non_primary_global_image_id,
             const std::string &primary_mirror_uuid)
   {
-    CephContext *cct = p_imctx->cct;
-    if (p_imctx->snap_id == CEPH_NOSNAP) {
-      lderr(cct) << "image to be cloned must be a snapshot" << dendl;
-      return -EINVAL;
-    }
+    CephContext *cct = (CephContext *)c_ioctx.cct();
 
-    ldout(cct, 20) << "clone " << &p_imctx->md_ctx << " name " << p_imctx->name
-                   << " snap " << p_imctx->snap_name << " to child " << &c_ioctx
-                   << " name " << c_name << " opts = " << c_opts << dendl;
+    ThreadPool *thread_pool;
+    ContextWQ *op_work_queue;
+    ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
 
-    bool default_format_set;
-    c_opts.is_set(RBD_IMAGE_OPTION_FORMAT, &default_format_set);
-    if (!default_format_set) {
-      c_opts.set(RBD_IMAGE_OPTION_FORMAT, static_cast<uint64_t>(2));
-    }
+    C_SaferCond cond;
+    auto *req = image::CloneRequest<>::create(
+      p_imctx, c_ioctx, std::string(c_name), c_opts, non_primary_global_image_id,
+      primary_mirror_uuid, op_work_queue, &cond);
+    req->send();
 
-    uint64_t format = 0;
-    c_opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
-    if (format < 2) {
-      lderr(cct) << "format 2 or later required for clone" << dendl;
-      return -EINVAL;
-    }
-
-    bool use_p_features = true;
-    uint64_t features;
-    if (c_opts.get(RBD_IMAGE_OPTION_FEATURES, &features) == 0) {
-      if (features & ~RBD_FEATURES_ALL) {
-	lderr(cct) << "librbd does not support requested features" << dendl;
-	return -ENOSYS;
-      }
-      use_p_features = false;
-    }
-
-    // make sure child doesn't already exist, in either format
-    int r = detect_format(c_ioctx, c_name, NULL, NULL);
-    if (r != -ENOENT) {
-      lderr(cct) << "rbd image " << c_name << " already exists" << dendl;
-      return -EEXIST;
-    }
-
-    bool snap_protected;
-
-    uint64_t order;
-    uint64_t size;
-    uint64_t p_features;
-    int partial_r;
-    librbd::NoOpProgressContext no_op;
-    ImageCtx *c_imctx = NULL;
-    map<string, bufferlist> pairs;
-    ParentSpec pspec(p_imctx->md_ctx.get_id(), p_imctx->id, p_imctx->snap_id);
-
-    if (p_imctx->old_format) {
-      lderr(cct) << "parent image must be in new format" << dendl;
-      return -EINVAL;
-    }
-
-    p_imctx->snap_lock.get_read();
-    p_features = p_imctx->features;
-    size = p_imctx->get_image_size(p_imctx->snap_id);
-    r = p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
-    p_imctx->snap_lock.put_read();
-
-    if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
-      lderr(cct) << "parent image must support layering" << dendl;
-      return -ENOSYS;
-    }
-
-    if (r < 0) {
-      // we lost the race with snap removal?
-      lderr(cct) << "unable to locate parent's snapshot" << dendl;
-      return r;
-    }
-
-    if (!snap_protected) {
-      lderr(cct) << "parent snapshot must be protected" << dendl;
-      return -EINVAL;
-    }
-
-    if ((p_features & RBD_FEATURE_JOURNALING) != 0) {
-      bool force_non_primary = !non_primary_global_image_id.empty();
-      bool is_primary;
-      int r = Journal<>::is_tag_owner(p_imctx, &is_primary);
-      if (r < 0) {
-	lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
-		   << dendl;
-	return r;
-      }
-      if (!is_primary && !force_non_primary) {
-	lderr(cct) << "parent is non-primary mirrored image" << dendl;
-	return -EINVAL;
-      }
-    }
-
-    if (use_p_features) {
-      features = p_features;
-    }
-
-    order = p_imctx->order;
-    if (c_opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
-      c_opts.set(RBD_IMAGE_OPTION_ORDER, order);
-    }
-
-    if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
-      lderr(cct) << "cloning image must support layering" << dendl;
-      return -ENOSYS;
-    }
-
-    c_opts.set(RBD_IMAGE_OPTION_FEATURES, features);
-    r = create(c_ioctx, c_name, size, c_opts, non_primary_global_image_id,
-               primary_mirror_uuid, true);
-    if (r < 0) {
-      lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx, false);
-    r = c_imctx->state->open(false);
-    if (r < 0) {
-      lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
-      goto err_remove;
-    }
-
-    r = cls_client::set_parent(&c_ioctx, c_imctx->header_oid, pspec, size);
-    if (r < 0) {
-      lderr(cct) << "couldn't set parent: " << cpp_strerror(r) << dendl;
-      goto err_close_child;
-    }
-
-    r = cls_client::add_child(&c_ioctx, RBD_CHILDREN, pspec, c_imctx->id);
-    if (r < 0) {
-      lderr(cct) << "couldn't add child: " << cpp_strerror(r) << dendl;
-      goto err_close_child;
-    }
-
-    r = p_imctx->state->refresh();
-    if (r == 0) {
-      p_imctx->snap_lock.get_read();
-      r = p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
-      p_imctx->snap_lock.put_read();
-    }
-    if (r < 0 || !snap_protected) {
-      // we lost the race with unprotect
-      r = -EINVAL;
-      goto err_remove_child;
-    }
-
-    r = cls_client::metadata_list(&p_imctx->md_ctx, p_imctx->header_oid, "", 0,
-                                  &pairs);
-    if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-      lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
-      goto err_remove_child;
-    } else if (r == 0 && !pairs.empty()) {
-      r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
-      if (r < 0) {
-        lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
-        goto err_remove_child;
-      }
-    }
-
-    if (c_imctx->test_features(RBD_FEATURE_JOURNALING)) {
-      cls::rbd::MirrorMode mirror_mode_internal =
-        cls::rbd::MIRROR_MODE_DISABLED;
-      r = cls_client::mirror_mode_get(&c_imctx->md_ctx, &mirror_mode_internal);
-      if (r < 0 && r != -ENOENT) {
-        lderr(cct) << "failed to retrieve mirror mode: " << cpp_strerror(r)
-                   << dendl;
-        goto err_remove_child;
-      }
-
-      // enable mirroring now that clone has been fully created
-      if (mirror_mode_internal == cls::rbd::MIRROR_MODE_POOL ||
-          !non_primary_global_image_id.empty()) {
-        C_SaferCond ctx;
-        mirror::EnableRequest<ImageCtx> *req =
-          mirror::EnableRequest<ImageCtx>::create(c_imctx->md_ctx, c_imctx->id,
-                                                  non_primary_global_image_id,
-                                                  c_imctx->op_work_queue, &ctx);
-        req->send();
-
-        r = ctx.wait();
-        if (r < 0) {
-          lderr(cct) << "failed to enable mirroring: " << cpp_strerror(r)
-                     << dendl;
-          goto err_remove_child;
-        }
-      }
-    }
-
-    ldout(cct, 2) << "done." << dendl;
-    r = c_imctx->state->close();
-    return r;
-
-  err_remove_child:
-    partial_r = cls_client::remove_child(&c_ioctx, RBD_CHILDREN, pspec,
-                                         c_imctx->id);
-    if (partial_r < 0) {
-     lderr(cct) << "Error removing failed clone from list of children: "
-                << cpp_strerror(partial_r) << dendl;
-    }
-  err_close_child:
-    c_imctx->state->close();
-  err_remove:
-    partial_r = remove(c_ioctx, c_name, "", no_op);
-    if (partial_r < 0) {
-      lderr(cct) << "Error removing failed clone: "
-		 << cpp_strerror(partial_r) << dendl;
-    }
-    return r;
+    return cond.wait();
   }
 
   int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)

@@ -79,6 +79,8 @@ namespace librbd {
   void image_options_create(rbd_image_options_t* opts);
   void image_options_create_ref(rbd_image_options_t* opts,
 				rbd_image_options_t orig);
+  void image_options_copy(rbd_image_options_t *opts,
+			  const ImageOptions &orig);
   void image_options_destroy(rbd_image_options_t opts);
   int image_options_set(rbd_image_options_t opts, int optname,
 			const std::string& optval);
