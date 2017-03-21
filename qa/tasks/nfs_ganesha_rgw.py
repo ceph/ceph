@@ -73,9 +73,9 @@ def task(ctx, config):
                    roles_for_host in remotes.remotes.iteritems()]
     # clone the repo
 
-    clients[0].run(args=['sudo', 'rm', '-rf', 'nfs-ganesh-rgw'], check_status=False)
+    clients[0].run(args=['sudo', 'rm', '-rf', 'nfs-ganesha-rgw'], check_status=False)
     clients[0].run(args=['sudo', 'rm', '-rf', run.Raw('/tmp/nfs-ganesh-rgw_log*')], check_status=False)
-    clients[0].run(args=['mkdir', 'nfs-ganesha-rgw'])
+    clients[0].run(args=['mkdir', '-p', 'nfs-ganesha-rgw'])
 
     # stop native nfs-ganesha service.
 
@@ -135,7 +135,7 @@ def task(ctx, config):
 
     clients[0].run(args=['sudo', '/usr/bin/ganesha.nfsd', '-f','/etc/ganesha/ganesha.conf'])
 
-    clients[0].run(args=['mkdir', run.Raw('~/ganesha-mount')])
+    clients[0].run(args=['mkdir', '-p', run.Raw('~/ganesha-mount')])
 
     # mount NFS_Ganesha
 
@@ -157,6 +157,6 @@ def task(ctx, config):
             os.makedirs(path)
             sub = os.path.join(path, clients[0].shortname)
             os.makedirs(sub)
-            teuthology.pull_directory(clients[0], '/tmp/apilog',
-                                      os.path.join(sub, 'log'))
-            clients[0].run(args=['sudo', 'rm', '-rf', 'api-tests'])
+            # teuthology.pull_directory(clients[0], '/tmp/apilog',os.path.join(sub, 'log'))
+            clients[0].run(args=['sudo', 'rm', '-rf', run.Raw('~/nfs-ganesha-rgw')])
+            clients[0].run(args=['sudo', 'umount', run.Raw('~/ganesha-mount')])
