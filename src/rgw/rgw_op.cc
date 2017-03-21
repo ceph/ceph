@@ -631,7 +631,7 @@ rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
   return e;
 }
 
-static void rgw_bucket_object_pre_exec(struct req_state *s)
+void rgw_bucket_object_pre_exec(struct req_state *s)
 {
   if (s->expect_cont)
     dump_continue(s);

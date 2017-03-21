@@ -27,11 +27,16 @@ public:
                                              rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) = 0;
 };
 
+class RGWRESTMgr;
+
 class RGWSyncModuleInstance {
 public:
   RGWSyncModuleInstance() {}
   virtual ~RGWSyncModuleInstance() {}
   virtual RGWDataSyncModule *get_data_handler() = 0;
+  virtual RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) {
+    return orig;
+  }
 };
 
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;

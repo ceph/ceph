@@ -97,6 +97,9 @@ public:
 };
 
 
+
+void rgw_bucket_object_pre_exec(struct req_state *s);
+
 /**
  * Provide the base class for all ops.
  */

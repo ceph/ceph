@@ -4,8 +4,10 @@
 #include "rgw_data_sync.h"
 #include "rgw_boost_asio_yield.h"
 #include "rgw_sync_module_es.h"
+#include "rgw_sync_module_es_rest.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rest.h"
+#include "rgw_op.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -311,16 +313,32 @@ public:
                             << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     return NULL;
   }
-};
-
-class RGWElasticSyncModuleInstance : public RGWSyncModuleInstance {
-  RGWElasticDataSyncModule data_handler;
-public:
-  RGWElasticSyncModuleInstance(CephContext *cct, const string& endpoint) : data_handler(cct, endpoint) {}
-  RGWDataSyncModule *get_data_handler() override {
-    return &data_handler;
+  RGWRESTConn *get_rest_conn() {
+    return conf.conn;
   }
 };
+
+RGWElasticSyncModuleInstance::RGWElasticSyncModuleInstance(CephContext *cct, const string& endpoint)
+{
+  data_handler = std::unique_ptr<RGWElasticDataSyncModule>(new RGWElasticDataSyncModule(cct, endpoint));
+}
+
+RGWDataSyncModule *RGWElasticSyncModuleInstance::get_data_handler()
+{
+  return data_handler.get();
+}
+
+RGWRESTConn *RGWElasticSyncModuleInstance::get_rest_conn()
+{
+  return data_handler->get_rest_conn();
+}
+
+RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr *orig) {
+  if (dialect != RGW_REST_S3) {
+    return orig;
+  }
+  return new RGWRESTMgr_MDSearch_S3(this);
+}
 
 int RGWElasticSyncModule::create_instance(CephContext *cct, map<string, string>& config, RGWSyncModuleInstanceRef *instance) {
   string endpoint;
