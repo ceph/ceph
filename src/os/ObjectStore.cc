@@ -77,6 +77,18 @@ ObjectStore *ObjectStore::create(CephContext *cct,
       cct->check_experimental_feature_enabled("bluestore")) {
     return new BlueStore(cct, data);
   }
+  if (type == "random" &&
+      cct->check_experimental_feature_enabled("bluestore")) {
+    if (rand() % 2) {
+      return new FileStore(cct, data, journal, flags);
+    } else {
+      return new BlueStore(cct, data);
+    }
+  }
+#else
+  if (type == "random") {
+    return new FileStore(cct, data, journal, flags);
+  }
 #endif
   if (type == "kstore" &&
       cct->check_experimental_feature_enabled("kstore")) {
