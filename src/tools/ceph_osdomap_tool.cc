@@ -164,11 +164,13 @@ int main(int argc, char **argv) {
     ostringstream ss;
     bool repair = (cmd == "repair");
     r = omap.check(ss, repair);
-    if (r > 0) {
+    if (r) {
       std::cerr << ss.str() << std::endl;
-      std::cerr << "check got " << r << " error(s)" << std::endl;
-      r = 1;
-      goto done;
+      if (r > 0) {
+        std::cerr << "check got " << r << " error(s)" << std::endl;
+        r = 1;
+        goto done;
+      }
     }
     std::cout << (repair ? "repair" : "check") << " succeeded" << std::endl;
   } else if (cmd == "dump-headers") {
