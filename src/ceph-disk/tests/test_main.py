@@ -797,7 +797,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 stop_daemon=lambda cluster, osd_id: True,
                 _remove_osd_directory_files=lambda path, cluster: True,
                 path_set_context=lambda path: True,
-                unmount=lambda path: True,
+                unmount=lambda path,False: True,
                 dmcrypt_unmap=lambda part_uuid: True,
         ):
             main.main_deactivate(args)
@@ -831,7 +831,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 stop_daemon=lambda cluster, osd_id: True,
                 _remove_osd_directory_files=lambda path, cluster: True,
                 path_set_context=lambda path: True,
-                unmount=lambda path: True,
+                unmount=lambda path,False: True,
                 dmcrypt_unmap=lambda part_uuid: True,
         ):
             main.main_deactivate(args)
