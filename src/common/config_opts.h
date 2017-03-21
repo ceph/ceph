@@ -240,7 +240,7 @@ SAFE_OPTION(ms_dpdk_coremask, OPT_STR, "1")        // it is modified in unittest
 OPTION(ms_dpdk_memory_channel, OPT_STR, "4")
 OPTION(ms_dpdk_hugepages, OPT_STR, "")
 OPTION(ms_dpdk_pmd, OPT_STR, "")
-OPTION(ms_dpdk_host_ipv4_addr, OPT_STR, "")
+SAFE_OPTION(ms_dpdk_host_ipv4_addr, OPT_STR, "")
 OPTION(ms_dpdk_gateway_ipv4_addr, OPT_STR, "")
 OPTION(ms_dpdk_netmask_ipv4_addr, OPT_STR, "")
 OPTION(ms_dpdk_lro, OPT_BOOL, true)
