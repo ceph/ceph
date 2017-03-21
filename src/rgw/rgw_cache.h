@@ -181,12 +181,10 @@ class RGWCache  : public T
   }
 
   string normal_name(rgw_pool& pool, const std::string& oid) {
-    string& pool_name = pool.name;
-    char buf[pool_name.size() + 1 + oid.size() + 1];
-    const char *pool_str = pool_name.c_str();
-    const char *oid_str = oid.c_str();
-    sprintf(buf, "%s+%s", pool_str, oid_str);
-    return string(buf);
+    std::string buf;
+    buf.reserve(pool.name.size() + oid.size() + 2);
+    buf.append(pool.name).append("+").append(oid);
+    return buf;
   }
 
   void normalize_pool_and_obj(rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
