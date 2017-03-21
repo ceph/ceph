@@ -1683,8 +1683,12 @@ void MDSRank::handle_mds_recovery(mds_rank_t who)
     snapserver->handle_mds_recovery(who);
   }
 
-  queue_waiters(waiting_for_active_peer[who]);
-  waiting_for_active_peer.erase(who);
+  auto waiting_for_active_peer_entry =
+    waiting_for_active_peer.emplace(who,
+				    list<MDSInternalContextBase*>()).first;
+
+  queue_waiters(waiting_for_active_peer_entry->second);
+  waiting_for_active_peer.erase(waiting_for_active_peer_entry);
 }
 
 void MDSRank::handle_mds_failure(mds_rank_t who)
