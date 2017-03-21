@@ -225,6 +225,7 @@ int RGWRESTConn::get_resource(const string& resource,
 		     param_vec_t *extra_params,
 		     map<string, string> *extra_headers,
 		     bufferlist& bl,
+                     bufferlist *send_data,
 		     RGWHTTPManager *mgr)
 {
   string url;
@@ -249,7 +250,7 @@ int RGWRESTConn::get_resource(const string& resource,
     headers.insert(extra_headers->begin(), extra_headers->end());
   }
 
-  ret = req.send_request(&key, headers, resource, nullptr, mgr);
+  ret = req.send_request(&key, headers, resource, send_data, mgr);
   if (ret < 0) {
     ldout(cct, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
     return ret;
