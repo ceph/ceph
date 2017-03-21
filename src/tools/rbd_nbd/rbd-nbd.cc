@@ -253,7 +253,7 @@ private:
       switch (ctx->command)
       {
         case NBD_CMD_DISC:
-          // RBD_DO_IT will return when pipe is closed
+          // NBD_DO_IT will return when pipe is closed
 	  dout(0) << "disconnect request received" << dendl;
           return;
         case NBD_CMD_WRITE:
