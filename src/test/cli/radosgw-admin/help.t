@@ -68,8 +68,6 @@
     zonegroup placement modify modify a placement target of a specific zonegroup
     zonegroup placement rm     remove a placement target from a zonegroup
     zonegroup placement default  set a zonegroup's default placement target
-    zonegroup-map get          show zonegroup-map
-    zonegroup-map set          set zonegroup-map (requires infile)
     zone create                create a new zone
     zone delete                delete a zone
     zone get                   show zone cluster params
@@ -227,7 +225,6 @@
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations
-     --reset-regions           reset regionmap when regionmap update
      --bypass-gc               when specified with bucket deletion, triggers
                                object deletions by not involving GC
      --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,
