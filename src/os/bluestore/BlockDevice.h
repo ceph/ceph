@@ -82,7 +82,7 @@ protected:
 public:
   BlockDevice(CephContext* cct) : cct(cct) {}
   virtual ~BlockDevice() = default;
-  typedef void (*aio_callback_t)(void *handle, void *aio);
+  typedef void (*aio_callback_t)(void *handle, std::vector<void*> &aio);
 
   static BlockDevice *create(
     CephContext* cct, const string& path, aio_callback_t cb, void *cbpriv);

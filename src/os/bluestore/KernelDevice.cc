@@ -263,6 +263,7 @@ void KernelDevice::_aio_thread()
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
     }
     if (r > 0) {
+      std::vector<void*> batch;
       dout(30) << __func__ << " got " << r << " completed aios" << dendl;
       for (int i = 0; i < r; ++i) {
 	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
@@ -297,9 +298,12 @@ void KernelDevice::_aio_thread()
 	  void *priv = ioc->priv;
 	  ioc->aio_wake();
 	  if (priv) {
-	    aio_callback(aio_callback_priv, priv);
+            batch.push_back(priv);
 	  }
 	}
+      }
+      if (batch.size() > 0) {
+        aio_callback(aio_callback_priv, batch);
       }
     }
     if (cct->_conf->bdev_debug_aio) {
@@ -414,38 +418,26 @@ void KernelDevice::aio_submit(IOContext *ioc)
   ioc->num_pending -= pending;
   assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
 
-  bool done = false;
-  while (!done) {
-    FS::aio_t& aio = *p;
+  for (auto it = p; it != e; it++) {
+    FS::aio_t& aio = *it;
     aio.priv = static_cast<void*>(ioc);
+
     dout(20) << __func__ << "  aio " << &aio << " fd " << aio.fd
 	     << " 0x" << std::hex << aio.offset << "~" << aio.length
 	     << std::dec << dendl;
-    for (vector<iovec>::iterator q = aio.iov.begin(); q != aio.iov.end(); ++q)
-      dout(30) << __func__ << "   iov " << (void*)q->iov_base
-	       << " len " << q->iov_len << dendl;
-
-    // be careful: as soon as we submit aio we race with completion.
-    // since we are holding a ref take care not to dereference txc at
-    // all after that point.
-    list<FS::aio_t>::iterator cur = p;
-    ++p;
-    done = (p == e);
-
-    // do not dereference txc (or it's contents) after we submit (if
-    // done == true and we don't loop)
-    int retries = 0;
-    if (cct->_conf->bdev_debug_aio) {
-      std::lock_guard<std::mutex> l(debug_queue_lock);
-      debug_aio_link(*cur);
+    for (const iovec& q : aio.iov) {
+      dout(30) << __func__ << "   iov " << static_cast<void*>(q.iov_base)
+               << " len " << q.iov_len << dendl;
     }
-    int r = aio_queue.submit(*cur, &retries);
-    if (retries)
-      derr << __func__ << " retries " << retries << dendl;
-    if (r) {
-      derr << " aio submit got " << cpp_strerror(r) << dendl;
-      assert(r == 0);
-    }
+  }
+
+  // be careful: as soon as we submit aio we race with completion.
+  // since we are holding a ref take care not to dereference txc at
+  // all after that point.
+  const int r = aio_queue.submit(p, e);
+  if (r) {
+    derr << " aio submit got " << cpp_strerror(r) << dendl;
+    assert(r == 0);
   }
 }
 

@@ -22,6 +22,8 @@
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
+#include <chrono>
+#include <functional>
 
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/unordered_set.hpp>
@@ -1517,6 +1519,76 @@ public:
     }
   };
 
+  class TransBatch : private std::vector<TransContext*> {
+    typedef std::vector<TransContext*> base_t;
+    TransContext::state_t state;
+
+  public:
+    TransBatch(const TransContext::state_t state)
+      : state(state) {
+    }
+    TransBatch(TransContext* const txc)
+      : base_t({ txc }),
+        state(txc->state) {
+    }
+    TransBatch(const TransContext::state_t state,
+               std::deque<TransContext*>&& txc_queue)
+      : state(state) {
+      auto& base_vec = static_cast<base_t&>(*this);
+      base_vec.reserve(txc_queue.size());
+      std::move(std::begin(txc_queue), std::end(txc_queue),
+                std::back_inserter(base_vec));
+    }
+
+    ~TransBatch() = default;
+
+    using base_t::emplace_back;
+    using base_t::push_back;
+    using base_t::front;
+    using base_t::empty;
+    using base_t::size;
+    using base_t::cbegin;
+    using base_t::cend;
+
+    using base_t::begin;
+    using base_t::end;
+
+    TransContext::state_t get_state() const {
+      return state;
+    }
+
+    void set_state(const TransContext::state_t new_state) {
+      for (auto txc : *this) {
+        txc->state = new_state;
+      }
+      state = new_state;
+    }
+
+    TransBatch dissect(std::function<bool(TransContext*)> pred) {
+      TransBatch dissected(get_state());
+
+      for (auto it = this->begin(); it != this->end(); /* see body */) {
+        if (pred(*it)) {
+          dissected.emplace_back(*it);
+          it = this->erase(it);
+        } else {
+          it++;
+        }
+      }
+      return std::move(dissected);
+    }
+
+    void log_state_latency(PerfCounters* const logger, const int state) {
+      for (auto txc : *this) {
+        txc->log_state_latency(logger, state);
+      }
+    }
+
+    void for_each(std::function<void(TransContext*)> f) {
+      std::for_each(std::begin(*this), std::end(*this), f);
+    }
+  };
+
   class OpSequencer : public Sequencer_impl {
   public:
     std::mutex qlock;
@@ -1651,6 +1723,26 @@ public:
     }
   };
 
+  struct NagleBatcherThread : public Thread {
+    BlueStore* const store;
+    std::atomic<uint64_t> touched;
+
+    explicit NagleBatcherThread(BlueStore* store) noexcept
+      : store(store),
+        touched({0}) {
+    }
+    ~NagleBatcherThread() = default;
+
+    void *entry() {
+      store->_prepare_thread();
+      return nullptr;
+    }
+
+    void touch() noexcept {
+      touched.store(ceph_clock_now().usec());
+    }
+  };
+
   struct KVSyncThread : public Thread {
     BlueStore *store;
     explicit KVSyncThread(BlueStore *s) : store(s) {}
@@ -1721,6 +1813,18 @@ private:
 
   int m_finisher_num;
   vector<Finisher*> finishers;
+
+
+  NagleBatcherThread nagle_submit_thread;
+  typedef deque<std::tuple<Sequencer*,
+                std::vector<Transaction>,
+                ThreadPool::TPHandle*>> submit_queue_t;
+  submit_queue_t submit_queue;
+  std::mutex submit_lock;
+  std::mutex prepare_ctl_lock;
+  std::condition_variable prepare_ctl_cond;
+  bool prepare_stop;
+
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
@@ -1850,24 +1954,44 @@ private:
   void _dump_extent_map(ExtentMap& em, int log_level=30);
   void _dump_transaction(Transaction *t, int log_level = 30);
 
+  void _submit_queued(submit_queue_t& submitting_queue);
+
+  TransContext *_txc_prepare(Sequencer *posr,
+                             std::vector<Transaction>& tls,
+                             ThreadPool::TPHandle *handle);
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
-  void _txc_state_proc(TransContext *txc);
+  void _txc_state_proc(TransBatch batch);
   void _txc_aio_submit(TransContext *txc);
 public:
-  void _txc_aio_finish(void *p) {
-    _txc_state_proc(static_cast<TransContext*>(p));
+  void _txc_aio_finish(TransBatch& batch) {
+    _txc_state_proc(batch);
   }
 private:
   void _txc_finish_io(TransContext *txc);
   void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
+  void _txc_release_alloc(TransBatch& batch);
   void _txc_release_alloc(TransContext *txc);
-  void _txc_finish_kv(TransContext *txc);
+  void _txc_finish_kv(TransBatch& batch);
   void _txc_finish(TransContext *txc);
 
   void _osr_reap_done(OpSequencer *osr);
+
+  void _prepare_thread();
+  void _prepare_stop() {
+    {
+      std::lock_guard<std::mutex> l(prepare_ctl_lock);
+      prepare_stop = true;
+      prepare_ctl_cond.notify_all();
+    }
+    nagle_submit_thread.join();
+    {
+      std::lock_guard<std::mutex> l(prepare_ctl_lock);
+      prepare_stop = false;
+    }
+  }
 
   void _kv_sync_thread();
   void _kv_stop() {
@@ -2241,14 +2365,14 @@ private:
         BlobRef b,
         uint64_t blob_len,
         uint64_t o,
-        bufferlist& bl,
+        ceph::bufferlist&& bl,
         uint64_t o0,
         uint64_t l0,
         bool _mark_unused)
        : b(b),
          blob_length(blob_len),
          b_off(o),
-         bl(bl),
+         bl(std::move(bl)),
          b_off0(o0),
          length0(l0),
          mark_unused(_mark_unused) {}
@@ -2259,10 +2383,10 @@ private:
       BlobRef b,
       uint64_t blob_len,
       uint64_t o,
-      bufferlist& bl,
+      ceph::bufferlist&& bl,
       uint64_t o0,
       uint64_t len0, bool _mark_unused) {
-      writes.emplace_back(write_item(b, blob_len, o, bl, o0, len0, _mark_unused));
+      writes.emplace_back(b, blob_len, o, std::move(bl), o0, len0, _mark_unused);
     }
   };
 
@@ -2278,7 +2402,7 @@ private:
     CollectionRef &c,
     OnodeRef o,
     uint64_t offset, uint64_t length,
-    bufferlist::iterator& blp,
+    ceph::bufferlist&& bl,
     WriteContext *wctx);
   int _do_alloc_write(
     TransContext *txc,
@@ -2421,7 +2545,7 @@ private:
 			unsigned bits, int rem);
 
   void _op_queue_reserve_throttle(TransContext *txc);
-  void _op_queue_release_throttle(TransContext *txc);
+  void op_queue_release_throttle(TransBatch& batch);
   void _op_queue_reserve_wal_throttle(TransContext *txc);
   void _op_queue_release_wal_throttle(TransContext *txc);
 };
