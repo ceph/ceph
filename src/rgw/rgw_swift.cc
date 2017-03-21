@@ -229,7 +229,8 @@ static int decode_b64_cms(CephContext *cct, const string& signed_b64, bufferlist
   return 0;
 }
 
-int	RGWSwift::get_keystone_url(std::string& url)
+int RGWSwift::get_keystone_url(CephContext * const cct,
+                               std::string& url)
 {
   bufferlist bl;
   RGWGetRevokedTokens req(cct, &bl);
@@ -244,11 +245,22 @@ int	RGWSwift::get_keystone_url(std::string& url)
   return 0;
 }
 
-int	RGWSwift::get_keystone_admin_token(std::string& token)
+int RGWSwift::get_keystone_url(std::string& url)
+{
+  return RGWSwift::get_keystone_url(cct, url);
+}
+
+int RGWSwift::get_keystone_admin_token(std::string& token)
+{
+  return RGWSwift::get_keystone_admin_token(cct, token);
+}
+
+int RGWSwift::get_keystone_admin_token(CephContext * const cct,
+                                       std::string& token)
 {
   std::string token_url;
 
-  if (get_keystone_url(token_url) < 0)
+  if (get_keystone_url(cct, token_url) < 0)
     return -EINVAL;
   if (cct->_conf->rgw_keystone_admin_token.empty()) {
     token_url.append("v2.0/tokens");
