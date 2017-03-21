@@ -42,7 +42,11 @@ int RadosImport::import(std::string pool, bool no_overwrite)
     cerr << "Error " << ret << " in cluster.conf_read_env" << std::endl;
     return ret;
   }
-  cluster.connect();
+  ret = cluster.connect();
+  if (ret) {
+    cerr << "Error " << ret << " in cluster.connect" << std::endl;
+    return ret;
+  }
 
   ret = cluster.ioctx_create(pool.c_str(), ioctx);
   if (ret < 0) {
