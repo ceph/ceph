@@ -46,6 +46,14 @@ struct ClientId {
   }
 };
 
+struct NotifyResponse {
+  std::map<ClientId, bufferlist> acks;
+  std::vector<ClientId> timeouts;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+};
+
 template <typename ImageCtxT>
 struct Traits {
   typedef librbd::Watcher Watcher;
@@ -58,5 +66,6 @@ std::ostream &operator<<(std::ostream &out,
                          const librbd::watcher::ClientId &client);
 
 WRITE_CLASS_ENCODER(librbd::watcher::ClientId);
+WRITE_CLASS_ENCODER(librbd::watcher::NotifyResponse);
 
 #endif // CEPH_LIBRBD_WATCHER_TYPES_H

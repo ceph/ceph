@@ -251,9 +251,10 @@ void Watcher::handle_rewatch(int r) {
   }
 }
 
-void Watcher::send_notify(bufferlist& payload, bufferlist *out_bl,
+void Watcher::send_notify(bufferlist& payload,
+                          watcher::NotifyResponse *response,
                           Context *on_finish) {
-  m_notifier.notify(payload, out_bl, on_finish);
+  m_notifier.notify(payload, response, on_finish);
 }
 
 void Watcher::WatchCtx::handle_notify(uint64_t notify_id,

@@ -22,6 +22,8 @@ namespace watch_notify {
 
 using librbd::watcher::ClientId;
 
+WRITE_CLASS_ENCODER(ClientId);
+
 struct AsyncRequestId {
   ClientId client_id;
   uint64_t request_id;

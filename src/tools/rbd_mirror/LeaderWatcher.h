@@ -10,8 +10,9 @@
 
 #include "common/AsyncOpTracker.h"
 #include "librbd/ManagedLock.h"
-#include "librbd/managed_lock/Types.h"
 #include "librbd/Watcher.h"
+#include "librbd/managed_lock/Types.h"
+#include "librbd/watcher/Types.h"
 #include "Instances.h"
 #include "MirrorStatusWatcher.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
@@ -195,7 +196,7 @@ private:
   Context *m_timer_task = nullptr;
   C_TimerGate *m_timer_gate = nullptr;
 
-  bufferlist m_heartbeat_ack_bl;
+  librbd::watcher::NotifyResponse m_heartbeat_response;
 
   bool is_leader(Mutex &m_lock);
 

@@ -16,6 +16,8 @@ class ContextWQ;
 
 namespace librbd {
 
+namespace watcher { struct NotifyResponse; }
+
 class Watcher {
 public:
   struct C_NotifyAck : public Context {
@@ -72,7 +74,8 @@ protected:
   watcher::Notifier m_notifier;
   WatchState m_watch_state;
 
-  void send_notify(bufferlist &payload, bufferlist *out_bl = nullptr,
+  void send_notify(bufferlist &payload,
+                   watcher::NotifyResponse *response = nullptr,
                    Context *on_finish = nullptr);
 
   virtual void handle_notify(uint64_t notify_id, uint64_t handle,
