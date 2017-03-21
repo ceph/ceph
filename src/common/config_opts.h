@@ -236,7 +236,7 @@ OPTION(ms_async_rdma_roce_ver, OPT_INT, 1)         // 0=RoCEv1, 1=RoCEv2, 2=RoCE
 OPTION(ms_async_rdma_sl, OPT_INT, 3)               // in RoCE, this means PCP
 
 OPTION(ms_dpdk_port_id, OPT_INT, 0)
-OPTION(ms_dpdk_coremask, OPT_STR, "1")
+SAFE_OPTION(ms_dpdk_coremask, OPT_STR, "1")        // it is modified in unittest so that use SAFE_OPTION to declare 
 OPTION(ms_dpdk_memory_channel, OPT_STR, "4")
 OPTION(ms_dpdk_hugepages, OPT_STR, "")
 OPTION(ms_dpdk_pmd, OPT_STR, "")
