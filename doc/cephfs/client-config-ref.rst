@@ -4,8 +4,7 @@
 
 ``client acl type``
 
-:Description: Set the ACL type. Currently, only possible value is ``"posix_acl"`` to enable POSIX ACL, or an empty string. This option only takes effect when the
-``fuse_default_permissions`` is set to ``false``.
+:Description: Set the ACL type. Currently, only possible value is ``"posix_acl"`` to enable POSIX ACL, or an empty string. This option only takes effect when the ``fuse_default_permissions`` is set to ``false``.
 
 :Type: String
 :Default: ``""`` (no ACL enforcement)
