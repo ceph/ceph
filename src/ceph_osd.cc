@@ -442,8 +442,8 @@ flushjournal_out:
 	 << TEXT_NORMAL << dendl;
   }
 
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
-  std::string cluster_msgr_type = g_conf->ms_cluster_type.empty() ? g_conf->ms_type : g_conf->ms_cluster_type;
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
+  std::string cluster_msgr_type = g_conf->ms_cluster_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_cluster_type;
   Messenger *ms_public = Messenger::create(g_ceph_context, public_msgr_type,
 					   entity_name_t::OSD(whoami), "client",
 					   getpid(),

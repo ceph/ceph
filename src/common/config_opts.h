@@ -175,7 +175,7 @@ OPTION(heartbeat_file, OPT_STR, "")
 OPTION(heartbeat_inject_failure, OPT_INT, 0)    // force an unhealthy heartbeat for N seconds
 OPTION(perf, OPT_BOOL, true)       // enable internal perf counters
 
-OPTION(ms_type, OPT_STR, "async+posix")   // messenger backend
+SAFE_OPTION(ms_type, OPT_STR, "async+posix")   // messenger backend. It will be modified in runtime, so use SAFE_OPTION
 OPTION(ms_public_type, OPT_STR, "")   // messenger backend
 OPTION(ms_cluster_type, OPT_STR, "")   // messenger backend
 OPTION(ms_tcp_nodelay, OPT_BOOL, true)
