@@ -6,6 +6,7 @@
 
 #include "common/ceph_json.h"
 #include "rgw_common.h"
+#include "rgw_es_query.h"
 
 using namespace std;
 
@@ -104,44 +105,6 @@ static bool infix_to_prefix(list<string>& source, list<string> *out)
   out->swap(operand_stack);
   return true;
 }
-
-class ESQueryStack {
-  list<string> l;
-  list<string>::iterator iter;
-
-public:
-  ESQueryStack(list<string>& src) {
-    assign(src);
-  }
-
-  ESQueryStack() {}
-
-  void assign(list<string>& src) {
-    l.swap(src);
-    iter = l.begin();
-  }
-
-  bool peek(string *dest) {
-    if (done()) {
-      return false;
-    }
-    *dest = *iter;
-    return true;
-  }
-
-  bool pop(string *dest) {
-    bool valid = peek(dest);
-    if (!valid) {
-      return false;
-    }
-    ++iter;
-    return true;
-  }
-
-  bool done() {
-    return (iter == l.end());
-  }
-};
 
 class ESQueryNode {
 public:
@@ -375,158 +338,140 @@ static bool is_val_char(char c)
   return (c != ')');
 }
 
-class ESInfixQueryParser {
-  string query;
-  int size;
-  const char *str;
-  int pos{0};
-  list<string> args;
-
-  void skip_whitespace(const char *str, int size, int& pos) {
-    while (pos < size && isspace(str[pos])) {
-      ++pos;
-    }
+void ESInfixQueryParser::skip_whitespace(const char *str, int size, int& pos) {
+  while (pos < size && isspace(str[pos])) {
+    ++pos;
   }
+}
 
-  bool get_next_token(bool (*filter)(char)) {
-    skip_whitespace(str, size, pos);
-    int token_start = pos;
-    while (pos < size && filter(str[pos])) {
-      ++pos;
-    }
-    if (pos == token_start) {
-      return false;
-    }
-    string token = string(str + token_start, pos - token_start);
-    args.push_back(token);
-    return true;
+bool ESInfixQueryParser::get_next_token(bool (*filter)(char)) {
+  skip_whitespace(str, size, pos);
+  int token_start = pos;
+  while (pos < size && filter(str[pos])) {
+    ++pos;
   }
-
-  bool parse_condition() {
-    /*
-     * condition: <key> <operator> <val>
-     *
-     * whereas key: needs to conform to http header field restrictions
-     *         operator: one of the following: < <= == >= >
-     *         val: ascii, terminated by either space or ')' (or end of string)
-     */
-
-    /* parse key */
-    bool valid = get_next_token(is_key_char) &&
-      get_next_token(is_op_char) &&
-      get_next_token(is_val_char);
-
-    if (!valid) {
-      return false;
-    }
-
-    return true;
+  if (pos == token_start) {
+    return false;
   }
+  string token = string(str + token_start, pos - token_start);
+  args.push_back(token);
+  return true;
+}
 
-  bool parse_and_or() {
-    skip_whitespace(str, size, pos);
-    if (pos + 3 <= size && strncmp(str + pos, "and", 3) == 0) {
-      pos += 3;
-      args.push_back("and");
-      return true;
-    }
+bool ESInfixQueryParser::parse_condition() {
+  /*
+   * condition: <key> <operator> <val>
+   *
+   * whereas key: needs to conform to http header field restrictions
+   *         operator: one of the following: < <= == >= >
+   *         val: ascii, terminated by either space or ')' (or end of string)
+   */
 
-    if (pos + 2 <= size && strncmp(str + pos, "or", 2) == 0) {
-      pos += 2;
-      args.push_back("or");
-      return true;
-    }
+  /* parse key */
+  bool valid = get_next_token(is_key_char) &&
+    get_next_token(is_op_char) &&
+    get_next_token(is_val_char);
 
+  if (!valid) {
     return false;
   }
 
-  bool parse_specific_char(const char *pchar) {
-    skip_whitespace(str, size, pos);
-    if (pos >= size) {
-      return false;
-    }
-    if (str[pos] != *pchar) {
-      return false;
-    }
+  return true;
+}
 
-    args.push_back(pchar);
-    ++pos;
+bool ESInfixQueryParser::parse_and_or() {
+  skip_whitespace(str, size, pos);
+  if (pos + 3 <= size && strncmp(str + pos, "and", 3) == 0) {
+    pos += 3;
+    args.push_back("and");
     return true;
   }
 
-  bool parse_open_bracket() {
-    return parse_specific_char("(");
-  }
-
-  bool parse_close_bracket() {
-    return parse_specific_char(")");
-  }
-
-public:
-  ESInfixQueryParser(const string& _query) : query(_query), size(query.size()), str(query.c_str()) {}
-  bool parse(list<string> *result) {
-    /*
-     * expression: [(]<condition>[[and/or]<condition>][)][and/or]...
-     */
-
-    while (pos < size) {
-      parse_open_bracket();
-      if (!parse_condition()) {
-        return false;
-      }
-      parse_close_bracket();
-      parse_and_or();
-    }
-
-    result->swap(args);
-
-    return true;
-  }
-};
-
-class ESQueryCompiler {
-  ESInfixQueryParser parser;
-  ESQueryStack stack;
-  ESQueryNode *query_root{nullptr};
-
-  bool convert(list<string>& infix) {
-    list<string> prefix;
-    if (!infix_to_prefix(infix, &prefix)) {
-      return false;
-    }
-    stack.assign(prefix);
-    if (!alloc_node(&stack, &query_root)) {
-      return false;
-    }
-    if (!stack.done()) {
-      return false;
-    }
+  if (pos + 2 <= size && strncmp(str + pos, "or", 2) == 0) {
+    pos += 2;
+    args.push_back("or");
     return true;
   }
 
-public:
-  ESQueryCompiler(const string& query) : parser(query) {}
-  ~ESQueryCompiler() {
-    delete query_root;
+  return false;
+}
+
+bool ESInfixQueryParser::parse_specific_char(const char *pchar) {
+  skip_whitespace(str, size, pos);
+  if (pos >= size) {
+    return false;
+  }
+  if (str[pos] != *pchar) {
+    return false;
   }
 
-  bool compile() {
-    list<string> infix;
-    if (!parser.parse(&infix)) {
+  args.push_back(pchar);
+  ++pos;
+  return true;
+}
+
+bool ESInfixQueryParser::parse_open_bracket() {
+  return parse_specific_char("(");
+}
+
+bool ESInfixQueryParser::parse_close_bracket() {
+  return parse_specific_char(")");
+}
+
+bool ESInfixQueryParser::parse(list<string> *result) {
+  /*
+   * expression: [(]<condition>[[and/or]<condition>][)][and/or]...
+   */
+
+  while (pos < size) {
+    parse_open_bracket();
+    if (!parse_condition()) {
       return false;
     }
-
-    if (!convert(infix)) {
-      return false;
-    }
-
-    return true;
+    parse_close_bracket();
+    parse_and_or();
   }
 
-  void dump(Formatter *f) const {
-    encode_json("query", *query_root, f);
+  result->swap(args);
+
+  return true;
+}
+
+bool ESQueryCompiler::convert(list<string>& infix) {
+  list<string> prefix;
+  if (!infix_to_prefix(infix, &prefix)) {
+    return false;
   }
-};
+  stack.assign(prefix);
+  if (!alloc_node(&stack, &query_root)) {
+    return false;
+  }
+  if (!stack.done()) {
+    return false;
+  }
+  return true;
+}
+
+ESQueryCompiler::~ESQueryCompiler() {
+  delete query_root;
+}
+
+bool ESQueryCompiler::compile() {
+  list<string> infix;
+  if (!parser.parse(&infix)) {
+    return false;
+  }
+
+  if (!convert(infix)) {
+    return false;
+  }
+
+  return true;
+}
+
+void ESQueryCompiler::dump(Formatter *f) const {
+  encode_json("query", *query_root, f);
+}
 
 
 int main(int argc, char *argv[])
