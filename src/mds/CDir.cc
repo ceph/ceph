@@ -554,6 +554,8 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   // verify open snaprealm parent
   if (in->snaprealm)
     in->snaprealm->adjust_parent();
+  else if (in->is_any_caps())
+    in->move_to_realm(inode->find_snaprealm());
 }
 
 void CDir::unlink_inode(CDentry *dn)
