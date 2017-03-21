@@ -623,10 +623,11 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey& key, map<string, string>&
   url_encode(obj.key.name, urlsafe_object);
   string resource = urlsafe_bucket + "/" + urlsafe_object;
 
-  return send_request(&key, extra_headers, resource, mgr);
+  return send_request(&key, extra_headers, resource, nullptr, mgr);
 }
 
-int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr)
+int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
+                                         bufferlist *send_data, RGWHTTPManager *mgr)
 {
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
@@ -683,6 +684,10 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
   map<string, string>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
     headers.push_back(pair<string, string>(iter->first, iter->second));
+  }
+
+  if (send_data) {
+    in_data.claim(*send_data);
   }
 
   RGWHTTPManager *pmanager = &http_manager;
