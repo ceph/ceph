@@ -501,7 +501,7 @@ namespace buffer CEPH_BUFFER_API {
 	  pbl->append(bufferptr(bp, 0, l));
 	  bp.set_length(bp.length() - l);
 	  bp.set_offset(bp.offset() + l);
-	} else {
+	} else if (pbl) {
 	  // we are using pbl's append_buffer
 	  size_t l = pos - pbl->append_buffer.end_c_str();
 	  if (l) {
@@ -515,12 +515,18 @@ namespace buffer CEPH_BUFFER_API {
       friend class list;
 
     public:
+      contiguous_appender(char* pos)
+        : pbl(nullptr),
+          pos(pos),
+          deep(true) {
+      }
+
       ~contiguous_appender() {
 	if (bp.have_raw()) {
 	  // we allocated a new buffer
 	  bp.set_length(pos - bp.c_str());
 	  pbl->append(std::move(bp));
-	} else {
+	} else if (pbl) {
 	  // we are using pbl's append_buffer
 	  size_t l = pos - pbl->append_buffer.end_c_str();
 	  if (l) {
@@ -655,6 +661,11 @@ namespace buffer CEPH_BUFFER_API {
     // cppcheck-suppress noExplicitConstructor
     list(unsigned prealloc) : _len(0), _memcopy_count(0), last_p(this) {
       reserve(prealloc);
+    }
+
+    list(ptr append_buffer) : _len(0), _memcopy_count(0),
+                              append_buffer(append_buffer), last_p(this) {
+      this->append_buffer.set_length(0);   // unused, so far.
     }
 
     list(const list& other) : _buffers(other._buffers), _len(other._len),

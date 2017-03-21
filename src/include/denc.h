@@ -242,8 +242,50 @@ WRITE_INT_DENC(bool, uint8_t);
 // high bit of each byte indicates another byte follows.
 template<typename T>
 inline void denc_varint(T v, size_t& p) {
-  p += sizeof(T) + 1;
+  p += sizeof(v) + 1;
 }
+
+template<typename T>
+inline void denc_varint_exact(T v, size_t& p) {
+  static_assert(std::is_unsigned<T>::value,
+                "denc_varint() operates on unsigned integers only");
+  register size_t i;
+  for (i = 1; v; i++) {
+    v >>= 7;
+  }
+  p += i;
+}
+
+#if 1
+template<>
+inline void denc_varint_exact<unsigned>(const unsigned v, size_t& p) {
+  if (v == 0) {
+    p++;
+  } else {
+    p += (sizeof(v) * CHAR_BIT - clz(v) + 6) / (CHAR_BIT - 1);
+  }
+}
+
+template<>
+inline void denc_varint_exact<unsigned long>(const unsigned long v, size_t& p) {
+  if (v == 0) {
+    p++;
+  } else {
+    p += (sizeof(v) * CHAR_BIT - clzl(v) + 6) / (CHAR_BIT - 1);
+  }
+}
+
+template<>
+inline void denc_varint_exact<unsigned long long>(const unsigned long long v,
+                                            size_t& p) {
+
+  if (v == 0) {
+    p++;
+  } else {
+    p += (sizeof(v) * CHAR_BIT - clzll(v) + 6) / (CHAR_BIT - 1);
+  }
+}
+#endif
 
 template<typename T>
 inline void denc_varint(T v, bufferlist::contiguous_appender& p) {
@@ -306,6 +348,14 @@ inline void denc_signed_varint(T& v, bufferptr::iterator& p)
 // (so, 5 bits data in first byte, 7 bits data thereafter)
 inline void denc_varint_lowz(uint64_t v, size_t& p) {
   p += sizeof(v) + 2;
+}
+
+inline void denc_varint_lowz_exact(uint64_t v, size_t& p) {
+  int lowznib = v ? (ctz(v) / 4) : 0;
+  if (lowznib > 3)
+    lowznib = 3;
+  v >>= lowznib * 4 - 2;
+  denc_varint_exact(v, p);
 }
 inline void denc_varint_lowz(uint64_t v, bufferlist::contiguous_appender& p) {
   int lowznib = v ? (ctz(v) / 4) : 0;
@@ -384,6 +434,42 @@ inline void denc_signed_varint_lowz(T& v, bufferptr::iterator& p)
 // high bit of each subsequent byte = another byte follows
 inline void denc_lba(uint64_t v, size_t& p) {
   p += sizeof(v) + 2;
+}
+
+inline void denc_lba_exact(uint64_t v, size_t& p) {
+  p += 4;
+
+  /* This check shouldn't be duplicative. A compiler will get a chance
+   * to skip the ones in ctz() and cbits(). */
+  if (! v) {
+    return;
+  }
+
+  const uint8_t low_zero_nibbles = ctz(v) / 4;
+  /* Assumption: if v != 0, then ctz(v) + 1 <= cbits(v). */
+  uint8_t nbits = cbitsl(static_cast<unsigned long>(v));
+
+  const int8_t t = low_zero_nibbles - 3;
+  if (t < 0) {
+    /* The byte (*111) case. */
+    nbits += 3;
+  } else if (t < 3) {
+    /* 12 or 16 zeros. */
+    nbits = nbits - low_zero_nibbles * 4 + (t + 1);
+  } else {
+    /* The 20 zeros case. Need to reserve place for trailing 011 bits. */
+    nbits = nbits - 20 + 3;
+  }
+
+  /* We're always encoding the first 32 bits of v. */
+  if (nbits < sizeof(uint32_t) * CHAR_BIT) {
+    /* p is already incremented enough -- see the first instruction. */
+    return;
+  } else {
+    nbits -= sizeof(uint32_t) * CHAR_BIT - 1; /* The cont mark. */
+  }
+
+  p += (nbits + 6) / (CHAR_BIT - 1);
 }
 
 inline void denc_lba(uint64_t v, bufferlist::contiguous_appender& p) {
@@ -1248,18 +1334,19 @@ struct denc_traits<boost::none_t> {
 // Write denc_traits<> for a class that defines bound_encode/encode/decode
 // methods.
 
-#define WRITE_CLASS_DENC(T) _DECLARE_CLASS_DENC(T, false)
-#define WRITE_CLASS_DENC_BOUNDED(T) _DECLARE_CLASS_DENC(T, true)
-#define _DECLARE_CLASS_DENC(T, b)					\
+#define WRITE_CLASS_DENC(T) _DECLARE_CLASS_DENC(T, false, )
+#define WRITE_CLASS_DENC_ATTR(T, attr) _DECLARE_CLASS_DENC(T, false, attr)
+#define WRITE_CLASS_DENC_BOUNDED(T) _DECLARE_CLASS_DENC(T, true, )
+#define _DECLARE_CLASS_DENC(T, b, attr)					\
   template<> struct denc_traits<T> {					\
     static constexpr bool supported = true;				\
     static constexpr bool featured = false;				\
     static constexpr bool bounded = b;					\
-    static void bound_encode(const T& v, size_t& p, uint64_t f=0) {	\
+    static void bound_encode(const T& v, size_t& p, uint64_t f=0) attr { \
       v.bound_encode(p);						\
     }									\
     static void encode(const T& v, buffer::list::contiguous_appender& p, \
-		       uint64_t f=0) {					\
+		       uint64_t f=0) attr {				\
       v.encode(p);							\
     }									\
     static void decode(T& v, buffer::ptr::iterator& p, uint64_t f=0) {	\
@@ -1267,18 +1354,19 @@ struct denc_traits<boost::none_t> {
     }									\
   };
 
-#define WRITE_CLASS_DENC_FEATURED(T) _DECLARE_CLASS_DENC_FEATURED(T, false)
-#define WRITE_CLASS_DENC_FEATURED_BOUNDED(T) _DECLARE_CLASS_DENC_FEATURED(T, true)
-#define _DECLARE_CLASS_DENC_FEATURED(T, b)				\
+#define WRITE_CLASS_DENC_FEATURED(T) _DECLARE_CLASS_DENC_FEATURED(T, false, )
+#define WRITE_CLASS_DENC_FEATURED_ATTR(T, attr) _DECLARE_CLASS_DENC_FEATURED(T, false, attr)
+#define WRITE_CLASS_DENC_FEATURED_BOUNDED(T) _DECLARE_CLASS_DENC_FEATURED(T, true, )
+#define _DECLARE_CLASS_DENC_FEATURED(T, b, attr)			\
   template<> struct denc_traits<T> {					\
     static constexpr bool supported = true;				\
     static constexpr bool featured = true;				\
     static constexpr bool bounded = b;					\
-    static void bound_encode(const T& v, size_t& p, uint64_t f) {	\
+    static void bound_encode(const T& v, size_t& p, uint64_t f) attr {	\
       v.bound_encode(p, f);						\
     }									\
     static void encode(const T& v, buffer::list::contiguous_appender& p, \
-		       uint64_t f) {					\
+		       uint64_t f) attr {				\
       v.encode(p, f);							\
     }									\
     static void decode(T& v, buffer::ptr::iterator& p, uint64_t f=0) {	\

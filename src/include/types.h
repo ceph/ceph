@@ -59,6 +59,7 @@ extern "C" {
 #include <iostream>
 #include <iomanip>
 
+#include <boost/container/small_vector.hpp>
 using namespace std;
 
 #include "include/unordered_map.h"
@@ -97,6 +98,17 @@ inline ostream& operator<<(ostream& out, const pair<A,B>& v) {
 
 template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v) {
+  out << "[";
+  for (auto p = v.begin(); p != v.end(); ++p) {
+    if (p != v.begin()) out << ",";
+    out << *p;
+  }
+  out << "]";
+  return out;
+}
+template<class A, size_t N, class Alloc>
+inline ostream& operator<<(ostream& out,
+                           const boost::container::small_vector<A,N,Alloc>& v) {
   out << "[";
   for (auto p = v.begin(); p != v.end(); ++p) {
     if (p != v.begin()) out << ",";

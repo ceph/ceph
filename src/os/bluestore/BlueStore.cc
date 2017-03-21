@@ -2339,30 +2339,30 @@ bool BlueStore::ExtentMap::encode_some(
                      // handling at ExtentMap level.
 
   unsigned n = 0;
-  size_t bound = 0;
+  register size_t bound = 0;
   denc(struct_v, bound);
-  denc_varint(0, bound);
+  denc_varint(0ul, bound);
   bool must_reshard = false;
   for (auto p = start;
-       p != extent_map.end() && p->logical_offset < end;
+       unlikely(p != extent_map.end()) && p->logical_offset < end;
        ++p, ++n) {
     assert(p->logical_offset >= offset);
     p->blob->last_encoded_id = -1;
-    if (!p->blob->is_spanning() && p->blob_escapes_range(offset, length)) {
+    if (unlikely(p->blob_escapes_range(offset, length)) &&
+        likely(!p->blob->is_spanning())) {
       dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
 	       << std::dec << " hit new spanning blob " << *p << dendl;
       request_reshard(p->blob_start(), p->blob_end());
       must_reshard = true;
     }
-    denc_varint(0, bound); // blobid
-    denc_varint(0, bound); // logical_offset
-    denc_varint(0, bound); // len
-    denc_varint(0, bound); // blob_offset
+    denc_varint(0ul, bound); // blobid
+    denc_varint(0ul, bound); // logical_offset
+    denc_varint(0ul, bound); // len
+    denc_varint(0ul, bound); // blob_offset
 
     p->blob->bound_encode(
       bound,
       struct_v,
-      p->blob->shared_blob->get_sbid(),
       false);
   }
   if (must_reshard) {
@@ -2385,7 +2385,7 @@ bool BlueStore::ExtentMap::encode_some(
 	 ++p, ++n) {
       unsigned blobid;
       bool include_blob = false;
-      if (p->blob->is_spanning()) {
+      if (unlikely(p->blob->is_spanning())) {
 	blobid = p->blob->id << BLOBID_SHIFT_BITS;
 	blobid |= BLOBID_FLAG_SPANNING;
       } else if (p->blob->last_encoded_id < 0) {
@@ -2418,7 +2418,7 @@ bool BlueStore::ExtentMap::encode_some(
       }
       pos = p->logical_end();
       if (include_blob) {
-	p->blob->encode(app, struct_v, p->blob->shared_blob->get_sbid(), false);
+	p->blob->encode(app, struct_v, false);
       }
     }
   }
@@ -2456,7 +2456,7 @@ unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
   unsigned n = 0;
 
   while (!p.end()) {
-    Extent *le = new Extent();
+    Extent *le = create_from_pool();
     uint64_t blobid;
     denc_varint(blobid, p);
     if ((blobid & BLOBID_FLAG_CONTIGUOUS) == 0) {
@@ -2485,7 +2485,7 @@ unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
 	le->assign_blob(blobs[blobid - 1]);
 	assert(le->blob);
       } else {
-	Blob *b = new Blob();
+        Blob* const b = onode->blob_pool.construct();
         uint64_t sbid = 0;
         b->decode(onode->c, p, struct_v, &sbid, false);
 	blobs[n] = b;
@@ -2520,7 +2520,7 @@ void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
   denc_varint((uint32_t)0, key_size);
   p += spanning_blob_map.size() * key_size;
   for (const auto& i : spanning_blob_map) {
-    i.second->bound_encode(p, struct_v, i.second->shared_blob->get_sbid(), true);
+    i.second->bound_encode(p, struct_v, true);
   }
 }
 
@@ -2536,7 +2536,7 @@ void BlueStore::ExtentMap::encode_spanning_blobs(
   denc_varint(spanning_blob_map.size(), p);
   for (auto& i : spanning_blob_map) {
     denc_varint(i.second->id, p);
-    i.second->encode(p, struct_v, i.second->shared_blob->get_sbid(), true);
+    i.second->encode(p, struct_v, true);
   }
 }
 
@@ -2553,7 +2553,7 @@ void BlueStore::ExtentMap::decode_spanning_blobs(
   unsigned n;
   denc_varint(n, p);
   while (n--) {
-    BlobRef b(new Blob());
+    BlobRef b(onode->blob_pool.construct());
     denc_varint(b->id, p);
     spanning_blob_map[b->id] = b;
     uint64_t sbid = 0;
@@ -2793,7 +2793,7 @@ void BlueStore::ExtentMap::punch_hole(
 	// split and deref middle
 	uint64_t front = offset - p->logical_offset;
 	old_extents->insert(
-	  *new Extent(offset, p->blob_offset + front, length, p->blob));
+	  *create_from_pool(offset, p->blob_offset + front, length, p->blob));
 	add(end,
 	    p->blob_offset + front + length,
 	    p->length - front - length,
@@ -2804,7 +2804,7 @@ void BlueStore::ExtentMap::punch_hole(
 	// deref tail
 	assert(p->logical_end() > offset); // else seek_lextent bug
 	uint64_t keep = offset - p->logical_offset;
-	old_extents->insert(*new Extent(offset, p->blob_offset + keep,
+	old_extents->insert(*create_from_pool(offset, p->blob_offset + keep,
 					p->length - keep,  p->blob));
 	p->length = keep;
 	++p;
@@ -2813,14 +2813,14 @@ void BlueStore::ExtentMap::punch_hole(
     }
     if (p->logical_offset + p->length <= end) {
       // deref whole lextent
-      old_extents->insert(*new Extent(p->logical_offset, p->blob_offset,
+      old_extents->insert(*create_from_pool(p->logical_offset, p->blob_offset,
 				      p->length, p->blob));
       rm(p++);
       continue;
     }
     // deref head
     uint64_t keep = p->logical_end() - end;
-    old_extents->insert(*new Extent(p->logical_offset, p->blob_offset,
+    old_extents->insert(*create_from_pool(p->logical_offset, p->blob_offset,
 				    p->length - keep, p->blob));
     add(end, p->blob_offset + p->length - keep, keep, p->blob);
     rm(p);
@@ -2842,7 +2842,7 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
   if (b->get_blob().get_logical_length() != 0) {
     b->get_ref(onode->c, blob_offset, length);
   }
-  Extent *le = new Extent(logical_offset, blob_offset, length, b);
+  Extent *le = create_from_pool(logical_offset, blob_offset, length, b);
   extent_map.insert(*le);
   if (spans_shard(logical_offset, length)) {
     request_reshard(logical_offset, logical_offset + length);
@@ -2861,7 +2861,7 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
   dout(20) << __func__ << " 0x" << std::hex << pos << " end 0x" << end_pos
 	   << " blob_offset 0x" << blob_offset << std::dec << " " << *lb
 	   << dendl;
-  BlobRef rb = onode->c->new_blob();
+  BlobRef rb = onode->c->new_blob(onode);
   lb->split(onode->c, blob_offset, rb.get());
 
   for (auto ep = seek_lextent(pos);
@@ -2873,7 +2873,7 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
     if (ep->logical_offset < pos) {
       // split extent
       size_t left = pos - ep->logical_offset;
-      Extent *ne = new Extent(pos, 0, ep->length - left, rb);
+      Extent *ne = create_from_pool(pos, 0, ep->length - left, rb);
       extent_map.insert(*ne);
       ep->length = left;
       dout(30) << __func__ << "  split " << *ep << dendl;
@@ -8614,7 +8614,7 @@ void BlueStore::_do_write_small(
   }
 
   // new blob.
-  b = c->new_blob();
+  b = c->new_blob(&*o);
   unsigned alloc_len = min_alloc_size;
   uint64_t b_off = P2PHASE(offset, alloc_len);
   uint64_t b_off0 = b_off;
@@ -8645,7 +8645,7 @@ void BlueStore::_do_write_big(
   logger->inc(l_bluestore_write_big);
   logger->inc(l_bluestore_write_big_bytes, length);
   while (length > 0) {
-    BlobRef b = c->new_blob();
+    BlobRef b = c->new_blob(&*o);
     auto l = MIN(wctx->target_blob_size, length);
     bufferlist t;
     blp.copy(l, t);
@@ -8847,6 +8847,7 @@ int BlueStore::_do_alloc_write(
     // counting machinery.
     assert(!b->is_referenced());
     b->get_ref(coll.get(), wi.b_off0, wi.length0); 
+    b->_encode_blob_to_cache(3);
                                                
 
     // queue io
@@ -8931,7 +8932,7 @@ void BlueStore::_wctx_finish(
         txc->statfs_delta.compressed_allocated() -= e.length;
       }
     }
-    delete &lo;
+    o->extent_pool.free(&lo);
     if (b->is_spanning() && !b->is_referenced()) {
       dout(20) << __func__ << "  spanning_blob_map removing empty " << *b
 	       << dendl;
@@ -9728,7 +9729,7 @@ int BlueStore::_do_clone_range(
       } else {
 	c->load_shared_blob(e.blob->shared_blob);
       }
-      cb = new Blob();
+      cb = newo->blob_pool.construct();
       e.blob->last_encoded_id = n;
       id_to_blob[n] = cb;
       e.blob->dup(*cb);
@@ -9753,7 +9754,7 @@ int BlueStore::_do_clone_range(
     } else {
       skip_back = 0;
     }
-    Extent *ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
+    Extent *ne = newo->extent_map.create_from_pool(e.logical_offset + skip_front + dstoff - srcoff,
 			    e.blob_offset + skip_front,
 			    e.length - skip_front - skip_back, cb);
     newo->extent_map.extent_map.insert(*ne);

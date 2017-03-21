@@ -17,6 +17,7 @@
 
 #include <ostream>
 #include <bitset>
+#include <boost/container/small_vector.hpp>
 #include "include/types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
@@ -26,6 +27,7 @@
 #include "common/Checksummer.h"
 #include "include/mempool.h"
 
+#define BLUESTORE_FORCEINLINE __attribute__((always_inline))
 namespace ceph {
   class Formatter;
 }
@@ -144,9 +146,17 @@ struct bluestore_pextent_t : public AllocExtent {
     return offset != INVALID_OFFSET;
   }
 
-  DENC(bluestore_pextent_t, v, p) {
-    denc_lba(v.offset, p);
-    denc_varint_lowz(v.length, p);
+  void bound_encode(size_t& p) const {
+    denc_lba_exact(offset, p);
+    denc_varint_lowz_exact(length, p);
+  }
+  void encode(bufferlist::contiguous_appender& p) const {
+    denc_lba(offset, p);
+    denc_varint_lowz(length, p);
+  }
+  void decode(bufferptr::iterator& p) {
+    denc_lba(offset, p);
+    denc_varint_lowz(length, p);
   }
 
   void dump(Formatter *f) const;
@@ -156,19 +166,23 @@ WRITE_CLASS_DENC(bluestore_pextent_t)
 
 ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
-typedef mempool::bluestore_meta_other::vector<bluestore_pextent_t> PExtentVector;
+typedef boost::container::small_vector<bluestore_pextent_t, 1> PExtentVector;
 
 template<>
 struct denc_traits<PExtentVector> {
   static constexpr bool supported = true;
-  static constexpr bool bounded = false;
+  static constexpr bool bounded = true;
   static constexpr bool featured = false;
+
+  BLUESTORE_FORCEINLINE
   static void bound_encode(const PExtentVector& v, size_t& p) {
-    p += sizeof(uint32_t);
-    size_t per = 0;
-    denc(*(bluestore_pextent_t*)nullptr, per);
-    p += per * v.size();
+    denc_varint_exact(v.size(), p);
+    for (auto& i : v) {
+      i.bound_encode(p);
+    }
   }
+
+  BLUESTORE_FORCEINLINE
   static void encode(const PExtentVector& v,
 		     bufferlist::contiguous_appender& p) {
     denc_varint(v.size(), p);
@@ -391,7 +405,7 @@ struct bluestore_blob_use_tracker_t {
       }
     }
   }
-  void encode(bufferlist::contiguous_appender& p) const {
+  void encode(bufferlist::contiguous_appender& p) const __attribute__((always_inline)) {
     denc_varint(au_size, p);
     if (au_size) {
       denc_varint(num_au, p);
@@ -458,21 +472,48 @@ struct bluestore_blob_t {
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
   DENC_HELPERS;
+
+  BLUESTORE_FORCEINLINE
   void bound_encode(size_t& p, uint64_t struct_v) const {
-    assert(struct_v == 1 || struct_v == 2);
-    denc(extents, p);
-    denc_varint(flags, p);
-    denc_varint_lowz(compressed_length_orig, p);
-    denc_varint_lowz(compressed_length, p);
-    denc(csum_type, p);
-    denc(csum_chunk_order, p);
-    denc_varint(csum_data.length(), p);
-    p += csum_data.length();
-    p += sizeof(unsigned long long);
+    size_t p_ct = 0;
+    size_t p_cco = 0;
+    size_t p_cdi = 0;
+    size_t p_cdl = 0;
+    if (has_csum()) {
+      denc(csum_type, p_ct);
+      denc(csum_chunk_order, p_cco);
+
+      denc_varint_exact(csum_data.length(), p_cdi);
+      p_cdl += csum_data.length();
+    }
+    p += p_ct + p_cdl + p_cdi + p_cco;
+
+    size_t p_extents = 0;
+    denc(extents, p_extents);
+    p += p_extents;
+
+    size_t p_flags = 0;
+    denc_varint_exact(flags, p_flags);
+    p += p_flags;
+
+    if (is_compressed()) {
+      size_t p_clo = 0;
+      denc_varint_lowz_exact(compressed_length_orig, p_clo);
+      p += p_clo;
+
+      size_t p_cl = 0;
+      denc_varint_lowz_exact(compressed_length, p_cl);
+      p += p_cl;
+    }
+
+    if (has_unused()) {
+      denc(unused, p);
+    }
   }
 
-  void encode(bufferlist::contiguous_appender& p, uint64_t struct_v) const {
-    assert(struct_v == 1 || struct_v == 2);
+  BLUESTORE_FORCEINLINE
+  inline void encode(bufferlist::contiguous_appender& p, uint64_t struct_v) const {
+//    assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_compressed()) {
@@ -715,10 +756,10 @@ struct bluestore_blob_t {
   }
 
   uint32_t get_logical_length() const {
-    if (is_compressed()) {
-      return compressed_length_orig;
-    } else {
+    if (! is_compressed()) {
       return get_ondisk_length();
+    } else {
+      return compressed_length_orig;
     }
   }
   size_t get_csum_value_size() const;
@@ -800,7 +841,8 @@ struct bluestore_blob_t {
     return res;
   }
 };
-WRITE_CLASS_DENC_FEATURED(bluestore_blob_t)
+WRITE_CLASS_DENC_FEATURED_ATTR(bluestore_blob_t,
+                               __attribute__((always_inline)))
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o);
 
