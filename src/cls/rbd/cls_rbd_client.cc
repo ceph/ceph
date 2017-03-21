@@ -411,13 +411,21 @@ namespace librbd {
     int add_child(librados::IoCtx *ioctx, const std::string &oid,
 		  const ParentSpec &pspec, const std::string &c_imageid)
     {
-      bufferlist in, out;
+      librados::ObjectWriteOperation op;
+      add_child(&op, pspec, c_imageid);
+      return ioctx->operate(oid, &op);
+    }
+
+    void add_child(librados::ObjectWriteOperation *op,
+		  const ParentSpec pspec, const std::string &c_imageid)
+    {
+      bufferlist in;
       ::encode(pspec.pool_id, in);
       ::encode(pspec.image_id, in);
       ::encode(pspec.snap_id, in);
       ::encode(c_imageid, in);
 
-      return ioctx->exec(oid, "rbd", "add_child", in, out);
+      op->exec("rbd", "add_child", in);
     }
 
     void remove_child(librados::ObjectWriteOperation *op,

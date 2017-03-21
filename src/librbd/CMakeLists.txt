@@ -32,6 +32,7 @@ set(librbd_internal_srcs
   exclusive_lock/PostAcquireRequest.cc
   exclusive_lock/PreReleaseRequest.cc
   exclusive_lock/StandardPolicy.cc
+  image/CloneRequest.cc
   image/CloseRequest.cc
   image/CreateRequest.cc
   image/OpenRequest.cc

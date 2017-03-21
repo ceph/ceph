@@ -183,6 +183,7 @@ class CEPH_RBD_API ImageOptions {
 public:
   ImageOptions();
   ImageOptions(rbd_image_options_t opts);
+  ImageOptions(const ImageOptions &imgopts);
   ~ImageOptions();
 
   int set(int optname, const std::string& optval);
