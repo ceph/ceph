@@ -362,6 +362,7 @@ public:
   static void incr_count() { count++;}
   static int64_t get_total_blocks() {return total_blocks;}
   bool is_allocated(int64_t start_block, int64_t num_blocks);
+  bool is_exhausted();
   bool reserve_blks(int64_t required);
   void unreserve_blks(int64_t allocated, int64_t reserve);
   void reset_marker();

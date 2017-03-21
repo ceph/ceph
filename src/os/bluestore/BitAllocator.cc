@@ -306,25 +306,6 @@ inline bool BitMapZone::is_exhausted()
   /* BitMapZone::get_used_blocks operates atomically. No need for lock. */
   return get_used_blocks() == size();
 }
-bool BitMapZone::reserve_blks(int64_t required)
-{
-  alloc_assert(check_locked());
-  if (get_used_blocks() + required <= size()) {
-    add_used_blocks(required);
-    return false;
-  }
-  return true;
-}
-
-void BitMapZone::unreserve_blks(int64_t allocated, int64_t reserved)
-{
-  if (allocated < reserved) {
-    alloc_assert(allocated == 0);
-    sub_used_blocks(reserved);
-  } else {
-    add_used_blocks(allocated - reserved);
-  }
-}
 
 bool BitMapZone::is_allocated(int64_t start_block, int64_t num_blocks)
 {
@@ -515,7 +496,7 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
       }
     }
   }
-  unreserve_blks(allocated, min_alloc);
+  add_used_blocks(allocated);
   return allocated;
 }
 
@@ -687,7 +668,7 @@ bool BitMapAreaIN::child_check_n_lock(BitMapArea *child, int64_t required)
 {
   child->lock_shared();
 
-  if (child->reserve_blks(required)) {
+  if (!child->reserve_blks(required)) {
     child->unlock();
     return false;
   }
@@ -712,9 +693,9 @@ bool BitMapAreaIN::reserve_blks(int64_t required)
   std::lock_guard<std::mutex> l(m_blocks_lock);
   if (m_used_blocks + required <= size()) {
     m_used_blocks += required;
-    return false;
+    return true;
   }
-  return true;
+  return false;
 }
 
 void BitMapAreaIN::unreserve_blks(int64_t allocated, int64_t reserved)
@@ -1273,14 +1254,7 @@ bool BitAllocator::child_check_n_lock(BitMapArea *child, int64_t required)
 {
   child->lock_shared();
 
-  if (child->reserve_blks(required)) {
-    child->unlock();
-    return false;
-  }
-
-  int64_t child_used_blocks = child->get_used_blocks();
-  int64_t child_total_blocks = child->size();
-  if ((child_total_blocks - child_used_blocks) < required) {
+  if (!child->reserve_blks(required)) {
     child->unlock();
     return false;
   }
