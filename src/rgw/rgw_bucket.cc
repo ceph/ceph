@@ -45,9 +45,9 @@ void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id)
 /*
  * Note that this is not a reversal of parse_bucket(). That one deals
  * with the syntax we need in metadata and such. This one deals with
- * the representation in RADOS pools. We chose '/' because it's not
- * acceptable in bucket names and thus qualified buckets cannot conflict
- * with the legacy or S3 buckets.
+ * the representation in RADOS pools. We chose '-' because it's
+ * acceptable in S3 and Swift naming rules and thus qualified buckets
+ * cannot conflict with the legacy or S3 buckets.
  */
 void rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry) {
   if (bucket_name.empty()) {
@@ -55,7 +55,7 @@ void rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_
   } else if (tenant_name.empty()) {
     bucket_entry = bucket_name;
   } else {
-    bucket_entry = tenant_name + "/" + bucket_name;
+    bucket_entry = tenant_name + "-" + bucket_name;
   }
 }
 
@@ -67,7 +67,7 @@ string rgw_make_bucket_entry_name(const string& tenant_name, const string& bucke
   } else if (tenant_name.empty()) {
     bucket_entry = bucket_name;
   } else {
-    bucket_entry = tenant_name + "/" + bucket_name;
+    bucket_entry = tenant_name + "-" + bucket_name;
   }
 
   return bucket_entry;
