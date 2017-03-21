@@ -29,13 +29,13 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
-void RGWMetadataSearch::pre_exec()
+void RGWMetadataSearchOp::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
 }
 
 
-void RGWMetadataSearch::execute()
+void RGWMetadataSearchOp::execute()
 {
   op_ret = get_params();
   if (op_ret < 0)
@@ -54,9 +54,9 @@ void RGWMetadataSearch::execute()
   // conn->
 }
 
-class RGWMetadataSearch_ObjStore_S3 : public RGWMetadataSearch {
+class RGWMetadataSearch_ObjStore_S3 : public RGWMetadataSearchOp {
 public:
-  RGWMetadataSearch_ObjStore_S3(RGWElasticSyncModuleInstance *_es_module) : RGWMetadataSearch(_es_module) {}
+  RGWMetadataSearch_ObjStore_S3(RGWElasticSyncModuleInstance *_es_module) : RGWMetadataSearchOp(_es_module) {}
 
   int get_params() override {
     expression = s->info.args.get("query");
@@ -84,7 +84,7 @@ protected:
     if (!s->info.args.exists("query")) {
       return nullptr;
     }
-    return new RGWMetadataSearch_ObjStore_S3;
+    return new RGWMetadataSearch_ObjStore_S3(es_module);
   }
   RGWOp *op_head() {
     return nullptr;
