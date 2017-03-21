@@ -1787,7 +1787,8 @@ class RGWPeriod
   const string get_period_oid_prefix();
 
   // gather the metadata sync status for each shard; only for use on master zone
-  int update_sync_status(const RGWPeriod &current_period);
+  int update_sync_status(const RGWPeriod &current_period,
+                         std::ostream& error_stream, bool force_if_stale);
 
 public:
   RGWPeriod() : epoch(0), cct(NULL), store(NULL) {}
@@ -1860,7 +1861,7 @@ public:
 
   // commit a staging period; only for use on master zone
   int commit(RGWRealm& realm, const RGWPeriod &current_period,
-             std::ostream& error_stream);
+             std::ostream& error_stream, bool force_if_stale = false);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
