@@ -41,6 +41,7 @@
 #include "rgw_rest_conn.h"
 #include "rgw_realm_watcher.h"
 #include "rgw_role.h"
+#include "rgw_reshard.h"
 
 using namespace std;
 
@@ -189,6 +190,10 @@ void _usage()
   cout << "  role-policy list           list policies attached to a role\n";
   cout << "  role-policy get            get the specified inline policy document embedded with the given role\n";
   cout << "  role-policy delete         delete policy attached to a role\n";
+  cout << "  reshard add                schedule a resharding of a bucket\n";
+  cout << "  reshard list                  list all bucket resharding or scheduled to be reshared\n";
+  cout << "  reshard execute         execute resharding of  a bucket \n";
+  cout << "  reshard cancel           cancel resharding a bucket\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -475,6 +480,10 @@ enum {
   OPT_ROLE_POLICY_LIST,
   OPT_ROLE_POLICY_GET,
   OPT_ROLE_POLICY_DELETE,
+  OPT_RESHARD_ADD,
+  OPT_RESHARD_LIST,
+  OPT_RESHARD_EXECUTE,
+  OPT_RESHARD_CANCEL,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -508,6 +517,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "quota") == 0 ||
       strcmp(cmd, "realm") == 0 ||
       strcmp(cmd, "replicalog") == 0 ||
+      strcmp(cmd, "reshard") == 0 ||
       strcmp(cmd, "role") == 0 ||
       strcmp(cmd, "role-policy") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
@@ -894,6 +904,15 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ROLE_POLICY_GET;
     if (strcmp(cmd, "delete") == 0)
       return OPT_ROLE_POLICY_DELETE;
+  } else if (strcmp(prev_cmd, "reshard") == 0) {
+    if (strcmp(cmd, "add") == 0)
+      return OPT_RESHARD_ADD;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_RESHARD_LIST;
+    if (strcmp(cmd, "execute") == 0)
+      return OPT_RESHARD_EXECUTE;
+    if (strcmp(cmd, "cancel") == 0)
+      return OPT_RESHARD_CANCEL;
   }
 
   return -EINVAL;
@@ -5836,7 +5855,142 @@ next:
 			  attrs,
 			  max_entries,
 			  bucket_op,
-			  verbose);    
+			  verbose);
+  }
+
+  if (opt_cmd == OPT_RESHARD_ADD) {
+    rgw_bucket bucket;
+    RGWBucketInfo bucket_info;
+    map<string, bufferlist> attrs;
+
+    int ret = check_reshard_bucket_params(store,
+					  bucket_name,
+					  tenant,
+					  bucket_id,
+					  num_shards_specified,
+					  num_shards,
+					  yes_i_really_mean_it,
+					  bucket,
+					  bucket_info,
+					  attrs);
+    if (ret < 0) {
+      return ret;
+    }
+
+    int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+
+    RGWReshard reshard(g_ceph_context, store);
+    cls_rgw_reshard_entry entry;
+    entry.time = real_clock::now();
+    entry.tenant = tenant;
+    entry.bucket_name = bucket_name;
+    entry.bucket_id = bucket_info.bucket.bucket_id;
+    entry.old_num_shards = num_source_shards;
+    entry.new_num_shards = num_shards;
+
+    return reshard.add(entry);
+  }
+
+  if (opt_cmd == OPT_RESHARD_LIST) {
+    list<cls_rgw_reshard_entry> entries;
+    bool is_truncated = true;
+    string marker;
+    int ret;
+    int count = 0;
+    if (max_entries < 0) {
+      max_entries = 1000;
+    }
+
+    RGWReshard reshard(g_ceph_context, store);
+
+    formatter->open_array_section("reshard");
+    do {
+      entries.clear();
+      ret = reshard.list(marker, max_entries, entries, is_truncated);
+      if (ret < 0) {
+	cerr << "Error listing resharding buckets: " << cpp_strerror(-ret) << std::endl;
+	return ret;
+      }
+      for (auto iter=entries.begin(); iter != entries.end(); ++iter) {
+	cls_rgw_reshard_entry& entry = *iter;
+	encode_json("entry", entry, formatter);
+      }
+      count += entries.size();
+      formatter->flush(cout);
+    } while (is_truncated && count < max_entries);
+
+    formatter->close_section();
+    formatter->flush(cout);
+    return 0;
+  }
+
+  if (opt_cmd == OPT_RESHARD_EXECUTE) {
+    RGWReshard reshard(g_ceph_context, store);
+
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    cls_rgw_reshard_entry entry;
+    //entry.tenant = tenant;
+    entry.bucket_name = bucket_name;
+    //entry.bucket_id = bucket_id;
+    int ret = reshard.get(entry);
+    if (ret < 0) {
+      cerr << "Error in getting bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    rgw_bucket bucket;
+    RGWBucketInfo bucket_info;
+    map<string, bufferlist> attrs;
+    ret = init_bucket(tenant, entry.bucket_name, bucket_id, bucket_info, bucket, &attrs);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    ret = reshard_bucket(store, formatter, entry.new_num_shards, bucket, bucket_info, attrs,
+			 max_entries, bucket_op, verbose);
+    if (ret < 0) {
+      return ret;
+    }
+
+    ret =reshard.remove(entry);
+    if (ret < 0) {
+      cerr << "Error removing bucket " << bucket_name << " for resharding queue: " << cpp_strerror(-ret) <<
+	std::endl;
+      return ret;
+    }
+
+    return 0;
+  }
+
+  if (opt_cmd == OPT_RESHARD_CANCEL) {
+    RGWReshard reshard(g_ceph_context, store);
+
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    cls_rgw_reshard_entry entry;
+    //entry.tenant = tenant;
+    entry.bucket_name = bucket_name;
+    //entry.bucket_id = bucket_id;
+    int ret = reshard.get(entry);
+    if (ret < 0) {
+      cerr << "Error in getting bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    /* TBD stop running resharding */
+
+    ret =reshard.remove(entry);
+    if (ret < 0) {
+      cerr << "Error removing bucket " << bucket_name << " for resharding queue: " << cpp_strerror(-ret) <<
+	std::endl;
+      return ret;
+    }
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
