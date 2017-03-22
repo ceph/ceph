@@ -268,92 +268,32 @@ public:
     return CHUNK_SIZE;
   }
 
-#ifdef USE_CRYPTOPP
-
-  bool cbc_transform(unsigned char* out,
-                     const unsigned char* in,
-                     size_t size,
-                     const unsigned char (&iv)[AES_256_IVSIZE],
-                     const unsigned char (&key)[AES_256_KEYSIZE],
+  bool cbc_transform(bufferlist& out,
+                     bufferlist& in,
+                     bufferptr& iv,
+                     bufferptr& key,
                      bool encrypt)
   {
+    CryptoHandler* ch = CryptoHandler::create(CEPH_CRYPTO_AES_256_CBC);
+    string error;
+
+    size_t out_len = out.length();
+    CryptoKeyHandler* ckh = ch->get_key_handler(key, iv, error);
     if (encrypt) {
-      CBC_Mode< AES >::Encryption e;
-      e.SetKeyWithIV(key, AES_256_KEYSIZE, iv, AES_256_IVSIZE);
-      e.ProcessData((byte*)out, (byte*)in, size);
+      ckh->encrypt(in, out, &error);
     } else {
-      CBC_Mode< AES >::Decryption d;
-      d.SetKeyWithIV(key, AES_256_KEYSIZE, iv, AES_256_IVSIZE);
-      d.ProcessData((byte*)out, (byte*)in, size);
+      ckh->decrypt(in, out, &error);
     }
+    assert(out.length() == out_len+in.length());
+    delete ckh;
+    delete ch;
     return true;
   }
 
-#elif defined(USE_NSS)
-
-  bool cbc_transform(unsigned char* out,
-                     const unsigned char* in,
-                     size_t size,
-                     const unsigned char (&iv)[AES_256_IVSIZE],
-                     const unsigned char (&key)[AES_256_KEYSIZE],
-                     bool encrypt)
-  {
-    bool result = false;
-    PK11SlotInfo *slot;
-    SECItem keyItem;
-    PK11SymKey *symkey;
-    CK_AES_CBC_ENCRYPT_DATA_PARAMS ctr_params = {0};
-    SECItem ivItem;
-    SECItem *param;
-    SECStatus ret;
-    PK11Context *ectx;
-    int written;
-
-    slot = PK11_GetBestSlot(CKM_AES_CBC, NULL);
-    if (slot) {
-      keyItem.type = siBuffer;
-      keyItem.data = const_cast<unsigned char*>(&key[0]);
-      keyItem.len = AES_256_KEYSIZE;
-      symkey = PK11_ImportSymKey(slot, CKM_AES_CBC, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
-      if (symkey) {
-        memcpy(ctr_params.iv, iv, AES_256_IVSIZE);
-        ivItem.type = siBuffer;
-        ivItem.data = (unsigned char*)&ctr_params;
-        ivItem.len = sizeof(ctr_params);
-
-        param = PK11_ParamFromIV(CKM_AES_CBC, &ivItem);
-        if (param) {
-          ectx = PK11_CreateContextBySymKey(CKM_AES_CBC, encrypt?CKA_ENCRYPT:CKA_DECRYPT, symkey, param);
-          if (ectx) {
-            ret = PK11_CipherOp(ectx,
-                                out, &written, size,
-                                in, size);
-            if ((ret == SECSuccess) && (written == (int)size)) {
-              result = true;
-            }
-            PK11_DestroyContext(ectx, PR_TRUE);
-          }
-          SECITEM_FreeItem(param, PR_TRUE);
-        }
-        PK11_FreeSymKey(symkey);
-      }
-      PK11_FreeSlot(slot);
-    }
-    if (result == false) {
-      ldout(cct, 5) << "Failed to perform AES-CBC encryption: " << PR_GetError() << dendl;
-    }
-    return result;
-  }
-
-#else
-#error Must define USE_CRYPTOPP or USE_NSS
-#endif
-
-  bool cbc_transform(unsigned char* out,
-                     const unsigned char* in,
-                     size_t size,
+  bool cbc_transform(bufferlist& output,
+                     bufferlist& input,
                      off_t stream_offset,
-                     const unsigned char (&key)[AES_256_KEYSIZE],
+                     bufferptr& key,
                      bool encrypt)
   {
     static std::atomic<bool> failed_to_get_crypto(false);
@@ -364,28 +304,45 @@ public:
       if (!crypto_accel)
         failed_to_get_crypto = true;
     }
+    if (key.length() != AES_256_KEYSIZE) {
+      return false;
+    }
+    unsigned char iv_arr[AES_256_IVSIZE];
+    unsigned char key_arr[AES_256_KEYSIZE];
+    if (crypto_accel != nullptr) {
+      memcpy(key_arr, key.c_str(), AES_256_KEYSIZE);
+    }
     bool result = true;
-    unsigned char iv[AES_256_IVSIZE];
+    size_t size = input.length();
     for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
       size_t process_size = offset + CHUNK_SIZE <= size ? CHUNK_SIZE : size - offset;
-      prepare_iv(iv, stream_offset + offset);
+      bufferptr iv = prepare_iv(stream_offset + offset);
+      assert(iv.length() == AES_256_IVSIZE);
       if (crypto_accel != nullptr) {
+        memcpy(key_arr, key.c_str(), AES_256_KEYSIZE);
+        memcpy(iv_arr, iv.c_str(), AES_256_IVSIZE);
+        bufferptr out_buf(process_size);
+        unsigned char* out_ptr =
+            reinterpret_cast<unsigned char*>(out_buf.c_str());
+        const unsigned char* in_ptr =
+          reinterpret_cast<unsigned char*>(input.get_contiguous(offset, process_size));
         if (encrypt) {
-          result = crypto_accel->cbc_encrypt(out + offset, in + offset,
-                                             process_size, iv, key);
+          result = crypto_accel->cbc_encrypt(out_ptr, in_ptr,
+                                             process_size, iv_arr, key_arr);
         } else {
-          result = crypto_accel->cbc_decrypt(out + offset, in + offset,
-                                             process_size, iv, key);
+          result = crypto_accel->cbc_decrypt(out_ptr, in_ptr,
+                                             process_size, iv_arr, key_arr);
         }
+        output.append(out_buf);
       } else {
-        result = cbc_transform(
-            out + offset, in + offset, process_size,
-            iv, key, encrypt);
+        bufferlist _tmp;
+        _tmp.substr_of(input, offset, process_size);
+
+        result = cbc_transform(output, _tmp, iv, key, encrypt);
       }
     }
     return result;
   }
-
 
   bool encrypt(bufferlist& input,
                off_t in_ofs,
@@ -397,50 +354,48 @@ public:
     size_t aligned_size = size / AES_256_IVSIZE * AES_256_IVSIZE;
     size_t unaligned_rest_size = size - aligned_size;
     output.clear();
-    buffer::ptr buf(aligned_size + AES_256_IVSIZE);
-    unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf.c_str());
-    const unsigned char* input_raw = reinterpret_cast<const unsigned char*>(input.c_str());
+    bufferptr _key((char*)key, AES_256_KEYSIZE);
 
     /* encrypt main bulk of data */
-    result = cbc_transform(buf_raw,
-                           input_raw + in_ofs,
-                           aligned_size,
-                           stream_offset, key, true);
+    bufferlist _tmp;
+    _tmp.substr_of(input, in_ofs, aligned_size);
+    result = cbc_transform(output, _tmp, stream_offset, _key, true);
+
     if (result && (unaligned_rest_size > 0)) {
       /* remainder to encrypt */
+      bufferlist unaligned_chunk;
       if (aligned_size % CHUNK_SIZE > 0) {
         /* use last chunk for unaligned part */
-        unsigned char iv[AES_256_IVSIZE] = {0};
-        result = cbc_transform(buf_raw + aligned_size,
-                               buf_raw + aligned_size - AES_256_IVSIZE,
-                               AES_256_IVSIZE,
-                               iv, key, true);
+        bufferptr iv(AES_256_IVSIZE);
+        iv.zero();
+        bufferlist _tmp;
+        _tmp.substr_of(output, aligned_size - AES_256_IVSIZE, AES_256_IVSIZE);
+        result = cbc_transform(unaligned_chunk, _tmp, iv, _key, true);
       } else {
         /* 0 full blocks in current chunk, use IV as base for unaligned part */
-        unsigned char iv[AES_256_IVSIZE] = {0};
-        unsigned char data[AES_256_IVSIZE];
-        prepare_iv(data, stream_offset + aligned_size);
-        result = cbc_transform(buf_raw + aligned_size,
-                               data,
-                               AES_256_IVSIZE,
-                               iv, key, true);
+        bufferptr iv(AES_256_IVSIZE);
+        iv.zero();
+        bufferptr data = prepare_iv(stream_offset + aligned_size);
+        bufferlist _data;
+        _data.append(data);
+        result = cbc_transform(unaligned_chunk, _data, iv, _key, true);
       }
       if (result) {
-        for(size_t i = aligned_size; i < size; i++) {
-          *(buf_raw + i) ^= *(input_raw + in_ofs + i);
+        char* unaligned_chunk_bytes = unaligned_chunk.c_str();
+        const char* unaligned_rest_bytes = input.get_contiguous(in_ofs + aligned_size, unaligned_rest_size);
+        for (size_t i = 0 ; i < unaligned_rest_size ; i++) {
+          unaligned_chunk_bytes[i] ^= unaligned_rest_bytes[i];
         }
+        output.append(unaligned_chunk_bytes, unaligned_rest_size);
       }
     }
     if (result) {
       ldout(cct, 25) << "Encrypted " << size << " bytes"<< dendl;
-      buf.set_length(size);
-      output.append(buf);
     } else {
       ldout(cct, 5) << "Failed to encrypt" << dendl;
     }
     return result;
   }
-
 
   bool decrypt(bufferlist& input,
                off_t in_ofs,
@@ -452,50 +407,50 @@ public:
     size_t aligned_size = size / AES_256_IVSIZE * AES_256_IVSIZE;
     size_t unaligned_rest_size = size - aligned_size;
     output.clear();
-    buffer::ptr buf(aligned_size + AES_256_IVSIZE);
-    unsigned char* buf_raw = reinterpret_cast<unsigned char*>(buf.c_str());
-    unsigned char* input_raw = reinterpret_cast<unsigned char*>(input.c_str());
-
     /* decrypt main bulk of data */
-    result = cbc_transform(buf_raw,
-                           input_raw + in_ofs,
-                           aligned_size,
-                           stream_offset, key, false);
+    bufferptr _key((char*)key, AES_256_KEYSIZE);
+
+    bufferlist _tmp;
+    _tmp.substr_of(input, in_ofs, aligned_size);
+    result = cbc_transform(output,
+                           _tmp,
+                           stream_offset, _key, false);
+
     if (result && unaligned_rest_size > 0) {
       /* remainder to decrypt */
+      bufferlist unaligned_chunk;
       if (aligned_size % CHUNK_SIZE > 0) {
-        /*use last chunk for unaligned part*/
-        unsigned char iv[AES_256_IVSIZE] = {0};
-        result = cbc_transform(buf_raw + aligned_size,
-                               input_raw + in_ofs + aligned_size - AES_256_IVSIZE,
-                               AES_256_IVSIZE,
-                               iv, key, true);
+        /* use last chunk for unaligned part */
+        bufferptr iv(AES_256_IVSIZE);
+        iv.zero();
+        bufferlist _tmp;
+        _tmp.substr_of(input, in_ofs + aligned_size - AES_256_IVSIZE, AES_256_IVSIZE);
+        result = cbc_transform(unaligned_chunk, _tmp, iv, _key, true);
       } else {
         /* 0 full blocks in current chunk, use IV as base for unaligned part */
-        unsigned char iv[AES_256_IVSIZE] = {0};
-        unsigned char data[AES_256_IVSIZE];
-        prepare_iv(data, stream_offset + aligned_size);
-        result = cbc_transform(buf_raw + aligned_size,
-                               data,
-                               AES_256_IVSIZE,
-                               iv, key, true);
+        bufferptr iv(AES_256_IVSIZE);
+        iv.zero();
+        bufferptr data = prepare_iv(stream_offset + aligned_size);
+        bufferlist _data;
+        _data.append(data);
+        result = cbc_transform(unaligned_chunk, _data, iv, _key, true);
       }
       if (result) {
-        for(size_t i = aligned_size; i < size; i++) {
-          *(buf_raw + i) ^= *(input_raw + in_ofs + i);
+        char* unaligned_chunk_bytes = unaligned_chunk.c_str();
+        const char* unaligned_rest_bytes = input.get_contiguous(in_ofs + aligned_size, unaligned_rest_size);
+        for (size_t i = 0 ; i < unaligned_rest_size ; i++) {
+          unaligned_chunk_bytes[i] ^= unaligned_rest_bytes[i];
         }
+        output.append(unaligned_chunk_bytes, unaligned_rest_size);
       }
     }
     if (result) {
       ldout(cct, 25) << "Decrypted " << size << " bytes"<< dendl;
-      buf.set_length(size);
-      output.append(buf);
     } else {
       ldout(cct, 5) << "Failed to decrypt" << dendl;
     }
     return result;
   }
-
 
   void prepare_iv(byte (&iv)[AES_256_IVSIZE], off_t offset) {
     off_t index = offset / AES_256_IVSIZE;
@@ -510,6 +465,24 @@ public:
       i--;
     }
   }
+
+  bufferptr prepare_iv(off_t offset) {
+    bufferptr iv(AES_256_IVSIZE);
+    unsigned char* _iv = (unsigned char*) iv.c_str();
+    off_t index = offset / AES_256_IVSIZE;
+    off_t i = AES_256_IVSIZE - 1;
+    unsigned int val;
+    unsigned int carry = 0;
+    while (i>=0) {
+      val = (index & 0xff) + IV[i] + carry;
+      _iv[i] = val;
+      carry = val >> 8;
+      index = index >> 8;
+      i--;
+    }
+    return iv;
+  }
+
 };
 
 

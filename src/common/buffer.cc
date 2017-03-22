@@ -1488,7 +1488,6 @@ static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
     append_buffer.swap(other.append_buffer);
     other.clear();
   }
-
   void buffer::list::swap(list& other)
   {
     std::swap(_len, other._len);

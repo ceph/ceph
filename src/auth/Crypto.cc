@@ -94,6 +94,9 @@ public:
   CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override {
     return new CryptoNoneKeyHandler;
   }
+  CryptoKeyHandler *get_key_handler(const bufferptr& secret, const bufferptr& iv, string& error) override {
+    return new CryptoNoneKeyHandler;
+  }
 };
 
 
@@ -110,6 +113,7 @@ public:
   int create(bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
   CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
+  CryptoKeyHandler *get_key_handler(const bufferptr& secret, const bufferptr& iv, string& error) override;
 };
 
 #ifdef USE_CRYPTOPP
@@ -129,7 +133,7 @@ public:
     delete dec_key;
   }
 
-  int init(const bufferptr& s, ostringstream& err) {
+  int init(const bufferptr& s, const bufferptr& iv, ostringstream& err) {
     secret = s;
 
     enc_key = new CryptoPP::AES::Encryption(
@@ -200,6 +204,7 @@ public:
 // when we say AES, we mean AES-128
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16
+# define AES_IV_LEN 16
 
 static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 			     CK_MECHANISM_TYPE mechanism,
@@ -275,7 +280,7 @@ public:
       PK11_FreeSlot(slot);
   }
 
-  int init(const bufferptr& s, ostringstream& err) {
+  int init(const bufferptr& s, const bufferptr& iv, ostringstream& err) {
     secret = s;
 
     slot = PK11_GetBestSlot(mechanism, NULL);
@@ -294,13 +299,20 @@ public:
       err << "cannot convert AES key for NSS: " << PR_GetError();
       return -1;
     }
-
+    static_assert(AES_IV_LEN == sizeof(CEPH_AES_IV)-1, "Internal error");
     SECItem ivItem;
     ivItem.type = siBuffer;
     // losing constness due to SECItem.data; IV should never be
     // modified, regardless
-    ivItem.data = (unsigned char*)CEPH_AES_IV;
-    ivItem.len = sizeof(CEPH_AES_IV);
+    if (iv.length() == 0) {
+      ivItem.data = (unsigned char*)CEPH_AES_IV;
+      ivItem.len = sizeof(CEPH_AES_IV)-1;
+    }
+    else
+    {
+      ivItem.data = (unsigned char*)iv.c_str();
+      ivItem.len = iv.length();
+    }
 
     param = PK11_ParamFromIV(mechanism, &ivItem);
     if (!param) {
@@ -353,7 +365,7 @@ CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
 {
   CryptoAESKeyHandler *ckh = new CryptoAESKeyHandler;
   ostringstream oss;
-  if (ckh->init(secret, oss) < 0) {
+  if (ckh->init(secret, bufferptr((unsigned)0), oss) < 0) {
     error = oss.str();
     delete ckh;
     return NULL;
@@ -361,11 +373,397 @@ CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
   return ckh;
 }
 
+CryptoKeyHandler *CryptoAES::get_key_handler(
+    const bufferptr& secret,
+    const bufferptr& iv, string& error)
+{
+  CryptoAESKeyHandler *ckh = new CryptoAESKeyHandler;
+    ostringstream oss;
+    if (ckh->init(secret, iv, oss) < 0) {
+      error = oss.str();
+      delete ckh;
+      return NULL;
+    }
+    return ckh;
+}
+
+class CryptoAES_256_CBC : public CryptoHandler {
+public:
+  CryptoAES_256_CBC() { }
+  ~CryptoAES_256_CBC() override {}
+  int get_type() const override {
+    return CEPH_CRYPTO_AES_256_CBC;
+  }
+  int create(bufferptr& secret) override;
+  int validate_secret(const bufferptr& secret) override;
+  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
+  CryptoKeyHandler *get_key_handler(const bufferptr& secret, const bufferptr& iv, string& error) override;
+
+  static constexpr size_t KEY_SIZE = 256 / 8;
+  static constexpr size_t IV_SIZE = 128 / 8;
+  static constexpr size_t BLOCK_SIZE = 128 / 8;
+};
 
 
+class CryptoAES_256_CBCKeyHandler : public CryptoKeyHandler {
+public:
+  CryptoAES_256_CBCKeyHandler(const bufferptr& key, const bufferptr& iv)
+    : iv(iv) {
+    secret = key;
+  }
+  virtual ~CryptoAES_256_CBCKeyHandler() {}
+
+  int encrypt(const bufferlist& in, bufferlist& out, std::string *error) const {
+    return cbc_transform(in, out, true, error);
+  }
+  int decrypt(const bufferlist& in, bufferlist& out, std::string *error) const {
+    return cbc_transform(in, out, false, error);
+  }
+private:
+  bufferptr iv;
+  int cbc_transform(const bufferlist& in, bufferlist& out,
+      bool encrypt, std::string *error) const;
+  int cbc_transform(
+      const unsigned char* in, size_t size, unsigned char* out,
+      bool encrypt, std::string *error) const ;
+};
+
+int CryptoAES_256_CBCKeyHandler::cbc_transform(
+    const bufferlist& in, bufferlist& out,
+    bool encrypt, std::string *error) const
+{
+  if ((in.length() % CryptoAES_256_CBC::BLOCK_SIZE) != 0) {
+      return -EINVAL;
+    }
+  int result;
+  bufferptr p(in.length());
+  bufferlist _in(in);
+  result = cbc_transform(
+      reinterpret_cast<const unsigned char*>(_in.c_str()),
+      in.length(),
+      reinterpret_cast<unsigned char*>(p.c_str()),
+      encrypt, error);
+  out.append(p);
+  return result;
+}
+
+#ifdef USE_CRYPTOPP
+
+int CryptoAES_256_CBCKeyHandler::cbc_transform(
+    const unsigned char* in, size_t size, unsigned char* out,
+    bool encrypt, std::string *error) const
+{
+  using namespace CryptoPP;
+  if (encrypt) {
+    CBC_Mode< AES >::Encryption e;
+    e.SetKeyWithIV(
+        reinterpret_cast<const byte*>(secret.c_str()), CryptoAES_256_CBC::KEY_SIZE,
+        reinterpret_cast<const byte*>(iv.c_str()), CryptoAES_256_CBC::IV_SIZE);
+    e.ProcessData((byte*)out, (byte*)in, size);
+  } else {
+    CBC_Mode< AES >::Decryption d;
+    d.SetKeyWithIV(
+        reinterpret_cast<const byte*>(secret.c_str()), CryptoAES_256_CBC::KEY_SIZE,
+        reinterpret_cast<const byte*>(iv.c_str()), CryptoAES_256_CBC::IV_SIZE);
+    d.ProcessData((byte*)out, (byte*)in, size);
+  }
+  return true;
+}
+
+#elif defined(USE_NSS)
+
+int CryptoAES_256_CBCKeyHandler::cbc_transform(
+    const unsigned char* in, size_t size, unsigned char* out,
+    bool encrypt, std::string *error) const
+{
+  int result = -EINVAL;
+  PK11SlotInfo *slot;
+  SECItem keyItem;
+  PK11SymKey *symkey;
+  CK_AES_CBC_ENCRYPT_DATA_PARAMS ctr_params = {0};
+  SECItem ivItem;
+  SECItem *param;
+  SECStatus ret;
+  PK11Context *ectx;
+  int written;
+
+  slot = PK11_GetBestSlot(CKM_AES_CBC, NULL);
+  if (slot) {
+    keyItem.type = siBuffer;
+    keyItem.data = reinterpret_cast<unsigned char*>(const_cast<char*>(secret.c_str()));
+    keyItem.len = CryptoAES_256_CBC::KEY_SIZE;
+    symkey = PK11_ImportSymKey(slot, CKM_AES_CBC, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
+    if (symkey) {
+      memcpy(ctr_params.iv, iv.c_str(), CryptoAES_256_CBC::IV_SIZE);
+      ivItem.type = siBuffer;
+      ivItem.data = (unsigned char*)&ctr_params;
+      ivItem.len = sizeof(ctr_params);
+
+      param = PK11_ParamFromIV(CKM_AES_CBC, &ivItem);
+      if (param) {
+        ectx = PK11_CreateContextBySymKey(CKM_AES_CBC, encrypt?CKA_ENCRYPT:CKA_DECRYPT, symkey, param);
+        if (ectx) {
+          ret = PK11_CipherOp(ectx,
+              out, &written, size,
+              in, size);
+          if ((ret == SECSuccess) && (written == (int)size)) {
+            result = 0;
+          }
+          PK11_DestroyContext(ectx, PR_TRUE);
+        }
+        SECITEM_FreeItem(param, PR_TRUE);
+      }
+      PK11_FreeSymKey(symkey);
+    }
+    PK11_FreeSlot(slot);
+  }
+  if (result != 0) {
+    if (error != nullptr) {
+      std::ostringstream ss;
+      ss << "Failed to perform AES-CBC encryption: " << PR_GetError();
+      *error = ss.str();
+    }
+  }
+  return result;
+}
+
+#else
+#error Must define USE_CRYPTOPP or USE_NSS
+#endif
+
+
+
+int CryptoAES_256_CBC::create(bufferptr& secret)
+{
+  bufferlist bl;
+  int r = get_random_bytes(KEY_SIZE, bl);
+  if (r < 0)
+    return r;
+  secret = buffer::ptr(bl.c_str(), bl.length());
+  return 0;
+}
+
+int CryptoAES_256_CBC::validate_secret(const bufferptr& secret)
+{
+  if (secret.length() == KEY_SIZE) {
+    return -EINVAL;
+  }
+  return 0;
+}
+
+CryptoKeyHandler *CryptoAES_256_CBC::get_key_handler(
+    const bufferptr& secret, string& error)
+{
+  static_assert(sizeof(CEPH_AES_IV) - 1 == IV_SIZE, "mismatch in IV size");
+  bufferptr iv(CEPH_AES_IV, IV_SIZE);
+  if (secret.length() != KEY_SIZE) {
+    error = "Improper key size.";
+    return nullptr;
+  }
+  CryptoAES_256_CBCKeyHandler *ckh = new CryptoAES_256_CBCKeyHandler(secret, iv);
+  return ckh;
+}
+
+CryptoKeyHandler *CryptoAES_256_CBC::get_key_handler(
+    const bufferptr& secret, const bufferptr& iv, string& error)
+{
+  if (secret.length() != KEY_SIZE) {
+    error = "Improper key size.";
+    return nullptr;
+  }
+  if (iv.length() != IV_SIZE) {
+    error = "Improper iv size.";
+    return nullptr;
+  }
+  CryptoAES_256_CBCKeyHandler *ckh = new CryptoAES_256_CBCKeyHandler(secret, iv);
+  return ckh;
+}
 
 // --
 
+class CryptoAES_256_ECB : public CryptoHandler {
+public:
+  CryptoAES_256_ECB() { }
+  ~CryptoAES_256_ECB() override {}
+  int get_type() const override {
+    return CEPH_CRYPTO_AES_256_ECB;
+  }
+  int create(bufferptr& secret) override;
+  int validate_secret(const bufferptr& secret) override;
+  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
+  CryptoKeyHandler *get_key_handler(const bufferptr& secret, const bufferptr& iv, string& error) override;
+
+  static constexpr size_t KEY_SIZE = 256 / 8;
+  static constexpr size_t BLOCK_SIZE = 128 / 8;
+};
+
+
+class CryptoAES_256_ECBKeyHandler : public CryptoKeyHandler {
+public:
+  CryptoAES_256_ECBKeyHandler(const bufferptr& key)
+  {
+    secret = key;
+  }
+  virtual ~CryptoAES_256_ECBKeyHandler() {}
+
+  int encrypt(const bufferlist& in, bufferlist& out, std::string *error) const {
+    return ecb_transform(in, out, error);
+  }
+  int decrypt(const bufferlist& in, bufferlist& out, std::string *error) const {
+    return ecb_transform(in, out, error);
+  }
+private:
+  int ecb_transform(const bufferlist& in, bufferlist& out,
+      std::string *error) const;
+  int ecb_transform(
+      const unsigned char* in, size_t size, unsigned char* out,
+      std::string *error) const;
+};
+
+int CryptoAES_256_ECBKeyHandler::ecb_transform(
+    const bufferlist& in, bufferlist& out,
+    std::string *error) const
+{
+  if ((in.length() % CryptoAES_256_ECB::BLOCK_SIZE) != 0) {
+    if (error) {
+      *error = "input size is not multiple of 16";
+    }
+    return -EINVAL;
+  }
+  int result;
+  bufferptr p(in.length());
+  bufferlist _in(in);
+  result = ecb_transform(
+      reinterpret_cast<const unsigned char*>(_in.c_str()),
+      in.length(),
+      reinterpret_cast<unsigned char*>(p.c_str()),
+      error);
+  out.append(p);
+  return result;
+}
+
+#ifdef USE_CRYPTOPP
+
+int CryptoAES_256_ECBKeyHandler::ecb_transform(
+    const unsigned char* data_in, size_t data_size, unsigned char* data_out,
+    std::string *error) const
+{
+  using namespace CryptoPP;
+  int res = -EINVAL;
+  try {
+    ECB_Mode< AES >::Encryption e;
+    e.SetKey(reinterpret_cast<const unsigned char*>(secret.c_str()), CryptoAES_256_ECB::KEY_SIZE);
+    e.ProcessData(data_out, data_in, data_size);
+    res = 0;
+  } catch( CryptoPP::Exception& ex ) {
+    if (error) {
+      std::ostringstream ss;
+      ss << "AES-ECB encryption failed with: " << ex.GetWhat();
+      *error = ss.str();
+    }
+  }
+  return res;
+}
+
+#elif defined USE_NSS
+
+int CryptoAES_256_ECBKeyHandler::ecb_transform(
+    const unsigned char* data_in, size_t data_size, unsigned char* data_out,
+    std::string *error) const
+{
+  int result = -EINVAL;
+  PK11SlotInfo *slot;
+  SECItem keyItem;
+  PK11SymKey *symkey;
+  SECItem *param;
+  SECStatus ret;
+  PK11Context *ectx;
+  int written;
+  unsigned int written2;
+  slot = PK11_GetBestSlot(CKM_AES_ECB, NULL);
+  if (slot) {
+    keyItem.type = siBuffer;
+    keyItem.data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(secret.c_str()));
+    keyItem.len = CryptoAES_256_ECB::KEY_SIZE;
+
+    param = PK11_ParamFromIV(CKM_AES_ECB, NULL);
+    if (param) {
+      symkey = PK11_ImportSymKey(slot, CKM_AES_ECB, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
+      if (symkey) {
+        ectx = PK11_CreateContextBySymKey(CKM_AES_ECB, CKA_ENCRYPT, symkey, param);
+        if (ectx) {
+          ret = PK11_CipherOp(ectx,
+              data_out, &written, data_size,
+              data_in, data_size);
+          if (ret == SECSuccess) {
+            ret = PK11_DigestFinal(ectx,
+                data_out + written, &written2,
+                data_size - written);
+            if (ret == SECSuccess) {
+              result = 0;
+            }
+          }
+          PK11_DestroyContext(ectx, PR_TRUE);
+        }
+        PK11_FreeSymKey(symkey);
+      }
+      SECITEM_FreeItem(param, PR_TRUE);
+    }
+    PK11_FreeSlot(slot);
+  }
+  if (result != 0) {
+    if (error) {
+      std::ostringstream ss;
+      ss << "Failed to perform AES-ECB encryption: " << PR_GetError();
+      *error = ss.str();
+    }
+  }
+  return result;
+}
+
+#else
+#error Must define USE_CRYPTOPP or USE_NSS
+#endif
+
+int CryptoAES_256_ECB::create(bufferptr& secret)
+{
+  bufferlist bl;
+  int r = get_random_bytes(KEY_SIZE, bl);
+  if (r < 0)
+    return r;
+  secret = buffer::ptr(bl.c_str(), bl.length());
+  return 0;
+}
+
+int CryptoAES_256_ECB::validate_secret(const bufferptr& secret)
+{
+  if (secret.length() == KEY_SIZE) {
+    return -EINVAL;
+  }
+  return 0;
+}
+
+CryptoKeyHandler *CryptoAES_256_ECB::get_key_handler(
+    const bufferptr& secret, string& error)
+{
+  if (secret.length() != KEY_SIZE) {
+    error = "Invalid key size";
+    return nullptr;
+  }
+  CryptoAES_256_ECBKeyHandler *ckh = new CryptoAES_256_ECBKeyHandler(secret);
+  return ckh;
+}
+
+CryptoKeyHandler *CryptoAES_256_ECB::get_key_handler(
+    const bufferptr& secret, const bufferptr& iv, string& error)
+{
+  if (secret.length() != KEY_SIZE) {
+    error = "Invalid key size";
+    return nullptr;
+  }
+  CryptoAES_256_ECBKeyHandler *ckh = new CryptoAES_256_ECBKeyHandler(secret);
+  return ckh;
+}
 
 // ---------------------------------------------------
 
@@ -486,6 +884,10 @@ CryptoHandler *CryptoHandler::create(int type)
     return new CryptoNone;
   case CEPH_CRYPTO_AES:
     return new CryptoAES;
+  case CEPH_CRYPTO_AES_256_CBC:
+      return new CryptoAES_256_CBC;
+  case CEPH_CRYPTO_AES_256_ECB:
+      return new CryptoAES_256_ECB;
   default:
     return NULL;
   }
