@@ -28,4 +28,7 @@ KERNEL!="sr*", IMPORT{program}="/sbin/blkid -o udev -p $tempnode"
 # NEW: by-parttypeuuid links (type.id)
 ENV{ID_PART_ENTRY_SCHEME}=="gpt", ENV{ID_PART_ENTRY_TYPE}=="?*", ENV{ID_PART_ENTRY_UUID}=="?*", SYMLINK+="disk/by-parttypeuuid/$env{ID_PART_ENTRY_TYPE}.$env{ID_PART_ENTRY_UUID}"
 
+# when ceph-disk prepares a filestore osd with a journal it makes the symbolic link by disk/by-partuuid but LVM2 currently doesn't seem to populate /dev/disk/by-partuuid.
+ENV{ID_PART_ENTRY_SCHEME}=="gpt", ENV{ID_PART_ENTRY_TYPE}=="?*", ENV{ID_PART_ENTRY_UUID}=="?*", SYMLINK+="disk/by-partuuid/$env{ID_PART_ENTRY_UUID}"
+
 LABEL="persistent_storage_end_two"

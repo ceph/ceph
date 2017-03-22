@@ -693,14 +693,27 @@ def get_partition_dev(dev, pnum):
         partname = get_partition_mpath(dev, pnum)
     else:
         name = get_dev_name(os.path.realpath(dev))
-        for f in os.listdir(os.path.join('/sys/block', name)):
-            if f.startswith(name) and f.endswith(str(pnum)):
-                # we want the shortest name that starts with the base name
-                # and ends with the partition number
-                if not partname or len(f) < len(partname):
-                    partname = f
+        if name.startswith('dm-'):
+            # NOTE: by nicho1as. I'm assuming the mapped device is an LV which
+            # has got a symbolic link as /dev/mapper/<name>p<partition_num>.
+            for f in os.listdir('/dev/mapper'):
+                if f.startswith(os.path.basename(dev)) and f.endswith('p'+str(pnum)):
+                    # we want the shortest name that starts with the base name
+                    # and ends with the partition number
+                    if not partname or len(f) < len(partname):
+                        partname = f
+        else:
+            for f in os.listdir(os.path.join('/sys/block', name)):
+                if f.startswith(name) and f.endswith(str(pnum)):
+                    # we want the shortest name that starts with the base name
+                    # and ends with the partition number
+                    if not partname or len(f) < len(partname):
+                        partname = f
     if partname:
-        return get_dev_path(partname)
+        if name.startswith('dm-'):
+            return '/dev/mapper/'+partname
+        else:
+            return get_dev_path(partname)
     else:
         raise Error('partition %d for %s does not appear to exist' %
                     (pnum, dev))
@@ -1440,9 +1453,16 @@ def get_free_partition_index(dev):
             'BYT;' not in lines):
         raise Error('parted output expected to contain one of ' +
                     'CHH; CYL; or BYT; : ' + lines)
-    if os.path.realpath(dev) not in lines:
-        raise Error('parted output expected to contain ' + dev + ': ' + lines)
-    _, partitions = lines.split(os.path.realpath(dev))
+    _ = ''
+    for line in lines.split('\n'):
+        if line.find(os.path.realpath(dev)) != -1 and line.find(os.path.realpath(dev)) < 2: _ = line
+        elif line.find(dev) != -1 and line.find(dev) < 2: _ = line
+        # NOTE: by nicho1as. why I change the code? the output for an LVM logical volumes was:
+        # "BYT;\n/dev/mapper/vg--ssd1-lv--ssd1:326GB:dm:512:512:gpt:Linux device-mapper (linear):;"
+        # not just "BYT;\n/dev/mapper/dm-4"
+    if _ == '':
+        raise Error('parted output expected to contain "' + dev + '" or "'+ os.path.realpath(dev) +'": ' + lines)
+    _, partitions = lines.split(_)
     partition_numbers = extract_parted_partition_numbers(partitions)
     if partition_numbers:
         return max(partition_numbers) + 1
