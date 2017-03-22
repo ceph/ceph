@@ -1861,8 +1861,6 @@ void PG::activate(ObjectStore::Transaction& t,
 
     state_set(PG_STATE_ACTIVATING);
     release_pg_backoffs();
-  }
-  if (is_primary()) {
     projected_last_update = info.last_update;
   }
   if (acting.size() >= pool.info.min_size) {
@@ -6051,14 +6049,8 @@ boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& no
 {
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 7) << "handle_pg_notify from osd." << notevt.from << dendl;
-  if (pg->peer_info.count(notevt.from) &&
-      pg->peer_info[notevt.from].last_update == notevt.notify.info.last_update) {
-    ldout(pg->cct, 10) << *pg << " got dup osd." << notevt.from << " info "
-		       << notevt.notify.info << ", identical to ours" << dendl;
-  } else {
-    pg->proc_replica_info(
-      notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
-  }
+  pg->proc_replica_info(
+    notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
   return discard_event();
 }
 
@@ -7077,7 +7069,6 @@ void PG::RecoveryState::Active::exit()
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
-  pg->state_clear(PG_STATE_REPLAY);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_active_latency, dur);
   pg->agent_stop();
@@ -7761,16 +7752,12 @@ boost::statechart::result PG::RecoveryState::Incomplete::react(const AdvMap &adv
 boost::statechart::result PG::RecoveryState::Incomplete::react(const MNotifyRec& notevt) {
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 7) << "handle_pg_notify from osd." << notevt.from << dendl;
-  if (pg->peer_info.count(notevt.from) &&
-      pg->peer_info[notevt.from].last_update == notevt.notify.info.last_update) {
-    ldout(pg->cct, 10) << *pg << " got dup osd." << notevt.from << " info " << notevt.notify.info
-		       << ", identical to ours" << dendl;
-    return discard_event();
-  } else {
-    pg->proc_replica_info(
-      notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
-    // try again!
+  if (pg->proc_replica_info(
+    notevt.from, notevt.notify.info, notevt.notify.epoch_sent)) {
+    // We got something new, try again!
     return transit< GetLog >();
+  } else {
+    return discard_event();
   }
 }
 
