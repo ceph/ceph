@@ -328,6 +328,31 @@ struct SnapshotNamespaceOnDisk {
 };
 WRITE_CLASS_ENCODER(SnapshotNamespaceOnDisk);
 
+// TODO: maybe boost::variant?
+struct PerfCounter {
+  uint32_t type;
+  uint64_t u64;
+  uint64_t avgcount;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void merge(const PerfCounter &rhs);
+
+  PerfCounter& operator=(const PerfCounter &rhs);
+  bool operator==(const PerfCounter &rhs) const;
+};
+WRITE_CLASS_ENCODER(PerfCounter);
+
+struct PerfCounters {
+  std::map<std::string, PerfCounter> counters;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void merge(const PerfCounters &rhs_old);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(PerfCounters);
+
 } // namespace rbd
 } // namespace cls
 

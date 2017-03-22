@@ -71,6 +71,7 @@ CLS_NAME(rbd)
 #define RBD_METADATA_KEY_PREFIX "metadata_"
 
 #define GROUP_SNAP_SEQ "snap_seq"
+#define RBD_IMAGE_PERF_KEY "image_perf"
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -4872,6 +4873,60 @@ int image_get_group(cls_method_context_t hctx,
   return 0;
 }
 
+int image_perf_update(cls_method_context_t hctx, bufferlist *in,
+                   bufferlist *out)
+{
+  cls::rbd::PerfCounters perf;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(perf, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  cls::rbd::PerfCounters old_perf;
+  int r = read_key(hctx, RBD_IMAGE_PERF_KEY, &old_perf);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("Could not read image perf off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  perf.merge(old_perf);
+
+  bufferlist bl;
+  ::encode(perf, bl);
+  r = cls_cxx_map_set_val(hctx, RBD_IMAGE_PERF_KEY, &bl);
+  if (r < 0) {
+    CLS_ERR("error writing image perf to disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+int image_perf_reset(cls_method_context_t hctx, bufferlist *in,
+                     bufferlist *out)
+{
+  int r = remove_key(hctx, RBD_IMAGE_PERF_KEY);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+int image_perf_get(cls_method_context_t hctx, bufferlist *in,
+                    bufferlist *out)
+{
+  cls::rbd::PerfCounters perf;
+  int r = read_key(hctx, RBD_IMAGE_PERF_KEY, &perf);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("Could not read image perf off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  ::encode(perf, *out);
+  return 0;
+}
+
 CLS_INIT(rbd)
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -4962,6 +5017,9 @@ CLS_INIT(rbd)
   cls_method_handle_t h_image_add_group;
   cls_method_handle_t h_image_remove_group;
   cls_method_handle_t h_image_get_group;
+  cls_method_handle_t h_image_perf_update;
+  cls_method_handle_t h_image_perf_reset;
+  cls_method_handle_t h_image_perf_get;
 
   cls_register("rbd", &h_class);
   cls_register_cxx_method(h_class, "create",
@@ -5227,5 +5285,15 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "image_get_group",
 			  CLS_METHOD_RD,
 			  image_get_group, &h_image_get_group);
+  /* methods for image perf report */
+  cls_register_cxx_method(h_class, "image_perf_update",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          image_perf_update, &h_image_perf_update);
+  cls_register_cxx_method(h_class, "image_perf_reset",
+                          CLS_METHOD_WR,
+                          image_perf_reset, &h_image_perf_reset);
+  cls_register_cxx_method(h_class, "image_perf_get",
+                          CLS_METHOD_RD,
+                          image_perf_get, &h_image_perf_get);
   return;
 }

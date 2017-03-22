@@ -4,6 +4,7 @@
 #include <boost/variant.hpp>
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Formatter.h"
+#include "common/perf_counters.h"
 
 namespace cls {
 namespace rbd {
@@ -446,6 +447,97 @@ std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns) {
 std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns) {
   os << "[unknown]";
   return os;
+}
+
+void PerfCounter::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(type, bl);
+  ::encode(u64, bl);
+  ::encode(avgcount, bl);
+  ENCODE_FINISH(bl);
+}
+
+void PerfCounter::decode(bufferlist::iterator &it) {
+  DECODE_START(1, it);
+  ::decode(type, it);
+  ::decode(u64, it);
+  ::decode(avgcount, it);
+  DECODE_FINISH(it);
+}
+
+void PerfCounter::merge(const PerfCounter &rhs) {
+  u64 += rhs.u64;
+  avgcount += rhs.avgcount;
+}
+
+PerfCounter& PerfCounter::operator=(const PerfCounter &rhs) {
+  if (&rhs == this)
+    return *this;
+
+  type = rhs.type;
+  u64 = rhs.u64;
+  avgcount = rhs.avgcount;
+  return *this;
+}
+
+bool PerfCounter::operator==(const PerfCounter &rhs) const {
+  return (type == rhs.type &&
+          u64 == rhs.u64 &&
+          avgcount == rhs.avgcount);
+}
+
+void PerfCounters::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(counters, bl);
+  ENCODE_FINISH(bl);
+}
+
+void PerfCounters::decode(bufferlist::iterator &it) {
+  DECODE_START(1, it);
+  ::decode(counters, it);
+  DECODE_FINISH(it);
+}
+
+void PerfCounters::merge(const PerfCounters &rhs_old) {
+  for (auto &c : rhs_old.counters) {
+    if (counters.count(c.first)) {
+      counters[c.first].merge(c.second);
+    }
+  }
+}
+
+void PerfCounters::dump(Formatter *f) const {
+  f->open_object_section("perf counters");
+  for (auto &c : counters) {
+    auto &d = c.second;
+
+    if (d.type & PERFCOUNTER_HISTOGRAM) {
+      continue;
+    }
+
+    if (d.type & PERFCOUNTER_LONGRUNAVG) {
+      f->open_object_section(c.first.c_str());
+      if (d.type & PERFCOUNTER_U64) {
+        f->dump_unsigned("count", d.avgcount);
+        f->dump_unsigned("sum", d.u64);
+      } else if (d.type & PERFCOUNTER_TIME) {
+        f->dump_unsigned("count", d.avgcount);
+        f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
+                                d.u64 / 1000000000ull,
+                                d.u64 % 1000000000ull);
+      }
+      f->close_section();
+    } else {
+      if (d.type & PERFCOUNTER_U64) {
+        f->dump_unsigned(c.first.c_str(), d.u64);
+      } else if (d.type & PERFCOUNTER_TIME) {
+        f->dump_format_unquoted(c.first.c_str(), "%" PRId64 ".%09" PRId64,
+                                d.u64 / 1000000000ull,
+                                d.u64 % 1000000000ull);
+      }
+    }
+  }
+  f->close_section();
 }
 
 } // namespace rbd

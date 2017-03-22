@@ -1963,5 +1963,56 @@ namespace librbd {
       return image_get_group_finish(&iter, group_spec);
     }
 
+    void image_perf_update(librados::ObjectWriteOperation *op,
+                           const cls::rbd::PerfCounters &perf)
+    {
+      bufferlist bl;
+      ::encode(perf, bl);
+      op->exec("rbd", "image_perf_update", bl);
+    }
+
+    int image_perf_reset(librados::IoCtx *ioctx, const std::string &oid)
+    {
+      bufferlist in, out;
+      return ioctx->exec(oid, "rbd", "image_perf_reset", in, out);
+    }
+
+    int image_perf_get(librados::IoCtx *ioctx, const std::string &oid,
+                       cls::rbd::PerfCounters *perf)
+    {
+      librados::ObjectReadOperation op;
+      image_perf_get_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator iter = out_bl.begin();
+      r = image_perf_get_finish(&iter, perf);
+      if (r < 0) {
+        return r;
+      }
+      return 0;
+    }
+
+    void image_perf_get_start(librados::ObjectReadOperation *op)
+    {
+      bufferlist empty_bl;
+      op->exec("rbd", "image_perf_get", empty_bl);
+    }
+
+    int image_perf_get_finish(bufferlist::iterator *iter,
+                              cls::rbd::PerfCounters *perf)
+    {
+      try {
+        ::decode(*perf, *iter);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
   } // namespace cls_client
 } // namespace librbd

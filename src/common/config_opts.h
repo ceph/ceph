@@ -1327,6 +1327,7 @@ OPTION(rbd_validate_names, OPT_BOOL, true) // true if image specs should be vali
 OPTION(rbd_auto_exclusive_lock_until_manual_request, OPT_BOOL, true) // whether to automatically acquire/release exclusive lock until it is explicitly requested, i.e. before we know the user of librbd is properly using the lock API
 OPTION(rbd_mirroring_resync_after_disconnect, OPT_BOOL, false) // automatically start image resync after mirroring is disconnected due to being laggy
 OPTION(rbd_mirroring_replay_delay, OPT_INT, 0) // time-delay in seconds for rbd-mirror asynchronous replication
+OPTION(rbd_perf_report_interval, OPT_INT, 10)
 
 /*
  * The following options change the behavior for librbd's image creation methods that

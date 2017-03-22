@@ -428,6 +428,12 @@ const std::string &PerfCounters::get_name() const
   return m_name;
 }
 
+void PerfCounters::with_counters(std::function<void(
+    const perf_counter_data_vec_t &)> fn) const
+{
+  fn(m_data);
+}
+
 PerfCounters::PerfCounters(CephContext *cct, const std::string &name,
 	   int lower_bound, int upper_bound)
   : m_cct(cct),

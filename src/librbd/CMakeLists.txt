@@ -19,12 +19,14 @@ set(librbd_internal_srcs
   MirroringWatcher.cc
   ObjectMap.cc
   Operations.cc
+  PerfReporter.cc
   Utils.cc
   Watcher.cc
   api/DiffIterate.cc
   api/Group.cc
   api/Image.cc
   api/Mirror.cc
+  api/Perf.cc
   cache/ImageWriteback.cc
   cache/PassthroughImageCache.cc
   exclusive_lock/AutomaticPolicy.cc

@@ -400,6 +400,16 @@ namespace librbd {
     int image_get_group(librados::IoCtx *ioctx, const std::string &oid,
 			cls::rbd::GroupSpec *group_spec);
 
+    // image perf report functions
+    void image_perf_update(librados::ObjectWriteOperation *op,
+                           const cls::rbd::PerfCounters &perf);
+    int image_perf_reset(librados::IoCtx *ioctx, const std::string &oid);
+    int image_perf_get(librados::IoCtx *ioctx, const std::string &oid,
+                       cls::rbd::PerfCounters *perf);
+    void image_perf_get_start(librados::ObjectReadOperation *op);
+    int image_perf_get_finish(bufferlist::iterator *iter,
+                              cls::rbd::PerfCounters *perf);
+
   } // namespace cls_client
 } // namespace librbd
 #endif // CEPH_LIBRBD_CLS_RBD_CLIENT_H
