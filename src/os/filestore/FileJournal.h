@@ -390,6 +390,7 @@ private:
 
  public:
   FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true, bool faio=false) :
+    throttle(g_conf->filestore_caller_concurrency, g_ceph_context),
     Journal(fsid, fin, sync_cond),
     finisher_lock("FileJournal::finisher_lock", false, true, false, g_ceph_context),
     journaled_seq(0),
