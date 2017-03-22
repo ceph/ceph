@@ -1699,6 +1699,13 @@ void OSDMap::_apply_remap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
   pg_t pg = pi.raw_pg_to_pg(raw_pg);
   auto p = pg_remap.find(pg);
   if (p != pg_remap.end()) {
+    // make sure targets aren't marked out
+    for (auto osd : p->second) {
+      if (osd != CRUSH_ITEM_NONE && osd < max_osd && osd_weight[osd] == 0) {
+	// reject/ignore the explicit mapping
+	return;
+      }
+    }
     *raw = p->second;
     return;
   }
@@ -1712,11 +1719,16 @@ void OSDMap::_apply_remap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
       bool exists = false;
       ssize_t pos = -1;
       for (unsigned i = 0; i < raw->size(); ++i) {
-	if ((*raw)[i] == r.second) {
+	int osd = (*raw)[i];
+	if (osd == r.second) {
 	  exists = true;
 	  break;
 	}
-	if ((*raw)[i] == r.first && pos < 0) {
+	// ignore mapping if target is marked out (or invalid osd id)
+	if (osd == r.first &&
+	    pos < 0 &&
+	    !(r.second != CRUSH_ITEM_NONE && r.second < max_osd &&
+	      osd_weight[r.second] == 0)) {
 	  pos = i;
 	}
       }
