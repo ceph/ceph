@@ -3643,6 +3643,16 @@ void RGWPutACLs::execute()
     return;
   }
 
+  if (s->object.empty() && !store->is_meta_master()) {
+    bufferlist in_data;
+    in_data.append(data, len);
+    op_ret = forward_request_to_master(s, NULL, store, in_data, NULL);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
     ldout(s->cct, 15) << "Old AccessControlPolicy";
     policy->to_xml(*_dout);
