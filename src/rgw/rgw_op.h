@@ -1768,13 +1768,11 @@ public:
 
 class RGWGetObjLayout : public RGWOp {
 protected:
-  RGWRados::Object *target{nullptr};
   RGWObjManifest *manifest{nullptr};
   rgw_raw_obj head_obj;
 
 public:
   RGWGetObjLayout() {
-    delete target;
   }
 
   int check_caps(RGWUserCaps& caps) {
