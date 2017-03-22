@@ -26,36 +26,39 @@
 class RDMAWorker;
 class RDMADispatcher;
 
+typedef Infiniband::QueuePair QueuePair;
+
 class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
+protected:
+  CephContext *cct;
+
+  Infiniband* infiniband;
+  RDMADispatcher* dispatcher;
+  RDMAWorker* worker;
+  Device *ibdev;
+  int ibport;
+  Infiniband::QueuePair *qp;
+  bool is_server;
+  bool active;// qp is active ?
+  int connected;
+
+  void register_qp(QueuePair *qp);
+  void notify();
+
  public:
   typedef Infiniband::MemoryManager::Chunk Chunk;
   typedef Infiniband::CompletionChannel CompletionChannel;
   typedef Infiniband::CompletionQueue CompletionQueue;
 
  private:
-  CephContext *cct;
-  Infiniband::QueuePair *qp;
-  Device *ibdev;
-  int ibport;
-  IBSYNMsg peer_msg;
-  IBSYNMsg my_msg;
-  int connected;
   int error;
-  Infiniband* infiniband;
-  RDMADispatcher* dispatcher;
-  RDMAWorker* worker;
   std::vector<Chunk*> buffers;
   int notify_fd = -1;
   bufferlist pending_bl;
 
   Mutex lock;
   std::vector<ibv_wc> wc;
-  bool is_server;
-  EventCallbackRef con_handler;
-  int tcp_fd = -1;
-  bool active;// qp is active ?
 
-  void notify();
   ssize_t read_buffers(char* buf, size_t len);
   int post_work_request(std::vector<Chunk*>&);
 
@@ -78,35 +81,19 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   virtual int fd() const override { return notify_fd; }
   void fault();
   const char* get_qp_state() { return Infiniband::qp_state_string(qp->get_state()); }
-  ssize_t submit(bool more);
-  int activate();
-  void fin();
-  void handle_connection();
-  void cleanup();
-  void set_accept_fd(int sd);
-  int try_connect(const entity_addr_t&, const SocketOptions &opt);
+  virtual void fin();
+  virtual void cleanup() = 0;
+  virtual int try_connect(const entity_addr_t&, const SocketOptions &opt) = 0;
+  virtual ssize_t submit(bool more);
+  virtual int remote_qpn() = 0;
 
-  class C_handle_connection : public EventCallback {
-    RDMAConnectedSocketImpl *csi;
-    bool active;
-   public:
-    C_handle_connection(RDMAConnectedSocketImpl *w): csi(w), active(true) {}
-    void do_request(int fd) {
-      if (active)
-        csi->handle_connection();
-    }
-    void close() {
-      active = false;
-    }
-  };
 };
 
 class RDMAServerSocketImpl : public ServerSocketImpl {
+protected:
   CephContext *cct;
   Device *ibdev;
   int ibport;
-  NetHandler net;
-  int server_setup_socket;
   Infiniband* infiniband;
   RDMADispatcher *dispatcher;
   RDMAWorker *worker;
@@ -115,11 +102,10 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
  public:
   RDMAServerSocketImpl(CephContext *cct, Infiniband* i, RDMADispatcher *s, RDMAWorker *w, entity_addr_t& a);
 
-  int listen(entity_addr_t &sa, const SocketOptions &opt);
-  virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
-  virtual void abort_accept() override;
-  virtual int fd() const override { return server_setup_socket; }
-  int get_fd() { return server_setup_socket; }
+  virtual int listen(entity_addr_t &sa, const SocketOptions &opt) = 0;
+  virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) = 0;
+  virtual void abort_accept() = 0;
+  virtual int fd() const = 0;
 };
 
 #endif
