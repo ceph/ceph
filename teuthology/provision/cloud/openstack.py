@@ -370,22 +370,25 @@ class OpenStackProvisioner(base.Provisioner):
 
     @property
     def node(self):
-        if not hasattr(self, '_node'):
-            nodes = retry(self.provider.driver.list_nodes)
-            for node in nodes:
-                matches = [node for node in nodes if node.name == self.name]
-                msg = "Unknown error locating %s"
-                if not matches:
-                    msg = "No nodes found with name '%s'" % self.name
-                    log.warn(msg)
-                    return
-                elif len(matches) > 1:
-                    msg = "More than one node found with name '%s'"
-                elif len(matches) == 1:
-                    self._node = matches[0]
-                    break
-                raise RuntimeError(msg % self.name)
-        return self._node
+        if hasattr(self, '_node'):
+            return self._node
+        matches = self._find_nodes()
+        msg = "Unknown error locating %s"
+        if not matches:
+            msg = "No nodes found with name '%s'" % self.name
+            log.warn(msg)
+            return
+        elif len(matches) > 1:
+            msg = "More than one node found with name '%s'"
+        elif len(matches) == 1:
+            self._node = matches[0]
+            return self._node
+        raise RuntimeError(msg % self.name)
+
+    def _find_nodes(self):
+        nodes = retry(self.provider.driver.list_nodes)
+        matches = [node for node in nodes if node.name == self.name]
+        return matches
 
     def _destroy(self):
         if not self.node:
