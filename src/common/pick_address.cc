@@ -32,7 +32,7 @@ static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
   get_str_list(networks, nets);
 
   for(std::list<string>::iterator s = nets.begin(); s != nets.end(); ++s) {
-      struct sockaddr net;
+      struct sockaddr_storage net;
       unsigned int prefix_len;
 
       if (!parse_network(s->c_str(), &net, &prefix_len)) {
@@ -40,7 +40,7 @@ static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
 	exit(1);
       }
 
-      const struct sockaddr *found = find_ip_in_subnet(ifa, &net, prefix_len);
+      const struct sockaddr *found = find_ip_in_subnet(ifa, (struct sockaddr *) &net, prefix_len);
       if (found)
 	return found;
     }
