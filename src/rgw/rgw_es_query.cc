@@ -130,6 +130,7 @@ class ESQueryNode_Bool : public ESQueryNode {
   ESQueryNode *second{nullptr};
 public:
   ESQueryNode_Bool() {}
+  ESQueryNode_Bool(const string& _op, ESQueryNode *_first, ESQueryNode *_second) : op(_op), first(_first), second(_second) {}
   bool init(ESQueryStack *s) {
     bool valid = s->pop(&op);
     if (!valid) {
@@ -190,6 +191,11 @@ public:
 class ESQueryNode_Op_Equal : public ESQueryNode_Op {
 public:
   ESQueryNode_Op_Equal() {}
+  ESQueryNode_Op_Equal(const string& f, const string& v) {
+    op = "==";
+    field = f;
+    val = v;
+  }
 
   virtual void dump(Formatter *f) const {
     f->open_object_section("term");
@@ -464,6 +470,11 @@ bool ESQueryCompiler::compile() {
 
   if (!convert(infix)) {
     return false;
+  }
+
+  for (auto& c : eq_conds) {
+    ESQueryNode_Op_Equal *eq_node = new ESQueryNode_Op_Equal(c.first, c.second);
+    query_root = new ESQueryNode_Bool("and", eq_node, query_root);
   }
 
   return true;

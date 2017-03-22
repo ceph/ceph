@@ -131,7 +131,15 @@ void RGWMetadataSearchOp::execute()
   if (op_ret < 0)
     return;
 
-  ESQueryCompiler es_query(expression);
+  list<pair<string, string> > conds;
+
+  conds.push_back(make_pair("permissions", s->user->user_id.to_str()));
+
+  if (!s->bucket_name.empty()) {
+    conds.push_back(make_pair("bucket", s->bucket_name));
+  }
+
+  ESQueryCompiler es_query(expression, &conds);
   
   bool valid = es_query.compile();
   if (!valid) {
@@ -204,6 +212,7 @@ public:
     for (auto& i : response.hits.hits) {
       es_index_obj_response& e = i.source;
       s->formatter->open_object_section("Contents");
+      s->formatter->dump_string("Bucket", e.bucket);
       s->formatter->dump_string("Key", e.key.name);
       string instance = (!e.key.instance.empty() ? e.key.instance : "null");
       s->formatter->dump_string("Instance", instance.c_str());
