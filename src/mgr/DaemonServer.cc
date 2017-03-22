@@ -217,8 +217,10 @@ bool DaemonServer::ms_dispatch(Message *m)
 
 void DaemonServer::shutdown()
 {
+  dout(10) << __func__ << dendl;
   msgr->shutdown();
   msgr->wait();
+  dout(10) << __func__ << " done" << dendl;
 }
 
 
