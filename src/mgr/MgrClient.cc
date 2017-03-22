@@ -289,7 +289,10 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 
   ldout(cct, 20) << "cmd: " << cmd << dendl;
 
-  assert(map.epoch > 0);
+  if (map.epoch == 0) {
+    ldout(cct,20) << " no MgrMap, assuming EACCES" << dendl;
+    return -EACCES;
+  }
 
   auto &op = command_table.start_command();
   op.cmd = cmd;
@@ -303,7 +306,6 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
     MCommand *m = op.get_message({});
     session->con->send_message(m);
   }
-
   return 0;
 }
 
