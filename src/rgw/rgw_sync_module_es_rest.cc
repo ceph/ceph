@@ -210,6 +210,14 @@ public:
       dump_time(s, "LastModified", &e.meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", e.meta.etag.c_str());
       dump_owner(s, e.owner.get_id(), e.owner.get_display_name());
+      s->formatter->open_array_section("CustomMetadata");
+      for (auto& m : e.meta.custom_str) {
+        s->formatter->open_object_section("Entry");
+        s->formatter->dump_string("Name", m.first.c_str());
+        s->formatter->dump_string("Value", m.second);
+        s->formatter->close_section();
+      }
+      s->formatter->close_section();
       s->formatter->close_section();
       rgw_flush_formatter(s, s->formatter);
     };
