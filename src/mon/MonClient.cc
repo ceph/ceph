@@ -898,8 +898,8 @@ int MonClient::wait_auth_rotating(double timeout)
   utime_t now = ceph_clock_now();
   utime_t until = now;
   until += timeout;
-
-  if (auth->get_protocol() == CEPH_AUTH_NONE)
+  int protocol = auth->get_protocol();
+  if (protocol == CEPH_AUTH_NONE || protocol == CEPH_AUTH_UNKNOWN)
     return 0;
   
   if (!rotating_secrets)

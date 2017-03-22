@@ -18,6 +18,7 @@
 #include "AuthClientHandler.h"
 #include "cephx/CephxClientHandler.h"
 #include "none/AuthNoneClientHandler.h"
+#include "unknown/AuthUnknownClientHandler.h"
 
 AuthClientHandler *get_auth_client_handler(CephContext *cct, int proto,
 					   RotatingKeyRing *rkeys)
@@ -27,6 +28,8 @@ AuthClientHandler *get_auth_client_handler(CephContext *cct, int proto,
     return new CephxClientHandler(cct, rkeys);
   case CEPH_AUTH_NONE:
     return new AuthNoneClientHandler(cct, rkeys);
+  case CEPH_AUTH_UNKNOWN:
+    return new AuthUnknownClientHandler(cct, rkeys);
   default:
     return NULL;
   }
