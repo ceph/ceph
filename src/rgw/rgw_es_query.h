@@ -69,8 +69,14 @@ class ESQueryCompiler {
 
   bool convert(list<string>& infix);
 
+  list<pair<string, string> > eq_conds;
+
 public:
-  ESQueryCompiler(const string& query) : parser(query) {}
+  ESQueryCompiler(const string& query, list<pair<string, string> > *prepend_eq_conds) : parser(query) {
+    if (prepend_eq_conds) {
+      eq_conds = std::move(*prepend_eq_conds);
+    }
+  }
   ~ESQueryCompiler();
 
   bool compile();
