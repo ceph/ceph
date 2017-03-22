@@ -18,6 +18,7 @@
 #include "auth/Auth.h"
 #include "common/Finisher.h"
 #include "common/Timer.h"
+#include "common/LogClient.h"
 
 #include "DaemonServer.h"
 #include "PyModules.h"
@@ -28,11 +29,21 @@
 class MMgrMap;
 class Mgr;
 
-class MgrStandby : public Dispatcher {
+class MgrStandby : public Dispatcher,
+		   public md_config_obs_t {
+public:
+  // config observer bits
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
+                         const std::set <std::string> &changed) override;
+
 protected:
   MonClient *monc;
-  Objecter *objecter;
   Messenger *client_messenger;
+  Objecter *objecter;
+
+  LogClient log_client;
+  LogChannelRef clog, audit_clog;
 
   Mutex lock;
   SafeTimer timer;
@@ -42,6 +53,7 @@ protected:
   std::string state_str();
 
   void handle_mgr_map(MMgrMap *m);
+  void _update_log_config();
 
 public:
   MgrStandby();

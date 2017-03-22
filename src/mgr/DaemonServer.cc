@@ -28,9 +28,11 @@
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
 
 DaemonServer::DaemonServer(MonClient *monc_,
-  DaemonStateIndex &daemon_state_,
-  ClusterState &cluster_state_,
-  PyModules &py_modules_)
+			   DaemonStateIndex &daemon_state_,
+			   ClusterState &cluster_state_,
+			   PyModules &py_modules_,
+			   LogChannelRef clog_,
+			   LogChannelRef audit_clog_)
     : Dispatcher(g_ceph_context),
       client_byte_throttler(new Throttle(g_ceph_context, "mgr_client_bytes",
 					 g_conf->mgr_client_bytes)),
@@ -53,6 +55,8 @@ DaemonServer::DaemonServer(MonClient *monc_,
       daemon_state(daemon_state_),
       cluster_state(cluster_state_),
       py_modules(py_modules_),
+      clog(clog_),
+      audit_clog(audit_clog_),
       auth_registry(g_ceph_context,
                     g_conf->auth_supported.empty() ?
                       g_conf->auth_cluster_required :

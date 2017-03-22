@@ -37,7 +37,8 @@
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 
-Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_) :
+Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
+	 LogChannelRef clog_, LogChannelRef audit_clog_) :
   monc(monc_),
   objecter(objecter_),
   client_messenger(clientm_),
@@ -47,7 +48,7 @@ Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_) :
   waiting_for_fs_map(NULL),
   py_modules(daemon_state, cluster_state, *monc, finisher),
   cluster_state(monc, nullptr),
-  server(monc, daemon_state, cluster_state, py_modules),
+  server(monc, daemon_state, cluster_state, py_modules, clog_, audit_clog_),
   initialized(false),
   initializing(false)
 {
