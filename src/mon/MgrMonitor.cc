@@ -299,6 +299,9 @@ void MgrMonitor::send_digests()
 
 void MgrMonitor::tick()
 {
+  if (!is_active() || !mon->is_leader())
+    return;
+
   const utime_t now = ceph_clock_now();
   utime_t cutoff = now;
   cutoff -= g_conf->mon_mgr_beacon_grace;
