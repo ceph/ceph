@@ -504,14 +504,14 @@ start_mon() {
     local count=0
     for f in a b c d e f g h i j k l m n o p q r s t u v w x y z
     do
+        [ $count -eq $CEPH_NUM_MON ] && break;
+        count=$(($count + 1))
         if [ -z "$MONS" ];
         then
 	        MONS="$f"
         else
 	        MONS="$MONS $f"
         fi
-        count=$(($count + 1))
-        [ $count -eq $CEPH_NUM_MON ] && break;
     done
 
     if [ "$new" -eq 1 ]; then
@@ -600,6 +600,8 @@ start_mgr() {
     local mgr=0
     for name in x y z a b c d e f g h i j k l m n o p
     do
+        [ $mgr -eq $CEPH_NUM_MGR ] && break
+        mgr=$(($mgr + 1))
         if [ "$new" -eq 1 ]; then
             mkdir -p $CEPH_DEV_DIR/mgr.$name
             key_fn=$CEPH_DEV_DIR/mgr.$name/keyring
@@ -614,9 +616,6 @@ EOF
 
         echo "Starting mgr.${name}"
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name
-
-        mgr=$(($mgr + 1))
-        [ $mgr -eq $CEPH_NUM_MGR ] && break
     done
 }
 
@@ -640,6 +639,9 @@ start_mds() {
     local mds=0
     for name in a b c d e f g h i j k l m n o p
     do
+	    [ $mds -eq $CEPH_NUM_MDS ] && break
+	    mds=$(($mds + 1))
+
 	    if [ "$new" -eq 1 ]; then
 	        prun mkdir -p "$CEPH_DEV_DIR/mds.$name"
 	        key_fn=$CEPH_DEV_DIR/mds.$name/keyring
@@ -670,9 +672,6 @@ EOF
 	    if [ "$standby" -eq 1 ]; then
 	        run 'mds' $CEPH_BIN/ceph-mds -i ${name}s $ARGS $CMDS_ARGS
 	    fi
-
-	    mds=$(($mds + 1))
-	    [ $mds -eq $CEPH_NUM_MDS ] && break
 
         #valgrind --tool=massif $CEPH_BIN/ceph-mds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
         #$CEPH_BIN/ceph-mds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
@@ -823,12 +822,12 @@ fi
 fs=0
 for name in a b c d e f g h i j k l m n o p
 do
+    [ $fs -eq $CEPH_NUM_FS ] && break
+    fs=$(($fs + 1))
     if [ "$CEPH_MAX_MDS" -gt 1 ]; then
         ceph_adm fs set "cephfs_${name}" allow_multimds true --yes-i-really-mean-it
         ceph_adm fs set "cephfs_${name}" max_mds "$CEPH_MAX_MDS"
     fi
-    fs=$(($fs + 1))
-    [ $fs -eq $CEPH_NUM_FS ] && break
 done
 
 # mgr
