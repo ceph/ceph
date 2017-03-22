@@ -169,7 +169,6 @@ struct es_obj_metadata {
     }
     f->close_section();
   }
-
 };
 
 class RGWElasticInitConfigCBCR : public RGWCoroutine {
@@ -331,6 +330,10 @@ RGWDataSyncModule *RGWElasticSyncModuleInstance::get_data_handler()
 RGWRESTConn *RGWElasticSyncModuleInstance::get_rest_conn()
 {
   return data_handler->get_rest_conn();
+}
+
+string RGWElasticSyncModuleInstance::get_index_path(const RGWRealm& realm) {
+  return es_get_index_path(realm);
 }
 
 RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr *orig) {
