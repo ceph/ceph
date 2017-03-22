@@ -350,6 +350,48 @@ static inline int ____ibv_query_port(const char *f, int l,
 }
 #define ___ibv_query_port(...)        ____ibv_query_port(__func__, __LINE__, __VA_ARGS__)
 
+#if 0
+static inline int _ibv_query_qp(const char *f, int l,
+                                struct ibv_qp *qp, struct ibv_qp_attr *attr,
+                                int attr_mask,
+                                struct ibv_qp_init_attr *init_attr)
+{
+  auto ret = ibv_create_srq(pd, srq_init_attr);
+  
+  ibdbg_ldout <<
+    " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define ibv_query_qp(...)             _ibv_query_qp(__func__, __LINE__, __VA_ARGS__)
+
+static inline struct ibv_mr *_ibv_reg_mr(const char *f, int l,
+                                         struct ibv_pd *pd, void *addr,
+                                         size_t length, int access)
+{
+  auto ret = ibv_create_srq(pd, srq_init_attr);
+  
+  ibdbg_ldout <<
+    " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define ibv_reg_mr(...)               _ibv_reg_mr(__func__, __LINE__, __VA_ARGS__)
+
+static inline int _ibv_dereg_mr(const char *f, int l,
+                                struct ibv_mr *mr)
+{
+  auto ret = ibv_create_srq(pd, srq_init_attr);
+  
+  ibdbg_ldout <<
+    " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define ibv_dereg_mr(...)             _ibv_dereg_mr(__func__, __LINE__, __VA_ARGS__)
+
+#endif
+
 static inline int _ibv_req_notify_cq(const char *f, int l,
                                      struct ibv_cq *cq, int solicited_only)
 {
@@ -383,5 +425,24 @@ static inline void _ibv_ack_async_event(const char *f, int l,
   ibv_ack_async_event(event);
 }
 #define ibv_ack_async_event(...)        _ibv_ack_async_event(__func__, __LINE__, __VA_ARGS__)
+
+#if 0
+#define rdma_create_event_channel(...) print_call_func(rdma_create_event_channel, , __VA_ARGS__)
+#define rdma_create_id(...) print_call_func(rdma_create_id, , __VA_ARGS__)
+#define rdma_create_qp(...) print_call_func(rdma_create_qp, , __VA_ARGS__)
+#define rdma_destroy_qp(id) print_call_func(rdma_destroy_qp, << " qp: " << id->qp->qp_num, id)
+#define rdma_create_srq(...) print_call_func(rdma_create_srq, , __VA_ARGS__)
+#define rdma_freeaddrinfo(...) print_call_func(rdma_freeaddrinfo, , __VA_ARGS__)
+#define rdma_destroy_event_channel(...) print_call_func(rdma_destroy_event_channel, , __VA_ARGS__)
+#define rdma_destroy_id(...) print_call_func(rdma_destroy_id, , __VA_ARGS__)
+#define rdma_disconnect(...) print_call_func(rdma_disconnect, , __VA_ARGS__)
+#define rdma_getaddrinfo(...) print_call_func(rdma_getaddrinfo, , __VA_ARGS__)
+#define rdma_resolve_addr(...) print_call_func(rdma_resolve_addr, , __VA_ARGS__)
+#define rdma_get_cm_event(...) print_call_func(rdma_get_cm_event, , __VA_ARGS__)
+#define rdma_resolve_route(...) print_call_func(rdma_resolve_route, , __VA_ARGS__)
+#define rdma_connect(...) print_call_func(rdma_connect, , __VA_ARGS__)
+#define rdma_accept(...) print_call_func(rdma_accept, , __VA_ARGS__)
+#define rdma_ack_cm_event(...) print_call_func(rdma_ack_cm_event, , __VA_ARGS__)
+#endif
 
 #endif // __IB_DBG_H__

@@ -31,7 +31,7 @@
 #include "msg/async/net_handler.h"
 #include "common/Mutex.h"
 
-#define RDMA_DEBUG 0
+#define RDMA_DEBUG 1
 
 #if RDMA_DEBUG
 #include "ib_dbg.h"
