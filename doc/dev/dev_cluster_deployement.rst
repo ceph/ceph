@@ -12,7 +12,7 @@ It allows to deploy a fake local cluster on your machine for development purpose
 
 To start your development cluster, type the following::
 
-	vstart.sh [OPTIONS]... [mon] [osd] [mds]
+	vstart.sh [OPTIONS]...
 
 In order to stop the cluster, you can type::
 
