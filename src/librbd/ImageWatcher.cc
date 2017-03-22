@@ -651,7 +651,7 @@ bool ImageWatcher<I>::handle_payload(const FlattenPayload &payload,
       ProgressContext *prog_ctx;
       r = prepare_async_request(payload.async_request_id, &new_request,
                                 &ctx, &prog_ctx);
-      if (new_request) {
+      if (r == 0 && new_request) {
         ldout(m_image_ctx.cct, 10) << this << " remote flatten request: "
 				   << payload.async_request_id << dendl;
         m_image_ctx.operations->execute_flatten(*prog_ctx, ctx);
@@ -677,7 +677,7 @@ bool ImageWatcher<I>::handle_payload(const ResizePayload &payload,
       ProgressContext *prog_ctx;
       r = prepare_async_request(payload.async_request_id, &new_request,
                                 &ctx, &prog_ctx);
-      if (new_request) {
+      if (r == 0 && new_request) {
         ldout(m_image_ctx.cct, 10) << this << " remote resize request: "
 				   << payload.async_request_id << " "
 				   << payload.size << " "
@@ -812,7 +812,7 @@ bool ImageWatcher<I>::handle_payload(const RebuildObjectMapPayload& payload,
       ProgressContext *prog_ctx;
       r = prepare_async_request(payload.async_request_id, &new_request,
                                 &ctx, &prog_ctx);
-      if (new_request) {
+      if (r == 0 && new_request) {
         ldout(m_image_ctx.cct, 10) << this
                                    << " remote rebuild object map request: "
                                    << payload.async_request_id << dendl;
