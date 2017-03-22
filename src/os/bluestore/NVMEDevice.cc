@@ -106,6 +106,8 @@ struct Task {
   int64_t return_code;
   ceph::coarse_real_clock::time_point start;
   IORequest io_request;
+  std::mutex lock;
+  std::condition_variable cond;
   Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0)
     : device(dev), command(c), offset(off), len(l),
       return_code(rc),
@@ -138,6 +140,16 @@ struct Task {
       left -= need_copy;
       copied += need_copy;
     }
+  }
+
+  void io_wait() {
+    std::unique_lock<std::mutex> l(lock);
+    cond.wait(l);
+  }
+
+  void io_wake() {
+    std::lock_guard<std::mutex> l(lock);
+    cond.notify_all();
   }
 };
 
@@ -782,7 +794,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     } else {
       task->return_code = 0;
       if(!--ctx->num_reading) {
-        ctx->aio_wake();
+        task->io_wake();
       }
     }
   } else {
@@ -969,7 +981,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   driver->queue_task(t);
 
   while(t->return_code > 0) {
-    ioc->aio_wait();
+    t->io_wait();
   }
   pbl->push_back(std::move(p));
   r = t->return_code;
@@ -1035,7 +1047,7 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   driver->queue_task(t);
 
   while(t->return_code > 0) {
-    ioc.aio_wait();
+    t->io_wait();
   }
   r = t->return_code;
   delete t;
