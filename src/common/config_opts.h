@@ -615,9 +615,6 @@ OPTION(mds_damage_table_max_entries, OPT_INT, 10000)
 // verify backend can support configured max object name length
 OPTION(osd_check_max_object_name_len_on_startup, OPT_BOOL, true)
 
-// If true, compact leveldb store on mount
-OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
-
 // Maximum number of backfills to or from a single osd
 OPTION(osd_max_backfills, OPT_U64, 1)
 
