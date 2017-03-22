@@ -262,6 +262,7 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* ESX/SCSI */							    \
 	f(WRITESAME,	__CEPH_OSD_OP(WR, DATA, 38),	"write-same")	    \
+	f(CMPEXT,	__CEPH_OSD_OP(RD, DATA, 31),	"cmpext")	    \
 									    \
 	/** attrs **/							    \
 	/* read */							    \
@@ -353,6 +354,7 @@ static inline int ceph_osd_op_uses_extent(int op)
 	case CEPH_OSD_OP_ZERO:
 	case CEPH_OSD_OP_APPEND:
 	case CEPH_OSD_OP_TRIMTRUNC:
+	case CEPH_OSD_OP_CMPEXT:
 		return true;
 	default:
 		return false;

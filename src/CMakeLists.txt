@@ -638,6 +638,8 @@ if (WITH_MGR)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
   target_link_libraries(ceph-mgr mds osdc global-static common
       ${Boost_PYTHON_LIBRARY} ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+  set_target_properties(ceph-mgr PROPERTIES
+    INSTALL_RPATH "")
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
 
@@ -730,6 +732,8 @@ add_dependencies(ceph-mon erasure_code_plugins)
 target_link_libraries(ceph-mon mon common os global-static common
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
+set_target_properties(ceph-mon PROPERTIES
+  INSTALL_RPATH "")
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
@@ -801,6 +805,8 @@ add_executable(ceph-osd ${ceph_osd_srcs}
 add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global-static common
   ${BLKID_LIBRARIES} ${RDMA_LIBRARIES})
+set_target_properties(ceph-osd PROPERTIES
+  INSTALL_RPATH "")
 if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()
@@ -813,6 +819,8 @@ add_executable(ceph-mds ${ceph_mds_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static common
   ${Boost_THREAD_LIBRARY})
+set_target_properties(ceph-mds PROPERTIES
+  INSTALL_RPATH "")
 install(TARGETS ceph-mds DESTINATION bin)
 
 add_subdirectory(erasure-code)
@@ -916,6 +924,8 @@ if(WITH_LIBCEPHFS)
     client/SyntheticClient.cc)
   add_executable(ceph-syn ${ceph_syn_srcs})
   target_link_libraries(ceph-syn client global-static common)
+  set_target_properties(ceph-syn PROPERTIES
+    INSTALL_RPATH "")
 
   set(mount_ceph_srcs
     mount/mount.ceph.c)
@@ -936,7 +946,9 @@ if(WITH_LIBCEPHFS)
     add_executable(ceph-fuse ${ceph_fuse_srcs})
     target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
       client common global-static)
-    set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
+    set_target_properties(ceph-fuse PROPERTIES
+      COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}"
+      INSTALL_RPATH "")
     install(TARGETS ceph-fuse DESTINATION bin)
     install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
   endif(WITH_FUSE)
