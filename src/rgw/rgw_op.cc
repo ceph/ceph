@@ -2441,10 +2441,21 @@ void RGWPutBL::execute()
     if (op_ret < 0) {
       dout(0) << "RGWPutBL() failed to acquire lock " << oid << op_ret << dendl;
       break;
-    }
-    op_ret = cls_rgw_lc_set_entry(*ctx, oid, entry);
-    if (op_ret < 0) {
-      dout(0) << "RGWPutBL() failed to set entry " << oid << op_ret << dendl;     
+    } else {
+      if (new_status.is_enabled()) {
+	op_ret = cls_rgw_bl_set_entry(*ctx, oid, entry);
+	if (op_ret < 0) {
+	  dout(0) << "RGWPutBL() failed to set entry:"
+		  << " oid=" << oid << " ret=" << op_ret << dendl;     
+	}
+      } else {
+	op_ret = cls_rgw_bl_rm_entry(*ctx, oid, entry);
+	if (op_ret < 0) {
+	  dout(0) << "RGWPutBL() failed to rm entry:" 
+		  << " oid=" << oid << " ret=" << op_ret << dendl;     
+	}
+
+      }
     }
     break;
   } while(1);
