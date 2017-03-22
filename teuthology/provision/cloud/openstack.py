@@ -391,8 +391,12 @@ class OpenStackProvisioner(base.Provisioner):
         return matches
 
     def _destroy(self):
-        if not self.node:
-            return True
-        log.info("Destroying node: %s", self.node)
         self._destroy_volumes()
-        return self.node.destroy()
+        nodes = self._find_nodes()
+        if not nodes:
+            log.warn("Didn't find any nodes named '%s' to destroy!", self.name)
+            return True
+        if len(nodes) > 1:
+            log.warn("Found multiple nodes named '%s' to destroy!", self.name)
+        log.info("Destroying nodes: %s", nodes)
+        return all([node.destroy() for node in nodes])

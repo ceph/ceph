@@ -539,17 +539,22 @@ class TestOpenStackProvisioner(TestOpenStackBase):
         assert parsed_query == dict(name=['x'], ip=['y'])
 
     @mark.parametrize(
-        'node',
-        [None, Mock()]
+        'nodes',
+        [[], [Mock()], [Mock(), Mock()]]
     )
-    def test_destroy(self, node):
-        obj = self.get_obj()
-        obj._node = node
-        result = obj.destroy()
-        if not node:
-            assert result is True
-        else:
-            assert node.destroy.called_once_with()
+    def test_destroy(self, nodes):
+        with patch(
+            'teuthology.provision.cloud.openstack.'
+            'OpenStackProvisioner._find_nodes'
+        ) as m_find_nodes:
+            m_find_nodes.return_value = nodes
+            obj = self.get_obj()
+            result = obj.destroy()
+            if not all(nodes):
+                assert result is True
+            else:
+                for node in nodes:
+                    assert node.destroy.called_once_with()
 
     _volume_matrix = (
         'count, size, should_succeed',
