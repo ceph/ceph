@@ -686,8 +686,10 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
     headers.push_back(pair<string, string>(iter->first, iter->second));
   }
 
+  bool send_data_hint = false;
   if (send_data) {
-    in_data.claim(*send_data);
+    outbl.claim(*send_data);
+    send_data_hint = true;
   }
 
   RGWHTTPManager *pmanager = &http_manager;
@@ -695,7 +697,7 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
     pmanager = mgr;
   }
 
-  int r = pmanager->add_request(this, new_info.method, new_url.c_str());
+  int r = pmanager->add_request(this, new_info.method, new_url.c_str(), send_data_hint);
   if (r < 0)
     return r;
 
