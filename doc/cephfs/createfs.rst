@@ -52,7 +52,8 @@ an *active* state.  For example, in a single MDS system:
     e5: 1/1/1 up {0=a=up:active}
 
 Once the filesystem is created and the MDS is active, you are ready to mount
-the filesystem:
+the filesystem.  If you have created more than one filesystem, you will
+choose which to use when mounting.
 
 	- `Mount CephFS`_
 	- `Mount CephFS as FUSE`_

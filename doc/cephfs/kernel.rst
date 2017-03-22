@@ -19,6 +19,9 @@ approach reads the secret from a file. For example::
 
 	sudo mount -t ceph 192.168.0.1:6789:/ /mnt/mycephfs -o name=admin,secretfile=/etc/ceph/admin.secret
 	
+If you have more than one filesystem, specify which one to mount using
+the ``mds_namespace`` option, e.g. ``-o mds_namespace=myfs``.
+    
 See `User Management`_ for details on cephx.
 
 To unmount the Ceph file system, you may use the ``umount`` command. For example:: 
