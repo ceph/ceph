@@ -36,12 +36,15 @@
 MgrStandby::MgrStandby() :
   Dispatcher(g_ceph_context),
   monc(new MonClient(g_ceph_context)),
+  client_messenger(Messenger::create_client_messenger(g_ceph_context, "mgr")),
+  objecter(new Objecter(g_ceph_context, client_messenger, monc, NULL, 0, 0)),
+  log_client(g_ceph_context, client_messenger, &monc->monmap, LogClient::NO_FLAGS),
+  clog(log_client.create_channel(CLOG_CHANNEL_CLUSTER)),
+  audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),
   lock("MgrStandby::lock"),
   timer(g_ceph_context, lock),
   active_mgr(nullptr)
 {
-  client_messenger = Messenger::create_client_messenger(g_ceph_context, "mgr");
-  objecter = new Objecter(g_ceph_context, client_messenger, monc, NULL, 0, 0);
 }
 
 
@@ -52,6 +55,41 @@ MgrStandby::~MgrStandby()
   delete client_messenger;
 }
 
+const char** MgrStandby::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    // clog & admin clog
+    "clog_to_monitors",
+    "clog_to_syslog",
+    "clog_to_syslog_facility",
+    "clog_to_syslog_level",
+    "osd_objectstore_fuse",
+    "clog_to_graylog",
+    "clog_to_graylog_host",
+    "clog_to_graylog_port",
+    "host",
+    "fsid",
+    NULL
+  };
+  return KEYS;
+}
+
+void MgrStandby::handle_conf_change(
+  const struct md_config_t *conf,
+  const std::set <std::string> &changed)
+{
+  if (changed.count("clog_to_monitors") ||
+      changed.count("clog_to_syslog") ||
+      changed.count("clog_to_syslog_level") ||
+      changed.count("clog_to_syslog_facility") ||
+      changed.count("clog_to_graylog") ||
+      changed.count("clog_to_graylog_host") ||
+      changed.count("clog_to_graylog_port") ||
+      changed.count("host") ||
+      changed.count("fsid")) {
+    _update_log_config();
+  }
+}
 
 int MgrStandby::init()
 {
@@ -91,6 +129,9 @@ int MgrStandby::init()
 
   client_t whoami = monc->get_global_id();
   client_messenger->set_myname(entity_name_t::CLIENT(whoami.v));
+
+  monc->set_log_client(&log_client);
+  _update_log_config();
 
   objecter->set_client_incarnation(0);
   objecter->init();
@@ -151,6 +192,33 @@ void MgrStandby::shutdown()
   client_messenger->shutdown();
 }
 
+void MgrStandby::_update_log_config()
+{
+  map<string,string> log_to_monitors;
+  map<string,string> log_to_syslog;
+  map<string,string> log_channel;
+  map<string,string> log_prio;
+  map<string,string> log_to_graylog;
+  map<string,string> log_to_graylog_host;
+  map<string,string> log_to_graylog_port;
+  uuid_d fsid;
+  string host;
+
+  if (parse_log_client_options(cct, log_to_monitors, log_to_syslog,
+			       log_channel, log_prio, log_to_graylog,
+			       log_to_graylog_host, log_to_graylog_port,
+			       fsid, host) == 0) {
+    clog->update_config(log_to_monitors, log_to_syslog,
+			log_channel, log_prio, log_to_graylog,
+			log_to_graylog_host, log_to_graylog_port,
+			fsid, host);
+    audit_clog->update_config(log_to_monitors, log_to_syslog,
+			      log_channel, log_prio, log_to_graylog,
+			      log_to_graylog_host, log_to_graylog_port,
+			      fsid, host);
+  }
+}
+
 void MgrStandby::handle_mgr_map(MMgrMap* mmap)
 {
   auto map = mmap->get_map();
@@ -161,7 +229,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   if (active_in_map) {
     if (!active_mgr) {
       dout(1) << "Activating!" << dendl;
-      active_mgr.reset(new Mgr(monc, client_messenger, objecter));
+      active_mgr.reset(new Mgr(monc, client_messenger, objecter, clog, audit_clog));
       active_mgr->background_init();
       dout(1) << "I am now active" << dendl;
     } else {

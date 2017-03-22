@@ -20,6 +20,7 @@
 #include <string>
 
 #include "common/Mutex.h"
+#include "common/LogClient.h"
 
 #include <msg/Messenger.h>
 #include <mon/MonClient.h>
@@ -56,6 +57,7 @@ protected:
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   PyModules &py_modules;
+  LogChannelRef clog, audit_clog;
 
   AuthAuthorizeHandlerRegistry auth_registry;
 
@@ -78,9 +80,11 @@ public:
   entity_addr_t get_myaddr() const;
 
   DaemonServer(MonClient *monc_,
-      DaemonStateIndex &daemon_state_,
-      ClusterState &cluster_state_,
-      PyModules &py_modules_);
+	       DaemonStateIndex &daemon_state_,
+	       ClusterState &cluster_state_,
+	       PyModules &py_modules_,
+	       LogChannelRef cl,
+	       LogChannelRef auditcl);
   ~DaemonServer() override;
 
   bool ms_dispatch(Message *m) override;
