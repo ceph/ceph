@@ -42,12 +42,12 @@ RDMAConnTCP::RDMAConnTCP(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
 
   ibdev->init(ibport);
 
-  qp = ibdev->create_queue_pair(cct, IBV_QPT_RC);
+  qp = ibdev->create_queue_pair(ibport, IBV_QPT_RC);
   my_msg.qpn = qp->get_local_qp_number();
   my_msg.psn = qp->get_initial_psn();
-  my_msg.lid = ibdev->get_lid();
+  my_msg.lid = ibdev->get_lid(ibport);
   my_msg.peer_qpn = 0;
-  my_msg.gid = ibdev->get_gid();
+  my_msg.gid = ibdev->get_gid(ibport);
   register_qp(qp);
 }
 
@@ -121,7 +121,7 @@ int RDMAConnTCP::activate()
   qpa.ah_attr.grh.hop_limit = 6;
   qpa.ah_attr.grh.dgid = peer_msg.gid;
 
-  qpa.ah_attr.grh.sgid_index = ibdev->get_gid_idx();
+  qpa.ah_attr.grh.sgid_index = ibdev->get_gid_idx(ibport);
 
   qpa.ah_attr.dlid = peer_msg.lid;
   qpa.ah_attr.sl = cct->_conf->ms_async_rdma_sl;
