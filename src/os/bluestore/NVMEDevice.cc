@@ -628,22 +628,51 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
 {
   Mutex::Locker l(lock);
   int r = 0;
+  unsigned long long core_value;
+  uint32_t core_num = 0;
+  int m_core = -1;
 
+  string master_core = "--master-lcore=";
   string prefix = "--file-prefix=";
   string sock_mem = "--socket-mem=";
   string coremask = "-c ";
+  stringstream master_core_ss;
   prefix += sn_tag;
   sock_mem += g_conf->bluestore_spdk_socket_mem;
   coremask += g_conf->bluestore_spdk_coremask;
   char *prefix_arg = (char *)prefix.c_str();
   char *sock_mem_arg = (char *)sock_mem.c_str();
   char *coremask_arg = (char *)coremask.c_str();
+  char *master_core_arg;
 
   if (sn_tag.empty()) {
     r = -ENOENT;
     derr << __func__ << " empty serial number: " << cpp_strerror(r) << dendl;
     return r;
   }
+
+  core_value = strtoll(g_conf->bluestore_spdk_coremask.c_str(), NULL, 16);
+  for (uint32_t i = 0; i < sizeof(long long) * 8; i++) {
+    bool tmp = (core_value >> i) & 0x1;
+    if (tmp) {
+      core_num += 1;
+      // select the least signficant bit as the master core
+      if(m_core < 0) {
+        m_core = i;
+      }
+    }
+  }
+
+  // at least two cores are needed for using spdk
+  if (core_num < 2) {
+    r = -ENOENT;
+    derr << __func__ << " invalid spdk coremask, at least two cores are needed: "
+         << cpp_strerror(r) << dendl;
+    return r;
+  }
+  master_core_ss << m_core;
+  master_core += master_core_ss.str();
+  master_core_arg = (char *)master_core.c_str();
 
   for (auto &&it : shared_driver_datas) {
     if (it->is_equal(sn_tag)) {
@@ -655,13 +684,14 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   if (!init) {
     init = true;
     dpdk_thread = std::thread(
-      [this, prefix_arg, sock_mem_arg, coremask_arg]() {
+      [this, prefix_arg, sock_mem_arg, coremask_arg, master_core_arg]() {
         static const char *ealargs[] = {
             "ceph-osd",
             coremask_arg, /* This must be the second parameter. It is overwritten by index in main(). */
             "-n 4",
 	    sock_mem_arg,
-	    prefix_arg
+	    prefix_arg,
+	    master_core_arg
         };
 
         int r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
