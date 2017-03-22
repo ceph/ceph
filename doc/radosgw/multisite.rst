@@ -15,7 +15,9 @@ non-master zones. Following are the basic terminologies that would be used:
 - **Zonegroup**: A zonegroup consists of multiple zones, this approximately
   corresponds to what used to be called as a region in pre Jewel releases for
   federated deployments. There should be a master zonegroup that will handle
-  changes to the system configuration.
+  changes to the system configuration. Object data is only replicated between
+  zones within a zonegroup, whereas metadata (such as buckets and users) are
+  replicated across all zonegroups.
 
 - **Zonegroup map**: A zonegroup map is a configuration structure that holds the
   map of the entire system, ie. which zonegroup is the master, relationships
@@ -37,6 +39,12 @@ non-master zones. Following are the basic terminologies that would be used:
   - A new period is generated with a new period id and epoch of 1
   - Realm's current period is updated to point to the newly generated period id
   - Realm's epoch is incremented
+
+- **Metadata Master Zone**: The master zone of the master zonegroup is
+  designated as the metadata master zone. This zone is authoritative for all
+  metadata in the system. Any S3/Swift requests to modify metadata (such as
+  bucket creation/removal) that are sent to other zones are forwarded to and
+  handled by the metadata master zone.
 
 About this guide
 ================
@@ -781,6 +789,63 @@ system's init system, for eg::
 
   $ sudo systemctl start ceph-radosgw@rgw.us-west
 
+
+Maintenance
+===========
+
+Checking the Sync Status
+------------------------
+
+Information about the replication status of a zone can be queried with::
+
+  $ radosgw-admin sync status
+  
+            realm b3bc1c37-9c44-4b89-a03b-04c269bea5da (earth)
+        zonegroup f54f9b22-b4b6-4a0e-9211-fa6ac1693f49 (us)
+             zone adce11c9-b8ed-4a90-8bc5-3fc029ff0816 (us-2)
+    metadata sync syncing
+                  full sync: 0/64 shards
+                  incremental sync: 64/64 shards
+                  metadata is behind on 1 shards
+                  oldest incremental change not applied: 2017-03-22 10:20:00.0.881361s
+        data sync source: 341c2d81-4574-4d08-ab0f-5a2a7b168028 (us-1)
+                          syncing
+                          full sync: 0/128 shards
+                          incremental sync: 128/128 shards
+                          data is caught up with source
+                  source: 3b5d1a3f-3f27-4e4a-8f34-6072d4bb1275 (us-3)
+                          syncing
+                          full sync: 0/128 shards
+                          incremental sync: 128/128 shards
+                          data is caught up with source
+
+
+Changing the Metadata Master Zone
+---------------------------------
+
+.. important:: Care must be taken when changing which zone is the metadata
+   master. If a zone has not finished syncing metadata from the current master
+   zone, it will be unable to serve any remaining entries when promoted to
+   master and those changes will be lost. For this reason, waiting for a
+   zone's ``radosgw-admin sync status`` to catch up on metadata sync before
+   promoting it to master is recommended.
+
+   Similarly, if changes to metadata are being processed by the current master
+   zone while another zone is being promoted to master, those changes are
+   likely to be lost. To avoid this, shutting down any ``radosgw`` instances
+   on the previous master zone is recommended. After promoting another zone,
+   its new period can be fetched with ``radosgw-admin period pull`` and the
+   gateway(s) can be restarted.
+
+To promote a zone (for example, zone ``us-2`` in zonegroup ``us``) to metadata
+master, run the following commands on that zone::
+
+  $ radosgw-admin zone modify --rgw-zone=us-2 --master
+  $ radosgw-admin zonegroup modify --rgw-zonegroup=us --master
+  $ radosgw-admin period update --commit
+
+This will generate a new period, and the radosgw instance(s) in zone ``us-2``
+will send this period to other zones.
 
 .. _`Ceph Object Gateway - Create Pools`: ../config#create-pools
 .. _`Install Ceph Gateway`: ../../install/install-ceph-gateway
