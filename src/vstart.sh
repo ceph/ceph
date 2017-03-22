@@ -57,6 +57,17 @@ export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 [ -z "$CEPH_NUM_FS"  ] && CEPH_NUM_FS="$FS"
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW="$RGW"
 
+# if none of the CEPH_NUM_* number is specified, kill the existing
+# cluster.
+if [ -z "$CEPH_NUM_MON" -a \
+     -z "$CEPH_NUM_OSD" -a \
+     -z "$CEPH_NUM_MDS" -a \
+     -z "$CEPH_NUM_MGR" ]; then
+    kill_all=1
+else
+    kill_all=0
+fi
+
 [ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON=3
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD=3
 [ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS=3
@@ -81,10 +92,6 @@ extra_conf=""
 new=0
 standby=0
 debug=0
-start_all=1
-start_mon=0
-start_mds=0
-start_osd=0
 ip=""
 nodaemon=0
 smallmds=0
@@ -108,7 +115,7 @@ keyring_fn="$CEPH_CONF_PATH/keyring"
 osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
 
-usage="usage: $0 [option]... [\"mon\"] [\"mds\"] [\"osd\"]\nex: $0 -n -d --mon_num 3 --osd_num 3 --mds_num 1 --rgw_num 1\n"
+usage="usage: $0 [option]... \nex: $0 -n -d --mon_num 3 --osd_num 3 --mds_num 1 --rgw_num 1\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
@@ -126,9 +133,6 @@ usage=$usage"\t-X disable cephx\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
-usage=$usage"\tmon : start just ceph MONs\n"
-usage=$usage"\tosd : start just ceph OSDs\n"
-usage=$usage"\tmds : start just ceph MDSes\n"
 usage=$usage"\t--mon_num specify ceph monitor count\n"
 usage=$usage"\t--osd_num specify ceph osd count\n"
 usage=$usage"\t--mds_num specify ceph mds count\n"
@@ -236,18 +240,6 @@ case $1 in
             rgw_frontend=$2
             shift
             ;;
-    mon )
-	    start_mon=1
-	    start_all=0
-	    ;;
-    mds )
-	    start_mds=1
-	    start_all=0
-	    ;;
-    osd )
-	    start_osd=1
-	    start_all=0
-	    ;;
     -m )
 	    [ -z "$2" ] && usage_exit
 	    MON_ADDR=$2
@@ -303,7 +295,7 @@ esac
 shift
 done
 
-if [ "$start_all" -eq 1 ]; then
+if [ $kill_all -eq 1 ]; then
     $SUDO $INIT_CEPH stop
 fi
 
@@ -326,12 +318,6 @@ else
         # -k is implied... (doesn't make sense otherwise)
         overwrite_conf=0
     fi
-fi
-
-if [ "$start_all" -eq 1 ]; then
-	start_mon=1
-	start_mds=1
-	start_osd=1
 fi
 
 ARGS="-c $conf_fn"
@@ -558,12 +544,10 @@ EOF
 	fi
 
 	# start monitors
-	if [ "$start_mon" -ne 0 ]; then
-		for f in $MONS
-		do
-		    run 'mon' $CEPH_BIN/ceph-mon -i $f $ARGS $CMON_ARGS
-		done
-	fi
+	for f in $MONS
+	do
+		run 'mon' $CEPH_BIN/ceph-mon -i $f $ARGS $CMON_ARGS
+	done
 }
 
 start_osd() {
@@ -792,12 +776,12 @@ if [ "$new" -eq 1 ]; then
     prepare_conf
 fi
 
-if [ "$start_mon" -eq 1 ]; then
+if [ $CEPH_NUM_MON -gt 0 ]; then
     start_mon
 fi
 
 # osd
-if [ "$start_osd" -eq 1 ]; then
+if [ $CEPH_NUM_OSD -gt 0 ]; then
     start_osd
 fi
 
@@ -810,7 +794,7 @@ if [ "$smallmds" -eq 1 ]; then
 EOF
 fi
 
-if [ "$start_mds" -eq 1 -a "$CEPH_NUM_MDS" -gt 0 ]; then
+if [ $CEPH_NUM_MDS -gt 0 ]; then
     start_mds
 fi
 
@@ -832,7 +816,7 @@ done
 
 # mgr
 
-if [ "$CEPH_NUM_MGR" -gt 0 ]; then
+if [ $CEPH_NUM_MGR -gt 0 ]; then
     start_mgr
 fi
 
