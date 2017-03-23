@@ -2709,9 +2709,11 @@ void PG::publish_stats_to_osd()
   _update_blocked_by();
 
   bool publish = false;
+  pg_stat_t pre_publish = info.stats;
+  pre_publish.stats.add(unstable_stats);
   utime_t cutoff = now;
   cutoff -= cct->_conf->osd_pg_stat_report_interval_max;
-  if (pg_stats_publish_valid && info.stats == pg_stats_publish &&
+  if (pg_stats_publish_valid && pre_publish == pg_stats_publish &&
       info.stats.last_fresh > cutoff) {
     dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
 	     << ": no change since " << info.stats.last_fresh << dendl;
@@ -2736,8 +2738,7 @@ void PG::publish_stats_to_osd()
 
     publish = true;
     pg_stats_publish_valid = true;
-    pg_stats_publish = info.stats;
-    pg_stats_publish.stats.add(unstable_stats);
+    pg_stats_publish = pre_publish;
 
     dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
 	     << ":" << pg_stats_publish.reported_seq << dendl;
