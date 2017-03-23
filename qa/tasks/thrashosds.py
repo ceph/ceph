@@ -122,6 +122,9 @@ def task(ctx, config):
 
     chance_thrash_cluster_full: .05
 
+    chance_thrash_pg_remap: 1.0
+    chance_thrash_pg_remap_items: 1.0
+
     example:
 
     tasks:
