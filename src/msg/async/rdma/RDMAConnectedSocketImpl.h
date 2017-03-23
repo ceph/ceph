@@ -54,6 +54,9 @@ protected:
   bool is_server;
   bool active;// qp is active ?
   int connected;
+  int error;
+  Mutex lock;
+  std::vector<ibv_wc> wc;
 
   void register_qp(QueuePair *qp);
   void notify();
@@ -65,13 +68,9 @@ protected:
   typedef Infiniband::CompletionQueue CompletionQueue;
 
  private:
-  int error;
   std::vector<Chunk*> buffers;
   int notify_fd = -1;
   bufferlist pending_bl;
-
-  Mutex lock;
-  std::vector<ibv_wc> wc;
 
   ssize_t read_buffers(char* buf, size_t len);
   int post_work_request(std::vector<Chunk*>&);
