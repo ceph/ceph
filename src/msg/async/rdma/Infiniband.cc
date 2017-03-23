@@ -612,6 +612,11 @@ Device* Infiniband::get_device(const char* device_name)
   return device_list->get_device(device_name);
 }
 
+Device *Infiniband::get_device(const struct ibv_context *ctxt)
+{
+  return device_list->get_device(ctxt);
+}
+
 Infiniband::QueuePair::~QueuePair()
 {
   if (qp) {
