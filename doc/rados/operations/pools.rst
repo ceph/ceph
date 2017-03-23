@@ -466,7 +466,7 @@ You may set values for the following keys:
 :Default: ``20``
 
 
-``hit_set_grade_search_last_n``
+``hit_set_search_last_n``
 
 :Description: Count at most N appearance in hit_sets for temperature calculation
 :Type: Integer
