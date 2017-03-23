@@ -376,7 +376,6 @@ public:
     ObjectStore::Transaction &t) override {
     if (hset_history) {
       info.hit_set = *hset_history;
-      dirty_info = true;
     }
     append_log(logv, trim_to, roll_forward_to, t, transaction_applied);
   }
