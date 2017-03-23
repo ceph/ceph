@@ -100,6 +100,7 @@ protected:
   virtual int try_connect(const entity_addr_t&, const SocketOptions &opt) = 0;
   virtual ssize_t submit(bool more);
   virtual int remote_qpn() = 0;
+  int local_qpn() { return qp ? qp->get_local_qp_number() : -1; };
 
   virtual ostream &print(ostream &o) = 0;
 };
