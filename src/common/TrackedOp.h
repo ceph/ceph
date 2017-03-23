@@ -48,6 +48,7 @@ public:
   }
   void insert(utime_t now, TrackedOpRef op);
   void dump_ops(utime_t now, Formatter *f);
+  void dump_ops_by_duration(utime_t now, Formatter *f);
   void on_shutdown();
   void set_size_and_duration(uint32_t new_size, uint32_t new_duration) {
     history_size = new_size;
@@ -83,7 +84,7 @@ public:
     tracking_enabled = enable;
   }
   bool dump_ops_in_flight(Formatter *f, bool print_only_blocked=false);
-  bool dump_historic_ops(Formatter *f);
+  bool dump_historic_ops(Formatter *f, bool by_duration = false);
   bool register_inflight_op(TrackedOp *i);
   void unregister_inflight_op(TrackedOp *i);
 
