@@ -2571,7 +2571,7 @@ bool MDSRankDispatcher::handle_command(
       return true;
     }
 
-    Formatter *f = new JSONFormatter();
+    Formatter *f = new JSONFormatter(true);
     dump_sessions(filter, f);
     f->flush(*ds);
     delete f;
@@ -2591,7 +2591,7 @@ bool MDSRankDispatcher::handle_command(
     *need_reply = false;
     return true;
   } else if (prefix == "damage ls") {
-    Formatter *f = new JSONFormatter();
+    Formatter *f = new JSONFormatter(true);
     damage_table.dump(f);
     f->flush(*ds);
     delete f;
