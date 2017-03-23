@@ -23,6 +23,7 @@
 #include "rgw_common.h"
 #include "rgw_bucket.h"
 #include "rgw_bl.h"
+#include "rgw_rados.h"
 
 
 #define dout_context g_ceph_context
@@ -141,7 +142,8 @@ int RGWBL::bucket_bl_prepare(int index)
 }
 
 static vector<string> &split_shard_id(const string &s, char delim,
-				      vector<string> &elems) {
+				      vector<string> &elems) 
+{
   stringstream ss(s);
   string item;
   while (getline(ss, item, delim)) {
@@ -156,46 +158,189 @@ static vector<string> split_shard_id(const string &s, char delim) {
   return elems;
 }
 
+static vector<string> split_opslog_obj_name(const string&obj_name){
+  vector<std::string> elems;
+  split_shard_id(obj_name, '-'); // FIXME ungly code cleanup
+  return elems;
+}
+
+static string generate_target_object(const string prefix, string obj_name)
+{
+  string target_object = "";
+
+  char unique_string_buf[BL_UNIQUE_STRING_LEN + 1];
+  int ret = gen_rand_alphanumeric_plain(g_ceph_context, unique_string_buf,
+					sizeof(unique_string_buf));
+  if (ret < 0) {
+      return "";
+  } else {
+    vector<std::string> _result;
+    _result = split_opslog_obj_name(obj_name);
+    string date = _result[0];
+
+    target_object += prefix;
+    target_object += date;
+    target_object += "-";
+    target_object += string(unique_string_buf);
+  }
+
+  return target_object;
+}
+
+int RGWBL::bucket_bl_fetch(const string opslog_obj, bufferlist *opslog_entries)
+{
+  RGWAccessHandle sh;
+  int r = store->log_show_init(opslog_obj, &sh);
+  if (r < 0) {
+    ldout(cct, 0) << __func__ << "log_show_init() failed ret="
+		  << cpp_strerror(-r) << dendl;
+  }
+
+  return r;
+} 
+
+int RGWBL::bucket_bl_upload(bufferlist* opslog_entries, const string target_bucket,
+			    const string target_object)
+{
+  int r = 0;
+
+  return r;
+}
+
+int RGWBL::bucket_bl_remove(const string obj_name)
+{
+  int r = store->log_remove(obj_name);
+  if (r < 0) {
+    ldout(cct, 0) << __func__ << "uploaded, log_remove() failed ret="
+		  << cpp_strerror(-r) << dendl;
+
+  }
+  return r;
+} 
+
+int RGWBL::bucket_bl_deliver(string opslog_obj, const string target_bucket,
+			     const string target_prefix)
+{
+  string target_object = generate_target_object(target_prefix, opslog_obj);
+  if (target_object.empty()) {
+    ldout(cct, 0) << __func__ << "generate target object failed ret=" << dendl;
+    return -1;
+  }
+
+  bufferlist opslog_entries;
+  int r = bucket_bl_fetch(opslog_obj, &opslog_entries);
+  if (r < 0) {
+    ldout(cct, 0) << __func__ << "bucket_bl_fetch() failed ret="
+		  << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = bucket_bl_upload(&opslog_entries, target_bucket, target_object);
+  if (r < 0) {
+    ldout(cct, 0) << __func__ << "bucket_bl_upload() failed ret="
+		  << cpp_strerror(-r) << dendl;
+    return r;
+  } else {
+    r = bucket_bl_remove(opslog_obj);
+    if (r < 0){
+      return r;
+    } else {
+      return 0;
+    }
+  }
+}
+
 int RGWBL::bucket_bl_process(string& shard_id)
 {
   RGWBucketLoggingStatus status(cct);
-  RGWBucketInfo bucket_info;
-  map<string, bufferlist> bucket_attrs;
+  RGWBucketInfo sbucket_info;
+  map<string, bufferlist> sbucket_attrs;
   RGWObjectCtx obj_ctx(store);
 
   vector<std::string> result;
   result = split_shard_id(shard_id, ':');
-  string bucket_tenant = result[0];
-  string bucket_name = result[1];
-  string bucket_id = result[2];
+  string sbucket_tenant = result[0]; // sbucket stands for source bucket
+  string sbucket_name = result[1];
+  string sbucket_id = result[2];
 
-  int ret = store->get_bucket_info(obj_ctx, bucket_tenant, bucket_name,
-                                   bucket_info, NULL, &bucket_attrs);
+  int ret = store->get_bucket_info(obj_ctx, sbucket_tenant, sbucket_name,
+                                   sbucket_info, NULL, &sbucket_attrs);
   if (ret < 0) {
-    ldout(cct, 0) << "RGWBL:get_bucket_info failed, bucket_name="
-                  << bucket_name << dendl;
+    ldout(cct, 0) << "RGWBL:get_bucket_info failed, source_bucket_name="
+                  << sbucket_name << dendl;
     return ret;
   }
 
-  ret = bucket_info.bucket.bucket_id.compare(bucket_id) ;
+  ret = sbucket_info.bucket.bucket_id.compare(sbucket_id) ;
   if (ret != 0) {
-    ldout(cct, 0) << "RGWBL:old bucket id found, bucket_name=" << bucket_name
-                  << "should be deleted." << dendl;
+    ldout(cct, 0) << "RGWBL:old bucket id found, source_bucket_name="
+		  << sbucket_name << "should be deleted." << dendl;
     return -ENOENT;
   }
 
-  map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_BL);
-  if (aiter == bucket_attrs.end())
+  map<string, bufferlist>::iterator aiter = sbucket_attrs.find(RGW_ATTR_BL);
+  if (aiter == sbucket_attrs.end())
     return 0;
 
   bufferlist::iterator iter(&aiter->second);
   try {
     status.decode(iter);
   } catch (const buffer::error& e) {
-    ldout(cct, 0) << __func__ <<  "decode bucket logging status failed" << dendl;
+    ldout(cct, 0) << __func__ << "decode bucket logging status failed" << dendl;
     return -1;
   }
 
+  if (!status.is_enabled()){
+    // bucketlogging is diabled, but rm entry in following bucket_bl_post failed.
+    // need to cleanup
+    // return ???
+  }
+
+  string filter("");
+  filter += sbucket_id;
+  filter += "-";
+  filter += sbucket_name;
+  RGWAccessHandle lh;
+  ret = store->log_list_init(filter, &lh);
+  if (ret == -ENOENT) {
+    // no ops log
+    return 0;
+  } else {
+    if (ret < 0) {
+      ldout(cct, 0) << __func__ << "list_log_init() failed ret="
+		    << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    string tbucket = status.get_target_bucket();
+    if (tbucket.empty()) {
+      tbucket = sbucket_name; // source bucket as default when target bucket didn't specified.
+    } else {
+      // FIXME check tbucket deliver group acl
+    }
+    string tprefix = status.get_target_prefix(); // prefix is optional
+
+    while (true){
+      string opslog_obj;
+      int r = store->log_list_next(lh, &opslog_obj);
+      if (r == -ENOENT) {
+	ret = 0; // no opslog
+	break;
+      }
+      if (r < 0) {
+	ldout(cct, 0) << __func__ << "log_list_next() failed ret="
+		      << cpp_strerror(-r) << dendl;
+	ret = r;
+	break;
+      } else {
+	int r = bucket_bl_deliver(opslog_obj, tbucket, tprefix);
+	if (r < 0 ){
+	  ret = r;
+	  break;
+	}
+      }
+    }
+  }
   return ret;
 }
 

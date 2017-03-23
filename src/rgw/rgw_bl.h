@@ -34,6 +34,7 @@
 
 using namespace std;
 #define BL_HASH_PRIME 7877
+#define BL_UNIQUE_STRING_LEN 10
 static string bl_oid_prefix = "bl";
 static string bl_index_lock_name = "bl_process";
 
@@ -88,6 +89,14 @@ class RGWBL {
   int bucket_bl_process(string& shard_id);
   int bucket_bl_post(int index, int max_lock_sec,
 		     pair<string, int >& entry, int& result);
+
+  int bucket_bl_fetch(const string opslog_obj, bufferlist* opslog_entries);
+  int bucket_bl_upload(bufferlist* opslog_entries, const string target_bucket,
+		       const string target_object);
+  int bucket_bl_remove(const string opslog_obj);
+  int bucket_bl_deliver(string opslog_obj, const string target_bucket,
+			       const string target_object);
+
   bool going_down();
   void start_processor();
   void stop_processor();

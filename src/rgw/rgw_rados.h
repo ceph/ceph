@@ -2614,7 +2614,7 @@ public:
   int list_buckets_next(rgw_bucket_dir_entry& obj, RGWAccessHandle *handle);
 
   /// list logs
-  int log_list_init(const string& prefix, RGWAccessHandle *handle);
+  int log_list_init(const string& filter, RGWAccessHandle *handle, const bool filter_by_date=false);
   int log_list_next(RGWAccessHandle handle, string *name);
 
   /// remove log

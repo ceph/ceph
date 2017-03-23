@@ -4987,16 +4987,36 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_LOG_LIST) {
-    // filter by date?
+      if(!(date.empty() && bucket_name.empty() && bucket_id.empty()) &&
+         (date.empty() && (bucket_name.empty() || bucket_id.empty()))
+	)
+      {
+        cerr << "specify nothing or a date or bucket and bucket-id" << std::endl;
+        usage();
+        assert(false);
+      }
+
+    std::string filter("");
+    bool filter_by_date = false;
     if (date.size() && date.size() != 10) {
       cerr << "bad date format for '" << date << "', expect YYYY-MM-DD" << std::endl;
       return EINVAL;
+    } else {
+      filter = date;
+      filter_by_date = true;
     }
+
+    if (!bucket_id.empty() && !bucket_name.empty()) {
+	filter = bucket_id;
+	filter += "-";
+	filter += bucket_name;
+    }
+
 
     formatter->reset();
     formatter->open_array_section("logs");
     RGWAccessHandle h;
-    int r = store->log_list_init(date, &h);
+    int r = store->log_list_init(filter, &h, filter_by_date);
     if (r == -ENOENT) {
       // no logs.
     } else {
