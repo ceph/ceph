@@ -2569,32 +2569,30 @@ void Client::handle_mds_map(MMDSMap* m)
 
   // reset session
   for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
-       p != mds_sessions.end();
-       ++p) {
-    int oldstate = oldmap->get_state(p->first);
-    int newstate = mdsmap->get_state(p->first);
-    if (!mdsmap->is_up(p->first) ||
-	mdsmap->get_inst(p->first) != p->second->inst) {
-      p->second->con->mark_down();
-      if (mdsmap->is_up(p->first)) {
-	p->second->inst = mdsmap->get_inst(p->first);
-	// When new MDS starts to take over, notify kernel to trim unused entries
-	// in its dcache/icache. Hopefully, the kernel will release some unused
-	// inodes before the new MDS enters reconnect state.
-	trim_cache_for_reconnect(p->second);
-      }
+       p != mds_sessions.end(); ) {
+    mds_rank_t mds = p->first;
+    MetaSession *session = p->second;
+    ++p;
+
+    int oldstate = oldmap->get_state(mds);
+    int newstate = mdsmap->get_state(mds);
+    if (!mdsmap->is_up(mds)) {
+      session->con->mark_down();
+    } else if (mdsmap->get_inst(mds) != session->inst) {
+      session->con->mark_down();
+      session->inst = mdsmap->get_inst(mds);
+      // When new MDS starts to take over, notify kernel to trim unused entries
+      // in its dcache/icache. Hopefully, the kernel will release some unused
+      // inodes before the new MDS enters reconnect state.
+      trim_cache_for_reconnect(session);
     } else if (oldstate == newstate)
       continue;  // no change
     
-    MetaSession *session = p->second;
     session->mds_state = newstate;
     if (newstate == MDSMap::STATE_RECONNECT) {
-      session->inst = mdsmap->get_inst(p->first);
       session->con = messenger->get_connection(session->inst);
       send_reconnect(session);
-    }
-
-    if (newstate >= MDSMap::STATE_ACTIVE) {
+    } else if (newstate >= MDSMap::STATE_ACTIVE) {
       if (oldstate < MDSMap::STATE_ACTIVE) {
 	// kick new requests
 	kick_requests(session);
@@ -2603,7 +2601,10 @@ void Client::handle_mds_map(MMDSMap* m)
 	kick_maxsize_requests(session);
 	wake_inode_waiters(session);
       }
-      connect_mds_targets(p->first);
+      connect_mds_targets(mds);
+    } else if (newstate == MDSMap::STATE_NULL &&
+	       mds >= mdsmap->get_max_mds()) {
+      _closed_mds_session(session);
     }
   }
 
