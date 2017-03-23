@@ -101,6 +101,7 @@ class RDMADispatcher : public CephContext::ForkWatcher {
   RDMAStack* stack;
 
  public:
+  std::atomic<uint64_t> pending_fins = {0}; // XXX broken XXX
   PerfCounters *perf_logger;
 
   explicit RDMADispatcher(CephContext* c, RDMAStack* s);

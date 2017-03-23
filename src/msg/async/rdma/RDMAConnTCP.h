@@ -42,6 +42,19 @@ class RDMAConnTCP : public RDMAConnectedSocketImpl {
     };
   };
 
+  class Disconnector : public RDMADisconnector {
+    QueuePair *qp;
+
+  public:
+    Disconnector(QueuePair *qp) : qp(qp) {};
+
+    virtual void disconnect() { qp->to_dead(); };
+
+    virtual ostream &print(ostream &o) {
+      return o << "TCP FIN: { qpn: " << *qp << "}";
+    }
+  };
+
   IBSYNMsg peer_msg;
   IBSYNMsg my_msg;
   EventCallbackRef con_handler;
@@ -65,6 +78,7 @@ public:
   virtual void cleanup() override;
   virtual int try_connect(const entity_addr_t&, const SocketOptions &opt) override;
   virtual int remote_qpn()override { return peer_msg.qpn; };
+  virtual void fin() override;
 
   virtual ostream &print(ostream &o) override;
 };

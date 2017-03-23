@@ -28,6 +28,19 @@ class RDMADispatcher;
 
 typedef Infiniband::QueuePair QueuePair;
 
+class RDMADisconnector {
+public:
+  virtual ~RDMADisconnector() { };
+  virtual void disconnect() = 0;
+  virtual ostream &print(ostream &o) = 0;
+};
+
+inline ostream& operator<<(ostream& out, RDMADisconnector &d)
+{
+  return d.print(out);
+}
+
+
 class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
 protected:
   CephContext *cct;
@@ -44,6 +57,7 @@ protected:
 
   void register_qp(QueuePair *qp);
   void notify();
+  void fin(uint64_t wr_id);
 
  public:
   typedef Infiniband::MemoryManager::Chunk Chunk;
@@ -81,7 +95,7 @@ protected:
   virtual int fd() const override { return notify_fd; }
   void fault();
   const char* get_qp_state() { return Infiniband::qp_state_string(qp->get_state()); }
-  virtual void fin();
+  virtual void fin() = 0;
   virtual void cleanup() = 0;
   virtual int try_connect(const entity_addr_t&, const SocketOptions &opt) = 0;
   virtual ssize_t submit(bool more);

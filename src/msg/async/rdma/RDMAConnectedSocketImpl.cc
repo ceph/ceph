@@ -14,6 +14,7 @@
  *
  */
 
+#include "Infiniband.h"
 #include "RDMAStack.h"
 #include "Device.h"
 #include "RDMAConnTCP.h"
@@ -63,6 +64,16 @@ RDMAConnTCP::~RDMAConnTCP()
   cleanup();
   if (tcp_fd >= 0)
     ::close(tcp_fd);
+}
+
+void RDMAConnTCP::fin()
+{
+  Disconnector *f = new Disconnector(qp);
+  uint64_t wr_id = reinterpret_cast<uint64_t>(f);
+
+  ldout(cct, 1) << __func__ << " sending " << *f << dendl;
+
+  RDMAConnectedSocketImpl::fin(wr_id);
 }
 
 RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
@@ -573,19 +584,24 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
   return 0;
 }
 
-void RDMAConnectedSocketImpl::fin() {
+void RDMAConnectedSocketImpl::fin(uint64_t wr_id)
+{
+  dispatcher->pending_fins++;
+
   ibv_send_wr wr;
   memset(&wr, 0, sizeof(wr));
-  wr.wr_id = reinterpret_cast<uint64_t>(qp);
+  wr.wr_id = wr_id;
   wr.num_sge = 0;
   wr.opcode = IBV_WR_SEND;
   wr.send_flags = IBV_SEND_SIGNALED;
   ibv_send_wr* bad_tx_work_request;
-  if (ibv_post_send(qp->get_qp(), &wr, &bad_tx_work_request)) {
+  int err = ibv_post_send(qp->get_qp(), &wr, &bad_tx_work_request);
+  if (err) {
     ldout(cct, 1) << __func__ << " failed to send message="
                   << " ibv_post_send failed(most probably should be peer not ready): "
-                  << cpp_strerror(errno) << dendl;
+                  << cpp_strerror(err) << dendl;
     worker->perf_logger->inc(l_msgr_rdma_tx_failed);
+    dispatcher->pending_fins--;
     return ;
   }
 }
