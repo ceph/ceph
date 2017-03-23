@@ -92,7 +92,7 @@ Mutex::~Mutex() {
 void Mutex::Lock(bool no_lockdep) {
   int r;
 
-  if (lockdep && g_lockdep && !no_lockdep) _will_lock();
+  if (lockdep && g_lockdep && !no_lockdep && !recursive) _will_lock();
 
   if (logger && cct && cct->_conf->mutex_perf_counter) {
     utime_t start;
