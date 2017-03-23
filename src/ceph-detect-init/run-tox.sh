@@ -18,7 +18,6 @@
 #
 
 # run from the ceph-detect-init directory or from its parent
-: ${CEPH_DETECT_INIT_VIRTUALENV:=/tmp/ceph-detect-init-virtualenv}
 test -d ceph-detect-init && cd ceph-detect-init
 
 if [ -e tox.ini ]; then
@@ -27,5 +26,4 @@ else
     TOX_PATH=`readlink -f $(dirname $0)/tox.ini`
 fi
 
-source ${CEPH_DETECT_INIT_VIRTUALENV}/bin/activate
 tox -c ${TOX_PATH}

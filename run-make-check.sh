@@ -83,11 +83,9 @@ function main() {
         return 1
     fi
     if run "$@" ; then
-        rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
         echo "cmake check: successful run on $(git rev-parse HEAD)"
         return 0
     else
-        rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
         return 1
     fi
 }

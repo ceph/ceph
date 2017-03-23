@@ -16,7 +16,6 @@
 #
 
 # run from the ceph-disk directory or from its parent
-: ${CEPH_DISK_VIRTUALENV:=/tmp/ceph-disk-virtualenv}
 test -d ceph-disk && cd ceph-disk
 
 if [ -e tox.ini ]; then
@@ -29,5 +28,4 @@ if [ -z $CEPH_BUILD_DIR ]; then
     export CEPH_BUILD_DIR=$(dirname ${TOX_PATH})
 fi
 
-source ${CEPH_DISK_VIRTUALENV}/bin/activate
 tox -c ${TOX_PATH}
