@@ -811,6 +811,15 @@ void Client::_fragmap_remove_non_leaves(Inode *in)
       ++p;
 }
 
+void Client::_fragmap_remove_stopped_mds(Inode *in, mds_rank_t mds)
+{
+  for (auto p = in->fragmap.begin(); p != in->fragmap.end(); )
+    if (p->second == mds)
+      in->fragmap.erase(p++);
+    else
+      ++p;
+}
+
 Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 				 MetaSession *session,
 				 const UserPerm& request_perms)
@@ -1386,7 +1395,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
 // -------
 
-mds_rank_t Client::choose_target_mds(MetaRequest *req) 
+mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
 {
   mds_rank_t mds = MDS_RANK_NONE;
   __u32 hash = 0;
@@ -1455,9 +1464,11 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req)
     if (is_hash && S_ISDIR(in->mode) && !in->fragmap.empty()) {
       frag_t fg = in->dirfragtree[hash];
       if (in->fragmap.count(fg)) {
-        mds = in->fragmap[fg];
-        ldout(cct, 10) << "choose_target_mds from dirfragtree hash" << dendl;
-        goto out;
+	mds = in->fragmap[fg];
+	if (phash_diri)
+	  *phash_diri = in;
+	ldout(cct, 10) << "choose_target_mds from dirfragtree hash" << dendl;
+	goto out;
       }
     }
   
@@ -1660,27 +1671,28 @@ int Client::make_request(MetaRequest *request,
     request->caller_cond = &caller_cond;
 
     // choose mds
-    mds_rank_t mds = choose_target_mds(request);
-    if (mds == MDS_RANK_NONE || !mdsmap->is_active_or_stopping(mds)) {
-      ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
-      wait_on_list(waiting_for_mdsmap);
+    Inode *hash_diri = NULL;
+    mds_rank_t mds = choose_target_mds(request, &hash_diri);
+    int mds_state = (mds == MDS_RANK_NONE) ? MDSMap::STATE_NULL : mdsmap->get_state(mds);
+    if (mds_state != MDSMap::STATE_ACTIVE && mds_state != MDSMap::STATE_STOPPING) {
+      if (mds_state == MDSMap::STATE_NULL && mds >= mdsmap->get_max_mds()) {
+	if (hash_diri) {
+	  ldout(cct, 10) << " target mds." << mds << " has stopped, remove it from fragmap" << dendl;
+	  _fragmap_remove_stopped_mds(hash_diri, mds);
+	} else {
+	  ldout(cct, 10) << " target mds." << mds << " has stopped, trying a random mds" << dendl;
+	  request->resend_mds = _get_random_up_mds();
+	}
+      } else {
+	ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
+	wait_on_list(waiting_for_mdsmap);
+      }
       continue;
     }
 
     // open a session?
     MetaSession *session = NULL;
     if (!have_open_session(mds)) {
-      if (!mdsmap->is_active_or_stopping(mds)) {
-	ldout(cct, 10) << "no address for mds." << mds << ", waiting for new mdsmap" << dendl;
-	wait_on_list(waiting_for_mdsmap);
-
-	if (!mdsmap->is_active_or_stopping(mds)) {
-	  ldout(cct, 10) << "hmm, still have no address for mds." << mds << ", trying a random mds" << dendl;
-	  request->resend_mds = _get_random_up_mds();
-	  continue;
-	}
-      }
-      
       session = _get_or_open_mds_session(mds);
 
       // wait
