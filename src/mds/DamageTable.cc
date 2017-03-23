@@ -49,6 +49,7 @@ class DirFragDamage : public DamageEntry
     f->dump_int("id", id);
     f->dump_int("ino", ino);
     f->dump_stream("frag") << frag;
+    f->dump_string("path", path);
     f->close_section();
   }
 };
@@ -87,6 +88,7 @@ class DentryDamage : public DamageEntry
     f->dump_stream("frag") << frag;
     f->dump_string("dname", dname);
     f->dump_stream("snap_id") << snap_id;
+    f->dump_string("path", path);
     f->close_section();
   }
 };
@@ -115,6 +117,7 @@ class BacktraceDamage : public DamageEntry
     f->dump_string("damage_type", "backtrace");
     f->dump_int("id", id);
     f->dump_int("ino", ino);
+    f->dump_string("path", path);
     f->close_section();
   }
 };
@@ -125,7 +128,7 @@ DamageEntry::~DamageEntry()
 
 bool DamageTable::notify_dentry(
     inodeno_t ino, frag_t frag,
-    snapid_t snap_id, const std::string &dname)
+    snapid_t snap_id, const std::string &dname, const std::string &path)
 {
   if (oversized()) {
     return true;
@@ -147,6 +150,7 @@ bool DamageTable::notify_dentry(
   if (dentries.count(key) == 0) {
     DamageEntryRef entry = std::make_shared<DentryDamage>(
         ino, frag, dname, snap_id);
+    entry->path = path;
     dentries[key][DentryIdent(dname, snap_id)] = entry;
     by_id[entry->id] = entry;
   }
@@ -154,7 +158,8 @@ bool DamageTable::notify_dentry(
   return false;
 }
 
-bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag)
+bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag,
+                                 const std::string &path)
 {
   // Special cases: damage to these dirfrags is considered fatal to
   // the MDS rank that owns them.
@@ -175,6 +180,7 @@ bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag)
   auto key = DirFragIdent(ino, frag);
   if (dirfrags.count(key) == 0) {
     DamageEntryRef entry = std::make_shared<DirFragDamage>(ino, frag);
+    entry->path = path;
     dirfrags[key] = entry;
     by_id[entry->id] = entry;
   }
@@ -182,7 +188,7 @@ bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag)
   return false;
 }
 
-bool DamageTable::notify_remote_damaged(inodeno_t ino)
+bool DamageTable::notify_remote_damaged(inodeno_t ino, const std::string &path)
 {
   if (oversized()) {
     return true;
@@ -190,6 +196,7 @@ bool DamageTable::notify_remote_damaged(inodeno_t ino)
 
   if (remotes.count(ino) == 0) {
     auto entry = std::make_shared<BacktraceDamage>(ino);
+    entry->path = path;
     remotes[ino] = entry;
     by_id[entry->id] = entry;
   }

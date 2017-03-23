@@ -8204,8 +8204,16 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSInternal
   if (r < 0) {
       dout(0) << "open_remote_dentry_finish bad remote dentry " << *dn << dendl;
       dn->state_set(CDentry::STATE_BADREMOTEINO);
+
+      std::string path;
+      CDir *dir = dn->get_dir();
+      if (dir) {
+        dir->get_inode()->make_path_string(path);
+        path =  path + "/" + dn->get_name();
+      }
+
       bool fatal = mds->damage_table.notify_remote_damaged(
-          dn->get_projected_linkage()->get_remote_ino());
+          dn->get_projected_linkage()->get_remote_ino(), path);
       if (fatal) {
         mds->damaged();
         assert(0);  // unreachable, damaged() respawns us
