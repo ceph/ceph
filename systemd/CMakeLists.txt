@@ -16,4 +16,5 @@ install(FILES
   ceph-rbd-mirror@.service
   ceph-disk@.service
   rbdmap.service
+  check_rdma.sh
   DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/systemd/system)
