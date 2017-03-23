@@ -71,6 +71,13 @@ def task(ctx, config):
     clients = [
         remote for remote,
                    roles_for_host in remotes.remotes.iteritems()]
+
+    rgw_remote = ctx.cluster.only(teuthology.is_type('rgw'))
+    rgw = [
+        remote for remote,
+                   roles_for_host in rgw_remote.remotes.iteritems()]
+
+
     # clone the repo
 
     clients[0].run(args=['sudo', 'rm', '-rf', 'nfs-ganesha-rgw'], check_status=False)
@@ -88,13 +95,19 @@ def task(ctx, config):
 
     sys_conf = {}
 
-    sys_conf['rgw_hostname'] = clients[0].shortname
+    sys_conf['rgw_hostname'] = rgw[0].shortname
+
+    # copy v_as_out = out.read() becasue of bz
+
+    out = cStringIO.StringIO()
+    clients[0].run(args=['sudo', 'cat', '/etc/ceph/ceph.client.admin.keyring'], stdout=out)
+    v_as_out = out.read()
+    teuthology.create_file(rgw[0], '/etc/ceph/ceph.client.admin.keyring', data=v_as_out, sudo=True)
 
 
     out = cStringIO.StringIO()
-    clients[0].run(args=['radosgw-admin', 'user', 'create', '--display-name="johnny rotten"', '--uid=johnny'],
+    rgw[0].run(args=['radosgw-admin', 'user', 'create', '--display-name="johnny rotten"', '--uid=johnny'],
                stdout=out)
-
     v_as_out = out.read()
 
     v_as_json = json.loads(v_as_out)
