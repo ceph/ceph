@@ -9,6 +9,7 @@ LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
+ExecStartPre=/usr/lib/systemd/system/check_rdma.sh %n
 ExecStart=/usr/bin/ceph-mds -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID
 PrivateDevices=yes
@@ -19,6 +20,7 @@ TasksMax=infinity
 Restart=on-failure
 StartLimitInterval=30min
 StartLimitBurst=3
+ExecStopPost=/usr/lib/systemd/system/check_rdma.sh %n clean
 
 [Install]
 WantedBy=ceph-mds.target
