@@ -210,6 +210,8 @@ void Device::uninit()
 
 Device::~Device()
 {
+  delete async_handler;
+
   uninit();
 
   for (int i = 1; i <= port_cnt; i++)
