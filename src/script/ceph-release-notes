@@ -143,14 +143,14 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
                 author = commit.parents[-1].author.name
 
             if strict and not issues:
-                print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " has no associated issue")
+                print ("ERROR: https://github.com/ceph/ceph/pull/" + str(number) + " has no associated issue")
                 continue    
             
             if strict:
                 title_re = '^(?:hammer|infernalis|jewel|kraken):\s+(cephx|cli|common|mon|msgr|osd|log|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|cmake|doc|crush|librados)(:.*)'
                 match = re.match(title_re, title)
                 if not match:
-                    print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title.encode("utf-8") + " does not match " + title_re)
+                    print ("ERROR: https://github.com/ceph/ceph/pull/" + str(number) + " title " + title.encode("utf-8") + " does not match " + title_re)
                 else:
                     title = match.group(1) + match.group(2)
             if use_tags:
@@ -184,7 +184,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
         if plaintext:
             print ("* {title} ({issues}{author})".format(title=title.encode("utf-8"), issues=issues, author=author.encode("utf-8")))
         else:
-            print ("* {title} ({issues}`pr#{pr} <http://github.com/ceph/ceph/pull/{pr}>`_, {author})".format(title=title.encode("utf-8"), issues=issues, author=author.encode("utf-8"), pr=pr))
+            print ("* {title} ({issues}`pr#{pr} <https://github.com/ceph/ceph/pull/{pr}>`_, {author})".format(title=title.encode("utf-8"), issues=issues, author=author.encode("utf-8"), pr=pr))
         if message:
             print (message)
 
