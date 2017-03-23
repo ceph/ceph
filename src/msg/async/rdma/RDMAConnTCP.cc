@@ -111,3 +111,10 @@ void RDMAConnTCP::gid_to_wire_gid(const union ibv_gid *gid, char wgid[])
     sprintf(&wgid[i * 8], "%08x", htonl(*(uint32_t *)(gid->raw + i * 4)));
 }
 
+ostream &RDMAConnTCP::print(ostream &o)
+{
+  return o << "RDMAConnTCP: {" <<
+    " lqpn: " << local_qpn() <<
+    " rqpn: " << remote_qpn() <<
+    " }";
+}

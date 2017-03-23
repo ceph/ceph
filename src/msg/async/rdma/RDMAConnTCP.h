@@ -65,6 +65,8 @@ public:
   virtual void cleanup() override;
   virtual int try_connect(const entity_addr_t&, const SocketOptions &opt) override;
   virtual int remote_qpn()override { return peer_msg.qpn; };
+
+  virtual ostream &print(ostream &o) override;
 };
 
 class RDMAServerConnTCP : public RDMAServerSocketImpl {

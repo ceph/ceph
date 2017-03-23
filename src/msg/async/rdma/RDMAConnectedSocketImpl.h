@@ -87,6 +87,7 @@ protected:
   virtual ssize_t submit(bool more);
   virtual int remote_qpn() = 0;
 
+  virtual ostream &print(ostream &o) = 0;
 };
 
 class RDMAServerSocketImpl : public ServerSocketImpl {
@@ -107,6 +108,11 @@ protected:
   virtual void abort_accept() = 0;
   virtual int fd() const = 0;
 };
+
+inline ostream& operator<<(ostream& out, RDMAConnectedSocketImpl &s)
+{
+  return s.print(out);
+}
 
 #endif
 

@@ -290,7 +290,7 @@ class Infiniband {
 
 inline ostream& operator<<(ostream& out, const Infiniband::QueuePair &qp)
 {
-    return out << qp.get_local_qp_number();
+    return out << std::hex << std::showbase << qp.get_local_qp_number();
 }
 
 #endif
