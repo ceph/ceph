@@ -523,6 +523,22 @@ recovery operations to ensure optimal performance during recovery.
 :Type: 32-bit Integer
 :Default: ``5``
 
+
+``osd agent max ops``
+
+:Description: The maximum number of agent flush ops for tiering flushing.
+:Type: 32-bit Integer
+:Default: ``4``
+
+
+``osd agent max low ops``
+
+:Description: The maximum number of low speed agent flush ops for tiering flushing.
+:Type: 32-bit Integer
+:Default: ``2``
+
+
+
 .. index:: OSD; backfilling
 
 Backfilling
