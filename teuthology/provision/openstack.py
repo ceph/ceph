@@ -92,7 +92,14 @@ class ProvisionOpenStack(OpenStack):
                                      " not information available yet")
             # do not use OpenStack().run because its
             # bugous for volume
-            misc.sh("openstack server add volume " + name + " " + volume_name)
+            with safe_while(sleep=20, increment=20, tries=10,
+                            action="add volume " + volume_name) as proceed:
+                while proceed():
+                    try:
+                        misc.sh("openstack server add volume " + name + " " + volume_name)
+                        break
+                    except subprocess.CalledProcessError:
+                        log.warning("openstack add volume failed unexpectedly; retrying")
 
     @staticmethod
     def ip2name(prefix, ip):
