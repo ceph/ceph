@@ -44,6 +44,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         misc/e2fsprogs-libuuid \
         misc/getopt \
         textproc/expat2 \
+        textproc/gsed \
         textproc/libxml2 \
         textproc/xmlstarlet \
 	textproc/jq \
