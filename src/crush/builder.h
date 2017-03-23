@@ -234,7 +234,7 @@ extern int crush_bucket_add_item(struct crush_map *map, struct crush_bucket *buc
  *
  * If __bucket->alg__ is different from ::CRUSH_BUCKET_UNIFORM,
  * set the  __weight__ of  __item__ in __bucket__. The former weight of the
- * item is subtracted from the weight of of the bucket and the new weight is added.
+ * item is subtracted from the weight of the bucket and the new weight is added.
  * The return value is the difference between the new item weight and the former
  * item weight.
  *
