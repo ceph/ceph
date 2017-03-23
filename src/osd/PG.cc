@@ -1757,7 +1757,7 @@ void PG::activate(ObjectStore::Transaction& t,
       // share past_intervals if we are creating the pg on the replica
       // based on whether our info for that peer was dne() *before*
       // updating pi.history in the backfill block above.
-      if (needs_past_intervals)
+      if (m && needs_past_intervals)
 	m->past_intervals = past_intervals;
 
       // update local version of peer's missing list!
