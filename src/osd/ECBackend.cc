@@ -2099,15 +2099,15 @@ void ECBackend::be_deep_scrub(
     o.digest_present = false;
     return;
   } else {
-    if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
-      dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
-      o.read_error = true;
+    if (hinfo->get_total_chunk_size() != pos) {
+      dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;
+      o.ec_size_mismatch = true;
       return;
     }
 
-    if (hinfo->get_total_chunk_size() != pos) {
-      dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;
-      o.read_error = true;
+    if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
+      dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
+      o.ec_hash_mismatch = true;
       return;
     }
 

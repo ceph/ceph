@@ -3832,8 +3832,12 @@ void PG::repair_object(
   const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
   pg_shard_t bad_peer)
 {
+  list<pg_shard_t> op_shards;
+  for (auto i : *ok_peers) {
+    op_shards.push_back(i.second);
+  }
   dout(10) << "repair_object " << soid << " bad_peer osd."
-	   << bad_peer << " ok_peers osd.{" << ok_peers << "}" << dendl;
+	   << bad_peer << " ok_peers osd.{" << op_shards << "}" << dendl;
   ScrubMap::object &po = ok_peers->back().first;
   eversion_t v;
   bufferlist bv;
