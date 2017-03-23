@@ -14,6 +14,7 @@
 
 #include "AuthAuthorizeHandler.h"
 #include "cephx/CephxAuthorizeHandler.h"
+#include "gssapi/GssapiAuthorizeHandler.h"
 #include "none/AuthNoneAuthorizeHandler.h"
 #include "common/Mutex.h"
 
@@ -35,6 +36,10 @@ AuthAuthorizeHandler *AuthAuthorizeHandlerRegistry::get_handler(int protocol)
     
   case CEPH_AUTH_CEPHX:
     m_authorizers[protocol] = new CephxAuthorizeHandler();
+    return m_authorizers[protocol];
+
+  case CEPH_AUTH_GSSAPI:
+    m_authorizers[protocol] = new GssapiAuthorizeHandler();
     return m_authorizers[protocol];
   }
   return NULL;

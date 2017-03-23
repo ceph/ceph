@@ -17,6 +17,7 @@
 
 #include "AuthClientHandler.h"
 #include "cephx/CephxClientHandler.h"
+#include "gssapi/GssapiClientHandler.h"
 #include "none/AuthNoneClientHandler.h"
 
 AuthClientHandler *get_auth_client_handler(CephContext *cct, int proto,
@@ -25,6 +26,8 @@ AuthClientHandler *get_auth_client_handler(CephContext *cct, int proto,
   switch (proto) {
   case CEPH_AUTH_CEPHX:
     return new CephxClientHandler(cct, rkeys);
+  case CEPH_AUTH_GSSAPI:
+    return new GssapiClientHandler(cct, rkeys);
   case CEPH_AUTH_NONE:
     return new AuthNoneClientHandler(cct, rkeys);
   default:

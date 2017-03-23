@@ -153,6 +153,7 @@ public:
 
   const MonCommand *leader_supported_mon_commands;
   int leader_supported_mon_commands_size;
+  string client_keytab;
 
 private:
   void new_tick();

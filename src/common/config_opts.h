@@ -41,6 +41,8 @@ OPTION(restapi_base_url, OPT_STR, "")	// "
 OPTION(fatal_signal_handlers, OPT_BOOL, true)
 OPTION(erasure_code_dir, OPT_STR, CEPH_PKGLIBDIR"/erasure-code") // default location for erasure-code plugins
 
+OPTION(krb5_client_keytab_file, OPT_STR, "/var/lib/ceph/$name/krb5_client.keytab")
+
 OPTION(log_file, OPT_STR, "/var/log/ceph/$cluster-$name.log") // default changed by common_preinit()
 OPTION(log_max_new, OPT_INT, 1000) // default changed by common_preinit()
 OPTION(log_max_recent, OPT_INT, 10000) // default changed by common_preinit()

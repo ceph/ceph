@@ -155,6 +155,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 			cct->_conf->auth_service_required : cct->_conf->auth_supported ),
   leader_supported_mon_commands(NULL),
   leader_supported_mon_commands_size(0),
+  client_keytab(cct->_conf->krb5_client_keytab_file),
   store(s),
   
   state(STATE_PROBING),
@@ -194,6 +195,11 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
 
   update_log_clients();
+
+  if (!client_keytab.empty()){
+    int r = setenv("KRB5_CLIENT_KTNAME", client_keytab.c_str(), 1);
+    assert(!r);
+  }
 
   paxos = new Paxos(this, "paxos");
 
@@ -2702,7 +2708,9 @@ bool Monitor::is_keyring_required()
     g_conf->auth_service_required : g_conf->auth_supported;
 
   return auth_service_required == "cephx" ||
-    auth_cluster_required == "cephx";
+         auth_cluster_required == "cephx" ||
+         auth_service_required == "gssapi" ||
+         auth_cluster_required == "gssapi";
 }
 
 void Monitor::handle_command(MonOpRequestRef op)

@@ -205,6 +205,12 @@ find_package(OpenLdap REQUIRED)
 set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
 endif(${WITH_OPENLDAP})
 
+option(WITH_GSSAPI "GSSAPI is here" ON)
+#if(${WITH_GSSAPI})
+find_package(GSSAPI)
+set(HAVE_GSSAPI ${GSSAPI_FOUND})
+#endif(${WITH_GSSAPI})
+
 option(WITH_FUSE "Fuse is here" ON)
 if(${WITH_FUSE})
 find_package(fuse)
