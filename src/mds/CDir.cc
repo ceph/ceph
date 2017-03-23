@@ -1958,7 +1958,7 @@ void CDir::go_bad_dentry(snapid_t last, const std::string &dname)
 {
   dout(10) << "go_bad_dentry " << dname << dendl;
   const bool fatal = cache->mds->damage_table.notify_dentry(
-      inode->ino(), frag, last, dname);
+      inode->ino(), frag, last, dname, get_path() + "/" + dname);
   if (fatal) {
     cache->mds->damaged();
     ceph_abort();  // unreachable, damaged() respawns us
@@ -1968,7 +1968,8 @@ void CDir::go_bad_dentry(snapid_t last, const std::string &dname)
 void CDir::go_bad(bool complete)
 {
   dout(10) << "go_bad " << frag << dendl;
-  const bool fatal = cache->mds->damage_table.notify_dirfrag(inode->ino(), frag);
+  const bool fatal = cache->mds->damage_table.notify_dirfrag(
+      inode->ino(), frag, get_path());
   if (fatal) {
     cache->mds->damaged();
     ceph_abort();  // unreachable, damaged() respawns us
