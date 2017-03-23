@@ -2,10 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #include <errno.h>
 
-#include "include/types.h"
-#include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_client.h"
-#include "include/rados/librados.hpp"
 
 #include "common/debug.h"
 

@@ -1,10 +1,8 @@
 #ifndef CEPH_CLS_RGW_CLIENT_H
 #define CEPH_CLS_RGW_CLIENT_H
 
-#include "include/types.h"
 #include "include/str_list.h"
 #include "include/rados/librados.hpp"
-#include "cls_rgw_types.h"
 #include "cls_rgw_ops.h"
 #include "common/RefCountedObj.h"
 #include "include/compat.h"
@@ -12,7 +10,6 @@
 
 // Forward declaration
 class BucketIndexAioManager;
-
 /*
  * Bucket index AIO request argument, this is used to pass a argument
  * to callback.

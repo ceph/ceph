@@ -1,6 +1,5 @@
 
 #include "cls/rgw/cls_rgw_types.h"
-#include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "include/utime.h"
 

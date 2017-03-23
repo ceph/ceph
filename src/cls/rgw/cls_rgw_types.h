@@ -1,9 +1,6 @@
 #ifndef CEPH_CLS_RGW_TYPES_H
 #define CEPH_CLS_RGW_TYPES_H
 
-#include <map>
-
-#include "include/types.h"
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
 

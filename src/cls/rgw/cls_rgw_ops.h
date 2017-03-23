@@ -1,10 +1,6 @@
 #ifndef CEPH_CLS_RGW_OPS_H
 #define CEPH_CLS_RGW_OPS_H
 
-#include <map>
-
-#include "include/types.h"
-#include "common/ceph_time.h"
 #include "cls/rgw/cls_rgw_types.h"
 
 struct rgw_cls_tag_timeout_op

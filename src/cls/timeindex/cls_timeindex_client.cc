@@ -3,7 +3,6 @@
 
 #include <errno.h>
 
-#include "include/types.h"
 #include "cls/timeindex/cls_timeindex_ops.h"
 #include "include/rados/librados.hpp"
 #include "include/compat.h"

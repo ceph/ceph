@@ -1,7 +1,6 @@
 #include <errno.h>
 
-#include "include/types.h"
-#include "cls/version/cls_version_ops.h"
+#include "cls/version/cls_version_client.h"
 #include "include/rados/librados.hpp"
 
 
