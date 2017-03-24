@@ -332,6 +332,7 @@ public:
   int mount();
   void umount();
 
+  void collect_metadata(map<string,string> *pm);
   int fsck();
 
   uint64_t get_fs_usage();
