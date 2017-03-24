@@ -679,8 +679,13 @@ namespace _denc {
 				   !traits::featured, void>::type
     bound_encode(const container& s, size_t& p) {
       size_t elem_size = 0;
-      denc(*(const T*)nullptr, elem_size);
-      p += sizeof(uint32_t) + elem_size * s.size();
+      p += sizeof(uint32_t);
+      if (!s.empty()) {
+	// STL containers use weird element types like std::pair<const K, V>;
+	// cast to something we have denc_traits for.
+	denc(static_cast<const T&>(*s.begin()), elem_size);
+	p += sizeof(uint32_t) + elem_size * s.size();
+      }
     }
     template<typename U=T>
     static typename std::enable_if<sizeof(U) &&
@@ -698,8 +703,13 @@ namespace _denc {
 				   traits::featured>::type
     bound_encode(const container& s, size_t& p, uint64_t f) {
       size_t elem_size = 0;
-      denc(*(const T*)nullptr, elem_size, f);
-      p += sizeof(uint32_t) + elem_size * s.size();
+      p += sizeof(uint32_t);
+      if (!s.empty()) {
+	// STL containers use weird element types like std::pair<const K, V>;
+	// cast to something we have denc_traits for.
+	denc(static_cast<const T&>(*s.begin()), elem_size, f);
+	p += elem_size * s.size();
+      }
     }
 
     template<typename U=T>
@@ -902,7 +912,7 @@ public:
 				 !traits::featured, void>::type
   bound_encode(const container& s, size_t& p) {
     size_t elem_size = 0;
-    denc(*(const T*)nullptr, elem_size);
+    denc(*s.begin(), elem_size);
     p += elem_size * N;
   }
   template<typename U=T>
@@ -919,8 +929,11 @@ public:
 				 traits::featured>::type
   bound_encode(const container& s, size_t& p, uint64_t f) {
     size_t elem_size = 0;
-    denc(*(const T*)nullptr, elem_size, f);
-    p += sizeof(uint32_t) + elem_size * s.size();
+    p += sizeof(uint32_t);
+    if (!s.empty()) {
+      denc(*s.begin(), elem_size, f);
+      p += elem_size * s.size();
+    }
   }
 
   template<typename U=T>
@@ -1018,13 +1031,13 @@ private:
   template<typename T, size_t I, size_t J, size_t ...Is>
   static void bound_encode_helper_nfb(const T& s, size_t& p,
 				      _denc::indices<I, J, Is...>) {
-    denc(*(typename std::tuple_element<I, T>::type *)nullptr, p);
+    denc(std::get<I>(s), p);
     bound_encode_helper_nfb(s, p, _denc::indices<J, Is...>{});
   }
   template<typename T, size_t I>
   static void bound_encode_helper_nfb(const T& s, size_t& p,
 				      _denc::indices<I>) {
-    denc(*(typename std::tuple_element<I, T>::type *)nullptr, p);
+    denc(std::get<I>(s), p);
   }
 
   template<typename T, size_t I, size_t J, size_t ...Is>
@@ -1042,13 +1055,13 @@ private:
   template<typename T, size_t I, size_t J, size_t ...Is>
   static void bound_encode_helper_fb(const T& s, size_t& p, uint64_t f,
 				     _denc::indices<I, J, Is...>) {
-    denc(*(typename std::tuple_element<I, T>::type *)nullptr, p);
+    denc(std::get<I>(s), p);
     bound_encode_helper_fb(s, p, f, _denc::indices<J, Is...>{});
   }
   template<typename T, size_t I>
   static void bound_encode_helper_fb(const T& s, size_t& p, uint64_t f,
 				     _denc::indices<I>) {
-    denc(*(typename std::tuple_element<I, T>::type *)nullptr, p, f);
+    denc(std::get<I>(s), p);
   }
 
   template<typename T, size_t I, size_t J, size_t ...Is>
@@ -1159,14 +1172,14 @@ struct denc_traits<
   template<typename U = T>
   static typename std::enable_if<sizeof(U) && !featured>::type
   bound_encode(const boost::optional<T>& v, size_t& p) {
-    denc(*(bool *)nullptr, p);
+    p += sizeof(bool);
     if (v)
       denc(*v, p);
   }
   template<typename U = T>
   static typename std::enable_if<sizeof(U) && featured>::type
   bound_encode(const boost::optional<T>& v, size_t& p, uint64_t f) {
-    denc(*(bool *)nullptr, p);
+    p += sizeof(bool);
     if (v)
       denc(*v, p);
   }
@@ -1233,7 +1246,7 @@ struct denc_traits<boost::none_t> {
   static constexpr bool bounded = true;
 
   static void bound_encode(const boost::none_t& v, size_t& p) {
-    denc(*(bool *)nullptr, p);
+    p += sizeof(bool);
   }
 
   static void encode(const boost::none_t& v,
