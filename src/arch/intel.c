@@ -22,6 +22,7 @@ int ceph_arch_intel_sse41 = 0;
 int ceph_arch_intel_ssse3 = 0;
 int ceph_arch_intel_sse3 = 0;
 int ceph_arch_intel_sse2 = 0;
+int ceph_arch_intel_aesni = 0;
 
 #ifdef __x86_64__
 
@@ -51,6 +52,7 @@ static void do_cpuid(unsigned int *eax, unsigned int *ebx, unsigned int *ecx,
 #define CPUID_SSSE3	(1 << 9)
 #define CPUID_SSE3	(1)
 #define CPUID_SSE2	(1 << 26)
+#define CPUID_AESNI (1 << 25)
 
 int ceph_arch_intel_probe(void)
 {
@@ -75,6 +77,9 @@ int ceph_arch_intel_probe(void)
 	if ((edx & CPUID_SSE2) != 0) {
 	        ceph_arch_intel_sse2 = 1;
 	}
+  if ((ecx & CPUID_AESNI) != 0) {
+          ceph_arch_intel_aesni = 1;
+  }
 
 	return 0;
 }
