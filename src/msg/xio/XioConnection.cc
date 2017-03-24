@@ -539,12 +539,23 @@ int XioConnection::discard_input_queue(uint32_t flags)
   for (ix = 0; ix < q_size; ++ix) {
     XioSubmit::Queue::iterator q_iter = deferred_q.begin();
     XioSubmit* xs = &(*q_iter);
-    assert(xs->type == XioSubmit::OUTGOING_MSG);
-    XioMsg* xmsg = static_cast<XioMsg*>(xs);
-    deferred_q.erase(q_iter);
-    // release once for each chained xio_msg
-    for (ix = 0; ix < int(xmsg->hdr.msg_cnt); ++ix)
-      xmsg->put();
+    XioMsg* xmsg;
+    switch (xs->type) {
+      case XioSubmit::OUTGOING_MSG:
+	xmsg = static_cast<XioMsg*>(xs);
+	deferred_q.erase(q_iter);
+	// release once for each chained xio_msg
+	for (ix = 0; ix < int(xmsg->hdr.msg_cnt); ++ix)
+	  xmsg->put();
+	break;
+      case XioSubmit::INCOMING_MSG_RELEASE:
+	deferred_q.erase(q_iter);
+	portal->release_xio_rsp(static_cast<XioRsp*>(xs));
+	break;
+      default:
+	ldout(msgr->cct,0) << __func__ << ": Unknown Msg type " << xs->type << dendl;
+	break;
+    }
   }
 
   return 0;
