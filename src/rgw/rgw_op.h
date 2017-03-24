@@ -1512,7 +1512,7 @@ public:
   const string name() override { return "init_multipart"; }
   RGWOpType get_type() override { return RGW_OP_INIT_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-  int prepare_encryption(map<string, bufferlist>& attrs) { return 0; }
+  virtual int prepare_encryption(map<string, bufferlist>& attrs) { return 0; }
 };
 
 class RGWCompleteMultipart : public RGWOp {
