@@ -224,10 +224,12 @@ struct bluestore_extent_ref_map_t {
 
   void bound_encode(size_t& p) const {
     denc_varint((uint32_t)0, p);
-    size_t elem_size = 0;
-    denc_varint_lowz((uint32_t)0, p);
-    ((const record_t*)nullptr)->bound_encode(elem_size);
-    p += elem_size * ref_map.size();
+    if (!ref_map.empty()) {
+      size_t elem_size = 0;
+      denc_varint_lowz((uint64_t)0, elem_size);
+      ref_map.begin()->second.bound_encode(elem_size);
+      p += elem_size * ref_map.size();
+    }
   }
   void encode(bufferlist::contiguous_appender& p) const {
     uint32_t n = ref_map.size();
