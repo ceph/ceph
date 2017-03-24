@@ -1386,10 +1386,12 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
     ::encode(crush->chooseleaf_stable, bl);
   }
 
-  // device classes
-  ::encode(class_map, bl);
-  ::encode(class_name, bl);
-  ::encode(class_bucket, bl);
+  if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    // device classes
+    ::encode(class_map, bl);
+    ::encode(class_name, bl);
+    ::encode(class_bucket, bl);
+  }
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
