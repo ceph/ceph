@@ -192,9 +192,13 @@ void Mgr::init()
   // Wait for FSMap
   dout(4) << "waiting for FSMap..." << dendl;
   lock.Unlock();
-  cond.wait();
+  int ret = cond.wait();
   lock.Lock();
   waiting_for_fs_map = nullptr;
+  if (ret == -1) {
+    dout(4) << "Get FSMap failed, probablely called shutdown." << dendl;
+    return;
+  }
   dout(4) << "Got FSMap." << dendl;
 
   // Wait for MgrDigest...?
@@ -340,6 +344,13 @@ void Mgr::shutdown()
 
   // First stop the server so that we're not taking any more incoming requests
   server.shutdown();
+
+
+  // interupte waiting for fs_map
+  if (waiting_for_fs_map) {
+    waiting_for_fs_map->complete(-1);
+    waiting_for_fs_map = NULL;
+  }
 
   // Then stop the finisher to ensure its enqueued contexts aren't going
   // to touch references to the things we're about to tear down
