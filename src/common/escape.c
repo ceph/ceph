@@ -119,7 +119,6 @@ void escape_xml_attr(const char *buf, char *out)
 
 #define DBL_QUOTE_JESCAPE "\\\""
 #define BACKSLASH_JESCAPE "\\\\"
-#define SLASH_JESCAPE "\\/"
 #define TAB_JESCAPE "\\t"
 #define NEWLINE_JESCAPE "\\n"
 
@@ -136,9 +135,6 @@ int escape_json_attr_len(const char *buf, int src_len)
 			break;
 		case '\\':
 			ret += SSTRL(BACKSLASH_JESCAPE);
-			break;
-		case '/':
-			ret += SSTRL(SLASH_JESCAPE);
 			break;
 		case '\t':
 			ret += SSTRL(TAB_JESCAPE);
@@ -178,11 +174,6 @@ void escape_json_attr(const char *buf, int src_len, char *out)
 			// cppcheck-suppress sizeofDivisionMemfunc
 			memcpy(o, BACKSLASH_JESCAPE, SSTRL(BACKSLASH_JESCAPE));
 			o += SSTRL(BACKSLASH_JESCAPE);
-			break;
-		case '/':
-			// cppcheck-suppress sizeofDivisionMemfunc
-			memcpy(o, SLASH_JESCAPE, SSTRL(SLASH_JESCAPE));
-			o += SSTRL(SLASH_JESCAPE);
 			break;
 		case '\t':
 			// cppcheck-suppress sizeofDivisionMemfunc
