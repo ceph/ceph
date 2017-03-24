@@ -20,8 +20,8 @@ void BasicClient::init(CephContext *cct) {
     const auto& env_map = get_env().get_map();
 
     for (const auto& iter: env_map) {
-      rgw::crypt_sanitize::env x{iter->first, iter->second};
-      ldout(cct, 20) << iter->first << "=" << (x) << dendl;
+      rgw::crypt_sanitize::env x{iter.first, iter.second};
+      ldout(cct, 20) << iter.first << "=" << (x) << dendl;
     }
   }
 }
