@@ -19,6 +19,7 @@ monkey.patch_all(
     subprocess=False,
 )
 import sys
+from gevent.hub import Hub
 
 # Don't write pyc files
 sys.dont_write_bytecode = True
@@ -93,3 +94,17 @@ def install_except_hook():
                                                          exc_traceback))
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
     sys.excepthook = log_exception
+
+
+def patch_gevent_hub_error_handler():
+    Hub._origin_handle_error = Hub.handle_error
+
+    def custom_handle_error(self, context, type, value, tb):
+        if not issubclass(type, Hub.SYSTEM_ERROR + Hub.NOT_ERROR):
+            log.error("Uncaught exception (Hub)", exc_info=(type, value, tb))
+
+        self._origin_handle_error(context, type, value, tb)
+
+    Hub.handle_error = custom_handle_error
+
+patch_gevent_hub_error_handler()
