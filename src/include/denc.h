@@ -546,10 +546,18 @@ public:
 		     uint64_t f=0) {
     uint32_t len;
     ::denc(len, p);
+    decode_nohead(len, s, p);
+  }
+  static void decode_nohead(size_t len, value_type& s,
+			    buffer::ptr::iterator& p) {
     s.clear();
     if (len) {
       s.append(p.get_pos_add(len), len);
     }
+  }
+  static void encode_nohead(const value_type& s,
+			    buffer::list::contiguous_appender& p) {
+    p.append(s.data(), s.length());
   }
 };
 
@@ -597,6 +605,17 @@ struct denc_traits<bufferlist> {
     ::denc(len, p);
     v.clear();
     v.push_back(p.get_ptr(len));
+  }
+  static void encode_nohead(const bufferlist& v,
+			    buffer::list::contiguous_appender& p) {
+    p.append(v);
+  }
+  static void decode_nohead(size_t len, bufferlist& v,
+			    buffer::ptr::iterator& p) {
+    v.clear();
+    if (len) {
+      v.append(p.get_ptr(len));
+    }
   }
 };
 
