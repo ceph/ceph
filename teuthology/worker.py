@@ -8,7 +8,7 @@ import yaml
 
 from datetime import datetime
 
-from teuthology import setup_log_file
+from teuthology import setup_log_file, install_except_hook
 from . import beanstalk
 from . import report
 from . import safepath
@@ -56,19 +56,6 @@ def load_config(ctx=None):
             ))
         else:
             teuth_config.archive_base = ctx.archive_dir
-
-
-def install_except_hook():
-    """
-    Install an exception hook that first logs any uncaught exception, then
-    raises it.
-    """
-    def log_exception(exc_type, exc_value, exc_traceback):
-        if not issubclass(exc_type, KeyboardInterrupt):
-            log.critical("Uncaught exception", exc_info=(exc_type, exc_value,
-                                                         exc_traceback))
-        sys.__excepthook__(exc_type, exc_value, exc_traceback)
-    sys.excepthook = log_exception
 
 
 def main(ctx):
