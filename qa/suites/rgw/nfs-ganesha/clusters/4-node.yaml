@@ -27,4 +27,3 @@ roles:
   - osd.7
   - osd.8
 - - rgw.0
-- - client.0
