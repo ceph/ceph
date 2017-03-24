@@ -2519,6 +2519,11 @@ void RGWDeleteBucket::execute()
   if ( op_ret < 0) {
      ldout(s->cct, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
+  
+  op_ret = store->check_bucket_empty(s->bucket_info);
+  if (op_ret < 0) {
+    return;
+  }
 
   if (!store->is_meta_master()) {
     bufferlist in_data;
@@ -2534,7 +2539,7 @@ void RGWDeleteBucket::execute()
     }
   }
 
-  op_ret = store->delete_bucket(s->bucket_info, ot);
+  op_ret = store->delete_bucket(s->bucket_info, ot, false);
 
   if (op_ret == -ECANCELED) {
     // lost a race, either with mdlog sync or another delete bucket operation.

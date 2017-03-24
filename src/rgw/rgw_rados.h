@@ -3067,13 +3067,15 @@ public:
                string *ptag,
                ceph::buffer::list *petag,
                struct rgw_err *err);
+  
+  int check_bucket_empty(RGWBucketInfo& bucket_info);
 
   /**
    * Delete a bucket.
    * bucket: the name of the bucket to delete
    * Returns 0 on success, -ERR# otherwise.
    */
-  int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker);
+  int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, bool check_empty = true);
 
   bool is_meta_master();
 
