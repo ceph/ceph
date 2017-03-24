@@ -47,7 +47,7 @@ TEST(blkdev, get_block_device_base) {
       printf("  got '%s' expected '%s'\n", buf3, de->d_name);
       ASSERT_EQ(0, strcmp(de->d_name, buf3));
       printf("  discard granularity = %lld .. supported = %d\n",
-	     (long long)get_block_device_int_property(base, "discard_granularity"),
+	     (long long)get_block_device_int_property(base, "queue/discard_granularity"),
 	     (int)block_device_support_discard(base));
 
       char subdirfn[PATH_MAX];
@@ -74,7 +74,7 @@ TEST(blkdev, get_block_device_base) {
 	printf("  got '%s' expected '%s'\n", buf3, de->d_name);
 	ASSERT_EQ(0, strcmp(buf3, de->d_name));
 	printf("  discard granularity = %lld .. supported = %d\n",
-	       (long long)get_block_device_int_property(part, "discard_granularity"),
+	       (long long)get_block_device_int_property(part, "queue/discard_granularity"),
 	       (int)block_device_support_discard(part));
       }
 
