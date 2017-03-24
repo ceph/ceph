@@ -11,6 +11,7 @@ extern int64_t get_block_device_string_property(const char *devname, const char 
 						char *val, size_t maxlen);
 extern bool block_device_support_discard(const char *devname);
 extern bool block_device_is_rotational(const char *devname);
+extern int block_device_model(const char *devname, char *model, size_t max);
 extern int block_device_discard(int fd, int64_t offset, int64_t len);
 extern int get_device_by_uuid(uuid_d dev_uuid, const char* label,
 		char* partition, char* device);
