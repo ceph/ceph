@@ -115,7 +115,11 @@ int KernelDevice::open(const string& p)
       goto out_fail;
     }
     size = s;
+  } else {
+    size = st.st_size;
+  }
 
+  {
     char partition[1024], devname[1024];
     r = get_device_by_fd(fd_buffered, partition, devname);
     if (r < 0) {
@@ -123,11 +127,8 @@ int KernelDevice::open(const string& p)
 	   << cpp_strerror(r) << dendl;
       goto out_fail;
     }
+    dout(20) << __func__ << " devname " << devname << dendl;
     rotational = block_device_is_rotational(devname);
-  } else {
-    size = st.st_size;
-    //regular file is rotational device
-    rotational = true;
   }
 
   // Operate as though the block size is 4 KB.  The backing file
