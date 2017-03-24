@@ -126,7 +126,7 @@ public:
 
     std::mutex lock;
     std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
-
+    set<unsigned int> unsync_bdev; ///< write but unsync bdev recently
     FileWriter(FileRef f)
       : file(f),
 	pos(0),
@@ -288,6 +288,7 @@ private:
   //void _aio_finish(void *priv);
 
   void flush_bdev();  // this is safe to call without a lock
+  void flush_bdev(set<unsigned int> &unsync_bdev); // only flush bdev in this set
 
   int _preallocate(FileRef f, uint64_t off, uint64_t len);
   int _truncate(FileWriter *h, uint64_t off);
