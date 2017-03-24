@@ -660,7 +660,7 @@
   
   rbd help info
   usage: rbd info [--pool <pool>] [--image <image>] [--snap <snap>] 
-                  [--format <format>] [--pretty-format] 
+                  [--image-id <image-id>] [--format <format>] [--pretty-format] 
                   <image-or-snap-spec> 
   
   Show information about image size, striping, etc.
@@ -673,6 +673,7 @@
     -p [ --pool ] arg     pool name
     --image arg           image name
     --snap arg            snapshot name
+    --image-id arg        image id
     --format arg          output format [plain, json, or xml]
     --pretty-format       pretty formatting (json and xml)
   
