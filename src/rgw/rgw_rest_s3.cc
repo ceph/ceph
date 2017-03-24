@@ -1563,7 +1563,7 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
       return 0;
   }
 
-  while (true) {
+  while (!*done) {
   /*
    * iterate through fields
    */
@@ -1589,6 +1589,8 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
       break;
 
     r = read_line(bl, chunk_size, &reached_boundary, done);
+    if (r < 0)
+        return r;
   }
 
   return 0;
