@@ -57,7 +57,7 @@ make_fresh() {
     exit 1
   fi
 
-  env CEPH_NUM_MON=3 CEPH_NUM_OSD=2 CEPH_NUM_MDS=1 \
+  env MON=3 OSD=0 MDS=0 MGR=0 \
     ./vstart.sh -n -l -d mon
 }
 
