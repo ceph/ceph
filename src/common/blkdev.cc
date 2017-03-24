@@ -141,7 +141,7 @@ int64_t get_block_device_int_property(const char *devname, const char *property)
     return r;
 
   snprintf(filename, sizeof(filename),
-	   "%s/sys/block/%s/queue/%s", sandbox_dir, basename, property);
+	   "%s/sys/block/%s/%s", sandbox_dir, basename, property);
 
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
@@ -170,7 +170,7 @@ int64_t get_block_device_int_property(const char *devname, const char *property)
 
 bool block_device_support_discard(const char *devname)
 {
-  return get_block_device_int_property(devname, "discard_granularity") > 0;
+  return get_block_device_int_property(devname, "queue/discard_granularity") > 0;
 }
 
 int block_device_discard(int fd, int64_t offset, int64_t len)
@@ -181,7 +181,7 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
 
 bool block_device_is_rotational(const char *devname)
 {
-  return get_block_device_int_property(devname, "rotational") > 0;
+  return get_block_device_int_property(devname, "queue/rotational") > 0;
 }
 
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
