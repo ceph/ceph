@@ -83,6 +83,8 @@ public:
     return block_size;
   }
 
+  int collect_metadata(string prefix, map<string,string> *pm) const override;
+
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc,
 	   bool buffered) override;

@@ -865,6 +865,7 @@ int NVMEDevice::open(const string& p)
   driver->register_device(this);
   block_size = driver->get_block_size();
   size = driver->get_size();
+  name = serial_number;
 
   //nvme is non-rotational device.
   rotational = false;
@@ -887,6 +888,17 @@ void NVMEDevice::close()
   driver->remove_device(this);
 
   dout(1) << __func__ << " end" << dendl;
+}
+
+void NVMEDevice::collect_metadata(map<string,string> *pm)
+{
+  (*pm)[prefix + "rotational"] = "0";
+  (*pm)[prefix + "size"] = stringify(get_size());
+  (*pm)[prefix + "block_size"] = stringify(get_block_size());
+  (*pm)[prefix + "driver"] = "NVMEDevice";
+  (*pm)[prefix + "type"] = "nvme";
+  (*pm)[prefix + "access_mode"] = "spdk";
+  (*pm)[prefix + "nvme_serial_number"] = name;
 }
 
 int NVMEDevice::flush()
