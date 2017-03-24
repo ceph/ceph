@@ -222,6 +222,27 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
     blkid_put_cache(cache);
   return rc;
 }
+
+int get_device_by_fd(int fd, char *partition, char *device)
+{
+  struct stat st;
+  int r = fstat(fd, &st);
+  if (r < 0) {
+    return -EINVAL;  // hrm.
+  }
+  char *t = blkid_devno_to_devname(st.st_rdev);
+  if (!t) {
+    return -EINVAL;
+  }
+  strcpy(partition, t);
+  dev_t diskdev;
+  r = blkid_devno_to_wholedisk(st.st_rdev, device, PATH_MAX, &diskdev);
+  if (r < 0) {
+    return -EINVAL;
+  }
+  return 0;
+}
+
 #elif defined(__APPLE__)
 #include <sys/disk.h>
 
@@ -291,6 +312,10 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 {
   return -EOPNOTSUPP;
 }
+int get_device_by_fd(int fd, char* partition, char* device)
+{
+  return -EOPNOTSUPP;
+}
 #else
 int get_block_device_size(int fd, int64_t *psize)
 {
@@ -314,6 +339,11 @@ bool block_device_is_rotational(const char *devname)
 
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 	char* device)
+{
+  return -EOPNOTSUPP;
+}
+
+int get_device_by_fd(int fd, char* partition, char* device)
 {
   return -EOPNOTSUPP;
 }
