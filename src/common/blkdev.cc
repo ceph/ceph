@@ -206,6 +206,11 @@ bool block_device_is_rotational(const char *devname)
   return get_block_device_int_property(devname, "queue/rotational") > 0;
 }
 
+int block_device_model(const char *devname, char *model, size_t max)
+{
+  return get_block_device_string_property(devname, "device/model", model, max);
+}
+
 int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 	char* device)
 {
