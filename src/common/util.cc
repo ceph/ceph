@@ -263,3 +263,39 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
   }
   f->close_section();
 }
+
+
+// If non-printable characters found then convert bufferlist to
+// base64 encoded string indicating whether it did.
+string cleanbin(bufferlist &bl, bool &base64)
+{
+  bufferlist::iterator it;
+  for (it = bl.begin(); it != bl.end(); ++it) {
+    if (iscntrl(*it))
+      break;
+  }
+  if (it == bl.end()) {
+    base64 = false;
+    string result(bl.c_str(), bl.length());
+    return result;
+  }
+
+  bufferlist b64;
+  bl.encode_base64(b64);
+  string encoded(b64.c_str(), b64.length());
+  base64 = true;
+  return encoded;
+}
+
+// If non-printable characters found then convert to "Base64:" followed by
+// base64 encoding
+string cleanbin(string &str)
+{
+  bool base64;
+  bufferlist bl;
+  bl.append(str);
+  string result = cleanbin(bl, base64);
+  if (base64)
+    result = "Base64:" + result;
+  return result;
+}
