@@ -2751,6 +2751,11 @@ def parse_args():
         help='be more verbose',
         )
     parser.add_argument(
+        '--log-stdout',
+        action='store_true', default=None,
+        help='log to stdout',
+    )
+    parser.add_argument(
         '--prepend-to-path',
         metavar='PATH',
         default='/usr/bin',
@@ -2975,13 +2980,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    loglevel = logging.WARNING
-    if args.verbose:
-        loglevel = logging.DEBUG
-
-    logging.basicConfig(
-        level=loglevel,
-        )
+    setup_logging(args.verbose, args.log_stdout)
 
     if args.prepend_to_path != '':
         path = os.environ.get('PATH', os.defpath)
@@ -3009,6 +3008,24 @@ def main():
                 exc_name=exc_name,
                 msg=error,
             )
+        )
+
+
+def setup_logging(verbose, log_stdout):
+    loglevel = logging.WARNING
+    if verbose:
+        loglevel = logging.DEBUG
+
+    if log_stdout:
+        ch = logging.StreamHandler(stream=sys.stdout)
+        ch.setLevel(loglevel)
+        formatter = logging.Formatter('%(filename)s: %(message)s')
+        ch.setFormatter(formatter)
+        LOG.addHandler(ch)
+        LOG.setLevel(loglevel)
+    else:
+        logging.basicConfig(
+            level=loglevel,
         )
 
 
