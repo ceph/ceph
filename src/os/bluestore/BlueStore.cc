@@ -16,6 +16,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <algorithm>
 
 #include "BlueStore.h"
 #include "os/kv.h"
@@ -3174,10 +3175,16 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     throttle_deferred_bytes(cct, "bluestore_deferred_max_bytes",
 		       cct->_conf->bluestore_max_bytes +
 		       cct->_conf->bluestore_deferred_max_bytes),
+    latency_managed_throttle(cct->_conf->bluestore_latency_managed_throttle),
+    throttle_mgr(cct,
+                 this,
+		 throttle_bytes),
     kv_sync_thread(this),
     mempool_thread(this)
 {
   _init_logger();
+  throttle_mgr.init(logger);
+
   cct->_conf->add_observer(this);
   set_cache_shards(1);
 
@@ -3201,6 +3208,10 @@ BlueStore::BlueStore(CephContext *cct,
     throttle_deferred_bytes(cct, "bluestore_deferred_max_bytes",
 		       cct->_conf->bluestore_max_bytes +
 		       cct->_conf->bluestore_deferred_max_bytes),
+    latency_managed_throttle(cct->_conf->bluestore_latency_managed_throttle),
+    throttle_mgr(cct,
+                 this,
+		 throttle_bytes),
     kv_sync_thread(this),
     min_alloc_size(_min_alloc_size),
     min_alloc_size_order(ctz(_min_alloc_size)),
@@ -3256,6 +3267,9 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_max_bytes",
     "bluestore_deferred_max_ops",
     "bluestore_deferred_max_bytes",
+    "bluestore_throttle_latency_min",
+    "bluestore_throttle_latency_max",
+    "bluestore_throttle_latency_window_msec",
     NULL
   };
   return KEYS;
@@ -3291,10 +3305,42 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
     throttle_bytes.reset_max(conf->bluestore_max_bytes);
     throttle_deferred_bytes.reset_max(
       conf->bluestore_max_bytes + conf->bluestore_deferred_max_bytes);
+    // reset internal throttle of the throttle manager
+    throttle_mgr.reset();
   }
   if (changed.count("bluestore_deferred_max_bytes")) {
     throttle_deferred_bytes.reset_max(
       conf->bluestore_max_bytes + conf->bluestore_deferred_max_bytes);
+  }
+
+#if 0
+  // This cannot work as-is, because it will turn on throttle_ops,
+  // throttle_deferred_ops, and throttle_deferred_bytes, and they
+  // could receive calls to put without the corresponding preceding
+  // call to get. To resolve we could allow Throttles to be
+  // deactivated, where they'd still receive their gets and puts but
+  // never block. If that's done then activate this code and add
+  // "bluestore_latency_managed_throttle" to the result of
+  // get_tracked_conf_keys.
+
+  if (changed.count("bluestore_latency_managed_throttle")) {
+    // if turning on latency managed throttle, reset throttle data
+    if (!latency_managed_throttle.load() &&
+	conf->bluestore_latency_managed_throttle) {
+      throttle_mgr.reset();
+    }
+    latency_managed_throttle.store(conf->bluestore_latency_managed_throttle);
+  }
+#endif
+
+  if (changed.count("bluestore_throttle_latency_min")) {
+    throttle_mgr.set_min_latency(conf->bluestore_throttle_latency_min);
+  }
+  if (changed.count("bluestore_throttle_latency_max")) {
+    throttle_mgr.set_max_latency(conf->bluestore_throttle_latency_max);
+  }
+  if (changed.count("bluestore_throttle_latency_window_msec")) {
+    throttle_mgr.set_latency_window(conf->bluestore_throttle_latency_window_msec);
   }
 }
 
@@ -7939,6 +7985,7 @@ bluestore_deferred_op_t *BlueStore::_get_deferred_op(
   return &txc->deferred_txn->ops.back();
 }
 
+
 void BlueStore::_deferred_queue(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << " on " << txc->osr << dendl;
@@ -8049,7 +8096,9 @@ int BlueStore::_deferred_finish(TransContext *txc)
     TransContext *txc = &i;
     txc->state = TransContext::STATE_DEFERRED_CLEANUP;
     txc->osr->qcond.notify_all();
-    throttle_deferred_bytes.put(txc->cost);
+    if (!latency_managed_throttle) {
+        throttle_deferred_bytes.put(txc->cost);
+    }
     deferred_done_queue.push_back(txc);
   }
   finished.clear();
@@ -8162,12 +8211,19 @@ int BlueStore::queue_transactions(
     handle->suspend_tp_timeout();
 
   utime_t tstart = ceph_clock_now();
+
+  if (latency_managed_throttle) {
+    throttle_mgr.manage_throttle();
+  }
   throttle_bytes.get(txc->cost);
+
   if (txc->deferred_txn) {
     // ensure we do not block here because of deferred writes
     if (!throttle_deferred_bytes.get_or_fail(txc->cost)) {
       deferred_try_submit();
-      throttle_deferred_bytes.get(txc->cost);
+      if (!latency_managed_throttle) {
+          throttle_deferred_bytes.get(txc->cost);
+      }
     }
   }
   utime_t tend = ceph_clock_now();
@@ -10598,4 +10654,153 @@ void BlueStore::flush_cache()
   }
   coll_map.clear();
 }
+
+
+// ThrottleManager
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore(" << store->path << ").throttle_mgr "
+
+
+/* Computes the square root of 2 to the given power */
+int64_t BlueStore::ThrottleManager::sqrt_2_power(uint power) {
+  constexpr double sqrt_2 = sqrt(2.0);
+  int64_t result = int64_t(1) << (power / 2);
+  if (power & 1) {
+    result = int64_t(0.5 + result * sqrt_2);
+  }
+  return result;
+}
+
+
+BlueStore::ThrottleManager::ThrottleManager(CephContext* cct,
+                                            BlueStore* store,
+					    Throttle& managed_throttle)
+  : cct(cct),
+    store(store),
+    managed_throttle(managed_throttle),
+    upper_lat_limit(cct->_conf->bluestore_throttle_latency_max),
+    lower_lat_limit(cct->_conf->bluestore_throttle_latency_min),
+    poll_count(0),
+    thresh_count(0),
+    zero_submit_count(0)
+{
+  set_latency_window(cct->_conf->bluestore_throttle_latency_window_msec);
+}
+
+
+BlueStore::ThrottleManager::~ThrottleManager() {
+  // empty
+}
+
+
+void BlueStore::ThrottleManager::init(PerfCounters *logger) {
+  this->logger = logger;
+  reset();
+}
+
+
+void BlueStore::ThrottleManager::reset() {
+  uint32_t next_power =
+      uint32_t(0.5 + 2 * log2(double(managed_throttle.get_max())));
+  // insure next_power w/i bounds
+  next_power = std::min(std::max(next_power, min_power), max_power);
+
+  std::lock_guard<std::mutex> l(mtx);
+
+  power = next_power;
+  managed_throttle.reset_max(sqrt_2_power(power));
+
+  prev_time = ceph_clock_now();
+  prev_throt_avg = logger->get_tavg_ms(throt_lat_idx);
+  prev_commit_avg = logger->get_tavg_ms(commit_lat_idx);
+}
+
+
+void BlueStore::ThrottleManager::manage_throttle() {
+  utime_t now = ceph_clock_now();
+
+  std::unique_lock<std::mutex> l(mtx);
+
+  if (now - prev_time < latency_window) return;
+  prev_time = now;
+
+  ++poll_count;
+
+  pair<uint64_t,uint64_t> this_throt_avg =
+    logger->get_tavg_ms(throt_lat_idx);
+  pair<uint64_t,uint64_t> this_commit_avg =
+    logger->get_tavg_ms(commit_lat_idx);
+
+  assert(this_throt_avg.first >= prev_throt_avg.first);
+  if (this_throt_avg.first > prev_throt_avg.first) {
+    double window_throt_avg =
+      (this_throt_avg.second - prev_throt_avg.second) /
+      double(this_throt_avg.first - prev_throt_avg.first);
+    dout(log_level) << __func__ << " window_throttle_latency:" <<
+      window_throt_avg << dendl;
+    if (window_throt_avg < 0.5) {
+      ++zero_submit_count;
+      if (zero_submit_count >= thresh_limit) {
+	mod_throttle(ModDir::decrease);
+	reset_counters();
+	prev_commit_avg = this_commit_avg;
+	prev_throt_avg = this_throt_avg;
+	return;
+      }
+    } else {
+      zero_submit_count = 0;
+    }
+
+    prev_throt_avg = this_throt_avg;
+  }
+
+  assert(this_commit_avg.first >= prev_commit_avg.first);
+  if (this_commit_avg.first == prev_commit_avg.first) { // no new data
+    if (poll_count >= poll_cycles) {
+      reset_counters();
+    }
+    return;
+  }
+
+  double window_avg =
+    (this_commit_avg.second - prev_commit_avg.second) /
+    double(this_commit_avg.first - prev_commit_avg.first);
+  prev_commit_avg = this_commit_avg;
+
+  dout(log_level) << __func__ << " window_commit_latency:" <<
+    window_avg << dendl;
+
+  if (window_avg > upper_lat_limit) {
+    ++thresh_count;
+  } else if (window_avg < lower_lat_limit) {
+    --thresh_count;
+  }
+
+  if (thresh_count >= thresh_limit) {
+    mod_throttle(ModDir::increase);
+    reset_counters();
+  } else if (thresh_count <= -thresh_limit) {
+    mod_throttle(ModDir::decrease);
+    reset_counters();
+  } else if (poll_count >= poll_cycles) {
+    reset_counters();
+  }
+}
+
+
+// mtx must be held by caller
+void BlueStore::ThrottleManager::mod_throttle(ModDir dir) {
+  int dir_val = static_cast<int>(dir);
+  uint32_t next_power =
+    std::min(std::max(power + dir_val, min_power), max_power);
+  if (power != next_power) {
+    power = next_power;
+    auto throt = sqrt_2_power(power);
+    managed_throttle.reset_max(throt);
+    dout(log_level) << __func__ << " power:" << power <<
+      " throttle:" << throt << dendl;
+  }
+}
+
 // ===========================================
