@@ -126,12 +126,14 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
 }
 
 /**
- * get a block device property
+ * get a block device property as a string
  *
- * return the value (we assume it is positive)
+ * store property in *val, up to maxlen chars
+ * return 0 on success
  * return negative error on error
  */
-int64_t get_block_device_int_property(const char *devname, const char *property)
+int64_t get_block_device_string_property(const char *devname, const char *property,
+					 char *val, size_t maxlen)
 {
   char basename[PATH_MAX], filename[PATH_MAX];
   int64_t r;
@@ -148,23 +150,43 @@ int64_t get_block_device_int_property(const char *devname, const char *property)
     return -errno;
   }
 
-  char buff[256] = {0};
-  if (fgets(buff, sizeof(buff) - 1, fp)) {
-    // strip newline etc
-    for (char *p = buff; *p; ++p) {
-      if (!isdigit(*p)) {
-	*p = 0;
-	break;
-      }
-    }
-    char *endptr = 0;
-    r = strtoll(buff, &endptr, 10);
-    if (endptr != buff + strlen(buff))
-      r = -EINVAL;
+  int r = 0;
+  if (fgets(val, maxlen - 1, fp)) {
+    // truncate at newline
+    char *p = val;
+    while (*p && *p != '\n')
+      ++p;
+    *p = 0;
   } else {
-    r = 0;
+    r = -EINVAL;
   }
   fclose(fp);
+  return r;
+}
+
+/**
+ * get a block device property
+ *
+ * return the value (we assume it is positive)
+ * return negative error on error
+ */
+int64_t get_block_device_int_property(const char *devname, const char *property)
+{
+  char buff[256] = {0};
+  int r = get_block_device_string_property(devname, property, buff, sizeof(buff));
+  if (r < 0)
+    return r;
+  // take only digits
+  for (char *p = buff; *p; ++p) {
+    if (!isdigit(*p)) {
+      *p = 0;
+      break;
+    }
+  }
+  char *endptr = 0;
+  r = strtoll(buff, &endptr, 10);
+  if (endptr != buff + strlen(buff))
+    r = -EINVAL;
   return r;
 }
 
