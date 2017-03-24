@@ -48,9 +48,9 @@ TEST(BlueFS, mkfs) {
   string fn = get_temp_bdev(size);
   uuid_d fsid;
   BlueFS fs(g_ceph_context);
-  fs.add_block_device(BlueFS::BDEV_DB, fn);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
-  fs.mkfs(fsid);
+  ASSERT_EQ(0, fs.mkfs(fsid));
   rm_temp_bdev(fn);
 }
 
