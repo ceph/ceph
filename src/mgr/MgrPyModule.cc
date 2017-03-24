@@ -82,16 +82,18 @@ int MgrPyModule::serve()
   auto pValue = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("serve"), nullptr);
 
+  int r = 0;
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
+    derr << "Failed to invoke serve() on " << module_name << dendl;
     PyErr_Print();
-    return -EINVAL;
+    r = -EINVAL;
   }
 
   PyGILState_Release(gstate);
 
-  return 0;
+  return r;
 }
 
 // FIXME: DRY wrt serve
@@ -108,8 +110,8 @@ void MgrPyModule::shutdown()
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
     derr << "Failed to invoke shutdown() on " << module_name << dendl;
+    PyErr_Print();
   }
 
   PyGILState_Release(gstate);
@@ -130,6 +132,7 @@ void MgrPyModule::notify(const std::string &notify_type, const std::string &noti
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
+    derr << "Failed to invoke notify() on " << module_name << dendl;
     PyErr_Print();
     // FIXME: callers can't be expected to handle a python module
     // that has spontaneously broken, but Mgr() should provide
@@ -243,6 +246,7 @@ int MgrPyModule::handle_command(
 
     Py_DECREF(pResult);
   } else {
+    derr << "Failed to invoke handle_command() on " << module_name << dendl;
     PyErr_Print();
     r = -EINVAL;
   }
