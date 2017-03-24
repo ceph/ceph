@@ -252,13 +252,15 @@ int get_device_by_fd(int fd, char *partition, char *device)
   if (r < 0) {
     return -EINVAL;  // hrm.
   }
-  char *t = blkid_devno_to_devname(st.st_rdev);
+  dev_t devid = S_ISBLK(st.st_mode) ? st.st_rdev : st.st_dev;
+  char *t = blkid_devno_to_devname(devid);
   if (!t) {
     return -EINVAL;
   }
   strcpy(partition, t);
+  free(t);
   dev_t diskdev;
-  r = blkid_devno_to_wholedisk(st.st_rdev, device, PATH_MAX, &diskdev);
+  r = blkid_devno_to_wholedisk(devid, device, PATH_MAX, &diskdev);
   if (r < 0) {
     return -EINVAL;
   }
