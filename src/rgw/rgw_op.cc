@@ -1395,6 +1395,7 @@ void RGWGetObj::execute()
   op_ret = read_op.prepare();
   if (op_ret < 0)
     goto done_err;
+  version_id = read_op.state.obj.key.instance;
 
   /* start gettorrent */
   if (torrent.get_flag())
