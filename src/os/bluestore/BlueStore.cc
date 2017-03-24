@@ -5434,6 +5434,19 @@ int BlueStore::fsck(bool deep)
   return errors;
 }
 
+void BlueStore::collect_metadata(map<string,string> *pm)
+{
+  dout(10) << __func__ << dendl;
+  bdev->collect_metadata("bluestore_bdev_", pm);
+  if (bluefs) {
+    (*pm)["bluefs"] = "1";
+    (*pm)["bluefs_single_shared_device"] = stringify((int)bluefs_single_shared_device);
+    bluefs->collect_metadata(pm);
+  } else {
+    (*pm)["bluefs"] = "0";
+  }
+}
+
 int BlueStore::statfs(struct store_statfs_t *buf)
 {
   buf->reset();
