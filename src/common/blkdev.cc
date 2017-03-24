@@ -245,7 +245,7 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
   return rc;
 }
 
-int get_device_by_fd(int fd, char *partition, char *device)
+int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 {
   struct stat st;
   int r = fstat(fd, &st);
@@ -257,10 +257,10 @@ int get_device_by_fd(int fd, char *partition, char *device)
   if (!t) {
     return -EINVAL;
   }
-  strcpy(partition, t);
+  strncpy(partition, t, max);
   free(t);
   dev_t diskdev;
-  r = blkid_devno_to_wholedisk(devid, device, PATH_MAX, &diskdev);
+  r = blkid_devno_to_wholedisk(devid, device, max, &diskdev);
   if (r < 0) {
     return -EINVAL;
   }

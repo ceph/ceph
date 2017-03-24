@@ -120,8 +120,8 @@ int KernelDevice::open(const string& p)
   }
 
   {
-    char partition[1024], devname[1024];
-    r = get_device_by_fd(fd_buffered, partition, devname);
+    char partition[PATH_MAX], devname[PATH_MAX];
+    r = get_device_by_fd(fd_buffered, partition, devname, sizeof(devname));
     if (r < 0) {
       derr << "unable to get device name for " << path << ": "
 	   << cpp_strerror(r) << dendl;
@@ -217,7 +217,7 @@ int KernelDevice::collect_metadata(string prefix, map<string,string> *pm) const
     (*pm)[prefix + "access_mode"] = "blk";
     char partition_path[PATH_MAX];
     char dev_node[PATH_MAX];
-    int rc = get_device_by_fd(fd_buffered, partition_path, dev_node);
+    int rc = get_device_by_fd(fd_buffered, partition_path, dev_node, PATH_MAX);
     switch (rc) {
     case -EOPNOTSUPP:
     case -EINVAL:
