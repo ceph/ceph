@@ -111,6 +111,67 @@ object-storage endpoint::
   | service_type | object-store                             |
   +--------------+------------------------------------------+
 
+As of Newton
+------------
+
+Keystone itself needs to be configured to point to the Ceph Object Gateway as an
+object-storage endpoint::
+
+  $ openstack service create --name swift --description "Swift Service" object-store
+  +-------------+----------------------------------+
+  | Field       | Value                            |
+  +-------------+----------------------------------+
+  | description | Swift Service                    |
+  | enabled     | True                             |
+  | id          | b143395708b5410db1ef22dbef9bfb91 |
+  | name        | swift                            |
+  | type        | object-store                     |
+  +-------------+----------------------------------+
+
+  $ openstack endpoint create --region RegionOne swift public 'http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s'
+  +--------------+--------------------------------------------------------------+
+  | Field        | Value                                                        |
+  +--------------+--------------------------------------------------------------+
+  | enabled      | True                                                         |
+  | id           | 4d092bf234b94f5e94d26118bd0dd954                             |
+  | interface    | public                                                       |
+  | region       | RegionOne                                                    |
+  | region_id    | RegionOne                                                    |
+  | service_id   | b143395708b5410db1ef22dbef9bfb91                             |
+  | service_name | swift                                                        |
+  | service_type | object-store                                                 |
+  | url          | http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s |
+  +--------------+--------------------------------------------------------------+
+
+  $ openstack endpoint create --region RegionOne swift admin http://radosgw.example.com:8080/swift/v1
+  +--------------+------------------------------------------+
+  | Field        | Value                                    |
+  +--------------+------------------------------------------+
+  | enabled      | True                                     |
+  | id           | 8e40fbe1bd584a1a8dcf1c869e7afa9b         |
+  | interface    | admin                                    |
+  | region       | RegionOne                                |
+  | region_id    | RegionOne                                |
+  | service_id   | b143395708b5410db1ef22dbef9bfb91         |
+  | service_name | swift                                    |
+  | service_type | object-store                             |
+  | url          | http://radosgw.example.com:8080/swift/v1 |
+  +--------------+------------------------------------------+
+
+  $ openstack endpoint create --region RegionOne swift internal http://radosgw.example.com:8080/swift/v1
+  +--------------+------------------------------------------+
+  | Field        | Value                                    |
+  +--------------+------------------------------------------+
+  | enabled      | True                                     |
+  | id           | 50f51d9833884ab68d7d6709bf837d34         |
+  | interface    | internal                                 |
+  | region       | RegionOne                                |
+  | region_id    | RegionOne                                |
+  | service_id   | b143395708b5410db1ef22dbef9bfb91         |
+  | service_name | swift                                    |
+  | service_type | object-store                             |
+  | url          | http://radosgw.example.com:8080/swift/v1 |
+  +--------------+------------------------------------------+
 
 The keystone URL is the Keystone admin RESTful API URL. The admin token is the
 token that is configured internally in Keystone for admin requests.
