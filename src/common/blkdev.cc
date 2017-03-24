@@ -132,18 +132,13 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
  * return 0 on success
  * return negative error on error
  */
-int64_t get_block_device_string_property(const char *devname, const char *property,
+int64_t get_block_device_string_property(const char *devname,
+					 const char *property,
 					 char *val, size_t maxlen)
 {
-  char basename[PATH_MAX], filename[PATH_MAX];
-  int64_t r;
-
-  r = get_block_device_base(devname, basename, sizeof(basename));
-  if (r < 0)
-    return r;
-
+  char filename[PATH_MAX];
   snprintf(filename, sizeof(filename),
-	   "%s/sys/block/%s/%s", sandbox_dir, basename, property);
+	   "%s/sys/block/%s/%s", sandbox_dir, devname, property);
 
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {

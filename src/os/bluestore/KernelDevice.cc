@@ -112,9 +112,16 @@ int KernelDevice::open(const string& p)
     if (r < 0) {
       goto out_fail;
     }
-
-    rotational = block_device_is_rotational(path.c_str());
     size = s;
+
+    char partition[1024], devname[1024];
+    r = get_device_by_fd(fd_buffered, partition, devname);
+    if (r < 0) {
+      derr << "unable to get device name for " << path << ": "
+	   << cpp_strerror(r) << dendl;
+      goto out_fail;
+    }
+    rotational = block_device_is_rotational(devname);
   } else {
     size = st.st_size;
     //regular file is rotational device
