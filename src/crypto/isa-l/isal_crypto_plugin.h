@@ -17,6 +17,8 @@
 // -----------------------------------------------------------------------------
 #include "crypto/crypto_plugin.h"
 #include "crypto/isa-l/isal_crypto_accel.h"
+#include "arch/intel.h"
+#include "arch/probe.h"
 // -----------------------------------------------------------------------------
 
 
@@ -34,7 +36,10 @@ public:
   {
     if (cryptoaccel == nullptr)
     {
-      cryptoaccel = CryptoAccelRef(new ISALCryptoAccel);
+      ceph_arch_probe();
+      if (ceph_arch_intel_aesni && ceph_arch_intel_sse41) {
+        cryptoaccel = CryptoAccelRef(new ISALCryptoAccel);
+      }
     }
     *cs = cryptoaccel;
     return 0;
