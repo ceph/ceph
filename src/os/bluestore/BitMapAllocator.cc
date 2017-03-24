@@ -115,6 +115,7 @@ int64_t BitMapAllocator::allocate(
 
   assert(!(alloc_unit % m_block_size));
   assert(alloc_unit);
+  assert((want_size % alloc_unit) == 0);
 
   assert(!max_alloc_size || max_alloc_size >= alloc_unit);
 

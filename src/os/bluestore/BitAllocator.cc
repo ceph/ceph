@@ -271,23 +271,6 @@ inline int64_t BitMapZone::get_used_blocks()
   return std::atomic_load(&m_used_blocks);
 }
 
-bool BitMapZone::reserve_blocks(int64_t num_blocks)
-{
-  ceph_abort();
-  return false;
-}
-
-void BitMapZone::unreserve(int64_t num_blocks, int64_t allocated)
-{
-  ceph_abort();
-}
-
-int64_t BitMapZone::get_reserved_blocks()
-{
-  ceph_abort();
-  return 0;
-}
-
 BitMapZone::BitMapZone(CephContext* cct, int64_t total_blocks,
 		       int64_t zone_num)
   : BitMapArea(cct)
@@ -439,6 +422,7 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
   
 
   alloc_assert(check_locked());
+  alloc_assert(num_blocks >= min_alloc);
 
   BitMapEntityIter <BmapEntry> iter = BitMapEntityIter<BmapEntry>(
           &m_bmap_vec, bmap_idx);
@@ -512,7 +496,6 @@ int64_t BitMapZone::alloc_blocks_dis(int64_t num_blocks,
       }
     }
   }
-
   add_used_blocks(allocated);
   return allocated;
 }
@@ -685,7 +668,7 @@ bool BitMapAreaIN::child_check_n_lock(BitMapArea *child, int64_t required)
 {
   child->lock_shared();
 
-  if (child->is_exhausted()) {
+  if (!child->reserve_blks(required)) {
     child->unlock();
     return false;
   }
@@ -705,9 +688,27 @@ void BitMapAreaIN::child_unlock(BitMapArea *child)
   child->unlock();
 }
 
-bool BitMapAreaIN::is_exhausted()
+bool BitMapAreaIN::reserve_blks(int64_t required)
 {
-  return get_used_blocks() == size();
+  std::lock_guard<std::mutex> l(m_blocks_lock);
+  if (m_used_blocks + required <= size()) {
+    m_used_blocks += required;
+    return true;
+  }
+  return false;
+}
+
+void BitMapAreaIN::unreserve_blks(int64_t allocated, int64_t reserved)
+{
+  /*
+   * m_block_lock is already taken by parent.
+   */
+  if (allocated < reserved) {
+    alloc_assert(allocated == 0);
+    sub_used_blocks(reserved);
+  } else {
+    add_used_blocks(allocated - reserved);
+  }
 }
 
 int64_t BitMapAreaIN::add_used_blocks(int64_t blks)
@@ -739,7 +740,7 @@ int64_t BitMapAreaIN::get_used_blocks_adj()
   return m_used_blocks - m_reserved_blocks;
 }
 
-bool BitMapAreaIN::reserve_blocks(int64_t num)
+bool BitMapAreaIN::reserve_blks_ext(int64_t num)
 {
   bool res = false;
   std::lock_guard<std::mutex> u_l(m_blocks_lock);
@@ -752,7 +753,7 @@ bool BitMapAreaIN::reserve_blocks(int64_t num)
   return res;
 }
 
-void BitMapAreaIN::unreserve(int64_t needed, int64_t allocated)
+void BitMapAreaIN::unreserve_blks_ext(int64_t needed, int64_t allocated)
 {
   std::lock_guard<std::mutex> l(m_blocks_lock);
   m_used_blocks -= (needed - allocated);
@@ -806,7 +807,7 @@ int64_t BitMapAreaIN::alloc_blocks_dis_int_work(bool wrap, int64_t num_blocks, i
         m_child_list, hint / m_child_size_blocks, wrap);
 
   while ((child = (BitMapArea *) iter.next())) {
-    if (!child_check_n_lock(child, 1)) {
+    if (!child_check_n_lock(child, min_alloc)) {
       hint = 0;
       continue;
     }
@@ -836,11 +837,9 @@ int64_t BitMapAreaIN::alloc_blocks_dis(int64_t num_blocks, int64_t min_alloc,
 {
   int64_t allocated = 0;
 
-  lock_shared();
-  allocated += alloc_blocks_dis_int(num_blocks, min_alloc, hint, blk_off, block_list);
-  add_used_blocks(allocated);
+  allocated = alloc_blocks_dis_int(num_blocks, min_alloc, hint, blk_off, block_list);
+  unreserve_blks(allocated, min_alloc);
 
-  unlock();
   return allocated;
 }
 
@@ -1037,7 +1036,7 @@ int64_t BitMapAreaLeaf::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_all
    * so there is no business to go through vptr and thus prohibit
    * compiler to inline the stuff. Consult BitMapAreaLeaf::init. */
   while ((child = static_cast<BitMapZone*>(iter.next()))) {
-    if (!child_check_n_lock(child, 1, false)) {
+    if (!child_check_n_lock(child, min_alloc, false)) {
       hint = 0;
       continue;
     }
@@ -1214,9 +1213,14 @@ BitAllocator::shutdown()
   unlock();
 }
 
+bool BitAllocator::reserve_blocks(int64_t unused)
+{
+  return BitMapAreaIN::reserve_blks_ext(unused);
+}
+
 void BitAllocator::unreserve_blocks(int64_t unused)
 {
-  unreserve(unused, 0);
+  BitMapAreaIN::unreserve_blks_ext(unused, 0);
 }
 
 void BitAllocator::serial_lock()
@@ -1250,14 +1254,7 @@ bool BitAllocator::child_check_n_lock(BitMapArea *child, int64_t required)
 {
   child->lock_shared();
 
-  if (child->is_exhausted()) {
-    child->unlock();
-    return false;
-  }
-
-  int64_t child_used_blocks = child->get_used_blocks();
-  int64_t child_total_blocks = child->size();
-  if ((child_total_blocks - child_used_blocks) < required) {
+  if (!child->reserve_blks(required)) {
     child->unlock();
     return false;
   }
@@ -1336,11 +1333,11 @@ int64_t BitAllocator::alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc
 int64_t BitAllocator::alloc_blocks_dis_res(int64_t num_blocks, int64_t min_alloc,
                                            int64_t hint, ExtentList *block_list)
 {
-  return alloc_blocks_dis_work(num_blocks, min_alloc, hint, block_list, true);
+  return alloc_blocks_dis_work(num_blocks, min_alloc, hint, block_list);
 }
 
 int64_t BitAllocator::alloc_blocks_dis_work(int64_t num_blocks, int64_t min_alloc,
-                                            int64_t hint, ExtentList *block_list, bool reserved)
+                                            int64_t hint, ExtentList *block_list)
 {
   int scans = 1;
   int64_t allocated = 0;
@@ -1360,9 +1357,6 @@ int64_t BitAllocator::alloc_blocks_dis_work(int64_t num_blocks, int64_t min_allo
 
   lock_shared();
   serial_lock();
-  if (!reserved && !reserve_blocks(num_blocks)) {
-    goto exit;
-  }
 
   if (is_stats_on()) {
     m_stats->add_concurrent_scans(scans);
@@ -1390,10 +1384,9 @@ int64_t BitAllocator::alloc_blocks_dis_work(int64_t num_blocks, int64_t min_allo
     }
   }
 
-  unreserve(num_blocks, allocated);
+  unreserve_blks_ext(num_blocks, allocated);
   alloc_dbg_assert(is_allocated_dis(block_list, allocated));
 
-exit:
   serial_unlock();
   unlock();
 
