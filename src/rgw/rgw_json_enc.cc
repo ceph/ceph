@@ -201,6 +201,13 @@ void ACLOwner::dump(Formatter *f) const
   encode_json("display_name", display_name, f);
 }
 
+void ACLOwner::decode_json(JSONObj *obj) {
+  string id_str;
+  JSONDecoder::decode_json("id", id_str, obj);
+  id.from_str(id_str);
+  JSONDecoder::decode_json("display_name", display_name, obj);
+}
+
 void RGWAccessControlPolicy::dump(Formatter *f) const
 {
   encode_json("acl", acl, f);

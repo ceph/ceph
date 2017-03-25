@@ -49,6 +49,7 @@ struct es_index_obj_response {
     JSONDecoder::decode_json("name", key.name, obj);
     JSONDecoder::decode_json("instance", key.instance, obj);
     JSONDecoder::decode_json("permissions", read_permissions, obj);
+    JSONDecoder::decode_json("owner", owner, obj);
     JSONDecoder::decode_json("meta", meta, obj);
   }
 };
@@ -101,6 +102,12 @@ class RGWMetadataSearchOp : public RGWOp {
   RGWElasticSyncModuleInstance *es_module;
 protected:
   string expression;
+#define MAX_KEYS_DEFAULT 100
+  uint64_t max_keys{MAX_KEYS_DEFAULT};
+  string marker_str;
+  uint64_t marker{0};
+  string next_marker;
+  bool is_truncated{false};
 
   es_search_response response;
 
@@ -163,7 +170,13 @@ void RGWMetadataSearchOp::execute()
 
   string resource = es_module->get_index_path(store->get_realm()) + "/_search";
   param_vec_t params;
-//    params.push_back(param_pair_t("size", size));
+#define BUFSIZE 32
+  char buf[BUFSIZE];
+  snprintf(buf, sizeof(buf), "%lld", (long long)max_keys);
+  params.push_back(param_pair_t("size", buf));
+  if (marker > 0) {
+    params.push_back(param_pair_t("from", marker_str.c_str()));
+  }
   ldout(s->cct, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
   op_ret = conn->get_resource(resource, &params, nullptr, out, &in);
   if (op_ret < 0) {
@@ -196,6 +209,31 @@ public:
 
   int get_params() override {
     expression = s->info.args.get("query");
+    bool exists;
+    string max_keys_str = s->info.args.get("max-keys", &exists);
+#define MAX_KEYS_MAX 10000
+    if (exists) {
+      string err;
+      max_keys = strict_strtoll(max_keys_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        return -EINVAL;
+      }
+      if (max_keys > MAX_KEYS_MAX) {
+        max_keys = MAX_KEYS_MAX;
+      }
+    }
+    marker_str = s->info.args.get("marker", &exists);
+    if (exists) {
+      string err;
+      marker = strict_strtoll(marker_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        return -EINVAL;
+      }
+    }
+    uint64_t nm = marker + max_keys;
+    char buf[BUFSIZE];
+    snprintf(buf, sizeof(buf), "%lld", (long long)nm);
+    next_marker = buf;
     return 0;
   }
   void send_response() override {
@@ -208,7 +246,14 @@ public:
       return;
     }
 
+    is_truncated = (response.hits.hits.size() >= max_keys);
+
     s->formatter->open_object_section("SearchMetadataResponse");
+    s->formatter->dump_string("Marker", marker_str);
+    s->formatter->dump_string("IsTruncated", (is_truncated ? "true" : "false"));
+    if (is_truncated) {
+      s->formatter->dump_string("NextMarker", next_marker);
+    }
     for (auto& i : response.hits.hits) {
       es_index_obj_response& e = i.source;
       s->formatter->open_object_section("Contents");
