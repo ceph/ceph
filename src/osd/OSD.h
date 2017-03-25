@@ -767,7 +767,7 @@ private:
   struct AgentThread : public Thread {
     OSDService *osd;
     explicit AgentThread(OSDService *o) : osd(o) {}
-    void *entry() {
+    void *entry() override {
       osd->agent_entry();
       return NULL;
     }
@@ -1263,9 +1263,9 @@ class OSD : public Dispatcher,
   SafeTimer tick_timer_without_osd_lock;
 public:
   // config observer bits
-  virtual const char** get_tracked_conf_keys() const;
-  virtual void handle_conf_change(const struct md_config_t *conf,
-				  const std::set <std::string> &changed);
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set <std::string> &changed) override;
   void update_log_config();
   void check_config();
 
@@ -1594,7 +1594,7 @@ private:
   struct T_Heartbeat : public Thread {
     OSD *osd;
     explicit T_Heartbeat(OSD *o) : osd(o) {}
-    void *entry() {
+    void *entry() override {
       osd->heartbeat_entry();
       return 0;
     }
@@ -1607,7 +1607,7 @@ public:
     OSD *osd;
     explicit HeartbeatDispatcher(OSD *o) : Dispatcher(o->cct), osd(o) {}
 
-    bool ms_can_fast_dispatch_any() const { return true; }
+    bool ms_can_fast_dispatch_any() const override { return true; }
     bool ms_can_fast_dispatch(const Message *m) const override {
       switch (m->get_type()) {
 	case CEPH_MSG_PING:
@@ -1617,22 +1617,22 @@ public:
           return false;
 	}
     }
-    void ms_fast_dispatch(Message *m) {
+    void ms_fast_dispatch(Message *m) override {
       osd->heartbeat_dispatch(m);
     }
-    bool ms_dispatch(Message *m) {
+    bool ms_dispatch(Message *m) override {
       return osd->heartbeat_dispatch(m);
     }
-    bool ms_handle_reset(Connection *con) {
+    bool ms_handle_reset(Connection *con) override {
       return osd->heartbeat_reset(con);
     }
-    void ms_handle_remote_reset(Connection *con) {}
-    bool ms_handle_refused(Connection *con) {
+    void ms_handle_remote_reset(Connection *con) override {}
+    bool ms_handle_refused(Connection *con) override {
       return osd->ms_handle_refused(con);
     }
     bool ms_verify_authorizer(Connection *con, int peer_type,
 			      int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			      bool& isvalid, CryptoKey& session_key) {
+			      bool& isvalid, CryptoKey& session_key) override {
       isvalid = true;
       return true;
     }
@@ -1778,7 +1778,7 @@ private:
 	shard_list.push_back(one_shard);
       }
     }
-    ~ShardedOpWQ() {
+    ~ShardedOpWQ() override {
       while (!shard_list.empty()) {
 	delete shard_list.back();
 	shard_list.pop_back();
@@ -1798,15 +1798,15 @@ private:
     void clear_pg_slots();
 
     /// try to do some work
-    void _process(uint32_t thread_index, heartbeat_handle_d *hb);
+    void _process(uint32_t thread_index, heartbeat_handle_d *hb) override;
 
     /// enqueue a new item
-    void _enqueue(pair <spg_t, PGQueueable> item);
+    void _enqueue(pair <spg_t, PGQueueable> item) override;
 
     /// requeue an old item (at the front of the line)
-    void _enqueue_front(pair <spg_t, PGQueueable> item);
+    void _enqueue_front(pair <spg_t, PGQueueable> item) override;
       
-    void return_waiting_threads() {
+    void return_waiting_threads() override {
       for(uint32_t i = 0; i < num_shards; i++) {
 	ShardData* sdata = shard_list[i];
 	assert (NULL != sdata); 
@@ -2312,7 +2312,7 @@ protected:
   } remove_wq;
 
  private:
-  bool ms_can_fast_dispatch_any() const { return true; }
+  bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OP:
@@ -2338,19 +2338,19 @@ protected:
       return false;
     }
   }
-  void ms_fast_dispatch(Message *m);
-  void ms_fast_preprocess(Message *m);
-  bool ms_dispatch(Message *m);
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
+  void ms_fast_dispatch(Message *m) override;
+  void ms_fast_preprocess(Message *m) override;
+  bool ms_dispatch(Message *m) override;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key);
-  void ms_handle_connect(Connection *con);
-  void ms_handle_fast_connect(Connection *con);
-  void ms_handle_fast_accept(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_handle_refused(Connection *con);
+			    bool& isvalid, CryptoKey& session_key) override;
+  void ms_handle_connect(Connection *con) override;
+  void ms_handle_fast_connect(Connection *con) override;
+  void ms_handle_fast_accept(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override;
 
   io_queue get_io_queue() const {
     if (cct->_conf->osd_op_queue == "debug_random") {
@@ -2388,7 +2388,7 @@ protected:
       Messenger *hb_back_server,
       Messenger *osdc_messenger,
       MonClient *mc, const std::string &dev, const std::string &jdev);
-  ~OSD();
+  ~OSD() override;
 
   // static bits
   static int mkfs(CephContext *cct, ObjectStore *store,

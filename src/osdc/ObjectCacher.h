@@ -424,7 +424,7 @@ class ObjectCacher {
     ObjectCacher *oc;
   public:
     explicit FlusherThread(ObjectCacher *o) : oc(o) {}
-    void *entry() {
+    void *entry() override {
       oc->flusher_entry();
       return 0;
     }

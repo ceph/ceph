@@ -44,7 +44,7 @@ class KernelDevice : public BlockDevice {
   struct AioCompletionThread : public Thread {
     KernelDevice *bdev;
     explicit AioCompletionThread(KernelDevice *b) : bdev(b) {}
-    void *entry() {
+    void *entry() override {
       bdev->_aio_thread();
       return NULL;
     }

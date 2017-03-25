@@ -179,7 +179,7 @@ public:
     second = NULL;
   }
 
-  ~C_TwoContexts() {
+  ~C_TwoContexts() override {
     delete first;
     delete second;
   }
