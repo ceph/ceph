@@ -3423,8 +3423,6 @@ void BlueStore::_init_logger()
 		 "Average read latency", "rlat");
   b.add_time_avg(l_bluestore_read_onode_meta_lat, "read_onode_meta_lat",
     "Average read onode metadata latency");
-  b.add_time_avg(l_bluestore_read_wait_flush_lat, "read_wait_flush_lat",
-    "Average wait flush latency during reads");
   b.add_time_avg(l_bluestore_read_wait_aio_lat, "read_wait_aio_lat",
     "Average read latency");
   b.add_time_avg(l_bluestore_compress_lat, "compress_lat",
@@ -5820,9 +5818,6 @@ int BlueStore::_do_read(
   }
 
   utime_t start = ceph_clock_now();
-  logger->tinc(l_bluestore_read_wait_flush_lat, ceph_clock_now() - start);
-
-  start = ceph_clock_now();
   o->extent_map.fault_range(db, offset, length);
   logger->tinc(l_bluestore_read_onode_meta_lat, ceph_clock_now() - start);
   _dump_onode(o);
