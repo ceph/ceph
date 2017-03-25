@@ -24,8 +24,6 @@
 #include "acconfig.h"
 
 #include <errno.h>
-#include <string.h>
-#include <string>
 #include <map>
 #include <boost/utility/string_ref.hpp>
 #include "include/types.h"
