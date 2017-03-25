@@ -33,14 +33,14 @@ class CephContext;
 
 struct PGLog : DoutPrefixProvider {
   DoutPrefixProvider *prefix_provider;
-  string gen_prefix() const {
+  string gen_prefix() const override {
     return prefix_provider ? prefix_provider->gen_prefix() : "";
   }
-  unsigned get_subsys() const {
+  unsigned get_subsys() const override {
     return prefix_provider ? prefix_provider->get_subsys() :
       (unsigned)ceph_subsys_osd;
   }
-  CephContext *get_cct() const {
+  CephContext *get_cct() const override {
     return cct;
   }
 
@@ -66,7 +66,7 @@ struct PGLog : DoutPrefixProvider {
     explicit read_log_and_missing_error(const char *what) {
       snprintf(buf, sizeof(buf), "read_log_and_missing_error: %s", what);
     }
-    const char *what() const throw () {
+    const char *what() const throw () override {
       return buf;
     }
   private:

@@ -125,86 +125,86 @@ public:
     const ghobject_t &oid,
     const map<string, bufferlist> &set,
     const SequencerPosition *spos=0
-    );
+    ) override;
 
   int set_header(
     const ghobject_t &oid,
     const bufferlist &bl,
     const SequencerPosition *spos=0
-    );
+    ) override;
 
   int get_header(
     const ghobject_t &oid,
     bufferlist *bl
-    );
+    ) override;
 
   int clear(
     const ghobject_t &oid,
     const SequencerPosition *spos=0
-    );
+    ) override;
 
   int clear_keys_header(
     const ghobject_t &oid,
     const SequencerPosition *spos=0
-    );
+    ) override;
 
   int rm_keys(
     const ghobject_t &oid,
     const set<string> &to_clear,
     const SequencerPosition *spos=0
-    );
+    ) override;
 
   int get(
     const ghobject_t &oid,
     bufferlist *header,
     map<string, bufferlist> *out
-    );
+    ) override;
 
   int get_keys(
     const ghobject_t &oid,
     set<string> *keys
-    );
+    ) override;
 
   int get_values(
     const ghobject_t &oid,
     const set<string> &keys,
     map<string, bufferlist> *out
-    );
+    ) override;
 
   int check_keys(
     const ghobject_t &oid,
     const set<string> &keys,
     set<string> *out
-    );
+    ) override;
 
   int get_xattrs(
     const ghobject_t &oid,
     const set<string> &to_get,
     map<string, bufferlist> *out
-    );
+    ) override;
 
   int get_all_xattrs(
     const ghobject_t &oid,
     set<string> *out
-    );
+    ) override;
 
   int set_xattrs(
     const ghobject_t &oid,
     const map<string, bufferlist> &to_set,
     const SequencerPosition *spos=0
-    );
+    ) override;
 
   int remove_xattrs(
     const ghobject_t &oid,
     const set<string> &to_remove,
     const SequencerPosition *spos=0
-    );
+    ) override;
 
   int clone(
     const ghobject_t &oid,
     const ghobject_t &target,
     const SequencerPosition *spos=0
-    );
+    ) override;
 
   /// Read initial state from backing store
   int init(bool upgrade = false);
@@ -213,16 +213,16 @@ public:
   int upgrade_to_v2();
 
   /// Consistency check, debug, there must be no parallel writes
-  bool check(std::ostream &out);
+  bool check(std::ostream &out) override;
 
   /// Ensure that all previous operations are durable
-  int sync(const ghobject_t *oid=0, const SequencerPosition *spos=0);
+  int sync(const ghobject_t *oid=0, const SequencerPosition *spos=0) override;
 
   /// Util, list all objects, there must be no other concurrent access
   int list_objects(vector<ghobject_t> *objs ///< [out] objects
     );
 
-  ObjectMapIterator get_iterator(const ghobject_t &oid);
+  ObjectMapIterator get_iterator(const ghobject_t &oid) override;
 
   static const string USER_PREFIX;
   static const string XATTR_PREFIX;
@@ -346,15 +346,15 @@ private:
 
   class EmptyIteratorImpl : public ObjectMapIteratorImpl {
   public:
-    int seek_to_first() { return 0; }
+    int seek_to_first() override { return 0; }
     int seek_to_last() { return 0; }
-    int upper_bound(const string &after) { return 0; }
-    int lower_bound(const string &to) { return 0; }
-    bool valid() { return false; }
-    int next(bool validate=true) { ceph_abort(); return 0; }
-    string key() { ceph_abort(); return ""; }
-    bufferlist value() { ceph_abort(); return bufferlist(); }
-    int status() { return 0; }
+    int upper_bound(const string &after) override { return 0; }
+    int lower_bound(const string &to) override { return 0; }
+    bool valid() override { return false; }
+    int next(bool validate=true) override { ceph_abort(); return 0; }
+    string key() override { ceph_abort(); return ""; }
+    bufferlist value() override { ceph_abort(); return bufferlist(); }
+    int status() override { return 0; }
   };
 
 
@@ -384,15 +384,15 @@ private:
 
     DBObjectMapIteratorImpl(DBObjectMap *map, Header header) :
       map(map), hlock(map), header(header), r(0), ready(false), invalid(true) {}
-    int seek_to_first();
+    int seek_to_first() override;
     int seek_to_last();
-    int upper_bound(const string &after);
-    int lower_bound(const string &to);
-    bool valid();
-    int next(bool validate=true);
-    string key();
-    bufferlist value();
-    int status();
+    int upper_bound(const string &after) override;
+    int lower_bound(const string &to) override;
+    bool valid() override;
+    int next(bool validate=true) override;
+    string key() override;
+    bufferlist value() override;
+    int status() override;
 
     bool on_parent() {
       return cur_iter == parent_iter;

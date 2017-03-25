@@ -168,14 +168,14 @@ public:
     string head, tail;
   public:
     OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
-    int seek_to_first();
-    int upper_bound(const string &after);
-    int lower_bound(const string &to);
-    bool valid();
-    int next(bool validate=true);
-    string key();
-    bufferlist value();
-    int status() {
+    int seek_to_first() override;
+    int upper_bound(const string &after) override;
+    int lower_bound(const string &to) override;
+    bool valid() override;
+    int next(bool validate=true) override;
+    string key() override;
+    bufferlist value() override;
+    int status() override {
       return 0;
     }
   };
@@ -272,7 +272,7 @@ public:
       : Sequencer_impl(cct),
 	parent(NULL) {
     }
-    ~OpSequencer() {
+    ~OpSequencer() override {
       assert(q.empty());
     }
 
@@ -281,13 +281,13 @@ public:
       q.push_back(*txc);
     }
 
-    void flush() {
+    void flush() override {
       std::unique_lock<std::mutex> l(qlock);
       while (!q.empty())
 	qcond.wait(l);
     }
 
-    bool flush_commit(Context *c) {
+    bool flush_commit(Context *c) override {
       std::lock_guard<std::mutex> l(qlock);
       if (q.empty()) {
 	return true;
@@ -305,7 +305,7 @@ public:
   struct KVSyncThread : public Thread {
     KStore *store;
     explicit KVSyncThread(KStore *s) : store(s) {}
-    void *entry() {
+    void *entry() override {
       store->_kv_sync_thread();
       return NULL;
     }
@@ -403,22 +403,22 @@ private:
 
 public:
   KStore(CephContext *cct, const string& path);
-  ~KStore();
+  ~KStore() override;
 
-  string get_type() {
+  string get_type() override {
     return "kstore";
   }
 
-  bool needs_journal() { return false; };
-  bool wants_journal() { return false; };
-  bool allows_journal() { return false; };
+  bool needs_journal() override { return false; };
+  bool wants_journal() override { return false; };
+  bool allows_journal() override { return false; };
 
   static int get_block_device_fsid(const string& path, uuid_d *fsid);
 
-  bool test_mount_in_use();
+  bool test_mount_in_use() override;
 
-  int mount();
-  int umount();
+  int mount() override;
+  int umount() override;
   void _sync();
 
   int fsck(bool deep) override;
@@ -427,12 +427,12 @@ public:
   int validate_hobject_key(const hobject_t &obj) const override {
     return 0;
   }
-  unsigned get_max_attr_name_length() {
+  unsigned get_max_attr_name_length() override {
     return 256;  // arbitrary; there is no real limit internally
   }
 
-  int mkfs();
-  int mkjournal() {
+  int mkfs() override;
+  int mkjournal() override {
     return 0;
   }
   void dump_perf_counters(Formatter *f) override {
@@ -444,16 +444,16 @@ public:
   int statfs(struct store_statfs_t *buf) override;
 
   using ObjectStore::exists;
-  bool exists(const coll_t& cid, const ghobject_t& oid);
+  bool exists(const coll_t& cid, const ghobject_t& oid) override;
   using ObjectStore::stat;
   int stat(
     const coll_t& cid,
     const ghobject_t& oid,
     struct stat *st,
-    bool allow_eio = false); // struct stat?
+    bool allow_eio = false) override; // struct stat?
   int set_collection_opts(
     const coll_t& cid,
-    const pool_opts_t& opts);
+    const pool_opts_t& opts) override;
   using ObjectStore::read;
   int read(
     const coll_t& cid,
@@ -462,7 +462,7 @@ public:
     size_t len,
     bufferlist& bl,
     uint32_t op_flags = 0,
-    bool allow_eio = false);
+    bool allow_eio = false) override;
   int _do_read(
     OnodeRef o,
     uint64_t offset,
@@ -471,15 +471,15 @@ public:
     uint32_t op_flags = 0);
 
   using ObjectStore::fiemap;
-  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
+  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) override;
   using ObjectStore::getattr;
-  int getattr(const coll_t& cid, const ghobject_t& oid, const char *name, bufferptr& value);
+  int getattr(const coll_t& cid, const ghobject_t& oid, const char *name, bufferptr& value) override;
   using ObjectStore::getattrs;
-  int getattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset);
+  int getattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset) override;
 
-  int list_collections(vector<coll_t>& ls);
-  bool collection_exists(const coll_t& c);
-  int collection_empty(const coll_t& c, bool *empty);
+  int list_collections(vector<coll_t>& ls) override;
+  bool collection_exists(const coll_t& c) override;
+  int collection_empty(const coll_t& c, bool *empty) override;
 
   int collection_list(
     const coll_t& cid, const ghobject_t& start, const ghobject_t& end,
@@ -496,7 +496,7 @@ public:
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     map<string, bufferlist> *out /// < [out] Key to value map
-    );
+    ) override;
 
   using ObjectStore::omap_get_header;
   /// Get omap header
@@ -505,7 +505,7 @@ public:
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
-    );
+    ) override;
 
   using ObjectStore::omap_get_keys;
   /// Get keys defined on oid
@@ -513,7 +513,7 @@ public:
     const coll_t& cid,              ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
     set<string> *keys      ///< [out] Keys defined on oid
-    );
+    ) override;
 
   using ObjectStore::omap_get_values;
   /// Get key values
@@ -522,7 +522,7 @@ public:
     const ghobject_t &oid,       ///< [in] Object containing omap
     const set<string> &keys,     ///< [in] Keys to get
     map<string, bufferlist> *out ///< [out] Returned keys and values
-    );
+    ) override;
 
   using ObjectStore::omap_check_keys;
   /// Filters keys into out which are defined on oid
@@ -531,18 +531,18 @@ public:
     const ghobject_t &oid,   ///< [in] Object containing omap
     const set<string> &keys, ///< [in] Keys to check
     set<string> *out         ///< [out] Subset of keys defined on oid
-    );
+    ) override;
 
   using ObjectStore::get_omap_iterator;
   ObjectMap::ObjectMapIterator get_omap_iterator(
     const coll_t& cid,              ///< [in] collection
     const ghobject_t &oid  ///< [in] object
-    );
+    ) override;
 
-  void set_fsid(uuid_d u) {
+  void set_fsid(uuid_d u) override {
     fsid = u;
   }
-  uuid_d get_fsid() {
+  uuid_d get_fsid() override {
     return fsid;
   }
 
@@ -550,10 +550,10 @@ public:
     return num_objects * 300; //assuming per-object overhead is 300 bytes
   }
 
-  objectstore_perf_stat_t get_cur_stats() {
+  objectstore_perf_stat_t get_cur_stats() override {
     return objectstore_perf_stat_t();
   }
-  const PerfCounters* get_perf_counters() const {
+  const PerfCounters* get_perf_counters() const override {
     return logger;
   }
 
@@ -562,7 +562,7 @@ public:
     Sequencer *osr,
     vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
-    ThreadPool::TPHandle *handle = NULL);
+    ThreadPool::TPHandle *handle = NULL) override;
 
 private:
   // --------------------------------------------------------

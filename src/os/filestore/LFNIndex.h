@@ -150,40 +150,40 @@ public:
    }
   }
 
-  coll_t coll() const { return collection; }
+  coll_t coll() const override { return collection; }
 
   /// Virtual destructor
-  virtual ~LFNIndex() {}
+  ~LFNIndex() override {}
 
   /// @see CollectionIndex
-  int init();
+  int init() override;
 
   /// @see CollectionIndex
-  int cleanup() = 0;
+  int cleanup() override = 0;
 
   /// @see CollectionIndex
   int created(
     const ghobject_t &oid,
     const char *path
-    );
+    ) override;
 
   /// @see CollectionIndex
   int unlink(
     const ghobject_t &oid
-    );
+    ) override;
 
   /// @see CollectionIndex
   int lookup(
     const ghobject_t &oid,
     IndexedPath *path,
     int *hardlink
-    );
+    ) override;
 
   /// @see CollectionIndex;
   int pre_hash_collection(
       uint32_t pg_num,
       uint64_t expected_num_objs
-      );
+      ) override;
 
   /// @see CollectionIndex
   int collection_list_partial(
@@ -192,7 +192,7 @@ public:
     int max_count,
     vector<ghobject_t> *ls,
     ghobject_t *next
-    );
+    ) override;
 
   virtual int _split(
     uint32_t match,                             //< [in] value to match
@@ -205,7 +205,7 @@ public:
     uint32_t match,
     uint32_t bits,
     CollectionIndex* dest
-    ) {
+    ) override {
     WRAP_RETRY(
       r = _split(match, bits, dest);
       goto out;
