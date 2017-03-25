@@ -1647,9 +1647,6 @@ private:
       pg->state_clear(PG_STATE_SNAPTRIM_WAIT);
       pg->publish_stats_to_osd();
     }
-    boost::statechart::result react(const KickTrim&) {
-      return discard_event();
-    }
   };
 
   struct WaitScrub : boost::statechart::state< WaitScrub, SnapTrimmer >, NamedState {
