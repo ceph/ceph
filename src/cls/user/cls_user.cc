@@ -93,25 +93,31 @@ static int read_header(cls_method_context_t hctx, cls_user_header *header)
   return 0;
 }
 
-static void add_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry)
+static void add_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry, bool sync_bucket_count=false)
 {
   stats->total_entries += entry.count;
   stats->total_bytes += entry.size;
   stats->total_bytes_rounded += entry.size_rounded;
+  if (sync_bucket_count)
+    stats->total_buckets += entry.bucket_count;
 }
 
-static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry)
+static void dec_header_stats(cls_user_stats *stats, cls_user_bucket_entry& entry, bool sync_bucket_count=false)
 {
   stats->total_bytes -= entry.size;
   stats->total_bytes_rounded -= entry.size_rounded;
   stats->total_entries -= entry.count;
+  if (sync_bucket_count)
+    stats->total_buckets -= entry.bucket_count;
 }
 
-static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_bucket_entry *target_entry)
+static void apply_entry_stats(const cls_user_bucket_entry& src_entry, cls_user_bucket_entry *target_entry, bool sync_bucket_count=false)
 {
   target_entry->size = src_entry.size;
   target_entry->size_rounded = src_entry.size_rounded;
   target_entry->count = src_entry.count;
+  if (sync_bucket_count)
+    target_entry->bucket_count = src_entry.bucket_count;
 }
 
 static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -157,25 +163,31 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
       return ret;
     } else if (ret >= 0 && entry.user_stats_sync) {
-      dec_header_stats(&header.stats, entry);
+      // only delete if we are actually doing an op.add which means that this is a rewrite
+      dec_header_stats(&header.stats, entry, op.add);
     }
 
-    CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
-            key.c_str(), (long long)update_entry.size, (long long)update_entry.count);
+    CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld bucket_count=%lld",
+            key.c_str(), (long long)update_entry.size, (long long)update_entry.count,
+	    (long long)update_entry.bucket_count);
 
-    apply_entry_stats(update_entry, &entry);
+    apply_entry_stats(update_entry, &entry, op.add);
     entry.user_stats_sync = true;
 
     ret = write_entry(hctx, key, entry);
     if (ret < 0)
       return ret;
 
-    add_header_stats(&header.stats, entry);
+    add_header_stats(&header.stats, entry, op.add);
+
   }
+
 
   bufferlist bl;
 
-  CLS_LOG(20, "header: total bytes=%lld entries=%lld", (long long)header.stats.total_bytes, (long long)header.stats.total_entries);
+  CLS_LOG(20, "header: total bytes=%lld entries=%lld buckets=%lld",
+	  (long long)header.stats.total_bytes, (long long)header.stats.total_entries,
+	  (long long)header.stats.total_buckets);
 
   if (header.last_stats_update < op.time)
     header.last_stats_update = op.time;
@@ -255,8 +267,12 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     return ret;
   }
 
-  if (entry.user_stats_sync) {
-    dec_header_stats(&header.stats, entry);
+
+  if (entry.user_stats_sync){
+    //we set user_stats_sync to true when we create a bucket
+    // as far as nobody overrides the stats are handled correctly
+    // if anyone else overrides this then the bucket header stats are no longer valid
+    dec_header_stats(&header.stats, entry, true);
   }
 
   CLS_LOG(20, "removing entry at %s", key.c_str());
@@ -264,7 +280,20 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
   ret = remove_entry(hctx, key);
   if (ret < 0)
     return ret;
-  
+
+  // write the header stats to disk
+  CLS_LOG(20, "header: total bytes=%lld entries=%lld buckets=%lld",
+	  (long long)header.stats.total_bytes, (long long)header.stats.total_entries,
+	  (long long)header.stats.total_buckets);
+
+  bufferlist bl;
+
+  ::encode(header, bl);
+
+  ret = cls_cxx_map_write_header(hctx, &bl);
+  if (ret < 0)
+    return ret;
+
   return 0;
 }
 
