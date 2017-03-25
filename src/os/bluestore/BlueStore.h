@@ -69,7 +69,6 @@ enum {
   l_bluestore_commit_lat,
   l_bluestore_read_lat,
   l_bluestore_read_onode_meta_lat,
-  l_bluestore_read_wait_flush_lat,
   l_bluestore_read_wait_aio_lat,
   l_bluestore_compress_lat,
   l_bluestore_decompress_lat,
