@@ -779,6 +779,17 @@ export CXXFLAGS="$RPM_OPT_FLAGS"
 
 env | sort
 
+%if %{with lowmem_builder}
+%if 0%{?jobs} > 8
+%define _smp_mflags -j8
+%endif
+%endif
+
+# unlimit _smp_mflags in system macro if not set above
+%define _smp_ncpus_max 0
+# extract the number of processors for use with cmake
+%define _smp_ncpus %(echo %{_smp_mflags} | sed 's/-j//')
+
 mkdir build
 cd build
 cmake .. \
@@ -817,14 +828,9 @@ cmake .. \
 %endif
     $CEPH_EXTRA_CMAKE_ARGS \
 %if 0%{with ocf}
-    -DWITH_OCF=ON
+    -DWITH_OCF=ON \
 %endif
-
-%if %{with lowmem_builder}
-%if 0%{?jobs} > 8
-%define _smp_mflags -j8
-%endif
-%endif
+    -DBOOST_J=%{_smp_ncpus}
 
 make %{?_smp_mflags}
 
