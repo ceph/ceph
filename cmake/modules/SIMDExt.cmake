@@ -44,7 +44,18 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64")
   if(HAVE_ARMV8_CRYPTO)
     message(STATUS " aarch64 crypto extensions supported")
   endif()
-  CHECK_C_COMPILER_FLAG(-march=armv8-a+crc+crypto HAVE_ARMV8_CRC_CRYPTO_INTRINSICS)
+  CHECK_C_COMPILER_FLAG(-march=armv8-a+crc+crypto HAVE_ARMV8_CRC_CRYPTO_MARCH)
+
+  # don't believe only the -march support; gcc 4.8.5 on RHEL/CentOS says
+  # it supports +crc but hasn't got the intrinsics or arm_acle.h.  Test for
+  # the actual presence of one of the intrinsic functions.
+  if(HAVE_ARMV8_CRC_CRYPTO_MARCH)
+    check_cxx_source_compiles("
+      #include <inttypes.h>
+      int main() { uint32_t a; uint8_t b; __builtin_aarch64_crc32b(a, b); }
+    " HAVE_ARMV8_CRC_CRYPTO_INTRINSICS)
+  endif()
+
   if(HAVE_ARMV8_CRC_CRYPTO_INTRINSICS)
     message(STATUS " aarch64 crc+crypto intrinsics supported")
     set(ARMV8_CRC_COMPILE_FLAGS "${ARMV8_CRC_COMPILE_FLAGS} -march=armv8-a+crc+crypto")
