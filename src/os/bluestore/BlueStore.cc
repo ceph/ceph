@@ -3383,12 +3383,18 @@ void BlueStore::_set_csum()
 
 void BlueStore::_init_logger()
 {
-  PerfCountersBuilder b(cct, "BlueStore",
+  PerfCountersBuilder b(cct, "bluestore",
                         l_bluestore_first, l_bluestore_last);
+  b.add_time_avg(l_bluestore_kv_flush_lat, "kv_flush_lat",
+		 "Average kv_thread flush latency", "kflat");
+  b.add_time_avg(l_bluestore_kv_commit_lat, "kv_commit_lat",
+		 "Average kv_thread commit latency");
+  b.add_time_avg(l_bluestore_kv_lat, "kv_lat",
+		 "Average kv_thread sync latency", "klat");
   b.add_time_avg(l_bluestore_state_prepare_lat, "state_prepare_lat",
     "Average prepare state latency");
   b.add_time_avg(l_bluestore_state_aio_wait_lat, "state_aio_wait_lat",
-    "Average aio_wait state latency");
+		 "Average aio_wait state latency", "iolat");
   b.add_time_avg(l_bluestore_state_io_done_lat, "state_io_done_lat",
     "Average io_done state latency");
   b.add_time_avg(l_bluestore_state_kv_queued_lat, "state_kv_queued_lat",
@@ -3407,12 +3413,14 @@ void BlueStore::_init_logger()
     "Average finishing state latency");
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat",
     "Average done state latency");
+  b.add_time_avg(l_bluestore_throttle_lat, "throttle_lat",
+		 "Average submit throttle latency", "tlat");
   b.add_time_avg(l_bluestore_submit_lat, "submit_lat",
-    "Average submit latency");
+		 "Average submit latency", "slat");
   b.add_time_avg(l_bluestore_commit_lat, "commit_lat",
-    "Average commit latency");
+		 "Average commit latency", "clat");
   b.add_time_avg(l_bluestore_read_lat, "read_lat",
-    "Average read latency");
+		 "Average read latency", "rlat");
   b.add_time_avg(l_bluestore_read_onode_meta_lat, "read_onode_meta_lat",
     "Average read onode metadata latency");
   b.add_time_avg(l_bluestore_read_wait_flush_lat, "read_wait_flush_lat",
@@ -3425,18 +3433,18 @@ void BlueStore::_init_logger()
     "Average decompress latency");
   b.add_time_avg(l_bluestore_csum_lat, "csum_lat",
     "Average checksum latency");
-  b.add_u64(l_bluestore_compress_success_count, "compress_success_count",
+  b.add_u64_counter(l_bluestore_compress_success_count, "compress_success_count",
     "Sum for beneficial compress ops");
-  b.add_u64(l_bluestore_compress_rejected_count, "compress_rejected_count",
+  b.add_u64_counter(l_bluestore_compress_rejected_count, "compress_rejected_count",
     "Sum for compress ops rejected due to low net gain of space");
-  b.add_u64(l_bluestore_write_pad_bytes, "write_pad_bytes",
+  b.add_u64_counter(l_bluestore_write_pad_bytes, "write_pad_bytes",
     "Sum for write-op padded bytes");
-  b.add_u64(l_bluestore_deferred_write_ops, "deferred_write_ops",
-    "Sum for deferred write op");
-  b.add_u64(l_bluestore_deferred_write_bytes, "deferred_write_bytes",
-    "Sum for deferred write bytes");
-  b.add_u64(l_bluestore_write_penalty_read_ops, "write_penalty_read_ops",
-    "Sum for write penalty read ops");
+  b.add_u64_counter(l_bluestore_deferred_write_ops, "deferred_write_ops",
+		    "Sum for deferred write op");
+  b.add_u64_counter(l_bluestore_deferred_write_bytes, "deferred_write_bytes",
+		    "Sum for deferred write bytes", "def");
+  b.add_u64_counter(l_bluestore_write_penalty_read_ops, "write_penalty_read_ops",
+		    "Sum for write penalty read ops");
   b.add_u64(l_bluestore_allocated, "bluestore_allocated",
     "Sum for allocated bytes");
   b.add_u64(l_bluestore_stored, "bluestore_stored",
@@ -3450,14 +3458,15 @@ void BlueStore::_init_logger()
 
   b.add_u64(l_bluestore_onodes, "bluestore_onodes",
 	    "Number of onodes in cache");
-  b.add_u64(l_bluestore_onode_hits, "bluestore_onode_hits",
-    "Sum for onode-lookups hit in the cache");
-  b.add_u64(l_bluestore_onode_misses, "bluestore_onode_misses",
-    "Sum for onode-lookups missed in the cache");
-  b.add_u64(l_bluestore_onode_shard_hits, "bluestore_onode_shard_hits",
-    "Sum for onode-shard lookups hit in the cache");
-  b.add_u64(l_bluestore_onode_shard_misses, "bluestore_onode_shard_misses",
-    "Sum for onode-shard lookups missed in the cache");
+  b.add_u64_counter(l_bluestore_onode_hits, "bluestore_onode_hits",
+		    "Sum for onode-lookups hit in the cache");
+  b.add_u64_counter(l_bluestore_onode_misses, "bluestore_onode_misses",
+		    "Sum for onode-lookups missed in the cache");
+  b.add_u64_counter(l_bluestore_onode_shard_hits, "bluestore_onode_shard_hits",
+		    "Sum for onode-shard lookups hit in the cache");
+  b.add_u64_counter(l_bluestore_onode_shard_misses,
+		    "bluestore_onode_shard_misses",
+		    "Sum for onode-shard lookups missed in the cache");
   b.add_u64(l_bluestore_extents, "bluestore_extents",
 	    "Number of extents in cache");
   b.add_u64(l_bluestore_blobs, "bluestore_blobs",
@@ -3471,35 +3480,39 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_buffer_miss_bytes, "bluestore_buffer_miss_bytes",
     "Sum for bytes of read missed in the cache");
 
-  b.add_u64(l_bluestore_write_big, "bluestore_write_big",
-	    "Large min_alloc_size-aligned writes into fresh blobs");
-  b.add_u64(l_bluestore_write_big_bytes, "bluestore_write_big_bytes",
-	    "Large min_alloc_size-aligned writes into fresh blobs (bytes)");
-  b.add_u64(l_bluestore_write_big_blobs, "bluestore_write_big_blobs",
-	    "Large min_alloc_size-aligned writes into fresh blobs (blobs)");
-  b.add_u64(l_bluestore_write_small, "bluestore_write_small",
-	    "Small writes into existing or sparse small blobs");
-  b.add_u64(l_bluestore_write_small_bytes, "bluestore_write_small_bytes",
-	    "Small writes into existing or sparse small blobs (bytes)");
-  b.add_u64(l_bluestore_write_small_unused, "bluestore_write_small_unused",
-	    "Small writes into unused portion of existing blob");
-  b.add_u64(l_bluestore_write_small_deferred, "bluestore_write_small_deferred",
-	    "Small overwrites using deferred");
-  b.add_u64(l_bluestore_write_small_pre_read, "bluestore_write_small_pre_read",
-	    "Small writes that required we read some data (possibly cached) to "
-	    "fill out the block");
-  b.add_u64(l_bluestore_write_small_new, "bluestore_write_small_new",
-	    "Small write into new (sparse) blob");
+  b.add_u64_counter(l_bluestore_write_big, "bluestore_write_big",
+		    "Large aligned writes into fresh blobs");
+  b.add_u64_counter(l_bluestore_write_big_bytes, "bluestore_write_big_bytes",
+		    "Large aligned writes into fresh blobs (bytes)");
+  b.add_u64_counter(l_bluestore_write_big_blobs, "bluestore_write_big_blobs",
+		    "Large aligned writes into fresh blobs (blobs)");
+  b.add_u64_counter(l_bluestore_write_small, "bluestore_write_small",
+		    "Small writes into existing or sparse small blobs");
+  b.add_u64_counter(l_bluestore_write_small_bytes, "bluestore_write_small_bytes",
+		    "Small writes into existing or sparse small blobs (bytes)");
+  b.add_u64_counter(l_bluestore_write_small_unused,
+		    "bluestore_write_small_unused",
+		    "Small writes into unused portion of existing blob");
+  b.add_u64_counter(l_bluestore_write_small_deferred,
+		    "bluestore_write_small_deferred",
+		    "Small overwrites using deferred");
+  b.add_u64_counter(l_bluestore_write_small_pre_read,
+		    "bluestore_write_small_pre_read",
+		    "Small writes that required we read some data (possibly "
+		    "cached) to fill out the block");
+  b.add_u64_counter(l_bluestore_write_small_new, "bluestore_write_small_new",
+		    "Small write into new (sparse) blob");
 
-  b.add_u64(l_bluestore_txc, "bluestore_txc", "Transactions committed");
-  b.add_u64(l_bluestore_onode_reshard, "bluestore_onode_reshard",
-	    "Onode extent map reshard events");
-  b.add_u64(l_bluestore_blob_split, "bluestore_blob_split",
-            "Sum for blob splitting due to resharding");
-  b.add_u64(l_bluestore_extent_compress, "bluestore_extent_compress",
-            "Sum for extents that have been removed due to compression");
-  b.add_u64(l_bluestore_gc_merged, "bluestore_gc_merged",
-            "Sum for extents that have been merged due to garbage collection");
+  b.add_u64_counter(l_bluestore_txc, "bluestore_txc", "Transactions committed");
+  b.add_u64_counter(l_bluestore_onode_reshard, "bluestore_onode_reshard",
+		    "Onode extent map reshard events");
+  b.add_u64_counter(l_bluestore_blob_split, "bluestore_blob_split",
+		    "Sum for blob splitting due to resharding");
+  b.add_u64_counter(l_bluestore_extent_compress, "bluestore_extent_compress",
+		    "Sum for extents that have been removed due to compression");
+  b.add_u64_counter(l_bluestore_gc_merged, "bluestore_gc_merged",
+		    "Sum for extents that have been merged due to garbage "
+		    "collection");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -7675,6 +7688,7 @@ void BlueStore::_kv_sync_thread()
 			       deferred_done.end());
 	deferred_done.clear();
       }
+      utime_t after_flush = ceph_clock_now();
 
       // we will use one final transaction to force a sync
       KeyValueDB::Transaction synct = db->get_transaction();
@@ -7772,10 +7786,19 @@ void BlueStore::_kv_sync_thread()
       }
 
       utime_t finish = ceph_clock_now();
+      utime_t dur_flush = after_flush - start;
+      utime_t dur_kv = finish - after_flush;
       utime_t dur = finish - start;
       dout(20) << __func__ << " committed " << kv_committing.size()
 	       << " cleaned " << deferred_stable.size()
-	       << " in " << dur << dendl;
+	       << " in " << dur
+	       << " (" << dur_flush << " flush + " << dur_kv << " kv commit)"
+	       << dendl;
+      if (logger) {
+	logger->tinc(l_bluestore_kv_flush_lat, dur_flush);
+	logger->tinc(l_bluestore_kv_commit_lat, dur_kv);
+	logger->tinc(l_bluestore_kv_lat, dur);
+      }
       while (!kv_committing.empty()) {
 	TransContext *txc = kv_committing.front();
 	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
@@ -8057,6 +8080,7 @@ int BlueStore::queue_transactions(
   if (handle)
     handle->suspend_tp_timeout();
 
+  utime_t tstart = ceph_clock_now();
   throttle_ops.get(txc->ops);
   throttle_bytes.get(txc->bytes);
   if (txc->deferred_txn) {
@@ -8070,6 +8094,7 @@ int BlueStore::queue_transactions(
       throttle_deferred_bytes.get(txc->bytes);
     }
   }
+  utime_t tend = ceph_clock_now();
 
   if (handle)
     handle->reset_tp_timeout();
@@ -8080,6 +8105,7 @@ int BlueStore::queue_transactions(
   _txc_state_proc(txc);
 
   logger->tinc(l_bluestore_submit_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_throttle_lat, tend - tstart);
   return 0;
 }
 

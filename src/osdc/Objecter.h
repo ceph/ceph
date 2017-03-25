@@ -2922,6 +2922,10 @@ private:
   bool retry_writes_after_first_reply;
 public:
   void set_epoch_barrier(epoch_t epoch);
+
+  PerfCounters *get_logger() {
+    return logger;
+  }
 };
 
 #endif

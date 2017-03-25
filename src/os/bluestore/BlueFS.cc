@@ -53,7 +53,7 @@ BlueFS::~BlueFS()
 
 void BlueFS::_init_logger()
 {
-  PerfCountersBuilder b(cct, "BlueFS",
+  PerfCountersBuilder b(cct, "bluefs",
                         l_bluefs_first, l_bluefs_last);
   b.add_u64_counter(l_bluefs_gift_bytes, "gift_bytes",
 		    "Bytes gifted from BlueStore");
@@ -61,30 +61,30 @@ void BlueFS::_init_logger()
 		    "Bytes reclaimed by BlueStore");
   b.add_u64(l_bluefs_db_total_bytes, "db_total_bytes",
 	    "Total bytes (main db device)");
-  b.add_u64(l_bluefs_db_free_bytes, "db_free_bytes",
-	    "Free bytes (main db device)");
+  b.add_u64(l_bluefs_db_used_bytes, "db_used_bytes",
+	    "Used bytes (main db device)");
   b.add_u64(l_bluefs_wal_total_bytes, "wal_total_bytes",
 	    "Total bytes (wal device)");
-  b.add_u64(l_bluefs_wal_free_bytes, "wal_free_bytes",
-	    "Free bytes (wal device)");
+  b.add_u64(l_bluefs_wal_used_bytes, "wal_used_bytes",
+	    "Used bytes (wal device)");
   b.add_u64(l_bluefs_slow_total_bytes, "slow_total_bytes",
 	    "Total bytes (slow device)");
-  b.add_u64(l_bluefs_slow_free_bytes, "slow_free_bytes",
-	    "Free bytes (slow device)");
+  b.add_u64(l_bluefs_slow_used_bytes, "slow_used_bytes",
+	    "Used bytes (slow device)");
   b.add_u64(l_bluefs_num_files, "num_files", "File count");
   b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log");
   b.add_u64_counter(l_bluefs_log_compactions, "log_compactions",
 		    "Compactions of the metadata log");
   b.add_u64_counter(l_bluefs_logged_bytes, "logged_bytes",
-		    "Bytes written to the metadata log");
+		    "Bytes written to the metadata log", "j");
   b.add_u64_counter(l_bluefs_files_written_wal, "files_written_wal",
 		    "Files written to WAL");
   b.add_u64_counter(l_bluefs_files_written_sst, "files_written_sst",
 		    "Files written to SSTs");
   b.add_u64_counter(l_bluefs_bytes_written_wal, "bytes_written_wal",
-		    "Bytes written to WAL");
+		    "Bytes written to WAL", "wal");
   b.add_u64_counter(l_bluefs_bytes_written_sst, "bytes_written_sst",
-		    "Bytes written to SSTs");
+		    "Bytes written to SSTs", "sst");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -103,15 +103,18 @@ void BlueFS::_update_logger_stats()
 
   if (alloc[BDEV_WAL]) {
     logger->set(l_bluefs_wal_total_bytes, block_total[BDEV_WAL]);
-    logger->set(l_bluefs_wal_free_bytes, alloc[BDEV_WAL]->get_free());
+    logger->set(l_bluefs_wal_used_bytes,
+		block_total[BDEV_WAL] - alloc[BDEV_WAL]->get_free());
   }
   if (alloc[BDEV_DB]) {
     logger->set(l_bluefs_db_total_bytes, block_total[BDEV_DB]);
-    logger->set(l_bluefs_db_free_bytes, alloc[BDEV_DB]->get_free());
+    logger->set(l_bluefs_db_used_bytes,
+		block_total[BDEV_DB] - alloc[BDEV_DB]->get_free());
   }
   if (alloc[BDEV_SLOW]) {
     logger->set(l_bluefs_slow_total_bytes, block_total[BDEV_SLOW]);
-    logger->set(l_bluefs_slow_free_bytes, alloc[BDEV_SLOW]->get_free());
+    logger->set(l_bluefs_slow_used_bytes,
+		block_total[BDEV_SLOW] - alloc[BDEV_SLOW]->get_free());
   }
 }
 
