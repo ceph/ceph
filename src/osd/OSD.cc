@@ -511,6 +511,10 @@ void OSDService::init()
   reserver_finisher.start();
   objecter_finisher.start();
   objecter->set_client_incarnation(0);
+
+  // exclude objecter from daemonperf output
+  objecter->get_logger()->set_suppress_nicks(true);
+
   watch_timer.init();
   agent_timer.init();
   snap_sleep_timer.init();
