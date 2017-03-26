@@ -9015,27 +9015,27 @@ bool OSDMonitor::prepare_pool_op_create(MonOpRequestRef op)
   return true;
 }
 
-int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
+int OSDMonitor::_check_remove_pool(int64_t pool_id, const pg_pool_t& pool,
 				   ostream *ss)
 {
-  const string& poolstr = osdmap.get_pool_name(pool);
+  const string& poolstr = osdmap.get_pool_name(pool_id);
 
   // If the Pool is in use by CephFS, refuse to delete it
   FSMap const &pending_fsmap = mon->mdsmon()->get_pending();
-  if (pending_fsmap.pool_in_use(pool)) {
+  if (pending_fsmap.pool_in_use(pool_id)) {
     *ss << "pool '" << poolstr << "' is in use by CephFS";
     return -EBUSY;
   }
 
-  if (p->tier_of >= 0) {
+  if (pool.tier_of >= 0) {
     *ss << "pool '" << poolstr << "' is a tier of '"
-	<< osdmap.get_pool_name(p->tier_of) << "'";
+	<< osdmap.get_pool_name(pool.tier_of) << "'";
     return -EBUSY;
   }
-  if (!p->tiers.empty()) {
+  if (!pool.tiers.empty()) {
     *ss << "pool '" << poolstr << "' has tiers";
-    for(std::set<uint64_t>::iterator i = p->tiers.begin(); i != p->tiers.end(); ++i) {
-      *ss << " " << osdmap.get_pool_name(*i);
+    for(auto tier : pool.tiers) {
+      *ss << " " << osdmap.get_pool_name(tier);
     }
     return -EBUSY;
   }
@@ -9045,7 +9045,7 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
     return -EPERM;
   }
 
-  if (p->has_flag(pg_pool_t::FLAG_NODELETE)) {
+  if (pool.has_flag(pg_pool_t::FLAG_NODELETE)) {
     *ss << "pool deletion is disabled; you must unset nodelete flag for the pool first";
     return -EPERM;
   }
@@ -9157,14 +9157,14 @@ int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
 {
   dout(10) << "_prepare_remove_pool " << pool << dendl;
   const pg_pool_t *p = osdmap.get_pg_pool(pool);
-  int r = _check_remove_pool(pool, p, ss);
+  int r = _check_remove_pool(pool, *p, ss);
   if (r < 0)
     return r;
 
   if (pending_inc.new_pools.count(pool)) {
     // if there is a problem with the pending info, wait and retry
     // this op.
-    pg_pool_t *p = &pending_inc.new_pools[pool];
+    const auto& p = pending_inc.new_pools[pool];
     int r = _check_remove_pool(pool, p, ss);
     if (r < 0)
       return -EAGAIN;
