@@ -11,15 +11,50 @@
 // high bit of every byte indicates whether another byte follows.
 template<typename T>
 inline void small_encode_varint(T v, bufferlist& bl) {
-  uint8_t byte = v & 0x7f;
+  char buf[sizeof(T) + 2];
+  char *p = buf;
+  *p = v & 0x7f;
   v >>= 7;
-  while (v) {
-    byte |= 0x80;
-    ::encode(byte, bl);
-    byte = (v & 0x7f);
+  if (v) {
+    *p++ |= 0x80;
+    *p = v & 0x7f;
     v >>= 7;
+    if (sizeof(v) > 1 && v) {
+      *p++ |= 0x80;
+      *p = v & 0x7f;
+      v >>= 7;
+      if (sizeof(v) > 2 && v) {
+	*p++ |= 0x80;
+	*p = v & 0x7f;
+	v >>= 7;
+	if (v) {
+	  *p++ |= 0x80;
+	  *p = v & 0x7f;
+	  v >>= 7;
+	  if (sizeof(v) > 4 && v) {
+	    *p++ |= 0x80;
+	    *p = v & 0x7f;
+	    v >>= 7;
+	    if (v) {
+	      *p++ |= 0x80;
+	      *p = v & 0x7f;
+	      v >>= 7;
+	      if (v) {
+		*p++ |= 0x80;
+		*p = v & 0x7f;
+		v >>= 7;
+		if (v) {
+		  *p++ |= 0x80;
+		  *p = v & 0x7f;
+		}
+	      }
+	    }
+	  }
+	}
+      }
+    }
   }
-  ::encode(byte, bl);
+  bl.append(buf, p + 1 - buf);
 }
 
 template<typename T>
