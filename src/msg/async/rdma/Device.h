@@ -88,7 +88,7 @@ class Device {
   void verify_port(CephContext *c, int port_num);
 
  public:
-  explicit Device(CephContext *c, Infiniband *ib, ibv_device* d);
+  explicit Device(CephContext *c, Infiniband *ib, struct ibv_context *ctxt);
   ~Device();
 
   void init(int ibport = -1);
@@ -141,7 +141,7 @@ inline ostream& operator<<(ostream& out, const Device &d)
 
 class DeviceList {
   CephContext *cct;
-  struct ibv_device ** device_list;
+  struct ibv_context ** device_list;
   int num;
   Device** devices;
 
