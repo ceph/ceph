@@ -30,7 +30,7 @@ Options
 
 .. option:: --read-only
 
-   Map readonly.
+   Map read-only.
 
 .. option:: --nbds_max *limit*
 
@@ -43,7 +43,7 @@ Options
 
 .. option:: --exclusive
 
-   Forbid other clients write.
+   Forbid writes by other clients.
 
 Image and snap specs
 ====================
