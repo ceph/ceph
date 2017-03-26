@@ -84,7 +84,7 @@ def split_component(title,gh,number):
         labels = {it['name'] for it in issue['labels']}
         if 'documentation' in labels:
             return 'doc: '+ title
-        item = {'bluestore','build/ops','cephfs','common','core','fs','mgr','pybind','rgw','rbd'}.intersection(labels)
+        item = {'bluestore','build/ops','cephfs','common','core','mgr','mon','performance','pybind','rdma','rgw','rbd','tests','tools'}.intersection(labels)
         if item:
             return ",".join(item)+': '+title
         else:
