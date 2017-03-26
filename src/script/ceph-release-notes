@@ -35,6 +35,9 @@ from git import Repo
 
 
 fixes_re = re.compile(r"Fixes\:? #(\d+)")
+labels = [ 'bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
+           'mon', 'performance', 'pybind', 'rdma', 'rgw', 'rbd', 'tests',
+           'tools' ]
 merge_re = re.compile("Merge pull request #(\d+).*")
 prefixes = [ 'bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
              'common', 'core', 'crush', 'doc', 'fs', 'librados', 'librbd',
@@ -84,7 +87,7 @@ def split_component(title,gh,number):
         issue_labels = {it['name'] for it in issue['labels']}
         if 'documentation' in issue_labels:
             return 'doc: '+ title
-        item = {'bluestore','build/ops','cephfs','common','core','mgr','mon','performance','pybind','rdma','rgw','rbd','tests','tools'}.intersection(issue_labels)
+        item = labels.intersection(issue_labels)
         if item:
             return ",".join(item)+': '+title
         else:
