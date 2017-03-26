@@ -1694,8 +1694,8 @@ void ReplicatedBackend::submit_push_data(
   if (first && complete) {
     target_oid = recovery_info.soid;
   } else {
-    target_oid = get_parent()->get_temp_recovery_object(recovery_info.version,
-							recovery_info.soid.snap);
+    target_oid = get_parent()->get_temp_recovery_object(recovery_info.soid,
+							recovery_info.version);
     if (first) {
       dout(10) << __func__ << ": Adding oid "
 	       << target_oid << " in the temp collection" << dendl;
