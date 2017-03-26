@@ -107,6 +107,11 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
 #endif
 }
 
+Port::~Port()
+{
+  delete port_attr;
+}
+
 
 Device::Device(CephContext *cct, Infiniband *ib, ibv_device* d)
   : cct(cct), device(d), lock("ibdev_lock"),
@@ -201,12 +206,16 @@ void Device::uninit()
 
 Device::~Device()
 {
+  delete async_handler;
+
   uninit();
 
   if (active_port) {
     delete active_port;
     assert(ibv_close_device(ctxt) == 0);
   }
+
+  delete device_attr;
 }
 
 void Device::binding_port(CephContext *cct, int port_num) {
@@ -410,7 +419,7 @@ DeviceList::DeviceList(CephContext *cct, Infiniband *ib)
 
 DeviceList::~DeviceList()
 {
-  delete poll_fds;
+  delete[] poll_fds;
 
   for (int i=0; i < num; ++i) {
     delete devices[i];
