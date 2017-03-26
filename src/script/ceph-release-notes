@@ -81,10 +81,10 @@ def split_component(title,gh,number):
         return match.group(1)+match.group(2)
     else:
         issue = gh.repos("ceph")("ceph").issues(number).get()
-        labels = {it['name'] for it in issue['labels']}
-        if 'documentation' in labels:
+        issue_labels = {it['name'] for it in issue['labels']}
+        if 'documentation' in issue_labels:
             return 'doc: '+ title
-        item = {'bluestore','build/ops','cephfs','common','core','mgr','mon','performance','pybind','rdma','rgw','rbd','tests','tools'}.intersection(labels)
+        item = {'bluestore','build/ops','cephfs','common','core','mgr','mon','performance','pybind','rdma','rgw','rbd','tests','tools'}.intersection(issue_labels)
         if item:
             return ",".join(item)+': '+title
         else:
