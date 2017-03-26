@@ -36,6 +36,10 @@ from git import Repo
 
 fixes_re = re.compile(r"Fixes\:? #(\d+)")
 merge_re = re.compile("Merge pull request #(\d+).*")
+prefixes = [ 'bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
+             'common', 'core', 'crush', 'doc', 'fs', 'librados', 'librbd',
+             'log', 'mds', 'mgr', 'mon', 'msgr', 'objecter', 'osd', 'rbd',
+             'pybind', 'rgw', 'tests', 'tools' ]
 signed_off_re = re.compile("Signed-off-by: (.+) <")
 tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
@@ -71,7 +75,7 @@ def get_original_issue(issue, verbose):
         return issue
 
 def split_component(title,gh,number):
-    title_re = '(bluestore|build/ops|cephfs|cmake|core|common|crush|cli|doc|fs|librados|mds|mon|msgr|mgr|osd|log|librbd|rbd|objecter|pybind|rgw|tests|tools)(:.*)'
+    title_re = '(' + '|'.join(prefixes) + ')(:.*)'
     match = re.match(title_re, title)
     if match:
         return match.group(1)+match.group(2)
@@ -147,7 +151,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
                 continue    
             
             if strict:
-                title_re = '^(?:hammer|infernalis|jewel|kraken):\s+(cephx|cli|common|mon|msgr|osd|log|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|cmake|doc|crush|librados)(:.*)'
+                title_re = '^(?:hammer|infernalis|jewel|kraken):\s+(' + '|'.join(prefixes) + ')(:.*)'
                 match = re.match(title_re, title)
                 if not match:
                     print ("ERROR: https://github.com/ceph/ceph/pull/" + str(number) + " title " + title.encode("utf-8") + " does not match " + title_re)
