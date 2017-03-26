@@ -138,8 +138,8 @@ protected:
     return 0;
   }
 public:
-  RGWHandler_ReplicaLog() : RGWHandler_Auth_S3() {}
-  ~RGWHandler_ReplicaLog() override {}
+  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
+  ~RGWHandler_ReplicaLog() override = default;
 };
 
 class RGWRESTMgr_ReplicaLog : public RGWRESTMgr {
@@ -148,8 +148,9 @@ public:
   ~RGWRESTMgr_ReplicaLog() override = default;
 
   RGWHandler_REST* get_handler(struct req_state*,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
-    return new RGWHandler_ReplicaLog;
+    return new RGWHandler_ReplicaLog(auth_registry);
   }
 };
 

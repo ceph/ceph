@@ -15,6 +15,8 @@
 #include "rgw_civetweb_log.h"
 #include "civetweb/civetweb.h"
 
+#include "rgw_auth_registry.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -68,7 +70,8 @@ public:
   virtual void join() = 0;
 
   virtual void pause_for_new_config() = 0;
-  virtual void unpause_with_new_config(RGWRados* store) = 0;
+  virtual void unpause_with_new_config(RGWRados* store,
+                                       rgw_auth_registry_ptr_t auth_registry) = 0;
 };
 
 
@@ -129,8 +132,10 @@ public:
     env.mutex.get_write();
   }
 
-  void unpause_with_new_config(RGWRados *store) override {
+  void unpause_with_new_config(RGWRados* const store,
+                               rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
+    env.auth_registry = std::move(auth_registry);
     // unpause callbacks
     env.mutex.put_write();
   }
@@ -170,9 +175,11 @@ public:
     pprocess->pause();
   }
 
-  void unpause_with_new_config(RGWRados *store) override {
+  void unpause_with_new_config(RGWRados* const store,
+                               rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
-    pprocess->unpause_with_new_config(store);
+    env.auth_registry = auth_registry;
+    pprocess->unpause_with_new_config(store, std::move(auth_registry));
   }
 }; /* RGWProcessFrontend */
 
@@ -235,6 +242,7 @@ public:
 class RGWFrontendPauser : public RGWRealmReloader::Pauser {
   std::list<RGWFrontend*> &frontends;
   RGWRealmReloader::Pauser* pauser;
+
  public:
   RGWFrontendPauser(std::list<RGWFrontend*> &frontends,
                     RGWRealmReloader::Pauser* pauser = nullptr)
@@ -247,8 +255,13 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
       pauser->pause();
   }
   void resume(RGWRados *store) override {
+    /* Initialize the registry of auth strategies which will coordinate
+     * the dynamic reconfiguration. */
+    auto auth_registry = \
+      rgw::auth::StrategyRegistry::create(g_ceph_context, store);
+
     for (auto frontend : frontends)
-      frontend->unpause_with_new_config(store);
+      frontend->unpause_with_new_config(store, auth_registry);
     if (pauser)
       pauser->resume(store);
   }

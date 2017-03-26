@@ -438,6 +438,13 @@ class RGWHandler_REST_SWIFT;
 class RGWHandler_SWIFT_Auth;
 class RGWHandler_REST_S3;
 
+namespace rgw {
+namespace auth {
+
+class StrategyRegistry;
+
+}
+}
 
 class RGWRESTMgr {
   bool should_log;
@@ -476,8 +483,11 @@ public:
     return get_resource_mgr(s, frontend_prefix + uri, out_uri);
   }
 
-  virtual RGWHandler_REST* get_handler(struct req_state* const s,
-                                       const std::string& frontend_prefix) {
+  virtual RGWHandler_REST* get_handler(
+    struct req_state* const s,
+    const rgw::auth::StrategyRegistry& auth_registry,
+    const std::string& frontend_prefix
+  ) {
     return nullptr;
   }
 
@@ -507,6 +517,7 @@ public:
   RGWREST() {}
   RGWHandler_REST *get_handler(RGWRados *store,
                                struct req_state *s,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix,
                                RGWRestfulIO *rio,
                                RGWRESTMgr **pmgr,

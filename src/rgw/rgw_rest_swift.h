@@ -10,6 +10,7 @@
 
 #include "rgw_op.h"
 #include "rgw_rest.h"
+#include "rgw_swift_auth.h"
 
 class RGWGetObj_ObjStore_SWIFT : public RGWGetObj_ObjStore {
   int custom_http_ret = 0;
@@ -257,6 +258,8 @@ class RGWHandler_REST_SWIFT : public RGWHandler_REST {
   friend class RGWRESTMgr_SWIFT;
   friend class RGWRESTMgr_SWIFT_Info;
 protected:
+  const rgw::auth::Strategy& auth_strategy;
+
   virtual bool is_acl_op() {
     return false;
   }
@@ -264,8 +267,10 @@ protected:
   static int init_from_header(struct req_state* s,
                               const std::string& frontend_prefix);
 public:
-  RGWHandler_REST_SWIFT() {}
-  ~RGWHandler_REST_SWIFT() override {}
+  RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
+    : auth_strategy(auth_strategy) {
+  }
+  ~RGWHandler_REST_SWIFT() override = default;
 
   static int validate_bucket_name(const string& bucket);
 
@@ -273,7 +278,7 @@ public:
   int authorize() override;
   int postauth_init() override;
 
-  RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
+  RGWAccessControlPolicy *alloc_policy() { return nullptr; /* return new RGWAccessControlPolicy_SWIFT; */ }
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
 };
 
@@ -284,8 +289,8 @@ protected:
   RGWOp *op_post() override;
   RGWOp *op_delete() override;
 public:
-  RGWHandler_REST_Service_SWIFT() {}
-  ~RGWHandler_REST_Service_SWIFT() override {}
+  using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
+  ~RGWHandler_REST_Service_SWIFT() override = default;
 };
 
 class RGWHandler_REST_Bucket_SWIFT : public RGWHandler_REST_SWIFT {
@@ -305,8 +310,8 @@ protected:
   RGWOp *op_post() override;
   RGWOp *op_options() override;
 public:
-  RGWHandler_REST_Bucket_SWIFT() {}
-  ~RGWHandler_REST_Bucket_SWIFT() override {}
+  using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
+  ~RGWHandler_REST_Bucket_SWIFT() override = default;
 
   int error_handler(int err_no, std::string *error_content) override {
     return website_handler->error_handler(err_no, error_content);
@@ -343,8 +348,8 @@ protected:
   RGWOp *op_options() override;
 
 public:
-  RGWHandler_REST_Obj_SWIFT() {}
-  ~RGWHandler_REST_Obj_SWIFT() override {}
+  using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
+  ~RGWHandler_REST_Obj_SWIFT() override = default;
 
   int error_handler(int err_no, std::string *error_content) override {
     return website_handler->error_handler(err_no, error_content);
@@ -375,6 +380,7 @@ public:
   ~RGWRESTMgr_SWIFT() override = default;
 
   RGWHandler_REST *get_handler(struct req_state *s,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
 
@@ -445,6 +451,7 @@ public:
   ~RGWRESTMgr_SWIFT_CrossDomain() override = default;
 
   RGWHandler_REST* get_handler(struct req_state* const s,
+                               const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
     return new RGWHandler_SWIFT_CrossDomain;
@@ -500,6 +507,7 @@ public:
   ~RGWRESTMgr_SWIFT_HealthCheck() override = default;
 
   RGWHandler_REST* get_handler(struct req_state* const s,
+                               const rgw::auth::StrategyRegistry&,
                                const std::string&) override {
     s->prot_flags |= RGW_REST_SWIFT;
     return new RGWHandler_SWIFT_HealthCheck;
@@ -509,7 +517,7 @@ public:
 
 class RGWHandler_REST_SWIFT_Info : public RGWHandler_REST_SWIFT {
 public:
-  RGWHandler_REST_SWIFT_Info() = default;
+  using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
   ~RGWHandler_REST_SWIFT_Info() override = default;
 
   RGWOp *op_get() override {
@@ -545,6 +553,7 @@ public:
   ~RGWRESTMgr_SWIFT_Info() override = default;
 
   RGWHandler_REST *get_handler(struct req_state* s,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 };
 

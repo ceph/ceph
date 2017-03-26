@@ -362,9 +362,9 @@ static int read_obj_policy(RGWRados *store,
 
     const rgw_user& bucket_owner = bucket_policy.get_owner().get_id();
     if (bucket_owner.compare(s->user->user_id) != 0 &&
-        !s->auth_identity->is_admin_of(bucket_owner) &&
-        !bucket_policy.verify_permission(*s->auth_identity, s->perm_mask,
-                                         RGW_PERM_READ)) {
+        ! s->auth.identity->is_admin_of(bucket_owner) &&
+        ! bucket_policy.verify_permission(*s->auth.identity, s->perm_mask,
+                                          RGW_PERM_READ)) {
       ret = -EACCES;
     } else {
       ret = -ENOENT;
@@ -1544,7 +1544,7 @@ int RGWListBuckets::verify_permission()
 
 int RGWGetUsage::verify_permission()
 {
-  if (s->auth_identity->is_anonymous()) {
+  if (s->auth.identity->is_anonymous()) {
     return -EACCES;
   }
 
@@ -1731,7 +1731,7 @@ void RGWStatAccount::execute()
 
 int RGWGetBucketVersioning::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -1751,7 +1751,7 @@ void RGWGetBucketVersioning::execute()
 
 int RGWSetBucketVersioning::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -1981,7 +1981,7 @@ void RGWListBucket::execute()
 
 int RGWGetBucketLogging::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -1990,7 +1990,7 @@ int RGWGetBucketLogging::verify_permission()
 
 int RGWGetBucketLocation::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -2002,7 +2002,7 @@ int RGWCreateBucket::verify_permission()
   /* This check is mostly needed for S3 that doesn't support account ACL.
    * Swift doesn't allow to delegate any permission to an anonymous user,
    * so it will become an early exit in such case. */
-  if (s->auth_identity->is_anonymous()) {
+  if (s->auth.identity->is_anonymous()) {
     return -EACCES;
   }
 
@@ -2583,8 +2583,8 @@ int RGWPutObj::verify_permission()
     }
 
     /* admin request overrides permission checks */
-    if (!s->auth_identity->is_admin_of(cs_policy.get_owner().get_id()) &&
-        !cs_policy.verify_permission(*s->auth_identity, s->perm_mask, RGW_PERM_READ)) {
+    if (! s->auth.identity->is_admin_of(cs_policy.get_owner().get_id()) &&
+        ! cs_policy.verify_permission(*s->auth.identity, s->perm_mask, RGW_PERM_READ)) {
       return -EACCES;
     }
 
@@ -3455,7 +3455,7 @@ int RGWPutMetadataAccount::init_processing()
 
 int RGWPutMetadataAccount::verify_permission()
 {
-  if (s->auth_identity->is_anonymous()) {
+  if (s->auth.identity->is_anonymous()) {
     return -EACCES;
   }
 
@@ -3884,9 +3884,9 @@ int RGWCopyObj::verify_permission()
     }
 
     /* admin request overrides permission checks */
-    if (!s->auth_identity->is_admin_of(src_policy.get_owner().get_id()) &&
-        !src_policy.verify_permission(*s->auth_identity, s->perm_mask,
-                                      RGW_PERM_READ)) {
+    if (! s->auth.identity->is_admin_of(src_policy.get_owner().get_id()) &&
+        ! src_policy.verify_permission(*s->auth.identity, s->perm_mask,
+                                       RGW_PERM_READ)) {
       return -EACCES;
     }
   }
@@ -3922,9 +3922,9 @@ int RGWCopyObj::verify_permission()
   }
 
   /* admin request overrides permission checks */
-  if (!s->auth_identity->is_admin_of(dest_policy.get_owner().get_id()) &&
-      !dest_bucket_policy.verify_permission(*s->auth_identity, s->perm_mask,
-                                            RGW_PERM_WRITE)) {
+  if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id()) &&
+      ! dest_bucket_policy.verify_permission(*s->auth.identity, s->perm_mask,
+                                             RGW_PERM_WRITE)) {
     return -EACCES;
   }
 
@@ -4387,7 +4387,7 @@ void RGWDeleteLC::execute()
 
 int RGWGetCORS::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -4409,7 +4409,7 @@ void RGWGetCORS::execute()
 
 int RGWPutCORS::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -4431,7 +4431,7 @@ void RGWPutCORS::execute()
 
 int RGWDeleteCORS::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -4543,7 +4543,7 @@ void RGWGetRequestPayment::execute()
 
 int RGWSetRequestPayment::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 

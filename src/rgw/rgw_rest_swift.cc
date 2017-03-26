@@ -19,7 +19,6 @@
 #include "rgw_client_io.h"
 
 #include "rgw_auth.h"
-#include "rgw_auth_decoimpl.h"
 #include "rgw_swift_auth.h"
 
 #include "rgw_request.h"
@@ -707,7 +706,7 @@ int RGWPutObj_ObjStore_SWIFT::verify_permission()
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
    * (403 Forbidden). */
-  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+  if (s->auth.identity->is_anonymous() && op_ret == -EACCES) {
     return -EPERM;
   } else {
     return op_ret;
@@ -1011,7 +1010,7 @@ int RGWDeleteObj_ObjStore_SWIFT::verify_permission()
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
    * (403 Forbidden). */
-  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+  if (s->auth.identity->is_anonymous() && op_ret == -EACCES) {
     return -EPERM;
   } else {
     return op_ret;
@@ -1231,7 +1230,7 @@ int RGWGetObj_ObjStore_SWIFT::verify_permission()
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
    * (403 Forbidden). */
-  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+  if (s->auth.identity->is_anonymous() && op_ret == -EACCES) {
     return -EPERM;
   } else {
     return op_ret;
@@ -1669,15 +1668,15 @@ bool RGWSwiftWebsiteHandler::can_be_website_req() const
   }
 
   /* We also need to handle early failures from the auth system. In such cases
-   * req_state::auth_identity may be empty. Let's treat that the same way as
+   * req_state::auth.identity may be empty. Let's treat that the same way as
    * the anonymous access. */
-  if (! s->auth_identity) {
+  if (! s->auth.identity) {
     return true;
   }
 
   /* Swift serves websites only for anonymous requests unless client explicitly
    * requested this behaviour by supplying X-Web-Mode HTTP header set to true. */
-  if (s->auth_identity->is_anonymous() || is_web_mode()) {
+  if (s->auth.identity->is_anonymous() || is_web_mode()) {
     return true;
   }
 
@@ -2031,128 +2030,43 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
   return new RGWOptionsCORS_ObjStore_SWIFT;
 }
 
+
 int RGWHandler_REST_SWIFT::authorize()
 {
-  /* Factories. */
-  class SwiftAuthFactory : public RGWTempURLAuthApplier::Factory,
-                           public RGWLocalAuthApplier::Factory,
-                           public RGWRemoteAuthApplier::Factory {
-    typedef RGWAuthApplier::aplptr_t aplptr_t;
+  try {
+    auto result = auth_strategy.authenticate(s);
 
-    RGWRados * const store;
-    const std::string acct_override;
-
-  public:
-    SwiftAuthFactory(RGWRados * const store,
-                     const std::string& acct_override)
-      : store(store),
-        acct_override(acct_override) {
-    }
-
-    aplptr_t create_apl_turl(CephContext * const cct,
-                             const RGWUserInfo& user_info) const override {
-      /* TempURL doesn't need any user account override. It's a Swift-specific
-       * mechanism that requires  account name internally, so there is no
-       * business with delegating the responsibility outside. */
-      return aplptr_t(new RGWTempURLAuthApplier(cct, user_info));
-    }
-
-    aplptr_t create_apl_local(CephContext * const cct,
-                              const RGWUserInfo& user_info,
-                              const std::string& subuser) const override {
-      return aplptr_t(
-        new RGWThirdPartyAccountAuthApplier<RGWLocalAuthApplier>(
-          RGWLocalAuthApplier(cct, user_info, subuser),
-          store, acct_override));
-    }
-
-    aplptr_t create_apl_remote(CephContext * const cct,
-                               RGWRemoteAuthApplier::acl_strategy_t&& acl_alg,
-                               const RGWRemoteAuthApplier::AuthInfo info
-                              ) const override {
-      return aplptr_t(
-        new RGWThirdPartyAccountAuthApplier<RGWRemoteAuthApplier>(
-          RGWRemoteAuthApplier(cct, store, std::move(acl_alg), info),
-          store, acct_override));
-    }
-  } aplfact(store, s->account_name);
-
-  /* Extractors. */
-  RGWXAuthTokenExtractor token_extr(s);
-
-  /* Auth engines. */
-  RGWTempURLAuthEngine tempurl(s, store,                    &aplfact);
-  RGWSignedTokenAuthEngine rgwtk(s->cct, store, token_extr, &aplfact);
-  RGWKeystoneAuthEngine keystone(s->cct,        token_extr, &aplfact);
-  RGWExternalTokenAuthEngine ext(s->cct, store, token_extr, &aplfact);
-  RGWAnonymousAuthEngine anoneng(s->cct,        token_extr, &aplfact);
-
-  /* Pipeline. */
-  constexpr size_t ENGINES_NUM = 5;
-  const std::array<const RGWAuthEngine *, ENGINES_NUM> engines = {
-    &tempurl, &rgwtk, &keystone, &ext, &anoneng
-  };
-
-  for (const auto engine : engines) {
-    if (! engine->is_applicable()) {
-      /* Engine said it isn't suitable for handling this particular
-       * request. Let's try a next one. */
-      continue;
+    if (result.get_status() != decltype(result)::Status::GRANTED) {
+      /* Access denied is acknowledged by returning a std::unique_ptr with
+       * nullptr inside. */
+      ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
+      return -EPERM;
     }
 
     try {
-      ldout(s->cct, 5) << "trying auth engine: " << engine->get_name() << dendl;
+      rgw::auth::IdentityApplier::aplptr_t applier = result.get_applier();
 
-      auto applier = engine->authenticate();
-      if (! applier) {
-        /* Access denied is acknowledged by returning a std::unique_ptr with
-         * nullptr inside. */
-        ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
-        return -EPERM;
-      }
+      /* Account used by a given RGWOp is decoupled from identity employed
+       * in the authorization phase (RGWOp::verify_permissions). */
+      applier->load_acct_info(*s->user);
+      s->perm_mask = applier->get_perm_mask();
 
-      try {
-        /* Account used by a given RGWOp is decoupled from identity employed
-         * in the authorization phase (RGWOp::verify_permissions). */
-        applier->load_acct_info(*s->user);
-        s->perm_mask = applier->get_perm_mask();
+      /* This is the signle place where we pass req_state as a pointer
+       * to non-const and thus its modification is allowed. In the time
+       * of writing only RGWTempURLEngine needed that feature. */
+      applier->modify_request_state(s);
 
-        /* This is the signle place where we pass req_state as a pointer
-         * to non-const and thus its modification is allowed. In the time
-         * of writing only RGWTempURLEngine needed that feature. */
-        applier->modify_request_state(s);
+      s->auth.identity = std::move(applier);
+      s->auth.completer = std::move(result.get_completer());
 
-        s->auth_identity = std::move(applier);
-      } catch (int err) {
-        ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
-        return err;
-      }
+      return 0;
     } catch (int err) {
-      ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
+      ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
       return err;
     }
-
-    /* FIXME(rzarzynski): move into separated RGWAuthApplier decorator. */
-    if (s->user->system && s->auth_identity->is_owner_of(s->user->user_id)) {
-      s->system_request = true;
-      ldout(s->cct, 20) << "system request over Swift API" << dendl;
-
-      rgw_user euid(s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
-      if (!euid.empty()) {
-        RGWUserInfo einfo;
-
-        const int ret = rgw_get_user_info_by_uid(store, euid, einfo);
-        if (ret < 0) {
-          ldout(s->cct, 0) << "User lookup failed, euid=" << euid
-                           << " ret=" << ret << dendl;
-          return ret;
-        }
-
-        *(s->user) = einfo;
-      }
-    }
-
-    return 0;
+  } catch (int err) {
+    ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
+    return err;
   }
 
   /* All engines refused to handle this authentication request by
@@ -2415,8 +2329,10 @@ int RGWHandler_REST_SWIFT::init(RGWRados* store, struct req_state* s,
   return RGWHandler_REST::init(store, s, cio);
 }
 
-RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
-                                               const std::string& frontend_prefix)
+RGWHandler_REST*
+RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
+                              const rgw::auth::StrategyRegistry& auth_registry,
+                              const std::string& frontend_prefix)
 {
   int ret = RGWHandler_REST_SWIFT::init_from_header(s, frontend_prefix);
   if (ret < 0) {
@@ -2424,21 +2340,25 @@ RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
     return nullptr;
   }
 
+  const auto& auth_strategy = auth_registry.get_swift();
+
   if (s->init_state.url_bucket.empty()) {
-    return new RGWHandler_REST_Service_SWIFT;
+    return new RGWHandler_REST_Service_SWIFT(auth_strategy);
   }
 
   if (s->object.empty()) {
-    return new RGWHandler_REST_Bucket_SWIFT;
+    return new RGWHandler_REST_Bucket_SWIFT(auth_strategy);
   }
 
-  return new RGWHandler_REST_Obj_SWIFT;
+  return new RGWHandler_REST_Obj_SWIFT(auth_strategy);
 }
 
 RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(
   struct req_state* const s,
+  const rgw::auth::StrategyRegistry& auth_registry,
   const std::string& frontend_prefix)
 {
   s->prot_flags |= RGW_REST_SWIFT;
-  return new RGWHandler_REST_SWIFT_Info;
+  const auto& auth_strategy = auth_registry.get_swift();
+  return new RGWHandler_REST_SWIFT_Info(auth_strategy);
 }
