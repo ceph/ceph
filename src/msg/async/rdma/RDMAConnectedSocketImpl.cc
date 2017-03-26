@@ -667,7 +667,7 @@ void RDMAConnectedSocketImpl::fault()
     qp = NULL;
     }*/
   error = ECONNRESET;
-  connected = 1;
+  connected = 0;
   notify();
 }
 
