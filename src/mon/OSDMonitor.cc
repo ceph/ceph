@@ -9161,10 +9161,11 @@ int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
   if (r < 0)
     return r;
 
-  if (pending_inc.new_pools.count(pool)) {
+  auto new_pool = pending_inc.new_pools.find(pool);
+  if (new_pool != pending_inc.new_pools.end()) {
     // if there is a problem with the pending info, wait and retry
     // this op.
-    const auto& p = pending_inc.new_pools[pool];
+    const auto& p = new_pool->second;
     int r = _check_remove_pool(pool, p, ss);
     if (r < 0)
       return -EAGAIN;
