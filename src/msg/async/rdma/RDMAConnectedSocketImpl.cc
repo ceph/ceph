@@ -204,6 +204,11 @@ int RDMAConnTCP::activate()
   ldout(cct, 20) << __func__ << " transition to RTS state successfully." << dendl;
   ldout(cct, 20) << __func__ << " QueuePair: " << qp << " with qp:" << qp->get_qp() << dendl;
 
+  return RDMAConnectedSocketImpl::activate();
+}
+
+int RDMAConnectedSocketImpl::activate()
+{
   if (!is_server) {
     connected = 1; //indicate successfully
     ldout(cct, 20) << __func__ << " handle fake send, wake it up. QP: " << *qp << dendl;

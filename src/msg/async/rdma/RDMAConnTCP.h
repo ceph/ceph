@@ -64,7 +64,6 @@ private:
   void handle_connection();
   int send_msg(CephContext *cct, int sd, IBSYNMsg& msg);
   int recv_msg(CephContext *cct, int sd, IBSYNMsg& msg);
-  int activate();
   void wire_gid_to_gid(const char *wgid, union ibv_gid *gid);
   void gid_to_wire_gid(const union ibv_gid *gid, char wgid[]);
 
@@ -79,6 +78,7 @@ public:
   virtual int try_connect(const entity_addr_t&, const SocketOptions &opt) override;
   virtual int remote_qpn()override { return peer_msg.qpn; };
   virtual void fin() override;
+  virtual int activate() override;
 
   virtual ostream &print(ostream &o) override;
 };
