@@ -211,7 +211,7 @@ Device::~Device()
 
   for (int i = 1; i <= port_cnt; i++)
     delete ports[i];
-  delete ports;
+  delete[] ports;
 }
 
 void Device::verify_port(CephContext *cct, int port_num) {
@@ -420,7 +420,7 @@ DeviceList::DeviceList(CephContext *cct, Infiniband *ib)
 
 DeviceList::~DeviceList()
 {
-  delete poll_fds;
+  delete[] poll_fds;
 
   for (int i=0; i < num; ++i) {
     delete devices[i];

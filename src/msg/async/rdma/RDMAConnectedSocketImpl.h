@@ -50,7 +50,7 @@ protected:
   RDMAWorker* worker;
   Device *ibdev;
   int ibport;
-  Infiniband::QueuePair *qp;
+  Infiniband::QueuePair *qp = nullptr;
   bool is_server;
   bool active;// qp is active ?
   int connected;
