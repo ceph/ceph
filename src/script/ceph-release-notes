@@ -43,8 +43,8 @@ merge_re = re.compile("Merge pull request #(\d+).*")
 # prefixes is the list of commit description prefixes we recognize
 prefixes = [ 'bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
              'common', 'core', 'crush', 'doc', 'fs', 'librados', 'librbd',
-             'log', 'mds', 'mgr', 'mon', 'msg', 'objecter', 'osd', 'rbd',
-             'pybind', 'rgw', 'tests', 'tools' ]
+             'log', 'mds', 'mgr', 'mon', 'msg', 'objecter', 'osd', 'pybind',
+             'rbd', 'rbd-mirror', 'rbd-nbd', 'rgw', 'tests', 'tools' ]
 signed_off_re = re.compile("Signed-off-by: (.+) <")
 tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
