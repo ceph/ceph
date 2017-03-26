@@ -34,10 +34,10 @@ import requests
 from git import Repo
 
 
-merge_re = re.compile("Merge pull request #(\d+).*")
 fixes_re = re.compile(r"Fixes\:? #(\d+)")
-tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
+merge_re = re.compile("Merge pull request #(\d+).*")
 signed_off_re = re.compile("Signed-off-by: (.+) <")
+tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 
 def get_original_issue(issue, verbose):
