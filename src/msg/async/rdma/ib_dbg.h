@@ -286,6 +286,8 @@ static inline int _ibv_post_send(const char *f, int l,
   auto ret = ibv_post_send(qp, wr, bad_wr);
 
   ibdbg_ldout << " qp: " << qp <<
+    std::hex << std::showbase <<
+    " wr_id: " << wr->wr_id <<
     " | ret: " << ret << dendl;
 
   return ret;
@@ -426,23 +428,213 @@ static inline void _ibv_ack_async_event(const char *f, int l,
 }
 #define ibv_ack_async_event(...)        _ibv_ack_async_event(__func__, __LINE__, __VA_ARGS__)
 
+static inline struct rdma_event_channel *_rdma_create_event_channel(const char *f, int l)
+{
+  auto ret = rdma_create_event_channel();
+
+  ibdbg_ldout << " channel: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_create_event_channel(...)  _rdma_create_event_channel(__func__, __LINE__)
+
+static inline int _rdma_create_id(const char *f, int l,
+                                   struct rdma_event_channel *channel,
+                                   struct rdma_cm_id **id, void *context,
+                                   enum rdma_port_space ps)
+{
+  auto ret = rdma_create_id(channel, id, context, ps);
+
+  ibdbg_ldout << " ret: " << ret << " id: " << *id << dendl;
+
+  return ret;
+}
+#define rdma_create_id(...)             _rdma_create_id(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline int _rdma_create_qp(const char *f, int l,
+                                   struct rdma_cm_id *id, struct ibv_pd *pd,
+                                   struct ibv_qp_init_attr *qp_init_attr)
+{
+  auto ret = rdma_create_qp(id, pd, qp_init_attr);
+
+  ibdbg_ldout << " id: " << id <<
+    " pd: " << pd <<
+    " send_cq: " << qp_init_attr->send_cq <<
+    " recv_cq: " << qp_init_attr->recv_cq <<
+    " srq: " << qp_init_attr->srq <<
+    " | qp: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_create_qp(...)             _rdma_create_qp(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline void _rdma_destroy_qp(const char *f, int l,
+                                   struct rdma_cm_id *id)
+{
+  ibdbg_ldout << " id: " << id << dendl;
+
+  rdma_destroy_qp(id);
+}
+#define rdma_destroy_qp(...)        _rdma_destroy_qp(__func__, __LINE__, __VA_ARGS__)
+
+
 #if 0
-#define rdma_create_event_channel(...) print_call_func(rdma_create_event_channel, , __VA_ARGS__)
-#define rdma_create_id(...) print_call_func(rdma_create_id, , __VA_ARGS__)
-#define rdma_create_qp(...) print_call_func(rdma_create_qp, , __VA_ARGS__)
-#define rdma_destroy_qp(id) print_call_func(rdma_destroy_qp, << " qp: " << id->qp->qp_num, id)
-#define rdma_create_srq(...) print_call_func(rdma_create_srq, , __VA_ARGS__)
-#define rdma_freeaddrinfo(...) print_call_func(rdma_freeaddrinfo, , __VA_ARGS__)
-#define rdma_destroy_event_channel(...) print_call_func(rdma_destroy_event_channel, , __VA_ARGS__)
-#define rdma_destroy_id(...) print_call_func(rdma_destroy_id, , __VA_ARGS__)
-#define rdma_disconnect(...) print_call_func(rdma_disconnect, , __VA_ARGS__)
-#define rdma_getaddrinfo(...) print_call_func(rdma_getaddrinfo, , __VA_ARGS__)
-#define rdma_resolve_addr(...) print_call_func(rdma_resolve_addr, , __VA_ARGS__)
-#define rdma_get_cm_event(...) print_call_func(rdma_get_cm_event, , __VA_ARGS__)
-#define rdma_resolve_route(...) print_call_func(rdma_resolve_route, , __VA_ARGS__)
-#define rdma_connect(...) print_call_func(rdma_connect, , __VA_ARGS__)
-#define rdma_accept(...) print_call_func(rdma_accept, , __VA_ARGS__)
-#define rdma_ack_cm_event(...) print_call_func(rdma_ack_cm_event, , __VA_ARGS__)
+static inline int _rdma_create_srq(const char *f, int l,
+                                   struct rdma_cm_id *id, struct ibv_pd *pd,
+                                   struct ibv_srq_init_attr *attr)
+{
+  auto ret = rdma_create_srq(id, pd, attr);
+
+  ibdbg_ldout << " id: " << id  <<
+    " pd: " << pd <<
+    " | srq: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_create_srq(...)            _rdma_create_srq(__func__, __LINE__, __VA_ARGS__)
 #endif
+
+static inline void _rdma_freeaddrinfo(const char *f, int l,
+                                     struct rdma_addrinfo *res)
+{
+  ibdbg_ldout << " dst: " << res->ai_dst_addr << dendl;
+
+  rdma_freeaddrinfo(res);
+}
+#define rdma_freeaddrinfo(...)          _rdma_freeaddrinfo(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline void _rdma_destroy_event_channel(const char *f, int l,
+                                              struct rdma_event_channel *channel)
+{
+  ibdbg_ldout << " channel: " << channel << dendl;
+
+  rdma_destroy_event_channel(channel);
+}
+#define rdma_destroy_event_channel(...)        _rdma_destroy_event_channel(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline int _rdma_destroy_id(const char *f, int l,
+                                   struct rdma_cm_id *id)
+{
+  auto ret = rdma_destroy_id(id);
+
+  ibdbg_ldout << " id: " << id  <<
+    " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_destroy_id(...)        _rdma_destroy_id(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline int _rdma_disconnect(const char *f, int l,
+                                    struct rdma_cm_id *id)
+{
+  auto ret = rdma_disconnect(id);
+
+  ibdbg_ldout << " id: " << id  <<
+    " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_disconnect(...)        _rdma_disconnect(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline int _rdma_getaddrinfo(const char *f, int l,
+                                     char *node, char *service,
+                                     struct rdma_addrinfo *hints,
+                                     struct rdma_addrinfo **res)
+{
+  auto ret = rdma_getaddrinfo(node, service, hints, res);
+
+  ibdbg_ldout <<
+        " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_getaddrinfo(...)        _rdma_getaddrinfo(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline int _rdma_resolve_addr(const char *f, int l,
+                                      struct rdma_cm_id *id, struct sockaddr *src_addr,
+                                      struct sockaddr *dst_addr, int timeout_ms)
+{
+  auto ret = rdma_resolve_addr(id, src_addr, dst_addr, timeout_ms);
+
+  ibdbg_ldout << " id: " << id  <<
+    " dst: " << dst_addr <<
+    " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_resolve_addr(...)        _rdma_resolve_addr(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline int _rdma_get_cm_event(const char *f, int l,
+                                      struct rdma_event_channel *channel,
+                                      struct rdma_cm_event **event)
+{
+  auto ret = rdma_get_cm_event(channel, event);
+
+  ibdbg_ldout << " channel: " << channel  <<
+        " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_get_cm_event(...)        _rdma_get_cm_event(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline int _rdma_resolve_route(const char *f, int l,
+                                       struct rdma_cm_id *id, int timeout_ms)
+{
+  auto ret = rdma_resolve_route(id, timeout_ms);
+
+  ibdbg_ldout << " id: " << id  <<
+        " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_resolve_route(...)        _rdma_resolve_route(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline int _rdma_connect(const char *f, int l,
+                                 struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
+{
+  auto ret = rdma_connect(id, conn_param);
+
+  ibdbg_ldout << " id: " << id  <<
+        " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_connect(...)        _rdma_connect(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline int _rdma_accept(const char *f, int l,
+                                struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
+{
+  auto ret = rdma_accept(id, conn_param);
+
+  ibdbg_ldout << " id: " << id  <<
+        " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_accept(...)        _rdma_accept(__func__, __LINE__, __VA_ARGS__)
+
+
+static inline int _rdma_ack_cm_event(const char *f, int l,
+                                      struct rdma_cm_event *event)
+{
+  auto ret = rdma_ack_cm_event(event);
+
+  ibdbg_ldout << " event: " << event  <<
+        " | ret: " << ret << dendl;
+
+  return ret;
+}
+#define rdma_ack_cm_event(...)        _rdma_ack_cm_event(__func__, __LINE__, __VA_ARGS__)
 
 #endif // __IB_DBG_H__
