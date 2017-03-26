@@ -47,7 +47,7 @@ void RGWAccessControlList::add_grant(ACLGrant *grant)
   _add_grant(grant);
 }
 
-uint32_t RGWAccessControlList::get_perm(const RGWIdentityApplier& auth_identity,
+uint32_t RGWAccessControlList::get_perm(const rgw::auth::Identity& auth_identity,
                                         const uint32_t perm_mask)
 {
   ldout(cct, 5) << "Searching permissions for identity=" << auth_identity
@@ -94,10 +94,13 @@ uint32_t RGWAccessControlList::get_referer_perm(const std::string http_referer,
   }
 }
 
-uint32_t RGWAccessControlPolicy::get_perm(const RGWIdentityApplier& auth_identity,
+uint32_t RGWAccessControlPolicy::get_perm(const rgw::auth::Identity& auth_identity,
                                           const uint32_t perm_mask,
                                           const char * const http_referer)
 {
+  ldout(cct, 20) << "-- Getting permissions begin with perm_mask=" << perm_mask
+                 << dendl;
+
   uint32_t perm = acl.get_perm(auth_identity, perm_mask);
 
   if (auth_identity.is_owner_of(owner.get_id())) {
@@ -123,14 +126,14 @@ uint32_t RGWAccessControlPolicy::get_perm(const RGWIdentityApplier& auth_identit
     perm |= acl.get_referer_perm(http_referer, perm_mask);
   }
 
-  ldout(cct, 5) << "Getting permissions identity=" << auth_identity
-                << " owner=" << owner.get_id()
-                << " perm=" << perm << dendl;
+  ldout(cct, 5) << "-- Getting permissions done for identity=" << auth_identity
+                << ", owner=" << owner.get_id()
+                << ", perm=" << perm << dendl;
 
   return perm;
 }
 
-bool RGWAccessControlPolicy::verify_permission(const RGWIdentityApplier& auth_identity,
+bool RGWAccessControlPolicy::verify_permission(const rgw::auth::Identity& auth_identity,
                                                const uint32_t user_perm_mask,
                                                const uint32_t perm,
                                                const char * const http_referer)

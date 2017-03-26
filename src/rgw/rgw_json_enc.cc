@@ -1160,7 +1160,7 @@ void RGWRealm::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("epoch", epoch, obj);
 }
 
-void KeystoneToken::Token::decode_json(JSONObj *obj)
+void rgw::keystone::TokenEnvelope::Token::decode_json(JSONObj *obj)
 {
   string expires_iso8601;
   struct tm t;
@@ -1177,26 +1177,26 @@ void KeystoneToken::Token::decode_json(JSONObj *obj)
   }
 }
 
-void KeystoneToken::Role::decode_json(JSONObj *obj)
+void rgw::keystone::TokenEnvelope::Role::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("name", name, obj, true);
 }
 
-void KeystoneToken::Domain::decode_json(JSONObj *obj)
+void rgw::keystone::TokenEnvelope::Domain::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj, true);
   JSONDecoder::decode_json("name", name, obj, true);
 }
 
-void KeystoneToken::Project::decode_json(JSONObj *obj)
+void rgw::keystone::TokenEnvelope::Project::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj, true);
   JSONDecoder::decode_json("name", name, obj, true);
   JSONDecoder::decode_json("domain", domain, obj);
 }
 
-void KeystoneToken::User::decode_json(JSONObj *obj)
+void rgw::keystone::TokenEnvelope::User::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj, true);
   JSONDecoder::decode_json("name", name, obj, true);
@@ -1204,57 +1204,32 @@ void KeystoneToken::User::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("roles", roles_v2, obj);
 }
 
-void KeystoneToken::decode_json(JSONObj *root_obj)
+void rgw::keystone::TokenEnvelope::decode_v3(JSONObj* const root_obj)
+{
+  std::string expires_iso8601;
+
+  JSONDecoder::decode_json("user", user, root_obj, true);
+  JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj, true);
+  JSONDecoder::decode_json("roles", roles, root_obj, true);
+  JSONDecoder::decode_json("project", project, root_obj, true);
+
+  struct tm t;
+  if (parse_iso8601(expires_iso8601.c_str(), &t)) {
+    token.expires = timegm(&t);
+  } else {
+    token.expires = 0;
+    throw JSONDecoder::err("Failed to parse ISO8601 expiration date"
+                           "from Keystone response.");
+  }
+}
+
+void rgw::keystone::TokenEnvelope::decode_v2(JSONObj* const root_obj)
 {
   JSONDecoder::decode_json("user", user, root_obj, true);
+  JSONDecoder::decode_json("token", token, root_obj, true);
 
-  const auto version = KeystoneService::get_api_version();
-
-  if (version == KeystoneApiVersion::VER_3) {
-    string expires_iso8601;
-    if (JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj)) {
-      /* VER_3 */
-      /* Presence of "expires_at" suggests we are dealing with OpenStack
-       * Identity API v3 (aka Keystone API v3) token. */
-      struct tm t;
-
-      if (parse_iso8601(expires_iso8601.c_str(), &t)) {
-        token.expires = timegm(&t);
-      } else {
-        token.expires = 0;
-        throw JSONDecoder::err("Failed to parse ISO8601 expiration date"
-                               "from Keystone response.");
-      }
-      JSONDecoder::decode_json("roles", roles, root_obj, true);
-      JSONDecoder::decode_json("project", project, root_obj, true);
-    } else {
-      /* fallback: VER_2 */
-      JSONDecoder::decode_json("token", token, root_obj, true);
-      roles = user.roles_v2;
-      project = token.tenant_v2;
-    }
-  } else if (version == KeystoneApiVersion::VER_2) {
-    if (JSONDecoder::decode_json("token", token, root_obj)) {
-      /* VER_2 */
-      roles = user.roles_v2;
-      project = token.tenant_v2;
-    } else {
-      /* fallback: VER_3 */
-      string expires_iso8601;
-      JSONDecoder::decode_json("expires_at", expires_iso8601, root_obj, true);
-
-      struct tm t;
-      if (parse_iso8601(expires_iso8601.c_str(), &t)) {
-        token.expires = timegm(&t);
-      } else {
-        token.expires = 0;
-        throw JSONDecoder::err("Failed to parse ISO8601 expiration date"
-                               "from Keystone response.");
-      }
-      JSONDecoder::decode_json("roles", roles, root_obj, true);
-      JSONDecoder::decode_json("project", project, root_obj, true);
-    }
-  }
+  roles = user.roles_v2;
+  project = token.tenant_v2;
 }
 
 void rgw_slo_entry::decode_json(JSONObj *obj)
@@ -1344,20 +1319,29 @@ void rgw_sync_error_info::dump(Formatter *f) const {
   encode_json("message", message, f);
 }
 
-void KeystoneAdminTokenRequestVer2::dump(Formatter * const f) const
+/* This utility function shouldn't conflict with the overload of std::to_string
+ * provided by string_ref since Boost 1.54 as it's defined outside of the std
+ * namespace. I hope we'll remove it soon - just after merging the Matt's PR
+ * for bundled Boost. It would allow us to forget that CentOS 7 has Boost 1.53. */
+static inline std::string to_string(const boost::string_ref& s)
+{
+  return std::string(s.data(), s.length());
+}
+
+void rgw::keystone::AdminTokenRequestVer2::dump(Formatter* const f) const
 {
   f->open_object_section("token_request");
     f->open_object_section("auth");
       f->open_object_section("passwordCredentials");
-        encode_json("username", cct->_conf->rgw_keystone_admin_user, f);
-        encode_json("password", cct->_conf->rgw_keystone_admin_password, f);
+        encode_json("username", to_string(conf.get_admin_user()), f);
+        encode_json("password", to_string(conf.get_admin_password()), f);
       f->close_section();
-      encode_json("tenantName", cct->_conf->rgw_keystone_admin_tenant, f);
+      encode_json("tenantName", to_string(conf.get_admin_tenant()), f);
     f->close_section();
   f->close_section();
 }
 
-void KeystoneAdminTokenRequestVer3::dump(Formatter * const f) const
+void rgw::keystone::AdminTokenRequestVer3::dump(Formatter* const f) const
 {
   f->open_object_section("token_request");
     f->open_object_section("auth");
@@ -1368,22 +1352,22 @@ void KeystoneAdminTokenRequestVer3::dump(Formatter * const f) const
         f->open_object_section("password");
           f->open_object_section("user");
             f->open_object_section("domain");
-              encode_json("name", cct->_conf->rgw_keystone_admin_domain, f);
+              encode_json("name", to_string(conf.get_admin_domain()), f);
             f->close_section();
-            encode_json("name", cct->_conf->rgw_keystone_admin_user, f);
-            encode_json("password", cct->_conf->rgw_keystone_admin_password, f);
+            encode_json("name", to_string(conf.get_admin_user()), f);
+            encode_json("password", to_string(conf.get_admin_password()), f);
           f->close_section();
         f->close_section();
       f->close_section();
       f->open_object_section("scope");
         f->open_object_section("project");
-          if (!cct->_conf->rgw_keystone_admin_project.empty()) {
-            encode_json("name", cct->_conf->rgw_keystone_admin_project, f);
+          if (! conf.get_admin_project().empty()) {
+            encode_json("name", to_string(conf.get_admin_project()), f);
           } else {
-            encode_json("name", cct->_conf->rgw_keystone_admin_tenant, f);
+            encode_json("name", to_string(conf.get_admin_tenant()), f);
           }
           f->open_object_section("domain");
-            encode_json("name", cct->_conf->rgw_keystone_admin_domain, f);
+            encode_json("name", to_string(conf.get_admin_domain()), f);
           f->close_section();
         f->close_section();
       f->close_section();

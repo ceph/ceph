@@ -62,8 +62,8 @@ protected:
     return 0;
   }
 public:
-  RGWHandler_Config() : RGWHandler_Auth_S3() {}
-  ~RGWHandler_Config() override {}
+  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
+  ~RGWHandler_Config() override = default;
 };
 
 
@@ -73,8 +73,9 @@ public:
   ~RGWRESTMgr_Config() override = default;
 
   RGWHandler_REST* get_handler(struct req_state*,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
-    return new RGWHandler_Config;
+    return new RGWHandler_Config(auth_registry);
   }
 };
 

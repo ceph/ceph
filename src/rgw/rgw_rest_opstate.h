@@ -92,8 +92,8 @@ protected:
     return 0;
   }
 public:
-  RGWHandler_Opstate() : RGWHandler_Auth_S3() {}
-  ~RGWHandler_Opstate() override {}
+  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
+  ~RGWHandler_Opstate() override = default;
 };
 
 class RGWRESTMgr_Opstate : public RGWRESTMgr {
@@ -102,8 +102,9 @@ public:
   ~RGWRESTMgr_Opstate() override = default;
 
   RGWHandler_REST* get_handler(struct req_state*,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
-    return new RGWHandler_Opstate;
+    return new RGWHandler_Opstate(auth_registry);
   }
 };
 

@@ -433,6 +433,11 @@ int main(int argc, const char **argv)
     rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
   }
 
+  /* Initialize the registry of auth strategies which will coordinate
+   * the dynamic reconfiguration. */
+  auto auth_registry = \
+    rgw::auth::StrategyRegistry::create(g_ceph_context, store);
+
   /* Header custom behavior */
   rest.register_x_headers(g_conf->rgw_log_http_headers);
 
@@ -470,7 +475,7 @@ int main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
-      RGWProcessEnv env = { store, &rest, olog, 0, uri_prefix };
+      RGWProcessEnv env = { store, &rest, olog, 0, uri_prefix, auth_registry };
 
       fe = new RGWCivetWebFrontend(env, config);
     }
@@ -480,7 +485,7 @@ int main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
-      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix };
+      RGWProcessEnv env = { store, &rest, olog, port, uri_prefix, auth_registry };
 
       fe = new RGWLoadGenFrontend(env, config);
     }
@@ -491,7 +496,7 @@ int main(int argc, const char **argv)
       config->get_val("port", 80, &port);
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
-      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix };
+      RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry };
       fe = new RGWAsioFrontend(env);
     }
 #endif /* WITH_RADOSGW_ASIO_FRONTEND */
@@ -499,7 +504,7 @@ int main(int argc, const char **argv)
     else if (framework == "fastcgi" || framework == "fcgi") {
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
-      RGWProcessEnv fcgi_pe = { store, &rest, olog, 0, uri_prefix };
+      RGWProcessEnv fcgi_pe = { store, &rest, olog, 0, uri_prefix, auth_registry };
 
       fe = new RGWFCGXFrontend(fcgi_pe, config);
     }

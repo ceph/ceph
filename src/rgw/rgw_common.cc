@@ -876,7 +876,7 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
-string RGWHTTPArgs::sys_get(const string& name, bool * const exists)
+string RGWHTTPArgs::sys_get(const string& name, bool * const exists) const
 {
   const auto iter = sys_val_map.find(name);
   const bool e = (iter != sys_val_map.end());
@@ -899,7 +899,7 @@ bool verify_user_permission(struct req_state * const s,
   if ((perm & (int)s->perm_mask) != perm)
     return false;
 
-  return user_acl->verify_permission(*s->auth_identity, perm, perm);
+  return user_acl->verify_permission(*s->auth.identity, perm, perm);
 }
 
 bool verify_user_permission(struct req_state * const s,
@@ -913,10 +913,10 @@ bool verify_requester_payer_permission(struct req_state *s)
   if (!s->bucket_info.requester_pays)
     return true;
 
-  if (s->auth_identity->is_owner_of(s->bucket_info.owner))
+  if (s->auth.identity->is_owner_of(s->bucket_info.owner))
     return true;
   
-  if (s->auth_identity->is_anonymous()) {
+  if (s->auth.identity->is_anonymous()) {
     return false;
   }
 
@@ -950,14 +950,14 @@ bool verify_bucket_permission(struct req_state * const s,
   if (!verify_requester_payer_permission(s))
     return false;
 
-  if (bucket_acl->verify_permission(*s->auth_identity, perm, perm,
+  if (bucket_acl->verify_permission(*s->auth.identity, perm, perm,
                                     s->info.env->get("HTTP_REFERER")))
     return true;
 
   if (!user_acl)
     return false;
 
-  return user_acl->verify_permission(*s->auth_identity, perm, perm);
+  return user_acl->verify_permission(*s->auth.identity, perm, perm);
 }
 
 bool verify_bucket_permission(struct req_state * const s, const int perm)
@@ -996,7 +996,7 @@ bool verify_object_permission(struct req_state * const s,
     return false;
   }
 
-  bool ret = object_acl->verify_permission(*s->auth_identity, s->perm_mask, perm);
+  bool ret = object_acl->verify_permission(*s->auth.identity, s->perm_mask, perm);
   if (ret) {
     return true;
   }
@@ -1018,14 +1018,14 @@ bool verify_object_permission(struct req_state * const s,
 
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
-  if (bucket_acl->verify_permission(*s->auth_identity, swift_perm, swift_perm,
+  if (bucket_acl->verify_permission(*s->auth.identity, swift_perm, swift_perm,
                                     s->info.env->get("HTTP_REFERER")))
     return true;
 
   if (!user_acl)
     return false;
 
-  return user_acl->verify_permission(*s->auth_identity, swift_perm, swift_perm);
+  return user_acl->verify_permission(*s->auth.identity, swift_perm, swift_perm);
 }
 
 bool verify_object_permission(struct req_state *s, int perm)

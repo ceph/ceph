@@ -7,6 +7,7 @@
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
+#include "rgw_auth_registry.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
@@ -31,6 +32,7 @@ struct RGWProcessEnv {
   OpsLogSocket *olog;
   int port;
   std::string uri_prefix;
+  std::shared_ptr<rgw::auth::StrategyRegistry> auth_registry;
 };
 
 class RGWFrontendConfig;
@@ -40,6 +42,7 @@ class RGWProcess {
 protected:
   CephContext *cct;
   RGWRados* store;
+  rgw_auth_registry_ptr_t auth_registry;
   OpsLogSocket* olog;
   ThreadPool m_tp;
   Throttle req_throttle;
@@ -104,6 +107,7 @@ public:
              RGWFrontendConfig* const conf)
     : cct(cct),
       store(pe->store),
+      auth_registry(pe->auth_registry),
       olog(pe->olog),
       m_tp(cct, "RGWProcess::m_tp", "tp_rgw_process", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
@@ -124,8 +128,10 @@ public:
     m_tp.pause();
   }
 
-  void unpause_with_new_config(RGWRados *store) {
+  void unpause_with_new_config(RGWRados* const store,
+                               rgw_auth_registry_ptr_t auth_registry) {
     this->store = store;
+    this->auth_registry = std::move(auth_registry);
     m_tp.unpause();
   }
 
@@ -186,6 +192,7 @@ extern int process_request(RGWRados* store,
                            RGWREST* rest,
                            RGWRequest* req,
                            const std::string& frontend_prefix,
+                           const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
                            OpsLogSocket* olog);
 
