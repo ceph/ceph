@@ -761,6 +761,7 @@ void CreateRequest<I>::complete(int r) {
     ldout(m_cct, 20) << "done." << dendl;
   }
 
+  m_data_io_ctx.close();
   m_on_finish->complete(r);
   delete this;
 }
