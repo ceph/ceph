@@ -64,10 +64,10 @@ static void usage()
             << "               list-mapped                         List mapped nbd devices\n"
             << "Options:\n"
             << "  --device <device path>  Specify nbd device path\n"
-            << "  --read-only             Map readonly\n"
+            << "  --read-only             Map read-only\n"
             << "  --nbds_max <limit>      Override for module param nbds_max\n"
             << "  --max_part <limit>      Override for module param max_part\n"
-            << "  --exclusive             Forbid other clients write\n"
+            << "  --exclusive             Forbid writes by other clients\n"
             << std::endl;
   generic_server_usage();
 }

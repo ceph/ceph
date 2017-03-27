@@ -1131,8 +1131,8 @@
     -p [ --pool ] arg     pool name
     --image arg           image name
     --snap arg            snapshot name
-    --read-only           mount read-only
-    --exclusive           forbid other clients write
+    --read-only           map read-only
+    --exclusive           forbid writes by other clients
     --device arg          specify nbd device
     --nbds_max arg        override module param nbds_max
     --max_part arg        override module param max_part
