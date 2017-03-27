@@ -557,8 +557,8 @@ private:
 
 public:
   epoch_t get_epoch();
-  int get_leader() { return leader; }
-  const set<int>& get_quorum() { return quorum; }
+  int get_leader() const { return leader; }
+  const set<int>& get_quorum() const { return quorum; }
   list<string> get_quorum_names() {
     list<string> q;
     for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
