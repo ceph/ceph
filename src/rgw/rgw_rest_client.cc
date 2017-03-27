@@ -685,6 +685,13 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
     pmanager = mgr;
   }
 
+  uint64_t send_size = (size_t)(outbl.length() - write_ofs);
+
+  if (send_size > 0){
+    ldout(cct, 0) << "ABHI!!! set send len to " << send_size << dendl;
+    set_send_length(send_size);
+  }
+
   int r = pmanager->add_request(this, new_info.method, new_url.c_str(), send_data_hint);
   if (r < 0)
     return r;
