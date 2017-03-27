@@ -2370,6 +2370,9 @@ void RGWGetLC_ObjStore_S3::send_response()
   end_header(s, this, "application/xml");
   dump_start(s);
 
+  if (op_ret < 0)
+    return;
+
   config.dump_xml(s->formatter);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
