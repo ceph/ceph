@@ -43,6 +43,9 @@ class InoTable : public MDSTable {
   void replay_reset();
   bool repair(inodeno_t id);
   bool is_marked_free(inodeno_t id) const;
+  bool intersects_free(
+      const interval_set<inodeno_t> &other,
+      interval_set<inodeno_t> *intersection);
 
   void reset_state() override;
   void encode_state(bufferlist& bl) const override {
