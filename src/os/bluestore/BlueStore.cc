@@ -7660,18 +7660,19 @@ void BlueStore::_kv_sync_thread()
       // can rely on the bluefs commit to flush the device and make
       // deferred aios stable.  that means that if we do have done deferred
       // txcs AND we are not on a single device, we need to force a flush.
-      if (!bluefs || (!bluefs_single_shared_device && !deferred_done.empty())) {
+      if (bluefs_single_shared_device && bluefs) {
+	if (num_aios) {
+	  force_flush = true;
+	} else if (kv_committing.empty() && kv_submitting.empty() &&
+	    deferred_stable.empty()) {
+	  force_flush = true;  // there's nothing else to commit!
+	} else if (deferred_aggressive) {
+	  force_flush = true;
+	}
+      } else
 	force_flush = true;
-      }
-      if (kv_committing.empty() && kv_submitting.empty() &&
-	  deferred_stable.empty()) {
-	force_flush = true;  // there's nothing else to commit!
-      }
-      if (deferred_aggressive) {
-	force_flush = true;
-      }
 
-      if (num_aios || force_flush) {
+      if (force_flush) {
 	dout(20) << __func__ << " num_aios=" << num_aios
 		 << " force_flush=" << (int)force_flush
 		 << ", flushing, deferred done->stable" << dendl;
