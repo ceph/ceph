@@ -30,7 +30,7 @@ class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine{
     path(_path), params(make_param_list(params))
   {}
 
-  ~RGWReadRESTResourceCR() override {
+  ~RGWReadRawRESTResourceCR() override {
     request_cleanup();
   }
 
