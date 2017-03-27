@@ -72,6 +72,7 @@ class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine{
     }
     op->put();
     return 0;
+  }
 
   void request_cleanup() override {
     if (http_op) {
