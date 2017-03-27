@@ -458,7 +458,9 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   unsigned total = 0;
   unsigned need_reserve_bytes = 0;
   while (it != pending_bl.buffers().end()) {
-    if (infiniband->is_tx_buffer(it->raw_c_str())) {
+    if (infiniband->is_tx_buffer(it->raw_c_str()) && // TODO: tx zcopy
+	infiniband->is_rx_buffer(it->raw_c_str())) { // replicated message
+      ldout(cct, 20) << __func__ << " zcopy - using buffer that is already registered" << dendl;
       if (need_reserve_bytes) {
         unsigned copied = fill_tx_via_copy(tx_buffers, need_reserve_bytes, copy_it, it);
         total += copied;
