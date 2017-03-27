@@ -126,15 +126,8 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   }
 
   int send_request() override {
-    param_vec_t p;
-    if (send_content_length){
-      lsubdout(cct, rgw, 0) << "abhi: sending content length of " << input_bl.length() << dendl;
-      string content_length = to_string(input_bl.length());
-      p.push_back(param_pair_t("CONTENT_LENGTH",content_length));
-    }
-
     auto op = boost::intrusive_ptr<RGWRESTSendResource>(
-        new RGWRESTSendResource(conn, method, path, params, &p, http_manager));
+        new RGWRESTSendResource(conn, method, path, params, nullptr, http_manager));
 
     op->set_user_info((void *)stack);
 
