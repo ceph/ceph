@@ -302,6 +302,7 @@ int BlueFS::mkfs(uuid_d osd_uuid)
     log_file->fnode.prefer_bdev,
     cct->_conf->bluefs_max_log_runway,
     &log_file->fnode.extents);
+  log_file->fnode.recalc_allocated();
   assert(r == 0);
   log_writer = _create_writer(log_file);
 
@@ -841,6 +842,7 @@ void BlueFS::_drop_link(FileRef file)
     }
     file_map.erase(file->fnode.ino);
     file->deleted = true;
+    file->fnode.recalc_allocated();
     if (file->dirty_seq) {
       assert(file->dirty_seq > log_seq_stable);
       assert(dirty_files.count(file->dirty_seq));
@@ -1099,10 +1101,12 @@ void BlueFS::_compact_log_sync()
 
   mempool::bluefs::vector<bluefs_extent_t> old_extents;
   old_extents.swap(log_file->fnode.extents);
+  log_file->fnode.recalc_allocated();
   while (log_file->fnode.get_allocated() < need) {
     int r = _allocate(log_file->fnode.prefer_bdev,
 		      need - log_file->fnode.get_allocated(),
 		      &log_file->fnode.extents);
+    log_file->fnode.recalc_allocated();
     assert(r == 0);
   }
 
@@ -1168,6 +1172,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
 		      cct->_conf->bluefs_max_log_runway,
 		      &log_file->fnode.extents);
     assert(r == 0);
+    log_file->fnode.recalc_allocated();
   }
   dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
 
@@ -1202,6 +1207,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   int r = _allocate(BlueFS::BDEV_DB, new_log_jump_to,
                     &new_log->fnode.extents);
   assert(r == 0);
+  new_log->fnode.recalc_allocated();
   new_log_writer = _create_writer(new_log);
   new_log_writer->append(bl);
 
@@ -1252,6 +1258,8 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
 
   // swap the log files. New log file is the log file now.
   log_file->fnode.extents.swap(new_log->fnode.extents);
+  log_file->fnode.recalc_allocated();
+  new_log->fnode.recalc_allocated();
   log_writer->pos = log_writer->file->fnode.size =
     log_writer->pos - old_log_jump_to + new_log_jump_to;
 
@@ -1354,6 +1362,7 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
 		      cct->_conf->bluefs_max_log_runway,
 		      &log_writer->file->fnode.extents);
     assert(r == 0);
+    log_writer->file->fnode.recalc_allocated();
     log_t.op_file_update(log_writer->file->fnode);
   }
 
@@ -1472,6 +1481,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
            << dendl;
       return r;
     }
+    h->file->fnode.recalc_allocated();
     if (cct->_conf->bluefs_preextend_wal_files &&
 	h->writer_type == WRITER_WAL) {
       // NOTE: this *requires* that rocksdb also has log recycling
@@ -1831,6 +1841,7 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
     int r = _allocate(f->fnode.prefer_bdev, want, &f->fnode.extents);
     if (r < 0)
       return r;
+    f->fnode.recalc_allocated();
     log_t.op_file_update(f->fnode);
   }
   return 0;
@@ -1919,6 +1930,7 @@ int BlueFS::open_for_write(
 	pending_release[p.bdev].insert(p.offset, p.length);
       }
       file->fnode.extents.clear();
+      file->fnode.recalc_allocated();
     }
   }
   assert(file->fnode.ino > 1);
