@@ -7,33 +7,31 @@
 #include "rgw_coroutine.h"
 #include "rgw_rest_conn.h"
 
-template <class T>
-class RGWReadRESTResourceCR : public RGWSimpleCoroutine {
+class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine{
+  bufferlist *result;
+ protected:
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
   string path;
   param_vec_t params;
-  T *result;
-  bool raw; // raw result, T should be a bufferlist
-  bufferlist* result_bl;
+ public:
   boost::intrusive_ptr<RGWRESTReadResource> http_op;
-
-public:
-  RGWReadRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
-                        RGWHTTPManager *_http_manager, const string& _path,
-                        rgw_http_param_pair *params, T *_result)
-    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-    path(_path), params(make_param_list(params)), result(_result), raw(false)
+  RGWReadRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                           RGWHTTPManager *_http_manager, const string& _path,
+                           rgw_http_param_pair *params, bufferlist *_result)
+    : RGWSimpleCoroutine(_cct), result(_result), conn(_conn), http_manager(_http_manager),
+    path(_path), params(make_param_list(params))
   {}
 
- RGWReadRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
-                       RGWHTTPManager *_http_manager, const string& _path,
-                       rgw_http_param_pair *params, T *_result, bool _raw, bufferlist* _result_bl)
+ RGWReadRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                          RGWHTTPManager *_http_manager, const string& _path,
+                          rgw_http_param_pair *params)
    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-    path(_path), params(make_param_list(params)), result(_result), raw(_raw), result_bl(_result_bl)
+    path(_path), params(make_param_list(params))
   {}
 
-  ~RGWReadRESTResourceCR() override {
+
+  ~RGWReadRawRESTResourceCR() override {
     request_cleanup();
   }
 
@@ -55,16 +53,15 @@ public:
   }
 
 
+
+  virtual int wait_result() {
+    return http_op->wait_bl(result);
+  }
+
   int request_complete() override {
     int ret;
-    if (!raw)
-      ret = http_op->wait(result);
-    else{
-      // forgive me
-      ret = http_op->wait_bl(result_bl);
-      //bl->encode(result);
-    }
 
+    ret = wait_result();
 
     auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
@@ -82,6 +79,24 @@ public:
       http_op = NULL;
     }
   }
+
+};
+
+
+template <class T>
+class RGWReadRESTResourceCR : public RGWReadRawRESTResourceCR {
+  T *result;
+ public:
+ RGWReadRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                       RGWHTTPManager *_http_manager, const string& _path,
+                       rgw_http_param_pair *params, T *_result)
+   : RGWReadRawRESTResourceCR(_cct, _conn, _http_manager, _path, params), result(_result)
+  {}
+
+  int wait_result() override {
+    return http_op->wait(result);
+  }
+
 };
 
 template <class T>
