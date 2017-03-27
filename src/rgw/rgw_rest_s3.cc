@@ -1222,7 +1222,7 @@ int RGWPutObj_ObjStore_S3::validate_aws4_single_chunk(char *chunk_str,
   ldout(s->cct, 20) << "chunk_signature     = " << chunk_signature << dendl;
   ldout(s->cct, 20) << "new_chunk_signature = " << new_chunk_signature << dendl;
   ldout(s->cct, 20) << "aws4 chunk signing_key    = " << s->aws4_auth->signing_key << dendl;
-  ldout(s->cct, 20) << "aws4 chunk string_to_sign = " << string_to_sign << dendl;
+  ldout(s->cct, 20) << "aws4 chunk string_to_sign = " << rgw::crypt_sanitize::log_content{string_to_sign.c_str()} << dendl;
 
   /* chunk auth ok? */
 
@@ -4568,7 +4568,7 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(const std::string& access_key
     return result_t::deny(-EPERM);
   }
 
-  ldout(cct, 15) << "string_to_sign=" << string_to_sign << dendl;
+  ldout(cct, 15) << "string_to_sign=" << rgw::crypt_sanitize::log_content{string_to_sign.c_str()} << dendl;
   ldout(cct, 15) << "calculated digest=" << digest << dendl;
   ldout(cct, 15) << "auth signature=" << signature << dendl;
   ldout(cct, 15) << "compare=" << signature.compare(digest) << dendl;
