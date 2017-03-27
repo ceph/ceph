@@ -1633,6 +1633,12 @@ public:
 	qcond.wait(l);
     }
 
+    void drain_preceding(TransContext *txc) {
+      std::unique_lock<std::mutex> l(qlock);
+      while (!q.empty() && &q.front() != txc)
+	qcond.wait(l);
+    }
+
     bool _is_all_kv_submitted() {
       // caller must hold qlock
       if (q.empty()) {
@@ -1900,6 +1906,7 @@ private:
   void _txc_release_alloc(TransContext *txc);
 
   bool _osr_reap_done(OpSequencer *osr);
+  void _osr_drain_preceding(TransContext *txc);
   void _osr_drain_all();
   void _osr_unregister_all();
 
