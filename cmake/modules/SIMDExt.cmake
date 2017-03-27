@@ -19,6 +19,7 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64")
   set(save_quiet ${CMAKE_REQUIRED_QUIET})
   set(CMAKE_REQUIRED_QUIET true)
   include(CheckCXXSourceCompiles)
+
   check_cxx_source_compiles("
     #define CRC32CX(crc, value) __asm__(\"crc32cx %w[c], %w[c], %x[v]\":[c]\"+r\"(crc):[v]\"r\"(value))
     asm(\".arch_extension crc\");
@@ -34,28 +35,44 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64")
       return ret;
     }
     int main() { foo(0); }" HAVE_ARMV8_CRYPTO)
+
   set(CMAKE_REQUIRED_QUIET ${save_quiet})
   if(HAVE_ARMV8_CRC)
     message(STATUS " aarch64 crc extensions supported")
   endif()
+
   if(HAVE_ARMV8_CRYPTO)
     message(STATUS " aarch64 crypto extensions supported")
   endif()
-  CHECK_C_COMPILER_FLAG(-march=armv8-a+crc+crypto HAVE_ARMV8_CRC_CRYPTO_INTRINSICS)
+  CHECK_C_COMPILER_FLAG(-march=armv8-a+crc+crypto HAVE_ARMV8_CRC_CRYPTO_MARCH)
+
+  # don't believe only the -march support; gcc 4.8.5 on RHEL/CentOS says
+  # it supports +crc but hasn't got the intrinsics or arm_acle.h.  Test for
+  # the actual presence of one of the intrinsic functions.
+  if(HAVE_ARMV8_CRC_CRYPTO_MARCH)
+    check_cxx_source_compiles("
+      #include <inttypes.h>
+      int main() { uint32_t a; uint8_t b; __builtin_aarch64_crc32b(a, b); }
+    " HAVE_ARMV8_CRC_CRYPTO_INTRINSICS)
+  endif()
+
   if(HAVE_ARMV8_CRC_CRYPTO_INTRINSICS)
     message(STATUS " aarch64 crc+crypto intrinsics supported")
     set(ARMV8_CRC_COMPILE_FLAGS "${ARMV8_CRC_COMPILE_FLAGS} -march=armv8-a+crc+crypto")
   endif()
+
   CHECK_C_COMPILER_FLAG(-march=armv8-a+simd HAVE_ARMV8_SIMD)
   if(HAVE_ARMV8_SIMD)
     set(SIMD_COMPILE_FLAGS "${SIMD_COMPILE_FLAGS} -march=armv8-a+simd")
   endif()
+
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|ARM")
   set(HAVE_ARM 1)
   CHECK_C_COMPILER_FLAG(-mfpu=neon HAVE_ARM_NEON)
   if(HAVE_ARM_NEON)
     set(SIMD_COMPILE_FLAGS "${SIMD_COMPILE_FLAGS} -mfpu=neon")
   endif()
+
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64")
   set(HAVE_INTEL 1)
   CHECK_C_COMPILER_FLAG(-msse HAVE_INTEL_SSE)
@@ -86,4 +103,5 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64")
   if(HAVE_INTEL_SSE4_2)
     set(SIMD_COMPILE_FLAGS "${SIMD_COMPILE_FLAGS} -msse4.2")
   endif()
+
 endif()
