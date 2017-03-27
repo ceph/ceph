@@ -277,6 +277,10 @@ int RGWPolicy::from_json(bufferlist& bl, string& err_msg)
       int i;
       for (i = 0; !citer.end() && i < 3; ++citer, ++i) {
 	JSONObj *o = *citer;
+        const string& condition_data = o->get_data();
+        if (condition_data.empty()) {
+            return -EINVAL;
+        }
         v.push_back(o->get_data());
       }
       if (i != 3 || !citer.end()) { /* we expect exactly 3 arguments here */
