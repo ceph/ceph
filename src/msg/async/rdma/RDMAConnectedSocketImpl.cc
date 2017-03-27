@@ -67,6 +67,9 @@ RDMAConnTCP::RDMAConnTCP(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
 void RDMAConnectedSocketImpl::register_qp(QueuePair *qp)
 {
   notify_fd = dispatcher->register_qp(qp, this);
+
+  ldout(cct, 1) << __func__ << "  " << *this << " notify_fd: " << notify_fd << dendl;
+
   dispatcher->perf_logger->inc(l_msgr_rdma_created_queue_pair);
   dispatcher->perf_logger->inc(l_msgr_rdma_active_queue_pair);
 }
@@ -303,7 +306,8 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
 {
   uint64_t i = 0;
   int r = ::read(notify_fd, &i, sizeof(i));
-  ldout(cct, 20) << __func__ << " notify_fd : " << i << " in " << *qp << " r = " << r << dendl;
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " thread: " << pthread_self() << dendl;
+  ldout(cct, 1) << __func__ << " " << *this << " notify_fd : " << i << " in " << *qp << " r = " << r << dendl;
   if (error)
     return -error;
   ssize_t read = 0;
@@ -312,10 +316,13 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
 
   std::vector<ibv_wc> cqe;
   get_wc(cqe);
+
+  ldout(cct, 1) << __func__ << " cqe.empty(): " << cqe.empty() << dendl;
+
   if (cqe.empty())
     return read == 0 ? -EAGAIN : read;
 
-  ldout(cct, 20) << __func__ << " poll queue got " << cqe.size() << " responses. QP: " << *qp << dendl;
+  ldout(cct, 1) << __func__ << " poll queue got " << cqe.size() << " responses. QP: " << *qp << dendl;
   for (size_t i = 0; i < cqe.size(); ++i) {
     ibv_wc* response = &cqe[i];
     assert(response->status == IBV_WC_SUCCESS);
@@ -327,7 +334,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
       dispatcher->perf_logger->inc(l_msgr_rdma_rx_fin);
       if (connected) {
         error = ECONNRESET;
-        ldout(cct, 20) << __func__ << " got remote close msg..." << dendl;
+        ldout(cct, 1) << __func__ << " got remote close msg..." << dendl;
       }
       assert(ibdev->post_chunk(chunk) == 0);
     } else {
@@ -459,7 +466,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   if (error)
     return -error;
   Mutex::Locker l(lock);
-  size_t bytes = pending_bl.length();
+  size_t bytes = 10;//pending_bl.length();
   ldout(cct, 20) << __func__ << " we need " << bytes << " bytes. iov size: "
                  << pending_bl.buffers().size() << dendl;
   if (!bytes)
@@ -641,6 +648,8 @@ void RDMAConnectedSocketImpl::notify()
   if (retVal == -1) {
      lderr(cct) <<__func__ << " failed to write to fd=" << notify_fd << ", error: " << cpp_strerror(errno) <<dendl;
   }
+
+  ldout(cct, 1) << __func__ << " NOTIFY fd: " << notify_fd << " " << *this << " !!!!!!!!!!!!!!!!!!" << dendl;
 }
 
 void RDMAConnectedSocketImpl::shutdown()

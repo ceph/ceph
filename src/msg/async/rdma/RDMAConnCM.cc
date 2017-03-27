@@ -66,17 +66,18 @@ CMHandler::~CMHandler()
 
 void CMHandler::put()
 {
-  refs--;
+  int r = refs.dec();
 
-  ldout(cct, 1) << __func__ << *this ": ref-- = " < refs << dendl;
+  ldout(cct, 1) << __func__ << " " << *this << ": ref-- = " << r << dendl;
 
-  if (!refs)
+  if (!r)
     delete this;
 }
 
 void CMHandler::disconnect()
 {
   ldout(cct, 1) << __func__ << " " << *this << dendl;
+
   rdma_disconnect(id);
 }
 
@@ -88,31 +89,7 @@ void CMHandler::handle_cm_event(int fd)
   err = rdma_get_cm_event(id->channel, &event);
   assert(!err);
 
-  if (!csc) {
-    ldout(cct, 1) << __func__ << " CM event: " << rdma_event_str(event->event) << dendl;
-    assert(event->event == RDMA_CM_EVENT_DISCONNECTED ||
-           event->event == RDMA_CM_EVENT_TIMEWAIT_EXIT);
-
-    rdma_ack_cm_event(event);
-
-    if (channel) {
-      worker->center.submit_to(worker->center.get_id(), [this]() {
-			       worker->center.delete_file_event(channel->fd, EVENT_READABLE);
-			       }, false);
-      /* Removing here the event for the channel - the channel itself will be
-       * destroyed upon IBV_EVENT_QP_LAST_WQE_REACHED async event will happen
-       * Couldn't delete the file event near the destory_channel() since can't
-       * block in that context.
-       */
-    }
-
-    if (event->event == RDMA_CM_EVENT_TIMEWAIT_EXIT)
-      put();
-
-    return;
-  }
-
-  ldout(cct, 1) << __func__ << " " << *csc << " CM event: " << rdma_event_str(event->event) << dendl;
+  ldout(cct, 1) << __func__ << " " << *this << " event: " << rdma_event_str(event->event) << dendl;
 
   switch (event->event) {
   case RDMA_CM_EVENT_ADDR_RESOLVED:
@@ -128,15 +105,22 @@ void CMHandler::handle_cm_event(int fd)
     break;
 
   case RDMA_CM_EVENT_DISCONNECTED:
-    csc->cm_disconnected();
-    disconnect();
+    if (csc) {
+      csc->cm_disconnected();
+      disconnect();
+    }
     break;
 
   case RDMA_CM_EVENT_TIMEWAIT_EXIT:
-    /* must ack before put() to make sure no pending events exist */
-    rdma_ack_cm_event(event);
+    if (channel) {
+      worker->center.submit_to(worker->center.get_id(), [this]() {
+			       worker->center.delete_file_event(channel->fd, EVENT_READABLE);
+			       }, false);
+    }
 
+    rdma_ack_cm_event(event);
     put();
+
     return;
 
   case RDMA_CM_EVENT_REJECTED:
@@ -147,7 +131,7 @@ void CMHandler::handle_cm_event(int fd)
   case RDMA_CM_EVENT_ROUTE_ERROR:
   case RDMA_CM_EVENT_CONNECT_ERROR:
   case RDMA_CM_EVENT_UNREACHABLE:
-    ldout(cct, 1) << __func__  << " event: " << rdma_event_str(event->event) <<
+    ldout(cct, 1) << __func__  << " " << *this << " event: " << rdma_event_str(event->event) <<
       ", error: " << event->status << dendl;
     csc->cm_error();
     break;
@@ -302,7 +286,6 @@ void RDMAConnCM::cm_route_resolved()
 void RDMAConnCM::cm_established(uint32_t qpn)
 {
   peer_qpn = qpn;
-ldout(cct, 1) << __func__ << ":" << __LINE__ << " connection = 1 zzzzzzzzzzzzzzzzz" << dendl;
   connected = 1;
   ldout(cct, 1) << __func__ << " handle fake send, wake it up. QP: " << qp->get_local_qp_number() << dendl;
   submit(false);
@@ -314,6 +297,14 @@ ldout(cct, 1) << __func__ << ":" << __LINE__ << " connection = 1 zzzzzzzzzzzzzzz
 
 void RDMAConnCM::cm_disconnected()
 {
+  if (!error) {
+    error = ECONNABORTED;
+    cm_handler->disconnect();
+    connected = 0;
+    notify();
+    return;
+  }
+
   error = ECONNRESET;
   close();
 }
@@ -348,8 +339,7 @@ int RDMAConnCM::remote_qpn()
 
 int RDMAConnCM::activate()
 {
-ldout(cct, 1) << __func__ << ":" << __LINE__ << " connection = 1 zzzzzzzzzzzzzzzzz" << dendl;
-  connected = 1;
+//  connected = 1;
 //  cleanup();
   submit(false);
   notify();
@@ -398,6 +388,7 @@ int RDMAServerConnCM::listen(entity_addr_t &sa, const SocketOptions &opt)
 {
   int err;
 
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " thread: " << pthread_self() << dendl;
   err = rdma_listen(listen_id, 128);
   assert(!err);
 
@@ -431,10 +422,6 @@ int RDMAServerConnCM::on_connect_request(struct rdma_cm_event *event)
 
   ldout(cct, 20) << __func__ << " accepted a new QP" << dendl;
 
-  uint64_t i = 1;
-  err = ::write(accept_fd, &i, sizeof(i));
-  assert(err == sizeof(i));
-
   return 0;
 }
 
@@ -444,6 +431,7 @@ int RDMAServerConnCM::accept(ConnectedSocket *sock, const SocketOptions &opt, en
   uint64_t i;
   int err;
 
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " thread: " << pthread_self() << dendl;
   {
     Mutex::Locker l(lock);
     if (accepted_sockets.empty())
@@ -500,29 +488,34 @@ void RDMAServerConnCM::handle_cm_event()
       Mutex::Locker l(lock);
       accepted_sockets.push(socket);
     }
+
+    uint64_t i = 1;
+    err = ::write(accept_fd, &i, sizeof(i));
+    assert(err == sizeof(i));
   }
     break;
 
   case RDMA_CM_EVENT_DISCONNECTED:
   {
     CMHandler *cm = (CMHandler *)event->id->context;
+    RDMAConnCM *socket = cm->get_socket();
 
-    ldout(cct, 1) << __func__ << ":" << __LINE__ << " got disconnect" << dendl;
-    cm->disconnect();
-    err = -ECONNABORTED;
+    socket->cm_disconnected();
   }
     break;
 
   case RDMA_CM_EVENT_TIMEWAIT_EXIT:
   {
     CMHandler *cm = (CMHandler *)event->id->context;
-
-    rdma_ack_cm_event(event);
     cm->put();
-    return;
+    // XXX seems that need to call accept() = write to accept_fd
+    // XXX and there, return -ECONNABORTED
+    // XXX this wlil live things operating
   }
+    break;
 
   default:
+    ceph_abort();
     break;
   }
 

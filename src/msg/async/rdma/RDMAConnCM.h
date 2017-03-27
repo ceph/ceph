@@ -52,6 +52,7 @@ public:
 
   virtual ostream &print(ostream &out) override {
     return out << "cm_id: { " <<
+      " id: " << id <<
       " channel->fd: " << (id->channel ? id->channel->fd : -1) <<
       "}";
   };
@@ -69,7 +70,7 @@ private:
   * Only after LAST_WQE_REACHED destroy_qp() could be called, which can't be
   * called after rdma_destroy_id()
   */
-  std::atomic<uint64_t> refs;
+  atomic_t refs;
 
   EventCallbackRef cm_handler;
 };

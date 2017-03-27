@@ -99,7 +99,7 @@ void RDMADispatcher::process_async_event(Device *ibdev, ibv_async_event &async_e
   if (async_event.event_type == IBV_EVENT_QP_LAST_WQE_REACHED) {
     perf_logger->inc(l_msgr_rdma_async_last_wqe_events);
     uint64_t qpn = async_event.element.qp->qp_num;
-    ldout(cct, 10) << __func__ << " event associated qp=" << async_event.element.qp
+    ldout(cct, 1) << __func__ << " event associated qp=" << async_event.element.qp
       << " evt: " << ibv_event_type_str(async_event.event_type) << dendl;
     Mutex::Locker l(lock);
     RDMAConnectedSocketImpl *conn = get_conn_lockless(qpn);
@@ -415,6 +415,7 @@ void RDMAWorker::initialize()
 int RDMAWorker::listen(entity_addr_t &sa, const SocketOptions &opt,ServerSocket *sock)
 {
   auto p = RDMAServerSocketImpl::factory(cct, global_infiniband.get(), get_stack()->get_dispatcher(), this, sa);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " thread: " << pthread_self() << " owner: " << center.get_owner() << dendl;
   int r = p->listen(sa, opt);
   if (r < 0) {
     delete p;
@@ -446,6 +447,7 @@ int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
 int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes)
 {
   Device *ibdev = o->get_device();
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " thread: " << pthread_self() << " owner: " << center.get_owner() << dendl;
 
   assert(center.in_thread());
   int r = ibdev->get_tx_buffers(c, bytes);

@@ -374,7 +374,7 @@ void Device::handle_async_event()
 {
   ibv_async_event async_event;
 
-  ldout(cct, 30) << __func__ << dendl;
+  ldout(cct, 1) << __func__ << dendl;
 
   while (!ibv_get_async_event(ctxt, &async_event)) {
     RDMADispatcher *d = infiniband->get_dispatcher();
@@ -393,16 +393,18 @@ void Device::handle_async_event()
 DeviceList::DeviceList(CephContext *cct, Infiniband *ib)
   : cct(cct), device_list(rdma_get_devices(&num))
 {
+  cct->get();
+
   if (device_list == NULL || num == 0) {
     lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
   devices = new Device*[num];
 
-  poll_fds = new struct pollfd[2 * num];
+  poll_fds = new struct pollfd[3 * num];
 
   for (int i = 0; i < num; ++i) {
-    struct pollfd *pfd = &poll_fds[i * 2];
+    struct pollfd *pfd = &poll_fds[i * 3];
     struct Device *d;
 
     d = new Device(cct, ib, device_list[i]);
@@ -415,6 +417,10 @@ DeviceList::DeviceList(CephContext *cct, Infiniband *ib)
     pfd[1].fd = d->rx_cc->get_fd();
     pfd[1].events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
     pfd[1].revents = 0;
+
+    pfd[2].fd = d->ctxt->async_fd;
+    pfd[2].events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
+    pfd[2].revents = 0;
   }
 }
 
@@ -427,6 +433,8 @@ DeviceList::~DeviceList()
   }
   delete []devices;
   rdma_free_devices(device_list);
+
+  cct->put();
 }
 
 Device* DeviceList::get_device(const char* device_name)
@@ -489,7 +497,7 @@ int DeviceList::poll_blocking(bool &done)
 {
   int r = 0;
   while (!done && r == 0) {
-    r = poll(poll_fds, num * 2, 100);
+    r = poll(poll_fds, num * 3, 100);
     if (r < 0) {
       r = -errno;
       lderr(cct) << __func__ << " poll failed " << r << dendl;
@@ -503,11 +511,20 @@ int DeviceList::poll_blocking(bool &done)
   for (int i = 0; i < num ; i++) {
     Device *d = devices[i];
 
+    ldout(cct, 1) << __func__ << " " << *d << ":" <<
+      " rx: " << poll_fds[i * 3 + 0].revents << 
+      " tx: " << poll_fds[i * 3 + 1].revents << 
+      " async: " << poll_fds[i * 3 + 2].revents << 
+      dendl;
+
     if (d->tx_cc->get_cq_event())
       ldout(cct, 20) << __func__ << " " << *d << ": got tx cq event" << dendl;
 
     if (d->rx_cc->get_cq_event())
       ldout(cct, 20) << __func__ << " " << *d << ": got rx cq event" << dendl;
+
+    if (poll_fds[i * 3 + 2].revents & POLLIN)
+      d->handle_async_event();
   }
 
   return r;

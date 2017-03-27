@@ -56,6 +56,7 @@ RDMAServerConnTCP::RDMAServerConnTCP(CephContext *cct, Infiniband* i, RDMADispat
 int RDMAServerConnTCP::listen(entity_addr_t &sa, const SocketOptions &opt)
 {
   int rc = 0;
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " thread: " << pthread_self() << dendl;
   server_setup_socket = net.create_socket(sa.get_family(), true);
   if (server_setup_socket < 0) {
     rc = -errno;
@@ -102,6 +103,7 @@ err:
 int RDMAServerConnTCP::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w)
 {
   ldout(cct, 15) << __func__ << dendl;
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " thread: " << pthread_self() << dendl;
 
   assert(sock);
   sockaddr_storage ss;
@@ -133,6 +135,7 @@ int RDMAServerConnTCP::accept(ConnectedSocket *sock, const SocketOptions &opt, e
   //Worker* w = dispatcher->get_stack()->get_worker();
   server = new RDMAConnTCP(cct, infiniband, dispatcher, dynamic_cast<RDMAWorker*>(w));
   server->set_accept_fd(sd);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " thread: " << pthread_self() << dendl;
   ldout(cct, 20) << __func__ << " accepted a new QP, tcp_fd: " << sd << dendl;
   std::unique_ptr<RDMAConnectedSocketImpl> csi(server);
   *sock = ConnectedSocket(std::move(csi));
