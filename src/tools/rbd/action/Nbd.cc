@@ -99,8 +99,8 @@ void get_map_arguments(po::options_description *positional,
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
-    ("read-only", po::bool_switch(), "mount read-only")
-    ("exclusive", po::bool_switch(), "forbid other clients write")
+    ("read-only", po::bool_switch(), "map read-only")
+    ("exclusive", po::bool_switch(), "forbid writes by other clients")
     ("device", po::value<std::string>(), "specify nbd device")
     ("nbds_max", po::value<std::string>(), "override module param nbds_max")
     ("max_part", po::value<std::string>(), "override module param max_part");
