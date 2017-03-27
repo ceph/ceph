@@ -666,5 +666,7 @@ public:
                      MDSGatherBuilder *gather_bld);
 };
 
+std::ostream& operator<<(std::ostream &out, const Session &s);
+
 
 #endif
