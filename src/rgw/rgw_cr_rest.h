@@ -14,7 +14,8 @@ class RGWReadRESTResourceCR : public RGWSimpleCoroutine {
   string path;
   param_vec_t params;
   T *result;
-
+  bool raw; // raw result, T should be a bufferlist
+  bufferlist* result_bl;
   boost::intrusive_ptr<RGWRESTReadResource> http_op;
 
 public:
@@ -22,7 +23,14 @@ public:
                         RGWHTTPManager *_http_manager, const string& _path,
                         rgw_http_param_pair *params, T *_result)
     : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-      path(_path), params(make_param_list(params)), result(_result)
+    path(_path), params(make_param_list(params)), result(_result), raw(false)
+  {}
+
+ RGWReadRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                       RGWHTTPManager *_http_manager, const string& _path,
+                       rgw_http_param_pair *params, T *_result, bool _raw, bufferlist* _result_bl)
+   : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+    path(_path), params(make_param_list(params)), result(_result), raw(_raw), result_bl(_result_bl)
   {}
 
   ~RGWReadRESTResourceCR() override {
@@ -47,7 +55,16 @@ public:
   }
 
   int request_complete() override {
-    int ret = http_op->wait(result);
+    int ret;
+    if (!raw)
+      ret = http_op->wait(result);
+    else{
+      // forgive me
+      ret = http_op->wait_bl(result_bl);
+      //bl->encode(result);
+    }
+
+
     auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
       error_stream << "http operation failed: " << op->to_str()
