@@ -94,17 +94,17 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   param_vec_t params;
   T *result;
   bufferlist input_bl;
-
+  bool send_content_length=false;
   boost::intrusive_ptr<RGWRESTSendResource> http_op;
 
  public:
  RGWSendRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                           RGWHTTPManager *_http_manager,
                           const string& _method, const string& _path,
-                          rgw_http_param_pair *_params, bufferlist& _input, T *_result)
+                          rgw_http_param_pair *_params, bufferlist& _input, T *_result, bool _send_content_length)
    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
     method(_method), path(_path), params(make_param_list(_params)), result(_result),
-    input_bl(_input)
+    input_bl(_input), send_content_length(_send_content_length)
     {}
 
  RGWSendRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
@@ -126,8 +126,15 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   }
 
   int send_request() override {
+    param_vec_t p;
+    if (send_content_length){
+      lsubdout(cct, rgw, 0) << "abhi: sending content length of " << input_bl.length() << dendl;
+      string content_length = to_string(input_bl.length());
+      p.push_back(param_pair_t("CONTENT_LENGTH",content_length));
+    }
+
     auto op = boost::intrusive_ptr<RGWRESTSendResource>(
-        new RGWRESTSendResource(conn, method, path, params, NULL, http_manager));
+        new RGWRESTSendResource(conn, method, path, params, &p, http_manager));
 
     op->set_user_info((void *)stack);
 
@@ -209,7 +216,7 @@ class RGWPutRawRESTResourceCR: public RGWSendRawRESTResourceCR <T> {
                           RGWHTTPManager *_http_manager,
                           const string& _path,
                           rgw_http_param_pair *_params, bufferlist& _input, T *_result)
-    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "PUT", _path, _params, _input, _result){}
+    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "PUT", _path, _params, _input, _result, true){}
 
 };
 
@@ -222,8 +229,8 @@ public:
                         const string& _path,
                         rgw_http_param_pair *_params, S& _input, T *_result)
     : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
-                            "PUT", _path,
-                            _params, _input, _result) {}
+                                  "PUT", _path,
+                                  _params, _input, _result) {}
 };
 
 class RGWDeleteRESTResourceCR : public RGWSimpleCoroutine {
