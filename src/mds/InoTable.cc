@@ -190,3 +190,15 @@ void InoTable::generate_test_instances(list<InoTable*>& ls)
 {
   ls.push_back(new InoTable());
 }
+
+bool InoTable::intersects_free(
+    const interval_set<inodeno_t> &other,
+    interval_set<inodeno_t> *intersection)
+{
+  interval_set<inodeno_t> i;
+  i.intersection_of(free, other);
+  if (intersection != nullptr) {
+    *intersection = i;
+  }
+  return !(i.empty());
+}
