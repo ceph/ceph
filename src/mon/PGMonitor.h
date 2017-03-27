@@ -147,7 +147,7 @@ public:
 			     const set<int>& s, const char *desc, health_status_t sev) const;
 
   void check_subs();
-  void check_sub(Subscription *sub);
+  bool check_sub(Subscription *sub);
 
 private:
   // no copying allowed
