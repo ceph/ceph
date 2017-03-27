@@ -84,30 +84,45 @@ public:
   }
 };
 
-template <class S, class T>
-class RGWSendRESTResourceCR : public RGWSimpleCoroutine {
+template <class T>
+class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
+ protected:
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
   string method;
   string path;
   param_vec_t params;
   T *result;
-  S input;
+  bufferlist input_bl;
 
   boost::intrusive_ptr<RGWRESTSendResource> http_op;
 
-public:
-  RGWSendRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
-                        RGWHTTPManager *_http_manager,
-                        const string& _method, const string& _path,
-                        rgw_http_param_pair *_params, S& _input, T *_result)
-    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-      method(_method), path(_path), params(make_param_list(_params)), result(_result),
-      input(_input)
-  {}
+ public:
+ RGWSendRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                          RGWHTTPManager *_http_manager,
+                          const string& _method, const string& _path,
+                          rgw_http_param_pair *_params, bufferlist& _input, T *_result)
+   : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+    method(_method), path(_path), params(make_param_list(_params)), result(_result),
+    input_bl(_input)
+    {}
 
-  ~RGWSendRESTResourceCR() override {
+ RGWSendRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                          RGWHTTPManager *_http_manager,
+                          const string& _method, const string& _path,
+                          rgw_http_param_pair *_params, T *_result)
+   : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+    method(_method), path(_path), params(make_param_list(_params)), result(_result)
+    {}
+
+
+
+  ~RGWSendRawRESTResourceCR() override {
     request_cleanup();
+  }
+
+  void set_input_bl(bufferlist bl){
+    input_bl = std::move(bl);
   }
 
   int send_request() override {
@@ -116,14 +131,7 @@ public:
 
     op->set_user_info((void *)stack);
 
-    JSONFormatter jf;
-    encode_json("data", input, &jf);
-    std::stringstream ss;
-    jf.flush(ss);
-    bufferlist bl;
-    bl.append(ss.str());
-
-    int ret = op->aio_send(bl);
+    int ret = op->aio_send(input_bl);
     if (ret < 0) {
       lsubdout(cct, rgw, 0) << "ERROR: failed to send request" << dendl;
       op->put();
@@ -163,6 +171,26 @@ public:
 };
 
 template <class S, class T>
+class RGWSendRESTResourceCR : public RGWSendRawRESTResourceCR<T> {
+ public:
+  RGWSendRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                           RGWHTTPManager *_http_manager,
+                           const string& _method, const string& _path,
+                        rgw_http_param_pair *_params,S& _input, T *_result)
+    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, _method, _path, _params, _result){
+
+    JSONFormatter jf;
+    encode_json("data", _input, &jf);
+    std::stringstream ss;
+    jf.flush(ss);
+    //bufferlist bl;
+    this->input_bl.append(ss.str());
+    //set_input_bl(std::move(bl));
+  }
+
+};
+
+template <class S, class T>
 class RGWPostRESTResourceCR : public RGWSendRESTResourceCR<S, T> {
 public:
   RGWPostRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
@@ -173,6 +201,18 @@ public:
                             "POST", _path,
                             _params, _input, _result) {}
 };
+
+template <class T>
+class RGWPutRawRESTResourceCR: public RGWSendRawRESTResourceCR <T> {
+ public:
+  RGWPutRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                          RGWHTTPManager *_http_manager,
+                          const string& _path,
+                          rgw_http_param_pair *_params, bufferlist& _input, T *_result)
+    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "PUT", _path, _params, _input, _result){}
+
+};
+
 
 template <class S, class T>
 class RGWPutRESTResourceCR : public RGWSendRESTResourceCR<S, T> {
