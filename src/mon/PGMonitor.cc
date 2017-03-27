@@ -1936,16 +1936,18 @@ void PGMonitor::check_subs()
     });
 }
 
-void PGMonitor::check_sub(Subscription *sub)
+bool PGMonitor::check_sub(Subscription *sub)
 {
+  OSDMap& osdmap = mon->osdmon()->osdmap;
   if (sub->type == "osd_pg_creates") {
     // only send these if the OSD is up.  we will check_subs() when they do
     // come up so they will get the creates then.
     if (sub->session->inst.name.is_osd() &&
-        mon->osdmon()->osdmap.is_up(sub->session->inst.name.num())) {
+        osdmap.is_up(sub->session->inst.name.num())) {
       sub->next = send_pg_creates(sub->session->inst.name.num(),
                                   sub->session->con.get(),
                                   sub->next);
     }
   }
+  return true;
 }

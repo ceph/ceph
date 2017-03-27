@@ -1177,8 +1177,16 @@ void OSDMonitor::prime_pg_temp(
   const OSDMap& next,
   pg_t pgid)
 {
-  if (!creating_pgs.pgs.count(pgid)) {
-    return;
+  if (mon->monmap->get_required_features().contains_all(
+        ceph::features::mon::FEATURE_LUMINOUS)) {
+    if (!creating_pgs.pgs.count(pgid)) {
+      return;
+    }
+  } else {
+    const auto& pg_map = mon->pgmon()->pg_map;
+    if (!pg_map.creating_pgs.count(pgid)) {
+      return;
+    }
   }
 
   vector<int> up, acting;
@@ -1467,13 +1475,23 @@ void OSDMonitor::share_map_with_random_osd()
 
 version_t OSDMonitor::get_trim_to()
 {
-  {
+  if (mon->monmap->get_required_features().contains_all(
+        ceph::features::mon::FEATURE_LUMINOUS)) {
     std::lock_guard<Spinlock> l(creating_pgs_lock);
     if (!creating_pgs.pgs.empty()) {
       return 0;
     }
+    if (!mon->pgmon()->is_readable()) {
+      return 0;
+    }
+  } else {
+    if (!mon->pgmon()->is_readable())
+      return 0;
+    if (mon->pgmon()->pg_map.creating_pgs.empty()) {
+      return 0;
+    }
   }
-  if (mon->pgmon()->is_readable()) {
+  {
     epoch_t floor = mon->pgmon()->pg_map.get_min_last_epoch_clean();
     dout(10) << " min_last_epoch_clean " << floor << dendl;
     if (g_conf->mon_osd_force_trim_to > 0 &&
