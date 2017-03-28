@@ -4585,7 +4585,7 @@ static void usage_log_hash(CephContext *cct, const string& name, string& hash, u
     val %= max_user_shards;
     val += ceph_str_hash_linux(name.c_str(), name.size());
   }
-  char buf[16];
+  char buf[17];
   int max_shards = max(cct->_conf->rgw_usage_max_shards, 1);
   snprintf(buf, sizeof(buf), RGW_USAGE_OBJ_PREFIX "%u", (unsigned)(val % max_shards));
   hash = buf;
