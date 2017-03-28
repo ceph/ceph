@@ -821,6 +821,30 @@ def test_bucket_acl():
         bucket.set_acl('public-read')
         assert(len(bucket.get_acl().acl.grants) == 2) # new grant on AllUsers
 
+def test_bucket_delete_notempty():
+    buckets, zone_bucket = create_bucket_per_zone()
+    realm.meta_checkpoint()
+
+    for zone, bucket_name in zone_bucket.items():
+        # upload an object to each bucket on its own zone
+        conn = zone.get_connection(user)
+        bucket = conn.get_bucket(bucket_name)
+        k = bucket.new_key('foo')
+        k.set_contents_from_string('bar')
+        # attempt to delete the bucket before this object can sync
+        try:
+            conn.delete_bucket(bucket_name)
+        except boto.exception.S3ResponseError, e:
+            assert(e.error_code == 'BucketNotEmpty')
+            continue
+        assert False # expected 409 BucketNotEmpty
+
+    # assert that each bucket still exists on the master
+    z1 = realm.get_zone('us-1')
+    c1 = z1.get_connection(user)
+    for _, bucket_name in zone_bucket.items():
+        assert c1.get_bucket(bucket_name)
+
 def test_multi_period_incremental_sync():
     if len(realm.clusters) < 3:
         from nose.plugins.skip import SkipTest
