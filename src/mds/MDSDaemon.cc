@@ -673,16 +673,6 @@ COMMAND("heap " \
 	"mds", "*", "cli,rest")
 };
 
-// FIXME: reinstate issue_caps, try_eval,
-//  *if* it makes sense to do so (or should these be admin socket things?)
-
-/* This function DOES put the passed message before returning*/
-void MDSDaemon::handle_command(MMonCommand *m)
-{
-  bufferlist outbl;
-  _handle_command_legacy(m->cmd);
-  m->put();
-}
 
 int MDSDaemon::_handle_command(
     const cmdmap_t &cmdmap,
@@ -823,55 +813,6 @@ out:
   *outs = ss.str();
   outbl->append(ds);
   return r;
-}
-
-/**
- * Legacy "mds tell", takes a simple array of args
- */
-int MDSDaemon::_handle_command_legacy(std::vector<std::string> args)
-{
-  dout(10) << "handle_command args: " << args << dendl;
-  if (args[0] == "injectargs") {
-    if (args.size() < 2) {
-      derr << "Ignoring empty injectargs!" << dendl;
-    }
-    else {
-      std::ostringstream oss;
-      mds_lock.Unlock();
-      g_conf->injectargs(args[1], &oss);
-      mds_lock.Lock();
-      derr << "injectargs:" << dendl;
-      derr << oss.str() << dendl;
-    }
-  }
-  else if (args[0] == "exit") {
-    suicide();
-  }
-  else if (args[0] == "respawn") {
-    respawn();
-  }
-  else if (args[0] == "cpu_profiler") {
-    ostringstream ss;
-    cpu_profiler_handle_command(args, ss);
-    clog->info() << ss.str();
-  }
-  else if (args[0] == "heap") {
-    if (!ceph_using_tcmalloc())
-      clog->info() << "tcmalloc not enabled, can't use heap profiler commands";
-    else {
-      ostringstream ss;
-      vector<std::string> cmdargs;
-      cmdargs.insert(cmdargs.begin(), args.begin()+1, args.end());
-      ceph_heap_profiler_handle_command(cmdargs, ss);
-      clog->info() << ss.str();
-    }
-  } else {
-    if (!(mds_rank && mds_rank->handle_command_legacy(args))) {
-      dout(0) << "unrecognized command! " << args << dendl;
-    }
-  }
-
-  return 0;
 }
 
 /* This function deletes the passed message before returning. */
@@ -1192,12 +1133,6 @@ bool MDSDaemon::handle_core_message(Message *m)
     handle_mds_map(static_cast<MMDSMap*>(m));
     break;
 
-    // misc
-  case MSG_MON_COMMAND:
-    ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
-    handle_command(static_cast<MMonCommand*>(m));
-    break;
-
     // OSD
   case MSG_COMMAND:
     handle_command(static_cast<MCommand*>(m));
@@ -1208,6 +1143,12 @@ bool MDSDaemon::handle_core_message(Message *m)
     if (mds_rank) {
       mds_rank->handle_osd_map();
     }
+    m->put();
+    break;
+
+  case MSG_MON_COMMAND:
+    ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
+    clog->warn() << "dropping `mds tell` command from legacy monitor";
     m->put();
     break;
 

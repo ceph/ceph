@@ -313,10 +313,10 @@ COMMAND_WITH_FLAG("mds getmap " \
 COMMAND("mds metadata name=who,type=CephString,req=false",
 	"fetch metadata for mds <who>",
 	"mds", "r", "cli,rest")
-COMMAND("mds tell " \
+COMMAND_WITH_FLAG("mds tell " \
 	"name=who,type=CephString " \
 	"name=args,type=CephString,n=N", \
-	"send command to particular mds", "mds", "rw", "cli,rest")
+	"send command to particular mds", "mds", "rw", "cli,rest", FLAG(OBSOLETE))
 COMMAND("mds compat show", "show mds compatibility settings", \
 	"mds", "r", "cli,rest")
 COMMAND_WITH_FLAG("mds stop name=who,type=CephString", "stop mds", \
@@ -370,7 +370,7 @@ COMMAND_WITH_FLAG("mds newfs " \
 	"name=data,type=CephInt,range=0 " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"make new filesystem using pools <metadata> and <data>", \
-	"mds", "rw", "cli,rest", FLAG(DEPRECATED))
+	"mds", "rw", "cli,rest", FLAG(OBSOLETE))
 COMMAND("fs new " \
 	"name=fs_name,type=CephString " \
 	"name=metadata,type=CephString " \

@@ -952,48 +952,6 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       ss << "got fsmap epoch " << fsmap.get_epoch();
       r = 0;
     }
-  } else if (prefix == "mds tell") {
-    string whostr;
-    cmd_getval(g_ceph_context, cmdmap, "who", whostr);
-    vector<string>args_vec;
-    cmd_getval(g_ceph_context, cmdmap, "args", args_vec);
-
-    if (whostr == "*") {
-      r = -ENOENT;
-      const auto info_map = fsmap.get_mds_info();
-      for (const auto &i : info_map) {
-	m->cmd = args_vec;
-	mon->send_command(i.second.get_inst(), m->cmd);
-	r = 0;
-      }
-      if (r == -ENOENT) {
-	ss << "no mds active";
-      } else {
-	ss << "ok";
-      }
-    } else {
-      if (fsmap.legacy_client_fscid) {
-        auto fs = fsmap.filesystems.at(fsmap.legacy_client_fscid);
-        errno = 0;
-        long who_l = strtol(whostr.c_str(), 0, 10);
-        if (!errno && who_l >= 0) {
-          mds_rank_t who = mds_rank_t(who_l);
-          if (fs->mds_map.is_up(who)) {
-            m->cmd = args_vec;
-            mon->send_command(fs->mds_map.get_inst(who), m->cmd);
-            r = 0;
-            ss << "ok";
-          } else {
-            ss << "mds." << who << " not up";
-            r = -ENOENT;
-          }
-        } else {
-          ss << "specify mds number or *";
-        }
-      } else {
-        ss << "no legacy filesystem set";
-      }
-    }
   } else if (prefix == "mds compat show") {
       if (f) {
 	f->open_object_section("mds_compat");
@@ -1229,15 +1187,6 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
       }
     }
   }
-
-  if (prefix == "mds newfs") {
-    // newfs is the legacy command that in single-filesystem times
-    // used to be equivalent to doing an "fs rm ; fs new".  We
-    // can't do this in a sane way in multi-filesystem world.
-    ss << "'newfs' no longer available.  Please use 'fs new'.";
-    r = -EINVAL;
-    goto out;
-  } 
 
   r = filesystem_command(op, prefix, cmdmap, ss);
   if (r >= 0) {
