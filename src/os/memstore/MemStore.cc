@@ -460,6 +460,16 @@ int MemStore::collection_empty(const coll_t& cid, bool *empty)
   return 0;
 }
 
+int MemStore::collection_bits(const coll_t& cid)
+{
+  dout(10) << __func__ << " " << cid << dendl;
+  CollectionRef c = get_collection(cid);
+  if (!c)
+    return -ENOENT;
+  RWLock::RLocker l(c->lock);
+  return c->bits;
+}
+
 int MemStore::collection_list(const coll_t& cid,
 			      const ghobject_t& start,
 			      const ghobject_t& end,
@@ -854,7 +864,7 @@ void MemStore::_do_transaction(Transaction& t)
     case Transaction::OP_MKCOLL:
       {
         coll_t cid = i.get_cid(op->cid);
-	r = _create_collection(cid);
+	r = _create_collection(cid, op->split_bits);
       }
       break;
 
@@ -1345,7 +1355,7 @@ int MemStore::_omap_setheader(const coll_t& cid, const ghobject_t &oid,
   return 0;
 }
 
-int MemStore::_create_collection(const coll_t& cid)
+int MemStore::_create_collection(const coll_t& cid, int bits)
 {
   dout(10) << __func__ << " " << cid << dendl;
   RWLock::WLocker l(coll_lock);
@@ -1353,6 +1363,7 @@ int MemStore::_create_collection(const coll_t& cid)
   if (!result.second)
     return -EEXIST;
   result.first->second.reset(new Collection(cct, cid));
+  result.first->second->bits = bits;
   return 0;
 }
 
@@ -1457,6 +1468,9 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
       ++p;
     }
   }
+
+  sc->bits = bits;
+  assert(dc->bits == (int)bits);
 
   return 0;
 }
