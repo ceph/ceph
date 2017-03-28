@@ -5289,6 +5289,7 @@ ostream &ObjectRecoveryInfo::print(ostream &out) const
 	     << ", size: " << size
 	     << ", copy_subset: " << copy_subset
 	     << ", clone_subset: " << clone_subset
+	     << ", snapset: " << ss
 	     << ")";
 }
 
