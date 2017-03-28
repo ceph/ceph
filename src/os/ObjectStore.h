@@ -403,6 +403,8 @@ public:
       OP_COLL_HINT = 40, // cid, type, bl
 
       OP_TRY_RENAME = 41,   // oldcid, oldoid, newoid
+
+      OP_COLL_SET_BITS = 42, // cid, bits
     };
 
     // Transaction hint type
@@ -429,7 +431,8 @@ public:
       };
       __le64 expected_object_size;      //OP_SETALLOCHINT
       __le64 expected_write_size;       //OP_SETALLOCHINT
-      __le32 split_bits;                //OP_SPLIT_COLLECTION2
+      __le32 split_bits;                //OP_SPLIT_COLLECTION2,OP_COLL_SET_BITS,
+                                        //OP_MKCOLL
       __le32 split_rem;                 //OP_SPLIT_COLLECTION2
     } __attribute__ ((packed)) ;
 
@@ -677,6 +680,7 @@ public:
       case OP_COLL_RMATTR:
       case OP_COLL_SETATTRS:
       case OP_COLL_HINT:
+      case OP_COLL_SET_BITS:
         assert(op->cid < cm.size());
         op->cid = cm[op->cid];
         break;
@@ -1389,6 +1393,16 @@ public:
       _op->dest_cid = _get_coll_id(destination);
       _op->split_bits = bits;
       _op->split_rem = rem;
+      data.ops++;
+    }
+
+    void collection_set_bits(
+      coll_t cid,
+      int bits) {
+      Op* _op = _get_next_op();
+      _op->op = OP_COLL_SET_BITS;
+      _op->cid = _get_coll_id(cid);
+      _op->split_bits = bits;
       data.ops++;
     }
 
