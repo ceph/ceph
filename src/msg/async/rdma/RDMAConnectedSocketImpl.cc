@@ -435,11 +435,13 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   if (!bytes)
     return 0;
 
-  auto fill_tx_via_copy = [this](std::vector<Chunk*> &tx_buffers, unsigned bytes,
-                                 std::list<bufferptr>::const_iterator &start,
-                                 std::list<bufferptr>::const_iterator &end) -> unsigned {
+  auto fill_tx_via_copy = [this](
+      std::vector<std::tuple<uint64_t, char*, uint32_t, uint32_t> > &tx_iov,
+      unsigned bytes,
+      std::list<bufferptr>::const_iterator &start,
+      std::list<bufferptr>::const_iterator &end) -> unsigned {
     assert(start != end);
-    auto chunk_idx = tx_buffers.size();
+    std::vector<Chunk*> tx_buffers;
     int ret = worker->get_reged_mem(this, tx_buffers, bytes);
     if (ret == 0) {
       ldout(cct, 1) << __func__ << " no enough buffers in worker " << worker << dendl;
@@ -448,6 +450,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
     }
 
     unsigned total_copied = 0;
+    unsigned chunk_idx = 0;
     Chunk *current_chunk = tx_buffers[chunk_idx];
     while (start != end) {
       const uintptr_t addr = reinterpret_cast<const uintptr_t>(start->c_str());
@@ -458,6 +461,11 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
         total_copied += r;
         bytes -= r;
         if (current_chunk->full()){
+          tx_iov.push_back(std::make_tuple(
+                  reinterpret_cast<uint64_t>(current_chunk),
+                  current_chunk->buffer,
+                  current_chunk->mr->lkey,
+                  current_chunk->get_offset()));
           current_chunk = tx_buffers[++chunk_idx];
           if (chunk_idx == tx_buffers.size())
             return total_copied;
@@ -466,10 +474,15 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
       ++start;
     }
     assert(bytes == 0);
+    tx_iov.push_back(std::make_tuple(
+            reinterpret_cast<uint64_t>(current_chunk),
+            current_chunk->buffer,
+            current_chunk->mr->lkey,
+            current_chunk->get_offset()));
     return total_copied;
   };
 
-  std::vector<Chunk*> tx_buffers;
+  std::vector<std::tuple<uint64_t, char*, uint32_t, uint32_t> > tx_iov;
   std::list<bufferptr>::const_iterator it = pending_bl.buffers().begin();
   std::list<bufferptr>::const_iterator copy_it = it;
   unsigned total = 0;
@@ -477,7 +490,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   while (it != pending_bl.buffers().end()) {
     if (infiniband->is_tx_buffer(it->raw_c_str())) {
       if (need_reserve_bytes) {
-        unsigned copied = fill_tx_via_copy(tx_buffers, need_reserve_bytes, copy_it, it);
+        unsigned copied = fill_tx_via_copy(tx_iov, need_reserve_bytes, copy_it, it);
         total += copied;
         if (copied < need_reserve_bytes)
           goto sending;
@@ -487,7 +500,10 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
       assert(copy_it == it);
       auto chunk = infiniband->get_tx_chunk_by_buffer(it->raw_c_str());
       ++chunk->shared;
-      tx_buffers.push_back(chunk);
+      tx_iov.push_back(std::make_tuple(
+              reinterpret_cast<uint64_t>(chunk),
+              chunk->buffer + it->offset(),
+              chunk->mr->lkey, it->length()));
       total += it->length();
       worker->perf_logger->inc(l_msgr_rdma_tx_zerocopy_chunks);
       worker->perf_logger->inc(l_msgr_rdma_tx_zerocopy_bytes, it->length());
@@ -498,7 +514,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
     ++it;
   }
   if (need_reserve_bytes)
-    total += fill_tx_via_copy(tx_buffers, need_reserve_bytes, copy_it, it);
+    total += fill_tx_via_copy(tx_iov, need_reserve_bytes, copy_it, it);
 
  sending:
   if (total == 0)
@@ -514,9 +530,9 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   }
 
   ldout(cct, 20) << __func__ << " left bytes: " << pending_bl.length() << " in buffers "
-                 << pending_bl.buffers().size() << " tx chunks " << tx_buffers.size() << dendl;
+                 << pending_bl.buffers().size() << " tx chunks " << tx_iov.size() << dendl;
 
-  int r = post_work_request(tx_buffers);
+  int r = post_work_request(tx_iov);
   if (r < 0)
     return r;
 
@@ -524,26 +540,26 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   return pending_bl.length() ? -EAGAIN : 0;
 }
 
-int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
+int RDMAConnectedSocketImpl::post_work_request(
+    std::vector<std::tuple<uint64_t, char*, uint32_t, uint32_t> > &tx_iov)
 {
-  ldout(cct, 20) << __func__ << " QP: " << my_msg.qpn << " " << tx_buffers[0] << dendl;
+  ldout(cct, 20) << __func__ << " QP: " << my_msg.qpn << " " << tx_iov.size() << dendl;
   vector<Chunk*>::iterator current_buffer = tx_buffers.begin();
-  ibv_sge isge[tx_buffers.size()];
+  ibv_sge isge[tx_iov.size()];
   uint32_t current_sge = 0;
-  ibv_send_wr iswr[tx_buffers.size()];
+  ibv_send_wr iswr[tx_iov.size()];
   uint32_t current_swr = 0;
   ibv_send_wr* pre_wr = NULL;
 
   memset(iswr, 0, sizeof(iswr));
   memset(isge, 0, sizeof(isge));
-  current_buffer = tx_buffers.begin();
-  while (current_buffer != tx_buffers.end()) {
-    isge[current_sge].addr = reinterpret_cast<uint64_t>((*current_buffer)->buffer);
-    isge[current_sge].length = (*current_buffer)->get_offset();
-    isge[current_sge].lkey = (*current_buffer)->mr->lkey;
-    ldout(cct, 25) << __func__ << " sending buffer: " << *current_buffer << " length: " << isge[current_sge].length  << dendl;
+  for (auto iov : tx_iov) {
+    isge[current_sge].addr = reinterpret_cast<uint64_t>(std::get<1>(iov));
+    isge[current_sge].length = std::get<3>(iov);
+    isge[current_sge].lkey = std::get<2>(iov);
+    ldout(cct, 25) << __func__ << " sending buffer: " << std::get<0>(iov) << " length: " << isge[current_sge].length  << dendl;
 
-    iswr[current_swr].wr_id = reinterpret_cast<uint64_t>(*current_buffer);
+    iswr[current_swr].wr_id = std::get<0>(iov);
     iswr[current_swr].next = NULL;
     iswr[current_swr].sg_list = &isge[current_sge];
     iswr[current_swr].num_sge = 1;
@@ -560,7 +576,6 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
     pre_wr = &iswr[current_swr];
     ++current_sge;
     ++current_swr;
-    ++current_buffer;
   }
 
   ibv_send_wr *bad_tx_work_request;
@@ -571,7 +586,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
     worker->perf_logger->inc(l_msgr_rdma_tx_failed);
     return -errno;
   }
-  worker->perf_logger->inc(l_msgr_rdma_tx_chunks, tx_buffers.size());
+  worker->perf_logger->inc(l_msgr_rdma_tx_chunks, tx_iov.size());
   ldout(cct, 20) << __func__ << " qp state is " << Infiniband::qp_state_string(qp->get_state()) << dendl;
   return 0;
 }
