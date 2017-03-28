@@ -303,4 +303,7 @@ crush_make_straw_bucket(struct crush_map *map,
 extern int crush_addition_is_unsafe(__u32 a, __u32 b);
 extern int crush_multiplication_is_unsafe(__u32  a, __u32 b);
 
+extern void set_legacy_crush_map(struct crush_map *map);
+extern void set_optimal_crush_map(struct crush_map *map);
+
 #endif
