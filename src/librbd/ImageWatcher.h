@@ -20,7 +20,9 @@ class entity_name_t;
 namespace librbd {
 
 namespace watcher {
+namespace util {
 template <typename> struct HandlePayloadVisitor;
+}
 }
 
 class ImageCtx;
@@ -28,7 +30,7 @@ template <typename> class TaskFinisher;
 
 template <typename ImageCtxT = ImageCtx>
 class ImageWatcher : public Watcher {
-  friend struct watcher::HandlePayloadVisitor<ImageWatcher<ImageCtxT>>;
+  friend struct watcher::util::HandlePayloadVisitor<ImageWatcher<ImageCtxT>>;
 
 public:
   ImageWatcher(ImageCtxT& image_ctx);
@@ -161,9 +163,9 @@ private:
   };
 
   struct C_ResponseMessage : public Context {
-    watcher::C_NotifyAck *notify_ack;
+    C_NotifyAck *notify_ack;
 
-    C_ResponseMessage(watcher::C_NotifyAck *notify_ack) : notify_ack(notify_ack) {
+    C_ResponseMessage(C_NotifyAck *notify_ack) : notify_ack(notify_ack) {
     }
     void finish(int r) override;
   };
@@ -215,41 +217,41 @@ private:
                             ProgressContext** prog_ctx);
 
   bool handle_payload(const watch_notify::HeaderUpdatePayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::AcquiredLockPayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::ReleasedLockPayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::RequestLockPayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::AsyncProgressPayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::AsyncCompletePayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::FlattenPayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::ResizePayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::SnapCreatePayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::SnapRenamePayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::SnapRemovePayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::SnapProtectPayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::SnapUnprotectPayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::RebuildObjectMapPayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::RenamePayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UpdateFeaturesPayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UnknownPayload& payload,
-                      watcher::C_NotifyAck *ctx);
+                      C_NotifyAck *ctx);
   void process_payload(uint64_t notify_id, uint64_t handle,
-                             const watch_notify::Payload &payload, int r);
+                       const watch_notify::Payload &payload, int r);
 
   void handle_notify(uint64_t notify_id, uint64_t handle,
                      uint64_t notifier_id, bufferlist &bl) override;

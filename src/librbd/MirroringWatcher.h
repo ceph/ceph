@@ -17,12 +17,14 @@ namespace librados {
 namespace librbd {
 
 namespace watcher {
+namespace util {
 template <typename> struct HandlePayloadVisitor;
+}
 }
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class MirroringWatcher : public Watcher {
-  friend struct watcher::HandlePayloadVisitor<MirroringWatcher<ImageCtxT>>;
+  friend struct watcher::util::HandlePayloadVisitor<MirroringWatcher<ImageCtxT>>;
 
 public:
   MirroringWatcher(librados::IoCtx &io_ctx, ContextWQ *work_queue);

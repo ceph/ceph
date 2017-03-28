@@ -1,11 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/mirroring_watcher/Types.h"
-#include "librbd/watcher/Types.h"
+#include "common/Formatter.h"
 #include "include/assert.h"
 #include "include/stringify.h"
-#include "common/Formatter.h"
+#include "librbd/mirroring_watcher/Types.h"
+#include "librbd/watcher/Utils.h"
 
 namespace librbd {
 namespace mirroring_watcher {
@@ -76,7 +76,7 @@ void UnknownPayload::dump(Formatter *f) const {
 
 void NotifyMessage::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  boost::apply_visitor(watcher::EncodePayloadVisitor(bl), payload);
+  boost::apply_visitor(watcher::util::EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
 
@@ -99,7 +99,7 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
     break;
   }
 
-  apply_visitor(watcher::DecodePayloadVisitor(struct_v, iter), payload);
+  apply_visitor(watcher::util::DecodePayloadVisitor(struct_v, iter), payload);
   DECODE_FINISH(iter);
 }
 

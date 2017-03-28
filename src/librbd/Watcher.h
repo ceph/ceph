@@ -17,9 +17,18 @@ class ContextWQ;
 namespace librbd {
 
 class Watcher {
-  friend struct watcher::C_NotifyAck;
-
 public:
+  struct C_NotifyAck : public Context {
+    Watcher *watcher;
+    CephContext *cct;
+    uint64_t notify_id;
+    uint64_t handle;
+    bufferlist out;
+
+    C_NotifyAck(Watcher *watcher, uint64_t notify_id, uint64_t handle);
+    void finish(int r) override;
+  };
+
   Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
           const std::string& oid);
   virtual ~Watcher();

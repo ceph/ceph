@@ -1,6 +1,7 @@
 add_library(rbd_types STATIC
   journal/Types.cc
   mirroring_watcher/Types.cc
+  watcher/Types.cc
   WatchNotifyTypes.cc)
 
 set(librbd_internal_srcs
@@ -100,7 +101,6 @@ set(librbd_internal_srcs
   operation/TrimRequest.cc
   watcher/Notifier.cc
   watcher/RewatchRequest.cc
-  watcher/Types.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
 
 add_library(rbd_api STATIC librbd.cc)

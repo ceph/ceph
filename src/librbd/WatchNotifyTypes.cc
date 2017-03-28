@@ -2,11 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "cls/rbd/cls_rbd_types.h"
-#include "librbd/WatchNotifyTypes.h"
-#include "librbd/watcher/Types.h"
+#include "common/Formatter.h"
 #include "include/assert.h"
 #include "include/stringify.h"
-#include "common/Formatter.h"
+#include "librbd/WatchNotifyTypes.h"
+#include "librbd/watcher/Utils.h"
 
 namespace librbd {
 namespace watch_notify {
@@ -37,21 +37,6 @@ private:
 };
 
 } // anonymous namespace
-
-void ClientId::encode(bufferlist &bl) const {
-  ::encode(gid, bl);
-  ::encode(handle, bl);
-}
-
-void ClientId::decode(bufferlist::iterator &iter) {
-  ::decode(gid, iter);
-  ::decode(handle, iter);
-}
-
-void ClientId::dump(Formatter *f) const {
-  f->dump_unsigned("gid", gid);
-  f->dump_unsigned("handle", handle);
-}
 
 void AsyncRequestId::encode(bufferlist &bl) const {
   ::encode(client_id, bl);
@@ -295,7 +280,7 @@ bool NotifyMessage::check_for_refresh() const {
 
 void NotifyMessage::encode(bufferlist& bl) const {
   ENCODE_START(6, 1, bl);
-  boost::apply_visitor(watcher::EncodePayloadVisitor(bl), payload);
+  boost::apply_visitor(watcher::util::EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
 
@@ -360,7 +345,7 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
     break;
   }
 
-  apply_visitor(watcher::DecodePayloadVisitor(struct_v, iter), payload);
+  apply_visitor(watcher::util::DecodePayloadVisitor(struct_v, iter), payload);
   DECODE_FINISH(iter);
 }
 
@@ -467,12 +452,6 @@ std::ostream &operator<<(std::ostream &out,
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";
     break;
   }
-  return out;
-}
-
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::watch_notify::ClientId &client_id) {
-  out << "[" << client_id.gid << "," << client_id.handle << "]";
   return out;
 }
 
