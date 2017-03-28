@@ -3,6 +3,7 @@ overrides:
     bdev_inject_crash: 2
     bdev_inject_crash_probability: .5
   ceph:
+    fs: xfs
     conf:
       osd:
         osd objectstore: bluestore
