@@ -252,11 +252,11 @@ void Objecter::init()
 
     pcb.add_u64_counter(l_osdc_op, "op", "Operations");
     pcb.add_u64_counter(l_osdc_op_r, "op_r",
-			"Read operations", "read");
+			"Read operations", "rd");
     pcb.add_u64_counter(l_osdc_op_w, "op_w",
-			"Write operations", "writ");
+			"Write operations", "wr");
     pcb.add_u64_counter(l_osdc_op_rmw, "op_rmw",
-			"Read-modify-write operations");
+			"Read-modify-write operations", "rdwr");
     pcb.add_u64_counter(l_osdc_op_pg, "op_pg", "PG operation");
 
     pcb.add_u64_counter(l_osdc_osdop_stat, "osdop_stat", "Stat operations");
