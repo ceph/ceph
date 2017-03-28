@@ -18,4 +18,6 @@ split_tasks:
         chance_pgnum_grow: 1
         chance_pgpnum_fix: 1
         chance_thrash_cluster_full: 0
+        chance_thrash_pg_remap: 0
+        chance_thrash_pg_remap_items: 0
     - print: "**** done thrashosds 3-thrash"
