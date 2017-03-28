@@ -284,7 +284,7 @@ The benchmark is non-destructive and will not overwrite existing live
 OSD data, but might temporarily affect the performance of clients
 concurrently accessing the OSD. ::
 
-	ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE]
+	ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE] 
 
 
 MDS Subsystem
