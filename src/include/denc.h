@@ -524,29 +524,40 @@ inline typename std::enable_if<traits::supported &&
 //
 template<typename A>
 struct denc_traits<std::basic_string<char,std::char_traits<char>,A>> {
+private:
+  using value_type = std::basic_string<char,std::char_traits<char>,A>;
+
+public:
   static constexpr bool supported = true;
   static constexpr bool featured = false;
   static constexpr bool bounded = false;
-  static void bound_encode(const std::basic_string<char,
-			   std::char_traits<char>,A>& s, size_t& p,
-			   uint64_t f=0) {
+
+  static void bound_encode(const value_type& s, size_t& p, uint64_t f=0) {
     p += sizeof(uint32_t) + s.size();
   }
-  static void encode(const std::basic_string<char,std::char_traits<char>,A>& s,
+  static void encode(const value_type& s,
 		     buffer::list::contiguous_appender& p,
 	      uint64_t f=0) {
     ::denc((uint32_t)s.size(), p);
     memcpy(p.get_pos_add(s.size()), s.data(), s.size());
   }
-  static void decode(std::basic_string<char,std::char_traits<char>,A>& s,
+  static void decode(value_type& s,
 		     buffer::ptr::iterator& p,
 		     uint64_t f=0) {
     uint32_t len;
     ::denc(len, p);
+    decode_nohead(len, s, p);
+  }
+  static void decode_nohead(size_t len, value_type& s,
+			    buffer::ptr::iterator& p) {
     s.clear();
     if (len) {
       s.append(p.get_pos_add(len), len);
     }
+  }
+  static void encode_nohead(const value_type& s,
+			    buffer::list::contiguous_appender& p) {
+    p.append(s.data(), s.length());
   }
 };
 
@@ -594,6 +605,17 @@ struct denc_traits<bufferlist> {
     ::denc(len, p);
     v.clear();
     v.push_back(p.get_ptr(len));
+  }
+  static void encode_nohead(const bufferlist& v,
+			    buffer::list::contiguous_appender& p) {
+    p.append(v);
+  }
+  static void decode_nohead(size_t len, bufferlist& v,
+			    buffer::ptr::iterator& p) {
+    v.clear();
+    if (len) {
+      v.append(p.get_ptr(len));
+    }
   }
 };
 
