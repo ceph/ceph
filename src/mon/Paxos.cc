@@ -1108,7 +1108,7 @@ void Paxos::finish_round()
     trim();
   }
 
-  if (is_active() && pending_proposal) {
+  if (pending_proposal) {
     propose_pending();
   }
 }
