@@ -438,7 +438,7 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
     }
     offset += count;
   }
-  ret = 0;
+ 
  out:
   if (fd != STDOUT_FILENO)
     VOID_TEMP_FAILURE_RETRY(close(fd));
@@ -478,7 +478,7 @@ static int do_append(IoCtx& io_ctx, RadosStriper& striper,
       goto out;
     }
   }
-  ret = 0;
+
 out:
   if (fd != STDOUT_FILENO)
     VOID_TEMP_FAILURE_RETRY(close(fd));
