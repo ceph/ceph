@@ -3178,12 +3178,12 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       osdmap.count_full_nearfull_osds(&full, &nearfull);
       if (full > 0) {
 	ostringstream ss;
-	ss << full << " full osds(s)";
+	ss << full << " full osd(s)";
 	summary.push_back(make_pair(HEALTH_ERR, ss.str()));
       }
       if (nearfull > 0) {
 	ostringstream ss;
-	ss << nearfull << " nearfull osds(s)";
+	ss << nearfull << " nearfull osd(s)";
 	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
