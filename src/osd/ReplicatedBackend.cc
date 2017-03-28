@@ -209,8 +209,7 @@ bool ReplicatedBackend::handle_message(
   case MSG_OSD_SUBOP: {
     const MOSDSubOp *m = static_cast<const MOSDSubOp*>(op->get_req());
     if (m->ops.size() == 0) {
-      sub_op_modify(op);
-      return true;
+      assert(0);
     }
     break;
   }
