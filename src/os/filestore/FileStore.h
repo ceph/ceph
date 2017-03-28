@@ -652,6 +652,7 @@ public:
 
   // collections
   using ObjectStore::collection_list;
+  int collection_bits(const coll_t& c) override;
   int collection_list(const coll_t& c,
 		      const ghobject_t& start, const ghobject_t& end, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override;
