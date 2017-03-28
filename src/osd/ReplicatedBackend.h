@@ -224,10 +224,6 @@ private:
   void clear_pull_from(
     map<hobject_t, PullInfo>::iterator piter);
 
-  void sub_op_push(OpRequestRef op);
-  void sub_op_push_reply(OpRequestRef op);
-  void sub_op_pull(OpRequestRef op);
-
   void _do_push(OpRequestRef op);
   void _do_pull_response(OpRequestRef op);
   void do_push(OpRequestRef op) {
@@ -263,11 +259,6 @@ private:
 
   void send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &pushes);
   void prep_push_op_blank(const hobject_t& soid, PushOp *op);
-  int send_push_op_legacy(int priority, pg_shard_t peer,
-			  PushOp &pop);
-  int send_pull_legacy(int priority, pg_shard_t peer,
-		       const ObjectRecoveryInfo& recovery_info,
-		       ObjectRecoveryProgress progress);
   void send_pulls(
     int priority,
     map<pg_shard_t, vector<PullOp> > &pulls);
