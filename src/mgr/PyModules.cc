@@ -29,6 +29,34 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
+
+#undef dout_prefix
+#define dout_prefix *_dout << "mgr[py] "
+
+namespace {
+  PyObject* log_write(PyObject*, PyObject* args) {
+    char* m = nullptr;
+    if (PyArg_ParseTuple(args, "s", &m)) {
+      auto len = strlen(m);
+      if (len && m[len-1] == '\n') {
+	m[len-1] = '\0';
+      }
+      dout(4) << m << dendl;
+    }
+    Py_RETURN_NONE;
+  }
+
+  PyObject* log_flush(PyObject*, PyObject*){
+    Py_RETURN_NONE;
+  }
+
+  static PyMethodDef log_methods[] = {
+    {"write", log_write, METH_VARARGS, "write stdout and stderr"},
+    {"flush", log_flush, METH_VARARGS, "flush"},
+    {nullptr, nullptr, 0, nullptr}
+  };
+}
+
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
@@ -363,7 +391,17 @@ int PyModules::init()
   // fake one.  This step also picks up site-packages into sys.path.
   const char *argv[] = {"ceph-mgr"};
   PySys_SetArgv(1, (char**)argv);
-  
+
+  if (g_conf->daemonize) {
+    auto py_logger = Py_InitModule("ceph_logger", log_methods);
+#if PY_MAJOR_VERSION >= 3
+    PySys_SetObject("stderr", py_logger);
+    PySys_SetObject("stdout", py_logger);
+#else
+    PySys_SetObject(const_cast<char*>("stderr"), py_logger);
+    PySys_SetObject(const_cast<char*>("stdout"), py_logger);
+#endif
+  }
   // Populate python namespace with callable hooks
   Py_InitModule("ceph_state", CephStateMethods);
 
