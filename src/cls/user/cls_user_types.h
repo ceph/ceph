@@ -24,17 +24,28 @@ struct cls_user_bucket {
   } explicit_placement;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(8, 8, bl);
-    ::encode(name, bl);
-    ::encode(marker, bl);
-    ::encode(bucket_id, bl);
-    ::encode(placement_id, bl);
-    if (placement_id.empty()) {
+    /* since new version of this structure is not backward compatible,
+     * we have older rgw running against newer osd if we encode it
+     * in the new way. Only encode newer version if placement_id is
+     * not empty, otherwise keep handling it as before
+     */
+    if (!placement_id.empty()) {
+      ENCODE_START(9, 8, bl);
+      ::encode(name, bl);
+      ::encode(marker, bl);
+      ::encode(bucket_id, bl);
+      ::encode(placement_id, bl);
+      ENCODE_FINISH(bl);
+    } else {
+      ENCODE_START(7, 3, bl);
+      ::encode(name, bl);
       ::encode(explicit_placement.data_pool, bl);
+      ::encode(marker, bl);
+      ::encode(bucket_id, bl);
       ::encode(explicit_placement.index_pool, bl);
       ::encode(explicit_placement.data_extra_pool, bl);
+      ENCODE_FINISH(bl);
     }
-    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
@@ -65,7 +76,7 @@ struct cls_user_bucket {
       }
     } else {
       ::decode(placement_id, bl);
-      if (placement_id.empty()) {
+      if (struct_v == 8 && placement_id.empty()) {
         ::decode(explicit_placement.data_pool, bl);
         ::decode(explicit_placement.index_pool, bl);
         ::decode(explicit_placement.data_extra_pool, bl);
