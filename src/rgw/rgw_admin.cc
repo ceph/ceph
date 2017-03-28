@@ -5134,7 +5134,7 @@ next:
 
     ret = RGWUsage::trim(store, user_id, start_epoch, end_epoch);
     if (ret < 0) {
-      cerr << "ERROR: read_usage() returned ret=" << ret << std::endl;
+      cerr << "ERROR: trim_usage() returned ret=" << ret << std::endl;
       return 1;
     }
   }
