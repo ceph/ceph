@@ -1198,6 +1198,23 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
 
 void CInode::_stored_backtrace(int r, version_t v, Context *fin)
 {
+  if (r == -ENOENT) {
+    const int64_t pool = get_backtrace_pool();
+    bool exists = mdcache->mds->objecter->with_osdmap(
+        [pool](const OSDMap &osd_map) {
+          return osd_map.have_pg_pool(pool);
+        });
+
+    // This ENOENT is because the pool doesn't exist (the user deleted it
+    // out from under us), so the backtrace can never be written, so pretend
+    // to succeed so that the user can proceed to e.g. delete the file.
+    if (!exists) {
+      dout(4) << "store_backtrace got ENOENT: a data pool was deleted "
+                 "beneath us!" << dendl;
+      r = 0;
+    }
+  }
+
   if (r < 0) {
     dout(1) << "store backtrace error " << r << " v " << v << dendl;
     mdcache->mds->clog->error() << "failed to store backtrace on ino "
