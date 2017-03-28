@@ -23,6 +23,13 @@
 * CephFS directory fragmentation (large directory support) is enabled
   by default on new filesystems.  To enable it on existing filesystems
   use "ceph fs set <fs_name> allow_dirfrags".
+* CephFS will generate a health warning if you have fewer standby daemons
+  than it thinks you wanted.  By default this will be 1 if you ever had
+  a standby, and 0 if you did not.  You can customize this using
+  ``ceph fs set <fs> standby_count_wanted <number>``.  Setting it
+  to zero will effectively disable the health check.
+* The "ceph mds tell ..." command has been removed.  It is superceded
+  by "ceph tell mds.<id> ..."
 
 12.0.0
 ------
