@@ -878,7 +878,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
    * stored inside different accounts. */
   if (s->system_request) {
     ldout(s->cct, 2) << "overriding permissions due to system operation" << dendl;
-  } else if (s->auth_identity->is_admin_of(s->user->user_id)) {
+  } else if (s->auth.identity->is_admin_of(s->user->user_id)) {
     ldout(s->cct, 2) << "overriding permissions due to admin operation" << dendl;
   } else if (!verify_object_permission(s, s->user_acl.get(), bucket_policy,
                                        &obj_policy, RGW_PERM_READ)) {
