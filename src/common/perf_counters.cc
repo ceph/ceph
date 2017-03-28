@@ -504,6 +504,10 @@ void PerfCountersBuilder::add_impl(int idx, const char *name,
   assert(data.type == PERFCOUNTER_NONE);
   data.name = name;
   data.description = description;
+  // nick must be <= 4 chars
+  if (nick) {
+    assert(strlen(nick) <= 4);
+  }
   data.nick = nick;
   data.type = (enum perfcounter_type_d)ty;
   data.histogram = std::move(histogram);
