@@ -615,6 +615,25 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   }
 }
 
+void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
+                                                         const string &start,
+                                                         const string &end)
+{
+  if (db->enable_rmrange) {
+    bat.DeleteRange(combine_strings(prefix, start), combine_strings(prefix, end));
+  } else {
+    auto it = db->get_iterator(prefix);
+    it->lower_bound(start);
+    while (it->valid()) {
+      if (it->key() >= end) {
+        break;
+      }
+      bat.Delete(combine_strings(prefix, it->key()));
+      it->next();
+    }
+  }
+}
+
 void RocksDBStore::RocksDBTransactionImpl::merge(
   const string &prefix,
   const string &k,

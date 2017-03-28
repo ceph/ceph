@@ -102,6 +102,7 @@ public:
   /// compact the underlying rocksdb store
   bool compact_on_mount;
   bool disableWAL;
+  bool enable_rmrange;
   void compact() override;
 
   int tryInterpret(const string key, const string val, rocksdb::Options &opt);
@@ -135,7 +136,8 @@ public:
     compact_queue_stop(false),
     compact_thread(this),
     compact_on_mount(false),
-    disableWAL(false)
+    disableWAL(false),
+    enable_rmrange(cct->_conf->rocksdb_enable_rmrange)
   {}
 
   ~RocksDBStore() override;
@@ -273,6 +275,10 @@ public:
     void rmkeys_by_prefix(
       const string &prefix
       ) override;
+    void rm_range_keys(
+      const string &prefix,
+      const string &start,
+      const string &end) override;
     void merge(
       const string& prefix,
       const string& k,
