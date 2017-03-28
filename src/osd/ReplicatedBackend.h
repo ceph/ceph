@@ -405,8 +405,8 @@ private:
     ObjectStore::Transaction &op_t);
   void op_applied(InProgressOp *op);
   void op_commit(InProgressOp *op);
-  void sub_op_modify_reply(OpRequestRef op);
-  void sub_op_modify(OpRequestRef op);
+  void do_repop_reply(OpRequestRef op);
+  void do_repop(OpRequestRef op);
 
   struct RepModify {
     OpRequestRef op;
@@ -425,8 +425,8 @@ private:
   struct C_OSD_RepModifyApply;
   struct C_OSD_RepModifyCommit;
 
-  void sub_op_modify_applied(RepModifyRef rm);
-  void sub_op_modify_commit(RepModifyRef rm);
+  void repop_applied(RepModifyRef rm);
+  void repop_commit(RepModifyRef rm);
   bool scrub_supported() override { return true; }
   bool auto_repair_supported() const override { return false; }
 
