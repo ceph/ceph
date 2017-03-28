@@ -59,6 +59,8 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  io_ctx.set_osdmap_full_try();
+
   librbd::RBD rbd;
   r = do_create(rbd, io_ctx, image_name.c_str(), size, opts);
   if (r < 0) {
