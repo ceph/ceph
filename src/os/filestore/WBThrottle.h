@@ -82,7 +82,7 @@ class WBThrottle : Thread, public md_config_obs_t {
   bool stopping;
   Mutex lock;
   Cond cond;
-
+  bool statistic_helper;
 
   /**
    * Flush objects in lru order
@@ -137,9 +137,10 @@ private:
       return true;
   }
   bool need_flush() const {
-    if (cur_ios < io_limits.second &&
+    if (statistic_helper || 
+        (cur_ios < io_limits.second &&
 	pending_wbs.size() < fd_limits.second &&
-	cur_size < size_limits.second)
+	cur_size < size_limits.second))
       return false;
     else
       return true;
@@ -183,6 +184,11 @@ public:
 
   /// Thread
   void *entry();
+  /// Dump wb current info
+  void dump_info();
+  bool is_statistic_helper() {
+    return statistic_helper;      
+  }
 };
 
 #endif

@@ -6,6 +6,10 @@
 #include "os/filestore/WBThrottle.h"
 #include "common/perf_counters.h"
 
+#define dout_subsys ceph_subsys_throttle
+#undef dout_prefix
+#define dout_prefix *_dout << "wbthrottle "
+
 WBThrottle::WBThrottle(CephContext *cct) :
   cur_ios(0), cur_size(0),
   cct(cct),
@@ -34,6 +38,8 @@ WBThrottle::WBThrottle(CephContext *cct) :
     logger->set(i, 0);
 
   cct->_conf->add_observer(this);
+  statistic_helper = cct->_conf->filestore_wbthrottle_sync_statistic_helper;
+
 }
 
 WBThrottle::~WBThrottle() {
@@ -139,6 +145,8 @@ bool WBThrottle::get_next_should_flush(
          cond.Wait(lock);
   if (stopping)
     return false;
+  if (statistic_helper)
+    return false;    
   assert(!pending_wbs.empty());
   ghobject_t obj(pop_object());
 
@@ -265,3 +273,12 @@ void WBThrottle::throttle()
   while (!stopping && need_flush())
     cond.Wait(lock);
 }
+
+void WBThrottle::dump_info()
+{
+  ldout(cct, 10) << __func__ << " cur ios " << cur_ios << " vs limit ios " << 
+        io_limits.first << ", cur fd " << pending_wbs.size() << " vs limit obj " << 
+        fd_limits.first << ", cur size " << cur_size << " vs limit size " << 
+        size_limits.first << dendl;
+}
+

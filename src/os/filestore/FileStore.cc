@@ -3951,7 +3951,10 @@ void FileStore::sync_entry()
 	  derr << "object_map sync got " << cpp_strerror(err) << dendl;
 	  assert(0 == "object_map sync returned error");
 	}
-
+        // dump sync bytes, ios and inodes
+        if(!m_disable_wbthrottle && wbthrottle.is_statistic_helper()) {
+          wbthrottle.dump_info();
+        }
 	err = backend->syncfs();
 	if (err < 0) {
 	  derr << "syncfs got " << cpp_strerror(err) << dendl;

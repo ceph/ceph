@@ -1157,6 +1157,10 @@ OPTION(filestore_wbthrottle_xfs_bytes_hard_limit, OPT_U64, 419430400)
 OPTION(filestore_wbthrottle_xfs_ios_start_flusher, OPT_U64, 500)
 OPTION(filestore_wbthrottle_xfs_ios_hard_limit, OPT_U64, 5000)
 OPTION(filestore_wbthrottle_xfs_inodes_start_flusher, OPT_U64, 500)
+/* Switch which turns wbthrottle to be a pure statistic helper
+ * which count up bytes, ios and inodes for every sync operation
+ */
+OPTION(filestore_wbthrottle_sync_statistic_helper, OPT_BOOL, false)
 
 /// These must be less than the fd limit
 OPTION(filestore_wbthrottle_btrfs_inodes_hard_limit, OPT_U64, 5000)
