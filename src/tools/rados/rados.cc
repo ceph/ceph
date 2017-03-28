@@ -378,7 +378,6 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
 {
   string oid(objname);
   bool stdio = (strcmp(infile, "-") == 0);
-  int ret = 0;
   int fd = STDIN_FILENO;
   if (!stdio)
     fd = open(infile, O_RDONLY);
@@ -386,6 +385,8 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
     cerr << "error reading input file " << infile << ": " << cpp_strerror(errno) << std::endl;
     return 1;
   }
+
+  int ret = 0;
   int count = op_size;
   uint64_t offset = obj_offset;
   while (count != 0) {
@@ -438,7 +439,7 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
     }
     offset += count;
   }
-  ret = 0;
+
  out:
   if (fd != STDOUT_FILENO)
     VOID_TEMP_FAILURE_RETRY(close(fd));
@@ -478,7 +479,7 @@ static int do_append(IoCtx& io_ctx, RadosStriper& striper,
       goto out;
     }
   }
-  ret = 0;
+ 
 out:
   if (fd != STDOUT_FILENO)
     VOID_TEMP_FAILURE_RETRY(close(fd));
