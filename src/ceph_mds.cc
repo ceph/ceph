@@ -15,12 +15,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 #include <iostream>
 #include <string>
 using namespace std;
 
 #include "include/ceph_features.h"
+#include "include/compat.h"
 
 #include "common/config.h"
 #include "common/strtol.h"
@@ -92,6 +94,8 @@ extern "C" int cephd_mds(int argc, const char **argv)
 int main(int argc, const char **argv)
 #endif
 {
+  ceph_pthread_setname(pthread_self(), "ceph-mds");
+
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
