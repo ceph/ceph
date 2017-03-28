@@ -57,6 +57,12 @@ public:
     const string &prefix
     );
 
+  int rm_range_keys(
+      const string &prefix,
+      const string &start,
+      const string &end
+      );
+
   class TransactionImpl_ : public TransactionImpl {
   public:
     list<Context *> on_commit;
@@ -109,6 +115,20 @@ public:
     };
     void rmkeys_by_prefix(const string &prefix) override {
       on_commit.push_back(new RmKeysByPrefixOp(db, prefix));
+    }
+
+    struct RmRangeKeys: public Context {
+      KeyValueDBMemory *db;
+      string prefix, start, end;
+      RmRangeKeys(KeyValueDBMemory *db, const string &prefix, const string &s, const string &e)
+	: db(db), prefix(prefix), start(s), end(e) {}
+      void finish(int r) {
+	db->rm_range_keys(prefix, start, end);
+      }
+    };
+
+    void rm_range_keys(const string &prefix, const string &start, const string &end) {
+      on_commit.push_back(new RmRangeKeys(db, prefix, start, end));
     }
 
     int complete() {
