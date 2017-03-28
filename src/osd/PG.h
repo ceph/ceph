@@ -57,8 +57,6 @@ using namespace std;
 class OSD;
 class OSDService;
 class MOSDOp;
-class MOSDSubOp;
-class MOSDSubOpReply;
 class MOSDPGScan;
 class MOSDPGBackfill;
 class MOSDPGInfo;
