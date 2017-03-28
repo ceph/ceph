@@ -56,7 +56,7 @@ TEST(TestOSDScrub, scrub_time_permit) {
              g_conf->osd_objectstore,
              g_conf->osd_data,
              g_conf->osd_journal);
-  std::string cluster_msgr_type = g_conf->ms_cluster_type.empty() ? g_conf->ms_type : g_conf->ms_cluster_type;
+  std::string cluster_msgr_type = g_conf->ms_cluster_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_cluster_type;
   Messenger *ms = Messenger::create(g_ceph_context, cluster_msgr_type,
 				    entity_name_t::OSD(0), "make_checker",
 				    getpid(), 0);
