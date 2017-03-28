@@ -91,7 +91,12 @@ static void handle_signal(int signum)
 {
   assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
-  ioctl(nbd, NBD_DISCONNECT);
+  dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
+  if (ioctl(nbd, NBD_DISCONNECT) < 0) {
+    derr << "rbd-nbd: disconnect failed: " << cpp_error(errno) << std::endl;
+  } else {
+    dout(20) << __func__ << ": " << "disconnected" << dendl;
+  }
 }
 
 class NBDServer
@@ -702,10 +707,13 @@ static int do_unmap()
     return nbd;
   }
 
-  // alert the reader thread to shut down
+  dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
   if (ioctl(nbd, NBD_DISCONNECT) < 0) {
     cerr << "rbd-nbd: the device is not used" << std::endl;
+  } else {
+    dout(20) << __func__ << ": " << "disconnected" << dendl;
   }
+
   close(nbd);
 
   return 0;
