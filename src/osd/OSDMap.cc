@@ -931,7 +931,7 @@ void OSDMap::set_max_osd(int m)
   max_osd = m;
   osd_state.resize(m);
   osd_weight.resize(m);
-  for (; o<max_osd; o++) {
+  for (; o < max_osd; ++o) {
     osd_state[o] = 0;
     osd_weight[o] = CEPH_OSD_OUT;
   }
@@ -953,7 +953,7 @@ int OSDMap::calc_num_osds()
   num_osd = 0;
   num_up_osd = 0;
   num_in_osd = 0;
-  for (int i=0; i<max_osd; i++) {
+  for (int i = 0; i < max_osd; ++i) {
     if (osd_state[i] & CEPH_OSD_EXISTS) {
       ++num_osd;
       if (osd_state[i] & CEPH_OSD_UP) {
@@ -983,14 +983,14 @@ void OSDMap::count_full_nearfull_osds(int *full, int *nearfull) const
 
 void OSDMap::get_all_osds(set<int32_t>& ls) const
 {
-  for (int i=0; i<max_osd; i++)
+  for (int i = 0; i < max_osd; ++i)
     if (exists(i))
       ls.insert(i);
 }
 
 void OSDMap::get_up_osds(set<int32_t>& ls) const
 {
-  for (int i = 0; i < max_osd; i++) {
+  for (int i = 0; i < max_osd; ++i) {
     if (is_up(i))
       ls.insert(i);
   }
@@ -1024,7 +1024,7 @@ void OSDMap::adjust_osd_weights(const map<int,double>& weights, Incremental& inc
 
 int OSDMap::identify_osd(const entity_addr_t& addr) const
 {
-  for (int i=0; i<max_osd; i++)
+  for (int i = 0; i < max_osd; ++i)
     if (exists(i) && (get_addr(i) == addr || get_cluster_addr(i) == addr))
       return i;
   return -1;
@@ -1032,7 +1032,7 @@ int OSDMap::identify_osd(const entity_addr_t& addr) const
 
 int OSDMap::identify_osd(const uuid_d& u) const
 {
-  for (int i=0; i<max_osd; i++)
+  for (int i = 0; i < max_osd; ++i)
     if (exists(i) && get_uuid(i) == u)
       return i;
   return -1;
@@ -1040,7 +1040,7 @@ int OSDMap::identify_osd(const uuid_d& u) const
 
 int OSDMap::identify_osd_on_all_channels(const entity_addr_t& addr) const
 {
-  for (int i=0; i<max_osd; i++)
+  for (int i = 0; i < max_osd; ++i)
     if (exists(i) && (get_addr(i) == addr || get_cluster_addr(i) == addr ||
 	get_hb_back_addr(i) == addr || get_hb_front_addr(i) == addr))
       return i;
@@ -1049,7 +1049,7 @@ int OSDMap::identify_osd_on_all_channels(const entity_addr_t& addr) const
 
 int OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
 {
-  for (int i=0; i<max_osd; i++)
+  for (int i = 0; i < max_osd; ++i)
     if (exists(i) && (get_addr(i).is_same_host(ip) || get_cluster_addr(i).is_same_host(ip)))
       return i;
   return -1;
@@ -1177,7 +1177,7 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
   // do addrs match?
   if (o->max_osd != n->max_osd)
     diff++;
-  for (int i = 0; i < o->max_osd && i < n->max_osd; i++) {
+  for (int i = 0; i < o->max_osd && i < n->max_osd; ++i) {
     if ( n->osd_addrs->client_addr[i] &&  o->osd_addrs->client_addr[i] &&
 	*n->osd_addrs->client_addr[i] == *o->osd_addrs->client_addr[i])
       n->osd_addrs->client_addr[i] = o->osd_addrs->client_addr[i];
@@ -2329,6 +2329,9 @@ void OSDMap::dump_erasure_code_profiles(const map<string,map<string,string> > &p
 
 void OSDMap::dump(Formatter *f) const
 {
+
+  int max_osds = get_max_osd();
+
   f->dump_int("epoch", get_epoch());
   f->dump_stream("fsid") << get_fsid();
   f->dump_stream("created") << get_created();
@@ -2338,7 +2341,7 @@ void OSDMap::dump(Formatter *f) const
   f->dump_float("nearfull_ratio", nearfull_ratio);
   f->dump_string("cluster_snapshot", get_cluster_snapshot());
   f->dump_int("pool_max", get_pool_max());
-  f->dump_int("max_osd", get_max_osd());
+  f->dump_int("max_osd", max_osds);
 
   f->open_array_section("pools");
   for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
@@ -2355,7 +2358,8 @@ void OSDMap::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("osds");
-  for (int i=0; i<get_max_osd(); i++)
+
+  for (int i = 0; i < max_osds; ++i)
     if (exists(i)) {
       f->open_object_section("osd_info");
       f->dump_int("osd", i);
@@ -2382,7 +2386,7 @@ void OSDMap::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("osd_xinfo");
-  for (int i=0; i<get_max_osd(); i++) {
+  for (int i = 0; i < max_osds; ++i) {
     if (exists(i)) {
       f->open_object_section("xinfo");
       f->dump_int("osd", i);
@@ -2536,8 +2540,10 @@ void OSDMap::print(ostream& out) const
 
   print_pools(out);
 
-  out << "max_osd " << get_max_osd() << "\n";
-  for (int i=0; i<get_max_osd(); i++) {
+  int max_osds = get_max_osd();
+
+  out << "max_osd " << max_osds << "\n";
+  for (int i = 0; i < max_osds; ++i) {
     if (exists(i)) {
       out << "osd." << i;
       out << (is_up(i) ? " up  ":" down");
@@ -2593,7 +2599,9 @@ public:
 
     Parent::dump(tbl);
 
-    for (int i = 0; i < osdmap->get_max_osd(); i++) {
+    int max_osds = osdmap->get_max_osd();
+
+    for (int i = 0; i < max_osds; ++i) {
       if (osdmap->exists(i) && !is_touched(i))
 	dump_item(CrushTreeDumper::Item(i, 0, 0), tbl);
     }
@@ -2645,7 +2653,10 @@ public:
     Parent::dump(f);
     f->close_section();
     f->open_array_section("stray");
-    for (int i = 0; i < osdmap->get_max_osd(); i++) {
+
+    int max_osds = osdmap->get_max_osd();
+
+    for (int i = 0; i < max_osds; ++i) {
       if (osdmap->exists(i) && !is_touched(i))
 	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
     }
@@ -2781,7 +2792,9 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     r = build_simple_crush_map_from_conf(cct, *crush, &ss);
   assert(r == 0);
 
-  int poolbase = get_max_osd() ? get_max_osd() : 1;
+  int max_osds = get_max_osd();
+
+  int poolbase = max_osds ? max_osds : 1;
 
   int const default_replicated_ruleset = crush->get_osd_pool_default_crush_replicated_ruleset(cct);
   assert(default_replicated_ruleset >= 0);
@@ -2810,7 +2823,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     name_pool[*p] = pool;
   }
 
-  for (int i=0; i<get_max_osd(); i++) {
+  for (int i = 0; i < max_osds; ++i) {
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
   }
@@ -2991,8 +3004,9 @@ int OSDMap::summarize_mapping_stats(
 
   unsigned total_pg = 0;
   unsigned moved_pg = 0;
-  vector<unsigned> base_by_osd(get_max_osd(), 0);
-  vector<unsigned> new_by_osd(get_max_osd(), 0);
+  int max_osds = get_max_osd();
+  vector<unsigned> base_by_osd(max_osds, 0);
+  vector<unsigned> new_by_osd(max_osds, 0);
   for (int64_t pool_id : ls) {
     const pg_pool_t *pi = get_pg_pool(pool_id);
     vector<int> up, up2, acting;
@@ -3003,14 +3017,14 @@ int OSDMap::summarize_mapping_stats(
       pg_to_up_acting_osds(pgid, &up, &up_primary,
 			   &acting, &acting_primary);
       for (int osd : up) {
-	if (osd >= 0 && osd < get_max_osd())
+	if (osd >= 0 && osd < max_osds)
 	  ++base_by_osd[osd];
       }
       if (newmap) {
 	newmap->pg_to_up_acting_osds(pgid, &up2, &up_primary,
 				     &acting, &acting_primary);
 	for (int osd : up2) {
-	  if (osd >= 0 && osd < get_max_osd())
+	  if (osd >= 0 && osd < max_osds)
 	    ++new_by_osd[osd];
 	}
 	if (pi->type == pg_pool_t::TYPE_ERASURE) {
@@ -3033,7 +3047,7 @@ int OSDMap::summarize_mapping_stats(
   }
 
   unsigned num_up_in = 0;
-  for (int osd = 0; osd < get_max_osd(); ++osd) {
+  for (int osd = 0; osd < max_osds; ++osd) {
     if (is_up(osd) && is_in(osd))
       ++num_up_in;
   }
@@ -3046,7 +3060,7 @@ int OSDMap::summarize_mapping_stats(
   int min = -1, max = -1;
   unsigned min_base_pg = 0, max_base_pg = 0;
   unsigned min_new_pg = 0, max_new_pg = 0;
-  for (int osd = 0; osd < get_max_osd(); ++osd) {
+  for (int osd = 0; osd < max_osds; ++osd) {
     if (is_up(osd) && is_in(osd)) {
       float base_diff = (float)base_by_osd[osd] - avg_pg;
       base_stddev += base_diff * base_diff;

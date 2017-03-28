@@ -302,7 +302,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mon->store->apply_transaction(t);
   }
 
-  for (int o = 0; o < osdmap.get_max_osd(); o++) {
+  int max_osds = osdmap.get_max_osd();
+
+  for (int o = 0; o < max_osds; ++o) {
     if (osdmap.is_out(o))
       continue;
     auto found = down_pending_out.find(o);
@@ -671,7 +673,9 @@ public:
 
 protected:
   void dump_stray(F *f) {
-    for (int i = 0; i < osdmap->get_max_osd(); i++) {
+    int max_osds = osdmap->get_max_osd();
+
+    for (int i = 0; i < max_osds; ++i) {
       if (osdmap->exists(i) && !this->is_touched(i))
 	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
     }
@@ -725,7 +729,8 @@ protected:
 
   double average_utilization() {
     int64_t kb = 0, kb_used = 0;
-    for (int i = 0; i < osdmap->get_max_osd(); i++) {
+    int max_osds = osdmap->get_max_osd();
+    for (int i = 0; i < max_osds; ++i) {
       if (!osdmap->exists(i) || osdmap->get_weight(i) == 0)
 	continue;
       int64_t kb_i, kb_used_i, kb_avail_i;
@@ -1341,7 +1346,9 @@ void OSDMonitor::print_nodes(Formatter *f)
 {
   // group OSDs by their hosts
   map<string, list<int> > osds; // hostname => osd
-  for (int osd = 0; osd < osdmap.get_max_osd(); osd++) {
+  int max_osds = osdmap.get_max_osd();
+
+  for (int osd = 0; osd < max_osds; ++osd) {
     map<string, string> m;
     if (load_metadata(osd, m, NULL)) {
       continue;
@@ -3134,8 +3141,9 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
   } else {
     int num_in_osds = 0;
     int num_down_in_osds = 0;
+    int max_osds = osdmap.get_max_osd();
     set<int> osds;
-    for (int i = 0; i < osdmap.get_max_osd(); i++) {
+    for (int i = 0; i < max_osds; ++i) {
       if (!osdmap.exists(i)) {
         if (osdmap.crush->item_exists(i)) {
           osds.insert(i);
@@ -3337,7 +3345,10 @@ void OSDMonitor::dump_info(Formatter *f)
   f->close_section();
 
   f->open_array_section("osd_metadata");
-  for (int i=0; i<osdmap.get_max_osd(); ++i) {
+
+  int max_osds = osdmap.get_max_osd();
+
+  for (int i = 0; i < max_osds; ++i) {
     if (osdmap.exists(i)) {
       f->open_object_section("osd");
       f->dump_unsigned("id", i);
@@ -3454,6 +3465,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	   prefix == "osd getcrushmap") {
     string val;
 
+    int max_osds = osdmap.get_max_osd();
+
     epoch_t epoch = 0;
     int64_t epochnum;
     cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)osdmap.get_epoch());
@@ -3491,9 +3504,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       if (!f)
 	ds << " ";
     } else if (prefix == "osd ls") {
+
+//      int max_osds = osdmap.get_max_osd();
+
       if (f) {
 	f->open_array_section("osds");
-	for (int i = 0; i < osdmap.get_max_osd(); i++) {
+	for (int i = 0; i < max_osds; ++i) {
 	  if (osdmap.exists(i)) {
 	    f->dump_int("osd", i);
 	  }
@@ -3502,7 +3518,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	f->flush(ds);
       } else {
 	bool first = true;
-	for (int i = 0; i < osdmap.get_max_osd(); i++) {
+	for (int i = 0; i < max_osds; ++i) {
 	  if (osdmap.exists(i)) {
 	    if (!first)
 	      ds << "\n";
@@ -3609,7 +3625,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     } else {
       r = 0;
       f->open_array_section("osd_metadata");
-      for (int i=0; i<osdmap.get_max_osd(); ++i) {
+      int max_osds = osdmap.get_max_osd();
+      for (int i = 0; i < max_osds; ++i) {
         if (osdmap.exists(i)) {
           f->open_object_section("osd");
           f->dump_unsigned("id", i);
@@ -3692,8 +3709,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
     if (whostr == "*") {
       ss << "osds ";
-      int c = 0;
-      for (int i = 0; i < osdmap.get_max_osd(); i++)
+      int c = 0, max_osds = osdmap.get_max_osd();
+      for (int i = 0; i < max_osds; ++i)
 	if (osdmap.is_up(i)) {
 	  ss << (c++ ? "," : "") << i;
 	  mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
@@ -6718,7 +6735,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       // Check if the OSDs exist between current max and new value.
       // If there are any OSDs exist, then don't allow shrinking number
       // of OSDs.
-      for (int i = newmax; i < osdmap.get_max_osd(); i++) {
+      for (int i = newmax; i < osdmap.get_max_osd(); ++i) {
         if (osdmap.exists(i)) {
           err = -EBUSY;
           ss << "cannot shrink max_osd to " << newmax
@@ -7231,7 +7248,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     // allocate a new id
-    for (i=0; i < osdmap.get_max_osd(); i++) {
+    for (i = 0; i < osdmap.get_max_osd(); ++i) {
       if (!osdmap.exists(i) &&
 	  pending_inc.new_up_client.count(i) == 0 &&
 	  (pending_inc.new_state.count(i) == 0 ||
