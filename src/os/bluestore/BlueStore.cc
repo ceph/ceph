@@ -3421,15 +3421,15 @@ void BlueStore::_init_logger()
   PerfCountersBuilder b(cct, "bluestore",
                         l_bluestore_first, l_bluestore_last);
   b.add_time_avg(l_bluestore_kv_flush_lat, "kv_flush_lat",
-		 "Average kv_thread flush latency", "kflat");
+		 "Average kv_thread flush latency", "fl_l");
   b.add_time_avg(l_bluestore_kv_commit_lat, "kv_commit_lat",
 		 "Average kv_thread commit latency");
   b.add_time_avg(l_bluestore_kv_lat, "kv_lat",
-		 "Average kv_thread sync latency", "klat");
+		 "Average kv_thread sync latency", "k_l");
   b.add_time_avg(l_bluestore_state_prepare_lat, "state_prepare_lat",
     "Average prepare state latency");
   b.add_time_avg(l_bluestore_state_aio_wait_lat, "state_aio_wait_lat",
-		 "Average aio_wait state latency", "iolat");
+		 "Average aio_wait state latency", "io_l");
   b.add_time_avg(l_bluestore_state_io_done_lat, "state_io_done_lat",
     "Average io_done state latency");
   b.add_time_avg(l_bluestore_state_kv_queued_lat, "state_kv_queued_lat",
@@ -3449,13 +3449,13 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat",
     "Average done state latency");
   b.add_time_avg(l_bluestore_throttle_lat, "throttle_lat",
-		 "Average submit throttle latency", "tlat");
+		 "Average submit throttle latency", "t_l");
   b.add_time_avg(l_bluestore_submit_lat, "submit_lat",
-		 "Average submit latency", "slat");
+		 "Average submit latency", "s_l");
   b.add_time_avg(l_bluestore_commit_lat, "commit_lat",
-		 "Average commit latency", "clat");
+		 "Average commit latency", "c_l");
   b.add_time_avg(l_bluestore_read_lat, "read_lat",
-		 "Average read latency", "rlat");
+		 "Average read latency", "r_l");
   b.add_time_avg(l_bluestore_read_onode_meta_lat, "read_onode_meta_lat",
     "Average read onode metadata latency");
   b.add_time_avg(l_bluestore_read_wait_aio_lat, "read_wait_aio_lat",
