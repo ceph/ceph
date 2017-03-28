@@ -1915,17 +1915,20 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
 void PGMonitor::check_subs()
 {
   dout(10) << __func__ << dendl;
-  string type = "osd_pg_creates";
-  if (mon->session_map.subs.count(type) == 0)
-    return;
+  const string type = "osd_pg_creates";
 
-  xlist<Subscription*>::iterator p = mon->session_map.subs[type]->begin();
-  while (!p.end()) {
-    Subscription *sub = *p;
-    ++p;
-    dout(20) << __func__ << " .. " << sub->session->inst << dendl;
-    check_sub(sub);
-  }
+  mon->with_session_map([this, &type](const MonSessionMap& session_map) {
+      if (mon->session_map.subs.count(type) == 0)
+	return;
+
+      auto p = mon->session_map.subs[type]->begin();
+      while (!p.end()) {
+	Subscription *sub = *p;
+	++p;
+	dout(20) << __func__ << " .. " << sub->session->inst << dendl;
+	check_sub(sub);
+      }
+    });
 }
 
 void PGMonitor::check_sub(Subscription *sub)
