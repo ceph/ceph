@@ -28,8 +28,13 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* i
     is_server(false), con_handler(new C_handle_connection(this)),
     active(false)
 {
-  ibdev = ib->get_device();
-  ibport = ib->get_ib_physical_port();
+  ibdev = ib->get_device(cct->_conf->ms_async_rdma_device_name.c_str());
+  ibport = cct->_conf->ms_async_rdma_port_num;
+
+  assert(ibdev);
+  assert(ibport > 0);
+
+  ibdev->init(ibport);
 
   qp = ibdev->create_queue_pair(cct, IBV_QPT_RC);
   my_msg.qpn = qp->get_local_qp_number();
@@ -101,12 +106,12 @@ int RDMAConnectedSocketImpl::activate()
   qpa.ah_attr.grh.hop_limit = 6;
   qpa.ah_attr.grh.dgid = peer_msg.gid;
 
-  qpa.ah_attr.grh.sgid_index = infiniband->get_device()->get_gid_idx();
+  qpa.ah_attr.grh.sgid_index = ibdev->get_gid_idx();
 
   qpa.ah_attr.dlid = peer_msg.lid;
   qpa.ah_attr.sl = cct->_conf->ms_async_rdma_sl;
   qpa.ah_attr.src_path_bits = 0;
-  qpa.ah_attr.port_num = (uint8_t)(infiniband->get_ib_physical_port());
+  qpa.ah_attr.port_num = (uint8_t)ibport;
 
   ldout(cct, 20) << __func__ << " Choosing gid_index " << (int)qpa.ah_attr.grh.sgid_index << ", sl " << (int)qpa.ah_attr.sl << dendl;
 
