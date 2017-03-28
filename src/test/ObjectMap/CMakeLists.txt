@@ -5,6 +5,7 @@ add_executable(ceph_test_object_map
   )
 set_target_properties(ceph_test_object_map PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
+add_ceph_unittest(ceph_test_object_map ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph_test_object_map)
 target_link_libraries(ceph_test_object_map
   os
   common
