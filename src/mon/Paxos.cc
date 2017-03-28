@@ -427,6 +427,11 @@ bool Paxos::store_state(MMonPaxos *m)
     return false;
   }
 
+  if (last_committed ==  m->last_committed) {
+    dout(10) << "store_state nothing to commit" << dendl;
+    return false;
+  }
+
   // push forward the start position on the message's values iterator, up until
   // we run out of positions or we find a position matching 'last_committed'.
   while (start != m->values.end() && start->first <= last_committed) {
@@ -441,33 +446,30 @@ bool Paxos::store_state(MMonPaxos *m)
     ++end;
   }
 
-  if (start == end) {
-    dout(10) << "store_state nothing to commit" << dendl;
-  } else {
-    dout(10) << "store_state [" << start->first << ".." 
-	     << last_committed << "]" << dendl;
-    t->put(get_name(), "last_committed", last_committed);
+  dout(10) << "store_state [" << start->first << ".." 
+           << last_committed << "]" << dendl;
+  t->put(get_name(), "last_committed", last_committed);
 
-    // we should apply the state here -- decode every single bufferlist in the
-    // map and append the transactions to 't'.
-    map<version_t,bufferlist>::iterator it;
-    for (it = start; it != end; ++it) {
-      // write the bufferlist as the version's value
-      t->put(get_name(), it->first, it->second);
-      // decode the bufferlist and append it to the transaction we will shortly
-      // apply.
-      decode_append_transaction(t, it->second);
-    }
-
-    // discard obsolete uncommitted value?
-    if (uncommitted_v && uncommitted_v <= last_committed) {
-      dout(10) << " forgetting obsolete uncommitted value " << uncommitted_v
-	       << " pn " << uncommitted_pn << dendl;
-      uncommitted_v = 0;
-      uncommitted_pn = 0;
-      uncommitted_value.clear();
-    }
+  // we should apply the state here -- decode every single bufferlist in the
+  // map and append the transactions to 't'.
+  map<version_t,bufferlist>::iterator it;
+  for (it = start; it != end; ++it) {
+    // write the bufferlist as the version's value
+    t->put(get_name(), it->first, it->second);
+    // decode the bufferlist and append it to the transaction we will shortly
+    // apply.
+    decode_append_transaction(t, it->second);
   }
+
+  // discard obsolete uncommitted value?
+  if (uncommitted_v && uncommitted_v <= last_committed) {
+    dout(10) << " forgetting obsolete uncommitted value " << uncommitted_v
+	     << " pn " << uncommitted_pn << dendl;
+    uncommitted_v = 0;
+    uncommitted_pn = 0;
+    uncommitted_value.clear();
+  }
+  
   if (!t->empty()) {
     dout(30) << __func__ << " transaction dump:\n";
     JSONFormatter f(true);
