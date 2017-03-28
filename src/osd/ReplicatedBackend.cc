@@ -1179,38 +1179,23 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   rm->committed = true;
 
   // send commit.
-  dout(10) << __func__ << " on op " << *rm->op->get_req()
+  const Message *m = rm->op->get_req();
+  dout(10) << __func__ << " on op " << *m
 	   << ", sending commit to osd." << rm->ackerosd
 	   << dendl;
-
+  assert(m->get_type() == MSG_OSD_REPOP);
   assert(get_osdmap()->is_up(rm->ackerosd));
+
   get_parent()->update_last_complete_ondisk(rm->last_complete);
 
-  const Message *m = rm->op->get_req();
-  Message *commit = NULL;
-  if (m->get_type() == MSG_OSD_SUBOP) {
-    // doesn't have CLIENT SUBOP feature ,use Subop
-    MOSDSubOpReply  *reply = new MOSDSubOpReply(
-      static_cast<const MOSDSubOp*>(m),
-      get_parent()->whoami_shard(),
-      0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
-    reply->set_last_complete_ondisk(rm->last_complete);
-    commit = reply;
-  } else if (m->get_type() == MSG_OSD_REPOP) {
-    MOSDRepOpReply *reply = new MOSDRepOpReply(
-      static_cast<const MOSDRepOp*>(m),
-      get_parent()->whoami_shard(),
-      0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
-    reply->set_last_complete_ondisk(rm->last_complete);
-    commit = reply;
-  }
-  else {
-    ceph_abort();
-  }
-
-  commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
+  MOSDRepOpReply *reply = new MOSDRepOpReply(
+    static_cast<const MOSDRepOp*>(m),
+    get_parent()->whoami_shard(),
+    0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
+  reply->set_last_complete_ondisk(rm->last_complete);
+  reply->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
   get_parent()->send_message_osd_cluster(
-    rm->ackerosd, commit, get_osdmap()->get_epoch());
+    rm->ackerosd, reply, get_osdmap()->get_epoch());
 
   log_subop_stats(get_parent()->get_logger(), rm->op, l_osd_sop_w);
 }
