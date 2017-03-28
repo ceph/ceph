@@ -7050,6 +7050,206 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     pending_inc.new_primary_temp[pgid] = osd;
     ss << "set " << pgid << " primary_temp mapping to " << osd;
     goto update;
+  } else if (prefix == "osd pg-remap") {
+    if (!g_conf->mon_osd_allow_pg_remap) {
+      ss << "you must enable 'mon osd allow pg remap = true' on the mons before you can adjust pg_remap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+      err = -EPERM;
+      goto reply;
+    }
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err < 0)
+      goto reply;
+    string pgidstr;
+    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
+      ss << "unable to parse 'pgid' value '"
+         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    pg_t pgid;
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!osdmap.pg_exists(pgid)) {
+      ss << "pg " << pgid << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    if (pending_inc.new_pg_remap.count(pgid) ||
+	pending_inc.old_pg_remap.count(pgid)) {
+      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
+      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+      return true;
+    }
+    vector<int64_t> id_vec;
+    if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
+      ss << "unable to parse 'id' value(s) '"
+         << cmd_vartype_stringify(cmdmap["id"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    vector<int32_t> new_pg_remap;
+    for (auto osd : id_vec) {
+      if (osd != CRUSH_ITEM_NONE && !osdmap.exists(osd)) {
+        ss << "osd." << osd << " does not exist";
+        err = -ENOENT;
+        goto reply;
+      }
+      new_pg_remap.push_back(osd);
+    }
+
+    pending_inc.new_pg_remap[pgid] = new_pg_remap;
+    ss << "set " << pgid << " pg_remap mapping to " << new_pg_remap;
+    goto update;
+  } else if (prefix == "osd rm-pg-remap") {
+    if (!g_conf->mon_osd_allow_pg_remap) {
+      ss << "you must enable 'mon osd allow pg remap = true' on the mons before you can adjust pg_remap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+      err = -EPERM;
+      goto reply;
+    }
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err < 0)
+      goto reply;
+    string pgidstr;
+    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
+      ss << "unable to parse 'pgid' value '"
+         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    pg_t pgid;
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!osdmap.pg_exists(pgid)) {
+      ss << "pg " << pgid << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    if (pending_inc.new_pg_remap.count(pgid) ||
+	pending_inc.old_pg_remap.count(pgid)) {
+      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
+      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+      return true;
+    }
+
+    pending_inc.old_pg_remap.insert(pgid);
+    ss << "clear " << pgid << " pg_remap mapping";
+    goto update;
+  } else if (prefix == "osd pg-remap-items") {
+    if (!g_conf->mon_osd_allow_pg_remap) {
+      ss << "you must enable 'mon osd allow pg remap = true' on the mons before you can adjust pg_remap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+      err = -EPERM;
+      goto reply;
+    }
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err < 0)
+      goto reply;
+    string pgidstr;
+    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
+      ss << "unable to parse 'pgid' value '"
+         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    pg_t pgid;
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!osdmap.pg_exists(pgid)) {
+      ss << "pg " << pgid << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    if (pending_inc.new_pg_remap_items.count(pgid) ||
+	pending_inc.old_pg_remap_items.count(pgid)) {
+      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
+      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+      return true;
+    }
+    vector<int64_t> id_vec;
+    if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
+      ss << "unable to parse 'id' value(s) '"
+         << cmd_vartype_stringify(cmdmap["id"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (id_vec.size() % 2) {
+      ss << "you must specify pairs of osd ids to be remapped";
+      err = -EINVAL;
+      goto reply;
+    }
+    vector<pair<int32_t,int32_t>> new_pg_remap_items;
+    for (auto p = id_vec.begin(); p != id_vec.end(); ++p) {
+      int from = *p++;
+      int to = *p;
+      if (!osdmap.exists(from)) {
+	ss << "osd." << from << " does not exist";
+	err = -ENOENT;
+	goto reply;
+      }
+      if (to != CRUSH_ITEM_NONE && !osdmap.exists(to)) {
+	ss << "osd." << to << " does not exist";
+	err = -ENOENT;
+	goto reply;
+      }
+      new_pg_remap_items.push_back(make_pair(from, to));
+    }
+
+    pending_inc.new_pg_remap_items[pgid] = new_pg_remap_items;
+    ss << "set " << pgid << " pg_remap_items mapping to " << new_pg_remap_items;
+    goto update;
+  } else if (prefix == "osd rm-pg-remap-items") {
+    if (!g_conf->mon_osd_allow_pg_remap) {
+      ss << "you must enable 'mon osd allow pg remap = true' on the mons before you can adjust pg_remap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+      err = -EPERM;
+      goto reply;
+    }
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err < 0)
+      goto reply;
+    string pgidstr;
+    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
+      ss << "unable to parse 'pgid' value '"
+         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    pg_t pgid;
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!osdmap.pg_exists(pgid)) {
+      ss << "pg " << pgid << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    if (pending_inc.new_pg_remap_items.count(pgid) ||
+	pending_inc.old_pg_remap_items.count(pgid)) {
+      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
+      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+      return true;
+    }
+
+    pending_inc.old_pg_remap_items.insert(pgid);
+    ss << "clear " << pgid << " pg_remap_items mapping";
+    goto update;
   } else if (prefix == "osd primary-affinity") {
     int64_t id;
     if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {

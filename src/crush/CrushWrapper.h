@@ -554,7 +554,7 @@ public:
    * FIXME: ambiguous for items that occur multiple times in the map
    */
   pair<string,string> get_immediate_parent(int id, int *ret = NULL);
-  int get_immediate_parent_id(int id, int *parent);
+  int get_immediate_parent_id(int id, int *parent) const;
 
   /**
    * get the fully qualified location of a device by successively finding
@@ -1169,6 +1169,25 @@ public:
     for (int i=0; i<numrep; i++)
       out[i] = rawout[i];
   }
+
+  int _choose_type_stack(
+    CephContext *cct,
+    const vector<pair<int,int>>& stack,
+    const set<int>& overfull,
+    const vector<int>& underfull,
+    const vector<int>& orig,
+    vector<int>::const_iterator& i,
+    set<int>& used,
+    vector<int> *pw) const;
+
+  int try_remap_rule(
+    CephContext *cct,
+    int rule,
+    int maxout,
+    const set<int>& overfull,
+    const vector<int>& underfull,
+    const vector<int>& orig,
+    vector<int> *out) const;
 
   bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
     assert(crush);
