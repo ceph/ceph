@@ -2748,6 +2748,14 @@ void FileStore::_do_transaction(
       }
       break;
 
+    case Transaction::OP_COLL_SET_BITS:
+      {
+	const coll_t &cid = i.get_cid(op->cid);
+	int bits = op->split_bits;
+	r = _collection_set_bits(cid, bits);
+      }
+      break;
+
     case Transaction::OP_COLL_HINT:
       {
         const coll_t &cid = i.get_cid(op->cid);
