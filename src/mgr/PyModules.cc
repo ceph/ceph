@@ -48,7 +48,10 @@ void PyModules::dump_server(const std::string &hostname,
     // TODO: pick the highest version, and make sure that
     // somewhere else (during health reporting?) we are
     // indicating to the user if we see mixed versions
-    ceph_version = i.second->metadata.at("ceph_version");
+    auto ver_iter = i.second->metadata.find("ceph_version");
+    if (ver_iter != i.second->metadata.end()) {
+      ceph_version = i.second->metadata.at("ceph_version");
+    }
 
     f->open_object_section("service");
     f->dump_string("type", str_type);
