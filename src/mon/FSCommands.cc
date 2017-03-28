@@ -412,6 +412,21 @@ public:
       });
 
       ss << "marked " << (is_down ? "down" : "up");
+    } else if (var == "standby_count_wanted") {
+      if (interr.length()) {
+       ss << var << " requires an integer value";
+       return -EINVAL;
+      }
+      if (n < 0) {
+       ss << var << " must be non-negative";
+       return -ERANGE;
+      }
+      fsmap.modify_filesystem(
+          fs->fscid,
+          [n](std::shared_ptr<Filesystem> fs)
+      {
+        fs->mds_map.set_standby_count_wanted(n);
+      });
     } else {
       ss << "unknown variable " << var;
       return -EINVAL;
