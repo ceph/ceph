@@ -5753,6 +5753,21 @@ void PG::update_store_with_options()
   if(r < 0 && r != -EOPNOTSUPP) {
     derr << __func__ << "set_collection_opts returns error:" << r << dendl;
   }
+
+  if (osd->store->get_type() == "filestore") {
+    // legacy filestore didn't store collection bit width; fix.
+    int bits = osd->store->collection_bits(coll);
+    if (bits < 0) {
+      if (coll.is_meta())
+	bits = 0;
+      else
+	bits = info.pgid.get_split_bits(pool.info.get_pg_num());
+      lderr(cct) << __func__ << " setting bit width to " << bits << dendl;
+      ObjectStore::Transaction t;
+      t.collection_set_bits(coll, bits);
+      osd->store->apply_transaction(osr.get(), std::move(t));
+    }
+  }
 }
 
 std::ostream& operator<<(std::ostream& oss,
