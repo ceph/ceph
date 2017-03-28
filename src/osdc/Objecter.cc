@@ -2289,8 +2289,13 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 
   bool need_send = false;
 
-  if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
-      osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
+  if (osdmap->get_epoch() < epoch_barrier) {
+    ldout(cct, 10) << " barrier, paused " << op << " tid " << op->tid
+		   << dendl;
+    op->target.paused = true;
+    _maybe_request_map();
+  } else if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
+             osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
     ldout(cct, 10) << " paused modify " << op << " tid " << op->tid
 		   << dendl;
     op->target.paused = true;
