@@ -413,6 +413,8 @@ RDMAWorker::RDMAWorker(CephContext *c, unsigned i)
 
   plb.add_u64_counter(l_msgr_rdma_tx_chunks, "tx_chunks", "The number of tx chunks transmitted");
   plb.add_u64_counter(l_msgr_rdma_tx_bytes, "tx_bytes", "The bytes of tx chunks transmitted");
+  plb.add_u64_counter(l_msgr_rdma_tx_zerocopy_chunks, "tx_zerocopy_chunks", "The number of tx zerocopy_chunks transmitted");
+  plb.add_u64_counter(l_msgr_rdma_tx_zerocopy_bytes, "tx_zerocopy_bytes", "The bytes of tx zerocopy_chunks transmitted");
   plb.add_u64_counter(l_msgr_rdma_rx_chunks, "rx_chunks", "The number of rx chunks transmitted");
   plb.add_u64_counter(l_msgr_rdma_rx_bytes, "rx_bytes", "The bytes of rx chunks transmitted");
   plb.add_u64_counter(l_msgr_rdma_pending_sent_conns, "pending_sent_conns", "The count of pending sent conns");

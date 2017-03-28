@@ -489,6 +489,8 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
       ++chunk->shared;
       tx_buffers.push_back(chunk);
       total += it->length();
+      worker->perf_logger->inc(l_msgr_rdma_tx_zerocopy_chunks);
+      worker->perf_logger->inc(l_msgr_rdma_tx_zerocopy_bytes, it->length());
       ++copy_it;
     } else {
       need_reserve_bytes += it->length();

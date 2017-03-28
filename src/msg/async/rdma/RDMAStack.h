@@ -157,6 +157,9 @@ enum {
 
   l_msgr_rdma_tx_chunks,
   l_msgr_rdma_tx_bytes,
+  l_msgr_rdma_tx_zerocopy_chunks,
+  l_msgr_rdma_tx_zerocopy_bytes,
+
   l_msgr_rdma_rx_chunks,
   l_msgr_rdma_rx_bytes,
   l_msgr_rdma_pending_sent_conns,
