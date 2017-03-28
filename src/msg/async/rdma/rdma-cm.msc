@@ -1,0 +1,65 @@
+# MSC for some fictional process
+msc {
+  hscale = "2", arcgradient="5";
+
+  AsyncConnection_c,worker_c,socket_c,cma_c,cma_s,socket_s,listener,AsyncConnection_s,async_s;
+
+  worker_c=>socket_c               [ label = "try_connect()" ];
+  socket_c box socket_c            [ label = "Socket created" ];
+  socket_c box socket_c            [ label = "CMHandler created" ];
+
+  socket_c=>cma_c                  [ label = "resolve_addr()" ];
+  cma_c=>socket_c                  [ label = "ADDR_RESOLVED" ];
+
+  socket_c=>cma_c                  [ label = "resolve_route()" ];
+  cma_c=>socket_c                  [ label = "ROUTE_RESOLVED" ];
+
+  socket_c=>cma_c                  [ label = "connect()" ];
+  cma_c->cma_s                     [ label = "REQ" ];
+
+  cma_s->listener                  [ label = "CONNECT_REQUEST" ];
+  listener=>socket_s               [ label = "ctor()" ];
+
+  socket_s box socket_s            [ label = "Socket created" ];
+  socket_s box socket_s            [ label = "CMHandler created" ];
+
+  listener=>cma_s                  [ label = "rdma_accept()" ];
+  cma_s=>listener                  [ label = "ESTABLISHED" ];
+  cma_s->cma_c                     [ label = "REP" ];
+  cma_c=>socket_c                  [ label = "ESTABLISHED" ];
+
+  ---  [ label = "connection established" ];
+  ...;
+  ---  [ label = "connection teardown" ];
+
+  AsyncConnection_c=>socket_c              [ label = "shutdown()" ];
+  socket_c:>socket_s                       [ label = "fin" ];
+  socket_c box socket_c                    [ label = "Socket destroyed" ];
+
+  AsyncConnection_s=>socket_s              [ label = "read()" ];
+  socket_s>>AsyncConnection_s              [ label = "-ECONNRESET" ];
+  AsyncConnection_s=>socket_s              [ label = "shutdown()" ];
+
+  socket_c<<socket_s                       [ label = "fin completion" ];
+  socket_c=>cma_c                          [ label = "rdma_disconnect()" ];
+  cma_c=>cma_c                             [ label = "QP=>ERR" ];
+  socket_s=>cma_s                          [ label = "rdma_disconnect()" ];
+
+  cma_c->cma_s                             [ label = "DREQ" ];
+  cma_s->cma_c                             [ label = "DREP" ];
+
+  cma_s=>socket_s                          [ label = "DISCONNECTED" ];
+
+  cma_c=>socket_c                          [ label = "DISCONNECTED" ];
+#  async_c->socket_c                        [ label = "LAST_WQE_REACHED" ];
+
+  socket_c box socket_c                    [ label = "~QueuePair" ];
+  socket_c box socket_c                    [ label = "CMHandler destroyed" ];
+  socket_c=>cma_c                          [ label = "rdma_destroy_id()" ];
+  
+  cma_s=>socket_s                          [ label = "TIMEWAIT_EXIT" ];
+  socket_s=>cma_s                          [ label = "rdma_destroy_id()" ];
+  socket_s box socket_s                    [ label = "CMHandler destroyed" ];
+
+  async_s->socket_s                        [ label = "LAST_WQE_REACHED" ];
+}

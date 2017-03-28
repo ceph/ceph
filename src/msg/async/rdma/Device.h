@@ -70,7 +70,11 @@ class Device {
   CephContext *cct;
   ibv_device *device;
   const char *name;
-  uint8_t  port_cnt;
+
+  Port **ports; // Array of Port objects. index is 1 based (IB port #1 is in
+                // index 1). Index 0 is not used
+
+  int port_cnt;
 
   uint32_t max_send_wr;
   uint32_t max_recv_wr;
@@ -81,22 +85,27 @@ class Device {
   EventCallbackRef async_handler;
   Infiniband *infiniband;
 
+  void verify_port(CephContext *c, int port_num);
+
  public:
-  explicit Device(CephContext *c, Infiniband *ib, ibv_device* d);
+  explicit Device(CephContext *c, Infiniband *ib, struct ibv_context *ctxt);
   ~Device();
 
-  void init();
+  void init(int ibport = -1);
   void uninit();
 
   void handle_async_event();
 
   const char* get_name() const { return name;}
-  uint16_t get_lid() { return active_port->get_lid(); }
-  ibv_gid get_gid() { return active_port->get_gid(); }
-  int get_gid_idx() { return active_port->get_gid_idx(); }
-  void binding_port(CephContext *c, int port_num);
 
-  QueuePair* create_queue_pair(CephContext *c, ibv_qp_type type);
+  Port *get_port(int ibport);
+  uint16_t get_lid(int p) { return get_port(p)->get_lid(); }
+  ibv_gid get_gid(int p) { return get_port(p)->get_gid(); }
+  int get_gid_idx(int p) { return get_port(p)->get_gid_idx(); }
+
+  QueuePair *create_queue_pair(int port,
+			       ibv_qp_type type,
+			       CMHandler *cm_handler = NULL);
   ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
   CompletionChannel *create_comp_channel(CephContext *c);
   CompletionQueue *create_comp_queue(CephContext *c, CompletionChannel *cc=NULL);
@@ -114,7 +123,6 @@ class Device {
 
   struct ibv_context *ctxt;
   ibv_device_attr *device_attr;
-  Port* active_port;
 
   MemoryManager* memory_manager = nullptr;
   ibv_srq *srq = nullptr;
@@ -133,11 +141,11 @@ inline ostream& operator<<(ostream& out, const Device &d)
 
 class DeviceList {
   CephContext *cct;
-  struct ibv_device ** device_list;
+  struct ibv_context ** device_list;
   int num;
   Device** devices;
 
-  int last_poll_dev;
+  int last_poll_dev = 0;
   struct pollfd *poll_fds;
 
  public:
@@ -145,6 +153,9 @@ class DeviceList {
   ~DeviceList();
 
   Device* get_device(const char* device_name);
+  Device* get_device(const struct ibv_context *ctxt);
+
+  void uninit();
 
   void rearm_notify();
   int poll_tx(int n, Device **d, ibv_wc *wc);

@@ -21,6 +21,7 @@
 #include "common/deleter.h"
 #include "common/Tub.h"
 #include "RDMAStack.h"
+#include "RDMAConnTCP.h"
 #include "Device.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -90,7 +91,7 @@ void RDMADispatcher::polling_stop()
   t.join();
 }
 
-void RDMADispatcher::process_async_event(ibv_async_event &async_event)
+void RDMADispatcher::process_async_event(Device *ibdev, ibv_async_event &async_event)
 {
   perf_logger->inc(l_msgr_rdma_total_async_events);
   // FIXME: Currently we must ensure no other factor make QP in ERROR state,
@@ -98,7 +99,7 @@ void RDMADispatcher::process_async_event(ibv_async_event &async_event)
   if (async_event.event_type == IBV_EVENT_QP_LAST_WQE_REACHED) {
     perf_logger->inc(l_msgr_rdma_async_last_wqe_events);
     uint64_t qpn = async_event.element.qp->qp_num;
-    ldout(cct, 10) << __func__ << " event associated qp=" << async_event.element.qp
+    ldout(cct, 1) << __func__ << " event associated qp=" << async_event.element.qp
       << " evt: " << ibv_event_type_str(async_event.event_type) << dendl;
     Mutex::Locker l(lock);
     RDMAConnectedSocketImpl *conn = get_conn_lockless(qpn);
@@ -110,7 +111,7 @@ void RDMADispatcher::process_async_event(ibv_async_event &async_event)
       erase_qpn_lockless(qpn);
     }
   } else {
-    ldout(cct, 1) << __func__ << " ibv_get_async_event: dev=" << global_infiniband->get_device()->ctxt
+    ldout(cct, 1) << __func__ << " ibv_get_async_event: dev=" << *ibdev
       << " evt: " << ibv_event_type_str(async_event.event_type)
       << dendl;
   }
@@ -296,12 +297,9 @@ void RDMADispatcher::handle_pre_fork()
 void RDMADispatcher::handle_post_fork()
 {
   if (!global_infiniband) {
-    global_infiniband.construct(
-      cct, cct->_conf->ms_async_rdma_device_name, cct->_conf->ms_async_rdma_port_num);
+    global_infiniband.construct(cct);
     global_infiniband->set_dispatcher(this);
   }
-
-  global_infiniband->handle_post_fork();
 
   polling_start();
 }
@@ -347,8 +345,11 @@ void RDMADispatcher::handle_tx_event(Device *ibdev, ibv_wc *cqe, int n)
     // FIXME: why not tx?
     if (ibdev->get_memory_manager()->is_tx_buffer(chunk->buffer))
       tx_chunks.push_back(chunk);
-    else
-      ldout(cct, 1) << __func__ << " not tx buffer, chunk " << chunk << dendl;
+    else {
+      RDMADisconnector *d = reinterpret_cast<RDMADisconnector *>(chunk);
+      ldout(cct, 1) << __func__ << " got fin: " << *d << dendl;
+      d->disconnect();
+    }
   }
 
   perf_logger->inc(l_msgr_rdma_tx_total_wc, n);
@@ -413,7 +414,8 @@ void RDMAWorker::initialize()
 
 int RDMAWorker::listen(entity_addr_t &sa, const SocketOptions &opt,ServerSocket *sock)
 {
-  auto p = new RDMAServerSocketImpl(cct, global_infiniband.get(), get_stack()->get_dispatcher(), this, sa);
+  auto p = RDMAServerSocketImpl::factory(cct, global_infiniband.get(), get_stack()->get_dispatcher(), this, sa);
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " thread: " << pthread_self() << " owner: " << center.get_owner() << dendl;
   int r = p->listen(sa, opt);
   if (r < 0) {
     delete p;
@@ -426,7 +428,10 @@ int RDMAWorker::listen(entity_addr_t &sa, const SocketOptions &opt,ServerSocket 
 
 int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket)
 {
-  RDMAConnectedSocketImpl* p = new RDMAConnectedSocketImpl(cct, global_infiniband.get(), get_stack()->get_dispatcher(), this);
+  RDMAConnectedSocketImpl* p = RDMAConnectedSocketImpl::factory(cct,
+							 global_infiniband.get(),
+							 get_stack()->get_dispatcher(),
+							 this);
   int r = p->try_connect(addr, opts);
 
   if (r < 0) {
@@ -442,6 +447,7 @@ int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
 int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes)
 {
   Device *ibdev = o->get_device();
+  ldout(cct, 1) << __func__ << ":" << __LINE__ << " thread: " << pthread_self() << " owner: " << center.get_owner() << dendl;
 
   assert(center.in_thread());
   int r = ibdev->get_tx_buffers(c, bytes);
@@ -506,8 +512,7 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
   }
 
   if (!global_infiniband)
-    global_infiniband.construct(
-      cct, cct->_conf->ms_async_rdma_device_name, cct->_conf->ms_async_rdma_port_num);
+    global_infiniband.construct(cct);
   ldout(cct, 20) << __func__ << " constructing RDMAStack..." << dendl;
   dispatcher = new RDMADispatcher(cct, this);
   global_infiniband->set_dispatcher(dispatcher);

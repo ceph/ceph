@@ -668,20 +668,20 @@ EOF
 if [ "$debug" -eq 0 ]; then
     CMONDEBUG='
         debug mon = 10
-        debug ms = 1'
+        debug ms = 29'
     COSDDEBUG='
-        debug ms = 1'
+        debug ms = 29'
     CMDSDEBUG='
-        debug ms = 1'
+        debug ms = 29'
 else
     echo "** going verbose **"
     CMONDEBUG='
         debug mon = 20
         debug paxos = 20
         debug auth = 20
-        debug ms = 1'
+        debug ms = 29'
     COSDDEBUG='
-        debug ms = 1
+        debug ms = 29
         debug osd = 25
         debug objecter = 20
         debug monc = 20
@@ -695,7 +695,7 @@ else
         debug rgw = 20
         debug objclass = 20'
     CMDSDEBUG='
-        debug ms = 1
+        debug ms = 29
         debug mds = 20
         debug auth = 20
         debug monc = 20
@@ -704,7 +704,7 @@ else
         mds verify scatter = true
         mds log max segments = 2'
     CMGRDEBUG='
-        debug ms = 1
+        debug ms = 29
         debug monc = 20
         debug mgr = 20'
 fi

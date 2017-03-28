@@ -14,9 +14,12 @@
  *
  */
 
+#include <rdma/rdma_cma.h>
+
 #include "Infiniband.h"
 #include "RDMAStack.h"
 #include "Device.h"
+#include "RDMAConnCM.h"
 
 #include "common/errno.h"
 #include "common/debug.h"
@@ -26,13 +29,12 @@
 #define dout_prefix *_dout << "Infiniband "
 
 static const uint32_t MAX_INLINE_DATA = 0;
-static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000000000000000000000000000");
 
 Infiniband::QueuePair::QueuePair(
     CephContext *c, Device &device, ibv_qp_type type,
     int port, ibv_srq *srq,
     Infiniband::CompletionQueue* txcq, Infiniband::CompletionQueue* rxcq,
-    uint32_t max_send_wr, uint32_t max_recv_wr, uint32_t q_key)
+    uint32_t max_send_wr, uint32_t max_recv_wr, uint32_t q_key, CMHandler *cm_handler)
 : cct(c), ibdev(device),
   type(type),
   ctxt(ibdev.ctxt),
@@ -46,7 +48,8 @@ Infiniband::QueuePair::QueuePair(
   max_send_wr(max_send_wr),
   max_recv_wr(max_recv_wr),
   q_key(q_key),
-  dead(false)
+  dead(false),
+  cm_handler(cm_handler)
 {
   initial_psn = lrand48() & 0xffffff;
   if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
@@ -69,7 +72,18 @@ int Infiniband::QueuePair::init()
   qpia.qp_type = type;                 // RC, UC, UD, or XRC
   qpia.sq_sig_all = 0;                 // only generate CQEs on requested WQEs
 
-  qp = ibv_create_qp(pd, &qpia);
+  if (cm_handler) {
+    int err;
+
+    err = rdma_create_qp(cm_handler->id, pd, &qpia);
+    if (err)
+      lderr(cct) << __func__ << " failed to create queue pair. err: " << err << " errno: " << cpp_strerror(errno) << dendl;
+
+    qp = err ? NULL : cm_handler->id->qp;
+  } else {
+    qp = ibv_create_qp(pd, &qpia);
+  }
+
   if (qp == NULL) {
     lderr(cct) << __func__ << " failed to create queue pair" << cpp_strerror(errno) << dendl;
     if (errno == ENOMEM) {
@@ -110,7 +124,7 @@ int Infiniband::QueuePair::init()
 
   int ret = ibv_modify_qp(qp, &qpa, mask);
   if (ret) {
-    ibv_destroy_qp(qp);
+    destroy_qp();
     lderr(cct) << __func__ << " failed to transition to INIT state: "
                << cpp_strerror(errno) << dendl;
     return -1;
@@ -437,11 +451,6 @@ void Infiniband::MemoryManager::Chunk::clear()
   bound = 0;
 }
 
-void Infiniband::MemoryManager::Chunk::post_srq(Infiniband *ib)
-{
-  ib->device->post_chunk(this);
-}
-
 Infiniband::MemoryManager::Cluster::Cluster(MemoryManager& m, uint32_t s)
   : manager(m), buffer_size(s), lock("cluster_lock")
 {
@@ -593,16 +602,9 @@ int Infiniband::MemoryManager::get_channel_buffers(std::vector<Chunk*> &chunks, 
 }
 
 
-Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t port_num)
+Infiniband::Infiniband(CephContext *cct)
   : device_list(new DeviceList(cct, this))
 {
-  device = device_list->get_device(device_name.c_str());
-
-  device->init();
-
-  device->binding_port(cct, port_num);
-  assert(device);
-  ib_physical_port = device->active_port->get_port_num();
 }
 
 Infiniband::~Infiniband()
@@ -620,99 +622,36 @@ void Infiniband::set_dispatcher(RDMADispatcher *d)
   dispatcher = d;
 }
 
-// 1 means no valid buffer read, 0 means got enough buffer
-// else return < 0 means error
-int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
+Device* Infiniband::get_device(const char* device_name)
 {
-  char msg[TCP_MSG_LEN];
-  char gid[33];
-  ssize_t r = ::read(sd, &msg, sizeof(msg));
-  // Drop incoming qpt
-  if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
-    if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
-      ldout(cct, 0) << __func__ << " injecting socket failure" << dendl;
-      return -EINVAL;
-    }
-  }
-  if (r < 0) {
-    r = -errno;
-    lderr(cct) << __func__ << " got error " << r << ": "
-               << cpp_strerror(r) << dendl;
-  } else if (r == 0) { // valid disconnect message of length 0
-    ldout(cct, 10) << __func__ << " got disconnect message " << dendl;
-  } else if ((size_t)r != sizeof(msg)) { // invalid message
-    ldout(cct, 1) << __func__ << " got bad length (" << r << ") " << dendl;
-    r = -EINVAL;
-  } else { // valid message
-    sscanf(msg, "%hu:%x:%x:%x:%s", &(im.lid), &(im.qpn), &(im.psn), &(im.peer_qpn),gid);
-    wire_gid_to_gid(gid, &(im.gid));
-    ldout(cct, 5) << __func__ << " recevd: " << im.lid << ", " << im.qpn << ", " << im.psn << ", " << im.peer_qpn << ", " << gid  << dendl;
-  }
-  return r;
+  return device_list->get_device(device_name);
 }
 
-int Infiniband::send_msg(CephContext *cct, int sd, IBSYNMsg& im)
+Device *Infiniband::get_device(const struct ibv_context *ctxt)
 {
-  int retry = 0;
-  ssize_t r;
-
-  char msg[TCP_MSG_LEN];
-  char gid[33];
-retry:
-  gid_to_wire_gid(&(im.gid), gid);
-  sprintf(msg, "%04x:%08x:%08x:%08x:%s", im.lid, im.qpn, im.psn, im.peer_qpn, gid);
-  ldout(cct, 10) << __func__ << " sending: " << im.lid << ", " << im.qpn << ", " << im.psn
-                 << ", " << im.peer_qpn << ", "  << gid  << dendl;
-  r = ::write(sd, msg, sizeof(msg));
-  // Drop incoming qpt
-  if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
-    if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
-      ldout(cct, 0) << __func__ << " injecting socket failure" << dendl;
-      return -EINVAL;
-    }
-  }
-
-  if ((size_t)r != sizeof(msg)) {
-    // FIXME need to handle EAGAIN instead of retry
-    if (r < 0 && (errno == EINTR || errno == EAGAIN) && retry < 3) {
-      retry++;
-      goto retry;
-    }
-    if (r < 0)
-      lderr(cct) << __func__ << " send returned error " << errno << ": "
-                 << cpp_strerror(errno) << dendl;
-    else
-      lderr(cct) << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << dendl;
-    return -errno;
-  }
-  return 0;
-}
-
-void Infiniband::wire_gid_to_gid(const char *wgid, union ibv_gid *gid)
-{
-  char tmp[9];
-  uint32_t v32;
-  int i;
-
-  for (tmp[8] = 0, i = 0; i < 4; ++i) {
-    memcpy(tmp, wgid + i * 8, 8);
-    sscanf(tmp, "%x", &v32);
-    *(uint32_t *)(&gid->raw[i * 4]) = ntohl(v32);
-  }
-}
-
-void Infiniband::gid_to_wire_gid(const union ibv_gid *gid, char wgid[])
-{
-  for (int i = 0; i < 4; ++i)
-    sprintf(&wgid[i * 8], "%08x", htonl(*(uint32_t *)(gid->raw + i * 4)));
+  return device_list->get_device(ctxt);
 }
 
 Infiniband::QueuePair::~QueuePair()
 {
-  if (qp) {
-    ldout(cct, 20) << __func__ << " destroy qp=" << qp << dendl;
+  destroy_qp();
+  if (cm_handler)
+    cm_handler->put();
+}
+
+void Infiniband::QueuePair::destroy_qp()
+{
+  if (!qp)
+    return;
+
+  ldout(cct, 20) << __func__ << " destroy qp=" << qp << dendl;
+
+  if (cm_handler)
+    rdma_destroy_qp(cm_handler->id);
+  else
     assert(!ibv_destroy_qp(qp));
-  }
+
+  qp = nullptr;
 }
 
 /**
@@ -771,12 +710,7 @@ const char* Infiniband::qp_state_string(int status) {
 
 void Infiniband::handle_pre_fork()
 {
-  device->uninit();
-}
-
-void Infiniband::handle_post_fork()
-{
-  device->init();
+  device_list->uninit();
 }
 
 int Infiniband::poll_tx(int n, Device **d, ibv_wc *wc)
@@ -802,9 +736,4 @@ void Infiniband::rearm_notify()
 void Infiniband::handle_async_event()
 {
   device_list->handle_async_event();
-}
-
-void Infiniband::process_async_event(ibv_async_event &async_event)
-{
-  dispatcher->process_async_event(async_event);
 }

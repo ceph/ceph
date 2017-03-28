@@ -108,25 +108,29 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
 }
 
 
-Device::Device(CephContext *cct, Infiniband *ib, ibv_device* d)
-  : cct(cct), device(d), lock("ibdev_lock"),
+Device::Device(CephContext *cct, Infiniband *ib, struct ibv_context *ctxt)
+  : cct(cct), device(ctxt->device), lock("ibdev_lock"),
     async_handler(new C_handle_cq_async(this)), infiniband(ib),
-    device_attr(new ibv_device_attr), active_port(nullptr)
+    ctxt(ctxt), device_attr(new ibv_device_attr)
 {
   if (device == NULL) {
     lderr(cct) << __func__ << " device == NULL" << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
   name = ibv_get_device_name(device);
-  ctxt = ibv_open_device(device);
-  if (ctxt == NULL) {
-    lderr(cct) << __func__ << " open rdma device failed. " << cpp_strerror(errno) << dendl;
-    ceph_abort();
-  }
   int r = ibv_query_device(ctxt, device_attr);
   if (r == -1) {
     lderr(cct) << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << dendl;
     ceph_abort();
+  }
+
+  port_cnt = device_attr->phys_port_cnt;
+  ports = new Port *[port_cnt + 1];
+  assert(ports);
+
+  for (int i = 1; i <= port_cnt; i++) {
+    ports[i] = new Port(cct, ctxt, i);
+    assert(ports[i]);
   }
 
   tx_cc = create_comp_channel(cct);
@@ -138,9 +142,11 @@ Device::Device(CephContext *cct, Infiniband *ib, ibv_device* d)
   assert(NetHandler(cct).set_nonblock(ctxt->async_fd) == 0);
 }
 
-void Device::init()
+void Device::init(int ibport)
 {
   Mutex::Locker l(lock);
+
+  verify_port(cct, ibport);
 
   if (initialized)
     return;
@@ -171,6 +177,7 @@ void Device::init()
   assert(rx_cq);
 
   initialized = true;
+
   ldout(cct, 5) << __func__ << ":" << __LINE__ << " device " << *this << " is initialized" << dendl;
 }
 
@@ -198,31 +205,36 @@ void Device::uninit()
 
 Device::~Device()
 {
+  delete async_handler;
+
   uninit();
 
-  if (active_port) {
-    delete active_port;
-    assert(ibv_close_device(ctxt) == 0);
+  for (int i = 1; i <= port_cnt; i++)
+    delete ports[i];
+  delete[] ports;
+}
+
+void Device::verify_port(CephContext *cct, int port_num) {
+  if (port_num < 0 || port_num > port_cnt) {
+    lderr(cct) << __func__ << "  port not found" << dendl;
+    ceph_abort();
+  }
+
+  Port *port = ports[port_num];
+
+  if (port->get_port_attr()->state == IBV_PORT_ACTIVE) {
+    ldout(cct, 1) << __func__ << " found active port " << port_num << dendl;
+  } else {
+    ldout(cct, 10) << __func__ << " port " << port_num <<
+      " is not what we want. state: " << port->get_port_attr()->state << ")"<< dendl;
+    ceph_abort();
   }
 }
 
-void Device::binding_port(CephContext *cct, int port_num) {
-  port_cnt = device_attr->phys_port_cnt;
-  for (uint8_t i = 0; i < port_cnt; ++i) {
-    Port *port = new Port(cct, ctxt, i+1);
-    if (i + 1 == port_num && port->get_port_attr()->state == IBV_PORT_ACTIVE) {
-      active_port = port;
-      ldout(cct, 1) << __func__ << " found active port " << i+1 << dendl;
-      break;
-    } else {
-      ldout(cct, 10) << __func__ << " port " << i+1 << " is not what we want. state: " << port->get_port_attr()->state << ")"<< dendl;
-    }
-    delete port;
-  }
-  if (nullptr == active_port) {
-    lderr(cct) << __func__ << "  port not found" << dendl;
-    assert(active_port);
-  }
+Port *Device::get_port(int ibport)
+{
+  assert(ibport > 0 && ibport <= port_cnt);
+  return ports[ibport];
 }
 
 /**
@@ -235,11 +247,12 @@ void Device::binding_port(CephContext *cct, int port_num) {
  *      QueuePair on success or NULL if init fails
  * See QueuePair::QueuePair for parameter documentation.
  */
-Infiniband::QueuePair* Device::create_queue_pair(CephContext *cct,
-						 ibv_qp_type type)
+Infiniband::QueuePair* Device::create_queue_pair(int port,
+						 ibv_qp_type type,
+						 CMHandler *cm_handler)
 {
   Infiniband::QueuePair *qp = new QueuePair(
-      cct, *this, type, active_port->get_port_num(), srq, tx_cq, rx_cq, max_send_wr, max_recv_wr);
+      cct, *this, type, port, srq, tx_cq, rx_cq, max_send_wr, max_recv_wr, 0, cm_handler);
   if (qp->init()) {
     delete qp;
     return NULL;
@@ -361,10 +374,11 @@ void Device::handle_async_event()
 {
   ibv_async_event async_event;
 
-  ldout(cct, 30) << __func__ << dendl;
+  ldout(cct, 1) << __func__ << dendl;
 
   while (!ibv_get_async_event(ctxt, &async_event)) {
-    infiniband->process_async_event(async_event);
+    RDMADispatcher *d = infiniband->get_dispatcher();
+    d->process_async_event(this, async_event);
 
     ibv_ack_async_event(&async_event);
   }
@@ -377,18 +391,20 @@ void Device::handle_async_event()
 
 
 DeviceList::DeviceList(CephContext *cct, Infiniband *ib)
-  : cct(cct), device_list(ibv_get_device_list(&num))
+  : cct(cct), device_list(rdma_get_devices(&num))
 {
+  cct->get();
+
   if (device_list == NULL || num == 0) {
     lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
   devices = new Device*[num];
 
-  poll_fds = new struct pollfd[2 * num];
+  poll_fds = new struct pollfd[3 * num];
 
   for (int i = 0; i < num; ++i) {
-    struct pollfd *pfd = &poll_fds[i * 2];
+    struct pollfd *pfd = &poll_fds[i * 3];
     struct Device *d;
 
     d = new Device(cct, ib, device_list[i]);
@@ -401,18 +417,24 @@ DeviceList::DeviceList(CephContext *cct, Infiniband *ib)
     pfd[1].fd = d->rx_cc->get_fd();
     pfd[1].events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
     pfd[1].revents = 0;
+
+    pfd[2].fd = d->ctxt->async_fd;
+    pfd[2].events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
+    pfd[2].revents = 0;
   }
 }
 
 DeviceList::~DeviceList()
 {
-  delete poll_fds;
+  delete[] poll_fds;
 
   for (int i=0; i < num; ++i) {
     delete devices[i];
   }
   delete []devices;
-  ibv_free_device_list(device_list);
+  rdma_free_devices(device_list);
+
+  cct->put();
 }
 
 Device* DeviceList::get_device(const char* device_name)
@@ -423,6 +445,21 @@ Device* DeviceList::get_device(const char* device_name)
       return devices[i];
     }
   }
+  return NULL;
+}
+
+
+Device* DeviceList::get_device(const struct ibv_context *ctxt)
+{
+  ibv_device *device = ctxt->device;
+
+  assert(devices);
+  for (int i = 0; i < num; ++i) {
+    if (devices[i]->ctxt->device == device) {
+      return devices[i];
+    }
+  }
+
   return NULL;
 }
 
@@ -460,7 +497,7 @@ int DeviceList::poll_blocking(bool &done)
 {
   int r = 0;
   while (!done && r == 0) {
-    r = poll(poll_fds, num * 2, 100);
+    r = poll(poll_fds, num * 3, 100);
     if (r < 0) {
       r = -errno;
       lderr(cct) << __func__ << " poll failed " << r << dendl;
@@ -474,11 +511,20 @@ int DeviceList::poll_blocking(bool &done)
   for (int i = 0; i < num ; i++) {
     Device *d = devices[i];
 
+    ldout(cct, 1) << __func__ << " " << *d << ":" <<
+      " rx: " << poll_fds[i * 3 + 0].revents << 
+      " tx: " << poll_fds[i * 3 + 1].revents << 
+      " async: " << poll_fds[i * 3 + 2].revents << 
+      dendl;
+
     if (d->tx_cc->get_cq_event())
       ldout(cct, 20) << __func__ << " " << *d << ": got tx cq event" << dendl;
 
     if (d->rx_cc->get_cq_event())
       ldout(cct, 20) << __func__ << " " << *d << ": got rx cq event" << dendl;
+
+    if (poll_fds[i * 3 + 2].revents & POLLIN)
+      d->handle_async_event();
   }
 
   return r;
@@ -494,4 +540,10 @@ void DeviceList::handle_async_event()
 {
   for (int i = 0; i < num; i++)
     devices[i]->handle_async_event();
+}
+
+void DeviceList::uninit()
+{
+  for (int i = 0; i < num; i++)
+    devices[i]->uninit();
 }

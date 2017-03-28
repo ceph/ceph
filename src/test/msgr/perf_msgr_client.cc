@@ -30,6 +30,11 @@ using namespace std;
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
 
+#define dout_subsys ceph_subsys_ms
+#undef dout_prefix
+#define dout_prefix *_dout << "TEST "
+
+
 class MessengerClient {
   class ClientThread;
   class ClientDispatcher : public Dispatcher {
@@ -90,6 +95,7 @@ class MessengerClient {
       data.append(ptr);
     }
     void *entry() override {
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
       lock.Lock();
       for (int i = 0; i < ops; ++i) {
         if (inflight > uint64_t(concurrent)) {
@@ -105,7 +111,11 @@ class MessengerClient {
         //cerr << __func__ << " send m=" << m << std::endl;
       }
       lock.Unlock();
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
+    usleep(1000*1000 * 5);
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
       msgr->shutdown();
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
       return 0;
     }
   };
@@ -129,6 +139,7 @@ class MessengerClient {
     }
   }
   void ready(int c, int jobs, int ops, int msg_len) {
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
     entity_addr_t addr;
     addr.parse(serveraddr.c_str());
     addr.set_nonce(0);
@@ -142,22 +153,31 @@ class MessengerClient {
       clients.push_back(t);
       msgr->start();
     }
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
     usleep(1000*1000);
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
   }
   void start() {
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
     for (uint64_t i = 0; i < clients.size(); ++i)
       clients[i]->create("client");
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
     for (uint64_t i = 0; i < msgrs.size(); ++i)
       msgrs[i]->wait();
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
+    usleep(1000*1000);
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
   }
 };
 
 void MessengerClient::ClientDispatcher::ms_fast_dispatch(Message *m) {
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
   usleep(think_time);
   m->put();
   Mutex::Locker l(thread->lock);
   thread->inflight--;
   thread->cond.Signal();
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
 }
 
 
@@ -202,14 +222,22 @@ int main(int argc, char **argv)
   cerr << "       thinktime(us) " << think_time << std::endl;
   cerr << "       message data bytes " << len << std::endl;
 
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
   MessengerClient client(public_msgr_type, args[0], think_time);
 
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
   client.ready(concurrent, numjobs, ios, len);
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
   Cycles::init();
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
   uint64_t start = Cycles::rdtsc();
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
   client.start();
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
   uint64_t stop = Cycles::rdtsc();
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
   cerr << " Total op " << ios << " run time " << Cycles::to_microseconds(stop - start) << "us." << std::endl;
+ldout(g_ceph_context,1) << __func__ << ":" << __LINE__ << " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~" << dendl;
 
   return 0;
 }
