@@ -1022,7 +1022,7 @@ void LeaderWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
   dout(20) << "notify_id=" << notify_id << ", handle=" << handle << ", "
            << "notifier_id=" << notifier_id << dendl;
 
-  Context *ctx = new librbd::watcher::C_NotifyAck(this, notify_id, handle);
+  Context *ctx = new C_NotifyAck(this, notify_id, handle);
 
   if (notifier_id == m_notifier_id) {
     dout(20) << "our own notification, ignoring" << dendl;
