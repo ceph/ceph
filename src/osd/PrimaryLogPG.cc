@@ -4324,6 +4324,7 @@ void PrimaryLogPG::maybe_create_new_object(
   if (!obs.exists) {
     ctx->delta_stats.num_objects++;
     obs.exists = true;
+    assert(!obs.oi.is_whiteout());
     obs.oi.new_object();
     if (!ignore_transaction)
       ctx->op_t->create(obs.oi.soid);
@@ -6538,6 +6539,7 @@ inline int PrimaryLogPG::_delete_oid(
   if (oi.is_whiteout()) {
     dout(20) << __func__ << " deleting whiteout on " << soid << dendl;
     ctx->delta_stats.num_whiteouts--;
+    oi.clear_flag(object_info_t::FLAG_WHITEOUT);
   }
   if (oi.is_cache_pinned()) {
     ctx->delta_stats.num_objects_pinned--;
