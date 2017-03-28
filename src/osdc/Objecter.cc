@@ -2352,6 +2352,10 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 
   assert(op->target.flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
 
+  if (osdmap_full_try) {
+    op->target.flags |= CEPH_OSD_FLAG_FULL_TRY;
+  }
+
   bool need_send = false;
 
   if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
@@ -3062,9 +3066,6 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   if (!honor_osdmap_full)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
-
-  if (osdmap_full_try)
-    flags |= CEPH_OSD_FLAG_FULL_TRY;
 
   op->target.paused = false;
   op->stamp = ceph::mono_clock::now();
