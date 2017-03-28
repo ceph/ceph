@@ -701,6 +701,87 @@ int rebuild_monstore(const char* progname,
   return 0;
 }
 
+void get_name_by_pid(pid_t pid, char *task_name)
+{
+  char proc_pid_path[PATH_MAX] = {0};
+  snprintf(proc_pid_path, PATH_MAX, "/proc/%d/cmdline", pid);
+  int fd = open(proc_pid_path, O_RDONLY);
+
+  if (fd < 0) {
+    fd = -errno;
+    std::cerr << "Failed to open '" << proc_pid_path
+              << "' error = " << cpp_strerror(fd)
+              << std::endl;
+    return;
+  }
+
+  int ret = read(fd, task_name, PATH_MAX-1);
+  if (ret < 0) {
+    ret = -errno;
+    std::cerr << "Failed to read '" << proc_pid_path
+              << "' error = " << cpp_strerror(ret)
+              << std::endl;
+    close(fd);
+  }
+
+  close(fd);
+}
+
+
+int check_lock(const string &path) {
+ 
+  string::const_reverse_iterator rit;
+  int pos = 0;
+  for (rit = path.rbegin(); rit != path.rend(); ++rit, ++pos) {
+    if (*rit != '/')
+      break;
+  }
+  ostringstream os;
+  os << path.substr(0, path.size() - pos) << "/store.db/LOCK";
+  string lock_path = os.str();
+
+  //The lock file is not existed.
+  if (access(lock_path.c_str(), F_OK)) {
+     return 0;
+  }
+
+  int fd = open(lock_path.c_str(), O_RDONLY);
+  if (fd < 0) {
+    fd = -errno;
+    std::cerr << "Failed to open '" << lock_path
+              << "' error = " << cpp_strerror(fd)
+              << std::endl;
+    return -errno;
+  }
+
+  struct flock f;
+  memset(&f, 0, sizeof(f));
+  f.l_type = F_WRLCK;
+  f.l_whence = SEEK_SET;
+
+  if (-1 == fcntl(fd, F_GETLK, &f)) {
+    std::cerr << " Failed to get the lock " << cpp_strerror(errno) << std::endl;
+    close(fd);
+    return -errno;
+  }
+
+  if (f.l_type != F_UNLCK) {
+    if (f.l_type == F_WRLCK) {
+      char task_name[PATH_MAX] = "unknown";
+      //get the locked thread name
+      get_name_by_pid(f.l_pid, task_name);
+      cout << "The database have already locked by PID: '"
+           << f.l_pid << "' task name: '" << task_name
+           << "' please close it first!" << std::endl;
+      close(fd);
+      return -EACCES;
+    }
+  }
+
+  close(fd);
+  return 0;
+}
+
 int main(int argc, char **argv) {
   int err = 0;
   po::options_description desc("Allowed options");
@@ -794,6 +875,9 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->apply_changes(NULL);
   g_conf = g_ceph_context->_conf;
 
+  int ret = check_lock(store_path);
+  if (ret)
+    return ret;
   // this is where we'll write *whatever*, on a per-command basis.
   // not all commands require some place to write their things.
   MonitorDBStore st(store_path);
