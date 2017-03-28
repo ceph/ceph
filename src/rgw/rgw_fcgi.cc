@@ -52,8 +52,10 @@ int RGWFCGX::send_content_length(uint64_t len)
    * Status 204 should not include a content-length header
    * RFC7230 says so
    */
-  if (status_num == 204)
+  if ((status_num == 204) &&
+      ! g_conf->rgw_print_prohibited_content_length) {
     return 0;
+  }
 
   char buf[21];
   snprintf(buf, sizeof(buf), "%" PRIu64, len);

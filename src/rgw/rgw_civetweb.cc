@@ -64,9 +64,11 @@ int RGWMongoose::complete_request()
        * 'given in the response.'
        *
        */
-      if (status_num == 204 || status_num == 304) {
+      if ((status_num == 204 || status_num == 304) &&
+	  ! g_conf->rgw_print_prohibited_content_length) {
         has_content_length = true;
       } else if (0 && data.length() == 0) {
+	/* XXX this never happens */
         has_content_length = true;
         print("Transfer-Enconding: %s\r\n", "chunked");
         data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
