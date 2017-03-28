@@ -2750,7 +2750,7 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_op_outb,  "op_out_bytes",
       "Client operations total read size", "rd");      // client op out bytes (reads)
   osd_plb.add_time_avg(l_osd_op_lat,   "op_latency",
-      "Latency of client operations (including queue time)", "lat");       // client op latency
+      "Latency of client operations (including queue time)", "l");       // client op latency
   osd_plb.add_time_avg(l_osd_op_process_lat, "op_process_latency",
       "Latency of client operations (excluding queue time)");   // client op process latency
   osd_plb.add_time_avg(l_osd_op_prepare_lat, "op_prepare_latency",
@@ -2819,7 +2819,7 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_push_outb, "push_out_bytes", "Pushed size");  // pushed bytes
 
   osd_plb.add_u64_counter(l_osd_rop, "recovery_ops",
-      "Started recovery operations", "recop");       // recovery ops (started)
+      "Started recovery operations", "rop");       // recovery ops (started)
 
   osd_plb.add_u64(l_osd_loadavg, "loadavg", "CPU load");
   osd_plb.add_u64(l_osd_buf, "buffer_bytes", "Total allocated buffer size");       // total ceph::buffer bytes
