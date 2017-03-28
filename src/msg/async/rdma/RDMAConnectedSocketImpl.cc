@@ -628,26 +628,29 @@ void RDMAConnectedSocketImpl::close()
 
 void RDMAConnectedSocketImpl::alloc_shared_registered_memory(bufferlist &bl, unsigned len)
 {
-  assert(worker->center.in_thread());
-  std::vector<Chunk*> buffers;
-  int r = ibdev->get_tx_buffers(buffers, len);
-  assert(r >= 0);
-  dispatcher->inflight += r;
-  unsigned got = ibdev->get_memory_manager()->get_tx_buffer_size() * r;
-  ldout(cct, 30) << __func__ << " need " << len << " bytes, reserve " << got
-                 << " registered  bytes, inflight " << dispatcher->inflight << dendl;
-  // must keep the reference to the device, since bufferptr may be destruct
-  // after connection down
-  Device *dev = ibdev;
-  RDMADispatcher *dpt = dispatcher;
-  for (auto c : buffers) {
-    auto del = std::bind([dpt, c, dev] {
-                         std::vector<Chunk*> buffers;
-                         buffers.push_back(c);
-                         dpt->post_tx_buffer(dev, buffers); });
-    bl.push_back(buffer::claim_buffer(
-            c->bytes, c->buffer,
-            make_deleter(std::move(del))));
+  unsigned got = 0;
+  if (ibdev->get_memory_manager()->num_tx_buffer() >= cct->_conf->ms_async_rdma_send_need_copy_free_num) {
+    assert(worker->center.in_thread());
+    std::vector<Chunk*> buffers;
+    int r = ibdev->get_tx_buffers(buffers, len);
+    assert(r >= 0);
+    dispatcher->inflight += r;
+    got = ibdev->get_memory_manager()->get_tx_buffer_size() * r;
+    ldout(cct, 30) << __func__ << " need " << len << " bytes, reserve " << got
+                   << " registered  bytes, inflight " << dispatcher->inflight << dendl;
+    // must keep the reference to the device, since bufferptr may be destruct
+    // after connection down
+    Device *dev = ibdev;
+    RDMADispatcher *dpt = dispatcher;
+    for (auto c : buffers) {
+      auto del = std::bind([dpt, c, dev] {
+                           std::vector<Chunk*> buffers;
+                           buffers.push_back(c);
+                           dpt->post_tx_buffer(dev, buffers); });
+      bl.push_back(buffer::claim_buffer(
+              c->bytes, c->buffer,
+              make_deleter(std::move(del))));
+    }
   }
 
   if (got < len) {

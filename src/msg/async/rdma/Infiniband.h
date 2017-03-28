@@ -183,7 +183,7 @@ class Infiniband {
 
       MemoryManager& manager;
       uint32_t buffer_size;
-      uint32_t num_chunk;
+      std::atomic_uint num_free_chunk = {0};
       Mutex lock;
       std::vector<Chunk*> free_chunks;
       char *base = nullptr;
@@ -207,6 +207,9 @@ class Infiniband {
     }
     uint32_t get_tx_buffer_size() const {
       return send->buffer_size;
+    }
+    unsigned num_tx_buffer() const {
+      return send->num_free_chunk;
     }
 
     bool enabled_huge_page;
