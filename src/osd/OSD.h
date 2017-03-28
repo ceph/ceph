@@ -1299,7 +1299,6 @@ protected:
   void tick_without_osd_lock();
   void _dispatch(Message *m);
   void dispatch_op(OpRequestRef op);
-  bool dispatch_op_fast(OpRequestRef op, OSDMapRef& osdmap);
 
   void check_osdmap_features(ObjectStore *store);
 

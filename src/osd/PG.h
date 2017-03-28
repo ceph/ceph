@@ -1511,7 +1511,6 @@ public:
   TrivialEvent(RemoteRecoveryReserved)
   TrivialEvent(AllRemotesReserved)
   TrivialEvent(AllBackfillsReserved)
-  TrivialEvent(Recovering)
   TrivialEvent(GoClean)
 
   TrivialEvent(AllReplicasActivated)
