@@ -4399,8 +4399,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
           bufferlist tmpbl;
 	  r = pgbackend->objects_read_sync(soid, miter->first, miter->second, op.flags, &tmpbl);
-          if (r < 0)
+          if (r < 0) {
+            result = r;
             break;
+          }
 
           if (r < (int)miter->second) /* this is usually happen when we get extent that exceeds the actual file size */
             miter->second = r;
