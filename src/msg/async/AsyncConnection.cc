@@ -158,10 +158,12 @@ AsyncConnection::~AsyncConnection()
 
 void AsyncConnection::maybe_start_delay_thread()
 {
-  if (!delay_state &&
-      async_msgr->cct->_conf->ms_inject_delay_type.find(ceph_entity_type_name(peer_type)) != string::npos) {
-    ldout(msgr->cct, 1) << __func__ << " setting up a delay queue" << dendl;
-    delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue, conn_id);
+  if (!delay_state) {
+    auto pos = async_msgr->cct->_conf->get_val<std::string>("ms_inject_delay_type").find(ceph_entity_type_name(peer_type));
+    if (pos != string::npos) {
+      ldout(msgr->cct, 1) << __func__ << " setting up a delay queue" << dendl;
+      delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue, conn_id);
+    }
   }
 }
 

@@ -39,7 +39,7 @@ OPTION(max_open_files, OPT_LONGLONG, 0)
 OPTION(restapi_log_level, OPT_STR, "") 	// default set by Python code
 OPTION(restapi_base_url, OPT_STR, "")	// "
 OPTION(fatal_signal_handlers, OPT_BOOL, true)
-OPTION(erasure_code_dir, OPT_STR, CEPH_PKGLIBDIR"/erasure-code") // default location for erasure-code plugins
+SAFE_OPTION(erasure_code_dir, OPT_STR, CEPH_PKGLIBDIR"/erasure-code") // default location for erasure-code plugins
 
 OPTION(log_file, OPT_STR, "/var/log/ceph/$cluster-$name.log") // default changed by common_preinit()
 OPTION(log_max_new, OPT_INT, 1000) // default changed by common_preinit()
@@ -80,7 +80,7 @@ OPTION(mon_cluster_log_to_graylog_port, OPT_STR, "12201")
 
 OPTION(enable_experimental_unrecoverable_data_corrupting_features, OPT_STR, "")
 
-OPTION(plugin_dir, OPT_STR, CEPH_PKGLIBDIR)
+SAFE_OPTION(plugin_dir, OPT_STR, CEPH_PKGLIBDIR)
 
 OPTION(xio_trace_mempool, OPT_BOOL, false) // mempool allocation counters
 OPTION(xio_trace_msgcnt, OPT_BOOL, false) // incoming/outgoing msg counters
@@ -175,7 +175,7 @@ OPTION(heartbeat_file, OPT_STR, "")
 OPTION(heartbeat_inject_failure, OPT_INT, 0)    // force an unhealthy heartbeat for N seconds
 OPTION(perf, OPT_BOOL, true)       // enable internal perf counters
 
-OPTION(ms_type, OPT_STR, "async+posix")   // messenger backend
+SAFE_OPTION(ms_type, OPT_STR, "async+posix")   // messenger backend. It will be modified in runtime, so use SAFE_OPTION
 OPTION(ms_public_type, OPT_STR, "")   // messenger backend
 OPTION(ms_cluster_type, OPT_STR, "")   // messenger backend
 OPTION(ms_tcp_nodelay, OPT_BOOL, true)
@@ -207,7 +207,7 @@ OPTION(ms_tcp_read_timeout, OPT_U64, 900)
 OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 16777216)
 OPTION(ms_pq_min_cost, OPT_U64, 65536)
 OPTION(ms_inject_socket_failures, OPT_U64, 0)
-OPTION(ms_inject_delay_type, OPT_STR, "")          // "osd mds mon client" allowed
+SAFE_OPTION(ms_inject_delay_type, OPT_STR, "")          // "osd mds mon client" allowed
 OPTION(ms_inject_delay_msg_type, OPT_STR, "")      // the type of message to delay, as returned by Message::get_type_name(). This is an additional restriction on the general type filter ms_inject_delay_type.
 OPTION(ms_inject_delay_max, OPT_DOUBLE, 1)         // seconds
 OPTION(ms_inject_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
@@ -236,13 +236,13 @@ OPTION(ms_async_rdma_roce_ver, OPT_INT, 1)         // 0=RoCEv1, 1=RoCEv2, 2=RoCE
 OPTION(ms_async_rdma_sl, OPT_INT, 3)               // in RoCE, this means PCP
 
 OPTION(ms_dpdk_port_id, OPT_INT, 0)
-OPTION(ms_dpdk_coremask, OPT_STR, "1")
+SAFE_OPTION(ms_dpdk_coremask, OPT_STR, "1")        // it is modified in unittest so that use SAFE_OPTION to declare 
 OPTION(ms_dpdk_memory_channel, OPT_STR, "4")
 OPTION(ms_dpdk_hugepages, OPT_STR, "")
 OPTION(ms_dpdk_pmd, OPT_STR, "")
-OPTION(ms_dpdk_host_ipv4_addr, OPT_STR, "")
-OPTION(ms_dpdk_gateway_ipv4_addr, OPT_STR, "")
-OPTION(ms_dpdk_netmask_ipv4_addr, OPT_STR, "")
+SAFE_OPTION(ms_dpdk_host_ipv4_addr, OPT_STR, "")
+SAFE_OPTION(ms_dpdk_gateway_ipv4_addr, OPT_STR, "")
+SAFE_OPTION(ms_dpdk_netmask_ipv4_addr, OPT_STR, "")
 OPTION(ms_dpdk_lro, OPT_BOOL, true)
 OPTION(ms_dpdk_hw_flow_control, OPT_BOOL, true)
 // Weighing of a hardware network queue relative to a software queue (0=no work, 1=     equal share)")
@@ -907,7 +907,7 @@ OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic wi
 
 
 OPTION(rocksdb_separate_wal_dir, OPT_BOOL, false) // use $path.wal for wal
-OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
+SAFE_OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_U64, 128*1024*1024)  // default rocksdb cache size
 OPTION(rocksdb_cache_shard_bits, OPT_INT, 4)  // rocksdb block cache shard bits, 4 bit -> 16 shards

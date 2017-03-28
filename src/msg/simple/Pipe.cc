@@ -209,11 +209,13 @@ void Pipe::start_reader()
 
 void Pipe::maybe_start_delay_thread()
 {
-  if (!delay_thread &&
-      msgr->cct->_conf->ms_inject_delay_type.find(ceph_entity_type_name(connection_state->peer_type)) != string::npos) {
-    lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
-    delay_thread = new DelayedDelivery(this);
-    delay_thread->create("ms_pipe_delay");
+  if (!delay_thread) {
+    auto pos = msgr->cct->_conf->get_val<std::string>("ms_inject_delay_type").find(ceph_entity_type_name(connection_state->peer_type));
+    if (pos != string::npos) {
+      lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
+      delay_thread = new DelayedDelivery(this);
+      delay_thread->create("ms_pipe_delay");
+    }
   }
 }
 

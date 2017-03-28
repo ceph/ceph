@@ -98,7 +98,7 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
   g_ceph_context->_conf->apply_changes(NULL);
   const char* env = getenv("CEPH_LIB");
   std::string libs_dir(env ? env : ".libs");
-  g_conf->set_val("erasure_code_dir", libs_dir, false, false);
+  g_conf->set_val("erasure_code_dir", libs_dir, false);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -157,7 +157,7 @@ int ErasureCodeNonRegression::run_create()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
+			      g_conf->get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
@@ -229,7 +229,7 @@ int ErasureCodeNonRegression::run_check()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->erasure_code_dir,
+			      g_conf->get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;

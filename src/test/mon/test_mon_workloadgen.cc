@@ -361,7 +361,7 @@ class OSDStub : public TestStub
 	     << cct->_conf->auth_supported << dendl;
     stringstream ss;
     ss << "client-osd" << whoami;
-    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->ms_type : cct->_conf->ms_public_type;
+    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
     messenger.reset(Messenger::create(cct, public_msgr_type, entity_name_t::OSD(whoami),
 				      ss.str().c_str(), getpid(), 0));
 
