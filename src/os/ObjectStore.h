@@ -1836,12 +1836,11 @@ public:
    * return the number of significant bits of the coll_t::pgid.
    *
    * This should return what the last create_collection or split_collection
-   * set.  A lazy backend can choose not to store and report this (e.g.,
-   * FileStore).
+   * set.  A legacy backend may return -EAGAIN if the value is unavailable
+   * (because we upgraded from an older version, e.g., FileStore).
    */
-  virtual int collection_bits(const coll_t& c) {
-    return -EOPNOTSUPP;
-  }
+  virtual int collection_bits(const coll_t& c) = 0;
+
 
   /**
    * list contents of a collection that fall in the range [start, end) and no more than a specified many result
