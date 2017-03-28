@@ -29,7 +29,6 @@ class PyModules
 {
   std::map<std::string, std::unique_ptr<MgrPyModule>> modules;
   std::map<std::string, std::unique_ptr<ServeThread>> serve_threads;
-
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
