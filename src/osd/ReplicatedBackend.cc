@@ -1055,8 +1055,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
 
   const hobject_t& soid = m->poid;
 
-  dout(10) << "sub_op_modify trans"
-           << " " << soid
+  dout(10) << __func__ << " " << soid
            << " v " << m->version
 	   << (m->logbl.length() ? " (transaction)" : " (parallel exec")
 	   << " " << m->logbl.length()
@@ -1139,7 +1138,7 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
   rm->op->mark_event("sub_op_applied");
   rm->applied = true;
 
-  dout(10) << "sub_op_modify_applied on " << rm << " op "
+  dout(10) << __func__ << " on " << rm << " op "
 	   << *rm->op->get_req() << dendl;
   const Message *m = rm->op->get_req();
 
@@ -1181,7 +1180,7 @@ void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
   rm->committed = true;
 
   // send commit.
-  dout(10) << "sub_op_modify_commit on op " << *rm->op->get_req()
+  dout(10) << __func__ << " on op " << *rm->op->get_req()
 	   << ", sending commit to osd." << rm->ackerosd
 	   << dendl;
 
