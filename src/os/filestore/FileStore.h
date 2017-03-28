@@ -650,6 +650,8 @@ public:
   int _collection_remove_recursive(const coll_t &cid,
 				   const SequencerPosition &spos);
 
+  int _collection_set_bits(const coll_t& cid, int bits);
+
   // collections
   using ObjectStore::collection_list;
   int collection_bits(const coll_t& c) override;
@@ -683,7 +685,8 @@ public:
   using ObjectStore::get_omap_iterator;
   ObjectMap::ObjectMapIterator get_omap_iterator(const coll_t& c, const ghobject_t &oid) override;
 
-  int _create_collection(const coll_t& c, const SequencerPosition &spos);
+  int _create_collection(const coll_t& c, int bits,
+			 const SequencerPosition &spos);
   int _destroy_collection(const coll_t& c);
   /**
    * Give an expected number of objects hint to the collection.

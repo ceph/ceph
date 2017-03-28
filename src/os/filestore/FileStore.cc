@@ -1851,7 +1851,7 @@ void FileStore::init_temp_collections()
       temps.erase(temp);
     } else {
       dout(10) << __func__ << " creating " << temp << dendl;
-      r = _create_collection(temp, spos);
+      r = _create_collection(temp, 0, spos);
       assert(r == 0);
     }
   }
@@ -2743,7 +2743,7 @@ void FileStore::_do_transaction(
         const coll_t &cid = i.get_cid(op->cid);
         tracepoint(objectstore, mkcoll_enter, osr_name);
         if (_check_replay_guard(cid, spos) > 0)
-          r = _create_collection(cid, spos);
+          r = _create_collection(cid, op->split_bits, spos);
         tracepoint(objectstore, mkcoll_exit, r);
       }
       break;
@@ -4790,10 +4790,50 @@ int FileStore::collection_empty(const coll_t& c, bool *empty)
   return 0;
 }
 
+int FileStore::_collection_set_bits(const coll_t& c, int bits)
+{
+  char fn[PATH_MAX];
+  get_cdir(c, fn, sizeof(fn));
+  dout(10) << "collection_set_bits " << fn << " " << bits << dendl;
+  char n[PATH_MAX];
+  int r;
+  int32_t v = bits;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  get_attrname("bits", n, PATH_MAX);
+  r = chain_fsetxattr(fd, n, (char*)&v, sizeof(v));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
+ out:
+  dout(10) << "collection_setattr " << fn << " " << bits << " = " << r << dendl;
+  return r;
+}
+
 int FileStore::collection_bits(const coll_t& c)
 {
-#warning fixme
-  return -EAGAIN;
+  char fn[PATH_MAX];
+  get_cdir(c, fn, sizeof(fn));
+  dout(15) << "collection_bits " << fn << dendl;
+  int r;
+  char n[PATH_MAX];
+  int32_t bits;
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    r = -errno;
+    goto out;
+  }
+  get_attrname("bits", n, PATH_MAX);
+  r = chain_fgetxattr(fd, n, (char*)&bits, sizeof(bits));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
+  if (r < 0) {
+    bits = r;
+    goto out;
+  }
+ out:
+  dout(10) << "collection_bits " << fn << " = " << bits << dendl;
+  return bits;
 }
 
 int FileStore::collection_list(const coll_t& c,
@@ -5084,6 +5124,7 @@ int FileStore::_collection_hint_expected_num_objs(const coll_t& c, uint32_t pg_n
 
 int FileStore::_create_collection(
   const coll_t& c,
+  int bits,
   const SequencerPosition &spos)
 {
   char fn[PATH_MAX];
@@ -5101,11 +5142,13 @@ int FileStore::_create_collection(
   r = init_index(c);
   if (r < 0)
     return r;
-
+  r = _collection_set_bits(c, bits);
+  if (r < 0)
+    return r;
   // create parallel temp collection, too
   if (!c.is_meta() && !c.is_temp()) {
     coll_t temp = c.get_temp();
-    r = _create_collection(temp, spos);
+    r = _create_collection(temp, 0, spos);
     if (r < 0)
       return r;
   }
@@ -5493,6 +5536,7 @@ int FileStore::_split_collection(const coll_t& cid,
     _close_replay_guard(cid, spos);
     _close_replay_guard(dest, spos);
   }
+  _collection_set_bits(cid, bits);
   if (!r && cct->_conf->filestore_debug_verify_split) {
     vector<ghobject_t> objects;
     ghobject_t next;
