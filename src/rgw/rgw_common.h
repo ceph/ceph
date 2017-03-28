@@ -17,21 +17,9 @@
 #define CEPH_RGW_COMMON_H
 
 #include "common/ceph_crypto.h"
-
-#include "common/debug.h"
 #include "common/perf_counters.h"
-
 #include "acconfig.h"
-
-#include <errno.h>
-#include <string.h>
-#include <string>
-#include <map>
-#include <boost/utility/string_ref.hpp>
-#include "include/types.h"
-#include "include/utime.h"
 #include "rgw_acl.h"
-#include "rgw_basic_types.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"
