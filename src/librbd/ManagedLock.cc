@@ -267,6 +267,42 @@ void ManagedLock<I>::break_lock(const managed_lock::Locker &locker,
 }
 
 template <typename I>
+int ManagedLock<I>::assert_header_locked() {
+  ldout(m_cct, 10) << dendl;
+
+  librados::ObjectReadOperation op;
+  {
+    Mutex::Locker locker(m_lock);
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME,
+                                    (m_mode == EXCLUSIVE ? LOCK_EXCLUSIVE :
+                                                           LOCK_SHARED),
+                                    m_cookie,
+                                    managed_lock::util::get_watcher_lock_tag());
+  }
+
+  int r = m_ioctx.operate(m_oid, &op, nullptr);
+  if (r < 0) {
+    if (r == -EBLACKLISTED) {
+      ldout(m_cct, 5) << "client is not lock owner -- client blacklisted"
+                      << dendl;
+    } else if (r == -ENOENT) {
+      ldout(m_cct, 5) << "client is not lock owner -- no lock detected"
+                      << dendl;
+    } else if (r == -EBUSY) {
+      ldout(m_cct, 5) << "client is not lock owner -- owned by different client"
+                      << dendl;
+    } else {
+      lderr(m_cct) << "failed to verify lock ownership: " << cpp_strerror(r)
+                   << dendl;
+    }
+
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
 void ManagedLock<I>::shutdown_handler(int r, Context *on_finish) {
   on_finish->complete(r);
 }

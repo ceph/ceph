@@ -1118,9 +1118,22 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner)
   {
-    RWLock::RLocker l(ictx->owner_lock);
-    *is_owner = (ictx->exclusive_lock != nullptr &&
-		 ictx->exclusive_lock->is_lock_owner());
+    *is_owner = false;
+
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    if (ictx->exclusive_lock == nullptr ||
+        !ictx->exclusive_lock->is_lock_owner()) {
+      return 0;
+    }
+
+    // might have been blacklisted by peer -- ensure we still own
+    // the lock by pinging the OSD
+    int r = ictx->exclusive_lock->assert_header_locked();
+    if (r < 0) {
+      return r;
+    }
+
+    *is_owner = true;
     return 0;
   }
 
