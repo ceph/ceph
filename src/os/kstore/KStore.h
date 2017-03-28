@@ -480,7 +480,7 @@ public:
   int list_collections(vector<coll_t>& ls) override;
   bool collection_exists(const coll_t& c) override;
   int collection_empty(const coll_t& c, bool *empty) override;
-
+  int collection_bits(const coll_t& c) override;
   int collection_list(
     const coll_t& cid, const ghobject_t& start, const ghobject_t& end,
     int max,
