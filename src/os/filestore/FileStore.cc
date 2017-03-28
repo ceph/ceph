@@ -4789,6 +4789,13 @@ int FileStore::collection_empty(const coll_t& c, bool *empty)
   tracepoint(objectstore, collection_empty_exit, *empty);
   return 0;
 }
+
+int FileStore::collection_bits(const coll_t& c)
+{
+#warning fixme
+  return -EAGAIN;
+}
+
 int FileStore::collection_list(const coll_t& c,
 			       const ghobject_t& orig_start,
 			       const ghobject_t& end,
