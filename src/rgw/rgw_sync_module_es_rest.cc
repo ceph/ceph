@@ -102,6 +102,7 @@ class RGWMetadataSearchOp : public RGWOp {
   RGWElasticSyncModuleInstance *es_module;
 protected:
   string expression;
+  string custom_prefix;
 #define MAX_KEYS_DEFAULT 100
   uint64_t max_keys{MAX_KEYS_DEFAULT};
   string marker_str;
@@ -146,7 +147,7 @@ void RGWMetadataSearchOp::execute()
     conds.push_back(make_pair("bucket", s->bucket_name));
   }
 
-  ESQueryCompiler es_query(expression, &conds);
+  ESQueryCompiler es_query(expression, &conds, custom_prefix);
   
   bool valid = es_query.compile();
   if (!valid) {
@@ -205,7 +206,9 @@ void RGWMetadataSearchOp::execute()
 
 class RGWMetadataSearch_ObjStore_S3 : public RGWMetadataSearchOp {
 public:
-  RGWMetadataSearch_ObjStore_S3(RGWElasticSyncModuleInstance *_es_module) : RGWMetadataSearchOp(_es_module) {}
+  RGWMetadataSearch_ObjStore_S3(RGWElasticSyncModuleInstance *_es_module) : RGWMetadataSearchOp(_es_module) {
+    custom_prefix = "x-amz-meta-";
+  }
 
   int get_params() override {
     expression = s->info.args.get("query");

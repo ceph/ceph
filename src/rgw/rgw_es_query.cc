@@ -107,8 +107,10 @@ static bool infix_to_prefix(list<string>& source, list<string> *out)
 }
 
 class ESQueryNode {
+protected:
+  ESQueryCompiler *compiler;
 public:
-  ESQueryNode() {}
+  ESQueryNode(ESQueryCompiler *_compiler) : compiler(_compiler) {}
   virtual ~ESQueryNode() {}
 
   virtual bool init(ESQueryStack *s) = 0;
@@ -122,22 +124,22 @@ public:
   virtual void leaf_field_rename(const string& new_name) {}
 };
 
-static bool alloc_node(ESQueryStack *s, ESQueryNode **pnode);
+static bool alloc_node(ESQueryCompiler *compiler, ESQueryStack *s, ESQueryNode **pnode);
 
 class ESQueryNode_Bool : public ESQueryNode {
   string op;
   ESQueryNode *first{nullptr};
   ESQueryNode *second{nullptr};
 public:
-  ESQueryNode_Bool() {}
-  ESQueryNode_Bool(const string& _op, ESQueryNode *_first, ESQueryNode *_second) : op(_op), first(_first), second(_second) {}
+  ESQueryNode_Bool(ESQueryCompiler *compiler) : ESQueryNode(compiler) {}
+  ESQueryNode_Bool(ESQueryCompiler *compiler, const string& _op, ESQueryNode *_first, ESQueryNode *_second) :ESQueryNode(compiler), op(_op), first(_first), second(_second) {}
   bool init(ESQueryStack *s) {
     bool valid = s->pop(&op);
     if (!valid) {
       return false;
     }
-    valid = alloc_node(s, &first) &&
-      alloc_node(s, &second);
+    valid = alloc_node(compiler, s, &first) &&
+      alloc_node(compiler, s, &second);
     if (!valid) {
       return false;
     }
@@ -166,7 +168,7 @@ protected:
   string field;
   string val;
 public:
-  ESQueryNode_Op() {}
+  ESQueryNode_Op(ESQueryCompiler *compiler) : ESQueryNode(compiler) {}
   bool init(ESQueryStack *s) {
     bool valid = s->pop(&op) &&
       s->pop(&val) &&
@@ -190,8 +192,8 @@ public:
 
 class ESQueryNode_Op_Equal : public ESQueryNode_Op {
 public:
-  ESQueryNode_Op_Equal() {}
-  ESQueryNode_Op_Equal(const string& f, const string& v) {
+  ESQueryNode_Op_Equal(ESQueryCompiler *compiler) : ESQueryNode_Op(compiler) {}
+  ESQueryNode_Op_Equal(ESQueryCompiler *compiler, const string& f, const string& v) : ESQueryNode_Op(compiler) {
     op = "==";
     field = f;
     val = v;
@@ -207,7 +209,7 @@ public:
 class ESQueryNode_Op_Range : public ESQueryNode_Op {
   string range_str;
 public:
-  ESQueryNode_Op_Range(const string& rs) : range_str(rs) {}
+  ESQueryNode_Op_Range(ESQueryCompiler *compiler, const string& rs) : ESQueryNode_Op(compiler), range_str(rs) {}
 
   virtual void dump(Formatter *f) const {
     f->open_object_section("range");
@@ -218,24 +220,35 @@ public:
   }
 };
 
-class ESQueryNode_Op_Nested : public ESQueryNode_Op {
+class ESQueryNode_Op_Nested_Parent : public ESQueryNode_Op {
+public:
+  ESQueryNode_Op_Nested_Parent(ESQueryCompiler *compiler) : ESQueryNode_Op(compiler) {}
+
+  virtual string get_custom_leaf_field_name() = 0;
+};
+
+template <class T>
+class ESQueryNode_Op_Nested : public ESQueryNode_Op_Nested_Parent {
   string name;
   ESQueryNode *next;
 public:
-  ESQueryNode_Op_Nested(const string& _name, ESQueryNode *_next) : name(_name), next(_next) {}
+  ESQueryNode_Op_Nested(ESQueryCompiler *compiler, const string& _name, ESQueryNode *_next) : ESQueryNode_Op_Nested_Parent(compiler),
+                                                                                              name(_name), next(_next) {}
   ~ESQueryNode_Op_Nested() {
     delete next;
   }
 
   virtual void dump(Formatter *f) const {
     f->open_object_section("nested");
-    encode_json("path", "meta.custom-string", f);
+    string s = string("custom-") + type_str();
+    encode_json("path", s.c_str(), f);
     f->open_object_section("query");
     f->open_object_section("bool");
     f->open_array_section("must");
     f->open_object_section("entry");
     f->open_object_section("match");
-    encode_json("meta.custom-string.name", name.c_str(), f);
+    string n = s + ".name";
+    encode_json(n.c_str(), name.c_str(), f);
     f->close_section();
     f->close_section();
     encode_json("entry", *next, f);
@@ -244,14 +257,34 @@ public:
     f->close_section();
     f->close_section();
   }
+
+  string type_str() const;
+  string get_custom_leaf_field_name() {
+    return string("meta.custom-") + type_str() + ".value";
+  }
 };
+
+template<>
+string ESQueryNode_Op_Nested<string>::type_str() const {
+  return "string";
+}
+
+template<>
+string ESQueryNode_Op_Nested<int64_t>::type_str() const {
+  return "int";
+}
+
+template<>
+string ESQueryNode_Op_Nested<ceph::real_time>::type_str() const {
+  return "date";
+}
 
 static bool is_bool_op(const string& str)
 {
   return (str == "or" || str == "and");
 }
 
-static bool alloc_node(ESQueryStack *s, ESQueryNode **pnode)
+static bool alloc_node(ESQueryCompiler *compiler, ESQueryStack *s, ESQueryNode **pnode)
 {
   string op;
   bool valid = s->peek(&op);
@@ -262,9 +295,9 @@ static bool alloc_node(ESQueryStack *s, ESQueryNode **pnode)
   ESQueryNode *node;
 
   if (is_bool_op(op)) {
-    node = new ESQueryNode_Bool();
+    node = new ESQueryNode_Bool(compiler);
   } else if (op == "==") {
-    node = new ESQueryNode_Op_Equal();
+    node = new ESQueryNode_Op_Equal(compiler);
   } else {
     static map<string, string> range_op_map = {
       { "<", "lt"},
@@ -278,7 +311,7 @@ static bool alloc_node(ESQueryStack *s, ESQueryNode **pnode)
       return false;
     }
 
-    node = new ESQueryNode_Op_Range(iter->second);
+    node = new ESQueryNode_Op_Range(compiler, iter->second);
   }
 
   if (!node->init(s)) {
@@ -286,12 +319,32 @@ static bool alloc_node(ESQueryStack *s, ESQueryNode **pnode)
     return false;
   }
   string field_name;
+  string custom_prefix = compiler->get_custom_prefix();
   if (node->leaf_field_name(&field_name) &&
-      boost::algorithm::starts_with(field_name, "meta.custom.")) {
-    node->leaf_field_rename("meta.custom-string.value");
-    field_name = field_name.substr(sizeof("meta.custom.")-1);
-    node = new ESQueryNode_Op_Nested(field_name, node);
+      boost::algorithm::starts_with(field_name, custom_prefix)) {
+    ESQueryNode *leaf_node = node;
+    field_name = field_name.substr(custom_prefix.size());
+    ESEntityTypeMap::EntityType entity_type = ESEntityTypeMap::ES_ENTITY_NONE;
+    auto m = compiler->get_custom_type_map();
+    if (m) {
+      entity_type = m->find(field_name);
+    }
+
+    ESQueryNode_Op_Nested_Parent *new_node;
+    switch (entity_type) {
+      case ESEntityTypeMap::ES_ENTITY_INT:
+        new_node = new ESQueryNode_Op_Nested<int64_t>(compiler, field_name, node);
+        break;
+      case ESEntityTypeMap::ES_ENTITY_DATE:
+        new_node = new ESQueryNode_Op_Nested<ceph::real_time>(compiler, field_name, node);
+        break;
+      default:
+        new_node = new ESQueryNode_Op_Nested<string>(compiler, field_name, node);
+    }
     
+    leaf_node->leaf_field_rename(new_node->get_custom_leaf_field_name());
+
+    node = new_node;
   }
   *pnode = node;
   return true;
@@ -449,7 +502,7 @@ bool ESQueryCompiler::convert(list<string>& infix) {
     return false;
   }
   stack.assign(prefix);
-  if (!alloc_node(&stack, &query_root)) {
+  if (!alloc_node(this, &stack, &query_root)) {
     return false;
   }
   if (!stack.done()) {
@@ -473,8 +526,8 @@ bool ESQueryCompiler::compile() {
   }
 
   for (auto& c : eq_conds) {
-    ESQueryNode_Op_Equal *eq_node = new ESQueryNode_Op_Equal(c.first, c.second);
-    query_root = new ESQueryNode_Bool("and", eq_node, query_root);
+    ESQueryNode_Op_Equal *eq_node = new ESQueryNode_Op_Equal(this, c.first, c.second);
+    query_root = new ESQueryNode_Bool(this, "and", eq_node, query_root);
   }
 
   return true;
