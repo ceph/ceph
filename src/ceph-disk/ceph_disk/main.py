@@ -3127,13 +3127,6 @@ def start_daemon(
                     'ceph-osd@{osd_id}'.format(osd_id=osd_id),
                 ],
             )
-            command_check_call(
-                [
-                    'systemctl',
-                    'start',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
         elif os.path.exists(os.path.join(path, 'openrc')):
             base_script = '/etc/init.d/ceph-osd'
             osd_script = '{base}.{osd_id}'.format(
