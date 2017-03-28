@@ -19,7 +19,13 @@ int main(int argc, char *argv[])
     expr = "age >= 30";
   }
 
-  ESQueryCompiler es_query(expr);
+  ESQueryCompiler es_query(expr, nullptr, "x-amz-meta-");
+
+  map<string, ESEntityTypeMap::EntityType> custom_map = { {"str", ESEntityTypeMap::ES_ENTITY_STR},
+                                                          {"int", ESEntityTypeMap::ES_ENTITY_INT},
+                                                          {"date", ESEntityTypeMap::ES_ENTITY_DATE} };
+  ESEntityTypeMap em(custom_map);
+  es_query.set_custom_type_map(&em);
   
   bool valid = es_query.compile();
   if (!valid) {
