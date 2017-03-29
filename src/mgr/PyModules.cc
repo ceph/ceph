@@ -460,6 +460,7 @@ void PyModules::shutdown()
   }
   modules.clear();
 
+  PyGILState_Ensure();
   Py_Finalize();
 }
 
