@@ -2873,7 +2873,16 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
   f->dump_int("last_backfill_bitwise", (int)last_backfill_bitwise);
-  f->dump_stream("purged_snaps") << purged_snaps;
+  f->open_array_section("purged_snaps");
+  for (interval_set<snapid_t>::const_iterator i=purged_snaps.begin();
+       i != purged_snaps.end();
+       ++i) {
+    f->open_object_section("purged_snap_interval");
+    f->dump_stream("start") << i.get_start();
+    f->dump_stream("length") << i.get_len();
+    f->close_section();
+  }
+  f->close_section();
   f->open_object_section("history");
   history.dump(f);
   f->close_section();
