@@ -3804,6 +3804,14 @@ int RGWRados::init_complete()
     if (ret < 0) {
       return ret;
     }
+    // read period_config into current_period
+    auto& period_config = current_period.get_config();
+    ret = period_config.read(this, zonegroup.realm_id);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(cct, 0) << "ERROR: failed to read period config: "
+          << cpp_strerror(ret) << dendl;
+      return ret;
+    }
   }
 
   ldout(cct, 10) << "Cannot find current period zone using local zone" << dendl;

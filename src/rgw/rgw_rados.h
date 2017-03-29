@@ -1469,6 +1469,7 @@ public:
   const string& get_master_zonegroup() const { return master_zonegroup; }
   const string& get_realm() const { return realm_id; }
   const RGWPeriodMap& get_map() const { return period_map; }
+  RGWPeriodConfig& get_config() { return period_config; }
   const RGWPeriodConfig& get_config() const { return period_config; }
   const std::vector<std::string>& get_sync_status() const { return sync_status; }
   const string& get_pool_name(CephContext *cct);
