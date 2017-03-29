@@ -135,7 +135,7 @@ bool WBThrottle::get_next_should_flush(
 {
   assert(lock.is_locked());
   assert(next);
-  while (!stopping && !beyond_limit())
+  while (!stopping && (!beyond_limit() || pending_wbs.empty()))
          cond.Wait(lock);
   if (stopping)
     return false;
