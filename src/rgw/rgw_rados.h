@@ -2242,7 +2242,7 @@ public:
                  bool *is_truncated, RGWUsageIter& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage);
   int trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoch);
 
-  virtual int create_pool(rgw_bucket& bucket);
+  virtual int create_pool(const rgw_bucket& bucket);
 
   /**
    * create a bucket with name bucket and the given list of attrs

@@ -5311,7 +5311,7 @@ done:
  * create a rados pool, associated meta info
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_pool(rgw_bucket& bucket) 
+int RGWRados::create_pool(const rgw_bucket& bucket) 
 {
   int ret = 0;
 
