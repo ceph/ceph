@@ -66,15 +66,17 @@ private:
     PoolWatcherListener(Replayer *replayer) : replayer(replayer) {
     }
 
-    void handle_update(const ImageIds &added_image_ids,
+    void handle_update(const std::string &mirror_uuid,
+                       const ImageIds &added_image_ids,
                        const ImageIds &removed_image_ids) override {
-      replayer->handle_update(added_image_ids, removed_image_ids);
+      replayer->handle_update(mirror_uuid, added_image_ids, removed_image_ids);
     }
   };
 
   struct C_RefreshLocalImages;
 
-  void handle_update(const ImageIds &added_image_ids,
+  void handle_update(const std::string &mirror_uuid,
+                     const ImageIds &added_image_ids,
                      const ImageIds &removed_image_ids);
 
   void start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer);
@@ -116,8 +118,6 @@ private:
 
   int64_t m_local_pool_id = -1;
   int64_t m_remote_pool_id = -1;
-
-  std::string m_remote_mirror_uuid;
 
   PoolWatcherListener m_pool_watcher_listener;
   std::unique_ptr<PoolWatcher<> > m_pool_watcher;
