@@ -259,13 +259,13 @@ static int skip_tag(int fd, uint64_t length)
   if (fd == STDIN_FILENO) {
     // read the appending data out to skip this tag.
     char buf[4096];
-    uint64_t len = min(length, sizeof(buf));
+    uint64_t len = min<uint64_t>(length, sizeof(buf));
     while (len > 0) {
       r = safe_read_exact(fd, buf, len);
       if (r < 0)
         return r;
       length -= len;
-      len = min(length, sizeof(buf));
+      len = min<uint64_t>(length, sizeof(buf));
     }
   } else {
     // lseek to skip this tag
@@ -606,7 +606,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
                      max(g_conf->rbd_concurrent_management_ops, 1), false));
   }
 
-  reqlen = min(reqlen, size);
+  reqlen = min<uint64_t>(reqlen, size);
   // loop body handles 0 return, as we may have a block to flush
   while ((readlen = ::read(fd, p + blklen, reqlen)) >= 0) {
     if (throttle->pending_error()) {
