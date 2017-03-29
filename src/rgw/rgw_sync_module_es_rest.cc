@@ -158,7 +158,7 @@ void RGWMetadataSearchOp::execute()
                                   { "contenttype", "meta.contenttype" },
   };
   es_query.set_field_aliases(&aliases);
-#warning permissions need to be restricted value
+
   static map<string, ESEntityTypeMap::EntityType> generic_map = { {"bucket", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"name", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"instance", ESEntityTypeMap::ES_ENTITY_STR},
@@ -169,6 +169,9 @@ void RGWMetadataSearchOp::execute()
                                                            {"meta.size", ESEntityTypeMap::ES_ENTITY_INT} };
   ESEntityTypeMap gm(generic_map);
   es_query.set_generic_type_map(&gm);
+
+  static set<string> restricted_fields = { {"permissions"} };
+  es_query.set_restricted_fields(&restricted_fields);
 
   static map<string, ESEntityTypeMap::EntityType> custom_map = { };
   ESEntityTypeMap em(custom_map);

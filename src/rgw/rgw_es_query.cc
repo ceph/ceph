@@ -225,6 +225,7 @@ protected:
   string str_val;
   ESQueryNodeLeafVal *val{nullptr};
   ESEntityTypeMap::EntityType entity_type{ESEntityTypeMap::ES_ENTITY_NONE};
+  bool allow_restricted{false};
 
   bool val_from_str(string *perr) {
     switch (entity_type) {
@@ -268,6 +269,10 @@ public:
     return do_init(pnode, perr);
   }
   bool handle_nested(ESQueryNode **pnode, string *perr);
+
+  void set_allow_restricted(bool allow) {
+    allow_restricted = allow;
+  }
 
   virtual void dump(Formatter *f) const = 0;
 };
@@ -376,7 +381,8 @@ bool ESQueryNode_Op::handle_nested(ESQueryNode **pnode, string *perr)
     *pnode = this;
     auto m = compiler->get_generic_type_map();
     if (m) {
-      bool found = m->find(field_name, &entity_type);
+      bool found = m->find(field_name, &entity_type) &&
+        (allow_restricted || !compiler->is_restricted(field_name));
       if (!found) {
         *perr = string("unexpected generic field '") + field_name + "'";
       }
@@ -635,6 +641,7 @@ bool ESQueryCompiler::compile(string *perr) {
 
   for (auto& c : eq_conds) {
     ESQueryNode_Op_Equal *eq_node = new ESQueryNode_Op_Equal(this, c.first, c.second);
+    eq_node->set_allow_restricted(true); /* can access restricted fields */
     ESQueryNode *effective_node;
     if (!eq_node->init(nullptr, &effective_node, perr)) {
       delete eq_node;

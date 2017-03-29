@@ -101,6 +101,7 @@ class ESQueryCompiler {
   ESEntityTypeMap *custom_type_map{nullptr};
 
   map<string, string> *field_aliases;
+  set<string> *restricted_fields;
 
 public:
   ESQueryCompiler(const string& query, list<pair<string, string> > *prepend_eq_conds, const string& _custom_prefix) : parser(query), custom_prefix(_custom_prefix) {
@@ -144,6 +145,14 @@ public:
     }
 
     return i->second;
+  }
+
+  void set_restricted_fields(set<string> *rf) {
+    restricted_fields = rf;
+  }
+
+  bool is_restricted(const string& f) {
+    return (restricted_fields && restricted_fields->find(f) != restricted_fields->end());
   }
 };
 
