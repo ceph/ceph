@@ -236,8 +236,12 @@ public:
 
   void expect_timer_add_event(MockThreads &mock_threads) {
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
-      .WillOnce(WithArg<1>(Invoke([](Context *ctx) {
-          ctx->complete(0);
+      .WillOnce(WithArg<1>(Invoke([this](Context *ctx) {
+          auto wrapped_ctx = new FunctionContext([this, ctx](int r) {
+              Mutex::Locker timer_locker(m_threads->timer_lock);
+              ctx->complete(r);
+            });
+          m_threads->work_queue->queue(wrapped_ctx, 0);
         })));
   }
 
@@ -799,6 +803,41 @@ TEST_F(TestMockPoolWatcher, GetImageNameError) {
   ASSERT_TRUE(wait_for_get_name(1));
   ASSERT_TRUE(wait_for_update(1));
 
+  expect_mirroring_watcher_unregister(mock_mirroring_watcher, 0);
+  ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
+}
+
+TEST_F(TestMockPoolWatcher, DeferredRefresh) {
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  InSequence seq;
+  MockMirroringWatcher mock_mirroring_watcher;
+  expect_mirroring_watcher_is_unregistered(mock_mirroring_watcher, true);
+  expect_mirroring_watcher_register(mock_mirroring_watcher, 0);
+
+  MockRefreshImagesRequest mock_refresh_images_request;
+
+  EXPECT_CALL(mock_refresh_images_request, send())
+    .WillOnce(Invoke([&mock_refresh_images_request]() {
+        *mock_refresh_images_request.image_ids = {};
+        MirroringWatcher::get_instance().handle_rewatch_complete(0);
+        mock_refresh_images_request.on_finish->complete(0);
+        }));
+  expect_timer_add_event(mock_threads);
+  expect_mirroring_watcher_is_unregistered(mock_mirroring_watcher, false);
+  expect_refresh_images(mock_refresh_images_request, {}, 0);
+
+  MockListener mock_listener(this);
+  expect_listener_handle_update(mock_listener, {}, {});
+
+  MockPoolWatcher mock_pool_watcher(&mock_threads, m_remote_io_ctx,
+                                    mock_listener);
+  C_SaferCond ctx;
+  mock_pool_watcher.init(&ctx);
+  ASSERT_EQ(0, ctx.wait());
+
+  ASSERT_TRUE(wait_for_update(1));
   expect_mirroring_watcher_unregister(mock_mirroring_watcher, 0);
   ASSERT_EQ(0, when_shut_down(mock_pool_watcher));
 }

@@ -93,6 +93,9 @@ void PoolWatcher<I>::init(Context *on_finish) {
   {
     Mutex::Locker locker(m_lock);
     m_on_init_finish = on_finish;
+
+    assert(!m_refresh_in_progress);
+    m_refresh_in_progress = true;
   }
 
   // start async updates for mirror image directory
@@ -126,8 +129,7 @@ void PoolWatcher<I>::register_watcher() {
   {
     Mutex::Locker locker(m_lock);
     assert(m_image_ids_invalid);
-    assert(!m_refresh_in_progress);
-    m_refresh_in_progress = true;
+    assert(m_refresh_in_progress);
   }
 
   // if the watch registration is in-flight, let the watcher
@@ -242,6 +244,7 @@ template <typename I>
 void PoolWatcher<I>::handle_refresh_images(int r) {
   dout(5) << "r=" << r << dendl;
 
+  bool deferred_refresh = false;
   bool retry_refresh = false;
   Context *on_init_finish = nullptr;
   {
@@ -250,7 +253,10 @@ void PoolWatcher<I>::handle_refresh_images(int r) {
     assert(m_refresh_in_progress);
     m_refresh_in_progress = false;
 
-    if (r >= 0) {
+    if (m_deferred_refresh) {
+      // need to refresh -- skip the notification
+      deferred_refresh = true;
+    } else if (r >= 0) {
       m_image_ids_invalid = false;
       m_pending_image_ids = m_refresh_image_ids;
       std::swap(on_init_finish, m_on_init_finish);
@@ -272,7 +278,10 @@ void PoolWatcher<I>::handle_refresh_images(int r) {
     }
   }
 
-  if (retry_refresh) {
+  if (deferred_refresh) {
+    dout(5) << "scheduling deferred refresh" << dendl;
+    schedule_refresh_images(0);
+  } else if (retry_refresh) {
     derr << "failed to retrieve mirroring directory: " << cpp_strerror(r)
          << dendl;
     schedule_refresh_images(10);
@@ -289,12 +298,16 @@ void PoolWatcher<I>::schedule_refresh_images(double interval) {
   Mutex::Locker timer_locker(m_threads->timer_lock);
   Mutex::Locker locker(m_lock);
   if (m_shutting_down || m_refresh_in_progress || m_timer_ctx != nullptr) {
+    if (m_refresh_in_progress && !m_deferred_refresh) {
+      dout(5) << "deferring refresh until in-flight refresh completes" << dendl;
+      m_deferred_refresh = true;
+    }
     return;
   }
 
   m_image_ids_invalid = true;
   m_timer_ctx = new FunctionContext([this](int r) {
-      processs_refresh_images();
+      process_refresh_images();
     });
   m_threads->timer->add_event_after(interval, m_timer_ctx);
 }
@@ -437,10 +450,17 @@ void PoolWatcher<I>::handle_get_image_name(int r) {
 }
 
 template <typename I>
-void PoolWatcher<I>::processs_refresh_images() {
+void PoolWatcher<I>::process_refresh_images() {
   assert(m_threads->timer_lock.is_locked());
   assert(m_timer_ctx != nullptr);
   m_timer_ctx = nullptr;
+
+  {
+    Mutex::Locker locker(m_lock);
+    assert(!m_refresh_in_progress);
+    m_refresh_in_progress = true;
+    m_deferred_refresh = false;
+  }
 
   // execute outside of the timer's lock
   m_async_op_tracker.start_op();
