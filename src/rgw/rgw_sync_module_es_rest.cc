@@ -109,6 +109,7 @@ protected:
   uint64_t marker{0};
   string next_marker;
   bool is_truncated{false};
+  string err;
 
   es_search_response response;
 
@@ -149,7 +150,7 @@ void RGWMetadataSearchOp::execute()
 
   ESQueryCompiler es_query(expression, &conds, custom_prefix);
   
-  bool valid = es_query.compile();
+  bool valid = es_query.compile(&err);
   if (!valid) {
     ldout(s->cct, 10) << "invalid query, failed generating request json" << dendl;
     op_ret = -EINVAL;
@@ -240,8 +241,10 @@ public:
     return 0;
   }
   void send_response() override {
-    if (op_ret)
+    if (op_ret) {
+      s->err.message = err;
       set_req_state_err(s, op_ret);
+    }
     dump_errno(s);
     end_header(s, this, "application/xml");
 
