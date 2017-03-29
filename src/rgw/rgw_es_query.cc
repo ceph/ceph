@@ -219,10 +219,11 @@ class ESQueryNode_Op : public ESQueryNode {
 protected:
   string op;
   string field;
+  string str_val;
   ESQueryNodeLeafVal *val{nullptr};
   ESEntityTypeMap::EntityType entity_type{ESEntityTypeMap::ES_ENTITY_NONE};
 
-  bool val_from_str(const string& str_val, string *perr) {
+  bool val_from_str(string *perr) {
     switch (entity_type) {
       case ESEntityTypeMap::ES_ENTITY_DATE:
         val = new ESQueryNodeLeafVal_Date;
@@ -235,13 +236,25 @@ protected:
     }
     return val->init(str_val, perr);
   }
+  bool do_init(ESQueryNode **pnode, string *perr) {
+    field = compiler->unalias_field(field);
+    ESQueryNode *effective_node;
+    if (!handle_nested(&effective_node, perr)) {
+      return false;
+    }
+    if (!val_from_str(perr)) {
+      return false;
+    }
+    *pnode = effective_node;
+    return true;
+  }
+
 public:
   ESQueryNode_Op(ESQueryCompiler *compiler) : ESQueryNode(compiler) {}
   ~ESQueryNode_Op() {
     delete val;
   }
   virtual bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) override {
-    string str_val;
     bool valid = s->pop(&op) &&
       s->pop(&str_val) &&
       s->pop(&field);
@@ -249,15 +262,7 @@ public:
       *perr = "invalid expression";
       return false;
     }
-    ESQueryNode *effective_node;
-    if (!handle_nested(&effective_node, perr)) {
-      return false;
-    }
-    if (!val_from_str(str_val, perr)) {
-      return false;
-    }
-    *pnode = effective_node;
-    return true;
+    return do_init(pnode, perr);
   }
   bool handle_nested(ESQueryNode **pnode, string *perr);
 
@@ -265,7 +270,6 @@ public:
 };
 
 class ESQueryNode_Op_Equal : public ESQueryNode_Op {
-  string str_val;
 public:
   ESQueryNode_Op_Equal(ESQueryCompiler *compiler) : ESQueryNode_Op(compiler) {}
   ESQueryNode_Op_Equal(ESQueryCompiler *compiler, const string& f, const string& v) : ESQueryNode_Op(compiler) {
@@ -278,7 +282,7 @@ public:
     if (op.empty()) {
       return ESQueryNode_Op::init(s, pnode, perr);
     }
-    return val_from_str(str_val, perr);
+    return do_init(pnode, perr);
   }
 
   virtual void dump(Formatter *f) const {
@@ -322,7 +326,7 @@ public:
 
   virtual void dump(Formatter *f) const {
     f->open_object_section("nested");
-    string s = string("custom-") + type_str();
+    string s = string("meta.custom-") + type_str();
     encode_json("path", s.c_str(), f);
     f->open_object_section("query");
     f->open_object_section("bool");
@@ -628,7 +632,12 @@ bool ESQueryCompiler::compile(string *perr) {
 
   for (auto& c : eq_conds) {
     ESQueryNode_Op_Equal *eq_node = new ESQueryNode_Op_Equal(this, c.first, c.second);
-    query_root = new ESQueryNode_Bool(this, "and", eq_node, query_root);
+    ESQueryNode *effective_node;
+    if (!eq_node->init(nullptr, &effective_node, perr)) {
+      delete eq_node;
+      return false;
+    }
+    query_root = new ESQueryNode_Bool(this, "and", effective_node, query_root);
   }
 
   return true;

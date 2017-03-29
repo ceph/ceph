@@ -34,10 +34,22 @@ int main(int argc, char *argv[])
 
   ESQueryCompiler es_query(expr, nullptr, "x-amz-meta-");
 
-  map<string, ESEntityTypeMap::EntityType> generic_map = { {"key", ESEntityTypeMap::ES_ENTITY_STR},
+  map<string, string> aliases = { { "key", "name" },
+                                  { "etag", "meta.etag" },
+                                  { "size", "meta.size" },
+                                  { "mtime", "meta.mtime" },
+                                  { "lastmodified", "meta.mtime" },
+                                  { "contenttype", "meta.contenttype" },
+  };
+  es_query.set_field_aliases(&aliases);
+
+  map<string, ESEntityTypeMap::EntityType> generic_map = { {"bucket", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"name", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"instance", ESEntityTypeMap::ES_ENTITY_STR},
-                                                           {"lastmodified", ESEntityTypeMap::ES_ENTITY_DATE},
-                                                           {"size", ESEntityTypeMap::ES_ENTITY_DATE} };
+                                                           {"meta.etag", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"meta.contenttype", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"meta.mtime", ESEntityTypeMap::ES_ENTITY_DATE},
+                                                           {"meta.size", ESEntityTypeMap::ES_ENTITY_INT} };
   ESEntityTypeMap gm(generic_map);
   es_query.set_generic_type_map(&gm);
 
