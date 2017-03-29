@@ -1377,6 +1377,15 @@ struct RGWPeriodConfig
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+
+  // the period config must be stored in a local object outside of the period,
+  // so that it can be used in a default configuration where no realm/period
+  // exists
+  int read(RGWRados *store, const std::string& realm_id);
+  int write(RGWRados *store, const std::string& realm_id);
+
+  static std::string get_oid(const std::string& realm_id);
+  static rgw_pool get_pool(CephContext *cct);
 };
 WRITE_CLASS_ENCODER(RGWPeriodConfig)
 
