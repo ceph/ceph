@@ -26,7 +26,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <assert.h>
 
 #include <linux/nbd.h>
 #include <linux/fs.h>
@@ -93,7 +92,7 @@ static void handle_signal(int signum)
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
   if (ioctl(nbd, NBD_DISCONNECT) < 0) {
-    derr << "rbd-nbd: disconnect failed: " << cpp_error(errno) << std::endl;
+    derr << "rbd-nbd: disconnect failed: " << cpp_strerror(errno) << dendl;
   } else {
     dout(20) << __func__ << ": " << "disconnected" << dendl;
   }
