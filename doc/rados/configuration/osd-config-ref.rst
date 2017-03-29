@@ -448,7 +448,7 @@ recovery operations to ensure optimal performance during recovery.
 
 :Description: The Ceph OSD Daemon operation thread timeout in seconds.
 :Type: 32-bit Integer
-:Default: ``30`` 
+:Default: ``15`` 
 
 
 ``osd op complaint time`` 
