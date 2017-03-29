@@ -2352,11 +2352,11 @@ private:
 	    CollectionRef& c,
 	    OnodeRef& o,
 	    uint64_t offset, size_t len);
-  int _do_truncate(TransContext *txc,
+  void _do_truncate(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef o,
 		   uint64_t offset);
-  int _truncate(TransContext *txc,
+  void _truncate(TransContext *txc,
 		CollectionRef& c,
 		OnodeRef& o,
 		uint64_t offset);
