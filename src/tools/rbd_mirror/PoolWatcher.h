@@ -150,6 +150,7 @@ private:
   bool m_shutting_down = false;
   bool m_image_ids_invalid = true;
   bool m_refresh_in_progress = false;
+  bool m_deferred_refresh = false;
 
   UpdatedImages m_updated_images;
   IdToUpdatedImages m_id_to_updated_images;
@@ -163,7 +164,7 @@ private:
   void handle_refresh_images(int r);
 
   void schedule_refresh_images(double interval);
-  void processs_refresh_images();
+  void process_refresh_images();
 
   void handle_rewatch_complete(int r);
   void handle_image_updated(const std::string &remote_image_id,
