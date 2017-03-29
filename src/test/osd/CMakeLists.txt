@@ -27,6 +27,7 @@ add_ceph_test(osd-scrub-repair.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.s
 add_ceph_test(osd-scrub-snaps.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-snaps.sh)
 add_ceph_test(osd-copy-from.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-copy-from.sh)
 add_ceph_test(osd-fast-mark-down.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-fast-mark-down.sh)
+add_ceph_test(osd-dup.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-dup.sh)
 
 # unittest_osdmap
 add_executable(unittest_osdmap
