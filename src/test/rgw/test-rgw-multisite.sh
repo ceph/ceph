@@ -12,7 +12,7 @@ num_clusters=$1
 set -e
 
 realm_name=earth
-zg=us
+zg=zg1
 
 i=1
 while [ $i -le $num_clusters ]; do
@@ -25,12 +25,12 @@ system_access_key="1234567890"
 system_secret="pencil"
 
 # bring up first cluster
-x $(start_ceph_cluster 1) -n
+x $(start_ceph_cluster 1 1) -n
 
 # create realm, zonegroup, zone, start rgw
 init_first_zone 1 $realm_name $zg $zone1 $zone1_port $system_access_key $system_secret
 
-output=`$(rgw_admin 1) realm get`
+output=`$(rgw_admin 1 1) realm get`
 
 echo realm_status=$output
 
@@ -38,7 +38,7 @@ echo realm_status=$output
 
 i=2
 while [ $i -le $num_clusters ]; do
-  x $(start_ceph_cluster $i) -n
+  x $(start_ceph_cluster 1 $i) -n
 
 
   # create new zone, start rgw

@@ -61,67 +61,99 @@ mstop=$root_path/mstop.sh
 mrun=$root_path/mrun
 
 function start_ceph_cluster {
-  [ $# -ne 1 ] && echo "start_ceph_cluster() needs 1 param" && exit 1
+  [ $# -ne 2 ] && echo "start_ceph_cluster() needs 2 param" && exit 1
 
-  echo "$mstart c$1"
+  echo "$mstart zg$1-c$2"
 }
 
 function rgw_admin {
-  [ $# -lt 1 ] && echo "rgw_admin() needs 1 param" && exit 1
+  [ $# -lt 2 ] && echo "rgw_admin() needs 2 param" && exit 1
 
-  echo "$mrun c$1 radosgw-admin"
+  echo "$mrun zg$1-c$2 radosgw-admin"
 }
 
 function rgw {
-  [ $# -ne 2 ] && echo "rgw() needs 2 params" && exit 1
+  [ $# -ne 3 ] && echo "rgw() needs 3 params" && exit 1
 
-  echo "$root_path/mrgw.sh c$1 $2 $rgw_flags"
+  echo "$root_path/mrgw.sh zg$1-c$2 $3 $rgw_flags"
 }
 
 function init_first_zone {
-  [ $# -ne 7 ] && echo "init_first_zone() needs 7 params" && exit 1
+  [ $# -ne 8 ] && echo "init_first_zone() needs 8 params" && exit 1
 
-  id=$1
-  realm=$2
-  zg=$3
-  zone=$4
-  endpoints=$5
-
-  access_key=$6
-  secret=$7
-
-# initialize realm
-  x $(rgw_admin $id) realm create --rgw-realm=$realm
-
-# create zonegroup, zone
-  x $(rgw_admin $id) zonegroup create --rgw-zonegroup=$zg --master --default
-  x $(rgw_admin $id) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints --default
-  x $(rgw_admin $id) user create --uid=zone.user --display-name="Zone User" --access-key=${access_key} --secret=${secret} --system
-
-  x $(rgw_admin $id) period update --commit
-}
-
-function init_zone_in_existing_zg {
-  [ $# -ne 8 ] && echo "init_zone_in_existing_zg() needs 8 params" && exit 1
-
-  id=$1
-  realm=$2
-  zg=$3
-  zone=$4
-  zone1_port=$5
+  zgid=$1
+  cid=$2
+  realm=$3
+  zg=$4
+  zone=$5
   endpoints=$6
 
   access_key=$7
   secret=$8
 
-  x $(rgw_admin $id) realm pull --url=http://localhost:$zone1_port --access-key=${access_key} --secret=${secret} --default
-  x $(rgw_admin $id) zonegroup default --rgw-zonegroup=$zg
-  x $(rgw_admin $id) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints
-  x $(rgw_admin $id) period update --commit
+# initialize realm
+  x $(rgw_admin $zgid $cid) realm create --rgw-realm=$realm
+
+# create zonegroup, zone
+  x $(rgw_admin $zgid $cid) zonegroup create --rgw-zonegroup=$zg --master --default
+  x $(rgw_admin $zgid $cid) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints --default
+  x $(rgw_admin $zgid $cid) user create --uid=zone.user --display-name="Zone User" --access-key=${access_key} --secret=${secret} --system
+
+  x $(rgw_admin $zgid $cid) period update --commit
+}
+
+function init_zone_in_existing_zg {
+  [ $# -ne 9 ] && echo "init_zone_in_existing_zg() needs 9 params" && exit 1
+
+  zgid=$1
+  cid=$2
+  realm=$3
+  zg=$4
+  zone=$5
+  master_zg_zone1_port=$6
+  endpoints=$7
+
+  access_key=$8
+  secret=$9
+
+  x $(rgw_admin $zgid $cid) realm pull --url=http://localhost:$master_zg_zone1_port --access-key=${access_key} --secret=${secret} --default
+  x $(rgw_admin $zgid $cid) zonegroup default --rgw-zonegroup=$zg
+  x $(rgw_admin $zgid $cid) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints
+  x $(rgw_admin $zgid $cid) period update --commit --url=http://localhost:$master_zg_zone1_port --access-key=${access_key} --secret=${secret}
+}
+
+function init_first_zone_in_slave_zg {
+  [ $# -ne 9 ] && echo "init_first_zone_in_slave_zg() needs 9 params" && exit 1
+
+  zgid=$1
+  cid=$2
+  realm=$3
+  zg=$4
+  zone=$5 
+  master_zg_zone1_port=$6
+  endpoints=$7
+
+  access_key=$8
+  secret=$9
+
+# create zonegroup, zone
+  x $(rgw_admin $zgid $cid) realm pull --url=http://localhost:$master_zg_zone1_port --access-key=${access_key} --secret=${secret}
+  x $(rgw_admin $zgid $cid) realm default --rgw-realm=$realm
+  x $(rgw_admin $zgid $cid) zonegroup create --rgw-realm=$realm --rgw-zonegroup=$zg --endpoints=$endpoints --default
+  x $(rgw_admin $zgid $cid) zonegroup default --rgw-zonegroup=$zg
+
+  x $(rgw_admin $zgid $cid) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=$endpoints
+  x $(rgw_admin $zgid $cid) zone default --rgw-zone=$zone
+  x $(rgw_admin $zgid $cid) zonegroup add --rgw-zonegroup=$zg --rgw-zone=$zone
+
+  x $(rgw_admin $zgid $cid) user create --uid=zone.user --display-name="Zone User" --access-key=${access_key} --secret=${secret} --system
+  x $(rgw_admin $zgid $cid) period update --commit --url=localhost:$master_zg_zone1_port --access-key=${access_key} --secret=${secret}
+
 }
 
 function call_rgw_admin {
-  c=$1
-  shift
-  x $(rgw_admin $c) "$@"
+  zgid=$1
+  cid=$2
+  shift 2
+  x $(rgw_admin $zgid $cid) "$@"
 }
