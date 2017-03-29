@@ -446,20 +446,39 @@ void PyModules::shutdown()
 {
   Mutex::Locker locker(lock);
 
-  // Signal modules to drop out of serve()
-  for (auto& i : modules) {
+  // Signal modules to drop out of serve() and/or tear down resources
+  C_SaferCond shutdown_called;
+  C_GatherBuilder gather(g_ceph_context);
+  for (auto &i : modules) {
     auto module = i.second.get();
-    finisher.queue(new FunctionContext([module](int r){
+    auto shutdown_cb = gather.new_sub();
+    finisher.queue(new FunctionContext([module, shutdown_cb](int r){
       module->shutdown();
+      shutdown_cb->complete(0);
     }));
   }
 
+  if (gather.has_subs()) {
+    gather.set_finisher(&shutdown_called);
+    gather.activate();
+  }
+
+  // For modules implementing serve(), finish the threads where we
+  // were running that.
   for (auto &i : serve_threads) {
     lock.Unlock();
     i.second->join();
     lock.Lock();
   }
   serve_threads.clear();
+
+  // Wait for the module's shutdown() to complete before
+  // we proceed to destroy the module.
+  if (!modules.empty()) {
+    dout(4) << "waiting for module shutdown calls" << dendl;
+    shutdown_called.wait();
+  }
+
   modules.clear();
 
   PyGILState_Ensure();
