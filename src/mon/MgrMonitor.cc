@@ -315,10 +315,10 @@ void MgrMonitor::tick()
       && last_beacon.at(pending_map.active_gid) < cutoff) {
 
     drop_active();
+    propose = true;
     dout(4) << "Dropping active" << pending_map.active_gid << dendl;
     if (promote_standby()) {
       dout(4) << "Promoted standby " << pending_map.active_gid << dendl;
-      propose = true;
     } else {
       dout(4) << "Active is laggy but have no standbys to replace it" << dendl;
     }
