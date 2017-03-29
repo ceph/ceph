@@ -827,8 +827,7 @@ public:
 		     uint32_t offset, uint32_t length);
 
     /// ensure a range of the map is marked dirty
-    void dirty_range(KeyValueDB::Transaction t,
-		     uint32_t offset, uint32_t length);
+    void dirty_range(uint32_t offset, uint32_t length);
 
     extent_map_t::iterator find(uint64_t offset);
 
