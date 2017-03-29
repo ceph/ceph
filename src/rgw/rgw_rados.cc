@@ -850,6 +850,53 @@ int RGWRealm::notify_new_period(const RGWPeriod& period)
   return notify_zone(bl);
 }
 
+std::string RGWPeriodConfig::get_oid(const std::string& realm_id)
+{
+  if (realm_id.empty()) {
+    return "period_config.default";
+  }
+  return "period_config." + realm_id;
+}
+
+rgw_pool RGWPeriodConfig::get_pool(CephContext *cct)
+{
+  const auto& pool_name = cct->_conf->rgw_period_root_pool;
+  if (pool_name.empty()) {
+    return {RGW_DEFAULT_PERIOD_ROOT_POOL};
+  }
+  return {pool_name};
+}
+
+int RGWPeriodConfig::read(RGWRados *store, const std::string& realm_id)
+{
+  RGWObjectCtx obj_ctx(store);
+  const auto& pool = get_pool(store->ctx());
+  const auto& oid = get_oid(realm_id);
+  bufferlist bl;
+
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, nullptr, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(*this, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return 0;
+}
+
+int RGWPeriodConfig::write(RGWRados *store, const std::string& realm_id)
+{
+  const auto& pool = get_pool(store->ctx());
+  const auto& oid = get_oid(realm_id);
+  bufferlist bl;
+  ::encode(*this, bl);
+  return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(),
+                            false, nullptr, real_time(), nullptr);
+}
+
 int RGWPeriod::init(CephContext *_cct, RGWRados *_store, const string& period_realm_id,
 		    const string& period_realm_name, bool setup_obj)
 {
