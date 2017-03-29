@@ -74,13 +74,15 @@ struct ESEntityTypeMap {
 
   ESEntityTypeMap(map<string, EntityType>& _m) : m(_m) {}
 
-  EntityType find(const string& entity) {
+  bool find(const string& entity, EntityType *ptype) {
     auto i = m.find(entity);
     if (i != m.end()) {
-      return i->second;
+      *ptype = i->second;
+      return true;
     }
 
-    return ES_ENTITY_NONE;
+    *ptype = ES_ENTITY_NONE;
+    return false;
   }
 };
 
@@ -95,6 +97,7 @@ class ESQueryCompiler {
 
   list<pair<string, string> > eq_conds;
 
+  ESEntityTypeMap *generic_type_map{nullptr};
   ESEntityTypeMap *custom_type_map{nullptr};
 
 public:
@@ -108,6 +111,13 @@ public:
   bool compile();
   void dump(Formatter *f) const;
   
+  void set_generic_type_map(ESEntityTypeMap *entity_map) {
+    generic_type_map = entity_map;
+  }
+
+  ESEntityTypeMap *get_generic_type_map() {
+    return generic_type_map;
+  }
   const string& get_custom_prefix() { return custom_prefix; }
 
   void set_custom_type_map(ESEntityTypeMap *entity_map) {
