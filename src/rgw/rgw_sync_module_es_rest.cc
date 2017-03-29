@@ -150,6 +150,30 @@ void RGWMetadataSearchOp::execute()
 
   ESQueryCompiler es_query(expression, &conds, custom_prefix);
   
+  static map<string, string> aliases = { { "key", "name" },
+                                  { "etag", "meta.etag" },
+                                  { "size", "meta.size" },
+                                  { "mtime", "meta.mtime" },
+                                  { "lastmodified", "meta.mtime" },
+                                  { "contenttype", "meta.contenttype" },
+  };
+  es_query.set_field_aliases(&aliases);
+#warning permissions need to be restricted value
+  static map<string, ESEntityTypeMap::EntityType> generic_map = { {"bucket", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"name", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"instance", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"permissions", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"meta.etag", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"meta.contenttype", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"meta.mtime", ESEntityTypeMap::ES_ENTITY_DATE},
+                                                           {"meta.size", ESEntityTypeMap::ES_ENTITY_INT} };
+  ESEntityTypeMap gm(generic_map);
+  es_query.set_generic_type_map(&gm);
+
+  static map<string, ESEntityTypeMap::EntityType> custom_map = { };
+  ESEntityTypeMap em(custom_map);
+  es_query.set_custom_type_map(&em);
+
   bool valid = es_query.compile(&err);
   if (!valid) {
     ldout(s->cct, 10) << "invalid query, failed generating request json" << dendl;

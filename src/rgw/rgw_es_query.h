@@ -100,6 +100,8 @@ class ESQueryCompiler {
   ESEntityTypeMap *generic_type_map{nullptr};
   ESEntityTypeMap *custom_type_map{nullptr};
 
+  map<string, string> *field_aliases;
+
 public:
   ESQueryCompiler(const string& query, list<pair<string, string> > *prepend_eq_conds, const string& _custom_prefix) : parser(query), custom_prefix(_custom_prefix) {
     if (prepend_eq_conds) {
@@ -126,6 +128,22 @@ public:
 
   ESEntityTypeMap *get_custom_type_map() {
     return custom_type_map;
+  }
+
+  void set_field_aliases(map<string, string> *fa) {
+    field_aliases = fa;
+  }
+
+  string unalias_field(const string& field) {
+    if (!field_aliases) {
+      return field;
+    }
+    auto i = field_aliases->find(field);
+    if (i == field_aliases->end()) {
+      return field;
+    }
+
+    return i->second;
   }
 };
 
