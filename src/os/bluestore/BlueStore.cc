@@ -8048,6 +8048,7 @@ int BlueStore::_deferred_replay()
   dout(10) << __func__ << " start" << dendl;
   OpSequencerRef osr = new OpSequencer(cct, this);
   int count = 0;
+  int r = 0;
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_DEFERRED);
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
     dout(20) << __func__ << " replay " << pretty_binary_string(it->key())
@@ -8062,18 +8063,20 @@ int BlueStore::_deferred_replay()
       derr << __func__ << " failed to decode deferred txn "
 	   << pretty_binary_string(it->key()) << dendl;
       delete deferred_txn;
-      return -EIO;
+      r = -EIO;
+      goto out;
     }
     TransContext *txc = _txc_create(osr.get());
     txc->deferred_txn = deferred_txn;
     txc->state = TransContext::STATE_KV_DONE;
     _txc_state_proc(txc);
   }
+ out:
   dout(20) << __func__ << " draining osr" << dendl;
   _osr_drain_all();
   osr->discard();
   dout(10) << __func__ << " completed " << count << " events" << dendl;
-  return 0;
+  return r;
 }
 
 // ---------------------------
