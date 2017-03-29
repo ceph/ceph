@@ -346,6 +346,10 @@ public:
   unsigned get_num_up_mds() const {
     return up.size();
   }
+  mds_rank_t get_last_in_mds() const {
+    auto p = in.rbegin();
+    return p == in.rend() ? MDS_RANK_NONE : *p;
+  }
   int get_num_failed_mds() const {
     return failed.size();
   }
