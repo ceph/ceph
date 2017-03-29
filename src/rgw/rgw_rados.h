@@ -1818,7 +1818,6 @@ public:
     realm_id = _realm_id;
   }
 
-  void update(const RGWZoneGroupMap& map);
   int reflect();
 
   int get_zonegroup(RGWZoneGroup& zonegroup,
