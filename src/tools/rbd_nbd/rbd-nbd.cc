@@ -46,6 +46,7 @@
 #include "common/ceph_argparse.h"
 #include "common/Preforker.h"
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
@@ -78,6 +79,7 @@ static int nbds_max = 0;
 static int max_part = 255;
 static bool set_max_part = false;
 static bool exclusive = false;
+static int nbd = -1;
 
 #define RBD_NBD_BLKSIZE 512UL
 
@@ -89,6 +91,18 @@ static bool exclusive = false;
 #error "Could not determine endianess"
 #endif
 #define htonll(a) ntohll(a)
+
+static void handle_signal(int signum)
+{
+  assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
+  dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
+  if (ioctl(nbd, NBD_DISCONNECT) < 0) {
+    derr << "rbd-nbd: disconnect failed: " << cpp_error(errno) << std::endl;
+  } else {
+    dout(20) << __func__ << ": " << "disconnected" << dendl;
+  }
+}
 
 class NBDServer
 {
@@ -522,7 +536,6 @@ static int do_map(int argc, const char *argv[])
 
   int index = 0;
   int fd[2];
-  int nbd;
 
   librbd::image_info_t info;
 
@@ -704,7 +717,19 @@ static int do_map(int argc, const char *argv[])
       NBDServer server(fd[1], image);
 
       server.start();
+      
+      init_async_signal_handler();
+      register_async_signal_handler(SIGHUP, sighup_handler);
+      register_async_signal_handler_oneshot(SIGINT, handle_signal);
+      register_async_signal_handler_oneshot(SIGTERM, handle_signal);
+
       ioctl(nbd, NBD_DO_IT);
+     
+      unregister_async_signal_handler(SIGHUP, sighup_handler);
+      unregister_async_signal_handler(SIGINT, handle_signal);
+      unregister_async_signal_handler(SIGTERM, handle_signal);
+      shutdown_async_signal_handler();
+      
       server.stop();
     }
 
@@ -739,10 +764,13 @@ static int do_unmap()
     return nbd;
   }
 
-  // alert the reader thread to shut down
+  dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
   if (ioctl(nbd, NBD_DISCONNECT) < 0) {
     cerr << "rbd-nbd: the device is not used" << std::endl;
+  } else {
+    dout(20) << __func__ << ": " << "disconnected" << dendl;
   }
+
   close(nbd);
 
   return 0;
