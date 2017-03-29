@@ -31,9 +31,14 @@ MgrPyModule::MgrPyModule(const std::string &module_name_)
 
 MgrPyModule::~MgrPyModule()
 {
-  Py_XDECREF(pModule);
-  Py_XDECREF(pClass);
+  PyGILState_STATE gstate;
+  gstate = PyGILState_Ensure();
+
   Py_XDECREF(pClassInstance);
+  Py_XDECREF(pClass);
+  Py_XDECREF(pModule);
+
+  PyGILState_Release(gstate);
 }
 
 int MgrPyModule::load()
