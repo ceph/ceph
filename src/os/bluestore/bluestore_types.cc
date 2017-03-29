@@ -995,8 +995,8 @@ void bluestore_shared_blob_t::generate_test_instances(
 
 ostream& operator<<(ostream& out, const bluestore_shared_blob_t& sb)
 {
-  out << " sbid 0x" << std::hex << sb.sbid << std::dec;
-  out << " ref_map(" << sb.ref_map << ")";
+  out << "(sbid 0x" << std::hex << sb.sbid << std::dec;
+  out << " " << sb.ref_map << ")";
   return out;
 }
 
