@@ -1380,6 +1380,12 @@ int RGWPeriod::update()
     }
   }
 
+  ret = period_config.read(store, realm_id);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(cct, 0) << "ERROR: failed to read period config: "
+        << cpp_strerror(ret) << dendl;
+    return ret;
+  }
   return 0;
 }
 
@@ -1401,6 +1407,13 @@ int RGWPeriod::reflect()
             << " as the default" << dendl;
       }
     }
+  }
+
+  int r = period_config.write(store, realm_id);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to store period config: "
+        << cpp_strerror(-r) << dendl;
+    return r;
   }
   return 0;
 }
