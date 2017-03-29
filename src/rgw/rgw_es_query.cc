@@ -113,12 +113,12 @@ public:
   ESQueryNode(ESQueryCompiler *_compiler) : compiler(_compiler) {}
   virtual ~ESQueryNode() {}
 
-  virtual bool init(ESQueryStack *s, ESQueryNode **pnode) = 0;
+  virtual bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) = 0;
 
   virtual void dump(Formatter *f) const = 0;
 };
 
-static bool alloc_node(ESQueryCompiler *compiler, ESQueryStack *s, ESQueryNode **pnode);
+static bool alloc_node(ESQueryCompiler *compiler, ESQueryStack *s, ESQueryNode **pnode, string *perr);
 
 class ESQueryNode_Bool : public ESQueryNode {
   string op;
@@ -127,13 +127,14 @@ class ESQueryNode_Bool : public ESQueryNode {
 public:
   ESQueryNode_Bool(ESQueryCompiler *compiler) : ESQueryNode(compiler) {}
   ESQueryNode_Bool(ESQueryCompiler *compiler, const string& _op, ESQueryNode *_first, ESQueryNode *_second) :ESQueryNode(compiler), op(_op), first(_first), second(_second) {}
-  bool init(ESQueryStack *s, ESQueryNode **pnode) override {
+  bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) override {
     bool valid = s->pop(&op);
     if (!valid) {
+      *perr = "incorrect expression";
       return false;
     }
-    valid = alloc_node(compiler, s, &first) &&
-      alloc_node(compiler, s, &second);
+    valid = alloc_node(compiler, s, &first, perr) &&
+      alloc_node(compiler, s, &second, perr);
     if (!valid) {
       return false;
     }
@@ -162,7 +163,7 @@ public:
   ESQueryNodeLeafVal() = default;
   virtual ~ESQueryNodeLeafVal() {}
 
-  virtual bool init(const string& str_val) = 0;
+  virtual bool init(const string& str_val, string *perr) = 0;
   virtual void encode_json(const string& field, Formatter *f) const  = 0;
 };
 
@@ -170,7 +171,7 @@ class ESQueryNodeLeafVal_Str : public ESQueryNodeLeafVal {
   string val;
 public:
   ESQueryNodeLeafVal_Str() {}
-  bool init(const string& str_val) override {
+  bool init(const string& str_val, string *perr) override {
     val = str_val;
     return true;
   }
@@ -183,10 +184,11 @@ class ESQueryNodeLeafVal_Int : public ESQueryNodeLeafVal {
   int64_t val;
 public:
   ESQueryNodeLeafVal_Int() {}
-  bool init(const string& str_val) override {
+  bool init(const string& str_val, string *perr) override {
     string err;
     val = strict_strtoll(str_val.c_str(), 10, &err);
     if (!err.empty()) {
+      *perr = string("failed to parse integer: ") + err;
       return false;
     }
     return true;
@@ -200,8 +202,9 @@ class ESQueryNodeLeafVal_Date : public ESQueryNodeLeafVal {
   ceph::real_time val;
 public:
   ESQueryNodeLeafVal_Date() {}
-  bool init(const string& str_val) override {
+  bool init(const string& str_val, string *perr) override {
     if (parse_time(str_val.c_str(), &val) < 0) {
+      *perr = string("failed to parse date: ") + str_val;
       return false;
     }
     return true;
@@ -219,7 +222,7 @@ protected:
   ESQueryNodeLeafVal *val{nullptr};
   ESEntityTypeMap::EntityType entity_type{ESEntityTypeMap::ES_ENTITY_NONE};
 
-  bool val_from_str(const string& str_val) {
+  bool val_from_str(const string& str_val, string *perr) {
     switch (entity_type) {
       case ESEntityTypeMap::ES_ENTITY_DATE:
         val = new ESQueryNodeLeafVal_Date;
@@ -230,32 +233,33 @@ protected:
       default:
         val = new ESQueryNodeLeafVal_Str;
     }
-    return val->init(str_val);
+    return val->init(str_val, perr);
   }
 public:
   ESQueryNode_Op(ESQueryCompiler *compiler) : ESQueryNode(compiler) {}
   ~ESQueryNode_Op() {
     delete val;
   }
-  virtual bool init(ESQueryStack *s, ESQueryNode **pnode) override {
+  virtual bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) override {
     string str_val;
     bool valid = s->pop(&op) &&
       s->pop(&str_val) &&
       s->pop(&field);
     if (!valid) {
+      *perr = "invalid expression";
       return false;
     }
     ESQueryNode *effective_node;
-    if (!handle_nested(&effective_node)) {
+    if (!handle_nested(&effective_node, perr)) {
       return false;
     }
-    if (!val_from_str(str_val)) {
+    if (!val_from_str(str_val, perr)) {
       return false;
     }
     *pnode = effective_node;
     return true;
   }
-  bool handle_nested(ESQueryNode **pnode);
+  bool handle_nested(ESQueryNode **pnode, string *perr);
 
   virtual void dump(Formatter *f) const = 0;
 };
@@ -270,11 +274,11 @@ public:
     str_val = v;
   }
 
-  bool init(ESQueryStack *s, ESQueryNode **pnode) override {
+  bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) override {
     if (op.empty()) {
-      return ESQueryNode_Op::init(s, pnode);
+      return ESQueryNode_Op::init(s, pnode, perr);
     }
-    return val_from_str(str_val);
+    return val_from_str(str_val, perr);
   }
 
   virtual void dump(Formatter *f) const {
@@ -357,7 +361,7 @@ string ESQueryNode_Op_Nested<ceph::real_time>::type_str() const {
   return "date";
 }
 
-bool ESQueryNode_Op::handle_nested(ESQueryNode **pnode)
+bool ESQueryNode_Op::handle_nested(ESQueryNode **pnode, string *perr)
 {
   string field_name = field;
   const string& custom_prefix = compiler->get_custom_prefix();
@@ -365,8 +369,13 @@ bool ESQueryNode_Op::handle_nested(ESQueryNode **pnode)
     *pnode = this;
     auto m = compiler->get_generic_type_map();
     if (m) {
-      return m->find(field_name, &entity_type);
+      bool found = m->find(field_name, &entity_type);
+      if (!found) {
+        *perr = string("unexpected generic field '") + field_name + "'";
+      }
+      return found;
     }
+    *perr = "query parser does not support generic types";
     return false;
   }
 
@@ -400,11 +409,12 @@ static bool is_bool_op(const string& str)
   return (str == "or" || str == "and");
 }
 
-static bool alloc_node(ESQueryCompiler *compiler, ESQueryStack *s, ESQueryNode **pnode)
+static bool alloc_node(ESQueryCompiler *compiler, ESQueryStack *s, ESQueryNode **pnode, string *perr)
 {
   string op;
   bool valid = s->peek(&op);
   if (!valid) {
+    *perr = "incorrect expression";
     return false;
   }
 
@@ -424,13 +434,14 @@ static bool alloc_node(ESQueryCompiler *compiler, ESQueryStack *s, ESQueryNode *
 
     auto iter = range_op_map.find(op);
     if (iter == range_op_map.end()) {
+      *perr = string("invalid operator: ") + op;
       return false;
     }
 
     node = new ESQueryNode_Op_Range(compiler, iter->second);
   }
 
-  if (!node->init(s, pnode)) {
+  if (!node->init(s, pnode, perr)) {
     delete node;
     return false;
   }
@@ -583,16 +594,18 @@ bool ESInfixQueryParser::parse(list<string> *result) {
   return true;
 }
 
-bool ESQueryCompiler::convert(list<string>& infix) {
+bool ESQueryCompiler::convert(list<string>& infix, string *perr) {
   list<string> prefix;
   if (!infix_to_prefix(infix, &prefix)) {
+    *perr = "invalid query";
     return false;
   }
   stack.assign(prefix);
-  if (!alloc_node(this, &stack, &query_root)) {
+  if (!alloc_node(this, &stack, &query_root, perr)) {
     return false;
   }
   if (!stack.done()) {
+    *perr = "invalid query";
     return false;
   }
   return true;
@@ -602,13 +615,14 @@ ESQueryCompiler::~ESQueryCompiler() {
   delete query_root;
 }
 
-bool ESQueryCompiler::compile() {
+bool ESQueryCompiler::compile(string *perr) {
   list<string> infix;
   if (!parser.parse(&infix)) {
+    *perr = "failed to parse query";
     return false;
   }
 
-  if (!convert(infix)) {
+  if (!convert(infix, perr)) {
     return false;
   }
 

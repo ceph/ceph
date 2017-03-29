@@ -46,10 +46,12 @@ int main(int argc, char *argv[])
                                                           {"date", ESEntityTypeMap::ES_ENTITY_DATE} };
   ESEntityTypeMap em(custom_map);
   es_query.set_custom_type_map(&em);
+
+  string err;
   
-  bool valid = es_query.compile();
+  bool valid = es_query.compile(&err);
   if (!valid) {
-    cout << "invalid query, failed generating request json" << std::endl;
+    cout << "failed to compile query: " << err << std::endl;
     return EINVAL;
   }
 

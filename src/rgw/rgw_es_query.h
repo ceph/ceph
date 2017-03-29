@@ -93,7 +93,7 @@ class ESQueryCompiler {
 
   string custom_prefix;
 
-  bool convert(list<string>& infix);
+  bool convert(list<string>& infix, string *perr);
 
   list<pair<string, string> > eq_conds;
 
@@ -108,7 +108,7 @@ public:
   }
   ~ESQueryCompiler();
 
-  bool compile();
+  bool compile(string *perr);
   void dump(Formatter *f) const;
   
   void set_generic_type_map(ESEntityTypeMap *entity_map) {
