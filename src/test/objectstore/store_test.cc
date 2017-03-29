@@ -5689,6 +5689,7 @@ TEST_P(StoreTest, TooManyBlobsTest) {
   ASSERT_EQ(res_stat.allocated, max_object);
 }
 
+#if defined(HAVE_LIBAIO)
 void get_mempool_stats(uint64_t* total_bytes, uint64_t* total_items)
 {
   uint64_t onode_allocated = mempool::bluestore_meta_onode::allocated_bytes();
@@ -6325,6 +6326,8 @@ TEST_P(StoreTestSpecificAUSize, SmallWriteOnShardedExtents) {
   g_conf->set_val("bluestore_max_target_blob", "524288");
   g_conf->set_val("bluestore_csum_type", "crc32c");
 }
+
+#endif //#if defined(HAVE_LIBAIO)
 
 TEST_P(StoreTest, KVDBHistogramTest) {
   if (string(GetParam()) != "bluestore")
