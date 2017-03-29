@@ -475,6 +475,11 @@ public:
              get_blob().can_split_at(blob_offset);
     }
 
+    bool try_reuse_blob(uint32_t min_alloc_size,
+			uint32_t target_blob_size,
+			uint32_t b_offset,
+			uint32_t *length0);
+
     void dup(Blob& o) {
       o.shared_blob = shared_blob;
       o.blob = blob;
@@ -655,7 +660,30 @@ public:
   };
   typedef boost::intrusive::set<Extent> extent_map_t;
 
+
   friend ostream& operator<<(ostream& out, const Extent& e);
+
+  struct OldExtent {
+    boost::intrusive::list_member_hook<> old_extent_item;
+    Extent e;
+    PExtentVector r;
+    bool blob_empty; // flag to track the last removed extent that makes blob
+                     // empty - required to update compression stat properly
+    OldExtent(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b)
+      : e(lo, o, l, b), blob_empty(false) {
+    }
+    static OldExtent* create(CollectionRef c,
+                             uint32_t lo,
+			     uint32_t o,
+			     uint32_t l,
+			     BlobRef& b);
+  };
+  typedef boost::intrusive::list<
+      OldExtent,
+      boost::intrusive::member_hook<
+        OldExtent,
+    boost::intrusive::list_member_hook<>,
+    &OldExtent::old_extent_item> > old_extent_map_t;
 
   struct Onode;
 
@@ -804,14 +832,17 @@ public:
     int compress_extent_map(uint64_t offset, uint64_t length);
 
     /// punch a logical hole.  add lextents to deref to target list.
-    void punch_hole(uint64_t offset, uint64_t length,
-		    extent_map_t *old_extents);
+    void punch_hole(CollectionRef &c,
+		    uint64_t offset, uint64_t length,
+		    old_extent_map_t *old_extents);
 
     /// put new lextent into lextent_map overwriting existing ones if
     /// any and update references accordingly
-    Extent *set_lextent(uint64_t logical_offset,
+    Extent *set_lextent(CollectionRef &c,
+			uint64_t logical_offset,
 			uint64_t offset, uint64_t length,
-                        BlobRef b, extent_map_t *old_extents);
+                        BlobRef b,
+			old_extent_map_t *old_extents);
 
     /// split a blob (and referring extents)
     BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
@@ -855,7 +886,7 @@ public:
       uint64_t offset,
       uint64_t length,
       const ExtentMap& extent_map,
-      const extent_map_t& old_extents,
+      const old_extent_map_t& old_extents,
       uint64_t min_alloc_size);
 
     /// return a collection of extents to perform GC on
@@ -2242,9 +2273,10 @@ private:
     uint64_t target_blob_size = 0;  ///< target (max) blob size
     unsigned csum_order = 0;        ///< target checksum chunk order
 
-    extent_map_t old_extents;       ///< must deref these blobs
+    old_extent_map_t old_extents;   ///< must deref these blobs
 
     struct write_item {
+      uint64_t logical_offset;      ///< write logical offset
       BlobRef b;
       uint64_t blob_length;
       uint64_t b_off;
@@ -2253,34 +2285,64 @@ private:
       uint64_t length0; ///< original data length prior to padding
 
       bool mark_unused;
+      bool new_blob; ///< whether new blob was created
 
       write_item(
+	uint64_t logical_offs,
         BlobRef b,
         uint64_t blob_len,
         uint64_t o,
         bufferlist& bl,
         uint64_t o0,
         uint64_t l0,
-        bool _mark_unused)
-       : b(b),
+        bool _mark_unused,
+	bool _new_blob)
+       :
+         logical_offset(logical_offs),
+         b(b),
          blob_length(blob_len),
          b_off(o),
          bl(bl),
          b_off0(o0),
          length0(l0),
-         mark_unused(_mark_unused) {}
+         mark_unused(_mark_unused),
+	 new_blob(_new_blob) {}
     };
     vector<write_item> writes;                 ///< blobs we're writing
 
+    /// partial clone of the context
+    void fork(const WriteContext& other) {
+      buffered = other.buffered;
+      compress = other.compress;
+      target_blob_size = other.target_blob_size;
+      csum_order = other.csum_order;
+    }
     void write(
+      uint64_t loffs,
       BlobRef b,
       uint64_t blob_len,
       uint64_t o,
       bufferlist& bl,
       uint64_t o0,
-      uint64_t len0, bool _mark_unused) {
-      writes.emplace_back(write_item(b, blob_len, o, bl, o0, len0, _mark_unused));
+      uint64_t len0,
+      bool _mark_unused,
+      bool _new_blob) {
+      writes.emplace_back(loffs,
+                          b,
+                          blob_len,
+                          o,
+                          bl,
+                          o0,
+                          len0,
+                          _mark_unused,
+                          _new_blob);
     }
+    /// Checks for writes to the same pextent within a blob
+    bool has_conflict(
+      BlobRef b,
+      uint64_t loffs,
+      uint64_t loffs_end,
+      uint64_t min_alloc_size);
   };
 
   void _do_write_small(
@@ -2300,7 +2362,7 @@ private:
   int _do_alloc_write(
     TransContext *txc,
     CollectionRef c,
-    OnodeRef& o,
+    OnodeRef o,
     WriteContext *wctx);
   void _wctx_finish(
     TransContext *txc,
@@ -2334,12 +2396,6 @@ private:
                       uint64_t length,
                       bufferlist& bl,
                       WriteContext *wctx);
-  void _do_garbage_collection(TransContext *txc,
-			      CollectionRef& c,
-			      OnodeRef o,
-			      uint64_t offset,
-			      uint64_t length,
-			      WriteContext *wctx);
 
   int _touch(TransContext *txc,
 	     CollectionRef& c,
