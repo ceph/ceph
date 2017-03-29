@@ -3811,6 +3811,7 @@ int BlueStore::_open_alloc()
 
   uint64_t num = 0, bytes = 0;
 
+  dout(1) << __func__ << " opening allocation metadata" << dendl;
   // initialize from freelist
   fm->enumerate_reset();
   uint64_t offset, length;
@@ -3819,9 +3820,9 @@ int BlueStore::_open_alloc()
     ++num;
     bytes += length;
   }
-  dout(10) << __func__ << " loaded " << pretty_si_t(bytes)
-	   << " in " << num << " extents"
-	   << dendl;
+  dout(1) << __func__ << " loaded " << pretty_si_t(bytes)
+	  << " in " << num << " extents"
+	  << dendl;
 
   // also mark bluefs space as allocated
   for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
