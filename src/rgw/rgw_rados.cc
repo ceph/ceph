@@ -1287,20 +1287,6 @@ void RGWPeriod::fork()
   realm_epoch++;
 }
 
-void RGWPeriod::update(const RGWZoneGroupMap& map)
-{
-  ldout(cct, 20) << __func__ << " realm " << realm_id << " period " << id << dendl;
-  for (std::map<string, RGWZoneGroup>::const_iterator iter = map.zonegroups.begin();
-       iter != map.zonegroups.end(); ++iter) {
-    period_map.zonegroups_by_api[iter->second.api_name] = iter->second;
-    period_map.zonegroups[iter->second.get_name()] = iter->second;
-  }
-
-  period_config.bucket_quota = map.bucket_quota;
-  period_config.user_quota = map.user_quota;
-  period_map.master_zonegroup = map.master_zonegroup;
-}
-
 int RGWPeriod::update_sync_status()
 {
   // must be new period's master zone to write sync status
