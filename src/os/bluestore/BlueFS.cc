@@ -873,6 +873,8 @@ int BlueFS::_read_random(
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << h->file->fnode << dendl;
 
+  logger->inc(l_bluefs_reads);
+  logger->inc(l_bluefs_read_bytes, len);
   ++h->file->num_reading;
 
   if (!h->ignore_eof &&
