@@ -5012,6 +5012,12 @@ int BlueStore::fsck(bool deep)
   if (r < 0)
     goto out_alloc;
 
+  mempool_thread.init();
+
+  r = _deferred_replay();
+  if (r < 0)
+    goto out_scan;
+
   used_blocks.resize(bdev->get_size() / block_size);
   apply(
     0, BLUEFS_START, block_size, used_blocks, "0~BLUEFS_START",
@@ -5031,8 +5037,7 @@ int BlueStore::fsck(bool deep)
     }
     r = bluefs->fsck();
     if (r < 0) {
-      flush_cache();
-      goto out_alloc;
+      goto out_scan;
     }
     if (r > 0)
       errors += r;
@@ -5329,6 +5334,7 @@ int BlueStore::fsck(bool deep)
 	  used_omap_head.insert(o->onode.nid);
 	}
       }
+      c->trim_cache();
     }
   }
   dout(1) << __func__ << " checking shared_blobs" << dendl;
@@ -5472,6 +5478,7 @@ int BlueStore::fsck(bool deep)
   }
 
  out_scan:
+  mempool_thread.shutdown();
   flush_cache();
  out_alloc:
   _close_alloc();
