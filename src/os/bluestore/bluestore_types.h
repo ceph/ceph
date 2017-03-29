@@ -138,8 +138,14 @@ struct bluestore_pextent_t : public AllocExtent {
 
   bluestore_pextent_t() : AllocExtent() {}
   bluestore_pextent_t(uint64_t o, uint64_t l) : AllocExtent(o, l) {}
-  bluestore_pextent_t(AllocExtent &ext) : AllocExtent(ext.offset, ext.length) { }
+  bluestore_pextent_t(const AllocExtent &ext) :
+    AllocExtent(ext.offset, ext.length) { }
 
+  bluestore_pextent_t& operator=(const AllocExtent &ext) {
+    offset = ext.offset;
+    length = ext.length;
+    return *this;
+  }
   bool is_valid() const {
     return offset != INVALID_OFFSET;
   }
@@ -349,12 +355,45 @@ struct bluestore_blob_use_tracker_t {
       assert(_num_au <= num_au);
       if (_num_au) {
         num_au = _num_au; // bytes_per_au array is left unmodified
+
       } else {
         clear();
       }
     }
   }
-  
+  void add_tail(uint32_t new_len, uint32_t _au_size) {
+    auto full_size = au_size * (num_au ? num_au : 1);
+    assert(new_len >= full_size);
+    if (new_len == full_size) {
+      return;
+    }
+    if (!num_au) {
+      uint32_t old_total = total_bytes;
+      total_bytes = 0;
+      init(new_len, _au_size);
+      assert(num_au);
+      bytes_per_au[0] = old_total;
+    } else {
+      assert(_au_size == au_size);
+      new_len = ROUND_UP_TO(new_len, au_size);
+      uint32_t _num_au = new_len / au_size;
+      assert(_num_au >= num_au);
+      if (_num_au > num_au) {
+	auto old_bytes = bytes_per_au;
+	auto old_num_au = num_au;
+	num_au = _num_au;
+	allocate();
+	for (size_t i = 0; i < old_num_au; i++) {
+	  bytes_per_au[i] = old_bytes[i];
+	}
+	for (size_t i = old_num_au; i < num_au; i++) {
+	  bytes_per_au[i] = 0;
+	}
+	delete[] old_bytes;
+      }
+    }
+  }
+
   void init(
     uint32_t full_length,
     uint32_t _au_size);
@@ -438,6 +477,12 @@ ostream& operator<<(ostream& out, const bluestore_blob_use_tracker_t& rm);
 
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
+private:
+  PExtentVector extents;              ///< raw data position on device
+  uint32_t logical_length = 0;        ///< < original length of data stored in the blob
+  uint32_t compressed_length = 0;     ///< compressed length if any
+
+public:
   enum {
     FLAG_MUTABLE = 1,         ///< blob can be overwritten or split
     FLAG_COMPRESSED = 2,      ///< blob is compressed
@@ -447,10 +492,6 @@ struct bluestore_blob_t {
   };
   static string get_flags_string(unsigned flags);
 
-
-  PExtentVector extents;              ///< raw data position on device
-  uint32_t compressed_length_orig = 0;///< original length of compressed blob if any
-  uint32_t compressed_length = 0;     ///< compressed length if any
   uint32_t flags = 0;                 ///< FLAG_*
 
   uint16_t unused = 0;     ///< portion that has never been written to (bitmap)
@@ -462,12 +503,16 @@ struct bluestore_blob_t {
 
   bluestore_blob_t(uint32_t f = 0) : flags(f) {}
 
+  const PExtentVector& get_extents() const {
+    return extents;
+  }
+
   DENC_HELPERS;
   void bound_encode(size_t& p, uint64_t struct_v) const {
     assert(struct_v == 1 || struct_v == 2);
     denc(extents, p);
     denc_varint(flags, p);
-    denc_varint_lowz(compressed_length_orig, p);
+    denc_varint_lowz(logical_length, p);
     denc_varint_lowz(compressed_length, p);
     denc(csum_type, p);
     denc(csum_chunk_order, p);
@@ -481,7 +526,7 @@ struct bluestore_blob_t {
     denc(extents, p);
     denc_varint(flags, p);
     if (is_compressed()) {
-      denc_varint_lowz(compressed_length_orig, p);
+      denc_varint_lowz(logical_length, p);
       denc_varint_lowz(compressed_length, p);
     }
     if (has_csum()) {
@@ -501,8 +546,10 @@ struct bluestore_blob_t {
     denc(extents, p);
     denc_varint(flags, p);
     if (is_compressed()) {
-      denc_varint_lowz(compressed_length_orig, p);
+      denc_varint_lowz(logical_length, p);
       denc_varint_lowz(compressed_length, p);
+    } else {
+      logical_length = get_ondisk_length();
     }
     if (has_csum()) {
       denc(csum_type, p);
@@ -544,7 +591,7 @@ struct bluestore_blob_t {
 
   void set_compressed(uint64_t clen_orig, uint64_t clen) {
     set_flag(FLAG_COMPRESSED);
-    compressed_length_orig = clen_orig;
+    logical_length = clen_orig;
     compressed_length = clen;
   }
   bool is_mutable() const {
@@ -574,9 +621,6 @@ struct bluestore_blob_t {
   uint32_t get_compressed_payload_length() const {
     return is_compressed() ? compressed_length : 0;
   }
-  uint32_t get_compressed_payload_original_length() const {
-    return is_compressed() ? compressed_length_orig : 0;
-  }
   uint64_t calc_offset(uint64_t x_off, uint64_t *plen) const {
     auto p = extents.begin();
     assert(p != extents.end());
@@ -603,6 +647,31 @@ struct bluestore_blob_t {
     while (b_len) {
       assert(p != extents.end());
       if (!p->is_valid()) {
+	return false;
+      }
+      if (p->length >= b_len) {
+	return true;
+      }
+      b_len -= p->length;
+      ++p;
+    }
+    assert(0 == "we should not get here");
+  }
+
+  /// return true if the entire range is unallocated
+  ///  (not mapped to extents on disk)
+  bool is_unallocated(uint64_t b_off, uint64_t b_len) const {
+    auto p = extents.begin();
+    assert(p != extents.end());
+    while (b_off >= p->length) {
+      b_off -= p->length;
+      ++p;
+      assert(p != extents.end());
+    }
+    b_len += b_off;
+    while (b_len) {
+      assert(p != extents.end());
+      if (p->is_valid()) {
 	return false;
       }
       if (p->length >= b_len) {
@@ -720,11 +789,7 @@ struct bluestore_blob_t {
   }
 
   uint32_t get_logical_length() const {
-    if (is_compressed()) {
-      return compressed_length_orig;
-    } else {
-      return get_ondisk_length();
-    }
+    return logical_length;
   }
   size_t get_csum_value_size() const;
 
@@ -785,6 +850,8 @@ struct bluestore_blob_t {
       !has_unused();
   }
   void prune_tail() {
+    const auto &p = extents.back();
+    logical_length -= p.length;
     extents.pop_back();
     if (has_csum()) {
       bufferptr t;
@@ -792,6 +859,22 @@ struct bluestore_blob_t {
       csum_data = bufferptr(t.c_str(),
 			    get_logical_length() / get_csum_chunk_size() *
 			    get_csum_value_size());
+    }
+  }
+  void add_tail(uint32_t new_len) {
+    assert(is_mutable());
+    assert(new_len > logical_length);
+    extents.emplace_back(
+      bluestore_pextent_t(
+        bluestore_pextent_t::INVALID_OFFSET,
+        new_len - logical_length));
+    logical_length = new_len;
+    if (has_csum()) {
+      bufferptr t;
+      t.swap(csum_data);
+      csum_data = buffer::create(get_csum_value_size() * logical_length / get_csum_chunk_size());
+      csum_data.copy_in(0, t.length(), t.c_str());
+      csum_data.zero( t.length(), csum_data.length() - t.length());
     }
   }
   uint32_t get_release_size(uint32_t min_alloc_size) const {
@@ -804,6 +887,21 @@ struct bluestore_blob_t {
     }
     return res;
   }
+
+  void split(uint32_t blob_offset, bluestore_blob_t& rb);
+  void allocated(uint32_t b_off, uint32_t length, const AllocExtentVector& allocs);
+  void allocated_test(const bluestore_pextent_t& alloc); // intended for UT only
+
+  /// updates blob's pextents container and return unused pextents eligible
+  /// for release.
+  /// all - indicates that the whole blob to be released.
+  /// logical - specifies set of logical extents within blob's
+  /// to be released
+  /// Returns true if blob has no more valid pextents
+  bool release_extents(
+    bool all,
+    const PExtentVector& logical,
+    PExtentVector* r);
 };
 WRITE_CLASS_DENC_FEATURED(bluestore_blob_t)
 
