@@ -550,7 +550,7 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
   trim_whitespace(p, str);
   int len = str.size();
 
-  if (len == 1 && str[0] == 'Z')
+  if (len == 0 || (len == 1 && str[0] == 'Z'))
     return true;
 
   if (str[0] != '.' ||
