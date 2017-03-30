@@ -60,7 +60,6 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon, const PGMap& pg
 void PGMonitor::on_restart()
 {
   // clear leader state
-  last_sent_pg_create.clear();
   last_osd_report.clear();
 }
 
@@ -177,8 +176,6 @@ void PGMonitor::update_from_paxos(bool *need_bootstrap)
 
   // pg/osd keys in leveldb
   // read meta
-  epoch_t last_pg_scan = pg_map.last_pg_scan;
-
   while (version > pg_map.version) {
     // load full state?
     if (pg_map.version == 0) {
@@ -203,9 +200,6 @@ void PGMonitor::update_from_paxos(bool *need_bootstrap)
   read_pgmap_meta();
 
 out:
-  if (last_pg_scan != pg_map.last_pg_scan)
-    last_sent_pg_create.clear();  // reset pg_create throttle timer
-
   assert(version == pg_map.version);
 
   update_logger();
@@ -237,6 +231,11 @@ void PGMonitor::post_paxos_update()
 {
   dout(10) << __func__ << dendl;
   OSDMap& osdmap = mon->osdmon()->osdmap;
+  if (mon->monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS)) {
+    // let OSDMonitor take care of the pg-creates subscriptions.
+    return;
+  }
   if (osdmap.get_epoch()) {
     if (osdmap.get_num_up_osds() > 0) {
       assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);
@@ -883,10 +882,10 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   const OSDMap& osdmap = mon->osdmon()->osdmap;
   assert(pg_map.last_osdmap_epoch < epoch);
   pending_inc.osdmap_epoch = epoch;
-  PGMapUpdater::update_creating_pgs(osdmap, &pg_map, &pending_inc);
-  PGMapUpdater::register_new_pgs(osdmap, &pg_map, &pending_inc);
+  PGMapUpdater::update_creating_pgs(osdmap, pg_map, &pending_inc);
+  PGMapUpdater::register_new_pgs(osdmap, pg_map, &pending_inc);
 
-  PGMapUpdater::check_down_pgs(osdmap, &pg_map, check_all_pgs,
+  PGMapUpdater::check_down_pgs(osdmap, pg_map, check_all_pgs,
 			       need_check_down_pg_osds, &pending_inc);
   check_all_pgs = false;
 
@@ -931,7 +930,6 @@ epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
   }
 
   con->send_message(m);
-  last_sent_pg_create[osd] = ceph_clock_now();
 
   // sub is current through last + 1
   return last + 1;
@@ -1337,7 +1335,7 @@ bool PGMonitor::prepare_command(MonOpRequestRef op)
 	pgid,
 	epoch,
 	true,
-	&pg_map,
+	pg_map,
 	&pending_inc);
     }
     ss << "pg " << pgidstr << " now creating, ok";
@@ -1922,29 +1920,34 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
 void PGMonitor::check_subs()
 {
   dout(10) << __func__ << dendl;
-  string type = "osd_pg_creates";
-  if (mon->session_map.subs.count(type) == 0)
-    return;
+  const string type = "osd_pg_creates";
 
-  xlist<Subscription*>::iterator p = mon->session_map.subs[type]->begin();
-  while (!p.end()) {
-    Subscription *sub = *p;
-    ++p;
-    dout(20) << __func__ << " .. " << sub->session->inst << dendl;
-    check_sub(sub);
-  }
+  mon->with_session_map([this, &type](const MonSessionMap& session_map) {
+      if (mon->session_map.subs.count(type) == 0)
+	return;
+
+      auto p = mon->session_map.subs[type]->begin();
+      while (!p.end()) {
+	Subscription *sub = *p;
+	++p;
+	dout(20) << __func__ << " .. " << sub->session->inst << dendl;
+	check_sub(sub);
+      }
+    });
 }
 
-void PGMonitor::check_sub(Subscription *sub)
+bool PGMonitor::check_sub(Subscription *sub)
 {
+  OSDMap& osdmap = mon->osdmon()->osdmap;
   if (sub->type == "osd_pg_creates") {
     // only send these if the OSD is up.  we will check_subs() when they do
     // come up so they will get the creates then.
     if (sub->session->inst.name.is_osd() &&
-        mon->osdmon()->osdmap.is_up(sub->session->inst.name.num())) {
+        osdmap.is_up(sub->session->inst.name.num())) {
       sub->next = send_pg_creates(sub->session->inst.name.num(),
                                   sub->session->con.get(),
                                   sub->next);
     }
   }
+  return true;
 }

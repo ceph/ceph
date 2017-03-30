@@ -789,6 +789,7 @@ OPTION(osd_mon_heartbeat_interval, OPT_INT, 30)  // (seconds) how often to ping 
 OPTION(osd_mon_report_interval_max, OPT_INT, 600)
 OPTION(osd_mon_report_interval_min, OPT_INT, 5)  // pg stats, failures, up_thru, boot.
 OPTION(osd_mon_report_max_in_flight, OPT_INT, 2)  // max updates in flight
+OPTION(osd_beacon_report_interval, OPT_INT, 300)       // (second) how often to send beacon message to monitor
 OPTION(osd_pg_stat_report_interval_max, OPT_INT, 500)  // report pg stats for any given pg at least this often
 OPTION(osd_mon_ack_timeout, OPT_DOUBLE, 30.0) // time out a mon if it doesn't ack stats
 OPTION(osd_stats_ack_timeout_factor, OPT_DOUBLE, 2.0) // multiples of mon_ack_timeout

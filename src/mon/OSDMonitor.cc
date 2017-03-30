@@ -31,6 +31,7 @@
 #include "crush/CrushTester.h"
 #include "crush/CrushTreeDumper.h"
 
+#include "messages/MOSDBeacon.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDFull.h"
@@ -40,6 +41,8 @@
 #include "messages/MOSDAlive.h"
 #include "messages/MPoolOp.h"
 #include "messages/MPoolOpReply.h"
+#include "messages/MOSDPGCreate.h"
+#include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
@@ -68,16 +71,21 @@
 #include "include/str_map.h"
 
 #define dout_subsys ceph_subsys_mon
+#define OSD_PG_CREATING_PREFIX "osd_pg_creating"
 
-struct C_PrintTime : public Context {
+struct C_UpdateCreatingPGs : public Context {
+  OSDMonitor *osdmon;
   utime_t start;
   epoch_t epoch;
-  C_PrintTime(epoch_t e) : start(ceph_clock_now()), epoch(e) {}
+  C_UpdateCreatingPGs(OSDMonitor *osdmon, epoch_t e) :
+    osdmon(osdmon), start(ceph_clock_now()), epoch(e) {}
   void finish(int r) override {
     if (r >= 0) {
       utime_t end = ceph_clock_now();
       dout(10) << "osdmap epoch " << epoch << " mapping took "
 	       << (end - start) << " seconds" << dendl;
+      osdmon->update_creating_pgs();
+      osdmon->check_pg_creates_subs();
     }
   }
 };
@@ -97,10 +105,10 @@ OSDMonitor::OSDMonitor(
   const string& service_name)
  : PaxosService(mn, p, service_name),
    cct(cct),
-   mapper(mn->cct, &mn->cpu_tp),
    inc_osd_cache(g_conf->mon_osd_cache_size),
    full_osd_cache(g_conf->mon_osd_cache_size),
    last_attempted_minwait_time(utime_t()),
+   mapper(mn->cct, &mn->cpu_tp),
    op_tracker(cct, true, 1)
 {}
 
@@ -163,6 +171,12 @@ void OSDMonitor::create_initial()
   dout(20) << " full crc " << pending_inc.full_crc << dendl;
 }
 
+void OSDMonitor::get_store_prefixes(std::set<string>& s)
+{
+  s.insert(service_name);
+  s.insert(OSD_PG_CREATING_PREFIX);
+}
+
 void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_last_committed();
@@ -191,16 +205,14 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
   if (get_first_committed() > 1 &&
       latest_full < get_first_committed()) {
-    /* a bug introduced in 7fb3804fb860dcd0340dd3f7c39eec4315f8e4b6 would lead
-     * us to not update the on-disk latest_full key.  Upon trim, the actual
-     * version would cease to exist but we would still point to it.  This
-     * makes sure we get it pointing to a proper version.
-     */
+    // the monitor could be just sync'ed with its peer, and the latest_full key
+    // is not encoded in the paxos commits in encode_pending(), so we need to
+    // make sure we get it pointing to a proper version.
     version_t lc = get_last_committed();
     version_t fc = get_first_committed();
 
     dout(10) << __func__ << " looking for valid full map in interval"
-             << " [" << fc << ", " << lc << "]" << dendl;
+	     << " [" << fc << ", " << lc << "]" << dendl;
 
     latest_full = 0;
     for (version_t v = lc; v >= fc; v--) {
@@ -212,9 +224,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       }
     }
 
-    // if we trigger this, then there's something else going with the store
-    // state, and we shouldn't want to work around it without knowing what
-    // exactly happened.
     assert(latest_full > 0);
     auto t(std::make_shared<MonitorDBStore::Transaction>());
     put_version_latest_full(t, latest_full);
@@ -229,6 +238,16 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     assert(latest_bl.length() != 0);
     dout(7) << __func__ << " loading latest full map e" << latest_full << dendl;
     osdmap.decode(latest_bl);
+  }
+
+  if (mon->monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS)) {
+    bufferlist bl;
+    mon->store->get(OSD_PG_CREATING_PREFIX, "creating", bl);
+    auto p = bl.begin();
+    std::lock_guard<Spinlock> l(creating_pgs_lock);
+    creating_pgs.decode(p);
+    dout(7) << __func__ << " loading creating_pgs e" << creating_pgs.last_scan_epoch << dendl;
   }
 
   // walk through incrementals
@@ -296,6 +315,10 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       t = MonitorDBStore::TransactionRef();
       tx_size = 0;
     }
+    if (mon->monmap->get_required_features().contains_all(
+          ceph::features::mon::FEATURE_LUMINOUS)) {
+      creating_pgs = update_pending_creatings(inc);
+    }
   }
 
   if (t) {
@@ -324,13 +347,13 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   /** we don't have any of the feature bit infrastructure in place for
    * supporting primary_temp mappings without breaking old clients/OSDs.*/
   assert(g_conf->mon_osd_allow_primary_temp || osdmap.primary_temp->empty());
-
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
     mon->pgmon()->check_osd_map(osdmap.epoch);
   }
 
-  check_subs();
+  check_osdmap_subs();
+  check_pg_creates_subs();
 
   share_map_with_random_osd();
   update_logger();
@@ -339,6 +362,27 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
   // make sure our feature bits reflect the latest map
   update_msgr_features();
+
+  if (!mon->is_leader()) {
+    // will be called by on_active() on the leader, avoid doing so twice
+    start_mapping();
+  }
+}
+
+void OSDMonitor::start_mapping()
+{
+  // initiate mapping job
+  if (mapping_job) {
+    dout(10) << __func__ << " canceling previous mapping_job " << mapping_job.get()
+	     << dendl;
+    mapping_job->abort();
+  }
+  auto fin = new C_UpdateCreatingPGs(this, osdmap.get_epoch());
+  mapping_job = mapping.start_update(osdmap, mapper,
+				     g_conf->mon_osd_mapping_pgs_per_chunk);
+  dout(10) << __func__ << " started mapping job " << mapping_job.get()
+	   << " at " << fin->start << dendl;
+  mapping_job->set_finish_event(fin);
 }
 
 void OSDMonitor::update_msgr_features()
@@ -364,10 +408,9 @@ void OSDMonitor::on_active()
 {
   update_logger();
 
-  if (mon->is_leader())
+  if (mon->is_leader()) {
     mon->clog->info() << "osdmap " << osdmap;
-
-  if (!mon->is_leader()) {
+  } else {
     list<MonOpRequestRef> ls;
     take_all_failures(ls);
     while (!ls.empty()) {
@@ -377,22 +420,7 @@ void OSDMonitor::on_active()
       ls.pop_front();
     }
   }
-
-  // initiate mapping job
-  if (mapping_job) {
-    dout(10) << __func__ << " canceling previous mapping_job " << mapping_job.get()
-	     << dendl;
-    mapping_job->abort();
-  }
-  if (g_conf->mon_osd_prime_pg_temp) {
-    C_PrintTime *fin = new C_PrintTime(osdmap.get_epoch());
-    mapping.reset(new OSDMapMapping);
-    mapping_job = mapping->start_update(osdmap, mapper,
-					g_conf->mon_osd_mapping_pgs_per_chunk);
-    dout(10) << __func__ << " started mapping job " << mapping_job.get()
-	     << " at " << fin->start << dendl;
-    mapping_job->set_finish_event(fin);
-  }
+  start_mapping();
 }
 
 void OSDMonitor::on_shutdown()
@@ -1010,6 +1038,40 @@ void OSDMonitor::create_pending()
   }
 }
 
+creating_pgs_t
+OSDMonitor::update_pending_creatings(const OSDMap::Incremental& inc)
+{
+  creating_pgs_t pending_creatings;
+  {
+    std::lock_guard<Spinlock> l(creating_pgs_lock);
+    pending_creatings = creating_pgs;
+  }
+  if (pending_creatings.last_scan_epoch > inc.epoch) {
+    return pending_creatings;
+  }
+  for (auto& pg : pending_created_pgs) {
+    pending_creatings.created_pools.insert(pg.pool());
+    pending_creatings.pgs.erase(pg);
+  }
+  for (auto old_pool : inc.old_pools) {
+    pending_creatings.created_pools.erase(old_pool);
+    const auto removed_pool = (uint64_t)old_pool;
+    auto first =
+      pending_creatings.pgs.lower_bound(pg_t{0, removed_pool});
+    auto last =
+      pending_creatings.pgs.lower_bound(pg_t{0, removed_pool + 1});
+    pending_creatings.pgs.erase(first, last);
+  }
+  scan_for_creating_pgs(osdmap.get_pools(),
+			inc.old_pools,
+			&pending_creatings);
+  scan_for_creating_pgs(inc.new_pools,
+			inc.old_pools,
+			&pending_creatings);
+  pending_creatings.last_scan_epoch = osdmap.get_epoch();
+  return pending_creatings;
+}
+
 void OSDMonitor::maybe_prime_pg_temp()
 {
   bool all = false;
@@ -1051,13 +1113,13 @@ void OSDMonitor::maybe_prime_pg_temp()
 
   if (!all) {
     unsigned estimate =
-      mapping->get_osd_acting_pgs(*osds.begin()).size() * osds.size();
-    if (estimate > mapping->get_num_pgs() *
+      mapping.get_osd_acting_pgs(*osds.begin()).size() * osds.size();
+    if (estimate > mapping.get_num_pgs() *
 	g_conf->mon_osd_prime_pg_temp_max_estimate) {
       dout(10) << __func__ << " estimate " << estimate << " pgs on "
 	       << osds.size() << " osds >= "
 	       << g_conf->mon_osd_prime_pg_temp_max_estimate << " of total "
-	       << mapping->get_num_pgs() << " pgs, all"
+	       << mapping.get_num_pgs() << " pgs, all"
 	       << dendl;
       all = true;
     } else {
@@ -1089,7 +1151,7 @@ void OSDMonitor::maybe_prime_pg_temp()
     int n = chunk;
     std::unordered_set<pg_t> did_pgs;
     for (auto osd : osds) {
-      auto& pgs = mapping->get_osd_acting_pgs(osd);
+      auto& pgs = mapping.get_osd_acting_pgs(osd);
       dout(20) << __func__ << " osd." << osd << " " << pgs << dendl;
       for (auto pgid : pgs) {
 	if (!did_pgs.insert(pgid).second) {
@@ -1115,13 +1177,20 @@ void OSDMonitor::prime_pg_temp(
   const OSDMap& next,
   pg_t pgid)
 {
-  PGMap *pg_map = &mon->pgmon()->pg_map;  // FIMXE: use new creating_pgs map
-  if (!pg_map->creating_pgs.count(pgid)) {
-    return;
+  if (mon->monmap->get_required_features().contains_all(
+        ceph::features::mon::FEATURE_LUMINOUS)) {
+    if (!creating_pgs.pgs.count(pgid)) {
+      return;
+    }
+  } else {
+    const auto& pg_map = mon->pgmon()->pg_map;
+    if (!pg_map.creating_pgs.count(pgid)) {
+      return;
+    }
   }
 
   vector<int> up, acting;
-  mapping->get(pgid, &up, nullptr, &acting, nullptr);
+  mapping.get(pgid, &up, nullptr, &acting, nullptr);
 
   vector<int> next_up, next_acting;
   int next_up_primary, next_acting_primary;
@@ -1162,16 +1231,16 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   int r = pending_inc.propagate_snaps_to_tiers(g_ceph_context, osdmap);
   assert(r == 0);
 
-  if (mapping && mapping_job) {
+  if (mapping_job) {
     if (!mapping_job->is_done()) {
       dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
 	      << mapping_job.get() << " did not complete, "
 	      << mapping_job->shards << " left" << dendl;
       mapping_job->abort();
-    } else if (mapping->get_epoch() == osdmap.get_epoch()) {
+    } else if (mapping.get_epoch() == osdmap.get_epoch()) {
       dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
 	      << mapping_job.get() << " is prior epoch "
-	      << mapping->get_epoch() << dendl;
+	      << mapping.get_epoch() << dendl;
     } else {
       if (g_conf->mon_osd_prime_pg_temp) {
 	maybe_prime_pg_temp();
@@ -1307,6 +1376,32 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     t->erase(OSD_METADATA_PREFIX, stringify(*p));
   pending_metadata.clear();
   pending_metadata_rm.clear();
+
+  // and pg creating, also!
+  if (mon->monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS)) {
+    auto pending_creatings = update_pending_creatings(pending_inc);
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      dout(7) << __func__ << " in the middle of upgrading, "
+	      << " trimming pending creating_pgs using pgmap" << dendl;
+      trim_creating_pgs(&pending_creatings, mon->pgmon()->pg_map);
+    }
+    bufferlist creatings_bl;
+    ::encode(pending_creatings, creatings_bl);
+    t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
+  }
+}
+
+void OSDMonitor::trim_creating_pgs(creating_pgs_t* creating_pgs,
+				   const PGMap& pgm)
+{
+  for (auto& pg : pgm.pg_stat) {
+    auto created = creating_pgs->pgs.find(pg.first);
+    if (created != creating_pgs->pgs.end()) {
+      creating_pgs->pgs.erase(created);
+      creating_pgs->created_pools.insert(pg.first.pool());
+    }
+  }
 }
 
 int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
@@ -1380,8 +1475,23 @@ void OSDMonitor::share_map_with_random_osd()
 
 version_t OSDMonitor::get_trim_to()
 {
-  if (mon->pgmon()->is_readable() &&
-      mon->pgmon()->pg_map.creating_pgs.empty()) {
+  if (mon->monmap->get_required_features().contains_all(
+        ceph::features::mon::FEATURE_LUMINOUS)) {
+    std::lock_guard<Spinlock> l(creating_pgs_lock);
+    if (!creating_pgs.pgs.empty()) {
+      return 0;
+    }
+    if (!mon->pgmon()->is_readable()) {
+      return 0;
+    }
+  } else {
+    if (!mon->pgmon()->is_readable())
+      return 0;
+    if (mon->pgmon()->pg_map.creating_pgs.empty()) {
+      return 0;
+    }
+  }
+  {
     epoch_t floor = mon->pgmon()->pg_map.get_min_last_epoch_clean();
     dout(10) << " min_last_epoch_clean " << floor << dendl;
     if (g_conf->mon_osd_force_trim_to > 0 &&
@@ -1437,8 +1547,12 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_boot(op);
   case MSG_OSD_ALIVE:
     return preprocess_alive(op);
+  case MSG_OSD_PG_CREATED:
+    return preprocess_pg_created(op);
   case MSG_OSD_PGTEMP:
     return preprocess_pgtemp(op);
+  case MSG_OSD_BEACON:
+    return preprocess_beacon(op);
 
   case CEPH_MSG_POOLOP:
     return preprocess_pool_op(op);
@@ -1470,8 +1584,12 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     return prepare_boot(op);
   case MSG_OSD_ALIVE:
     return prepare_alive(op);
+  case MSG_OSD_PG_CREATED:
+    return prepare_pg_created(op);
   case MSG_OSD_PGTEMP:
     return prepare_pgtemp(op);
+  case MSG_OSD_BEACON:
+    return prepare_beacon(op);
 
   case MSG_MON_COMMAND:
     return prepare_command(op);
@@ -1481,6 +1599,7 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
 
   case MSG_REMOVE_SNAPS:
     return prepare_remove_snaps(op);
+
 
   default:
     ceph_abort();
@@ -2524,6 +2643,43 @@ void OSDMonitor::_reply_map(MonOpRequestRef op, epoch_t e)
   send_latest(op, e);
 }
 
+// pg_created
+bool OSDMonitor::preprocess_pg_created(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = static_cast<MOSDPGCreated*>(op->get_req());
+  dout(10) << __func__ << " " << *m << dendl;
+  auto session = m->get_session();
+  if (!session) {
+    dout(10) << __func__ << ": no monitor session!" << dendl;
+    return true;
+  }
+  if (!session->is_capable("osd", MON_CAP_X)) {
+    derr << __func__ << " received from entity "
+         << "with insufficient privileges " << session->caps << dendl;
+    return true;
+  }
+  // always forward the "created!" to the leader
+  return false;
+}
+
+bool OSDMonitor::prepare_pg_created(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = static_cast<MOSDPGCreated*>(op->get_req());
+  dout(10) << __func__ << " " << *m << dendl;
+  auto src = m->get_orig_source();
+  auto from = src.num();
+  if (!src.is_osd() ||
+      !mon->osdmon()->osdmap.is_up(from) ||
+      m->get_orig_source_inst() != mon->osdmon()->osdmap.get_inst(from)) {
+    dout(1) << __func__ << " ignoring stats from non-active osd." << dendl;
+    return false;
+  }
+  pending_created_pgs.push_back(m->pgid);
+  return true;
+}
+
 // -------------
 // pg_temp changes
 
@@ -2739,6 +2895,47 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
   return true;
 }
 
+// osd beacon
+bool OSDMonitor::preprocess_beacon(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto beacon = static_cast<MOSDBeacon*>(op->get_req());
+  // check caps
+  auto session = beacon->get_session();
+  if (!session) {
+    dout(10) << __func__ << " no monitor session!" << dendl;
+    return true;
+  }
+  if (!session->is_capable("osd", MON_CAP_X)) {
+    derr << __func__ << " received from entity "
+         << "with insufficient privileges " << session->caps << dendl;
+    return true;
+  }
+  // Always forward the beacon to the leader, even if they are the same as
+  // the old one. The leader will mark as down osds that haven't sent
+  // beacon for a few minutes.
+  return false;
+}
+
+bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  const auto beacon = static_cast<MOSDBeacon*>(op->get_req());
+  const auto src = beacon->get_orig_source();
+  dout(10) << __func__ << " " << *beacon
+	   << " from " << src << dendl;
+  int from = src.num();
+
+  if (!src.is_osd() ||
+      !osdmap.is_up(from) ||
+      beacon->get_orig_source_inst() != osdmap.get_inst(from)) {
+    dout(1) << " ignoring beacon from non-active osd." << dendl;
+    return false;
+  }
+
+  last_osd_report[from] = ceph_clock_now();
+  return false;
+}
 
 // ---------------
 // map helpers
@@ -2917,21 +3114,25 @@ epoch_t OSDMonitor::blacklist(const entity_addr_t& a, utime_t until)
 }
 
 
-void OSDMonitor::check_subs()
+void OSDMonitor::check_osdmap_subs()
 {
   dout(10) << __func__ << dendl;
-  string type = "osdmap";
-  if (mon->session_map.subs.count(type) == 0)
+  if (!osdmap.get_epoch()) {
     return;
-  xlist<Subscription*>::iterator p = mon->session_map.subs[type]->begin();
+  }
+  auto osdmap_subs = mon->session_map.subs.find("osdmap");
+  if (osdmap_subs == mon->session_map.subs.end()) {
+    return;
+  }
+  auto p = osdmap_subs->second->begin();
   while (!p.end()) {
-    Subscription *sub = *p;
+    auto sub = *p;
     ++p;
-    check_sub(sub);
+    check_osdmap_sub(sub);
   }
 }
 
-void OSDMonitor::check_sub(Subscription *sub)
+void OSDMonitor::check_osdmap_sub(Subscription *sub)
 {
   dout(10) << __func__ << " " << sub << " next " << sub->next
 	   << (sub->onetime ? " (onetime)":" (ongoing)") << dendl;
@@ -2947,6 +3148,144 @@ void OSDMonitor::check_sub(Subscription *sub)
   }
 }
 
+void OSDMonitor::check_pg_creates_subs()
+{
+  if (!mon->monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS)) {
+    // PGMonitor takes care of this in pre-luminous era.
+    return;
+  }
+  if (!osdmap.get_num_up_osds()) {
+    return;
+  }
+  assert(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB);
+  mon->with_session_map([this](const MonSessionMap& session_map) {
+      auto pg_creates_subs = session_map.subs.find("osd_pg_creates");
+      if (pg_creates_subs == session_map.subs.end()) {
+	return;
+      }
+      for (auto sub : *pg_creates_subs->second) {
+	check_pg_creates_sub(sub);
+      }
+    });
+}
+
+void OSDMonitor::check_pg_creates_sub(Subscription *sub)
+{
+  dout(20) << __func__ << " .. " << sub->session->inst << dendl;
+  assert(sub->type == "osd_pg_creates");
+  // only send these if the OSD is up.  we will check_subs() when they do
+  // come up so they will get the creates then.
+  if (sub->session->inst.name.is_osd() &&
+      mon->osdmon()->osdmap.is_up(sub->session->inst.name.num())) {
+    sub->next = send_pg_creates(sub->session->inst.name.num(),
+				sub->session->con.get(),
+				sub->next);
+  }
+}
+
+void OSDMonitor::scan_for_creating_pgs(const map<int64_t,pg_pool_t>& pools,
+				       const set<int64_t>& removed_pools,
+				       creating_pgs_t* creating_pgs) const
+{
+  for (auto& p : pools) {
+    int64_t poolid = p.first;
+    const pg_pool_t& pool = p.second;
+    int ruleno = osdmap.crush->find_rule(pool.get_crush_ruleset(),
+					 pool.get_type(), pool.get_size());
+    if (ruleno < 0 || !osdmap.crush->rule_exists(ruleno))
+      continue;
+
+    const auto last_scan_epoch = creating_pgs->last_scan_epoch;
+    const auto created = pool.get_last_change();
+    if (last_scan_epoch && created <= last_scan_epoch) {
+      dout(10) << __func__ << " no change in pool " << poolid
+	       << " " << pool << dendl;
+      continue;
+    }
+    if (removed_pools.count(poolid)) {
+      dout(10) << __func__ << " pool is being removed: " << poolid
+	       << " " << pool << dendl;
+      continue;
+    }
+    dout(10) << __func__ << " scanning pool " << poolid
+	     << " " << pool << dendl;
+    if (creating_pgs->created_pools.count(poolid)) {
+      // split pgs are skipped by OSD, so drop it early.
+      continue;
+    }
+    // first pgs in this pool
+    for (ps_t ps = 0; ps < pool.get_pg_num(); ps++) {
+      const pg_t pgid{ps, static_cast<uint64_t>(poolid)};
+      if (creating_pgs->pgs.count(pgid)) {
+	dout(20) << __func__ << " already have " << pgid << dendl;
+	continue;
+      }
+      creating_pgs->pgs.emplace(pgid, make_pair(created, ceph_clock_now()));
+      dout(10) << __func__ << " adding " << pgid
+	       << " at " << osdmap.get_epoch() << dendl;
+    }
+  }
+}
+
+void OSDMonitor::update_creating_pgs()
+{
+  creating_pgs_by_osd_epoch.clear();
+  std::lock_guard<Spinlock> l(creating_pgs_lock);
+  for (const auto& pg : creating_pgs.pgs) {
+    int acting_primary = -1;
+    auto pgid = pg.first;
+    auto created = pg.second.first;
+    mapping.get(pgid, nullptr, nullptr, nullptr, &acting_primary);
+    if (acting_primary >= 0) {
+      dout(10) << __func__ << " will instruct osd." << acting_primary
+	       << " to create " << pgid << dendl;
+      creating_pgs_by_osd_epoch[acting_primary][created].insert(pgid);
+    }
+  }
+  creating_pgs_epoch = mapping.get_epoch();
+}
+
+epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
+{
+  dout(30) << __func__ << " osd." << osd << " next=" << next
+	   << " " << creating_pgs_by_osd_epoch << dendl;
+  auto creating_pgs_by_epoch = creating_pgs_by_osd_epoch.find(osd);
+  if (creating_pgs_by_epoch == creating_pgs_by_osd_epoch.end())
+    return next;
+  assert(!creating_pgs_by_epoch->second.empty());
+
+  MOSDPGCreate *m = nullptr;
+  epoch_t last = 0;
+  for (auto epoch_pgs = creating_pgs_by_epoch->second.lower_bound(next);
+       epoch_pgs != creating_pgs_by_epoch->second.end(); ++epoch_pgs) {
+    auto epoch = epoch_pgs->first;
+    auto& pgs = epoch_pgs->second;
+    dout(20) << __func__ << " osd." << osd << " from " << next
+             << " : epoch " << epoch << " " << pgs.size() << " pgs" << dendl;
+    last = epoch;
+    for (auto& pg : pgs) {
+      if (!m)
+	m = new MOSDPGCreate(creating_pgs_epoch);
+      // Need the create time from the monitor using its clock to set
+      // last_scrub_stamp upon pg creation.
+      const auto& creation = creating_pgs.pgs[pg];
+      m->mkpg[pg] = pg_create_t{creation.first, pg, 0};
+      m->ctimes[pg] = creation.second;
+      dout(20) << __func__ << " will create " << pg
+	       << " at " << creation.first << dendl;
+    }
+  }
+  if (!m) {
+    dout(20) << __func__ << " osd." << osd << " from " << next
+             << " has nothing to send" << dendl;
+    return next;
+  }
+  con->send_message(m);
+  // sub is current through last + 1
+  return last + 1;
+}
+
 // TICK
 
 
@@ -2960,6 +3299,9 @@ void OSDMonitor::tick()
 
   bool do_propose = false;
   utime_t now = ceph_clock_now();
+
+  if (handle_osd_timeouts(now, last_osd_report))
+    do_propose = true;
 
   // mark osds down?
   if (check_failures(now))
@@ -3092,15 +3434,20 @@ void OSDMonitor::tick()
     propose_pending();
 }
 
-void OSDMonitor::handle_osd_timeouts(const utime_t &now,
+bool OSDMonitor::handle_osd_timeouts(const utime_t &now,
 				     std::map<int,utime_t> &last_osd_report)
 {
   utime_t timeo(g_conf->mon_osd_report_timeout, 0);
+  if (now - mon->get_leader_since() < timeo) {
+    // We haven't been the leader for long enough to consider OSD timeouts
+    return false;
+  }
+
   int max_osd = osdmap.get_max_osd();
   bool new_down = false;
 
   for (int i=0; i < max_osd; ++i) {
-    dout(30) << "handle_osd_timeouts: checking up on osd " << i << dendl;
+    dout(30) << __func__ << ": checking up on osd " << i << dendl;
     if (!osdmap.is_up(i))
       continue;
     const std::map<int,utime_t>::const_iterator t = last_osd_report.find(i);
@@ -3118,9 +3465,7 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
       }
     }
   }
-  if (new_down) {
-    propose_pending();
-  }
+  return new_down;
 }
 
 void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
@@ -8688,27 +9033,27 @@ bool OSDMonitor::prepare_pool_op_create(MonOpRequestRef op)
   return true;
 }
 
-int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
+int OSDMonitor::_check_remove_pool(int64_t pool_id, const pg_pool_t& pool,
 				   ostream *ss)
 {
-  const string& poolstr = osdmap.get_pool_name(pool);
+  const string& poolstr = osdmap.get_pool_name(pool_id);
 
   // If the Pool is in use by CephFS, refuse to delete it
   FSMap const &pending_fsmap = mon->mdsmon()->get_pending();
-  if (pending_fsmap.pool_in_use(pool)) {
+  if (pending_fsmap.pool_in_use(pool_id)) {
     *ss << "pool '" << poolstr << "' is in use by CephFS";
     return -EBUSY;
   }
 
-  if (p->tier_of >= 0) {
+  if (pool.tier_of >= 0) {
     *ss << "pool '" << poolstr << "' is a tier of '"
-	<< osdmap.get_pool_name(p->tier_of) << "'";
+	<< osdmap.get_pool_name(pool.tier_of) << "'";
     return -EBUSY;
   }
-  if (!p->tiers.empty()) {
+  if (!pool.tiers.empty()) {
     *ss << "pool '" << poolstr << "' has tiers";
-    for(std::set<uint64_t>::iterator i = p->tiers.begin(); i != p->tiers.end(); ++i) {
-      *ss << " " << osdmap.get_pool_name(*i);
+    for(auto tier : pool.tiers) {
+      *ss << " " << osdmap.get_pool_name(tier);
     }
     return -EBUSY;
   }
@@ -8718,7 +9063,7 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
     return -EPERM;
   }
 
-  if (p->has_flag(pg_pool_t::FLAG_NODELETE)) {
+  if (pool.has_flag(pg_pool_t::FLAG_NODELETE)) {
     *ss << "pool deletion is disabled; you must unset nodelete flag for the pool first";
     return -EPERM;
   }
@@ -8830,14 +9175,15 @@ int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
 {
   dout(10) << "_prepare_remove_pool " << pool << dendl;
   const pg_pool_t *p = osdmap.get_pg_pool(pool);
-  int r = _check_remove_pool(pool, p, ss);
+  int r = _check_remove_pool(pool, *p, ss);
   if (r < 0)
     return r;
 
-  if (pending_inc.new_pools.count(pool)) {
+  auto new_pool = pending_inc.new_pools.find(pool);
+  if (new_pool != pending_inc.new_pools.end()) {
     // if there is a problem with the pending info, wait and retry
     // this op.
-    pg_pool_t *p = &pending_inc.new_pools[pool];
+    const auto& p = new_pool->second;
     int r = _check_remove_pool(pool, p, ss);
     if (r < 0)
       return -EAGAIN;

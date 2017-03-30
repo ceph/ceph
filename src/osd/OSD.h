@@ -945,6 +945,8 @@ public:
   void requeue_pg_temp();
   void send_pg_temp();
 
+  void send_pg_created(pg_t pgid);
+
   void queue_for_peering(PG *pg);
 
   Mutex snap_sleep_lock;
@@ -2029,7 +2031,7 @@ protected:
   void add_newly_split_pg(PG *pg,
 			  PG::RecoveryCtx *rctx);
 
-  void handle_pg_peering_evt(
+  int handle_pg_peering_evt(
     spg_t pgid,
     const pg_history_t& orig_history,
     const pg_interval_map_t& pi,
@@ -2130,6 +2132,9 @@ protected:
   void send_pg_stats(const utime_t &now);
   void handle_pg_stats_ack(class MPGStatsAck *ack);
   void flush_pg_stats();
+
+  ceph::coarse_mono_clock::time_point last_sent_beacon;
+  void send_beacon(const ceph::coarse_mono_clock::time_point& now);
 
   void pg_stat_queue_enqueue(PG *pg) {
     pg_stat_queue_lock.Lock();

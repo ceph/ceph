@@ -654,8 +654,14 @@ public:
 
   // -- sessions --
   MonSessionMap session_map;
+  Mutex session_map_lock{"Monitor::session_map_lock"};
   AdminSocketHook *admin_hook;
 
+  template<typename Func, typename...Args>
+  void with_session_map(Func&& func) {
+    Mutex::Locker l(session_map_lock);
+    std::forward<Func>(func)(session_map);
+  }
   void send_latest_monmap(Connection *con);
 
   // messages
