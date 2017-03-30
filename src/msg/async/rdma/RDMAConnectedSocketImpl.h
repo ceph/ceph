@@ -52,7 +52,6 @@ class RDMAConnMgr {
 
   virtual void cleanup() = 0;
   virtual int try_connect(const entity_addr_t&, const SocketOptions &opt) = 0;
-  virtual void set_accept_fd(int sd) = 0;
 
   void post_read();
 
@@ -99,7 +98,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   uint32_t remote_qpn = 0;
 
   RDMAConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
-                          RDMAWorker *w);
+                          RDMAWorker *w, void *info = nullptr);
   virtual ~RDMAConnectedSocketImpl();
 
   ostream &print(ostream &out) const {
@@ -128,7 +127,6 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   void notify();
 
   QueuePair *create_queue_pair(Device *d, int p);
-  void set_accept_fd(int sd) {cmgr->set_accept_fd(sd); };
   int try_connect(const entity_addr_t &sa, const SocketOptions &opt) { return cmgr->try_connect(sa, opt); };
 };
 inline ostream& operator<<(ostream& out, const RDMAConnectedSocketImpl &s)
