@@ -468,8 +468,7 @@ Ceph provides a number of settings to balance the resource contention between
 new service requests and the need to recover data objects and restore the
 placement groups to the current state. The ``osd recovery delay start`` setting
 allows an OSD to restart, re-peer and even process some replay requests before
-starting the recovery process. The ``osd recovery threads`` setting limits the
-number of threads for the recovery process (1 thread by default).  The ``osd
+starting the recovery process.  The ``osd
 recovery thread timeout`` sets a thread timeout, because multiple OSDs may fail,
 restart and re-peer at staggered rates. The ``osd recovery max active`` setting
 limits the  number of recovery requests an OSD will entertain simultaneously to

@@ -673,13 +673,6 @@ perform well in a degraded state.
 :Default: ``8 << 20`` 
 
 
-``osd recovery threads`` 
-
-:Description: The number of threads for recovering data.
-:Type: 32-bit Integer
-:Default: ``1``
-
-
 ``osd recovery thread timeout`` 
 
 :Description: The maximum time in seconds before timing out a recovery thread.
