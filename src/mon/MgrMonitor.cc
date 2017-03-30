@@ -19,6 +19,7 @@
 #include "PGMonitor.h"
 #include "include/stringify.h"
 #include "mgr/MgrContext.h"
+#include "OSDMonitor.h"
 
 #include "MgrMonitor.h"
 
@@ -45,6 +46,12 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 
     dout(4) << "active server: " << map.active_addr
 	    << "(" << map.active_gid << ")" << dendl;
+
+    if (map.available) {
+      first_seen_inactive = utime_t();
+    } else {
+      first_seen_inactive = ceph_clock_now();
+    }
 
     check_subs();
   }
@@ -295,6 +302,36 @@ void MgrMonitor::send_digests()
       send_digests();
   });
   mon->timer.add_event_after(g_conf->mon_mgr_digest_period, digest_callback);
+}
+
+void MgrMonitor::get_health(
+  list<pair<health_status_t,string> >& summary,
+  list<pair<health_status_t,string> > *detail,
+  CephContext *cct) const
+{
+  // start mgr warnings as soon as the mons and osds are all upgraded,
+  // but before the require_luminous osdmap flag is set.  this way the
+  // user gets some warning before the osd flag is set and mgr is
+  // actually *required*.
+  if (!mon->monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS) ||
+      !HAVE_FEATURE(mon->osdmon()->osdmap.get_up_osd_features(),
+		    SERVER_LUMINOUS)) {
+    return;
+  }
+
+  if (!map.available) {
+    auto level = HEALTH_WARN;
+    // do not escalate to ERR if they are still upgrading to jewel.
+    if (mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      utime_t now = ceph_clock_now();
+      if (first_seen_inactive != utime_t() &&
+	  now - first_seen_inactive > g_conf->mon_mgr_inactive_grace) {
+	level = HEALTH_ERR;
+      }
+    }
+    summary.push_back(make_pair(level, "no active mgr"));
+  }
 }
 
 void MgrMonitor::tick()

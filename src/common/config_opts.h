@@ -1648,6 +1648,7 @@ OPTION(mgr_connect_retry_interval, OPT_DOUBLE, 1.0)
 
 OPTION(mon_mgr_digest_period, OPT_INT, 5)  // How frequently to send digests
 OPTION(mon_mgr_beacon_grace, OPT_INT, 30)  // How long to wait to failover
+OPTION(mon_mgr_inactive_grace, OPT_INT, 60) // How long before health WARN -> ERR
 
 OPTION(rgw_list_bucket_min_readahead, OPT_INT, 1000) // minimum number of entries to read from rados for bucket listing
 
