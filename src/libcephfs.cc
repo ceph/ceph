@@ -33,6 +33,7 @@
 
 #include "include/cephfs/libcephfs.h"
 
+
 struct ceph_mount_info
 {
 public:
@@ -86,7 +87,7 @@ public:
 
     //at last the client
     ret = -CEPHFS_ERROR_NEW_CLIENT; //defined in libcephfs.h;
-    client = new Client(messenger, monclient);
+    client = new StandaloneClient(messenger, monclient);
     if (!client)
       goto fail;
 
@@ -248,7 +249,7 @@ public:
 private:
   bool mounted;
   bool inited;
-  Client *client;
+  StandaloneClient *client;
   MonClient *monclient;
   Messenger *messenger;
   CephContext *cct;

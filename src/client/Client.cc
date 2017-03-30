@@ -226,9 +226,8 @@ vinodeno_t Client::map_faked_ino(ino_t ino)
 
 // cons/des
 
-Client::Client(Messenger *m, MonClient *mc)
+Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   : Dispatcher(m->cct),
-    logger(NULL),
     m_command_hook(this),
     timer(m->cct, client_lock),
     callback_handle(NULL),
@@ -246,17 +245,16 @@ Client::Client(Messenger *m, MonClient *mc)
     remount_finisher(m->cct),
     objecter_finisher(m->cct),
     tick_event(NULL),
-    monclient(mc), messenger(m), whoami(mc->get_global_id()),
-    cap_epoch_barrier(0),
+    messenger(m), monclient(mc),
+    objecter(objecter_),
+    whoami(mc->get_global_id()), cap_epoch_barrier(0),
     last_tid(0), oldest_tid(0), last_flush_tid(1),
-    initialized(false), authenticated(false),
+    initialized(false),
     mounted(false), unmounting(false),
     local_osd(-1), local_osd_epoch(0),
     unsafe_sync_write(0),
     client_lock("Client::client_lock")
 {
-  monclient->set_messenger(m);
-
   _reset_faked_inos();
   //
   root = 0;
@@ -279,14 +277,12 @@ Client::Client(Messenger *m, MonClient *mc)
   // file handles
   free_fd_set.insert(10, 1<<30);
 
-  // osd interfaces
   mdsmap.reset(new MDSMap);
-  objecter = new Objecter(cct, messenger, monclient, NULL,
-			  0, 0);
-  objecter->set_client_incarnation(0);  // client always 0, for now.
-  writeback_handler = new ObjecterWriteback(objecter, &objecter_finisher,
-					    &client_lock);
-  objectcacher = new ObjectCacher(cct, "libcephfs", *writeback_handler, client_lock,
+
+  // osd interfaces
+  writeback_handler.reset(new ObjecterWriteback(objecter, &objecter_finisher,
+					    &client_lock));
+  objectcacher.reset(new ObjectCacher(cct, "libcephfs", *writeback_handler, client_lock,
 				  client_flush_set_callback,    // all commit callback
 				  (void*)this,
 				  cct->_conf->client_oc_size,
@@ -294,9 +290,9 @@ Client::Client(Messenger *m, MonClient *mc)
 				  cct->_conf->client_oc_max_dirty,
 				  cct->_conf->client_oc_target_dirty,
 				  cct->_conf->client_oc_max_dirty_age,
-				  true);
+				  true));
   objecter_finisher.start();
-  filer = new Filer(objecter, &objecter_finisher);
+  filer.reset(new Filer(objecter, &objecter_finisher));
 }
 
 
@@ -305,14 +301,6 @@ Client::~Client()
   assert(!client_lock.is_locked());
 
   tear_down_cache();
-
-  delete objectcacher;
-  delete writeback_handler;
-
-  delete filer;
-  delete objecter;
-
-  delete logger;
 }
 
 void Client::tear_down_cache()
@@ -467,35 +455,27 @@ int Client::init()
 {
   timer.init();
   objectcacher->start();
-  objecter->init();
 
   client_lock.Lock();
   assert(!initialized);
 
-  // ok!
-  messenger->add_dispatcher_tail(objecter);
   messenger->add_dispatcher_tail(this);
+  client_lock.Unlock();
 
-  monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
-  int r = monclient->init();
-  if (r < 0) {
-    // need to do cleanup because we're in an intermediate init state
-    timer.shutdown();
-    client_lock.Unlock();
-    objecter->shutdown();
-    objectcacher->stop();
-    monclient->shutdown();
-    return r;
-  }
-  objecter->start();
+  _finish_init();
+  return 0;
+}
 
+void Client::_finish_init()
+{
+  client_lock.Lock();
   // logger
   PerfCountersBuilder plb(cct, "client", l_c_first, l_c_last);
   plb.add_time_avg(l_c_reply, "reply", "Latency of receiving a reply on metadata request");
   plb.add_time_avg(l_c_lat, "lat", "Latency of processing a metadata request");
   plb.add_time_avg(l_c_wrlat, "wrlat", "Latency of a file data write operation");
-  logger = plb.create_perf_counters();
-  cct->get_perfcounters_collection()->add(logger);
+  logger.reset(plb.create_perf_counters());
+  cct->get_perfcounters_collection()->add(logger.get());
 
   client_lock.Unlock();
 
@@ -546,7 +526,6 @@ int Client::init()
   client_lock.Lock();
   initialized = true;
   client_lock.Unlock();
-  return r;
 }
 
 void Client::shutdown() 
@@ -600,20 +579,14 @@ void Client::shutdown()
   timer.shutdown();
   client_lock.Unlock();
 
-  objecter->shutdown();
   objecter_finisher.wait_for_empty();
   objecter_finisher.stop();
 
-  monclient->shutdown();
-
   if (logger) {
-    cct->get_perfcounters_collection()->remove(logger);
-    delete logger;
-    logger = NULL;
+    cct->get_perfcounters_collection()->remove(logger.get());
+    logger.reset();
   }
 }
-
-
 
 
 // ===================
@@ -5436,7 +5409,7 @@ int Client::authenticate()
 {
   assert(client_lock.is_locked_by_me());
 
-  if (authenticated) {
+  if (monclient->is_authenticated()) {
     return 0;
   }
 
@@ -5449,7 +5422,6 @@ int Client::authenticate()
 
   whoami = monclient->get_global_id();
   messenger->set_myname(entity_name_t::CLIENT(whoami.v));
-  authenticated = true;
 
   return 0;
 }
@@ -13255,5 +13227,57 @@ mds_rank_t Client::_get_random_up_mds() const
   for (int n = rand() % up.size(); n; n--)
     ++p;
   return *p;
+}
+
+
+StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc)
+    : Client(m, mc, new Objecter(m->cct, m, mc, NULL, 0, 0))
+{
+  monclient->set_messenger(m);
+  objecter->set_client_incarnation(0);
+}
+
+StandaloneClient::~StandaloneClient()
+{
+  delete objecter;
+  objecter = nullptr;
+}
+
+int StandaloneClient::init()
+{
+  timer.init();
+  objectcacher->start();
+  objecter->init();
+
+  client_lock.Lock();
+  assert(!initialized);
+
+  messenger->add_dispatcher_tail(objecter);
+  messenger->add_dispatcher_tail(this);
+
+  monclient->set_want_keys(CEPH_ENTITY_TYPE_MDS | CEPH_ENTITY_TYPE_OSD);
+  int r = monclient->init();
+  if (r < 0) {
+    // need to do cleanup because we're in an intermediate init state
+    timer.shutdown();
+    client_lock.Unlock();
+    objecter->shutdown();
+    objectcacher->stop();
+    monclient->shutdown();
+    return r;
+  }
+  objecter->start();
+
+  client_lock.Unlock();
+  _finish_init();
+
+  return 0;
+}
+
+void StandaloneClient::shutdown()
+{
+  Client::shutdown();
+  objecter->shutdown();
+  monclient->shutdown();
 }
 
