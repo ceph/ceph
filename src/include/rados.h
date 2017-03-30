@@ -196,6 +196,7 @@ extern const char *ceph_osd_state_name(int s);
 	f(READ,		__CEPH_OSD_OP(RD, DATA, 1),	"read")		    \
 	f(STAT,		__CEPH_OSD_OP(RD, DATA, 2),	"stat")		    \
 	f(MAPEXT,	__CEPH_OSD_OP(RD, DATA, 3),	"mapext")	    \
+	f(CHECKSUM,	__CEPH_OSD_OP(RD, DATA, 31),	"checksum")	    \
 									    \
 	/* fancy read */						    \
 	f(MASKTRUNC,	__CEPH_OSD_OP(RD, DATA, 4),	"masktrunc")	    \
@@ -464,6 +465,12 @@ enum {
 	CEPH_OSD_WATCH_OP_PING = 7,
 };
 
+enum {
+	CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH32 = 0,
+	CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH64 = 1,
+	CEPH_OSD_CHECKSUM_OP_TYPE_CRC32C   = 2
+};
+
 const char *ceph_osd_watch_op_name(int o);
 
 enum {
@@ -568,6 +575,12 @@ struct ceph_osd_op {
 			__le64 length;
 			__le64 data_length;
 		} __attribute__ ((packed)) writesame;
+		struct {
+			__le64 offset;
+			__le64 length;
+			__le32 chunk_size;
+			__u8 type;              /* CEPH_OSD_CHECKSUM_OP_TYPE_* */
+		} __attribute__ ((packed)) checksum;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));

@@ -9131,6 +9131,7 @@ int OSD::init_op_flags(OpRequestRef& op)
       const pg_pool_t *base_pool = osdmap->get_pg_pool(pool->tier_of);
       if (base_pool && base_pool->require_rollback()) {
         if ((iter->op.op != CEPH_OSD_OP_READ) &&
+            (iter->op.op != CEPH_OSD_OP_CHECKSUM) &&
             (iter->op.op != CEPH_OSD_OP_STAT) &&
             (iter->op.op != CEPH_OSD_OP_ISDIRTY) &&
             (iter->op.op != CEPH_OSD_OP_UNDIRTY) &&
@@ -9240,6 +9241,7 @@ int OSD::init_op_flags(OpRequestRef& op)
     case CEPH_OSD_OP_READ:
     case CEPH_OSD_OP_SYNC_READ:
     case CEPH_OSD_OP_SPARSE_READ:
+    case CEPH_OSD_OP_CHECKSUM:
     case CEPH_OSD_OP_WRITEFULL:
       if (m->ops.size() == 1 &&
           (iter->op.flags & CEPH_OSD_OP_FLAG_FADVISE_NOCACHE ||
