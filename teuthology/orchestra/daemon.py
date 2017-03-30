@@ -3,6 +3,7 @@ import struct
 
 from . import run
 from .. import misc
+from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +44,10 @@ class DaemonState(object):
             return
         self.proc.stdin.close()
         self.log.debug('waiting for process to exit')
-        run.wait([self.proc], timeout=timeout)
+        try:
+            run.wait([self.proc], timeout=timeout)
+        except CommandFailedError:
+            log.exception("Error while waiting for process to exit")
         self.proc = None
         self.log.info('Stopped')
 
@@ -134,6 +138,16 @@ class DaemonState(object):
                 run.wait([self.proc])
             finally:
                 self.proc = None
+
+    def check_status(self):
+        """
+        Check to see if the process has exited.
+
+        :returns: The exit status, if any
+        :raises:  CommandFailedError, if the process was run with
+                  check_status=True
+        """
+        return self.proc.poll()
 
 
 class DaemonGroup(object):
