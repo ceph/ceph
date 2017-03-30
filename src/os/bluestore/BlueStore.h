@@ -1937,11 +1937,17 @@ private:
   int _deferred_finish(TransContext *txc);
   int _deferred_replay();
 
+public:
+  using mempool_dynamic_bitset =
+    boost::dynamic_bitset<uint64_t,
+			  mempool::bluestore_fsck::pool_allocator<uint64_t>>;
+
+private:
   int _fsck_check_extents(
     const ghobject_t& oid,
     const PExtentVector& extents,
     bool compressed,
-    boost::dynamic_bitset<> &used_blocks,
+    mempool_dynamic_bitset &used_blocks,
     store_statfs_t& expected_statfs);
 
   void _buffer_cache_write(
