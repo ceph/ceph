@@ -8229,7 +8229,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_TRUNCATE:
       {
         uint64_t off = op->off;
-	r = _truncate(txc, c, o, off);
+	_truncate(txc, c, o, off);
       }
       break;
 
@@ -9509,7 +9509,7 @@ int BlueStore::_do_zero(TransContext *txc,
   return r;
 }
 
-int BlueStore::_do_truncate(
+void BlueStore::_do_truncate(
   TransContext *txc, CollectionRef& c, OnodeRef o, uint64_t offset)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
@@ -9518,7 +9518,7 @@ int BlueStore::_do_truncate(
   _dump_onode(o, 30);
 
   if (offset == o->onode.size)
-    return 0;
+    return ;
 
   if (offset < o->onode.size) {
     WriteContext wctx;
@@ -9543,10 +9543,9 @@ int BlueStore::_do_truncate(
   o->onode.size = offset;
 
   txc->write_onode(o);
-  return 0;
 }
 
-int BlueStore::_truncate(TransContext *txc,
+void BlueStore::_truncate(TransContext *txc,
 			 CollectionRef& c,
 			 OnodeRef& o,
 			 uint64_t offset)
@@ -9554,11 +9553,7 @@ int BlueStore::_truncate(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec
 	   << dendl;
-  int r = _do_truncate(txc, c, o, offset);
-  dout(10) << __func__ << " " << c->cid << " " << o->oid
-	   << " 0x" << std::hex << offset << std::dec
-	   << " = " << r << dendl;
-  return r;
+  _do_truncate(txc, c, o, offset);
 }
 
 int BlueStore::_do_remove(
@@ -9566,9 +9561,7 @@ int BlueStore::_do_remove(
   CollectionRef& c,
   OnodeRef o)
 {
-  int r = _do_truncate(txc, c, o, 0);
-  if (r < 0)
-    return r;
+  _do_truncate(txc, c, o, 0);
   if (o->onode.has_omap()) {
     o->flush();
     _do_omap_clear(txc, o->onode.nid);
@@ -9890,9 +9883,7 @@ int BlueStore::_clone(TransContext *txc,
 
   // clone data
   oldo->flush();
-  r = _do_truncate(txc, c, newo, 0);
-  if (r < 0)
-    goto out;
+  _do_truncate(txc, c, newo, 0);
   if (cct->_conf->bluestore_clone_cow) {
     _do_clone_range(txc, c, oldo, newo, 0, oldo->onode.size, 0);
   } else {
