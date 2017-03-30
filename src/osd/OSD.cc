@@ -221,6 +221,7 @@ OSDService::OSDService(OSD *osd) :
   whoami(osd->whoami), store(osd->store),
   log_client(osd->log_client), clog(osd->clog),
   pg_recovery_stats(osd->pg_recovery_stats),
+  injectfull(0),
   cluster_messenger(osd->cluster_messenger),
   client_messenger(osd->client_messenger),
   logger(osd->logger),
@@ -753,9 +754,10 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
   }
 
   enum s_names new_state;
+  // If testing with injectfull, let's keep determined state as FAILSAFE
   if (ratio > failsafe_ratio) {
     new_state = FAILSAFE;
-  } else if (ratio > full_ratio) {
+  } else if (ratio > full_ratio || injectfull) {
     new_state = FULL;
   } else if (ratio > nearfull_ratio) {
     new_state = NEARFULL;
@@ -806,6 +808,16 @@ bool OSDService::need_fullness_update()
 bool OSDService::check_failsafe_full()
 {
   Mutex::Locker l(full_status_lock);
+
+  if (injectfull) {
+    // injectfull is either a count of the number of times to return full
+    // or if -1 then always return full
+    if (injectfull > 0)
+      --injectfull;
+    dout(5) << __func__ << " Injected full OSD (" << (injectfull < 0 ? "set" : std::to_string(injectfull)) << ")" << dendl;
+    return true;
+  }
+
   if (cur_state == FAILSAFE)
     return true;
   return false;
@@ -826,6 +838,14 @@ bool OSDService::is_full()
 bool OSDService::too_full_for_backfill(ostream &ss)
 {
   Mutex::Locker l(full_status_lock);
+  if (injectfull) {
+    // injectfull is either a count of the number of times to return full
+    // or if -1 then always return full
+    if (injectfull > 0)
+      --injectfull;
+    ss << "Injected full OSD (" << (injectfull < 0 ? string("set") : std::to_string(injectfull)) << ")";
+    return true;
+  }
   double max_ratio;
   max_ratio = cct->_conf->osd_backfill_full_ratio;
   ss << "current usage is " << cur_ratio << ", which is greater than max allowed ratio " << max_ratio;
@@ -2628,6 +2648,13 @@ void OSD::final_init()
    "name=pgid,type=CephString ",
    test_ops_hook,
    "Trigger a scheduled scrub ");
+  assert(r == 0);
+  r = admin_socket->register_command(
+   "injectfull",
+   "injectfull " \
+   "name=count,type=CephInt,req=false ",
+   test_ops_hook,
+   "Inject a full disk (optional count times)");
   assert(r == 0);
 }
 
@@ -4849,6 +4876,10 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       ss << "Not primary";
     }
     pg->unlock();
+    return;
+  }
+  if (command == "injectfull") {
+    cmd_getval(service->cct, cmdmap, "count", service->injectfull, (int64_t)-1);
     return;
   }
   ss << "Internal error - command=" << command;
