@@ -29,10 +29,12 @@ int main(int argc, char **argv)
 {
   string out_dir;
   vector<string> devs;
+  string path;
   string action;
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
+    ("path", po::value<string>(&path), "bluestore path")
     ("out-dir", po::value<string>(&out_dir), "output directory")
     ("dev", po::value<vector<string>>(&devs), "device(s)")
     ;
@@ -68,9 +70,26 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if (devs.empty()) {
-    cerr << "must specify one or more device(s)" << std::endl;
-    exit(1);
+  if (action == "fsck") {
+    if (path.empty()) {
+      cerr << "must specify bluestore path" << std::endl;
+      exit(1);
+    }
+  }
+  if (action == "bluefs-export" ||
+      action == "show-label") {
+    if (devs.empty() && path.empty()) {
+      cerr << "must specify bluestore path *or* raw device(s)" << std::endl;
+      exit(1);
+    }
+    cout << "infering bluefs devices from bluestore path" << std::endl;
+    for (auto fn : {"block", "block.wal", "block.db"}) {
+      string p = path + "/" + fn;
+      struct stat st;
+      if (::stat(p.c_str(), &st) == 0) {
+	devs.push_back(p);
+      }
+    }
   }
 
   vector<const char*> args;
@@ -103,7 +122,7 @@ int main(int argc, char **argv)
     jf.close_section();
     jf.flush(cout);
   }
-  if (action == "bluefs-export") {
+  else if (action == "bluefs-export") {
     if (out_dir.empty()) {
       cerr << "must specify out-dir to export bluefs" << std::endl;
       exit(1);
@@ -201,6 +220,9 @@ int main(int argc, char **argv)
       }
     }
     fs.umount();
+  } else {
+    cerr << "unrecognized action " << action << std::endl;
+    return 1;
   }
 
   return 0;
