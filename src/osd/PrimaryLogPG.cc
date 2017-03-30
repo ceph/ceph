@@ -1888,7 +1888,10 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 	     << *m << dendl;
     return;
   }
-  if (!(m->get_source().is_mds()) && osd->check_failsafe_full() && write_ordered) {
+  // mds should have stopped writing before this point.
+  // We can't allow OSD to become non-startable even if mds
+  // could be writing as part of file removals.
+  if (write_ordered && osd->check_failsafe_full()) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
 	     << dendl;
     return;
