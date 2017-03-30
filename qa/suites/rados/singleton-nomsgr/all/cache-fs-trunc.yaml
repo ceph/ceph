@@ -1,5 +1,5 @@
 roles:
-- [mon.0, mds.a, osd.0, osd.1, osd.2, client.0, client.1]
+- [mon.a, mgr.x, mds.a, osd.0, osd.1, osd.2, client.0, client.1]
 tasks:
 - install:
 - ceph:

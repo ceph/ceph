@@ -19,6 +19,7 @@
 #include "PGMonitor.h"
 #include "include/stringify.h"
 #include "mgr/MgrContext.h"
+#include "OSDMonitor.h"
 
 #include "MgrMonitor.h"
 
@@ -33,23 +34,30 @@ void MgrMonitor::create_initial()
 void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_last_committed();
-  if (version == map.epoch) {
-    return;
+  if (version != map.epoch) {
+    dout(4) << "loading version " << version << dendl;
+
+    bufferlist bl;
+    int err = get_version(version, bl);
+    assert(err == 0);
+
+    bufferlist::iterator p = bl.begin();
+    map.decode(p);
+
+    dout(4) << "active server: " << map.active_addr
+	    << "(" << map.active_gid << ")" << dendl;
+
+    if (map.available) {
+      first_seen_inactive = utime_t();
+    } else {
+      first_seen_inactive = ceph_clock_now();
+    }
+
+    check_subs();
   }
 
-  dout(4) << "loading version " << version << dendl;
-
-  bufferlist bl;
-  int err = get_version(version, bl);
-  assert(err == 0);
-
-  bufferlist::iterator p = bl.begin();
-  map.decode(p);
-
-  dout(4) << "active server: " << map.active_addr
-          << "(" << map.active_gid << ")" << dendl;
-
-  check_subs();
+  // feed our pet MgrClient
+  mon->mgr_client.ms_dispatch(new MMgrMap(map));
 }
 
 void MgrMonitor::create_pending()
@@ -60,10 +68,29 @@ void MgrMonitor::create_pending()
 
 void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
+  dout(10) << __func__ << " " << pending_map << dendl;
   bufferlist bl;
   pending_map.encode(bl, 0);
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
+}
+
+bool MgrMonitor::check_caps(MonOpRequestRef op, const uuid_d& fsid)
+{
+  // check permissions
+  MonSession *session = op->get_session();
+  if (!session)
+    return false;
+  if (!session->is_capable("mgr", MON_CAP_X)) {
+    dout(1) << __func__ << " insufficient caps " << session->caps << dendl;
+    return false;
+  }
+  if (fsid != mon->monmap->fsid) {
+    dout(1) << __func__ << " op fsid " << fsid
+	    << " != " << mon->monmap->fsid << dendl;
+    return false;
+  }
+  return true;
 }
 
 bool MgrMonitor::preprocess_query(MonOpRequestRef op)
@@ -122,6 +149,10 @@ bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
   MMgrBeacon *m = static_cast<MMgrBeacon*>(op->get_req());
   dout(4) << "beacon from " << m->get_gid() << dendl;
 
+  if (!check_caps(op, m->get_fsid())) {
+    return true;
+  }
+
   last_beacon[m->get_gid()] = ceph_clock_now();
 
   if (pending_map.active_gid == m->get_gid()
@@ -171,7 +202,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
   if (pending_map.active_gid == m->get_gid()) {
     // A beacon from the currently active daemon
     if (pending_map.active_addr != m->get_server_addr()) {
-      dout(4) << "learned address " << m->get_server_addr() << dendl;
+      dout(4) << "learned address " << m->get_server_addr()
+	      << " (was " << pending_map.active_addr << ")" << dendl;
       pending_map.active_addr = m->get_server_addr();
       updated = true;
     }
@@ -186,10 +218,13 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     if (pending_map.standbys.count(m->get_gid())) {
       drop_standby(m->get_gid());
     }
+    dout(4) << "selecting new active " << m->get_gid()
+	    << " " << m->get_name()
+	    << " (was " << pending_map.active_gid << " "
+	    << pending_map.active_name << ")" << dendl;
     pending_map.active_gid = m->get_gid();
     pending_map.active_name = m->get_name();
 
-    dout(4) << "selecting new active in epoch " << pending_map.epoch << dendl;
     updated = true;
   } else {
     if (pending_map.standbys.count(m->get_gid()) > 0) {
@@ -274,8 +309,47 @@ void MgrMonitor::send_digests()
   mon->timer.add_event_after(g_conf->mon_mgr_digest_period, digest_callback);
 }
 
+void MgrMonitor::on_active()
+{
+  if (mon->is_leader())
+    mon->clog->info() << "mgrmap e" << map.epoch << ": " << map;
+}
+
+void MgrMonitor::get_health(
+  list<pair<health_status_t,string> >& summary,
+  list<pair<health_status_t,string> > *detail,
+  CephContext *cct) const
+{
+  // start mgr warnings as soon as the mons and osds are all upgraded,
+  // but before the require_luminous osdmap flag is set.  this way the
+  // user gets some warning before the osd flag is set and mgr is
+  // actually *required*.
+  if (!mon->monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS) ||
+      !HAVE_FEATURE(mon->osdmon()->osdmap.get_up_osd_features(),
+		    SERVER_LUMINOUS)) {
+    return;
+  }
+
+  if (!map.available) {
+    auto level = HEALTH_WARN;
+    // do not escalate to ERR if they are still upgrading to jewel.
+    if (mon->osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      utime_t now = ceph_clock_now();
+      if (first_seen_inactive != utime_t() &&
+	  now - first_seen_inactive > g_conf->mon_mgr_inactive_grace) {
+	level = HEALTH_ERR;
+      }
+    }
+    summary.push_back(make_pair(level, "no active mgr"));
+  }
+}
+
 void MgrMonitor::tick()
 {
+  if (!is_active() || !mon->is_leader())
+    return;
+
   const utime_t now = ceph_clock_now();
   utime_t cutoff = now;
   cutoff -= g_conf->mon_mgr_beacon_grace;

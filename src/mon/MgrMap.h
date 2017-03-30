@@ -98,45 +98,56 @@ public:
     DECODE_FINISH(p);
   }
 
+  void dump(Formatter *f) const {
+    f->dump_int("epoch", epoch);
+    f->dump_int("active_gid", get_active_gid());
+    f->dump_string("active_name", get_active_name());
+    f->dump_stream("active_addr") << active_addr;
+    f->dump_bool("available", available);
+    f->open_array_section("standbys");
+    for (const auto &i : standbys) {
+      f->open_object_section("standby");
+      f->dump_int("gid", i.second.gid);
+      f->dump_string("name", i.second.name);
+      f->close_section();
+    }
+    f->close_section();
+  }
+
+  static void generate_test_instances(list<MgrMap*> &l) {
+    l.push_back(new MgrMap);
+  }
+
   void print_summary(Formatter *f, std::ostream *ss) const
   {
     // One or the other, not both
     assert((ss != nullptr) != (f != nullptr));
-
     if (f) {
-      f->dump_int("active_gid", get_active_gid());
-      f->dump_string("active_name", get_active_name());
+      dump(f);
     } else {
       if (get_active_gid() != 0) {
-        *ss << "active: " << get_active_name() << " ";
+	*ss << "active: " << get_active_name() << " ";
       } else {
-        *ss << "no daemons active ";
+	*ss << "no daemons active ";
       }
-    }
-
-
-    if (f) {
-      f->open_array_section("standbys");
-      for (const auto &i : standbys) {
-        f->open_object_section("standby");
-        f->dump_int("gid", i.second.gid);
-        f->dump_string("name", i.second.name);
-        f->close_section();
-      }
-      f->close_section();
-    } else {
       if (standbys.size()) {
-        *ss << "standbys: ";
-        bool first = true;
-        for (const auto &i : standbys) {
-          if (!first) {
-            *ss << ", ";
-          }
-          *ss << i.second.name;
-          first = false;
-        }
+	*ss << "standbys: ";
+	bool first = true;
+	for (const auto &i : standbys) {
+	  if (!first) {
+	    *ss << ", ";
+	  }
+	  *ss << i.second.name;
+	  first = false;
+	}
       }
     }
+  }
+
+  friend ostream& operator<<(ostream& out, const MgrMap& m) {
+    ostringstream ss;
+    m.print_summary(nullptr, &ss);
+    return out << ss.str();
   }
 };
 

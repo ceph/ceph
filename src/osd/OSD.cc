@@ -6514,7 +6514,7 @@ void OSD::handle_pg_scrub(MOSDScrub *m, PG *pg)
 void OSD::handle_scrub(MOSDScrub *m)
 {
   dout(10) << "handle_scrub " << *m << dendl;
-  if (!require_mon_peer(m)) {
+  if (!require_mon_or_mgr_peer(m)) {
     m->put();
     return;
   }
@@ -7552,6 +7552,18 @@ bool OSD::require_mon_peer(const Message *m)
 {
   if (!m->get_connection()->peer_is_mon()) {
     dout(0) << "require_mon_peer received from non-mon "
+	    << m->get_connection()->get_peer_addr()
+	    << " " << *m << dendl;
+    return false;
+  }
+  return true;
+}
+
+bool OSD::require_mon_or_mgr_peer(const Message *m)
+{
+  if (!m->get_connection()->peer_is_mon() &&
+      !m->get_connection()->peer_is_mgr()) {
+    dout(0) << "require_mon_or_mgr_peer received from non-mon, non-mgr "
 	    << m->get_connection()->get_peer_addr()
 	    << " " << *m << dendl;
     return false;

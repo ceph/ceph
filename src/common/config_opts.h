@@ -329,6 +329,7 @@ OPTION(mon_probe_timeout, OPT_DOUBLE, 2.0)
 OPTION(mon_slurp_timeout, OPT_DOUBLE, 10.0)
 OPTION(mon_slurp_bytes, OPT_INT, 256*1024)    // limit size of slurp messages
 OPTION(mon_client_bytes, OPT_U64, 100ul << 20)  // client msg data allowed in memory (in bytes)
+OPTION(mon_mgr_proxy_client_bytes_ratio, OPT_FLOAT, .3) // ratio of mon_client_bytes that can be consumed by proxied mgr commands before we error out to client
 OPTION(mon_daemon_bytes, OPT_U64, 400ul << 20)  // mds, osd message memory cap (in bytes)
 OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
 OPTION(mon_reweight_min_pgs_per_osd, OPT_U64, 10)   // min pgs per osd for reweight-by-pg command
@@ -1629,13 +1630,26 @@ OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retryi
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
 
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
+
 OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python modules from
 OPTION(mgr_modules, OPT_STR, "rest")  // Which modules to load
 OPTION(mgr_data, OPT_STR, "/var/lib/ceph/mgr/$cluster-$id") // where to find keyring etc
 OPTION(mgr_beacon_period, OPT_INT, 5)  // How frequently to send beacon
 OPTION(mgr_stats_period, OPT_INT, 5) // How frequently to send stats
+OPTION(mgr_client_bytes, OPT_U64, 128*1048576) // bytes from clients
+OPTION(mgr_client_messages, OPT_U64, 512)      // messages from clients
+OPTION(mgr_osd_bytes, OPT_U64, 512*1048576)   // bytes from osds
+OPTION(mgr_osd_messages, OPT_U64, 8192)       // messages from osds
+OPTION(mgr_mds_bytes, OPT_U64, 128*1048576)   // bytes from mdss
+OPTION(mgr_mds_messages, OPT_U64, 128)        // messages from mdss
+OPTION(mgr_mon_bytes, OPT_U64, 128*1048576)   // bytes from mons
+OPTION(mgr_mon_messages, OPT_U64, 128)        // messages from mons
+
+OPTION(mgr_connect_retry_interval, OPT_DOUBLE, 1.0)
+
 OPTION(mon_mgr_digest_period, OPT_INT, 5)  // How frequently to send digests
 OPTION(mon_mgr_beacon_grace, OPT_INT, 30)  // How long to wait to failover
+OPTION(mon_mgr_inactive_grace, OPT_INT, 60) // How long before health WARN -> ERR
 
 OPTION(rgw_list_bucket_min_readahead, OPT_INT, 1000) // minimum number of entries to read from rados for bucket listing
 
