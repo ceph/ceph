@@ -6554,18 +6554,17 @@ boost::statechart::result
 PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  double ratio, max_ratio;
+  ostringstream ss;
 
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected: failure injection"
 		       << dendl;
     post_event(RemoteReservationRejected());
-  } else if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
+  } else if (pg->osd->too_full_for_backfill(ss) &&
       !pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
-    ldout(pg->cct, 10) << "backfill reservation rejected: full ratio is "
-		       << ratio << ", which is greater than max allowed ratio "
-		       << max_ratio << dendl;
+    ldout(pg->cct, 10) << "backfill reservation rejected: "
+		       << ss.str() << dendl;
     post_event(RemoteReservationRejected());
   } else {
     pg->osd->remote_reserver.request_reservation(
@@ -6590,7 +6589,7 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
 {
   PG *pg = context< RecoveryMachine >().pg;
 
-  double ratio, max_ratio;
+  ostringstream ss;
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
@@ -6598,11 +6597,10 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
     pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
     post_event(RemoteReservationRejected());
     return discard_event();
-  } else if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
+  } else if (pg->osd->too_full_for_backfill(ss) &&
 	     !pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
-    ldout(pg->cct, 10) << "backfill reservation rejected after reservation: full ratio is "
-		       << ratio << ", which is greater than max allowed ratio "
-		       << max_ratio << dendl;
+    ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
+		       << ss.str() << dendl;
     pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
     post_event(RemoteReservationRejected());
     return discard_event();

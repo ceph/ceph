@@ -823,15 +823,12 @@ bool OSDService::is_full()
   return cur_state >= FULL;
 }
 
-bool OSDService::too_full_for_backfill(double *_ratio, double *_max_ratio)
+bool OSDService::too_full_for_backfill(ostream &ss)
 {
   Mutex::Locker l(full_status_lock);
   double max_ratio;
   max_ratio = cct->_conf->osd_backfill_full_ratio;
-  if (_ratio)
-    *_ratio = cur_ratio;
-  if (_max_ratio)
-    *_max_ratio = max_ratio;
+  ss << "current usage is " << cur_ratio << ", which is greater than max allowed ratio " << max_ratio;
   return cur_ratio >= max_ratio;
 }
 

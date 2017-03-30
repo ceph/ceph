@@ -1155,7 +1155,7 @@ public:
   bool check_failsafe_full();
   bool is_nearfull();
   bool is_full();
-  bool too_full_for_backfill(double *ratio, double *max_ratio);
+  bool too_full_for_backfill(ostream &ss);
   bool need_fullness_update();  ///< osdmap state needs update
 
 
