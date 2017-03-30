@@ -1419,6 +1419,8 @@ function test_mon_pg()
 
   ceph osd set-full-ratio .962
   ceph osd dump | grep '^full_ratio 0.962'
+  ceph osd set-backfillfull-ratio .912
+  ceph osd dump | grep '^backfillfull_ratio 0.912'
   ceph osd set-nearfull-ratio .892
   ceph osd dump | grep '^nearfull_ratio 0.892'
 

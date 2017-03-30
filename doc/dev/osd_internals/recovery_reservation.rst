@@ -34,8 +34,8 @@ the typical process.
 
 Once the primary has its local reservation, it requests a remote
 reservation from the backfill target. This reservation CAN be rejected,
-for instance if the OSD is too full (osd_backfill_full_ratio config
-option). If the reservation is rejected, the primary drops its local
+for instance if the OSD is too full (backfillfull_ratio osd setting).
+If the reservation is rejected, the primary drops its local
 reservation, waits (osd_backfill_retry_interval), and then retries. It
 will retry indefinitely.
 
@@ -64,7 +64,7 @@ to the monitor. The state chart can set:
  - recovering: recovering
  - backfill_wait: waiting for remote backfill reservations
  - backfilling: backfilling
- - backfill_toofull: backfill reservation rejected, OSD too full
+ - backfill_toofull: backfill stopped, OSD(s) above backfillfull ratio
 
 
 --------

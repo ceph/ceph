@@ -560,15 +560,6 @@ priority than requests to read or write data.
 :Default: ``512`` 
 
 
-``osd backfill full ratio``
-
-:Description: Refuse to accept backfill requests when the Ceph OSD Daemon's 
-              full ratio is above this value.
-
-:Type: Float
-:Default: ``0.85``
-
-
 ``osd backfill retry interval``
 
 :Description: The number of seconds to wait before retrying backfill requests.

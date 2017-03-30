@@ -400,6 +400,7 @@ EOF
     if test -z "$(get_config mon $id mon_initial_members)" ; then
         ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
         ceph osd pool create rbd $PG_NUM || return 1
+        ceph osd set-backfillfull-ratio .99
     fi
 }
 
@@ -634,7 +635,6 @@ function activate_osd() {
     ceph_disk_args+=" --prepend-to-path="
 
     local ceph_args="$CEPH_ARGS"
-    ceph_args+=" --osd-backfill-full-ratio=.99"
     ceph_args+=" --osd-failsafe-full-ratio=.99"
     ceph_args+=" --osd-journal-size=100"
     ceph_args+=" --osd-scrub-load-threshold=2000"

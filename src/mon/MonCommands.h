@@ -592,6 +592,10 @@ COMMAND("osd set-full-ratio " \
 	"name=ratio,type=CephFloat,range=0.0|1.0", \
 	"set usage ratio at which OSDs are marked full",
 	"osd", "rw", "cli,rest")
+COMMAND("osd set-backfillfull-ratio " \
+	"name=ratio,type=CephFloat,range=0.0|1.0", \
+	"set usage ratio at which OSDs are marked too full to backfill",
+	"osd", "rw", "cli,rest")
 COMMAND("osd set-nearfull-ratio " \
 	"name=ratio,type=CephFloat,range=0.0|1.0", \
 	"set usage ratio at which OSDs are marked near-full",
