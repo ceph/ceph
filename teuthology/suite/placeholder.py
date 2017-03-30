@@ -89,6 +89,7 @@ dict_templ = {
             }
         },
         'workunit': {
+            'branch': Placeholder('suite_branch'),
             'sha1': Placeholder('suite_hash'),
         }
     },
