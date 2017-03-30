@@ -4895,9 +4895,10 @@ int BlueStore::umount()
 static void apply(uint64_t off,
                   uint64_t len,
                   uint64_t granularity,
-                  boost::dynamic_bitset<> &bitset,
+                  BlueStore::mempool_dynamic_bitset &bitset,
 	          const char *what,
-                  std::function<void(uint64_t, boost::dynamic_bitset<> &)> f) {
+                  std::function<void(uint64_t,
+				     BlueStore::mempool_dynamic_bitset &)> f) {
   auto end = ROUND_UP_TO(off + len, granularity);
   while (off < end) {
     uint64_t pos = off / granularity;
@@ -4910,7 +4911,7 @@ int BlueStore::_fsck_check_extents(
   const ghobject_t& oid,
   const PExtentVector& extents,
   bool compressed,
-  boost::dynamic_bitset<> &used_blocks,
+  mempool_dynamic_bitset &used_blocks,
   store_statfs_t& expected_statfs)
 {
   dout(30) << __func__ << " oid " << oid << " extents " << extents << dendl;
@@ -4925,7 +4926,7 @@ int BlueStore::_fsck_check_extents(
     bool already = false;
     apply(
       e.offset, e.length, block_size, used_blocks, __func__,
-      [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+      [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	if (bs.test(pos))
 	  already = true;
 	else
@@ -4949,10 +4950,10 @@ int BlueStore::fsck(bool deep)
 {
   dout(1) << __func__ << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
   int errors = 0;
-  set<uint64_t> used_nids;
-  set<uint64_t> used_omap_head;
-  boost::dynamic_bitset<> used_blocks;
-  set<uint64_t> used_sbids;
+  mempool::bluestore_fsck::set<uint64_t> used_nids;
+  mempool::bluestore_fsck::set<uint64_t> used_omap_head;
+  mempool_dynamic_bitset used_blocks;
+  mempool::bluestore_fsck::set<uint64_t> used_sbids;
   KeyValueDB::Iterator it;
   store_statfs_t expected_statfs, actual_statfs;
   struct sb_info_t {
@@ -4961,7 +4962,7 @@ int BlueStore::fsck(bool deep)
     bluestore_extent_ref_map_t ref_map;
     bool compressed;
   };
-  map<uint64_t,sb_info_t> sb_info;
+  mempool::bluestore_fsck::map<uint64_t,sb_info_t> sb_info;
 
   uint64_t num_objects = 0;
   uint64_t num_extents = 0;
@@ -5021,7 +5022,7 @@ int BlueStore::fsck(bool deep)
   used_blocks.resize(bdev->get_size() / block_size);
   apply(
     0, BLUEFS_START, block_size, used_blocks, "0~BLUEFS_START",
-    [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+    [&](uint64_t pos, mempool_dynamic_bitset &bs) {
       bs.set(pos);
     }
   );
@@ -5030,7 +5031,7 @@ int BlueStore::fsck(bool deep)
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
         e.get_start(), e.get_len(), block_size, used_blocks, "bluefs",
-        [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+        [&](uint64_t pos, mempool_dynamic_bitset &bs) {
           bs.set(pos);
         }
 	);
@@ -5055,7 +5056,7 @@ int BlueStore::fsck(bool deep)
   if (it) {
     CollectionRef c;
     spg_t pgid;
-    list<string> expecting_shards;
+    mempool::bluestore_fsck::list<string> expecting_shards;
     for (it->lower_bound(string()); it->valid(); it->next()) {
       dout(30) << " key " << pretty_binary_string(it->key()) << dendl;
       if (is_extent_shard_key(it->key())) {
@@ -5181,7 +5182,8 @@ int BlueStore::fsck(bool deep)
       // lextents
       map<BlobRef,bluestore_blob_t::unused_t> referenced;
       uint64_t pos = 0;
-      map<BlobRef, bluestore_blob_use_tracker_t> ref_map;
+      mempool::bluestore_fsck::map<BlobRef,
+				   bluestore_blob_use_tracker_t> ref_map;
       for (auto& l : o->extent_map.extent_map) {
 	dout(20) << __func__ << "    " << l << dendl;
 	if (l.logical_offset < pos) {
@@ -5426,7 +5428,7 @@ int BlueStore::fsck(bool deep)
       for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
         apply(
           e.get_start(), e.get_len(), block_size, used_blocks, "deferred",
-          [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+          [&](uint64_t pos, mempool_dynamic_bitset &bs) {
             bs.set(pos);
           }
         );
@@ -5441,7 +5443,7 @@ int BlueStore::fsck(bool deep)
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
         e.get_start(), e.get_len(), block_size, used_blocks, "bluefs_extents",
-        [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+        [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	  bs.reset(pos);
         }
       );
@@ -5452,7 +5454,7 @@ int BlueStore::fsck(bool deep)
       bool intersects = false;
       apply(
         offset, length, block_size, used_blocks, "free",
-        [&](uint64_t pos, boost::dynamic_bitset<> &bs) {
+        [&](uint64_t pos, mempool_dynamic_bitset &bs) {
           if (bs.test(pos)) {
             intersects = true;
           } else {
