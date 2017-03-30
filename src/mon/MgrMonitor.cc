@@ -202,7 +202,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
   if (pending_map.active_gid == m->get_gid()) {
     // A beacon from the currently active daemon
     if (pending_map.active_addr != m->get_server_addr()) {
-      dout(4) << "learned address " << m->get_server_addr() << dendl;
+      dout(4) << "learned address " << m->get_server_addr()
+	      << " (was " << pending_map.active_addr << ")" << dendl;
       pending_map.active_addr = m->get_server_addr();
       updated = true;
     }
@@ -217,10 +218,13 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     if (pending_map.standbys.count(m->get_gid())) {
       drop_standby(m->get_gid());
     }
+    dout(4) << "selecting new active " << m->get_gid()
+	    << " " << m->get_name()
+	    << " (was " << pending_map.active_gid << " "
+	    << pending_map.active_name << ")" << dendl;
     pending_map.active_gid = m->get_gid();
     pending_map.active_name = m->get_name();
 
-    dout(4) << "selecting new active in epoch " << pending_map.epoch << dendl;
     updated = true;
   } else {
     if (pending_map.standbys.count(m->get_gid()) > 0) {
