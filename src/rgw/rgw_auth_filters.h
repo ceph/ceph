@@ -85,6 +85,10 @@ public:
     return get_decoratee().is_identity(ids);
   }
 
+  const boost::optional<const std::string&> get_subuser_name() const override {
+    return get_decoratee().get_subuser_name();
+  }
+
   void to_str(std::ostream& out) const override {
     get_decoratee().to_str(out);
   }

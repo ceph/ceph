@@ -21,7 +21,6 @@ namespace auth {
 
 using Exception = std::system_error;
 
-
 /* Load information about identity that will be used by RGWOp to authorize
  * any operation that comes from an authenticated user. */
 class Identity {
@@ -68,6 +67,11 @@ public:
   /* Verify whether a given identity corresponds to an identity in the
      provided set */
   virtual bool is_identity(const idset_t& ids) const = 0;
+
+  virtual const boost::optional<const std::string&> get_subuser_name() const {
+    return boost::none;
+  };
+
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -436,10 +440,8 @@ class LocalApplier : public IdentityApplier {
 
 protected:
   const RGWUserInfo user_info;
-  const std::string subuser;
-
-  uint32_t get_perm_mask(const std::string& subuser_name,
-                         const RGWUserInfo &uinfo) const;
+  std::string subuser;
+  uint32_t perm_mask;
 
 public:
   static const std::string NO_SUBUSER;
@@ -447,18 +449,24 @@ public:
   LocalApplier(CephContext* const cct,
                const RGWUserInfo& user_info,
                std::string subuser)
-    : user_info(user_info),
-      subuser(std::move(subuser)) {
+    : user_info(user_info) {
+    parse_subuser_info(subuser, user_info);
   }
 
 
+  void parse_subuser_info(const std::string& subuser_name, const RGWUserInfo &uinfo);
   uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_user& uid) const override;
   bool is_owner_of(const rgw_user& uid) const override;
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
-    return get_perm_mask(subuser, user_info);
+    return perm_mask;
   }
+
+  const boost::optional<const std::string&> get_subuser_name() const override {
+    return subuser;
+  }
+
   void to_str(std::ostream& out) const override;
   void load_acct_info(RGWUserInfo& user_info) const override; /* out */
 
