@@ -31,16 +31,18 @@ int main(int argc, char **argv)
   vector<string> devs;
   string path;
   string action;
+  bool fsck_deep;
   po::options_description po_options("Options");
   po_options.add_options()
     ("help,h", "produce help message")
     ("path", po::value<string>(&path), "bluestore path")
     ("out-dir", po::value<string>(&out_dir), "output directory")
     ("dev", po::value<vector<string>>(&devs), "device(s)")
+    ("deep", po::value<bool>(&fsck_deep), "deep fsck (read all data)")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "show-label, bluefs-export")
+    ("command", po::value<string>(&action), "fsck, bluefs-export, show-label")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -104,7 +106,16 @@ int main(int argc, char **argv)
 
   cout << "action " << action << std::endl;
 
-  if (action == "show-label") {
+  if (action == "fsck" ||
+      action == "fsck-deep") {
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.fsck(fsck_deep);
+    if (r < 0) {
+      cerr << "error from fsck: " << cpp_strerror(r) << std::endl;
+      return 1;
+    }
+  }
+  else if (action == "show-label") {
     JSONFormatter jf(true);
     jf.open_array_section("devices");
     for (auto& i : devs) {
