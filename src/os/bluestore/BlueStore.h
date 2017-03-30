@@ -1858,8 +1858,10 @@ private:
 				   bool create);
 
   int _write_bdev_label(string path, bluestore_bdev_label_t label);
+public:
   static int _read_bdev_label(CephContext* cct, string path,
 			      bluestore_bdev_label_t *label);
+private:
   int _check_or_set_bdev_label(string path, uint64_t size, string desc,
 			       bool create);
 
