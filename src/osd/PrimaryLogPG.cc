@@ -3331,10 +3331,9 @@ void PrimaryLogPG::do_scan(
   switch (m->op) {
   case MOSDPGScan::OP_SCAN_GET_DIGEST:
     {
-      double ratio, full_ratio;
-      if (osd->too_full_for_backfill(&ratio, &full_ratio)) {
-	dout(1) << __func__ << ": Canceling backfill, current usage is "
-		<< ratio << ", which exceeds " << full_ratio << dendl;
+      ostringstream ss;
+      if (osd->too_full_for_backfill(ss)) {
+	dout(1) << __func__ << ": Canceling backfill, " << ss.str() << dendl;
 	queue_peering_event(
 	  CephPeeringEvtRef(
 	    std::make_shared<CephPeeringEvt>(
