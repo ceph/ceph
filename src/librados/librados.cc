@@ -68,6 +68,19 @@ namespace {
 
 TracepointProvider::Traits tracepoint_traits("librados_tp.so", "rados_tracing");
 
+uint8_t get_checksum_op_type(rados_checksum_type_t type) {
+  switch (type) {
+  case LIBRADOS_CHECKSUM_TYPE_XXHASH32:
+    return CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH32;
+  case LIBRADOS_CHECKSUM_TYPE_XXHASH64:
+    return CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH64;
+  case LIBRADOS_CHECKSUM_TYPE_CRC32C:
+    return CEPH_OSD_CHECKSUM_OP_TYPE_CRC32C;
+  default:
+    return -1;
+  }
+}
+
 } // anonymous namespace
 
 /*
@@ -226,6 +239,17 @@ void librados::ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
 {
   ::ObjectOperation *o = &impl->o;
   o->sparse_read(off, len, m, data_bl, prval);
+}
+
+void librados::ObjectReadOperation::checksum(rados_checksum_type_t type,
+					     const bufferlist &init_value_bl,
+					     uint64_t off, size_t len,
+					     size_t chunk_size, bufferlist *pbl,
+					     int *prval)
+{
+  ::ObjectOperation *o = &impl->o;
+  o->checksum(get_checksum_op_type(type), init_value_bl, off, len, chunk_size,
+	      pbl, prval, nullptr);
 }
 
 void librados::ObjectReadOperation::tmap_get(bufferlist *pbl, int *prval)
@@ -1161,6 +1185,16 @@ int librados::IoCtx::read(const std::string& oid, bufferlist& bl, size_t len, ui
 {
   object_t obj(oid);
   return io_ctx_impl->read(obj, bl, len, off);
+}
+
+int librados::IoCtx::checksum(const std::string& oid,
+			      rados_checksum_type_t type,
+			      const bufferlist &init_value_bl, size_t len,
+			      uint64_t off, size_t chunk_size, bufferlist *pbl)
+{
+  object_t obj(oid);
+  return io_ctx_impl->checksum(obj, get_checksum_op_type(type), init_value_bl,
+			       len, off, chunk_size, pbl);
 }
 
 int librados::IoCtx::remove(const std::string& oid)
@@ -3506,6 +3540,36 @@ extern "C" int rados_read(rados_ioctx_t io, const char *o, char *buf, size_t len
   return ret;
 }
 
+extern "C" int rados_checksum(rados_ioctx_t io, const char *o,
+                              rados_checksum_type_t type,
+                              const char *init_value, size_t init_value_len,
+                              size_t len, uint64_t off, size_t chunk_size,
+			      char *pchecksum, size_t checksum_len)
+{
+  tracepoint(librados, rados_checksum_enter, io, o, type, init_value,
+	     init_value_len, len, off, chunk_size);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+
+  bufferlist init_value_bl;
+  init_value_bl.append(init_value, init_value_len);
+
+  bufferlist checksum_bl;
+
+  int retval = ctx->checksum(oid, get_checksum_op_type(type), init_value_bl,
+			     len, off, chunk_size, &checksum_bl);
+  if (retval >= 0) {
+    if (checksum_bl.length() > checksum_len) {
+      tracepoint(librados, rados_checksum_exit, -ERANGE, NULL, 0);
+      return -ERANGE;
+    }
+
+    checksum_bl.copy(0, checksum_bl.length(), pchecksum);
+  }
+  tracepoint(librados, rados_checksum_exit, retval, pchecksum, checksum_len);
+  return retval;
+}
+
 extern "C" uint64_t rados_get_last_version(rados_ioctx_t io)
 {
   tracepoint(librados, rados_get_last_version_enter, io);
@@ -5529,6 +5593,31 @@ extern "C" void rados_read_op_read(rados_read_op_t read_op,
   ctx->out_bl.push_back(buffer::create_static(len, buf));
   ((::ObjectOperation *)read_op)->read(offset, len, &ctx->out_bl, prval, ctx);
   tracepoint(librados, rados_read_op_read_exit);
+}
+
+extern "C" void rados_read_op_checksum(rados_read_op_t read_op,
+                                       rados_checksum_type_t type,
+                                       const char *init_value,
+                                       size_t init_value_len,
+                                       uint64_t offset, size_t len,
+                                       size_t chunk_size, char *pchecksum,
+				       size_t checksum_len, int *prval)
+{
+  tracepoint(librados, rados_read_op_checksum_enter, read_op, type, init_value,
+	     init_value_len, offset, len, chunk_size);
+  bufferlist init_value_bl;
+  init_value_bl.append(init_value, init_value_len);
+
+  C_bl_to_buf *ctx = nullptr;
+  if (pchecksum != nullptr) {
+    ctx = new C_bl_to_buf(pchecksum, checksum_len, nullptr, prval);
+  }
+  ((::ObjectOperation *)read_op)->checksum(get_checksum_op_type(type),
+					   init_value_bl, offset, len,
+					   chunk_size,
+					   (ctx ? &ctx->out_bl : nullptr),
+					   prval, ctx);
+  tracepoint(librados, rados_read_op_checksum_exit);
 }
 
 class C_out_buffer : public Context {

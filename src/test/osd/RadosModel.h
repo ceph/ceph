@@ -1180,6 +1180,9 @@ public:
   vector<bool> is_sparse_read;
   uint64_t waiting_on;
 
+  vector<bufferlist> checksums;
+  vector<int> checksum_retvals;
+
   map<string, bufferlist> attrs;
   int attrretval;
 
@@ -1205,6 +1208,8 @@ public:
       extent_results(3),
       is_sparse_read(3, false),
       waiting_on(0),
+      checksums(3),
+      checksum_retvals(3),
       attrretval(0)
   {}
 
@@ -1218,6 +1223,10 @@ public:
 		   len,
 		   &results[index],
 		   &retvals[index]);
+      bufferlist init_value_bl;
+      ::encode(static_cast<uint32_t>(-1), init_value_bl);
+      read_op.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init_value_bl, 0, len,
+		       0, &checksums[index], &checksum_retvals[index]);
     } else {
       is_sparse_read[index] = true;
       read_op.sparse_read(0,
@@ -1389,6 +1398,24 @@ public:
 	  } else {
 	    if (!old_value.check(results[i])) {
 	      cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
+	      context->errors++;
+	    }
+
+	    uint32_t checksum = 0;
+	    if (checksum_retvals[i] == 0) {
+	      try {
+	        auto bl_it = checksums[i].begin();
+	        uint32_t csum_count;
+	        ::decode(csum_count, bl_it);
+	        ::decode(checksum, bl_it);
+	      } catch (const buffer::error &err) {
+	        checksum_retvals[i] = -EBADMSG;
+	      }
+	    }
+	    if (checksum_retvals[i] != 0 || checksum != results[i].crc32c(-1)) {
+	      cerr << num << ": oid " << oid << " checksum " << checksums[i]
+	           << " incorrect, expecting " << results[i].crc32c(-1)
+                   << std::endl;
 	      context->errors++;
 	    }
 	  }
