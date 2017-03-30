@@ -6308,6 +6308,38 @@ void RGWGetObjLayout::execute()
 }
 
 
+int RGWConfigBucketMetaSearch::verify_permission()
+{
+  if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWConfigBucketMetaSearch::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWConfigBucketMetaSearch::execute()
+{
+  op_ret = get_params();
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "NOTICE: get_params() returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  s->bucket_info.mdsearch_config = mdsearch_config;
+
+  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(), &s->bucket_attrs);
+  if (op_ret < 0) {
+    ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << op_ret << dendl;
+    return;
+  }
+}
+
+
 RGWHandler::~RGWHandler()
 {
 }

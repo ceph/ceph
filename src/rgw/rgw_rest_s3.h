@@ -418,6 +418,14 @@ public:
   void send_response();
 };
 
+class RGWConfigBucketMetaSearch_ObjStore_S3 : public RGWConfigBucketMetaSearch {
+public:
+  RGWConfigBucketMetaSearch_ObjStore_S3() {}
+  ~RGWConfigBucketMetaSearch_ObjStore_S3() {}
+
+  int get_params() override;
+  void send_response() override;
+};
 
 class RGW_Auth_S3 {
 private:
