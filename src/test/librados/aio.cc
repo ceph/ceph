@@ -424,6 +424,66 @@ TEST(LibRadosAio, RoundTrip2) {
   rados_aio_release(my_completion2);
 }
 
+TEST(LibRadosAio, RoundTrip3) {
+  AioTestData test_data;
+  rados_completion_t my_completion;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+
+  rados_write_op_t op1 = rados_create_write_op();
+  rados_write_op_write(op1, buf, sizeof(buf), 0);
+  rados_write_op_set_alloc_hint2(op1, 0, 0, LIBRADOS_OP_FLAG_FADVISE_DONTNEED); 
+  ASSERT_EQ(0, rados_aio_write_op_operate(op1, test_data.m_ioctx, my_completion,
+					  "foo", NULL, 0));
+  rados_release_write_op(op1);
+
+  {
+    TestAlarm alarm;
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
+  }
+
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
+  rados_aio_release(my_completion);
+
+  char buf2[128];
+  memset(buf2, 0, sizeof(buf2));
+  rados_completion_t my_completion2;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion2));
+
+  rados_read_op_t op2 = rados_create_read_op();
+  rados_read_op_read(op2, 0, sizeof(buf2), buf2, NULL, NULL);
+  rados_read_op_set_flags(op2, LIBRADOS_OP_FLAG_FADVISE_NOCACHE |
+			       LIBRADOS_OP_FLAG_FADVISE_RANDOM);
+  __le32 init_value = -1;
+  __le32 checksum[2];
+  rados_read_op_checksum(op2, LIBRADOS_CHECKSUM_TYPE_CRC32C,
+			 reinterpret_cast<char *>(&init_value),
+			 sizeof(init_value), 0, 0, 0,
+                         reinterpret_cast<char *>(&checksum),
+                         sizeof(checksum), NULL);
+  ASSERT_EQ(0, rados_aio_read_op_operate(op2, test_data.m_ioctx, my_completion2,
+					 "foo", 0));
+  rados_release_read_op(op2);
+  
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
+  }
+  ASSERT_EQ(0, rados_aio_get_return_value(my_completion2));
+  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
+  rados_aio_release(my_completion2);
+
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(1U, checksum[0]);
+  ASSERT_EQ(bl.crc32c(-1), checksum[1]);
+}
+
 TEST(LibRadosAio, RoundTripPP) {
   AioTestDataPP test_data;
   ASSERT_EQ("", test_data.init());
@@ -511,7 +571,7 @@ TEST(LibRadosAio, RoundTripPP3)
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl;
-  bl.append(buf);
+  bl.append(buf, sizeof(buf));
 
   op.write(0, bl);
   op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
@@ -527,6 +587,11 @@ TEST(LibRadosAio, RoundTripPP3)
   ObjectReadOperation op1;
   op1.read(0, sizeof(buf), &bl, NULL);
   op1.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
+  bufferlist init_value_bl;
+  ::encode(static_cast<int32_t>(-1), init_value_bl);
+  bufferlist csum_bl;
+  op1.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init_value_bl,
+	       0, 0, 0, &csum_bl, nullptr);
   ioctx.aio_operate("test_obj", my_completion2.get(), &op1, 0);
   {
     TestAlarm alarm;
@@ -534,6 +599,15 @@ TEST(LibRadosAio, RoundTripPP3)
   }
   EXPECT_EQ(0, my_completion2->get_return_value());
   ASSERT_EQ(0, memcmp(buf, bl.c_str(), sizeof(buf)));
+
+  ASSERT_EQ(8U, csum_bl.length());
+  auto csum_bl_it = csum_bl.begin();
+  uint32_t csum_count;
+  uint32_t csum;
+  ::decode(csum_count, csum_bl_it);
+  ASSERT_EQ(1U, csum_count);
+  ::decode(csum, csum_bl_it);
+  ASSERT_EQ(bl.crc32c(-1), csum);
   ioctx.remove("test_obj");
   destroy_one_pool_pp(pool_name, cluster);
 }
