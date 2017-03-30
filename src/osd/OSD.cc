@@ -736,20 +736,24 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
     return;
   }
   float nearfull_ratio = osdmap->get_nearfull_ratio();
-  float full_ratio = std::max(osdmap->get_full_ratio(), nearfull_ratio);
+  float backfillfull_ratio = std::max(osdmap->get_backfillfull_ratio(), nearfull_ratio);
+  float full_ratio = std::max(osdmap->get_full_ratio(), backfillfull_ratio);
   float failsafe_ratio = std::max(get_failsafe_full_ratio(), full_ratio);
 
   if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
     // use the failsafe for nearfull and full; the mon isn't using the
     // flags anyway because we're mid-upgrade.
     full_ratio = failsafe_ratio;
+    backfillfull_ratio = failsafe_ratio;
     nearfull_ratio = failsafe_ratio;
   } else if (full_ratio <= 0 ||
+	     backfillfull_ratio <= 0 ||
 	     nearfull_ratio <= 0) {
-    derr << __func__ << " full_ratio or nearfull_ratio is <= 0" << dendl;
+    derr << __func__ << " full_ratio, backfillfull_ratio or nearfull_ratio is <= 0" << dendl;
     // use failsafe flag.  ick.  the monitor did something wrong or the user
     // did something stupid.
     full_ratio = failsafe_ratio;
+    backfillfull_ratio = failsafe_ratio;
     nearfull_ratio = failsafe_ratio;
   }
 
@@ -759,6 +763,8 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
     new_state = FAILSAFE;
   } else if (ratio > full_ratio || injectfull) {
     new_state = FULL;
+  } else if (ratio > backfillfull_ratio) {
+    new_state = BACKFILLFULL;
   } else if (ratio > nearfull_ratio) {
     new_state = NEARFULL;
   } else {
@@ -766,6 +772,7 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
   }
   dout(20) << __func__ << " cur ratio " << ratio
 	   << ". nearfull_ratio " << nearfull_ratio
+	   << ". backfillfull_ratio " << backfillfull_ratio
 	   << ", full_ratio " << full_ratio
 	   << ", failsafe_ratio " << failsafe_ratio
 	   << ", new state " << get_full_state_name(new_state)
@@ -793,6 +800,8 @@ bool OSDService::need_fullness_update()
   if (osdmap->exists(whoami)) {
     if (osdmap->get_state(whoami) & CEPH_OSD_FULL) {
       cur = FULL;
+    } else if (osdmap->get_state(whoami) & CEPH_OSD_BACKFILLFULL) {
+      cur = BACKFILLFULL;
     } else if (osdmap->get_state(whoami) & CEPH_OSD_NEARFULL) {
       cur = NEARFULL;
     }
@@ -800,6 +809,8 @@ bool OSDService::need_fullness_update()
   s_names want = NONE;
   if (is_full())
     want = FULL;
+  else if (is_backfillfull())
+    want = BACKFILLFULL;
   else if (is_nearfull())
     want = NEARFULL;
   return want != cur;
@@ -818,15 +829,19 @@ bool OSDService::check_failsafe_full()
     return true;
   }
 
-  if (cur_state == FAILSAFE)
-    return true;
-  return false;
+  return cur_state == FAILSAFE;
 }
 
 bool OSDService::is_nearfull()
 {
   Mutex::Locker l(full_status_lock);
-  return cur_state == NEARFULL;
+  return cur_state >= NEARFULL;
+}
+
+bool OSDService::is_backfillfull()
+{
+  Mutex::Locker l(full_status_lock);
+  return cur_state >= BACKFILLFULL;
 }
 
 bool OSDService::is_full()
@@ -838,18 +853,11 @@ bool OSDService::is_full()
 bool OSDService::too_full_for_backfill(ostream &ss)
 {
   Mutex::Locker l(full_status_lock);
-  if (injectfull) {
-    // injectfull is either a count of the number of times to return full
-    // or if -1 then always return full
-    if (injectfull > 0)
-      --injectfull;
-    ss << "Injected full OSD (" << (injectfull < 0 ? string("set") : std::to_string(injectfull)) << ")";
+  if (cur_state >= BACKFILLFULL) {
+    ss << "current usage is " << cur_ratio << ", which is greater than max allowed ratio";
     return true;
   }
-  double max_ratio;
-  max_ratio = cct->_conf->osd_backfill_full_ratio;
-  ss << "current usage is " << cur_ratio << ", which is greater than max allowed ratio " << max_ratio;
-  return cur_ratio >= max_ratio;
+  return false;
 }
 
 void OSDService::update_osd_stat(vector<int>& hb_peers)
@@ -5213,6 +5221,8 @@ void OSD::send_full_update()
   unsigned state = 0;
   if (service.is_full()) {
     state = CEPH_OSD_FULL;
+  } else if (service.is_backfillfull()) {
+    state = CEPH_OSD_BACKFILLFULL;
   } else if (service.is_nearfull()) {
     state = CEPH_OSD_NEARFULL;
   }

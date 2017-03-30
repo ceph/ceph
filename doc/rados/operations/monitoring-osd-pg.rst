@@ -496,8 +496,9 @@ placement group can't be backfilled, it may be considered ``incomplete``.
 Ceph provides a number of settings to manage the load spike associated with
 reassigning placement groups to an OSD (especially a new OSD). By default,
 ``osd_max_backfills`` sets the maximum number of concurrent backfills to or from
-an OSD to 10. The ``osd backfill full ratio`` enables an OSD to refuse a
-backfill request if the OSD is approaching its full ratio (85%, by default).
+an OSD to 10. The ``backfill full ratio`` enables an OSD to refuse a
+backfill request if the OSD is approaching its full ratio (90%, by default) and
+change with ``ceph osd set-backfillfull-ratio`` comand.
 If an OSD refuses a backfill request, the ``osd backfill retry interval``
 enables an OSD to retry the request (after 10 seconds, by default). OSDs can
 also set ``osd backfill scan min`` and ``osd backfill scan max`` to manage scan

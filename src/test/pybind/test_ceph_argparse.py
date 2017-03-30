@@ -1150,6 +1150,9 @@ class TestOSD(TestArgparse):
     def test_set_full_ratio(self):
         self.set_ratio('set-full-ratio')
 
+    def test_set_backfillfull_ratio(self):
+        self.set_ratio('set-backfillfull-ratio')
+
     def test_set_nearfull_ratio(self):
         self.set_ratio('set-nearfull-ratio')
 

@@ -155,6 +155,7 @@ public:
     string cluster_snapshot;
 
     float new_nearfull_ratio = -1;
+    float new_backfillfull_ratio = -1;
     float new_full_ratio = -1;
 
     mutable bool have_crc;      ///< crc values are defined
@@ -254,7 +255,7 @@ private:
   string cluster_snapshot;
   bool new_blacklist_entries;
 
-  float full_ratio = 0, nearfull_ratio = 0;
+  float full_ratio = 0, backfillfull_ratio = 0, nearfull_ratio = 0;
 
   mutable uint64_t cached_up_osd_features;
 
@@ -336,10 +337,13 @@ public:
   float get_full_ratio() const {
     return full_ratio;
   }
+  float get_backfillfull_ratio() const {
+    return backfillfull_ratio;
+  }
   float get_nearfull_ratio() const {
     return nearfull_ratio;
   }
-  void count_full_nearfull_osds(int *full, int *nearfull) const;
+  void count_full_nearfull_osds(int *full, int *backfill, int *nearfull) const;
 
   /***** cluster state *****/
   /* osds */

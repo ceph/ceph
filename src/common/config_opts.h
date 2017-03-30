@@ -308,6 +308,7 @@ OPTION(mon_pg_warn_min_pool_objects, OPT_INT, 1000)  // do not warn on pools bel
 OPTION(mon_pg_check_down_all_threshold, OPT_FLOAT, .5) // threshold of down osds after which we check all pgs
 OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT, .66) // position between pool cache_target_full and max where we start warning
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
+OPTION(mon_osd_backfillfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD backfill full (backfill halted)
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
 OPTION(mon_allow_pool_delete, OPT_BOOL, false) // allow pool deletion
 OPTION(mon_globalid_prealloc, OPT_U32, 10000)   // how many globalids to prealloc
@@ -625,9 +626,6 @@ OPTION(osd_max_backfills, OPT_U64, 1)
 
 // Minimum recovery priority (255 = max, smaller = lower)
 OPTION(osd_min_recovery_priority, OPT_INT, 0)
-
-// Refuse backfills when OSD full ratio is above this value
-OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.90)
 
 // Seconds to wait before retrying refused backfills
 OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 30.0)

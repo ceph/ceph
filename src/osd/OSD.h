@@ -1139,11 +1139,12 @@ public:
   // -- OSD Full Status --
 private:
   Mutex full_status_lock;
-  enum s_names { NONE, NEARFULL, FULL, FAILSAFE } cur_state;  // ascending
+  enum s_names { NONE, NEARFULL, BACKFILLFULL, FULL, FAILSAFE } cur_state;  // ascending
   const char *get_full_state_name(s_names s) {
     switch (s) {
     case NONE: return "none";
     case NEARFULL: return "nearfull";
+    case BACKFILLFULL: return "backfillfull";
     case FULL: return "full";
     case FAILSAFE: return "failsafe";
     default: return "???";
@@ -1155,6 +1156,7 @@ private:
 public:
   bool check_failsafe_full();
   bool is_nearfull();
+  bool is_backfillfull();
   bool is_full();
   bool too_full_for_backfill(ostream &ss);
   bool need_fullness_update();  ///< osdmap state needs update

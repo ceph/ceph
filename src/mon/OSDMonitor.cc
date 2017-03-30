@@ -164,6 +164,7 @@ void OSDMonitor::create_initial()
   if (!g_conf->mon_debug_no_require_luminous) {
     newmap.set_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
     newmap.full_ratio = g_conf->mon_osd_full_ratio;
+    newmap.backfillfull_ratio = g_conf->mon_osd_backfillfull_ratio;
     newmap.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
   }
 
@@ -784,8 +785,15 @@ void OSDMonitor::create_pending()
   OSDMap::clean_temps(g_ceph_context, osdmap, &pending_inc);
   dout(10) << "create_pending  did clean_temps" << dendl;
 
+  // On upgrade OSDMap has new field set by mon_osd_backfillfull_ratio config
+  // instead of osd_backfill_full_ratio config
+  if (osdmap.backfillfull_ratio <= 0) {
+    dout(1) << __func__ << " setting backfillfull_ratio = "
+	    << g_conf->mon_osd_backfillfull_ratio << dendl;
+    pending_inc.new_backfillfull_ratio = g_conf->mon_osd_backfillfull_ratio;
+  }
   if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-    // transition nearfull ratios from PGMap to OSDMap (on upgrade)
+    // transition full ratios from PGMap to OSDMap (on upgrade)
     PGMap *pg_map = &mon->pgmon()->pg_map;
     if (osdmap.full_ratio != pg_map->full_ratio) {
       dout(10) << __func__ << " full_ratio " << osdmap.full_ratio
@@ -1048,8 +1056,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     tmp.apply_incremental(pending_inc);
 
     if (tmp.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      int full, nearfull;
-      tmp.count_full_nearfull_osds(&full, &nearfull);
+      int full, backfill, nearfull;
+      tmp.count_full_nearfull_osds(&full, &backfill, &nearfull);
       if (full > 0) {
 	if (!tmp.test_flag(CEPH_OSDMAP_FULL)) {
 	  dout(10) << __func__ << " setting full flag" << dendl;
@@ -2287,7 +2295,7 @@ bool OSDMonitor::preprocess_full(MonOpRequestRef op)
   MOSDFull *m = static_cast<MOSDFull*>(op->get_req());
   int from = m->get_orig_source().num();
   set<string> state;
-  unsigned mask = CEPH_OSD_NEARFULL | CEPH_OSD_FULL;
+  unsigned mask = CEPH_OSD_NEARFULL | CEPH_OSD_BACKFILLFULL | CEPH_OSD_FULL;
 
   // check permissions, ignore if failed
   MonSession *session = m->get_session();
@@ -2337,7 +2345,7 @@ bool OSDMonitor::prepare_full(MonOpRequestRef op)
   const MOSDFull *m = static_cast<MOSDFull*>(op->get_req());
   const int from = m->get_orig_source().num();
 
-  const unsigned mask = CEPH_OSD_NEARFULL | CEPH_OSD_FULL;
+  const unsigned mask = CEPH_OSD_NEARFULL | CEPH_OSD_BACKFILLFULL | CEPH_OSD_FULL;
   const unsigned want_state = m->state & mask;  // safety first
 
   unsigned cur_state = osdmap.get_state(from);
@@ -3342,12 +3350,17 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
 
     if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      int full, nearfull;
-      osdmap.count_full_nearfull_osds(&full, &nearfull);
+      int full, backfill, nearfull;
+      osdmap.count_full_nearfull_osds(&full, &backfill, &nearfull);
       if (full > 0) {
 	ostringstream ss;
 	ss << full << " full osd(s)";
 	summary.push_back(make_pair(HEALTH_ERR, ss.str()));
+      }
+      if (backfill > 0) {
+	ostringstream ss;
+	ss << backfill << " backfillfull osd(s)";
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
       }
       if (nearfull > 0) {
 	ostringstream ss;
@@ -6929,6 +6942,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
 
   } else if (prefix == "osd set-full-ratio" ||
+	     prefix == "osd set-backfillfull-ratio" ||
              prefix == "osd set-nearfull-ratio") {
     if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       ss << "you must complete the upgrade and set require_luminous_osds before"
@@ -6945,6 +6959,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if (prefix == "osd set-full-ratio")
       pending_inc.new_full_ratio = n;
+    else if (prefix == "osd set-backfillfull-ratio")
+      pending_inc.new_backfillfull_ratio = n;
     else if (prefix == "osd set-nearfull-ratio")
       pending_inc.new_nearfull_ratio = n;
     ss << prefix << " " << n;
