@@ -461,6 +461,7 @@ public:
   LogClient &log_client;
   LogChannelRef clog;
   PGRecoveryStats &pg_recovery_stats;
+  int64_t injectfull;
 private:
   Messenger *&cluster_messenger;
   Messenger *&client_messenger;
