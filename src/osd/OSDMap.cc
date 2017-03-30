@@ -2329,9 +2329,6 @@ void OSDMap::dump_erasure_code_profiles(const map<string,map<string,string> > &p
 
 void OSDMap::dump(Formatter *f) const
 {
-
-  int max_osds = get_max_osd();
-
   f->dump_int("epoch", get_epoch());
   f->dump_stream("fsid") << get_fsid();
   f->dump_stream("created") << get_created();
@@ -2341,7 +2338,7 @@ void OSDMap::dump(Formatter *f) const
   f->dump_float("nearfull_ratio", nearfull_ratio);
   f->dump_string("cluster_snapshot", get_cluster_snapshot());
   f->dump_int("pool_max", get_pool_max());
-  f->dump_int("max_osd", max_osds);
+  f->dump_int("max_osd", get_max_osd());
 
   f->open_array_section("pools");
   for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
@@ -2358,7 +2355,7 @@ void OSDMap::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("osds");
-
+  int max_osds = get_max_osd();
   for (int i = 0; i < max_osds; ++i)
     if (exists(i)) {
       f->open_object_section("osd_info");
@@ -2541,7 +2538,6 @@ void OSDMap::print(ostream& out) const
   print_pools(out);
 
   int max_osds = get_max_osd();
-
   out << "max_osd " << max_osds << "\n";
   for (int i = 0; i < max_osds; ++i) {
     if (exists(i)) {
@@ -2600,7 +2596,6 @@ public:
     Parent::dump(tbl);
 
     int max_osds = osdmap->get_max_osd();
-
     for (int i = 0; i < max_osds; ++i) {
       if (osdmap->exists(i) && !is_touched(i))
 	dump_item(CrushTreeDumper::Item(i, 0, 0), tbl);
@@ -2652,10 +2647,9 @@ public:
     f->open_array_section("nodes");
     Parent::dump(f);
     f->close_section();
+
     f->open_array_section("stray");
-
     int max_osds = osdmap->get_max_osd();
-
     for (int i = 0; i < max_osds; ++i) {
       if (osdmap->exists(i) && !is_touched(i))
 	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
@@ -2793,9 +2787,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   assert(r == 0);
 
   int max_osds = get_max_osd();
-
   int poolbase = max_osds ? max_osds : 1;
-
   int const default_replicated_ruleset = crush->get_osd_pool_default_crush_replicated_ruleset(cct);
   assert(default_replicated_ruleset >= 0);
 

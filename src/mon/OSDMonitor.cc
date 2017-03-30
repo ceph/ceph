@@ -303,7 +303,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   int max_osds = osdmap.get_max_osd();
-
   for (int o = 0; o < max_osds; ++o) {
     if (osdmap.is_out(o))
       continue;
@@ -674,7 +673,6 @@ public:
 protected:
   void dump_stray(F *f) {
     int max_osds = osdmap->get_max_osd();
-
     for (int i = 0; i < max_osds; ++i) {
       if (osdmap->exists(i) && !this->is_touched(i))
 	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
@@ -1347,7 +1345,6 @@ void OSDMonitor::print_nodes(Formatter *f)
   // group OSDs by their hosts
   map<string, list<int> > osds; // hostname => osd
   int max_osds = osdmap.get_max_osd();
-
   for (int osd = 0; osd < max_osds; ++osd) {
     map<string, string> m;
     if (load_metadata(osd, m, NULL)) {
@@ -3184,16 +3181,18 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       int full, nearfull;
       osdmap.count_full_nearfull_osds(&full, &nearfull);
+
       if (full > 0) {
-	ostringstream ss;
-	ss << full << " full osds(s)";
-	summary.push_back(make_pair(HEALTH_ERR, ss.str()));
+        ostringstream ss;
+        ss << full << " full osds(s)";
+        summary.push_back(make_pair(HEALTH_ERR, ss.str()));
       }
       if (nearfull > 0) {
-	ostringstream ss;
-	ss << nearfull << " nearfull osds(s)";
-	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+        ostringstream ss;
+        ss << nearfull << " nearfull osds(s)";
+        summary.push_back(make_pair(HEALTH_WARN, ss.str()));
       }
+
     }
     // note: we leave it to ceph-mgr to generate details health warnings
     // with actual osd utilizations
@@ -3345,9 +3344,7 @@ void OSDMonitor::dump_info(Formatter *f)
   f->close_section();
 
   f->open_array_section("osd_metadata");
-
   int max_osds = osdmap.get_max_osd();
-
   for (int i = 0; i < max_osds; ++i) {
     if (osdmap.exists(i)) {
       f->open_object_section("osd");
@@ -3464,9 +3461,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	   prefix == "osd getmap" ||
 	   prefix == "osd getcrushmap") {
     string val;
-
     int max_osds = osdmap.get_max_osd();
-
     epoch_t epoch = 0;
     int64_t epochnum;
     cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)osdmap.get_epoch());
@@ -3504,9 +3499,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       if (!f)
 	ds << " ";
     } else if (prefix == "osd ls") {
-
-//      int max_osds = osdmap.get_max_osd();
-
       if (f) {
 	f->open_array_section("osds");
 	for (int i = 0; i < max_osds; ++i) {
@@ -6734,8 +6726,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (newmax < osdmap.get_max_osd()) {
       // Check if the OSDs exist between current max and new value.
       // If there are any OSDs exist, then don't allow shrinking number
-      // of OSDs.
-      for (int i = newmax; i < osdmap.get_max_osd(); ++i) {
+      // of OSDs.'
+      int max_osds = osdmap.get_max_osd();
+      for (int i = newmax; i < max_osds; ++i) {
         if (osdmap.exists(i)) {
           err = -EBUSY;
           ss << "cannot shrink max_osd to " << newmax
