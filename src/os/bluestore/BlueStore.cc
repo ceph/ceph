@@ -9517,6 +9517,9 @@ int BlueStore::_do_truncate(
 
   _dump_onode(o, 30);
 
+  o->exists = true;
+  txc->write_onode(o);
+
   if (offset == o->onode.size)
     return 0;
 
@@ -9541,8 +9544,6 @@ int BlueStore::_do_truncate(
   }
 
   o->onode.size = offset;
-
-  txc->write_onode(o);
   return 0;
 }
 
