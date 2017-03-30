@@ -61,10 +61,10 @@ namespace {
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 PyModules::PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-                     Objecter &objecter_,
+                     Objecter &objecter_, Client &client_,
 		     Finisher &f)
   : daemon_state(ds), cluster_state(cs), monc(mc),
-    objecter(objecter_),
+    objecter(objecter_), client(client_),
     finisher(f)
 {}
 

@@ -26,6 +26,9 @@
 #include "DaemonState.h"
 #include "ClusterState.h"
 
+class Objecter;
+class Client;
+
 class MMgrMap;
 class Mgr;
 
@@ -41,6 +44,7 @@ protected:
   MonClient *monc;
   Messenger *client_messenger;
   Objecter *objecter;
+  std::unique_ptr<Client> client;
 
   LogClient log_client;
   LogChannelRef clog, audit_clog;

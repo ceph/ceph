@@ -662,7 +662,7 @@ if (WITH_MGR)
   add_executable(ceph-mgr ${mgr_srcs}
                  $<TARGET_OBJECTS:heap_profiler_objs>)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
-  target_link_libraries(ceph-mgr osdc global-static common
+  target_link_libraries(ceph-mgr osdc client global-static common
       ${Boost_PYTHON_LIBRARY} ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
