@@ -85,11 +85,11 @@ target_link_libraries(os kv)
 add_dependencies(os compressor_plugins)
 
 if(HAVE_LIBAIO)
-  add_executable(ceph-bluefs-tool
-    bluestore/bluefs_tool.cc)
-  target_link_libraries(ceph-bluefs-tool
+  add_executable(ceph-bluestore-tool
+    bluestore/bluestore_tool.cc)
+  target_link_libraries(ceph-bluestore-tool
     os global)
-  install(TARGETS ceph-bluefs-tool
+  install(TARGETS ceph-bluestore-tool
     DESTINATION bin)
 endif()
 
