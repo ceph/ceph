@@ -29,6 +29,8 @@
 #include "rgw_auth_keystone.h"
 #include "rgw_auth_registry.h"
 
+#include "rgw_es_query.h"
+
 #include <typeinfo> // for 'typeid'
 
 #include "rgw_ldap.h"
@@ -2713,6 +2715,77 @@ void RGWGetObjLayout_ObjStore_S3::send_response()
   rgw_flush_formatter(s, &f);
 }
 
+int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
+{
+  auto iter = s->info.x_meta_map.find("x-amz-meta-search");
+  if (iter == s->info.x_meta_map.end()) {
+    s->err.message = "X-Rgw-Meta-Search header not provided";
+    ldout(s->cct, 20) << s->err.message << dendl;
+    return -EINVAL;
+  }
+
+  list<string> expressions;
+  get_str_list(iter->second, ",", expressions);
+
+  for (auto& expression : expressions) {
+    vector<string> args;
+    get_str_vec(expression, ";", args);
+
+    if (args.empty()) {
+      s->err.message = "invalid empty expression";
+      ldout(s->cct, 20) << s->err.message << dendl;
+      return -EINVAL;
+    }
+    if (args.size() > 2) {
+      s->err.message = string("invalid expression: ") + expression;
+      ldout(s->cct, 20) << s->err.message << dendl;
+      return -EINVAL;
+    }
+
+    string key = boost::algorithm::to_lower_copy(rgw_trim_whitespace(args[0]));
+    string val;
+    if (args.size() > 1) {
+      val = boost::algorithm::to_lower_copy(rgw_trim_whitespace(args[1]));
+    }
+
+#define X_AMZ_META_PREFIX "x-amz-meta-"
+    if (!boost::algorithm::starts_with(key, X_AMZ_META_PREFIX)) {
+      s->err.message = string("invalid expression, key must start with '" X_AMZ_META_PREFIX "' : ") + expression;
+      ldout(s->cct, 20) << s->err.message << dendl;
+      return -EINVAL;
+    }
+
+    key = key.substr(sizeof(X_AMZ_META_PREFIX) - 1);
+
+    ESEntityTypeMap::EntityType entity_type;
+
+    if (val.empty() || val == "str" || val == "string") {
+      entity_type = ESEntityTypeMap::ES_ENTITY_STR;
+    } else if (val == "int" || val == "integer") {
+      entity_type = ESEntityTypeMap::ES_ENTITY_INT;
+    } else if (val == "date" || val == "datetime") {
+      entity_type = ESEntityTypeMap::ES_ENTITY_DATE;
+    } else {
+      s->err.message = string("invalid entity type: ") + val;
+      ldout(s->cct, 20) << s->err.message << dendl;
+      return -EINVAL;
+    }
+
+    mdsearch_config[key] = entity_type;
+  }
+
+  return 0;
+}
+
+void RGWConfigBucketMetaSearch_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this);
+}
+
+
 RGWOp *RGWHandler_REST_Service_S3::op_get()
 {
   if (is_usage_op()) {
@@ -2857,6 +2930,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_post()
 {
   if (s->info.args.exists("delete")) {
     return new RGWDeleteMultiObj_ObjStore_S3;
+  }
+
+  if (s->info.args.exists("mdsearch")) {
+    return new RGWConfigBucketMetaSearch_ObjStore_S3;
   }
 
   return new RGWPostObj_ObjStore_S3;

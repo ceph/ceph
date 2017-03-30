@@ -64,10 +64,10 @@ class ESQueryNode;
 
 struct ESEntityTypeMap {
   enum EntityType {
-    ES_ENTITY_NONE,
-    ES_ENTITY_STR,
-    ES_ENTITY_INT,
-    ES_ENTITY_DATE,
+    ES_ENTITY_NONE = 0,
+    ES_ENTITY_STR  = 1,
+    ES_ENTITY_INT  = 2,
+    ES_ENTITY_DATE = 3,
   };
 
   map<string, EntityType> m;
