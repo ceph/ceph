@@ -706,11 +706,8 @@ static int do_unmap()
     return nbd;
   }
 
-  dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
   if (ioctl(nbd, NBD_DISCONNECT) < 0) {
     cerr << "rbd-nbd: the device is not used" << std::endl;
-  } else {
-    dout(20) << __func__ << ": " << "disconnected" << dendl;
   }
 
   close(nbd);
