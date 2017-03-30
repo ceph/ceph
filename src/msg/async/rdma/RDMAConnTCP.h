@@ -27,6 +27,10 @@
 class RDMAWorker;
 class RDMADispatcher;
 
+struct RDMAConnTCPInfo {
+  int sd;
+};
+
 class RDMAConnTCP : public RDMAConnMgr {
   class C_handle_connection : public EventCallback {
     RDMAConnTCP *cst;
@@ -57,7 +61,8 @@ class RDMAConnTCP : public RDMAConnMgr {
 
  public:
   RDMAConnTCP(CephContext *cct, RDMAConnectedSocketImpl *sock,
-	      Infiniband* ib, RDMADispatcher* s, RDMAWorker *w);
+	      Infiniband* ib, RDMADispatcher* s, RDMAWorker *w,
+	      void *info);
   virtual ~RDMAConnTCP();
 
   virtual ostream &print(ostream &out) const override;
