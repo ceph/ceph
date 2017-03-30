@@ -43,6 +43,7 @@ function TEST_preload_warning() {
     for plugin in ${legacy_jerasure_plugins[*]} ${legacy_shec_plugins[*]}; do
         setup $dir || return 1
         run_mon $dir a --osd_erasure_code_plugins="${plugin}" || return 1 
+	run_mgr $dir x || return 1
         CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
         run_osd $dir 0 --osd_erasure_code_plugins="${plugin}" || return 1 
         CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
@@ -59,6 +60,7 @@ function TEST_preload_no_warning() {
     for plugin in ${plugins[*]}; do
         setup $dir || return 1
         run_mon $dir a --osd_erasure_code_plugins="${plugin}" || return 1 
+	run_mgr $dir x || return 1
         CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
         run_osd $dir 0 --osd_erasure_code_plugins="${plugin}" || return 1 
         CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
@@ -76,6 +78,7 @@ function TEST_preload_no_warning_default() {
     setup $dir || return 1
     run_mon $dir a || return 1 
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1 
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
     ! grep "WARNING: osd_erasure_code_plugins" $dir/mon.a.log || return 1
@@ -90,6 +93,7 @@ function TEST_ec_profile_warning() {
 
     setup $dir || return 1
     run_mon $dir a || return 1 
+    run_mgr $dir x || return 1
     for id in $(seq 0 2) ; do
         run_osd $dir $id || return 1 
     done

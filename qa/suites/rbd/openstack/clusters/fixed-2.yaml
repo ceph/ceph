@@ -5,5 +5,5 @@ overrides:
         osd pool default size: 2
         osd crush chooseleaf type: 0
 roles:
-- [mon.a, osd.0, osd.1, osd.2]
+- [mon.a, mgr.x, osd.0, osd.1, osd.2]
 - [client.0]

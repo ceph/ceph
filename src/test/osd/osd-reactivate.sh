@@ -37,6 +37,7 @@ function TEST_reactivate() {
     local dir=$1
 
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 
     kill_daemons $dir TERM osd || return 1

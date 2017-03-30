@@ -155,6 +155,7 @@ public:
   void set_peer_type(int t) { peer_type = t; }
 
   bool peer_is_mon() const { return peer_type == CEPH_ENTITY_TYPE_MON; }
+  bool peer_is_mgr() const { return peer_type == CEPH_ENTITY_TYPE_MGR; }
   bool peer_is_mds() const { return peer_type == CEPH_ENTITY_TYPE_MDS; }
   bool peer_is_osd() const { return peer_type == CEPH_ENTITY_TYPE_OSD; }
   bool peer_is_client() const { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }

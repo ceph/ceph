@@ -84,6 +84,8 @@
 #include "include/compat.h"
 #include "perfglue/heap_profiler.h"
 
+#include "auth/none/AuthNoneClientHandler.h"
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -106,6 +108,19 @@ MonCommand mon_commands[] = {
 #define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
   {parsesig, helptext, modulename, req_perms, avail, flags},
 #include <mon/MonCommands.h>
+#undef COMMAND
+#undef COMMAND_WITH_FLAG
+
+  // FIXME: slurp up the Mgr commands too
+
+#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
+  {parsesig, helptext, modulename, req_perms, avail, FLAG(MGR)},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
+  {parsesig, helptext, modulename, req_perms, avail, flags | FLAG(MGR)},
+#include <mgr/MgrCommands.h>
+#undef COMMAND
+#undef COMMAND_WITH_FLAG
+
 };
 
 
@@ -133,7 +148,7 @@ long parse_pos_long(const char *s, ostream *pss)
 }
 
 Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
-		 Messenger *m, MonMap *map) :
+		 Messenger *m, Messenger *mgr_m, MonMap *map) :
   Dispatcher(cct_),
   name(nm),
   rank(-1), 
@@ -141,6 +156,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   con_self(m ? m->get_loopback_connection() : NULL),
   lock("Monitor::lock"),
   timer(cct_, lock),
+  finisher(cct_, "mon_finisher", "fin"),
   cpu_tp(cct, "Monitor::cpu_tp", "cpu_tp", g_conf->mon_cpu_threads),
   has_ever_joined(false),
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
@@ -155,6 +171,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 			cct->_conf->auth_service_required : cct->_conf->auth_supported ),
   leader_supported_mon_commands(NULL),
   leader_supported_mon_commands_size(0),
+  mgr_messenger(mgr_m),
+  mgr_client(cct_, mgr_m),
   store(s),
   
   state(STATE_PROBING),
@@ -819,6 +837,8 @@ int Monitor::init()
   dout(2) << "init" << dendl;
   Mutex::Locker l(lock);
 
+  finisher.start();
+
   // start ticker
   timer.init();
   new_tick();
@@ -827,6 +847,10 @@ int Monitor::init()
 
   // i'm ready!
   messenger->add_dispatcher_tail(this);
+
+  mgr_client.init();
+  mgr_messenger->add_dispatcher_tail(&mgr_client);
+  mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
 
   bootstrap();
 
@@ -911,6 +935,7 @@ void Monitor::shutdown()
   dout(1) << "shutdown" << dendl;
 
   lock.Lock();
+
   wait_for_paxos_write();
 
   state = STATE_SHUTDOWN;
@@ -937,6 +962,13 @@ void Monitor::shutdown()
   }
 
   elector.shutdown();
+
+  mgr_client.shutdown();
+
+  lock.Unlock();
+  finisher.wait_for_empty();
+  finisher.stop();
+  lock.Lock();
 
   // clean up
   paxos->shutdown();
@@ -971,6 +1003,7 @@ void Monitor::shutdown()
   lock.Unlock();
 
   messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
+  mgr_messenger->shutdown();
 }
 
 void Monitor::wait_for_paxos_write()
@@ -2650,9 +2683,12 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
   bool cmd_w = this_cmd->requires_perm('w');
   bool cmd_x = this_cmd->requires_perm('x');
 
-  bool capable = s->caps.is_capable(g_ceph_context, s->entity_name,
-                                    module, prefix, param_str_map,
-                                    cmd_r, cmd_w, cmd_x);
+  bool capable = s->caps.is_capable(
+    g_ceph_context,
+    CEPH_ENTITY_TYPE_MON,
+    s->entity_name,
+    module, prefix, param_str_map,
+    cmd_r, cmd_w, cmd_x);
 
   dout(10) << __func__ << " " << (capable ? "" : "not ") << "capable" << dendl;
   return capable;
@@ -2661,18 +2697,23 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
 void Monitor::format_command_descriptions(const MonCommand *commands,
 					  unsigned commands_size,
 					  Formatter *f,
-					  bufferlist *rdata)
+					  bufferlist *rdata,
+					  bool hide_mgr_flag)
 {
   int cmdnum = 0;
   f->open_object_section("command_descriptions");
   for (const MonCommand *cp = commands;
        cp < &commands[commands_size]; cp++) {
 
+    unsigned flags = cp->flags;
+    if (hide_mgr_flag) {
+      flags &= ~MonCommand::FLAG_MGR;
+    }
     ostringstream secname;
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
     dump_cmddesc_to_json(f, secname.str(),
 			 cp->cmdstring, cp->helpstring, cp->module,
-			 cp->req_perms, cp->availability, cp->flags);
+			 cp->req_perms, cp->availability, flags);
     cmdnum++;
   }
   f->close_section();	// command_descriptions
@@ -2704,6 +2745,21 @@ bool Monitor::is_keyring_required()
   return auth_service_required == "cephx" ||
     auth_cluster_required == "cephx";
 }
+
+struct C_MgrProxyCommand : public Context {
+  Monitor *mon;
+  MonOpRequestRef op;
+  uint64_t size;
+  bufferlist outbl;
+  string outs;
+  C_MgrProxyCommand(Monitor *mon, MonOpRequestRef op, uint64_t s)
+    : mon(mon), op(op), size(s) { }
+  void finish(int r) {
+    Mutex::Locker l(mon->lock);
+    mon->mgr_proxy_bytes -= size;
+    mon->reply_command(op, r, outs, outbl, 0);
+  }
+};
 
 void Monitor::handle_command(MonOpRequestRef op)
 {
@@ -2751,7 +2807,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   // check return value. If no prefix parameter provided,
   // return value will be false, then return error info.
-  if(!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
+  if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
     reply_command(op, -EINVAL, "command prefix not found", 0);
     return;
   }
@@ -2765,8 +2821,12 @@ void Monitor::handle_command(MonOpRequestRef op)
   if (prefix == "get_command_descriptions") {
     bufferlist rdata;
     Formatter *f = Formatter::create("json");
+    // hide mgr commands until luminous upgrade is complete
+    bool hide_mgr_flag =
+      !osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
     format_command_descriptions(leader_supported_mon_commands,
-				leader_supported_mon_commands_size, f, &rdata);
+				leader_supported_mon_commands_size, f, &rdata,
+				hide_mgr_flag);
     delete f;
     reply_command(op, 0, "", rdata, 0);
     return;
@@ -2876,6 +2936,30 @@ void Monitor::handle_command(MonOpRequestRef op)
     << "from='" << session->inst << "' "
     << "entity='" << session->entity_name << "' "
     << "cmd=" << m->cmd << ": dispatch";
+
+  if (mon_cmd->is_mgr() &&
+      osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    const auto& hdr = m->get_header();
+    uint64_t size = hdr.front_len + hdr.middle_len + hdr.data_len;
+    uint64_t max =
+      g_conf->mon_client_bytes * g_conf->mon_mgr_proxy_client_bytes_ratio;
+    if (mgr_proxy_bytes + size > max) {
+      dout(10) << __func__ << " current mgr proxy bytes " << mgr_proxy_bytes
+	       << " + " << size << " > max " << max << dendl;
+      reply_command(op, -EAGAIN, "hit limit on proxied mgr commands", rdata, 0);
+      return;
+    }
+    mgr_proxy_bytes += size;
+    dout(10) << __func__ << " proxying mgr command (+" << size
+	     << " -> " << mgr_proxy_bytes << ")" << dendl;
+    C_MgrProxyCommand *fin = new C_MgrProxyCommand(this, op, size);
+    mgr_client.start_command(m->cmd,
+			     m->get_data(),
+			     &fin->outbl,
+			     &fin->outs,
+			     new C_OnFinisher(fin, &finisher));
+    return;
+  }
 
   if (module == "mds" || module == "fs") {
     mdsmon()->dispatch(op);
@@ -5230,54 +5314,78 @@ void Monitor::extract_save_mon_key(KeyRing& keyring)
   }
 }
 
-bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, bool force_new)
+bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer,
+				bool force_new)
 {
-  dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id) << dendl;
+  dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id)
+	   << dendl;
 
   if (is_shutdown())
     return false;
 
-  // we only connect to other monitors; every else connects to us.
-  if (service_id != CEPH_ENTITY_TYPE_MON)
+  // we only connect to other monitors and mgr; every else connects to us.
+  if (service_id != CEPH_ENTITY_TYPE_MON &&
+      service_id != CEPH_ENTITY_TYPE_MGR)
     return false;
 
-  if (!auth_cluster_required.is_supported_auth(CEPH_AUTH_CEPHX))
-    return false;
+  if (!auth_cluster_required.is_supported_auth(CEPH_AUTH_CEPHX)) {
+    // auth_none
+    dout(20) << __func__ << " building auth_none authorizer" << dendl;
+    AuthNoneClientHandler handler(g_ceph_context, nullptr);
+    handler.set_global_id(0);
+    *authorizer = handler.build_authorizer(service_id);
+    return true;
+  }
 
   CephXServiceTicketInfo auth_ticket_info;
   CephXSessionAuthInfo info;
   int ret;
+
   EntityName name;
   name.set_type(CEPH_ENTITY_TYPE_MON);
-
   auth_ticket_info.ticket.name = name;
   auth_ticket_info.ticket.global_id = 0;
 
-  CryptoKey secret;
-  if (!keyring.get_secret(name, secret) &&
-      !key_server.get_secret(name, secret)) {
-    dout(0) << " couldn't get secret for mon service from keyring or keyserver" << dendl;
-    stringstream ss, ds;
-    int err = key_server.list_secrets(ds);
-    if (err < 0)
-      ss << "no installed auth entries!";
-    else
-      ss << "installed auth entries:";
-    dout(0) << ss.str() << "\n" << ds.str() << dendl;
-    return false;
-  }
+  if (service_id == CEPH_ENTITY_TYPE_MON) {
+    // mon to mon authentication uses the private monitor shared key and not the
+    // rotating key
+    CryptoKey secret;
+    if (!keyring.get_secret(name, secret) &&
+	!key_server.get_secret(name, secret)) {
+      dout(0) << " couldn't get secret for mon service from keyring or keyserver"
+	      << dendl;
+      stringstream ss, ds;
+      int err = key_server.list_secrets(ds);
+      if (err < 0)
+	ss << "no installed auth entries!";
+      else
+	ss << "installed auth entries:";
+      dout(0) << ss.str() << "\n" << ds.str() << dendl;
+      return false;
+    }
 
-  /* mon to mon authentication uses the private monitor shared key and not the
-     rotating key */
-  ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info, secret, (uint64_t)-1);
-  if (ret < 0) {
-    dout(0) << "ms_get_authorizer failed to build session auth_info for use with mon ret " << ret << dendl;
-    return false;
+    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info,
+					     secret, (uint64_t)-1);
+    if (ret < 0) {
+      dout(0) << __func__ << " failed to build mon session_auth_info "
+	      << cpp_strerror(ret) << dendl;
+      return false;
+    }
+  } else if (service_id == CEPH_ENTITY_TYPE_MGR) {
+    // mgr
+    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info);
+    if (ret < 0) {
+      derr << __func__ << " failed to build mgr service session_auth_info "
+	   << cpp_strerror(ret) << dendl;
+      return false;
+    }
+  } else {
+    ceph_abort();  // see check at top of fn
   }
 
   CephXTicketBlob blob;
   if (!cephx_build_service_ticket_blob(cct, info, blob)) {
-    dout(0) << "ms_get_authorizer failed to build service ticket use with mon" << dendl;
+    dout(0) << "ms_get_authorizer failed to build service ticket" << dendl;
     return false;
   }
   bufferlist ticket_data;
@@ -5295,7 +5403,8 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
 }
 
 bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
-				   int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
+				   int protocol, bufferlist& authorizer_data,
+				   bufferlist& authorizer_reply,
 				   bool& isvalid, CryptoKey& session_key)
 {
   dout(10) << "ms_verify_authorizer " << con->get_peer_addr()

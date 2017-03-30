@@ -56,18 +56,17 @@ protected:
 
   unique_ptr<MgrSessionState> session;
 
-  Mutex lock;
+  Mutex lock = {"MgrClient::lock"};
 
-  uint32_t stats_period;
-  SafeTimer     timer;
+  uint32_t stats_period = 0;
+  SafeTimer timer;
 
   CommandTable<MgrCommand> command_table;
 
-  void wait_on_list(list<Cond*>& ls);
-  void signal_cond_list(list<Cond*>& ls);
+  utime_t last_connect_attempt;
 
-  list<Cond*> waiting_for_session;
-  Context *report_callback;
+  Context *report_callback = nullptr;
+  Context *connect_retry_callback = nullptr;
 
   // If provided, use this to compose an MPGStats to send with
   // our reports (hook for use by OSD)

@@ -37,7 +37,8 @@
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 
-Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_) :
+Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
+	 LogChannelRef clog_, LogChannelRef audit_clog_) :
   monc(monc_),
   objecter(objecter_),
   client_messenger(clientm_),
@@ -47,7 +48,7 @@ Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_) :
   waiting_for_fs_map(NULL),
   py_modules(daemon_state, cluster_state, *monc, finisher),
   cluster_state(monc, nullptr),
-  server(monc, daemon_state, cluster_state, py_modules),
+  server(monc, daemon_state, cluster_state, py_modules, clog_, audit_clog_),
   initialized(false),
   initializing(false)
 {
@@ -422,7 +423,7 @@ void Mgr::handle_osd_map()
 
 bool Mgr::ms_dispatch(Message *m)
 {
-  derr << *m << dendl;
+  dout(4) << *m << dendl;
   Mutex::Locker l(lock);
 
   switch (m->get_type()) {
@@ -498,7 +499,8 @@ void Mgr::handle_fs_map(MFSMap* m)
       // FIXME: nothing stopping old daemons being here, they won't have
       // addr: need to handle case of pre-ceph-mgr daemons that don't have
       // the fields we expect
-      if (metadata->metadata.empty()) {
+      if (metadata->metadata.empty() ||
+	  metadata->metadata.count("addr") == 0) {
         update = true;
       } else {
         auto metadata_addr = metadata->metadata.at("addr");

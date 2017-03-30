@@ -22,6 +22,8 @@ class MgrMonitor : public PaxosService
   MgrMap map;
   MgrMap pending_map;
 
+  utime_t first_seen_inactive;
+
   std::map<uint64_t, utime_t> last_beacon;
 
   /**
@@ -35,6 +37,8 @@ class MgrMonitor : public PaxosService
   void drop_standby(uint64_t gid);
 
   Context *digest_callback;
+
+  bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
 
 public:
   MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
@@ -68,6 +72,10 @@ public:
   void check_subs();
   void send_digests();
 
+  void on_active() override;
+  void get_health(list<pair<health_status_t,string> >& summary,
+		  list<pair<health_status_t,string> > *detail,
+		  CephContext *cct) const override;
   void tick() override;
 
   void print_summary(Formatter *f, std::ostream *ss) const;

@@ -825,10 +825,12 @@ int librados::RadosClient::mgr_command(const vector<string>& cmd,
   Mutex::Locker l(lock);
 
   C_SaferCond cond;
-  mgrclient.start_command(cmd, inbl, outbl, outs, &cond);
+  int r = mgrclient.start_command(cmd, inbl, outbl, outs, &cond);
+  if (r < 0)
+    return r;
 
   lock.Unlock();
-  int r = cond.wait();
+  r = cond.wait();
   lock.Lock();
 
   return r;

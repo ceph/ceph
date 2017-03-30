@@ -1,7 +1,7 @@
 # this runs s3tests against rgw, using civetweb
 roles:
 - [mon.a, mon.c, osd.0, osd.1, osd.2, client.0]
-- [mon.b, osd.3, osd.4, osd.5, client.1]
+- [mon.b, mgr.x, osd.3, osd.4, osd.5, client.1]
 
 tasks:
 - install:

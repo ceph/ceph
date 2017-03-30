@@ -516,6 +516,7 @@ start_mon() {
 			--cap mon 'allow *' \
 			--cap osd 'allow *' \
 			--cap mds 'allow *' \
+			--cap mgr 'allow *' \
 			"$keyring_fn"
 
 		# build a fresh fs monmap, mon fs
@@ -574,7 +575,7 @@ EOF
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
             echo adding osd$osd key to auth repository
-            ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd" mgr "allow"
+            ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd" mgr "allow profile osd"
         fi
         echo start osd$osd
         run 'osd' $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS $COSD_ARGS
@@ -591,7 +592,7 @@ start_mgr() {
             mkdir -p $CEPH_DEV_DIR/mgr.$name
             key_fn=$CEPH_DEV_DIR/mgr.$name/keyring
             $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mgr.$name $key_fn
-            ceph_adm -i $key_fn auth add mgr.$name mon 'allow *'
+            ceph_adm -i $key_fn auth add mgr.$name mon 'allow profile mgr'
         fi
 
         wconf <<EOF
@@ -600,7 +601,7 @@ start_mgr() {
 EOF
 
         echo "Starting mgr.${name}"
-        run 'mgr' $CEPH_BIN/ceph-mgr -i $name
+        run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 }
 
@@ -651,7 +652,7 @@ EOF
 			    prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.${name}s" \
 				     "$CEPH_DEV_DIR/mds.${name}s/keyring"
 			    ceph_adm -i "$CEPH_DEV_DIR/mds.${name}s/keyring" auth add "mds.${name}s" \
-				         mon 'allow *' osd 'allow *' mds 'allow' mgr 'allow'
+				         mon 'allow profile mds' osd 'allow *' mds 'allow' mgr 'allow profile mds'
 	        fi
 	    fi
 
@@ -680,6 +681,7 @@ else
         debug mon = 20
         debug paxos = 20
         debug auth = 20
+	debug mgrc = 20
         debug ms = 1'
     COSDDEBUG='
         debug ms = 1

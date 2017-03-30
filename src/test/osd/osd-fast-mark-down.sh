@@ -53,6 +53,7 @@ function test_fast_kill() {
    # create cluster with 3 osds
    setup $dir || return 1
    run_mon $dir a --osd_pool_default_size=3 || return 1
+    run_mgr $dir x || return 1
    for oi in {0..2}; do
      run_osd $dir $oi || return 1
      pids[$oi]=$(cat $dir/osd.$oi.pid)

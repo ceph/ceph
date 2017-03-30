@@ -75,6 +75,7 @@ function TEST_corrupt_and_repair_replicated() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     wait_for_clean || return 1
@@ -182,6 +183,7 @@ function TEST_auto_repair_erasure_coded() {
     # Launch a cluster with 5 seconds scrub interval
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     local ceph_osd_args="--osd-scrub-auto-repair=true \
             --osd-deep-scrub-interval=5 \
             --osd-scrub-max-interval=5 \
@@ -227,6 +229,7 @@ function TEST_corrupt_and_repair_jerasure() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     for id in $(seq 0 3) ; do
         run_osd $dir $id || return 1
     done
@@ -247,6 +250,7 @@ function TEST_corrupt_and_repair_lrc() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     for id in $(seq 0 9) ; do
         run_osd $dir $id || return 1
     done
@@ -269,6 +273,7 @@ function TEST_unfound_erasure_coded() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
@@ -308,6 +313,11 @@ function TEST_unfound_erasure_coded() {
     #
     # 3) check pg state
     #
+    # it may take a bit to appear due to mon/mgr asynchrony
+    for f in `seq 1 60`; do
+	ceph -s | grep "1/1 unfound" && break
+	sleep 1
+    done
     ceph -s|grep "4 osds: 4 up, 4 in" || return 1
     ceph -s|grep "1/1 unfound" || return 1
 
@@ -324,6 +334,7 @@ function TEST_list_missing_erasure_coded() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     for id in $(seq 0 2) ; do
         run_osd $dir $id || return 1
     done
@@ -393,6 +404,7 @@ function TEST_corrupt_scrub_replicated() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     wait_for_clean || return 1
@@ -1509,6 +1521,7 @@ function TEST_corrupt_scrub_erasure() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     for id in $(seq 0 2) ; do
         run_osd $dir $id || return 1
     done
@@ -2163,6 +2176,7 @@ function TEST_periodic_scrub_replicated() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x || return 1
     local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0"
     run_osd $dir 0 $ceph_osd_args || return 1
     run_osd $dir 1 $ceph_osd_args || return 1
