@@ -8,11 +8,13 @@ PartOf=ceph-fuse.target
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
+ExecStartPre=/usr/lib/systemd/system/check_rdma.sh %n
 ExecStart=/usr/bin/ceph-fuse -f --cluster ${CLUSTER} %I
 TasksMax=infinity
 Restart=on-failure
 StartLimitInterval=30min
 StartLimitBurst=3
+ExecStopPost=/usr/lib/systemd/system/check_rdma.sh %n clean
 
 [Install]
 WantedBy=ceph-fuse.target

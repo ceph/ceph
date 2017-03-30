@@ -9,6 +9,7 @@ LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
+ExecStartPre=/usr/lib/systemd/system/check_rdma.sh %n
 ExecStart=/usr/bin/radosgw -f --cluster ${CLUSTER} --name client.%i --setuser ceph --setgroup ceph
 PrivateDevices=yes
 ProtectHome=true
@@ -18,6 +19,7 @@ TasksMax=infinity
 Restart=on-failure
 StartLimitInterval=30s
 StartLimitBurst=5
+ExecStopPost=/usr/lib/systemd/system/check_rdma.sh %n clean
 
 [Install]
 WantedBy=ceph-radosgw.target
