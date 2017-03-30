@@ -655,6 +655,7 @@ public:
   friend class MonmapMonitor;
   friend class PGMonitor;
   friend class LogMonitor;
+  friend class ConfigKeyService;
 
   QuorumService *health_monitor;
   QuorumService *config_key_service;
