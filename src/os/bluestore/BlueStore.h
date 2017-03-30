@@ -26,6 +26,7 @@
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/unordered_set.hpp>
 #include <boost/intrusive/set.hpp>
+#include <boost/container/flat_set.hpp>
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
 
@@ -583,19 +584,18 @@ public:
   typedef mempool::bluestore_meta_other::map<int,Blob*> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
-  typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
-  struct Extent : public ExtentBase {
+  struct Extent { //: public ExtentBase {
     MEMPOOL_CLASS_HELPERS();
 
     uint32_t logical_offset = 0;      ///< logical offset
     uint32_t blob_offset = 0;         ///< blob offset
     uint32_t length = 0;              ///< length
-    Blob* blob = nullptr;                    ///< the blob with our data
+    Blob*  blob = nullptr;                    ///< the blob with our data
 
     /// ctor for lookup only
-    explicit Extent(uint32_t lo) : ExtentBase(), logical_offset(lo) { }
+    explicit Extent(uint32_t lo) : logical_offset(lo) { }
     /// ctor for delayed initialization (see decode_some())
-    explicit Extent() : ExtentBase() {
+    explicit Extent() {
     }
     /// ctor for general usage
     Extent(uint32_t lo, uint32_t o, uint32_t l, Blob* const b)
@@ -643,7 +643,7 @@ public:
       return blob_start() < o || blob_end() > o + l;
     }
   };
-  typedef boost::intrusive::set<Extent> extent_map_t;
+  typedef boost::container::flat_set<Extent> extent_map_t;
 
 
   friend ostream& operator<<(ostream& out, const Extent& e);
@@ -706,17 +706,10 @@ public:
       }
     }
 
-    struct DeleteDisposer {
-      void operator()(Extent *e) { delete e; }
-    };
-
     ExtentMap(Onode *o);
-    ~ExtentMap() {
-      extent_map.clear_and_dispose(DeleteDisposer());
-    }
 
     void clear() {
-      extent_map.clear_and_dispose(DeleteDisposer());
+      extent_map.clear();
       shards.clear();
       inline_bl.clear();
       clear_needs_reshard();
@@ -802,13 +795,13 @@ public:
     extent_map_t::const_iterator seek_lextent(uint64_t offset) const;
 
     /// add a new Extent
-    void add(uint32_t lo, uint32_t o, uint32_t l, Blob* const b) {
-      extent_map.insert(*new Extent(lo, o, l, b));
+    void add(uint32_t lo, uint32_t o, uint32_t l, Blob* b) {
+      extent_map.emplace(lo, o, l, b);
     }
 
     /// remove (and delete) an Extent
-    void rm(extent_map_t::iterator p) {
-      extent_map.erase_and_dispose(p, DeleteDisposer());
+    extent_map_t::iterator rm(extent_map_t::iterator p) {
+      return extent_map.erase(p);
     }
 
     bool has_any_lextents(uint64_t offset, uint64_t length);

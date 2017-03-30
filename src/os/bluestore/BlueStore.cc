@@ -2397,7 +2397,8 @@ unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
   unsigned n = 0;
 
   while (!p.end()) {
-    Extent *le = new Extent();
+    Extent rle;
+    Extent *le = &rle;
     uint64_t blobid;
     denc_varint(blobid, p);
     if ((blobid & BLOBID_FLAG_CONTIGUOUS) == 0) {
@@ -2441,7 +2442,7 @@ unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
     }
     pos += prev_len;
     ++n;
-    extent_map.insert(*le);
+    extent_map.insert(rle);
   }
 
   assert(n == num);
@@ -2696,7 +2697,7 @@ int BlueStore::ExtentMap::compress_extent_map(
 	       << " next shard 0x" << shard_end << std::dec
 	       << " merging " << *p << " and " << *n << dendl;
       p->length += n->length;
-      rm(n++);
+      n = rm(n);
       ++removed;
     }
     if (n == extent_map.end()) {
@@ -2760,7 +2761,7 @@ void BlueStore::ExtentMap::punch_hole(
       OldExtent* oe = OldExtent::create(c, p->logical_offset, p->blob_offset,
 				        p->length, p->blob);
       old_extents->push_back(*oe);
-      rm(p++);
+      p = rm(p);
       continue;
     }
     // deref head
@@ -2773,6 +2774,7 @@ void BlueStore::ExtentMap::punch_hole(
     rm(p);
     break;
   }
+
 }
 
 BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
@@ -2793,12 +2795,15 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
     punch_hole(c, logical_offset, length, old_extents);
   }
 
-  Extent *le = new Extent(logical_offset, blob_offset, length, b);
-  extent_map.insert(*le);
+  extent_map_t::iterator leit;
+  bool is_new;
+  std::tie(leit, is_new) = extent_map.emplace(logical_offset, blob_offset,
+                                              length, b);
+
   if (spans_shard(logical_offset, length)) {
     request_reshard(logical_offset, logical_offset + length);
   }
-  return le;
+  return &*leit;
 }
 
 BlueStore::Blob* BlueStore::ExtentMap::split_blob(
@@ -5754,7 +5759,7 @@ int BlueStore::_do_read(
   uint32_t op_flags)
 {
   FUNCTRACE();
-  boost::intrusive::set<Extent>::iterator ep, eend;
+  extent_map_t::iterator ep, eend;
   int r = 0;
 
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
@@ -6113,7 +6118,7 @@ int BlueStore::fiemap(
     dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	     << " size 0x" << o->onode.size << std::dec << dendl;
 
-    boost::intrusive::set<Extent>::iterator ep, eend;
+    extent_map_t::iterator ep, eend;
     if (offset >= o->onode.size)
       goto out;
 
@@ -9205,12 +9210,15 @@ void BlueStore::_wctx_finish(
         txc->statfs_delta.compressed_allocated() -= e.length;
       }
     }
+
     delete &lo;
+
     if (b->is_spanning() && !b->is_referenced()) {
       dout(20) << __func__ << "  spanning_blob_map removing empty " << *b
 	       << dendl;
       o->extent_map.spanning_blob_map.erase(b->id);
     }
+
     if (lo.blob_empty) {
       delete b;
     }
