@@ -1238,7 +1238,7 @@ void BlueStore::TwoQCache::_audit(const char *when)
 void BlueStore::BufferSpace::_clear(Cache* cache)
 {
   // note: we already hold cache->lock
-  ldout(cache->cct, 10) << __func__ << dendl;
+  ldout(cache->cct, 20) << __func__ << dendl;
   while (!buffer_map.empty()) {
     _rm_buffer(cache, buffer_map.begin());
   }
