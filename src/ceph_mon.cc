@@ -44,6 +44,7 @@ using namespace std;
 #include "perfglue/heap_profiler.h"
 
 #include "include/assert.h"
+#include "include/str_list.h"
 
 #define dout_subsys ceph_subsys_mon
 
@@ -601,7 +602,8 @@ int main(int argc, const char **argv)
     }
   }
 
-  // this is what i will bind to
+  // this is a list of possible IPs to bind
+  list<entity_addr_t> ipaddr_list;
   entity_addr_t ipaddr;
 
   if (monmap.contains(g_conf->name.get_id())) {
@@ -620,33 +622,61 @@ int main(int argc, const char **argv)
 	     << "         continuing with monmap configuration" << dendl;
       }
     }
+    dout(0) << "adding " << setw(12) << "mon addr " << conf_addr << " -> "
+            << ipaddr << " to the list of IPs to bind against" << dendl;
+    ipaddr_list.push_back(ipaddr);
   } else {
     dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
 
-    pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
-    if (!g_conf->public_addr.is_blank_ip()) {
+    entity_addr_t conf_host;
+    std::vector <std::string> my_sections;
+    g_conf->get_my_sections(my_sections);
+    std::string mon_host_str;
+    if (g_conf->get_val_from_conf_file(my_sections, "mon host",
+				       mon_host_str, true) == 0) {
+      // mon host can be a comma separated list so let's parse it
+      list<string> mon_list;
+      get_str_list(mon_host_str.c_str(), mon_list);
+      for (std::list<string>::const_iterator iterator = mon_list.begin(), end = mon_list.end(); iterator != end; ++iterator) {
+        if (conf_host.parse((*iterator).c_str())) {
+          ipaddr = conf_host;
+          ipaddr.set_port(CEPH_MON_PORT);
+          dout(0) << "adding " << setw(12) << "mon host " << conf_host << " -> "
+                  << ipaddr << " to the list of IPs to bind against" << dendl;
+          ipaddr_list.push_back(ipaddr);
+        }
+      }
+    } else {
+        MonMap tmpmap;
+        int err = tmpmap.build_initial(g_ceph_context, cerr);
+        if (err < 0) {
+          derr << argv[0] << ": error generating initial monmap: "
+               << cpp_strerror(err) << dendl;
+          usage();
+          prefork.exit(1);
+        }
+        if (tmpmap.contains(g_conf->name.get_id())) {
+          ipaddr = tmpmap.get_addr(g_conf->name.get_id());
+          dout(0) << "adding " << setw(12) << " " << g_conf->name.get_id() << " -> "
+                 << ipaddr << " to the list of IPs to bind against" << dendl;
+          ipaddr_list.push_back(ipaddr);
+        } else {
+          derr << "no public_addr or public_network specified, and " << g_conf->name
+               << " not present in monmap or ceph.conf" << dendl;
+          prefork.exit(1);
+        }
+      }
+  }
+
+  // In any case, we add the public address as a fallback
+  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
+  if (!g_conf->public_addr.is_blank_ip()) {
       ipaddr = g_conf->public_addr;
       if (ipaddr.get_port() == 0)
-	ipaddr.set_port(CEPH_MON_PORT);
-      dout(0) << "using public_addr " << g_conf->public_addr << " -> "
-	      << ipaddr << dendl;
-    } else {
-      MonMap tmpmap;
-      int err = tmpmap.build_initial(g_ceph_context, cerr);
-      if (err < 0) {
-	derr << argv[0] << ": error generating initial monmap: "
-             << cpp_strerror(err) << dendl;
-	usage();
-	prefork.exit(1);
-      }
-      if (tmpmap.contains(g_conf->name.get_id())) {
-	ipaddr = tmpmap.get_addr(g_conf->name.get_id());
-      } else {
-	derr << "no public_addr or public_network specified, and " << g_conf->name
-	     << " not present in monmap or ceph.conf" << dendl;
-	prefork.exit(1);
-      }
-    }
+         ipaddr.set_port(CEPH_MON_PORT);
+      dout(0) << "adding " << setw(12) << "public_addr " << g_conf->public_addr << " -> "
+              << ipaddr << " to the list of IPs to bind against" << dendl;
+      ipaddr_list.push_back(ipaddr);
   }
 
   // bind
@@ -691,23 +721,32 @@ int main(int argc, const char **argv)
   msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler,
 				     NULL);
 
-  dout(0) << "starting " << g_conf->name << " rank " << rank
-       << " at " << ipaddr
-       << " mon_data " << g_conf->mon_data
-       << " fsid " << monmap.get_fsid()
-       << dendl;
+  dout(0) << "Found " << ipaddr_list.size() << " IP addresses to try binding against" << dendl;
+  bool is_binded = false;
+  // For every IP address we have detected, let's try to bind against
+  for (std::list<entity_addr_t>::const_iterator iterator = ipaddr_list.begin(), end = ipaddr_list.end(); iterator != end; ++iterator) {
+       entity_addr_t testing_ipaddr = *iterator;
 
-  err = msgr->bind(ipaddr);
-  if (err < 0) {
-    derr << "unable to bind monitor to " << ipaddr << dendl;
-    prefork.exit(1);
+        dout(0) << "starting " << g_conf->name << " rank " << rank
+                << " at " << testing_ipaddr
+                << " mon_data " << g_conf->mon_data
+                << " fsid " << monmap.get_fsid()
+                << dendl;
+
+         err = msgr->bind(testing_ipaddr);
+         if (err < 0) {
+           derr << "unable to bind monitor to " << testing_ipaddr << dendl;
+         } else {
+            is_binded = true;
+            break;
+         }
   }
 
-  cout << "starting " << g_conf->name << " rank " << rank
-       << " at " << ipaddr
-       << " mon_data " << g_conf->mon_data
-       << " fsid " << monmap.get_fsid()
-       << std::endl;
+  // If we cannot bind to any ip address given, let's quit
+  if (is_binded == false) {
+      derr << "No valid ip address found" << dendl;
+      prefork.exit(1);
+  }
 
   // start monitor
   mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store,
