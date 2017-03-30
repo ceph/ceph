@@ -122,7 +122,7 @@ ceph_send_command(PyObject *self, PyObject *args)
     }
 
     ceph_tid_t tid;
-    global_handle()->get_objecter().osd_command(
+    global_handle->get_objecter().osd_command(
         osd_id,
         {cmd_json},
         {},
@@ -131,8 +131,17 @@ ceph_send_command(PyObject *self, PyObject *args)
         &c->outs,
         c);
   } else if (std::string(type) == "mds") {
-    // TODO: expose a Client instance
-    return nullptr;
+    int r = global_handle->get_client().mds_command(
+        name,
+        {cmd_json},
+        {},
+        &c->outbl,
+        &c->outs,
+        c);
+    if (r != 0) {
+      // TODO: raise exception
+      return nullptr;
+    }
   } else if (std::string(type) == "pg") {
     // TODO: expose objecter::pg_command
     return nullptr;
