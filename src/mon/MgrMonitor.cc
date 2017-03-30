@@ -68,6 +68,7 @@ void MgrMonitor::create_pending()
 
 void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
+  dout(10) << __func__ << " " << pending_map << dendl;
   bufferlist bl;
   pending_map.encode(bl, 0);
   put_version(t, pending_map.epoch, bl);
@@ -302,6 +303,12 @@ void MgrMonitor::send_digests()
       send_digests();
   });
   mon->timer.add_event_after(g_conf->mon_mgr_digest_period, digest_callback);
+}
+
+void MgrMonitor::on_active()
+{
+  if (mon->is_leader())
+    mon->clog->info() << "mgrmap e" << map.epoch << ": " << map;
 }
 
 void MgrMonitor::get_health(

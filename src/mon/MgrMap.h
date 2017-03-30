@@ -138,6 +138,12 @@ public:
       }
     }
   }
+
+  friend ostream& operator<<(ostream& out, const MgrMap& m) {
+    ostringstream ss;
+    m.print_summary(nullptr, &ss);
+    return out << ss.str();
+  }
 };
 
 WRITE_CLASS_ENCODER_FEATURES(MgrMap)
