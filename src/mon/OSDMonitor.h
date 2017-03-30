@@ -32,6 +32,7 @@ using namespace std;
 #include "osd/OSDMap.h"
 #include "osd/OSDMapMapping.h"
 
+#include "CreatingPGs.h"
 #include "PaxosService.h"
 
 class Monitor;
@@ -113,10 +114,6 @@ struct failure_info_t {
 class OSDMonitor : public PaxosService {
   CephContext *cct;
 
-  ParallelPGMapper mapper;                        ///< for background pg work
-  unique_ptr<OSDMapMapping> mapping;              ///< pg <-> osd mappings
-  unique_ptr<ParallelPGMapper::Job> mapping_job;  ///< background mapping job
-
 public:
   OSDMap osdmap;
 
@@ -152,6 +149,8 @@ public:
   // svc
 public:  
   void create_initial() override;
+  void get_store_prefixes(std::set<string>& s) override;
+
 private:
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;  // prepare a new pending
@@ -191,7 +190,7 @@ private:
    */
   bool validate_crush_against_features(const CrushWrapper *newcrush,
                                       stringstream &ss);
-
+  void check_osdmap_subs();
   void share_map_with_random_osd();
 
   Mutex prime_pg_temp_lock = {"OSDMonitor::prime_pg_temp_lock"};
@@ -209,6 +208,11 @@ private:
   };
   void maybe_prime_pg_temp();
   void prime_pg_temp(const OSDMap& next, pg_t pgid);
+
+  ParallelPGMapper mapper;                        ///< for background pg work
+  OSDMapMapping mapping;                          ///< pg <-> osd mappings
+  unique_ptr<ParallelPGMapper::Job> mapping_job;  ///< background mapping job
+  void start_mapping();
 
   void update_logger();
 
@@ -276,7 +280,10 @@ private:
   bool preprocess_pgtemp(MonOpRequestRef op);
   bool prepare_pgtemp(MonOpRequestRef op);
 
-  int _check_remove_pool(int64_t pool, const pg_pool_t *pi, ostream *ss);
+  bool preprocess_pg_created(MonOpRequestRef op);
+  bool prepare_pg_created(MonOpRequestRef op);
+
+  int _check_remove_pool(int64_t pool_id, const pg_pool_t &pool, ostream *ss);
   bool _check_become_tier(
       int64_t tier_pool_id, const pg_pool_t *tier_pool,
       int64_t base_pool_id, const pg_pool_t *base_pool,
@@ -414,7 +421,30 @@ private:
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
 
- public:
+  // when we last received PG stats from each osd
+  map<int,utime_t> last_osd_report;
+  bool preprocess_beacon(MonOpRequestRef op);
+  bool prepare_beacon(MonOpRequestRef op);
+
+  friend class C_UpdateCreatingPGs;
+  std::map<int, std::map<epoch_t, std::set<pg_t>>> creating_pgs_by_osd_epoch;
+  std::vector<pg_t> pending_created_pgs;
+  // the epoch when the pg mapping was calculated
+  epoch_t creating_pgs_epoch = 0;
+  creating_pgs_t creating_pgs;
+  Spinlock creating_pgs_lock;
+
+  creating_pgs_t update_pending_creatings(const OSDMap::Incremental& inc);
+  void trim_creating_pgs(creating_pgs_t *creating_pgs, const PGMap& pgm);
+  void scan_for_creating_pgs(const std::map<int64_t,pg_pool_t>& pools,
+			     const std::set<int64_t>& removed_pools,
+			     creating_pgs_t* creating_pgs) const;
+  pair<int32_t, pg_t> get_parent_pg(pg_t pgid) const;
+  void update_creating_pgs();
+  void check_pg_creates_subs();
+  epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
+
+public:
   OSDMonitor(CephContext *cct, Monitor *mn, Paxos *p, const string& service_name);
 
   void tick() override;  // check state, take actions
@@ -431,7 +461,7 @@ private:
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
 
-  void handle_osd_timeouts(const utime_t &now,
+  bool handle_osd_timeouts(const utime_t &now,
 			   std::map<int,utime_t> &last_osd_report);
 
   void send_latest(MonOpRequestRef op, epoch_t start=0);
@@ -449,8 +479,8 @@ private:
   int dump_osd_metadata(int osd, Formatter *f, ostream *err);
   void print_nodes(Formatter *f);
 
-  void check_subs();
-  void check_sub(Subscription *sub);
+  void check_osdmap_sub(Subscription *sub);
+  void check_pg_creates_sub(Subscription *sub);
 
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {

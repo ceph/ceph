@@ -2702,6 +2702,10 @@ void PG::publish_stats_to_osd()
     if ((state & (PG_STATE_ACTIVE|PG_STATE_PEERED)) &&
 	!(info.stats.state & (PG_STATE_ACTIVE|PG_STATE_PEERED)))
       info.stats.last_became_peered = now;
+    if (!(state & PG_STATE_CREATING) &&
+	(info.stats.state & PG_STATE_CREATING)) {
+      osd->send_pg_created(get_pgid().pgid);
+    }
     info.stats.state = state;
   }
 

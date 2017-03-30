@@ -3552,6 +3552,7 @@ void Monitor::remove_session(MonSession *s)
 
 void Monitor::remove_all_sessions()
 {
+  Mutex::Locker l(session_map_lock);
   while (!session_map.sessions.empty()) {
     MonSession *s = session_map.sessions.front();
     remove_session(s);
@@ -3601,8 +3602,10 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
     con->mark_down();
     // proxied sessions aren't registered and don't have a con; don't remove
     // those.
-    if (!s->proxy_con)
+    if (!s->proxy_con) {
+      Mutex::Locker l(session_map_lock);
       remove_session(s);
+    }
     op->mark_zap();
   }
 }
@@ -3636,7 +3639,10 @@ void Monitor::_ms_dispatch(Message *m)
     }
 
     ConnectionRef con = m->get_connection();
-    s = session_map.new_session(m->get_source_inst(), con.get());
+    {
+      Mutex::Locker l(session_map_lock);
+      s = session_map.new_session(m->get_source_inst(), con.get());
+    }
     assert(s);
     con->set_priv(s->get());
     dout(10) << __func__ << " new session " << s << " " << *s << dendl;
@@ -3735,12 +3741,14 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     // OSDs
     case CEPH_MSG_MON_GET_OSDMAP:
     case CEPH_MSG_POOLOP:
+    case MSG_OSD_BEACON:
     case MSG_OSD_MARK_ME_DOWN:
     case MSG_OSD_FULL:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
     case MSG_OSD_ALIVE:
     case MSG_OSD_PGTEMP:
+    case MSG_OSD_PG_CREATED:
     case MSG_REMOVE_SNAPS:
       paxos_service[PAXOS_OSDMAP]->dispatch(op);
       break;
@@ -4406,6 +4414,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       for (map<string, Subscription*>::iterator it = s->sub_map.begin();
 	   it != s->sub_map.end(); ) {
 	if (it->first != p->first && logmon()->sub_name_to_id(it->first) >= 0) {
+	  Mutex::Locker l(session_map_lock);
 	  session_map.remove_sub((it++)->second);
 	} else {
 	  ++it;
@@ -4413,9 +4422,12 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       }
     }
 
-    session_map.add_update_sub(s, p->first, p->second.start, 
-			       p->second.flags & CEPH_SUBSCRIBE_ONETIME,
-			       m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
+    {
+      Mutex::Locker l(session_map_lock);
+      session_map.add_update_sub(s, p->first, p->second.start,
+				 p->second.flags & CEPH_SUBSCRIBE_ONETIME,
+				 m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
+    }
 
     if (p->first.compare(0, 6, "mdsmap") == 0 || p->first.compare(0, 5, "fsmap") == 0) {
       dout(10) << __func__ << ": MDS sub '" << p->first << "'" << dendl;
@@ -4430,11 +4442,16 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 	  // client needs earlier osdmaps on purpose, so reset the sent epoch
 	  s->osd_epoch = 0;
 	}
-        osdmon()->check_sub(s->sub_map["osdmap"]);
+        osdmon()->check_osdmap_sub(s->sub_map["osdmap"]);
       }
     } else if (p->first == "osd_pg_creates") {
       if ((int)s->is_capable("osd", MON_CAP_W)) {
-	pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
+	if (monmap->get_required_features().contains_all(
+	      ceph::features::mon::FEATURE_LUMINOUS)) {
+	  osdmon()->check_pg_creates_sub(s->sub_map["osd_pg_creates"]);
+	} else {
+	  pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
+	}
       }
     } else if (p->first == "monmap") {
       monmon()->check_sub(s->sub_map[p->first]);
@@ -4522,8 +4539,10 @@ bool Monitor::ms_handle_reset(Connection *con)
   Mutex::Locker l(lock);
 
   dout(10) << "reset/close on session " << s->inst << dendl;
-  if (!s->closed)
+  if (!s->closed) {
+    Mutex::Locker l(session_map_lock);
     remove_session(s);
+  }
   s->put();
   return true;
 }
@@ -4970,41 +4989,43 @@ void Monitor::tick()
   
   // trim sessions
   utime_t now = ceph_clock_now();
-  xlist<MonSession*>::iterator p = session_map.sessions.begin();
+  {
+    Mutex::Locker l(session_map_lock);
+    auto p = session_map.sessions.begin();
 
-  bool out_for_too_long = (!exited_quorum.is_zero()
-      && now > (exited_quorum + 2*g_conf->mon_lease));
+    bool out_for_too_long = (!exited_quorum.is_zero() &&
+			     now > (exited_quorum + 2*g_conf->mon_lease));
 
-  while (!p.end()) {
-    MonSession *s = *p;
-    ++p;
+    while (!p.end()) {
+      MonSession *s = *p;
+      ++p;
     
-    // don't trim monitors
-    if (s->inst.name.is_mon())
-      continue;
+      // don't trim monitors
+      if (s->inst.name.is_mon())
+	continue;
 
-    if (s->session_timeout < now && s->con) {
-      // check keepalive, too
-      s->session_timeout = s->con->get_last_keepalive();
-      s->session_timeout += g_conf->mon_session_timeout;
-    }
-    if (s->session_timeout < now) {
-      dout(10) << " trimming session " << s->con << " " << s->inst
-	       << " (timeout " << s->session_timeout
-	       << " < now " << now << ")" << dendl;
-    } else if (out_for_too_long) {
-      // boot the client Session because we've taken too long getting back in
-      dout(10) << " trimming session " << s->con << " " << s->inst
-        << " because we've been out of quorum too long" << dendl;
-    } else {
-      continue;
-    }
+      if (s->session_timeout < now && s->con) {
+	// check keepalive, too
+	s->session_timeout = s->con->get_last_keepalive();
+	s->session_timeout += g_conf->mon_session_timeout;
+      }
+      if (s->session_timeout < now) {
+	dout(10) << " trimming session " << s->con << " " << s->inst
+		 << " (timeout " << s->session_timeout
+		 << " < now " << now << ")" << dendl;
+      } else if (out_for_too_long) {
+	// boot the client Session because we've taken too long getting back in
+	dout(10) << " trimming session " << s->con << " " << s->inst
+		 << " because we've been out of quorum too long" << dendl;
+      } else {
+	continue;
+      }
 
-    s->con->mark_down();
-    remove_session(s);
-    logger->inc(l_mon_session_trim);
+      s->con->mark_down();
+      remove_session(s);
+      logger->inc(l_mon_session_trim);
+    }
   }
-
   sync_trim_providers();
 
   if (!maybe_wait_for_quorum.empty()) {

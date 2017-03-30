@@ -157,6 +157,9 @@ TYPE(MonCap)
 #include "mon/mon_types.h"
 TYPE(LevelDBStoreStats)
 
+#include "mon/CreatingPGs.h"
+TYPE(creating_pgs_t)
+
 #include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
