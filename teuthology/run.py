@@ -4,9 +4,9 @@ import StringIO
 import contextlib
 import sys
 import logging
-from traceback import format_tb
 
 import teuthology
+from teuthology import install_except_hook
 from . import report
 from .job_status import get_status
 from .misc import get_user, merge_configs
@@ -31,18 +31,6 @@ def set_up_logging(verbose, archive):
         teuthology.setup_log_file(os.path.join(archive, 'teuthology.log'))
 
     install_except_hook()
-
-
-def install_except_hook():
-    def log_exception(exception_class, exception, traceback):
-        logging.critical(''.join(format_tb(traceback)))
-        if not exception.message:
-            logging.critical(exception_class.__name__)
-            return
-        logging.critical('{0}: {1}'.format(
-            exception_class.__name__, exception))
-
-    sys.excepthook = log_exception
 
 
 def write_initial_metadata(archive, config, name, description, owner):
