@@ -154,6 +154,9 @@ TYPE_FEATUREFUL(MonMap)
 #include "mon/MonCap.h"
 TYPE(MonCap)
 
+#include "mon/MgrMap.h"
+TYPE_FEATUREFUL(MgrMap)
+
 #include "mon/mon_types.h"
 TYPE(LevelDBStoreStats)
 
