@@ -107,12 +107,10 @@ int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map
       return ret;
     }
     map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
-    for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
-         i != buckets.end();
-         ++i) {
-      marker = i->first;
+    for (auto i :  buckets) {
+      marker = i.first;
 
-      RGWBucketEnt& bucket_ent = i->second;
+      RGWBucketEnt& bucket_ent = i.second;
       cls_user_bucket_entry entry;
       ret = store->cls_user_get_bucket_stats(bucket_ent.bucket, entry);
       if (ret < 0) {
