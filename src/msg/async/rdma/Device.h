@@ -137,7 +137,7 @@ class DeviceList {
   int num;
   Device** devices;
 
-  int last_poll_dev;
+  unsigned last_poll_dev = 0;
   struct pollfd *poll_fds;
 
  public:
