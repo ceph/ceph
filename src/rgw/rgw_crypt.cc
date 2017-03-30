@@ -359,7 +359,14 @@ public:
                      const unsigned char (&key)[AES_256_KEYSIZE],
                      bool encrypt)
   {
-    CryptoAccelRef crypto_accel = get_crypto_accel(cct);
+    static std::atomic<bool> failed_to_get_crypto(false);
+    CryptoAccelRef crypto_accel;
+    if (! failed_to_get_crypto.load())
+    {
+      crypto_accel = get_crypto_accel(cct);
+      if (!crypto_accel)
+        failed_to_get_crypto = true;
+    }
     bool result = true;
     unsigned char iv[AES_256_IVSIZE];
     for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
