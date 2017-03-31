@@ -245,7 +245,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     bufferlist bl;
     mon->store->get(OSD_PG_CREATING_PREFIX, "creating", bl);
     auto p = bl.begin();
-    std::lock_guard<Spinlock> l(creating_pgs_lock);
+    std::lock_guard<std::mutex> l(creating_pgs_lock);
     creating_pgs.decode(p);
     dout(7) << __func__ << " loading creating_pgs e" << creating_pgs.last_scan_epoch << dendl;
   }
@@ -1043,7 +1043,7 @@ OSDMonitor::update_pending_creatings(const OSDMap::Incremental& inc)
 {
   creating_pgs_t pending_creatings;
   {
-    std::lock_guard<Spinlock> l(creating_pgs_lock);
+    std::lock_guard<std::mutex> l(creating_pgs_lock);
     pending_creatings = creating_pgs;
   }
   if (pending_creatings.last_scan_epoch > inc.epoch) {
@@ -1477,7 +1477,7 @@ version_t OSDMonitor::get_trim_to()
 {
   if (mon->monmap->get_required_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
-    std::lock_guard<Spinlock> l(creating_pgs_lock);
+    std::lock_guard<std::mutex> l(creating_pgs_lock);
     if (!creating_pgs.pgs.empty()) {
       return 0;
     }
@@ -3234,7 +3234,7 @@ void OSDMonitor::scan_for_creating_pgs(const map<int64_t,pg_pool_t>& pools,
 void OSDMonitor::update_creating_pgs()
 {
   creating_pgs_by_osd_epoch.clear();
-  std::lock_guard<Spinlock> l(creating_pgs_lock);
+  std::lock_guard<std::mutex> l(creating_pgs_lock);
   for (const auto& pg : creating_pgs.pgs) {
     int acting_primary = -1;
     auto pgid = pg.first;

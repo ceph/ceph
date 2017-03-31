@@ -432,7 +432,7 @@ private:
   // the epoch when the pg mapping was calculated
   epoch_t creating_pgs_epoch = 0;
   creating_pgs_t creating_pgs;
-  Spinlock creating_pgs_lock;
+  std::mutex creating_pgs_lock;
 
   creating_pgs_t update_pending_creatings(const OSDMap::Incremental& inc);
   void trim_creating_pgs(creating_pgs_t *creating_pgs, const PGMap& pgm);
