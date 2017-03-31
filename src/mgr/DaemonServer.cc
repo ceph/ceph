@@ -498,7 +498,7 @@ bool DaemonServer::handle_command(MCommand *m)
     int acting_primary = -1;
     entity_inst_t inst;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	osdmap.pg_to_acting_osds(pgid, nullptr, &acting_primary);
+	acting_primary = osdmap.get_pg_acting_primary(pgid);
 	if (acting_primary >= 0) {
 	  inst = osdmap.get_inst(acting_primary);
 	}
