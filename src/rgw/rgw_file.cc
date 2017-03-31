@@ -260,6 +260,8 @@ namespace rgw {
 	/* for the duration of our cache timer, trust positive
 	 * child cache */
 	if (rgw_fh->has_children()) {
+	  rgw_fh->mtx.unlock();
+	  unref(rgw_fh);
 	  return(-ENOTEMPTY);
 	}
 	oname += "/";
