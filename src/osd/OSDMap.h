@@ -800,11 +800,9 @@ public:
 
   // pg -> acting primary osd
   int get_pg_acting_primary(pg_t pg) const {
-    vector<int> group;
-    int nrep = pg_to_acting_osds(pg, group);
-    if (nrep > 0)
-      return group[0];
-    return -1;  // we fail!
+    int primary = -1;
+    _pg_to_up_acting_osds(pg, nullptr, nullptr, nullptr, &primary);
+    return primary;
   }
 
   /*
