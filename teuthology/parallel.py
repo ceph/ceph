@@ -1,14 +1,17 @@
 import logging
 import sys
 
+import gevent
 import gevent.pool
 import gevent.queue
 
 log = logging.getLogger(__name__)
 
+
 class ExceptionHolder(object):
     def __init__(self, exc_info):
         self.exc_info = exc_info
+
 
 def capture_traceback(func, *args, **kwargs):
     """
@@ -20,6 +23,7 @@ def capture_traceback(func, *args, **kwargs):
     except Exception:
         return ExceptionHolder(sys.exc_info())
 
+
 def resurrect_traceback(exc):
     if isinstance(exc, ExceptionHolder):
         exc_info = exc.exc_info
@@ -29,6 +33,7 @@ def resurrect_traceback(exc):
         return
 
     raise exc_info[0], exc_info[1], exc_info[2]
+
 
 class parallel(object):
     """
@@ -73,20 +78,13 @@ class parallel(object):
         return self
 
     def __exit__(self, type_, value, traceback):
-        self.group.join()
-
         if value is not None:
             return False
 
-        try:
-            # raises if any greenlets exited with an exception
-            for result in self:
-                log.debug('result is %s', repr(result))
-                pass
-        except Exception:
-            # Emit message here because traceback gets stomped when we re-raise
-            log.exception("Exception in parallel execution")
-            raise
+        # raises if any greenlets exited with an exception
+        for result in self:
+            log.debug('result is %s', repr(result))
+
         return True
 
     def __iter__(self):
