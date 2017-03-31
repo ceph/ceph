@@ -461,7 +461,6 @@ public:
   LogClient &log_client;
   LogChannelRef clog;
   PGRecoveryStats &pg_recovery_stats;
-  int64_t injectfull;
 private:
   Messenger *&cluster_messenger;
   Messenger *&client_messenger;
@@ -1138,9 +1137,10 @@ public:
 
   // -- OSD Full Status --
 private:
-  Mutex full_status_lock;
-  enum s_names { NONE, NEARFULL, BACKFILLFULL, FULL, FAILSAFE } cur_state;  // ascending
-  const char *get_full_state_name(s_names s) {
+  friend TestOpsSocketHook;
+  mutable Mutex full_status_lock;
+  enum s_names { INVALID = -1, NONE, NEARFULL, BACKFILLFULL, FULL, FAILSAFE } cur_state;  // ascending
+  const char *get_full_state_name(s_names s) const {
     switch (s) {
     case NONE: return "none";
     case NEARFULL: return "nearfull";
@@ -1150,16 +1150,37 @@ private:
     default: return "???";
     }
   }
+  s_names get_full_state(string type) const {
+    if (type == "none")
+      return NONE;
+    else if (type == "failsafe")
+      return FAILSAFE;
+    else if (type == "full")
+      return FULL;
+    else if (type == "backfillfull")
+      return BACKFILLFULL;
+    else if (type == "nearfull")
+      return NEARFULL;
+    else
+      return INVALID;
+  }
   double cur_ratio;  ///< current utilization
+  mutable int64_t injectfull = 0;
+  s_names injectfull_state = NONE;
   float get_failsafe_full_ratio();
   void check_full_status(const osd_stat_t &stat);
+  bool _check_full(s_names type, ostream &ss) const;
 public:
-  bool check_failsafe_full();
-  bool is_nearfull();
-  bool is_backfillfull();
-  bool is_full();
-  bool too_full_for_backfill(ostream &ss);
+  bool check_failsafe_full(ostream &ss) const;
+  bool check_full(ostream &ss) const;
+  bool check_backfill_full(ostream &ss) const;
+  bool check_nearfull(ostream &ss) const;
+  bool is_failsafe_full() const;
+  bool is_full() const;
+  bool is_backfillfull() const;
+  bool is_nearfull() const;
   bool need_fullness_update();  ///< osdmap state needs update
+  void set_injectfull(s_names type, int64_t count);
 
 
   // -- epochs --

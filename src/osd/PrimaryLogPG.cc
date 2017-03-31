@@ -1891,8 +1891,10 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   // mds should have stopped writing before this point.
   // We can't allow OSD to become non-startable even if mds
   // could be writing as part of file removals.
-  if (write_ordered && osd->check_failsafe_full()) {
+  ostringstream ss;
+  if (write_ordered && osd->check_failsafe_full(ss)) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
+             << ss.str()
 	     << dendl;
     return;
   }
@@ -3332,7 +3334,7 @@ void PrimaryLogPG::do_scan(
   case MOSDPGScan::OP_SCAN_GET_DIGEST:
     {
       ostringstream ss;
-      if (osd->too_full_for_backfill(ss)) {
+      if (osd->check_backfill_full(ss)) {
 	dout(1) << __func__ << ": Canceling backfill, " << ss.str() << dendl;
 	queue_peering_event(
 	  CephPeeringEvtRef(

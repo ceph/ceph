@@ -221,7 +221,6 @@ OSDService::OSDService(OSD *osd) :
   whoami(osd->whoami), store(osd->store),
   log_client(osd->log_client), clog(osd->clog),
   pg_recovery_stats(osd->pg_recovery_stats),
-  injectfull(0),
   cluster_messenger(osd->cluster_messenger),
   client_messenger(osd->client_messenger),
   logger(osd->logger),
@@ -757,11 +756,14 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
     nearfull_ratio = failsafe_ratio;
   }
 
-  enum s_names new_state;
-  // If testing with injectfull, let's keep determined state as FAILSAFE
-  if (ratio > failsafe_ratio) {
+  string inject;
+  s_names new_state;
+  if (injectfull_state > NONE && injectfull) {
+    new_state = injectfull_state;
+    inject = "(Injected)";
+  } else if (ratio > failsafe_ratio) {
     new_state = FAILSAFE;
-  } else if (ratio > full_ratio || injectfull) {
+  } else if (ratio > full_ratio) {
     new_state = FULL;
   } else if (ratio > backfillfull_ratio) {
     new_state = BACKFILLFULL;
@@ -776,6 +778,7 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
 	   << ", full_ratio " << full_ratio
 	   << ", failsafe_ratio " << failsafe_ratio
 	   << ", new state " << get_full_state_name(new_state)
+	   << " " << inject
 	   << dendl;
 
   // warn
@@ -816,48 +819,73 @@ bool OSDService::need_fullness_update()
   return want != cur;
 }
 
-bool OSDService::check_failsafe_full()
+bool OSDService::_check_full(s_names type, ostream &ss) const
 {
   Mutex::Locker l(full_status_lock);
 
-  if (injectfull) {
-    // injectfull is either a count of the number of times to return full
+  if (injectfull && injectfull_state >= type) {
+    // injectfull is either a count of the number of times to return failsafe full
     // or if -1 then always return full
     if (injectfull > 0)
       --injectfull;
-    dout(5) << __func__ << " Injected full OSD (" << (injectfull < 0 ? "set" : std::to_string(injectfull)) << ")" << dendl;
+    ss << "Injected " << get_full_state_name(type) << " OSD ("
+       << (injectfull < 0 ? "set" : std::to_string(injectfull)) << ")";
     return true;
   }
 
+  ss << "current usage is " << cur_ratio;
+  return cur_state >= type;
+}
+
+bool OSDService::check_failsafe_full(ostream &ss) const
+{
+  return _check_full(FAILSAFE, ss);
+}
+
+bool OSDService::check_full(ostream &ss) const
+{
+  return _check_full(FULL, ss);
+}
+
+bool OSDService::check_backfill_full(ostream &ss) const
+{
+  return _check_full(BACKFILLFULL, ss);
+}
+
+bool OSDService::check_nearfull(ostream &ss) const
+{
+  return _check_full(NEARFULL, ss);
+}
+
+bool OSDService::is_failsafe_full() const
+{
+  Mutex::Locker l(full_status_lock);
   return cur_state == FAILSAFE;
 }
 
-bool OSDService::is_nearfull()
-{
-  Mutex::Locker l(full_status_lock);
-  return cur_state >= NEARFULL;
-}
-
-bool OSDService::is_backfillfull()
-{
-  Mutex::Locker l(full_status_lock);
-  return cur_state >= BACKFILLFULL;
-}
-
-bool OSDService::is_full()
+bool OSDService::is_full() const
 {
   Mutex::Locker l(full_status_lock);
   return cur_state >= FULL;
 }
 
-bool OSDService::too_full_for_backfill(ostream &ss)
+bool OSDService::is_backfillfull() const
 {
   Mutex::Locker l(full_status_lock);
-  if (cur_state >= BACKFILLFULL) {
-    ss << "current usage is " << cur_ratio << ", which is greater than max allowed ratio";
-    return true;
-  }
-  return false;
+  return cur_state >= BACKFILLFULL;
+}
+
+bool OSDService::is_nearfull() const
+{
+  Mutex::Locker l(full_status_lock);
+  return cur_state >= NEARFULL;
+}
+
+void OSDService::set_injectfull(s_names type, int64_t count)
+{
+  Mutex::Locker l(full_status_lock);
+  injectfull_state = type;
+  injectfull = count;
 }
 
 void OSDService::update_osd_stat(vector<int>& hb_peers)
@@ -2660,6 +2688,7 @@ void OSD::final_init()
   r = admin_socket->register_command(
    "injectfull",
    "injectfull " \
+   "name=type,type=CephString,req=false " \
    "name=count,type=CephInt,req=false ",
    test_ops_hook,
    "Inject a full disk (optional count times)");
@@ -4887,7 +4916,21 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     return;
   }
   if (command == "injectfull") {
-    cmd_getval(service->cct, cmdmap, "count", service->injectfull, (int64_t)-1);
+    int64_t count;
+    string type;
+    OSDService::s_names state;
+    cmd_getval(service->cct, cmdmap, "type", type, string("full"));
+    cmd_getval(service->cct, cmdmap, "count", count, (int64_t)-1);
+    if (type == "none" || count == 0) {
+      type = "none";
+      count = 0;
+    }
+    state = service->get_full_state(type);
+    if (state == OSDService::s_names::INVALID) {
+      ss << "Invalid type use (none, nearfull, backfillfull, full, failsafe)";
+      return;
+    }
+    service->set_injectfull(state, count);
     return;
   }
   ss << "Internal error - command=" << command;
