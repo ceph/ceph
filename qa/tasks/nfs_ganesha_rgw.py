@@ -134,7 +134,9 @@ def task(ctx, config):
     teuthology.sudo_write_file(rgw[0],ganesha_config_path_on_client, ganesha_config)
 
     rgw[0].run(args=['cd', 'nfs-ganesha-rgw', run.Raw(';'), 'git', 'clone',
-                         'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git', '-b', 'wip-nfs-ganesha'])
+                         'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git'])
+
+    rgw[0].run(args=['cd', 'nfs-ganesha-rgw/ceph-qe-scripts', run.Raw(';'), 'git', 'checkout', 'wip-nfs-ganesha'])
 
     rgw[0].run(args=['sudo', 'pip', 'install', 'psutil'])
 
