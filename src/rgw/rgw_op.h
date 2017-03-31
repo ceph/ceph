@@ -2032,4 +2032,18 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
+class RGWGetBucketMetaSearch : public RGWOp {
+public:
+  RGWGetBucketMetaSearch() {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute() {}
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_bucket_meta_search"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_BUCKET_META_SEARCH; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
 #endif /* CEPH_RGW_OP_H */

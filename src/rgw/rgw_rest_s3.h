@@ -427,6 +427,14 @@ public:
   void send_response() override;
 };
 
+class RGWGetBucketMetaSearch_ObjStore_S3 : public RGWGetBucketMetaSearch {
+public:
+  RGWGetBucketMetaSearch_ObjStore_S3() {}
+  ~RGWGetBucketMetaSearch_ObjStore_S3() {}
+
+  void send_response() override;
+};
+
 class RGW_Auth_S3 {
 private:
   static int authorize_v2(RGWRados *store,
