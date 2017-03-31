@@ -239,6 +239,7 @@ void ExclusiveLock<I>::handle_peer_notification(int r) {
 
     ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
     assert(get_active_action() == ACTION_REQUEST_LOCK);
+    m_state = STATE_ACQUIRING;
 
     if (r >= 0) {
       execute_next_action();
