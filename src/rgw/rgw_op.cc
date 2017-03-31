@@ -6339,6 +6339,20 @@ void RGWConfigBucketMetaSearch::execute()
   }
 }
 
+int RGWGetBucketMetaSearch::verify_permission()
+{
+  if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetBucketMetaSearch::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
 
 RGWHandler::~RGWHandler()
 {
