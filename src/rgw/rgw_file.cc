@@ -395,7 +395,7 @@ namespace rgw {
 	    << dendl;
 	}
       }
-      break;
+      goto out;
       default:
 	abort();
       } /* switch */
@@ -1466,7 +1466,7 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  return -(fs->getattr(rgw_fh, st));
+  return fs->getattr(rgw_fh, st);
 }
 
 /*
