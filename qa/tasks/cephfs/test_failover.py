@@ -4,7 +4,6 @@ from unittest import case, SkipTest
 
 from cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
-from tasks.ceph_manager import CephManager
 from teuthology import misc as teuthology
 from tasks.cephfs.fuse_mount import FuseMount
 
@@ -558,19 +557,9 @@ class TestMultiFilesystems(CephFSTestCase):
         self.assertEqual(set(fs_b.get_active_names()), {mds_c, mds_d})
 
     def test_standby_for_invalid_fscid(self):
-        # Set invalid standby_fscid with other mds standby_rank
-        # stopping active mds service should not end up in mon crash
-
-        # Get configured mons in the cluster
-        first_mon = teuthology.get_first_mon(self.ctx, self.configs_set)
-        (mon,) = self.ctx.cluster.only(first_mon).remotes.iterkeys()
-        manager = CephManager(
-            mon,
-            ctx=self.ctx,
-            logger=log.getChild('ceph_manager'),
-        )
-        configured_mons = manager.get_mon_quorum()
-
+        """
+        That an invalid standby_fscid does not cause a mon crash
+        """
         use_daemons = sorted(self.mds_cluster.mds_ids[0:3])
         mds_a, mds_b, mds_c = use_daemons
         log.info("Using MDS daemons: {0}".format(use_daemons))
@@ -581,6 +570,10 @@ class TestMultiFilesystems(CephFSTestCase):
 
         # Create one fs
         fs_a = self.mds_cluster.newfs("cephfs")
+
+        # Get configured mons in the cluster, so we can see if any
+        # crashed later.
+        configured_mons = fs_a.mon_manager.get_mon_quorum()
 
         # Set all the daemons to have a rank assignment but no other
         # standby preferences.
@@ -609,7 +602,8 @@ class TestMultiFilesystems(CephFSTestCase):
             fs_a.wait_for_daemons()
 
         #Get active mons from cluster
-        active_mons = manager.get_mon_quorum()
+        active_mons = fs_a.mon_manager.get_mon_quorum()
 
         #Check for active quorum mon status and configured mon status
-        self.assertEqual(active_mons, configured_mons, "Not all mons are in quorum Invalid standby invalid fscid test failed!")
+        self.assertEqual(active_mons, configured_mons,
+                "Not all mons are in quorum Invalid standby invalid fscid test failed!")

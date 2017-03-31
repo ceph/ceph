@@ -603,6 +603,10 @@ class LocalCephCluster(CephCluster):
         self.mon_manager = LocalCephManager()
         self._conf = defaultdict(dict)
 
+    @property
+    def admin_remote(self):
+        return LocalRemote()
+
     def get_config(self, key, service_type=None):
         if service_type is None:
             service_type = 'mon'
@@ -693,10 +697,6 @@ class LocalMgrCluster(LocalCephCluster, MgrCluster):
 
 
 class LocalFilesystem(Filesystem, LocalMDSCluster):
-    @property
-    def admin_remote(self):
-        return LocalRemote()
-
     def __init__(self, ctx, fscid=None, create=None):
         # Deliberately skip calling parent constructor
         self._ctx = ctx
