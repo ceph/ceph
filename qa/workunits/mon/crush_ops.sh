@@ -78,6 +78,7 @@ ceph osd crush add-bucket foo host
 ceph osd crush move foo root=default rack=localrack
 
 ceph osd crush create-or-move osd.$o1 1.0 root=default
+expect_false ceph osd crush create-or-move osd.$o1 1.0 root=empty
 ceph osd crush move osd.$o1 host=foo
 ceph osd find osd.$o1 | grep host | grep foo
 
