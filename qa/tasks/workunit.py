@@ -16,6 +16,58 @@ from teuthology.orchestra import run
 log = logging.getLogger(__name__)
 
 
+class Refspec:
+    def __init__(self, refspec):
+        self.refspec = refspec
+
+    def __str__(self):
+        return self.refspec
+
+    def _clone(self, git_url, clonedir, opts=None):
+        if opts is None:
+            opts = []
+        return (['rm', '-rf', clonedir] +
+                [run.Raw('&&')] +
+                ['git', 'clone'] + opts +
+                [git_url, clonedir])
+
+    def _cd(self, clonedir):
+        return ['cd', clonedir]
+
+    def _checkout(self):
+        return ['git', 'checkout', self.refspec]
+
+    def clone(self, git_url, clonedir):
+        return (self._clone(git_url, clonedir) +
+                [run.Raw('&&')] +
+                self._cd(clonedir) +
+                [run.Raw('&&')] +
+                self._checkout())
+
+
+class Branch(Refspec):
+    def __init__(self, tag):
+        Refspec.__init__(self, tag)
+
+    def clone(self, git_url, clonedir):
+        opts = ['--depth', '1',
+                '--branch', self.refspec]
+        return (self._clone(git_url, clonedir, opts) +
+                [run.Raw('&&')] +
+                self._cd(clonedir))
+
+
+class Head(Refspec):
+    def __init__(self):
+        Refspec.__init__(self, 'HEAD')
+
+    def clone(self, git_url, clonedir):
+        opts = ['--depth', '1']
+        return (self._clone(git_url, clonedir, opts) +
+                [run.Raw('&&')] +
+                self._cd(clonedir))
+
+
 def task(ctx, config):
     """
     Run ceph on all workunits found under the specified path.
@@ -78,13 +130,13 @@ def task(ctx, config):
     overrides = ctx.config.get('overrides', {})
     misc.deep_merge(config, overrides.get('workunit', {}))
 
-    refspec = config.get('branch')
+    for spec, cls in [('branch', Branch), ('tag', Refspec), ('sha1', Refspec)]:
+        refspec = config.get(spec)
+        if refspec:
+            refspec = cls(refspec)
+            break
     if refspec is None:
-        refspec = config.get('tag')
-    if refspec is None:
-        refspec = config.get('sha1')
-    if refspec is None:
-        refspec = 'HEAD'
+        refspec = Head()
 
     timeout = config.get('timeout', '3h')
 
@@ -276,6 +328,7 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, subdir, timeout=None):
     for role, _ in client_remotes.items():
         _delete_dir(ctx, role, created_mountpoint[role])
 
+
 def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
     """
     Run the individual test. Create a scratch directory and then extract the
@@ -312,24 +365,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
     # if we are running an upgrade test, and ceph-ci does not have branches like
     # `jewel`, so should use ceph.git as an alternative.
     try:
-        remote.run(
-            logger=log.getChild(role),
-            args=[
-                'rm',
-                '-rf',
-                clonedir,
-                run.Raw('&&'),
-                'git',
-                'clone',
-                '--depth=1',
-                git_url,
-                clonedir,
-                run.Raw('&&'),
-                'cd', '--', clonedir,
-                run.Raw('&&'),
-                'git', 'checkout', refspec,
-            ],
-        )
+        remote.run(logger=log.getChild(role),
+                   args=refspec.clone(git_url, clonedir))
     except CommandFailedError:
         if not git_url.endswith('/ceph-ci.git'):
             raise
@@ -340,24 +377,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
             git_url,
             alt_git_url,
         )
-        remote.run(
-            logger=log.getChild(role),
-            args=[
-                'rm',
-                '-rf',
-                clonedir,
-                run.Raw('&&'),
-                'git',
-                'clone',
-                '--depth=1',
-                alt_git_url,
-                clonedir,
-                run.Raw('&&'),
-                'cd', '--', clonedir,
-                run.Raw('&&'),
-                'git', 'checkout', refspec,
-            ],
-        )
+        remote.run(logger=log.getChild(role),
+                   args=refspec.clone(alt_git_url, clonedir))
     remote.run(
         logger=log.getChild(role),
         args=[
