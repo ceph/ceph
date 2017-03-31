@@ -8,6 +8,7 @@ import time
 
 from cStringIO import StringIO
 from teuthology.orchestra import run
+from teuthology.misc import reconnect, get_first_mon, wait_until_healthy
 
 log = logging.getLogger(__name__)
 
@@ -124,4 +125,18 @@ def task(ctx, config):
                 log.info("Failed to stop ceph mds service")
             remote.run(args=['sudo', 'systemctl', 'start', mds_name])
             time.sleep(4)
+
+    # reboot all nodes and verify the systemd units restart
+    # workunit that runs would fail if any of the systemd unit doesnt start
+    ctx.cluster.run(args='sudo reboot', wait=False, check_status=False)
+    # avoid immediate reconnect
+    time.sleep(120)
+    reconnect(ctx, 480)  # reconnect all nodes
+    # for debug info
+    ctx.cluster.run(args=['sudo', 'ps', '-eaf', run.Raw('|'),
+                          'grep', 'ceph'])
+    # wait for HEALTH_OK
+    mon = get_first_mon(ctx, config)
+    (mon_remote,) = ctx.cluster.only(mon).remotes.iterkeys()
+    wait_until_healthy(ctx, mon_remote)
     yield
