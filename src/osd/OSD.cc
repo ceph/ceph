@@ -5560,15 +5560,17 @@ void OSD::flush_pg_stats()
 
 void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
 {
-  dout(20) << __func__ << dendl;
-  last_sent_beacon = now;
   const auto& monmap = monc->monmap;
   // send beacon to mon even if we are just connected, and the monmap is not
   // initialized yet by then.
-  if (monmap.epoch == 0 &&
+  if (monmap.epoch > 0 &&
       monmap.get_required_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
+    dout(20) << __func__ << " sending" << dendl;
+    last_sent_beacon = now;
     monc->send_mon_message(new MOSDBeacon());
+  } else {
+    dout(20) << __func__ << " not sending" << dendl;
   }
 }
 
