@@ -493,6 +493,7 @@ int get_pool_journal_names(const po::variables_map &vm,
 int validate_snapshot_name(at::ArgumentModifier mod,
                            const std::string &snap_name,
                            SnapshotPresence snapshot_presence) {
+  boost::regex pattern;
   std::string prefix = at::get_description_prefix(mod);
   switch (snapshot_presence) {
   case SNAPSHOT_PRESENCE_PERMITTED:
@@ -511,6 +512,12 @@ int validate_snapshot_name(at::ArgumentModifier mod,
       std::cerr << "rbd: "
                 << (mod == at::ARGUMENT_MODIFIER_DEST ? prefix : std::string())
                 << "snap name was not specified" << std::endl;
+      return -EINVAL;
+    }
+    // disallow "/" and "@" in snap name
+    pattern = "^[^@/]*?$";
+    if (!boost::regex_match (snap_name, pattern)) {
+      std::cerr << "rbd: invalid spec '" << snap_name << "'" << std::endl;
       return -EINVAL;
     }
     break;
