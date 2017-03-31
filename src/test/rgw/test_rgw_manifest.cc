@@ -353,7 +353,7 @@ TEST(TestRGWManifest, old_obj_manifest) {
 
   gen_old_obj(env, obj_size, head_size, stripe_size, &old_manifest, &old_bucket, &old_head, &old_objs);
 
-  ASSERT_EQ(old_objs.size(), 11);
+  ASSERT_EQ(old_objs.size(), 11u);
 
 
   bufferlist bl;
