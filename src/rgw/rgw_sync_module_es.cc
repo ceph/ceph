@@ -30,16 +30,32 @@ static string es_get_obj_path(const RGWRealm& realm, const RGWBucketInfo& bucket
 }
 
 struct es_dump_type {
-  string type;
+  const char *type;
+  const char *format;
 
-  es_dump_type(const string& t) : type(t) {}
+  es_dump_type(const char *t, const char *f = nullptr) : type(t), format(f) {}
 
   void dump(Formatter *f) const {
     encode_json("type", type, f);
+    if (format) {
+      encode_json("format", format, f);
+    }
   }
 };
 
 struct es_index_mappings {
+  void dump_custom(Formatter *f, const char *section, const char *type, const char *format) const {
+    f->open_object_section(section);
+    ::encode_json("type", "nested", f);
+    f->open_object_section("properties");
+    f->open_object_section("name");
+    ::encode_json("type", "string", f);
+    ::encode_json("index", "not_analyzed", f);
+    f->close_section(); // name
+    encode_json("value", es_dump_type(type, format), f);
+    f->close_section(); // entry
+    f->close_section(); // custom-string
+  }
   void dump(Formatter *f) const {
     f->open_object_section("mappings");
     f->open_object_section("object");
@@ -61,16 +77,9 @@ struct es_index_mappings {
     ::encode_json("format", "strict_date_optional_time||epoch_millis", f);
     f->close_section(); // mtime
     encode_json("size", es_dump_type("long"), f);
-    f->open_object_section("custom-string");
-    ::encode_json("type", "nested", f);
-    f->open_object_section("properties");
-    f->open_object_section("name");
-    ::encode_json("type", "string", f);
-    ::encode_json("index", "not_analyzed", f);
-    f->close_section(); // name
-    encode_json("value", es_dump_type("string"), f);
-    f->close_section(); // entry
-    f->close_section(); // custom-string
+    dump_custom(f, "custom-string", "string", nullptr);
+    dump_custom(f, "custom-int", "long", nullptr);
+    dump_custom(f, "custom-date", "date", "strict_date_optional_time||epoch_millis");
     f->close_section(); // properties
     f->close_section(); // meta
     f->close_section(); // properties

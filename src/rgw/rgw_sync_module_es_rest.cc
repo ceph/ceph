@@ -19,6 +19,8 @@ struct es_index_obj_response {
     ceph::real_time mtime;
     string etag;
     map<string, string> custom_str;
+    map<string, int64_t> custom_int;
+    map<string, string> custom_date;
 
     template <class T>
     struct _custom_entry {
@@ -40,6 +42,16 @@ struct es_index_obj_response {
       JSONDecoder::decode_json("custom-string", str_entries, obj);
       for (auto& e : str_entries) {
         custom_str[e.name] = e.value;
+      }
+      list<_custom_entry<int64_t> > int_entries;
+      JSONDecoder::decode_json("custom-int", int_entries, obj);
+      for (auto& e : int_entries) {
+        custom_int[e.name] = e.value;
+      }
+      list<_custom_entry<string> > date_entries;
+      JSONDecoder::decode_json("custom-date", date_entries, obj);
+      for (auto& e : date_entries) {
+        custom_date[e.name] = e.value;
       }
     }
   } meta;
@@ -299,6 +311,18 @@ public:
       dump_owner(s, e.owner.get_id(), e.owner.get_display_name());
       s->formatter->open_array_section("CustomMetadata");
       for (auto& m : e.meta.custom_str) {
+        s->formatter->open_object_section("Entry");
+        s->formatter->dump_string("Name", m.first.c_str());
+        s->formatter->dump_string("Value", m.second);
+        s->formatter->close_section();
+      }
+      for (auto& m : e.meta.custom_int) {
+        s->formatter->open_object_section("Entry");
+        s->formatter->dump_string("Name", m.first.c_str());
+        s->formatter->dump_int("Value", m.second);
+        s->formatter->close_section();
+      }
+      for (auto& m : e.meta.custom_date) {
         s->formatter->open_object_section("Entry");
         s->formatter->dump_string("Name", m.first.c_str());
         s->formatter->dump_string("Value", m.second);
