@@ -911,6 +911,9 @@ def wait_until_osds_up(ctx, cluster, remote, ceph_cluster='ceph'):
     testdir = get_testdir(ctx)
     with safe_while(sleep=6, tries=50) as proceed:
         while proceed():
+            daemons = ctx.daemons.iter_daemons_of_role('osd', ceph_cluster)
+            for daemon in daemons:
+                daemon.check_status()
             r = remote.run(
                 args=[
                     'adjust-ulimits',
