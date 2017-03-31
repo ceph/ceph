@@ -341,10 +341,14 @@ class RGWHandler_REST_MDSearch_S3 : public RGWHandler_REST_S3 {
   RGWElasticSyncModuleInstance *es_module;
 protected:
   RGWOp *op_get() {
-    if (!s->info.args.exists("query")) {
-      return nullptr;
+    if (s->info.args.exists("query")) {
+      return new RGWMetadataSearch_ObjStore_S3(es_module);
     }
-    return new RGWMetadataSearch_ObjStore_S3(es_module);
+    if (!s->init_state.url_bucket.empty() &&
+        s->info.args.exists("mdsearch")) {
+      return new RGWGetBucketMetaSearch_ObjStore_S3;
+    }
+    return nullptr;
   }
   RGWOp *op_head() {
     return nullptr;
