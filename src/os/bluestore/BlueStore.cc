@@ -63,8 +63,8 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 // superblock (always the second block of the device).
 #define BDEV_LABEL_BLOCK_SIZE  4096
 
-// for bluefs, label (4k) + bluefs super (4k), means we start at 8k.
-#define BLUEFS_START  8192
+// reserve: label (4k) + bluefs super (4k), which means we start at 8k.
+#define SUPER_RESERVED  8192
 
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
 
@@ -3790,6 +3790,11 @@ int BlueStore::_open_fm(bool create)
     }
     fm->create(bdev->get_size(), t);
 
+    // allocate superblock reserved space.  note that we do not mark
+    // bluefs space as allocated in the freelist; we instead rely on
+    // bluefs_extents.
+    fm->allocate(0, SUPER_RESERVED, t);
+
     uint64_t reserved = 0;
     if (cct->_conf->bluestore_bluefs) {
       assert(bluefs_extents.num_intervals() == 1);
@@ -3803,12 +3808,8 @@ int BlueStore::_open_fm(bool create)
       dout(20) << __func__ << " bluefs_extents 0x" << std::hex << bluefs_extents
 	       << std::dec << dendl;
     } else {
-      reserved = BLUEFS_START;
+      reserved = SUPER_RESERVED;
     }
-
-    // note: we do not mark bluefs space as allocated in the freelist; we
-    // instead rely on bluefs_extents.
-    fm->allocate(0, BLUEFS_START, t);
 
     if (cct->_conf->bluestore_debug_prefill > 0) {
       uint64_t end = bdev->get_size() - reserved;
@@ -4101,8 +4102,8 @@ int BlueStore::_open_db(bool create)
       if (create) {
 	bluefs->add_block_extent(
 	  BlueFS::BDEV_DB,
-	  BLUEFS_START,
-	  bluefs->get_block_device_size(BlueFS::BDEV_DB) - BLUEFS_START);
+	  SUPER_RESERVED,
+	  bluefs->get_block_device_size(BlueFS::BDEV_DB) - SUPER_RESERVED);
       }
       bluefs_shared_bdev = BlueFS::BDEV_SLOW;
       bluefs_single_shared_device = false;
@@ -4119,17 +4120,16 @@ int BlueStore::_open_db(bool create)
       goto free_bluefs;
     }
     if (create) {
-      // note: we might waste a 4k block here if block.db is used, but it's
-      // simpler.
+      // note: we always leave the first SUPER_RESERVED (8k) of the device unused
       uint64_t initial =
 	bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
 			    cct->_conf->bluestore_bluefs_gift_ratio);
       initial = MAX(initial, cct->_conf->bluestore_bluefs_min);
       // align to bluefs's alloc_size
       initial = P2ROUNDUP(initial, cct->_conf->bluefs_alloc_size);
-      initial += cct->_conf->bluefs_alloc_size - BLUEFS_START;
-      bluefs->add_block_extent(bluefs_shared_bdev, BLUEFS_START, initial);
-      bluefs_extents.insert(BLUEFS_START, initial);
+      initial += cct->_conf->bluefs_alloc_size - SUPER_RESERVED;
+      bluefs->add_block_extent(bluefs_shared_bdev, SUPER_RESERVED, initial);
+      bluefs_extents.insert(SUPER_RESERVED, initial);
     }
 
     bfn = path + "/block.wal";
@@ -5097,7 +5097,7 @@ int BlueStore::fsck(bool deep)
 
   used_blocks.resize(bdev->get_size() / block_size);
   apply(
-    0, BLUEFS_START, block_size, used_blocks, "0~BLUEFS_START",
+    0, SUPER_RESERVED, block_size, used_blocks, "0~SUPER_RESERVED",
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
       bs.set(pos);
     }
