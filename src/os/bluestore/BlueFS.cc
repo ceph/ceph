@@ -1402,10 +1402,13 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   // drop lock while we wait for io
   list<FS::aio_t> completed_ios;
   _claim_completed_aios(log_writer, &completed_ios);
+
+  set<unsigned int> unsync_bdev = log_writer->unsync_bdev;
+  log_writer->unsync_bdev.clear();
   l.unlock();
   wait_for_aio(log_writer);
   completed_ios.clear();
-  flush_bdev();
+  flush_bdev(unsync_bdev);
   l.lock();
 
   log_flushing = false;
@@ -1604,6 +1607,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       }
     }
     bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
+    h->unsync_bdev.insert(p->bdev);
     bloff += x_len;
     length -= x_len;
     ++p;
@@ -1724,10 +1728,13 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
 
   list<FS::aio_t> completed_ios;
   _claim_completed_aios(h, &completed_ios);
+
+  set<unsigned int> unsync_bdev = h->unsync_bdev;
+  h->unsync_bdev.clear();
   lock.unlock();
   wait_for_aio(h);
   completed_ios.clear();
-  flush_bdev();
+  flush_bdev(unsync_bdev);
 
   //make sure metadata-update after data-update to avoid
   //read wrong data for case which metadata-update before data-update
@@ -1767,6 +1774,17 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
   }
   return 0;
 }
+
+void BlueFS::flush_bdev(set<unsigned int> &unsync_bdev)
+{
+  // NOTE: this is safe to call without a lock.
+  dout(20) << __func__ << dendl;
+  for (auto p : unsync_bdev) {
+    assert(p < MAX_BDEV && bdev[p] != NULL);
+    bdev[p]->flush();
+  }
+}
+
 
 void BlueFS::flush_bdev()
 {
