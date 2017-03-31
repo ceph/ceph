@@ -1516,27 +1516,8 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   }
   if (must_dirty) {
     h->file->fnode.mtime = ceph_clock_now();
+    h->dirty = true;
     assert(h->file->fnode.ino >= 1);
-    if (h->file->dirty_seq == 0) {
-      h->file->dirty_seq = log_seq + 1;
-      dirty_files[h->file->dirty_seq].push_back(*h->file);
-      dout(20) << __func__ << " dirty_seq = " << log_seq + 1
-	       << " (was clean)" << dendl;
-    } else {
-      if (h->file->dirty_seq != log_seq + 1) {
-        // need re-dirty, erase from list first
-        assert(dirty_files.count(h->file->dirty_seq));
-        auto it = dirty_files[h->file->dirty_seq].iterator_to(*h->file);
-        dirty_files[h->file->dirty_seq].erase(it);
-        h->file->dirty_seq = log_seq + 1;
-        dirty_files[h->file->dirty_seq].push_back(*h->file);
-        dout(20) << __func__ << " dirty_seq = " << log_seq + 1
-                 << " (was " << h->file->dirty_seq << ")" << dendl;
-      } else {
-        dout(20) << __func__ << " dirty_seq = " << log_seq + 1
-                 << " (unchanged, do nothing) " << dendl;
-      }
-    }
   }
   dout(20) << __func__ << " file now " << h->file->fnode << dendl;
 
@@ -1740,7 +1721,6 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
   int r = _flush(h, true);
   if (r < 0)
      return r;
-  uint64_t old_dirty_seq = h->file->dirty_seq;
 
   list<FS::aio_t> completed_ios;
   _claim_completed_aios(h, &completed_ios);
@@ -1748,15 +1728,42 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
   wait_for_aio(h);
   completed_ios.clear();
   flush_bdev();
-  lock.lock();
 
-  if (old_dirty_seq) {
+  //make sure metadata-update after data-update to avoid
+  //read wrong data for case which metadata-update before data-update
+  lock.lock();
+  if (h->dirty) {
+    if (h->file->dirty_seq == 0) {
+      h->file->dirty_seq = log_seq + 1;
+      dirty_files[h->file->dirty_seq].push_back(*h->file);
+      dout(20) << __func__ << " dirty_seq = " << log_seq + 1
+	<< " (was clean)" << dendl;
+    } else {
+      if (h->file->dirty_seq != log_seq + 1) {
+	// need re-dirty, erase from list first
+	assert(dirty_files.count(h->file->dirty_seq));
+	auto it = dirty_files[h->file->dirty_seq].iterator_to(*h->file);
+	dirty_files[h->file->dirty_seq].erase(it);
+	h->file->dirty_seq = log_seq + 1;
+	dirty_files[h->file->dirty_seq].push_back(*h->file);
+	dout(20) << __func__ << " dirty_seq = " << log_seq + 1
+	  << " (was " << h->file->dirty_seq << ")" << dendl;
+      } else {
+	dout(20) << __func__ << " dirty_seq = " << log_seq + 1
+	  << " (unchanged, do nothing) " << dendl;
+      }
+    }
+    //_flush_and_sync_log will unlock lock.
+    //So avoid clean up next dirty we should set dirty = false
+    //before _flush_and_sync_log
+    h->dirty = false;
+
     uint64_t s = log_seq;
-    dout(20) << __func__ << " file metadata was dirty (" << old_dirty_seq
-	     << ") on " << h->file->fnode << ", flushing log" << dendl;
-    _flush_and_sync_log(l, old_dirty_seq);
+    dout(20) << __func__ << " file metadata was dirty (" << h->file->dirty_seq
+      << ") on " << h->file->fnode << ", flushing log" << dendl;
+    _flush_and_sync_log(l, h->file->dirty_seq);
     assert(h->file->dirty_seq == 0 ||  // cleaned
-	   h->file->dirty_seq > s);    // or redirtied by someone else
+	h->file->dirty_seq > s);    // or redirtied by someone else
   }
   return 0;
 }
