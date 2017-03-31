@@ -8,6 +8,7 @@
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rest.h"
 #include "rgw_op.h"
+#include "rgw_es_query.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -157,9 +158,51 @@ struct es_obj_metadata {
     for (auto i : out_attrs) {
       ::encode_json(i.first.c_str(), i.second, f);
     }
-    if (!custom_meta.empty()) {
+    map<string, string> custom_str;
+    map<string, string> custom_int;
+    map<string, string> custom_date;
+
+    for (auto i : custom_meta) {
+      auto config = bucket_info.mdsearch_config.find(i.first);
+      if (config == bucket_info.mdsearch_config.end()) {
+        ldout(cct, 20) << "custom meta entry key=" << i.first << " not found in bucket mdsearch config: " << bucket_info.mdsearch_config << dendl;
+        continue;
+      }
+      switch (config->second) {
+        case ESEntityTypeMap::ES_ENTITY_DATE:
+          custom_date[i.first] = i.second;
+          break;
+        case ESEntityTypeMap::ES_ENTITY_INT:
+          custom_int[i.first] = i.second;
+          break;
+        default:
+          custom_str[i.first] = i.second;
+      }
+    }
+
+    if (!custom_str.empty()) {
       f->open_array_section("custom-string");
-      for (auto i : custom_meta) {
+      for (auto i : custom_str) {
+        f->open_object_section("entity");
+        ::encode_json("name", i.first.c_str(), f);
+        ::encode_json("value", i.second, f);
+        f->close_section();
+      }
+      f->close_section();
+    }
+    if (!custom_int.empty()) {
+      f->open_array_section("custom-int");
+      for (auto i : custom_int) {
+        f->open_object_section("entity");
+        ::encode_json("name", i.first.c_str(), f);
+        ::encode_json("value", i.second, f);
+        f->close_section();
+      }
+      f->close_section();
+    }
+    if (!custom_date.empty()) {
+      f->open_array_section("custom-date");
+      for (auto i : custom_date) {
         f->open_object_section("entity");
         ::encode_json("name", i.first.c_str(), f);
         ::encode_json("value", i.second, f);
