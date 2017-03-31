@@ -66,8 +66,18 @@ TEST(LibRadosMiscConnectFailure, ConnectFailure) {
   ASSERT_EQ(-ENOTCONN, rados_monitor_log(cluster, "error",
                                          test_rados_log_cb, NULL));
 
-  ASSERT_NE(0, rados_connect(cluster));
-  ASSERT_NE(0, rados_connect(cluster));
+  // try this a few times; sometimes we don't schedule fast enough for the
+  // cond to time out
+  int r;
+  for (unsigned i=0; i<16; ++i) {
+    cout << i << std::endl;
+    r = rados_connect(cluster);
+    if (r < 0)
+      break;  // yay, we timed out
+    // try again
+    rados_shutdown(cluster);
+  }
+  ASSERT_NE(0, r);
 
   rados_shutdown(cluster);
 }
