@@ -4982,7 +4982,9 @@ void OSD::ms_handle_connect(Connection *con)
       send_pg_stats(now);
 
       map_lock.put_read();
-      send_beacon(ceph::coarse_mono_clock::now());
+      if (is_active()) {
+	send_beacon(ceph::coarse_mono_clock::now());
+      }
     }
 
     // full map requests may happen while active or pre-boot
