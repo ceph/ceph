@@ -90,6 +90,7 @@ class RGWBL {
   int bucket_bl_post(int index, int max_lock_sec,
 		     pair<string, int >& entry, int& result);
 
+  void format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer);
   int bucket_bl_fetch(const string opslog_obj, bufferlist* opslog_entries);
   int bucket_bl_upload(bufferlist* opslog_entries, const string target_bucket,
 		       const string target_object);
