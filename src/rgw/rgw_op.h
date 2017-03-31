@@ -2046,4 +2046,18 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
+class RGWDelBucketMetaSearch : public RGWOp {
+public:
+  RGWDelBucketMetaSearch() {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "delete_bucket_meta_search"; }
+  virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
 #endif /* CEPH_RGW_OP_H */

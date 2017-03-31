@@ -435,6 +435,14 @@ public:
   void send_response() override;
 };
 
+class RGWDelBucketMetaSearch_ObjStore_S3 : public RGWDelBucketMetaSearch {
+public:
+  RGWDelBucketMetaSearch_ObjStore_S3() {}
+  ~RGWDelBucketMetaSearch_ObjStore_S3() {}
+
+  void send_response() override;
+};
+
 class RGW_Auth_S3 {
 private:
   static int authorize_v2(RGWRados *store,
