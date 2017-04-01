@@ -81,8 +81,22 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
-set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
-set(CMAKE_ASM_FLAGS "-f elf64")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64le")
+  message(STATUS " we are ppc64le")
+  CHECK_C_COMPILER_FLAG("-maltivec" HAS_ALTIVEC)
+  if(HAS_ALTIVEC)
+    message(STATUS " HAS_ALTIVEC yes")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -maltivec")
+    set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -maltivec")
+  endif(HAS_ALTIVEC)
+  CHECK_C_COMPILER_FLAG("-mcpu=power8" HAVE_POWER8)
+  if(HAVE_POWER8)
+    message(STATUS " HAVE_POWER8 yes")
+  endif(HAVE_POWER8)
+else(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64le")
+  set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
+  set(CMAKE_ASM_FLAGS "-f elf64")
+endif(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64le")
 
 execute_process(
   COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
@@ -290,6 +304,7 @@ configure_file(
 set(arch_files
   arch/arm.c
   arch/intel.c
+  arch/ppc.c
   arch/probe.cc)
 
 set(auth_files
@@ -417,6 +432,7 @@ set(libcommon_files
   common/crc32c.cc
   common/crc32c_intel_baseline.c
   common/crc32c_intel_fast.c
+  common/crc32c_ppc.c
   ${yasm_srcs}
   xxHash/xxhash.c
   common/assert.cc
@@ -521,6 +537,10 @@ elseif(FREEBSD OR APPLE)
   list(APPEND libcommon_files msg/async/EventKqueue.cc)
   message(STATUS " Using EventKqueue for events.")
 endif(LINUX)
+
+if(HAVE_POWER8)
+  list(APPEND libcommon_files common/crc32c_ppc_asm.S)
+endif(HAVE_POWER8)
 
 if(WITH_LTTNG AND WITH_EVENTTRACE)
   message(STATUS " Using EventTrace class.")
