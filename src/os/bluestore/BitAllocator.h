@@ -188,26 +188,14 @@ public:
 
 };
 
-typedef enum bmap_area_type {
-  UNDEFINED = 0,
-  ZONE = 1,
-  LEAF = 2,
-  NON_LEAF = 3
-} bmap_area_type_t;
-
 class BitMapArea {
-public:
-  CephContext* cct;
-
 protected:
   int16_t m_area_index;
-  bmap_area_type_t m_type;
 
 public:
   MEMPOOL_CLASS_HELPERS();
   static int64_t get_zone_size(CephContext* cct);
   static int64_t get_span_size(CephContext* cct);
-  bmap_area_type_t level_to_type(int level);
   static int get_level(CephContext* cct, int64_t total_blocks);
   static int64_t get_level_factor(CephContext* cct, int level);
   virtual bool is_allocated(int64_t start_block, int64_t num_blocks) = 0;
@@ -257,36 +245,32 @@ public:
   int64_t child_count();
   int64_t get_index();
   int64_t get_level();
-  bmap_area_type_t get_type();
-  virtual void dump_state(int& count) = 0;
-  BitMapArea(CephContext* cct) : cct(cct), m_type(UNDEFINED) {}
+  virtual void dump_state(CephContext* cct, int& count) = 0;
+  BitMapArea(CephContext*) { }
   virtual ~BitMapArea() { }
 };
 
 class BitMapAreaList {
 
 private:
-  BitMapArea **m_items;
-  int64_t m_num_items;
-  std::mutex m_marker_mutex;
+  std::vector<BitMapArea*> m_items;
 
 public:
-  BitMapArea *get_nth_item(int64_t idx) {
+  /* Must be DefaultConstructible as BitMapAreaIN and derivates employ
+   * a deferred init, sorry. */
+  BitMapAreaList() = default;
+
+  BitMapAreaList(std::vector<BitMapArea*>&& m_items)
+    : m_items(std::move(m_items)) {
+  }
+
+  BitMapArea *get_nth_item(const int64_t idx) {
     return m_items[idx];
   }
 
-   BitMapArea ** get_item_list() {
-    return m_items;
-  }
-
-  int64_t size() {
-    return m_num_items;
-  }
-  BitMapAreaList(BitMapArea **list, int64_t len);
-  BitMapAreaList(BitMapArea **list, int64_t len, int64_t marker);
-
-  BitMapArea **get_list() {
-    return m_items;
+  /* FIXME: we really should use size_t. */
+  int64_t size() const {
+    return m_items.size();
   }
 };
 
@@ -350,7 +334,7 @@ public:
 
 typedef mempool::bluestore_alloc::vector<BmapEntry> BmapEntryVector;
 
-class BitMapZone: public BitMapArea{
+class BitMapZone: public BitMapArea {
 
 private:
   std::atomic<int32_t> m_used_blocks;
@@ -383,7 +367,7 @@ public:
   bool check_locked();
 
   void free_blocks_int(int64_t start_block, int64_t num_blocks);
-  void init(int64_t zone_num, int64_t total_blocks, bool def);
+  void init(CephContext* cct, int64_t zone_num, int64_t total_blocks, bool def);
 
   BitMapZone(CephContext* cct, int64_t total_blocks, int64_t zone_num);
   BitMapZone(CephContext* cct, int64_t total_blocks, int64_t zone_num, bool def);
@@ -395,7 +379,7 @@ public:
   void set_blocks_used(int64_t start_block, int64_t num_blocks) override;
 
   void free_blocks(int64_t start_block, int64_t num_blocks) override;
-  void dump_state(int& count) override;
+  void dump_state(CephContext* cct, int& count) override;
 };
 
 class BitMapAreaIN: public BitMapArea{
@@ -404,12 +388,11 @@ protected:
   int64_t m_child_size_blocks;
   int64_t m_total_blocks;
   int16_t m_level;
-  int16_t m_num_child;
 
   int64_t m_used_blocks;
   int64_t m_reserved_blocks;
   std::mutex m_blocks_lock;
-  BitMapAreaList *m_child_list;
+  BitMapAreaList m_child_list;
 
   bool is_allocated(int64_t start_block, int64_t num_blocks) override;
   bool is_exhausted() override;
@@ -432,8 +415,11 @@ protected:
     return;
   }
 
-  void init(int64_t total_blocks, int64_t zone_size_block, bool def);
-  void init_common(int64_t total_blocks, int64_t zone_size_block, bool def);
+  void init(CephContext* cct, int64_t total_blocks, int64_t zone_size_block, bool def);
+  void init_common(CephContext* cct,
+                   int64_t total_blocks,
+                   int64_t zone_size_block,
+                   bool def);
   int64_t alloc_blocks_dis_int_work(bool wrap, int64_t num_blocks, int64_t min_alloc, int64_t hint,
         int64_t blk_off, ExtentList *block_list);  
 
@@ -470,13 +456,13 @@ public:
 
   virtual void free_blocks_int(int64_t start_block, int64_t num_blocks);
   void free_blocks(int64_t start_block, int64_t num_blocks) override;
-  void dump_state(int& count) override;
+  void dump_state(CephContext* cct, int& count) override;
 };
 
 class BitMapAreaLeaf: public BitMapAreaIN{
 
 private:
-  void init(int64_t total_blocks, int64_t zone_size_block,
+  void init(CephContext* cct, int64_t total_blocks, int64_t zone_size_block,
             bool def);
 
 public:
@@ -512,6 +498,7 @@ typedef enum bmap_alloc_mode {
 
 class BitAllocator:public BitMapAreaIN{
 private:
+  CephContext* const cct;
   bmap_alloc_mode_t m_alloc_mode;
   std::mutex m_serial_mutex;
   pthread_rwlock_t m_rw_lock;
