@@ -55,6 +55,7 @@ using ceph::crypto::MD5;
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
 #define RGW_ATTR_LC            RGW_ATTR_PREFIX "lc"
+#define RGW_ATTR_BL            RGW_ATTR_PREFIX "bl"
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
 #define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"

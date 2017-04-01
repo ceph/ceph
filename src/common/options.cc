@@ -4306,6 +4306,38 @@ std::vector<Option> get_rgw_options() {
     .set_default(true)
     .set_description(""),
 
+    Option("rgw_enable_bl_threads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("whether or not the bl threads should be started"),
+
+    Option("rgw_bl_max_objs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(32)
+    .set_description(""),
+
+    Option("rgw_bl_lock_max_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(60)
+    .set_description("total run time for a single bl processor work"),
+
+    Option("rgw_bl_work_time", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("00:00-06:00")
+    .set_description("job process bl at 00:00-06:00s"),
+
+    Option("rgw_bl_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("http://localhost:7480")
+    .set_description(""),
+
+    Option("rgw_bl_deliver_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(3600 * 24)
+    .set_description("deliver interval in seconds, default is 1 day"),
+
+    Option("rgw_bl_ops_log_lock_duration", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(120)
+    .set_description("exclusive lock duration for reading/writing ops log"),
+
+    Option("rgw_bl_max_ops_log_entries", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(10000)
+    .set_description("max record count in a single log"),
+
     Option("rgw_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/radosgw/$cluster-$id")
     .set_description(""),

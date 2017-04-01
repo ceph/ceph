@@ -103,6 +103,8 @@
     gc process                 manually process garbage
     lc list                    list all bucket lifecycle progress
     lc process                 manually process lifecycle
+    bl list                    list all bucket logging deliver progress
+    bl process                 deliver bucket logging manually
     metadata get               get metadata info
     metadata put               put metadata info
     metadata rm                remove metadata info

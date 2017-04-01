@@ -1308,6 +1308,23 @@ OPTION(rgw_bucket_index_max_aio, OPT_U32)
 OPTION(rgw_enable_quota_threads, OPT_BOOL)
 OPTION(rgw_enable_gc_threads, OPT_BOOL)
 OPTION(rgw_enable_lc_threads, OPT_BOOL)
+OPTION(rgw_enable_bl_threads, OPT_BOOL)
+
+OPTION(rgw_bl_max_objs, OPT_INT)
+OPTION(rgw_bl_lock_max_time, OPT_INT)
+OPTION(rgw_bl_work_time, OPT_STR)
+/**
+ * bl thread need to upload opslog by sending http put requests to itself
+
+ * We need to support FCGI frontend which we can't find listening port
+ * for http reqeust in ceph.conf, moreover certain rgw_frontend also
+ * support listening on serverl ports. so we need to modify the port
+ * according to the rgw_frontends config option.
+*/
+OPTION(rgw_bl_url, OPT_STR)
+OPTION(rgw_bl_deliver_interval, OPT_INT)
+OPTION(rgw_bl_ops_log_lock_duration, OPT_INT)
+OPTION(rgw_bl_max_ops_log_entries, OPT_INT)
 
 
 OPTION(rgw_data, OPT_STR)

@@ -66,6 +66,7 @@ using namespace librados;
 
 #include "rgw_gc.h"
 #include "rgw_lc.h"
+#include "rgw_bl.h"
 
 #include "rgw_object_expirer_core.h"
 #include "rgw_sync.h"
@@ -1703,6 +1704,7 @@ int RGWZoneParams::fix_pool_names()
   control_pool = fix_zone_pool_dup(pools, name, ".rgw.control", control_pool);
   gc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:gc", gc_pool);
   lc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:lc", lc_pool);
+  bl_pool = fix_zone_pool_dup(pools, name ,".rgw.log:bl", bl_pool);
   log_pool = fix_zone_pool_dup(pools, name, ".rgw.log", log_pool);
   intent_log_pool = fix_zone_pool_dup(pools, name, ".rgw.log:intent", intent_log_pool);
   usage_log_pool = fix_zone_pool_dup(pools, name, ".rgw.log:usage", usage_log_pool);
@@ -3667,6 +3669,12 @@ void RGWRados::finalize()
   delete obj_expirer;
   obj_expirer = NULL;
 
+  if (use_bl_thread) {
+    bl->stop_processor();
+  }
+  delete bl;
+  bl = NULL;
+
   delete rest_master_conn;
 
   map<string, RGWRESTConn *>::iterator iter;
@@ -4429,6 +4437,10 @@ int RGWRados::init_complete()
   if (ret < 0)
     return ret;
 
+  ret = open_bl_pool_ctx();
+  if (ret < 0)
+    return ret;
+
   ret = open_objexp_pool_ctx();
   if (ret < 0)
     return ret;
@@ -4528,6 +4540,12 @@ int RGWRados::init_complete()
 
   if (use_lc_thread)
     lc->start_processor();
+
+  bl = new RGWBL();
+  bl->initialize(cct, this);
+
+  if (use_bl_thread)
+    bl->start_processor();
 
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
 
@@ -4701,6 +4719,11 @@ int RGWRados::open_gc_pool_ctx()
 int RGWRados::open_lc_pool_ctx()
 {
   return rgw_init_ioctx(get_rados_handle(), get_zone_params().lc_pool, lc_pool_ctx, true);
+}
+
+int RGWRados::open_bl_pool_ctx()
+{
+  return rgw_init_ioctx(get_rados_handle(), get_zone_params().bl_pool, bl_pool_ctx, true);
 }
 
 int RGWRados::open_objexp_pool_ctx()
@@ -12605,6 +12628,16 @@ int RGWRados::process_lc()
   return lc->process();
 }
 
+int RGWRados::list_bl_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map)
+{
+  return bl->list_bl_progress(marker, max_entries, progress_map);
+}
+
+int RGWRados::process_bl()
+{
+  return bl->process();
+}
+
 int RGWRados::process_expire_objects()
 {
   obj_expirer->inspect_all_shards(utime_t(), ceph_clock_now());
@@ -13682,7 +13715,13 @@ uint64_t RGWRados::next_bucket_id()
   return ++max_bucket_id;
 }
 
-RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread)
+RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct,
+						 bool use_gc_thread,
+						 bool use_lc_thread,
+						 bool use_bl_thread,
+						 bool quota_threads,
+						 bool run_sync_thread,
+						 bool run_reshard_thread)
 {
   int use_cache = cct->_conf->rgw_cache_enabled;
   RGWRados *store = NULL;
@@ -13692,7 +13731,8 @@ RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_t
     store = new RGWCache<RGWRados>; 
   }
 
-  if (store->initialize(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread, run_reshard_thread) < 0) {
+  if (store->initialize(cct, use_gc_thread, use_lc_thread, use_bl_thread, 
+			quota_threads, run_sync_thread, run_reshard_thread) < 0) {
     delete store;
     return NULL;
   }

@@ -32,6 +32,7 @@
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_lc.h"
+#include "rgw_bl.h"
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
@@ -160,6 +161,8 @@ void usage()
   cout << "  gc process                 manually process garbage\n";
   cout << "  lc list                    list all bucket lifecycle progress\n";
   cout << "  lc process                 manually process lifecycle\n";
+  cout << "  bl list                    list all bucket logging deliver progress\n";
+  cout << "  bl process                 deliver bucket logging manually\n";
   cout << "  metadata get               get metadata info\n";
   cout << "  metadata put               put metadata info\n";
   cout << "  metadata rm                remove metadata info\n";
@@ -386,6 +389,8 @@ enum {
   OPT_GC_PROCESS,
   OPT_LC_LIST,
   OPT_LC_PROCESS,
+  OPT_BL_LIST,
+  OPT_BL_PROCESS,
   OPT_ORPHANS_FIND,
   OPT_ORPHANS_FINISH,
   OPT_ORPHANS_LIST_JOBS,
@@ -492,6 +497,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   // NOTE: please keep the checks in alphabetical order !!!
   if (strcmp(cmd, "bi") == 0 ||
       strcmp(cmd, "bilog") == 0 ||
+      strcmp(cmd, "bl") == 0 ||
+      strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "caps") == 0 ||
       strcmp(cmd, "data") == 0 ||
@@ -808,6 +815,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_LC_LIST;
     if (strcmp(cmd, "process") == 0)
       return OPT_LC_PROCESS;
+  } else if (strcmp(prev_cmd, "bl") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_BL_LIST;
+    if (strcmp(cmd, "process") == 0)
+      return OPT_BL_PROCESS;
   } else if (strcmp(prev_cmd, "orphans") == 0) {
     if (strcmp(cmd, "find") == 0)
       return OPT_ORPHANS_FIND;
@@ -2930,7 +2942,8 @@ int main(int argc, const char **argv)
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
   } else {
-    store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false);
+    store = RGWStoreManager::get_storage(g_ceph_context, false, false, false,
+                                         false, false, false);
   }
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
@@ -5950,6 +5963,45 @@ next:
       return 1;
     }
   }
+
+  if (opt_cmd == OPT_BL_LIST) {
+    formatter->open_array_section("bucket_logging_list");
+    map<string, int> bl_map;
+    string marker;
+#define MAX_BL_LIST_ENTRIES 100
+    if (max_entries < 0) {
+      max_entries = MAX_BL_LIST_ENTRIES;
+    }
+    do {
+      int ret = store->list_bl_progress(marker, max_entries, &bl_map);
+      if (ret < 0) {
+        cerr << "ERROR: failed to list bl objs, ret=" << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+      for (auto iter = bl_map.begin(); iter != bl_map.end(); ++iter) {
+        formatter->open_object_section("bucket_bl_info");
+        formatter->dump_string("bucket", iter->first);
+        string bl_status = BL_STATUS[iter->second];
+        formatter->dump_string("status", bl_status);
+        formatter->close_section(); // objs
+        formatter->flush(cout);
+        marker = iter->first;
+      }
+    } while (!bl_map.empty());
+
+    formatter->close_section(); // bucket_logging_list
+    formatter->flush(cout);
+  }
+
+
+  if (opt_cmd == OPT_BL_PROCESS) {
+    int ret = store->process_bl();
+    if (ret < 0) {
+      cerr << "ERROR: bl processing ret=" << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
 
   if (opt_cmd == OPT_ORPHANS_FIND) {
     RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
