@@ -4594,7 +4594,6 @@ void RGWInitMultipart::execute()
   bufferlist aclbl;
   map<string, bufferlist> attrs;
   rgw_obj obj;
-  map<string, string>::iterator iter;
 
   if (get_params() < 0)
     return;
