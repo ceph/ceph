@@ -5,6 +5,7 @@ import logging
 import pipes
 import os
 
+from copy import deepcopy
 from util import get_remote_for_role
 
 from teuthology import misc
@@ -127,10 +128,18 @@ def task(ctx, config):
     assert isinstance(config.get('clients'), dict), \
         'configuration must contain a dictionary of clients'
 
-    overrides = ctx.config.get('overrides', {})
-    misc.deep_merge(config, overrides.get('workunit', {}))
+    # mimic the behavior of the "install" task, where the "overrides" are
+    # actually the defaults of that task. in other words, if none of "sha1",
+    # "tag", or "branch" is specified by a "workunit" tasks, we will update
+    # it with the information in the "workunit" sub-task nested in "overrides".
+    overrides = deepcopy(ctx.config.get('overrides', {}).get('workunit', {}))
+    refspecs = {'branch': Branch, 'tag': Refspec, 'sha1': Refspec}
+    if any(map(lambda i: i in config, refspecs.iterkeys())):
+        for i in refspecs.iterkeys():
+            overrides.pop(i, None)
+    misc.deep_merge(config, overrides)
 
-    for spec, cls in [('branch', Branch), ('tag', Refspec), ('sha1', Refspec)]:
+    for spec, cls in refspecs.iteritems():
         refspec = config.get(spec)
         if refspec:
             refspec = cls(refspec)
