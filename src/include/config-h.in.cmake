@@ -307,4 +307,7 @@
 /* Defined if pthread_getname_np() is available */
 #cmakedefine HAVE_PTHREAD_GETNAME_NP 1
 
+/* Support POWER8 instructions */
+#cmakedefine HAVE_POWER8
+
 #endif /* CONFIG_H */
