@@ -1,0 +1,28 @@
+overrides:
+  ceph-ansible:
+    vars:
+      ceph_stable: true
+      ceph_origin: distro
+      ceph_stable_rh_storage: true
+      journal_collocation: true
+      journal_size: 1024
+      osd_auto_discovery: false
+      ceph_conf_overrides:
+          global: 
+            osd default pool size: 2
+            osd pool default pg num:  128
+            osd pool default pgp num:  128
+      mons: 
+        calamari: true
+roles:
+- - osd.0
+  - osd.1
+- - mon.a
+  - osd.2
+  - osd.3
+- - osd.4
+- - osd.5
+tasks:
+- ssh-keys:
+- ceph-ansible:
+- calamari-api:
