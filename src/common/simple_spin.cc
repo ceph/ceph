@@ -18,9 +18,6 @@
 #include <stdint.h>
 #include <pthread.h>
 
-static uint32_t bar = 13;
-static uint32_t *foo = &bar;
- 
 void simple_spin_lock(simple_spinlock_t *lock)
 {
   while(1) {
@@ -31,9 +28,15 @@ void simple_spin_lock(simple_spinlock_t *lock)
 	return;
     }
     // delay
-    for (int i = 0; i < 100000; i++) {
-      *foo = (*foo * 33) + 17;
-    }
+#if defined(__i386__) || defined(__x86_64__)
+    asm volatile("pause");
+#elif defined(__arm__) || defined(__aarch64__)
+    asm volatile("yield");
+#elif defined(__ppc64__)
+    asm volatile("or 27,27,27");
+#else
+#error "Unknown architecture"
+#endif
   }
 }
 
