@@ -3285,15 +3285,21 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
   }
   if (changed.count("bluestore_max_ops")) {
     throttle_ops.reset_max(conf->bluestore_max_ops);
+    throttle_deferred_ops.reset_max(
+      conf->bluestore_max_ops + conf->bluestore_deferred_max_ops);
   }
   if (changed.count("bluestore_max_bytes")) {
     throttle_bytes.reset_max(conf->bluestore_max_bytes);
+    throttle_deferred_bytes.reset_max(
+      conf->bluestore_max_bytes + conf->bluestore_deferred_max_bytes);
   }
   if (changed.count("bluestore_deferred_max_ops")) {
-    throttle_deferred_ops.reset_max(conf->bluestore_deferred_max_ops);
+    throttle_deferred_ops.reset_max(
+      conf->bluestore_max_ops + conf->bluestore_deferred_max_ops);
   }
   if (changed.count("bluestore_deferred_max_bytes")) {
-    throttle_deferred_bytes.reset_max(conf->bluestore_deferred_max_bytes);
+    throttle_deferred_bytes.reset_max(
+      conf->bluestore_max_bytes + conf->bluestore_deferred_max_bytes);
   }
 }
 
