@@ -552,7 +552,7 @@ static int unmap_image(struct krbd_ctx *ctx, const char *devnode,
                        const char *options)
 {
   struct stat sb;
-  dev_t wholedevno;
+  dev_t wholedevno = 0;
   string id;
   int r;
 
@@ -588,7 +588,7 @@ static int unmap_image(struct krbd_ctx *ctx, const char *pool,
                        const char *image, const char *snap,
                        const char *options)
 {
-  dev_t devno;
+  dev_t devno = 0;
   string id;
   int r;
 
