@@ -127,6 +127,7 @@ int process_request(RGWRados* const store,
                     const rgw_auth_registry_t& auth_registry,
                     RGWRestfulIO* const client_io,
                     OpsLogSocket* const olog,
+                    optional_yield_context yield,
                     int* http_ret)
 {
   int ret = client_io->init(g_ceph_context);
@@ -157,6 +158,7 @@ int process_request(RGWRados* const store,
   s->req_id = store->svc.zone_utils->unique_id(req->id);
   s->trans_id = store->svc.zone_utils->unique_trans_id(req->id);
   s->host_id = store->host_id;
+  s->yield = yield;
 
   ldpp_dout(s, 2) << "initializing for trans_id = " << s->trans_id << dendl;
 
