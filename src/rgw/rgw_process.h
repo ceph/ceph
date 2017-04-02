@@ -197,6 +197,7 @@ extern int process_request(RGWRados* store,
                            const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
                            OpsLogSocket* olog,
+                           optional_yield_context y,
                            int* http_ret = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,

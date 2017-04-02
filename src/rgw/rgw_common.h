@@ -29,6 +29,7 @@
 #include "rgw_iam_policy.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"
+#include "common/async/yield_context.h"
 #include "rgw_website.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
@@ -1953,6 +1954,9 @@ struct req_state : DoutPrefixProvider {
   uint64_t id;
 
   bool mfa_verified{false};
+
+  /// optional coroutine context
+  optional_yield_context yield{null_yield};
 
   req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u, uint64_t id);
   ~req_state();
