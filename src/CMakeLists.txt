@@ -304,8 +304,10 @@ configure_file(
 set(arch_files
   arch/arm.c
   arch/intel.c
-  arch/ppc.c
   arch/probe.cc)
+if(HAVE_PPC)
+  list(APPEND arch_files arch/ppc.c)
+endif()
 
 set(auth_files
   auth/AuthAuthorizeHandler.cc
@@ -432,7 +434,6 @@ set(libcommon_files
   common/crc32c.cc
   common/crc32c_intel_baseline.c
   common/crc32c_intel_fast.c
-  common/crc32c_ppc.c
   ${yasm_srcs}
   xxHash/xxhash.c
   common/assert.cc
@@ -538,6 +539,9 @@ elseif(FREEBSD OR APPLE)
   message(STATUS " Using EventKqueue for events.")
 endif(LINUX)
 
+if(HAVE_PPC)
+  list(APPEND libcommon_files common/crc32c_ppc.c)
+endif()
 if(HAVE_POWER8)
   list(APPEND libcommon_files common/crc32c_ppc_asm.S)
 endif(HAVE_POWER8)

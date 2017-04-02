@@ -14,7 +14,9 @@ int ceph_arch_probe(void)
 
   ceph_arch_intel_probe();
   ceph_arch_arm_probe();
+#if defined(HAVE_PPC)
   ceph_arch_ppc_probe();
+#endif
 
   ceph_arch_probed = 1;
   return 1;

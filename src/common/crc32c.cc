@@ -32,9 +32,11 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
     return ceph_crc32c_aarch64;
   }
 
+#if defined(HAVE_PPC)
   if (ceph_arch_ppc_crc32) {
     return ceph_crc32c_ppc;
   }
+#endif
 
   // default
   return ceph_crc32c_sctp;
