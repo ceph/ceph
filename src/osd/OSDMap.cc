@@ -1022,16 +1022,16 @@ int OSDMap::calc_num_osds()
   return num_osd;
 }
 
-void OSDMap::count_full_nearfull_osds(int *full, int *nearfull) const
+void OSDMap::count_full_nearfull_osds(int& full, int& nearfull) const
 {
-  *full = 0;
-  *nearfull = 0;
+  full = 0;
+  nearfull = 0;
   for (int i = 0; i < max_osd; ++i) {
     if (exists(i) && is_up(i) && is_in(i)) {
       if (osd_state[i] & CEPH_OSD_FULL)
-	++(*full);
+	++full;
       else if (osd_state[i] & CEPH_OSD_NEARFULL)
-	++(*nearfull);
+	++nearfull;
     }
   }
 }

@@ -339,7 +339,7 @@ public:
   float get_nearfull_ratio() const {
     return nearfull_ratio;
   }
-  void count_full_nearfull_osds(int *full, int *nearfull) const;
+  void count_full_nearfull_osds(int&, int&) const;
 
   /***** cluster state *****/
   /* osds */
