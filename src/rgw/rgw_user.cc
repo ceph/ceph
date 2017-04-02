@@ -117,7 +117,7 @@ int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map
         ldout(cct, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
         return ret;
       }
-      buckets_usage_map.insert(pair<string, cls_user_bucket_entry>(bucket_ent.bucket.name, entry));
+      buckets_usage_map.emplace(bucket_ent.bucket.name, entry);
     }
     done = (buckets.size() < max_entries);
   } while (!done);
