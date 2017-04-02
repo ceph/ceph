@@ -14,7 +14,15 @@
 
 #include "acconfig.h"
 
+#if defined(__linux__)
+#define PROCPREFIX
+#endif
+
 #if defined(__FreeBSD__)
+
+// FreeBSD supports Linux procfs with its compatibility module
+// And all compatibility stuff is standard mounted on this 
+#define PROCPREFIX "/compat/linux"
 
 /* Make sure that ENODATA is defined in the correct way */
 #ifndef ENODATA
