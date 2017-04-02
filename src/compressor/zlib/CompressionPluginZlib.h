@@ -35,6 +35,7 @@ public:
   int factory(CompressorRef *cs,
                       std::ostream *ss) override
   {
+#if defined(__i386__) || defined(__x86_64__)
     bool isal;
     if (cct->_conf->compressor_zlib_isal) {
       ceph_arch_probe();
@@ -46,6 +47,7 @@ public:
       compressor = std::make_shared<ZlibCompressor>(isal);
       has_isal = isal;
     }
+#endif
     *cs = compressor;
     return 0;
   }

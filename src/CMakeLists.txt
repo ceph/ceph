@@ -290,12 +290,6 @@ configure_file(
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   @ONLY)
 
-set(arch_files
-  arch/arm.c
-  arch/intel.c
-  arch/ppc.c
-  arch/probe.cc)
-
 set(auth_files
   auth/AuthAuthorizeHandler.cc
   auth/AuthClientHandler.cc
@@ -516,9 +510,16 @@ set(libcommon_files
   common/fs_types.cc
   common/dns_resolve.cc
   common/hostname.cc
-  ${arch_files}
+  arch/probe.cc
   ${auth_files}
   ${mds_files})
+if(HAVE_ARM)
+  list(APPEND libcommon_files arch/arm.c)
+elseif(HAVE_INTEL)
+  list(APPEND libcommon_files arch/intel.c)
+elseif(HAVE_POWER8)
+  list(APPEND libcommon_files arch/ppc.c)
+endif()
 if(LINUX)
   list(APPEND libcommon_files msg/async/EventEpoll.cc)
   message(STATUS " Using EventEpoll for events.")
