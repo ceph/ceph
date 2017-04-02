@@ -9,7 +9,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::object_watcher::Notifier: "
+#define dout_prefix *_dout << "librbd::watcher::Notifier: " \
+                           << this << " " << __func__ << ": "
 
 namespace librbd {
 namespace watcher {
@@ -63,8 +64,7 @@ void Notifier::notify(bufferlist &bl, NotifyResponse *response,
     Mutex::Locker aio_notify_locker(m_aio_notify_lock);
     ++m_pending_aio_notifies;
 
-    ldout(m_cct, 20) << __func__ << ": pending=" << m_pending_aio_notifies
-                     << dendl;
+    ldout(m_cct, 20) << "pending=" << m_pending_aio_notifies << dendl;
   }
 
   C_AioNotify *ctx = new C_AioNotify(this, response, on_finish);
@@ -75,21 +75,22 @@ void Notifier::notify(bufferlist &bl, NotifyResponse *response,
 }
 
 void Notifier::handle_notify(int r, Context *on_finish) {
-  if (on_finish != nullptr) {
-    m_work_queue->queue(on_finish, r);
-  }
+  ldout(m_cct, 20) << "r=" << r << dendl;
 
   Mutex::Locker aio_notify_locker(m_aio_notify_lock);
   assert(m_pending_aio_notifies > 0);
   --m_pending_aio_notifies;
 
-  ldout(m_cct, 20) << __func__ << ": pending=" << m_pending_aio_notifies
-                   << dendl;
+  ldout(m_cct, 20) << "pending=" << m_pending_aio_notifies << dendl;
   if (m_pending_aio_notifies == 0) {
     for (auto ctx : m_aio_notify_flush_ctxs) {
       m_work_queue->queue(ctx, 0);
     }
     m_aio_notify_flush_ctxs.clear();
+  }
+
+  if (on_finish != nullptr) {
+    m_work_queue->queue(on_finish, r);
   }
 }
 
