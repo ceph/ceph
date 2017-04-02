@@ -57,6 +57,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         www/py-flask \
         www/fcgi \
         sysutils/flock \
+        sysutils/fusefs-libs \
 
     exit
 else
