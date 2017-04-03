@@ -3303,8 +3303,13 @@ void OSDMonitor::tick()
   bool do_propose = false;
   utime_t now = ceph_clock_now();
 
-  if (handle_osd_timeouts(now, last_osd_report))
-    do_propose = true;
+  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) &&
+      mon->monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS)) {
+    if (handle_osd_timeouts(now, last_osd_report)) {
+      do_propose = true;
+    }
+  }
 
   // mark osds down?
   if (check_failures(now))
