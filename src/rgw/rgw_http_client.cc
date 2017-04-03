@@ -856,7 +856,7 @@ int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
  */
 int RGWHTTPManager::complete_requests()
 {
-  bool done;
+  bool done = false;
   int ret;
   do {
     ret = process_requests(true, &done);
