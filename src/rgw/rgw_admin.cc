@@ -228,6 +228,8 @@ void _usage()
   cout << "   --realm-new-name=<name>   realm new name\n";
   cout << "   --rgw-zonegroup=<name>    zonegroup name\n";
   cout << "   --zonegroup-id=<id>       zonegroup id\n";
+  cout << "   --zonegroup-new-name=<name>\n";
+  cout << "                             zonegroup new name\n";
   cout << "   --rgw-zone=<name>         name of zone in which radosgw is running\n";
   cout << "   --zone-id=<id>            zone id\n";
   cout << "   --zone-new-name=<name>    zone new name\n";

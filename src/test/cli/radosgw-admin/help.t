@@ -174,6 +174,8 @@
      --realm-new-name=<name>   realm new name
      --rgw-zonegroup=<name>    zonegroup name
      --zonegroup-id=<id>       zonegroup id
+     --zonegroup-new-name=<name>
+                               zonegroup new name
      --rgw-zone=<name>         name of zone in which radosgw is running
      --zone-id=<id>            zone id
      --zone-new-name=<name>    zone new name
