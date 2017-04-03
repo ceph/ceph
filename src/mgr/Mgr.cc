@@ -351,8 +351,10 @@ void Mgr::shutdown()
   // First stop the server so that we're not taking any more incoming requests
   server.shutdown();
 
+  lock.Unlock();
   // after the messenger is stopped, signal modules to shutdown via finisher
   py_modules.shutdown();
+  lock.Lock();
 
   // Then stop the finisher to ensure its enqueued contexts aren't going
   // to touch references to the things we're about to tear down
