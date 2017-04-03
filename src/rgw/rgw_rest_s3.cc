@@ -468,7 +468,7 @@ void RGWGetUsage_ObjStore_S3::send_response()
      }
      formatter->close_section(); // entries
    }
-  
+
    if (show_log_sum) {
      formatter->open_array_section("Summary");
      map<string, rgw_usage_log_entry>::iterator siter;
@@ -484,19 +484,19 @@ void RGWGetUsage_ObjStore_S3::send_response()
        formatter->dump_int("BytesReceived", total_usage.bytes_received);
        formatter->dump_int("Ops", total_usage.ops);
        formatter->dump_int("SuccessfulOps", total_usage.successful_ops);
-       formatter->close_section(); // total 
+       formatter->close_section(); // total
        formatter->close_section(); // user
      }
 
      if (s->cct->_conf->rgw_rest_getusage_op_compat) {
-       formatter->open_object_section("Stats"); 
-     }	
-       
+       formatter->open_object_section("Stats");
+     }
+
      formatter->dump_int("TotalBytes", header.stats.total_bytes);
      formatter->dump_int("TotalBytesRounded", header.stats.total_bytes_rounded);
      formatter->dump_int("TotalEntries", header.stats.total_entries);
-     
-     if (s->cct->_conf->rgw_rest_getusage_op_compat) { 
+
+     if (s->cct->_conf->rgw_rest_getusage_op_compat) {
        formatter->close_section(); //Stats
      }
 
@@ -506,15 +506,14 @@ void RGWGetUsage_ObjStore_S3::send_response()
   formatter->open_array_section("CapacityUsed");
   formatter->open_object_section("User");
   formatter->open_array_section("Buckets");
-  map<string, cls_user_bucket_entry>::iterator biter;
-  for (biter = buckets_usage.begin(); biter != buckets_usage.end(); ++biter) {
-    const cls_user_bucket_entry& entry = biter->second;
-    dump_usage_bucket_info(formatter, biter->first, entry);
+  for (const auto& biter : buckets_usage) {
+    const cls_user_bucket_entry& entry = biter.second;
+    dump_usage_bucket_info(formatter, biter.first, entry);
   }
-  formatter->close_section(); // Buckets 
-  formatter->close_section(); // User 
+  formatter->close_section(); // Buckets
+  formatter->close_section(); // User
   formatter->close_section(); // CapacityUsed
-   
+
   formatter->close_section(); // usage
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
