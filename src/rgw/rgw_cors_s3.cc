@@ -22,6 +22,7 @@
 #include "rgw_cors_s3.h"
 #include "rgw_user.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -183,37 +184,37 @@ bool RGWCORSConfiguration_S3::xml_end(const char *el) {
 class CORSRuleID_S3 : public XMLObj {
   public:
     CORSRuleID_S3() {}
-    ~CORSRuleID_S3() {}
+    ~CORSRuleID_S3() override {}
 };
 
 class CORSRuleAllowedOrigin_S3 : public XMLObj {
   public:
     CORSRuleAllowedOrigin_S3() {}
-    ~CORSRuleAllowedOrigin_S3() {}
+    ~CORSRuleAllowedOrigin_S3() override {}
 };
 
 class CORSRuleAllowedMethod_S3 : public XMLObj {
   public:
     CORSRuleAllowedMethod_S3() {}
-    ~CORSRuleAllowedMethod_S3() {}
+    ~CORSRuleAllowedMethod_S3() override {}
 };
 
 class CORSRuleAllowedHeader_S3 : public XMLObj {
   public:
     CORSRuleAllowedHeader_S3() {}
-    ~CORSRuleAllowedHeader_S3() {}
+    ~CORSRuleAllowedHeader_S3() override {}
 };
 
 class CORSRuleMaxAgeSeconds_S3 : public XMLObj {
   public:
     CORSRuleMaxAgeSeconds_S3() {}
-    ~CORSRuleMaxAgeSeconds_S3() {}
+    ~CORSRuleMaxAgeSeconds_S3() override {}
 };
 
 class CORSRuleExposeHeader_S3 : public XMLObj {
   public:
     CORSRuleExposeHeader_S3() {}
-    ~CORSRuleExposeHeader_S3() {}
+    ~CORSRuleExposeHeader_S3() override {}
 };
 
 XMLObj *RGWCORSXMLParser_S3::alloc_obj(const char *el) {

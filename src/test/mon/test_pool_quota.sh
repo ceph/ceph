@@ -36,8 +36,8 @@ function TEST_pool_quota() {
    
     local poolname=testquoa
     ceph osd  pool create $poolname 20
-    local objects=`ceph df detail | grep -w $poolname|awk '{print $4}'`
-    local bytes=`ceph df detail | grep -w $poolname|awk '{print $5}'`
+    local objects=`ceph df detail | grep -w $poolname|awk '{print $3}'`
+    local bytes=`ceph df detail | grep -w $poolname|awk '{print $4}'`
 
     echo $objects
     echo $bytes
@@ -49,8 +49,8 @@ function TEST_pool_quota() {
     ceph osd pool set-quota  $poolname   max_objects 1000
     ceph osd pool set-quota  $poolname  max_bytes 1024
 
-    objects=`ceph df detail | grep -w $poolname|awk '{print $4}'`
-    bytes=`ceph df detail | grep -w $poolname|awk '{print $5}'`
+    objects=`ceph df detail | grep -w $poolname|awk '{print $3}'`
+    bytes=`ceph df detail | grep -w $poolname|awk '{print $4}'`
    
      if [ $objects != '1000' ] || [ $bytes != '1024' ] ;
        then

@@ -27,13 +27,13 @@ int main(int argc, char **argv)
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->set_val(
+  common_init_finish(cct.get());
+  cct->_conf->set_val(
     "enable_experimental_unrecoverable_data_corrupting_features",
     "*");
-  g_ceph_context->_conf->apply_changes(NULL);
+  cct->_conf->apply_changes(NULL);
 
-  BlueFS fs;
+  BlueFS fs(&(*cct));
 
   if (args.size() != 4) {
     usage(argv);

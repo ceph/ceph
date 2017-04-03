@@ -19,6 +19,7 @@
 
 #include "common/config.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << "." << table_name << ": "
@@ -107,7 +108,7 @@ void InoTable::replay_alloc_id(inodeno_t id)
     projected_free.erase(id);
   } else {
     mds->clog->error() << "journal replay alloc " << id
-      << " not in free " << free << "\n";
+      << " not in free " << free;
   }
   projected_version = ++version;
 }
@@ -123,7 +124,7 @@ void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids)
     projected_free.subtract(ids);
   } else {
     mds->clog->error() << "journal replay alloc " << ids << ", only "
-	<< is << " is in free " << free << "\n";
+	<< is << " is in free " << free;
     free.subtract(is);
     projected_free.subtract(is);
   }

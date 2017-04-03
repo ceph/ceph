@@ -15,6 +15,7 @@ import time
 import gevent
 import socket
 
+from paramiko import SSHException
 from ceph_manager import CephManager, write_conf
 from tasks.cephfs.filesystem import Filesystem
 from teuthology import misc as teuthology
@@ -38,6 +39,7 @@ def generate_caps(type_):
     defaults = dict(
         osd=dict(
             mon='allow *',
+            mgr='allow *',
             osd='allow *',
         ),
         mgr=dict(
@@ -45,11 +47,13 @@ def generate_caps(type_):
         ),
         mds=dict(
             mon='allow *',
+            mgr='allow *',
             osd='allow *',
             mds='allow',
         ),
         client=dict(
             mon='allow rw',
+            mgr='allow r',
             osd='allow rwx',
             mds='allow',
         ),
@@ -132,6 +136,8 @@ def ceph_log(ctx, config):
                     # ConnectionLostError, we ignore this because nodes
                     # are allowed to get power cycled during tests.
                     log.debug("Missed logrotate, EOFError")
+                except SSHException as e:
+                    log.debug("Missed logrotate, SSHException")
                 except socket.error as e:
                     if e.errno == errno.EHOSTUNREACH:
                         log.debug("Missed logrotate, host unreachable")
@@ -334,39 +340,15 @@ def cephfs_setup(ctx, config):
     if mdss.remotes:
         log.info('Setting up CephFS filesystem...')
 
-        Filesystem(ctx, create='cephfs') # TODO: make Filesystem cluster-aware
+        fs = Filesystem(ctx, create='cephfs')
 
         is_active_mds = lambda role: 'mds.' in role and not role.endswith('-s') and '-s-' not in role
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
         num_active = len([r for r in all_roles if is_active_mds(r)])
-        mon_remote.run(
-            args=[
-                'sudo',
-                'adjust-ulimits',
-                'ceph-coverage',
-                coverage_dir,
-                'ceph', 'mds', 'set', 'allow_multimds', 'true',
-                '--yes-i-really-mean-it'],
-	    check_status=False,  # probably old version, upgrade test
-        )
-        mon_remote.run(args=[
-            'sudo',
-            'adjust-ulimits',
-            'ceph-coverage',
-            coverage_dir,
-            'ceph',
-            '--cluster', cluster_name,
-            'mds', 'set_max_mds', str(num_active)])
-        mon_remote.run(
-            args=[
-                'sudo',
-                'adjust-ulimits',
-                'ceph-coverage',
-                coverage_dir,
-                'ceph', 'mds', 'set', 'allow_dirfrags', 'true',
-                '--yes-i-really-mean-it'],
-	    check_status=False,  # probably old version, upgrade test
-        )
+
+        fs.set_allow_multimds(True)
+        fs.set_max_mds(num_active)
+        fs.set_allow_dirfrags(True)
 
     yield
 
@@ -563,6 +545,7 @@ def cluster(ctx, config):
             '--cap', 'mon', 'allow *',
             '--cap', 'osd', 'allow *',
             '--cap', 'mds', 'allow *',
+            '--cap', 'mgr', 'allow *',
             keyring_path,
         ],
     )
@@ -617,34 +600,35 @@ def cluster(ctx, config):
         ),
     )
 
-    log.info('Setting up mgr nodes...')
-    mgrs = ctx.cluster.only(teuthology.is_type('mgr', cluster_name))
-    for remote, roles_for_host in mgrs.remotes.iteritems():
-        for role in teuthology.cluster_roles_of_type(roles_for_host, 'mgr',
-                                                     cluster_name):
-            _, _, id_ = teuthology.split_role(role)
-            mgr_dir = '/var/lib/ceph/mgr/{cluster}-{id}'.format(
-                cluster=cluster_name,
-                id=id_,
-            )
-            remote.run(
-                args=[
-                    'sudo',
-                    'mkdir',
-                    '-p',
-                    mgr_dir,
-                    run.Raw('&&'),
-                    'sudo',
-                    'adjust-ulimits',
-                    'ceph-coverage',
-                    coverage_dir,
-                    'ceph-authtool',
-                    '--create-keyring',
-                    '--gen-key',
-                    '--name=mgr.{id}'.format(id=id_),
-                    mgr_dir + '/keyring',
-                ],
-            )
+    if not config.get('skip_mgr_daemons', False):
+        log.info('Setting up mgr nodes...')
+        mgrs = ctx.cluster.only(teuthology.is_type('mgr', cluster_name))
+        for remote, roles_for_host in mgrs.remotes.iteritems():
+            for role in teuthology.cluster_roles_of_type(roles_for_host, 'mgr',
+                                                         cluster_name):
+                _, _, id_ = teuthology.split_role(role)
+                mgr_dir = '/var/lib/ceph/mgr/{cluster}-{id}'.format(
+                    cluster=cluster_name,
+                    id=id_,
+                )
+                remote.run(
+                    args=[
+                        'sudo',
+                        'mkdir',
+                        '-p',
+                        mgr_dir,
+                        run.Raw('&&'),
+                        'sudo',
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        coverage_dir,
+                        'ceph-authtool',
+                        '--create-keyring',
+                        '--gen-key',
+                        '--name=mgr.{id}'.format(id=id_),
+                        mgr_dir + '/keyring',
+                    ],
+                )
 
     log.info('Setting up mds nodes...')
     mdss = ctx.cluster.only(teuthology.is_type('mds', cluster_name))
@@ -808,6 +792,8 @@ def cluster(ctx, config):
     keys = []
     for remote, roles_for_host in ctx.cluster.remotes.iteritems():
         for type_ in ['mgr',  'mds', 'osd']:
+            if type_ == 'mgr' and config.get('skip_mgr_daemons', False):
+                continue
             for role in teuthology.cluster_roles_of_type(roles_for_host, type_, cluster_name):
                 _, _, id_ = teuthology.split_role(role)
                 data = teuthology.get_file(
@@ -1072,14 +1058,15 @@ def osd_scrub_pgs(ctx, config):
     loop = True
     while loop:
         stats = manager.get_pg_stats()
-        timez = [stat['last_scrub_stamp'] for stat in stats]
+        timez = [(stat['pgid'],stat['last_scrub_stamp']) for stat in stats]
         loop = False
         thiscnt = 0
-        for tmval in timez:
+        for (pgid, tmval) in timez:
             pgtm = time.strptime(tmval[0:tmval.find('.')], '%Y-%m-%d %H:%M:%S')
             if pgtm > check_time_now:
                 thiscnt += 1
             else:
+                log.info('pgid %s last_scrub_stamp %s %s <= %s', pgid, tmval, pgtm, check_time_now)
                 loop = True
         if thiscnt > prev_good:
             prev_good = thiscnt
@@ -1157,13 +1144,18 @@ def run_daemon(ctx, config, type_):
 
             run_cmd.extend(run_cmd_tail)
 
-            ctx.daemons.add_daemon(remote, type_, id_,
-                                   cluster=cluster_name,
-                                   args=run_cmd,
-                                   logger=log.getChild(role),
-                                   stdin=run.PIPE,
-                                   wait=False,
-                                   )
+            # always register mgr; don't necessarily start
+            ctx.daemons.register_daemon(
+                remote, type_, id_,
+                cluster=cluster_name,
+                args=run_cmd,
+                logger=log.getChild(role),
+                stdin=run.PIPE,
+                wait=False
+            )
+            if type_ != 'mgr' or not config.get('skip_mgr_daemons', False):
+                role = cluster_name + '.' + type_
+                ctx.daemons.get_daemon(type_, id_, cluster_name).restart()
 
     try:
         yield
@@ -1301,12 +1293,6 @@ def restart(ctx, config):
         ctx.daemons.get_daemon(type_, id_, cluster).restart()
         clusters.add(cluster)
 
-    if config.get('wait-for-healthy', True):
-        for cluster in clusters:
-            healthy(ctx=ctx, config=dict(cluster=cluster))
-    if config.get('wait-for-osds-up', False):
-        for cluster in clusters:
-            wait_for_osds_up(ctx=ctx, config=dict(cluster=cluster))
     manager = ctx.managers['ceph']
     for dmon in daemons:
         if '.' in dmon:
@@ -1314,6 +1300,13 @@ def restart(ctx, config):
             if dm_parts[1].isdigit():
                 if dm_parts[0] == 'osd':
                     manager.mark_down_osd(int(dm_parts[1]))
+
+    if config.get('wait-for-healthy', True):
+        for cluster in clusters:
+            healthy(ctx=ctx, config=dict(cluster=cluster))
+    if config.get('wait-for-osds-up', False):
+        for cluster in clusters:
+            wait_for_osds_up(ctx=ctx, config=dict(cluster=cluster))
     yield
 
 
@@ -1566,6 +1559,7 @@ def task(ctx, config):
             mount_options=config.get('mount_options', None),
             block_journal=config.get('block_journal', None),
             tmpfs_journal=config.get('tmpfs_journal', None),
+            skip_mgr_daemons=config.get('skip_mgr_daemons', False),
             log_whitelist=config.get('log-whitelist', []),
             cpu_profile=set(config.get('cpu_profile', []),),
             cluster=config['cluster'],

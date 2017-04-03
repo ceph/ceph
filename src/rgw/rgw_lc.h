@@ -20,6 +20,7 @@
 
 using namespace std;
 #define HASH_PRIME 7877
+#define MAX_ID_LEN 255
 static string lc_oid_prefix = "lc";
 static string lc_index_lock_name = "lc_process";
 
@@ -54,6 +55,9 @@ public:
 //  static void generate_test_instances(list<ACLOwner*>& o);
   void set_days(const string& _days) { days = _days; }
   int get_days() {return atoi(days.c_str()); }
+  bool empty() const{
+    return days.empty();
+  }
 };
 WRITE_CLASS_ENCODER(LCExpiration)
 
@@ -64,6 +68,7 @@ protected:
   string prefix;
   string status;
   LCExpiration expiration;
+  LCExpiration noncur_expiration;
 
 public:
 
@@ -87,6 +92,10 @@ public:
     return expiration;
   }
 
+  LCExpiration& get_noncur_expiration() {
+    return noncur_expiration;
+  }
+
   void set_id(string*_id) {
     id = *_id;
   }
@@ -102,34 +111,54 @@ public:
   void set_expiration(LCExpiration*_expiration) {
     expiration = *_expiration;
   }
+
+  void set_noncur_expiration(LCExpiration*_noncur_expiration) {
+    noncur_expiration = *_noncur_expiration;
+  }
+
+  bool validate();
   
   void encode(bufferlist& bl) const {
-     ENCODE_START(1, 1, bl);
+     ENCODE_START(2, 1, bl);
      ::encode(id, bl);
      ::encode(prefix, bl);
      ::encode(status, bl);
      ::encode(expiration, bl);
+     ::encode(noncur_expiration, bl);
      ENCODE_FINISH(bl);
    }
    void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
+     DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl);
      ::decode(id, bl);
      ::decode(prefix, bl);
      ::decode(status, bl);
      ::decode(expiration, bl);
+     if (struct_v >=2) {
+       ::decode(noncur_expiration, bl);
+     }
      DECODE_FINISH(bl);
    }
 
 };
 WRITE_CLASS_ENCODER(LCRule)
 
+struct lc_op
+{
+  bool status;
+  int expiration;
+  int noncur_expiration;
+
+  lc_op() : status(false), expiration(0), noncur_expiration(0) {}
+  
+};
+
 class RGWLifecycleConfiguration
 {
 protected:
   CephContext *cct;
-  map<string, int> prefix_map;
+  map<string, lc_op> prefix_map;
   multimap<string, LCRule> rule_map;
-  void _add_rule(LCRule *rule);
+  bool _add_rule(LCRule *rule);
 public:
   RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
   RGWLifecycleConfiguration() : cct(NULL) {}
@@ -162,8 +191,12 @@ public:
 
   void add_rule(LCRule* rule);
 
+  int check_and_add_rule(LCRule* rule);
+
+  bool validate();
+
   multimap<string, LCRule>& get_rule_map() { return rule_map; }
-  map<string, int>& get_prefix_map() { return prefix_map; }
+  map<string, lc_op>& get_prefix_map() { return prefix_map; }
 /*
   void create_default(string id, string name) {
     ACLGrant grant;
@@ -190,7 +223,7 @@ class RGWLC {
 
   public:
     LCWorker(CephContext *_cct, RGWLC *_lc) : cct(_cct), lc(_lc), lock("LCWorker") {}
-    void *entry();
+    void *entry() override;
     void stop();
     bool should_work(utime_t& now);
     int schedule_next_start_time(utime_t& start, utime_t& now);
@@ -220,6 +253,7 @@ class RGWLC {
   void stop_processor();
 
   private:
+  int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, bool remove_indeed = true);
   bool obj_has_expired(double timediff, int days);
 };
 

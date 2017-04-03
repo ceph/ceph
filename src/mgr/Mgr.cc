@@ -28,15 +28,18 @@
 #include "messages/MMgrDigest.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
+#include "messages/MLog.h"
 
 #include "Mgr.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 
-Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_) :
+Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
+	 LogChannelRef clog_, LogChannelRef audit_clog_) :
   monc(monc_),
   objecter(objecter_),
   client_messenger(clientm_),
@@ -46,7 +49,7 @@ Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_) :
   waiting_for_fs_map(NULL),
   py_modules(daemon_state, cluster_state, *monc, finisher),
   cluster_state(monc, nullptr),
-  server(monc, daemon_state, cluster_state, py_modules),
+  server(monc, daemon_state, cluster_state, py_modules, clog_, audit_clog_),
   initialized(false),
   initializing(false)
 {
@@ -76,7 +79,7 @@ public:
   MetadataUpdate(DaemonStateIndex &daemon_state_, const DaemonKey &key_)
     : daemon_state(daemon_state_), key(key_) {}
 
-  void finish(int r)
+  void finish(int r) override
   {
     daemon_state.clear_updating(key);
     if (r == 0) {
@@ -179,6 +182,7 @@ void Mgr::init()
   // Subscribe to OSDMap update to pass on to ClusterState
   objecter->maybe_request_map();
 
+  monc->sub_want("log-info", 0, 0);
   monc->sub_want("mgrdigest", 0, 0);
 
   // Prepare to receive FSMap and request it
@@ -195,6 +199,7 @@ void Mgr::init()
   lock.Lock();
   waiting_for_fs_map = nullptr;
   dout(4) << "Got FSMap." << dendl;
+
 
   // Wait for MgrDigest...?
   // TODO
@@ -340,6 +345,9 @@ void Mgr::shutdown()
   // First stop the server so that we're not taking any more incoming requests
   server.shutdown();
 
+  // after the messenger is stopped, signal modules to shutdown via finisher
+  py_modules.shutdown();
+
   // Then stop the finisher to ensure its enqueued contexts aren't going
   // to touch references to the things we're about to tear down
   finisher.wait_for_empty();
@@ -403,10 +411,9 @@ void Mgr::handle_osd_map()
         std::ostringstream cmd;
         cmd << "{\"prefix\": \"osd metadata\", \"id\": "
             << osd_id << "}";
-        int r = monc->start_mon_command(
+        monc->start_mon_command(
             {cmd.str()},
             {}, &c->outbl, &c->outs, c);
-        assert(r == 0);  // start_mon_command defined to not fail
       }
     }
 
@@ -417,9 +424,16 @@ void Mgr::handle_osd_map()
   daemon_state.cull(CEPH_ENTITY_TYPE_OSD, names_exist);
 }
 
+void Mgr::handle_log(MLog *m)
+{
+  for (const auto &e : m->entries) {
+    py_modules.notify_all(e);
+  }
+}
+
 bool Mgr::ms_dispatch(Message *m)
 {
-  derr << *m << dendl;
+  dout(4) << *m << dendl;
   Mutex::Locker l(lock);
 
   switch (m->get_type()) {
@@ -452,6 +466,10 @@ bool Mgr::ms_dispatch(Message *m)
       // Continuous subscribe, so that we can generate notifications
       // for our MgrPyModules
       objecter->maybe_request_map();
+      m->put();
+      break;
+    case MSG_LOG:
+      handle_log(static_cast<MLog *>(m));
       m->put();
       break;
 
@@ -495,7 +513,8 @@ void Mgr::handle_fs_map(MFSMap* m)
       // FIXME: nothing stopping old daemons being here, they won't have
       // addr: need to handle case of pre-ceph-mgr daemons that don't have
       // the fields we expect
-      if (metadata->metadata.empty()) {
+      if (metadata->metadata.empty() ||
+	  metadata->metadata.count("addr") == 0) {
         update = true;
       } else {
         auto metadata_addr = metadata->metadata.at("addr");
@@ -516,10 +535,9 @@ void Mgr::handle_fs_map(MFSMap* m)
       std::ostringstream cmd;
       cmd << "{\"prefix\": \"mds metadata\", \"who\": \""
           << info.name << "\"}";
-      int r = monc->start_mon_command(
+      monc->start_mon_command(
           {cmd.str()},
           {}, &c->outbl, &c->outs, c);
-      assert(r == 0);  // start_mon_command defined to not fail
     }
   }
 }

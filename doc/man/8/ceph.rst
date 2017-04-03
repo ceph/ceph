@@ -963,12 +963,6 @@ Usage::
 
 	ceph osd stat
 
-Subcommand ``thrash`` thrashes OSDs for <num_epochs>.
-
-Usage::
-
-	ceph osd thrash <int[0-]>
-
 Subcommand ``tier`` is used for managing tiers. It uses some additional
 subcommands.
 
@@ -1118,7 +1112,7 @@ Usage::
 	deep_scrub|backfill|backfill_toofull|recovery_wait|
 	undersized...]}
 
-Subcommand ``ls-by-pool`` lists pg with pool = [poolname | poolid]
+Subcommand ``ls-by-pool`` lists pg with pool = [poolname]
 
 Usage::
 
@@ -1189,12 +1183,16 @@ Usage::
 quorum
 ------
 
-Enter or exit quorum.
+Cause MON to enter or exit quorum.
 
 Usage::
 
 	ceph quorum enter|exit
 
+Note: this only works on the MON to which the ``ceph`` command is connected.
+If you want a specific MON to enter or exit quorum, use this syntax::
+
+	ceph tell mon.<id> quorum enter|exit
 
 quorum_status
 -------------

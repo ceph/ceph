@@ -295,6 +295,7 @@ specify the pool name for the block device. On your OpenStack node, edit
     ...
     [ceph]
     volume_driver = cinder.volume.drivers.rbd.RBDDriver
+    volume_backend_name = ceph
     rbd_pool = volumes
     rbd_ceph_conf = /etc/ceph/ceph.conf
     rbd_flatten_volume_from_snapshot = false
@@ -396,7 +397,7 @@ On every Compute node, edit ``/etc/nova/nova.conf`` and add::
     libvirt_images_type = rbd
     libvirt_images_rbd_pool = vms
     libvirt_images_rbd_ceph_conf = /etc/ceph/ceph.conf
-    libvirt_disk_cachemodes="network=writeback"
+    disk_cachemodes="network=writeback"
     rbd_user = cinder
     rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
@@ -506,6 +507,6 @@ dashboard, you can boot from that volume by performing the following steps:
 #. Select the volume you created.
 
 .. _qemu-img: ../qemu-rbd/#running-qemu-with-rbd
-.. _Block Devices and OpenStack (Dumpling): http://ceph.com/docs/dumpling/rbd/rbd-openstack
+.. _Block Devices and OpenStack (Dumpling): http://docs.ceph.com/docs/dumpling/rbd/rbd-openstack
 .. _stable/havana: https://github.com/jdurgin/nova/tree/havana-ephemeral-rbd
 .. _stable/icehouse: https://github.com/angdraug/nova/tree/rbd-ephemeral-clone-stable-icehouse

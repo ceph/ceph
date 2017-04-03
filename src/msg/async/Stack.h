@@ -42,6 +42,7 @@ struct SocketOptions {
   bool nodelay = true;
   int rcbuf_size = 0;
   int priority = -1;
+  entity_addr_t connect_bind_addr;
 };
 
 /// \cond internal
@@ -292,7 +293,7 @@ class NetworkStack : public CephContext::ForkWatcher {
  public:
   NetworkStack(const NetworkStack &) = delete;
   NetworkStack& operator=(const NetworkStack &) = delete;
-  virtual ~NetworkStack() {
+  ~NetworkStack() override {
     for (auto &&w : workers)
       delete w;
   }
@@ -328,11 +329,11 @@ class NetworkStack : public CephContext::ForkWatcher {
   virtual void spawn_worker(unsigned i, std::function<void ()> &&) = 0;
   virtual void join_worker(unsigned i) = 0;
 
-  virtual void handle_pre_fork() override {
+  void handle_pre_fork() override {
     stop();
   }
 
-  virtual void handle_post_fork() override {
+  void handle_post_fork() override {
     start();
   }
 

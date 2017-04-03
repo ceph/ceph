@@ -72,6 +72,32 @@ namespace librados
   };
   CEPH_RADOS_API std::ostream& operator<<(std::ostream& out, const librados::ListObject& lop);
 
+  class CEPH_RADOS_API NObjectIterator;
+
+  class CEPH_RADOS_API ObjectCursor
+  {
+    public:
+    ObjectCursor();
+    ObjectCursor(const ObjectCursor &rhs);
+    explicit ObjectCursor(rados_object_list_cursor c);
+    ~ObjectCursor();
+    ObjectCursor& operator=(const ObjectCursor& rhs);
+    bool operator<(const ObjectCursor &rhs) const;
+    bool operator==(const ObjectCursor &rhs) const;
+    void set(rados_object_list_cursor c);
+
+    friend class IoCtx;
+    friend class NObjectIteratorImpl;
+    friend std::ostream& operator<<(std::ostream& os, const librados::ObjectCursor& oc);
+
+    std::string to_str() const;
+    bool from_str(const std::string& s);
+
+    protected:
+    rados_object_list_cursor c_cursor;
+  };
+  CEPH_RADOS_API std::ostream& operator<<(std::ostream& os, const librados::ObjectCursor& oc);
+
   class CEPH_RADOS_API NObjectIterator : public std::iterator <std::forward_iterator_tag, ListObject> {
   public:
     static const NObjectIterator __EndObjectIterator;
@@ -95,6 +121,12 @@ namespace librados
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
 
+    /// move the iterator to a given cursor position
+    uint32_t seek(const ObjectCursor& cursor);
+
+    /// get current cursor position
+    ObjectCursor get_cursor();
+
     /**
      * Configure PGLS filter to be applied OSD-side (requires caller
      * to know/understand the format expected by the OSD)
@@ -105,51 +137,6 @@ namespace librados
     NObjectIterator(ObjListCtx *ctx_);
     void get_next();
     NObjectIteratorImpl *impl;
-  };
-
-  // DEPRECATED; Use NObjectIterator
-  class CEPH_RADOS_API ObjectIterator : public std::iterator <std::forward_iterator_tag, std::pair<std::string, std::string> > {
-  public:
-    static const ObjectIterator __EndObjectIterator;
-    ObjectIterator() {}
-    ObjectIterator(ObjListCtx *ctx_);
-    ~ObjectIterator();
-    ObjectIterator(const ObjectIterator &rhs);
-    ObjectIterator& operator=(const ObjectIterator& rhs);
-
-    bool operator==(const ObjectIterator& rhs) const;
-    bool operator!=(const ObjectIterator& rhs) const;
-    const std::pair<std::string, std::string>& operator*() const;
-    const std::pair<std::string, std::string>* operator->() const;
-    ObjectIterator &operator++(); // Preincrement
-    ObjectIterator operator++(int); // Postincrement
-    friend class IoCtx;
-
-    /// get current hash position of the iterator, rounded to the current pg
-    uint32_t get_pg_hash_position() const;
-
-    /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
-    uint32_t seek(uint32_t pos);
-
-  private:
-    void get_next();
-    ceph::shared_ptr < ObjListCtx > ctx;
-    std::pair<std::string, std::string> cur_obj;
-  };
-
-  class CEPH_RADOS_API ObjectCursor
-  {
-    public:
-    ObjectCursor();
-    ObjectCursor(const ObjectCursor &rhs);
-    ~ObjectCursor();
-    bool operator<(const ObjectCursor &rhs);
-    void set(rados_object_list_cursor c);
-
-    friend class IoCtx;
-
-    protected:
-    rados_object_list_cursor c_cursor;
   };
 
   class CEPH_RADOS_API ObjectItem
@@ -316,10 +303,6 @@ namespace librados
 
     void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
-    void src_cmpxattr(const std::string& src_oid,
-		      const char *name, int op, const bufferlist& val);
-    void src_cmpxattr(const std::string& src_oid,
-		      const char *name, int op, uint64_t v);
     void exec(const char *cls, const char *method, bufferlist& inbl);
     void exec(const char *cls, const char *method, bufferlist& inbl, bufferlist *obl, int *prval);
     void exec(const char *cls, const char *method, bufferlist& inbl, ObjectOperationCompletion *completion);
@@ -376,7 +359,7 @@ namespace librados
     time_t *unused;
   public:
     ObjectWriteOperation() : unused(NULL) {}
-    ~ObjectWriteOperation() {}
+    ~ObjectWriteOperation() override {}
 
     void mtime(time_t *pt);
     void mtime2(struct timespec *pts);
@@ -397,9 +380,6 @@ namespace librados
     void setxattr(const char *name, const bufferlist& bl);
     void tmap_update(const bufferlist& cmdbl);
     void tmap_put(const bufferlist& bl);
-    void clone_range(uint64_t dst_off,
-                     const std::string& src_oid, uint64_t src_off,
-                     size_t len);
     void selfmanaged_snap_rollback(uint64_t snapid);
 
     /**
@@ -494,7 +474,7 @@ namespace librados
   {
   public:
     ObjectReadOperation() {}
-    ~ObjectReadOperation() {}
+    ~ObjectReadOperation() override {}
 
     void stat(uint64_t *psize, time_t *pmtime, int *prval);
     void stat2(uint64_t *psize, struct timespec *pts, int *prval);
@@ -522,6 +502,23 @@ namespace librados
       const std::string &start_after,
       uint64_t max_return,
       std::map<std::string, bufferlist> *out_vals,
+      int *prval) __attribute__ ((deprecated));  // use v2
+
+    /**
+     * omap_get_vals: keys and values from the object omap
+     *
+     * Get up to max_return keys and values beginning after start_after
+     *
+     * @param start_after [in] list no keys smaller than start_after
+     * @param max_return [in] list no more than max_return key/value pairs
+     * @param out_vals [out] place returned values in out_vals on completion
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals2(
+      const std::string &start_after,
+      uint64_t max_return,
+      std::map<std::string, bufferlist> *out_vals,
+      bool *pmore,
       int *prval);
 
     /**
@@ -540,6 +537,26 @@ namespace librados
       const std::string &filter_prefix,
       uint64_t max_return,
       std::map<std::string, bufferlist> *out_vals,
+      int *prval) __attribute__ ((deprecated));  // use v2
+
+    /**
+     * omap_get_vals2: keys and values from the object omap
+     *
+     * Get up to max_return keys and values beginning after start_after
+     *
+     * @param start_after [in] list keys starting after start_after
+     * @param filter_prefix [in] list only keys beginning with filter_prefix
+     * @param max_return [in] list no more than max_return key/value pairs
+     * @param out_vals [out] place returned values in out_vals on completion
+     * @param pmore [out] pointer to bool indicating whether there are more keys
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_vals2(
+      const std::string &start_after,
+      const std::string &filter_prefix,
+      uint64_t max_return,
+      std::map<std::string, bufferlist> *out_vals,
+      bool *pmore,
       int *prval);
 
 
@@ -556,7 +573,24 @@ namespace librados
     void omap_get_keys(const std::string &start_after,
                        uint64_t max_return,
                        std::set<std::string> *out_keys,
-                       int *prval);
+                       int *prval) __attribute__ ((deprecated)); // use v2
+
+    /**
+     * omap_get_keys2: keys from the object omap
+     *
+     * Get up to max_return keys beginning after start_after
+     *
+     * @param start_after [in] list keys starting after start_after
+     * @param max_return [in] list no more than max_return keys
+     * @param out_keys [out] place returned values in out_keys on completion
+     * @param pmore [out] pointer to bool indicating whether there are more keys
+     * @param prval [out] place error code in prval upon completion
+     */
+    void omap_get_keys2(const std::string &start_after,
+			uint64_t max_return,
+			std::set<std::string> *out_keys,
+			bool *pmore,
+			int *prval);
 
     /**
      * omap_get_header: get header from object omap
@@ -709,9 +743,6 @@ namespace librados
     int write_full(const std::string& oid, bufferlist& bl);
     int writesame(const std::string& oid, bufferlist& bl,
 		  size_t write_len, uint64_t off);
-    int clone_range(const std::string& dst_oid, uint64_t dst_off,
-                   const std::string& src_oid, uint64_t src_off,
-                   size_t len);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int remove(const std::string& oid);
     int remove(const std::string& oid, int flags);
@@ -745,15 +776,31 @@ namespace librados
                       const std::string& start_after,
                       uint64_t max_return,
                       std::map<std::string, bufferlist> *out_vals);
+    int omap_get_vals2(const std::string& oid,
+		       const std::string& start_after,
+		       uint64_t max_return,
+		       std::map<std::string, bufferlist> *out_vals,
+		       bool *pmore);
     int omap_get_vals(const std::string& oid,
                       const std::string& start_after,
                       const std::string& filter_prefix,
                       uint64_t max_return,
                       std::map<std::string, bufferlist> *out_vals);
+    int omap_get_vals2(const std::string& oid,
+		       const std::string& start_after,
+		       const std::string& filter_prefix,
+		       uint64_t max_return,
+		       std::map<std::string, bufferlist> *out_vals,
+		       bool *pmore);
     int omap_get_keys(const std::string& oid,
                       const std::string& start_after,
                       uint64_t max_return,
                       std::set<std::string> *out_keys);
+    int omap_get_keys2(const std::string& oid,
+		       const std::string& start_after,
+		       uint64_t max_return,
+		       std::set<std::string> *out_keys,
+		       bool *pmore);
     int omap_get_header(const std::string& oid,
                         bufferlist *bl);
     int omap_get_vals_by_keys(const std::string& oid,
@@ -795,8 +842,10 @@ namespace librados
       __attribute__ ((deprecated));
 
     int selfmanaged_snap_create(uint64_t *snapid);
+    void aio_selfmanaged_snap_create(uint64_t *snapid, AioCompletion *c);
 
     int selfmanaged_snap_remove(uint64_t snapid);
+    void aio_selfmanaged_snap_remove(uint64_t snapid, AioCompletion *c);
 
     int selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid);
 
@@ -830,24 +879,30 @@ namespace librados
     NObjectIterator nobjects_begin(uint32_t start_hash_position);
     NObjectIterator nobjects_begin(uint32_t start_hash_position,
                                    const bufferlist &filter);
+    /// Start enumerating objects for a pool starting from cursor
+    NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor);
+    NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor,
+                                   const bufferlist &filter);
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 
-    // DEPRECATED
-    ObjectIterator objects_begin() __attribute__ ((deprecated));
-    /// Start enumerating objects for a pool starting from a hash position
-    ObjectIterator objects_begin(uint32_t start_hash_position) __attribute__ ((deprecated));
-    /// Iterator indicating the end of a pool
-    const ObjectIterator& objects_end() const __attribute__ ((deprecated));
-
+    /// Get cursor for pool beginning
     ObjectCursor object_list_begin();
+
+    /// Get cursor for pool end
     ObjectCursor object_list_end();
+
+    /// Check whether a cursor is at the end of a pool
     bool object_list_is_end(const ObjectCursor &oc);
+
+    /// List some objects between two cursors
     int object_list(const ObjectCursor &start, const ObjectCursor &finish,
                     const size_t result_count,
                     const bufferlist &filter,
                     std::vector<ObjectItem> *result,
                     ObjectCursor *next);
+
+    /// Generate cursors that include the N out of Mth slice of the pool
     void object_list_slice(
         const ObjectCursor start,
         const ObjectCursor finish,
@@ -1125,7 +1180,6 @@ namespace librados
 
     // assert version for next sync operations
     void set_assert_version(uint64_t ver);
-    void set_assert_src_version(const std::string& o, uint64_t ver);
 
     /**
      * Pin/unpin an object in cache tier
@@ -1153,6 +1207,9 @@ namespace librados
     int get_object_pg_hash_position2(const std::string& oid, uint32_t *pg_hash_position);
 
     config_t cct();
+
+    void set_osdmap_full_try();
+    void unset_osdmap_full_try();
 
   private:
     /* You can only get IoCtx instances from Rados */

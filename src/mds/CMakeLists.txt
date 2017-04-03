@@ -11,6 +11,7 @@ set(mds_srcs
   MDCache.cc
   RecoveryQueue.cc
   StrayManager.cc
+  PurgeQueue.cc
   Locker.cc
   Migrator.cc
   MDBalancer.cc
@@ -40,4 +41,4 @@ set(mds_srcs
 add_library(mds STATIC ${mds_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:common_util_obj>)
-target_link_libraries(mds ${ALLOC_LIBS} osdc common liblua)
+target_link_libraries(mds ${ALLOC_LIBS} osdc liblua)

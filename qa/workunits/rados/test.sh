@@ -11,7 +11,8 @@ function cleanup() {
 }
 trap cleanup EXIT ERR HUP INT QUIT
 
-pids=""
+declare -A pids
+
 for f in \
     api_aio api_io api_list api_lock api_misc \
     api_tier api_pool api_snapshots api_stat api_watch_notify api_cmd \
@@ -27,7 +28,7 @@ do
 	bash -o pipefail -exc "ceph_test_rados_$f $color 2>&1 | tee ceph_test_rados_$f.log | sed \"s/^/$r: /\"" &
 	pid=$!
 	echo "test $f on pid $pid"
-	pids="$pids $pid"
+	pids[$f]=$pid
     else
 	ceph_test_rados_$f
     fi
@@ -35,11 +36,12 @@ done
 
 ret=0
 if [ $parallel -eq 1 ]; then
-for p in $pids
+for t in "${!pids[@]}"
 do
-  if ! wait $p
+  pid=${pids[$t]}
+  if ! wait $pid
   then
-    echo "error in $p"
+    echo "error in $t ($pid)"
     ret=1
   fi
 done

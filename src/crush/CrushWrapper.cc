@@ -104,6 +104,28 @@ bool CrushWrapper::is_v5_rule(unsigned ruleid) const
   return false;
 }
 
+int CrushWrapper::split_id_class(int i, int *idout, int *classout) const
+{
+  if (!item_exists(i))
+    return -EINVAL;
+  string name = get_item_name(i);
+  size_t pos = name.find("~");
+  if (pos == string::npos) {
+    *idout = i;
+    *classout = -1;
+    return 0;
+  }
+  string name_no_class = name.substr(0, pos);
+  if (!name_exists(name_no_class))
+    return -ENOENT;
+  string class_name = name.substr(pos + 1);
+  if (!class_exists(class_name))
+    return -ENOENT;
+  *idout = get_item_id(name_no_class);
+  *classout = get_class_id(class_name);
+  return 0;
+}
+
 int CrushWrapper::can_rename_item(const string& srcname,
                                   const string& dstname,
                                   ostream *ss) const
@@ -218,7 +240,7 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
   if (_search_item_exists(item)) {
     return false;
   }
-  if (item < 0 && _bucket_is_in_use(cct, item)) {
+  if (item < 0 && _bucket_is_in_use(item)) {
     return false;
   }
 
@@ -226,6 +248,8 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
     crush_bucket *t = get_bucket(item);
     ldout(cct, 5) << "_maybe_remove_last_instance removing bucket " << item << dendl;
     crush_remove_bucket(crush, t);
+    if (class_bucket.count(item) != 0)
+      class_bucket.erase(item);
   }
   if ((item >= 0 || !unlink_only) && name_map.count(item)) {
     ldout(cct, 5) << "_maybe_remove_last_instance removing name for item " << item << dendl;
@@ -233,6 +257,33 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
     have_rmaps = false;
   }
   return true;
+}
+
+int CrushWrapper::remove_unused_root(int item)
+{
+  if (_bucket_is_in_use(item))
+    return 0;
+
+  crush_bucket *b = get_bucket(item);
+  if (IS_ERR(b))
+    return -ENOENT;
+
+  for (unsigned n = 0; n < b->size; n++) {
+    if (b->items[n] >= 0)
+      continue;
+    int r = remove_unused_root(b->items[n]);
+    if (r < 0)
+      return r;
+  }
+
+  crush_remove_bucket(crush, b);
+  if (name_map.count(item) != 0) {
+    name_map.erase(item);
+    have_rmaps = false;
+  }
+  if (class_bucket.count(item) != 0)
+    class_bucket.erase(item);
+  return 0;
 }
 
 int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
@@ -253,7 +304,7 @@ int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
 		    << " items, not empty" << dendl;
       return -ENOTEMPTY;
     }
-    if (_bucket_is_in_use(cct, item)) {
+    if (_bucket_is_in_use(item)) {
       return -EBUSY;
     }
   }
@@ -295,16 +346,26 @@ bool CrushWrapper::_search_item_exists(int item) const
   return false;
 }
 
-bool CrushWrapper::_bucket_is_in_use(CephContext *cct, int item)
+bool CrushWrapper::_bucket_is_in_use(int item)
 {
+  for (auto &i : class_bucket)
+    for (auto &j : i.second)
+      if (j.second == item)
+	return true;
   for (unsigned i = 0; i < crush->max_rules; ++i) {
     crush_rule *r = crush->rules[i];
     if (!r)
       continue;
     for (unsigned j = 0; j < r->len; ++j) {
-      if (r->steps[j].op == CRUSH_RULE_TAKE &&
-	  r->steps[j].arg1 == item) {
-	return true;
+      if (r->steps[j].op == CRUSH_RULE_TAKE) {
+	int step_item = r->steps[j].arg1;
+	int original_item;
+	int c;
+	int res = split_id_class(step_item, &original_item, &c);
+	if (res < 0)
+	  return false;
+	if (step_item == item || original_item == item)
+	  return true;
       }
     }
   }
@@ -347,7 +408,7 @@ int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bo
   ldout(cct, 5) << "remove_item_under " << item << " under " << ancestor
 		<< (unlink_only ? " unlink_only":"") << dendl;
 
-  if (!unlink_only && _bucket_is_in_use(cct, item)) {
+  if (!unlink_only && _bucket_is_in_use(item)) {
     return -EBUSY;
   }
 
@@ -793,6 +854,8 @@ int CrushWrapper::get_item_weight(int id) const
     crush_bucket *b = crush->buckets[bidx];
     if (b == NULL)
       continue;
+    if (b->id == id)
+      return b->weight;
     for (unsigned i = 0; i < b->size; i++)
       if (b->items[i] == id)
 	return crush_get_bucket_item_weight(b, i);
@@ -935,7 +998,7 @@ pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
   return pair<string, string>();
 }
 
-int CrushWrapper::get_immediate_parent_id(int id, int *parent)
+int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
 {
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
@@ -949,6 +1012,50 @@ int CrushWrapper::get_immediate_parent_id(int id, int *parent)
     }
   }
   return -ENOENT;
+}
+
+int CrushWrapper::populate_classes()
+{
+  set<int> roots;
+  find_roots(roots);
+  for (auto &r : roots) {
+    if (r >= 0)
+      continue;
+    if (id_has_class(r))
+      continue;
+    for (auto &c : class_name) {
+      int clone;
+      int res = device_class_clone(r, c.first, &clone);
+      if (res < 0)
+	return res;
+    }
+  }
+  return 0;
+}
+
+int CrushWrapper::cleanup_classes()
+{
+  return trim_roots_with_class();
+}
+
+int CrushWrapper::trim_roots_with_class()
+{
+  set<int> takes;
+  find_takes(takes);
+  set<int> roots;
+  find_roots(roots);
+  for (auto &r : roots) {
+    if (r >= 0)
+      continue;
+    if (!id_has_class(r))
+      continue;
+    int res = remove_unused_root(r);
+    if (res)
+      return res;
+  }
+  // there is no need to reweight because we only remove from the
+  // root and down
+  return 0;
 }
 
 void CrushWrapper::reweight(CephContext *cct)
@@ -1125,6 +1232,65 @@ int CrushWrapper::remove_rule(int ruleno)
   return 0;
 }
 
+int CrushWrapper::device_class_clone(int original_id, int device_class, int *clone)
+{
+  const char *item_name = get_item_name(original_id);
+  if (item_name == NULL)
+    return -ECHILD;
+  const char *class_name = get_class_name(device_class);
+  if (class_name == NULL)
+    return -EBADF;
+  string copy_name = item_name + string("~") + class_name;
+  if (name_exists(copy_name)) {
+    *clone = get_item_id(copy_name);
+    return 0;
+  }
+  crush_bucket *original = get_bucket(original_id);
+  if (original == NULL)
+    return -ENOENT;
+  crush_bucket *copy = crush_make_bucket(crush,
+					 original->alg,
+					 original->hash,
+					 original->type,
+					 0, NULL, NULL);
+  if(copy == NULL)
+    return -ENOMEM;
+  for (unsigned i = 0; i < original->size; i++) {
+    int item = original->items[i];
+    int weight = crush_get_bucket_item_weight(original, i);
+    if (item >= 0) {
+      if (class_map.count(item) != 0 && class_map[item] == device_class) {
+	int res = crush_bucket_add_item(crush, copy, item, weight);
+	if (res)
+	  return res;
+      }
+    } else {
+      int child_copy_id;
+      int res = device_class_clone(item, device_class, &child_copy_id);
+      if (res < 0)
+	return res;
+      crush_bucket *child_copy = get_bucket(child_copy_id);
+      if (IS_ERR(child_copy))
+	return -ENOENT;
+      res = crush_bucket_add_item(crush, copy, child_copy_id, child_copy->weight);
+      if (res)
+	return res;
+    }
+  }
+  int res = crush_add_bucket(crush, 0, copy, clone);
+  if (res)
+    return res;
+  res = set_item_class(*clone, device_class);
+  if (res < 0)
+    return res;
+  // we do not use set_item_name because the name is intentionally invalid
+  name_map[*clone] = copy_name;
+  if (have_rmaps)
+    name_rmap[copy_name] = *clone;
+  class_bucket[original_id][device_class] = *clone;
+  return 0;
+}
+
 void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
 {
   assert(crush);
@@ -1219,6 +1385,13 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
   if (features & CEPH_FEATURE_CRUSH_TUNABLES5) {
     ::encode(crush->chooseleaf_stable, bl);
   }
+
+  if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    // device classes
+    ::encode(class_map, bl);
+    ::encode(class_name, bl);
+    ::encode(class_bucket, bl);
+  }
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
@@ -1310,6 +1483,14 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
     }
     if (!blp.end()) {
       ::decode(crush->chooseleaf_stable, blp);
+    }
+    if (!blp.end()) {
+      ::decode(class_map, blp);
+      ::decode(class_name, blp);
+      for (auto &c : class_name)
+	class_rname[c.second] = c.first;
+      ::decode(class_bucket, blp);
+      cleanup_classes();
     }
     finalize();
   }
@@ -1436,6 +1617,9 @@ void CrushWrapper::dump(Formatter *f) const
       sprintf(name, "device%d", i);
       f->dump_string("name", name);
     }
+    const char *device_class = get_item_class(i);
+    if (device_class != NULL)
+      f->dump_string("class", device_class);
     f->close_section();
   }
   f->close_section();
@@ -1687,7 +1871,7 @@ public:
   }
 
 protected:
-  virtual void dump_item(const CrushTreeDumper::Item &qi, ostream *out) {
+  void dump_item(const CrushTreeDumper::Item &qi, ostream *out) override {
     *out << qi.id << "\t"
 	 << weightf_t(qi.weight) << "\t";
 
@@ -1808,4 +1992,208 @@ bool CrushWrapper::is_valid_crush_loc(CephContext *cct,
     }
   }
   return true;
+}
+
+int CrushWrapper::_choose_type_stack(
+  CephContext *cct,
+  const vector<pair<int,int>>& stack,
+  const set<int>& overfull,
+  const vector<int>& underfull,
+  const vector<int>& orig,
+  vector<int>::const_iterator& i,
+  set<int>& used,
+  vector<int> *pw) const
+{
+  vector<int> w = *pw;
+  vector<int> o;
+
+  ldout(cct, 10) << __func__ << " stack " << stack
+		 << " orig " << orig
+		 << " at " << *i
+		 << " pw " << *pw
+		 << dendl;
+
+  vector<int> cumulative_fanout(stack.size());
+  int f = 1;
+  for (int j = (int)stack.size() - 1; j >= 0; --j) {
+    cumulative_fanout[j] = f;
+    f *= stack[j].second;
+  }
+  ldout(cct, 10) << __func__ << " cumulative_fanout " << cumulative_fanout
+		 << dendl;
+
+  for (unsigned j = 0; j < stack.size(); ++j) {
+    int type = stack[j].first;
+    int fanout = stack[j].second;
+    int cum_fanout = cumulative_fanout[j];
+    ldout(cct, 10) << " level " << j << ": type " << type << " fanout " << fanout
+		   << " cumulative " << cum_fanout
+		   << " w " << w << dendl;
+    vector<int> o;
+    auto tmpi = i;
+    for (auto from : w) {
+      ldout(cct, 10) << " from " << from << dendl;
+
+      for (int pos = 0; pos < fanout; ++pos) {
+	if (type > 0) {
+	  // non-leaf
+	  int item = *tmpi;
+	  do {
+	    int r = get_immediate_parent_id(item, &item);
+	    if (r < 0) {
+	      ldout(cct, 10) << __func__ << " parent of " << item << " got "
+			     << cpp_strerror(r) << dendl;
+	      return -EINVAL;
+	    }
+	  } while (get_bucket_type(item) != type);
+	  o.push_back(item);
+	  ldout(cct, 10) << __func__ << "   from " << *tmpi << " got " << item
+			 << " of type " << type << dendl;
+	  int n = cum_fanout;
+	  while (n-- && tmpi != orig.end())
+	    ++tmpi;
+	} else {
+	  // leaf
+	  bool replaced = false;
+	  if (overfull.count(*i)) {
+	    for (auto item : underfull) {
+	      ldout(cct, 10) << __func__ << " pos " << pos
+			     << " was " << *i << " considering " << item
+			     << dendl;
+	      if (used.count(item)) {
+		ldout(cct, 20) << __func__ << "   in used " << used << dendl;
+		continue;
+	      }
+	      if (!subtree_contains(from, item)) {
+		ldout(cct, 20) << __func__ << "   not in subtree " << from << dendl;
+		continue;
+	      }
+	      if (std::find(orig.begin(), orig.end(), item) != orig.end()) {
+		ldout(cct, 20) << __func__ << "   in orig " << orig << dendl;
+		continue;
+	      }
+	      o.push_back(item);
+	      used.insert(item);
+	      ldout(cct, 10) << __func__ << " pos " << pos << " replace "
+			     << *i << " -> " << item << dendl;
+	      replaced = true;
+	      ++i;
+	      break;
+	    }
+	  }
+	  if (!replaced) {
+	    ldout(cct, 10) << __func__ << " pos " << pos << " keep " << *i
+			   << dendl;
+	    o.push_back(*i);
+	    ++i;
+	  }
+	  if (i == orig.end()) {
+	    ldout(cct, 10) << __func__ << " end of orig, break 1" << dendl;
+	    break;
+	  }
+	}
+      }
+      if (i == orig.end()) {
+	ldout(cct, 10) << __func__ << " end of orig, break 2" << dendl;
+	break;
+      }
+    }
+    ldout(cct, 10) << __func__ << "  w <- " << o << " was " << w << dendl;
+    w.swap(o);
+  }
+  *pw = w;
+  return 0;
+}
+
+int CrushWrapper::try_remap_rule(
+  CephContext *cct,
+  int ruleno,
+  int maxout,
+  const set<int>& overfull,
+  const vector<int>& underfull,
+  const vector<int>& orig,
+  vector<int> *out) const
+{
+  const crush_map *map = crush;
+  const crush_rule *rule = get_rule(ruleno);
+  assert(rule);
+
+  ldout(cct, 10) << __func__ << " ruleno " << ruleno
+		<< " numrep " << maxout << " overfull " << overfull
+		<< " underfull " << underfull << " orig " << orig
+		<< dendl;
+  vector<int> w; // working set
+  out->clear();
+
+  auto i = orig.begin();
+  set<int> used;
+
+  vector<pair<int,int>> type_stack;  // (type, fan-out)
+
+  for (unsigned step = 0; step < rule->len; ++step) {
+    const crush_rule_step *curstep = &rule->steps[step];
+    ldout(cct, 10) << __func__ << " step " << step << " w " << w << dendl;
+    switch (curstep->op) {
+    case CRUSH_RULE_TAKE:
+      if ((curstep->arg1 >= 0 && curstep->arg1 < map->max_devices) ||
+	  (-1-curstep->arg1 >= 0 && -1-curstep->arg1 < map->max_buckets &&
+	   map->buckets[-1-curstep->arg1])) {
+	w.clear();
+	w.push_back(curstep->arg1);
+	ldout(cct, 10) << __func__ << " take " << w << dendl;
+      } else {
+	ldout(cct, 1) << " bad take value " << curstep->arg1 << dendl;
+      }
+      break;
+
+    case CRUSH_RULE_CHOOSELEAF_FIRSTN:
+    case CRUSH_RULE_CHOOSELEAF_INDEP:
+      {
+	int numrep = curstep->arg1;
+	int type = curstep->arg2;
+	if (numrep <= 0)
+	  numrep += maxout;
+	type_stack.push_back(make_pair(type, numrep));
+	type_stack.push_back(make_pair(0, 1));
+	int r = _choose_type_stack(cct, type_stack, overfull, underfull, orig,
+				   i, used, &w);
+	if (r < 0)
+	  return r;
+	type_stack.clear();
+      }
+      break;
+
+    case CRUSH_RULE_CHOOSE_FIRSTN:
+    case CRUSH_RULE_CHOOSE_INDEP:
+      {
+	int numrep = curstep->arg1;
+	int type = curstep->arg2;
+	if (numrep <= 0)
+	  numrep += maxout;
+	type_stack.push_back(make_pair(type, numrep));
+      }
+      break;
+
+    case CRUSH_RULE_EMIT:
+      ldout(cct, 10) << " emit " << w << dendl;
+      if (!type_stack.empty()) {
+	int r = _choose_type_stack(cct, type_stack, overfull, underfull, orig,
+				   i, used, &w);
+	if (r < 0)
+	  return r;
+	type_stack.clear();
+      }
+      for (auto item : w) {
+	out->push_back(item);
+      }
+      w.clear();
+      break;
+
+    default:
+      // ignore
+      break;
+    }
+  }
+
+  return 0;
 }

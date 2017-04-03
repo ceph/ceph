@@ -67,6 +67,13 @@ public:
   int64_t get_max() const { return max.read(); }
 
   /**
+   * return true if past midpoint
+   */
+  bool past_midpoint() const {
+    return count.read() >= max.read() / 2;
+  }
+
+  /**
    * set the new max number, and wait until the number of taken slots drains
    * and drops below this limit.
    *
@@ -146,6 +153,10 @@ public:
  * delay = e + (r - h)((m - e)/(1 - h))
  */
 class BackoffThrottle {
+  CephContext *cct;
+  const std::string name;
+  PerfCounters *logger;
+
   std::mutex lock;
   using locker = std::unique_lock<std::mutex>;
 
@@ -153,6 +164,8 @@ class BackoffThrottle {
 
   /// allocated once to avoid constantly allocating new ones
   vector<std::condition_variable> conds;
+
+  const bool use_perf;
 
   /// pointers into conds
   list<std::condition_variable*> waiters;
@@ -213,9 +226,10 @@ public:
   uint64_t get_current();
   uint64_t get_max();
 
-  BackoffThrottle(
-    unsigned expected_concurrency ///< [in] determines size of conds
-    ) : conds(expected_concurrency) {}
+  BackoffThrottle(CephContext *cct, const std::string& n,
+    unsigned expected_concurrency, ///< [in] determines size of conds
+    bool _use_perf = true);
+  ~BackoffThrottle();
 };
 
 
@@ -257,7 +271,7 @@ public:
   }
 
 protected:
-  virtual void finish(int r);
+  void finish(int r) override;
 
 private:
   OrderedThrottle *m_ordered_throttle;

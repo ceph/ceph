@@ -424,11 +424,31 @@ recovery operations to ensure optimal performance during recovery.
 :Valid Range: 1-63
 
 
+``osd scrub priority``
+
+:Description: The priority set for scrub operations. It is relative to
+              ``osd client op priority``.
+
+:Type: 32-bit Integer
+:Default: ``5``
+:Valid Range: 1-63
+
+
+``osd snap trim priority``
+
+:Description: The priority set for snap trim operations. It is relative to
+              ``osd client op priority``.
+
+:Type: 32-bit Integer
+:Default: ``5``
+:Valid Range: 1-63
+
+
 ``osd op thread timeout`` 
 
 :Description: The Ceph OSD Daemon operation thread timeout in seconds.
 :Type: 32-bit Integer
-:Default: ``30`` 
+:Default: ``15`` 
 
 
 ``osd op complaint time`` 
@@ -462,10 +482,9 @@ recovery operations to ensure optimal performance during recovery.
 	      operations. ``be`` is the default and is the same
 	      priority as all other threads in the OSD. ``rt`` means
 	      the disk thread will have precendence over all other
-	      threads in the OSD. This is useful if scrubbing is much
-	      needed and must make progress at the expense of client
-	      operations. Note: Only works with the Linux Kernel CFQ
-	      scheduler.
+	      threads in the OSD. Note: Only works with the Linux Kernel 
+	      CFQ scheduler. Since Jewel scrubbing is no longer carried
+	      out by the disk iothread, see osd priority options instead.
 :Type: String
 :Default: the empty string
 
@@ -479,9 +498,8 @@ recovery operations to ensure optimal performance during recovery.
 	      host were in class ``idle`` and compete for I/O
 	      (i.e. due to controller congestion), it can be used to
 	      lower the disk thread priority of one OSD to 7 so that
-	      another OSD with priority 0 can potentially scrub
-	      faster. Note: Only works with the Linux Kernel CFQ
-	      scheduler.
+	      another OSD with priority 0 can have priority.
+	      Note: Only works with the Linux Kernel CFQ scheduler.
 :Type: Integer in the range of 0 to 7 or -1 if not to be used.
 :Default: ``-1``
 
@@ -677,7 +695,26 @@ perform well in a degraded state.
 :Type: Boolean
 :Default: ``true``
 
+Tiering
+=======
 
+``osd agent max ops``
+
+:Description: The maximum number of simultaneous flushing ops per tiering agent
+              in the high speed mode.
+:Type: 32-bit Integer
+:Default: ``4``
+
+
+``osd agent max low ops``
+
+:Description: The maximum number of simultaneous flushing ops per tiering agent
+              in the low speed mode.
+:Type: 32-bit Integer
+:Default: ``2``
+
+See `cache target dirty high ratio`_ for when the tiering agent flushes dirty
+objects within the high speed mode.
 
 Miscellaneous
 =============
@@ -770,3 +807,4 @@ Miscellaneous
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
 .. _Pool & PG Config Reference: ../pool-pg-config-ref
 .. _Journal Config Reference: ../journal-ref
+.. _cache target dirty high ratio: ../../operations/pools#cache-target-dirty-high-ratio

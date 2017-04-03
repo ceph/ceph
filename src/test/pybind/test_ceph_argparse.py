@@ -1,4 +1,4 @@
-#!/usr/bin/nosetests --nocapture
+#!/usr/bin/env nosetests 
 # -*- mode:python; tab-width:4; indent-tabs-mode:t; coding:utf-8 -*-
 # vim: ts=4 sw=4 smarttab expandtab fileencoding=utf-8
 #
@@ -505,9 +505,9 @@ class TestFS(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['fs', 'ls', 'toomany']))
 
     def test_fs_set_default(self):
-        self.assert_valid_command(['fs', 'set_default', 'cephfs'])
-        assert_equal({}, validate_command(sigdict, ['fs', 'set_default']))
-        assert_equal({}, validate_command(sigdict, ['fs', 'set_default', 'cephfs', 'toomany']))
+        self.assert_valid_command(['fs', 'set-default', 'cephfs'])
+        assert_equal({}, validate_command(sigdict, ['fs', 'set-default']))
+        assert_equal({}, validate_command(sigdict, ['fs', 'set-default', 'cephfs', 'toomany']))
 
 class TestMon(TestArgparse):
 
@@ -1120,9 +1120,6 @@ class TestOSD(TestArgparse):
                                                     'reweight-by-utilization',
                                                     '100',
                                                     'toomany']))
-
-    def test_thrash(self):
-        self.check_1_natural_arg('osd', 'thrash')
 
     def test_tier_op(self):
         for op in ('add', 'remove', 'set-overlay'):

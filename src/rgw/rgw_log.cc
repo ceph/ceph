@@ -98,7 +98,7 @@ class UsageLogger {
     UsageLogger *logger;
   public:
     explicit C_UsageLogTimeout(UsageLogger *_l) : logger(_l) {}
-    void finish(int r) {
+    void finish(int r) override {
       logger->flush();
       logger->set_timer();
     }
@@ -113,7 +113,7 @@ public:
     timer.init();
     Mutex::Locker l(timer_lock);
     set_timer();
-    utime_t ts = ceph_clock_now(cct);
+    utime_t ts = ceph_clock_now();
     recalc_round_timestamp(ts);
   }
 
@@ -223,7 +223,7 @@ static void log_usage(struct req_state *s, const string& op_name)
 
   entry.add(op_name, data);
 
-  utime_t ts = ceph_clock_now(s->cct);
+  utime_t ts = ceph_clock_now();
 
   usage_logger->insert(ts, entry);
 }
@@ -371,7 +371,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
   entry.time = s->time;
-  entry.total_time = ceph_clock_now(s->cct) - s->time;
+  entry.total_time = ceph_clock_now() - s->time;
   entry.bytes_sent = bytes_sent;
   entry.bytes_received = bytes_received;
   if (s->err.http_ret) {
@@ -400,7 +400,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				        s->bucket.bucket_id, entry.bucket);
 
-    rgw_obj obj(store->get_zone_params().log_pool, oid);
+    rgw_raw_obj obj(store->get_zone_params().log_pool, oid);
 
     ret = store->append_async(obj, bl.length(), bl);
     if (ret == -ENOENT) {

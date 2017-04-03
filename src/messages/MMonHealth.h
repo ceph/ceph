@@ -40,17 +40,17 @@ struct MMonHealth : public MMonQuorumService
   { }
 
 private:
-  ~MMonHealth() { }
+  ~MMonHealth() override { }
 
 public:
-  const char *get_type_name() const { return "mon_health"; }
+  const char *get_type_name() const override { return "mon_health"; }
   const char *get_service_op_name() const {
     switch (service_op) {
     case OP_TELL: return "tell";
     }
     return "???";
   }
-  void print(ostream &o) const {
+  void print(ostream &o) const override {
     o << "mon_health( service " << get_service_type()
       << " op " << get_service_op_name()
       << " e " << get_epoch() << " r " << get_round()
@@ -65,7 +65,7 @@ public:
     return service_op;
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     service_decode(p);
     ::decode(service_type, p);
@@ -73,7 +73,7 @@ public:
     ::decode(data_stats, p);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     service_encode();
     ::encode(service_type, payload);
     ::encode(service_op, payload);

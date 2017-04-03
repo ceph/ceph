@@ -58,10 +58,9 @@ void seed::get_torrent_file(int &op_ret, RGWRados::Object::Read &read_op, uint64
   }
 
   string oid, key;
-  rgw_bucket bucket;
   map<string, bufferlist> m;
   set<string> obj_key;
-  get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
+  get_obj_bucket_and_oid_loc(obj, oid, key);
   ldout(s->cct, 0) << "NOTICE: head obj oid= " << oid << dendl;
 
   obj_key.insert(RGW_OBJ_TORRENT);
@@ -160,7 +159,7 @@ int seed::sha1_process()
 
   SHA1 h;
   list<bufferlist>::iterator iter = torrent_bl.begin();
-  for (; iter != torrent_bl.end(); iter++)
+  for (; iter != torrent_bl.end(); ++iter)
   {
     bufferlist &bl_info = *iter;
     sha1(&h, bl_info, (*iter).length());
@@ -268,7 +267,10 @@ int seed::save_torrent_file()
   string key = RGW_OBJ_TORRENT;
   rgw_obj obj(s->bucket, s->object.name);    
 
-  op_ret = store->omap_set(obj, key, bl);
+  rgw_raw_obj raw_obj;
+  store->obj_to_raw(s->bucket_info.placement_rule, obj, &raw_obj);
+
+  op_ret = store->omap_set(raw_obj, key, bl);
   if (op_ret < 0)
   {
     ldout(s->cct, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;

@@ -46,7 +46,6 @@ public:
   void schedule_image_delete(RadosRef local_rados,
                              int64_t local_pool_id,
                              const std::string& local_image_id,
-                             const std::string& local_image_name,
                              const std::string& global_image_id);
   void wait_for_scheduled_deletion(int64_t local_pool_id,
                                    const std::string &global_image_id,
@@ -69,7 +68,7 @@ private:
   public:
     ImageDeleterThread(ImageDeleter *image_deleter) :
       m_image_deleter(image_deleter) {}
-    void *entry() {
+    void *entry() override {
       m_image_deleter->run();
       return 0;
     }
@@ -79,7 +78,6 @@ private:
     RadosRef local_rados;
     int64_t local_pool_id;
     std::string local_image_id;
-    std::string local_image_name;
     std::string global_image_id;
     int error_code;
     int retries;
@@ -88,12 +86,11 @@ private:
 
     DeleteInfo(RadosRef local_rados, int64_t local_pool_id,
                const std::string& local_image_id,
-               const std::string& local_image_name,
                const std::string& global_image_id) :
       local_rados(local_rados), local_pool_id(local_pool_id),
-      local_image_id(local_image_id), local_image_name(local_image_name),
-      global_image_id(global_image_id), error_code(0), retries(0),
-      notify_on_failed_retry(true), on_delete(nullptr) {
+      local_image_id(local_image_id), global_image_id(global_image_id),
+      error_code(0), retries(0), notify_on_failed_retry(true),
+      on_delete(nullptr) {
     }
 
     bool match(int64_t local_pool_id, const std::string &global_image_id) {

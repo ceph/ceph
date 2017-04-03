@@ -16,7 +16,7 @@
 
 #include "include/elist.h"
 #include <list>
-#include "osdc/Filer.h"
+#include "mds/PurgeQueue.h"
 
 class MDSRank;
 class PerfCounters;
@@ -26,50 +26,31 @@ class CDentry;
 class StrayManager
 {
   protected:
-  class QueuedStray {
-    public:
-    CDir *dir;
-    std::string name;
-    bool trunc;
-    uint32_t ops_required;
-    QueuedStray(CDentry *dn, bool t, uint32_t ops)
-      : dir(dn->get_dir()), name(dn->name),
-	trunc(t), ops_required(ops) {}
-    bool operator<(const QueuedStray& o) const {
-      return (name < o.name);
-    }
-  };
-
   // Has passed through eval_stray and still has refs
   elist<CDentry*> delayed_eval_stray;
 
-  // No more refs, can purge these
-  std::list<QueuedStray> ready_for_purge;
-
   // strays that have been trimmed from cache
   std::set<std::string> trimmed_strays;
-  // strays that are being fetching
-  std::set<QueuedStray> fetching_strays;
 
   // Global references for doing I/O
   MDSRank *mds;
   PerfCounters *logger;
 
-  // Throttled allowances
-  uint64_t ops_in_flight;
-  uint64_t files_purging;
+  bool started;
 
-  // Dynamic op limit per MDS based on PG count
-  uint64_t max_purge_ops;
-
-  // Statistics
+  // Stray dentries for this rank (including those not in cache)
   uint64_t num_strays;
-  uint64_t num_strays_purging;
+
+  // Stray dentries
   uint64_t num_strays_delayed;
 
-  Filer filer;
+  // Entries that have entered enqueue() but not been persistently
+  // recorded by PurgeQueue yet
+  uint64_t num_strays_enqueuing;
 
-  void truncate(CDentry *dn, uint32_t op_allowance);
+  PurgeQueue &purge_queue;
+
+  void truncate(CDentry *dn);
 
   /**
    * Purge a dentry from a stray directory.  This function
@@ -77,7 +58,7 @@ class StrayManager
    * throttling is also satisfied.  There is no going back
    * at this stage!
    */
-  void purge(CDentry *dn, uint32_t op_allowance);
+  void purge(CDentry *dn);
 
   /**
    * Completion handler for a Filer::purge on a stray inode.
@@ -102,41 +83,15 @@ class StrayManager
   friend class C_TruncateStrayLogged;
   friend class C_IO_PurgeStrayPurged;
 
-  /**
-   * Enqueue a purge operation on a dentry that has passed the tests
-   * in eval_stray.  This may start the operation inline if the throttle
-   * allowances are already available.
-   *
-   * @param trunc false to purge dentry (normal), true to just truncate
-   *                 inode (snapshots)
-   */
+
+  // Call this on a dentry that has been identified as
+  // elegible for purging.  It will be passed on to PurgeQueue.
   void enqueue(CDentry *dn, bool trunc);
 
-  /**
-   * Iteratively call _consume on items from the ready_for_purge
-   * list until it returns false (throttle limit reached)
-   */
-  void _advance();
+  // Final part of enqueue() which we may have to retry
+  // after opening snap parents.
+  void _enqueue(CDentry *dn, bool trunc);
 
-  /**
-   * Attempt to purge an inode, if throttling permits
-   * its.
-   *
-   * Return true if we successfully consumed resource,
-   * false if insufficient resource was available.
-   */
-  bool _consume(CDentry *dn, bool trunc, uint32_t ops_required);
-
-  void _process(CDentry *dn, bool trunc, uint32_t ops_required);
-
-
-  /**
-   * Return the maximum number of concurrent RADOS ops that
-   * may be executed while purging this inode.
-   *
-   * @param trunc true if it's a truncate, false if it's a purge
-   */
-  uint32_t _calculate_ops_required(CInode *in, bool trunc);
 
   /**
    * When hard links exist to an inode whose primary dentry
@@ -162,12 +117,13 @@ class StrayManager
    * @returns true if the dentry will be purged (caller should never
    *          take more refs after this happens), else false.
    */
-  bool __eval_stray(CDentry *dn, bool delay=false);
+  bool _eval_stray(CDentry *dn, bool delay=false);
 
   // My public interface is for consumption by MDCache
   public:
-  explicit StrayManager(MDSRank *mds);
+  explicit StrayManager(MDSRank *mds, PurgeQueue &purge_queue_);
   void set_logger(PerfCounters *l) {logger = l;}
+  void activate();
 
   bool eval_stray(CDentry *dn, bool delay=false);
 
@@ -236,33 +192,6 @@ class StrayManager
    * this MDS to another MDS.
    */
   void notify_stray_removed();
-
-  /**
-   * For any strays that are enqueued for purge, but
-   * currently blocked on throttling, clear their
-   * purging status.  Used during MDS rank shutdown
-   * so that it can migrate these strays instead
-   * of waiting for them to trickle through the
-   * queue.
-   */
-  void abort_queue();
-
-  /*
-   * Calculate our local RADOS op throttle limit based on
-   * (mds_max_purge_ops_per_pg / number_of_mds) * number_of_pg
-   *
-   * Call this whenever one of those operands changes.
-   */
-  void update_op_limit();
-
-  /*
-   * track stray dentries that have been trimmed from cache
-   */
-  void notify_stray_trimmed(CDentry *dn);
-  /*
-   * restore stray dentry's previous stats
-   */
-  void notify_stray_loaded(CDentry *dn);
 };
 
 #endif  // STRAY_MANAGER_H

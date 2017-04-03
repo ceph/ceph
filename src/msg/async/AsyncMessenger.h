@@ -53,7 +53,7 @@ class Processor {
   class C_processor_accept;
 
  public:
-  Processor(AsyncMessenger *r, Worker *w, CephContext *c, uint64_t n);
+  Processor(AsyncMessenger *r, Worker *w, CephContext *c);
   ~Processor() { delete listen_handler; };
 
   void stop();
@@ -82,25 +82,25 @@ public:
    * _nonce A unique ID to use for this AsyncMessenger. It should not
    * be a value that will be repeated if the daemon restarts.
    */
-  AsyncMessenger(CephContext *cct, entity_name_t name,
+  AsyncMessenger(CephContext *cct, entity_name_t name, const std::string &type,
                  string mname, uint64_t _nonce);
 
   /**
    * Destroy the AsyncMessenger. Pretty simple since all the work is done
    * elsewhere.
    */
-  virtual ~AsyncMessenger();
+  ~AsyncMessenger() override;
 
   /** @defgroup Accessors
    * @{
    */
   void set_addr_unknowns(const entity_addr_t &addr) override;
 
-  int get_dispatch_queue_len() {
+  int get_dispatch_queue_len() override {
     return dispatch_queue.get_queue_len();
   }
 
-  double get_dispatch_queue_max_age(utime_t now) {
+  double get_dispatch_queue_max_age(utime_t now) override {
     return dispatch_queue.get_max_age(now);
   }
   /** @} Accessors */
@@ -109,13 +109,14 @@ public:
    * @defgroup Configuration functions
    * @{
    */
-  void set_cluster_protocol(int p) {
+  void set_cluster_protocol(int p) override {
     assert(!started && !did_bind);
     cluster_protocol = p;
   }
 
-  int bind(const entity_addr_t& bind_addr);
-  int rebind(const set<int>& avoid_ports);
+  int bind(const entity_addr_t& bind_addr) override;
+  int rebind(const set<int>& avoid_ports) override;
+  int client_bind(const entity_addr_t& bind_addr) override;
 
   /** @} Configuration functions */
 
@@ -147,9 +148,8 @@ public:
    */
   ConnectionRef get_connection(const entity_inst_t& dest) override;
   ConnectionRef get_loopback_connection() override;
-  int send_keepalive(Connection *con);
-  virtual void mark_down(const entity_addr_t& addr) override;
-  virtual void mark_down_all() override {
+  void mark_down(const entity_addr_t& addr) override;
+  void mark_down_all() override {
     shutdown_connections(true);
   }
   /** @} // Connection Management */
@@ -223,6 +223,8 @@ private:
 
   // the worker run messenger's cron jobs
   Worker *local_worker;
+
+  std::string ms_type;
 
   /// overall lock used for AsyncMessenger data structures
   Mutex lock;

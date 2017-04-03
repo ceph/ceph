@@ -576,7 +576,7 @@ void dump_time(struct req_state *s, const char *name, real_time *t)
   s->formatter->dump_string(name, buf);
 }
 
-void dump_owner(struct req_state *s, rgw_user& id, string& name,
+void dump_owner(struct req_state *s, const rgw_user& id, string& name,
 		const char *section)
 {
   if (!section)
@@ -2077,13 +2077,15 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   return 0;
 }
 
-RGWHandler_REST* RGWREST::get_handler(RGWRados * const store,
-                                      struct req_state* const s,
-                                      const std::string& frontend_prefix,
-                                      RGWRestfulIO* const rio,
-                                      RGWRESTMgr** const pmgr,
-                                      int* const init_error)
-{
+RGWHandler_REST* RGWREST::get_handler(
+  RGWRados * const store,
+  struct req_state* const s,
+  const rgw::auth::StrategyRegistry& auth_registry,
+  const std::string& frontend_prefix,
+  RGWRestfulIO* const rio,
+  RGWRESTMgr** const pmgr,
+  int* const init_error
+) {
   *init_error = preprocess(s, rio);
   if (*init_error < 0) {
     return nullptr;
@@ -2100,7 +2102,7 @@ RGWHandler_REST* RGWREST::get_handler(RGWRados * const store,
     *pmgr = m;
   }
 
-  RGWHandler_REST* handler = m->get_handler(s, frontend_prefix);
+  RGWHandler_REST* handler = m->get_handler(s, auth_registry, frontend_prefix);
   if (! handler) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;

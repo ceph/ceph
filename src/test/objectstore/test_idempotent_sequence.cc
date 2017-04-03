@@ -27,6 +27,7 @@
 #include "common/config.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 #undef dout_prefix
 #define dout_prefix *_dout << "test_idempotent_sequence "
@@ -77,10 +78,10 @@ int verify_at = 0;
 std::string status_file;
 
 int run_diff(std::string& a_path, std::string& a_journal,
-	      std::string& b_path, std::string& b_journal)
+	     std::string& b_path, std::string& b_journal)
 {
-  FileStore *a = new FileStore(a_path, a_journal, 0, "a");
-  FileStore *b = new FileStore(b_path, b_journal, 0, "b");
+  FileStore *a = new FileStore(g_ceph_context, a_path, a_journal, 0, "a");
+  FileStore *b = new FileStore(g_ceph_context, b_path, b_journal, 0, "b");
 
   int ret = 0;
   {
@@ -100,7 +101,8 @@ int run_diff(std::string& a_path, std::string& a_journal,
 
 int run_get_last_op(std::string& filestore_path, std::string& journal_path)
 {
-  FileStore *store = new FileStore(filestore_path, journal_path);
+  FileStore *store = new FileStore(g_ceph_context, filestore_path,
+				   journal_path);
 
   int err = store->mount();
   if (err) {
@@ -134,7 +136,8 @@ int run_sequence_to(int val, std::string& filestore_path,
   if (!is_seed_set)
     seed = (int) time(NULL);
 
-  FileStore *store = new FileStore(filestore_path, journal_path);
+  FileStore *store = new FileStore(g_ceph_context, filestore_path,
+				   journal_path);
 
   int err;
 

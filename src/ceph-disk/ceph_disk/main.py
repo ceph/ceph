@@ -208,6 +208,13 @@ class Ptype(object):
 DEFAULT_FS_TYPE = 'xfs'
 SYSFS = '/sys'
 
+if platform.system() == 'FreeBSD':
+    FREEBSD = True
+    PROCDIR = '/compat/linux/proc'
+else:
+    FREEBSD = False
+    PROCDIR = '/proc'
+
 """
 OSD STATUS Definition
 """
@@ -224,6 +231,7 @@ MOUNT_OPTIONS = dict(
     # that user_xattr helped
     ext4='noatime,user_xattr',
     xfs='noatime,inode64',
+    zfs='atime=off',
 )
 
 MKFS_ARGS = dict(
@@ -248,6 +256,7 @@ INIT_SYSTEMS = [
     'sysvinit',
     'systemd',
     'openrc',
+    'bsdrc',
     'auto',
     'none',
 ]
@@ -303,7 +312,12 @@ class Error(Exception):
 
     def __str__(self):
         doc = _bytes2str(self.__doc__.strip())
-        return ': '.join([doc] + [_bytes2str(a) for a in self.args])
+        try:
+            str_type = basestring
+        except NameError:
+            str_type = str
+        args = [a if isinstance(a, str_type) else str(a) for a in self.args]
+        return ': '.join([doc] + [_bytes2str(a) for a in args])
 
 
 class MountError(Error):
@@ -361,7 +375,7 @@ def is_systemd():
     """
     Detect whether systemd is running
     """
-    with open('/proc/1/comm', 'r') as f:
+    with open(PROCDIR + '/1/comm', 'r') as f:
         return 'systemd' in f.read()
 
 
@@ -501,25 +515,33 @@ def platform_distro():
 
 
 def platform_information():
-    distro, release, codename = platform.linux_distribution()
-    # this could be an empty string in Debian
-    if not codename and 'debian' in distro.lower():
-        debian_codenames = {
-            '8': 'jessie',
-            '7': 'wheezy',
-            '6': 'squeeze',
-        }
-        major_version = release.split('.')[0]
-        codename = debian_codenames.get(major_version, '')
+    if FREEBSD:
+        distro = platform.system()
+        release = platform.version().split()[1]
+        codename = platform.version().split()[3]
+        version = platform.version().split('-')[0]
+        major_version = version.split('.')[0]
+        major, minor = release.split('.')
+    else:
+        distro, release, codename = platform.linux_distribution()
+        # this could be an empty string in Debian
+        if not codename and 'debian' in distro.lower():
+            debian_codenames = {
+                '8': 'jessie',
+                '7': 'wheezy',
+                '6': 'squeeze',
+            }
+            major_version = release.split('.')[0]
+            codename = debian_codenames.get(major_version, '')
 
-        # In order to support newer jessie/sid or wheezy/sid strings we test
-        # this if sid is buried in the minor, we should use sid anyway.
-        if not codename and '/' in release:
-            major, minor = release.split('/')
-            if minor == 'sid':
-                codename = minor
-            else:
-                codename = major
+            # In order to support newer jessie/sid,  wheezy/sid strings we test
+            # this if sid is buried in the minor, we should use sid anyway.
+            if not codename and '/' in release:
+                major, minor = release.split('/')
+                if minor == 'sid':
+                    codename = minor
+                else:
+                    codename = major
 
     return (
         str(distro).strip(),
@@ -557,6 +579,8 @@ def platform_information():
 
 
 def block_path(dev):
+    if FREEBSD:
+        return dev
     path = os.path.realpath(dev)
     rdev = os.stat(path).st_rdev
     (M, m) = (os.major(rdev), os.minor(rdev))
@@ -577,6 +601,8 @@ def is_mpath(dev):
     """
     True if the path is managed by multipath
     """
+    if FREEBSD:
+        return True
     uuid = get_dm_uuid(dev)
     return (uuid and
             (re.match('part\d+-mpath-', uuid) or
@@ -663,11 +689,14 @@ def get_partition_dev(dev, pnum):
        cciss/c0d1 1 -> cciss!c0d1p1
     """
     partname = None
+    error_msg = ""
     if is_mpath(dev):
         partname = get_partition_mpath(dev, pnum)
     else:
         name = get_dev_name(os.path.realpath(dev))
-        for f in os.listdir(os.path.join('/sys/block', name)):
+        sys_entry = os.path.join('/sys/block', name)
+        error_msg = " in %s" % sys_entry
+        for f in os.listdir(sys_entry):
             if f.startswith(name) and f.endswith(str(pnum)):
                 # we want the shortest name that starts with the base name
                 # and ends with the partition number
@@ -676,8 +705,8 @@ def get_partition_dev(dev, pnum):
     if partname:
         return get_dev_path(partname)
     else:
-        raise Error('partition %d for %s does not appear to exist' %
-                    (pnum, dev))
+        raise Error('partition %d for %s does not appear to exist%s' %
+                    (pnum, dev, error_msg))
 
 
 def list_all_partitions():
@@ -795,7 +824,7 @@ def is_mounted(dev):
     Check if the given device is mounted.
     """
     dev = os.path.realpath(dev)
-    with open('/proc/mounts', 'rb') as proc_mounts:
+    with open(PROCDIR + '/mounts', 'rb') as proc_mounts:
         for line in proc_mounts:
             fields = line.split()
             if len(fields) < 3:
@@ -1165,10 +1194,19 @@ def get_dmcrypt_key(
     if os.path.exists(path):
         mode = get_oneliner(path, 'key-management-mode')
         osd_uuid = get_oneliner(path, 'osd-uuid')
+        ceph_fsid = read_one_line(path, 'ceph_fsid')
+        if ceph_fsid is None:
+            raise Error('No cluster uuid assigned.')
+        cluster = find_cluster_by_uuid(ceph_fsid)
+        if cluster is None:
+            raise Error('No cluster conf found in ' + SYSCONFDIR +
+                        ' with fsid %s' % ceph_fsid)
+
         if mode == KEY_MANAGEMENT_MODE_V1:
             key, stderr, ret = command(
                 [
                     'ceph',
+                    '--cluster', cluster,
                     '--name',
                     'client.osd-lockbox.' + osd_uuid,
                     '--keyring',
@@ -1420,16 +1458,22 @@ def check_journal_reqs(args):
         'ceph-osd', '--check-allows-journal',
         '-i', '0',
         '--cluster', args.cluster,
+        '--setuser', get_ceph_user(),
+        '--setgroup', get_ceph_group(),
     ])
     _, _, wants_journal = command([
         'ceph-osd', '--check-wants-journal',
         '-i', '0',
         '--cluster', args.cluster,
+        '--setuser', get_ceph_user(),
+        '--setgroup', get_ceph_group(),
     ])
     _, _, needs_journal = command([
         'ceph-osd', '--check-needs-journal',
         '-i', '0',
         '--cluster', args.cluster,
+        '--setuser', get_ceph_user(),
+        '--setgroup', get_ceph_group(),
     ])
     return (not allows_journal, not wants_journal, not needs_journal)
 
@@ -2461,6 +2505,7 @@ class Lockbox(object):
         command_check_call(
             [
                 'ceph',
+                '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
                 'config-key',
@@ -2472,6 +2517,7 @@ class Lockbox(object):
         keyring, stderr, ret = command(
             [
                 'ceph',
+                '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', bootstrap,
                 'auth',
@@ -2509,6 +2555,9 @@ class Lockbox(object):
         LOG.debug('Mounting lockbox ' + str(" ".join(args)))
         command_check_call(args)
         write_one_line(path, 'osd-uuid', self.args.osd_uuid)
+        if self.args.cluster_uuid is None:
+            self.args.cluster_uuid = get_fsid(cluster=self.args.cluster)
+        write_one_line(path, 'ceph_fsid', self.args.cluster_uuid)
         self.create_key()
         self.symlink_spaces(path)
         write_one_line(path, 'magic', CEPH_LOCKBOX_ONDISK_MAGIC)
@@ -2907,7 +2956,7 @@ def mkfs(
                 '--osd-uuid', fsid,
                 '--keyring', os.path.join(path, 'keyring'),
                 '--setuser', get_ceph_user(),
-                '--setgroup', get_ceph_user(),
+                '--setgroup', get_ceph_group(),
             ],
         )
     else:
@@ -3099,9 +3148,21 @@ def start_daemon(
                     'start',
                 ],
             )
+        elif os.path.exists(os.path.join(path, 'bsdrc')):
+            base_script = '/usr/local/etc/rc.d/ceph'
+            osd_script = '{base} start osd.{osd_id}'.format(
+                base=base_script,
+                osd_id=osd_id
+            )
+            command_check_call(
+                [
+                    osd_script,
+                ],
+            )
         else:
-            raise Error('{cluster} osd.{osd_id} is not tagged '
-                        'with an init system'.format(
+            raise Error('{cluster} osd.{osd_id} '
+                        'is not tagged with an init system'
+                        .format(
                             cluster=cluster,
                             osd_id=osd_id,
                         ))
@@ -3164,9 +3225,18 @@ def stop_daemon(
                     'stop',
                 ],
             )
+        elif os.path.exists(os.path.join(path, 'bsdrc')):
+            command_check_call(
+                [
+                    '/usr/local/etc/rc.d/ceph stop osd.{osd_id}'
+                    .format(osd_id=osd_id),
+                    'stop',
+                ],
+            )
         else:
-            raise Error('{cluster} osd.{osd_id} is not tagged with an init '
-                        ' system'.format(cluster=cluster, osd_id=osd_id))
+            raise Error('{cluster} osd.{osd_id} '
+                        'is not tagged with an init system'
+                        .format(cluster=cluster, osd_id=osd_id))
     except subprocess.CalledProcessError as e:
         raise Error('ceph osd stop failed', e)
 
@@ -3766,15 +3836,17 @@ def _deallocate_osd_id(cluster, osd_id):
     ])
 
 
-def _remove_lockbox(uuid):
+def _remove_lockbox(uuid, cluster):
     command([
         'ceph',
+        '--cluster', cluster,
         'auth',
         'del',
         'client.osd-lockbox.' + uuid,
     ])
     command([
         'ceph',
+        '--cluster', cluster,
         'config-key',
         'del',
         'dm-crypt/osd/' + uuid + '/luks',
@@ -3872,7 +3944,7 @@ def main_destroy_locked(args):
         for name in Space.NAMES:
             if target_dev.get(name + '_uuid'):
                 dmcrypt_unmap(target_dev[name + '_uuid'])
-        _remove_lockbox(target_dev['uuid'])
+        _remove_lockbox(target_dev['uuid'], args.cluster)
 
     # Check zap flag. If we found zap flag, we need to find device for
     # destroy this osd data.
@@ -4018,7 +4090,7 @@ def main_activate_all(args):
 
 def is_swap(dev):
     dev = os.path.realpath(dev)
-    with open('/proc/swaps', 'rb') as proc_swaps:
+    with open(PROCDIR + '/swaps', 'rb') as proc_swaps:
         for line in proc_swaps.readlines()[1:]:
             fields = line.split()
             if len(fields) < 3:

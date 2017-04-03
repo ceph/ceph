@@ -41,8 +41,8 @@ std::string unique_lock_name(const std::string &name, void *address) {
   return name + " (" + stringify(address) + ")";
 }
 
-librados::AioCompletion *create_rados_ack_callback(Context *on_finish) {
-  return create_rados_ack_callback<Context, &Context::complete>(on_finish);
+librados::AioCompletion *create_rados_callback(Context *on_finish) {
+  return create_rados_callback<Context, &Context::complete>(on_finish);
 }
 
 std::string generate_image_id(librados::IoCtx &ioctx) {
@@ -56,9 +56,8 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
   std::string id = bid_ss.str();
 
   // ensure the image id won't overflow the fixed block name size
-  const size_t max_id_length = RBD_MAX_BLOCK_NAME_SIZE - strlen(RBD_DATA_PREFIX) - 1;
-  if (id.length() > max_id_length) {
-    id = id.substr(id.length() - max_id_length);
+  if (id.length() > RBD_MAX_IMAGE_ID_LENGTH) {
+    id = id.substr(id.length() - RBD_MAX_IMAGE_ID_LENGTH);
   }
 
   return id;

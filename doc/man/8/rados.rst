@@ -77,8 +77,16 @@ Global commands
   Create a pool with name foo.
 
 :command:`rmpool` *foo* [ *foo* --yes-i-really-really-mean-it ]
-  Delete the pool foo (and all its data)
+  Delete the pool foo (and all its data).
 
+:command:`list-inconsistent-pg` *pool*
+  List inconsistent PGs in given pool.
+
+:command:`list-inconsistent-obj` *pgid*
+  List inconsistent objects in given PG.
+
+:command:`list-inconsistent-snapset` *pgid*
+  List inconsistent snapsets in given PG.
 
 Pool specific commands
 ======================
@@ -182,6 +190,10 @@ To delete the object::
 To read a previously snapshotted version of an object::
 
        rados -p foo -s mysnap get myobject blah.txt.old
+
+To list inconsistent objects in PG 0.6::
+
+       rados list-inconsistent-obj 0.6 --format=json-pretty
 
 
 Availability

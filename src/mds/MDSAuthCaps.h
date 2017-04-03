@@ -29,7 +29,7 @@ enum {
   MAY_EXECUTE = 4,
   MAY_CHOWN = 16,
   MAY_CHGRP = 32,
-  MAY_SET_POOL = 64,
+  MAY_SET_VXATTR = 64,
 };
 
 class CephContext;
@@ -38,12 +38,12 @@ class CephContext;
 struct MDSCapSpec {
   bool read, write, any;
 
-  // True if the capability permits modifying the pool on file layouts
-  bool layout_pool;
+  // True if the capability permits setting vxattrs (layout, quota, etc)
+  bool set_vxattr;
 
-  MDSCapSpec() : read(false), write(false), any(false), layout_pool(false) {}
+  MDSCapSpec() : read(false), write(false), any(false), set_vxattr(false) {}
   MDSCapSpec(bool r, bool w, bool a, bool lop)
-    : read(r), write(w), any(a), layout_pool(lop) {}
+    : read(r), write(w), any(a), set_vxattr(lop) {}
 
   bool allow_all() const {
     return any;
@@ -59,8 +59,8 @@ struct MDSCapSpec {
     return true;
   }
 
-  bool allows_set_pool() const {
-    return layout_pool;
+  bool allows_set_vxattr() const {
+    return set_vxattr;
   }
 };
 

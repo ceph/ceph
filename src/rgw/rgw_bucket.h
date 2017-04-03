@@ -46,7 +46,7 @@ extern int rgw_bucket_delete_bucket_obj(RGWRados *store,
                                         const string& bucket_name,
                                         RGWObjVersionTracker& objv_tracker);
 
-extern int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket);
+extern int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, const RGWBucketInfo& bucket_info);
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name);
 
 extern void rgw_make_bucket_entry_name(const string& tenant_name,
@@ -74,7 +74,7 @@ public:
     mtime = m;
   }
 
-  void dump(Formatter *f) const {
+  void dump(Formatter *f) const override {
     ep.dump(f);
   }
 };
@@ -88,7 +88,7 @@ public:
     mtime = m;
   }
 
-  void dump(Formatter *f) const {
+  void dump(Formatter *f) const override {
     info.dump(f);
   }
 
@@ -126,7 +126,7 @@ public:
   /**
    * Add a (created) bucket to the user's bucket list.
    */
-  void add(RGWBucketEnt& bucket) {
+  void add(const RGWBucketEnt& bucket) {
     buckets[bucket.bucket.name] = bucket;
   }
 
@@ -274,7 +274,7 @@ public:
   int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-          list<rgw_obj_key>& objs_to_unlink, std::string *err_msg = NULL);
+          list<rgw_obj_index_key>& objs_to_unlink, std::string *err_msg = NULL);
 
   int check_object_index(RGWBucketAdminOpState& op_state,
                          RGWFormatterFlusher& flusher,
@@ -433,7 +433,7 @@ class RGWDataChangesLog {
 
   public:
     ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log), lock("ChangesRenewThread::lock") {}
-    void *entry();
+    void *entry() override;
     void stop();
   };
 

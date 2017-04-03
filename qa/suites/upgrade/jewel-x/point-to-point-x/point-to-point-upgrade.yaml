@@ -205,9 +205,4 @@ upgrade-sequence_x:
        daemons: [osd.5]
        wait-for-healthy: false
        wait-for-up-osds: true
-   - exec:
-       mon.a:
-         - ceph osd set require_kraken_osds
-   - sleep:
-       duration: 60
    - print: "**** done ceph.restart all -x branch mds/osd/mon"

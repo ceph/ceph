@@ -30,9 +30,9 @@ WRITE_CLASS_ENCODER(inodeno_t)
 
 template<>
 struct denc_traits<inodeno_t> {
-  enum { supported = 2 };
-  enum { featured = false };
-  enum { bounded = true };
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
   static void bound_encode(const inodeno_t &o, size_t& p) {
     denc(o.val, p);
   }
@@ -102,7 +102,7 @@ struct file_layout_t {
   }
 
   uint64_t get_period() const {
-    return stripe_count * object_size;
+    return static_cast<uint64_t>(stripe_count) * object_size;
   }
 
   void from_legacy(const ceph_file_layout& fl);

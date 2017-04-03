@@ -23,13 +23,13 @@ class MMonGetMap : public Message {
  public:
   MMonGetMap() : Message(CEPH_MSG_MON_GET_MAP) { }
 private:
-  ~MMonGetMap() {}
+  ~MMonGetMap() override {}
 
 public:
-  const char *get_type_name() const { return "mon_getmap"; }
+  const char *get_type_name() const override { return "mon_getmap"; }
   
-  void encode_payload(uint64_t features) { }
-  void decode_payload() { }
+  void encode_payload(uint64_t features) override { }
+  void decode_payload() override { }
 };
 
 #endif

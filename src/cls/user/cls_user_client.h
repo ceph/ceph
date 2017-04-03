@@ -11,7 +11,7 @@
 
 class RGWGetUserHeader_CB : public RefCountedObject {
 public:
-  virtual ~RGWGetUserHeader_CB() {}
+  ~RGWGetUserHeader_CB() override {}
   virtual void handle_response(int r, cls_user_header& header) = 0;
 };
 

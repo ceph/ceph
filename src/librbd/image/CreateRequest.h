@@ -35,10 +35,12 @@ public:
                                const ImageOptions &image_options,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
+                               bool skip_mirror_enable,
                                ContextWQ *op_work_queue, Context *on_finish) {
     return new CreateRequest(ioctx, image_name, image_id, size, image_options,
                              non_primary_global_image_id, primary_mirror_uuid,
-                             op_work_queue, on_finish);
+                             skip_mirror_enable, op_work_queue,
+                             on_finish);
   }
 
   static int validate_order(CephContext *cct, uint8_t order);
@@ -52,8 +54,11 @@ private:
    *                                  <start> . . . . > . . . . .
    *                                     |                      .
    *                                     v                      .
-   *                                VALIDATE POOL               v (pool validation
-   *                                     |                      . disabled)
+   *                               VALIDATE POOL                v (pool validation
+   *                                     |                      .  disabled)
+   *                                     v                      .
+   *                             VALIDATE OVERWRITE             .
+   *                                     |                      .
    *                                     v                      .
    * (error: bottom up)           CREATE ID OBJECT. . < . . . . .
    *  _______<_______                    |
@@ -79,14 +84,9 @@ private:
    * |               |\             JOURNAL CREATE              .
    * |               | \               /  |                     .
    * v               |  *<------------/   v                     .
-   * |               |           FETCH MIRROR IMAGE             v
+   * |               |           MIRROR IMAGE ENABLE            .
    * |               |                /   |                     .
-   * |        JOURNAL REMOVE<--------/    v                     .
-   * |                \          MIRROR IMAGE ENABLE            .
-   * |                 \               /  |                     .
-   * |                  *<------------/   v                     .
-   * |                              NOTIFY WATCHERS             .
-   * |                                    |                     .
+   * |        JOURNAL REMOVE*<-------/    |                     .
    * |                                    v                     .
    * |_____________>___________________<finish> . . . . < . . . .
    *
@@ -98,9 +98,11 @@ private:
                 const ImageOptions &image_options,
                 const std::string &non_primary_global_image_id,
                 const std::string &primary_mirror_uuid,
+                bool skip_mirror_enable,
                 ContextWQ *op_work_queue, Context *on_finish);
 
-  IoCtx m_ioctx;
+  IoCtx &m_ioctx;
+  IoCtx m_data_io_ctx;
   std::string m_image_name;
   std::string m_image_id;
   uint64_t m_size;
@@ -115,6 +117,7 @@ private:
   int64_t m_data_pool_id = -1;
   const std::string m_non_primary_global_image_id;
   const std::string m_primary_mirror_uuid;
+  bool m_skip_mirror_enable;
   bool m_negotiate_features = false;
 
   ContextWQ *m_op_work_queue;
@@ -131,58 +134,55 @@ private:
   cls::rbd::MirrorImage m_mirror_image_internal;
 
   void validate_pool();
-  Context *handle_validate_pool(int *result);
+  void handle_validate_pool(int r);
+
+  void validate_overwrite();
+  void handle_validate_overwrite(int r);
 
   void create_id_object();
-  Context *handle_create_id_object(int *result);
+  void handle_create_id_object(int r);
 
   void add_image_to_directory();
-  Context *handle_add_image_to_directory(int *result);
+  void handle_add_image_to_directory(int r);
 
   void negotiate_features();
-  Context *handle_negotiate_features(int *result);
+  void handle_negotiate_features(int r);
 
   void create_image();
-  Context *handle_create_image(int *result);
+  void handle_create_image(int r);
 
   void set_stripe_unit_count();
-  Context *handle_set_stripe_unit_count(int *result);
+  void handle_set_stripe_unit_count(int r);
 
   void object_map_resize();
-  Context *handle_object_map_resize(int *result);
+  void handle_object_map_resize(int r);
 
   void fetch_mirror_mode();
-  Context *handle_fetch_mirror_mode(int *result);
+  void handle_fetch_mirror_mode(int r);
 
   void journal_create();
-  Context *handle_journal_create(int *result);
-
-  void fetch_mirror_image();
-  Context *handle_fetch_mirror_image(int *result);
+  void handle_journal_create(int r);
 
   void mirror_image_enable();
-  Context *handle_mirror_image_enable(int *result);
-
-  void send_watcher_notification();
-  void handle_watcher_notify(int r);
+  void handle_mirror_image_enable(int r);
 
   void complete(int r);
 
   // cleanup
   void journal_remove();
-  Context *handle_journal_remove(int *result);
+  void handle_journal_remove(int r);
 
   void remove_object_map();
-  Context *handle_remove_object_map(int *result);
+  void handle_remove_object_map(int r);
 
   void remove_header_object();
-  Context *handle_remove_header_object(int *result);
+  void handle_remove_header_object(int r);
 
   void remove_from_dir();
-  Context *handle_remove_from_dir(int *result);
+  void handle_remove_from_dir(int r);
 
   void remove_id_object();
-  Context *handle_remove_id_object(int *result);
+  void handle_remove_id_object(int r);
 };
 
 } //namespace image

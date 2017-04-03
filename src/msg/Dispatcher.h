@@ -59,7 +59,7 @@ public:
    * @param m The message we want to fast dispatch.
    * @returns True if the message can be fast dispatched; false otherwise.
    */
-  virtual bool ms_can_fast_dispatch(Message *m) const { return false;}
+  virtual bool ms_can_fast_dispatch(const Message *m) const { return false;}
   /**
    * This function determines if a dispatcher is included in the
    * list of fast-dispatch capable Dispatchers.

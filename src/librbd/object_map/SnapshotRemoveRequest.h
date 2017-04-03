@@ -52,12 +52,12 @@ public:
       m_snap_id(snap_id), m_next_snap_id(CEPH_NOSNAP) {
   }
 
-  virtual void send();
+  void send() override;
 
 protected:
-  virtual bool should_complete(int r);
+  bool should_complete(int r) override;
 
-  virtual int filter_return_code(int r) const {
+  int filter_return_code(int r) const override {
     if ((m_state == STATE_LOAD_MAP || m_state == STATE_REMOVE_MAP) &&
         r == -ENOENT) {
       return 0;

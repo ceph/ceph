@@ -17,6 +17,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+#include "common/safe_io.h"
 
 #include "global/global_init.h"
 #include "osd/OSDMap.h"
@@ -30,13 +31,53 @@ void usage()
   cout << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
   cout << "   --test-map-pgs [--pool <poolid>] [--pg_num <pg_num>] map all pgs" << std::endl;
   cout << "   --test-map-pgs-dump [--pool <poolid>] map all pgs" << std::endl;
+  cout << "   --test-map-pgs-dump-all [--pool <poolid>] map all pgs to osds" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
   cout << "   --test-random           do random placements" << std::endl;
   cout << "   --test-map-pg <pgid>    map a pgid to osds" << std::endl;
   cout << "   --test-map-object <objectname> [--pool <poolid>] map an object to osds"
        << std::endl;
+  cout << "   --remap-cleanup <file>  clean up pg_remap[_items] entries, writing" << std::endl;
+  cout << "                           commands to <file> [default: - for stdout]" << std::endl;
+  cout << "   --remap <file>          calculate pg remap entries to balance pg layout" << std::endl;
+  cout << "                           writing commands to <file> [default: - for stdout]" << std::endl;
+  cout << "   --remap-max <max-count> set max remap entries to calculate [default: 100]" << std::endl;
+  cout << "   --remap-deviation <max-deviation>" << std::endl;
+  cout << "                           max deviation from target [default: .01]" << std::endl;
+  cout << "   --remap-pool <poolname> restrict remap balancing to 1 or more pools" << std::endl;
   exit(1);
+}
+
+void print_inc_remaps(const OSDMap::Incremental& pending_inc, int fd)
+{
+  ostringstream ss;
+  for (auto& i : pending_inc.old_pg_remap) {
+    ss << "ceph osd rm-pg-remap " << i << std::endl;
+  }
+  for (auto& i : pending_inc.new_pg_remap) {
+    ss << "ceph osd pg-remap " << i.first;
+    for (auto osd : i.second) {
+      ss << " " << osd;
+    }
+    ss << std::endl;
+  }
+  for (auto& i : pending_inc.old_pg_remap_items) {
+    ss << "ceph osd rm-pg-remap-items " << i << std::endl;
+  }
+  for (auto& i : pending_inc.new_pg_remap_items) {
+    ss << "ceph osd pg-remap-items " << i.first;
+    for (auto p : i.second) {
+      ss << " " << p.first << " " << p.second;
+    }
+    ss << std::endl;
+  }
+  string s = ss.str();
+  int r = safe_write(fd, s.c_str(), s.size());
+  if (r < 0) {
+    cerr << "error writing output: " << cpp_strerror(r) << std::endl;
+    exit(1);
+  }
 }
 
 int main(int argc, const char **argv)
@@ -74,7 +115,14 @@ int main(int argc, const char **argv)
   bool test_map_pgs = false;
   bool test_map_pgs_dump = false;
   bool test_random = false;
+  bool remap_cleanup = false;
+  bool remap = false;
+  std::string remap_file = "-";
+  int remap_max = 100;
+  float remap_deviation = .01;
+  std::set<std::string> remap_pools;
   int64_t pg_num = -1;
+  bool test_map_pgs_dump_all = false;
 
   std::string val;
   std::ostringstream err;
@@ -95,6 +143,15 @@ int main(int argc, const char **argv)
       if (!val.empty() && val != "plain") {
 	tree_formatter.reset(Formatter::create(val, "", "json"));
       }
+    } else if (ceph_argparse_witharg(args, i, &remap_file, "--remap-cleanup", (char*)NULL)) {
+      remap_cleanup = true;
+    } else if (ceph_argparse_witharg(args, i, &remap_file, "--remap", (char*)NULL)) {
+      remap_cleanup = true;
+      remap = true;
+    } else if (ceph_argparse_witharg(args, i, &remap_max, err, "--remap-max", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &remap_deviation, err, "--remap-deviation", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--remap-pool", (char*)NULL)) {
+      remap_pools.insert(val);
     } else if (ceph_argparse_witharg(args, i, &num_osd, err, "--createsimple", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -111,6 +168,8 @@ int main(int argc, const char **argv)
       test_map_pgs = true;
     } else if (ceph_argparse_flag(args, i, "--test-map-pgs-dump", (char*)NULL)) {
       test_map_pgs_dump = true;
+    } else if (ceph_argparse_flag(args, i, "--test-map-pgs-dump-all", (char*)NULL)) {
+      test_map_pgs_dump_all = true;
     } else if (ceph_argparse_flag(args, i, "--test-random", (char*)NULL)) {
       test_random = true;
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
@@ -244,6 +303,62 @@ int main(int argc, const char **argv)
     cout << "clearing pg/primary temp" << std::endl;
     osdmap.clear_temp();
   }
+  int remap_fd = STDOUT_FILENO;
+  if (remap || remap_cleanup) {
+    if (remap_file != "-") {
+      remap_fd = ::open(remap_file.c_str(), O_CREAT|O_WRONLY, 0644);
+      if (remap_fd < 0) {
+	cerr << "error opening " << remap_file << ": " << cpp_strerror(errno)
+	     << std::endl;
+	exit(1);
+      }
+      cout << "writing remap command output to: " << remap_file << std::endl;
+    }
+  }
+  if (remap_cleanup) {
+    cout << "checking for remap cleanups" << std::endl;
+    OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
+    pending_inc.fsid = osdmap.get_fsid();
+    int r = osdmap.clean_remaps(g_ceph_context, &pending_inc);
+    if (r > 0) {
+      print_inc_remaps(pending_inc, remap_fd);
+      r = osdmap.apply_incremental(pending_inc);
+      assert(r == 0);
+    }
+  }
+  if (remap) {
+    cout << "remap, max-count " << remap_max
+	 << ", max deviation " << remap_deviation
+	 << std::endl;
+    OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
+    pending_inc.fsid = osdmap.get_fsid();
+    set<int64_t> pools;
+    for (auto& s : remap_pools) {
+      int64_t p = osdmap.lookup_pg_pool_name(s);
+      if (p < 0) {
+	cerr << " pool '" << s << "' does not exist" << std::endl;
+	exit(1);
+      }
+      pools.insert(p);
+    }
+    if (!pools.empty())
+      cout << " limiting to pools " << remap_pools << " (" << pools << ")"
+	   << std::endl;
+    int changed = osdmap.remap_pgs(g_ceph_context, remap_deviation,
+				   remap_max, pools,
+				   &pending_inc);
+    if (changed) {
+      print_inc_remaps(pending_inc, remap_fd);
+      int r = osdmap.apply_incremental(pending_inc);
+      assert(r == 0);
+      modified = true;
+    } else {
+      cout << "no remaps proposed" << std::endl;
+    }
+  }
+  if (remap_file != "-") {
+    ::close(remap_fd);
+  }
 
   if (!import_crush.empty()) {
     bufferlist cbl;
@@ -326,7 +441,7 @@ int main(int argc, const char **argv)
          << ") acting (" << acting << ", p" << acting_primary << ")"
          << std::endl;
   }
-  if (test_map_pgs || test_map_pgs_dump) {
+  if (test_map_pgs || test_map_pgs_dump || test_map_pgs_dump_all) {
     if (pool != -1 && !osdmap.have_pg_pool(pool)) {
       cerr << "There is no pool " << pool << std::endl;
       exit(1);
@@ -351,21 +466,31 @@ int main(int argc, const char **argv)
       for (unsigned i = 0; i < p->second.get_pg_num(); ++i) {
 	pg_t pgid = pg_t(i, p->first);
 
-	vector<int> osds;
-	int primary;
+	vector<int> osds, raw, up, acting;
+	int primary, calced_primary, up_primary, acting_primary;
 	if (test_random) {
 	  osds.resize(p->second.size);
 	  for (unsigned i=0; i<osds.size(); ++i) {
 	    osds[i] = rand() % osdmap.get_max_osd();
 	  }
 	  primary = osds[0];
-	} else {
+	} else if (test_map_pgs_dump_all) {
+         osdmap.pg_to_raw_osds(pgid, &raw, &calced_primary);
+         osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary,
+                                &acting, &acting_primary);         
+       } else {
 	  osdmap.pg_to_acting_osds(pgid, &osds, &primary);
 	}
 	size[osds.size()]++;
 
-	if (test_map_pgs_dump)
+	if (test_map_pgs_dump) {
 	  cout << pgid << "\t" << osds << "\t" << primary << std::endl;
+       } else if (test_map_pgs_dump_all) {
+         cout << pgid << " raw (" << raw << ", p" << calced_primary
+              << ") up (" << up << ", p" << up_primary
+              << ") acting (" << acting << ", p" << acting_primary << ")"
+              << std::endl;
+       }
 
 	for (unsigned i=0; i<osds.size(); i++) {
 	  //cout << " rep " << i << " on " << osds[i] << std::endl;
@@ -471,7 +596,8 @@ int main(int argc, const char **argv)
   if (!print && !tree && !modified &&
       export_crush.empty() && import_crush.empty() && 
       test_map_pg.empty() && test_map_object.empty() &&
-      !test_map_pgs && !test_map_pgs_dump) {
+      !test_map_pgs && !test_map_pgs_dump && !test_map_pgs_dump_all &&
+      !remap && !remap_cleanup) {
     cerr << me << ": no action specified?" << std::endl;
     usage();
   }

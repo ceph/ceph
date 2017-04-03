@@ -16,7 +16,7 @@
 #ifndef CEPH_MOSDREPOPREPLY_H
 #define CEPH_MOSDREPOPREPLY_H
 
-#include "msg/Message.h"
+#include "MOSDFastDispatchOp.h"
 
 #include "os/ObjectStore.h"
 
@@ -28,7 +28,7 @@
  *
  */
 
-class MOSDRepOpReply : public Message {
+class MOSDRepOpReply : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
 public:
@@ -50,7 +50,14 @@ public:
   // Decoding flags. Decoding is only needed for messages catched by pipe reader.
   bool final_decode_needed;
 
-  virtual void decode_payload() {
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
+
+  void decode_payload() override {
     p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
@@ -67,7 +74,7 @@ public:
     ::decode(from, p);
     final_decode_needed = false;
   }
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid, payload);
@@ -88,12 +95,12 @@ public:
   int get_result() { return result; }
 
   void set_last_complete_ondisk(eversion_t v) { last_complete_ondisk = v; }
-  eversion_t get_last_complete_ondisk() { return last_complete_ondisk; }
+  eversion_t get_last_complete_ondisk() const { return last_complete_ondisk; }
 
 public:
   MOSDRepOpReply(
-    MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, int at) :
-    Message(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    const MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, int at) :
+    MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
     map_epoch(e),
     reqid(req->reqid),
     from(from),
@@ -104,16 +111,17 @@ public:
     set_tid(req->get_tid());
   }
   MOSDRepOpReply() 
-    : Message(MSG_OSD_REPOPREPLY), map_epoch(0),  
+    : MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+      map_epoch(0),
       ack_type(0), result(0),
       final_decode_needed(true) {}
 private:
-  ~MOSDRepOpReply() {}
+  ~MOSDRepOpReply() override {}
 
 public:
-  const char *get_type_name() const { return "osd_repop_reply"; }
+  const char *get_type_name() const override { return "osd_repop_reply"; }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "osd_repop_reply(" << reqid
         << " " << pgid;
     if (!final_decode_needed) {

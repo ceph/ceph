@@ -66,9 +66,9 @@ struct MonSession : public RefCountedObject {
     osd_epoch(0),
     auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
-    time_established = ceph_clock_now(g_ceph_context);
+    time_established = ceph_clock_now();
   }
-  ~MonSession() {
+  ~MonSession() override {
     //generic_dout(0) << "~MonSession " << this << dendl;
     // we should have been removed before we get destructed; see MonSessionMap::remove_session()
     assert(!item.is_on_list());
@@ -78,10 +78,12 @@ struct MonSession : public RefCountedObject {
 
   bool is_capable(string service, int mask) {
     map<string,string> args;
-    return caps.is_capable(g_ceph_context,
-			   entity_name,
-			   service, "", args,
-			   mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X);
+    return caps.is_capable(
+      g_ceph_context,
+      CEPH_ENTITY_TYPE_MON,
+      entity_name,
+      service, "", args,
+      mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X);
   }
 };
 

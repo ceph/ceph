@@ -1,12 +1,12 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
-#include "librbd/AioCompletion.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/Types.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
@@ -32,18 +32,18 @@ public:
       : lock("ReplayHandler::lock"), entries_available(false), complete(false) {
     }
 
-    virtual void get() {
+    void get() override {
     }
-    virtual void put() {
+    void put() override {
     }
 
-    virtual void handle_entries_available()  {
+    void handle_entries_available() override  {
       Mutex::Locker locker(lock);
       entries_available = true;
       cond.Signal();
     }
 
-    virtual void handle_complete(int r) {
+    void handle_complete(int r) override {
       Mutex::Locker locker(lock);
       complete = true;
       cond.Signal();
@@ -53,7 +53,7 @@ public:
   ReplayHandler m_replay_handler;
   Journalers m_journalers;
 
-  virtual void TearDown() {
+  void TearDown() override {
     for (Journalers::iterator it = m_journalers.begin();
          it != m_journalers.end(); ++it) {
       journal::Journaler *journaler = *it;
@@ -93,9 +93,9 @@ public:
   bool wait_for_entries_available(librbd::ImageCtx *ictx) {
     Mutex::Locker locker(m_replay_handler.lock);
     while (!m_replay_handler.entries_available) {
-      if (m_replay_handler.cond.WaitInterval(ictx->cct, m_replay_handler.lock,
-                                             utime_t(10, 0)) != 0) {
-        return false;
+      if (m_replay_handler.cond.WaitInterval(m_replay_handler.lock,
+					     utime_t(10, 0)) != 0) {
+	return false;
       }
     }
     m_replay_handler.entries_available = false;
@@ -126,10 +126,13 @@ TEST_F(TestJournalEntries, AioWrite) {
   ASSERT_TRUE(journaler != NULL);
 
   std::string buffer(512, '1');
+  bufferlist write_bl;
+  write_bl.append(buffer);
+
   C_SaferCond cond_ctx;
-  librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
+  auto c = librbd::io::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->aio_work_queue->aio_write(c, 123, buffer.size(), buffer.c_str(), 0);
+  ictx->io_work_queue->aio_write(c, 123, buffer.size(), std::move(write_bl), 0);
   ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 
@@ -170,9 +173,9 @@ TEST_F(TestJournalEntries, AioDiscard) {
   ASSERT_TRUE(journaler != NULL);
 
   C_SaferCond cond_ctx;
-  librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
+  auto c = librbd::io::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->aio_work_queue->aio_discard(c, 123, 234);
+  ictx->io_work_queue->aio_discard(c, 123, 234, cct->_conf->rbd_skip_partial_discard);
   ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 
@@ -203,9 +206,9 @@ TEST_F(TestJournalEntries, AioFlush) {
   ASSERT_TRUE(journaler != NULL);
 
   C_SaferCond cond_ctx;
-  librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
+  auto c = librbd::io::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->aio_work_queue->aio_flush(c);
+  ictx->io_work_queue->aio_flush(c);
   ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 

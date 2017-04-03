@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -92,13 +92,13 @@ public:
 
     EXPECT_CALL(mock_journaler, allocate_tag(456, ContentsEqual(tag_data_bl),
                                              _, _))
-      .WillOnce(WithArg<3>(CompleteContext(r, NULL)));
+      .WillOnce(WithArg<3>(CompleteContext(r, static_cast<ContextWQ*>(NULL))));
   }
 
   void expect_shut_down_journaler(::journal::MockJournaler &mock_journaler,
                                   int r) {
     EXPECT_CALL(mock_journaler, shut_down(_))
-      .WillOnce(CompleteContext(r, NULL));
+      .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
   }
 
 };

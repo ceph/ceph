@@ -48,6 +48,9 @@ private:
    *    v
    * OPEN_IMAGE * * * * * * * *
    *    |                     *
+   *    v                     *
+   * IS_PRIMARY * * * * * * * *
+   *    |                     *
    *    v (skip if primary)   v
    * LOCK_IMAGE * * * > CLOSE_IMAGE
    *    |                     |
@@ -63,15 +66,19 @@ private:
   ContextWQ *m_work_queue;
   Context *m_on_finish;
 
+  bool m_primary = false;
   int m_ret_val = 0;
 
   void send_open_image();
   void handle_open_image(int r);
 
+  void send_is_primary();
+  void handle_is_primary(int r);
+
   void send_lock_image();
   void handle_lock_image(int r);
 
-  void send_close_image(bool destroy_only, int r);
+  void send_close_image(int r);
   void handle_close_image(int r);
 
   void finish(int r);

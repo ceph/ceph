@@ -24,6 +24,7 @@
 #include "DataScan.h"
 #include "include/compat.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "datascan." << __func__ << ": "
@@ -32,14 +33,16 @@ void DataScan::usage()
 {
   std::cout << "Usage: \n"
     << "  cephfs-data-scan init [--force-init]\n"
-    << "  cephfs-data-scan scan_extents [--force-pool] <data pool name>\n"
-    << "  cephfs-data-scan scan_inodes [--force-pool] [--force-corrupt] <data pool name>\n"
+    << "  cephfs-data-scan scan_extents [--force-pool] [--worker_n N --worker_m M] <data pool name>\n"
+    << "  cephfs-data-scan scan_inodes [--force-pool] [--force-corrupt] [--worker_n N --worker_m M] <data pool name>\n"
     << "  cephfs-data-scan pg_files <path> <pg id> [<pg id>...]\n"
     << "  cephfs-data-scan scan_links\n"
     << "\n"
     << "    --force-corrupt: overrite apparently corrupt structures\n"
     << "    --force-init: write root inodes even if they exist\n"
     << "    --force-pool: use data pool even if it is not in FSMap\n"
+    << "    --worker_m: Maximum number of workers\n"
+    << "    --worker_n: Worker number, range 0-(worker_m-1)\n"
     << "\n"
     << "  cephfs-data-scan scan_frags [--force-corrupt]\n"
     << "  cephfs-data-scan cleanup <data pool name>\n"
@@ -342,8 +345,8 @@ int MetadataDriver::inject_unlinked_inode(
   // (we won't actually give the *correct* dirstat here though)
   inode.inode.dirstat.nfiles = 1;
 
-  inode.inode.ctime = 
-    inode.inode.mtime = ceph_clock_now(g_ceph_context);
+  inode.inode.ctime =
+    inode.inode.mtime = ceph_clock_now();
   inode.inode.nlink = 1;
   inode.inode.truncate_size = -1ull;
   inode.inode.truncate_seq = 1;

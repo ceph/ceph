@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_TEST_LIBRBD_MOCK_JOURNAL_H
@@ -11,11 +11,11 @@
 
 namespace librbd {
 
-struct AioObjectRequestHandle;
 struct ImageCtx;
+namespace io { struct ObjectRequestHandle; }
 
 struct MockJournal {
-  typedef std::list<AioObjectRequestHandle *> AioObjectRequests;
+  typedef std::list<io::ObjectRequestHandle *> ObjectRequests;
 
   static MockJournal *s_instance;
   static MockJournal *get_instance() {
@@ -54,12 +54,12 @@ struct MockJournal {
 
   MOCK_METHOD5(append_write_event, uint64_t(uint64_t, size_t,
                                             const bufferlist &,
-                                            const AioObjectRequests &, bool));
+                                            const ObjectRequests &, bool));
   MOCK_METHOD5(append_io_event_mock, uint64_t(const journal::EventEntry&,
-                                              const AioObjectRequests &,
+                                              const ObjectRequests &,
                                               uint64_t, size_t, bool));
   uint64_t append_io_event(journal::EventEntry &&event_entry,
-                           const AioObjectRequests &requests,
+                           const ObjectRequests &requests,
                            uint64_t offset, size_t length,
                            bool flush_entry) {
     // googlemock doesn't support move semantics

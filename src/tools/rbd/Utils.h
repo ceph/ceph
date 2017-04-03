@@ -14,7 +14,42 @@
 namespace rbd {
 namespace utils {
 
+namespace detail {
+
+template <typename T, void(T::*MF)(int)>
+void aio_completion_callback(librbd::completion_t completion,
+                                    void *arg) {
+  librbd::RBD::AioCompletion *aio_completion =
+    reinterpret_cast<librbd::RBD::AioCompletion*>(completion);
+
+  // complete the AIO callback in separate thread context
+  T *t = reinterpret_cast<T *>(arg);
+  int r = aio_completion->get_return_value();
+  aio_completion->release();
+
+  (t->*MF)(r);
+}
+
+} // namespace detail
+
 static const std::string RBD_DIFF_BANNER ("rbd diff v1\n");
+
+static const std::string RBD_IMAGE_BANNER_V2 ("rbd image v2\n");
+static const std::string RBD_IMAGE_DIFFS_BANNER_V2 ("rbd image diffss v2\n");
+static const std::string RBD_DIFF_BANNER_V2 ("rbd diff v2\n");
+
+#define RBD_DIFF_FROM_SNAP	'f'
+#define RBD_DIFF_TO_SNAP	't'
+#define RBD_DIFF_IMAGE_SIZE	's'
+#define RBD_DIFF_WRITE		'w'
+#define RBD_DIFF_ZERO		'z'
+#define RBD_DIFF_END		'e'
+
+#define RBD_EXPORT_IMAGE_ORDER		'O'
+#define RBD_EXPORT_IMAGE_FEATURES	'T'
+#define RBD_EXPORT_IMAGE_STRIPE_UNIT	'U'
+#define RBD_EXPORT_IMAGE_STRIPE_COUNT	'C'
+#define RBD_EXPORT_IMAGE_END		'E'
 
 enum SnapshotPresence {
   SNAPSHOT_PRESENCE_NONE,
@@ -37,10 +72,16 @@ struct ProgressContext : public librbd::ProgressContext {
     : operation(o), progress(!no_progress), last_pc(0) {
   }
 
-  int update_progress(uint64_t offset, uint64_t total);
+  int update_progress(uint64_t offset, uint64_t total) override;
   void finish();
   void fail();
 };
+
+template <typename T, void(T::*MF)(int)>
+librbd::RBD::AioCompletion *create_aio_completion(T *t) {
+  return new librbd::RBD::AioCompletion(
+    t, &detail::aio_completion_callback<T, MF>);
+}
 
 void aio_context_callback(librbd::completion_t completion, void *arg);
 

@@ -15,6 +15,9 @@
  */
 
 #include "Infiniband.h"
+#include "RDMAStack.h"
+#include "Device.h"
+
 #include "common/errno.h"
 #include "common/debug.h"
 
@@ -22,125 +25,33 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "Infiniband "
 
-static const uint32_t MAX_SHARED_RX_SGE_COUNT = 1;
-static const uint32_t MAX_INLINE_DATA = 128;
-static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000000000000000000000000000");
-static const uint32_t CQ_DEPTH = 30000;
+static const uint32_t MAX_INLINE_DATA = 0;
 
-Device::Device(CephContext *cct, ibv_device* d): device(d), device_attr(new ibv_device_attr), active_port(nullptr)
+Infiniband::QueuePair::QueuePair(
+    CephContext *c, Device &device, ibv_qp_type type,
+    int port, ibv_srq *srq,
+    Infiniband::CompletionQueue* txcq, Infiniband::CompletionQueue* rxcq,
+    uint32_t max_send_wr, uint32_t max_recv_wr, uint32_t q_key)
+: cct(c), ibdev(device),
+  type(type),
+  ctxt(ibdev.ctxt),
+  ib_physical_port(port),
+  pd(ibdev.pd->pd),
+  srq(srq),
+  qp(NULL),
+  txcq(txcq),
+  rxcq(rxcq),
+  initial_psn(0),
+  max_send_wr(max_send_wr),
+  max_recv_wr(max_recv_wr),
+  q_key(q_key),
+  dead(false)
 {
-  if (device == NULL) {
-    lderr(cct) << __func__ << "device == NULL" << cpp_strerror(errno) << dendl;
+  initial_psn = lrand48() & 0xffffff;
+  if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
+    lderr(cct) << __func__ << " invalid queue pair type" << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
-  name = ibv_get_device_name(device);
-  ctxt = ibv_open_device(device);
-  if (ctxt == NULL) {
-    lderr(cct) << __func__ << "open rdma device failed. " << cpp_strerror(errno) << dendl;
-    ceph_abort();
-  }
-  int r = ibv_query_device(ctxt, device_attr);
-  if (r == -1) {
-    lderr(cct) << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << dendl;
-    ceph_abort();
-  }
-}
-
-void Device::binding_port(CephContext *cct, uint8_t port_num) {
-  port_cnt = device_attr->phys_port_cnt;
-  ports = new Port*[port_cnt];
-  for (uint8_t i = 0; i < port_cnt; ++i) {
-    ports[i] = new Port(cct, ctxt, i+1);
-    if (i+1 == port_num && ports[i]->get_port_attr()->state == IBV_PORT_ACTIVE) {
-      active_port = ports[i];
-      ldout(cct, 1) << __func__ << " found active port " << i+1 << dendl;
-      return ;
-    } else {
-      ldout(cct, 10) << __func__ << " port " << i+1 << " is not what we want. state: " << ports[i]->get_port_attr()->state << ")"<< dendl;
-    }
-  }
-  if (nullptr == active_port) {
-    lderr(cct) << __func__ << "  port not found" << dendl;
-    assert(active_port);
-  }
-}
-
-Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t port_num): device_list(cct)
-{
-  device = device_list.get_device(device_name.c_str());
-  device->binding_port(cct, port_num);
-  assert(device);
-  ib_physical_port = device->active_port->get_port_num();
-  pd = new ProtectionDomain(cct, device);
-  assert(NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
-
-  max_recv_wr = device->device_attr->max_srq_wr;
-  if (max_recv_wr > cct->_conf->ms_async_rdma_receive_buffers) {
-    max_recv_wr = cct->_conf->ms_async_rdma_receive_buffers;
-    ldout(cct, 1) << __func__ << " assigning: " << max_recv_wr << " receive buffers" << dendl;
-  } else {
-    ldout(cct, 1) << __func__ << " using the max allowed receive buffers: " << max_recv_wr << dendl;
-  }
-
-  max_send_wr = device->device_attr->max_qp_wr;
-  if (max_send_wr > cct->_conf->ms_async_rdma_send_buffers) {
-    max_send_wr = cct->_conf->ms_async_rdma_send_buffers;
-    ldout(cct, 1) << __func__ << " assigning: " << max_send_wr << " send buffers"  << dendl;
-  } else {
-    ldout(cct, 1) << __func__ << " using the max allowed send buffers: " << max_send_wr << dendl;
-  }
-
-  ldout(cct, 1) << __func__ << " device allow " << device->device_attr->max_cqe
-                << " completion entries" << dendl;
-
-  memory_manager = new MemoryManager(device, pd,
-                                     cct->_conf->ms_async_rdma_enable_hugepage);
-  memory_manager->register_rx_tx(
-      cct->_conf->ms_async_rdma_buffer_size, max_recv_wr, max_send_wr);
-
-  srq = create_shared_receive_queue(max_recv_wr, MAX_SHARED_RX_SGE_COUNT);
-  post_channel_cluster();
-}
-
-/**
- * Create a shared receive queue. This basically wraps the verbs call. 
- *
- * \param[in] max_wr
- *      The max number of outstanding work requests in the SRQ.
- * \param[in] max_sge
- *      The max number of scatter elements per WR.
- * \return
- *      A valid ibv_srq pointer, or NULL on error.
- */
-ibv_srq* Infiniband::create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge)
-{
-  ibv_srq_init_attr sia;
-  memset(&sia, 0, sizeof(sia));
-  sia.srq_context = device->ctxt;
-  sia.attr.max_wr = max_wr;
-  sia.attr.max_sge = max_sge;
-  return ibv_create_srq(pd->pd, &sia);
-}
-
-/**
- * Create a new QueuePair. This factory should be used in preference to
- * the QueuePair constructor directly, since this lets derivatives of
- * Infiniband, e.g. MockInfiniband (if it existed),
- * return mocked out QueuePair derivatives.
- *
- * \return
- *      QueuePair on success or NULL if init fails
- * See QueuePair::QueuePair for parameter documentation.
- */
-Infiniband::QueuePair* Infiniband::create_queue_pair(CephContext *cct, CompletionQueue *tx, CompletionQueue* rx, ibv_qp_type type)
-{
-  Infiniband::QueuePair *qp = new QueuePair(
-      cct, *this, type, ib_physical_port, srq, tx, rx, max_send_wr, max_recv_wr);
-  if (qp->init()) {
-    delete qp;
-    return NULL;
-  }
-  return qp;
 }
 
 int Infiniband::QueuePair::init()
@@ -160,8 +71,11 @@ int Infiniband::QueuePair::init()
   qp = ibv_create_qp(pd, &qpia);
   if (qp == NULL) {
     lderr(cct) << __func__ << " failed to create queue pair" << cpp_strerror(errno) << dendl;
-    lderr(cct) << __func__ << " try reducing ms_async_rdma_receive_buffers or"
-	" ms_async_rdma_send_buffers" << dendl;
+    if (errno == ENOMEM) {
+      lderr(cct) << __func__ << " try reducing ms_async_rdma_receive_buffers, "
+				" ms_async_rdma_send_buffers or"
+				" ms_async_rdma_buffer_size" << dendl;
+    }
     return -1;
   }
 
@@ -238,181 +152,83 @@ int Infiniband::QueuePair::to_dead()
   return ret;
 }
 
-int Infiniband::post_chunk(Chunk* chunk)
+int Infiniband::QueuePair::get_remote_qp_number(uint32_t *rqp) const
 {
-  ibv_sge isge;
-  isge.addr = reinterpret_cast<uint64_t>(chunk->buffer);
-  isge.length = chunk->bytes;
-  isge.lkey = chunk->mr->lkey;
-  ibv_recv_wr rx_work_request;
+  ibv_qp_attr qpa;
+  ibv_qp_init_attr qpia;
 
-  memset(&rx_work_request, 0, sizeof(rx_work_request));
-  rx_work_request.wr_id = reinterpret_cast<uint64_t>(chunk);// stash descriptor ptr
-  rx_work_request.next = NULL;
-  rx_work_request.sg_list = &isge;
-  rx_work_request.num_sge = 1;
-
-  ibv_recv_wr *badWorkRequest;
-  int ret = ibv_post_srq_recv(srq, &rx_work_request, &badWorkRequest);
-  if (ret)
+  int r = ibv_query_qp(qp, &qpa, IBV_QP_DEST_QPN, &qpia);
+  if (r) {
+    lderr(cct) << __func__ << " failed to query qp: "
+      << cpp_strerror(errno) << dendl;
     return -1;
+  }
+
+  if (rqp)
+    *rqp = qpa.dest_qp_num;
   return 0;
 }
 
-int Infiniband::post_channel_cluster()
+/**
+ * Get the remote infiniband address for this QueuePair, as set in #plumb().
+ * LIDs are "local IDs" in infiniband terminology. They are short, locally
+ * routable addresses.
+ */
+int Infiniband::QueuePair::get_remote_lid(uint16_t *lid) const
 {
-  vector<Chunk*> free_chunks;
-  int r = memory_manager->get_channel_buffers(free_chunks, 0);
-  assert(r > 0);
-  for (vector<Chunk*>::iterator iter = free_chunks.begin(); iter != free_chunks.end(); ++iter) {
-    r = post_chunk(*iter);
-    assert(r == 0);
+  ibv_qp_attr qpa;
+  ibv_qp_init_attr qpia;
+
+  int r = ibv_query_qp(qp, &qpa, IBV_QP_AV, &qpia);
+  if (r) {
+    lderr(cct) << __func__ << " failed to query qp: "
+      << cpp_strerror(errno) << dendl;
+    return -1;
   }
+
+  if (lid)
+    *lid = qpa.ah_attr.dlid;
   return 0;
 }
 
-Infiniband::CompletionChannel* Infiniband::create_comp_channel(CephContext *c)
+/**
+ * Get the state of a QueuePair.
+ */
+int Infiniband::QueuePair::get_state() const
 {
-  Infiniband::CompletionChannel *cc = new Infiniband::CompletionChannel(c, *this);
-  if (cc->init()) {
-    delete cc;
-    return NULL;
+  ibv_qp_attr qpa;
+  ibv_qp_init_attr qpia;
+
+  int r = ibv_query_qp(qp, &qpa, IBV_QP_STATE, &qpia);
+  if (r) {
+    lderr(cct) << __func__ << " failed to get state: "
+      << cpp_strerror(errno) << dendl;
+    return -1;
   }
-  return cc;
+  return qpa.qp_state;
 }
 
-Infiniband::CompletionQueue* Infiniband::create_comp_queue(
-    CephContext *cct, CompletionChannel *cc)
+/**
+ * Return true if the queue pair is in an error state, false otherwise.
+ */
+bool Infiniband::QueuePair::is_error() const
 {
-  Infiniband::CompletionQueue *cq = new Infiniband::CompletionQueue(
-      cct, *this, CQ_DEPTH, cc);
-  if (cq->init()) {
-    delete cq;
-    return NULL;
+  ibv_qp_attr qpa;
+  ibv_qp_init_attr qpia;
+
+  int r = ibv_query_qp(qp, &qpa, -1, &qpia);
+  if (r) {
+    lderr(cct) << __func__ << " failed to get state: "
+      << cpp_strerror(errno) << dendl;
+    return true;
   }
-  return cq;
+  return qpa.cur_qp_state == IBV_QPS_ERR;
 }
 
 
-Infiniband::QueuePair::QueuePair(
-    CephContext *c, Infiniband& infiniband, ibv_qp_type type,
-    int port, ibv_srq *srq,
-    Infiniband::CompletionQueue* txcq, Infiniband::CompletionQueue* rxcq,
-    uint32_t max_send_wr, uint32_t max_recv_wr, uint32_t q_key)
-: cct(c), infiniband(infiniband),
-  type(type),
-  ctxt(infiniband.device->ctxt),
-  ib_physical_port(port),
-  pd(infiniband.pd->pd),
-  srq(srq),
-  qp(NULL),
-  txcq(txcq),
-  rxcq(rxcq),
-  initial_psn(0),
-  max_send_wr(max_send_wr),
-  max_recv_wr(max_recv_wr),
-  q_key(q_key),
-  dead(false)
+Infiniband::CompletionChannel::CompletionChannel(CephContext *c, Device &ibdev)
+  : cct(c), ibdev(ibdev), channel(NULL), cq(NULL), cq_events_that_need_ack(0)
 {
-  initial_psn = lrand48() & 0xffffff;
-  if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
-    lderr(cct) << __func__ << "invalid queue pair type" << cpp_strerror(errno) << dendl;
-    ceph_abort();
-  }
-  pd = infiniband.pd->pd;
-}
-
-// 1 means no valid buffer read, 0 means got enough buffer
-// else return < 0 means error
-int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
-{
-  char msg[TCP_MSG_LEN];
-  char gid[33];
-  ssize_t r = ::read(sd, &msg, sizeof(msg));
-  // Drop incoming qpt
-  if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
-    if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
-      ldout(cct, 0) << __func__ << " injecting socket failure" << dendl;
-      return -EINVAL;
-    }
-  }
-  if (r < 0) {
-    r = -errno;
-    lderr(cct) << __func__ << " got error " << errno << ": "
-               << cpp_strerror(errno) << dendl;
-  } else if (r == 0) { // valid disconnect message of length 0
-    ldout(cct, 10) << __func__ << " got disconnect message " << dendl;
-  } else if ((size_t)r != sizeof(msg)) { // invalid message
-    ldout(cct, 1) << __func__ << " got bad length (" << r << "): " << cpp_strerror(errno) << dendl;
-    r = -EINVAL;
-  } else { // valid message
-    sscanf(msg, "%x:%x:%x:%x:%s", &(im.lid), &(im.qpn), &(im.psn), &(im.peer_qpn),gid);
-    wire_gid_to_gid(gid, &(im.gid));
-    ldout(cct, 5) << __func__ << " recevd: " << im.lid << ", " << im.qpn << ", " << im.psn << ", " << im.peer_qpn << ", " << gid  << dendl;
-  }
-  return r;
-}
-
-int Infiniband::send_msg(CephContext *cct, int sd, IBSYNMsg& im)
-{
-  int retry = 0;
-  ssize_t r;
-
-  char msg[TCP_MSG_LEN];
-  char gid[33];
-retry:
-  gid_to_wire_gid(&(im.gid), gid);
-  sprintf(msg, "%04x:%08x:%08x:%08x:%s", im.lid, im.qpn, im.psn, im.peer_qpn, gid);
-  ldout(cct, 10) << __func__ << " sending: " << im.lid << ", " << im.qpn << ", " << im.psn
-                 << ", " << im.peer_qpn << ", "  << gid  << dendl;
-  r = ::write(sd, msg, sizeof(msg));
-  // Drop incoming qpt
-  if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
-    if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
-      ldout(cct, 0) << __func__ << " injecting socket failure" << dendl;
-      return -EINVAL;
-    }
-  }
-
-  if ((size_t)r != sizeof(msg)) {
-    // FIXME need to handle EAGAIN instead of retry
-    if (r < 0 && (errno == EINTR || errno == EAGAIN) && retry < 3) {
-      retry++;
-      goto retry;
-    }
-    if (r < 0)
-      lderr(cct) << __func__ << " send returned error " << errno << ": "
-                 << cpp_strerror(errno) << dendl;
-    else
-      lderr(cct) << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << dendl;
-    return -errno;
-  }
-  return 0;
-}
-
-void Infiniband::wire_gid_to_gid(const char *wgid, union ibv_gid *gid)
-{
-  char tmp[9];
-  uint32_t v32;
-  int i;
-
-  for (tmp[8] = 0, i = 0; i < 4; ++i) {
-    memcpy(tmp, wgid + i * 8, 8);
-    sscanf(tmp, "%x", &v32);
-    *(uint32_t *)(&gid->raw[i * 4]) = ntohl(v32);
-  }
-}
-
-void Infiniband::gid_to_wire_gid(const union ibv_gid *gid, char wgid[])
-{
-  for (int i = 0; i < 4; ++i)
-    sprintf(&wgid[i * 8], "%08x", htonl(*(uint32_t *)(gid->raw + i * 4)));
-}
-
-Infiniband::QueuePair::~QueuePair()
-{
-  if (qp)
-    assert(!ibv_destroy_qp(qp));
 }
 
 Infiniband::CompletionChannel::~CompletionChannel()
@@ -425,33 +241,27 @@ Infiniband::CompletionChannel::~CompletionChannel()
   }
 }
 
-Infiniband::CompletionQueue::~CompletionQueue()
-{
-  if (cq) {
-    int r = ibv_destroy_cq(cq);
-    if (r < 0)
-      lderr(cct) << __func__ << " failed to destroy cq: " << cpp_strerror(errno) << dendl;
-    assert(r == 0);
-  }
-}
-
-int Infiniband::CompletionQueue::rearm_notify(bool solicite_only)
+int Infiniband::CompletionChannel::init()
 {
   ldout(cct, 20) << __func__ << " started." << dendl;
-  int r = ibv_req_notify_cq(cq, 0);
-  if (r < 0)
-    lderr(cct) << __func__ << " failed to notify cq: " << cpp_strerror(errno) << dendl;
-  return r;
-}
-
-int Infiniband::CompletionQueue::poll_cq(int num_entries, ibv_wc *ret_wc_array) {
-  int r = ibv_poll_cq(cq, num_entries, ret_wc_array);
-  if (r < 0) {
-    lderr(cct) << __func__ << " poll_completion_queue occur met error: "
-      << cpp_strerror(errno) << dendl;
+  channel = ibv_create_comp_channel(ibdev.ctxt);
+  if (!channel) {
+    lderr(cct) << __func__ << " failed to create receive completion channel: "
+                          << cpp_strerror(errno) << dendl;
     return -1;
   }
-  return r;
+  int rc = NetHandler(cct).set_nonblock(channel->fd);
+  if (rc < 0) {
+    ibv_destroy_comp_channel(channel);
+    return -1;
+  }
+  return 0;
+}
+
+void Infiniband::CompletionChannel::ack_events()
+{
+  ibv_ack_cq_events(cq, cq_events_that_need_ack);
+  cq_events_that_need_ack = 0;
 }
 
 bool Infiniband::CompletionChannel::get_cq_event()
@@ -477,9 +287,20 @@ bool Infiniband::CompletionChannel::get_cq_event()
   return true;
 }
 
+
+Infiniband::CompletionQueue::~CompletionQueue()
+{
+  if (cq) {
+    int r = ibv_destroy_cq(cq);
+    if (r < 0)
+      lderr(cct) << __func__ << " failed to destroy cq: " << cpp_strerror(errno) << dendl;
+    assert(r == 0);
+  }
+}
+
 int Infiniband::CompletionQueue::init()
 {
-  cq = ibv_create_cq(infiniband.device->ctxt, queue_depth, this, channel->get_channel(), 0);
+  cq = ibv_create_cq(ibdev.ctxt, queue_depth, this, channel->get_channel(), 0);
   if (!cq) {
     lderr(cct) << __func__ << " failed to create receive completion queue: "
       << cpp_strerror(errno) << dendl;
@@ -498,21 +319,305 @@ int Infiniband::CompletionQueue::init()
   return 0;
 }
 
-int Infiniband::CompletionChannel::init()
+int Infiniband::CompletionQueue::rearm_notify(bool solicite_only)
 {
   ldout(cct, 20) << __func__ << " started." << dendl;
-  channel = ibv_create_comp_channel(infiniband.device->ctxt);
-  if (!channel) {
-    lderr(cct) << __func__ << " failed to create receive completion channel: "
-                          << cpp_strerror(errno) << dendl;
+  int r = ibv_req_notify_cq(cq, 0);
+  if (r < 0)
+    lderr(cct) << __func__ << " failed to notify cq: " << cpp_strerror(errno) << dendl;
+  return r;
+}
+
+int Infiniband::CompletionQueue::poll_cq(int num_entries, ibv_wc *ret_wc_array) {
+  int r = ibv_poll_cq(cq, num_entries, ret_wc_array);
+  if (r < 0) {
+    lderr(cct) << __func__ << " poll_completion_queue occur met error: "
+      << cpp_strerror(errno) << dendl;
     return -1;
   }
-  int rc = NetHandler(cct).set_nonblock(channel->fd);
-  if (rc < 0) {
-    ibv_destroy_comp_channel(channel);
-    return -1;
+  return r;
+}
+
+
+Infiniband::ProtectionDomain::ProtectionDomain(CephContext *cct, Device *device)
+  : pd(ibv_alloc_pd(device->ctxt))
+{
+  if (pd == NULL) {
+    lderr(cct) << __func__ << " failed to allocate infiniband protection domain: " << cpp_strerror(errno) << dendl;
+    ceph_abort();
+  }
+}
+
+Infiniband::ProtectionDomain::~ProtectionDomain()
+{
+  int rc = ibv_dealloc_pd(pd);
+  assert(rc == 0);
+}
+
+
+Infiniband::MemoryManager::Chunk::Chunk(ibv_mr* m, uint32_t len, char* b)
+  : mr(m), bytes(len), offset(0), buffer(b)
+{
+}
+
+Infiniband::MemoryManager::Chunk::~Chunk()
+{
+  assert(ibv_dereg_mr(mr) == 0);
+}
+
+void Infiniband::MemoryManager::Chunk::set_offset(uint32_t o)
+{
+  offset = o;
+}
+
+uint32_t Infiniband::MemoryManager::Chunk::get_offset()
+{
+  return offset;
+}
+
+void Infiniband::MemoryManager::Chunk::set_bound(uint32_t b)
+{
+  bound = b;
+}
+
+void Infiniband::MemoryManager::Chunk::prepare_read(uint32_t b)
+{
+  offset = 0;
+  bound = b;
+}
+
+uint32_t Infiniband::MemoryManager::Chunk::get_bound()
+{
+  return bound;
+}
+
+uint32_t Infiniband::MemoryManager::Chunk::read(char* buf, uint32_t len)
+{
+  uint32_t left = bound - offset;
+  if (left >= len) {
+    memcpy(buf, buffer+offset, len);
+    offset += len;
+    return len;
+  } else {
+    memcpy(buf, buffer+offset, left);
+    offset = 0;
+    bound = 0;
+    return left;
+  }
+}
+
+uint32_t Infiniband::MemoryManager::Chunk::write(char* buf, uint32_t len)
+{
+  uint32_t left = bytes - offset;
+  if (left >= len) {
+    memcpy(buffer+offset, buf, len);
+    offset += len;
+    return len;
+  } else {
+    memcpy(buffer+offset, buf, left);
+    offset = bytes;
+    return left;
+  }
+}
+
+bool Infiniband::MemoryManager::Chunk::full()
+{
+  return offset == bytes;
+}
+
+bool Infiniband::MemoryManager::Chunk::over()
+{
+  return Infiniband::MemoryManager::Chunk::offset == bound;
+}
+
+void Infiniband::MemoryManager::Chunk::clear()
+{
+  offset = 0;
+  bound = 0;
+}
+
+Infiniband::MemoryManager::Cluster::Cluster(MemoryManager& m, uint32_t s)
+  : manager(m), buffer_size(s), lock("cluster_lock")
+{
+}
+
+Infiniband::MemoryManager::Cluster::~Cluster()
+{
+  char *p = chunk_base;
+  for (uint32_t i = 0; i < num_chunk; i++){
+    Chunk *chunk = reinterpret_cast<Chunk*>(p);
+    chunk->~Chunk();
+    p += sizeof(Chunk);
+  }
+
+  ::free(chunk_base);
+  if (manager.enabled_huge_page)
+    manager.free_huge_pages(base);
+  else
+    ::free(base);
+}
+
+int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
+{
+  assert(!base);
+  num_chunk = num;
+  uint32_t bytes = buffer_size * num;
+  if (manager.enabled_huge_page) {
+    base = (char*)manager.malloc_huge_pages(bytes);
+  } else {
+    base = (char*)memalign(CEPH_PAGE_SIZE, bytes);
+  }
+  end = base + bytes;
+  assert(base);
+  chunk_base = (char*)::malloc(sizeof(Chunk) * num);
+  memset(chunk_base, 0, sizeof(Chunk) * num);
+  free_chunks.reserve(num);
+  char *ptr = chunk_base;
+  for (uint32_t offset = 0; offset < bytes; offset += buffer_size){
+    Chunk *chunk = reinterpret_cast<Chunk*>(ptr);
+    ibv_mr* m = ibv_reg_mr(manager.pd->pd, base+offset, buffer_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
+    assert(m);
+    new(chunk) Chunk(m, buffer_size, base+offset);
+    free_chunks.push_back(chunk);
+    ptr += sizeof(Chunk);
   }
   return 0;
+}
+
+void Infiniband::MemoryManager::Cluster::take_back(std::vector<Chunk*> &ck)
+{
+  Mutex::Locker l(lock);
+  for (auto c : ck) {
+    c->clear();
+    free_chunks.push_back(c);
+  }
+}
+
+int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk*> &chunks, size_t bytes)
+{
+  uint32_t num = bytes / buffer_size + 1;
+  if (bytes % buffer_size == 0)
+    --num;
+  int r = num;
+  Mutex::Locker l(lock);
+  if (free_chunks.empty())
+    return 0;
+  if (!bytes) {
+    r = free_chunks.size();
+    for (auto c : free_chunks)
+      chunks.push_back(c);
+    free_chunks.clear();
+    return r;
+  }
+  if (free_chunks.size() < num) {
+    num = free_chunks.size();
+    r = num;
+  }
+  for (uint32_t i = 0; i < num; ++i) {
+    chunks.push_back(free_chunks.back());
+    free_chunks.pop_back();
+  }
+  return r;
+}
+
+
+Infiniband::MemoryManager::MemoryManager(Device *d, ProtectionDomain *p, bool hugepage)
+  : device(d), pd(p)
+{
+  enabled_huge_page = hugepage;
+}
+
+Infiniband::MemoryManager::~MemoryManager()
+{
+  if (channel)
+    delete channel;
+  if (send)
+    delete send;
+}
+
+void* Infiniband::MemoryManager::malloc_huge_pages(size_t size)
+{
+  size_t real_size = ALIGN_TO_PAGE_SIZE(size + HUGE_PAGE_SIZE);
+  char *ptr = (char *)mmap(NULL, real_size, PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS |MAP_POPULATE | MAP_HUGETLB,-1, 0);
+  if (ptr == MAP_FAILED) {
+    ptr = (char *)malloc(real_size);
+    if (ptr == NULL) return NULL;
+    real_size = 0;
+  }
+  *((size_t *)ptr) = real_size;
+  return ptr + HUGE_PAGE_SIZE;
+}
+
+void Infiniband::MemoryManager::free_huge_pages(void *ptr)
+{
+  if (ptr == NULL) return;
+  void *real_ptr = (char *)ptr -HUGE_PAGE_SIZE;
+  size_t real_size = *((size_t *)real_ptr);
+  assert(real_size % HUGE_PAGE_SIZE == 0);
+  if (real_size != 0)
+    munmap(real_ptr, real_size);
+  else
+    free(real_ptr);
+}
+
+void Infiniband::MemoryManager::register_rx_tx(uint32_t size, uint32_t rx_num, uint32_t tx_num)
+{
+  assert(device);
+  assert(pd);
+  channel = new Cluster(*this, size);
+  channel->fill(rx_num);
+
+  send = new Cluster(*this, size);
+  send->fill(tx_num);
+}
+
+void Infiniband::MemoryManager::return_tx(std::vector<Chunk*> &chunks)
+{
+  send->take_back(chunks);
+}
+
+int Infiniband::MemoryManager::get_send_buffers(std::vector<Chunk*> &c, size_t bytes)
+{
+  return send->get_buffers(c, bytes);
+}
+
+int Infiniband::MemoryManager::get_channel_buffers(std::vector<Chunk*> &chunks, size_t bytes)
+{
+  return channel->get_buffers(chunks, bytes);
+}
+
+
+Infiniband::Infiniband(CephContext *cct)
+  : device_list(new DeviceList(cct, this))
+{
+}
+
+Infiniband::~Infiniband()
+{
+  if (dispatcher)
+    dispatcher->polling_stop();
+
+  delete device_list;
+}
+
+void Infiniband::set_dispatcher(RDMADispatcher *d)
+{
+  assert(!d ^ !dispatcher);
+
+  dispatcher = d;
+}
+
+Device* Infiniband::get_device(const char* device_name)
+{
+  return device_list->get_device(device_name);
+}
+
+Infiniband::QueuePair::~QueuePair()
+{
+  if (qp) {
+    ldout(cct, 20) << __func__ << " destroy qp=" << qp << dendl;
+    assert(!ibv_destroy_qp(qp));
+  }
 }
 
 /**
@@ -567,4 +672,34 @@ const char* Infiniband::qp_state_string(int status) {
     case IBV_QPS_ERR   : return "IBV_QPS_ERR";
     default: return " out of range.";
   }
+}
+
+void Infiniband::handle_pre_fork()
+{
+  device_list->uninit();
+}
+
+int Infiniband::poll_tx(int n, Device **d, ibv_wc *wc)
+{
+  return device_list->poll_tx(n, d, wc);
+}
+
+int Infiniband::poll_rx(int n, Device **d, ibv_wc *wc)
+{
+  return device_list->poll_rx(n, d, wc);
+}
+
+int Infiniband::poll_blocking(bool &done)
+{
+  return device_list->poll_blocking(done);
+}
+
+void Infiniband::rearm_notify()
+{
+  device_list->rearm_notify();
+}
+
+void Infiniband::handle_async_event()
+{
+  device_list->handle_async_event();
 }

@@ -141,7 +141,7 @@ documentation`_.
 
 Once a pool has been created and configured the metadata service must be told
 that the new pool may be used to store file data. A pool is be made available
-for storing file system data using the ``ceph mds add_data_pool`` command.
+for storing file system data using the ``ceph fs add_data_pool`` command.
 
 First, create the pool. In this example we create the ``hadoop1`` pool with
 replication factor 1. ::
@@ -162,7 +162,7 @@ The output should resemble::
 where ``3`` is the pool id. Next we will use the pool id reference to register
 the pool as a data pool for storing file system data. ::
 
-    ceph mds add_data_pool 3
+    ceph fs add_data_pool cephfs 3
 
 The final step is to configure Hadoop to consider this data pool when
 selecting the target pool for new files. ::

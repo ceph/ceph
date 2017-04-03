@@ -22,6 +22,8 @@ class MgrMonitor : public PaxosService
   MgrMap map;
   MgrMap pending_map;
 
+  utime_t first_seen_inactive;
+
   std::map<uint64_t, utime_t> last_beacon;
 
   /**
@@ -36,30 +38,32 @@ class MgrMonitor : public PaxosService
 
   Context *digest_callback;
 
+  bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
+
 public:
   MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name), digest_callback(nullptr)
   {}
 
-  void init();
-  void on_shutdown();
+  void init() override;
+  void on_shutdown() override;
 
   const MgrMap &get_map() const { return map; }
 
   bool in_use() const { return map.epoch > 0; }
 
-  void create_initial();
-  void update_from_paxos(bool *need_bootstrap);
-  void create_pending();
-  void encode_pending(MonitorDBStore::TransactionRef t);
+  void create_initial() override;
+  void update_from_paxos(bool *need_bootstrap) override;
+  void create_pending() override;
+  void encode_pending(MonitorDBStore::TransactionRef t) override;
 
-  bool preprocess_query(MonOpRequestRef op);
-  bool prepare_update(MonOpRequestRef op);
+  bool preprocess_query(MonOpRequestRef op) override;
+  bool prepare_update(MonOpRequestRef op) override;
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
-  void encode_full(MonitorDBStore::TransactionRef t) { }
+  void encode_full(MonitorDBStore::TransactionRef t) override { }
 
   bool preprocess_beacon(MonOpRequestRef op);
   bool prepare_beacon(MonOpRequestRef op);
@@ -68,7 +72,11 @@ public:
   void check_subs();
   void send_digests();
 
-  void tick();
+  void on_active() override;
+  void get_health(list<pair<health_status_t,string> >& summary,
+		  list<pair<health_status_t,string> > *detail,
+		  CephContext *cct) const override;
+  void tick() override;
 
   void print_summary(Formatter *f, std::ostream *ss) const;
 

@@ -32,8 +32,8 @@ public:
   explicit CompressionPluginZlib(CephContext *cct) : CompressionPlugin(cct)
   {}
 
-  virtual int factory(CompressorRef *cs,
-                      std::ostream *ss)
+  int factory(CompressorRef *cs,
+                      std::ostream *ss) override
   {
     bool isal;
     if (cct->_conf->compressor_zlib_isal) {
@@ -43,7 +43,7 @@ public:
       isal = false;
     }
     if (compressor == 0 || has_isal != isal) {
-      compressor = CompressorRef(new ZlibCompressor(isal));
+      compressor = std::make_shared<ZlibCompressor>(isal);
       has_isal = isal;
     }
     *cs = compressor;

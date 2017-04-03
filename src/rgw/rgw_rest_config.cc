@@ -22,6 +22,7 @@
 #include "common/errno.h"
 #include "include/assert.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 void RGWOp_ZoneGroupMap_Get::execute() {
@@ -52,12 +53,28 @@ void RGWOp_ZoneGroupMap_Get::send_response() {
   flusher.flush();
 }
 
+void RGWOp_ZoneConfig_Get::send_response() {
+  const RGWZoneParams& zone_params = store->get_zone_params();
+
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret < 0)
+    return;
+
+  encode_json("zone_params", zone_params, s->formatter);
+  flusher.flush();
+}
+
 RGWOp* RGWHandler_Config::op_get() {
   bool exists;
   string type = s->info.args.get("type", &exists);
 
   if (type.compare("zonegroup-map") == 0) {
     return new RGWOp_ZoneGroupMap_Get(false);
+  } else if (type.compare("zone") == 0) {
+    return new RGWOp_ZoneConfig_Get();
   } else {
     return new RGWOp_ZoneGroupMap_Get(true);
   }

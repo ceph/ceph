@@ -7,6 +7,7 @@
 #include <string>
 #include <map>
 #include <mutex>
+#include <functional>
 
 #include "common/Thread.h"
 #include "include/buffer.h"
@@ -35,7 +36,7 @@ public:
     FuseStore *fs;
   public:
     explicit FuseThread(FuseStore *f) : fs(f) {}
-    void *entry() {
+    void *entry() override {
       fs->loop();
       return NULL;
     }

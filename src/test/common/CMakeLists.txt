@@ -47,7 +47,7 @@ add_executable(unittest_str_map
   test_str_map.cc
   )
 add_ceph_unittest(unittest_str_map ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_str_map)
-target_link_libraries(unittest_str_map common global ${BLKID_LIBRARIES})
+target_link_libraries(unittest_str_map ceph-common global ${BLKID_LIBRARIES})
 
 # unittest_sharedptr_registry
 add_executable(unittest_sharedptr_registry
@@ -120,6 +120,7 @@ target_link_libraries(unittest_crc32c global)
 # unittest_config
 add_executable(unittest_config
   test_config.cc
+  test_hostname.cc
   )
 add_ceph_unittest(unittest_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_config)
 target_link_libraries(unittest_config global)
@@ -151,6 +152,12 @@ add_executable(unittest_tableformatter
   )
 add_ceph_unittest(unittest_tableformatter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_tableformatter)
 target_link_libraries(unittest_tableformatter global)
+
+add_executable(unittest_xmlformatter
+    test_xmlformatter.cc
+    )
+add_ceph_unittest(unittest_xmlformatter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_xmlformatter)
+target_link_libraries(unittest_xmlformatter ceph-common)
 
 # unittest_bit_vector
 add_executable(unittest_bit_vector
@@ -195,12 +202,26 @@ add_executable(unittest_mutex_debug
 add_ceph_unittest(unittest_mutex_debug ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mutex_debug)
 target_link_libraries(unittest_mutex_debug global ${BLKID_LIBRARIES} ${EXTRALIBS})
 
+# unittest_mutex
+add_executable(unittest_mutex
+  test_mutex.cc
+  )
+add_ceph_unittest(unittest_mutex ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_mutex)
+target_link_libraries(unittest_mutex global ${BLKID_LIBRARIES} ${EXTRALIBS})
+
 # unittest_shunique_lock
 add_executable(unittest_shunique_lock
   test_shunique_lock.cc
   )
 add_ceph_unittest(unittest_shunique_lock ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_shunique_lock)
 target_link_libraries(unittest_shunique_lock global ${BLKID_LIBRARIES} ${EXTRALIBS})
+
+# unittest_perf_histogram
+add_executable(unittest_perf_histogram
+  test_perf_histogram.cc
+  )
+add_ceph_unittest(unittest_perf_histogram ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_perf_histogram)
+target_link_libraries(unittest_perf_histogram global ${BLKID_LIBRARIES} ${EXTRALIBS})
 
 # unittest_global_doublefree
 if(WITH_CEPHFS)
@@ -217,3 +238,17 @@ add_executable(unittest_dns_resolve
 target_link_libraries(unittest_dns_resolve global)
 add_ceph_unittest(unittest_dns_resolve
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_dns_resolve)
+
+add_executable(unittest_back_trace
+  test_back_trace.cc)
+set_source_files_properties(test_back_trace.cc PROPERTIES
+  COMPILE_FLAGS -fno-inline)
+target_link_libraries(unittest_back_trace ceph-common)
+add_ceph_unittest(unittest_back_trace
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_back_trace)
+
+add_executable(unittest_hostname
+    test_hostname.cc)
+target_link_libraries(unittest_hostname ceph-common)
+add_ceph_unittest(unittest_hostname
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_hostname)

@@ -15,7 +15,7 @@ overrides:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
 roles:
-- [mon.0, osd.0, osd.1, client.0]
+- [mon.a, mgr.x, osd.0, osd.1, client.0]
 tasks:
 - install:
 - ceph:

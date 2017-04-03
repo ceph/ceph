@@ -224,10 +224,12 @@ Commands
   Deletes an rbd image (including all data blocks). If the image has
   snapshots, this fails and nothing is deleted.
 
-:command:`export` (*image-spec* | *snap-spec*) [*dest-path*]
+:command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
   Exports image to dest path (use - for stdout).
+  The --export-format accepts '1' or '2' currently. Format 2 allow us to export not only the content
+  of image, but also the snapshots and other properties, such as image_order, features.
 
-:command:`import` [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
+:command:`import` [--export-format *format (1 or 2)*] [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
   Creates a new image and imports its data from path (use - for
   stdin).  The import operation will try to create sparse rbd images 
   if possible.  For import from stdin, the sparsification unit is
@@ -235,6 +237,9 @@ Commands
 
   The --stripe-unit and --stripe-count arguments are optional, but must be
   used together.
+
+  The --export-format accepts '1' or '2' currently. Format 2 allow us to import not only the content
+  of image, but also the snapshots and other properties, such as image_order, features.
 
 :command:`export-diff` [--from-snap *snap-name*] [--whole-object] (*image-spec* | *snap-spec*) *dest-path*
   Exports an incremental diff for an image to dest path (use - for stdout).  If

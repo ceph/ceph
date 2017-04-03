@@ -13,11 +13,17 @@
 #include "include/stringify.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "global/global_context.h"
-#include "librbd/ObjectWatcher.h"
 #include "librbd/internal.h"
+#include "librbd/Utils.h"
+#include "librbd/Watcher.h"
+#include "librbd/api/Mirror.h"
+#include "InstanceWatcher.h"
+#include "LeaderWatcher.h"
 #include "Replayer.h"
 #include "Threads.h"
+#include "pool_watcher/RefreshImagesRequest.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::Replayer: " \
@@ -30,6 +36,7 @@ using std::unique_ptr;
 using std::vector;
 
 using librbd::cls_client::dir_get_name;
+using librbd::util::create_async_context_callback;
 
 namespace rbd {
 namespace mirror {
@@ -46,7 +53,7 @@ class StatusCommand : public ReplayerAdminSocketCommand {
 public:
   explicit StatusCommand(Replayer *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->print_status(f, ss);
     return true;
   }
@@ -59,7 +66,7 @@ class StartCommand : public ReplayerAdminSocketCommand {
 public:
   explicit StartCommand(Replayer *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->start();
     return true;
   }
@@ -72,7 +79,7 @@ class StopCommand : public ReplayerAdminSocketCommand {
 public:
   explicit StopCommand(Replayer *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->stop(true);
     return true;
   }
@@ -85,7 +92,7 @@ class RestartCommand : public ReplayerAdminSocketCommand {
 public:
   explicit RestartCommand(Replayer *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->restart();
     return true;
   }
@@ -98,7 +105,7 @@ class FlushCommand : public ReplayerAdminSocketCommand {
 public:
   explicit FlushCommand(Replayer *replayer) : replayer(replayer) {}
 
-  bool call(Formatter *f, stringstream *ss) {
+  bool call(Formatter *f, stringstream *ss) override {
     replayer->flush();
     return true;
   }
@@ -107,7 +114,18 @@ private:
   Replayer *replayer;
 };
 
-} // anonymous namespace
+class LeaderReleaseCommand : public ReplayerAdminSocketCommand {
+public:
+  explicit LeaderReleaseCommand(Replayer *replayer) : replayer(replayer) {}
+
+  bool call(Formatter *f, stringstream *ss) override {
+    replayer->release_leader();
+    return true;
+  }
+
+private:
+  Replayer *replayer;
+};
 
 class ReplayerAdminSocketHook : public AdminSocketHook {
 public:
@@ -151,9 +169,16 @@ public:
     if (r == 0) {
       commands[command] = new FlushCommand(replayer);
     }
+
+    command = "rbd mirror leader release " + name;
+    r = admin_socket->register_command(command, command, this,
+                                       "release rbd mirror leader " + name);
+    if (r == 0) {
+      commands[command] = new LeaderReleaseCommand(replayer);
+    }
   }
 
-  ~ReplayerAdminSocketHook() {
+  ~ReplayerAdminSocketHook() override {
     for (Commands::const_iterator i = commands.begin(); i != commands.end();
 	 ++i) {
       (void)admin_socket->unregister_command(i->first);
@@ -162,7 +187,7 @@ public:
   }
 
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
     assert(i != commands.end());
     Formatter *f = Formatter::create(format);
@@ -180,56 +205,24 @@ private:
   Commands commands;
 };
 
-class MirrorStatusWatchCtx {
-public:
-  MirrorStatusWatchCtx(librados::IoCtx &ioctx, ContextWQ *work_queue) {
-    m_ioctx.dup(ioctx);
-    m_watcher = new Watcher(m_ioctx, work_queue);
+} // anonymous namespace
+
+struct Replayer::C_RefreshLocalImages : public Context {
+  Replayer *replayer;
+  Context *on_finish;
+  ImageIds image_ids;
+
+  C_RefreshLocalImages(Replayer *replayer, Context *on_finish)
+    : replayer(replayer), on_finish(on_finish) {
   }
 
-  ~MirrorStatusWatchCtx() {
-    delete m_watcher;
+  void finish(int r) override {
+    replayer->handle_refresh_local_images(r, std::move(image_ids), on_finish);
   }
-
-  int register_watch() {
-    C_SaferCond cond;
-    m_watcher->register_watch(&cond);
-    return cond.wait();
-  }
-
-  int unregister_watch() {
-    C_SaferCond cond;
-    m_watcher->unregister_watch(&cond);
-    return cond.wait();
-  }
-
-  std::string get_oid() const {
-    return m_watcher->get_oid();
-  }
-
-private:
-  class Watcher : public librbd::ObjectWatcher<> {
-  public:
-    Watcher(librados::IoCtx &ioctx, ContextWQ *work_queue) :
-      ObjectWatcher<>(ioctx, work_queue) {
-    }
-
-    virtual std::string get_oid() const {
-      return RBD_MIRRORING;
-    }
-
-    virtual void handle_notify(uint64_t notify_id, uint64_t handle,
-			       bufferlist &bl) {
-      bufferlist out;
-      acknowledge_notify(notify_id, handle, out);
-    }
-  };
-
-  librados::IoCtx m_ioctx;
-  Watcher *m_watcher;
 };
 
-Replayer::Replayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+Replayer::Replayer(Threads<librbd::ImageCtx> *threads,
+                   std::shared_ptr<ImageDeleter> image_deleter,
                    ImageSyncThrottlerRef<> image_sync_throttler,
                    int64_t local_pool_id, const peer_t &peer,
                    const std::vector<const char*> &args) :
@@ -240,8 +233,10 @@ Replayer::Replayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter
   m_peer(peer),
   m_args(args),
   m_local_pool_id(local_pool_id),
+  m_pool_watcher_listener(this),
   m_asok_hook(nullptr),
-  m_replayer_thread(this)
+  m_replayer_thread(this),
+  m_leader_listener(this)
 {
 }
 
@@ -257,11 +252,24 @@ Replayer::~Replayer()
   if (m_replayer_thread.is_started()) {
     m_replayer_thread.join();
   }
+  if (m_leader_watcher) {
+    m_leader_watcher->shut_down();
+  }
+  if (m_instance_watcher) {
+    m_instance_watcher->shut_down();
+  }
+
+  assert(!m_pool_watcher);
 }
 
 bool Replayer::is_blacklisted() const {
   Mutex::Locker locker(m_lock);
   return m_blacklisted;
+}
+
+bool Replayer::is_leader() const {
+  Mutex::Locker locker(m_lock);
+  return m_leader_watcher && m_leader_watcher->is_leader();
 }
 
 int Replayer::init()
@@ -300,13 +308,21 @@ int Replayer::init()
 
   dout(20) << "connected to " << m_peer << dendl;
 
-  // Bootstrap existing mirroring images
-  init_local_mirroring_images();
+  m_leader_watcher.reset(new LeaderWatcher<>(m_threads, m_local_io_ctx,
+                                             &m_leader_listener));
+  r = m_leader_watcher->init();
+  if (r < 0) {
+    derr << "error initializing leader watcher: " << cpp_strerror(r) << dendl;
+    return r;
+  }
 
-  m_pool_watcher.reset(new PoolWatcher(m_remote_io_ctx,
-		       g_ceph_context->_conf->rbd_mirror_image_directory_refresh_interval,
-		       m_lock, m_cond));
-  m_pool_watcher->refresh_images();
+  m_instance_watcher.reset(InstanceWatcher<>::create(m_local_io_ctx,
+                                                     m_threads->work_queue));
+  r = m_instance_watcher->init();
+  if (r < 0) {
+    derr << "error initializing instance watcher: " << cpp_strerror(r) << dendl;
+    return r;
+  }
 
   m_replayer_thread.create("replayer");
 
@@ -384,58 +400,11 @@ int Replayer::init_rados(const std::string &cluster_name,
   return 0;
 }
 
-void Replayer::init_local_mirroring_images() {
-  rbd_mirror_mode_t mirror_mode;
-  int r = librbd::mirror_mode_get(m_local_io_ctx, &mirror_mode);
-  if (r < 0) {
-    derr << "could not tell whether mirroring was enabled for "
-         << m_local_io_ctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
-    return;
-  }
-  if (mirror_mode == RBD_MIRROR_MODE_DISABLED) {
-    dout(20) << "pool " << m_local_io_ctx.get_pool_name() << " "
-             << "has mirroring disabled" << dendl;
-    return;
-  }
-
-  std::set<InitImageInfo> images;
-
-  std::string last_read = "";
-  int max_read = 1024;
-  do {
-    std::map<std::string, std::string> mirror_images;
-    r = librbd::cls_client::mirror_image_list(&m_local_io_ctx, last_read,
-                                              max_read, &mirror_images);
-    if (r < 0) {
-      derr << "error listing mirrored image directory: "
-           << cpp_strerror(r) << dendl;
-      continue;
-    }
-    for (auto it = mirror_images.begin(); it != mirror_images.end(); ++it) {
-      std::string image_name;
-      r = dir_get_name(&m_local_io_ctx, RBD_DIRECTORY, it->first, &image_name);
-      if (r < 0) {
-        derr << "error retrieving local image name: " << cpp_strerror(r)
-             << dendl;
-        continue;
-      }
-      images.insert(InitImageInfo(it->second, it->first, image_name));
-    }
-    if (!mirror_images.empty()) {
-      last_read = mirror_images.rbegin()->first;
-    }
-    r = mirror_images.size();
-  } while (r == max_read);
-
-  m_init_images = std::move(images);
-}
-
 void Replayer::run()
 {
   dout(20) << "enter" << dendl;
 
   while (!m_stopping.read()) {
-
     std::string asok_hook_name = m_local_io_ctx.get_pool_name() + " " +
                                  m_peer.cluster_name;
     if (m_asok_hook_name != asok_hook_name || m_asok_hook == nullptr) {
@@ -447,28 +416,33 @@ void Replayer::run()
     }
 
     Mutex::Locker locker(m_lock);
-    if (m_pool_watcher->is_blacklisted()) {
+    if (m_pool_watcher && m_pool_watcher->is_blacklisted()) {
       m_blacklisted = true;
       m_stopping.set(1);
-    } else if (!m_manual_stop) {
-      set_sources(m_pool_watcher->get_images());
-    }
-
-    if (m_blacklisted) {
       break;
     }
-    m_cond.WaitInterval(g_ceph_context, m_lock,
-	utime_t(g_ceph_context->_conf->rbd_mirror_image_state_check_interval, 0));
+
+    for (auto image_it = m_image_replayers.begin();
+         image_it != m_image_replayers.end(); ) {
+      if (image_it->second->remote_images_empty()) {
+        if (stop_image_replayer(image_it->second)) {
+          image_it = m_image_replayers.erase(image_it);
+          continue;
+        }
+      } else {
+        start_image_replayer(image_it->second);
+      }
+      ++image_it;
+    }
+
+    m_cond.WaitInterval(m_lock,
+			utime_t(g_ceph_context->_conf->
+                                  rbd_mirror_image_state_check_interval, 0));
   }
 
-  ImageIds empty_sources;
-  while (true) {
-    Mutex::Locker l(m_lock);
-    set_sources(empty_sources);
-    if (m_image_replayers.empty()) {
-      break;
-    }
-    m_cond.WaitInterval(g_ceph_context, m_lock, seconds(1));
+  Mutex::Locker locker(m_lock);
+  while (!m_image_replayers.empty()) {
+    stop_image_replayers();
   }
 }
 
@@ -476,25 +450,37 @@ void Replayer::print_status(Formatter *f, stringstream *ss)
 {
   dout(20) << "enter" << dendl;
 
+  if (!f) {
+    return;
+  }
+
   Mutex::Locker l(m_lock);
 
-  if (f) {
-    f->open_object_section("replayer_status");
-    f->dump_string("pool", m_local_io_ctx.get_pool_name());
-    f->dump_stream("peer") << m_peer;
-    f->open_array_section("image_replayers");
-  };
+  f->open_object_section("replayer_status");
+  f->dump_string("pool", m_local_io_ctx.get_pool_name());
+  f->dump_stream("peer") << m_peer;
+
+  bool leader = m_leader_watcher->is_leader();
+  f->dump_bool("leader", leader);
+  if (leader) {
+    std::vector<std::string> instance_ids;
+    m_leader_watcher->list_instances(&instance_ids);
+    f->open_array_section("instances");
+    for (auto instance_id : instance_ids) {
+      f->dump_string("instance_id", instance_id);
+    }
+    f->close_section();
+  }
+  f->open_array_section("image_replayers");
 
   for (auto &kv : m_image_replayers) {
     auto &image_replayer = kv.second;
     image_replayer->print_status(f, ss);
   }
 
-  if (f) {
-    f->close_section();
-    f->close_section();
-    f->flush(*ss);
-  }
+  f->close_section();
+  f->close_section();
+  f->flush(*ss);
 }
 
 void Replayer::start()
@@ -569,60 +555,93 @@ void Replayer::flush()
   }
 }
 
-void Replayer::set_sources(const ImageIds &image_ids)
+void Replayer::release_leader()
 {
   dout(20) << "enter" << dendl;
 
-  assert(m_lock.is_locked());
+  Mutex::Locker l(m_lock);
 
-  if (!m_init_images.empty()) {
+  if (m_stopping.read() || !m_leader_watcher) {
+    return;
+  }
+
+  m_leader_watcher->release_leader();
+}
+
+void Replayer::handle_update(const ImageIds &added_image_ids,
+                             const ImageIds &removed_image_ids) {
+  if (m_stopping.read()) {
+    return;
+  }
+
+  dout(10) << dendl;
+  Mutex::Locker locker(m_lock);
+  if (!m_leader_watcher->is_leader()) {
+    return;
+  }
+
+  // first callback will be a full directory -- so see if we need to remove
+  // any local images that no longer exist on the remote side
+  if (!m_init_image_ids.empty()) {
     dout(20) << "scanning initial local image set" << dendl;
-    for (auto &remote_image : image_ids) {
-      auto it = m_init_images.find(InitImageInfo(remote_image.global_id));
-      if (it != m_init_images.end()) {
-        m_init_images.erase(it);
+    for (auto &image_id : added_image_ids) {
+      auto it = m_init_image_ids.find(image_id);
+      if (it != m_init_image_ids.end()) {
+        m_init_image_ids.erase(it);
       }
     }
 
-    // the remaining images in m_init_images must be deleted
-    for (auto &image : m_init_images) {
+    // the remaining images in m_init_image_ids must be deleted
+    for (auto &image_id : m_init_image_ids) {
       dout(20) << "scheduling the deletion of init image: "
-               << image.name << dendl;
+               << image_id.global_id << " (" << image_id.id << ")" << dendl;
       m_image_deleter->schedule_image_delete(m_local_rados, m_local_pool_id,
-                                             image.id, image.name,
-                                             image.global_id);
+                                             image_id.id, image_id.global_id);
     }
-    m_init_images.clear();
+    m_init_image_ids.clear();
   }
 
   // shut down replayers for non-mirrored images
-  bool existing_image_replayers = !m_image_replayers.empty();
-  for (auto image_it = m_image_replayers.begin();
-       image_it != m_image_replayers.end();) {
-    if (image_ids.find(ImageId(image_it->first)) == image_ids.end()) {
+  for (auto &image_id : removed_image_ids) {
+    auto image_it = m_image_replayers.find(image_id.global_id);
+    if (image_it != m_image_replayers.end()) {
+      assert(!m_remote_mirror_uuid.empty());
+      image_it->second->remove_remote_image(m_remote_mirror_uuid,
+                                            image_id.id);
+
       if (image_it->second->is_running()) {
-        dout(20) << "stop image replayer for "
-                 << image_it->second->get_global_image_id() << dendl;
+        dout(20) << "stop image replayer for remote image "
+                 << image_id.id << " (" << image_id.global_id << ")"
+                 << dendl;
       }
-      if (stop_image_replayer(image_it->second)) {
-        image_it = m_image_replayers.erase(image_it);
-        continue;
+
+      if (image_it->second->remote_images_empty() &&
+          stop_image_replayer(image_it->second)) {
+        // no additional remotes registered for this image
+        m_image_replayers.erase(image_it);
       }
     }
-    ++image_it;
   }
 
-  if (image_ids.empty()) {
-    if (existing_image_replayers && m_image_replayers.empty()) {
-      mirror_image_status_shut_down();
+  // prune previously stopped image replayers
+  for (auto image_it = m_image_replayers.begin();
+       image_it != m_image_replayers.end(); ) {
+    if (image_it->second->remote_images_empty() &&
+        stop_image_replayer(image_it->second)) {
+      image_it = m_image_replayers.erase(image_it);
+    } else {
+      ++image_it;
     }
+  }
+
+  if (added_image_ids.empty()) {
     return;
   }
 
   std::string local_mirror_uuid;
   int r = librbd::cls_client::mirror_uuid_get(&m_local_io_ctx,
                                               &local_mirror_uuid);
-  if (r < 0) {
+  if (r < 0 || local_mirror_uuid.empty()) {
     derr << "failed to retrieve local mirror uuid from pool "
          << m_local_io_ctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
     return;
@@ -631,88 +650,42 @@ void Replayer::set_sources(const ImageIds &image_ids)
   std::string remote_mirror_uuid;
   r = librbd::cls_client::mirror_uuid_get(&m_remote_io_ctx,
                                           &remote_mirror_uuid);
-  if (r < 0) {
+  if (r < 0 || remote_mirror_uuid.empty()) {
     derr << "failed to retrieve remote mirror uuid from pool "
          << m_remote_io_ctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
     return;
   }
+  m_remote_mirror_uuid = remote_mirror_uuid;
 
-  if (m_image_replayers.empty() && !existing_image_replayers) {
-    // create entry for pool if it doesn't exist
-    r = mirror_image_status_init();
-    if (r < 0) {
-      return;
-    }
-  }
-
-  for (auto &image_id : image_ids) {
-    auto it = m_image_replayers.find(image_id.id);
+  // start replayers for newly added remote image sources
+  for (auto &image_id : added_image_ids) {
+    auto it = m_image_replayers.find(image_id.global_id);
     if (it == m_image_replayers.end()) {
       unique_ptr<ImageReplayer<> > image_replayer(new ImageReplayer<>(
         m_threads, m_image_deleter, m_image_sync_throttler, m_local_rados,
-        m_remote_rados, local_mirror_uuid, remote_mirror_uuid, m_local_pool_id,
-        m_remote_pool_id, image_id.id, image_id.global_id));
+        local_mirror_uuid, m_local_pool_id, image_id.global_id));
+      if (m_manual_stop) {
+        image_replayer->stop(nullptr, true);
+      }
+
       it = m_image_replayers.insert(
-        std::make_pair(image_id.id, std::move(image_replayer))).first;
+        std::make_pair(image_id.global_id, std::move(image_replayer))).first;
     }
+
+    it->second->add_remote_image(remote_mirror_uuid, image_id.id,
+                                 m_remote_io_ctx);
     if (!it->second->is_running()) {
-      dout(20) << "starting image replayer for "
-               << it->second->get_global_image_id() << dendl;
+      dout(20) << "starting image replayer for remote image "
+               << image_id.global_id << dendl;
     }
-    start_image_replayer(it->second, image_id.id, image_id.name);
+    start_image_replayer(it->second);
   }
 }
 
-int Replayer::mirror_image_status_init() {
-  assert(!m_status_watcher);
-
-  uint64_t instance_id = librados::Rados(m_local_io_ctx).get_instance_id();
-  dout(20) << "pool_id=" << m_local_pool_id << ", "
-           << "instance_id=" << instance_id << dendl;
-
-  librados::ObjectWriteOperation op;
-  librbd::cls_client::mirror_image_status_remove_down(&op);
-  int r = m_local_io_ctx.operate(RBD_MIRRORING, &op);
-  if (r < 0) {
-    derr << "error initializing " << RBD_MIRRORING << "object: "
-	 << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  unique_ptr<MirrorStatusWatchCtx> watch_ctx(
-    new MirrorStatusWatchCtx(m_local_io_ctx, m_threads->work_queue));
-
-  r = watch_ctx->register_watch();
-  if (r < 0) {
-    derr << "error registering watcher for " << watch_ctx->get_oid()
-	 << " object: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  m_status_watcher = std::move(watch_ctx);
-  return 0;
-}
-
-void Replayer::mirror_image_status_shut_down() {
-  assert(m_status_watcher);
-
-  int r = m_status_watcher->unregister_watch();
-  if (r < 0) {
-    derr << "error unregistering watcher for " << m_status_watcher->get_oid()
-	 << " object: " << cpp_strerror(r) << dendl;
-  }
-  m_status_watcher.reset();
-}
-
-void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer,
-                                    const std::string &image_id,
-                                    const boost::optional<std::string>& image_name)
+void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
 {
   assert(m_lock.is_locked());
-  dout(20) << "global_image_id=" << image_replayer->get_global_image_id()
-           << dendl;
-
-  if (!image_replayer->is_stopped()) {
+  if (!image_replayer->is_stopped() || image_replayer->remote_images_empty()) {
     return;
   } else if (image_replayer->is_blacklisted()) {
     derr << "blacklisted detected during image replay" << dendl;
@@ -721,31 +694,34 @@ void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer
     return;
   }
 
-  if (image_name) {
-    FunctionContext *ctx = new FunctionContext(
-        [this, image_id, image_name] (int r) {
-          if (r == -ESTALE || r == -ECANCELED) {
-            return;
-          }
+  std::string global_image_id = image_replayer->get_global_image_id();
+  dout(20) << "global_image_id=" << global_image_id << dendl;
 
-          Mutex::Locker locker(m_lock);
-          auto it = m_image_replayers.find(image_id);
-          if (it == m_image_replayers.end()) {
-            return;
-          }
+  FunctionContext *ctx = new FunctionContext(
+      [this, global_image_id] (int r) {
+        dout(20) << "image deleter result: r=" << r << ", "
+                 << "global_image_id=" << global_image_id << dendl;
+        if (r == -ESTALE || r == -ECANCELED) {
+          return;
+        }
 
-          auto &image_replayer = it->second;
-          if (r >= 0) {
-            image_replayer->start();
-          } else {
-            start_image_replayer(image_replayer, image_id, image_name);
-          }
-       }
-    );
+        Mutex::Locker locker(m_lock);
+        auto it = m_image_replayers.find(global_image_id);
+        if (it == m_image_replayers.end()) {
+          return;
+        }
 
-    m_image_deleter->wait_for_scheduled_deletion(
-      m_local_pool_id, image_replayer->get_global_image_id(), ctx, false);
-  }
+        auto &image_replayer = it->second;
+        if (r >= 0) {
+          image_replayer->start();
+        } else {
+          start_image_replayer(image_replayer);
+        }
+     }
+  );
+
+  m_image_deleter->wait_for_scheduled_deletion(
+    m_local_pool_id, image_replayer->get_global_image_id(), ctx, false);
 }
 
 bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
@@ -759,13 +735,12 @@ bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
     m_image_deleter->cancel_waiter(m_local_pool_id,
                                    image_replayer->get_global_image_id());
 
-    if (!m_stopping.read()) {
+    if (!m_stopping.read() && m_leader_watcher->is_leader()) {
       dout(20) << "scheduling delete" << dendl;
       m_image_deleter->schedule_image_delete(
         m_local_rados,
         image_replayer->get_local_pool_id(),
         image_replayer->get_local_image_id(),
-        image_replayer->get_local_image_name(),
         image_replayer->get_global_image_id());
     }
     return true;
@@ -775,12 +750,11 @@ bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
     }
     FunctionContext *ctx = new FunctionContext(
         [&image_replayer, this] (int r) {
-          if (!m_stopping.read() && r >= 0) {
+          if (!m_stopping.read() && m_leader_watcher->is_leader() && r >= 0) {
             m_image_deleter->schedule_image_delete(
               m_local_rados,
               image_replayer->get_local_pool_id(),
               image_replayer->get_local_image_id(),
-              image_replayer->get_local_image_name(),
               image_replayer->get_global_image_id());
           }
         }
@@ -789,6 +763,126 @@ bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
   }
 
   return false;
+}
+
+void Replayer::stop_image_replayers() {
+  dout(20) << dendl;
+
+  assert(m_lock.is_locked());
+  for (auto image_it = m_image_replayers.begin();
+       image_it != m_image_replayers.end();) {
+    if (stop_image_replayer(image_it->second)) {
+      image_it = m_image_replayers.erase(image_it);
+      continue;
+    }
+    ++image_it;
+  }
+}
+
+void Replayer::stop_image_replayers(Context *on_finish) {
+  dout(20) << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    stop_image_replayers();
+
+    if (!m_image_replayers.empty()) {
+      Context *ctx = new FunctionContext([this, on_finish](int r) {
+          assert(r == 0);
+          stop_image_replayers(on_finish);
+        });
+      ctx = create_async_context_callback(m_threads->work_queue, ctx);
+
+      Mutex::Locker timer_locker(m_threads->timer_lock);
+      m_threads->timer->add_event_after(1, ctx);
+      return;
+    }
+  }
+
+  on_finish->complete(0);
+}
+
+void Replayer::handle_post_acquire_leader(Context *on_finish) {
+  dout(20) << dendl;
+  refresh_local_images(on_finish);
+}
+
+void Replayer::handle_pre_release_leader(Context *on_finish) {
+  dout(20) << dendl;
+  shut_down_pool_watcher(on_finish);
+}
+
+void Replayer::refresh_local_images(Context *on_finish) {
+  dout(20) << dendl;
+
+  // ensure the initial set of local images is up-to-date
+  // after acquiring the leader role
+  auto ctx = new C_RefreshLocalImages(this, on_finish);
+  auto req = pool_watcher::RefreshImagesRequest<>::create(
+    m_local_io_ctx, &ctx->image_ids, ctx);
+  req->send();
+}
+
+void Replayer::handle_refresh_local_images(int r, ImageIds &&image_ids,
+                                           Context *on_finish) {
+  dout(20) << "r=" << r << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    m_init_image_ids = std::move(image_ids);
+  }
+
+  if (r < 0) {
+    derr << "failed to retrieve local images: " << cpp_strerror(r) << dendl;
+    on_finish->complete(r);
+    return;
+  }
+
+  init_pool_watcher(on_finish);
+}
+
+void Replayer::init_pool_watcher(Context *on_finish) {
+  dout(20) << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(!m_pool_watcher);
+  m_pool_watcher.reset(new PoolWatcher<>(
+    m_threads, m_remote_io_ctx, m_pool_watcher_listener));
+  m_pool_watcher->init(create_async_context_callback(
+    m_threads->work_queue, on_finish));
+
+  m_cond.Signal();
+}
+
+void Replayer::shut_down_pool_watcher(Context *on_finish) {
+  dout(20) << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    if (m_pool_watcher) {
+      Context *ctx = new FunctionContext([this, on_finish](int r) {
+          handle_shut_down_pool_watcher(r, on_finish);
+      });
+      ctx = create_async_context_callback(m_threads->work_queue, ctx);
+
+      m_pool_watcher->shut_down(ctx);
+      return;
+    }
+  }
+
+  on_finish->complete(0);
+}
+
+void Replayer::handle_shut_down_pool_watcher(int r, Context *on_finish) {
+  dout(20) << "r=" << r << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_pool_watcher);
+    m_pool_watcher.reset();
+  }
+
+  stop_image_replayers(on_finish);
 }
 
 } // namespace mirror

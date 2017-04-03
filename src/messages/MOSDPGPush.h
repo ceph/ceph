@@ -15,10 +15,9 @@
 #ifndef MOSDPGPUSH_H
 #define MOSDPGPUSH_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 
-class MOSDPGPush : public Message {
+class MOSDPGPush : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
@@ -42,20 +41,27 @@ public:
     }
   }
 
-  int get_cost() const {
+  int get_cost() const override {
     return cost;
+  }
+
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
   }
 
   void set_cost(uint64_t c) {
     cost = c;
   }
 
-  MOSDPGPush() :
-    Message(MSG_OSD_PG_PUSH, HEAD_VERSION, COMPAT_VERSION),
-    cost(0)
+  MOSDPGPush()
+    : MOSDFastDispatchOp(MSG_OSD_PG_PUSH, HEAD_VERSION, COMPAT_VERSION),
+      cost(0)
     {}
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid.pgid, p);
     ::decode(map_epoch, p);
@@ -70,7 +76,7 @@ public:
     }
   }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(pgid.pgid, payload);
     ::encode(map_epoch, payload);
     ::encode(pushes, payload, features);
@@ -79,9 +85,9 @@ public:
     ::encode(from, payload);
   }
 
-  const char *get_type_name() const { return "MOSDPGPush"; }
+  const char *get_type_name() const override { return "MOSDPGPush"; }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "MOSDPGPush(" << pgid
 	<< " " << map_epoch
 	<< " " << pushes;

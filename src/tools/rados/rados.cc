@@ -52,9 +52,6 @@ using namespace libradosstriper;
 #include "PoolDump.h"
 #include "RadosImport.h"
 
-int rados_tool_sync(const std::map < std::string, std::string > &opts,
-                             std::vector<const char*> &args);
-
 using namespace librados;
 
 // two steps seem to be necessary to do this right
@@ -85,13 +82,13 @@ void usage(ostream& out)
 "\n"
 "OBJECT COMMANDS\n"
 "   get <obj-name> [outfile]         fetch object\n"
-"   put <obj-name> [infile]          write object\n"
+"   put <obj-name> [infile] [--offset offset]\n"
+"                                    write object write object start offset(default:0)\n"
 "   append <obj-name> [infile]       append object\n"
 "   truncate <obj-name> length       truncate object\n"
 "   create <obj-name>                create object\n"
 "   rm <obj-name> ...[--force-full]  [force no matter full or not]remove object(s)\n"
 "   cp <obj-name> [target-obj]       copy object\n"
-"   clonedata <src-obj> <dst-obj>    clone object data\n"
 "   listxattr <obj-name>\n"
 "   getxattr <obj-name> attr\n"
 "   setxattr <obj-name> attr val\n"
@@ -334,26 +331,6 @@ static int do_copy(IoCtx& io_ctx, const char *objname,
   return target_ctx.operate(target_obj, &op);
 }
 
-static int do_clone_data(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const char *target_obj)
-{
-  string oid(objname);
-
-  // get size
-  uint64_t size;
-  int r = target_ctx.stat(oid, &size, NULL);
-  if (r < 0)
-    return r;
-
-  librados::ObjectWriteOperation write_op;
-  string target_oid(target_obj);
-
-  /* reset data stream only */
-  write_op.create(false);
-  write_op.truncate(0);
-  write_op.clone_range(0, oid, 0, size);
-  return target_ctx.operate(target_oid, &write_op);
-}
-
 static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_pool)
 {
   IoCtx src_ctx, target_ctx;
@@ -397,7 +374,7 @@ static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_p
 
 static int do_put(IoCtx& io_ctx, RadosStriper& striper,
 		  const char *objname, const char *infile, int op_size,
-		  bool use_striper)
+		  uint64_t obj_offset, bool use_striper)
 {
   string oid(objname);
   bool stdio = (strcmp(infile, "-") == 0);
@@ -410,7 +387,7 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
     return 1;
   }
   int count = op_size;
-  uint64_t offset = 0;
+  uint64_t offset = obj_offset;
   while (count != 0) {
     bufferlist indata;
     count = indata.read_fd(fd, op_size);
@@ -419,8 +396,9 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
       cerr << "error reading input file " << infile << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     }
+ 
     if (count == 0) {
-      if (!offset) { // in case we have to create an empty object
+     if (offset == obj_offset) { // in case we have to create an empty object & if obj_offset > 0 do a hole
 	if (use_striper) {
 	  ret = striper.write_full(oid, indata); // indata is empty
 	} else {
@@ -428,6 +406,17 @@ static int do_put(IoCtx& io_ctx, RadosStriper& striper,
 	}
 	if (ret < 0) {
 	  goto out;
+	}
+	if (offset) {
+	  if (use_striper) {
+	    ret = striper.trunc(oid, offset); // before truncate, object must be existed.
+	  } else {
+	    ret = io_ctx.trunc(oid, offset); // before truncate, object must be existed.
+	  }
+
+	  if (ret < 0) {
+	    goto out;
+	  }
 	}
       }
       continue;
@@ -501,11 +490,11 @@ class RadosWatchCtx : public librados::WatchCtx2 {
   string name;
 public:
   RadosWatchCtx(IoCtx& io, const char *imgname) : ioctx(io), name(imgname) {}
-  virtual ~RadosWatchCtx() {}
+  ~RadosWatchCtx() override {}
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
-		     bufferlist& bl) {
+		     bufferlist& bl) override {
     cout << "NOTIFY"
 	 << " cookie " << cookie
 	 << " notify_id " << notify_id
@@ -514,7 +503,7 @@ public:
     bl.hexdump(cout);
     ioctx.notify_ack(name, notify_id, cookie, bl);
   }
-  void handle_error(uint64_t cookie, int err) {
+  void handle_error(uint64_t cookie, int err) override {
     cout << "ERROR"
 	 << " cookie " << cookie
 	 << " err " << cpp_strerror(err)
@@ -612,7 +601,7 @@ public:
   }
 
   float time_passed() {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
     now -= start_time;
     uint64_t ns = now.nsec();
     float total = (float) ns / 1000000000.0;
@@ -805,7 +794,7 @@ uint64_t LoadGen::gen_next_op()
 
 int LoadGen::run()
 {
-  start_time = ceph_clock_now(g_ceph_context);
+  start_time = ceph_clock_now();
   utime_t end_time = start_time;
   end_time += run_length;
   utime_t stamp_time = start_time;
@@ -814,14 +803,14 @@ int LoadGen::run()
   while (1) {
     lock.Lock();
     utime_t one_second(1, 0);
-    cond.WaitInterval(g_ceph_context, lock, one_second);
+    cond.WaitInterval(lock, one_second);
     lock.Unlock();
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
 
     if (now > end_time)
       break;
 
-    uint64_t expected = total_expected();  
+    uint64_t expected = total_expected();
     lock.Lock();
     uint64_t sent = total_sent;
     uint64_t completed = total_completed;
@@ -894,15 +883,15 @@ class RadosBencher : public ObjBencher {
   OpWriteDest write_destination;
 
 protected:
-  int completions_init(int concurrentios) {
+  int completions_init(int concurrentios) override {
     completions = new librados::AioCompletion *[concurrentios];
     return 0;
   }
-  void completions_done() {
+  void completions_done() override {
     delete[] completions;
     completions = NULL;
   }
-  int create_completion(int slot, void (*cb)(void *, void*), void *arg) {
+  int create_completion(int slot, void (*cb)(void *, void*), void *arg) override {
     completions[slot] = rados.aio_create_completion((void *) arg, 0, cb);
 
     if (!completions[slot])
@@ -910,18 +899,18 @@ protected:
 
     return 0;
   }
-  void release_completion(int slot) {
+  void release_completion(int slot) override {
     completions[slot]->release();
     completions[slot] = 0;
   }
 
   int aio_read(const std::string& oid, int slot, bufferlist *pbl, size_t len,
-	       size_t offset) {
+	       size_t offset) override {
     return io_ctx.aio_read(oid, completions[slot], pbl, len, 0);
   }
 
   int aio_write(const std::string& oid, int slot, bufferlist& bl, size_t len,
-		size_t offset) {
+		size_t offset) override {
     librados::ObjectWriteOperation op;
 
     if (write_destination & OP_WRITE_DEST_OBJ) {
@@ -949,33 +938,33 @@ protected:
     return io_ctx.aio_operate(oid, completions[slot], &op);
   }
 
-  int aio_remove(const std::string& oid, int slot) {
+  int aio_remove(const std::string& oid, int slot) override {
     return io_ctx.aio_remove(oid, completions[slot]);
   }
 
-  int sync_read(const std::string& oid, bufferlist& bl, size_t len) {
+  int sync_read(const std::string& oid, bufferlist& bl, size_t len) override {
     return io_ctx.read(oid, bl, len, 0);
   }
-  int sync_write(const std::string& oid, bufferlist& bl, size_t len) {
+  int sync_write(const std::string& oid, bufferlist& bl, size_t len) override {
     return io_ctx.write_full(oid, bl);
   }
 
-  int sync_remove(const std::string& oid) {
+  int sync_remove(const std::string& oid) override {
     return io_ctx.remove(oid);
   }
 
-  bool completion_is_done(int slot) {
+  bool completion_is_done(int slot) override {
     return completions[slot]->is_safe();
   }
 
-  int completion_wait(int slot) {
+  int completion_wait(int slot) override {
     return completions[slot]->wait_for_safe_and_cb();
   }
-  int completion_ret(int slot) {
+  int completion_ret(int slot) override {
     return completions[slot]->get_return_value();
   }
 
-  bool get_objects(std::list<Object>* objects, int num) {
+  bool get_objects(std::list<Object>* objects, int num) override {
     int count = 0;
 
     if (!iterator_valid) {
@@ -1000,14 +989,14 @@ protected:
     return true;
   }
 
-  void set_namespace( const std::string& ns) {
+  void set_namespace( const std::string& ns) override {
     io_ctx.set_namespace(ns);
   }
 
 public:
   RadosBencher(CephContext *cct_, librados::Rados& _r, librados::IoCtx& _i)
     : ObjBencher(cct_), completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false), write_destination(OP_WRITE_DEST_OBJ) {}
-  ~RadosBencher() { }
+  ~RadosBencher() override { }
 
   void set_write_destination(OpWriteDest dest) {
     write_destination = dest;
@@ -1619,6 +1608,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   unsigned op_size = default_op_size;
   unsigned object_size = 0;
   unsigned max_objects = 0;
+  uint64_t obj_offset = 0;
   bool block_size_specified = false;
   int bench_write_dest = 0;
   bool cleanup = true;
@@ -1718,6 +1708,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("max-objects");
   if (i != opts.end()) {
     if (rados_sistrtoll(i, &max_objects)) {
+      return -EINVAL;
+    }
+  }
+  i = opts.find("offset");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &obj_offset)) {
       return -EINVAL;
     }
   }
@@ -2258,7 +2254,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "put") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage_exit();
-    ret = do_put(io_ctx, striper, nargs[1], nargs[2], op_size, use_striper);
+    ret = do_put(io_ctx, striper, nargs[1], nargs[2], op_size, obj_offset, use_striper);
     if (ret < 0) {
       cerr << "error putting " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -2619,55 +2615,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cerr << "error copying " << pool_name << "/" << nargs[1] << " => " << target << "/" << target_obj << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     }
-  }
-  else if (strcmp(nargs[0], "clonedata") == 0) {
-    if (!pool_name)
-      usage_exit();
-
-    if (nargs.size() < 2 || nargs.size() > 3)
-      usage_exit();
-
-    const char *target = target_pool_name;
-    if (!target)
-      target = pool_name;
-
-    const char *target_obj;
-    if (nargs.size() < 3) {
-      if (strcmp(target, pool_name) == 0) {
-        cerr << "cannot copy object into itself" << std::endl;
-        ret = -1;
-	goto out;
-      }
-      target_obj = nargs[1];
-    } else {
-      target_obj = nargs[2];
-    }
-
-    // open io context.
-    IoCtx target_ctx;
-    ret = rados.ioctx_create(target, target_ctx);
-    if (ret < 0) {
-      cerr << "error opening target pool " << target << ": "
-           << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
-    if (oloc.size()) {
-      target_ctx.locator_set_key(oloc);
-    } else {
-      cerr << "must specify locator for clone" << std::endl;
-      ret = -1;
-      goto out;
-    }
-    if (nspace.size())
-      target_ctx.set_namespace(nspace);
-
-    ret = do_clone_data(io_ctx, nargs[1], target_ctx, target_obj);
-    if (ret < 0) {
-      string src_name = (nspace.size() ? nspace + "/" : "") + nargs[1];
-      string target_name = (nspace.size() ? nspace + "/" : "") + target_obj;
-      cerr << "error cloning " << pool_name << ">" << src_name << " => " << target << ">" << target_name << ": " << cpp_strerror(ret) << std::endl;
-      goto out;
-    }
   } else if (strcmp(nargs[0], "rm") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
@@ -2905,6 +2852,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
     io_ctx.set_namespace(all_nspaces);
+    io_ctx.set_osdmap_full_try();
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     ret = bencher.clean_up_slow("", concurrent_ios);
     if (ret >= 0) {
@@ -3176,10 +3124,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
 
-    librados::ObjectReadOperation read;
     set<string> out_keys;
-    read.omap_get_keys("", LONG_MAX, &out_keys, &ret);
-    io_ctx.operate(nargs[1], &read, NULL);
+    ret = io_ctx.omap_get_keys(nargs[1], "", LONG_MAX, &out_keys);
     if (ret < 0) {
       cerr << "error getting omap key set " << pool_name << "/"
 	   << nargs[1] << ": "  << cpp_strerror(ret) << std::endl;
@@ -3654,6 +3600,8 @@ int main(int argc, const char **argv)
       opts["object-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*)NULL)) {
       opts["max-objects"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--offset", (char*)NULL)) {
+      opts["offset"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", (char*)NULL)) {
       opts["object-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-s", "--snap", (char*)NULL)) {

@@ -42,12 +42,7 @@ function TEST_osd_pool_get_set() {
     run_mon $dir a || return 1
 
     local flag
-    for flag in hashpspool nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
-        if [ $flag = hashpspool ]; then
-	    ceph osd dump | grep 'pool ' | grep $flag || return 1
-        else
-	    ! ceph osd dump | grep 'pool ' | grep $flag || return 1
-        fi
+    for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
 	ceph osd pool set $TEST_POOL $flag 0 || return 1
 	! ceph osd dump | grep 'pool ' | grep $flag || return 1
 	ceph osd pool set $TEST_POOL $flag 1 || return 1
@@ -152,6 +147,125 @@ function TEST_no_segfault_for_bad_keyring() {
     # 139(11|128) means segfault and core dumped
     [ $? -eq 139 ] && return 1
     CEPH_ARGS=$CEPH_ARGS_orig
+    teardown $dir || return 1
+}
+
+function jq_success() {
+  input="$1"
+  filter="$2"
+  expects="\"$3\""
+
+  in_escaped=$(printf %s "$input" | sed "s/'/'\\\\''/g")
+  filter_escaped=$(printf %s "$filter" | sed "s/'/'\\\\''/g")
+
+  ret=$(echo "$in_escaped" | jq "$filter_escaped")
+  if [[ "$ret" == "true" ]]; then
+    return 0
+  elif [[ -n "$expects" ]]; then
+    if [[ "$ret" == "$expects" ]]; then
+      return 0
+    fi
+  fi
+  return 1
+  input=$1
+  filter=$2
+  expects="$3"
+
+  ret="$(echo $input | jq \"$filter\")"
+  if [[ "$ret" == "true" ]]; then
+    return 0
+  elif [[ -n "$expects" && "$ret" == "$expects" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+function TEST_mon_features() {
+    local dir=$1
+    setup $dir || return 1
+
+    fsid=$(uuidgen)
+    MONA=127.0.0.1:7127 # git grep '\<7127\>' ; there must be only one
+    MONB=127.0.0.1:7128 # git grep '\<7128\>' ; there must be only one
+    MONC=127.0.0.1:7129 # git grep '\<7129\>' ; there must be only one
+    CEPH_ARGS_orig=$CEPH_ARGS
+    CEPH_ARGS="--fsid=$fsid --auth-supported=none "
+    CEPH_ARGS+="--mon-initial-members=a,b,c "
+    CEPH_ARGS+="--mon-host=$MONA,$MONB,$MONC "
+
+    run_mon $dir a --public-addr $MONA || return 1
+    run_mon $dir b --public-addr $MONB || return 1
+    timeout 120 ceph -s > /dev/null || return 1
+
+    # NOTE:
+    # jq only support --exit-status|-e from version 1.4 forwards, which makes
+    # returning on error waaaay prettier and straightforward.
+    # However, the current automated upstream build is running with v1.3,
+    # which has no idea what -e is. Hence the convoluted error checking we
+    # need. Sad.
+    # The next time someone changes this code, please check if v1.4 is now
+    # a thing, and, if so, please change these to use -e. Thanks.
+
+    # jq '.all.supported | select([.[] == "foo"] | any)'
+
+    # expect monmap to contain 3 monitors (a, b, and c)
+    jqinput="$(ceph mon_status --format=json 2>/dev/null)"
+    jq_success "$jqinput" '.monmap.mons | length == 3' || return 1
+    # quorum contains two monitors
+    jq_success "$jqinput" '.quorum | length == 2' || return 1
+    # quorum's monitor features contain kraken and luminous
+    jqfilter='.features.quorum_mon[]|select(. == "kraken")'
+    jq_success "$jqinput" "$jqfilter" "kraken" || return 1
+    jqfilter='.features.quorum_mon[]|select(. == "luminous")'
+    jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+
+    # monmap must have no persistent features set, because we
+    # don't currently have a quorum made out of all the monitors
+    # in the monmap.
+    jqfilter='.monmap.features.persistent | length == 0'
+    jq_success "$jqinput" "$jqfilter" || return 1
+
+    # nor do we have any optional features, for that matter.
+    jqfilter='.monmap.features.optional | length == 0'
+    jq_success "$jqinput" "$jqfilter" || return 1
+
+    # validate 'mon feature list'
+
+    jqinput="$(ceph mon feature list --format=json 2>/dev/null)"
+    # 'kraken' and 'luminous' are supported
+    jqfilter='.all.supported[] | select(. == "kraken")'
+    jq_success "$jqinput" "$jqfilter" "kraken" || return 1
+    jqfilter='.all.supported[] | select(. == "luminous")'
+    jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+
+    # start third monitor
+    run_mon $dir c --public-addr $MONC || return 1
+
+    wait_for_quorum 300 3 || return 1
+
+    timeout 300 ceph -s > /dev/null || return 1
+
+    jqinput="$(ceph mon_status --format=json 2>/dev/null)"
+    # expect quorum to have all three monitors
+    jqfilter='.quorum | length == 3'
+    jq_success "$jqinput" "$jqfilter" || return 1
+    # quorum's monitor features contain kraken and luminous
+    jqfilter='.features.quorum_mon[]|select(. == "kraken")'
+    jq_success "$jqinput" "$jqfilter" "kraken" || return 1
+    jqfilter='.features.quorum_mon[]|select(. == "luminous")'
+    jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+
+    # monmap must have no both 'kraken' and 'luminous' persistent
+    # features set.
+    jqfilter='.monmap.features.persistent | length == 2'
+    jq_success "$jqinput" "$jqfilter" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "kraken")'
+    jq_success "$jqinput" "$jqfilter" "kraken" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "luminous")'
+    jq_success "$jqinput" "$jqfilter" "luminous" || return 1
+
+    CEPH_ARGS=$CEPH_ARGS_orig
+    # that's all folks. thank you for tuning in.
     teardown $dir || return 1
 }
 

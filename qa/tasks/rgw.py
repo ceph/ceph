@@ -1305,8 +1305,8 @@ def task(ctx, config):
             subtasks.extend([
                 lambda: ship_apache_configs(ctx=ctx, config=config,
                                             role_endpoints=role_endpoints, on_client=master_client),
-                lambda: start_rgw(ctx=ctx, config=config, on_client=master_client),
                 lambda: start_apache(ctx=ctx, config=config, on_client=master_client),
+                lambda: start_rgw(ctx=ctx, config=config, on_client=master_client),
             ])
         elif ctx.rgw.frontend == 'civetweb':
             subtasks.extend([
@@ -1345,15 +1345,15 @@ def task(ctx, config):
                                             on_client=None,
                                             except_client = master_client,
                 ),
-                lambda: start_rgw(ctx=ctx,
-                                  config=config,
-                                  on_client=None,
-                                  except_client = master_client),
                 lambda: start_apache(ctx=ctx,
                                      config = config,
                                      on_client=None,
                                      except_client = master_client,
                 ),
+                lambda: start_rgw(ctx=ctx,
+                                  config=config,
+                                  on_client=None,
+                                  except_client = master_client),
             ])
         elif ctx.rgw.frontend == 'civetweb':
             subtasks.extend([
@@ -1386,9 +1386,9 @@ def task(ctx, config):
             subtasks.extend([
                 lambda: ship_apache_configs(ctx=ctx, config=config,
                                             role_endpoints=role_endpoints),
+                lambda: start_apache(ctx=ctx, config=config),
                 lambda: start_rgw(ctx=ctx,
                                   config=config),
-                lambda: start_apache(ctx=ctx, config=config),
                 ])
         elif ctx.rgw.frontend == 'civetweb':
             subtasks.extend([

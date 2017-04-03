@@ -275,15 +275,6 @@ You may set values for the following keys:
 :Type: Integer
 :Version: ``0.54`` and above
 
-.. _crash_replay_interval:
-
-``crash_replay_interval``
-
-:Description: The number of seconds to allow clients to replay acknowledged, 
-              but uncommitted requests.
-              
-:Type: Integer
-
 .. _pg_num:
 
 ``pg_num``
@@ -475,7 +466,7 @@ You may set values for the following keys:
 :Default: ``20``
 
 
-``hit_set_grade_search_last_n``
+``hit_set_search_last_n``
 
 :Description: Count at most N appearance in hit_sets for temperature calculation
 :Type: Integer
@@ -572,12 +563,6 @@ You may get values for the following keys:
 
 :Type: Integer
 :Version: ``0.54`` and above
-
-``crash_replay_interval``
-
-:Description: see crash_replay_interval_
-              
-:Type: Integer
 
 ``pg_num``
 

@@ -104,11 +104,11 @@ public:
     : m_object(new T),
       stray_okay(stray_okay),
       nondeterministic(nondeterministic) {}
-  ~DencoderBase() {
+  ~DencoderBase() override {
     delete m_object;
   }
 
-  string decode(bufferlist bl, uint64_t seek) {
+  string decode(bufferlist bl, uint64_t seek) override {
     bufferlist::iterator p = bl.begin();
     p.seek(seek);
     try {
@@ -125,18 +125,18 @@ public:
     return string();
   }
 
-  virtual void encode(bufferlist& out, uint64_t features) = 0;
+  void encode(bufferlist& out, uint64_t features) override = 0;
 
-  void dump(ceph::Formatter *f) {
+  void dump(ceph::Formatter *f) override {
     m_object->dump(f);
   }
-  void generate() {
+  void generate() override {
     T::generate_test_instances(m_list);
   }
-  int num_generated() {
+  int num_generated() override {
     return m_list.size();
   }
-  string select_generated(unsigned i) {
+  string select_generated(unsigned i) override {
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
       i = m_list.size();
@@ -148,7 +148,7 @@ public:
     return string();
   }
 
-  bool is_deterministic() {
+  bool is_deterministic() override {
     return !nondeterministic;
   }
 };
@@ -158,7 +158,7 @@ class DencoderImplNoFeatureNoCopy : public DencoderBase<T> {
 public:
   DencoderImplNoFeatureNoCopy(bool stray_ok, bool nondeterministic)
     : DencoderBase<T>(stray_ok, nondeterministic) {}
-  virtual void encode(bufferlist& out, uint64_t features) {
+  void encode(bufferlist& out, uint64_t features) override {
     out.clear();
     ::encode(*this->m_object, out);
   }
@@ -169,13 +169,13 @@ class DencoderImplNoFeature : public DencoderImplNoFeatureNoCopy<T> {
 public:
   DencoderImplNoFeature(bool stray_ok, bool nondeterministic)
     : DencoderImplNoFeatureNoCopy<T>(stray_ok, nondeterministic) {}
-  void copy() {
+  void copy() override {
     T *n = new T;
     *n = *this->m_object;
     delete this->m_object;
     this->m_object = n;
   }
-  void copy_ctor() {
+  void copy_ctor() override {
     T *n = new T(*this->m_object);
     delete this->m_object;
     this->m_object = n;
@@ -187,7 +187,7 @@ class DencoderImplFeaturefulNoCopy : public DencoderBase<T> {
 public:
   DencoderImplFeaturefulNoCopy(bool stray_ok, bool nondeterministic)
     : DencoderBase<T>(stray_ok, nondeterministic) {}
-  virtual void encode(bufferlist& out, uint64_t features) {
+  void encode(bufferlist& out, uint64_t features) override {
     out.clear();
     ::encode(*(this->m_object), out, features);
   }
@@ -198,13 +198,13 @@ class DencoderImplFeatureful : public DencoderImplFeaturefulNoCopy<T> {
 public:
   DencoderImplFeatureful(bool stray_ok, bool nondeterministic)
     : DencoderImplFeaturefulNoCopy<T>(stray_ok, nondeterministic) {}
-  void copy() {
+  void copy() override {
     T *n = new T;
     *n = *this->m_object;
     delete this->m_object;
     this->m_object = n;
   }
-  void copy_ctor() {
+  void copy_ctor() override {
     T *n = new T(*this->m_object);
     delete this->m_object;
     this->m_object = n;
@@ -220,11 +220,11 @@ public:
   MessageDencoderImpl() {
     m_object = new T;
   }
-  ~MessageDencoderImpl() {
+  ~MessageDencoderImpl() override {
     m_object->put();
   }
 
-  string decode(bufferlist bl, uint64_t seek) {
+  string decode(bufferlist bl, uint64_t seek) override {
     bufferlist::iterator p = bl.begin();
     p.seek(seek);
     try {
@@ -250,21 +250,21 @@ public:
     return string();
   }
 
-  void encode(bufferlist& out, uint64_t features) {
+  void encode(bufferlist& out, uint64_t features) override {
     out.clear();
     encode_message(m_object, features, out);
   }
 
-  void dump(ceph::Formatter *f) {
+  void dump(ceph::Formatter *f) override {
     m_object->dump(f);
   }
-  void generate() {
+  void generate() override {
     //T::generate_test_instances(m_list);
   }
-  int num_generated() {
+  int num_generated() override {
     return m_list.size();
   }
-  string select_generated(unsigned i) {
+  string select_generated(unsigned i) override {
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
       i = m_list.size();
@@ -276,7 +276,7 @@ public:
     m_object = *p;
     return string();
   }
-  bool is_deterministic() {
+  bool is_deterministic() override {
     return true;
   }
 

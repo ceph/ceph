@@ -51,16 +51,16 @@ public:
     }
     cout << "[plugin " << plugin << " (" << GetParam() << ")]" << std::endl;
   }
-  ~CompressorTest() {
+  ~CompressorTest() override {
     g_conf->set_val("compressor_zlib_isal", old_zlib_isal ? "true" : "false");
     g_ceph_context->_conf->apply_changes(NULL);
   }
 
-  void SetUp() {
+  void SetUp() override {
     compressor = Compressor::create(g_ceph_context, plugin);
     ASSERT_TRUE(compressor);
   }
-  void TearDown() {
+  void TearDown() override {
     compressor.reset();
   }
 };
@@ -324,7 +324,8 @@ INSTANTIATE_TEST_CASE_P(
   ::testing::Values(
     "zlib/isal",
     "zlib/noisal",
-    "snappy"));
+    "snappy",
+    "zstd"));
 
 TEST(ZlibCompressor, zlib_isal_compatibility)
 {

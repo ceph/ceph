@@ -30,7 +30,7 @@ using namespace std;
 struct MorePrinting : public DetailedStatCollector::AdditionalPrinting {
   CephContext *cct;
   explicit MorePrinting(CephContext *cct) : cct(cct) {}
-  void operator()(std::ostream *out) {
+  void operator()(std::ostream *out) override {
     bufferlist bl;
     Formatter *f = Formatter::create("json-pretty");
     cct->get_perfcounters_collection()->dump_formatted(f, 0);
@@ -132,7 +132,7 @@ int main(int argc, char **argv)
   ops.insert(make_pair(vm["write-ratio"].as<double>(), Bencher::WRITE));
   ops.insert(make_pair(1-vm["write-ratio"].as<double>(), Bencher::READ));
 
-  FileStore fs(vm["filestore-path"].as<string>(),
+  FileStore fs(g_ceph_context, vm["filestore-path"].as<string>(),
 	       vm["journal-path"].as<string>());
   ObjectStore::Sequencer osr(__func__);
 

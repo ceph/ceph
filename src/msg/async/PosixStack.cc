@@ -52,7 +52,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   explicit PosixConnectedSocketImpl(NetHandler &h, const entity_addr_t &sa, int f, bool connected)
       : handler(h), _fd(f), sa(sa), connected(connected) {}
 
-  virtual int is_connected() override {
+  int is_connected() override {
     if (connected)
       return 1;
 
@@ -67,11 +67,11 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     }
   }
 
-  virtual ssize_t zero_copy_read(bufferptr&) override {
+  ssize_t zero_copy_read(bufferptr&) override {
     return -EOPNOTSUPP;
   }
 
-  virtual ssize_t read(char *buf, size_t len) override {
+  ssize_t read(char *buf, size_t len) override {
     ssize_t r = ::read(_fd, buf, len);
     if (r < 0)
       r = -errno;
@@ -184,7 +184,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     return (ssize_t)sent;
   }
 
-  virtual ssize_t send(bufferlist &bl, bool more) {
+  ssize_t send(bufferlist &bl, bool more) override {
     size_t sent_bytes = 0;
     std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
     uint64_t left_pbrs = bl.buffers().size();
@@ -229,13 +229,13 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 
     return static_cast<ssize_t>(sent_bytes);
   }
-  virtual void shutdown() {
+  void shutdown() override {
     ::shutdown(_fd, SHUT_RDWR);
   }
-  virtual void close() {
+  void close() override {
     ::close(_fd);
   }
-  virtual int fd() const override {
+  int fd() const override {
     return _fd;
   }
   friend class PosixServerSocketImpl;
@@ -248,11 +248,11 @@ class PosixServerSocketImpl : public ServerSocketImpl {
 
  public:
   explicit PosixServerSocketImpl(NetHandler &h, int f): handler(h), _fd(f) {}
-  virtual int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
-  virtual void abort_accept() override {
+  int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
+  void abort_accept() override {
     ::close(_fd);
   }
-  virtual int fd() const override {
+  int fd() const override {
     return _fd;
   }
 };
@@ -278,7 +278,7 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
     ::close(sd);
     return -errno;
   }
-  handler.set_priority(sd, opt.priority);
+  handler.set_priority(sd, opt.priority, out->get_family());
 
   std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, *out, sd, true));
   *sock = ConnectedSocket(std::move(csi));
@@ -339,17 +339,16 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
   int sd;
 
   if (opts.nonblock) {
-    sd = net.nonblock_connect(addr);
+    sd = net.nonblock_connect(addr, opts.connect_bind_addr);
   } else {
-    sd = net.connect(addr);
+    sd = net.connect(addr, opts.connect_bind_addr);
   }
 
   if (sd < 0) {
-    ::close(sd);
     return -errno;
   }
 
-  net.set_priority(sd, opts.priority);
+  net.set_priority(sd, opts.priority, addr.get_family());
   *socket = ConnectedSocket(
       std::unique_ptr<PosixConnectedSocketImpl>(new PosixConnectedSocketImpl(net, addr, sd, !opts.nonblock)));
   return 0;

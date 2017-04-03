@@ -14,7 +14,7 @@ class RGWCompletionManager::WaitContext : public Context {
   void *opaque;
 public:
   WaitContext(RGWCompletionManager *_cm, void *_opaque) : manager(_cm), opaque(_opaque) {}
-  void finish(int r) {
+  void finish(int r) override {
     manager->_wakeup(opaque);
   }
 };
@@ -43,7 +43,6 @@ void RGWCompletionManager::register_completion_notifier(RGWAioCompletionNotifier
   Mutex::Locker l(lock);
   if (cn) {
     cns.insert(cn);
-    cn->get();
   }
 }
 
@@ -52,7 +51,6 @@ void RGWCompletionManager::unregister_completion_notifier(RGWAioCompletionNotifi
   Mutex::Locker l(lock);
   if (cn) {
     cns.erase(cn);
-    cn->put();
   }
 }
 
@@ -60,7 +58,6 @@ void RGWCompletionManager::_complete(RGWAioCompletionNotifier *cn, void *user_in
 {
   if (cn) {
     cns.erase(cn);
-    cn->put();
   }
   complete_reqs.push_back(user_info);
   cond.Signal();
@@ -160,7 +157,7 @@ stringstream& RGWCoroutine::Status::set_status()
   if (history.size() > (size_t)max_history) {
     history.pop_front();
   }
-  timestamp = ceph_clock_now(cct);
+  timestamp = ceph_clock_now();
 
   return status;
 }
@@ -372,8 +369,6 @@ bool RGWCoroutinesStack::collect(int *ret, RGWCoroutinesStack *skip_stack) /* re
 {
   return collect(NULL, ret, skip_stack);
 }
-
-static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg);
 
 static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
 {

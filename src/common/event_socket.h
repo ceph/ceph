@@ -19,6 +19,7 @@
 
 #include "include/event_type.h"
 #include <unistd.h>
+#include <errno.h>
 
 class EventSocket {
   int socket;

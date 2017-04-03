@@ -12,6 +12,7 @@
 #include "common/strtol.h"
 #include "include/str_list.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 int RGWRESTSimpleRequest::get_status()
@@ -95,9 +96,9 @@ int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
   return 0;
 }
 
-static void get_new_date_str(CephContext *cct, string& date_str)
+static void get_new_date_str(string& date_str)
 {
-  utime_t tm = ceph_clock_now(cct);
+  utime_t tm = ceph_clock_now();
   stringstream s;
   tm.asctime(s);
   date_str = s.str();
@@ -117,7 +118,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const c
   new_url.append(new_resource);
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
   headers.push_back(pair<string, string>("HTTP_DATE", date_str));
 
   string canonical_header;
@@ -248,7 +249,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
 {
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
 
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
@@ -318,7 +319,7 @@ class RGWRESTStreamOutCB : public RGWGetDataCB {
   RGWRESTStreamWriteRequest *req;
 public:
   explicit RGWRESTStreamOutCB(RGWRESTStreamWriteRequest *_req) : req(_req) {}
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len); /* callback for object iteration when sending data */
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override; /* callback for object iteration when sending data */
 };
 
 int RGWRESTStreamOutCB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
@@ -427,13 +428,13 @@ static void add_grants_headers(map<int, string>& grants, map<string, string, lts
 
 int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs)
 {
-  string resource = obj.bucket.name + "/" + obj.get_object();
+  string resource = obj.bucket.name + "/" + obj.get_oid();
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
 
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
@@ -618,7 +619,7 @@ int RGWRESTStreamRWRequest::get_obj(RGWAccessKey& key, map<string, string>& extr
 {
   string urlsafe_bucket, urlsafe_object;
   url_encode(obj.bucket.get_key(':', 0), urlsafe_bucket);
-  url_encode(obj.get_orig_obj(), urlsafe_object);
+  url_encode(obj.key.name, urlsafe_object);
   string resource = urlsafe_bucket + "/" + urlsafe_object;
 
   return get_resource(key, extra_headers, resource);
@@ -631,7 +632,7 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
     new_url.append("/");
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
 
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
@@ -796,7 +797,7 @@ class StreamIntoBufferlist : public RGWGetDataCB {
   bufferlist& bl;
 public:
   StreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
-  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) {
+  int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) override {
     bl.claim_append(inbl);
     return bl_len;
   }

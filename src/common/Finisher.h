@@ -63,7 +63,7 @@ class Finisher {
   struct FinisherThread : public Thread {
     Finisher *fin;    
     explicit FinisherThread(Finisher *f) : fin(f) {}
-    void* entry() { return (void*)fin->finisher_thread_entry(); }
+    void* entry() override { return (void*)fin->finisher_thread_entry(); }
   } finisher_thread;
 
  public:
@@ -174,14 +174,14 @@ public:
     assert(con != NULL);
   }
 
-  ~C_OnFinisher() {
+  ~C_OnFinisher() override {
     if (con != nullptr) {
       delete con;
       con = nullptr;
     }
   }
 
-  void finish(int r) {
+  void finish(int r) override {
     fin->queue(con, r);
     con = nullptr;
   }

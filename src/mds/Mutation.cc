@@ -173,6 +173,10 @@ void MutationImpl::cleanup()
   drop_pins();
 }
 
+void MutationImpl::_dump_op_descriptor_unlocked(ostream& stream) const
+{
+  stream << "Mutation";
+}
 
 // MDRequestImpl
 
@@ -205,6 +209,11 @@ bool MDRequestImpl::has_witnesses()
 bool MDRequestImpl::slave_did_prepare()
 {
   return has_more() && more()->slave_commit;
+}
+
+bool MDRequestImpl::slave_rolling_back()
+{
+  return has_more() && more()->slave_rolling_back;
 }
 
 bool MDRequestImpl::did_ino_allocation() const
@@ -364,13 +373,8 @@ void MDRequestImpl::_dump(Formatter *f) const
   {
     f->open_array_section("events");
     Mutex::Locker l(lock);
-    for (list<pair<utime_t, string> >::const_iterator i = events.begin();
-         i != events.end();
-         ++i) {
-      f->open_object_section("event");
-      f->dump_stream("time") << i->first;
-      f->dump_string("event", i->second);
-      f->close_section();
+    for (auto& i : events) {
+      f->dump_object("event", i);
     }
     f->close_section(); // events
   }

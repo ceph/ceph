@@ -28,6 +28,7 @@
 #include "MDCache.h"
 #include "Migrator.h"
 #include "MDLog.h"
+#include "PurgeQueue.h"
 #include "osdc/Journaler.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
@@ -87,7 +88,6 @@ enum {
   l_mdm_caps,
   l_mdm_rss,
   l_mdm_heap,
-  l_mdm_malloc,
   l_mdm_buf,
   l_mdm_last,
 };
@@ -159,6 +159,7 @@ class MDSRank {
     ScrubStack   *scrubstack;
     DamageTable  damage_table;
 
+
     InoTable     *inotable;
 
     SnapServer   *snapserver;
@@ -199,10 +200,20 @@ class MDSRank {
 
     void handle_write_error(int err);
 
+    void handle_conf_change(const struct md_config_t *conf,
+                            const std::set <std::string> &changed)
+    {
+      purge_queue.handle_conf_change(conf, changed, *mdsmap);
+    }
+
   protected:
     // Flag to indicate we entered shutdown: anyone seeing this to be true
     // after taking mds_lock must drop out.
     bool stopping;
+
+    // PurgeQueue is only used by StrayManager, but it is owned by MDSRank
+    // because its init/shutdown happens at the top level.
+    PurgeQueue   purge_queue;
 
     class ProgressThread : public Thread {
       MDSRank *mds;
@@ -226,7 +237,6 @@ class MDSRank {
     bool _dispatch(Message *m, bool new_msg);
 
     ceph::heartbeat_handle_d *hb;  // Heartbeat for threads using mds_lock
-    void heartbeat_reset();
 
     bool is_stale_message(Message *m) const;
 
@@ -296,6 +306,12 @@ class MDSRank {
     void suicide();
     void respawn();
     // <<<
+
+    /**
+     * Call this periodically if inside a potentially long running piece
+     * of code while holding the mds_lock
+     */
+    void heartbeat_reset();
 
     /**
      * Report state DAMAGED to the mon, and then pass on to respawn().  Call
@@ -477,7 +493,7 @@ public:
     assert(m);
     this->m = m;
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     mds->retry_dispatch(m);
   }
 };
@@ -499,7 +515,6 @@ public:
   void handle_osd_map();
   bool kill_session(int64_t session_id, bool wait, std::stringstream& ss);
   void update_log_config();
-  bool handle_command_legacy(std::vector<std::string> args);
 
   bool handle_command(
     const cmdmap_t &cmdmap,

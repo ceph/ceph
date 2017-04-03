@@ -14,6 +14,7 @@
 #include "MDSUtility.h"
 #include "mon/MonClient.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
 
@@ -21,7 +22,6 @@ MDSUtility::MDSUtility() :
   Dispatcher(g_ceph_context),
   objecter(NULL),
   lock("MDSUtility::lock"),
-  timer(g_ceph_context, lock),
   finisher(g_ceph_context, "MDSUtility", "fn_mds_utility"),
   waiting_for_mds_map(NULL)
 {
@@ -85,7 +85,6 @@ int MDSUtility::init()
   // Start Objecter and wait for OSD map
   objecter->start();
   objecter->wait_for_osd_map();
-  timer.init();
 
   // Prepare to receive MDS map and request it
   Mutex init_lock("MDSUtility:init");
@@ -117,7 +116,6 @@ void MDSUtility::shutdown()
   finisher.stop();
 
   lock.Lock();
-  timer.shutdown();
   objecter->shutdown();
   lock.Unlock();
   monc->shutdown();
@@ -164,6 +162,6 @@ bool MDSUtility::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
       return false;
   }
 
-  *authorizer = monc->auth->build_authorizer(dest_type);
+  *authorizer = monc->build_authorizer(dest_type);
   return *authorizer != NULL;
 }

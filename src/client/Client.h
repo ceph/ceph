@@ -259,7 +259,7 @@ class Client : public Dispatcher, public md_config_obs_t {
   public:
     explicit CommandHook(Client *client);
     bool call(std::string command, cmdmap_t &cmdmap, std::string format,
-	      bufferlist& out);
+	      bufferlist& out) override;
   };
   CommandHook m_command_hook;
 
@@ -400,7 +400,7 @@ protected:
 
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
-  void sync_write_commit(InodeRef& in);
+  void _sync_write_commit(Inode *in);
 
 protected:
   Filer                 *filer;     
@@ -433,7 +433,7 @@ protected:
 
   // Optional extra metadata about me to send to the MDS
   std::map<std::string, std::string> metadata;
-  void populate_metadata();
+  void populate_metadata(const std::string &mount_root);
 
 
   /* async block write barrier support */
@@ -498,7 +498,6 @@ protected:
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
   friend class C_C_Tick; // Asserts on client_lock
-  friend class C_Client_SyncCommit; // Asserts on client_lock
   friend class C_Client_RequestInterrupt;
   friend class C_Client_Remount;
   friend void intrusive_ptr_release(Inode *in);
@@ -555,13 +554,13 @@ protected:
 
   // friends
   friend class SyntheticClient;
-  bool ms_dispatch(Message *m);
+  bool ms_dispatch(Message *m) override;
 
-  void ms_handle_connect(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con);
-  bool ms_handle_refused(Connection *con);
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
+  void ms_handle_connect(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override;
+  bool ms_handle_refused(Connection *con) override;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
 
   int authenticate();
 
@@ -592,7 +591,7 @@ protected:
   void clear_filer_flags(int flags);
 
   Client(Messenger *m, MonClient *mc);
-  ~Client();
+  ~Client() override;
   void tear_down_cache();
 
   void update_metadata(std::string const &k, std::string const &v);
@@ -621,7 +620,7 @@ protected:
   void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,
 		      unsigned issued, unsigned seq, unsigned mseq, inodeno_t realm,
 		      int flags, const UserPerm& perms);
-  Cap* remove_cap(Cap *cap, bool queue_release);
+  void remove_cap(Cap *cap, bool queue_release);
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
   void mark_caps_dirty(Inode *in, int caps);
@@ -752,8 +751,8 @@ private:
     Client *client;
     Fh *f;
     C_Readahead(Client *c, Fh *f);
-    ~C_Readahead();
-    void finish(int r);
+    ~C_Readahead() override;
+    void finish(int r) override;
   };
 
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
@@ -805,6 +804,8 @@ private:
 		int flags, const UserPerm& perms);
   int _setxattr(InodeRef &in, const char *name, const void *value, size_t len,
 		int flags, const UserPerm& perms);
+  int _setxattr_check_data_pool(string& name, string& value, const OSDMap *osdmap);
+  void _setxattr_maybe_wait_for_osdmap(const char *name, const void *value, size_t len);
   int _removexattr(Inode *in, const char *nm, const UserPerm& perms);
   int _removexattr(InodeRef &in, const char *nm, const UserPerm& perms);
   int _open(Inode *in, int flags, mode_t mode, Fh **fhp,
@@ -857,8 +858,6 @@ private:
 
   int _getattr_for_perm(Inode *in, const UserPerm& perms);
   int _getgrouplist(gid_t **sgids, uid_t uid, gid_t gid);
-
-  int check_data_pool_exist(string name, string value, const OSDMap *osdmap);
 
   vinodeno_t _get_vino(Inode *in);
   inodeno_t _get_inodeno(Inode *in);
@@ -1220,9 +1219,9 @@ public:
   void ll_register_callbacks(struct client_callback_args *args);
   int test_dentry_handling(bool can_invalidate);
 
-  virtual const char** get_tracked_conf_keys() const;
-  virtual void handle_conf_change(const struct md_config_t *conf,
-	                          const std::set <std::string> &changed);
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
+	                          const std::set <std::string> &changed) override;
 };
 
 #endif

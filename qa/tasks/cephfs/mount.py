@@ -136,7 +136,8 @@ class CephFSMount(object):
 
     def run_shell(self, args, wait=True):
         args = ["cd", self.mountpoint, run.Raw('&&'), "sudo"] + args
-        return self.client_remote.run(args=args, stdout=StringIO(), wait=wait)
+        return self.client_remote.run(args=args, stdout=StringIO(),
+                                      stderr=StringIO(), wait=wait)
 
     def open_no_data(self, basename):
         """
@@ -156,7 +157,10 @@ class CephFSMount(object):
     def open_background(self, basename="background_file"):
         """
         Open a file for writing, then block such that the client
-        will hold a capability
+        will hold a capability.
+
+        Don't return until the remote process has got as far as opening
+        the file, then return the RemoteProcess instance.
         """
         assert(self.is_mounted())
 
@@ -175,6 +179,12 @@ class CephFSMount(object):
 
         rproc = self._run_python(pyscript)
         self.background_procs.append(rproc)
+
+        # This wait would not be sufficient if the file had already
+        # existed, but it's simple and in practice users of open_background
+        # are not using it on existing files.
+        self.wait_for_visible(basename)
+
         return rproc
 
     def wait_for_visible(self, basename="background_file", timeout=30):

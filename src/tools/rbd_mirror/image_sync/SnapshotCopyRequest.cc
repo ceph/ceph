@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::image_sync::SnapshotCopyRequest: " \
@@ -26,11 +27,14 @@ const std::string &get_snapshot_name(I *image_ctx, librados::snap_t snap_id) {
   auto snap_it = std::find_if(image_ctx->snap_ids.begin(),
                               image_ctx->snap_ids.end(),
                               [snap_id](
-      const std::pair<std::string, librados::snap_t> &pair) {
+				const std::pair<
+					  std::pair<cls::rbd::SnapshotNamespace,
+						    std::string>,
+					  librados::snap_t> &pair) {
     return pair.second == snap_id;
   });
   assert(snap_it != image_ctx->snap_ids.end());
-  return snap_it->first;
+  return snap_it->first.second;
 }
 
 } // anonymous namespace
@@ -63,7 +67,7 @@ SnapshotCopyRequest<I>::SnapshotCopyRequest(I *local_image_ctx,
 
 template <typename I>
 void SnapshotCopyRequest<I>::send() {
-  librbd::parent_spec remote_parent_spec;
+  librbd::ParentSpec remote_parent_spec;
   int r = validate_parent(m_remote_image_ctx, &remote_parent_spec);
   if (r < 0) {
     derr << ": remote image parent spec mismatch" << dendl;
@@ -169,7 +173,8 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_unprotect>(
       this);
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_unprotect(m_snap_name.c_str(),
+  m_local_image_ctx->operations->execute_snap_unprotect(cls::rbd::UserSnapshotNamespace(),
+							m_snap_name.c_str(),
                                                         ctx);
 }
 
@@ -246,7 +251,9 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_remove>(
       this);
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_remove(m_snap_name.c_str(), ctx);
+  m_local_image_ctx->operations->execute_snap_remove(cls::rbd::UserSnapshotNamespace(),
+						     m_snap_name.c_str(),
+						     ctx);
 }
 
 template <typename I>
@@ -317,7 +324,7 @@ void SnapshotCopyRequest<I>::send_snap_create() {
 
   uint64_t size = snap_info_it->second.size;
   m_snap_namespace = snap_info_it->second.snap_namespace;
-  librbd::parent_spec parent_spec;
+  librbd::ParentSpec parent_spec;
   uint64_t parent_overlap = 0;
   if (snap_info_it->second.parent.spec.pool_id != -1) {
     parent_spec = m_local_parent_spec;
@@ -361,7 +368,8 @@ void SnapshotCopyRequest<I>::handle_snap_create(int r) {
 
   assert(m_prev_snap_id != CEPH_NOSNAP);
 
-  auto snap_it = m_local_image_ctx->snap_ids.find(m_snap_name);
+  auto snap_it = m_local_image_ctx->snap_ids.find({cls::rbd::UserSnapshotNamespace(),
+						   m_snap_name});
   assert(snap_it != m_local_image_ctx->snap_ids.end());
   librados::snap_t local_snap_id = snap_it->second;
 
@@ -441,7 +449,9 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
     SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_snap_protect>(
       this);
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_protect(m_snap_name.c_str(), ctx);
+  m_local_image_ctx->operations->execute_snap_protect(cls::rbd::UserSnapshotNamespace(),
+						      m_snap_name.c_str(),
+						      ctx);
 }
 
 template <typename I>
@@ -533,7 +543,7 @@ void SnapshotCopyRequest<I>::compute_snap_map() {
 
 template <typename I>
 int SnapshotCopyRequest<I>::validate_parent(I *image_ctx,
-                                            librbd::parent_spec *spec) {
+                                            librbd::ParentSpec *spec) {
   RWLock::RLocker owner_locker(image_ctx->owner_lock);
   RWLock::RLocker snap_locker(image_ctx->snap_lock);
 

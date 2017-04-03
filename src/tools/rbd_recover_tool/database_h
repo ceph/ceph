@@ -138,7 +138,7 @@ function gather_hobject_common()
 
       hobject=$2;
       data_path=arr1[1];
-      gsub(/\\u/, "\\\\\\\\\\\\\\\\u", hobject); # dump backslash to delay escape (\ -> \\)
+      gsub(/\\u/, "\\\\\\\\u", hobject); # dump backslash to delay escape (\ -> \\)
       "awk \"\\$1 == \\\""$1"\\\" {print \\$2}\" "osd_host_mapping" | head -n 1" | getline node
       pgid = arr3[1];
 

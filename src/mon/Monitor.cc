@@ -84,6 +84,8 @@
 #include "include/compat.h"
 #include "perfglue/heap_profiler.h"
 
+#include "auth/none/AuthNoneClientHandler.h"
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -106,12 +108,19 @@ MonCommand mon_commands[] = {
 #define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
   {parsesig, helptext, modulename, req_perms, avail, flags},
 #include <mon/MonCommands.h>
-};
 #undef COMMAND
-MonCommand classic_mon_commands[] = {
+#undef COMMAND_WITH_FLAG
+
+  // FIXME: slurp up the Mgr commands too
+
 #define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail},
-#include <mon/DumplingMonCommands.h>
+  {parsesig, helptext, modulename, req_perms, avail, FLAG(MGR)},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
+  {parsesig, helptext, modulename, req_perms, avail, flags | FLAG(MGR)},
+#include <mgr/MgrCommands.h>
+#undef COMMAND
+#undef COMMAND_WITH_FLAG
+
 };
 
 
@@ -139,7 +148,7 @@ long parse_pos_long(const char *s, ostream *pss)
 }
 
 Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
-		 Messenger *m, MonMap *map) :
+		 Messenger *m, Messenger *mgr_m, MonMap *map) :
   Dispatcher(cct_),
   name(nm),
   rank(-1), 
@@ -147,6 +156,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   con_self(m ? m->get_loopback_connection() : NULL),
   lock("Monitor::lock"),
   timer(cct_, lock),
+  finisher(cct_, "mon_finisher", "fin"),
+  cpu_tp(cct, "Monitor::cpu_tp", "cpu_tp", g_conf->mon_cpu_threads),
   has_ever_joined(false),
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
@@ -160,6 +171,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 			cct->_conf->auth_service_required : cct->_conf->auth_supported ),
   leader_supported_mon_commands(NULL),
   leader_supported_mon_commands_size(0),
+  mgr_messenger(mgr_m),
+  mgr_client(cct_, mgr_m),
   store(s),
   
   state(STATE_PROBING),
@@ -217,7 +230,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   bool r = mon_caps->parse("allow *", NULL);
   assert(r);
 
-  exited_quorum = ceph_clock_now(g_ceph_context);
+  exited_quorum = ceph_clock_now();
 
   // assume our commands until we have an election.  this only means
   // we won't reply with EINVAL before the election; any command that
@@ -259,8 +272,7 @@ Monitor::~Monitor()
   delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;
-  if (leader_supported_mon_commands != mon_commands &&
-      leader_supported_mon_commands != classic_mon_commands)
+  if (leader_supported_mon_commands != mon_commands)
     delete[] leader_supported_mon_commands;
 }
 
@@ -270,7 +282,7 @@ class AdminHook : public AdminSocketHook {
 public:
   explicit AdminHook(Monitor *m) : mon(m) {}
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+	    bufferlist& out) override {
     stringstream ss;
     mon->do_admin_command(command, cmdmap, format, ss);
     out.append(ss);
@@ -337,123 +349,6 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     if (f) {
       f->flush(ss);
     }
-  } else if (boost::starts_with(command, "debug mon features")) {
-  
-    // check if unsupported feature is set
-    if (!cct->check_experimental_feature_enabled("mon_debug_features_commands")) {
-      ss << "error: this is an experimental feature and is not enabled.";
-      goto abort;
-    }
-
-    if (command == "debug mon features list") {
-
-      mon_feature_t supported = ceph::features::mon::get_supported();
-      mon_feature_t persistent = ceph::features::mon::get_persistent();
-
-      if (f) {
-
-        f->open_object_section("features");
-        f->open_object_section("ceph-mon");
-        supported.dump_with_value(f.get(), "supported");
-        persistent.dump_with_value(f.get(), "persistent");
-        f->close_section(); // ceph-mon
-        f->open_object_section("monmap");
-        monmap->persistent_features.dump_with_value(f.get(), "persistent");
-        monmap->optional_features.dump_with_value(f.get(), "optional");
-        mon_feature_t required = monmap->get_required_features();
-        required.dump_with_value(f.get(), "required");
-        f->close_section(); // monmap
-        f->close_section(); // features
-
-        f->flush(ss);
-      } else {
-        ss << "only structured formats allowed when listing";
-      }
-    } else if (command == "debug mon features set" ||
-               command == "debug mon features set_val" ||
-               command == "debug mon features unset" ||
-               command == "debug mon features unset_val") {
-
-      string n;
-      if (!cmd_getval(cct, cmdmap, "feature", n)) {
-        ss << "missing feature to set";
-        goto abort;
-      }
-
-      string f_type;
-      bool do_persistent = false, do_optional = false;
-
-      if (cmd_getval(cct, cmdmap, "feature_type", f_type)) {
-        if (f_type == "--persistent") {
-          do_persistent = true;
-        } else {
-          do_optional = true;
-        }
-      }
-
-      mon_feature_t feature;
-
-      if (command == "debug mon features set" ||
-          command == "debug mon features unset") {
-        feature = ceph::features::mon::get_feature_by_name(n);
-        if (feature == ceph::features::mon::FEATURE_NONE) {
-          ss << "no such feature '" << n << "'";
-          goto abort;
-        }
-      } else {
-        uint64_t feature_val;
-        string interr;
-        feature_val = strict_strtoll(n.c_str(), 10, &interr);
-        if (!interr.empty()) {
-          ss << "unable to parse feature value: " << interr;
-          goto abort;
-        }
-
-        feature = mon_feature_t(feature_val);
-      }
-
-      bool do_unset = false;
-      if (boost::ends_with(command, "unset") ||
-          boost::ends_with(command, "unset_val")) {
-        do_unset = true;
-      }
-
-      ss << (do_unset? "un" : "") << "setting feature '";
-      feature.print_with_value(ss);
-      ss << "' on current monmap\n";
-      ss << "please note this change is not persistent; "
-         << "changes to monmap will overwrite the changes\n";
-
-      if (!do_persistent && !do_optional) {
-        if (ceph::features::mon::get_persistent().contains_all(feature)) {
-          do_persistent = true;
-        } else {
-          do_optional = true;
-        }
-      }
-
-      ss << "\n" << (do_unset ? "un" : "") << "setting ";
-
-      mon_feature_t &target_feature = (do_persistent ?
-          monmap->persistent_features : monmap->optional_features);
-
-      if (do_persistent) {
-        ss << "persistent feature";
-      } else {
-        ss << "optional feature";
-      }
-
-      if (do_unset) {
-        target_feature.unset_feature(feature);
-      } else {
-        target_feature.set_feature(feature);
-      }
-
-    } else {
-
-      ss << "unrecognized command";
-    }
-
   } else {
     assert(0 == "bad AdminSocket command binding");
   }
@@ -540,7 +435,7 @@ void Monitor::read_features_off_disk(MonitorDBStore *store, CompatSet *features)
     *features = get_legacy_features();
 
     features->encode(featuresbl);
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     t->put(MONITOR_NAME, COMPAT_SET_LOC, featuresbl);
     store->apply_transaction(t);
   } else {
@@ -554,7 +449,7 @@ void Monitor::read_features()
   read_features_off_disk(store, &features);
   dout(10) << "features " << features << dendl;
 
-  apply_compatset_features_to_quorum_requirements();
+  calc_quorum_requirements();
   dout(10) << "required_features " << required_features << dendl;
 }
 
@@ -942,12 +837,20 @@ int Monitor::init()
   dout(2) << "init" << dendl;
   Mutex::Locker l(lock);
 
+  finisher.start();
+
   // start ticker
   timer.init();
   new_tick();
 
+  cpu_tp.start();
+
   // i'm ready!
   messenger->add_dispatcher_tail(this);
+
+  mgr_client.init();
+  mgr_messenger->add_dispatcher_tail(&mgr_client);
+  mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
 
   bootstrap();
 
@@ -956,8 +859,6 @@ int Monitor::init()
   int cmdsize;
   get_locally_supported_monitor_commands(&cmds, &cmdsize);
   MonCommand::encode_array(cmds, cmdsize, supported_commands_bl);
-  get_classic_monitor_commands(&cmds, &cmdsize);
-  MonCommand::encode_array(cmds, cmdsize, classic_commands_bl);
 
   return 0;
 }
@@ -1034,6 +935,7 @@ void Monitor::shutdown()
   dout(1) << "shutdown" << dendl;
 
   lock.Lock();
+
   wait_for_paxos_write();
 
   state = STATE_SHUTDOWN;
@@ -1061,6 +963,13 @@ void Monitor::shutdown()
 
   elector.shutdown();
 
+  mgr_client.shutdown();
+
+  lock.Unlock();
+  finisher.wait_for_empty();
+  finisher.stop();
+  lock.Lock();
+
   // clean up
   paxos->shutdown();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
@@ -1071,6 +980,8 @@ void Monitor::shutdown()
   finish_contexts(g_ceph_context, maybe_wait_for_quorum, -ECANCELED);
 
   timer.shutdown();
+
+  cpu_tp.stop();
 
   remove_all_sessions();
 
@@ -1092,6 +1003,7 @@ void Monitor::shutdown()
   lock.Unlock();
 
   messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
+  mgr_messenger->shutdown();
 }
 
 void Monitor::wait_for_paxos_write()
@@ -1218,7 +1130,7 @@ void Monitor::_reset()
 
   leader_since = utime_t();
   if (!quorum.empty()) {
-    exited_quorum = ceph_clock_now(g_ceph_context);
+    exited_quorum = ceph_clock_now();
   }
   quorum.clear();
   outside_quorum.clear();
@@ -1341,7 +1253,7 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
 
   if (sync_full) {
     // stash key state, and mark that we are syncing
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    auto t(std::make_shared<MonitorDBStore::Transaction>());
     sync_stash_critical_state(t);
     t->put("mon_sync", "in_sync", 1);
 
@@ -1405,7 +1317,7 @@ void Monitor::sync_finish(version_t last_committed)
 
   if (sync_full) {
     // finalize the paxos commits
-    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+    auto tx(std::make_shared<MonitorDBStore::Transaction>());
     paxos->read_and_prepare_transactions(tx, sync_start_version,
 					 last_committed);
     tx->put(paxos->get_name(), "last_committed", last_committed);
@@ -1421,7 +1333,7 @@ void Monitor::sync_finish(version_t last_committed)
 
   assert(g_conf->mon_sync_requester_kill_at != 8);
 
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->erase("mon_sync", "in_sync");
   t->erase("mon_sync", "force_sync");
   t->erase("mon_sync", "last_committed_floor");
@@ -1560,7 +1472,7 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
   }
 
   MMonSync *reply = new MMonSync(MMonSync::OP_CHUNK, sp.cookie);
-  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+  auto tx(std::make_shared<MonitorDBStore::Transaction>());
 
   int left = g_conf->mon_sync_max_payload_size;
   while (sp.last_committed < paxos->get_version() && left > 0) {
@@ -1654,7 +1566,7 @@ void Monitor::handle_sync_chunk(MonOpRequestRef op)
   assert(state == STATE_SYNCHRONIZING);
   assert(g_conf->mon_sync_requester_kill_at != 5);
 
-  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+  auto tx(std::make_shared<MonitorDBStore::Transaction>());
   tx->append_from_encoded(m->chunk_bl);
 
   dout(30) << __func__ << " tx dump:\n";
@@ -1669,7 +1581,7 @@ void Monitor::handle_sync_chunk(MonOpRequestRef op)
 
   if (!sync_full) {
     dout(10) << __func__ << " applying recent paxos transactions as we go" << dendl;
-    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+    auto tx(std::make_shared<MonitorDBStore::Transaction>());
     paxos->read_and_prepare_transactions(tx, paxos->get_version() + 1,
 					 m->last_committed);
     tx->put(paxos->get_name(), "last_committed", m->last_committed);
@@ -1702,7 +1614,7 @@ void Monitor::sync_trim_providers()
 {
   dout(20) << __func__ << dendl;
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   map<uint64_t,SyncProvider>::iterator p = sync_providers.begin();
   while (p != sync_providers.end()) {
     if (now > p->second.timeout) {
@@ -1992,7 +1904,7 @@ void Monitor::start_election()
   logger->inc(l_mon_num_elections);
   logger->inc(l_mon_election_call);
 
-  clog->info() << "mon." << name << " calling new monitor election\n";
+  clog->info() << "mon." << name << " calling new monitor election";
   elector.call_election();
 }
 
@@ -2016,7 +1928,7 @@ void Monitor::win_standalone_election()
   win_election(elector.get_epoch(), q,
                CEPH_FEATURES_ALL,
                ceph::features::mon::get_supported(),
-               my_cmds, cmdsize, NULL);
+               my_cmds, cmdsize);
 }
 
 const utime_t& Monitor::get_leader_since() const
@@ -2044,8 +1956,7 @@ void Monitor::_finish_svc_election()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
-                           const MonCommand *cmdset, int cmdsize,
-                           const set<int> *classic_monitors)
+                           const MonCommand *cmdset, int cmdsize)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
 	   << " features " << features
@@ -2053,7 +1964,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
            << dendl;
   assert(is_electing());
   state = STATE_LEADER;
-  leader_since = ceph_clock_now(g_ceph_context);
+  leader_since = ceph_clock_now();
   leader = rank;
   quorum = active;
   quorum_con_features = features;
@@ -2061,11 +1972,9 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   outside_quorum.clear();
 
   clog->info() << "mon." << name << "@" << rank
-		<< " won leader election with quorum " << quorum << "\n";
+		<< " won leader election with quorum " << quorum;
 
   set_leader_supported_commands(cmdset, cmdsize);
-  if (classic_monitors)
-    classic_mons = *classic_monitors;
 
   paxos->leader_init();
   // NOTE: tell monmap monitor first.  This is important for the
@@ -2158,7 +2067,7 @@ void Monitor::_apply_compatset_features(CompatSet &new_features)
     write_features(t);
     store->apply_transaction(t);
 
-    apply_compatset_features_to_quorum_requirements();
+    calc_quorum_requirements();
   }
 }
 
@@ -2200,16 +2109,19 @@ void Monitor::apply_monmap_to_compatset_features()
     assert(ceph::features::mon::get_persistent().contains_all(
            ceph::features::mon::FEATURE_KRAKEN));
     // this feature should only ever be set if the quorum supports it.
-    assert(quorum_con_features & CEPH_FEATURE_SERVER_KRAKEN);
+    assert(HAVE_FEATURE(quorum_con_features, SERVER_KRAKEN));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
   }
+
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
 }
 
-void Monitor::apply_compatset_features_to_quorum_requirements()
+void Monitor::calc_quorum_requirements()
 {
   required_features = 0;
+
+  // compatset
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES)) {
     required_features |= CEPH_FEATURE_OSD_ERASURE_CODES;
   }
@@ -2223,7 +2135,17 @@ void Monitor::apply_compatset_features_to_quorum_requirements()
     required_features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3;
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_KRAKEN)) {
-    required_features |= CEPH_FEATURE_SERVER_KRAKEN;
+    required_features |= CEPH_FEATUREMASK_SERVER_KRAKEN;
+  }
+
+  // monmap
+  if (monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_KRAKEN)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_KRAKEN;
+  }
+  if (monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_LUMINOUS;
   }
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }
@@ -2238,7 +2160,7 @@ void Monitor::sync_force(Formatter *f, ostream& ss)
     free_formatter = true;
   }
 
-  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+  auto tx(std::make_shared<MonitorDBStore::Transaction>());
   sync_stash_critical_state(tx);
   tx->put("mon_sync", "force_sync", 1);
   store->apply_transaction(tx);
@@ -2398,7 +2320,7 @@ void Monitor::health_tick_stop()
 
 utime_t Monitor::health_interval_calc_next_update()
 {
-  utime_t now = ceph_clock_now(cct);
+  utime_t now = ceph_clock_now();
 
   time_t secs = now.sec();
   int remainder = secs % cct->_conf->mon_health_to_clog_interval;
@@ -2761,9 +2683,12 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
   bool cmd_w = this_cmd->requires_perm('w');
   bool cmd_x = this_cmd->requires_perm('x');
 
-  bool capable = s->caps.is_capable(g_ceph_context, s->entity_name,
-                                    module, prefix, param_str_map,
-                                    cmd_r, cmd_w, cmd_x);
+  bool capable = s->caps.is_capable(
+    g_ceph_context,
+    CEPH_ENTITY_TYPE_MON,
+    s->entity_name,
+    module, prefix, param_str_map,
+    cmd_r, cmd_w, cmd_x);
 
   dout(10) << __func__ << " " << (capable ? "" : "not ") << "capable" << dendl;
   return capable;
@@ -2772,18 +2697,23 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
 void Monitor::format_command_descriptions(const MonCommand *commands,
 					  unsigned commands_size,
 					  Formatter *f,
-					  bufferlist *rdata)
+					  bufferlist *rdata,
+					  bool hide_mgr_flag)
 {
   int cmdnum = 0;
   f->open_object_section("command_descriptions");
   for (const MonCommand *cp = commands;
        cp < &commands[commands_size]; cp++) {
 
+    unsigned flags = cp->flags;
+    if (hide_mgr_flag) {
+      flags &= ~MonCommand::FLAG_MGR;
+    }
     ostringstream secname;
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
     dump_cmddesc_to_json(f, secname.str(),
 			 cp->cmdstring, cp->helpstring, cp->module,
-			 cp->req_perms, cp->availability, cp->flags);
+			 cp->req_perms, cp->availability, flags);
     cmdnum++;
   }
   f->close_section();	// command_descriptions
@@ -2797,15 +2727,9 @@ void Monitor::get_locally_supported_monitor_commands(const MonCommand **cmds,
   *cmds = mon_commands;
   *count = ARRAY_SIZE(mon_commands);
 }
-void Monitor::get_classic_monitor_commands(const MonCommand **cmds, int *count)
-{
-  *cmds = classic_mon_commands;
-  *count = ARRAY_SIZE(classic_mon_commands);
-}
 void Monitor::set_leader_supported_commands(const MonCommand *cmds, int size)
 {
-  if (leader_supported_mon_commands != mon_commands &&
-      leader_supported_mon_commands != classic_mon_commands)
+  if (leader_supported_mon_commands != mon_commands)
     delete[] leader_supported_mon_commands;
   leader_supported_mon_commands = cmds;
   leader_supported_mon_commands_size = size;
@@ -2821,6 +2745,21 @@ bool Monitor::is_keyring_required()
   return auth_service_required == "cephx" ||
     auth_cluster_required == "cephx";
 }
+
+struct C_MgrProxyCommand : public Context {
+  Monitor *mon;
+  MonOpRequestRef op;
+  uint64_t size;
+  bufferlist outbl;
+  string outs;
+  C_MgrProxyCommand(Monitor *mon, MonOpRequestRef op, uint64_t s)
+    : mon(mon), op(op), size(s) { }
+  void finish(int r) {
+    Mutex::Locker l(mon->lock);
+    mon->mgr_proxy_bytes -= size;
+    mon->reply_command(op, r, outs, outbl, 0);
+  }
+};
 
 void Monitor::handle_command(MonOpRequestRef op)
 {
@@ -2868,7 +2807,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   // check return value. If no prefix parameter provided,
   // return value will be false, then return error info.
-  if(!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
+  if (!cmd_getval(g_ceph_context, cmdmap, "prefix", prefix)) {
     reply_command(op, -EINVAL, "command prefix not found", 0);
     return;
   }
@@ -2882,8 +2821,12 @@ void Monitor::handle_command(MonOpRequestRef op)
   if (prefix == "get_command_descriptions") {
     bufferlist rdata;
     Formatter *f = Formatter::create("json");
+    // hide mgr commands until luminous upgrade is complete
+    bool hide_mgr_flag =
+      !osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
     format_command_descriptions(leader_supported_mon_commands,
-				leader_supported_mon_commands_size, f, &rdata);
+				leader_supported_mon_commands_size, f, &rdata,
+				hide_mgr_flag);
     delete f;
     reply_command(op, 0, "", rdata, 0);
     return;
@@ -2994,6 +2937,30 @@ void Monitor::handle_command(MonOpRequestRef op)
     << "entity='" << session->entity_name << "' "
     << "cmd=" << m->cmd << ": dispatch";
 
+  if (mon_cmd->is_mgr() &&
+      osdmon()->osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    const auto& hdr = m->get_header();
+    uint64_t size = hdr.front_len + hdr.middle_len + hdr.data_len;
+    uint64_t max =
+      g_conf->mon_client_bytes * g_conf->mon_mgr_proxy_client_bytes_ratio;
+    if (mgr_proxy_bytes + size > max) {
+      dout(10) << __func__ << " current mgr proxy bytes " << mgr_proxy_bytes
+	       << " + " << size << " > max " << max << dendl;
+      reply_command(op, -EAGAIN, "hit limit on proxied mgr commands", rdata, 0);
+      return;
+    }
+    mgr_proxy_bytes += size;
+    dout(10) << __func__ << " proxying mgr command (+" << size
+	     << " -> " << mgr_proxy_bytes << ")" << dendl;
+    C_MgrProxyCommand *fin = new C_MgrProxyCommand(this, op, size);
+    mgr_client.start_command(m->cmd,
+			     m->get_data(),
+			     &fin->outbl,
+			     &fin->outs,
+			     new C_OnFinisher(fin, &finisher));
+    return;
+  }
+
   if (module == "mds" || module == "fs") {
     mdsmon()->dispatch(op);
     return;
@@ -3068,9 +3035,9 @@ void Monitor::handle_command(MonOpRequestRef op)
 
   if (prefix == "compact" || prefix == "mon compact") {
     dout(1) << "triggering manual compaction" << dendl;
-    utime_t start = ceph_clock_now(g_ceph_context);
+    utime_t start = ceph_clock_now();
     store->compact();
-    utime_t end = ceph_clock_now(g_ceph_context);
+    utime_t end = ceph_clock_now();
     end -= start;
     dout(1) << "finished manual compaction in " << end << " seconds" << dendl;
     ostringstream oss;
@@ -3159,7 +3126,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->dump_stream("cluster_fingerprint") << fingerprint;
     f->dump_string("version", ceph_version_to_str());
     f->dump_string("commit", git_version_to_str());
-    f->dump_stream("timestamp") << ceph_clock_now(NULL);
+    f->dump_stream("timestamp") << ceph_clock_now();
 
     vector<string> tagsvec;
     cmd_getval(g_ceph_context, cmdmap, "tags", tagsvec);
@@ -3669,6 +3636,7 @@ void Monitor::remove_session(MonSession *s)
 
 void Monitor::remove_all_sessions()
 {
+  Mutex::Locker l(session_map_lock);
   while (!session_map.sessions.empty()) {
     MonSession *s = session_map.sessions.front();
     remove_session(s);
@@ -3706,7 +3674,7 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
   Message *m = op->get_req();
   MonSession *s = op->get_session();
   ConnectionRef con = op->get_connection();
-  utime_t too_old = ceph_clock_now(g_ceph_context);
+  utime_t too_old = ceph_clock_now();
   too_old -= g_ceph_context->_conf->mon_lease;
   if (m->get_recv_stamp() > too_old &&
       con->is_connected()) {
@@ -3718,8 +3686,10 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
     con->mark_down();
     // proxied sessions aren't registered and don't have a con; don't remove
     // those.
-    if (!s->proxy_con)
+    if (!s->proxy_con) {
+      Mutex::Locker l(session_map_lock);
       remove_session(s);
+    }
     op->mark_zap();
   }
 }
@@ -3753,7 +3723,10 @@ void Monitor::_ms_dispatch(Message *m)
     }
 
     ConnectionRef con = m->get_connection();
-    s = session_map.new_session(m->get_source_inst(), con.get());
+    {
+      Mutex::Locker l(session_map_lock);
+      s = session_map.new_session(m->get_source_inst(), con.get());
+    }
     assert(s);
     con->set_priv(s->get());
     dout(10) << __func__ << " new session " << s << " " << *s << dendl;
@@ -3776,7 +3749,7 @@ void Monitor::_ms_dispatch(Message *m)
 
   assert(s);
 
-  s->session_timeout = ceph_clock_now(NULL);
+  s->session_timeout = ceph_clock_now();
   s->session_timeout += g_conf->mon_session_timeout;
 
   if (s->auth_handler) {
@@ -3852,11 +3825,14 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     // OSDs
     case CEPH_MSG_MON_GET_OSDMAP:
     case CEPH_MSG_POOLOP:
+    case MSG_OSD_BEACON:
     case MSG_OSD_MARK_ME_DOWN:
+    case MSG_OSD_FULL:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
     case MSG_OSD_ALIVE:
     case MSG_OSD_PGTEMP:
+    case MSG_OSD_PG_CREATED:
     case MSG_REMOVE_SNAPS:
       paxos_service[PAXOS_OSDMAP]->dispatch(op);
       break;
@@ -4091,7 +4067,7 @@ void Monitor::timecheck_start_round()
 
   if (timecheck_round % 2) {
     dout(10) << __func__ << " there's a timecheck going on" << dendl;
-    utime_t curr_time = ceph_clock_now(g_ceph_context);
+    utime_t curr_time = ceph_clock_now();
     double max = g_conf->mon_timecheck_interval*3;
     if (curr_time - timecheck_round_start < max) {
       dout(10) << __func__ << " keep current round going" << dendl;
@@ -4106,7 +4082,7 @@ void Monitor::timecheck_start_round()
   assert(timecheck_round % 2 == 0);
   timecheck_acks = 0;
   timecheck_round ++;
-  timecheck_round_start = ceph_clock_now(g_ceph_context);
+  timecheck_round_start = ceph_clock_now();
   dout(10) << __func__ << " new " << timecheck_round << dendl;
 
   timecheck();
@@ -4290,7 +4266,7 @@ void Monitor::timecheck()
       continue;
 
     entity_inst_t inst = monmap->get_inst(*it);
-    utime_t curr_time = ceph_clock_now(g_ceph_context);
+    utime_t curr_time = ceph_clock_now();
     timecheck_waiting[inst] = curr_time;
     MTimeCheck *m = new MTimeCheck(MTimeCheck::OP_PING);
     m->epoch = get_epoch();
@@ -4341,7 +4317,7 @@ void Monitor::handle_timecheck_leader(MonOpRequestRef op)
     return;
   }
 
-  utime_t curr_time = ceph_clock_now(g_ceph_context);
+  utime_t curr_time = ceph_clock_now();
 
   assert(timecheck_waiting.count(other) > 0);
   utime_t timecheck_sent = timecheck_waiting[other];
@@ -4415,9 +4391,9 @@ void Monitor::handle_timecheck_leader(MonOpRequestRef op)
   ostringstream ss;
   health_status_t status = timecheck_status(ss, skew_bound, latency);
   if (status == HEALTH_ERR)
-    clog->error() << other << " " << ss.str() << "\n";
+    clog->error() << other << " " << ss.str();
   else if (status == HEALTH_WARN)
-    clog->warn() << other << " " << ss.str() << "\n";
+    clog->warn() << other << " " << ss.str();
 
   dout(10) << __func__ << " from " << other << " ts " << m->timestamp
 	   << " delta " << delta << " skew_bound " << skew_bound
@@ -4469,7 +4445,7 @@ void Monitor::handle_timecheck_peon(MonOpRequestRef op)
 
   assert((timecheck_round % 2) != 0);
   MTimeCheck *reply = new MTimeCheck(MTimeCheck::OP_PONG);
-  utime_t curr_time = ceph_clock_now(g_ceph_context);
+  utime_t curr_time = ceph_clock_now();
   reply->timestamp = curr_time;
   reply->epoch = m->epoch;
   reply->round = m->round;
@@ -4522,6 +4498,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       for (map<string, Subscription*>::iterator it = s->sub_map.begin();
 	   it != s->sub_map.end(); ) {
 	if (it->first != p->first && logmon()->sub_name_to_id(it->first) >= 0) {
+	  Mutex::Locker l(session_map_lock);
 	  session_map.remove_sub((it++)->second);
 	} else {
 	  ++it;
@@ -4529,9 +4506,12 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       }
     }
 
-    session_map.add_update_sub(s, p->first, p->second.start, 
-			       p->second.flags & CEPH_SUBSCRIBE_ONETIME,
-			       m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
+    {
+      Mutex::Locker l(session_map_lock);
+      session_map.add_update_sub(s, p->first, p->second.start,
+				 p->second.flags & CEPH_SUBSCRIBE_ONETIME,
+				 m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
+    }
 
     if (p->first.compare(0, 6, "mdsmap") == 0 || p->first.compare(0, 5, "fsmap") == 0) {
       dout(10) << __func__ << ": MDS sub '" << p->first << "'" << dendl;
@@ -4546,11 +4526,16 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 	  // client needs earlier osdmaps on purpose, so reset the sent epoch
 	  s->osd_epoch = 0;
 	}
-        osdmon()->check_sub(s->sub_map["osdmap"]);
+        osdmon()->check_osdmap_sub(s->sub_map["osdmap"]);
       }
     } else if (p->first == "osd_pg_creates") {
       if ((int)s->is_capable("osd", MON_CAP_W)) {
-	pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
+	if (monmap->get_required_features().contains_all(
+	      ceph::features::mon::FEATURE_LUMINOUS)) {
+	  osdmon()->check_pg_creates_sub(s->sub_map["osd_pg_creates"]);
+	} else {
+	  pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
+	}
       }
     } else if (p->first == "monmap") {
       monmon()->check_sub(s->sub_map[p->first]);
@@ -4638,8 +4623,10 @@ bool Monitor::ms_handle_reset(Connection *con)
   Mutex::Locker l(lock);
 
   dout(10) << "reset/close on session " << s->inst << dendl;
-  if (!s->closed)
+  if (!s->closed) {
+    Mutex::Locker l(session_map_lock);
     remove_session(s);
+  }
   s->put();
   return true;
 }
@@ -4759,7 +4746,7 @@ int Monitor::scrub_start()
   assert(is_leader());
 
   if (!scrub_result.empty()) {
-    clog->info() << "scrub already in progress\n";
+    clog->info() << "scrub already in progress";
     return -EBUSY;
   }
 
@@ -4947,13 +4934,13 @@ void Monitor::scrub_check_results()
       continue;
     if (p->second != mine) {
       ++errors;
-      clog->error() << "scrub mismatch" << "\n";
-      clog->error() << " mon." << rank << " " << mine << "\n";
-      clog->error() << " mon." << p->first << " " << p->second << "\n";
+      clog->error() << "scrub mismatch";
+      clog->error() << " mon." << rank << " " << mine;
+      clog->error() << " mon." << p->first << " " << p->second;
     }
   }
   if (!errors)
-    clog->info() << "scrub ok on " << quorum << ": " << mine << "\n";
+    clog->info() << "scrub ok on " << quorum << ": " << mine;
 }
 
 inline void Monitor::scrub_timeout()
@@ -5014,7 +5001,7 @@ void Monitor::scrub_event_start()
   struct C_Scrub : public Context {
     Monitor *mon;
     explicit C_Scrub(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       mon->scrub_start();
     }
   };
@@ -5048,7 +5035,7 @@ void Monitor::scrub_reset_timeout()
   struct C_ScrubTimeout : public Context {
     Monitor *mon;
     explicit C_ScrubTimeout(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       mon->scrub_timeout();
     }
   };
@@ -5063,7 +5050,7 @@ class C_Mon_Tick : public Context {
   Monitor *mon;
 public:
   explicit C_Mon_Tick(Monitor *m) : mon(m) {}
-  void finish(int r) {
+  void finish(int r) override {
     mon->tick();
   }
 };
@@ -5085,42 +5072,44 @@ void Monitor::tick()
   }
   
   // trim sessions
-  utime_t now = ceph_clock_now(g_ceph_context);
-  xlist<MonSession*>::iterator p = session_map.sessions.begin();
+  utime_t now = ceph_clock_now();
+  {
+    Mutex::Locker l(session_map_lock);
+    auto p = session_map.sessions.begin();
 
-  bool out_for_too_long = (!exited_quorum.is_zero()
-      && now > (exited_quorum + 2*g_conf->mon_lease));
+    bool out_for_too_long = (!exited_quorum.is_zero() &&
+			     now > (exited_quorum + 2*g_conf->mon_lease));
 
-  while (!p.end()) {
-    MonSession *s = *p;
-    ++p;
+    while (!p.end()) {
+      MonSession *s = *p;
+      ++p;
     
-    // don't trim monitors
-    if (s->inst.name.is_mon())
-      continue;
+      // don't trim monitors
+      if (s->inst.name.is_mon())
+	continue;
 
-    if (s->session_timeout < now && s->con) {
-      // check keepalive, too
-      s->session_timeout = s->con->get_last_keepalive();
-      s->session_timeout += g_conf->mon_session_timeout;
-    }
-    if (s->session_timeout < now) {
-      dout(10) << " trimming session " << s->con << " " << s->inst
-	       << " (timeout " << s->session_timeout
-	       << " < now " << now << ")" << dendl;
-    } else if (out_for_too_long) {
-      // boot the client Session because we've taken too long getting back in
-      dout(10) << " trimming session " << s->con << " " << s->inst
-        << " because we've been out of quorum too long" << dendl;
-    } else {
-      continue;
-    }
+      if (s->session_timeout < now && s->con) {
+	// check keepalive, too
+	s->session_timeout = s->con->get_last_keepalive();
+	s->session_timeout += g_conf->mon_session_timeout;
+      }
+      if (s->session_timeout < now) {
+	dout(10) << " trimming session " << s->con << " " << s->inst
+		 << " (timeout " << s->session_timeout
+		 << " < now " << now << ")" << dendl;
+      } else if (out_for_too_long) {
+	// boot the client Session because we've taken too long getting back in
+	dout(10) << " trimming session " << s->con << " " << s->inst
+		 << " because we've been out of quorum too long" << dendl;
+      } else {
+	continue;
+      }
 
-    s->con->mark_down();
-    remove_session(s);
-    logger->inc(l_mon_session_trim);
+      s->con->mark_down();
+      remove_session(s);
+      logger->inc(l_mon_session_trim);
+    }
   }
-
   sync_trim_providers();
 
   if (!maybe_wait_for_quorum.empty()) {
@@ -5181,7 +5170,7 @@ int Monitor::check_fsid()
 
 int Monitor::write_fsid()
 {
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
   write_fsid(t);
   int r = store->apply_transaction(t);
   return r;
@@ -5206,7 +5195,7 @@ int Monitor::write_fsid(MonitorDBStore::TransactionRef t)
  */
 int Monitor::mkfs(bufferlist& osdmapbl)
 {
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
 
   // verify cluster fsid
   int r = check_fsid();
@@ -5325,54 +5314,78 @@ void Monitor::extract_save_mon_key(KeyRing& keyring)
   }
 }
 
-bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, bool force_new)
+bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer,
+				bool force_new)
 {
-  dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id) << dendl;
+  dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id)
+	   << dendl;
 
   if (is_shutdown())
     return false;
 
-  // we only connect to other monitors; every else connects to us.
-  if (service_id != CEPH_ENTITY_TYPE_MON)
+  // we only connect to other monitors and mgr; every else connects to us.
+  if (service_id != CEPH_ENTITY_TYPE_MON &&
+      service_id != CEPH_ENTITY_TYPE_MGR)
     return false;
 
-  if (!auth_cluster_required.is_supported_auth(CEPH_AUTH_CEPHX))
-    return false;
+  if (!auth_cluster_required.is_supported_auth(CEPH_AUTH_CEPHX)) {
+    // auth_none
+    dout(20) << __func__ << " building auth_none authorizer" << dendl;
+    AuthNoneClientHandler handler(g_ceph_context, nullptr);
+    handler.set_global_id(0);
+    *authorizer = handler.build_authorizer(service_id);
+    return true;
+  }
 
   CephXServiceTicketInfo auth_ticket_info;
   CephXSessionAuthInfo info;
   int ret;
+
   EntityName name;
   name.set_type(CEPH_ENTITY_TYPE_MON);
-
   auth_ticket_info.ticket.name = name;
   auth_ticket_info.ticket.global_id = 0;
 
-  CryptoKey secret;
-  if (!keyring.get_secret(name, secret) &&
-      !key_server.get_secret(name, secret)) {
-    dout(0) << " couldn't get secret for mon service from keyring or keyserver" << dendl;
-    stringstream ss, ds;
-    int err = key_server.list_secrets(ds);
-    if (err < 0)
-      ss << "no installed auth entries!";
-    else
-      ss << "installed auth entries:";
-    dout(0) << ss.str() << "\n" << ds.str() << dendl;
-    return false;
-  }
+  if (service_id == CEPH_ENTITY_TYPE_MON) {
+    // mon to mon authentication uses the private monitor shared key and not the
+    // rotating key
+    CryptoKey secret;
+    if (!keyring.get_secret(name, secret) &&
+	!key_server.get_secret(name, secret)) {
+      dout(0) << " couldn't get secret for mon service from keyring or keyserver"
+	      << dendl;
+      stringstream ss, ds;
+      int err = key_server.list_secrets(ds);
+      if (err < 0)
+	ss << "no installed auth entries!";
+      else
+	ss << "installed auth entries:";
+      dout(0) << ss.str() << "\n" << ds.str() << dendl;
+      return false;
+    }
 
-  /* mon to mon authentication uses the private monitor shared key and not the
-     rotating key */
-  ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info, secret, (uint64_t)-1);
-  if (ret < 0) {
-    dout(0) << "ms_get_authorizer failed to build session auth_info for use with mon ret " << ret << dendl;
-    return false;
+    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info,
+					     secret, (uint64_t)-1);
+    if (ret < 0) {
+      dout(0) << __func__ << " failed to build mon session_auth_info "
+	      << cpp_strerror(ret) << dendl;
+      return false;
+    }
+  } else if (service_id == CEPH_ENTITY_TYPE_MGR) {
+    // mgr
+    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info);
+    if (ret < 0) {
+      derr << __func__ << " failed to build mgr service session_auth_info "
+	   << cpp_strerror(ret) << dendl;
+      return false;
+    }
+  } else {
+    ceph_abort();  // see check at top of fn
   }
 
   CephXTicketBlob blob;
   if (!cephx_build_service_ticket_blob(cct, info, blob)) {
-    dout(0) << "ms_get_authorizer failed to build service ticket use with mon" << dendl;
+    dout(0) << "ms_get_authorizer failed to build service ticket" << dendl;
     return false;
   }
   bufferlist ticket_data;
@@ -5390,7 +5403,8 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
 }
 
 bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
-				   int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
+				   int protocol, bufferlist& authorizer_data,
+				   bufferlist& authorizer_reply,
 				   bool& isvalid, CryptoKey& session_key)
 {
   dout(10) << "ms_verify_authorizer " << con->get_peer_addr()

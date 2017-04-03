@@ -43,8 +43,8 @@ int main(int argc, char **argv) {
 
   const char* env = getenv("CEPH_LIB");
   if (env) {
-    g_conf->set_val("erasure_code_dir", env, false, false);
-    g_conf->set_val("plugin_dir", env, false, false);
+    g_conf->set_val("erasure_code_dir", env, false);
+    g_conf->set_val("plugin_dir", env, false);
   }
 
   ::testing::InitGoogleTest(&argc, argv);

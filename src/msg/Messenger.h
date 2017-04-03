@@ -102,31 +102,31 @@ public:
 	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
 	features_required(0) {}
   private:
-    Policy(bool l, bool s, bool st, bool r, uint64_t sup, uint64_t req)
+    Policy(bool l, bool s, bool st, bool r, uint64_t req)
       : lossy(l), server(s), standby(st), resetcheck(r),
 	throttler_bytes(NULL),
 	throttler_messages(NULL),
-	features_supported(sup | CEPH_FEATURES_SUPPORTED_DEFAULT),
+	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
 	features_required(req) {}
 
   public:
-    static Policy stateful_server(uint64_t sup, uint64_t req) {
-      return Policy(false, true, true, true, sup, req);
+    static Policy stateful_server(uint64_t req) {
+      return Policy(false, true, true, true, req);
     }
-    static Policy stateless_server(uint64_t sup, uint64_t req) {
-      return Policy(true, true, false, false, sup, req);
+    static Policy stateless_server(uint64_t req) {
+      return Policy(true, true, false, false, req);
     }
-    static Policy lossless_peer(uint64_t sup, uint64_t req) {
-      return Policy(false, false, true, false, sup, req);
+    static Policy lossless_peer(uint64_t req) {
+      return Policy(false, false, true, false, req);
     }
-    static Policy lossless_peer_reuse(uint64_t sup, uint64_t req) {
-      return Policy(false, false, true, true, sup, req);
+    static Policy lossless_peer_reuse(uint64_t req) {
+      return Policy(false, false, true, true, req);
     }
-    static Policy lossy_client(uint64_t sup, uint64_t req) {
-      return Policy(true, false, false, false, sup, req);
+    static Policy lossy_client(uint64_t req) {
+      return Policy(true, false, false, false, req);
     }
-    static Policy lossless_client(uint64_t sup, uint64_t req) {
-      return Policy(false, false, false, true, sup, req);
+    static Policy lossless_client(uint64_t req) {
+      return Policy(false, false, false, true, req);
     }
   };
 
@@ -409,6 +409,14 @@ public:
    */
   virtual int rebind(const set<int>& avoid_ports) { return -EOPNOTSUPP; }
   /**
+   * Bind the 'client' Messenger to a specific address.Messenger will bind
+   * the address before connect to others when option ms_bind_before_connect
+   * is true.
+   * @param bind_addr The address to bind to.
+   * @return 0 on success, or -1 on error, or -errno if
+   */
+  virtual int client_bind(const entity_addr_t& bind_addr) = 0;
+  /**
    * @} // Configuration
    */
 
@@ -539,7 +547,7 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(Message *m) {
+  bool ms_can_fast_dispatch(const Message *m) {
     for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
 	 p != fast_dispatchers.end();
 	 ++p) {
@@ -554,9 +562,10 @@ public:
    *
    * @param m The Message we are fast dispatching. We take ownership
    * of one reference to it.
+   * If none of our Dispatchers can handle it, ceph_abort().
    */
   void ms_fast_dispatch(Message *m) {
-    m->set_dispatch_stamp(ceph_clock_now(cct));
+    m->set_dispatch_stamp(ceph_clock_now());
     for (list<Dispatcher*>::iterator p = fast_dispatchers.begin();
 	 p != fast_dispatchers.end();
 	 ++p) {
@@ -580,13 +589,13 @@ public:
   /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
-   *  If none of our Dispatchers can handle it, ceph_abort().
+   *  If none of our Dispatchers can handle it, assert(0).
    *
    *  @param m The Message to deliver. We take ownership of
    *  one reference to it.
    */
   void ms_deliver_dispatch(Message *m) {
-    m->set_dispatch_stamp(ceph_clock_now(cct));
+    m->set_dispatch_stamp(ceph_clock_now());
     for (list<Dispatcher*>::iterator p = dispatchers.begin();
 	 p != dispatchers.end();
 	 ++p) {

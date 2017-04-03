@@ -5,8 +5,8 @@
 
 #include "include/types.h"
 #include "include/buffer_fwd.h"
+#include "include/rbd_types.h"
 #include "common/Formatter.h"
-#include "librbd/parent_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 
 /// information about our parent image, if any
@@ -65,6 +65,7 @@ struct cls_rbd_snap {
   uint8_t protection_status;
   cls_rbd_parent parent;
   uint64_t flags;
+  utime_t timestamp;
   cls::rbd::SnapshotNamespaceOnDisk snapshot_namespace;
 
   /// true if we have a parent
@@ -74,10 +75,10 @@ struct cls_rbd_snap {
 
   cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0), features(0),
 		   protection_status(RBD_PROTECTION_STATUS_UNPROTECTED),
-                   flags(0)
+                   flags(0), timestamp(utime_t())
     {}
   void encode(bufferlist& bl) const {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     ::encode(id, bl);
     ::encode(name, bl);
     ::encode(image_size, bl);
@@ -86,10 +87,11 @@ struct cls_rbd_snap {
     ::encode(protection_status, bl);
     ::encode(flags, bl);
     ::encode(snapshot_namespace, bl);
+    ::encode(timestamp, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
-    DECODE_START(5, p);
+    DECODE_START(6, p);
     ::decode(id, p);
     ::decode(name, p);
     ::decode(image_size, p);
@@ -107,6 +109,9 @@ struct cls_rbd_snap {
       ::decode(snapshot_namespace, p);
     } else {
       snapshot_namespace = cls::rbd::SnapshotNamespaceOnDisk(cls::rbd::UserSnapshotNamespace());
+    }
+    if (struct_v >= 6) {
+      ::decode(timestamp, p);
     }
     DECODE_FINISH(p);
   }
@@ -154,6 +159,7 @@ struct cls_rbd_snap {
     t->parent.overlap = 12345;
     t->protection_status = RBD_PROTECTION_STATUS_PROTECTED;
     t->flags = 14;
+    t->timestamp = utime_t();
     o.push_back(t);
   }
 };

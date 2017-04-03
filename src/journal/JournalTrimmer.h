@@ -34,13 +34,13 @@ private:
   typedef std::function<Context*()> CreateContext;
 
   struct MetadataListener : public JournalMetadataListener {
-    JournalTrimmer *journal_trimmmer;
+    JournalTrimmer *journal_trimmer;
 
-    MetadataListener(JournalTrimmer *journal_trimmmer)
-      : journal_trimmmer(journal_trimmmer) {
+    MetadataListener(JournalTrimmer *journal_trimmer)
+      : journal_trimmer(journal_trimmer) {
     }
-    void handle_update(JournalMetadata *) {
-      journal_trimmmer->handle_metadata_updated();
+    void handle_update(JournalMetadata *) override {
+      journal_trimmer->handle_metadata_updated();
     }
   };
 
@@ -51,11 +51,11 @@ private:
       : journal_trimmer(_journal_trimmer) {
       journal_trimmer->m_async_op_tracker.start_op();
     }
-    virtual ~C_CommitPositionSafe() {
+    ~C_CommitPositionSafe() override {
       journal_trimmer->m_async_op_tracker.finish_op();
     }
 
-    virtual void finish(int r) {
+    void finish(int r) override {
     }
   };
 

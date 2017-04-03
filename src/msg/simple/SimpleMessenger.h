@@ -88,18 +88,18 @@ public:
    * Destroy the SimpleMessenger. Pretty simple since all the work is done
    * elsewhere.
    */
-  virtual ~SimpleMessenger();
+  ~SimpleMessenger() override;
 
   /** @defgroup Accessors
    * @{
    */
   void set_addr_unknowns(const entity_addr_t& addr) override;
 
-  int get_dispatch_queue_len() {
+  int get_dispatch_queue_len() override {
     return dispatch_queue.get_queue_len();
   }
 
-  double get_dispatch_queue_max_age(utime_t now) {
+  double get_dispatch_queue_max_age(utime_t now) override {
     return dispatch_queue.get_max_age(now);
   }
   /** @} Accessors */
@@ -108,13 +108,14 @@ public:
    * @defgroup Configuration functions
    * @{
    */
-  void set_cluster_protocol(int p) {
+  void set_cluster_protocol(int p) override {
     assert(!started && !did_bind);
     cluster_protocol = p;
   }
 
-  int bind(const entity_addr_t& bind_addr);
-  int rebind(const set<int>& avoid_ports);
+  int bind(const entity_addr_t& bind_addr) override;
+  int rebind(const set<int>& avoid_ports) override;
+  int client_bind(const entity_addr_t& bind_addr) override;
 
   /** @} Configuration functions */
 
@@ -122,9 +123,9 @@ public:
    * @defgroup Startup/Shutdown
    * @{
    */
-  virtual int start();
-  virtual void wait();
-  virtual int shutdown();
+  int start() override;
+  void wait() override;
+  int shutdown() override;
 
   /** @} // Startup/Shutdown */
 
@@ -132,7 +133,7 @@ public:
    * @defgroup Messaging
    * @{
    */
-  virtual int send_message(Message *m, const entity_inst_t& dest) {
+  int send_message(Message *m, const entity_inst_t& dest) override {
     return _send_message(m, dest);
   }
 
@@ -146,13 +147,13 @@ public:
    * @defgroup Connection Management
    * @{
    */
-  virtual ConnectionRef get_connection(const entity_inst_t& dest);
-  virtual ConnectionRef get_loopback_connection();
+  ConnectionRef get_connection(const entity_inst_t& dest) override;
+  ConnectionRef get_loopback_connection() override;
   int send_keepalive(Connection *con);
-  virtual void mark_down(const entity_addr_t& addr);
+  void mark_down(const entity_addr_t& addr) override;
   void mark_down(Connection *con);
   void mark_disposable(Connection *con);
-  virtual void mark_down_all();
+  void mark_down_all() override;
   /** @} // Connection Management */
 protected:
   /**
@@ -162,7 +163,7 @@ protected:
   /**
    * Start up the DispatchQueue thread once we have somebody to dispatch to.
    */
-  virtual void ready();
+  void ready() override;
   /** @} // Messenger Interfaces */
 private:
   /**
@@ -192,7 +193,7 @@ private:
     SimpleMessenger *msgr;
   public:
     explicit ReaperThread(SimpleMessenger *m) : msgr(m) {}
-    void *entry() {
+    void *entry() override {
       msgr->reaper_entry();
       return 0;
     }

@@ -90,7 +90,6 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 				   coll,
 				   next,
 				   ghobject_t::get_max(),
-				   true,
 				   LIST_AT_A_TIME,
 				   &list,
 				   &next);
@@ -266,7 +265,7 @@ struct lookup_ghobject : public action_on_object_t {
   lookup_ghobject(const string& name, const boost::optional<std::string>& nspace, bool need_snapset = false) : _name(name),
 		  _namespace(nspace), _need_snapset(need_snapset) { }
 
-  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
+  int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) override {
     if (_need_snapset && !ghobj.hobj.has_snapset())
       return 0;
     if ((_name.length() == 0 || ghobj.hobj.oid.name == _name) &&
@@ -377,7 +376,7 @@ int finish_remove_pgs(ObjectStore *store)
     if (it->is_temp(&pgid) ||
        (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
       cout << "finish_remove_pgs " << *it << " removing " << pgid << std::endl;
-      OSD::recursive_remove_collection(store, pgid, *it);
+      OSD::recursive_remove_collection(g_ceph_context, store, pgid, *it);
       continue;
     }
 
@@ -450,6 +449,7 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   map<string,bufferlist> km;
   pg_info_t last_written_info;
   int ret = PG::_prepare_write_info(
+    g_ceph_context,
     &km, epoch,
     info,
     last_written_info,
@@ -620,7 +620,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
 
   while (!next.is_max()) {
     vector<ghobject_t> objects;
-    int r = store->collection_list(coll, next, ghobject_t::get_max(), true, 300,
+    int r = store->collection_list(coll, next, ghobject_t::get_max(), 300,
       &objects, &next);
     if (r < 0)
       return r;
@@ -890,7 +890,7 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
     OSD::make_snapmapper_oid());
   spg_t pg;
   coll.is_pg_prefix(&pg);
-  SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
+  SnapMapper mapper(g_ceph_context, &driver, 0, 0, 0, pg.shard);
 
   if (ob.hoid.hobj.is_temp()) {
     cerr << "ERROR: Export contains temporary object '" << ob.hoid << "'" << std::endl;
@@ -1044,7 +1044,7 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     bufferlist findmap_bl;
     int ret = get_osdmap(store, ms.map_epoch, findmap, findmap_bl);
     if (ret == 0) {
-      ms.osdmap = findmap;
+      ms.osdmap.deepish_copy_from(findmap);
     } else {
       cerr << "WARNING: No OSDMap in old export,"
            " some objects may be ignored due to a split" << std::endl;
@@ -1445,7 +1445,7 @@ int do_remove_object(ObjectStore *store, coll_t coll,
     store,
     coll_t(),
     OSD::make_snapmapper_oid());
-  SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
+  SnapMapper mapper(g_ceph_context, &driver, 0, 0, 0, pg.shard);
   struct stat st;
 
   int r = store->stat(coll, ghobj, &st);
@@ -1828,8 +1828,8 @@ struct do_fix_lost : public action_on_object_t {
 
   explicit do_fix_lost(ObjectStore::Sequencer *_osr) : osr(_osr) {}
 
-  virtual int call(ObjectStore *store, coll_t coll,
-		   ghobject_t &ghobj, object_info_t &oi) {
+  int call(ObjectStore *store, coll_t coll,
+		   ghobject_t &ghobj, object_info_t &oi) override {
     if (oi.is_lost()) {
       cout << coll << "/" << ghobj << " is lost";
       if (!dry_run)
@@ -2227,7 +2227,8 @@ int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
   if (!journalpath.length())
     return -EINVAL;
 
-  FileJournal *journal = new FileJournal(uuid_d(), NULL, NULL, journalpath.c_str(), m_journal_dio);
+  FileJournal *journal = new FileJournal(g_ceph_context, uuid_d(), NULL, NULL,
+					 journalpath.c_str(), m_journal_dio);
   r = journal->_fdump(*f, false);
   delete journal;
   return r;
@@ -2664,7 +2665,8 @@ int main(int argc, char **argv)
     } else {
     json_spirit::Value v;
     try {
-      if (!json_spirit::read(object, v)) {
+      if (!json_spirit::read(object, v) ||
+          (v.type() != json_spirit::array_type && v.type() != json_spirit::obj_type)) {
         // Special: Need head/snapdir so set even if user didn't specify
         if (vm.count("objcmd") && (objcmd == "remove-clone-metadata"))
 	  head = true;

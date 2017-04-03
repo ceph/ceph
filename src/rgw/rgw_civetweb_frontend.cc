@@ -22,7 +22,7 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
   /* Hold a read lock over access to env.store for reconfiguration. */
   RWLock::RLocker lock(env.mutex);
 
-  RGWCivetWeb cw_client(conn, env.port);
+  RGWCivetWeb cw_client(conn);
   auto real_client_io = rgw::io::add_reordering(
                           rgw::io::add_buffering(
                             rgw::io::add_chunking(
@@ -32,7 +32,7 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 
   RGWRequest req(env.store->get_new_req_id());
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
-                            &client_io, env.olog);
+                            *env.auth_registry, &client_io, env.olog);
   if (ret < 0) {
     /* We don't really care about return code. */
     dout(20) << "process_request() returned " << ret << dendl;
@@ -45,14 +45,17 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 int RGWCivetWebFrontend::run()
 {
   auto& conf_map = conf->get_config_map();
+  string port_str;
 
   set_conf_default(conf_map, "num_threads",
                    std::to_string(g_conf->rgw_thread_pool_size));
   set_conf_default(conf_map, "decode_url", "no");
   set_conf_default(conf_map, "enable_keep_alive", "yes");
-  conf_map["listening_ports"] = conf->get_val("port", "80");
   set_conf_default(conf_map, "validate_http_method", "no");
   set_conf_default(conf_map, "canonicalize_url_path", "no");
+  conf->get_val("port", "80", &port_str);
+  std::replace(port_str.begin(), port_str.end(), '+', ',');
+  conf_map["listening_ports"] = port_str;
 
   /* Set run_as_user. This will cause civetweb to invoke setuid() and setgid()
    * based on pw_uid and pw_gid obtained from pw_name. */

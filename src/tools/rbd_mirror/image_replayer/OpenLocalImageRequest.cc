@@ -2,8 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/compat.h"
-#include "OpenLocalImageRequest.h"
 #include "CloseImageRequest.h"
+#include "IsPrimaryRequest.h"
+#include "OpenLocalImageRequest.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "librbd/ExclusiveLock.h"
@@ -15,6 +16,7 @@
 #include "librbd/journal/Policy.h"
 #include <type_traits>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::image_replayer::OpenLocalImageRequest: " \
@@ -30,11 +32,11 @@ namespace {
 
 struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
 
-  virtual bool may_auto_request_lock() {
+  bool may_auto_request_lock() override {
     return false;
   }
 
-  virtual int lock_requested(bool force) {
+  int lock_requested(bool force) override {
     // TODO: interlock is being requested (e.g. local promotion)
     // Wait for demote event from peer or abort replay on forced
     // promotion.
@@ -49,15 +51,15 @@ struct MirrorJournalPolicy : public librbd::journal::Policy {
   MirrorJournalPolicy(ContextWQ *work_queue) : work_queue(work_queue) {
   }
 
-  virtual bool append_disabled() const {
+  bool append_disabled() const override {
     // avoid recording any events to the local journal
     return true;
   }
-  virtual bool journal_disabled() const {
+  bool journal_disabled() const override {
     return false;
   }
 
-  virtual void allocate_tag_on_lock(Context *on_finish) {
+  void allocate_tag_on_lock(Context *on_finish) override {
     // rbd-mirror will manually create tags by copying them from the peer
     work_queue->queue(on_finish, 0);
   }
@@ -100,7 +102,7 @@ void OpenLocalImageRequest<I>::send_open_image() {
   Context *ctx = create_context_callback<
     OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_open_image>(
       this);
-  (*m_local_image_ctx)->state->open(ctx);
+  (*m_local_image_ctx)->state->open(false, ctx);
 }
 
 template <typename I>
@@ -110,7 +112,43 @@ void OpenLocalImageRequest<I>::handle_open_image(int r) {
   if (r < 0) {
     derr << ": failed to open image '" << m_local_image_id << "': "
          << cpp_strerror(r) << dendl;
-    send_close_image(true, r);
+    (*m_local_image_ctx)->destroy();
+    *m_local_image_ctx = nullptr;
+    finish(r);
+    return;
+  }
+
+  send_is_primary();
+}
+
+template <typename I>
+void OpenLocalImageRequest<I>::send_is_primary() {
+  dout(20) << dendl;
+
+  Context *ctx = create_context_callback<
+    OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_is_primary>(
+      this);
+  IsPrimaryRequest<I> *request = IsPrimaryRequest<I>::create(*m_local_image_ctx,
+                                                             &m_primary, ctx);
+  request->send();
+}
+
+template <typename I>
+void OpenLocalImageRequest<I>::handle_is_primary(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  if (r < 0) {
+    derr << ": error querying local image primary status: " << cpp_strerror(r)
+         << dendl;
+    send_close_image(r);
+    return;
+  }
+
+  // if the local image owns the tag -- don't steal the lock since
+  // we aren't going to mirror peer data into this image anyway
+  if (m_primary) {
+    dout(10) << ": local image is primary -- skipping image replay" << dendl;
+    send_close_image(-EREMOTEIO);
     return;
   }
 
@@ -119,34 +157,12 @@ void OpenLocalImageRequest<I>::handle_open_image(int r) {
 
 template <typename I>
 void OpenLocalImageRequest<I>::send_lock_image() {
-  // deduce the class type for the journal to support unit tests
-  using Journal = typename std::decay<
-    typename std::remove_pointer<decltype(std::declval<I>().journal)>
-    ::type>::type;
-
   dout(20) << dendl;
 
   RWLock::RLocker owner_locker((*m_local_image_ctx)->owner_lock);
   if ((*m_local_image_ctx)->exclusive_lock == nullptr) {
     derr << ": image does not support exclusive lock" << dendl;
-    send_close_image(false, -EINVAL);
-    return;
-  }
-
-  // TODO: make an async version
-  bool tag_owner;
-  int r = Journal::is_tag_owner(*m_local_image_ctx, &tag_owner);
-  if (r < 0) {
-    derr << ": failed to query journal: " << cpp_strerror(r) << dendl;
-    send_close_image(false, r);
-    return;
-  }
-
-  // if the local image owns the tag -- don't steal the lock since
-  // we aren't going to mirror peer data into this image anyway
-  if (tag_owner) {
-    dout(10) << ": local image is primary -- skipping image replay" << dendl;
-    send_close_image(false, -EREMOTEIO);
+    send_close_image(-EINVAL);
     return;
   }
 
@@ -157,7 +173,7 @@ void OpenLocalImageRequest<I>::send_lock_image() {
     OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_lock_image>(
       this);
 
-  (*m_local_image_ctx)->exclusive_lock->request_lock(ctx);
+  (*m_local_image_ctx)->exclusive_lock->acquire_lock(ctx);
 }
 
 template <typename I>
@@ -167,20 +183,25 @@ void OpenLocalImageRequest<I>::handle_lock_image(int r) {
   if (r < 0) {
     derr << ": failed to lock image '" << m_local_image_id << "': "
        << cpp_strerror(r) << dendl;
-    send_close_image(false, r);
+    send_close_image(r);
     return;
-  } else if ((*m_local_image_ctx)->exclusive_lock == nullptr ||
-             !(*m_local_image_ctx)->exclusive_lock->is_lock_owner()) {
-    derr << ": image is not locked" << dendl;
-    send_close_image(false, -EBUSY);
-    return;
+  }
+
+  {
+    RWLock::RLocker owner_locker((*m_local_image_ctx)->owner_lock);
+    if ((*m_local_image_ctx)->exclusive_lock == nullptr ||
+	!(*m_local_image_ctx)->exclusive_lock->is_lock_owner()) {
+      derr << ": image is not locked" << dendl;
+      send_close_image(-EBUSY);
+      return;
+    }
   }
 
   finish(0);
 }
 
 template <typename I>
-void OpenLocalImageRequest<I>::send_close_image(bool destroy_only, int r) {
+void OpenLocalImageRequest<I>::send_close_image(int r) {
   dout(20) << dendl;
 
   if (m_ret_val == 0 && r < 0) {
@@ -191,7 +212,7 @@ void OpenLocalImageRequest<I>::send_close_image(bool destroy_only, int r) {
     OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_close_image>(
       this);
   CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    m_local_image_ctx, m_work_queue, destroy_only, ctx);
+    m_local_image_ctx, ctx);
   request->send();
 }
 

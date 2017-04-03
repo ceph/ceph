@@ -5,6 +5,7 @@
 #include "BootstrapRequest.h"
 #include "CloseImageRequest.h"
 #include "CreateImageRequest.h"
+#include "IsPrimaryRequest.h"
 #include "OpenImageRequest.h"
 #include "OpenLocalImageRequest.h"
 #include "common/debug.h"
@@ -23,6 +24,7 @@
 #include "tools/rbd_mirror/ProgressContext.h"
 #include "tools/rbd_mirror/ImageSyncThrottler.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::image_replayer::BootstrapRequest: " \
@@ -33,7 +35,7 @@ namespace mirror {
 namespace image_replayer {
 
 using librbd::util::create_context_callback;
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 using librbd::util::unique_lock_name;
 
 template <typename I>
@@ -100,7 +102,7 @@ void BootstrapRequest<I>::get_local_image_id() {
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_image_get_image_id_start(&op, m_global_image_id);
 
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_local_image_id>(
       this);
   int r = m_local_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
@@ -251,17 +253,12 @@ void BootstrapRequest<I>::open_remote_image() {
       this);
   OpenImageRequest<I> *request = OpenImageRequest<I>::create(
     m_remote_io_ctx, &m_remote_image_ctx, m_remote_image_id, false,
-    m_work_queue, ctx);
+    ctx);
   request->send();
 }
 
 template <typename I>
 void BootstrapRequest<I>::handle_open_remote_image(int r) {
-  // deduce the class type for the journal to support unit tests
-  using Journal = typename std::decay<
-    typename std::remove_pointer<decltype(std::declval<I>().journal)>
-    ::type>::type;
-
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
@@ -271,18 +268,36 @@ void BootstrapRequest<I>::handle_open_remote_image(int r) {
     return;
   }
 
-  // TODO: make async
-  bool tag_owner;
-  r = Journal::is_tag_owner(m_remote_image_ctx, &tag_owner);
+  is_primary();
+}
+
+template <typename I>
+void BootstrapRequest<I>::is_primary() {
+  dout(20) << dendl;
+
+  update_progress("OPEN_REMOTE_IMAGE");
+
+  Context *ctx = create_context_callback<
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_is_primary>(
+      this);
+  IsPrimaryRequest<I> *request = IsPrimaryRequest<I>::create(m_remote_image_ctx,
+                                                             &m_primary, ctx);
+  request->send();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_is_primary(int r) {
+  dout(20) << ": r=" << r << dendl;
+
   if (r < 0) {
-    derr << ": failed to query remote image primary status: " << cpp_strerror(r)
+    derr << ": error querying remote image primary status: " << cpp_strerror(r)
          << dendl;
     m_ret_val = r;
     close_remote_image();
     return;
   }
 
-  if (!tag_owner) {
+  if (!m_primary) {
     dout(5) << ": remote image is not primary -- skipping image replay"
             << dendl;
     m_ret_val = -EREMOTEIO;
@@ -714,7 +729,7 @@ void BootstrapRequest<I>::close_local_image() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_close_local_image>(
       this);
   CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    m_local_image_ctx, m_work_queue, false, ctx);
+    m_local_image_ctx, ctx);
   request->send();
 }
 
@@ -740,7 +755,7 @@ void BootstrapRequest<I>::close_remote_image() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_close_remote_image>(
       this);
   CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    &m_remote_image_ctx, m_work_queue, false, ctx);
+    &m_remote_image_ctx, ctx);
   request->send();
 }
 

@@ -5,12 +5,13 @@
 #include "bluestore_types.h"
 #include "common/debug.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "stupidalloc "
 
-StupidAllocator::StupidAllocator()
-  : num_free(0),
+StupidAllocator::StupidAllocator(CephContext* cct)
+  : cct(cct), num_free(0),
     num_reserved(0),
     free(10),
     last_alloc(0)
@@ -23,7 +24,7 @@ StupidAllocator::~StupidAllocator()
 
 unsigned StupidAllocator::_choose_bin(uint64_t orig_len)
 {
-  uint64_t len = orig_len / g_conf->bdev_block_size;
+  uint64_t len = orig_len / cct->_conf->bdev_block_size;
   int bin = std::min((int)cbits(len), (int)free.size() - 1);
   dout(30) << __func__ << " len 0x" << std::hex << orig_len << std::dec
 	   << " -> " << bin << dendl;
@@ -82,7 +83,7 @@ static uint64_t aligned_len(btree_interval_set<uint64_t>::iterator p,
     return p.get_len() - skew;
 }
 
-int StupidAllocator::allocate_int(
+int64_t StupidAllocator::allocate_int(
   uint64_t want_size, uint64_t alloc_unit, int64_t hint,
   uint64_t *offset, uint32_t *length)
 {
@@ -158,9 +159,9 @@ int StupidAllocator::allocate_int(
     skew = alloc_unit - skew;
   *offset = p.get_start() + skew;
   *length = MIN(MAX(alloc_unit, want_size), p.get_len() - skew);
-  if (g_conf->bluestore_debug_small_allocations) {
+  if (cct->_conf->bluestore_debug_small_allocations) {
     uint64_t max =
-      alloc_unit * (rand() % g_conf->bluestore_debug_small_allocations);
+      alloc_unit * (rand() % cct->_conf->bluestore_debug_small_allocations);
     if (max && *length > max) {
       dout(10) << __func__ << " shortening allocation of 0x" << std::hex
 	       << *length << " -> 0x"
@@ -200,14 +201,12 @@ int StupidAllocator::allocate_int(
   return 0;
 }
 
-int StupidAllocator::allocate(
+int64_t StupidAllocator::allocate(
   uint64_t want_size,
   uint64_t alloc_unit,
   uint64_t max_alloc_size,
   int64_t hint,
-  mempool::bluestore_alloc::vector<AllocExtent> *extents,
-  int *count,
-  uint64_t *ret_len)
+  mempool::bluestore_alloc::vector<AllocExtent> *extents)
 {
   uint64_t allocated_size = 0;
   uint64_t offset = 0;
@@ -217,8 +216,6 @@ int StupidAllocator::allocate(
   if (max_alloc_size == 0) {
     max_alloc_size = want_size;
   }
-  *count = 0;
-  *ret_len = 0;
 
   ExtentList block_list = ExtentList(extents, 1, max_alloc_size);
 
@@ -236,16 +233,13 @@ int StupidAllocator::allocate(
     hint = offset + length;
   }
 
-  *count = block_list.get_extent_count();
-  *ret_len = allocated_size;
   if (allocated_size == 0) {
     return -ENOSPC;
   }
-
-  return 0;
+  return allocated_size;
 }
 
-int StupidAllocator::release(
+void StupidAllocator::release(
   uint64_t offset, uint64_t length)
 {
   std::lock_guard<std::mutex> l(lock);
@@ -253,7 +247,6 @@ int StupidAllocator::release(
 	   << std::dec << dendl;
   _insert_free(offset, length);
   num_free += length;
-  return 0;
 }
 
 uint64_t StupidAllocator::get_free()

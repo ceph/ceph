@@ -104,7 +104,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
 	    PaxosService *ps;
 	  public:
 	    explicit C_Propose(PaxosService *p) : ps(p) { }
-	    void finish(int r) {
+	    void finish(int r) override {
 	      ps->proposal_timer = 0;
 	      if (r >= 0)
 		ps->propose_pending();
@@ -164,7 +164,7 @@ bool PaxosService::should_propose(double& delay)
   if (get_last_committed() <= 1)
     delay = 0.0;
   else {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
     if ((now - paxos->last_commit_time) > g_conf->paxos_propose_interval)
       delay = (double)g_conf->paxos_min_wait;
     else
@@ -226,7 +226,7 @@ void PaxosService::propose_pending()
     PaxosService *ps;
   public:
     explicit C_Committed(PaxosService *p) : ps(p) { }
-    void finish(int r) {
+    void finish(int r) override {
       ps->proposing = false;
       if (r >= 0)
 	ps->_active();
@@ -303,7 +303,7 @@ void PaxosService::_active()
       PaxosService *svc;
     public:
       explicit C_Active(PaxosService *s) : svc(s) {}
-      void finish(int r) {
+      void finish(int r) override {
 	if (r >= 0)
 	  svc->_active();
       }

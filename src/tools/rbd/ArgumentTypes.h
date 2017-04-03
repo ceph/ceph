@@ -114,6 +114,12 @@ struct Format : public TypedValue<std::string> {
 
 struct JournalObjectSize {};
 
+struct ExportFormat {};
+
+struct Secret {};
+
+void add_export_format_option(boost::program_options::options_description *opt);
+
 std::string get_name_prefix(ArgumentModifier modifier);
 std::string get_description_prefix(ArgumentModifier modifier);
 
@@ -191,6 +197,8 @@ std::string get_short_features_help(bool append_suffix);
 std::string get_long_features_help();
 
 void validate(boost::any& v, const std::vector<std::string>& values,
+              ExportFormat *target_type, int);
+void validate(boost::any& v, const std::vector<std::string>& values,
               ImageSize *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,
               ImageOrder *target_type, int);
@@ -206,6 +214,9 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               Format *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,
               JournalObjectSize *target_type, int);
+void validate(boost::any& v, const std::vector<std::string>& values,
+              Secret *target_type, int);
+
 
 std::ostream &operator<<(std::ostream &os, const ImageFeatures &features);
 

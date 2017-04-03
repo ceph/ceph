@@ -16,6 +16,7 @@
 
 #include "rgw_coroutine.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 struct rgw_http_req_data : public RefCountedObject {
@@ -120,7 +121,7 @@ size_t RGWHTTPClient::simple_send_http_data(void * const ptr,
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
   int ret = client->send_data(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret="
+    dout(0) << "WARNING: client->send_data() returned ret="
             << ret << dendl;
   }
 

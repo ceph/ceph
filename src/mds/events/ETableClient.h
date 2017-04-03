@@ -31,18 +31,18 @@ struct ETableClient : public LogEvent {
     LogEvent(EVENT_TABLECLIENT),
     table(t), op(o), tid(ti) { }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(bufferlist& bl, uint64_t features) const override;
+  void decode(bufferlist::iterator& bl) override;
+  void dump(Formatter *f) const override;
   static void generate_test_instances(list<ETableClient*>& ls);
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "ETableClient " << get_mdstable_name(table) << " " << get_mdstableserver_opname(op);
     if (tid) out << " tid " << tid;
   }  
 
   //void update_segment();
-  void replay(MDSRank *mds);  
+  void replay(MDSRank *mds) override;  
 };
 WRITE_CLASS_ENCODER_FEATURES(ETableClient)
 

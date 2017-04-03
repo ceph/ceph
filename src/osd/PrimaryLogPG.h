@@ -27,8 +27,6 @@
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
 
-class MOSDSubOpReply;
-
 class CopyFromCallback;
 class PromoteCallback;
 
@@ -38,7 +36,6 @@ class HitSet;
 struct TierAgentState;
 class MOSDOp;
 class MOSDOpReply;
-class MOSDSubOp;
 class OSDService;
 
 void intrusive_ptr_add_ref(PrimaryLogPG *pg);
@@ -205,8 +202,7 @@ public:
     ceph_tid_t objecter_tid;
     vector<OSDOp> &ops;
     version_t user_version;
-    bool sent_disk;
-    bool sent_ack;
+    bool sent_reply;
     utime_t mtime;
     bool canceled;
     osd_reqid_t reqid;
@@ -214,8 +210,8 @@ public:
     ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops, osd_reqid_t _reqid)
       : ctx(NULL), op(_op), soid(oid),
         objecter_tid(0), ops(_ops),
-	user_version(0), sent_disk(false),
-	sent_ack(false), canceled(false),
+	user_version(0), sent_reply(false),
+	canceled(false),
         reqid(_reqid) { }
   };
   typedef ceph::shared_ptr<ProxyWriteOp> ProxyWriteOpRef;
@@ -257,8 +253,7 @@ public:
   void on_peer_recover(
     pg_shard_t peer,
     const hobject_t &oid,
-    const ObjectRecoveryInfo &recovery_info,
-    const object_stat_sum_t &stat
+    const ObjectRecoveryInfo &recovery_info
     ) override;
   void begin_peer_recover(
     pg_shard_t peer,
@@ -305,7 +300,7 @@ public:
 
   std::string gen_dbg_prefix() const override { return gen_prefix(); }
   
-  const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator>
+  const map<hobject_t, set<pg_shard_t>>
     &get_missing_loc_shards() const override {
     return missing_loc.get_missing_locs();
   }
@@ -335,11 +330,28 @@ public:
   const pg_pool_t &get_pool() const override {
     return pool.info;
   }
+
   ObjectContextRef get_obc(
     const hobject_t &hoid,
-    map<string, bufferlist> &attrs) override {
+    const map<string, bufferlist> &attrs) override {
     return get_object_context(hoid, true, &attrs);
   }
+
+  bool try_lock_for_read(
+    const hobject_t &hoid,
+    ObcLockManager &manager) override {
+    if (is_missing_object(hoid))
+      return false;
+    auto obc = get_object_context(hoid, false, nullptr);
+    if (!obc)
+      return false;
+    return manager.try_get_read_lock(hoid, obc);
+  }
+
+  void release_locks(ObcLockManager &manager) override {
+    release_object_locks(manager);
+  }
+
   void pgb_set_object_snap_mapping(
     const hobject_t &soid,
     const set<snapid_t> &snaps,
@@ -352,17 +364,15 @@ public:
     return clear_object_snap_mapping(t, soid);
   }
 
-
   void log_operation(
     const vector<pg_log_entry_t> &logv,
-    boost::optional<pg_hit_set_history_t> &hset_history,
+    const boost::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
     bool transaction_applied,
     ObjectStore::Transaction &t) override {
     if (hset_history) {
       info.hit_set = *hset_history;
-      dirty_info = true;
     }
     append_log(logv, trim_to, roll_forward_to, t, transaction_applied);
   }
@@ -379,8 +389,8 @@ public:
     assert(peer_info.count(peer));
     bool should_send =
       hoid.pool != (int64_t)info.pgid.pool() ||
-      cmp(hoid, last_backfill_started, get_sort_bitwise()) <= 0 ||
-      cmp(hoid, peer_info[peer].last_backfill, get_sort_bitwise()) <= 0;
+      hoid <= last_backfill_started ||
+      hoid <= peer_info[peer].last_backfill;
     if (!should_send)
       assert(is_backfill_targets(peer));
     return should_send;
@@ -416,9 +426,6 @@ public:
   }
   uint64_t min_peer_features() const override {
     return get_min_peer_features();
-  }
-  bool sort_bitwise() const override {
-    return get_sort_bitwise();
   }
 
   void send_message_osd_cluster(
@@ -504,7 +511,6 @@ public:
 
     interval_set<uint64_t> modified_ranges;
     ObjectContextRef obc;
-    map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator> src_obc;
     ObjectContextRef clone_obc;    // if we created a clone
     ObjectContextRef snapset_obc;  // if we created/deleted a snapdir
 
@@ -512,7 +518,6 @@ public:
 
     MOSDOpReply *reply;
 
-    utime_t readable_stamp;  // when applied on all replicas
     PrimaryLogPG *pg;
 
     int num_read;    ///< count read ops
@@ -545,8 +550,7 @@ public:
       on_committed.emplace_back(std::forward<F>(f));
     }
 
-    bool sent_ack;
-    bool sent_disk;
+    bool sent_reply;
 
     // pending async reads <off, len, op_flags> -> <outbl, outr>
     list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
@@ -582,7 +586,7 @@ public:
       num_read(0),
       num_write(0),
       copy_cb(NULL),
-      sent_ack(false), sent_disk(false),
+      sent_reply(false),
       async_read_result(0),
       inflightreads(0),
       lock_type(ObjectContext::RWState::RWNONE) {
@@ -808,11 +812,9 @@ protected:
     if (!to_req.empty()) {
       // requeue at front of scrub blocking queue if we are blocked by scrub
       for (auto &&p: to_req) {
-	if (scrubber.write_blocked_by_scrub(
-	      p.first.get_head(),
-	      get_sort_bitwise())) {
-	  waiting_for_active.splice(
-	    waiting_for_active.begin(),
+	if (scrubber.write_blocked_by_scrub(p.first.get_head())) {
+	  waiting_for_scrub.splice(
+	    waiting_for_scrub.begin(),
 	    p.second,
 	    p.second.begin(),
 	    p.second.end());
@@ -872,7 +874,6 @@ protected:
   HitSetRef hit_set;        ///< currently accumulating HitSet
   utime_t hit_set_start_stamp;    ///< time the current HitSet started recording
 
-  map<time_t,HitSetRef> hit_set_flushing; ///< currently being written, not yet readable
 
   void hit_set_clear();     ///< discard any HitSet state
   void hit_set_setup();     ///< initialize HitSet state
@@ -925,13 +926,13 @@ protected:
   bool already_ack(eversion_t v);
 
   // projected object info
-  SharedLRU<hobject_t, ObjectContext, hobject_t::ComparatorWithDefault> object_contexts;
+  SharedLRU<hobject_t, ObjectContext> object_contexts;
   // map from oid.snapdir() to SnapSetContext *
-  map<hobject_t, SnapSetContext*, hobject_t::BitwiseComparator> snapset_contexts;
+  map<hobject_t, SnapSetContext*> snapset_contexts;
   Mutex snapset_contexts_lock;
 
   // debug order that client ops are applied
-  map<hobject_t, map<client_t, ceph_tid_t>, hobject_t::BitwiseComparator> debug_op_order;
+  map<hobject_t, map<client_t, ceph_tid_t>> debug_op_order;
 
   void populate_obc_watchers(ObjectContextRef obc);
   void check_blacklisted_obc_watchers(ObjectContextRef obc);
@@ -946,7 +947,7 @@ protected:
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
-    map<string, bufferlist> *attrs = 0
+    const map<string, bufferlist> *attrs = 0
     );
 
   void context_registry_on_change();
@@ -966,7 +967,7 @@ protected:
   SnapSetContext *get_snapset_context(
     const hobject_t& oid,
     bool can_create,
-    map<string, bufferlist> *attrs = 0,
+    const map<string, bufferlist> *attrs = 0,
     bool oid_existed = true //indicate this oid whether exsited in backend
     );
   void register_snapset_context(SnapSetContext *ssc) {
@@ -983,7 +984,7 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-  map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator> recovering;
+  map<hobject_t, ObjectContextRef> recovering;
 
   /*
    * Backfill
@@ -999,8 +1000,8 @@ protected:
    *   - are not included in pg stats (yet)
    *   - have their stats in pending_backfill_updates on the primary
    */
-  set<hobject_t, hobject_t::Comparator> backfills_in_flight;
-  map<hobject_t, pg_stat_t, hobject_t::Comparator> pending_backfill_updates;
+  set<hobject_t> backfills_in_flight;
+  map<hobject_t, pg_stat_t> pending_backfill_updates;
 
   void dump_recovery_info(Formatter *f) const override {
     f->open_array_section("backfill_targets");
@@ -1033,7 +1034,7 @@ protected:
     }
     {
       f->open_array_section("backfills_in_flight");
-      for (set<hobject_t, hobject_t::BitwiseComparator>::const_iterator i = backfills_in_flight.begin();
+      for (set<hobject_t>::const_iterator i = backfills_in_flight.begin();
 	   i != backfills_in_flight.end();
 	   ++i) {
 	f->dump_stream("object") << *i;
@@ -1042,7 +1043,7 @@ protected:
     }
     {
       f->open_array_section("recovering");
-      for (map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator>::const_iterator i = recovering.begin();
+      for (map<hobject_t, ObjectContextRef>::const_iterator i = recovering.begin();
 	   i != recovering.end();
 	   ++i) {
 	f->dump_stream("object") << i->first;
@@ -1221,16 +1222,15 @@ protected:
   void recover_got(hobject_t oid, eversion_t v);
 
   // -- copyfrom --
-  map<hobject_t, CopyOpRef, hobject_t::BitwiseComparator> copy_ops;
+  map<hobject_t, CopyOpRef> copy_ops;
 
   int fill_in_copy_get(
     OpContext *ctx,
     bufferlist::iterator& bp,
     OSDOp& op,
-    ObjectContextRef& obc,
-    bool classic);
+    ObjectContextRef& obc);
   void fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
-                              OSDOp& osd_op, bool classic);
+                              OSDOp& osd_op);
 
   /**
    * To copy an object, call start_copy.
@@ -1266,7 +1266,7 @@ protected:
   friend struct C_Copyfrom;
 
   // -- flush --
-  map<hobject_t, FlushOpRef, hobject_t::BitwiseComparator> flush_ops;
+  map<hobject_t, FlushOpRef> flush_ops;
 
   /// start_flush takes ownership of on_flush iff ret == -EINPROGRESS
   int start_flush(
@@ -1284,18 +1284,17 @@ protected:
   friend struct C_Flush;
 
   // -- scrub --
-  virtual bool _range_available_for_scrub(
+  bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end) override;
-  virtual void scrub_snapshot_metadata(
+  void scrub_snapshot_metadata(
     ScrubMap &map,
-    const std::map<hobject_t, pair<uint32_t, uint32_t>,
-    hobject_t::BitwiseComparator> &missing_digest) override;
-  virtual void _scrub_clear_state() override;
-  virtual void _scrub_finish() override;
+    const std::map<hobject_t, pair<uint32_t, uint32_t>> &missing_digest) override;
+  void _scrub_clear_state() override;
+  void _scrub_finish() override;
   object_stat_collection_t scrub_cstat;
 
-  virtual void _split_into(pg_t child_pgid, PG *child,
-			   unsigned split_bits) override;
+  void _split_into(pg_t child_pgid, PG *child,
+                   unsigned split_bits) override;
   void apply_and_flush_repops(bool requeue);
 
   void calc_trim_to() override;
@@ -1307,7 +1306,7 @@ protected:
   bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
-  map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator> in_progress_proxy_ops;
+  map<hobject_t, list<OpRequestRef>> in_progress_proxy_ops;
   void kick_proxy_ops_blocked(hobject_t& soid);
   void cancel_proxy_ops(bool requeue);
 
@@ -1332,7 +1331,7 @@ protected:
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
 	       const PGPool &_pool, spg_t p);
-  ~PrimaryLogPG() {}
+  ~PrimaryLogPG() override {}
 
   int do_command(
     cmdmap_t cmdmap,
@@ -1348,7 +1347,6 @@ public:
   void do_op(OpRequestRef& op) override;
   void record_write_error(OpRequestRef op, const hobject_t &soid,
 			  MOSDOpReply *orig_reply, int r);
-  bool pg_op_must_wait(MOSDOp *op);
   void do_pg_op(OpRequestRef op);
   void do_sub_op(OpRequestRef op) override;
   void do_sub_op_reply(OpRequestRef op) override;
@@ -1356,6 +1354,9 @@ public:
     OpRequestRef op,
     ThreadPool::TPHandle &handle) override;
   void do_backfill(OpRequestRef op) override;
+  void do_backfill_remove(OpRequestRef op);
+
+  void handle_backoff(OpRequestRef& op);
 
   OpContextUPtr trim_object(bool first, const hobject_t &coid);
   void snap_trimmer(epoch_t e) override;
@@ -1421,7 +1422,7 @@ public:
     PG::_init(*t, child, pool);
   }
 private:
-  struct NotTrimming;
+
   struct DoSnapWork : boost::statechart::event< DoSnapWork > {
     DoSnapWork() : boost::statechart::event < DoSnapWork >() {}
   };
@@ -1440,52 +1441,209 @@ private:
   struct Reset : boost::statechart::event< Reset > {
     Reset() : boost::statechart::event< Reset >() {}
   };
+  struct SnapTrimReserved : boost::statechart::event< SnapTrimReserved > {
+    SnapTrimReserved() : boost::statechart::event< SnapTrimReserved >() {}
+  };
+  struct SnapTrimTimerReady : boost::statechart::event< SnapTrimTimerReady > {
+    SnapTrimTimerReady() : boost::statechart::event< SnapTrimTimerReady >() {}
+  };
+
+  struct NotTrimming;
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
     PrimaryLogPG *pg;
-    set<hobject_t, hobject_t::BitwiseComparator> in_flight;
-    snapid_t snap_to_trim;
     explicit SnapTrimmer(PrimaryLogPG *pg) : pg(pg) {}
-    ~SnapTrimmer();
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
+    bool can_trim() {
+      return pg->is_clean() && !pg->scrubber.active && !pg->snap_trimq.empty();
+    }
   } snap_trimmer_machine;
 
-  /* SnapTrimmerStates */
-  struct AwaitAsyncWork : boost::statechart::state< AwaitAsyncWork, SnapTrimmer >, NamedState {
+  struct WaitReservation;
+  struct Trimming : boost::statechart::state< Trimming, SnapTrimmer, WaitReservation >, NamedState {
     typedef boost::mpl::list <
-      boost::statechart::custom_reaction< DoSnapWork >,
       boost::statechart::custom_reaction< KickTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    explicit AwaitAsyncWork(my_context ctx);
-    void exit();
-    boost::statechart::result react(const DoSnapWork&);
+
+    set<hobject_t> in_flight;
+    snapid_t snap_to_trim;
+
+    explicit Trimming(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(context< SnapTrimmer >().can_trim());
+      assert(in_flight.empty());
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+      auto *pg = context< SnapTrimmer >().pg;
+      pg->osd->snap_reserver.cancel_reservation(pg->get_pgid());
+      pg->state_clear(PG_STATE_SNAPTRIM);
+      pg->publish_stats_to_osd();
+    }
     boost::statechart::result react(const KickTrim&) {
       return discard_event();
     }
   };
 
-  struct WaitRWLock : boost::statechart::state< WaitRWLock, SnapTrimmer >, NamedState {
+  /* SnapTrimmerStates */
+  struct WaitTrimTimer : boost::statechart::state< WaitTrimTimer, Trimming >, NamedState {
     typedef boost::mpl::list <
-      boost::statechart::custom_reaction< TrimWriteUnblocked >,
-      boost::statechart::custom_reaction< KickTrim >,
-      boost::statechart::transition< Reset, NotTrimming >
+      boost::statechart::custom_reaction< SnapTrimTimerReady >
+      > reactions;
+    Context *wakeup = nullptr;
+    explicit WaitTrimTimer(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitTrimTimer") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(context<Trimming>().in_flight.empty());
+      struct OnTimer : Context {
+	PrimaryLogPGRef pg;
+	epoch_t epoch;
+	OnTimer(PrimaryLogPGRef pg, epoch_t epoch) : pg(pg), epoch(epoch) {}
+	void finish(int) override {
+	  pg->lock();
+	  if (!pg->pg_has_reset_since(epoch))
+	    pg->snap_trimmer_machine.process_event(SnapTrimTimerReady());
+	  pg->unlock();
+	}
+      };
+      auto *pg = context< SnapTrimmer >().pg;
+      if (pg->cct->_conf->osd_snap_trim_sleep > 0) {
+	wakeup = new OnTimer{pg, pg->get_osdmap()->get_epoch()};
+	Mutex::Locker l(pg->osd->snap_sleep_lock);
+	pg->osd->snap_sleep_timer.add_event_after(
+	  pg->cct->_conf->osd_snap_trim_sleep, wakeup);
+      } else {
+	post_event(SnapTrimTimerReady());
+      }
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+      auto *pg = context< SnapTrimmer >().pg;
+      if (wakeup) {
+	Mutex::Locker l(pg->osd->snap_sleep_lock);
+	pg->osd->snap_sleep_timer.cancel_event(wakeup);
+	wakeup = nullptr;
+      }
+    }
+    boost::statechart::result react(const SnapTrimTimerReady &) {
+      wakeup = nullptr;
+      if (!context< SnapTrimmer >().can_trim()) {
+	post_event(KickTrim());
+	return transit< NotTrimming >();
+      } else {
+	return transit< AwaitAsyncWork >();
+      }
+    }
+  };
+
+  struct WaitRWLock : boost::statechart::state< WaitRWLock, Trimming >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< TrimWriteUnblocked >
       > reactions;
     explicit WaitRWLock(my_context ctx)
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRWLock") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context<SnapTrimmer>().in_flight.empty());
+      assert(context<Trimming>().in_flight.empty());
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
     }
     boost::statechart::result react(const TrimWriteUnblocked&) {
-      post_event(KickTrim());
-      return discard_event();
+      if (!context< SnapTrimmer >().can_trim()) {
+	post_event(KickTrim());
+	return transit< NotTrimming >();
+      } else {
+	return transit< AwaitAsyncWork >();
+      }
     }
-    boost::statechart::result react(const KickTrim&) {
-      return discard_event();
+  };
+
+  struct WaitRepops : boost::statechart::state< WaitRepops, Trimming >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< RepopsComplete >
+      > reactions;
+    explicit WaitRepops(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRepops") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(!context<Trimming>().in_flight.empty());
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+    }
+    boost::statechart::result react(const RepopsComplete&) {
+      if (!context< SnapTrimmer >().can_trim()) {
+	post_event(KickTrim());
+	return transit< NotTrimming >();
+      } else {
+	return transit< WaitTrimTimer >();
+      }
+    }
+  };
+
+  struct AwaitAsyncWork : boost::statechart::state< AwaitAsyncWork, Trimming >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< DoSnapWork >
+      > reactions;
+    explicit AwaitAsyncWork(my_context ctx);
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+    }
+    boost::statechart::result react(const DoSnapWork&);
+  };
+
+  struct WaitReservation : boost::statechart::state< WaitReservation, Trimming >, NamedState {
+    /* WaitReservation is a sub-state of trimming simply so that exiting Trimming
+     * always cancels the reservation */
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< SnapTrimReserved >
+      > reactions;
+    struct ReservationCB : public Context {
+      PrimaryLogPGRef pg;
+      bool canceled;
+      ReservationCB(PrimaryLogPG *pg) : pg(pg), canceled(false) {}
+      void finish(int) override {
+	pg->lock();
+	if (!canceled)
+	  pg->snap_trimmer_machine.process_event(SnapTrimReserved());
+	pg->unlock();
+      }
+      void cancel() {
+	assert(pg->is_locked());
+	assert(!canceled);
+	canceled = true;
+      }
+    };
+    ReservationCB *pending = nullptr;
+
+    explicit WaitReservation(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitReservation") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(context<Trimming>().in_flight.empty());
+      auto *pg = context< SnapTrimmer >().pg;
+      pending = new ReservationCB(pg);
+      pg->osd->snap_reserver.request_reservation(
+	pg->get_pgid(),
+	pending,
+	0);
+      pg->state_set(PG_STATE_SNAPTRIM_WAIT);
+      pg->publish_stats_to_osd();
+    }
+    boost::statechart::result react(const SnapTrimReserved&);
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+      if (pending)
+	pending->cancel();
+      pending = nullptr;
+      auto *pg = context< SnapTrimmer >().pg;
+      pg->state_clear(PG_STATE_SNAPTRIM_WAIT);
+      pg->publish_stats_to_osd();
     }
   };
 
@@ -1499,7 +1657,6 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitScrub") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context<SnapTrimmer>().in_flight.empty());
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
@@ -1510,35 +1667,6 @@ private:
     }
     boost::statechart::result react(const KickTrim&) {
       return discard_event();
-    }
-  };
-
-  struct WaitRepops : boost::statechart::state< WaitRepops, SnapTrimmer >, NamedState {
-    typedef boost::mpl::list <
-      boost::statechart::custom_reaction< RepopsComplete >,
-      boost::statechart::custom_reaction< KickTrim >,
-      boost::statechart::custom_reaction< Reset >
-      > reactions;
-    explicit WaitRepops(my_context ctx)
-      : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRepops") {
-      context< SnapTrimmer >().log_enter(state_name);
-      assert(!context<SnapTrimmer>().in_flight.empty());
-    }
-    void exit() {
-      context< SnapTrimmer >().log_exit(state_name, enter_time);
-      assert(context<SnapTrimmer>().in_flight.empty());
-    }
-    boost::statechart::result react(const RepopsComplete&) {
-      post_event(KickTrim());
-      return transit< NotTrimming >();
-    }
-    boost::statechart::result react(const KickTrim&) {
-      return discard_event();
-    }
-    boost::statechart::result react(const Reset&) {
-      context<SnapTrimmer>().in_flight.clear();
-      return transit< NotTrimming>();
     }
   };
 

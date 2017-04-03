@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      osd:
-        osd debug randomize hobject sort order: true

@@ -116,7 +116,11 @@ public:
                    bufferlist *bl) = 0;
   virtual int remove(const std::string& oid, const SnapContext &snapc) = 0;
   virtual int selfmanaged_snap_create(uint64_t *snapid) = 0;
+  virtual void aio_selfmanaged_snap_create(uint64_t *snapid,
+                                           AioCompletionImpl *c);
   virtual int selfmanaged_snap_remove(uint64_t snapid) = 0;
+  virtual void aio_selfmanaged_snap_remove(uint64_t snapid,
+                                           AioCompletionImpl *c);
   virtual int selfmanaged_snap_rollback(const std::string& oid,
                                         uint64_t snapid) = 0;
   virtual int selfmanaged_snap_set_write_ctx(snap_t seq,
@@ -139,6 +143,8 @@ public:
                     uint64_t off, const SnapContext &snapc) = 0;
   virtual int write_full(const std::string& oid, bufferlist& bl,
                          const SnapContext &snapc) = 0;
+  virtual int writesame(const std::string& oid, bufferlist& bl, size_t len,
+                        uint64_t off, const SnapContext &snapc) = 0;
   virtual int xattr_get(const std::string& oid,
                         std::map<std::string, bufferlist>* attrset) = 0;
   virtual int xattr_set(const std::string& oid, const std::string &name,
@@ -163,7 +169,7 @@ private:
     C_AioNotify(TestIoCtxImpl *_io_ctx, AioCompletionImpl *_aio_comp)
       : io_ctx(_io_ctx), aio_comp(_aio_comp) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       io_ctx->handle_aio_notify_complete(aio_comp, r);
     }
   };

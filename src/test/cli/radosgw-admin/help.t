@@ -28,6 +28,7 @@
     bi put                     store bucket index object entries
     bi list                    list raw bucket index entries
     object rm                  remove object
+    object stat                stat an object for its metadata
     object unlink              unlink object from bucket index
     objects expire             run expired objects cleanup
     period delete              delete a period
@@ -67,8 +68,6 @@
     zonegroup placement modify modify a placement target of a specific zonegroup
     zonegroup placement rm     remove a placement target from a zonegroup
     zonegroup placement default  set a zonegroup's default placement target
-    zonegroup-map get          show zonegroup-map
-    zonegroup-map set          set zonegroup-map (requires infile)
     zone create                create a new zone
     zone delete                delete a zone
     zone get                   show zone cluster params
@@ -121,6 +120,15 @@
     orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
     orphans list-jobs          list the current job-ids for orphans search
+    role create                create a AWS role for use with STS
+    role delete                delete a role
+    role get                   get a role
+    role list                  list roles with specified path prefix
+    role modify                modify the assume role policy of an existing role
+    role-policy put            add/update permission policy to role
+    role-policy list           list policies attached to a role
+    role-policy get            get the specified inline policy document embedded with the given role
+    role-policy delete         delete policy attached to a role
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -166,6 +174,8 @@
      --realm-new-name=<name>   realm new name
      --rgw-zonegroup=<name>    zonegroup name
      --zonegroup-id=<id>       zonegroup id
+     --zonegroup-new-name=<name>
+                               zonegroup new name
      --rgw-zone=<name>         name of zone in which radosgw is running
      --zone-id=<id>            zone id
      --zone-new-name=<name>    zone new name
@@ -188,7 +198,6 @@
                                set zone tier config keys, values
      --tier-config-rm=<k>[,...]
                                unset zone tier config keys
-     --tier_type=<type>        zone tier type
      --sync-from-all[=false]   set/reset whether zone syncs from all zonegroup peers
      --sync-from=[zone-name][,...]
                                set list of zones to sync from
@@ -218,7 +227,6 @@
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations
-     --reset-regions           reset regionmap when regionmap update
      --bypass-gc               when specified with bucket deletion, triggers
                                object deletions by not involving GC
      --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,
@@ -241,6 +249,14 @@
   
   Orphans list-jobs options:
      --extra-info              provide extra info in job list
+  
+  Role options:
+     --role-name               name of the role to create
+     --path                    path to the role
+     --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role
+     --policy-name             name of the policy document
+     --policy-doc              permission policy document
+     --path-prefix             path prefix for filtering roles
   
     --conf/-c FILE    read configuration from the given configuration file
     --id/-i ID        set ID portion of my name

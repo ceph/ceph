@@ -8,7 +8,7 @@
 #include "include/rados/librados.hpp"
 #include "common/snap_types.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/parent_types.h"
+#include "librbd/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "tools/rbd_mirror/BaseRequest.h"
 #include <map>
@@ -50,8 +50,8 @@ public:
                       librbd::journal::MirrorPeerClientMeta *client_meta,
                       ContextWQ *work_queue, Context *on_finish);
 
-  void send();
-  void cancel();
+  void send() override;
+  void cancel() override;
 
 private:
   /**
@@ -106,7 +106,7 @@ private:
   std::string m_snap_name;
   cls::rbd::SnapshotNamespace m_snap_namespace;
 
-  librbd::parent_spec m_local_parent_spec;
+  librbd::ParentSpec m_local_parent_spec;
 
   Mutex m_lock;
   bool m_canceled = false;
@@ -132,7 +132,7 @@ private:
 
   void compute_snap_map();
 
-  int validate_parent(ImageCtxT *image_ctx, librbd::parent_spec *spec);
+  int validate_parent(ImageCtxT *image_ctx, librbd::ParentSpec *spec);
 
 };
 

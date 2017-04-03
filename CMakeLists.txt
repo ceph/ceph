@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(ceph)
-set(VERSION 11.1.0)
+set(VERSION 12.0.0)
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
@@ -97,7 +97,6 @@ CHECK_FUNCTION_EXISTS(posix_fadvise HAVE_POSIX_FADVISE)
 CHECK_FUNCTION_EXISTS(posix_fallocate HAVE_POSIX_FALLOCATE)
 CHECK_FUNCTION_EXISTS(syncfs HAVE_SYS_SYNCFS)
 CHECK_FUNCTION_EXISTS(sync_file_range HAVE_SYNC_FILE_RANGE)
-CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
 CHECK_FUNCTION_EXISTS(pwritev HAVE_PWRITEV)
 CHECK_FUNCTION_EXISTS(splice CEPH_HAVE_SPLICE)
 CHECK_FUNCTION_EXISTS(getgrouplist HAVE_GETGROUPLIST)
@@ -174,7 +173,7 @@ else(ENABLE_SHARED)
 endif(ENABLE_SHARED)
 set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
-option(WITH_RDMA "Enable RDMA in async messenger" OFF)
+option(WITH_RDMA "Enable RDMA in async messenger" ON)
 if(WITH_RDMA)
   find_package(rdma REQUIRED)
   set(HAVE_RDMA ${RDMA_FOUND})
@@ -220,7 +219,6 @@ endif(${WITH_XFS})
 
 option(WITH_SPDK "Enable SPDK" OFF)
 if(WITH_SPDK)
-  find_package(pciaccess REQUIRED)
   find_package(dpdk REQUIRED)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
@@ -233,6 +231,13 @@ option(WITH_KVS "Key value store is here" ON)
 
 # remote block storage
 option(WITH_RBD "Remote block storage is here" ON)
+
+# KERNEL remote block storage
+option(WITH_KRBD "Kernel Remote block storage is here" ON)
+
+if(WITH_KRBD AND WITHOUT_RBD)
+  message(FATAL_ERROR "Cannot have WITH_KRBD with WITH_RBD.")
+endif()
 
 # embedded ceph daemon static library
 # NOTE: Ceph is mostly LGPL (see COPYING), which means that
@@ -267,6 +272,7 @@ if(ALLOCATOR)
   elseif(${ALLOCATOR} STREQUAL "jemalloc")
     find_package(JeMalloc REQUIRED)
     set(HAVE_LIBJEMALLOC ${JEMALLOC_FOUND})
+    set(HAVE_JEMALLOC 1)
   endif()
 else(ALLOCATOR)
   find_package(gperftools)
@@ -280,12 +286,16 @@ else(ALLOCATOR)
   elseif(JEMALLOC_FOUND)
     set(ALLOCATOR jemalloc)
   else()
-    message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
+    if(NOT FREEBSD)
+      # FreeBSD already has jemalloc as its default allocator
+      message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
+    endif()
     set(ALLOCATOR "libc")
   endif(GPERFTOOLS_FOUND)
 endif(ALLOCATOR)
 
-if(WITH_LIBCEPHFS OR WITH_RBD)
+
+if(WITH_LIBCEPHFS OR WITH_KRBD)
   find_package(keyutils REQUIRED)
 endif()
 
@@ -315,7 +325,7 @@ if(USE_NSS)
 else(USE_NSS)
   #openssl
   find_package(OpenSSL REQUIRED)
-  set(HAVE_OPENSSL ON)
+  set(USE_OPENSSL ON)
   set(SSL_LIBRARIES ${OPENSSL_LIBRARIES})
   message(STATUS "SSL with OpenSSL selected (Libs: ${SSL_LIBRARIES})")
 endif(USE_NSS)
@@ -334,12 +344,56 @@ endif(WITH_DPDK)
 
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
+option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" ON)
+option(WITH_RADOSGW_ASIO_FRONTEND "Rados Gateway's ASIO frontend is enabled" ON)
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
-  find_package(fcgi REQUIRED)
+  if(WITH_RADOSGW_FCGI_FRONTEND)
+    find_package(fcgi REQUIRED)
+  endif()
 endif(WITH_RADOSGW)
 
-option(WITH_RADOSGW_ASIO_FRONTEND "Rados Gateway's ASIO frontend is enabled" ON)
+
+if (WITH_RADOSGW)
+  if (NOT DEFINED OPENSSL_FOUND)
+    message(STATUS "Looking for openssl anyways, because radosgw selected")
+    find_package(OpenSSL)
+  endif()
+  if (OPENSSL_FOUND)
+    execute_process(
+      COMMAND
+	"sh" "-c"
+	"objdump -p ${OPENSSL_SSL_LIBRARY} | sed -n 's/^  SONAME  *//p'"
+      OUTPUT_VARIABLE LIBSSL_SONAME
+      ERROR_VARIABLE OBJDUMP_ERRORS
+      RESULT_VARIABLE OBJDUMP_RESULTS
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (OBJDUMP_RESULTS)
+      message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
+    endif()
+    if (NOT OBJDUMP_ERRORS STREQUAL "")
+      message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
+    endif()
+    execute_process(
+      COMMAND
+	"sh" "-c"
+	"objdump -p ${OPENSSL_CRYPTO_LIBRARY} | sed -n 's/^  SONAME  *//p'"
+      OUTPUT_VARIABLE LIBCRYPTO_SONAME
+      ERROR_VARIABLE OBJDUMP_ERRORS
+      RESULT_VARIABLE OBJDUMP_RESULTS
+      OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if (OBJDUMP_RESULTS)
+      message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
+    endif()
+    if (NOT OBJDUMP_ERRORS STREQUAL "")
+      message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
+    endif()
+    message(STATUS "ssl soname: ${LIBSSL_SONAME}")
+    message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
+  else()
+    message(WARNING "ssl not found: rgw civetweb may fail to dlopen libssl libcrypto")
+  endif()
+endif (WITH_RADOSGW)
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
@@ -348,6 +402,7 @@ option(WITH_CEPHFS "CephFS is enabled" ON)
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
     set(Python_ADDITIONAL_VERSIONS 2.7)
+    find_package(PythonInterp 2.7 REQUIRED)
     find_package(PythonLibs 2.7 REQUIRED)
     # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
@@ -366,6 +421,9 @@ set(HAVE_LIBROCKSDB 1)
 
 # -lz link into kv
 find_package(ZLIB REQUIRED)
+
+#option for EventTrace
+option(WITH_EVENTTRACE "Event tracing support" OFF)
 
 #option for LTTng
 option(WITH_LTTNG "LTTng tracing is enabled" ON)
@@ -403,6 +461,53 @@ endif(WITH_FIO)
 if(LINUX)
   add_definitions(-D__linux__)
 endif(LINUX)
+
+# ASAN and friends
+option(WITH_ASAN "build with ASAN" OFF)
+option(WITH_ASAN_LEAK "explicitly enable ASAN leak detection" OFF)
+
+if(WITH_ASAN)
+  set(ASAN_CFLAGS "-fsanitize=address -fno-omit-frame-pointer")
+  if(WITH_ASAN_LEAK)
+    set(ASAN_CFLAGS "${ASAN_CFLAGS} -fsanitize=leak")
+  endif()
+  set(ASAN_LFLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ASAN_CFLAGS} -lasan")
+  set(CMAKE_EXE_LINKER_FLAGS "${ASAN_LFLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ASAN_CFLAGS}")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${ASAN_CFLAGS}")
+  if(HAVE_JEMALLOC)
+    message(FATAL "ASAN does not work well with JeMalloc")
+  endif()
+endif()
+
+option(WITH_TSAN "build with TSAN" OFF)
+if(WITH_TSAN)
+  if (WITH_ASAN AND WITH_ASAN_LEAK)
+    message(FATAL_ERROR "Cannot combine -fsanitize-leak w/-fsanitize-thread")
+  endif()
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread -fno-omit-frame-pointer -pie -ltsan ")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=thread -fno-omit-frame-pointer -fPIC")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=thread -fno-omit-frame-pointer -fPIC")
+  if(HAVE_JEMALLOC)
+    message(FATAL "TSAN does not work well with JeMalloc")
+  endif()
+endif()
+
+option(WITH_UBSAN "build with UBSAN" OFF)
+if(WITH_UBSAN)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=undefined")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=undefined")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsanitize=undefined")
+  if(HAVE_JEMALLOC)
+    message(FATAL "UBSAN does not work well with JeMalloc")
+  endif()
+endif()
+
+# Rocksdb
+option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
+if (WITH_SYSTEM_ROCKSDB)
+  find_package(rocksdb REQUIRED)
+endif()
 
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
@@ -472,10 +577,6 @@ endif()
 find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
-
-if (NOT WITH_SYSTEM_BOOST)
-  LIST(APPEND Boost_LIBRARIES "-lz")
-endif()
 
 CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
 

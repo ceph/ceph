@@ -3,12 +3,12 @@
 
 #include "librbd/operation/TrimRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
-#include "librbd/AioObjectRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/ObjectRequest.h"
 #include "common/ContextCompletion.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -36,7 +36,7 @@ public:
   {
   }
 
-  virtual int send() {
+  int send() override {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
     assert(image_ctx.exclusive_lock == nullptr ||
@@ -45,8 +45,8 @@ public:
     string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
 
-    AioObjectRequest<> *req = new AioObjectTrim(&image_ctx, oid, m_object_no,
-                                                m_snapc, this, false);
+    auto req = new io::ObjectTrimRequest(&image_ctx, oid, m_object_no,
+                                         m_snapc, this, false);
     req->send();
     return 0;
   }
@@ -64,7 +64,7 @@ public:
   {
   }
 
-  virtual int send() {
+  int send() override {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
     assert(image_ctx.exclusive_lock == nullptr ||
@@ -82,7 +82,7 @@ public:
     ldout(image_ctx.cct, 10) << "removing " << oid << dendl;
 
     librados::AioCompletion *rados_completion =
-      util::create_rados_safe_callback(this);
+      util::create_rados_callback(this);
     int r = image_ctx.data_ctx.aio_remove(oid, rados_completion);
     assert(r == 0);
     rados_completion->release();
@@ -413,13 +413,13 @@ void TrimRequest<I>::send_clean_boundary() {
     ldout(cct, 20) << " ex " << *p << dendl;
     Context *req_comp = new C_ContextCompletion(*completion);
 
-    AioObjectRequest<> *req;
+    io::ObjectRequest<> *req;
     if (p->offset == 0) {
-      req = new AioObjectTrim(&image_ctx, p->oid.name, p->objectno, snapc,
-                              req_comp, true);
+      req = new io::ObjectTrimRequest(&image_ctx, p->oid.name, p->objectno,
+                                      snapc, req_comp, true);
     } else {
-      req = new AioObjectTruncate(&image_ctx, p->oid.name, p->objectno,
-                                  p->offset, snapc, req_comp);
+      req = new io::ObjectTruncateRequest(&image_ctx, p->oid.name, p->objectno,
+                                          p->offset, snapc, req_comp);
     }
     req->send();
   }

@@ -34,22 +34,22 @@ class MMDSFragmentNotify : public Message {
 	Message(MSG_MDS_FRAGMENTNOTIFY),
     ino(df.ino), basefrag(df.frag), bits(b) { }
 private:
-  ~MMDSFragmentNotify() {}
+  ~MMDSFragmentNotify() override {}
 
 public:  
-  const char *get_type_name() const { return "fragment_notify"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "fragment_notify"; }
+  void print(ostream& o) const override {
     o << "fragment_notify(" << ino << "." << basefrag
       << " " << (int)bits << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(ino, payload);
     ::encode(basefrag, payload);
     ::encode(bits, payload);
     ::encode(basebl, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(ino, p);
     ::decode(basefrag, p);

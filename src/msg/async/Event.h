@@ -152,6 +152,7 @@ class EventCenter {
 
  private:
   CephContext *cct;
+  std::string type;
   int nevent;
   // Used only to external event
   pthread_t owner;
@@ -171,7 +172,7 @@ class EventCenter {
   int notify_send_fd;
   NetHandler net;
   EventCallbackRef notify_handler;
-  unsigned idx = 10000;
+  unsigned idx;
   AssociatedCenters *global_centers = nullptr;
 
   int process_time_events();
@@ -186,11 +187,11 @@ class EventCenter {
     external_num_events(0),
     driver(NULL), time_event_next_id(1),
     notify_receive_fd(-1), notify_send_fd(-1), net(c),
-    notify_handler(NULL) { }
+    notify_handler(NULL), idx(0) { }
   ~EventCenter();
   ostream& _event_prefix(std::ostream *_dout);
 
-  int init(int nevent, unsigned idx);
+  int init(int nevent, unsigned idx, const std::string &t);
   void set_owner();
   pthread_t get_owner() const { return owner; }
   unsigned get_id() const { return idx; }
@@ -222,7 +223,7 @@ class EventCenter {
    public:
     C_submit_event(func &&_f, bool nw)
       : f(std::move(_f)), nonwait(nw) {}
-    void do_request(int id) {
+    void do_request(int id) override {
       f();
       lock.lock();
       cond.notify_all();

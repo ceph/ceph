@@ -218,7 +218,7 @@ struct C_MonOp : public Context
   explicit C_MonOp(MonOpRequestRef o) :
     op(o) { }
 
-  void finish(int r) {
+  void finish(int r) override {
     if (op && r == -ECANCELED) {
       op->mark_event("callback canceled");
     } else if (op && r == -EAGAIN) {
@@ -231,7 +231,7 @@ struct C_MonOp : public Context
 
   void mark_op_event(const string &event) {
     if (op)
-      op->mark_event(event);
+      op->mark_event_string(event);
   }
 
   virtual void _finish(int r) = 0;
@@ -437,7 +437,9 @@ WRITE_CLASS_ENCODER(mon_feature_t)
 namespace ceph {
   namespace features {
     namespace mon {
-      constexpr mon_feature_t FEATURE_KRAKEN(      (1ULL << 0));
+      constexpr mon_feature_t FEATURE_KRAKEN(     (1ULL << 0));
+      constexpr mon_feature_t FEATURE_LUMINOUS(   (1ULL << 1));
+
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
 
@@ -448,9 +450,10 @@ namespace ceph {
        */
       constexpr mon_feature_t get_supported() {
         return (
-            FEATURE_KRAKEN |
-            FEATURE_NONE
-            );
+	  FEATURE_KRAKEN |
+	  FEATURE_LUMINOUS |
+	  FEATURE_NONE
+	  );
       }
       /**
        * All the features that, once set, cannot be removed.
@@ -464,9 +467,10 @@ namespace ceph {
        */
       constexpr mon_feature_t get_persistent() {
         return (
-            FEATURE_KRAKEN |
-            FEATURE_NONE
-            );
+	  FEATURE_KRAKEN |
+	  FEATURE_LUMINOUS |
+	  FEATURE_NONE
+	  );
       }
 
       static inline mon_feature_t get_feature_by_name(std::string n);
@@ -479,6 +483,8 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
 
   if (f == FEATURE_KRAKEN) {
     return "kraken";
+  } else if (f == FEATURE_LUMINOUS) {
+    return "luminous";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -490,6 +496,8 @@ mon_feature_t ceph::features::mon::get_feature_by_name(std::string n) {
 
   if (n == "kraken") {
     return FEATURE_KRAKEN;
+  } else if (n == "luminous") {
+    return FEATURE_LUMINOUS;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }

@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_TEST_LIBRBD_MOCK_OPERATIONS_H
@@ -25,27 +25,32 @@ struct MockOperations {
                                     ProgressContext &prog_ctx,
                                     Context *on_finish,
                                     uint64_t journal_op_tid));
-  MOCK_METHOD3(snap_create, void(const std::string &snap_name,
-				 const cls::rbd::SnapshotNamespace &snapshot_namespace,
+  MOCK_METHOD3(snap_create, void(const cls::rbd::SnapshotNamespace &snapshot_namespace,
+				 const std::string &snap_name,
                                  Context *on_finish));
-  MOCK_METHOD5(execute_snap_create, void(const std::string &snap_name,
-					 const cls::rbd::SnapshotNamespace &snapshot_namespace,
+  MOCK_METHOD5(execute_snap_create, void(const cls::rbd::SnapshotNamespace &snapshot_namespace,
+					 const std::string &snap_name,
                                          Context *on_finish,
                                          uint64_t journal_op_tid,
                                          bool skip_object_map));
-  MOCK_METHOD2(snap_remove, void(const std::string &snap_name,
+  MOCK_METHOD3(snap_remove, void(const cls::rbd::SnapshotNamespace &snap_namespace,
+				 const std::string &snap_name,
                                  Context *on_finish));
-  MOCK_METHOD2(execute_snap_remove, void(const std::string &snap_name,
+  MOCK_METHOD3(execute_snap_remove, void(const cls::rbd::SnapshotNamespace &snap_namespace,
+					 const std::string &snap_name,
                                          Context *on_finish));
   MOCK_METHOD3(execute_snap_rename, void(uint64_t src_snap_id,
                                          const std::string &snap_name,
                                          Context *on_finish));
-  MOCK_METHOD3(execute_snap_rollback, void(const std::string &snap_name,
+  MOCK_METHOD4(execute_snap_rollback, void(const cls::rbd::SnapshotNamespace &snap_namespace,
+					   const std::string &snap_name,
                                            ProgressContext &prog_ctx,
                                            Context *on_finish));
-  MOCK_METHOD2(execute_snap_protect, void(const std::string &snap_name,
+  MOCK_METHOD3(execute_snap_protect, void(const cls::rbd::SnapshotNamespace &snap_namespace,
+					  const std::string &snap_name,
                                           Context *on_finish));
-  MOCK_METHOD2(execute_snap_unprotect, void(const std::string &snap_name,
+  MOCK_METHOD3(execute_snap_unprotect, void(const cls::rbd::SnapshotNamespace &snap_namespace,
+					    const std::string &snap_name,
                                             Context *on_finish));
   MOCK_METHOD2(execute_snap_set_limit, void(uint64_t limit,
 					    Context *on_finish));

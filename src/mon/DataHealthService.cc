@@ -139,7 +139,7 @@ int DataHealthService::update_store_stats(DataStats &ours)
   ours.store_stats.bytes_sst = extra["sst"];
   ours.store_stats.bytes_log = extra["log"];
   ours.store_stats.bytes_misc = extra["misc"];
-  ours.last_update = ceph_clock_now(g_ceph_context);
+  ours.last_update = ceph_clock_now();
 
   return 0;
 }
@@ -159,7 +159,7 @@ int DataHealthService::update_stats()
           << " total " << prettybyte_t(ours.fs_stats.byte_total)
           << ", used " << prettybyte_t(ours.fs_stats.byte_used)
           << ", avail " << prettybyte_t(ours.fs_stats.byte_avail) << dendl;
-  ours.last_update = ceph_clock_now(g_ceph_context);
+  ours.last_update = ceph_clock_now();
 
   return update_store_stats(ours);
 }
@@ -219,7 +219,7 @@ void DataHealthService::service_tick()
     if (ours.fs_stats.avail_percent != last_warned_percent)
       mon->clog->warn()
 	<< "reached concerning levels of available space on local monitor storage"
-	<< " (" << ours.fs_stats.avail_percent << "% free)\n";
+	<< " (" << ours.fs_stats.avail_percent << "% free)";
     last_warned_percent = ours.fs_stats.avail_percent;
   } else {
     last_warned_percent = 0;

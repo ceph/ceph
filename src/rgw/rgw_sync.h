@@ -147,7 +147,7 @@ public:
                                                                 reset_backoff(false), exit_on_error(_exit_on_error) {
   }
 
-  virtual ~RGWBackoffControlCR() {
+  ~RGWBackoffControlCR() override {
     if (cr) {
       cr->put();
     }
@@ -156,7 +156,7 @@ public:
   virtual RGWCoroutine *alloc_cr() = 0;
   virtual RGWCoroutine *alloc_finisher_cr() { return NULL; }
 
-  int operate();
+  int operate() override;
 };
 
 struct RGWMetaSyncEnv {
@@ -206,13 +206,13 @@ public:
       http_manager(store->ctx(), completion_mgr),
       status_manager(_sm), error_logger(NULL), meta_sync_cr(NULL) {}
 
-  ~RGWRemoteMetaLog();
+  ~RGWRemoteMetaLog() override;
 
   int init();
   void finish();
 
   int read_log_info(rgw_mdlog_info *log_info);
-  int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info);
+  int read_master_log_shards_info(const string& master_period, map<int, RGWMetadataLogInfo> *shards_info);
   int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result);
   int read_sync_status();
   int init_sync_status();
@@ -232,7 +232,7 @@ class RGWMetaSyncStatusManager {
 
   RGWRemoteMetaLog master_log;
 
-  map<int, rgw_obj> shard_objs;
+  map<int, rgw_raw_obj> shard_objs;
 
   struct utime_shard {
     real_time ts;
@@ -268,7 +268,7 @@ public:
   int read_log_info(rgw_mdlog_info *log_info) {
     return master_log.read_log_info(log_info);
   }
-  int read_master_log_shards_info(string *master_period, map<int, RGWMetadataLogInfo> *shards_info) {
+  int read_master_log_shards_info(const string& master_period, map<int, RGWMetadataLogInfo> *shards_info) {
     return master_log.read_master_log_shards_info(master_period, shards_info);
   }
   int read_master_log_shards_next(const string& period, map<int, string> shard_markers, map<int, rgw_mdlog_shard_data> *result) {
@@ -436,7 +436,7 @@ public:
     error_injection = (sync_env->cct->_conf->rgw_sync_meta_inject_err_probability > 0);
   }
 
-  int operate();
+  int operate() override;
 };
 
 class RGWShardCollectCR : public RGWCoroutine {
@@ -452,7 +452,7 @@ public:
                                                              status(0) {}
 
   virtual bool spawn_next() = 0;
-  int operate();
+  int operate() override;
 };
 
 

@@ -23,6 +23,8 @@
 #include "ImageDeleter.h"
 #include "ProgressContext.h"
 #include "types.h"
+#include <set>
+#include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
 
 class AdminSocketHook;
@@ -44,7 +46,7 @@ namespace journal { template <typename> class Replay; }
 namespace rbd {
 namespace mirror {
 
-struct Threads;
+template <typename> struct Threads;
 
 namespace image_replayer { template <typename> class BootstrapRequest; }
 namespace image_replayer { template <typename> class EventPreprocessor; }
@@ -67,13 +69,11 @@ public:
     STATE_STOPPED,
   };
 
-  ImageReplayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+  ImageReplayer(Threads<librbd::ImageCtx> *threads,
+                std::shared_ptr<ImageDeleter> image_deleter,
                 ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
-                RadosRef local, RadosRef remote,
-                const std::string &local_mirror_uuid,
-                const std::string &remote_mirror_uuid, int64_t local_pool_id,
-		int64_t remote_pool_id, const std::string &remote_image_id,
-                const std::string &global_image_id);
+                RadosRef local, const std::string &local_mirror_uuid,
+                int64_t local_pool_id, const std::string &global_image_id);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
@@ -91,17 +91,18 @@ public:
     return (m_last_r == -EBLACKLISTED);
   }
 
+  void add_remote_image(const std::string &remote_mirror_uuid,
+                        const std::string &remote_image_id,
+                        librados::IoCtx &remote_io_ctx);
+  void remove_remote_image(const std::string &remote_mirror_uuid,
+                           const std::string &remote_image_id);
+  bool remote_images_empty() const;
+
   inline int64_t get_local_pool_id() const {
     return m_local_pool_id;
   }
-  inline int64_t get_remote_pool_id() const {
-    return m_remote_pool_id;
-  }
   inline const std::string& get_global_image_id() const {
     return m_global_image_id;
-  }
-  inline const std::string& get_remote_image_id() const {
-    return m_remote_image_id;
   }
   inline std::string get_local_image_id() {
     Mutex::Locker locker(m_lock);
@@ -203,6 +204,37 @@ protected:
   bool on_replay_interrupted();
 
 private:
+  struct RemoteImage {
+    std::string mirror_uuid;
+    std::string image_id;
+    librados::IoCtx io_ctx;
+
+    RemoteImage() {
+    }
+    RemoteImage(const std::string &mirror_uuid,
+                const std::string &image_id)
+      : mirror_uuid(mirror_uuid), image_id(image_id) {
+    }
+    RemoteImage(const std::string &mirror_uuid,
+                const std::string &image_id,
+                librados::IoCtx &io_ctx)
+      : mirror_uuid(mirror_uuid), image_id(image_id), io_ctx(io_ctx) {
+    }
+
+    inline bool operator<(const RemoteImage &rhs) const {
+      if (mirror_uuid != rhs.mirror_uuid) {
+        return mirror_uuid < rhs.mirror_uuid;
+      } else {
+        return image_id < rhs.image_id;
+      }
+    }
+    inline bool operator==(const RemoteImage &rhs) const {
+      return (mirror_uuid == rhs.mirror_uuid && image_id == rhs.image_id);
+    }
+  };
+
+  typedef std::set<RemoteImage> RemoteImages;
+
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
   typedef boost::optional<State> OptionalState;
 
@@ -213,15 +245,15 @@ private:
       : img_replayer(img_replayer) {
     }
 
-    virtual void handle_close() {
+    void handle_close() override {
       img_replayer->on_stop_journal_replay();
     }
 
-    virtual void handle_promoted() {
+    void handle_promoted() override {
       img_replayer->on_stop_journal_replay(0, "force promoted");
     }
 
-    virtual void handle_resync() {
+    void handle_resync() override {
       img_replayer->resync_image();
     }
   };
@@ -232,20 +264,24 @@ private:
       replayer(replayer) {
     }
 
-    virtual void update_progress(const std::string &description,
-				 bool flush = true);
+    void update_progress(const std::string &description,
+				 bool flush = true) override;
   private:
     ImageReplayer<ImageCtxT> *replayer;
   };
 
-  Threads *m_threads;
+  Threads<librbd::ImageCtx> *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
-  RadosRef m_local, m_remote;
+
+  RemoteImages m_remote_images;
+  RemoteImage m_remote_image;
+
+  RadosRef m_local;
   std::string m_local_mirror_uuid;
-  std::string m_remote_mirror_uuid;
-  int64_t m_remote_pool_id, m_local_pool_id;
-  std::string m_remote_image_id, m_local_image_id, m_global_image_id;
+  int64_t m_local_pool_id;
+  std::string m_local_image_id;
+  std::string m_global_image_id;
   std::string m_local_image_name;
   std::string m_name;
   mutable Mutex m_lock;
@@ -257,7 +293,7 @@ private:
   image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
   image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
     nullptr;
-  librados::IoCtx m_local_ioctx, m_remote_ioctx;
+  librados::IoCtx m_local_ioctx;
   ImageCtxT *m_local_image_ctx = nullptr;
 
   decltype(ImageCtxT::journal) m_local_journal = nullptr;
@@ -292,13 +328,14 @@ private:
   librbd::journal::TagData m_replay_tag_data;
   librbd::journal::EventEntry m_event_entry;
   AsyncOpTracker m_event_replay_tracker;
+  Context *m_delayed_preprocess_task = nullptr;
 
   struct RemoteJournalerListener : public ::journal::JournalMetadataListener {
     ImageReplayer *replayer;
 
     RemoteJournalerListener(ImageReplayer *replayer) : replayer(replayer) { }
 
-    void handle_update(::journal::JournalMetadata *);
+    void handle_update(::journal::JournalMetadata *) override;
   } m_remote_listener;
 
   struct C_ReplayCommitted : public Context {
@@ -309,7 +346,7 @@ private:
                       ReplayEntry &&replay_entry)
       : replayer(replayer), replay_entry(std::move(replay_entry)) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       replayer->handle_process_entry_safe(replay_entry, r);
     }
   };
@@ -361,7 +398,8 @@ private:
   void handle_allocate_local_tag(int r);
 
   void preprocess_entry();
-  void handle_preprocess_entry(int r);
+  void handle_preprocess_entry_ready(int r);
+  void handle_preprocess_entry_safe(int r);
 
   void process_entry();
   void handle_process_entry_ready(int r);

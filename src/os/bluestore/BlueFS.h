@@ -22,11 +22,11 @@ enum {
   l_bluefs_gift_bytes,
   l_bluefs_reclaim_bytes,
   l_bluefs_db_total_bytes,
-  l_bluefs_db_free_bytes,
+  l_bluefs_db_used_bytes,
   l_bluefs_wal_total_bytes,
-  l_bluefs_wal_free_bytes,
+  l_bluefs_wal_used_bytes,
   l_bluefs_slow_total_bytes,
-  l_bluefs_slow_free_bytes,
+  l_bluefs_slow_used_bytes,
   l_bluefs_num_files,
   l_bluefs_log_bytes,
   l_bluefs_log_compactions,
@@ -40,6 +40,7 @@ enum {
 
 class BlueFS {
 public:
+  CephContext* cct;
   static constexpr unsigned MAX_BDEV = 3;
   static constexpr unsigned BDEV_WAL = 0;
   static constexpr unsigned BDEV_DB = 1;
@@ -74,7 +75,7 @@ public:
 	num_writers(0),
 	num_reading(0)
       {}
-    ~File() {
+    ~File() override {
       assert(num_readers.load() == 0);
       assert(num_writers.load() == 0);
       assert(num_reading.load() == 0);
@@ -129,7 +130,8 @@ public:
     FileWriter(FileRef f)
       : file(f),
 	pos(0),
-	buffer_appender(buffer.get_page_aligned_appender()) {
+	buffer_appender(buffer.get_page_aligned_appender(
+			  g_conf->bluefs_alloc_size / CEPH_PAGE_SIZE)) {
       ++file->num_writers;
       iocv.fill(nullptr);
     }
@@ -322,7 +324,7 @@ private:
   }
 
 public:
-  BlueFS();
+  BlueFS(CephContext* cct);
   ~BlueFS();
 
   // the super is always stored on bdev 0
@@ -336,6 +338,7 @@ public:
   uint64_t get_total(unsigned id);
   uint64_t get_free(unsigned id);
   void get_usage(vector<pair<uint64_t,uint64_t>> *usage); // [<free,total> ...]
+  void dump_perf_counters(Formatter *f);
 
   /// get current extents that we own for given block device
   int get_block_extents(unsigned id, interval_set<uint64_t> *extents);
@@ -388,7 +391,7 @@ public:
 
   /// reclaim block space
   int reclaim_blocks(unsigned bdev, uint64_t want,
-		     uint64_t *offset, uint32_t *length);
+		     AllocExtentVector *extents);
 
   void flush(FileWriter *h) {
     std::lock_guard<std::mutex> l(lock);

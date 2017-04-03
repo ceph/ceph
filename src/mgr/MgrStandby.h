@@ -18,6 +18,7 @@
 #include "auth/Auth.h"
 #include "common/Finisher.h"
 #include "common/Timer.h"
+#include "common/LogClient.h"
 
 #include "DaemonServer.h"
 #include "PyModules.h"
@@ -28,31 +29,42 @@
 class MMgrMap;
 class Mgr;
 
-class MgrStandby : public Dispatcher {
+class MgrStandby : public Dispatcher,
+		   public md_config_obs_t {
+public:
+  // config observer bits
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
+                         const std::set <std::string> &changed) override;
+
 protected:
   MonClient *monc;
-  Objecter *objecter;
   Messenger *client_messenger;
+  Objecter *objecter;
+
+  LogClient log_client;
+  LogChannelRef clog, audit_clog;
 
   Mutex lock;
   SafeTimer timer;
 
-  Mgr *active_mgr;
+  std::unique_ptr<Mgr> active_mgr;
 
   std::string state_str();
 
   void handle_mgr_map(MMgrMap *m);
+  void _update_log_config();
 
 public:
   MgrStandby();
-  ~MgrStandby();
+  ~MgrStandby() override;
 
-  bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con) { return false; }
-  void ms_handle_remote_reset(Connection *con) {}
+  bool ms_dispatch(Message *m) override;
+  bool ms_handle_reset(Connection *con) override { return false; }
+  void ms_handle_remote_reset(Connection *con) override {}
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
-                         bool force_new);
-  bool ms_handle_refused(Connection *con);
+                         bool force_new) override;
+  bool ms_handle_refused(Connection *con) override;
 
   int init();
   void shutdown();

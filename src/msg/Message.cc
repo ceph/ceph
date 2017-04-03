@@ -57,9 +57,11 @@ using namespace std;
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
+#include "messages/MOSDBeacon.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDFull.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -70,6 +72,7 @@ using namespace std;
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
 
+#include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
@@ -77,11 +80,14 @@ using namespace std;
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGTrim.h"
-#include "messages/MOSDPGMissing.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepScrub.h"
+#include "messages/MOSDRepScrubMap.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
+#include "messages/MOSDBackoff.h"
+#include "messages/MOSDPGBackfillRemove.h"
 
 #include "messages/MRemoveSnaps.h"
 
@@ -424,6 +430,9 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_ALIVE:
     m = new MOSDAlive();
     break;
+  case MSG_OSD_BEACON:
+    m = new MOSDBeacon();
+    break;
   case MSG_OSD_PGTEMP:
     m = new MOSDPGTemp;
     break;
@@ -432,6 +441,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_MARK_ME_DOWN:
     m = new MOSDMarkMeDown();
+    break;
+  case MSG_OSD_FULL:
+    m = new MOSDFull();
     break;
   case MSG_OSD_PING:
     m = new MOSDPing();
@@ -454,11 +466,17 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_REPOPREPLY:
     m = new MOSDRepOpReply();
     break;
+  case MSG_OSD_PG_CREATED:
+    m = new MOSDPGCreated();
+    break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
     m = new MOSDPGUpdateLogMissing();
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     m = new MOSDPGUpdateLogMissingReply();
+    break;
+  case CEPH_MSG_OSD_BACKOFF:
+    m = new MOSDBackoff;
     break;
 
   case CEPH_MSG_OSD_MAP:
@@ -494,20 +512,26 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_SCRUB:
     m = new MOSDScrub;
     break;
+  case MSG_OSD_SCRUB_RESERVE:
+    m = new MOSDScrubReserve;
+    break;
   case MSG_REMOVE_SNAPS:
     m = new MRemoveSnaps;
     break;
-  case MSG_OSD_PG_MISSING:
-    m = new MOSDPGMissing;
-    break;
   case MSG_OSD_REP_SCRUB:
     m = new MOSDRepScrub;
+    break;
+  case MSG_OSD_REP_SCRUBMAP:
+    m = new MOSDRepScrubMap;
     break;
   case MSG_OSD_PG_SCAN:
     m = new MOSDPGScan;
     break;
   case MSG_OSD_PG_BACKFILL:
     m = new MOSDPGBackfill;
+    break;
+  case MSG_OSD_PG_BACKFILL_REMOVE:
+    m = new MOSDPGBackfillRemove;
     break;
   case MSG_OSD_PG_PUSH:
     m = new MOSDPGPush;

@@ -6,10 +6,11 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/utime.h"
 #include "common/snap_types.h"
 #include "cls/lock/cls_lock_types.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/parent_types.h"
+#include "librbd/Types.h"
 #include <string>
 #include <vector>
 
@@ -27,11 +28,13 @@ template<typename ImageCtxT = ImageCtx>
 class RefreshRequest {
 public:
   static RefreshRequest *create(ImageCtxT &image_ctx, bool acquiring_lock,
-                                Context *on_finish) {
-    return new RefreshRequest(image_ctx, acquiring_lock, on_finish);
+                                bool skip_open_parent, Context *on_finish) {
+    return new RefreshRequest(image_ctx, acquiring_lock, skip_open_parent,
+                              on_finish);
   }
 
-  RefreshRequest(ImageCtxT &image_ctx, bool acquiring_lock, Context *on_finish);
+  RefreshRequest(ImageCtxT &image_ctx, bool acquiring_lock,
+                 bool skip_open_parent, Context *on_finish);
   ~RefreshRequest();
 
   void send();
@@ -56,6 +59,9 @@ private:
    *                |                                         |
    *                v                                         |
    *            V2_GET_SNAPSHOTS (skip if no snaps)           |
+   *                |                                         |
+   *                v                                         |
+   *            V2_GET_SNAP_TIMESTAMPS                        |
    *                |                                         |
    *                v                                         |
    *            V2_GET_SNAP_NAMESPACES                        |
@@ -104,6 +110,7 @@ private:
 
   ImageCtxT &m_image_ctx;
   bool m_acquiring_lock;
+  bool m_skip_open_parent_image;
   Context *m_on_finish;
 
   int m_error_result;
@@ -121,16 +128,17 @@ private:
   uint64_t m_incompatible_features;
   uint64_t m_flags;
   std::string m_object_prefix;
-  parent_info m_parent_md;
+  ParentInfo m_parent_md;
   cls::rbd::GroupSpec m_group_spec;
 
   ::SnapContext m_snapc;
   std::vector<std::string> m_snap_names;
   std::vector<cls::rbd::SnapshotNamespace> m_snap_namespaces;
   std::vector<uint64_t> m_snap_sizes;
-  std::vector<parent_info> m_snap_parents;
+  std::vector<ParentInfo> m_snap_parents;
   std::vector<uint8_t> m_snap_protection;
   std::vector<uint64_t> m_snap_flags;
+  std::vector<utime_t> m_snap_timestamps;
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> m_lockers;
@@ -166,6 +174,9 @@ private:
 
   void send_v2_get_snap_namespaces();
   Context *handle_v2_get_snap_namespaces(int *result);
+
+  void send_v2_get_snap_timestamps();
+  Context *handle_v2_get_snap_timestamps(int *result);
 
   void send_v2_refresh_parent();
   Context *handle_v2_refresh_parent(int *result);
@@ -209,7 +220,7 @@ private:
   }
 
   void apply();
-  int get_parent_info(uint64_t snap_id, parent_info *parent_md);
+  int get_parent_info(uint64_t snap_id, ParentInfo *parent_md);
 };
 
 } // namespace image

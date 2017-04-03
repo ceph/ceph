@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -192,8 +192,8 @@ public:
 
   void expect_snap_remove(MockTestImageCtx &mock_image_ctx,
                           const std::string &snap_name, int r) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(StrEq(snap_name), _))
-      .WillOnce(WithArg<1>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_remove(_, StrEq(snap_name), _))
+      .WillOnce(WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
   }
 
   template <typename T>
@@ -233,8 +233,8 @@ TEST_F(TestMockMirrorDisableRequest, Success) {
       {"", encode(journal::ClientData{journal::ImageClientMeta{}})},
       {"peer 1", encode(journal::ClientData{journal::MirrorPeerClientMeta{}})},
       {"peer 2", encode(journal::ClientData{journal::MirrorPeerClientMeta{
-        "remote image id", {{"snap 1", boost::optional<uint64_t>(0)},
-                            {"snap 2", boost::optional<uint64_t>(0)}}}
+        "remote image id", {{cls::rbd::UserSnapshotNamespace(), "snap 1", boost::optional<uint64_t>(0)},
+                            {cls::rbd::UserSnapshotNamespace(), "snap 2", boost::optional<uint64_t>(0)}}}
       })}
     }, 0);
   expect_journal_client_unregister(mock_image_ctx, "peer 1", 0);
@@ -493,8 +493,8 @@ TEST_F(TestMockMirrorDisableRequest, SnapRemoveError) {
       {"", encode(journal::ClientData{journal::ImageClientMeta{}})},
       {"peer 1", encode(journal::ClientData{journal::MirrorPeerClientMeta{}})},
       {"peer 2", encode(journal::ClientData{journal::MirrorPeerClientMeta{
-        "remote image id", {{"snap 1", boost::optional<uint64_t>(0)},
-                            {"snap 2", boost::optional<uint64_t>(0)}}}
+        "remote image id", {{cls::rbd::UserSnapshotNamespace(), "snap 1", boost::optional<uint64_t>(0)},
+                            {cls::rbd::UserSnapshotNamespace(), "snap 2", boost::optional<uint64_t>(0)}}}
       })}
     }, 0);
   expect_journal_client_unregister(mock_image_ctx, "peer 1", 0);
@@ -533,8 +533,8 @@ TEST_F(TestMockMirrorDisableRequest, JournalClientUnregisterError) {
       {"", encode(journal::ClientData{journal::ImageClientMeta{}})},
       {"peer 1", encode(journal::ClientData{journal::MirrorPeerClientMeta{}})},
       {"peer 2", encode(journal::ClientData{journal::MirrorPeerClientMeta{
-        "remote image id", {{"snap 1", boost::optional<uint64_t>(0)},
-                            {"snap 2", boost::optional<uint64_t>(0)}}}
+        "remote image id", {{cls::rbd::UserSnapshotNamespace(), "snap 1", boost::optional<uint64_t>(0)},
+                            {cls::rbd::UserSnapshotNamespace(), "snap 2", boost::optional<uint64_t>(0)}}}
       })}
     }, 0);
   expect_journal_client_unregister(mock_image_ctx, "peer 1", -EINVAL);

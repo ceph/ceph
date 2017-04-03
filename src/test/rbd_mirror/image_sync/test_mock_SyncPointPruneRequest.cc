@@ -50,7 +50,7 @@ class TestMockImageSyncSyncPointPruneRequest : public TestMockFixture {
 public:
   typedef SyncPointPruneRequest<librbd::MockTestImageCtx> MockSyncPointPruneRequest;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;
@@ -65,7 +65,7 @@ public:
 
   void expect_get_snap_id(librbd::MockTestImageCtx &mock_remote_image_ctx,
                           const std::string &snap_name, uint64_t snap_id) {
-    EXPECT_CALL(mock_remote_image_ctx, get_snap_id(StrEq(snap_name)))
+    EXPECT_CALL(mock_remote_image_ctx, get_snap_id(_, StrEq(snap_name)))
       .WillOnce(Return(snap_id));
   }
 
@@ -76,8 +76,8 @@ public:
 
   void expect_snap_remove(librbd::MockTestImageCtx &mock_remote_image_ctx,
                           const std::string &snap_name, int r) {
-    EXPECT_CALL(*mock_remote_image_ctx.operations, snap_remove(StrEq(snap_name), _))
-      .WillOnce(WithArg<1>(CompleteContext(r)));
+    EXPECT_CALL(*mock_remote_image_ctx.operations, snap_remove(_, StrEq(snap_name), _))
+      .WillOnce(WithArg<2>(CompleteContext(r)));
   }
 
   MockSyncPointPruneRequest *create_request(librbd::MockTestImageCtx &mock_remote_image_ctx,
@@ -93,7 +93,9 @@ public:
 
 TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressSuccess) {
   librbd::journal::MirrorPeerClientMeta client_meta;
-  client_meta.sync_points.emplace_front("snap1", boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap1",
+					boost::none);
   m_client_meta = client_meta;
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -114,8 +116,12 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressSuccess) {
 
 TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedSyncInProgressSuccess) {
   librbd::journal::MirrorPeerClientMeta client_meta;
-  client_meta.sync_points.emplace_front("snap2", "snap1", boost::none);
-  client_meta.sync_points.emplace_front("snap1", boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap2",
+					"snap1", boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap1",
+					boost::none);
   m_client_meta = client_meta;
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -139,8 +145,13 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedSyncInProgressSuccess) {
 
 TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressMissingSnapSuccess) {
   librbd::journal::MirrorPeerClientMeta client_meta;
-  client_meta.sync_points.emplace_front("snap2", "snap1", boost::none);
-  client_meta.sync_points.emplace_front("snap1", boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap2",
+					"snap1",
+					boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap1",
+					boost::none);
   m_client_meta = client_meta;
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -165,7 +176,10 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressMissingSnapSuccess)
 
 TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressUnexpectedFromSnapSuccess) {
   librbd::journal::MirrorPeerClientMeta client_meta;
-  client_meta.sync_points.emplace_front("snap2", "snap1", boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap2",
+					"snap1",
+					boost::none);
   m_client_meta = client_meta;
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -190,7 +204,9 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncInProgressUnexpectedFromSnapS
 
 TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncCompleteSuccess) {
   librbd::journal::MirrorPeerClientMeta client_meta;
-  client_meta.sync_points.emplace_front("snap1", boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap1",
+					boost::none);
   m_client_meta = client_meta;
   ASSERT_EQ(librbd::journal::MIRROR_PEER_STATE_SYNCING, m_client_meta.state);
 
@@ -213,8 +229,13 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SyncCompleteSuccess) {
 
 TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedSyncCompleteSuccess) {
   librbd::journal::MirrorPeerClientMeta client_meta;
-  client_meta.sync_points.emplace_front("snap2", "snap1", boost::none);
-  client_meta.sync_points.emplace_front("snap1", boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap2",
+					"snap1",
+					boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap1",
+					boost::none);
   m_client_meta = client_meta;
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -235,8 +256,14 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedSyncCompleteSuccess) {
 
 TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedCatchUpSyncCompleteSuccess) {
   librbd::journal::MirrorPeerClientMeta client_meta;
-  client_meta.sync_points.emplace_front("snap3", "snap2", boost::none);
-  client_meta.sync_points.emplace_front("snap2", "snap1", boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap3",
+					"snap2",
+					boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap2",
+					"snap1",
+					boost::none);
   m_client_meta = client_meta;
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -258,7 +285,9 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, RestartedCatchUpSyncCompleteSucce
 
 TEST_F(TestMockImageSyncSyncPointPruneRequest, SnapshotDNE) {
   librbd::journal::MirrorPeerClientMeta client_meta;
-  client_meta.sync_points.emplace_front("snap1", boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap1",
+					boost::none);
   m_client_meta = client_meta;
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
@@ -279,8 +308,13 @@ TEST_F(TestMockImageSyncSyncPointPruneRequest, SnapshotDNE) {
 
 TEST_F(TestMockImageSyncSyncPointPruneRequest, ClientUpdateError) {
   librbd::journal::MirrorPeerClientMeta client_meta;
-  client_meta.sync_points.emplace_front("snap2", "snap1", boost::none);
-  client_meta.sync_points.emplace_front("snap1", boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap2",
+					"snap1",
+					boost::none);
+  client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					"snap1",
+					boost::none);
   m_client_meta = client_meta;
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);

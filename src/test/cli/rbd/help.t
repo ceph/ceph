@@ -56,6 +56,7 @@
       mirror image promote        Promote an image to primary for RBD mirroring.
       mirror image resync         Force resync to primary image for RBD mirroring.
       mirror image status         Show RDB mirroring status for an image.
+      mirror pool demote          Demote all primary images in the pool.
       mirror pool disable         Disable RBD mirroring by default within a pool.
       mirror pool enable          Enable RBD mirroring by default within a pool.
       mirror pool info            Show information about the pool mirroring
@@ -63,6 +64,7 @@
       mirror pool peer add        Add a mirroring peer to a pool.
       mirror pool peer remove     Remove a mirroring peer from a pool.
       mirror pool peer set        Update mirroring peer settings.
+      mirror pool promote         Promote all non-primary images in the pool.
       mirror pool status          Show status for all mirrored images in the pool.
       nbd list (nbd ls)           List the nbd devices already used.
       nbd map                     Map image to a nbd device.
@@ -320,6 +322,7 @@
   rbd help export
   usage: rbd export [--pool <pool>] [--image <image>] [--snap <snap>] 
                     [--path <path>] [--no-progress] 
+                    [--export-format <export-format>] 
                     <source-image-or-snap-spec> <path-name> 
   
   Export image to file.
@@ -336,6 +339,7 @@
     --snap arg                   source snapshot name
     --path arg                   export file (or '-' for stdout)
     --no-progress                disable progress output
+    --export-format arg          format of image file
   
   rbd help export-diff
   usage: rbd export-diff [--pool <pool>] [--image <image>] [--snap <snap>] 
@@ -585,7 +589,8 @@
                     [--journal-splay-width <journal-splay-width>] 
                     [--journal-object-size <journal-object-size>] 
                     [--journal-pool <journal-pool>] [--no-progress] 
-                    [--pool <pool>] [--image <image>] 
+                    [--export-format <export-format>] [--pool <pool>] 
+                    [--image <image>] 
                     <path-name> <dest-image-spec> 
   
   Import image from file.
@@ -616,6 +621,7 @@
     --journal-object-size arg size of journal objects
     --journal-pool arg        pool for journal objects
     --no-progress             disable progress output
+    --export-format arg       format of image file
     -p [ --pool ] arg         pool name (deprecated)
     --image arg               image name (deprecated)
   
@@ -977,6 +983,18 @@
     --format arg         output format [plain, json, or xml]
     --pretty-format      pretty formatting (json and xml)
   
+  rbd help mirror pool demote
+  usage: rbd mirror pool demote [--pool <pool>] 
+                                <pool-name> 
+  
+  Demote all primary images in the pool.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
   rbd help mirror pool disable
   usage: rbd mirror pool disable [--pool <pool>] 
                                  <pool-name> 
@@ -1063,6 +1081,19 @@
   Optional arguments
     -p [ --pool ] arg    pool name
   
+  rbd help mirror pool promote
+  usage: rbd mirror pool promote [--force] [--pool <pool>] 
+                                 <pool-name> 
+  
+  Promote all non-primary images in the pool.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    --force              promote even if not cleanly demoted by remote cluster
+    -p [ --pool ] arg    pool name
+  
   rbd help mirror pool status
   usage: rbd mirror pool status [--pool <pool>] [--format <format>] 
                                 [--pretty-format] [--verbose] 
@@ -1100,8 +1131,8 @@
     -p [ --pool ] arg     pool name
     --image arg           image name
     --snap arg            snapshot name
-    --read-only           mount read-only
-    --exclusive           forbid other clients write
+    --read-only           map read-only
+    --exclusive           forbid writes by other clients
     --device arg          specify nbd device
     --nbds_max arg        override module param nbds_max
     --max_part arg        override module param max_part

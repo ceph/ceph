@@ -47,17 +47,17 @@ TEST(BlueFS, mkfs) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
   uuid_d fsid;
-  BlueFS fs;
-  fs.add_block_device(BlueFS::BDEV_DB, fn);
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
-  fs.mkfs(fsid);
+  ASSERT_EQ(0, fs.mkfs(fsid));
   rm_temp_bdev(fn);
 }
 
 TEST(BlueFS, mkfs_mount) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -72,7 +72,7 @@ TEST(BlueFS, mkfs_mount) {
 TEST(BlueFS, write_read) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -104,7 +104,7 @@ TEST(BlueFS, write_read) {
 TEST(BlueFS, small_appends) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -194,7 +194,7 @@ void write_single_file(BlueFS &fs, uint64_t rationed_bytes)
     stringstream ss;
     string dir = "dir.test";
     string file = "testfile";
-    int r=0, j=0;
+    int r=0;
     uint64_t written_bytes = 0;
     rationed_bytes -= ALLOC_SIZE;
     while (1) {
@@ -211,7 +211,6 @@ void write_single_file(BlueFS &fs, uint64_t rationed_bytes)
       }
       written_bytes += g_conf->bluefs_alloc_size;
       fs.close_writer(h);
-      j++;
       if ((rationed_bytes - written_bytes) <= g_conf->bluefs_alloc_size) {
         break;
       }
@@ -255,7 +254,7 @@ TEST(BlueFS, test_flush_1) {
     "65536");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -290,7 +289,7 @@ TEST(BlueFS, test_flush_2) {
     "65536");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -318,7 +317,7 @@ TEST(BlueFS, test_flush_3) {
     "65536");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -352,7 +351,7 @@ TEST(BlueFS, test_simple_compaction_sync) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -405,7 +404,7 @@ TEST(BlueFS, test_simple_compaction_async) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -461,7 +460,7 @@ TEST(BlueFS, test_compaction_sync) {
     "bluefs_compact_log_sync",
     "true");
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -499,7 +498,7 @@ TEST(BlueFS, test_compaction_async) {
     "bluefs_compact_log_sync",
     "false");
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
@@ -537,7 +536,7 @@ TEST(BlueFS, test_replay) {
     "bluefs_compact_log_sync",
     "false");
 
-  BlueFS fs;
+  BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;

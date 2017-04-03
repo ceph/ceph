@@ -19,6 +19,7 @@
 #include "MgrPyModule.h"
 
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
@@ -125,6 +126,36 @@ void MgrPyModule::notify(const std::string &notify_type, const std::string &noti
   auto pValue = PyObject_CallMethod(pClassInstance,
        const_cast<char*>("notify"), const_cast<char*>("(ss)"),
        notify_type.c_str(), notify_id.c_str());
+
+  if (pValue != NULL) {
+    Py_DECREF(pValue);
+  } else {
+    PyErr_Print();
+    // FIXME: callers can't be expected to handle a python module
+    // that has spontaneously broken, but Mgr() should provide
+    // a hook to unload misbehaving modules when they have an
+    // error somewhere like this
+  }
+
+  PyGILState_Release(gstate);
+}
+
+void MgrPyModule::notify_clog(const LogEntry &log_entry)
+{
+  assert(pClassInstance != nullptr);
+
+  PyGILState_STATE gstate;
+  gstate = PyGILState_Ensure();
+
+  // Construct python-ized LogEntry
+  PyFormatter f;
+  log_entry.dump(&f);
+  auto py_log_entry = f.get();
+
+  // Execute
+  auto pValue = PyObject_CallMethod(pClassInstance,
+       const_cast<char*>("notify"), const_cast<char*>("(sN)"),
+       "clog", py_log_entry);
 
   if (pValue != NULL) {
     Py_DECREF(pValue);

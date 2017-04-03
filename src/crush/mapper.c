@@ -104,7 +104,7 @@ static int bucket_perm_choose(const struct crush_bucket *bucket,
 
 	/* calculate permutation up to pr */
 	for (i = 0; i < work->perm_n; i++)
-		dprintk(" perm_choose have %d: %d\n", i, bucket->perm[i]);
+		dprintk(" perm_choose have %d: %d\n", i, work->perm[i]);
 	while (work->perm_n <= pr) {
 		unsigned int p = work->perm_n;
 		/* no point in swapping the final entry */
@@ -121,7 +121,7 @@ static int bucket_perm_choose(const struct crush_bucket *bucket,
 		work->perm_n++;
 	}
 	for (i = 0; i < bucket->size; i++)
-		dprintk(" perm_choose  %d: %d\n", i, bucket->perm[i]);
+		dprintk(" perm_choose  %d: %d\n", i, work->perm[i]);
 
 	s = work->perm[pr];
 out:
@@ -548,17 +548,15 @@ parent_r %d stable %d\n",
 					} else {
 						/* we already have a leaf! */
 						out2[outpos] = item;
-		}
+		                        }
 				}
 
-				if (!reject) {
+				if (!reject && !collide) {
 					/* out? */
 					if (itemtype == 0)
 						reject = is_out(map, weight,
 								weight_max,
 								item, x);
-					else
-						reject = 0;
 				}
 
 reject:

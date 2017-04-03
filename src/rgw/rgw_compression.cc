@@ -8,7 +8,7 @@
 
 //------------RGWPutObj_Compress---------------
 
-int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again)
+int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again)
 {
   bufferlist in_bl;
   if (*again) {
@@ -107,7 +107,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
       tmp_out.copy(0, q_len, out_bl);
     else
       out_bl.append(tmp_out);
-    first_block++;
+    ++first_block;
   }
 
   if (first_data && partial_content && out_bl.length() != 0)

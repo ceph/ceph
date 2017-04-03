@@ -331,6 +331,11 @@ void add_no_error_option(boost::program_options::options_description *opt) {
     (NO_ERROR.c_str(), po::bool_switch(), "continue after error");
 }
 
+void add_export_format_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    ("export-format", po::value<ExportFormat>(), "format of image file");
+}
+
 std::string get_short_features_help(bool append_suffix) {
   std::ostringstream oss;
   bool first_feature = true;
@@ -490,6 +495,30 @@ void validate(boost::any& v, const std::vector<std::string>& values,
     return;
   }
   throw po::validation_error(po::validation_error::invalid_option_value);
+}
+
+void validate(boost::any& v, const std::vector<std::string>& values,
+              ExportFormat *target_type, int) {
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+
+  std::string parse_error;
+  uint64_t format = strict_sistrtoll(s.c_str(), &parse_error);
+  if (!parse_error.empty() || (format != 1 && format != 2)) {
+    throw po::validation_error(po::validation_error::invalid_option_value);
+  }
+
+  v = boost::any(format);
+}
+
+void validate(boost::any& v, const std::vector<std::string>& values,
+              Secret *target_type, int) {
+  std::cerr << "rbd: --secret is deprecated, use --keyfile" << std::endl;
+
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+  g_conf->set_val_or_die("keyfile", s.c_str());
+  v = boost::any(s);
 }
 
 } // namespace argument_types

@@ -97,8 +97,11 @@ extern int rgw_get_user_info_by_swift(RGWRados *store,
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
-                                           RGWObjVersionTracker *objv_tracker = NULL, real_time *pmtime = NULL);
+extern int rgw_get_user_info_by_access_key(RGWRados* store,
+                                           const std::string& access_key,
+                                           RGWUserInfo& info,
+                                           RGWObjVersionTracker* objv_tracker = nullptr,
+                                           real_time* pmtime = nullptr);
 /**
  * Get all the custom metadata stored for user specified in @user_id
  * and put it into @attrs.

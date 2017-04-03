@@ -35,18 +35,29 @@ int do_list_snaps(librbd::Image& image, Formatter *f)
     t.define_column("SNAPID", TextTable::RIGHT, TextTable::RIGHT);
     t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     t.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
+    t.define_column("TIMESTAMP", TextTable::LEFT, TextTable::LEFT);
   }
 
   for (std::vector<librbd::snap_info_t>::iterator s = snaps.begin();
        s != snaps.end(); ++s) {
+    struct timespec timestamp;
+    image.snap_get_timestamp(s->id, &timestamp);
+    string tt_str = "";
+    if(timestamp.tv_sec != 0) {
+      time_t tt = timestamp.tv_sec;
+      tt_str = ctime(&tt);
+      tt_str = tt_str.substr(0, tt_str.length() - 1);  
+    }
+
     if (f) {
       f->open_object_section("snapshot");
       f->dump_unsigned("id", s->id);
       f->dump_string("name", s->name);
       f->dump_unsigned("size", s->size);
+      f->dump_string("timestamp", tt_str);
       f->close_section();
     } else {
-      t << s->id << s->name << stringify(prettybyte_t(s->size))
+      t << s->id << s->name << stringify(prettybyte_t(s->size)) << tt_str
         << TextTable::endrow;
     }
   }
@@ -268,8 +279,13 @@ int execute_remove(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
-                                 &io_ctx, &image);
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  io_ctx.set_osdmap_full_try();
+  r = utils::open_image(io_ctx, image_name, false, &image);
   if (r < 0) {
     return r;
   }
@@ -309,8 +325,13 @@ int execute_purge(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
-                                 &io_ctx, &image);
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  io_ctx.set_osdmap_full_try();
+  r = utils::open_image(io_ctx, image_name, false, &image);
   if (r < 0) {
     return r;
   }
@@ -428,8 +449,13 @@ int execute_unprotect(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
-                                 &io_ctx, &image);
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  io_ctx.set_osdmap_full_try();
+  r = utils::open_image(io_ctx, image_name, false, &image);
   if (r < 0) {
     return r;
   }
@@ -470,10 +496,14 @@ int execute_set_limit(const po::variables_map &vm) {
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
     &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
 
   if (vm.count(at::LIMIT)) {
     limit = vm[at::LIMIT].as<uint64_t>();
   } else {
+    std::cerr << "rbd: must specify --limit <num>" << std::endl;
     return -ERANGE;
   }
 
@@ -509,6 +539,9 @@ int execute_clear_limit(const po::variables_map &vm) {
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
     &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
 
   librados::Rados rados;
   librados::IoCtx io_ctx;

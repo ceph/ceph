@@ -16,13 +16,13 @@
 #ifndef CEPH_MOSDREPSCRUB_H
 #define CEPH_MOSDREPSCRUB_H
 
-#include "msg/Message.h"
+#include "MOSDFastDispatchOp.h"
 
 /*
  * instruct an OSD initiate a replica scrub on a specific PG
  */
 
-struct MOSDRepScrub : public Message {
+struct MOSDRepScrub : public MOSDFastDispatchOp {
 
   static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 2;
@@ -37,15 +37,22 @@ struct MOSDRepScrub : public Message {
   bool deep;             // true if scrub should be deep
   uint32_t seed;         // seed value for digest calculation
 
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
+
   MOSDRepScrub()
-    : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       chunky(false),
       deep(false),
       seed(0) { }
 
   MOSDRepScrub(spg_t pgid, eversion_t scrub_to, epoch_t map_epoch,
                hobject_t start, hobject_t end, bool deep, uint32_t seed)
-    : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid),
       scrub_to(scrub_to),
       map_epoch(map_epoch),
@@ -57,11 +64,11 @@ struct MOSDRepScrub : public Message {
 
 
 private:
-  ~MOSDRepScrub() {}
+  ~MOSDRepScrub() override {}
 
 public:
-  const char *get_type_name() const { return "replica scrub"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "replica scrub"; }
+  void print(ostream& out) const override {
     out << "replica scrub(pg: ";
     out << pgid << ",from:" << scrub_from << ",to:" << scrub_to
         << ",epoch:" << map_epoch << ",start:" << start << ",end:" << end
@@ -72,7 +79,7 @@ public:
     out << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(pgid.pgid, payload);
     ::encode(scrub_from, payload);
     ::encode(scrub_to, payload);
@@ -84,7 +91,7 @@ public:
     ::encode(pgid.shard, payload);
     ::encode(seed, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid.pgid, p);
     ::decode(scrub_from, p);

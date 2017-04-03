@@ -747,6 +747,104 @@ def test_object_delete():
 
             check_bucket_eq(source_zone, target_zone, bucket)
 
+def get_latest_object_version(key):
+    for k in key.bucket.list_versions(key.name):
+        if k.is_latest:
+            return k
+    return None
+
+def test_versioned_object_incremental_sync():
+    buckets, zone_bucket = create_bucket_per_zone()
+
+    # enable versioning
+    all_zones = []
+    for zone, bucket in zone_bucket.items():
+        bucket.configure_versioning(True)
+        all_zones.append(zone)
+
+    realm.meta_checkpoint()
+
+    # upload a dummy object to each bucket and wait for sync. this forces each
+    # bucket to finish a full sync and switch to incremental
+    for source_zone, bucket in zone_bucket.items():
+        new_key(source_zone, bucket, 'dummy').set_contents_from_string('')
+        for target_zone in all_zones:
+            if source_zone.zone_name == target_zone.zone_name:
+                continue
+            realm.zone_bucket_checkpoint(target_zone, source_zone, bucket.name)
+
+    for _, bucket in zone_bucket.items():
+        # create and delete multiple versions of an object from each zone
+        for zone in all_zones:
+            obj = 'obj-' + zone.zone_name
+            k = new_key(zone, bucket, obj)
+
+            k.set_contents_from_string('version1')
+            v = get_latest_object_version(k)
+            log(10, 'version1 id=', v.version_id)
+            # don't delete version1 - this tests that the initial version
+            # doesn't get squashed into later versions
+
+            # create and delete the following object versions to test that
+            # the operations don't race with each other during sync
+            k.set_contents_from_string('version2')
+            v = get_latest_object_version(k)
+            log(10, 'version2 id=', v.version_id)
+            k.bucket.delete_key(obj, version_id=v.version_id)
+
+            k.set_contents_from_string('version3')
+            v = get_latest_object_version(k)
+            log(10, 'version3 id=', v.version_id)
+            k.bucket.delete_key(obj, version_id=v.version_id)
+
+    for source_zone, bucket in zone_bucket.items():
+        for target_zone in all_zones:
+            if source_zone.zone_name == target_zone.zone_name:
+                continue
+            realm.zone_bucket_checkpoint(target_zone, source_zone, bucket.name)
+            check_bucket_eq(source_zone, target_zone, bucket)
+
+def test_bucket_versioning():
+    buckets, zone_bucket = create_bucket_per_zone()
+
+    for zone, bucket in zone_bucket.items():
+        bucket.configure_versioning(True)
+        res = bucket.get_versioning_status()
+        key = 'Versioning'
+        assert(key in res and res[key] == 'Enabled')
+
+def test_bucket_acl():
+    buckets, zone_bucket = create_bucket_per_zone()
+
+    for zone, bucket in zone_bucket.items():
+        assert(len(bucket.get_acl().acl.grants) == 1) # single grant on owner
+        bucket.set_acl('public-read')
+        assert(len(bucket.get_acl().acl.grants) == 2) # new grant on AllUsers
+
+def test_bucket_delete_notempty():
+    buckets, zone_bucket = create_bucket_per_zone()
+    realm.meta_checkpoint()
+
+    for zone, bucket_name in zone_bucket.items():
+        # upload an object to each bucket on its own zone
+        conn = zone.get_connection(user)
+        bucket = conn.get_bucket(bucket_name)
+        k = bucket.new_key('foo')
+        k.set_contents_from_string('bar')
+        # attempt to delete the bucket before this object can sync
+        try:
+            conn.delete_bucket(bucket_name)
+        except boto.exception.S3ResponseError, e:
+            assert(e.error_code == 'BucketNotEmpty')
+            continue
+        assert False # expected 409 BucketNotEmpty
+
+    # assert that each bucket still exists on the master
+    z1 = realm.get_zone('us-1')
+    c1 = z1.get_connection(user)
+    for _, bucket_name in zone_bucket.items():
+        assert c1.get_bucket(bucket_name)
+
 def test_multi_period_incremental_sync():
     if len(realm.clusters) < 3:
         from nose.plugins.skip import SkipTest

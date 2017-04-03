@@ -16,9 +16,9 @@
 #ifndef CEPH_MOSDPGUPDATELOGMISSINGREPLY_H
 #define CEPH_MOSDPGUPDATELOGMISSINGREPLY_H
 
-#include "msg/Message.h"
+#include "MOSDFastDispatchOp.h"
 
-class MOSDPGUpdateLogMissingReply : public Message {
+class MOSDPGUpdateLogMissingReply : public MOSDFastDispatchOp {
 
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
@@ -37,9 +37,15 @@ public:
   pg_shard_t get_from() const {
     return pg_shard_t(get_source().num(), from);
   }
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
 
-  MOSDPGUpdateLogMissingReply() :
-    Message(
+  MOSDPGUpdateLogMissingReply()
+    : MOSDFastDispatchOp(
       MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY,
       HEAD_VERSION,
       COMPAT_VERSION)
@@ -49,7 +55,7 @@ public:
     shard_id_t from,
     epoch_t epoch,
     ceph_tid_t rep_tid)
-    : Message(
+    : MOSDFastDispatchOp(
         MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY,
         HEAD_VERSION,
         COMPAT_VERSION),
@@ -60,22 +66,22 @@ public:
     {}
 
 private:
-  ~MOSDPGUpdateLogMissingReply() {}
+  ~MOSDPGUpdateLogMissingReply() override {}
 
 public:
-  const char *get_type_name() const { return "PGUpdateLogMissingReply"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "PGUpdateLogMissingReply"; }
+  void print(ostream& out) const override {
     out << "pg_update_log_missing_reply(" << pgid << " epoch " << map_epoch
 	<< " rep_tid " << rep_tid << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(map_epoch, payload);
     ::encode(pgid, payload);
     ::encode(from, payload);
     ::encode(rep_tid, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(pgid, p);

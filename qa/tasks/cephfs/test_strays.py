@@ -2,8 +2,9 @@ import json
 import time
 import logging
 from textwrap import dedent
+import datetime
 import gevent
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.orchestra.run import CommandFailedError, Raw
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, for_teuthology
 
 log = logging.getLogger(__name__)
@@ -54,18 +55,51 @@ class TestStrays(CephFSTestCase):
         ))
 
         self.mount_a.run_python(create_script)
+
+        # That the dirfrag object is created
+        self.fs.mds_asok(["flush", "journal"])
+        dir_ino = self.mount_a.path_to_ino("delete_me")
+        self.assertTrue(self.fs.dirfrag_exists(dir_ino, 0))
+
+        # Remove everything
         self.mount_a.run_shell(["rm", "-rf", "delete_me"])
         self.fs.mds_asok(["flush", "journal"])
+
+        # That all the removed files get created as strays
         strays = self.get_mdc_stat("strays_created")
         self.assertEqual(strays, file_count + 1)
+
+        # That the strays all get enqueued for purge
         self.wait_until_equal(
-            lambda: self.get_mdc_stat("strays_purged"),
+            lambda: self.get_mdc_stat("strays_enqueued"),
             strays,
             timeout=600
 
         )
 
+        # That all the purge operations execute
+        self.wait_until_equal(
+            lambda: self.get_stat("purge_queue", "pq_executed"),
+            strays,
+            timeout=600
+        )
+
+        # That finally, the directory metadata object is gone
+        self.assertFalse(self.fs.dirfrag_exists(dir_ino, 0))
+
+        # That finally, the data objects are all gone
+        self.await_data_pool_empty()
+
     def _test_throttling(self, throttle_type):
+        self.data_log = []
+        try:
+            return self._do_test_throttling(throttle_type)
+        except:
+            for l in self.data_log:
+                log.info(",".join([l_.__str__() for l_ in l]))
+            raise
+
+    def _do_test_throttling(self, throttle_type):
         """
         That the mds_max_purge_ops setting is respected
         """
@@ -150,20 +184,25 @@ class TestStrays(CephFSTestCase):
         elapsed = 0
         files_high_water = 0
         ops_high_water = 0
+
         while True:
-            mdc_stats = self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']
+            stats = self.fs.mds_asok(['perf', 'dump'])
+            mdc_stats = stats['mds_cache']
+            pq_stats = stats['purge_queue']
             if elapsed >= purge_timeout:
                 raise RuntimeError("Timeout waiting for {0} inodes to purge, stats:{1}".format(total_inodes, mdc_stats))
 
             num_strays = mdc_stats['num_strays']
-            num_strays_purging = mdc_stats['num_strays_purging']
-            num_purge_ops = mdc_stats['num_purge_ops']
+            num_strays_purging = pq_stats['pq_executing']
+            num_purge_ops = pq_stats['pq_executing_ops']
+
+            self.data_log.append([datetime.datetime.now(), num_strays, num_strays_purging, num_purge_ops])
 
             files_high_water = max(files_high_water, num_strays_purging)
             ops_high_water = max(ops_high_water, num_purge_ops)
 
             total_strays_created = mdc_stats['strays_created']
-            total_strays_purged = mdc_stats['strays_purged']
+            total_strays_purged = pq_stats['pq_executed']
 
             if total_strays_purged == total_inodes:
                 log.info("Complete purge in {0} seconds".format(elapsed))
@@ -172,7 +211,9 @@ class TestStrays(CephFSTestCase):
                 raise RuntimeError("Saw more strays than expected, mdc stats: {0}".format(mdc_stats))
             else:
                 if throttle_type == self.OPS_THROTTLE:
-                    if num_strays_purging > mds_max_purge_files:
+                    # 11 is filer_max_purge_ops plus one for the backtrace:
+                    # limit is allowed to be overshot by this much.
+                    if num_purge_ops > mds_max_purge_ops + 11:
                         raise RuntimeError("num_purge_ops violates threshold {0}/{1}".format(
                             num_purge_ops, mds_max_purge_ops
                         ))
@@ -209,17 +250,31 @@ class TestStrays(CephFSTestCase):
                 ))
 
         # Sanity check all MDC stray stats
-        mdc_stats = self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']
+        stats = self.fs.mds_asok(['perf', 'dump'])
+        mdc_stats = stats['mds_cache']
+        pq_stats = stats['purge_queue']
         self.assertEqual(mdc_stats['num_strays'], 0)
-        self.assertEqual(mdc_stats['num_strays_purging'], 0)
         self.assertEqual(mdc_stats['num_strays_delayed'], 0)
-        self.assertEqual(mdc_stats['num_purge_ops'], 0)
+        self.assertEqual(pq_stats['pq_executing'], 0)
+        self.assertEqual(pq_stats['pq_executing_ops'], 0)
         self.assertEqual(mdc_stats['strays_created'], total_inodes)
-        self.assertEqual(mdc_stats['strays_purged'], total_inodes)
+        self.assertEqual(mdc_stats['strays_enqueued'], total_inodes)
+        self.assertEqual(pq_stats['pq_executed'], total_inodes)
 
     def get_mdc_stat(self, name, mds_id=None):
-        return self.fs.mds_asok(['perf', 'dump', "mds_cache", name],
-                                mds_id=mds_id)['mds_cache'][name]
+        return self.get_stat("mds_cache", name, mds_id)
+
+    def get_stat(self, subsys, name, mds_id=None):
+        return self.fs.mds_asok(['perf', 'dump', subsys, name],
+                                mds_id=mds_id)[subsys][name]
+
+    def _wait_for_counter(self, subsys, counter, expect_val, timeout=60,
+                          mds_id=None):
+        self.wait_until_equal(
+            lambda: self.get_stat(subsys, counter, mds_id),
+            expect_val=expect_val, timeout=timeout,
+            reject_fn=lambda x: x > expect_val
+        )
 
     def test_open_inode(self):
         """
@@ -236,11 +291,11 @@ class TestStrays(CephFSTestCase):
 
         # Write some bytes to a file
         size_mb = 8
-        self.mount_a.write_n_mb("open_file", size_mb)
-        open_file_ino = self.mount_a.path_to_ino("open_file")
 
         # Hold the file open
         p = self.mount_a.open_background("open_file")
+        self.mount_a.write_n_mb("open_file", size_mb)
+        open_file_ino = self.mount_a.path_to_ino("open_file")
 
         self.assertEqual(self.get_session(mount_a_client_id)['num_caps'], 2)
 
@@ -252,10 +307,10 @@ class TestStrays(CephFSTestCase):
             lambda: self.get_mdc_stat("num_strays"),
             expect_val=1, timeout=60, reject_fn=lambda x: x > 1)
 
-        # See that while the stray count has incremented, the purge count
-        # has not
+        # See that while the stray count has incremented, none have passed
+        # on to the purge queue
         self.assertEqual(self.get_mdc_stat("strays_created"), 1)
-        self.assertEqual(self.get_mdc_stat("strays_purged"), 0)
+        self.assertEqual(self.get_mdc_stat("strays_enqueued"), 0)
 
         # See that the client still holds 2 caps
         self.assertEqual(self.get_session(mount_a_client_id)['num_caps'], 2)
@@ -272,14 +327,12 @@ class TestStrays(CephFSTestCase):
             expect_val=1, timeout=60, reject_fn=lambda x: x > 2 or x < 1
         )
         # Wait to see the purge counter increment, stray count go to zero
-        self.wait_until_equal(
-            lambda: self.get_mdc_stat("strays_purged"),
-            expect_val=1, timeout=60, reject_fn=lambda x: x > 1
-        )
+        self._wait_for_counter("mds_cache", "strays_enqueued", 1)
         self.wait_until_equal(
             lambda: self.get_mdc_stat("num_strays"),
             expect_val=0, timeout=6, reject_fn=lambda x: x > 1
         )
+        self._wait_for_counter("purge_queue", "pq_executed", 1)
 
         # See that the data objects no longer exist
         self.assertTrue(self.fs.data_objects_absent(open_file_ino, size_mb * 1024 * 1024))
@@ -319,7 +372,7 @@ class TestStrays(CephFSTestCase):
         # stray did not advance to purging given time)
         time.sleep(30)
         self.assertTrue(self.fs.data_objects_present(ino, size_mb * 1024 * 1024))
-        self.assertEqual(self.get_mdc_stat("strays_purged"), 0)
+        self.assertEqual(self.get_mdc_stat("strays_enqueued"), 0)
 
         # See that before reintegration, the inode's backtrace points to a stray dir
         self.fs.mds_asok(['flush', 'journal'])
@@ -332,10 +385,7 @@ class TestStrays(CephFSTestCase):
         # See the reintegration counter increment
         # This should happen as a result of the eval_remote call on
         # responding to a client request.
-        self.wait_until_equal(
-            lambda: self.get_mdc_stat("strays_reintegrated"),
-            expect_val=1, timeout=60, reject_fn=lambda x: x > 1
-        )
+        self._wait_for_counter("mds_cache", "strays_reintegrated", 1)
 
         # Flush the journal
         self.fs.mds_asok(['flush', 'journal'])
@@ -349,10 +399,9 @@ class TestStrays(CephFSTestCase):
 
         # Now really delete it
         self.mount_a.run_shell(["rm", "-f", "file_c"])
-        self.wait_until_equal(
-            lambda: self.get_mdc_stat("strays_purged"),
-            expect_val=1, timeout=60, reject_fn=lambda x: x > 1
-        )
+        self._wait_for_counter("mds_cache", "strays_enqueued", 1)
+        self._wait_for_counter("purge_queue", "pq_executed", 1)
+
         self.assert_purge_idle()
         self.assertTrue(self.fs.data_objects_absent(ino, size_mb * 1024 * 1024))
 
@@ -361,7 +410,7 @@ class TestStrays(CephFSTestCase):
         # One time we reintegrated it
         self.assertEqual(self.get_mdc_stat("strays_reintegrated"), 1)
         # Then the second time we purged it
-        self.assertEqual(self.get_mdc_stat("strays_purged"), 1)
+        self.assertEqual(self.get_mdc_stat("strays_enqueued"), 1)
 
     def test_mv_hardlink_cleanup(self):
         """
@@ -397,10 +446,7 @@ class TestStrays(CephFSTestCase):
         # Trigger reintegration and wait for it to happen
         self.assertEqual(self.get_mdc_stat("strays_reintegrated"), 0)
         self.mount_a.run_shell(["mv", "linkto_b", "file_c"])
-        self.wait_until_equal(
-            lambda: self.get_mdc_stat("strays_reintegrated"),
-            expect_val=1, timeout=60, reject_fn=lambda x: x > 1
-        )
+        self._wait_for_counter("mds_cache", "strays_reintegrated", 1)
 
         self.fs.mds_asok(['flush', 'journal'])
 
@@ -408,16 +454,10 @@ class TestStrays(CephFSTestCase):
         self.assertEqual(post_reint_bt['ancestors'][0]['dname'], "file_c")
         self.assertEqual(self.get_mdc_stat("num_strays"), 0)
 
-    def test_migration_on_shutdown(self):
-        """
-        That when an MDS rank is shut down, any not-yet-purging strays
-        are migrated to another MDS's stray dir.
-        """
-
+    def _setup_two_ranks(self):
         # Set up two MDSs
-        self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "allow_multimds",
-                                                   "true", "--yes-i-really-mean-it")
-        self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "2")
+        self.fs.set_allow_multimds(True)
+        self.fs.set_max_mds(2)
 
         # See that we have two active MDSs
         self.wait_until_equal(lambda: len(self.fs.get_active_names()), 2, 30,
@@ -435,21 +475,17 @@ class TestStrays(CephFSTestCase):
             self.mds_cluster.mds_stop(unneeded_mds)
             self.mds_cluster.mds_fail(unneeded_mds)
 
-        # Set the purge file throttle to 0 on MDS rank 1
-        self.set_conf("mds.{0}".format(rank_1_id), 'mds_max_purge_files', "0")
-        self.fs.mds_fail_restart(rank_1_id)
-        self.wait_until_equal(lambda: len(self.fs.get_active_names()), 2, 30,
-                              reject_fn=lambda v: v > 2 or v < 1)
+        return rank_0_id, rank_1_id
 
-        # Create a file
-        # Export dir on an empty dir doesn't work, so we create the file before
-        # calling export dir in order to kick a dirfrag into existence
-        size_mb = 8
-        self.mount_a.run_shell(["mkdir", "ALPHA"])
-        self.mount_a.write_n_mb("ALPHA/alpha_file", size_mb)
-        ino = self.mount_a.path_to_ino("ALPHA/alpha_file")
-
-        result = self.fs.mds_asok(["export", "dir", "/ALPHA", "1"], rank_0_id)
+    def _force_migrate(self, from_id, to_id, path, watch_ino):
+        """
+        :param from_id: MDS id currently containing metadata
+        :param to_id: MDS id to move it to
+        :param path: Filesystem path (string) to move
+        :param watch_ino: Inode number to look for at destination to confirm move
+        :return: None
+        """
+        result = self.fs.mds_asok(["export", "dir", path, "1"], from_id)
         self.assertEqual(result["return_code"], 0)
 
         # Poll the MDS cache dump to watch for the export completing
@@ -457,9 +493,9 @@ class TestStrays(CephFSTestCase):
         migrate_timeout = 60
         migrate_elapsed = 0
         while not migrated:
-            data = self.fs.mds_asok(["dump", "cache"], rank_1_id)
+            data = self.fs.mds_asok(["dump", "cache"], to_id)
             for inode_data in data:
-                if inode_data['ino'] == ino:
+                if inode_data['ino'] == watch_ino:
                     log.debug("Found ino in cache: {0}".format(json.dumps(inode_data, indent=2)))
                     if inode_data['is_auth'] is True:
                         migrated = True
@@ -472,42 +508,96 @@ class TestStrays(CephFSTestCase):
                     migrate_elapsed += 1
                     time.sleep(1)
 
-        # Delete the file on rank 1
-        self.mount_a.run_shell(["rm", "-f", "ALPHA/alpha_file"])
+    def _is_stopped(self, rank):
+        mds_map = self.fs.get_mds_map()
+        return rank not in [i['rank'] for i in mds_map['info'].values()]
 
-        # See the stray counter increment, but the purge counter doesn't
-        # See that the file objects are still on disk
-        self.wait_until_equal(
-            lambda: self.get_mdc_stat("num_strays", rank_1_id),
-            expect_val=1, timeout=60, reject_fn=lambda x: x > 1)
-        self.assertEqual(self.get_mdc_stat("strays_created", rank_1_id), 1)
-        time.sleep(60)  # period that we want to see if it gets purged
-        self.assertEqual(self.get_mdc_stat("strays_purged", rank_1_id), 0)
-        self.assertTrue(self.fs.data_objects_present(ino, size_mb * 1024 * 1024))
+    def test_purge_on_shutdown(self):
+        """
+        That when an MDS rank is shut down, its purge queue is
+        drained in the process.
+        """
+        rank_0_id, rank_1_id = self._setup_two_ranks()
+
+        self.set_conf("mds.{0}".format(rank_1_id), 'mds_max_purge_files', "0")
+        self.mds_cluster.mds_fail_restart(rank_1_id)
+        self.fs.wait_for_daemons()
+
+        file_count = 5
+
+        self.mount_a.create_n_files("delete_me/file", file_count)
+
+        self._force_migrate(rank_0_id, rank_1_id, "/delete_me",
+                            self.mount_a.path_to_ino("delete_me/file_0"))
+
+        self.mount_a.run_shell(["rm", "-rf", Raw("delete_me/*")])
+        self.mount_a.umount_wait()
+
+        # See all the strays go into purge queue
+        self._wait_for_counter("mds_cache", "strays_created", file_count, mds_id=rank_1_id)
+        self._wait_for_counter("mds_cache", "strays_enqueued", file_count, mds_id=rank_1_id)
+        self.assertEqual(self.get_stat("mds_cache", "num_strays", mds_id=rank_1_id), 0)
+
+        # See nothing get purged from the purge queue (yet)
+        time.sleep(10)
+        self.assertEqual(self.get_stat("purge_queue", "pq_executed", mds_id=rank_1_id), 0)
+
+        # Shut down rank 1
+        self.fs.set_max_mds(1)
+        self.fs.deactivate(1)
+
+        # It shouldn't proceed past stopping because its still not allowed
+        # to purge
+        time.sleep(10)
+        self.assertEqual(self.get_stat("purge_queue", "pq_executed", mds_id=rank_1_id), 0)
+        self.assertFalse(self._is_stopped(1))
+
+        # Permit the daemon to start purging again
+        self.fs.mon_manager.raw_cluster_cmd('tell', 'mds.{0}'.format(rank_1_id),
+                                            'injectargs',
+                                            "--mds_max_purge_files 100")
+
+        # It should now proceed through shutdown
+        self.wait_until_true(
+            lambda: self._is_stopped(1),
+            timeout=60
+        )
+
+        # ...and in the process purge all that data
+        self.await_data_pool_empty()
+
+    def test_migration_on_shutdown(self):
+        """
+        That when an MDS rank is shut down, any non-purgeable strays
+        get migrated to another rank.
+        """
+
+        rank_0_id, rank_1_id = self._setup_two_ranks()
+
+        # Create a non-purgeable stray in a ~mds1 stray directory
+        # by doing a hard link and deleting the original file
+        self.mount_a.run_shell(["mkdir", "mydir"])
+        self.mount_a.run_shell(["touch", "mydir/original"])
+        self.mount_a.run_shell(["ln", "mydir/original", "mydir/linkto"])
+
+        self._force_migrate(rank_0_id, rank_1_id, "/mydir",
+                            self.mount_a.path_to_ino("mydir/original"))
+
+        self.mount_a.run_shell(["rm", "-f", "mydir/original"])
+        self.mount_a.umount_wait()
+
+        self._wait_for_counter("mds_cache", "strays_created", 1,
+                               mds_id=rank_1_id)
 
         # Shut down rank 1
         self.fs.mon_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "1")
         self.fs.mon_manager.raw_cluster_cmd_result('mds', 'deactivate', "1")
 
         # Wait til we get to a single active MDS mdsmap state
-        def is_stopped():
-            mds_map = self.fs.get_mds_map()
-            return 1 not in [i['rank'] for i in mds_map['info'].values()]
-
-        self.wait_until_true(is_stopped, timeout=120)
+        self.wait_until_true(lambda: self._is_stopped(1), timeout=120)
 
         # See that the stray counter on rank 0 has incremented
         self.assertEqual(self.get_mdc_stat("strays_created", rank_0_id), 1)
-
-        # Wait til the purge counter on rank 0 increments
-        self.wait_until_equal(
-            lambda: self.get_mdc_stat("strays_purged", rank_0_id),
-            1, timeout=60, reject_fn=lambda x: x > 1)
-
-        # See that the file objects no longer exist
-        self.assertTrue(self.fs.data_objects_absent(ino, size_mb * 1024 * 1024))
-
-        self.await_data_pool_empty()
 
     def assert_backtrace(self, ino, expected_path):
         """
@@ -530,11 +620,12 @@ class TestStrays(CephFSTestCase):
         no ongoing purge activity.  Sanity check for when PurgeQueue should
         be idle.
         """
-        stats = self.fs.mds_asok(['perf', 'dump', "mds_cache"])['mds_cache']
-        self.assertEqual(stats["num_strays"], 0)
-        self.assertEqual(stats["num_strays_purging"], 0)
-        self.assertEqual(stats["num_strays_delayed"], 0)
-        self.assertEqual(stats["num_purge_ops"], 0)
+        mdc_stats = self.fs.mds_asok(['perf', 'dump', "mds_cache"])['mds_cache']
+        pq_stats = self.fs.mds_asok(['perf', 'dump', "purge_queue"])['purge_queue']
+        self.assertEqual(mdc_stats["num_strays"], 0)
+        self.assertEqual(mdc_stats["num_strays_delayed"], 0)
+        self.assertEqual(pq_stats["pq_executing"], 0)
+        self.assertEqual(pq_stats["pq_executing_ops"], 0)
 
     def test_mv_cleanup(self):
         """
@@ -558,10 +649,9 @@ class TestStrays(CephFSTestCase):
         # See that stray counter increments
         self.assertEqual(self.get_mdc_stat("strays_created"), 1)
         # Wait for purge counter to increment
-        self.wait_until_equal(
-            lambda: self.get_mdc_stat("strays_purged"),
-            expect_val=1, timeout=60, reject_fn=lambda x: x > 1
-        )
+        self._wait_for_counter("mds_cache", "strays_enqueued", 1)
+        self._wait_for_counter("purge_queue", "pq_executed", 1)
+
         self.assert_purge_idle()
 
         # file_b should have been purged
@@ -655,10 +745,8 @@ class TestStrays(CephFSTestCase):
         self.fs.mds_asok(["flush", "journal"])
 
         # See that a purge happens now
-        self.wait_until_equal(
-            lambda: self.get_mdc_stat("strays_purged"),
-            expect_val=2, timeout=60, reject_fn=lambda x: x > 1
-        )
+        self._wait_for_counter("mds_cache", "strays_enqueued", 2)
+        self._wait_for_counter("purge_queue", "pq_executed", 2)
 
         self.assertTrue(self.fs.data_objects_absent(file_a_ino, size_mb * 1024 * 1024))
         self.await_data_pool_empty()
@@ -693,7 +781,7 @@ class TestStrays(CephFSTestCase):
         That unlinking fails when the stray directory fragment becomes too large and that unlinking may continue once those strays are purged.
         """
 
-        self.fs.mon_manager.raw_cluster_cmd("mds", "set", "allow_dirfrags", "true", "--yes-i-really-mean-it")
+        self.fs.set_allow_dirfrags(True)
 
         LOW_LIMIT = 50
         for mds in self.fs.get_daemon_names():
@@ -776,11 +864,8 @@ class TestStrays(CephFSTestCase):
         strays_after = self.get_mdc_stat("strays_created")
         self.assertGreaterEqual(strays_after-strays_before, LOW_LIMIT)
 
-        self.wait_until_equal(
-            lambda: self.get_mdc_stat("strays_purged"),
-            strays_after,
-            timeout=600
-        )
+        self._wait_for_counter("mds_cache", "strays_enqueued", strays_after)
+        self._wait_for_counter("purge_queue", "pq_executed", strays_after)
 
         self.mount_a.run_python(dedent("""
             import os
@@ -796,3 +881,85 @@ class TestStrays(CephFSTestCase):
         path=self.mount_a.mountpoint,
         file_count=LOW_LIMIT
         )))
+
+    def test_purge_queue_upgrade(self):
+        """
+        That when starting on a system with no purge queue in the metadata
+        pool, we silently create one.
+        :return:
+        """
+
+        self.mds_cluster.mds_stop()
+        self.mds_cluster.mds_fail()
+        self.fs.rados(["rm", "500.00000000"])
+        self.mds_cluster.mds_restart()
+        self.fs.wait_for_daemons()
+
+    def test_purge_queue_op_rate(self):
+        """
+        A busy purge queue is meant to aggregate operations sufficiently
+        that our RADOS ops to the metadata pool are not O(files).  Check
+        that that is so.
+        :return:
+        """
+
+        # For low rates of deletion, the rate of metadata ops actually
+        # will be o(files), so to see the desired behaviour we have to give
+        # the system a significant quantity, i.e. an order of magnitude
+        # more than the number of files it will purge at one time.
+
+        max_purge_files = 2
+
+        self.set_conf('mds', 'mds_max_purge_files', "%d" % max_purge_files)
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
+
+        phase_1_files = 256
+        phase_2_files = 512
+
+        self.mount_a.run_shell(["mkdir", "phase1"])
+        self.mount_a.create_n_files("phase1/file", phase_1_files)
+
+        self.mount_a.run_shell(["mkdir", "phase2"])
+        self.mount_a.create_n_files("phase2/file", phase_2_files)
+
+        def unlink_and_count_ops(path, expected_deletions):
+            initial_ops = self.get_stat("objecter", "op")
+            initial_pq_executed = self.get_stat("purge_queue", "pq_executed")
+
+            self.mount_a.run_shell(["rm", "-rf", path])
+
+            self._wait_for_counter(
+                "purge_queue", "pq_executed", initial_pq_executed + expected_deletions
+            )
+
+            final_ops = self.get_stat("objecter", "op")
+
+            # Calculation of the *overhead* operations, i.e. do not include
+            # the operations where we actually delete files.
+            return final_ops - initial_ops - expected_deletions
+
+        self.fs.mds_asok(['flush', 'journal'])
+        phase1_ops = unlink_and_count_ops("phase1/", phase_1_files + 1)
+
+        self.fs.mds_asok(['flush', 'journal'])
+        phase2_ops = unlink_and_count_ops("phase2/", phase_2_files + 1)
+
+        log.info("Phase 1: {0}".format(phase1_ops))
+        log.info("Phase 2: {0}".format(phase2_ops))
+
+        # The success criterion is that deleting double the number
+        # of files doesn't generate double the number of overhead ops
+        # -- this comparison is a rough approximation of that rule.
+        self.assertTrue(phase2_ops < phase1_ops * 1.25)
+
+        # Finally, check that our activity did include properly quiescing
+        # the queue (i.e. call to Journaler::write_head in the right place),
+        # by restarting the MDS and checking that it doesn't try re-executing
+        # any of the work we did.
+        self.fs.mds_asok(['flush', 'journal'])  # flush to ensure no strays
+                                                # hanging around
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
+        time.sleep(10)
+        self.assertEqual(self.get_stat("purge_queue", "pq_executed"), 0)

@@ -48,7 +48,7 @@ class TestMockImageSyncSyncPointCreateRequest : public TestMockFixture {
 public:
   typedef SyncPointCreateRequest<librbd::MockTestImageCtx> MockSyncPointCreateRequest;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;
@@ -102,7 +102,10 @@ TEST_F(TestMockImageSyncSyncPointCreateRequest, Success) {
 }
 
 TEST_F(TestMockImageSyncSyncPointCreateRequest, ResyncSuccess) {
-  m_client_meta.sync_points.emplace_front("start snap", "", boost::none);
+  m_client_meta.sync_points.emplace_front(cls::rbd::UserSnapshotNamespace(),
+					  "start snap",
+					  "",
+					  boost::none);
   auto sync_point = m_client_meta.sync_points.front();
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);

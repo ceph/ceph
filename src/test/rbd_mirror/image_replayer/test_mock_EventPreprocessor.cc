@@ -46,7 +46,7 @@ class TestMockImageReplayerEventPreprocessor : public TestMockFixture {
 public:
   typedef EventPreprocessor<librbd::MockTestImageCtx> MockEventPreprocessor;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;
@@ -120,7 +120,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapMapPrune) {
   expect_update_client(mock_remote_journaler, 0);
 
   mock_local_image_ctx.snap_info = {
-    {6, librbd::SnapInfo{"snap", cls::rbd::UserSnapshotNamespace(), 0U, {}, 0U, 0U}}};
+    {6, librbd::SnapInfo{"snap", cls::rbd::UserSnapshotNamespace(), 0U, {}, 0U, 0U, utime_t()}}};
   m_client_meta.snap_seqs = {{1, 2}, {3, 4}, {5, 6}};
   MockEventPreprocessor event_preprocessor(mock_local_image_ctx,
                                            mock_remote_journaler,
@@ -144,9 +144,9 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapRename) {
   expect_image_refresh(mock_local_image_ctx, 0);
   expect_update_client(mock_remote_journaler, 0);
 
-  mock_local_image_ctx.snap_ids = {{"snap", 6}};
+  mock_local_image_ctx.snap_ids = {{{cls::rbd::UserSnapshotNamespace(), "snap"}, 6}};
   mock_local_image_ctx.snap_info = {
-    {6, librbd::SnapInfo{"snap", cls::rbd::UserSnapshotNamespace(), 0U, {}, 0U, 0U}}};
+    {6, librbd::SnapInfo{"snap", cls::rbd::UserSnapshotNamespace(), 0U, {}, 0U, 0U, utime_t()}}};
   MockEventPreprocessor event_preprocessor(mock_local_image_ctx,
                                            mock_remote_journaler,
                                            "local mirror uuid",
@@ -197,7 +197,7 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessSnapRenameKnown) {
   expect_image_refresh(mock_local_image_ctx, 0);
 
   mock_local_image_ctx.snap_info = {
-    {6, librbd::SnapInfo{"snap", cls::rbd::UserSnapshotNamespace(), 0U, {}, 0U, 0U}}};
+    {6, librbd::SnapInfo{"snap", cls::rbd::UserSnapshotNamespace(), 0U, {}, 0U, 0U, utime_t()}}};
   m_client_meta.snap_seqs = {{5, 6}};
   MockEventPreprocessor event_preprocessor(mock_local_image_ctx,
                                            mock_remote_journaler,
@@ -244,9 +244,9 @@ TEST_F(TestMockImageReplayerEventPreprocessor, PreprocessClientUpdateError) {
   expect_image_refresh(mock_local_image_ctx, 0);
   expect_update_client(mock_remote_journaler, -EINVAL);
 
-  mock_local_image_ctx.snap_ids = {{"snap", 6}};
+  mock_local_image_ctx.snap_ids = {{{cls::rbd::UserSnapshotNamespace(), "snap"}, 6}};
   mock_local_image_ctx.snap_info = {
-    {6, librbd::SnapInfo{"snap", cls::rbd::UserSnapshotNamespace(), 0U, {}, 0U, 0U}}};
+    {6, librbd::SnapInfo{"snap", cls::rbd::UserSnapshotNamespace(), 0U, {}, 0U, 0U, utime_t()}}};
   MockEventPreprocessor event_preprocessor(mock_local_image_ctx,
                                            mock_remote_journaler,
                                            "local mirror uuid",

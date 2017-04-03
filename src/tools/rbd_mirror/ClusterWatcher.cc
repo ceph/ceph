@@ -1,13 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "ClusterWatcher.h"
 #include "common/debug.h"
 #include "common/errno.h"
-
 #include "librbd/internal.h"
+#include "librbd/api/Mirror.h"
 
-#include "ClusterWatcher.h"
-
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::ClusterWatcher:" << this << " " \
@@ -97,7 +97,7 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
     }
 
     rbd_mirror_mode_t mirror_mode;
-    r = librbd::mirror_mode_get(ioctx, &mirror_mode);
+    r = librbd::api::Mirror<>::mode_get(ioctx, &mirror_mode);
     if (r < 0) {
       derr << "could not tell whether mirroring was enabled for " << pool_name
 	   << " : " << cpp_strerror(r) << dendl;
@@ -109,7 +109,7 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers,
     }
 
     vector<librbd::mirror_peer_t> configs;
-    r = librbd::mirror_peer_list(ioctx, &configs);
+    r = librbd::api::Mirror<>::peer_list(ioctx, &configs);
     if (r < 0) {
       derr << "error reading mirroring config for pool " << pool_name
 	   << cpp_strerror(r) << dendl;

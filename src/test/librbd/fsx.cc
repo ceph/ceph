@@ -88,6 +88,7 @@ int			logcount = 0;	/* total ops */
  * TRUNCATE:	-	4
  * FALLOCATE:	-	5
  * PUNCH HOLE:	-	6
+ * WRITESAME:	-	7
  *
  * When mapped read/writes are disabled, they are simply converted to normal
  * reads and writes. When fallocate/fpunch calls are disabled, they are
@@ -111,10 +112,11 @@ int			logcount = 0;	/* total ops */
 #define OP_TRUNCATE	4
 #define OP_FALLOCATE	5
 #define OP_PUNCH_HOLE	6
+#define OP_WRITESAME	7
 /* rbd-specific operations */
-#define OP_CLONE        7
-#define OP_FLATTEN	8
-#define OP_MAX_FULL	9
+#define OP_CLONE        8
+#define OP_FLATTEN	9
+#define OP_MAX_FULL	10
 
 /* operation modifiers */
 #define OP_CLOSEOPEN	100
@@ -272,12 +274,12 @@ struct ReplayHandler : public journal::ReplayHandler {
                   on_finish(on_finish) {
         }
 
-        virtual void get() {
+        void get() override {
         }
-        virtual void put() {
+        void put() override {
         }
 
-        virtual void handle_entries_available() {
+        void handle_entries_available() override {
                 while (true) {
                         journal::ReplayEntry replay_entry;
                         if (!journaler->try_pop_front(&replay_entry)) {
@@ -288,7 +290,7 @@ struct ReplayHandler : public journal::ReplayHandler {
                 }
         }
 
-        virtual void handle_complete(int r) {
+        void handle_complete(int r) override {
                 on_finish->complete(r);
         }
 };
@@ -518,6 +520,8 @@ struct rbd_operations {
 		     const char *dst_imagename, int *order, int stripe_unit,
 		     int stripe_count);
 	int (*flatten)(struct rbd_ctx *ctx);
+	ssize_t (*writesame)(struct rbd_ctx *ctx, uint64_t off, size_t len,
+			     const char *buf, size_t data_len);
 };
 
 char *pool;			/* name of the pool our test image is in */
@@ -665,6 +669,26 @@ librbd_discard(struct rbd_ctx *ctx, uint64_t off, uint64_t len)
 	return librbd_verify_object_map(ctx);
 }
 
+ssize_t
+librbd_writesame(struct rbd_ctx *ctx, uint64_t off, size_t len,
+                 const char *buf, size_t data_len)
+{
+	ssize_t n;
+	int ret;
+
+	n = rbd_writesame(ctx->image, off, len, buf, data_len, 0);
+	if (n < 0) {
+		prt("rbd_writesame(%llu, %zu) failed\n", off, len);
+		return n;
+	}
+
+	ret = librbd_verify_object_map(ctx);
+	if (ret < 0) {
+		return ret;
+	}
+	return n;
+}
+
 int
 librbd_get_size(struct rbd_ctx *ctx, uint64_t *size)
 {
@@ -781,7 +805,8 @@ const struct rbd_operations librbd_operations = {
 	librbd_get_size,
 	librbd_resize,
 	librbd_clone,
-	librbd_flatten
+	librbd_flatten,
+	librbd_writesame,
 };
 
 int
@@ -1034,6 +1059,7 @@ const struct rbd_operations krbd_operations = {
 	krbd_resize,
 	krbd_clone,
 	krbd_flatten,
+	NULL,
 };
 
 int
@@ -1156,6 +1182,7 @@ const struct rbd_operations nbd_operations = {
 	krbd_resize,
 	nbd_clone,
 	krbd_flatten,
+	NULL,
 };
 
 struct rbd_ctx ctx = RBD_CTX_INIT;
@@ -1281,6 +1308,14 @@ logdump(void)
 			if (badoff >= lp->args[0] && badoff <
 						     lp->args[0] + lp->args[1])
 				prt("\t******PPPP");
+			break;
+		case OP_WRITESAME:
+			prt("WRITESAME    0x%x thru 0x%x\t(0x%x bytes) data_size 0x%x",
+			    lp->args[0], lp->args[0] + lp->args[1] - 1,
+			    lp->args[1], lp->args[2]);
+			if (badoff >= lp->args[0] &&
+				badoff < lp->args[0] + lp->args[1])
+				prt("\t***WSWSWSWS");
 			break;
 		case OP_CLONE:
 			prt("CLONE");
@@ -1794,6 +1829,101 @@ do_punch_hole(unsigned offset, unsigned length)
 	memset(good_buf + max_offset, '\0', max_len);
 }
 
+unsigned get_data_size(unsigned size)
+{
+	unsigned i;
+	unsigned hint;
+	unsigned max = sqrt((double)size) + 1;
+	unsigned good = 1;
+	unsigned curr = good;
+
+	hint = get_random() % max;
+
+	for (i = 1; i < max && curr < hint; i++) {
+		if (size % i == 0) {
+			good = curr;
+			curr = i;
+		}
+	}
+
+	if (curr == hint)
+		good = curr;
+
+	return good;
+}
+
+void
+dowritesame(unsigned offset, unsigned size)
+{
+	ssize_t ret;
+	off_t newsize;
+	unsigned buf_off;
+	unsigned data_size;
+	int n;
+
+	offset -= offset % writebdy;
+	if (o_direct)
+		size -= size % writebdy;
+	if (size == 0) {
+		if (!quiet && testcalls > simulatedopcount && !o_direct)
+			prt("skipping zero size writesame\n");
+		log4(OP_SKIPPED, OP_WRITESAME, offset, size);
+		return;
+	}
+
+	data_size = get_data_size(size);
+
+	log4(OP_WRITESAME, offset, size, data_size);
+
+	gendata(original_buf, good_buf, offset, data_size);
+	if (file_size < offset + size) {
+		newsize = ceil(((double)offset + size) / truncbdy) * truncbdy;
+		if (file_size < newsize)
+			memset(good_buf + file_size, '\0', newsize - file_size);
+		file_size = newsize;
+		if (lite) {
+			warn("Lite file size bug in fsx!");
+			report_failure(162);
+		}
+		ret = ops->resize(&ctx, newsize);
+		if (ret < 0) {
+			prterrcode("dowritesame: ops->resize", ret);
+			report_failure(163);
+		}
+	}
+
+	for (n = size / data_size, buf_off = data_size; n > 1; n--) {
+		memcpy(good_buf + offset + buf_off, good_buf + offset, data_size);
+		buf_off += data_size;
+	}
+
+	if (testcalls <= simulatedopcount)
+		return;
+
+	if (!quiet &&
+		((progressinterval && testcalls % progressinterval == 0) ||
+		       (debug &&
+		       (monitorstart == -1 ||
+			(static_cast<long>(offset + size) > monitorstart &&
+			 (monitorend == -1 ||
+			  static_cast<long>(offset) <= monitorend))))))
+		prt("%lu writesame\t0x%x thru\t0x%x\tdata_size\t0x%x(0x%x bytes)\n", testcalls,
+		    offset, offset + size - 1, data_size, size);
+
+	ret = ops->writesame(&ctx, offset, size, good_buf + offset, data_size);
+	if (ret != (ssize_t)size) {
+		if (ret < 0)
+			prterrcode("dowritesame: ops->writesame", ret);
+		else
+			prt("short writesame: 0x%x bytes instead of 0x%x\n",
+			    ret, size);
+		report_failure(164);
+	}
+
+	if (flush_enabled)
+		doflush(offset, size);
+}
+
 void clone_filename(char *buf, size_t len, int clones)
 {
 	snprintf(buf, len, "%s/fsx-%s-parent%d",
@@ -2165,6 +2295,12 @@ test(void)
 			goto out;
 		}
 		break;
+	case OP_WRITESAME:
+		/* writesame not implemented */
+		if (!ops->writesame) {
+			log4(OP_SKIPPED, OP_WRITESAME, offset, size);
+			goto out;
+		}
 	}
 
 	switch (op) {
@@ -2197,6 +2333,11 @@ test(void)
 	case OP_PUNCH_HOLE:
 		TRIM_OFF_LEN(offset, size, file_size);
 		do_punch_hole(offset, size);
+		break;
+
+	case OP_WRITESAME:
+		TRIM_OFF_LEN(offset, size, maxfilelen);
+		dowritesame(offset, size);
 		break;
 
 	case OP_CLONE:

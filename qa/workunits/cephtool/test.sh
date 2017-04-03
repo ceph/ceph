@@ -201,7 +201,7 @@ function test_mon_injectargs()
                  ceph tell osd.0 injectargs -- '--osd_op_history_duration'
 
   ceph tell osd.0 injectargs -- '--mon-lease 6' >& $TMPFILE || return 1
-  check_response "mon_lease = '6' (unchangeable)"
+  check_response "mon_lease = '6' (not observed, change may require restart)"
 
   # osd-scrub-auto-repair-num-errors is an OPT_U32, so -1 is not a valid setting
   expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1
@@ -370,6 +370,15 @@ function test_tiering()
   ceph osd pool delete snap_base snap_base --yes-i-really-really-mean-it
   ceph osd pool delete snap_cache snap_cache --yes-i-really-really-mean-it
 
+  # make sure we can't create snapshot on tier
+  ceph osd pool create basex 2
+  ceph osd pool create cachex 2
+  ceph osd tier add basex cachex
+  expect_false ceph osd pool mksnap cache snapname
+  ceph osd tier remove basex cachex
+  ceph osd pool delete basex basex --yes-i-really-really-mean-it
+  ceph osd pool delete cachex cachex --yes-i-really-really-mean-it
+
   # make sure we can't create an ec pool tier
   ceph osd pool create eccache 2 2 erasure
   ceph osd pool create repbase 2
@@ -509,6 +518,9 @@ function test_auth()
   #
   local auid=444
   ceph-authtool --create-keyring --name client.TEST --gen-key --set-uid $auid TEST-keyring
+  expect_false ceph auth import --in-file TEST-keyring
+  rm TEST-keyring
+  ceph-authtool --create-keyring --name client.TEST --gen-key --cap mon "allow r" --set-uid $auid TEST-keyring
   ceph auth import --in-file TEST-keyring
   rm TEST-keyring
   ceph auth get client.TEST > $TMPFILE
@@ -524,8 +536,10 @@ function test_auth()
 
 function test_auth_profiles()
 {
-  ceph auth add client.xx-profile-ro mon 'allow profile read-only'
-  ceph auth add client.xx-profile-rw mon 'allow profile read-write'
+  ceph auth add client.xx-profile-ro mon 'allow profile read-only' \
+       mgr 'allow profile read-only'
+  ceph auth add client.xx-profile-rw mon 'allow profile read-write' \
+       mgr 'allow profile read-write'
   ceph auth add client.xx-profile-rd mon 'allow profile role-definer'
 
   ceph auth export > client.xx.keyring
@@ -626,7 +640,6 @@ function test_mon_misc()
   grep GLOBAL $TMPFILE
   grep -v DIRTY $TMPFILE
   ceph df detail > $TMPFILE
-  grep CATEGORY $TMPFILE
   grep DIRTY $TMPFILE
   ceph df --format json > $TMPFILE
   grep 'total_bytes' $TMPFILE
@@ -802,11 +815,6 @@ function test_mon_mds()
   # the "current_epoch + 1" checking below if they're generating updates
   fail_all_mds $FS_NAME
 
-  # Check for default crash_replay_interval set automatically in 'fs new'
-  #This may vary based on ceph.conf (e.g., it's 5 in teuthology runs)
-  #ceph osd dump | grep fs_data > $TMPFILE
-  #check_response "crash_replay_interval 45 "
-
   ceph mds compat show
   expect_false ceph mds deactivate 2
   ceph mds dump
@@ -915,7 +923,7 @@ function test_mon_mds()
   ceph fs rm $FS_NAME --yes-i-really-mean-it
 
   set +e
-  ceph fs new $FS_NAME fs_metadata mds-ec-pool 2>$TMPFILE
+  ceph fs new $FS_NAME fs_metadata mds-ec-pool --force 2>$TMPFILE
   check_response 'erasure-code' $? 22
   ceph fs new $FS_NAME mds-ec-pool fs_data 2>$TMPFILE
   check_response 'erasure-code' $? 22
@@ -932,13 +940,13 @@ function test_mon_mds()
   # Use of a readonly tier should be forbidden
   ceph osd tier cache-mode mds-tier readonly --yes-i-really-mean-it
   set +e
-  ceph fs new $FS_NAME fs_metadata mds-ec-pool 2>$TMPFILE
+  ceph fs new $FS_NAME fs_metadata mds-ec-pool --force 2>$TMPFILE
   check_response 'has a write tier (mds-tier) that is configured to forward' $? 22
   set -e
 
   # Use of a writeback tier should enable FS creation
   ceph osd tier cache-mode mds-tier writeback
-  ceph fs new $FS_NAME fs_metadata mds-ec-pool
+  ceph fs new $FS_NAME fs_metadata mds-ec-pool --force
 
   # While a FS exists using the tiered pools, I should not be allowed
   # to remove the tier
@@ -954,7 +962,7 @@ function test_mon_mds()
 
   # ... but we should be forbidden from using the cache pool in the FS directly.
   set +e
-  ceph fs new $FS_NAME fs_metadata mds-tier 2>$TMPFILE
+  ceph fs new $FS_NAME fs_metadata mds-tier --force 2>$TMPFILE
   check_response 'in use as a cache tier' $? 22
   ceph fs new $FS_NAME mds-tier fs_data 2>$TMPFILE
   check_response 'in use as a cache tier' $? 22
@@ -967,7 +975,7 @@ function test_mon_mds()
   ceph osd tier remove mds-ec-pool mds-tier
 
   # Create a FS using the 'cache' pool now that it's no longer a tier
-  ceph fs new $FS_NAME fs_metadata mds-tier
+  ceph fs new $FS_NAME fs_metadata mds-tier --force
 
   # We should be forbidden from using this pool as a tier now that
   # it's in use for CephFS
@@ -981,7 +989,7 @@ function test_mon_mds()
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
 
   # Create a FS and check that we can subsequently add a cache tier to it
-  ceph fs new $FS_NAME fs_metadata fs_data
+  ceph fs new $FS_NAME fs_metadata fs_data --force
 
   # Adding overlay to FS pool should be permitted, RADOS clients handle this.
   ceph osd tier add fs_metadata mds-tier
@@ -1039,6 +1047,12 @@ function test_mon_mon()
   [ -s $TEMP_DIR/monmap.$$ ]
   # ceph mon tell
   ceph mon_status
+
+  # test mon features
+  ceph mon feature list
+  ceph mon feature set kraken --yes-i-really-mean-it
+  expect_false ceph mon feature set abcd
+  expect_false ceph mon feature set abcd --yes-i-really-mean-it
 }
 
 function test_mon_osd()
@@ -1099,12 +1113,12 @@ function test_mon_osd()
   ceph osd deep-scrub 0
   ceph osd repair 0
 
-  for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norebalance norecover notieragent full sortbitwise
+  for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norebalance norecover notieragent full
   do
     ceph osd set $f
     ceph osd unset $f
   done
-  ceph osd set sortbitwise  # new backends cant handle nibblewise
+  expect_false ceph osd unset sortbitwise  # cannot be unset
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
   ceph osd set require_jewel_osds
@@ -1126,8 +1140,6 @@ function test_mon_osd()
     fi
   done
   ceph osd dump | grep 'osd.0 up'
-
-  ceph osd thrash 0
 
   ceph osd dump | grep 'osd.0 up'
   # ceph osd find expects the OsdName, so both ints and osd.n should work.
@@ -1391,12 +1403,11 @@ function test_mon_pg()
   ceph pg repair 0.0
   ceph pg scrub 0.0
 
-  ceph pg set_full_ratio 0.90
-  ceph pg dump --format=plain | grep '^full_ratio 0.9'
-  ceph pg set_full_ratio 0.95
-  ceph pg set_nearfull_ratio 0.90
-  ceph pg dump --format=plain | grep '^nearfull_ratio 0.9'
-  ceph pg set_nearfull_ratio 0.85
+  ceph osd set-full-ratio .962
+  ceph osd dump | grep '^full_ratio 0.962'
+  ceph osd set-nearfull-ratio .892
+  ceph osd dump | grep '^nearfull_ratio 0.892'
+
   ceph pg stat | grep 'pgs:'
   ceph pg 0.0 query
   ceph tell 0.0 query
@@ -1442,7 +1453,7 @@ function test_mon_osd_pool_set()
   wait_for_clean
   ceph osd pool get $TEST_POOL_GETSET all
 
-  for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
+  for s in pg_num pgp_num size min_size crush_rule crush_ruleset; do
     ceph osd pool get $TEST_POOL_GETSET $s
   done
 
@@ -1466,7 +1477,7 @@ function test_mon_osd_pool_set()
   ceph --format=xml osd pool get $TEST_POOL_GETSET auid | grep $auid
   ceph osd pool set $TEST_POOL_GETSET auid 0
 
-  for flag in hashpspool nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
+  for flag in nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
       ceph osd pool set $TEST_POOL_GETSET $flag false
       ceph osd pool get $TEST_POOL_GETSET $flag | grep "$flag: false"
       ceph osd pool set $TEST_POOL_GETSET $flag true
@@ -1539,6 +1550,12 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET size 2
   wait_for_clean
   ceph osd pool set $TEST_POOL_GETSET min_size 2
+  
+  expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool 0
+  ceph osd pool set $TEST_POOL_GETSET hashpspool 0 --yes-i-really-mean-it
+  
+  expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool 1
+  ceph osd pool set $TEST_POOL_GETSET hashpspool 1 --yes-i-really-mean-it
 
   ceph osd pool set $TEST_POOL_GETSET nodelete 1
   expect_false ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
@@ -1546,6 +1563,7 @@ function test_mon_osd_pool_set()
   ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
 
   ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
+  ceph osd pool get rbd crush_rule | grep 'crush_rule: '
 }
 
 function test_mon_osd_tiered_pool_set()
@@ -1884,8 +1902,8 @@ function test_mon_cephdf_commands()
     sleep 1
   done
 
-  cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $4}'`
-  raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $11}'`
+  cal_raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' ' '{printf "%d\n", 2 * $3}'`
+  raw_used_size=`ceph df detail | grep cephdf_for_test | awk -F ' '  '{print $10}'`
 
   ceph osd pool delete cephdf_for_test cephdf_for_test --yes-i-really-really-mean-it
   rm ./cephdf_for_test

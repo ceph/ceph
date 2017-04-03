@@ -271,13 +271,14 @@ public:
 
 /**
  * Holds weak refs to Watch structures corresponding to a connection
- * Lives in the OSD::Session object of an OSD connection
+ * Lives in the Session object of an OSD connection
  */
 class WatchConState {
   Mutex lock;
   std::set<WatchRef> watches;
 public:
-  WatchConState() : lock("WatchConState") {}
+  CephContext* cct;
+  WatchConState(CephContext* cct) : lock("WatchConState"), cct(cct) {}
 
   /// Add a watch
   void addWatch(

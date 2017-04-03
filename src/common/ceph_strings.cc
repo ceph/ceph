@@ -38,6 +38,10 @@ const char *ceph_osd_state_name(int s)
 		return "autoout";
 	case CEPH_OSD_NEW:
 		return "new";
+	case CEPH_OSD_FULL:
+		return "full";
+	case CEPH_OSD_NEARFULL:
+		return "nearfull";
 	default:
 		return "???";
 	}	
@@ -235,6 +239,16 @@ const char *ceph_pool_op_name(int op)
 	case POOL_OP_DELETE_SNAP: return "delete snap";
 	case POOL_OP_CREATE_UNMANAGED_SNAP: return "create unmanaged snap";
 	case POOL_OP_DELETE_UNMANAGED_SNAP: return "delete unmanaged snap";
+	}
+	return "???";
+}
+
+const char *ceph_osd_backoff_op_name(int op)
+{
+	switch (op) {
+	case CEPH_OSD_BACKOFF_OP_BLOCK: return "block";
+	case CEPH_OSD_BACKOFF_OP_ACK_BLOCK: return "ack-block";
+	case CEPH_OSD_BACKOFF_OP_UNBLOCK: return "unblock";
 	}
 	return "???";
 }

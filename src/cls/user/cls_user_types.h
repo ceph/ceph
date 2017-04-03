@@ -14,26 +14,45 @@
  */
 struct cls_user_bucket {
   std::string name;
-  std::string data_pool;
-  std::string index_pool;
   std::string marker;
   std::string bucket_id;
-  std::string data_extra_pool;
+  std::string placement_id;
+  struct {
+    std::string data_pool;
+    std::string index_pool;
+    std::string data_extra_pool;
+  } explicit_placement;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(7, 3, bl);
-    ::encode(name, bl);
-    ::encode(data_pool, bl);
-    ::encode(marker, bl);
-    ::encode(bucket_id, bl);
-    ::encode(index_pool, bl);
-    ::encode(data_extra_pool, bl);
-    ENCODE_FINISH(bl);
+    /* since new version of this structure is not backward compatible,
+     * we have older rgw running against newer osd if we encode it
+     * in the new way. Only encode newer version if placement_id is
+     * not empty, otherwise keep handling it as before
+     */
+    if (!placement_id.empty()) {
+      ENCODE_START(9, 8, bl);
+      ::encode(name, bl);
+      ::encode(marker, bl);
+      ::encode(bucket_id, bl);
+      ::encode(placement_id, bl);
+      ENCODE_FINISH(bl);
+    } else {
+      ENCODE_START(7, 3, bl);
+      ::encode(name, bl);
+      ::encode(explicit_placement.data_pool, bl);
+      ::encode(marker, bl);
+      ::encode(bucket_id, bl);
+      ::encode(explicit_placement.index_pool, bl);
+      ::encode(explicit_placement.data_extra_pool, bl);
+      ENCODE_FINISH(bl);
+    }
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     ::decode(name, bl);
-    ::decode(data_pool, bl);
+    if (struct_v < 8) {
+      ::decode(explicit_placement.data_pool, bl);
+    }
     if (struct_v >= 2) {
       ::decode(marker, bl);
       if (struct_v <= 3) {
@@ -46,13 +65,22 @@ struct cls_user_bucket {
         ::decode(bucket_id, bl);
       }
     }
-    if (struct_v >= 5) {
-      ::decode(index_pool, bl);
+    if (struct_v < 8) {
+      if (struct_v >= 5) {
+        ::decode(explicit_placement.index_pool, bl);
+      } else {
+        explicit_placement.index_pool = explicit_placement.data_pool;
+      }
+      if (struct_v >= 7) {
+        ::decode(explicit_placement.data_extra_pool, bl);
+      }
     } else {
-      index_pool = data_pool;
-    }
-    if (struct_v >= 7) {
-      ::decode(data_extra_pool, bl);
+      ::decode(placement_id, bl);
+      if (struct_v == 8 && placement_id.empty()) {
+        ::decode(explicit_placement.data_pool, bl);
+        ::decode(explicit_placement.index_pool, bl);
+        ::decode(explicit_placement.data_extra_pool, bl);
+      }
     }
     DECODE_FINISH(bl);
   }

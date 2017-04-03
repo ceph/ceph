@@ -18,12 +18,17 @@ namespace librbd {
 namespace mirror {
 
 using util::create_context_callback;
-using util::create_rados_ack_callback;
+using util::create_rados_callback;
 
 template <typename I>
-EnableRequest<I>::EnableRequest(I *image_ctx, Context *on_finish)
-  : m_io_ctx(&image_ctx->md_ctx), m_image_ctx(image_ctx),
-    m_on_finish(on_finish) {
+EnableRequest<I>::EnableRequest(librados::IoCtx &io_ctx,
+                                const std::string &image_id,
+                                const std::string &non_primary_global_image_id,
+                                ContextWQ *op_work_queue, Context *on_finish)
+  : m_io_ctx(io_ctx), m_image_id(image_id),
+    m_non_primary_global_image_id(non_primary_global_image_id),
+    m_op_work_queue(op_work_queue), m_on_finish(on_finish),
+    m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())) {
 }
 
 template <typename I>
@@ -33,29 +38,31 @@ void EnableRequest<I>::send() {
 
 template <typename I>
 void EnableRequest<I>::send_get_tag_owner() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  if (!m_non_primary_global_image_id.empty()) {
+    return
+    send_get_mirror_image();
+  }
+  ldout(m_cct, 10) << this << " " << __func__ << dendl;
 
   using klass = EnableRequest<I>;
   Context *ctx = create_context_callback<
       klass, &klass::handle_get_tag_owner>(this);
-
-  librbd::Journal<>::is_tag_owner(m_image_ctx, &m_is_primary, ctx);
+  librbd::Journal<>::is_tag_owner(m_io_ctx, m_image_id, &m_is_primary,
+                                  m_op_work_queue, ctx);
 }
 
 template <typename I>
 Context *EnableRequest<I>::handle_get_tag_owner(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(m_cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(cct) << "failed to check tag ownership: " << cpp_strerror(*result)
-               << dendl;
+    lderr(m_cct) << "failed to check tag ownership: " << cpp_strerror(*result)
+                 << dendl;
     return m_on_finish;
   }
 
   if (!m_is_primary) {
-    lderr(cct) << "last journal tag not owned by local cluster" << dendl;
+    lderr(m_cct) << "last journal tag not owned by local cluster" << dendl;
     *result = -EINVAL;
     return m_on_finish;
   }
@@ -66,25 +73,23 @@ Context *EnableRequest<I>::handle_get_tag_owner(int *result) {
 
 template <typename I>
 void EnableRequest<I>::send_get_mirror_image() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(m_cct, 10) << this << " " << __func__ << dendl;
 
   librados::ObjectReadOperation op;
-  cls_client::mirror_image_get_start(&op, m_image_ctx->id);
+  cls_client::mirror_image_get_start(&op, m_image_id);
 
   using klass = EnableRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_get_mirror_image>(this);
+    create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
   m_out_bl.clear();
-  int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
+  int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
   assert(r == 0);
   comp->release();
 }
 
 template <typename I>
 Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(m_cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
   if (*result == 0) {
     bufferlist::iterator iter = m_out_bl.begin();
@@ -93,26 +98,30 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
 
   if (*result == 0) {
     if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
-      ldout(cct, 10) << this << " " << __func__
-                     << ": mirroring is already enabled" << dendl;
+      ldout(m_cct, 10) << this << " " << __func__
+                       << ": mirroring is already enabled" << dendl;
     } else {
-      lderr(cct) << "currently disabling" << dendl;
+      lderr(m_cct) << "currently disabling" << dendl;
       *result = -EINVAL;
     }
     return m_on_finish;
   }
 
   if (*result != -ENOENT) {
-    lderr(cct) << "failed to retreive mirror image: " << cpp_strerror(*result)
-               << dendl;
+    lderr(m_cct) << "failed to retreive mirror image: " << cpp_strerror(*result)
+                 << dendl;
     return m_on_finish;
   }
 
   *result = 0;
   m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
-  uuid_d uuid_gen;
-  uuid_gen.generate_random();
-  m_mirror_image.global_image_id = uuid_gen.to_string();
+  if (m_non_primary_global_image_id.empty()) {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    m_mirror_image.global_image_id = uuid_gen.to_string();
+  } else {
+    m_mirror_image.global_image_id = m_non_primary_global_image_id;
+  }
 
   send_set_mirror_image();
   return nullptr;
@@ -120,29 +129,27 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
 
 template <typename I>
 void EnableRequest<I>::send_set_mirror_image() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(m_cct, 10) << this << " " << __func__ << dendl;
 
   librados::ObjectWriteOperation op;
-  cls_client::mirror_image_set(&op, m_image_ctx->id, m_mirror_image);
+  cls_client::mirror_image_set(&op, m_image_id, m_mirror_image);
 
   using klass = EnableRequest<I>;
   librados::AioCompletion *comp =
-    create_rados_ack_callback<klass, &klass::handle_set_mirror_image>(this);
+    create_rados_callback<klass, &klass::handle_set_mirror_image>(this);
   m_out_bl.clear();
-  int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op);
+  int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op);
   assert(r == 0);
   comp->release();
 }
 
 template <typename I>
 Context *EnableRequest<I>::handle_set_mirror_image(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(m_cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(cct) << "failed to enable mirroring: " << cpp_strerror(*result)
-               << dendl;
+    lderr(m_cct) << "failed to enable mirroring: " << cpp_strerror(*result)
+                 << dendl;
     return m_on_finish;
   }
 
@@ -152,27 +159,25 @@ Context *EnableRequest<I>::handle_set_mirror_image(int *result) {
 
 template <typename I>
 void EnableRequest<I>::send_notify_mirroring_watcher() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
+  ldout(m_cct, 10) << this << " " << __func__ << dendl;
 
   using klass = EnableRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_notify_mirroring_watcher>(this);
 
-  MirroringWatcher<>::notify_image_updated(m_image_ctx->md_ctx,
+  MirroringWatcher<>::notify_image_updated(m_io_ctx,
                                            cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-                                           m_image_ctx->id,
+                                           m_image_id,
                                            m_mirror_image.global_image_id, ctx);
 }
 
 template <typename I>
 Context *EnableRequest<I>::handle_notify_mirroring_watcher(int *result) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(m_cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(cct) << "failed to send update notification: "
-               << cpp_strerror(*result) << dendl;
+    lderr(m_cct) << "failed to send update notification: "
+                 << cpp_strerror(*result) << dendl;
     *result = 0;
   }
 

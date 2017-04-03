@@ -16,8 +16,7 @@
 #ifndef CEPH_MOSDSUBOP_H
 #define CEPH_MOSDSUBOP_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 
 #include "include/ceph_features.h"
 
@@ -25,7 +24,7 @@
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDSubOp : public Message {
+class MOSDSubOp : public MOSDFastDispatchOp {
 
   static const int HEAD_VERSION = 12;
   static const int COMPAT_VERSION = 7;
@@ -70,7 +69,7 @@ public:
   map<string,bufferlist> attrset;
 
   interval_set<uint64_t> data_subset;
-  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subsets;
+  map<hobject_t, interval_set<uint64_t>> clone_subsets;
 
   bool first, complete;
 
@@ -93,13 +92,20 @@ public:
   /// non-empty if this transaction involves a hit_set history update
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
 
-  int get_cost() const {
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
+
+  int get_cost() const override {
     if (ops.size() == 1 && ops[0].op.op == CEPH_OSD_OP_PULL)
       return ops[0].op.extent.length;
     return data.length();
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     //since we drop incorrect_pools flag, now we only support
     //version >=7
     assert (header.version >= 7);
@@ -180,7 +186,8 @@ public:
 
   void finish_decode() { }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
+    header.version = HEAD_VERSION;
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid.pgid, payload);
@@ -238,11 +245,11 @@ public:
   }
 
   MOSDSubOp()
-    : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }
+    : MOSDFastDispatchOp(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDSubOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po,  int aw,
 	    epoch_t mape, ceph_tid_t rtid, eversion_t v)
-    : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
       reqid(r),
       from(from),
@@ -256,11 +263,11 @@ public:
     set_tid(rtid);
   }
 private:
-  ~MOSDSubOp() {}
+  ~MOSDSubOp() override {}
 
 public:
-  const char *get_type_name() const { return "osd_sub_op"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_sub_op"; }
+  void print(ostream& out) const override {
     out << "osd_sub_op(" << reqid
 	<< " " << pgid
 	<< " " << poid

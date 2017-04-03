@@ -57,7 +57,7 @@ namespace dpdk {
       // TODO: Inherit these from the app parameters - "opts"
       std::vector<std::vector<char>> args {
           string2vector(string("ceph")),
-          string2vector("-c"), string2vector(c->_conf->ms_dpdk_coremask),
+          string2vector("-c"), string2vector(c->_conf->get_val<std::string>("ms_dpdk_coremask")),
           string2vector("-n"), string2vector(c->_conf->ms_dpdk_memory_channel),
       };
 
@@ -90,6 +90,12 @@ namespace dpdk {
       } else if (!c->_conf->ms_dpdk_pmd.empty()) {
         args.push_back(string2vector("--no-huge"));
       }
+
+      std::string rte_file_prefix;
+      rte_file_prefix = "rte_";
+      rte_file_prefix += c->_conf->name.to_str();
+      args.push_back(string2vector("--file-prefix"));
+      args.push_back(string2vector(rte_file_prefix));
 
       std::vector<char*> cargs;
 

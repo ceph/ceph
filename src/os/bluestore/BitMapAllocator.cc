@@ -12,12 +12,15 @@
 #include "bluestore_types.h"
 #include "common/debug.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "bitmapalloc:"
 
 
-BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
+BitMapAllocator::BitMapAllocator(CephContext* cct, int64_t device_size,
+				 int64_t block_size)
+  : cct(cct)
 {
   assert(ISP2(block_size));
   if (!ISP2(block_size)) {
@@ -27,7 +30,7 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
     return;
   }
 
-  int64_t zone_size_blks = g_conf->bluestore_bitmapallocator_blocks_per_zone;
+  int64_t zone_size_blks = cct->_conf->bluestore_bitmapallocator_blocks_per_zone;
   assert(ISP2(zone_size_blks));
   if (!ISP2(zone_size_blks)) {
     derr << __func__ << " zone_size " << zone_size_blks
@@ -36,7 +39,7 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
     return;
   }
 
-  int64_t span_size = g_conf->bluestore_bitmapallocator_span_size;
+  int64_t span_size = cct->_conf->bluestore_bitmapallocator_span_size;
   assert(ISP2(span_size));
   if (!ISP2(span_size)) {
     derr << __func__ << " span_size " << span_size
@@ -46,8 +49,8 @@ BitMapAllocator::BitMapAllocator(int64_t device_size, int64_t block_size)
   }
 
   m_block_size = block_size;
-  m_bit_alloc = new BitAllocator(device_size / block_size,
-        zone_size_blks, CONCURRENT, true);
+  m_bit_alloc = new BitAllocator(cct, device_size / block_size,
+				 zone_size_blks, CONCURRENT, true);
   assert(m_bit_alloc);
   if (!m_bit_alloc) {
     derr << __func__ << " Unable to intialize Bit Allocator" << dendl;
@@ -105,9 +108,9 @@ void BitMapAllocator::unreserve(uint64_t unused)
   m_bit_alloc->unreserve_blocks(nblks);
 }
 
-int BitMapAllocator::allocate(
+int64_t BitMapAllocator::allocate(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count, uint64_t *ret_len)
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents)
 {
 
   assert(!(alloc_unit % m_block_size));
@@ -122,30 +125,26 @@ int BitMapAllocator::allocate(
      << dendl;
 
   return allocate_dis(want_size, alloc_unit / m_block_size,
-                      max_alloc_size, hint / m_block_size, extents, count, ret_len); 
+                      max_alloc_size, hint / m_block_size, extents);
 }
 
-int BitMapAllocator::allocate_dis(
+int64_t BitMapAllocator::allocate_dis(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents, int *count, uint64_t *ret_len)
+  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents)
 {
   ExtentList block_list = ExtentList(extents, m_block_size, max_alloc_size);
   int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
   int64_t num = 0;
-  *count = 0;
-  *ret_len = 0;
 
   num = m_bit_alloc->alloc_blocks_dis_res(nblks, alloc_unit, hint, &block_list);
   if (num == 0) {
     return -ENOSPC;
   }
-  *count = block_list.get_extent_count();
-  *ret_len = num * m_block_size;
 
-  return 0;
+  return num * m_block_size;
 }
 
-int BitMapAllocator::release(
+void BitMapAllocator::release(
   uint64_t offset, uint64_t length)
 {
   std::lock_guard<std::mutex> l(m_lock);
@@ -153,7 +152,6 @@ int BitMapAllocator::release(
            << std::hex << offset << "~" << length << std::dec
            << dendl;
   insert_free(offset, length);
-  return 0;
 }
 
 uint64_t BitMapAllocator::get_free()

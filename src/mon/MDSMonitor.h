@@ -41,21 +41,21 @@ class MDSMonitor : public PaxosService {
   MDSMonitor(Monitor *mn, Paxos *p, string service_name);
 
   // service methods
-  void create_initial();
-  void update_from_paxos(bool *need_bootstrap);
-  void init();
-  void create_pending(); 
-  void encode_pending(MonitorDBStore::TransactionRef t);
+  void create_initial() override;
+  void update_from_paxos(bool *need_bootstrap) override;
+  void init() override;
+  void create_pending() override; 
+  void encode_pending(MonitorDBStore::TransactionRef t) override;
   // we don't require full versions; don't encode any.
-  virtual void encode_full(MonitorDBStore::TransactionRef t) { }
-  version_t get_trim_to();
+  void encode_full(MonitorDBStore::TransactionRef t) override { }
+  version_t get_trim_to() override;
 
-  bool preprocess_query(MonOpRequestRef op);  // true if processed.
-  bool prepare_update(MonOpRequestRef op);
-  bool should_propose(double& delay);
+  bool preprocess_query(MonOpRequestRef op) override;  // true if processed.
+  bool prepare_update(MonOpRequestRef op) override;
+  bool should_propose(double& delay) override;
 
-  void on_active();
-  void on_restart();
+  void on_active() override;
+  void on_restart() override;
 
   void check_subs();
   void check_sub(Subscription *sub);
@@ -65,6 +65,10 @@ class MDSMonitor : public PaxosService {
   void dump_info(Formatter *f);
   int print_nodes(Formatter *f);
 
+  /**
+   * Return true if a blacklist was done (i.e. OSD propose needed)
+   */
+  bool fail_mds_gid(mds_gid_t gid);
  protected:
   // mds maps
   FSMap fsmap;           // current
@@ -72,7 +76,6 @@ class MDSMonitor : public PaxosService {
 
   // my helpers
   void print_map(FSMap &m, int dbl=7);
-  void create_new_fs(FSMap &m, const std::string &name, int metadata_pool, int data_pool);
   void update_logger();
 
   void _updated(MonOpRequestRef op);
@@ -88,10 +91,6 @@ class MDSMonitor : public PaxosService {
 		  list<pair<health_status_t,string> > *detail,
 		  CephContext *cct) const override;
   int fail_mds(std::ostream &ss, const std::string &arg);
-  /**
-   * Return true if a blacklist was done (i.e. OSD propose needed)
-   */
-  bool fail_mds_gid(mds_gid_t gid);
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
@@ -101,11 +100,6 @@ class MDSMonitor : public PaxosService {
       mds_role_t *role,
       std::ostream &ss);
 
-  int management_command(
-      MonOpRequestRef op,
-      std::string const &prefix,
-      map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss);
   void modify_legacy_filesystem(
       std::function<void(std::shared_ptr<Filesystem> )> fn);
   int legacy_filesystem_command(
@@ -137,7 +131,7 @@ class MDSMonitor : public PaxosService {
   bool maybe_expand_cluster(std::shared_ptr<Filesystem> fs);
   void maybe_replace_gid(mds_gid_t gid, const beacon_info_t &beacon,
       bool *mds_propose, bool *osd_propose);
-  void tick();     // check state, take actions
+  void tick() override;     // check state, take actions
 
   int dump_metadata(const string& who, Formatter *f, ostream& err);
 
@@ -152,7 +146,6 @@ class MDSMonitor : public PaxosService {
 
   map<mds_gid_t, Metadata> pending_metadata;
 
-  int _check_pool(const int64_t pool_id, std::stringstream *ss) const;
   mds_gid_t gid_from_arg(const std::string& arg, std::ostream& err);
 
   // When did the mon last call into our tick() method?  Used for detecting

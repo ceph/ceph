@@ -13,6 +13,7 @@
 
 #include "DaemonState.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
@@ -109,6 +110,8 @@ void DaemonStateIndex::cull(entity_type_t daemon_type,
 void DaemonPerfCounters::update(MMgrReport *report)
 {
   dout(20) << "loading " << report->declare_types.size() << " new types, "
+	   << report->undeclare_types.size() << " old types, had "
+	   << types.size() << " types, got "
            << report->packed.length() << " bytes of data" << dendl;
 
   // Load any newly declared types
@@ -116,8 +119,12 @@ void DaemonPerfCounters::update(MMgrReport *report)
     types.insert(std::make_pair(t.path, t));
     declared_types.insert(t.path);
   }
+  // Remove any old types
+  for (const auto &t : report->undeclare_types) {
+    declared_types.erase(t);
+  }
 
-  const auto now = ceph_clock_now(g_ceph_context);
+  const auto now = ceph_clock_now();
 
   // Parse packed data according to declared set of types
   bufferlist::iterator p = report->packed.begin();

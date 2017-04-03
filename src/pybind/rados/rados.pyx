@@ -377,19 +377,32 @@ class TimedOut(Error):
     pass
 
 
-
-cdef errno_to_exception = {
-    errno.EPERM     : PermissionError,
-    errno.ENOENT    : ObjectNotFound,
-    errno.EIO       : IOError,
-    errno.ENOSPC    : NoSpace,
-    errno.EEXIST    : ObjectExists,
-    errno.EBUSY     : ObjectBusy,
-    errno.ENODATA   : NoData,
-    errno.EINTR     : InterruptedOrTimeoutError,
-    errno.ETIMEDOUT : TimedOut,
-    errno.EACCES    : PermissionDeniedError
-}
+IF UNAME_SYSNAME == "FreeBSD":
+    cdef errno_to_exception = {
+        errno.EPERM     : PermissionError,
+        errno.ENOENT    : ObjectNotFound,
+        errno.EIO       : IOError,
+        errno.ENOSPC    : NoSpace,
+        errno.EEXIST    : ObjectExists,
+        errno.EBUSY     : ObjectBusy,
+        errno.ENOATTR   : NoData,
+        errno.EINTR     : InterruptedOrTimeoutError,
+        errno.ETIMEDOUT : TimedOut,
+        errno.EACCES    : PermissionDeniedError
+    }
+ELSE:
+    cdef errno_to_exception = {
+        errno.EPERM     : PermissionError,
+        errno.ENOENT    : ObjectNotFound,
+        errno.EIO       : IOError,
+        errno.ENOSPC    : NoSpace,
+        errno.EEXIST    : ObjectExists,
+        errno.EBUSY     : ObjectBusy,
+        errno.ENODATA   : NoData,
+        errno.EINTR     : InterruptedOrTimeoutError,
+        errno.ETIMEDOUT : TimedOut,
+        errno.EACCES    : PermissionDeniedError
+    }
 
 
 cdef make_ex(ret, msg):
