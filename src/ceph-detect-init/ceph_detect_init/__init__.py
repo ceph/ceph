@@ -76,6 +76,7 @@ def _get_distro(distro, use_rhceph=False):
         'exherbo': gentoo,
         'freebsd': freebsd,
         'docker': docker,
+        'virtuozzo': centos,
     }
 
     if distro == 'redhat' and use_rhceph:
@@ -100,6 +101,8 @@ def _normalized_distro_name(distro):
         return 'oraclevms'
     elif distro.startswith(('gentoo', 'funtoo', 'exherbo')):
         return 'gentoo'
+    elif distro.startswith('virtuozzo'):
+        return 'virtuozzo'
     return distro
 
 
@@ -160,6 +163,9 @@ def platform_information():
         codename = 'OL' + release
     elif distro_lower.startswith('oracle vm'):
         codename = 'OVS' + release
+    # this could be an empty string in Virtuozzo linux
+    elif distro_lower.startswith('virtuozzo linux'):
+        codename = 'virtuozzo'
 
     return (
         str(distro).rstrip(),
