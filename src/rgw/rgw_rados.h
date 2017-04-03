@@ -1154,7 +1154,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
 
   string realm_id;
 
-  map<string, string> tier_config;
+  map<string, string, ltstr_nocase> tier_config;
 
   RGWZoneParams() : RGWSystemMetaObj() {}
   RGWZoneParams(const string& name) : RGWSystemMetaObj(name){}
