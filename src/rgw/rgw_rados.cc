@@ -12474,10 +12474,10 @@ int RGWRados::cls_user_get_bucket_stats(rgw_bucket& bucket, cls_user_bucket_entr
     return ret;
   }
 
-  int r = cls_bucket_head(bucket_info, RGW_NO_SHARD, headers);
-  if (r < 0) {
-    ldout(cct, 20) << "cls_bucket_header() returned " << r << dendl;
-    return r;
+  ret = cls_bucket_head(bucket_info, RGW_NO_SHARD, headers);
+  if (ret < 0) {
+    ldout(cct, 20) << "cls_bucket_header() returned " << ret << dendl;
+    return ret;
   }
 
   bucket.convert(&entry.bucket);
