@@ -7701,8 +7701,8 @@ void BlueStore::_kv_sync_thread()
   while (true) {
     assert(kv_committing.empty());
     if (kv_queue.empty() &&
-	deferred_done_queue.empty() &&
-	deferred_stable_queue.empty()) {
+	((deferred_done_queue.empty() && deferred_stable_queue.empty()) ||
+	 !deferred_aggressive)) {
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
