@@ -88,11 +88,12 @@
 #define MSG_REMOVE_SNAPS       90
 
 #define MSG_OSD_SCRUB          91
-//#define MSG_OSD_PG_MISSING     92  // obsolete
+#define MSG_OSD_SCRUB_RESERVE  92  // previous PG_MISSING
 #define MSG_OSD_REP_SCRUB      93
 
 #define MSG_OSD_PG_SCAN        94
 #define MSG_OSD_PG_BACKFILL    95
+#define MSG_OSD_PG_BACKFILL_REMOVE 96
 
 #define MSG_COMMAND            97
 #define MSG_COMMAND_REPLY      98
@@ -115,6 +116,7 @@
 #define MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY  115
 
 #define MSG_OSD_PG_CREATED      116
+#define MSG_OSD_REP_SCRUBMAP    117
 
 // *** MDS ***
 
