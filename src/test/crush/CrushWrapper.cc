@@ -1093,6 +1093,37 @@ TEST(CrushWrapper, populate_and_cleanup_classes) {
   ASSERT_FALSE(c.name_exists("default~ssd"));
 }
 
+TEST(CrushWrapper, class_is_in_use) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "root");
+
+  int weight = 1;
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  ASSERT_FALSE(c.class_is_in_use(0));
+
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  int class_id = c.get_or_create_class_id("ssd");
+  c.class_map[item] = class_id;
+
+  ASSERT_TRUE(c.class_is_in_use(c.get_class_id("ssd")));
+  ASSERT_EQ(0, c.remove_class_name("ssd"));
+  ASSERT_FALSE(c.class_is_in_use(c.get_class_id("ssd")));
+}
+
+TEST(CrushWrapper, remove_class_name) {
+  CrushWrapper c;
+  c.create();
+
+  ASSERT_EQ(-ENOENT, c.remove_class_name("ssd"));
+  ASSERT_GE(0, c.get_or_create_class_id("ssd"));
+  ASSERT_EQ(0, c.remove_class_name("ssd"));
+  ASSERT_EQ(-ENOENT, c.remove_class_name("ssd"));
+}
+
 TEST(CrushWrapper, try_remap_rule) {
   // build a simple 2 level map
   CrushWrapper c;
@@ -1282,3 +1313,6 @@ int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+// Local Variables:
+// compile-command: "cd ../../../build ; make -j4 unittest_crush_wrapper && bin/unittest_crush_wrapper"
+// End:

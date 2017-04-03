@@ -1014,6 +1014,20 @@ int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
   return -ENOENT;
 }
 
+bool CrushWrapper::class_is_in_use(int class_id)
+{
+  for (auto &i : class_bucket)
+    for (auto &j : i.second)
+      if (j.first == class_id)
+	return true;
+
+  for (auto &i : class_map)
+    if (i.second == class_id)
+      return true;
+
+  return false;
+}
+
 int CrushWrapper::populate_classes()
 {
   set<int> roots;
