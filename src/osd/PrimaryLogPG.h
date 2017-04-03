@@ -27,8 +27,6 @@
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
 
-class MOSDSubOpReply;
-
 class CopyFromCallback;
 class PromoteCallback;
 
@@ -38,7 +36,6 @@ class HitSet;
 struct TierAgentState;
 class MOSDOp;
 class MOSDOpReply;
-class MOSDSubOp;
 class OSDService;
 
 void intrusive_ptr_add_ref(PrimaryLogPG *pg);
@@ -1357,6 +1354,7 @@ public:
     OpRequestRef op,
     ThreadPool::TPHandle &handle) override;
   void do_backfill(OpRequestRef op) override;
+  void do_backfill_remove(OpRequestRef op);
 
   void handle_backoff(OpRequestRef& op);
 
