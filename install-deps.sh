@@ -179,6 +179,9 @@ else
                 if test $(lsb_release -si) = CentOS -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
+                if test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
+                    $SUDO yum-config-manager --enable cr
+                fi
                 ;;
         esac
         munge_ceph_spec_in $DIR/ceph.spec
