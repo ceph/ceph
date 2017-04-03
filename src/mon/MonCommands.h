@@ -428,14 +428,6 @@ COMMAND("osd getmap " \
 COMMAND("osd getcrushmap " \
 	"name=epoch,type=CephInt,range=0,req=false", \
 	"get CRUSH map", "osd", "r", "cli,rest")
-COMMAND("osd perf", \
-        "print dump of OSD perf summary stats", \
-        "osd", \
-        "r", \
-        "cli,rest")
-COMMAND("osd blocked-by", \
-	"print histogram of which OSDs are blocking their peers", \
-	"osd", "r", "cli,rest")
 COMMAND("osd getmaxosd", "show largest OSD id", "osd", "r", "cli,rest")
 COMMAND("osd find " \
 	"name=id,type=CephOsdName", \
