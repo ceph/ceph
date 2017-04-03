@@ -527,7 +527,7 @@ OPTION(mds_log_max_expiring, OPT_INT, 20)
 OPTION(mds_bal_sample_interval, OPT_DOUBLE, 3.0)  // every 3 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT, 8000)
 OPTION(mds_bal_unreplicate_threshold, OPT_FLOAT, 0)
-OPTION(mds_bal_frag, OPT_BOOL, false)
+OPTION(mds_bal_frag, OPT_BOOL, true)
 OPTION(mds_bal_split_size, OPT_INT, 10000)
 OPTION(mds_bal_split_rd, OPT_FLOAT, 25000)
 OPTION(mds_bal_split_wr, OPT_FLOAT, 10000)

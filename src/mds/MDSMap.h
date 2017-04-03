@@ -220,7 +220,7 @@ public:
 public:
   MDSMap() 
     : epoch(0), enabled(false), fs_name(MDS_FS_NAME_DEFAULT),
-      flags(0), last_failure(0),
+      flags(CEPH_MDSMAP_DEFAULTS), last_failure(0),
       last_failure_osd_epoch(0),
       tableserver(0), root(0),
       session_timeout(0),

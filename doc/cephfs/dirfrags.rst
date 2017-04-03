@@ -14,7 +14,7 @@ here should be left at their default values.
 
 While directory fragmentation enables CephFS to handle very large
 numbers of entries in a single directory, application programmers should
-remain cautious about creating very large directories, as they still
+remain conservative about creating very large directories, as they still
 have a resource cost in situations such as a CephFS client listing
 the directory, where all the fragments must be loaded at once.
 
@@ -27,7 +27,8 @@ Splitting and merging
 
 An MDS will only consider doing splits and merges if the ``mds_bal_frag``
 setting is true in the MDS's configuration file, and the allow_dirfrags
-setting is true in the filesystem map (set on the mons).
+setting is true in the filesystem map (set on the mons).  These settings
+are both true by default since the *Luminous* (12.2.x) release of Ceph.
 
 When an MDS identifies a directory fragment to be split, it does not
 do the split immediately.  Because splitting interrupts metadata IO,
