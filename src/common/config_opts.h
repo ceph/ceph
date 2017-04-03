@@ -627,7 +627,7 @@ OPTION(osd_max_backfills, OPT_U64, 1)
 OPTION(osd_min_recovery_priority, OPT_INT, 0)
 
 // Refuse backfills when OSD full ratio is above this value
-OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
+OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.90)
 
 // Seconds to wait before retrying refused backfills
 OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 30.0)
