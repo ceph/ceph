@@ -63,7 +63,7 @@ namespace crimson {
       std::numeric_limits<double>::infinity() :
       std::numeric_limits<double>::max();
     constexpr double min_tag = std::numeric_limits<double>::is_iec559 ?
-      -1 * std::numeric_limits<double>::infinity() :
+      -std::numeric_limits<double>::infinity() :
       std::numeric_limits<double>::lowest();
     constexpr uint tag_modulo = 1000000;
 
