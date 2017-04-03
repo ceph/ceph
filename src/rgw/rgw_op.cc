@@ -31,6 +31,7 @@
 #include "rgw_cors_s3.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rest_s3.h"
+#include "rgw_tar.h"
 #include "rgw_client_io.h"
 #include "rgw_compression.h"
 #include "rgw_role.h"
@@ -5495,6 +5496,542 @@ void RGWBulkDelete::execute()
   } while (!op_ret && is_truncated);
 
   return;
+}
+
+
+constexpr std::initializer_list<int> RGWBulkUploadOp::terminal_errors;
+
+int RGWBulkUploadOp::verify_permission()
+{
+  if (s->auth.identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (! verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  if (s->user->user_id.tenant != s->bucket_tenant) {
+    ldout(s->cct, 10) << "user cannot create a bucket in a different tenant"
+                      << " (user_id.tenant=" << s->user->user_id.tenant
+                      << " requested=" << s->bucket_tenant << ")"
+                      << dendl;
+    return -EACCES;
+  }
+
+  if (s->user->max_buckets < 0) {
+    return -EPERM;
+  }
+
+  return 0;
+}
+
+void RGWBulkUploadOp::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+boost::optional<std::pair<std::string, rgw_obj_key>>
+RGWBulkUploadOp::parse_path(const boost::string_ref& path)
+{
+  /* We need to skip all slashes at the beginning in order to preserve
+   * compliance with Swift. */
+  const size_t start_pos = path.find_first_not_of('/');
+
+  if (boost::string_ref::npos != start_pos) {
+    /* Seperator is the first slash after the leading ones. */
+    const size_t sep_pos = path.substr(start_pos).find('/');
+
+    if (boost::string_ref::npos != sep_pos) {
+      const auto bucket_name = path.substr(start_pos, sep_pos - start_pos);
+      const auto obj_name = path.substr(sep_pos + 1);
+
+      return std::make_pair(bucket_name.to_string(),
+                            rgw_obj_key(obj_name.to_string()));
+    } else {
+      /* It's guaranteed here that bucket name is at least one character
+       * long and is different than slash. */
+      return std::make_pair(path.substr(start_pos).to_string(),
+                            rgw_obj_key());
+    }
+  }
+
+  return boost::none;
+}
+
+int RGWBulkUploadOp::handle_dir_verify_permission()
+{
+  if (s->user->max_buckets > 0) {
+    RGWUserBuckets buckets;
+    std::string marker;
+    bool is_truncated;
+    op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets,
+                                   marker, std::string(), s->user->max_buckets,
+                                   false, &is_truncated);
+    if (op_ret < 0) {
+      return op_ret;
+    }
+
+    if (buckets.count() >= static_cast<size_t>(s->user->max_buckets)) {
+      return -ERR_TOO_MANY_BUCKETS;
+    }
+  }
+
+  return 0;
+}
+
+int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
+{
+  ldout(s->cct, 20) << "bulk upload: got directory=" << path << dendl;
+
+  op_ret = handle_dir_verify_permission();
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  std::string bucket_name;
+  rgw_obj_key object_junk;
+  std::tie(bucket_name, object_junk) =  *parse_path(path);
+
+  rgw_raw_obj obj(store->get_zone_params().domain_root,
+                  rgw_make_bucket_entry_name(s->bucket_tenant, bucket_name));
+
+  /* Swift API doesn't support location constraint. We're just checking here
+   * whether creation is taking place in the master zone or not. */
+  if (! store->get_zonegroup().is_master) {
+    ldout(s->cct, 0) << "creating bucket in a non-master zone." << dendl;
+    op_ret = -EINVAL;
+    return op_ret;
+  }
+
+  /* we need to make sure we read bucket info, it's not read before for this
+   * specific request */
+  RGWBucketInfo binfo;
+  std::map<std::string, ceph::bufferlist> battrs;
+  op_ret = store->get_bucket_info(*dir_ctx, s->bucket_tenant, bucket_name,
+                                  binfo, NULL, &battrs);
+  if (op_ret < 0 && op_ret != -ENOENT) {
+    return op_ret;
+  }
+  const bool bucket_exists = (op_ret != -ENOENT);
+
+  if (bucket_exists) {
+    RGWAccessControlPolicy old_policy(s->cct);
+    int r = get_bucket_policy_from_attr(s->cct, store, binfo,
+                                        battrs, &old_policy);
+    if (r >= 0)  {
+      if (old_policy.get_owner().get_id().compare(s->user->user_id) != 0) {
+        op_ret = -EEXIST;
+        return op_ret;
+      }
+    }
+  }
+
+  RGWBucketInfo master_info;
+  rgw_bucket *pmaster_bucket = nullptr;
+  real_time creation_time;
+  obj_version objv, ep_objv, *pobjv = nullptr;
+
+  if (! store->is_meta_master()) {
+    JSONParser jp;
+    ceph::bufferlist in_data;
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, &jp);
+    if (op_ret < 0) {
+      return op_ret;
+    }
+
+    JSONDecoder::decode_json("entry_point_object_ver", ep_objv, &jp);
+    JSONDecoder::decode_json("object_ver", objv, &jp);
+    JSONDecoder::decode_json("bucket_info", master_info, &jp);
+
+    ldout(s->cct, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver="
+                      << objv.ver << dendl;
+    ldout(s->cct, 20) << "got creation_time="<< master_info.creation_time
+                      << dendl;
+
+    pmaster_bucket= &master_info.bucket;
+    creation_time = master_info.creation_time;
+    pobjv = &objv;
+  } else {
+    pmaster_bucket = nullptr;
+  }
+
+
+  std::string placement_rule;
+  if (bucket_exists) {
+    std::string selected_placement_rule;
+    rgw_bucket bucket;
+    bucket.tenant = s->bucket_tenant;
+    bucket.name = s->bucket_name;
+    op_ret = store->select_bucket_placement(*(s->user),
+                                            store->get_zonegroup().get_id(),
+                                            placement_rule,
+                                            bucket,
+                                            &selected_placement_rule,
+                                            nullptr);
+    if (selected_placement_rule != binfo.placement_rule) {
+      op_ret = -EEXIST;
+      ldout(s->cct, 20) << "bulk upload: non-coherent placement rule" << dendl;
+      return op_ret;
+    }
+  }
+
+  /* Create metadata: ACLs. */
+  std::map<std::string, ceph::bufferlist> attrs;
+  RGWAccessControlPolicy policy;
+  policy.create_default(s->user->user_id, s->user->display_name);
+  ceph::bufferlist aclbl;
+  policy.encode(aclbl);
+  attrs.emplace(RGW_ATTR_ACL, std::move(aclbl));
+
+  RGWQuotaInfo quota_info;
+  const RGWQuotaInfo * pquota_info = nullptr;
+
+  rgw_bucket bucket;
+  bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
+  bucket.name = bucket_name;
+
+
+  RGWBucketInfo out_info;
+  op_ret = store->create_bucket(*(s->user),
+                                bucket,
+                                store->get_zonegroup().get_id(),
+                                placement_rule, binfo.swift_ver_location,
+                                pquota_info, attrs,
+                                out_info, pobjv, &ep_objv, creation_time,
+                                pmaster_bucket, true);
+  /* continue if EEXIST and create_bucket will fail below.  this way we can
+   * recover from a partial create by retrying it. */
+  ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << op_ret
+                    << ", bucket=" << bucket << dendl;
+
+  if (op_ret && op_ret != -EEXIST) {
+    return op_ret;
+  }
+
+  const bool existed = (op_ret == -EEXIST);
+  if (existed) {
+    /* bucket already existed, might have raced with another bucket creation, or
+     * might be partial bucket creation that never completed. Read existing bucket
+     * info, verify that the reported bucket owner is the current user.
+     * If all is ok then update the user's list of buckets.
+     * Otherwise inform client about a name conflict.
+     */
+    if (out_info.owner.compare(s->user->user_id) != 0) {
+      op_ret = -EEXIST;
+      ldout(s->cct, 20) << "bulk upload: conflicting bucket name" << dendl;
+      return op_ret;
+    }
+    bucket = out_info.bucket;
+  }
+
+  op_ret = rgw_link_bucket(store, s->user->user_id, bucket,
+                           out_info.creation_time, false);
+  if (op_ret && !existed && op_ret != -EEXIST) {
+    /* if it exists (or previously existed), don't remove it! */
+    op_ret = rgw_unlink_bucket(store, s->user->user_id,
+                               bucket.tenant, bucket.name);
+    if (op_ret < 0) {
+      ldout(s->cct, 0) << "bulk upload: WARNING: failed to unlink bucket: ret="
+                       << op_ret << dendl;
+    }
+  } else if (op_ret == -EEXIST || (op_ret == 0 && existed)) {
+    ldout(s->cct, 20) << "bulk upload: containers already exists"
+                      << dendl;
+    op_ret = -ERR_BUCKET_EXISTS;
+  }
+
+  return op_ret;
+}
+
+
+bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
+                                                    std::map<std::string, ceph::bufferlist>& battrs,
+                                                    ACLOwner& bucket_owner /* out */)
+{
+  RGWAccessControlPolicy bacl(store->ctx());
+  op_ret = read_bucket_policy(store, s, binfo, battrs, &bacl, binfo.bucket);
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "bulk upload: cannot read_policy() for bucket"
+                      << dendl;
+    return false;
+  }
+
+  bucket_owner = bacl.get_owner();
+  return verify_bucket_permission(s, s->user_acl.get(), &bacl, RGW_PERM_WRITE);
+}
+
+int RGWBulkUploadOp::handle_file(const boost::string_ref path,
+                                 const size_t size,
+                                 AlignedStreamGetter& body)
+{
+
+  ldout(s->cct, 20) << "bulk upload: got file=" << path << ", size=" << size
+                    << dendl;
+
+  RGWPutObjDataProcessor *filter = nullptr;
+  boost::optional<RGWPutObj_Compress> compressor;
+
+  if (size > static_cast<const size_t>(s->cct->_conf->rgw_max_put_size)) {
+    op_ret = -ERR_TOO_LARGE;
+    return op_ret;
+  }
+
+  std::string bucket_name;
+  rgw_obj_key object;
+  std::tie(bucket_name, object) = *parse_path(path);
+
+  auto& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  RGWBucketInfo binfo;
+  std::map<std::string, ceph::bufferlist> battrs;
+  ACLOwner bowner;
+  op_ret = store->get_bucket_info(obj_ctx, s->user->user_id.tenant,
+                                  bucket_name, binfo, nullptr, &battrs);
+  if (op_ret == -ENOENT) {
+    ldout(s->cct, 20) << "bulk upload: non existent directory=" << bucket_name
+                      << dendl;
+  } else if (op_ret < 0) {
+    return op_ret;
+  }
+
+  if (! handle_file_verify_permission(binfo, battrs, bowner)) {
+    ldout(s->cct, 20) << "bulk upload: object creation unauthorized" << dendl;
+    op_ret = -EACCES;
+    return op_ret;
+  }
+
+  op_ret = store->check_quota(bowner.get_id(), binfo.bucket,
+                              user_quota, bucket_quota, size);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  RGWPutObjProcessor_Atomic processor(obj_ctx,
+                                      binfo,
+                                      binfo.bucket,
+                                      object.name,
+                                      /* part size */
+                                      s->cct->_conf->rgw_obj_stripe_size,
+                                      s->req_id,
+                                      binfo.versioning_enabled());
+
+  /* No filters by default. */
+  filter = &processor;
+
+  op_ret = processor.prepare(store, nullptr);
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "bulk upload: cannot prepare processor due to ret="
+                      << op_ret << dendl;
+    return op_ret;
+  }
+
+  const auto& compression_type = store->get_zone_params().get_compression_type(
+      binfo.placement_rule);
+  CompressorRef plugin;
+  if (compression_type != "none") {
+    plugin = Compressor::create(s->cct, compression_type);
+    if (! plugin) {
+      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+                       << compression_type << dendl;
+    } else {
+      compressor.emplace(s->cct, plugin, filter);
+      filter = &*compressor;
+    }
+  }
+
+  /* Upload file content. */
+  ssize_t len = 0;
+  size_t ofs = 0;
+  MD5 hash;
+  do {
+    ceph::bufferlist data;
+    len = body.get_at_most(s->cct->_conf->rgw_max_chunk_size, data);
+
+    ldout(s->cct, 20) << "bulk upload: body=" << data.c_str() << dendl;
+    if (len < 0) {
+      op_ret = len;
+      return op_ret;
+    } else if (len > 0) {
+      hash.Update((const byte *)data.c_str(), data.length());
+      op_ret = put_data_and_throttle(filter, data, ofs, false);
+      if (op_ret < 0) {
+        ldout(s->cct, 20) << "processor->thottle_data() returned ret="
+			  << op_ret << dendl;
+        return op_ret;
+      }
+
+      ofs += len;
+    }
+
+  } while (len > 0);
+
+  if (ofs != size) {
+    ldout(s->cct, 10) << "bulk upload: real file size different from declared"
+                      << dendl;
+    op_ret = -EINVAL;
+  }
+
+  op_ret = store->check_quota(bowner.get_id(), binfo.bucket,
+			      user_quota, bucket_quota, size);
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "bulk upload: quota exceeded for path=" << path
+                      << dendl;
+    return op_ret;
+  }
+
+  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  hash.Final(m);
+  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+
+  /* Create metadata: ETAG. */
+  std::map<std::string, ceph::bufferlist> attrs;
+  std::string etag = calc_md5;
+  ceph::bufferlist etag_bl;
+  etag_bl.append(etag.c_str(), etag.size() + 1);
+  attrs.emplace(RGW_ATTR_ETAG, std::move(etag_bl));
+
+  /* Create metadata: ACLs. */
+  RGWAccessControlPolicy policy;
+  policy.create_default(s->user->user_id, s->user->display_name);
+  ceph::bufferlist aclbl;
+  policy.encode(aclbl);
+  attrs.emplace(RGW_ATTR_ACL, std::move(aclbl));
+
+  /* Create metadata: compression info. */
+  if (compressor && compressor->is_compressed()) {
+    ceph::bufferlist tmp;
+    RGWCompressionInfo cs_info;
+    cs_info.compression_type = plugin->get_type_name();
+    cs_info.orig_size = s->obj_size;
+    cs_info.blocks = std::move(compressor->get_compression_blocks());
+    ::encode(cs_info, tmp);
+    attrs.emplace(RGW_ATTR_COMPRESSION, std::move(tmp));
+  }
+
+  /* Complete the transaction. */
+  op_ret = processor.complete(size, etag, nullptr, ceph::real_time(), attrs,
+                              ceph::real_time() /* delete_at */);
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "bulk upload: processor::complete returned op_ret="
+                      << op_ret << dendl;
+  }
+
+  return op_ret;
+}
+
+void RGWBulkUploadOp::execute()
+{
+  ceph::bufferlist buffer(64 * 1024);
+
+  ldout(s->cct, 20) << "bulk upload: start" << dendl;
+
+  /* Create an instance of stream-abstracting class. Having this indirection
+   * allows for easy introduction of decompressors like gzip and bzip2. */
+  auto stream = create_stream();
+  if (! stream) {
+    return;
+  }
+
+  auto status = rgw::tar::StatusIndicator::create();
+  do {
+    op_ret = stream->get_exactly(rgw::tar::BLOCK_SIZE, buffer);
+    if (op_ret < 0) {
+      ldout(s->cct, 2) << "bulk upload: cannot read header" << dendl;
+      return;
+    }
+
+    /* We need to re-interpret the buffer as a TAR block. Exactly two blocks
+     * must be tracked to detect out end-of-archive. It occurs when both of
+     * them are empty (zeroed). Tracing this particular inter-block dependency
+     * is responsibility of the rgw::tar::StatusIndicator class. */
+    boost::optional<rgw::tar::HeaderView> header;
+    std::tie(status, header) = rgw::tar::interpret_block(status, buffer);
+
+    if (! status.empty() && header) {
+      /* This specific block isn't empty (entirely zeroed), so we can parse
+       * it as a TAR header and dispatch. At the moment we do support only
+       * regular files and directories. Everything else (symlinks, devices)
+       * will be ignored but won't cease the whole upload. */
+      switch (header->get_filetype()) {
+        case rgw::tar::FileType::NORMAL_FILE: {
+          ldout(s->cct, 2) << "bulk upload: handling regular file" << dendl;
+
+          auto body = AlignedStreamGetter(0, header->get_filesize(),
+                                          rgw::tar::BLOCK_SIZE, *stream);
+          op_ret = handle_file(header->get_filename(),
+                               header->get_filesize(),
+                               body);
+          if (! op_ret) {
+            /* Only regular files counts. */
+            num_created++;
+          } else {
+            failures.emplace_back(op_ret, header->get_filename().to_string());
+          }
+          break;
+        }
+        case rgw::tar::FileType::DIRECTORY: {
+          ldout(s->cct, 2) << "bulk upload: handling regular directory" << dendl;
+
+          op_ret = handle_dir(header->get_filename());
+          if (op_ret < 0 && op_ret != -ERR_BUCKET_EXISTS) {
+            failures.emplace_back(op_ret, header->get_filename().to_string());
+          }
+          break;
+        }
+        default: {
+          /* Not recognized. Skip. */
+          op_ret = 0;
+          break;
+        }
+      }
+
+      /* In case of any problems with sub-request authorization Swift simply
+       * terminates whole upload immediately. */
+      if (boost::algorithm::contains(std::initializer_list<int>{ op_ret },
+                                     terminal_errors)) {
+        ldout(s->cct, 2) << "bulk upload: terminating due to ret=" << op_ret
+                         << dendl;
+        break;
+      }
+    } else {
+      ldout(s->cct, 2) << "bulk upload: an empty block" << dendl;
+      op_ret = 0;
+    }
+
+    buffer.clear();
+  } while (! status.eof());
+
+  return;
+}
+
+RGWBulkUploadOp::AlignedStreamGetter::~AlignedStreamGetter()
+{
+  const size_t aligned_legnth = length + (-length % alignment);
+  ceph::bufferlist junk;
+
+  DecoratedStreamGetter::get_exactly(aligned_legnth - position, junk);
+}
+
+ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_at_most(const size_t want,
+                                                          ceph::bufferlist& dst)
+{
+  const size_t max_to_read = std::min(want, length - position);
+  const auto len = DecoratedStreamGetter::get_at_most(max_to_read, dst);
+  if (len > 0) {
+    position += len;
+  }
+  return len;
+}
+
+ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_exactly(const size_t want,
+                                                          ceph::bufferlist& dst)
+{
+  const auto len = DecoratedStreamGetter::get_exactly(want, dst);
+  if (len > 0) {
+    position += len;
+  }
+  return len;
 }
 
 int RGWSetAttrs::verify_permission()
