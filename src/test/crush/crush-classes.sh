@@ -128,6 +128,17 @@ function TEST_set_device_class() {
     $ok || return 1
 }
 
+function TEST_mon_classes() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush class create CLASS || return 1
+    ceph osd crush class create CLASS || return 1 # idempotent
+    ceph osd crush class ls | grep CLASS  || return 1
+    ceph osd crush class rm CLASS || return 1
+    expect_failure $dir ENOENT ceph osd crush class rm CLASS || return 1
+}
+
 main crush-classes "$@"
 
 # Local Variables:

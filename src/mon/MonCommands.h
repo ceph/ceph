@@ -581,6 +581,17 @@ COMMAND("osd crush rule rm " \
 COMMAND("osd crush tree",
 	"dump crush buckets and items in a tree view",
 	"osd", "r", "cli,rest")
+COMMAND("osd crush class create " \
+	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
+	"create crush device class <class>", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush class rm " \
+	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
+	"remove crush device class <class>", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush class ls", \
+	"list all crush device classes", \
+	"osd", "r", "cli,rest")
 COMMAND("osd setmaxosd " \
 	"name=newmax,type=CephInt,range=0", \
 	"set new maximum osd value", "osd", "rw", "cli,rest")
