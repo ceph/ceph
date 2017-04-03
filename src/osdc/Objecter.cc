@@ -4721,11 +4721,13 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
     if (!osdmap->exists(c->target_osd)) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "osd dne";
+      c->target.osd = -1;
       return RECALC_OP_TARGET_OSD_DNE;
     }
     if (osdmap->is_down(c->target_osd)) {
       c->map_check_error = -ENXIO;
       c->map_check_error_str = "osd down";
+      c->target.osd = -1;
       return RECALC_OP_TARGET_OSD_DOWN;
     }
     c->target.osd = c->target_osd;
@@ -4734,10 +4736,12 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
     if (ret == RECALC_OP_TARGET_POOL_DNE) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "pool dne";
+      c->target.osd = -1;
       return ret;
     } else if (ret == RECALC_OP_TARGET_OSD_DOWN) {
       c->map_check_error = -ENXIO;
       c->map_check_error_str = "osd down";
+      c->target.osd = -1;
       return ret;
     }
   }
