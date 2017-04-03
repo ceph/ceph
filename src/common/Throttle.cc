@@ -238,6 +238,9 @@ int64_t Throttle::put(int64_t c)
   return count.read();
 }
 
+#undef dout_prefix
+#define dout_prefix *_dout << "BackoffThrottle "
+
 bool BackoffThrottle::set_params(
   double _low_threshhold,
   double _high_threshhold,
@@ -369,7 +372,12 @@ std::chrono::duration<double> BackoffThrottle::get(uint64_t c)
   }
 
   auto ticket = _push_waiter();
-
+  if( cct )
+  {
+    ldout(cct, 15) << __func__ << " waiters:" << waiters.size() << 
+        ", delay ticks: " << delay.count() << ", cur:" << current << 
+        ", c:" << c << ", max:" << max << dendl; 
+  }
   while (waiters.begin() != ticket) {
     (*ticket)->wait(l);
   }

@@ -38,6 +38,7 @@ class JournalThrottle {
   /// deque<id, count>
   std::deque<std::pair<uint64_t, uint64_t> > journaled_ops;
   using locker = std::unique_lock<std::mutex>;
+  CephContext *cct;
 
 public:
   /**
@@ -94,8 +95,9 @@ public:
   uint64_t get_max();
 
   JournalThrottle(
-    unsigned expected_concurrency ///< [in] determines size of conds
-    ) : throttle(expected_concurrency) {}
+    unsigned expected_concurrency, ///< [in] determines size of conds
+    CephContext *cct
+    ) : cct(cct),throttle(expected_concurrency, cct) {}
 };
 
 #endif
