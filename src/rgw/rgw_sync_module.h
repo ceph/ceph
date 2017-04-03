@@ -48,7 +48,7 @@ public:
   virtual ~RGWSyncModule() {}
 
   virtual bool supports_data_export() = 0;
-  virtual int create_instance(CephContext *cct, map<string, string>& config, RGWSyncModuleInstanceRef *instance) = 0;
+  virtual int create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) = 0;
 };
 
 typedef std::shared_ptr<RGWSyncModule> RGWSyncModuleRef;
@@ -89,7 +89,7 @@ public:
     return module.get()->supports_data_export();
   }
 
-  int create_instance(CephContext *cct, const string& name, map<string, string>& config, RGWSyncModuleInstanceRef *instance) {
+  int create_instance(CephContext *cct, const string& name, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
     RGWSyncModuleRef module;
     if (!get_module(name, &module)) {
       return -ENOENT;
