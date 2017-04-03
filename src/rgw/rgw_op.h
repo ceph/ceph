@@ -17,6 +17,7 @@
 #include <string>
 #include <set>
 #include <map>
+#include <vector>
 
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
@@ -384,6 +385,137 @@ public:
 inline ostream& operator<<(ostream& out, const RGWBulkDelete::acct_path_t &o) {
   return out << o.bucket_name << "/" << o.obj_key;
 }
+
+
+class RGWBulkUploadOp : public RGWOp {
+  boost::optional<RGWObjectCtx> dir_ctx;
+
+protected:
+  class fail_desc_t {
+  public:
+    fail_desc_t(const int err, std::string path)
+      : err(err),
+        path(std::move(path)) {
+    }
+
+    const int err;
+    const std::string path;
+  };
+
+  static constexpr std::initializer_list<int> terminal_errors = {
+    -EACCES, -EPERM
+  };
+
+  /* FIXME:  boost::container::small_vector<fail_desc_t, 4> failures; */
+  std::vector<fail_desc_t> failures;
+  size_t num_created;
+
+  class StreamGetter;
+  class DecoratedStreamGetter;
+  class AlignedStreamGetter;
+
+  virtual std::unique_ptr<StreamGetter> create_stream() = 0;
+  virtual void send_response() = 0;
+
+  boost::optional<std::pair<std::string, rgw_obj_key>>
+  parse_path(const boost::string_ref& path);
+
+  bool handle_file_verify_permission(RGWBucketInfo& binfo,
+                                     std::map<std::string, ceph::bufferlist>& battrs,
+                                     ACLOwner& bucket_owner /* out */);
+  int handle_file(boost::string_ref path,
+                  size_t size,
+                  AlignedStreamGetter& body);
+
+  int handle_dir_verify_permission();
+  int handle_dir(boost::string_ref path);
+
+public:
+  RGWBulkUploadOp()
+    : num_created(0) {
+  }
+
+  void init(RGWRados* const store,
+            struct req_state* const s,
+            RGWHandler* const h) override {
+    RGWOp::init(store, s, h);
+    dir_ctx.emplace(store);
+  }
+
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
+
+  const std::string name() override {
+    return "bulk_upload";
+  }
+
+  RGWOpType get_type() override {
+    return RGW_OP_BULK_UPLOAD;
+  }
+
+  uint32_t op_mask() override {
+    return RGW_OP_TYPE_WRITE;
+  }
+}; /* RGWBulkUploadOp */
+
+
+class RGWBulkUploadOp::StreamGetter {
+public:
+  StreamGetter() = default;
+  virtual ~StreamGetter() = default;
+
+  virtual ssize_t get_at_most(size_t want, ceph::bufferlist& dst) = 0;
+  virtual ssize_t get_exactly(size_t want, ceph::bufferlist& dst) = 0;
+}; /* End of nested subclass StreamGetter */
+
+
+class RGWBulkUploadOp::DecoratedStreamGetter : public StreamGetter {
+  StreamGetter& decoratee;
+
+protected:
+  StreamGetter& get_decoratee() {
+    return decoratee;
+  }
+
+public:
+  DecoratedStreamGetter(StreamGetter& decoratee)
+    : decoratee(decoratee) {
+  }
+  virtual ~DecoratedStreamGetter() = default;
+
+  ssize_t get_at_most(const size_t want, ceph::bufferlist& dst) override {
+    return get_decoratee().get_at_most(want, dst);
+  }
+
+  ssize_t get_exactly(const size_t want, ceph::bufferlist& dst) override {
+    return get_decoratee().get_exactly(want, dst);
+  }
+}; /* RGWBulkUploadOp::DecoratedStreamGetter */
+
+
+class RGWBulkUploadOp::AlignedStreamGetter
+  : public RGWBulkUploadOp::DecoratedStreamGetter {
+  size_t position;
+  size_t length;
+  size_t alignment;
+
+public:
+  template <typename U>
+  AlignedStreamGetter(const size_t position,
+                      const size_t length,
+                      const size_t alignment,
+                      U&& decoratee)
+    : DecoratedStreamGetter(std::forward<U>(decoratee)),
+      position(position),
+      length(length),
+      alignment(alignment) {
+  }
+  virtual ~AlignedStreamGetter();
+  ssize_t get_at_most(size_t want, ceph::bufferlist& dst) override;
+  ssize_t get_exactly(size_t want, ceph::bufferlist& dst) override;
+}; /* RGWBulkUploadOp::AlignedStreamGetter */
+
 
 #define RGW_LIST_BUCKETS_LIMIT_MAX 10000
 

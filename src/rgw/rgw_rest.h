@@ -371,6 +371,12 @@ public:
   ~RGWBulkDelete_ObjStore() override {}
 };
 
+class RGWBulkUploadOp_ObjStore : public RGWBulkUploadOp {
+public:
+  RGWBulkUploadOp_ObjStore() = default;
+  ~RGWBulkUploadOp_ObjStore() = default;
+};
+
 class RGWDeleteMultiObj_ObjStore : public RGWDeleteMultiObj {
 public:
   RGWDeleteMultiObj_ObjStore() {}
