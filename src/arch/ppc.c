@@ -13,9 +13,9 @@
 int ceph_arch_ppc_crc32 = 0;
 
 #include <stdio.h>
-#include <sys/auxv.h>
 
 #if __linux__ && __powerpc64__
+#include <sys/auxv.h>
 #include <asm/cputable.h>
 #endif /* __linux__ && __powerpc64__ */
 
