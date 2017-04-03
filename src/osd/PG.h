@@ -242,7 +242,7 @@ protected:
    * lock() should be called before doing anything.
    * get() should be called on pointer copy (to another thread, etc.).
    * put() should be called on destruction of some previously copied pointer.
-   * put_unlock() when done with the current pointer (_most common_).
+   * unlock() when done with the current pointer (_most common_).
    */  
   mutable Mutex _lock;
   std::atomic_uint ref{0};
