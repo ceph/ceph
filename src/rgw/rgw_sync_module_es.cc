@@ -10,7 +10,92 @@
 #include "rgw_op.h"
 #include "rgw_es_query.h"
 
+#include "include/str_list.h"
+
 #define dout_subsys ceph_subsys_rgw
+
+
+/*
+ * whitelist utility. Config string is a list of entries, where an entry is either an item,
+ * a prefix, or a suffix. An item would be the name of the entity that we'd look up,
+ * a prefix would be a string ending with an asterisk, a suffix would be a string starting
+ * with an asterisk. For example:
+ *
+ *      bucket1, bucket2, foo*, *bar
+ */
+class ItemList {
+  bool approve_all{false};
+
+  set<string> entries;
+  set<string> prefixes;
+  set<string> suffixes;
+
+  void parse(const string& str) {
+    list<string> l;
+
+    get_str_list(str, ",", l);
+
+    for (auto& entry : l) {
+      entry = rgw_trim_whitespace(entry);
+      if (entry.empty()) {
+        continue;
+      }
+
+      if (entry == "*") {
+        approve_all = true;
+        return;
+      }
+
+      if (entry[0] == '*') {
+        suffixes.insert(entry.substr(1));
+        continue;
+      }
+
+      if (entry[entry.size() - 1] == '*') {
+        prefixes.insert(entry.substr(0, entry.size() - 1));
+        continue;
+      }
+
+      entries.insert(entry);
+    }
+  }
+
+public:
+  ItemList() {}
+  void init(const string& str, bool def_val) {
+    if (str.empty()) {
+      approve_all = def_val;
+    } else {
+      parse(str);
+    }
+  }
+
+  bool exists(const string& entry) {
+    if (approve_all) {
+      return true;
+    }
+
+    if (entries.find(entry) != entries.end()) {
+      return true;
+    }
+
+    auto i = prefixes.upper_bound(entry);
+    if (i != prefixes.begin()) {
+      --i;
+      if (boost::algorithm::starts_with(entry, *i)) {
+        return true;
+      }
+    }
+
+    for (i = suffixes.begin(); i != suffixes.end(); ++i) {
+      if (boost::algorithm::ends_with(entry, *i)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+};
 
 struct ElasticConfig {
   string id;
