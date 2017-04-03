@@ -3170,11 +3170,7 @@ static void aio_cb(void *priv, void *priv2)
 
 BlueStore::BlueStore(CephContext *cct, const string& path)
   : ObjectStore(cct, path),
-    throttle_ops(cct, "bluestore_max_ops", cct->_conf->bluestore_max_ops),
     throttle_bytes(cct, "bluestore_max_bytes", cct->_conf->bluestore_max_bytes),
-    throttle_deferred_ops(cct, "bluestore_deferred_max_ops",
-		     cct->_conf->bluestore_max_ops +
-		     cct->_conf->bluestore_deferred_max_ops),
     throttle_deferred_bytes(cct, "bluestore_deferred_max_bytes",
 		       cct->_conf->bluestore_max_bytes +
 		       cct->_conf->bluestore_deferred_max_bytes),
@@ -3201,11 +3197,7 @@ BlueStore::BlueStore(CephContext *cct,
   const string& path,
   uint64_t _min_alloc_size)
   : ObjectStore(cct, path),
-    throttle_ops(cct, "bluestore_max_ops", cct->_conf->bluestore_max_ops),
     throttle_bytes(cct, "bluestore_max_bytes", cct->_conf->bluestore_max_bytes),
-    throttle_deferred_ops(cct, "bluestore_deferred_max_ops",
-		     cct->_conf->bluestore_max_ops +
-		     cct->_conf->bluestore_deferred_max_ops),
     throttle_deferred_bytes(cct, "bluestore_deferred_max_bytes",
 		       cct->_conf->bluestore_max_bytes +
 		       cct->_conf->bluestore_deferred_max_bytes),
@@ -3288,19 +3280,17 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
       _set_alloc_sizes();
     }
   }
-  if (changed.count("bluestore_max_ops")) {
-    throttle_ops.reset_max(conf->bluestore_max_ops);
-    throttle_deferred_ops.reset_max(
-      conf->bluestore_max_ops + conf->bluestore_deferred_max_ops);
+  if (changed.count("bluestore_throttle_cost_per_io") ||
+      changed.count("bluestore_throttle_cost_per_io_hdd") ||
+      changed.count("bluestore_throttle_cost_per_io_ssd")) {
+    if (bdev) {
+      _set_throttle_params();
+    }
   }
   if (changed.count("bluestore_max_bytes")) {
     throttle_bytes.reset_max(conf->bluestore_max_bytes);
     throttle_deferred_bytes.reset_max(
       conf->bluestore_max_bytes + conf->bluestore_deferred_max_bytes);
-  }
-  if (changed.count("bluestore_deferred_max_ops")) {
-    throttle_deferred_ops.reset_max(
-      conf->bluestore_max_ops + conf->bluestore_deferred_max_ops);
   }
   if (changed.count("bluestore_deferred_max_bytes")) {
     throttle_deferred_bytes.reset_max(
@@ -3349,6 +3339,23 @@ void BlueStore::_set_csum()
 
   dout(10) << __func__ << " csum_type "
 	   << Checksummer::get_csum_type_string(csum_type)
+	   << dendl;
+}
+
+void BlueStore::_set_throttle_params()
+{
+  if (cct->_conf->bluestore_throttle_cost_per_io) {
+    throttle_cost_per_io = cct->_conf->bluestore_throttle_cost_per_io;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      throttle_cost_per_io = cct->_conf->bluestore_throttle_cost_per_io_hdd;
+    } else {
+      throttle_cost_per_io = cct->_conf->bluestore_throttle_cost_per_io_ssd;
+    }
+  }
+
+  dout(10) << __func__ << " throttle_cost_per_io " << throttle_cost_per_io
 	   << dendl;
 }
 
@@ -7067,6 +7074,7 @@ int BlueStore::_open_super_meta()
 	     << std::dec << dendl;
   }
   _set_alloc_sizes();
+  _set_throttle_params();
 
   return 0;
 }
@@ -7143,6 +7151,23 @@ BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
   dout(20) << __func__ << " osr " << osr << " = " << txc
 	   << " seq " << txc->seq << dendl;
   return txc;
+}
+
+void BlueStore::_txc_calc_cost(TransContext *txc)
+{
+  // this is about the simplest model for trasnaction cost you can
+  // imagine.  there is some fixed overhead cost by saying there is a
+  // minimum of one "io".  and then we have some cost per "io" that is
+  // a configurable (with different hdd and ssd defaults), and add
+  // that to the bytes value.
+  int ios = 1;  // one "io" for the kv commit
+  for (auto& p : txc->ioc.pending_aios) {
+    ios += p.iov.size();
+  }
+  txc->cost = ios * throttle_cost_per_io + txc->bytes;
+  dout(10) << __func__ << " " << txc << " cost " << txc->cost << " ("
+	   << ios << " ios * " << throttle_cost_per_io << " + " << txc->bytes
+	   << " bytes)" << dendl;
 }
 
 void BlueStore::_txc_update_store_statfs(TransContext *txc)
@@ -7795,8 +7820,7 @@ void BlueStore::_kv_sync_thread()
 	// iteration there will already be ops awake.  otherwise, we
 	// end up going to sleep, and then wake up when the very first
 	// transaction is ready for commit.
-	throttle_ops.put(txc->ops);
-	throttle_bytes.put(txc->bytes);
+	throttle_bytes.put(txc->cost);
       }
 
       PExtentVector bluefs_gift_extents;
@@ -7873,7 +7897,6 @@ void BlueStore::_kv_sync_thread()
       if (!deferred_aggressive) {
 	std::lock_guard<std::mutex> l(deferred_lock);
 	if (deferred_queue_size >= (int)g_conf->bluestore_deferred_batch_ops ||
-	    throttle_deferred_ops.past_midpoint() ||
 	    throttle_deferred_bytes.past_midpoint()) {
 	  _deferred_try_submit();
 	}
@@ -8026,8 +8049,7 @@ int BlueStore::_deferred_finish(TransContext *txc)
     TransContext *txc = &i;
     txc->state = TransContext::STATE_DEFERRED_CLEANUP;
     txc->osr->qcond.notify_all();
-    throttle_deferred_ops.put(txc->ops);
-    throttle_deferred_bytes.put(txc->bytes);
+    throttle_deferred_bytes.put(txc->cost);
     deferred_done_queue.push_back(txc);
   }
   finished.clear();
@@ -8119,10 +8141,10 @@ int BlueStore::queue_transactions(
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
     (*p).set_osr(osr);
-    txc->ops += (*p).get_num_ops();
     txc->bytes += (*p).get_num_bytes();
     _txc_add_transaction(txc, &(*p));
   }
+  _txc_calc_cost(txc);
 
   _txc_write_nodes(txc, txc->t);
 
@@ -8140,17 +8162,12 @@ int BlueStore::queue_transactions(
     handle->suspend_tp_timeout();
 
   utime_t tstart = ceph_clock_now();
-  throttle_ops.get(txc->ops);
-  throttle_bytes.get(txc->bytes);
+  throttle_bytes.get(txc->cost);
   if (txc->deferred_txn) {
     // ensure we do not block here because of deferred writes
-    if (!throttle_deferred_ops.get_or_fail(txc->ops)) {
+    if (!throttle_deferred_bytes.get_or_fail(txc->cost)) {
       deferred_try_submit();
-      throttle_deferred_ops.get(txc->ops);
-    }
-    if (!throttle_deferred_bytes.get_or_fail(txc->bytes)) {
-      deferred_try_submit();
-      throttle_deferred_bytes.get(txc->bytes);
+      throttle_deferred_bytes.get(txc->cost);
     }
   }
   utime_t tend = ceph_clock_now();

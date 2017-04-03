@@ -124,6 +124,7 @@ public:
 
   void _set_csum();
   void _set_compression();
+  void _set_throttle_params();
 
   class TransContext;
 
@@ -1439,7 +1440,7 @@ public:
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
-    uint64_t ops = 0, bytes = 0;
+    uint64_t bytes = 0, cost = 0;
 
     set<OnodeRef> onodes;     ///< these need to be updated/written
     set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
@@ -1745,8 +1746,8 @@ private:
   std::atomic<uint64_t> blobid_last = {0};
   std::atomic<uint64_t> blobid_max = {0};
 
-  Throttle throttle_ops, throttle_bytes;          ///< submit to commit
-  Throttle throttle_deferred_ops, throttle_deferred_bytes;  ///< submit to deferred complete
+  Throttle throttle_bytes;          ///< submit to commit
+  Throttle throttle_deferred_bytes;  ///< submit to deferred complete
 
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
@@ -1790,6 +1791,8 @@ private:
   uint64_t prefer_deferred_size = 0; ///< size threshold for forced deferred writes
 
   uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
+
+  uint64_t throttle_cost_per_io = 0;   ///< approx cost per io, in bytes
 
   std::atomic<Compressor::CompressionMode> comp_mode = {Compressor::COMP_NONE}; ///< compression mode
   CompressorRef compressor;
@@ -1892,6 +1895,7 @@ private:
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
+  void _txc_calc_cost(TransContext *txc);
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
