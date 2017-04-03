@@ -13272,6 +13272,10 @@ int PrimaryLogPG::getattrs_maybe_cache(
   return r;
 }
 
+bool PrimaryLogPG::check_failsafe_full(ostream &ss) {
+    return osd->check_failsafe_full(ss);
+}
+
 void intrusive_ptr_add_ref(PrimaryLogPG *pg) { pg->get("intptr"); }
 void intrusive_ptr_release(PrimaryLogPG *pg) { pg->put("intptr"); }
 

@@ -261,6 +261,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual LogClientTemp clog_error() = 0;
 
+     virtual bool check_failsafe_full(ostream &ss) = 0;
+
      virtual ~Listener() {}
    };
    Listener *parent;
