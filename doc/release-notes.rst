@@ -2515,6 +2515,47 @@ Notable Changes
 * test: ceph_test_rados_api_tmap_migrate: remove test for tmap_upgrade (`pr#10234 <http://github.com/ceph/ceph/pull/10234>`_, Kefu Chai)
 
 
+v10.2.7 Jewel
+=============
+
+This point release fixes several important bugs in RBD mirroring, librbd &  RGW.
+
+We recommend that all v10.2.x users upgrade.
+
+For more detailed information, see :download:`the complete changelog <changelog/v10.2.7.txt>`.
+
+
+Notable Changes
+---------------
+
+* librbd: possible race in ExclusiveLock handle_peer_notification (`issue#19368 <http://tracker.ceph.com/issues/19368>`_, `pr#14233 <https://github.com/ceph/ceph/pull/14233>`_, Mykola Golub)
+* osd: Increase priority for inactive PGs backfill (`issue#18350 <http://tracker.ceph.com/issues/18350>`_, `pr#13232 <https://github.com/ceph/ceph/pull/13232>`_, Bartłomiej Święcki)
+* osd: Scrub improvements and other fixes (`issue#17857 <http://tracker.ceph.com/issues/17857>`_, `issue#18114 <http://tracker.ceph.com/issues/18114>`_, `issue#13937 <http://tracker.ceph.com/issues/13937>`_, `issue#18113 <http://tracker.ceph.com/issues/18113>`_, `pr#13146 <https://github.com/ceph/ceph/pull/13146>`_, Kefu Chai, David Zafman)
+* osd: fix OSD network address in OSD heartbeat_check log message (`issue#18657 <http://tracker.ceph.com/issues/18657>`_, `pr#13108 <https://github.com/ceph/ceph/pull/13108>`_, Vikhyat Umrao)
+* rbd-mirror: deleting a snapshot during sync can result in read errors (`issue#18990 <http://tracker.ceph.com/issues/18990>`_, `pr#13596 <https://github.com/ceph/ceph/pull/13596>`_, Jason Dillaman)
+* rgw: 'period update' does not remove short_zone_ids of deleted zones (`issue#15618 <http://tracker.ceph.com/issues/15618>`_, `pr#14140 <https://github.com/ceph/ceph/pull/14140>`_, Casey Bodley)
+* rgw: DUMPABLE flag is cleared by setuid preventing coredumps (`issue#19089 <http://tracker.ceph.com/issues/19089>`_, `pr#13844 <https://github.com/ceph/ceph/pull/13844>`_, Brad Hubbard)
+* rgw: clear data_sync_cr if RGWDataSyncControlCR fails (`issue#17569 <http://tracker.ceph.com/issues/17569>`_, `pr#13886 <https://github.com/ceph/ceph/pull/13886>`_, Casey Bodley)
+* rgw: fix openssl (`issue#11239 <http://tracker.ceph.com/issues/11239>`_, `issue#19098 <http://tracker.ceph.com/issues/19098>`_, `issue#16535 <http://tracker.ceph.com/issues/16535>`_, `pr#14215 <https://github.com/ceph/ceph/pull/14215>`_, Marcus Watts)
+* rgw: fix swift cannot disable object versioning with empty X-Versions-Location (`issue#18852 <http://tracker.ceph.com/issues/18852>`_, `pr#13823 <https://github.com/ceph/ceph/pull/13823>`_, Jing Wenjun)
+* rgw: librgw: RGWLibFS::setattr fails on directories (`issue#18808 <http://tracker.ceph.com/issues/18808>`_, `pr#13778 <https://github.com/ceph/ceph/pull/13778>`_, Matt Benjamin)
+* rgw: make sending Content-Length in 204 and 304 controllable (`issue#16602 <http://tracker.ceph.com/issues/16602>`_, `pr#13503 <https://github.com/ceph/ceph/pull/13503>`_, Radoslaw Zarzynski, Matt Benjamin)
+* rgw: multipart uploads copy part support (`issue#12790 <http://tracker.ceph.com/issues/12790>`_, `pr#13219 <https://github.com/ceph/ceph/pull/13219>`_, Yehuda Sadeh, Javier M. Mellid, Matt Benjamin)
+* rgw: multisite: RGWMetaSyncShardControlCR gives up on EIO (`issue#19019 <http://tracker.ceph.com/issues/19019>`_, `pr#13867 <https://github.com/ceph/ceph/pull/13867>`_, Casey Bodley)
+* rgw: radosgw/swift: clean up flush / newline behavior (`issue#18473 <http://tracker.ceph.com/issues/18473>`_, `pr#14100 <https://github.com/ceph/ceph/pull/14100>`_, Nathan Cutler, Marcus Watts, Matt Benjamin)
+* rgw: radosgw/swift: clean up flush / newline behavior. (`issue#18473 <http://tracker.ceph.com/issues/18473>`_, `pr#13143 <https://github.com/ceph/ceph/pull/13143>`_, Marcus Watts, Matt Benjamin)
+* rgw: rgw_fh: RGWFileHandle dtor must also cond-unlink from FHCache (`issue#19112 <http://tracker.ceph.com/issues/19112>`_, `pr#14231 <https://github.com/ceph/ceph/pull/14231>`_, Matt Benjamin)
+* rgw: rgw_file:  avoid interning .. in FHCache table and don't ref for them (`issue#19036 <http://tracker.ceph.com/issues/19036>`_, `pr#13848 <https://github.com/ceph/ceph/pull/13848>`_, Matt Benjamin)
+* rgw: rgw_file:  interned RGWFileHandle objects need parent refs (`issue#18650 <http://tracker.ceph.com/issues/18650>`_, `pr#13583 <https://github.com/ceph/ceph/pull/13583>`_, Matt Benjamin)
+* rgw: rgw_file:  restore (corrected) fix for dir partial match (return of FLAG_EXACT_MATCH) (`issue#19060 <http://tracker.ceph.com/issues/19060>`_, `issue#18992 <http://tracker.ceph.com/issues/18992>`_, `issue#19059 <http://tracker.ceph.com/issues/19059>`_, `pr#13858 <https://github.com/ceph/ceph/pull/13858>`_, Matt Benjamin)
+* rgw: rgw_file: FHCache residence check should be exhaustive (`issue#19111 <http://tracker.ceph.com/issues/19111>`_, `pr#14169 <https://github.com/ceph/ceph/pull/14169>`_, Matt Benjamin)
+* rgw: rgw_file: ensure valid_s3_object_name for directories, too (`issue#19066 <http://tracker.ceph.com/issues/19066>`_, `pr#13717 <https://github.com/ceph/ceph/pull/13717>`_, Matt Benjamin)
+* rgw: rgw_file: fix marker computation (`issue#19018 <http://tracker.ceph.com/issues/19018>`_, `issue#18989 <http://tracker.ceph.com/issues/18989>`_, `issue#18992 <http://tracker.ceph.com/issues/18992>`_, `issue#18991 <http://tracker.ceph.com/issues/18991>`_, `pr#13869 <https://github.com/ceph/ceph/pull/13869>`_, Matt Benjamin)
+* rgw: rgw_file: wip dir orphan (`issue#18992 <http://tracker.ceph.com/issues/18992>`_, `issue#18989 <http://tracker.ceph.com/issues/18989>`_, `issue#19018 <http://tracker.ceph.com/issues/19018>`_, `issue#18991 <http://tracker.ceph.com/issues/18991>`_, `pr#14205 <https://github.com/ceph/ceph/pull/14205>`_, Gui Hecheng, Matt Benjamin)
+* rgw: rgw_file: various fixes (`pr#14206 <https://github.com/ceph/ceph/pull/14206>`_, Matt Benjamin)
+* rgw: rgw_file: expand argv (`pr#14230 <https://github.com/ceph/ceph/pull/14230>`_, Matt Benjamin)
+
+
 v10.2.6 Jewel
 =============
 
