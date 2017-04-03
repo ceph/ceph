@@ -354,17 +354,16 @@ void Mgr::load_config()
 
 void Mgr::shutdown()
 {
-  // FIXME: pre-empt init() if it is currently running, so that it will
-  // give up the lock for us.
-  Mutex::Locker l(lock);
-
   finisher.queue(new FunctionContext([&](int) {
-    monc->sub_unwant("log-info");
-    monc->sub_unwant("mgrdigest");
-    monc->sub_unwant("fsmap");
-    // First stop the server so that we're not taking any more incoming
-    // requests
-    server.shutdown();
+    {
+      Mutex::Locker l(lock);
+      monc->sub_unwant("log-info");
+      monc->sub_unwant("mgrdigest");
+      monc->sub_unwant("fsmap");
+      // First stop the server so that we're not taking any more incoming
+      // requests
+      server.shutdown();
+    }
     // after the messenger is stopped, signal modules to shutdown via finisher
     py_modules.shutdown();
   }));
