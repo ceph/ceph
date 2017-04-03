@@ -1331,9 +1331,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
   for (map<ceph_tid_t,CommandOp*>::iterator p = need_resend_command.begin();
        p != need_resend_command.end(); ++p) {
     CommandOp *c = p->second;
-    _assign_command_session(c, sul);
-    if (c->session && !c->session->is_homeless()) {
-      _send_command(c);
+    if (c->target.osd >= 0) {
+      _assign_command_session(c, sul);
+      if (c->session && !c->session->is_homeless()) {
+	_send_command(c);
+      }
     }
   }
 
