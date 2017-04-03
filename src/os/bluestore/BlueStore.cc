@@ -7497,8 +7497,6 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
   if (!txc->oncommits.empty()) {
     finishers[n]->queue(txc->oncommits);
   }
-  throttle_ops.put(txc->ops);
-  throttle_bytes.put(txc->bytes);
 }
 
 void BlueStore::_txc_finish(TransContext *txc)
@@ -7786,12 +7784,19 @@ void BlueStore::_kv_sync_thread()
 	  }
 	}
       }
-      if (num_aios) {
-	for (auto txc : kv_committing) {
-	  if (txc->had_ios) {
-	    --txc->osr->txc_with_unstable_io;
-	  }
+      for (auto txc : kv_committing) {
+	if (txc->had_ios) {
+	  --txc->osr->txc_with_unstable_io;
 	}
+
+	// release throttle *before* we commit.  this allows new ops
+	// to be prepared and enter pipeline while we are waiting on
+	// the kv commit sync/flush.  then hopefully on the next
+	// iteration there will already be ops awake.  otherwise, we
+	// end up going to sleep, and then wake up when the very first
+	// transaction is ready for commit.
+	throttle_ops.put(txc->ops);
+	throttle_bytes.put(txc->bytes);
       }
 
       PExtentVector bluefs_gift_extents;
