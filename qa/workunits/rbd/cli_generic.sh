@@ -3,7 +3,7 @@
 # make sure rbd pool is EMPTY.. this is a test script!!
 rbd ls | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this script on an empty test cluster only." && exit 1
 
-IMGS="testimg1 testimg2 testimg3 foo foo2 bar bar2 test1 test2 test3 clone2"
+IMGS="testimg1 testimg2 testimg3 testimg-diff1 testimg-diff2 testimg-diff3 foo foo2 bar bar2 test1 test2 test3 clone2"
 
 tiered=0
 if ceph osd dump | grep ^pool | grep "'rbd'" | grep tier; then
@@ -20,7 +20,7 @@ remove_images() {
 
 test_others() {
     echo "testing import, export, resize, and snapshots..."
-    TMP_FILES="/tmp/img1 /tmp/img1.new /tmp/img2 /tmp/img2.new /tmp/img3 /tmp/img3.new /tmp/img1.snap1"
+    TMP_FILES="/tmp/img1 /tmp/img1.new /tmp/img2 /tmp/img2.new /tmp/img3 /tmp/img3.new /tmp/img-diff1.new /tmp/img-diff2.new /tmp/img-diff3.new /tmp/img1.snap1 /tmp/img1.snap1 /tmp/img-diff1.snap1"
 
     remove_images
     rm -f $TMP_FILES
@@ -45,26 +45,54 @@ test_others() {
     rbd info testimg1 | grep 'size 128 MB'
     rbd info --snap=snap1 testimg1 | grep 'size 256 MB'
 
+    # export-diff
+    rbd export-diff testimg1 --snap=snap1 /tmp/diff-testimg1-1
+    rbd export-diff testimg1 --from-snap=snap1 /tmp/diff-testimg1-2
+
+    # import-diff
+    rbd create $RBD_CREATE_ARGS --size=1 testimg-diff1
+    rbd import-diff --sparse-size 8K /tmp/diff-testimg1-1 testimg-diff1
+    rbd import-diff --sparse-size 8K /tmp/diff-testimg1-2 testimg-diff1
+
+    # info
+    rbd info testimg1 | grep 'size 128 MB'
+    rbd info --snap=snap1 testimg1 | grep 'size 256 MB'
+    rbd info testimg-diff1 | grep 'size 128 MB'
+    rbd info --snap=snap1 testimg-diff1 | grep 'size 256 MB'
+
     # make copies
     rbd copy testimg1 --snap=snap1 testimg2
     rbd copy testimg1 testimg3
+    rbd copy testimg-diff1 --sparse-size 768K --snap=snap1 testimg-diff2
+    rbd copy testimg-diff1 --sparse-size 768K testimg-diff3
 
     # verify the result
     rbd info testimg2 | grep 'size 256 MB'
     rbd info testimg3 | grep 'size 128 MB'
+    rbd info testimg-diff2 | grep 'size 256 MB'
+    rbd info testimg-diff3 | grep 'size 128 MB'
 
     rbd export testimg1 /tmp/img1.new
     rbd export testimg2 /tmp/img2.new
     rbd export testimg3 /tmp/img3.new
+    rbd export testimg-diff1 /tmp/img-diff1.new
+    rbd export testimg-diff2 /tmp/img-diff2.new
+    rbd export testimg-diff3 /tmp/img-diff3.new
 
     cmp /tmp/img2 /tmp/img2.new
     cmp /tmp/img3 /tmp/img3.new
+    cmp /tmp/img2 /tmp/img-diff2.new
+    cmp /tmp/img3 /tmp/img-diff3.new
 
     # rollback
     rbd snap rollback --snap=snap1 testimg1
+    rbd snap rollback --snap=snap1 testimg-diff1
     rbd info testimg1 | grep 'size 256 MB'
+    rbd info testimg-diff1 | grep 'size 256 MB'
     rbd export testimg1 /tmp/img1.snap1
+    rbd export testimg-diif1 /tmp/img-diff1.snap1
     cmp /tmp/img2 /tmp/img1.snap1
+    cmp /tmp/img2 /tmp/img-diff1.snap1
 
     # test create, copy of zero-length images
     rbd rm testimg2
@@ -74,7 +102,9 @@ test_others() {
 
     # remove snapshots
     rbd snap rm --snap=snap1 testimg1
+    rbd snap rm --snap=snap1 testimg-diff1
     rbd info --snap=snap1 testimg1 2>&1 | grep 'error setting snapshot context: (2) No such file or directory'
+    rbd info --snap=snap1 testimg-diff1 2>&1 | grep 'error setting snapshot context: (2) No such file or directory'
 
     remove_images
     rm -f $TMP_FILES

@@ -70,6 +70,7 @@ static const std::string IMAGE_SIZE("size");
 static const std::string IMAGE_STRIPE_UNIT("stripe-unit");
 static const std::string IMAGE_STRIPE_COUNT("stripe-count");
 static const std::string IMAGE_DATA_POOL("data-pool");
+static const std::string IMAGE_SPARSE_SIZE("sparse-size");
 
 static const std::string JOURNAL_OBJECT_SIZE("journal-object-size");
 static const std::string JOURNAL_SPLAY_WIDTH("journal-splay-width");
@@ -178,6 +179,8 @@ void add_create_journal_options(
   boost::program_options::options_description *opt);
 
 void add_size_option(boost::program_options::options_description *opt);
+
+void add_sparse_size_option(boost::program_options::options_description *opt);
 
 void add_path_options(boost::program_options::options_description *pos,
                       boost::program_options::options_description *opt,

@@ -152,8 +152,8 @@ namespace librbd {
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
-	   ImageOptions& opts, ProgressContext &prog_ctx);
-  int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx);
+	   ImageOptions& opts, ProgressContext &prog_ctx, size_t sparse_size);
+  int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx, size_t sparse_size);
 
   /* cooperative locking */
   int list_lockers(ImageCtx *ictx,
