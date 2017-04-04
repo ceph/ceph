@@ -402,7 +402,7 @@ protected:
     const std::string path;
   };
 
-  static constexpr std::initializer_list<int> terminal_errors = {
+  static std::initializer_list<int> terminal_errors = {
     -EACCES, -EPERM
   };
 
