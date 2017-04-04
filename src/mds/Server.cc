@@ -3361,12 +3361,15 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   frag_t fg = (__u32)req->head.args.readdir.frag;
   unsigned req_flags = (__u32)req->head.args.readdir.flags;
   string offset_str = req->get_path2();
-  dout(10) << " frag " << fg << " offset '" << offset_str << "'"
-	   << " flags " << req_flags << dendl;
 
   __u32 offset_hash = 0;
   if (!offset_str.empty())
     offset_hash = ceph_frag_value(diri->hash_dentry_name(offset_str));
+  else
+    offset_hash = (__u32)req->head.args.readdir.offset_hash;
+
+  dout(10) << " frag " << fg << " offset '" << offset_str << "'"
+	   << " offset_hash " << offset_hash << " flags " << req_flags << dendl;
 
   // does the frag exist?
   if (diri->dirfragtree[fg.value()] != fg) {
@@ -3439,10 +3442,11 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   // build dir contents
   bufferlist dnbl;
   __u32 numfiles = 0;
+  bool start = !offset_hash && offset_str.empty();
   bool end = (dir->begin() == dir->end());
   // skip all dns < dentry_key_t(snapid, offset_str, offset_hash)
   dentry_key_t skip_key(snapid, offset_str.c_str(), offset_hash);
-  for (CDir::map_t::iterator it = offset_str.empty() ? dir->begin() : dir->lower_bound(skip_key);
+  for (CDir::map_t::iterator it = start ? dir->begin() : dir->lower_bound(skip_key);
        !end && numfiles < max;
        end = (it == dir->end())) {
     CDentry *dn = it->second;
@@ -3462,7 +3466,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
       continue;
     }
 
-    if (!offset_str.empty()) {
+    if (!start) {
       dentry_key_t offset_key(dn->last, offset_str.c_str(), offset_hash);
       if (!(offset_key < dn->key()))
 	continue;
@@ -3534,17 +3538,15 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
     mdcache->lru.lru_touch(dn);
   }
   
-  bool complete = false;
   __u16 flags = 0;
   if (end) {
     flags = CEPH_READDIR_FRAG_END;
-    complete = offset_str.empty(); // FIXME: what purpose does this serve
-    if (complete)
-      flags |= CEPH_READDIR_FRAG_COMPLETE;
+    if (start)
+      flags |= CEPH_READDIR_FRAG_COMPLETE; // FIXME: what purpose does this serve
   }
   // client only understand END and COMPLETE flags ?
   if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
-    flags |= CEPH_READDIR_HASH_ORDER;
+    flags |= CEPH_READDIR_HASH_ORDER | CEPH_READDIR_OFFSET_HASH;
   }
   
   // finish final blob
@@ -3555,8 +3557,8 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   // yay, reply
   dout(10) << "reply to " << *req << " readdir num=" << numfiles
 	   << " bytes=" << dirbl.length()
+	   << " start=" << (int)start
 	   << " end=" << (int)end
-	   << " complete=" << (int)complete
 	   << dendl;
   mdr->reply_extra_bl = dirbl;
 
