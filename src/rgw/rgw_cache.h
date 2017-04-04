@@ -182,8 +182,8 @@ class RGWCache  : public T
 
   string normal_name(rgw_pool& pool, const std::string& oid) {
     std::string buf;
-    buf.reserve(pool.name.size() + oid.size() + 2);
-    buf.append(pool.name).append("+").append(oid);
+    buf.reserve(pool.name.size() + pool.ns.size() + oid.size() + 2);
+    buf.append(pool.name).append("+").append(pool.ns).append("+").append(oid);
     return buf;
   }
 
