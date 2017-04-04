@@ -98,11 +98,30 @@ public:
 };
 
 struct ElasticConfig {
+  uint64_t sync_instance{0};
   string id;
+  string index_path;
   RGWRESTConn *conn{nullptr};
   bool explicit_custom_meta{true};
   ItemList index_buckets;
   ItemList allow_owners;
+
+  void init_instance(RGWRealm& realm, uint64_t instance_id) {
+    sync_instance = instance_id;
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "-%08x", (uint32_t)(sync_instance & 0xFFFFFFFF));
+
+    index_path = "/rgw-" + realm.get_name() + buf;
+  }
+
+  string get_index_path() {
+    return index_path;
+  }
+
+  string get_obj_path(const RGWBucketInfo& bucket_info, const rgw_obj_key& key) {
+    return index_path +  "/object/" + bucket_info.bucket.bucket_id + ":" + key.name + ":" + key.instance;
+  }
 
   bool should_handle_operation(RGWBucketInfo& bucket_info) {
     return index_buckets.exists(bucket_info.bucket.name) &&
@@ -111,18 +130,6 @@ struct ElasticConfig {
 };
 
 using ElasticConfigRef = std::shared_ptr<ElasticConfig>;
-
-static string es_get_index_path(const RGWRealm& realm)
-{
-  string path = "/rgw-" + realm.get_name();
-  return path;
-}
-
-static string es_get_obj_path(const RGWRealm& realm, const RGWBucketInfo& bucket_info, const rgw_obj_key& key)
-{
-  string path = "/rgw-" + realm.get_name() + "/object/" + bucket_info.bucket.bucket_id + ":" + key.name + ":" + key.instance;
-  return path;
-}
 
 struct es_dump_type {
   const char *type;
@@ -336,7 +343,7 @@ public:
     reenter(this) {
       ldout(sync_env->cct, 0) << ": init elasticsearch config zone=" << sync_env->source_zone << dendl;
       yield {
-        string path = es_get_index_path(sync_env->store->get_realm());
+        string path = conf->get_index_path();
 
         es_index_mappings doc;
 
@@ -367,7 +374,7 @@ public:
                               << " b=" << bucket_info.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
                               << " attrs=" << attrs << dendl;
       yield {
-        string path = es_get_obj_path(sync_env->store->get_realm(), bucket_info, key);
+        string path = conf->get_obj_path(bucket_info, key);
         es_obj_metadata doc(sync_env->cct, conf, bucket_info, key, mtime, size, attrs);
 
         call(new RGWPutRESTResourceCR<es_obj_metadata, int>(sync_env->cct, conf->conn,
@@ -418,7 +425,7 @@ public:
       ldout(sync_env->cct, 0) << ": remove remote obj: z=" << sync_env->source_zone
                               << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
-        string path = es_get_obj_path(sync_env->store->get_realm(), bucket_info, key);
+        string path = conf->get_obj_path(bucket_info, key);
 
         call(new RGWDeleteRESTResourceCR(sync_env->cct, conf->conn,
                                          sync_env->http_manager,
@@ -448,6 +455,10 @@ public:
   }
   ~RGWElasticDataSyncModule() override {
     delete conf->conn;
+  }
+
+  void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) override {
+    conf->init_instance(sync_env->store->get_realm(), instance_id);
   }
 
   RGWCoroutine *init_sync(RGWDataSyncEnv *sync_env) override {
@@ -481,6 +492,10 @@ public:
   RGWRESTConn *get_rest_conn() {
     return conf->conn;
   }
+
+  string get_index_path() {
+    return conf->get_index_path();
+  }
 };
 
 RGWElasticSyncModuleInstance::RGWElasticSyncModuleInstance(CephContext *cct, const map<string, string, ltstr_nocase>& config)
@@ -498,8 +513,8 @@ RGWRESTConn *RGWElasticSyncModuleInstance::get_rest_conn()
   return data_handler->get_rest_conn();
 }
 
-string RGWElasticSyncModuleInstance::get_index_path(const RGWRealm& realm) {
-  return es_get_index_path(realm);
+string RGWElasticSyncModuleInstance::get_index_path() {
+  return data_handler->get_index_path();
 }
 
 RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr *orig) {

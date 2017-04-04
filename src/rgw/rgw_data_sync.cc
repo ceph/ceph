@@ -22,6 +22,8 @@
 
 #include "cls/lock/cls_lock_client.h"
 
+#include "auth/Crypto.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
@@ -475,6 +477,8 @@ public:
       pool(store->get_zone_params().log_pool),
       num_shards(num_shards), status(status) {
     lock_name = "sync_lock";
+
+    get_random_bytes((char *)&status.instance_id, sizeof(status.instance_id));
 
 #define COOKIE_LEN 16
     char buf[COOKIE_LEN + 1];
@@ -1456,6 +1460,8 @@ public:
       /* read sync status */
       yield call(new RGWReadDataSyncStatusCoroutine(sync_env, &sync_status));
 
+      data_sync_module = sync_env->sync_module->get_data_handler();
+
       if (retcode == -ENOENT) {
         sync_status.sync_info.num_shards = num_shards;
       } else if (retcode < 0 && retcode != -ENOENT) {
@@ -1476,9 +1482,10 @@ public:
         *reset_backoff = true;
       }
 
+      data_sync_module->init(sync_env, sync_status.sync_info.instance_id);
+
       if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateBuildingFullSyncMaps) {
         /* call sync module init here */
-        data_sync_module = sync_env->sync_module->get_data_handler();
         call(data_sync_module->init_sync(sync_env));
         /* state: building full sync maps */
         ldout(sync_env->cct, 20) << __func__ << "(): building full sync maps" << dendl;

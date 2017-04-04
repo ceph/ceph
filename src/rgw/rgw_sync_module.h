@@ -16,6 +16,8 @@ public:
   RGWDataSyncModule() {}
   virtual ~RGWDataSyncModule() {}
 
+  virtual void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) {}
+
   virtual RGWCoroutine *init_sync(RGWDataSyncEnv *sync_env) {
     return nullptr;
   }
