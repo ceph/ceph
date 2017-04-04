@@ -3,8 +3,6 @@
 
 #include "rgw_sync_module.h"
 
-class RGWRealm;
-
 class RGWElasticSyncModule : public RGWSyncModule {
 public:
   RGWElasticSyncModule() {}
@@ -24,7 +22,7 @@ public:
   RGWDataSyncModule *get_data_handler() override;
   RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) override;
   RGWRESTConn *get_rest_conn();
-  std::string get_index_path(const RGWRealm& realm);
+  std::string get_index_path();
 };
 
 #endif

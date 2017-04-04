@@ -209,7 +209,7 @@ void RGWMetadataSearchOp::execute()
   f.flush(ss);
   in.append(ss.str());
 
-  string resource = es_module->get_index_path(store->get_realm()) + "/_search";
+  string resource = es_module->get_index_path() + "/_search";
   param_vec_t params;
 #define BUFSIZE 32
   char buf[BUFSIZE];
