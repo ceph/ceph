@@ -638,7 +638,7 @@ bool RGWLC::LCWorker::should_work(utime_t& now)
   if (cct->_conf->rgw_lc_debug_interval > 0) {
 	  /* We're debugging, so say we can run */
 	  return true;
-  } else if ((bdt.tm_hour*60 + bdt.tm_min >= start_hour*60 + start_minute) ||
+  } else if ((bdt.tm_hour*60 + bdt.tm_min >= start_hour*60 + start_minute) &&
 		     (bdt.tm_hour*60 + bdt.tm_min <= end_hour*60 + end_minute)) {
 	  return true;
   } else {
