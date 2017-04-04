@@ -32,7 +32,7 @@ void simple_spin_lock(simple_spinlock_t *lock)
     asm volatile("pause");
 #elif defined(__arm__) || defined(__aarch64__)
     asm volatile("yield");
-#elif defined(__ppc64__)
+#elif defined(__powerpc__) || defined(__ppc__)
     asm volatile("or 27,27,27");
 #else
 #error "Unknown architecture"
