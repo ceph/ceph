@@ -12,6 +12,7 @@
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/image_watcher/NotifyLockOwner.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/watcher/Utils.h"
 #include "include/encoding.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
@@ -28,8 +29,7 @@ using namespace watch_notify;
 using util::create_async_context_callback;
 using util::create_context_callback;
 using util::create_rados_callback;
-using librbd::watcher::HandlePayloadVisitor;
-using librbd::watcher::C_NotifyAck;
+using librbd::watcher::util::HandlePayloadVisitor;
 
 static const double	RETRY_DELAY_SECONDS = 1.0;
 
