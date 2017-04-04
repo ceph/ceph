@@ -9120,11 +9120,12 @@ int BlueStore::_do_alloc_write(
                                            wi.length0,
                                            wi.b,
                                            nullptr);
+    wi.b->dirty_blob().mark_used(le->blob_offset, le->length);
     txc->statfs_delta.stored() += le->length;
     dout(20) << __func__ << "  lex " << *le << dendl;
     _buffer_cache_write(txc, wi.b, b_off, wi.bl,
                         wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-    
+
     // queue io
     if (!g_conf->bluestore_debug_omit_block_device_write) {
       if (l->length() <= prefer_deferred_size) {
