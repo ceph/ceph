@@ -514,8 +514,8 @@ void OSDService::init()
   objecter_finisher.start();
   objecter->set_client_incarnation(0);
 
-  // exclude objecter from daemonperf output
-  objecter->get_logger()->set_suppress_nicks(true);
+  // deprioritize objecter in daemonperf output
+  objecter->get_logger()->set_prio_adjust(-3);
 
   watch_timer.init();
   agent_timer.init();
