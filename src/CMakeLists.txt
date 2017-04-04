@@ -81,22 +81,11 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64le")
-  message(STATUS " we are ppc64le")
-  CHECK_C_COMPILER_FLAG("-maltivec" HAS_ALTIVEC)
-  if(HAS_ALTIVEC)
-    message(STATUS " HAS_ALTIVEC yes")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -maltivec")
-    set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -maltivec")
-  endif(HAS_ALTIVEC)
-  CHECK_C_COMPILER_FLAG("-mcpu=power8" HAVE_POWER8)
-  if(HAVE_POWER8)
-    message(STATUS " HAVE_POWER8 yes")
-  endif(HAVE_POWER8)
-else(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64le")
+include(SIMDExt)
+if(HAVE_INTEL)
   set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
   set(CMAKE_ASM_FLAGS "-f elf64")
-endif(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc64le")
+endif()
 
 execute_process(
   COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
@@ -300,12 +289,6 @@ configure_file(
   ${CMAKE_SOURCE_DIR}/src/ceph_ver.h.in.cmake
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   @ONLY)
-
-set(arch_files
-  arch/arm.c
-  arch/intel.c
-  arch/ppc.c
-  arch/probe.cc)
 
 set(auth_files
   auth/AuthAuthorizeHandler.cc
@@ -527,9 +510,16 @@ set(libcommon_files
   common/fs_types.cc
   common/dns_resolve.cc
   common/hostname.cc
-  ${arch_files}
+  arch/probe.cc
   ${auth_files}
   ${mds_files})
+if(HAVE_ARM)
+  list(APPEND libcommon_files arch/arm.c)
+elseif(HAVE_INTEL)
+  list(APPEND libcommon_files arch/intel.c)
+elseif(HAVE_POWER8)
+  list(APPEND libcommon_files arch/ppc.c)
+endif()
 if(LINUX)
   list(APPEND libcommon_files msg/async/EventEpoll.cc)
   message(STATUS " Using EventEpoll for events.")
@@ -600,7 +590,6 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 
-include(SIMDExt)
 if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
   set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")
