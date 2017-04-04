@@ -378,13 +378,16 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
         f->dump_string("description", "");
       }
 
-      if (d->nick != NULL && !suppress_nicks) {
+      if (d->nick != NULL) {
         f->dump_string("nick", d->nick);
       } else {
         f->dump_string("nick", "");
       }
       if (d->prio) {
-	f->dump_int("priority", d->prio);
+	int p = std::max(std::min(d->prio + prio_adjust,
+				  (int)PerfCountersBuilder::PRIO_CRITICAL),
+			 0);
+	f->dump_int("priority", p);
       }
       f->close_section();
     } else {

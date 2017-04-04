@@ -182,8 +182,9 @@ public:
     m_name = s;
   }
 
-  void set_suppress_nicks(bool b) {
-    suppress_nicks = b;
+  /// adjust priority values by some value
+  void set_prio_adjust(int p) {
+    prio_adjust = p;
   }
 
 private:
@@ -202,7 +203,7 @@ private:
   std::string m_name;
   const std::string m_lock_name;
 
-  bool suppress_nicks = false;
+  int prio_adjust = 0;
 
   /** Protects m_data */
   mutable Mutex m_lock;
