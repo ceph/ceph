@@ -193,6 +193,7 @@ void Mgr::init()
   }
 
   dout(4) << "waiting for config-keys..." << dendl;
+
   // Preload config keys (`get` for plugins is to be a fast local
   // operation, we we don't have to synchronize these later because
   // all sets will come via mgr)
@@ -305,8 +306,9 @@ void Mgr::load_config()
   dout(10) << "listing keys" << dendl;
   JSONCommand cmd;
   cmd.run(monc, "{\"prefix\": \"config-key list\"}");
-
+  lock.Unlock();
   cmd.wait();
+  lock.Lock();
   assert(cmd.r == 0);
 
   std::map<std::string, std::string> loaded;
