@@ -5173,6 +5173,7 @@ int BlueStore::fsck(bool deep)
 	}
       }
       // lextents
+      map<BlobRef,uint16_t> referenced;
       uint64_t pos = 0;
       map<BlobRef, bluestore_blob_use_tracker_t> ref_map;
       for (auto& l : o->extent_map.extent_map) {
@@ -5206,6 +5207,65 @@ int BlueStore::fsck(bool deep)
 	  l.blob_offset, 
 	  l.length);
 	++num_extents;
+	if (blob.has_unused()) {
+	  auto p = referenced.find(l.blob);
+	  uint16_t *pu;
+	  if (p == referenced.end()) {
+	    pu = &referenced[l.blob];
+	  } else {
+	    pu = &p->second;
+	  }
+	  uint64_t blob_len = blob.get_logical_length();
+	  assert((blob_len % (sizeof(*pu)*8)) == 0);
+	  assert(l.blob_offset + l.length <= blob_len);
+	  uint64_t chunk_size = blob_len / (sizeof(*pu)*8);
+	  uint64_t start = l.blob_offset / chunk_size;
+	  uint64_t end =
+	    ROUND_UP_TO(l.blob_offset + l.length, chunk_size) / chunk_size;
+	  for (auto i = start; i < end; ++i) {
+	    (*pu) |= (1u << i);
+	  }
+	}
+      }
+      for (auto &i : referenced) {
+	dout(20) << __func__ << "  referenced 0x" << std::hex << i.second
+		 << std::dec << " for " << *i.first << dendl;
+	const bluestore_blob_t& blob = i.first->get_blob();
+	if (i.second & blob.unused) {
+	  derr << __func__ << " error: " << oid << " blob claims unused 0x"
+	       << std::hex << blob.unused
+	       << " but extents reference 0x" << i.second
+	       << " on blob " << *i.first << dendl;
+	  ++errors;
+	}
+	if (blob.has_csum()) {
+	  uint64_t blob_len = blob.get_logical_length();
+	  uint64_t unused_chunk_size = blob_len / (sizeof(blob.unused)*8);
+	  unsigned csum_count = blob.get_csum_count();
+	  unsigned csum_chunk_size = blob.get_csum_chunk_size();
+	  for (unsigned p = 0; p < csum_count; ++p) {
+	    unsigned pos = p * csum_chunk_size;
+	    unsigned firstbit = pos / unused_chunk_size;    // [firstbit,lastbit]
+	    unsigned lastbit = (pos + csum_chunk_size - 1) / unused_chunk_size;
+	    unsigned mask = 1u << firstbit;
+	    for (unsigned b = firstbit + 1; b <= lastbit; ++b) {
+	      mask |= 1u << b;
+	    }
+	    if ((blob.unused & mask) == mask) {
+	      // this csum chunk region is marked unused
+	      if (blob.get_csum_item(p) != 0) {
+		derr << __func__ << " error: " << oid
+		     << " blob claims csum chunk 0x" << std::hex << pos
+		     << "~" << csum_chunk_size
+		     << " is unused (mask 0x" << mask << " of unused 0x"
+		     << blob.unused << ") but csum is non-zero 0x"
+		     << blob.get_csum_item(p) << std::dec << " on blob "
+		     << *i.first << dendl;
+		++errors;
+	      }
+	    }
+	  }
+	}
       }
       for (auto &i : ref_map) {
 	++num_blobs;
