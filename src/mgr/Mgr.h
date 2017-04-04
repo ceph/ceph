@@ -86,7 +86,6 @@ public:
 
   void background_init();
   void shutdown();
-  int main(vector<const char *> args);
 };
 
 #endif
