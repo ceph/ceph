@@ -1533,6 +1533,36 @@ def zap(dev):
     if not stat.S_ISBLK(dmode) or is_partition(dev):
         raise Error('not full block device; cannot zap', dev)
     try:
+        # Thoroughly wipe all partitions of any traces of
+        # Filesystems or OSD Journals
+        #
+        # In addition we need to write 10M of data to each partition
+        # to make sure that after re-creating the same partition
+        # there is no trace left of any previous Filesystem or OSD
+        # Journal
+
+        LOG.debug('Writing zeros to existing partitions on %s', dev)
+
+        for partname in list_partitions(dev):
+            partition = get_dev_path(partname)
+            command_check_call(
+                [
+                    'wipefs',
+                    '--all',
+                    partition,
+                ],
+            )
+
+            command_check_call(
+                [
+                    'dd',
+                    'if=/dev/zero',
+                    'of={path}'.format(path=partition),
+                    'bs=1M',
+                    'count=10',
+                ],
+            )
+
         LOG.debug('Zapping partition table on %s', dev)
 
         # try to wipe out any GPT partition table backups.  sgdisk
