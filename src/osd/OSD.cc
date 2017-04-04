@@ -2746,13 +2746,15 @@ void OSD::create_logger()
     "Replication operations currently being processed (primary)");
   osd_plb.add_u64_counter(
     l_osd_op, "op",
-    "Client operations", "ops");
+    "Client operations", "ops", PerfCountersBuilder::PRIO_CRITICAL);
   osd_plb.add_u64_counter(
     l_osd_op_inb,   "op_in_bytes",
-    "Client operations total write size", "wr");
+    "Client operations total write size", "wr",
+    PerfCountersBuilder::PRIO_INTERESTING);
   osd_plb.add_u64_counter(
     l_osd_op_outb,  "op_out_bytes",
-    "Client operations total read size", "rd");
+    "Client operations total read size", "rd",
+    PerfCountersBuilder::PRIO_INTERESTING);
   osd_plb.add_time_avg(
     l_osd_op_lat,   "op_latency",
     "Latency of client operations (including queue time)",
@@ -2853,7 +2855,8 @@ void OSD::create_logger()
 
   osd_plb.add_u64_counter(
     l_osd_rop, "recovery_ops",
-    "Started recovery operations", "rop");
+    "Started recovery operations", "rop",
+    PerfCountersBuilder::PRIO_INTERESTING);
 
   osd_plb.add_u64(l_osd_loadavg, "loadavg", "CPU load");
   osd_plb.add_u64(l_osd_buf, "buffer_bytes", "Total allocated buffer size");
@@ -2865,7 +2868,8 @@ void OSD::create_logger()
     l_osd_cached_crc_adjusted, "cached_crc_adjusted",
     "Total number getting crc from crc_cache with adjusting");
 
-  osd_plb.add_u64(l_osd_pg, "numpg", "Placement groups", "pgs");
+  osd_plb.add_u64(l_osd_pg, "numpg", "Placement groups", "pgs",
+		  PerfCountersBuilder::PRIO_USEFUL);
   osd_plb.add_u64(
     l_osd_pg_primary, "numpg_primary",
     "Placement groups for which this osd is primary");
