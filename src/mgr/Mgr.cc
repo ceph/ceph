@@ -46,7 +46,6 @@ Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
   lock("Mgr::lock"),
   timer(g_ceph_context, lock),
   finisher(g_ceph_context, "Mgr", "mgr-fin"),
-  waiting_for_fs_map(NULL),
   py_modules(daemon_state, cluster_state, *monc, finisher),
   cluster_state(monc, nullptr),
   server(monc, daemon_state, cluster_state, py_modules, clog_, audit_clog_),
@@ -59,7 +58,6 @@ Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
 
 Mgr::~Mgr()
 {
-  assert(waiting_for_fs_map == nullptr);
 }
 
 
@@ -186,19 +184,14 @@ void Mgr::init()
   monc->sub_want("mgrdigest", 0, 0);
 
   // Prepare to receive FSMap and request it
-  dout(4) << "requesting FSMap..." << dendl;
-  C_SaferCond cond;
-  waiting_for_fs_map = &cond;
   monc->sub_want("fsmap", 0, 0);
   monc->renew_subs();
 
   // Wait for FSMap
   dout(4) << "waiting for FSMap..." << dendl;
-  lock.Unlock();
-  cond.wait();
-  lock.Lock();
-  waiting_for_fs_map = nullptr;
-  dout(4) << "Got FSMap." << dendl;
+  while (!cluster_state.have_fsmap()) {
+    fs_map_cond.Wait(lock);
+  }
 
 
   // Wait for MgrDigest...?
@@ -486,10 +479,7 @@ void Mgr::handle_fs_map(MFSMap* m)
 
   const FSMap &new_fsmap = m->get_fsmap();
 
-  if (waiting_for_fs_map) {
-    waiting_for_fs_map->complete(0);
-    waiting_for_fs_map = NULL;
-  }
+  fs_map_cond.Signal();
 
   // TODO: callers (e.g. from python land) are potentially going to see
   // the new fsmap before we've bothered populating all the resulting

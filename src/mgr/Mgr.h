@@ -54,7 +54,7 @@ protected:
   SafeTimer timer;
   Finisher finisher;
 
-  Context *waiting_for_fs_map;
+  Cond fs_map_cond;
 
   PyModules py_modules;
   DaemonStateIndex daemon_state;
