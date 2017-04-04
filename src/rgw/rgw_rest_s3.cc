@@ -3471,7 +3471,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
         return -EPERM;
       }
       /* handle expiration in epoch time */
-      now_req = (uint64_t)timegm(&date_t);
+      now_req = (uint64_t)internal_timegm(&date_t);
       if (now >= now_req + exp) {
         dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
         return -EPERM;

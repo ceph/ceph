@@ -219,7 +219,7 @@ bool rgw_create_s3_canonical_header(const req_info& info,
         dout(0) << "NOTICE: bad date (predates epoch): " << req_date << dendl;
         return false;
       }
-      *header_time = utime_t(timegm(&t), 0);
+      *header_time = utime_t(internal_timegm(&t), 0);
     }
   }
 
