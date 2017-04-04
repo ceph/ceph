@@ -8806,7 +8806,8 @@ void BlueStore::_do_write_small(
                  << std::dec << dendl;
 
         o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-	wctx->write(offset, b, alloc_len, b_off0, padded, b_off, length, false, false);
+	wctx->write(offset, b, alloc_len, b_off0, padded, b_off, length,
+		    false, false);
         logger->inc(l_bluestore_write_small_unused);
         return;
       }
@@ -8879,7 +8880,7 @@ void BlueStore::_do_write_big(
 	    b_off = offset - ep->blob_start();
             prev_ep = end; // to avoid check below
 	    dout(20) << __func__ << " reuse blob " << *b << std::hex
-	      << " (" << b_off << "~" << l << ")" << std::dec << dendl;
+		     << " (" << b_off << "~" << l << ")" << std::dec << dendl;
 	  } else {
 	    ++ep;
 	    any_change = true;
@@ -8893,7 +8894,7 @@ void BlueStore::_do_write_big(
 	    b = prev_ep->blob;
 	    b_off = offset - prev_ep->blob_start();
 	    dout(20) << __func__ << " reuse blob " << *b << std::hex
-	      << " (" << b_off << "~" << l << ")" << std::dec << dendl;
+		     << " (" << b_off << "~" << l << ")" << std::dec << dendl;
 	  } else if (prev_ep != begin) {
 	    --prev_ep;
 	    any_change = true;
