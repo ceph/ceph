@@ -816,6 +816,36 @@ int snap_set(librbd::Image &image, const std::string &snap_name) {
   return 0;
 }
 
+bool calc_sparse_extent(const bufferptr &bp,
+                        size_t sparse_size,
+                        uint64_t length,
+                        size_t *write_offset,
+                        size_t *write_length,
+                        size_t *offset) {
+  size_t extent_size;
+  if (*offset + sparse_size > length) {
+    extent_size = length - *offset;
+  } else {
+    extent_size = sparse_size;
+  }
+
+  bufferptr extent(bp, *offset, extent_size);
+  *offset += extent_size;
+
+  bool extent_is_zero = extent.is_zero();
+  if (!extent_is_zero) {
+    *write_length += extent_size;
+  }
+  if (extent_is_zero &&  *write_length == 0) {
+    *write_offset += extent_size;
+  }
+
+  if ((extent_is_zero || *offset == length) && *write_length != 0) {
+    return true;
+  }
+  return false;
+}
+
 std::string image_id(librbd::Image& image) {
   std::string id;
   int r = image.get_id(&id);

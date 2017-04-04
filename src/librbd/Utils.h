@@ -187,6 +187,12 @@ private:
 
 uint64_t get_rbd_default_features(CephContext* cct);
 
+bool calc_sparse_extent(const bufferptr &bp,
+                        size_t sparse_size,
+                        uint64_t length,
+                        size_t *write_offset,
+                        size_t *write_length,
+                        size_t *offset);
 } // namespace util
 
 } // namespace librbd

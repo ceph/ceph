@@ -358,6 +358,9 @@ CEPH_RBD_API int rbd_copy(rbd_image_t image, rados_ioctx_t dest_io_ctx,
 CEPH_RBD_API int rbd_copy2(rbd_image_t src, rbd_image_t dest);
 CEPH_RBD_API int rbd_copy3(rbd_image_t src, rados_ioctx_t dest_io_ctx,
 			   const char *destname, rbd_image_options_t dest_opts);
+CEPH_RBD_API int rbd_copy4(rbd_image_t src, rados_ioctx_t dest_io_ctx,
+			   const char *destname, rbd_image_options_t dest_opts,
+			   size_t sparse_size);
 CEPH_RBD_API int rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
                                         const char *destname,
                                         librbd_progress_fn_t cb, void *cbdata);
@@ -368,6 +371,12 @@ CEPH_RBD_API int rbd_copy_with_progress3(rbd_image_t image,
 					 const char *destname,
 					 rbd_image_options_t dest_opts,
 					 librbd_progress_fn_t cb, void *cbdata);
+CEPH_RBD_API int rbd_copy_with_progress4(rbd_image_t image,
+					 rados_ioctx_t dest_p,
+					 const char *destname,
+					 rbd_image_options_t dest_opts,
+					 librbd_progress_fn_t cb, void *cbdata,
+					 size_t sparse_size);
 
 /* snapshots */
 CEPH_RBD_API int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,

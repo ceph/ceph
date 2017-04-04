@@ -254,11 +254,16 @@ public:
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy2(Image& dest);
   int copy3(IoCtx& dest_io_ctx, const char *destname, ImageOptions& opts);
+  int copy4(IoCtx& dest_io_ctx, const char *destname, ImageOptions& opts,
+	    size_t sparse_size);
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			 ProgressContext &prog_ctx);
   int copy_with_progress2(Image& dest, ProgressContext &prog_ctx);
   int copy_with_progress3(IoCtx& dest_io_ctx, const char *destname,
 			  ImageOptions& opts, ProgressContext &prog_ctx);
+  int copy_with_progress4(IoCtx& dest_io_ctx, const char *destname,
+			  ImageOptions& opts, ProgressContext &prog_ctx,
+			  size_t sparse_size);
 
   /* striping */
   uint64_t get_stripe_unit() const;
