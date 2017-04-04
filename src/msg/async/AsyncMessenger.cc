@@ -291,6 +291,15 @@ void AsyncMessenger::ready()
 {
   ldout(cct,10) << __func__ << " " << get_myaddr() << dendl;
 
+  stack->ready();
+  if (pending_bind) {
+    int err = bind(pending_bind_addr);
+    if (err) {
+      lderr(cct) << __func__ << " postponed bind failed" << dendl;
+      ceph_abort();
+    }
+  }
+
   Mutex::Locker l(lock);
   for (auto &&p : processors)
     p->start();
@@ -320,12 +329,23 @@ int AsyncMessenger::shutdown()
 int AsyncMessenger::bind(const entity_addr_t &bind_addr)
 {
   lock.Lock();
-  if (started) {
+
+  if (!pending_bind && started) {
     ldout(cct,10) << __func__ << " already started" << dendl;
     lock.Unlock();
     return -1;
   }
+
   ldout(cct,10) << __func__ << " bind " << bind_addr << dendl;
+
+  if (!stack->is_ready()) {
+    ldout(cct, 10) << __func__ << " Network Stack is not ready for bind yet - postponed" << dendl;
+    pending_bind_addr = bind_addr;
+    pending_bind = true;
+    lock.Unlock();
+    return 0;
+  }
+
   lock.Unlock();
 
   // bind to a socket

@@ -287,7 +287,6 @@ class NetworkStack : public CephContext::ForkWatcher {
  protected:
   CephContext *cct;
   vector<Worker*> workers;
-  // Used to indicate whether thread started
 
   explicit NetworkStack(CephContext *c, const string &t);
  public:
@@ -337,6 +336,8 @@ class NetworkStack : public CephContext::ForkWatcher {
     start();
   }
 
+  virtual bool is_ready() { return true; };
+  virtual void ready() { };
 };
 
 #endif //CEPH_MSG_ASYNC_STACK_H
