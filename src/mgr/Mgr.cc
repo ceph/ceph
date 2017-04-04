@@ -162,10 +162,19 @@ void Mgr::init()
   dout(4) << "Loading daemon metadata..." << dendl;
   load_all_metadata();
 
-  // Preload config keys (`get` for plugins is to be a fast local
-  // operation, we we don't have to synchronize these later because
-  // all sets will come via mgr)
-  load_config();
+  // subscribe to all the maps
+  monc->sub_want("log-info", 0, 0);
+  monc->sub_want("mgrdigest", 0, 0);
+  monc->sub_want("fsmap", 0, 0);
+
+  dout(4) << "waiting for OSDMap..." << dendl;
+  // Subscribe to OSDMap update to pass on to ClusterState
+  objecter->maybe_request_map();
+
+  // reset the mon session.  we get these maps through subscriptions which
+  // are stateful with the connection, so even if *we* don't have them a
+  // previous incarnation sharing the same MonClient may have.
+  monc->reopen_session();
 
   // Start Objecter and wait for OSD map
   lock.Unlock();  // Drop lock because OSDMap dispatch calls into my ms_dispatch
@@ -177,22 +186,17 @@ void Mgr::init()
     cluster_state.notify_osdmap(osd_map);
   });
 
-  // Subscribe to OSDMap update to pass on to ClusterState
-  objecter->maybe_request_map();
-
-  monc->sub_want("log-info", 0, 0);
-  monc->sub_want("mgrdigest", 0, 0);
-
-  // Prepare to receive FSMap and request it
-  monc->sub_want("fsmap", 0, 0);
-  monc->renew_subs();
-
   // Wait for FSMap
   dout(4) << "waiting for FSMap..." << dendl;
   while (!cluster_state.have_fsmap()) {
     fs_map_cond.Wait(lock);
   }
 
+  dout(4) << "waiting for config-keys..." << dendl;
+  // Preload config keys (`get` for plugins is to be a fast local
+  // operation, we we don't have to synchronize these later because
+  // all sets will come via mgr)
+  load_config();
 
   // Wait for MgrDigest...?
   // TODO
