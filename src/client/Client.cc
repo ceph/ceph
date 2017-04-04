@@ -1106,10 +1106,17 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     frag_t fg = (unsigned)request->head.args.readdir.frag;
     unsigned readdir_offset = dirp->next_offset;
     string readdir_start = dirp->last_name;
+    assert(!readdir_start.empty() || readdir_offset == 2);
 
     unsigned last_hash = 0;
-    if (!readdir_start.empty())
-      last_hash = ceph_frag_value(diri->hash_dentry_name(readdir_start));
+    if (hash_order) {
+      if (!readdir_start.empty()) {
+	last_hash = ceph_frag_value(diri->hash_dentry_name(readdir_start));
+      } else if (flags & CEPH_READDIR_OFFSET_HASH) {
+	/* mds understands offset_hash */
+	last_hash = (unsigned)request->head.args.readdir.offset_hash;
+      }
+    }
 
     if (fg != dst.frag) {
       ldout(cct, 10) << "insert_trace got new frag " << fg << " -> " << dst.frag << dendl;
@@ -1122,11 +1129,14 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     }
 
     ldout(cct, 10) << __func__ << " " << numdn << " readdir items, end=" << end
-		   << ", hash_order=" << hash_order << ", offset " << readdir_offset
-		   << ", readdir_start " << readdir_start << dendl;
+		   << ", hash_order=" << hash_order
+		   << ", readdir_start " << readdir_start
+		   << ", last_hash " << last_hash
+		   << ", next_offset " << readdir_offset << dendl;
 
     if (diri->snapid != CEPH_SNAPDIR &&
-	fg.is_leftmost() && readdir_offset == 2 && readdir_start.empty()) {
+	fg.is_leftmost() && readdir_offset == 2 &&
+	!(hash_order && last_hash)) {
       dirp->release_count = diri->dir_release_count;
       dirp->ordered_count = diri->dir_ordered_count;
       dirp->start_shared_gen = diri->shared_gen;
@@ -7362,6 +7372,8 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   req->head.args.readdir.flags = CEPH_READDIR_REPLY_BITFLAGS;
   if (dirp->last_name.length()) {
     req->path2.set_path(dirp->last_name.c_str());
+  } else if (dirp->hash_order()) {
+    req->head.args.readdir.offset_hash = dirp->offset_high();
   }
   req->dirp = dirp;
   
