@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
+#include "librbd/watcher/Types.h"
 #include <iosfwd>
 #include <list>
 #include <string>
@@ -19,35 +20,9 @@ class Formatter;
 namespace librbd {
 namespace watch_notify {
 
-struct ClientId {
-  uint64_t gid;
-  uint64_t handle;
+using librbd::watcher::ClientId;
 
-  ClientId() : gid(0), handle(0) {}
-  ClientId(uint64_t gid_, uint64_t handle_) : gid(gid_), handle(handle_) {}
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
-  void dump(Formatter *f) const;
-
-  inline bool is_valid() const {
-    return (*this != ClientId());
-  }
-
-  inline bool operator==(const ClientId &rhs) const {
-    return (gid == rhs.gid && handle == rhs.handle);
-  }
-  inline bool operator!=(const ClientId &rhs) const {
-    return !(*this == rhs);
-  }
-  inline bool operator<(const ClientId &rhs) const {
-    if (gid != rhs.gid) {
-      return gid < rhs.gid;
-    } else {
-      return handle < rhs.handle;
-    }
-  }
-};
+WRITE_CLASS_ENCODER(ClientId);
 
 struct AsyncRequestId {
   ClientId client_id;
@@ -387,11 +362,8 @@ struct ResponseMessage {
 std::ostream &operator<<(std::ostream &out,
                          const librbd::watch_notify::NotifyOp &op);
 std::ostream &operator<<(std::ostream &out,
-                         const librbd::watch_notify::ClientId &client);
-std::ostream &operator<<(std::ostream &out,
                          const librbd::watch_notify::AsyncRequestId &request);
 
-WRITE_CLASS_ENCODER(librbd::watch_notify::ClientId);
 WRITE_CLASS_ENCODER(librbd::watch_notify::AsyncRequestId);
 WRITE_CLASS_ENCODER(librbd::watch_notify::NotifyMessage);
 WRITE_CLASS_ENCODER(librbd::watch_notify::ResponseMessage);

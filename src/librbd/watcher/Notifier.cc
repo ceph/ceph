@@ -5,6 +5,7 @@
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/watcher/Types.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -14,6 +15,25 @@ namespace librbd {
 namespace watcher {
 
 const uint64_t Notifier::NOTIFY_TIMEOUT = 5000;
+
+Notifier::C_AioNotify::C_AioNotify(Notifier *notifier, NotifyResponse *response,
+                                   Context *on_finish)
+  : notifier(notifier), response(response), on_finish(on_finish) {
+}
+
+void Notifier::C_AioNotify::finish(int r) {
+  if (response != nullptr) {
+    if (r == 0 || r == -ETIMEDOUT) {
+      try {
+        bufferlist::iterator it = out_bl.begin();
+        ::decode(*response, it);
+      } catch (const buffer::error &err) {
+        r = -EBADMSG;
+      }
+    }
+  }
+  notifier->handle_notify(r, on_finish);
+}
 
 Notifier::Notifier(ContextWQ *work_queue, IoCtx &ioctx, const std::string &oid)
   : m_work_queue(work_queue), m_ioctx(ioctx), m_oid(oid),
@@ -37,7 +57,8 @@ void Notifier::flush(Context *on_finish) {
   m_aio_notify_flush_ctxs.push_back(on_finish);
 }
 
-void Notifier::notify(bufferlist &bl, bufferlist *out_bl, Context *on_finish) {
+void Notifier::notify(bufferlist &bl, NotifyResponse *response,
+                      Context *on_finish) {
   {
     Mutex::Locker aio_notify_locker(m_aio_notify_lock);
     ++m_pending_aio_notifies;
@@ -46,9 +67,9 @@ void Notifier::notify(bufferlist &bl, bufferlist *out_bl, Context *on_finish) {
                      << dendl;
   }
 
-  C_AioNotify *ctx = new C_AioNotify(this, on_finish);
+  C_AioNotify *ctx = new C_AioNotify(this, response, on_finish);
   librados::AioCompletion *comp = util::create_rados_callback(ctx);
-  int r = m_ioctx.aio_notify(m_oid, comp, bl, NOTIFY_TIMEOUT, out_bl);
+  int r = m_ioctx.aio_notify(m_oid, comp, bl, NOTIFY_TIMEOUT, &ctx->out_bl);
   assert(r == 0);
   comp->release();
 }

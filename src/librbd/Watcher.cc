@@ -11,9 +11,6 @@
 #include <boost/bind.hpp>
 
 #define dout_subsys ceph_subsys_rbd
-#undef dout_prefix
-#define dout_prefix *_dout << "librbd::Watcher: " << this << " " << __func__ \
-                           << ": "
 
 namespace librbd {
 
@@ -65,6 +62,27 @@ struct C_UnwatchAndFlush : public Context {
 };
 
 } // anonymous namespace
+
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::Watcher::C_NotifyAck " << this << " " \
+                           << __func__ << ": "
+
+Watcher::C_NotifyAck::C_NotifyAck(Watcher *watcher, uint64_t notify_id,
+                                  uint64_t handle)
+  : watcher(watcher), cct(watcher->m_cct), notify_id(notify_id),
+    handle(handle) {
+  ldout(cct, 10) << "id=" << notify_id << ", " << "handle=" << handle << dendl;
+}
+
+void Watcher::C_NotifyAck::finish(int r) {
+  ldout(cct, 10) << "r=" << r << dendl;
+  assert(r == 0);
+  watcher->acknowledge_notify(notify_id, handle, out);
+}
+
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::Watcher: " << this << " " << __func__ \
+                           << ": "
 
 Watcher::Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
                           const string& oid)
@@ -233,9 +251,10 @@ void Watcher::handle_rewatch(int r) {
   }
 }
 
-void Watcher::send_notify(bufferlist& payload, bufferlist *out_bl,
+void Watcher::send_notify(bufferlist& payload,
+                          watcher::NotifyResponse *response,
                           Context *on_finish) {
-  m_notifier.notify(payload, out_bl, on_finish);
+  m_notifier.notify(payload, response, on_finish);
 }
 
 void Watcher::WatchCtx::handle_notify(uint64_t notify_id,
