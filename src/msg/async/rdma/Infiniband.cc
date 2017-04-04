@@ -707,6 +707,11 @@ unsigned Infiniband::MemoryManager::return_tx(std::vector<Chunk*> &chunks)
   return send->take_back(chunks);
 }
 
+unsigned Infiniband::MemoryManager::return_rx(std::vector<Chunk*> &chunks)
+{
+  return channel->take_back(chunks);
+}
+
 int Infiniband::MemoryManager::get_send_buffers(std::vector<Chunk*> &c, size_t bytes)
 {
   return send->get_buffers(c, bytes);
