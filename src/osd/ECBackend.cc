@@ -707,6 +707,17 @@ void ECBackend::recover_object(
     h->ops.back().recovery_info.size = obc->obs.oi.size;
     h->ops.back().recovery_info.oi = obc->obs.oi;
   }
+  if (hoid.is_snap()) {
+    if (obc) {
+      assert(obc->ssc);
+      h->ops.back().recovery_info.ss = obc->ssc->snapset;
+    } else if (head) {
+      assert(head->ssc);
+      h->ops.back().recovery_info.ss = head->ssc->snapset;
+    } else {
+      assert(0 == "neither obc nor head set for a snap object");
+    }
+  }
   h->ops.back().recovery_progress.omap_complete = true;
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_actingbackfill_shards().begin();
