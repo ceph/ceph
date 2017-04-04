@@ -550,7 +550,7 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
   // Hack: use this as a tick/opportunity to prompt python-land that
   // the pgmap might have changed since last time we were here.
   py_modules.notify_all("pg_summary", "");
-  
+  dout(10) << "done." << dendl;
   m->put();
 }
 
