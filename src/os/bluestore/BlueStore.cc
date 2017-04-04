@@ -1784,6 +1784,11 @@ bool BlueStore::Blob::try_reuse_blob(uint32_t min_alloc_size,
       return false;
     }
 
+    // FIXME: in some cases we could reduce unused resolution
+    if (get_blob().has_unused()) {
+      return false;
+    }
+
     if (overflow > 0) {
       new_blen -= overflow;
       length -= overflow;
