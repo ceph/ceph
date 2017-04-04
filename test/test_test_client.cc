@@ -56,7 +56,7 @@ TEST(test_client, full_bore_timing) {
 			5); // outstanding ops allowed
   client->wait_until_done();
   auto end = now();
-  EXPECT_EQ(1000, count) << "didn't get right number of ops";
+  EXPECT_EQ(1000u, count) << "didn't get right number of ops";
 
   int milliseconds = (end - start) / std::chrono::milliseconds(1);
   EXPECT_LT(10000, milliseconds) << "timing too fast to be correct";
@@ -100,7 +100,7 @@ TEST(test_client, paused_timing) {
 			50); // outstanding ops allowed
   std::thread t([&]() {
       std::this_thread::sleep_for(std::chrono::seconds(5));
-      EXPECT_EQ(50, unresponded_count.load()) <<
+      EXPECT_EQ(50u, unresponded_count.load()) <<
 	"should have 50 unresponded calls";
       auto_respond = true;
       // respond to those 50 calls

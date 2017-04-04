@@ -660,7 +660,7 @@ TEST_F(HeapFixture1, iterator_basics) {
       ++count;
     }
 
-    EXPECT_EQ(7, count) << "count should be 7";
+    EXPECT_EQ(7u, count) << "count should be 7";
   }
 
   auto i1 = heap.begin();
@@ -691,7 +691,7 @@ TEST_F(HeapFixture1, iterator_basics) {
 	"value in heap must be part of original set";
       values.erase(v.data);
     }
-    EXPECT_EQ(0, values.size()) << "all values must have been seen";
+    EXPECT_EQ(0u, values.size()) << "all values must have been seen";
   }
 }
 
@@ -705,7 +705,7 @@ TEST_F(HeapFixture1, const_iterator_basics) {
       ++count;
     }
 
-    EXPECT_EQ(7, count) << "count should be 7";
+    EXPECT_EQ(7u, count) << "count should be 7";
   }
 
   auto i1 = heap.cbegin();
@@ -736,7 +736,7 @@ TEST_F(HeapFixture1, const_iterator_basics) {
 	"value in heap must be part of original set";
       values.erase(v.data);
     }
-    EXPECT_EQ(0, values.size()) << "all values must have been seen";
+    EXPECT_EQ(0u, values.size()) << "all values must have been seen";
   }
 }
 
@@ -913,7 +913,7 @@ TEST_F(HeapFixture1, display_sorted) {
 
   std::string s = ss.str();
 
-  EXPECT_GT(s.length(), 0);
+  EXPECT_GT(s.length(), 0u);
 
   auto negseven = s.find("-7");
   EXPECT_NE(negseven, std::string::npos);

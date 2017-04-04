@@ -131,7 +131,8 @@ namespace crimson {
        */
 
       lock_pq([&] () {
-	  EXPECT_EQ(pq.client_map.size(), 0) << "client map initially has size 0";
+	  EXPECT_EQ(0u, pq.client_map.size()) <<
+	    "client map initially has size 0";
 	});
 
       Request req;
@@ -141,7 +142,8 @@ namespace crimson {
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
       lock_pq([&] () {
-	  EXPECT_EQ(1, pq.client_map.size()) << "client map has 1 after 1 client";
+	  EXPECT_EQ(1u, pq.client_map.size()) <<
+	    "client map has 1 after 1 client";
 	  EXPECT_FALSE(pq.client_map.at(client)->idle) <<
 	    "initially client map entry shows not idle.";
 	});
@@ -156,7 +158,7 @@ namespace crimson {
       std::this_thread::sleep_for(std::chrono::seconds(2));
 
       lock_pq([&] () {
-	  EXPECT_EQ(0, pq.client_map.size()) <<
+	  EXPECT_EQ(0u, pq.client_map.size()) <<
 	    "client map loses its entry after erase age";
 	});
     } // TEST
@@ -240,8 +242,8 @@ namespace crimson {
 
       Queue pq(client_info_f, true);
 
-      EXPECT_EQ(0, pq.client_count());
-      EXPECT_EQ(0, pq.request_count());
+      EXPECT_EQ(0u, pq.client_count());
+      EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
@@ -255,12 +257,12 @@ namespace crimson {
       pq.add_request(MyReq(98), client2, req_params);
       pq.add_request(MyReq(44), client1, req_params);
 
-      EXPECT_EQ(2, pq.client_count());
-      EXPECT_EQ(9, pq.request_count());
+      EXPECT_EQ(2u, pq.client_count());
+      EXPECT_EQ(9u, pq.request_count());
 
       pq.remove_by_req_filter([](const MyReq& r) -> bool {return 1 == r.id % 2;});
 
-      EXPECT_EQ(5, pq.request_count());
+      EXPECT_EQ(5u, pq.request_count());
 
       std::list<MyReq> capture;
       pq.remove_by_req_filter(
@@ -274,8 +276,8 @@ namespace crimson {
 	},
 	true);
 
-      EXPECT_EQ(0, pq.request_count());
-      EXPECT_EQ(5, capture.size());
+      EXPECT_EQ(0u, pq.request_count());
+      EXPECT_EQ(5u, capture.size());
       int total = 0;
       for (auto i : capture) {
 	total += i.id;
@@ -308,8 +310,8 @@ namespace crimson {
 
       Queue pq(client_info_f, true);
 
-      EXPECT_EQ(0, pq.client_count());
-      EXPECT_EQ(0, pq.request_count());
+      EXPECT_EQ(0u, pq.client_count());
+      EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
@@ -320,8 +322,8 @@ namespace crimson {
       pq.add_request(MyReq(5), client1, req_params);
       pq.add_request(MyReq(6), client1, req_params);
 
-      EXPECT_EQ(1, pq.client_count());
-      EXPECT_EQ(6, pq.request_count());
+      EXPECT_EQ(1u, pq.client_count());
+      EXPECT_EQ(6u, pq.request_count());
 
       // remove odd ids in forward order and append to end
 
@@ -337,8 +339,8 @@ namespace crimson {
 	},
 	false);
 
-      EXPECT_EQ(3, pq.request_count());
-      EXPECT_EQ(3, capture.size());
+      EXPECT_EQ(3u, pq.request_count());
+      EXPECT_EQ(3u, capture.size());
       EXPECT_EQ(1, capture[0].id) << "items should come out in forward order";
       EXPECT_EQ(3, capture[1].id) << "items should come out in forward order";
       EXPECT_EQ(5, capture[2].id) << "items should come out in forward order";
@@ -358,8 +360,8 @@ namespace crimson {
 	},
 	false);
 
-      EXPECT_EQ(0, pq.request_count());
-      EXPECT_EQ(3, capture2.size());
+      EXPECT_EQ(0u, pq.request_count());
+      EXPECT_EQ(3u, capture2.size());
       EXPECT_EQ(6, capture2[0].id) << "items should come out in reverse order";
       EXPECT_EQ(4, capture2[1].id) << "items should come out in reverse order";
       EXPECT_EQ(2, capture2[2].id) << "items should come out in reverse order";
@@ -390,8 +392,8 @@ namespace crimson {
 
       Queue pq(client_info_f, true);
 
-      EXPECT_EQ(0, pq.client_count());
-      EXPECT_EQ(0, pq.request_count());
+      EXPECT_EQ(0u, pq.client_count());
+      EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
@@ -402,8 +404,8 @@ namespace crimson {
       pq.add_request(MyReq(5), client1, req_params);
       pq.add_request(MyReq(6), client1, req_params);
 
-      EXPECT_EQ(1, pq.client_count());
-      EXPECT_EQ(6, pq.request_count());
+      EXPECT_EQ(1u, pq.client_count());
+      EXPECT_EQ(6u, pq.request_count());
 
       // now remove odd ids in forward order
 
@@ -419,8 +421,8 @@ namespace crimson {
 	},
 	true);
 
-      EXPECT_EQ(3, pq.request_count());
-      EXPECT_EQ(3, capture.size());
+      EXPECT_EQ(3u, pq.request_count());
+      EXPECT_EQ(3u, capture.size());
       EXPECT_EQ(1, capture[0].id) << "items should come out in forward order";
       EXPECT_EQ(3, capture[1].id) << "items should come out in forward order";
       EXPECT_EQ(5, capture[2].id) << "items should come out in forward order";
@@ -439,8 +441,8 @@ namespace crimson {
 	},
 	true);
 
-      EXPECT_EQ(0, pq.request_count());
-      EXPECT_EQ(3, capture2.size());
+      EXPECT_EQ(0u, pq.request_count());
+      EXPECT_EQ(3u, capture2.size());
       EXPECT_EQ(6, capture2[0].id) << "items should come out in reverse order";
       EXPECT_EQ(4, capture2[1].id) << "items should come out in reverse order";
       EXPECT_EQ(2, capture2[2].id) << "items should come out in reverse order";
@@ -472,8 +474,8 @@ namespace crimson {
 
       Queue pq(client_info_f, true);
 
-      EXPECT_EQ(0, pq.client_count());
-      EXPECT_EQ(0, pq.request_count());
+      EXPECT_EQ(0u, pq.client_count());
+      EXPECT_EQ(0u, pq.request_count());
 
       ReqParams req_params(1,1);
 
@@ -487,8 +489,8 @@ namespace crimson {
       pq.add_request(MyReq(98), client2, req_params);
       pq.add_request(MyReq(44), client1, req_params);
 
-      EXPECT_EQ(2, pq.client_count());
-      EXPECT_EQ(9, pq.request_count());
+      EXPECT_EQ(2u, pq.client_count());
+      EXPECT_EQ(9u, pq.request_count());
 
       std::list<MyReq> removed;
 
@@ -498,7 +500,7 @@ namespace crimson {
 			    removed.push_front(r);
 			  });
 
-      EXPECT_EQ(3, removed.size());
+      EXPECT_EQ(3u, removed.size());
       EXPECT_EQ(1, removed.front().id);
       removed.pop_front();
       EXPECT_EQ(11, removed.front().id);
@@ -506,7 +508,7 @@ namespace crimson {
       EXPECT_EQ(44, removed.front().id);
       removed.pop_front();
 
-      EXPECT_EQ(6, pq.request_count());
+      EXPECT_EQ(6u, pq.request_count());
 
       Queue::PullReq pr = pq.pull_request();
       EXPECT_TRUE(pr.is_retn());
@@ -517,7 +519,7 @@ namespace crimson {
       EXPECT_EQ(0, pr.get_retn().request->id);
 
       pq.remove_by_client(client2);
-      EXPECT_EQ(0, pq.request_count()) <<
+      EXPECT_EQ(0u, pq.request_count()) <<
 	"after second client removed, none left";
     } // TEST
 
@@ -715,7 +717,7 @@ namespace crimson {
 
       QueueRef pq(new Queue(client_info_f, false));
 
-      Request req;
+      // Request req;
       ReqParams req_params(1,1);
 
       auto now = dmc::get_time();
@@ -732,7 +734,7 @@ namespace crimson {
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 52;
-      ClientId client2 = 8;
+      // ClientId client2 = 8;
 
       dmc::ClientInfo info(1.0, 0.0, 1.0);
 
@@ -764,7 +766,7 @@ namespace crimson {
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 52;
-      ClientId client2 = 8;
+      // ClientId client2 = 8;
 
       dmc::ClientInfo info(0.0, 1.0, 1.0);
 
@@ -796,7 +798,7 @@ namespace crimson {
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 52;
-      ClientId client2 = 8;
+      // ClientId client2 = 8;
 
       dmc::ClientInfo info(1.0, 0.0, 1.0);
 
