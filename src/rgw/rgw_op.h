@@ -13,6 +13,7 @@
 
 #include <limits.h>
 
+#include <array>
 #include <memory>
 #include <string>
 #include <set>
@@ -402,8 +403,8 @@ protected:
     const std::string path;
   };
 
-  static constexpr std::initializer_list<int> terminal_errors = {
-    -EACCES, -EPERM
+  static constexpr std::array<int, 2> terminal_errors = {
+    { -EACCES, -EPERM }
   };
 
   /* FIXME:  boost::container::small_vector<fail_desc_t, 4> failures; */
