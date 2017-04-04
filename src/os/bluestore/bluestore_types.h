@@ -863,6 +863,7 @@ public:
   }
   void add_tail(uint32_t new_len) {
     assert(is_mutable());
+    assert(!has_unused());
     assert(new_len > logical_length);
     extents.emplace_back(
       bluestore_pextent_t(
@@ -872,9 +873,10 @@ public:
     if (has_csum()) {
       bufferptr t;
       t.swap(csum_data);
-      csum_data = buffer::create(get_csum_value_size() * logical_length / get_csum_chunk_size());
+      csum_data = buffer::create(
+	get_csum_value_size() * logical_length / get_csum_chunk_size());
       csum_data.copy_in(0, t.length(), t.c_str());
-      csum_data.zero( t.length(), csum_data.length() - t.length());
+      csum_data.zero(t.length(), csum_data.length() - t.length());
     }
   }
   uint32_t get_release_size(uint32_t min_alloc_size) const {
