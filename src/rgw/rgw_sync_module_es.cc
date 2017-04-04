@@ -103,11 +103,17 @@ struct ElasticConfig {
   string index_path;
   RGWRESTConn *conn{nullptr};
   bool explicit_custom_meta{true};
+  string override_index_path;
   ItemList index_buckets;
   ItemList allow_owners;
 
   void init_instance(RGWRealm& realm, uint64_t instance_id) {
     sync_instance = instance_id;
+
+    if (!override_index_path.empty()) {
+      index_path = override_index_path;
+      return;
+    }
 
     char buf[32];
     snprintf(buf, sizeof(buf), "-%08x", (uint32_t)(sync_instance & 0xFFFFFFFF));
@@ -452,6 +458,7 @@ public:
     conf->explicit_custom_meta = rgw_conf_get_bool(config, "explicit_custom_meta", true);
     conf->index_buckets.init(rgw_conf_get(config, "index_buckets_list", ""), true); /* approve all buckets by default */
     conf->allow_owners.init(rgw_conf_get(config, "approved_owners_list", ""), true); /* approve all bucket owners by default */
+    conf->override_index_path = rgw_conf_get(config, "override_index_path", "");
   }
   ~RGWElasticDataSyncModule() override {
     delete conf->conn;
