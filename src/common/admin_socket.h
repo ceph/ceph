@@ -77,13 +77,13 @@ public:
 
   bool init(const std::string &path);
 
+  void shutdown();
+
   void chown(uid_t uid, gid_t gid);
 
 private:
   AdminSocket(const AdminSocket& rhs);
   AdminSocket& operator=(const AdminSocket &rhs);
-
-  void shutdown();
 
   std::string create_shutdown_pipe(int *pipe_rd, int *pipe_wr);
   std::string destroy_shutdown_pipe();

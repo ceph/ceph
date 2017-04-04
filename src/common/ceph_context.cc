@@ -647,8 +647,7 @@ CephContext::~CephContext()
 
   delete _crypto_none;
   delete _crypto_aes;
-  if (_crypto_inited)
-    ceph::crypto::shutdown();
+  shutdown_crypto();
 }
 
 void CephContext::put() {
@@ -666,6 +665,14 @@ void CephContext::init_crypto()
   if (!_crypto_inited) {
     ceph::crypto::init(this);
     _crypto_inited = true;
+  }
+}
+
+void CephContext::shutdown_crypto()
+{
+  if (_crypto_inited) {
+    ceph::crypto::shutdown();
+    _crypto_inited = false;
   }
 }
 
@@ -716,6 +723,10 @@ void CephContext::join_service_thread()
   thread->exit_thread();
   thread->join();
   delete thread;
+
+  // shut down admin socket
+  if (_conf->admin_socket.length())
+    _admin_socket->shutdown();
 }
 
 uint32_t CephContext::get_module_type() const
