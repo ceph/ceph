@@ -1951,7 +1951,7 @@ struct bucket_list_entry {
     uint32_t nsec;
     if (parse_iso8601(mtime_str.c_str(), &t, &nsec)) {
       ceph_timespec ts;
-      ts.tv_sec = (uint64_t)timegm(&t);
+      ts.tv_sec = (uint64_t)internal_timegm(&t);
       ts.tv_nsec = nsec;
       mtime = real_clock::from_ceph_timespec(ts);
     }
