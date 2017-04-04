@@ -807,7 +807,6 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
     } else {
       end_header(s, op);
     }
-    rgw_flush_formatter(s, s->formatter);
   }
   perfcounter->inc(l_rgw_failed_req);
 }
