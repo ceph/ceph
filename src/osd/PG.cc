@@ -6700,6 +6700,15 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
 {
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
+
+  // Make sure all nodes that part of the recovery aren't full
+  if (!pg->cct->_conf->osd_debug_skip_full_check_in_recovery &&
+      pg->osd->check_osdmap_full(pg->actingbackfill)) {
+    post_event(RecoveryTooFull());
+    return;
+  }
+
+  pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   pg->state_set(PG_STATE_RECOVERY_WAIT);
   pg->osd->local_reserver.request_reservation(
     pg->info.pgid,
@@ -6708,6 +6717,15 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
       LocalRecoveryReserved()),
     pg->get_recovery_priority());
   pg->publish_stats_to_osd();
+}
+
+boost::statechart::result
+PG::RecoveryState::WaitLocalRecoveryReserved::react(const RecoveryTooFull &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->state_set(PG_STATE_RECOVERY_TOOFULL);
+  pg->schedule_recovery_full_retry();
+  return transit<NotRecovering>();
 }
 
 void PG::RecoveryState::WaitLocalRecoveryReserved::exit()

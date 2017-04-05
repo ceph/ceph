@@ -871,6 +871,7 @@ OPTION(osd_debug_skip_full_check_in_backfill_reservation, OPT_BOOL, false)
 OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_inject_copyfrom_error, OPT_BOOL, false)  // inject failure during copyfrom completion
 OPTION(osd_debug_misdirected_ops, OPT_BOOL, false)
+OPTION(osd_debug_skip_full_check_in_recovery, OPT_BOOL, false)
 OPTION(osd_enxio_on_misdirected_op, OPT_BOOL, false)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL, false)
 OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
