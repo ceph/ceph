@@ -1264,7 +1264,7 @@ public:
 
 class RGWPutACLs : public RGWOp {
 protected:
-  size_t len;
+  int len;
   char *data;
   ACLOwner owner;
 
@@ -1307,7 +1307,7 @@ public:
 
 class RGWPutLC : public RGWOp {
 protected:
-  size_t len;
+  int len;
   char *data;
   string cookie;
 
@@ -1723,7 +1723,7 @@ public:
 class RGWDeleteMultiObj : public RGWOp {
 protected:
   int max_to_delete;
-  size_t len;
+  int len;
   char *data;
   rgw_bucket bucket;
   bool quiet;
