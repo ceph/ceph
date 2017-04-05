@@ -1401,6 +1401,11 @@ void RGWGetObj::execute()
   if (op_ret < 0)
     goto done_err;
 
+  /* STAT ops don't need data, and do no i/o */
+  if (get_type() == RGW_OP_STAT_OBJ) {
+    return;
+  }
+
   /* start gettorrent */
   if (torrent.get_flag())
   {
@@ -1476,11 +1481,6 @@ void RGWGetObj::execute()
   }
 
   start = ofs;
-
-  /* STAT ops don't need data, and do no i/o */
-  if (get_type() == RGW_OP_STAT_OBJ) {
-    return;
-  }
 
   if (!get_data || ofs > end) {
     send_response_data(bl, 0, 0);
