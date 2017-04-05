@@ -1620,7 +1620,7 @@ void RGWListBuckets::execute()
       map<string, RGWBucketEnt>::reverse_iterator riter = m.rbegin();
       marker = riter->first;
     }
-  } while (!done);
+  } while (is_truncated && !done);
 
 send_end:
   if (!started) {
@@ -1701,7 +1701,6 @@ int RGWStatAccount::verify_permission()
 void RGWStatAccount::execute()
 {
   string marker;
-  bool done;
   bool is_truncated;
   uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
@@ -1729,9 +1728,8 @@ void RGWStatAccount::execute()
       }
       buckets_count += m.size();
 
-      done = (m.size() < max_buckets);
     }
-  } while (!done);
+  } while (is_truncated);
 }
 
 int RGWGetBucketVersioning::verify_permission()
