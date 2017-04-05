@@ -853,7 +853,8 @@ TEST(LibRGW, RELEASE_DIRS1) {
 }
 
 extern "C" {
-  static bool r1_cb(const char* name, void *arg, uint64_t offset) {
+  static bool r1_cb(const char* name, void *arg, uint64_t offset,
+		    uint32_t flags) {
     struct rgw_file_handle* parent_fh
       = static_cast<struct rgw_file_handle*>(arg);
     RGWFileHandle* rgw_fh = get_rgwfh(parent_fh);
@@ -861,6 +862,7 @@ extern "C" {
 			   << " bucket=" << rgw_fh->bucket_name()
 			   << " dir=" << rgw_fh->full_object_name()
 			   << " called back name=" << name
+			   << " flags=" << flags
 			   << dendl;
     string name_str{name};
     if (! ((name_str == ".") ||
@@ -1008,7 +1010,8 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
 }
 
 extern "C" {
-  static bool r2_cb(const char* name, void *arg, uint64_t offset) {
+  static bool r2_cb(const char* name, void *arg, uint64_t offset,
+		    uint32_t flags) {
     dirent_vec& dvec =
       *(static_cast<dirent_vec*>(arg));
     lsubdout(cct, rgw, 10) << __func__
@@ -1016,6 +1019,7 @@ extern "C" {
 			   << " dir=" << marker_dir
 			   << " iv count=" << dvec.count
 			   << " called back name=" << name
+			   << " flags=" << flags
 			   << dendl;
     string name_str{name};
     if (! ((name_str == ".") ||

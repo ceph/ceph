@@ -74,6 +74,7 @@ namespace rgw {
 
   LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
 				     const char *path,
+				     enum rgw_fh_type type,
 				     uint32_t flags)
   {
     /* find either-of <object_name>, <object_name/>, only one of
@@ -114,6 +115,10 @@ namespace rgw {
       switch (ix) {
       case 0:
       {
+	/* type hint */
+	if (type == RGW_FS_TYPE_DIRECTORY)
+	  continue;
+
 	RGWStatObjRequest req(cct, get_user(),
 			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
@@ -139,6 +144,10 @@ namespace rgw {
       case 1:
       {
 	/* try dir form */
+	/* type hint */
+	if (type == RGW_FS_TYPE_FILE)
+	  continue;
+
 	obj_path += "/";
 	RGWStatObjRequest req(cct, get_user(),
 			      parent->bucket_name(), obj_path,
@@ -170,7 +179,8 @@ namespace rgw {
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  if (req.matched) {
-	    // we need rgw object's key name equal to file name, if not return NULL
+	    /* we need rgw object's key name equal to file name, if
+	     * not return NULL */
 	    if ((flags & RGWFileHandle::FLAG_EXACT_MATCH) &&
 		!req.exact_matched) {
 	      lsubdout(get_context(), rgw, 15)
@@ -785,8 +795,8 @@ namespace rgw {
 
     if (flags & RGW_READDIR_FLAG_DOTDOT) {
       /* send '.' and '..' with their NFS-defined offsets */
-      rcb(".", cb_arg, 1);
-      rcb("..", cb_arg, 2);
+      rcb(".", cb_arg, 1, RGW_LOOKUP_FLAG_DIR);
+      rcb("..", cb_arg, 2, RGW_LOOKUP_FLAG_DIR);
     }
 
     if (is_root()) {
@@ -1330,10 +1340,13 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     }
   } else {
     /* lookup in a readdir callback */
+    enum rgw_fh_type fh_type = fh_type_of(flags);
+
     uint32_t sl_flags = (flags & RGW_LOOKUP_FLAG_RCB)
       ? RGWFileHandle::FLAG_NONE
       : RGWFileHandle::FLAG_EXACT_MATCH;
-    fhr = fs->stat_leaf(parent, path, sl_flags);
+
+    fhr = fs->stat_leaf(parent, path, fh_type, sl_flags);
     if (! get<0>(fhr)) {
       if (! (flags & RGW_LOOKUP_FLAG_CREATE))
 	return -ENOENT;
