@@ -2,20 +2,15 @@
 #include <iostream>
 #include <map>
 
-#include "include/types.h"
-
 #include "common/Formatter.h"
 #include <common/errno.h>
 #include "auth/Crypto.h"
-#include "include/rados/librados.hpp"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/lock/cls_lock_client.h"
-#include <common/dout.h>
 #include "rgw_common.h"
 #include "rgw_bucket.h"
 #include "rgw_lc.h"
-
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
