@@ -4317,7 +4317,7 @@ struct SnapSet {
   }
 
   /// populate SnapSet from a librados::snap_set_t
-  void from_snap_set(const librados::snap_set_t& ss);
+  void from_snap_set(const librados::snap_set_t& ss, bool legacy);
 
   /// get space accounted to clone
   uint64_t get_clone_bytes(snapid_t clone) const;
