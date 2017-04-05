@@ -1359,7 +1359,7 @@ fi
 
 %files osd
 %{_bindir}/ceph-clsinfo
-%{_bindir}/ceph-bluefs-tool
+%{_bindir}/ceph-bluestore-tool
 %{_bindir}/ceph-objectstore-tool
 %{_bindir}/ceph-osd
 %{_sbindir}/ceph-disk

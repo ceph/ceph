@@ -2376,7 +2376,7 @@ int main(int argc, char **argv)
   }
 
   if (vm.count("help")) {
-    usage(desc);
+    usage(all);
     return 1;
   }
 
