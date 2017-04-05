@@ -4781,7 +4781,7 @@ ostream& operator<<(ostream& out, const SnapSet& cs)
   }
 }
 
-void SnapSet::from_snap_set(const librados::snap_set_t& ss)
+void SnapSet::from_snap_set(const librados::snap_set_t& ss, bool legacy)
 {
   // NOTE: our reconstruction of snaps (and the snapc) is not strictly
   // correct: it will not include snaps that still logically exist
@@ -4807,6 +4807,13 @@ void SnapSet::from_snap_set(const librados::snap_set_t& ss)
       for (vector<pair<uint64_t, uint64_t> >::const_iterator q =
 	     p->overlap.begin(); q != p->overlap.end(); ++q)
 	clone_overlap[p->cloneid].insert(q->first, q->second);
+      if (!legacy) {
+	// p->snaps is ascending; clone_snaps is descending
+	vector<snapid_t>& v = clone_snaps[p->cloneid];
+	for (auto q = p->snaps.rbegin(); q != p->snaps.rend(); ++q) {
+	  v.push_back(*q);
+	}
+      }
     }
   }
 
