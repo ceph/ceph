@@ -678,6 +678,22 @@ namespace rgw {
     return static_cast<RGWFileHandle*>(fh->fh_private);
   }
 
+  static inline enum rgw_fh_type fh_type_of(uint32_t flags) {
+    enum rgw_fh_type fh_type;
+    switch(flags & RGW_LOOKUP_TYPE_FLAGS)
+    {
+    case RGW_LOOKUP_FLAG_DIR:
+      fh_type = RGW_FS_TYPE_DIRECTORY;
+      break;
+    case RGW_LOOKUP_FLAG_FILE:
+      fh_type = RGW_FS_TYPE_FILE;
+      break;
+    default:
+      fh_type = RGW_FS_TYPE_NIL;
+    };
+    return fh_type;
+  }
+
   typedef std::tuple<RGWFileHandle*, uint32_t> LookupFHResult;
   typedef std::tuple<RGWFileHandle*, int> MkObjResult;
 
@@ -1005,7 +1021,8 @@ namespace rgw {
 			       const char *path, uint32_t flags);
 
     LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
-			     uint32_t flags);
+			     enum rgw_fh_type type = RGW_FS_TYPE_NIL,
+			     uint32_t flags = RGWFileHandle::FLAG_NONE);
 
     int read(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
 	     size_t* bytes_read, void* buffer, uint32_t flags);
@@ -1190,7 +1207,7 @@ public:
     /* update traversal cache */
     rgw_fh->add_marker(off, rgw_obj_key{marker.data(), ""},
 		       RGW_FS_TYPE_DIRECTORY);
-    rcb(name.data(), cb_arg, off);
+    rcb(name.data(), cb_arg, off, RGW_LOOKUP_FLAG_DIR);
     return 0;
   }
 
@@ -1277,7 +1294,10 @@ public:
     *offset = off;
     /* update traversal cache */
     rgw_fh->add_marker(off, marker, type);
-    rcb(name.data(), cb_arg, off); // XXX has to be legit C-style string
+    rcb(name.data(), cb_arg, off,
+	(type == RGW_FS_TYPE_DIRECTORY) ?
+	RGW_LOOKUP_FLAG_DIR :
+	RGW_LOOKUP_FLAG_FILE);
     return 0;
   }
 
