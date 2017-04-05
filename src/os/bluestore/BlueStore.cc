@@ -1784,6 +1784,11 @@ bool BlueStore::Blob::try_reuse_blob(uint32_t min_alloc_size,
       return false;
     }
 
+    // FIXME: in some cases we could reduce unused resolution
+    if (get_blob().has_unused()) {
+      return false;
+    }
+
     if (overflow > 0) {
       new_blen -= overflow;
       length -= overflow;
@@ -5050,7 +5055,7 @@ int BlueStore::fsck(bool deep)
       if (is_extent_shard_key(it->key())) {
 	while (!expecting_shards.empty() &&
 	       expecting_shards.front() < it->key()) {
-	  derr << __func__ << " missing shard key "
+	  derr << __func__ << " error: missing shard key "
 	       << pretty_binary_string(expecting_shards.front())
 	       << dendl;
 	  ++errors;
@@ -5066,18 +5071,18 @@ int BlueStore::fsck(bool deep)
         uint32_t offset;
         string okey;
         get_key_extent_shard(it->key(), &okey, &offset);
-        derr << __func__ << " stray shard 0x" << std::hex << offset << std::dec
-             << dendl;
+        derr << __func__ << " error: stray shard 0x" << std::hex << offset
+	     << std::dec << dendl;
         if (expecting_shards.empty()) {
-          derr << __func__ << pretty_binary_string(it->key())
+          derr << __func__ << " error: " << pretty_binary_string(it->key())
                << " is unexpected" << dendl;
           ++errors;
           continue;
         }
 	while (expecting_shards.front() > it->key()) {
-	  derr << __func__ << "   saw " << pretty_binary_string(it->key())
+	  derr << __func__ << " error:   saw " << pretty_binary_string(it->key())
 	       << dendl;
-	  derr << __func__ << "   exp "
+	  derr << __func__ << " error:   exp "
 	       << pretty_binary_string(expecting_shards.front()) << dendl;
 	  ++errors;
 	  expecting_shards.pop_front();
@@ -5091,7 +5096,7 @@ int BlueStore::fsck(bool deep)
       ghobject_t oid;
       int r = get_key_object(it->key(), &oid);
       if (r < 0) {
-        derr << __func__ << "  bad object key "
+        derr << __func__ << " error: bad object key "
              << pretty_binary_string(it->key()) << dendl;
 	++errors;
 	continue;
@@ -5111,7 +5116,7 @@ int BlueStore::fsck(bool deep)
 	  }
 	}
 	if (!c) {
-          derr << __func__ << "  stray object " << oid
+          derr << __func__ << " error: stray object " << oid
                << " not owned by any collection" << dendl;
 	  ++errors;
 	  continue;
@@ -5122,7 +5127,7 @@ int BlueStore::fsck(bool deep)
 
       if (!expecting_shards.empty()) {
 	for (auto &k : expecting_shards) {
-	  derr << __func__ << " missing shard key "
+	  derr << __func__ << " error: missing shard key "
 	       << pretty_binary_string(k) << dendl;
 	}
 	++errors;
@@ -5134,12 +5139,12 @@ int BlueStore::fsck(bool deep)
       OnodeRef o = c->get_onode(oid, false);
       if (o->onode.nid) {
 	if (o->onode.nid > nid_max) {
-	  derr << __func__ << " " << oid << " nid " << o->onode.nid
+	  derr << __func__ << " error: " << oid << " nid " << o->onode.nid
 	       << " > nid_max " << nid_max << dendl;
 	  ++errors;
 	}
 	if (used_nids.count(o->onode.nid)) {
-	  derr << __func__ << " " << oid << " nid " << o->onode.nid
+	  derr << __func__ << " error: " << oid << " nid " << o->onode.nid
 	       << " already in use" << dendl;
 	  ++errors;
 	  continue; // go for next object
@@ -5161,26 +5166,27 @@ int BlueStore::fsck(bool deep)
 	get_extent_shard_key(o->key, s.shard_info->offset,
 			     &expecting_shards.back());
 	if (s.shard_info->offset >= o->onode.size) {
-	  derr << __func__ << " " << oid << " shard 0x" << std::hex
+	  derr << __func__ << " error: " << oid << " shard 0x" << std::hex
 	       << s.shard_info->offset << " past EOF at 0x" << o->onode.size
 	       << std::dec << dendl;
 	  ++errors;
 	}
       }
       // lextents
+      map<BlobRef,bluestore_blob_t::unused_t> referenced;
       uint64_t pos = 0;
       map<BlobRef, bluestore_blob_use_tracker_t> ref_map;
       for (auto& l : o->extent_map.extent_map) {
 	dout(20) << __func__ << "    " << l << dendl;
 	if (l.logical_offset < pos) {
-	  derr << __func__ << " " << oid << " lextent at 0x"
+	  derr << __func__ << " error: " << oid << " lextent at 0x"
 	       << std::hex << l.logical_offset
 	       << " overlaps with the previous, which ends at 0x" << pos
 	       << std::dec << dendl;
 	  ++errors;
 	}
 	if (o->extent_map.spans_shard(l.logical_offset, l.length)) {
-	  derr << __func__ << " " << oid << " lextent at 0x"
+	  derr << __func__ << " error: " << oid << " lextent at 0x"
 	       << std::hex << l.logical_offset << "~" << l.length
 	       << " spans a shard boundary"
 	       << std::dec << dendl;
@@ -5201,13 +5207,72 @@ int BlueStore::fsck(bool deep)
 	  l.blob_offset, 
 	  l.length);
 	++num_extents;
+	if (blob.has_unused()) {
+	  auto p = referenced.find(l.blob);
+	  bluestore_blob_t::unused_t *pu;
+	  if (p == referenced.end()) {
+	    pu = &referenced[l.blob];
+	  } else {
+	    pu = &p->second;
+	  }
+	  uint64_t blob_len = blob.get_logical_length();
+	  assert((blob_len % (sizeof(*pu)*8)) == 0);
+	  assert(l.blob_offset + l.length <= blob_len);
+	  uint64_t chunk_size = blob_len / (sizeof(*pu)*8);
+	  uint64_t start = l.blob_offset / chunk_size;
+	  uint64_t end =
+	    ROUND_UP_TO(l.blob_offset + l.length, chunk_size) / chunk_size;
+	  for (auto i = start; i < end; ++i) {
+	    (*pu) |= (1u << i);
+	  }
+	}
+      }
+      for (auto &i : referenced) {
+	dout(20) << __func__ << "  referenced 0x" << std::hex << i.second
+		 << std::dec << " for " << *i.first << dendl;
+	const bluestore_blob_t& blob = i.first->get_blob();
+	if (i.second & blob.unused) {
+	  derr << __func__ << " error: " << oid << " blob claims unused 0x"
+	       << std::hex << blob.unused
+	       << " but extents reference 0x" << i.second
+	       << " on blob " << *i.first << dendl;
+	  ++errors;
+	}
+	if (blob.has_csum()) {
+	  uint64_t blob_len = blob.get_logical_length();
+	  uint64_t unused_chunk_size = blob_len / (sizeof(blob.unused)*8);
+	  unsigned csum_count = blob.get_csum_count();
+	  unsigned csum_chunk_size = blob.get_csum_chunk_size();
+	  for (unsigned p = 0; p < csum_count; ++p) {
+	    unsigned pos = p * csum_chunk_size;
+	    unsigned firstbit = pos / unused_chunk_size;    // [firstbit,lastbit]
+	    unsigned lastbit = (pos + csum_chunk_size - 1) / unused_chunk_size;
+	    unsigned mask = 1u << firstbit;
+	    for (unsigned b = firstbit + 1; b <= lastbit; ++b) {
+	      mask |= 1u << b;
+	    }
+	    if ((blob.unused & mask) == mask) {
+	      // this csum chunk region is marked unused
+	      if (blob.get_csum_item(p) != 0) {
+		derr << __func__ << " error: " << oid
+		     << " blob claims csum chunk 0x" << std::hex << pos
+		     << "~" << csum_chunk_size
+		     << " is unused (mask 0x" << mask << " of unused 0x"
+		     << blob.unused << ") but csum is non-zero 0x"
+		     << blob.get_csum_item(p) << std::dec << " on blob "
+		     << *i.first << dendl;
+		++errors;
+	      }
+	    }
+	  }
+	}
       }
       for (auto &i : ref_map) {
 	++num_blobs;
 	const bluestore_blob_t& blob = i.first->get_blob();
 	bool equal = i.first->get_blob_use_tracker().equal(i.second);
 	if (!equal) {
-	  derr << __func__ << " " << oid << " blob " << *i.first
+	  derr << __func__ << " error: " << oid << " blob " << *i.first
 	       << " doesn't match expected ref_map " << i.second << dendl;
 	  ++errors;
 	}
@@ -5218,12 +5283,12 @@ int BlueStore::fsck(bool deep)
 	}
 	if (blob.is_shared()) {
 	  if (i.first->shared_blob->get_sbid() > blobid_max) {
-	    derr << __func__ << " " << oid << " blob " << blob
+	    derr << __func__ << " error: " << oid << " blob " << blob
 		 << " sbid " << i.first->shared_blob->get_sbid() << " > blobid_max "
 		 << blobid_max << dendl;
 	    ++errors;
 	  } else if (i.first->shared_blob->get_sbid() == 0) {
-            derr << __func__ << " " << oid << " blob " << blob
+            derr << __func__ << " error: " << oid << " blob " << blob
                  << " marked as shared but has uninitialized sbid"
                  << dendl;
             ++errors;
@@ -5249,14 +5314,14 @@ int BlueStore::fsck(bool deep)
 	int r = _do_read(c.get(), o, 0, o->onode.size, bl, 0);
 	if (r < 0) {
 	  ++errors;
-	  derr << __func__ << " " << oid << " error during read: "
+	  derr << __func__ << " error: " << oid << " error during read: "
 	       << cpp_strerror(r) << dendl;
 	}
       }
       // omap
       if (o->onode.has_omap()) {
 	if (used_omap_head.count(o->onode.nid)) {
-	  derr << __func__ << " " << oid << " omap_head " << o->onode.nid
+	  derr << __func__ << " error: " << oid << " omap_head " << o->onode.nid
 	       << " already in use" << dendl;
 	  ++errors;
 	} else {
@@ -5272,14 +5337,14 @@ int BlueStore::fsck(bool deep)
       string key = it->key();
       uint64_t sbid;
       if (get_key_shared_blob(key, &sbid)) {
-	derr << __func__ << " bad key '" << key << "' in shared blob namespace"
-	     << dendl;
+	derr << __func__ << " error: bad key '" << key
+	     << "' in shared blob namespace" << dendl;
 	++errors;
 	continue;
       }
       auto p = sb_info.find(sbid);
       if (p == sb_info.end()) {
-	derr << __func__ << " found stray shared blob data for sbid 0x"
+	derr << __func__ << " error: found stray shared blob data for sbid 0x"
 	     << std::hex << sbid << std::dec << dendl;
 	++errors;
       } else {
@@ -5291,9 +5356,9 @@ int BlueStore::fsck(bool deep)
 	::decode(shared_blob, blp);
 	dout(20) << __func__ << "  " << *sbi.sb << " " << shared_blob << dendl;
 	if (shared_blob.ref_map != sbi.ref_map) {
-	  derr << __func__ << " shared blob 0x" << std::hex << sbid << std::dec
-	       << " ref_map " << shared_blob.ref_map << " != expected "
-	       << sbi.ref_map << dendl;
+	  derr << __func__ << " error: shared blob 0x" << std::hex << sbid
+	       << std::dec << " ref_map " << shared_blob.ref_map
+	       << " != expected " << sbi.ref_map << dendl;
 	  ++errors;
 	}
 	PExtentVector extents;
@@ -5309,12 +5374,12 @@ int BlueStore::fsck(bool deep)
     }
   }
   for (auto &p : sb_info) {
-    derr << __func__ << " shared_blob 0x" << p.first << " key is missing ("
-	 << *p.second.sb << ")" << dendl;
+    derr << __func__ << " error: shared_blob 0x" << p.first
+	 << " key is missing (" << *p.second.sb << ")" << dendl;
     ++errors;
   }
   if (!(actual_statfs == expected_statfs)) {
-    derr << __func__ << " actual " << actual_statfs
+    derr << __func__ << " error: actual " << actual_statfs
 	 << " != expected " << expected_statfs << dendl;
     ++errors;
   }
@@ -5326,8 +5391,8 @@ int BlueStore::fsck(bool deep)
       uint64_t omap_head;
       _key_decode_u64(it->key().c_str(), &omap_head);
       if (used_omap_head.count(omap_head) == 0) {
-	derr << __func__ << " found stray omap data on omap_head " << omap_head
-	     << dendl;
+	derr << __func__ << " error: found stray omap data on omap_head "
+	     << omap_head << dendl;
 	++errors;
       }
     }
@@ -5343,7 +5408,7 @@ int BlueStore::fsck(bool deep)
       try {
 	::decode(wt, p);
       } catch (buffer::error& e) {
-	derr << __func__ << " failed to decode deferred txn "
+	derr << __func__ << " error: failed to decode deferred txn "
 	     << pretty_binary_string(it->key()) << dendl;
 	r = -EIO;
         goto out_scan;
@@ -5389,7 +5454,7 @@ int BlueStore::fsck(bool deep)
         }
       );
       if (intersects) {
-	derr << __func__ << " free extent 0x" << std::hex << offset
+	derr << __func__ << " error: free extent 0x" << std::hex << offset
 	     << "~" << length << std::dec
 	     << " intersects allocated blocks" << dendl;
 	++errors;
@@ -5398,7 +5463,7 @@ int BlueStore::fsck(bool deep)
     size_t count = used_blocks.count();
     if (used_blocks.size() != count) {
       assert(used_blocks.size() > count);
-      derr << __func__ << " leaked some space;"
+      derr << __func__ << " error: leaked some space;"
 	   << (used_blocks.size() - count) * min_alloc_size
 	   << " bytes leaked" << dendl;
       ++errors;
@@ -8833,7 +8898,8 @@ void BlueStore::_do_write_small(
                  << std::dec << dendl;
 
         o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-	wctx->write(offset, b, alloc_len, b_off0, padded, b_off, length, false, false);
+	wctx->write(offset, b, alloc_len, b_off0, padded, b_off, length,
+		    false, false);
         logger->inc(l_bluestore_write_small_unused);
         return;
       }
@@ -8906,7 +8972,7 @@ void BlueStore::_do_write_big(
 	    b_off = offset - ep->blob_start();
             prev_ep = end; // to avoid check below
 	    dout(20) << __func__ << " reuse blob " << *b << std::hex
-	      << " (" << b_off << "~" << l << ")" << std::dec << dendl;
+		     << " (" << b_off << "~" << l << ")" << std::dec << dendl;
 	  } else {
 	    ++ep;
 	    any_change = true;
@@ -8920,7 +8986,7 @@ void BlueStore::_do_write_big(
 	    b = prev_ep->blob;
 	    b_off = offset - prev_ep->blob_start();
 	    dout(20) << __func__ << " reuse blob " << *b << std::hex
-	      << " (" << b_off << "~" << l << ")" << std::dec << dendl;
+		     << " (" << b_off << "~" << l << ")" << std::dec << dendl;
 	  } else if (prev_ep != begin) {
 	    --prev_ep;
 	    any_change = true;
@@ -9147,11 +9213,12 @@ int BlueStore::_do_alloc_write(
                                            wi.length0,
                                            wi.b,
                                            nullptr);
+    wi.b->dirty_blob().mark_used(le->blob_offset, le->length);
     txc->statfs_delta.stored() += le->length;
     dout(20) << __func__ << "  lex " << *le << dendl;
     _buffer_cache_write(txc, wi.b, b_off, wi.bl,
                         wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-    
+
     // queue io
     if (!g_conf->bluestore_debug_omit_block_device_write) {
       if (l->length() <= prefer_deferred_size) {
