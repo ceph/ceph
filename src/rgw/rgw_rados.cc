@@ -7141,9 +7141,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.key.name,
                                       cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
-  const string& instance = dest_obj.key.instance;
-  if (instance != "null") {
-    processor.set_version_id(dest_obj.key.instance);
+  if (version_id) {
+    processor.set_version_id(*version_id);
   }
   processor.set_olh_epoch(olh_epoch);
   int ret = processor.prepare(this, NULL);
