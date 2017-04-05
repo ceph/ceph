@@ -4304,7 +4304,7 @@ struct SnapSet {
   vector<snapid_t> clones;   // ascending
   map<snapid_t, interval_set<uint64_t> > clone_overlap;  // overlap w/ next newest
   map<snapid_t, uint64_t> clone_size;
-  map<snapid_t, vector<snapid_t>> clone_snaps;
+  map<snapid_t, vector<snapid_t>> clone_snaps; // descending
 
   SnapSet() : seq(0), head_exists(false) {}
   explicit SnapSet(bufferlist& bl) {
@@ -4453,7 +4453,8 @@ struct object_info_t {
     return get_flag_string(flags);
   }
 
-  vector<snapid_t> legacy_snaps;  // [clone] pre-luminous; moved to SnapSet
+  /// [clone] descending. pre-luminous; moved to SnapSet
+  vector<snapid_t> legacy_snaps;
 
   uint64_t truncate_seq, truncate_size;
 
