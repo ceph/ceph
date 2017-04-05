@@ -24,8 +24,9 @@ set(prefix ${CMAKE_INSTALL_PREFIX})
 add_definitions("-DCEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\"")
 add_definitions("-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS")
+add_definitions("-D_FILE_OFFSET_BITS=64")
 if(LINUX)
-  add_definitions("-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
+  add_definitions("-D_GNU_SOURCE")
 endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wtype-limits -Wignored-qualifiers -Winit-self")
@@ -901,8 +902,9 @@ if(WITH_LIBCEPHFS OR WITH_KRBD)
   add_library(parse_secret_objs OBJECT ${parse_secret_files})
 endif()
 
+add_subdirectory(client)
+
 if(WITH_LIBCEPHFS)
-  add_subdirectory(client)
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs})
   target_link_libraries(cephfs LINK_PRIVATE client ceph-common
@@ -938,19 +940,19 @@ if(WITH_LIBCEPHFS)
 
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
-
-  if(WITH_FUSE)
-    set(ceph_fuse_srcs
-      ceph_fuse.cc
-      client/fuse_ll.cc)
-    add_executable(ceph-fuse ${ceph_fuse_srcs})
-    target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
-      client common global-static)
-    set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
-    install(TARGETS ceph-fuse DESTINATION bin)
-    install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
-  endif(WITH_FUSE)
 endif(WITH_LIBCEPHFS)
+
+if(WITH_FUSE)
+  set(ceph_fuse_srcs
+    ceph_fuse.cc
+    client/fuse_ll.cc)
+  add_executable(ceph-fuse ${ceph_fuse_srcs})
+  target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
+    client common global-static)
+  set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
+  install(TARGETS ceph-fuse DESTINATION bin)
+  install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
+endif(WITH_FUSE)
 
 add_subdirectory(journal)
 
