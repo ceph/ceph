@@ -23,5 +23,6 @@ overrides:
     - scrub mismatch
     - ScrubResult
     - wrongly marked
+    - failed to encode map e7 
     conf:
     fs: xfs
