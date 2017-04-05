@@ -1189,6 +1189,19 @@ string rgw_trim_whitespace(const string& src)
   return src.substr(start, end - start + 1);
 }
 
+boost::string_ref rgw_trim_whitespace(const boost::string_ref& src)
+{
+  boost::string_ref res = src;
+
+  while (res.size() > 0 && std::isspace(res.front())) {
+    res.remove_prefix(1);
+  }
+  while (res.size() > 0 && std::isspace(res.back())) {
+    res.remove_suffix(1);
+  }
+  return res;
+}
+
 string rgw_trim_quotes(const string& val)
 {
   string s = rgw_trim_whitespace(val);

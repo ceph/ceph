@@ -725,7 +725,9 @@ int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_l
 
     if (cache.length() == block_size) {
       bufferlist data;
-      crypt->decrypt(cache, 0, block_size, data, part_ofs);
+      if (! crypt->decrypt(cache, 0, block_size, data, part_ofs) ) {
+        return -ERR_INTERNAL_ERROR;
+      }
       part_ofs += block_size;
 
       off_t send_size = block_size - enc_begin_skip;
@@ -750,7 +752,9 @@ int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_l
     }
     if (aligned_size > 0) {
       bufferlist data;
-      crypt->decrypt(bl, bl_ofs, aligned_size, data, part_ofs);
+      if (! crypt->decrypt(bl, bl_ofs, aligned_size, data, part_ofs) ) {
+        return -ERR_INTERNAL_ERROR;
+      }
       part_ofs += aligned_size;
       off_t send_size = aligned_size - enc_begin_skip;
       if (ofs + enc_begin_skip + send_size > end + 1) {
@@ -779,7 +783,9 @@ int RGWGetObj_BlockDecrypt::flush() {
   }
   if (cache.length() > 0) {
     bufferlist data;
-    crypt->decrypt(cache, 0, cache.length(), data, part_ofs);
+    if (! crypt->decrypt(cache, 0, cache.length(), data, part_ofs) ) {
+      return -ERR_INTERNAL_ERROR;
+    }
     off_t send_size = cache.length() - enc_begin_skip;
     if (ofs + enc_begin_skip + send_size > end + 1) {
       send_size = end + 1 - ofs - enc_begin_skip;
@@ -820,7 +826,7 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
     //if *again is not set to false, we will have endless loop
     //drop info on log
     if (*again) {
-      ldout(cct, 0) << "*again==true" << dendl;
+      ldout(cct, 20) << "*again==true" << dendl;
     }
     return res;
   }
@@ -837,7 +843,9 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
     }
     if (cache.length() == block_size) {
       bufferlist data;
-      crypt->encrypt(cache, 0, block_size, data, ofs);
+      if (! crypt->encrypt(cache, 0, block_size, data, ofs)) {
+        return -ERR_INTERNAL_ERROR;
+      }
       res = next->handle_data(data, ofs, phandle, pobj, again);
       cache.clear();
       ofs += block_size;
@@ -854,7 +862,9 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
     }
     if (aligned_size > 0) {
       bufferlist data;
-      crypt->encrypt(bl, bl_ofs, aligned_size, data, ofs);
+      if (! crypt->encrypt(bl, bl_ofs, aligned_size, data, ofs) ) {
+        return -ERR_INTERNAL_ERROR;
+      }
       res=next->handle_data(data, ofs, phandle, pobj, again);
       ofs += aligned_size;
       if (res != 0)
@@ -865,7 +875,9 @@ int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
     if (cache.length() > 0) {
       /*flush cached data*/
       bufferlist data;
-      crypt->encrypt(cache, 0, cache.length(), data, ofs);
+      if (! crypt->encrypt(cache, 0, cache.length(), data, ofs) ) {
+        return -ERR_INTERNAL_ERROR;
+      }
       res = next->handle_data(data, ofs, phandle, pobj, again);
       ofs += cache.length();
       cache.clear();
@@ -885,16 +897,16 @@ int RGWPutObj_BlockEncrypt::throttle_data(void *handle,
   return next->throttle_data(handle, obj, size, need_to_wait);
 }
 
-std::string create_random_key_selector() {
+std::string create_random_key_selector(CephContext * const cct) {
   char random[AES_256_KEYSIZE];
   if (get_random_bytes(&random[0], sizeof(random)) != 0) {
-    dout(0) << "ERROR: cannot get_random_bytes. " << dendl;
+    ldout(cct, 0) << "ERROR: cannot get_random_bytes. " << dendl;
     for (char& v:random) v=rand();
   }
   return std::string(random, sizeof(random));
 }
 
-int get_barbican_url(CephContext * const cct,
+static int get_barbican_url(CephContext * const cct,
                      std::string& url)
 {
   url = cct->_conf->rgw_barbican_url;
@@ -910,7 +922,7 @@ int get_barbican_url(CephContext * const cct,
   return 0;
 }
 
-int request_key_from_barbican(CephContext *cct,
+static int request_key_from_barbican(CephContext *cct,
                               boost::string_ref key_id,
                               boost::string_ref key_selector,
                               const std::string& barbican_token,
@@ -954,7 +966,7 @@ static map<string,string> get_str_map(const string &str) {
   return m;
 }
 
-int get_actual_key_from_kms(CephContext *cct,
+static int get_actual_key_from_kms(CephContext *cct,
                             boost::string_ref key_id,
                             boost::string_ref key_selector,
                             std::string& actual_key)
@@ -1039,20 +1051,6 @@ static const crypt_option_names crypt_options[] = {
     {"HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID",      "x-amz-server-side-encryption-aws-kms-key-id"},
 };
 
-boost::string_ref rgw_trim_whitespace(const boost::string_ref& src)
-{
-  boost::string_ref res = src;
-
-  while (res.size() > 0 && std::isspace(res.front())) {
-    res.remove_prefix(1);
-  }
-  while (res.size() > 0 && std::isspace(res.back())) {
-    res.remove_suffix(1);
-  }
-  return res;
-}
-
-
 static boost::string_ref get_crypt_attribute(
     RGWEnv* env,
     map<string, post_form_part, const ltstr_nocase>* parts,
@@ -1080,7 +1078,7 @@ static boost::string_ref get_crypt_attribute(
 }
 
 
-int s3_prepare_encrypt(struct req_state* s,
+int rgw_s3_prepare_encrypt(struct req_state* s,
                        map<string, bufferlist>& attrs,
                        map<string, post_form_part, const ltstr_nocase>* parts,
                        std::unique_ptr<BlockCrypt>* block_crypt,
@@ -1149,7 +1147,7 @@ int s3_prepare_encrypt(struct req_state* s,
         return -ERR_INVALID_ACCESS_KEY;
       }
       /* try to retrieve actual key */
-      std::string key_selector = create_random_key_selector();
+      std::string key_selector = create_random_key_selector(s->cct);
       std::string actual_key;
       res = get_actual_key_from_kms(s->cct, key_id, key_selector, actual_key);
       if (res != 0)
@@ -1183,7 +1181,7 @@ int s3_prepare_encrypt(struct req_state* s,
       }
 
       set_attr(attrs, RGW_ATTR_CRYPT_MODE, "RGW-AUTO");
-      std::string key_selector = create_random_key_selector();
+      std::string key_selector = create_random_key_selector(s->cct);
       set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
 
       uint8_t actual_key[AES_256_KEYSIZE];
@@ -1208,7 +1206,7 @@ int s3_prepare_encrypt(struct req_state* s,
 }
 
 
-int s3_prepare_decrypt(struct req_state* s,
+int rgw_s3_prepare_decrypt(struct req_state* s,
                        map<string, bufferlist>& attrs,
                        std::unique_ptr<BlockCrypt>* block_crypt,
                        std::map<std::string, std::string>& crypt_http_responses)
