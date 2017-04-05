@@ -494,7 +494,8 @@ public:
 
   uint32_t flags = 0;                 ///< FLAG_*
 
-  uint16_t unused = 0;     ///< portion that has never been written to (bitmap)
+  typedef uint16_t unused_t;
+  unused_t unused = 0;     ///< portion that has never been written to (bitmap)
 
   uint8_t csum_type = Checksummer::CSUM_NONE;      ///< CSUM_*
   uint8_t csum_chunk_order = 0;       ///< csum block size is 1<<block_order bytes
