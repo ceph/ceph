@@ -1633,6 +1633,12 @@ public:
 	qcond.wait(l);
     }
 
+    void drain_preceding(TransContext *txc) {
+      std::unique_lock<std::mutex> l(qlock);
+      while (!q.empty() && &q.front() != txc)
+	qcond.wait(l);
+    }
+
     bool _is_all_kv_submitted() {
       // caller must hold qlock
       if (q.empty()) {
@@ -1749,7 +1755,7 @@ private:
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
-  bool deferred_aggressive = false;    ///< aggressive wakeup of kv thread
+  atomic_bool deferred_aggressive = {false}; ///< aggressive wakeup of kv thread
 
   int m_finisher_num = 1;
   vector<Finisher*> finishers;
@@ -1902,6 +1908,7 @@ private:
   void _txc_release_alloc(TransContext *txc);
 
   bool _osr_reap_done(OpSequencer *osr);
+  void _osr_drain_preceding(TransContext *txc);
   void _osr_drain_all();
   void _osr_unregister_all();
 

@@ -271,7 +271,7 @@ int main(int argc, const char *argv[])
     for (int i = 0; i < cfg.threads; i++) {
       std::stringstream oss;
       oss << "osbench-thread-" << i;
-      oids.emplace_back(pg.make_temp_hobject(oss.str()));
+      oids.emplace_back(hobject_t(sobject_t(oss.str(), CEPH_NOSNAP)));
 
       ObjectStore::Sequencer osr(__func__);
       ObjectStore::Transaction t;
@@ -280,7 +280,7 @@ int main(int argc, const char *argv[])
       assert(r == 0);
     }
   } else {
-    oids.emplace_back(pg.make_temp_hobject("osbench"));
+    oids.emplace_back(hobject_t(sobject_t("osbench", CEPH_NOSNAP)));
 
     ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
