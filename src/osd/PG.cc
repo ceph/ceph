@@ -3817,6 +3817,16 @@ void PG::schedule_backfill_full_retry()
       RequestBackfill()));
 }
 
+void PG::schedule_recovery_full_retry()
+{
+  Mutex::Locker lock(osd->recovery_request_lock);
+  osd->recovery_request_timer.add_event_after(
+    cct->_conf->osd_recovery_retry_interval,
+    new QueuePeeringEvt<DoRecovery>(
+      this, get_osdmap()->get_epoch(),
+      DoRecovery()));
+}
+
 void PG::clear_scrub_reserved()
 {
   scrubber.reserved_peers.clear();
@@ -5237,6 +5247,7 @@ void PG::start_peering_interval(
   state_clear(PG_STATE_PEERED);
   state_clear(PG_STATE_DOWN);
   state_clear(PG_STATE_RECOVERY_WAIT);
+  state_clear(PG_STATE_RECOVERY_TOOFULL);
   state_clear(PG_STATE_RECOVERING);
 
   peer_purged.clear();
@@ -6488,6 +6499,24 @@ void PG::RecoveryState::NotBackfilling::exit()
   pg->osd->recoverystate_perf->tinc(rs_notbackfilling_latency, dur);
 }
 
+/*----NotRecovering------*/
+PG::RecoveryState::NotRecovering::NotRecovering(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active/NotRecovering")
+{
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->publish_stats_to_osd();
+}
+
+void PG::RecoveryState::NotRecovering::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now() - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_notrecovering_latency, dur);
+}
+
 /*---RepNotRecovering----*/
 PG::RecoveryState::RepNotRecovering::RepNotRecovering(my_context ctx)
   : my_base(ctx),
@@ -6737,6 +6766,7 @@ PG::RecoveryState::Recovering::Recovering(my_context ctx)
 
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
+  pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   pg->state_set(PG_STATE_RECOVERING);
   pg->publish_stats_to_osd();
   pg->queue_recovery();
@@ -7185,6 +7215,7 @@ void PG::RecoveryState::Active::exit()
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
+  pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_active_latency, dur);
   pg->agent_stop();
