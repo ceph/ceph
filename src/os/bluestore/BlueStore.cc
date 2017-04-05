@@ -5173,7 +5173,7 @@ int BlueStore::fsck(bool deep)
 	}
       }
       // lextents
-      map<BlobRef,uint16_t> referenced;
+      map<BlobRef,bluestore_blob_t::unused_t> referenced;
       uint64_t pos = 0;
       map<BlobRef, bluestore_blob_use_tracker_t> ref_map;
       for (auto& l : o->extent_map.extent_map) {
@@ -5209,7 +5209,7 @@ int BlueStore::fsck(bool deep)
 	++num_extents;
 	if (blob.has_unused()) {
 	  auto p = referenced.find(l.blob);
-	  uint16_t *pu;
+	  bluestore_blob_t::unused_t *pu;
 	  if (p == referenced.end()) {
 	    pu = &referenced[l.blob];
 	  } else {
