@@ -7492,6 +7492,11 @@ bool BlueStore::_osr_reap_done(OpSequencer *osr)
       dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
 	       << dendl;
       if (txc->state != TransContext::STATE_DONE) {
+	if (txc->state == TransContext::STATE_PREPARE &&
+	  deferred_aggressive) {
+	  // for _osr_drain_preceding()
+	  osr->qcond.notify_all();
+	}
         break;
       }
 
@@ -7520,6 +7525,28 @@ bool BlueStore::_osr_reap_done(OpSequencer *osr)
   }
 
   return empty;
+}
+
+void BlueStore::_osr_drain_preceding(TransContext *txc)
+{
+  OpSequencer *osr = txc->osr.get();
+  dout(10) << __func__ << " " << txc << " osr " << osr << dendl;
+  deferred_aggressive = true; // FIXME: maybe osr-local aggressive flag?
+  {
+    // submit anything pending
+    std::lock_guard<std::mutex> l(deferred_lock);
+    if (!osr->deferred_pending.empty()) {
+      _deferred_try_submit(osr);
+    }
+  }
+  {
+    // wake up any previously finished deferred events
+    std::lock_guard<std::mutex> l(kv_lock);
+    kv_cond.notify_one();
+  }
+  osr->drain_preceding(txc);
+  deferred_aggressive = false;
+  dout(10) << __func__ << " " << osr << " done" << dendl;
 }
 
 void BlueStore::_osr_drain_all()
@@ -10260,6 +10287,13 @@ int BlueStore::_split_collection(TransContext *txc,
   RWLock::WLocker l(c->lock);
   RWLock::WLocker l2(d->lock);
   int r;
+
+  // flush all previous deferred writes on this sequencer.  this is a bit
+  // heavyweight, but we need to make sure all deferred writes complete
+  // before we split as the new collection's sequencer may need to order
+  // this after those writes, and we don't bother with the complexity of
+  // moving those TransContexts over to the new osr.
+  _osr_drain_preceding(txc);
 
   // move any cached items (onodes and referenced shared blobs) that will
   // belong to the child collection post-split.  leave everything else behind.
