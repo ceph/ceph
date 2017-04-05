@@ -1506,6 +1506,7 @@ public:
   TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
   TrivialEvent(BackfillTooFull)
+  TrivialEvent(RecoveryTooFull)
 
   TrivialEvent(AllReplicasRecovered)
   TrivialEvent(DoRecovery)
@@ -1947,10 +1948,12 @@ public:
 
     struct WaitLocalRecoveryReserved : boost::statechart::state< WaitLocalRecoveryReserved, Active >, NamedState {
       typedef boost::mpl::list <
-	boost::statechart::transition< LocalRecoveryReserved, WaitRemoteRecoveryReserved >
+	boost::statechart::transition< LocalRecoveryReserved, WaitRemoteRecoveryReserved >,
+	boost::statechart::custom_reaction< RecoveryTooFull >
 	> reactions;
       explicit WaitLocalRecoveryReserved(my_context ctx);
       void exit();
+      boost::statechart::result react(const RecoveryTooFull &evt);
     };
 
     struct Activating : boost::statechart::state< Activating, Active >, NamedState {
