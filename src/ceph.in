@@ -565,6 +565,68 @@ def ping_monitor(cluster_handle, name, timeout):
             print(s)
     return 0
 
+
+def maybe_daemon_command(parsed_args, childargs):
+    """
+    Check if --admin-socket, daemon, or daemonperf command
+    if it is, returns (boolean handled, return code if handled == True)
+    """
+
+    daemon_perf = False
+    sockpath = None
+    if parsed_args.admin_socket:
+        sockpath = parsed_args.admin_socket
+    elif len(childargs) > 0 and childargs[0] in ["daemon", "daemonperf"]:
+        daemon_perf = (childargs[0] == "daemonperf")
+        # Treat "daemon <path>" or "daemon <name>" like --admin_daemon <path>
+        # Handle "daemonperf <path>" the same but requires no trailing args
+        require_args = 2 if daemon_perf else 3
+        if len(childargs) >= require_args:
+            if childargs[1].find('/') >= 0:
+                sockpath = childargs[1]
+            else:
+                # try resolve daemon name
+                try:
+                    sockpath = ceph_conf(parsed_args, 'admin_socket',
+                                         childargs[1])
+                except Exception as e:
+                    print('Can\'t get admin socket path: ' + str(e), file=sys.stderr)
+                    return True, errno.EINVAL
+            # for both:
+            childargs = childargs[2:]
+        else:
+            print('{0} requires at least {1} arguments'.format(childargs[0], require_args), 
+                file=sys.stderr) 
+            return True, errno.EINVAL
+
+    if sockpath and daemon_perf:
+        interval = 1
+        count = None
+        if len(childargs) > 0:
+            try:
+                interval = float(childargs[0])
+                if interval < 0:
+                    raise ValueError
+            except ValueError:
+                print('daemonperf: interval should be a positive number', file=sys.stderr)
+                return True, errno.EINVAL
+        if len(childargs) > 1:
+            if not childargs[1].isdigit():
+                print('daemonperf: count should be a positive integer', file=sys.stderr)
+                return True, errno.EINVAL
+            count = int(childargs[1])
+        DaemonWatcher(sockpath).run(interval, count)
+        return True, 0
+    elif sockpath:
+        try:
+            raw_write(admin_socket(sockpath, childargs, parsed_args.output_format))
+        except Exception as e:
+            print('admin_socket: {0}'.format(e), file=sys.stderr)
+            return True, errno.EINVAL
+        return True, 0
+
+    return False, 0
+
 ###
 # main
 ###
@@ -610,58 +672,9 @@ def main():
 
     format = parsed_args.output_format
 
-    daemon_perf = False
-    sockpath = None
-    if parsed_args.admin_socket:
-        sockpath = parsed_args.admin_socket
-    elif len(childargs) > 0 and childargs[0] in ["daemon", "daemonperf"]:
-        daemon_perf = (childargs[0] == "daemonperf")
-        # Treat "daemon <path>" or "daemon <name>" like --admin_daemon <path>
-        # Handle "daemonperf <path>" the same but requires no trailing args
-        require_args = 2 if daemon_perf else 3
-        if len(childargs) >= require_args:
-            if childargs[1].find('/') >= 0:
-                sockpath = childargs[1]
-            else:
-                # try resolve daemon name
-                try:
-                    sockpath = ceph_conf(parsed_args, 'admin_socket',
-                                         childargs[1])
-                except Exception as e:
-                    print('Can\'t get admin socket path: ' + str(e), file=sys.stderr)
-                    return errno.EINVAL
-            # for both:
-            childargs = childargs[2:]
-        else:
-            print('{0} requires at least {1} arguments'.format(childargs[0], require_args), 
-                file=sys.stderr) 
-            return errno.EINVAL
-
-    if sockpath and daemon_perf:
-        interval = 1
-        count = None
-        if len(childargs) > 0:
-            try:
-                interval = float(childargs[0])
-                if interval < 0:
-                    raise ValueError
-            except ValueError:
-                print('daemonperf: interval should be a positive number', file=sys.stderr)
-                return errno.EINVAL
-        if len(childargs) > 1:
-            if not childargs[1].isdigit():
-                print('daemonperf: count should be a positive integer', file=sys.stderr)
-                return errno.EINVAL
-            count = int(childargs[1])
-        DaemonWatcher(sockpath).run(interval, count)
-        return 0
-    elif sockpath:
-        try:
-            raw_write(admin_socket(sockpath, childargs, format))
-        except Exception as e:
-            print('admin_socket: {0}'.format(e), file=sys.stderr)
-            return errno.EINVAL
-        return 0
+    done, ret = maybe_daemon_command(parsed_args, childargs)
+    if done:
+        return ret
 
     timeout = None
     if parsed_args.cluster_timeout:
