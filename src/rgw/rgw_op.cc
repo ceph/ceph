@@ -5499,7 +5499,7 @@ void RGWBulkDelete::execute()
 }
 
 
-constexpr std::initializer_list<int> RGWBulkUploadOp::terminal_errors;
+constexpr std::array<int, 2> RGWBulkUploadOp::terminal_errors;
 
 int RGWBulkUploadOp::verify_permission()
 {
