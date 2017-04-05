@@ -8,11 +8,13 @@ PartOf=ceph-fuse.target
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
+ExecStartPre=-/bin/sh -c "if echo $(ceph-conf ms_type) $(ceph-conf ms_public_type) $(ceph-conf ms_cluster_type) | egrep -q '*rdma*'; then /usr/lib/ceph/systemd-rdma-settings.sh %n; fi"
 ExecStart=/usr/bin/ceph-fuse -f --cluster ${CLUSTER} %I
 TasksMax=infinity
 Restart=on-failure
 StartLimitInterval=30min
 StartLimitBurst=3
+ExecStopPost=-/bin/sh -c "if echo $(ceph-conf ms_type) $(ceph-conf ms_public_type) $(ceph-conf ms_cluster_type) | egrep -q '*rdma*'; then /usr/lib/ceph/systemd-rdma-settings.sh %n clean; fi"
 
 [Install]
 WantedBy=ceph-fuse.target

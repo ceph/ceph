@@ -9,9 +9,11 @@ EnvironmentFile=-/etc/sysconfig/ceph
 Environment=RBDMAPFILE=/etc/ceph/rbdmap
 Type=oneshot
 RemainAfterExit=yes
+ExecStartPre=-/bin/sh -c "if echo $(ceph-conf ms_type) $(ceph-conf ms_public_type) $(ceph-conf ms_cluster_type) | egrep -q '*rdma*'; then /usr/lib/ceph/systemd-rdma-settings.sh %n; fi"
 ExecStart=/usr/bin/rbdmap map
 ExecReload=/usr/bin/rbdmap map
 ExecStop=/usr/bin/rbdmap unmap-all
+ExecStopPost=-/bin/sh -c "if echo $(ceph-conf ms_type) $(ceph-conf ms_public_type) $(ceph-conf ms_cluster_type) | egrep -q '*rdma*'; then /usr/lib/ceph/systemd-rdma-settings.sh %n clean; fi"
 
 [Install]
 WantedBy=multi-user.target

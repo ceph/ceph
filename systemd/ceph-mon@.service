@@ -15,6 +15,7 @@ LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
+ExecStartPre=-/bin/sh -c "if echo $(ceph-conf ms_type) $(ceph-conf ms_public_type) $(ceph-conf ms_cluster_type) | egrep -q '*rdma*'; then /usr/lib/ceph/systemd-rdma-settings.sh %n; fi"
 ExecStart=/usr/bin/ceph-mon -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID
 PrivateDevices=yes
@@ -26,6 +27,7 @@ Restart=on-failure
 StartLimitInterval=30min
 StartLimitBurst=5
 RestartSec=10
+ExecStopPost=-/bin/sh -c "if echo $(ceph-conf ms_type) $(ceph-conf ms_public_type) $(ceph-conf ms_cluster_type) | egrep -q '*rdma*'; then /usr/lib/ceph/systemd-rdma-settings.sh %n clean; fi"
 
 [Install]
 WantedBy=ceph-mon.target

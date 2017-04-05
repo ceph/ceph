@@ -9,7 +9,7 @@ LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
-
+ExecStartPre=-/bin/sh -c "if echo $(ceph-conf ms_type) $(ceph-conf ms_public_type) $(ceph-conf ms_cluster_type) | egrep -q '*rdma*'; then /usr/lib/ceph/systemd-rdma-settings.sh %n; fi"
 # This ExecStartPre business is a hack to inject a key for the mgr daemon,
 # using whatever key already exists on the mon on this node to gain sufficient
 # permissions to create the mgr key.  Failure is ignored at every step (the
@@ -27,6 +27,7 @@ ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 StartLimitInterval=30min
 StartLimitBurst=3
+ExecStopPost=-/bin/sh -c "if echo $(ceph-conf ms_type) $(ceph-conf ms_public_type) $(ceph-conf ms_cluster_type) | egrep -q '*rdma*'; then /usr/lib/ceph/systemd-rdma-settings.sh %n clean; fi"
 
 [Install]
 WantedBy=ceph-mgr.target

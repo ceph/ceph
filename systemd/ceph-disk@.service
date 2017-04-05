@@ -7,5 +7,7 @@ Wants=local-fs.target
 Type=oneshot
 KillMode=none
 Environment=CEPH_DISK_TIMEOUT=300
+ExecStartPre=-/bin/sh -c "if echo $(ceph-conf ms_type) $(ceph-conf ms_public_type) $(ceph-conf ms_cluster_type) | egrep -q '*rdma*'; then /usr/lib/ceph/systemd-rdma-settings.sh %n; fi"
 ExecStart=/bin/sh -c 'timeout $CEPH_DISK_TIMEOUT flock /var/lock/ceph-disk-$(basename %f) /usr/sbin/ceph-disk --verbose --log-stdout trigger --sync %f'
 TimeoutSec=0
+ExecStopPost=-/bin/sh -c 'if echo $(ceph-conf ms_type) $(ceph-conf ms_public_type) $(ceph-conf ms_cluster_type) | egrep -q '*rdma*'; then /usr/lib/ceph/systemd-rdma-settings.sh %n clean; fi'
