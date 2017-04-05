@@ -2393,6 +2393,32 @@ int process_pg_map_command(
     }
   }
 
+  if (prefix == "osd perf") {
+    if (f) {
+      f->open_object_section("osdstats");
+      pg_map.dump_osd_perf_stats(f);
+      f->close_section();
+      f->flush(ds);
+    } else {
+      pg_map.print_osd_perf_stats(&ds);
+    }
+    odata->append(ds);
+    return 0;
+  }
+
+  if (prefix == "osd blocked-by") {
+    if (f) {
+      f->open_object_section("osd_blocked_by");
+      pg_map.dump_osd_blocked_by_stats(f);
+      f->close_section();
+      f->flush(ds);
+    } else {
+      pg_map.print_osd_blocked_by_stats(&ds);
+    }
+    odata->append(ds);
+    return 0;
+  }
+
   return -EOPNOTSUPP;
 }
 

@@ -3771,29 +3771,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     else
       rdata.append(ds);
   }
-  else if (prefix == "osd perf") {
+  else if (prefix == "osd perf" ||
+	   prefix == "osd blocked-by") {
     const PGMap &pgm = mon->pgmon()->pg_map;
-    if (f) {
-      f->open_object_section("osdstats");
-      pgm.dump_osd_perf_stats(f.get());
-      f->close_section();
-      f->flush(ds);
-    } else {
-      pgm.print_osd_perf_stats(&ds);
-    }
-    rdata.append(ds);
-  }
-  else if (prefix == "osd blocked-by") {
-    const PGMap &pgm = mon->pgmon()->pg_map;
-    if (f) {
-      f->open_object_section("osd_blocked_by");
-      pgm.dump_osd_blocked_by_stats(f.get());
-      f->close_section();
-      f->flush(ds);
-    } else {
-      pgm.print_osd_blocked_by_stats(&ds);
-    }
-    rdata.append(ds);
+    r = process_pg_map_command(prefix, cmdmap, pgm, osdmap,
+			       f.get(), &ss, &rdata);
   }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
