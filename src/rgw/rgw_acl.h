@@ -302,7 +302,9 @@ public:
   uint32_t get_perm(const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask);
   uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
-  uint32_t get_referer_perm(const std::string http_referer, uint32_t perm_mask);
+  uint32_t get_referer_perm(uint32_t current_perm,
+                            std::string http_referer,
+                            uint32_t perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 3, bl);
     bool maps_initialized = true;
