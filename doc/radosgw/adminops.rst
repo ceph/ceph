@@ -738,9 +738,8 @@ Create Subuser
 ==============
 
 Create a new subuser (primarily useful for clients using the Swift API).
-Note that either ``gen-subuser`` or ``subuser`` is required for a valid
-request. Note that in general for a subuser to be useful, it must be
-granted permissions by specifying ``access``. As with user creation if
+Note that in general for a subuser to be useful, it must be granted 
+permissions by specifying ``access``. As with user creation if
 ``subuser`` is specified without ``secret``, then a secret key will
 be automatically generated.
 
@@ -771,7 +770,7 @@ Request Parameters
 :Description: Specify the subuser ID to be created.
 :Type: String
 :Example: ``sub_foo``
-:Required: No
+:Required: Yes
 
 ``secret-key``
 
