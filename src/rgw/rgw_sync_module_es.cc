@@ -14,6 +14,12 @@ struct ElasticConfig {
   RGWRESTConn *conn{nullptr};
 };
 
+static string es_get_index_path(const RGWRealm& realm)
+{
+  string path = "/rgw-" + realm.get_name();
+  return path;
+}
+
 static string es_get_obj_path(const RGWRealm& realm, const RGWBucketInfo& bucket_info, const rgw_obj_key& key)
 {
   string path = "/rgw-" + realm.get_name() + "/object/" + bucket_info.bucket.bucket_id + ":" + key.name + ":" + key.instance;
@@ -164,6 +170,37 @@ struct es_obj_metadata {
 
 };
 
+class RGWElasticInitConfigCBCR : public RGWCoroutine {
+  RGWDataSyncEnv *sync_env;
+  const ElasticConfig& conf;
+public:
+  RGWElasticInitConfigCBCR(RGWDataSyncEnv *_sync_env,
+                          const ElasticConfig& _conf) : RGWCoroutine(_sync_env->cct),
+                                                        sync_env(_sync_env),
+                                                        conf(_conf) {}
+  int operate() override {
+    reenter(this) {
+      ldout(sync_env->cct, 0) << ": init elasticsearch config zone=" << sync_env->source_zone << dendl;
+      yield {
+        string path = es_get_index_path(sync_env->store->get_realm());
+
+        es_index_mappings doc;
+
+        call(new RGWPutRESTResourceCR<es_index_mappings, int>(sync_env->cct, conf.conn,
+                                                              sync_env->http_manager,
+                                                              path, nullptr /* params */,
+                                                              doc, nullptr /* result */));
+      }
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
+      return set_cr_done();
+    }
+    return 0;
+  }
+
+};
+
 class RGWElasticHandleRemoteObjCBCR : public RGWStatRemoteObjCBCR {
   const ElasticConfig& conf;
 public:
@@ -255,6 +292,10 @@ public:
     delete conf.conn;
   }
 
+  RGWCoroutine *init_sync(RGWDataSyncEnv *sync_env) override {
+    ldout(sync_env->cct, 0) << conf.id << ": init" << dendl;
+    return new RGWElasticInitConfigCBCR(sync_env, conf);
+  }
   RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
     ldout(sync_env->cct, 0) << conf.id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
     return new RGWElasticHandleRemoteObjCR(sync_env, bucket_info, key, conf);
