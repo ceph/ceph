@@ -319,7 +319,7 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetDataCB> *fil
 {
   int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
-  res = s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
+  res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
   if (res == 0) {
     if (block_crypt != nullptr) {
       auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt)));
@@ -1435,7 +1435,7 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
 
   int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
-  res = s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses_unused);
+  res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses_unused);
   if (res == 0) {
     if (block_crypt != nullptr) {
       auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt)));
@@ -1475,7 +1475,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
         std::unique_ptr<BlockCrypt> block_crypt;
         /* We are adding to existing object.
          * We use crypto mode that configured as if we were decrypting. */
-        res = s3_prepare_decrypt(s, xattrs, &block_crypt, crypt_http_responses);
+        res = rgw_s3_prepare_decrypt(s, xattrs, &block_crypt, crypt_http_responses);
         if (res == 0 && block_crypt != nullptr)
           *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
               new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
@@ -1486,7 +1486,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   else
   {
     std::unique_ptr<BlockCrypt> block_crypt;
-    res = s3_prepare_encrypt(s, attrs, nullptr, &block_crypt, crypt_http_responses);
+    res = rgw_s3_prepare_encrypt(s, attrs, nullptr, &block_crypt, crypt_http_responses);
     if (res == 0 && block_crypt != nullptr) {
       *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
           new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
@@ -2190,7 +2190,7 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
 {
   int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
-  res = s3_prepare_encrypt(s, attrs, &parts, &block_crypt, crypt_http_responses);
+  res = rgw_s3_prepare_encrypt(s, attrs, &parts, &block_crypt, crypt_http_responses);
   if (res == 0 && block_crypt != nullptr) {
     *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
         new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
@@ -2725,7 +2725,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
 int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs)
 {
   int res = 0;
-  res = s3_prepare_encrypt(s, attrs, nullptr, nullptr, crypt_http_responses);
+  res = rgw_s3_prepare_encrypt(s, attrs, nullptr, nullptr, crypt_http_responses);
   return res;
 }
 
