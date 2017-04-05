@@ -1666,6 +1666,7 @@ OPTION(rgw_torrent_encoding, OPT_STR, "")    // torrent field encoding
 OPTION(rgw_torrent_origin, OPT_STR, "")    // torrent origin
 OPTION(rgw_torrent_sha_unit, OPT_INT, 512*1024)    // torrent field piece length 512K
 
+OPTION(event_tracing_perf_counters, OPT_STR, "") // list of functions that need latency to be published as perf counter
 OPTION(event_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 
 // This will be set to true when it is safe to start threads.

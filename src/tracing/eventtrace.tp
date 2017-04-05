@@ -26,17 +26,11 @@ TRACEPOINT_EVENT(eventtrace, oid_event,
     TP_ARGS(
         const char*, oid,
         const char*, event,
-        const char*, context,
-        const char*, file,
-        const char*, func,
-        uint32_t, line),
+        const char*, context),
     TP_FIELDS(
         ctf_string(oid, oid)
         ctf_string(event, event)
         ctf_string(context, context)
-        ctf_string(file, file)
-        ctf_string(func, func)
-        ctf_integer(uint32_t, line, line)
     )
 )
 
@@ -45,17 +39,23 @@ TRACEPOINT_EVENT(eventtrace, oid_elapsed,
         const char*, oid,
         const char*, event,
         const char*, context,
-        double, elapsed,
-        const char*, file,
-        const char*, func,
-        uint32_t, line),
+        double, elapsed),
     TP_FIELDS(
         ctf_string(oid, oid)
         ctf_string(event, event)
         ctf_string(context, context)
         ctf_float(double, elapsed, elapsed)
-        ctf_string(file, file)
-        ctf_string(func, func)
-        ctf_integer(uint32_t, line, line)
+    )
+)
+
+TRACEPOINT_EVENT(eventtrace, event_elapsed,
+    TP_ARGS(
+        const char*, event,
+        const char*, context,
+        double, elapsed),
+    TP_FIELDS(
+        ctf_string(event, event)
+        ctf_string(context, context)
+        ctf_float(double, elapsed, elapsed)
     )
 )
