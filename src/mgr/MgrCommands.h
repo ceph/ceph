@@ -54,3 +54,13 @@ COMMAND("pg deep-scrub name=pgid,type=CephPgid", "start deep-scrub on <pgid>", \
 	"pg", "rw", "cli,rest")
 COMMAND("pg repair name=pgid,type=CephPgid", "start repair on <pgid>", \
 	"pg", "rw", "cli,rest")
+
+// stuff in osd namespace
+COMMAND("osd perf", \
+        "print dump of OSD perf summary stats", \
+        "osd", \
+        "r", \
+        "cli,rest")
+COMMAND("osd blocked-by", \
+	"print histogram of which OSDs are blocking their peers", \
+	"osd", "r", "cli,rest")
