@@ -1584,6 +1584,15 @@ struct RGWPeriodConfig
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+
+  // the period config must be stored in a local object outside of the period,
+  // so that it can be used in a default configuration where no realm/period
+  // exists
+  int read(RGWRados *store, const std::string& realm_id);
+  int write(RGWRados *store, const std::string& realm_id);
+
+  static std::string get_oid(const std::string& realm_id);
+  static rgw_pool get_pool(CephContext *cct);
 };
 WRITE_CLASS_ENCODER(RGWPeriodConfig)
 
@@ -1788,6 +1797,7 @@ public:
   const string& get_master_zonegroup() const { return master_zonegroup; }
   const string& get_realm() const { return realm_id; }
   const RGWPeriodMap& get_map() const { return period_map; }
+  RGWPeriodConfig& get_config() { return period_config; }
   const RGWPeriodConfig& get_config() const { return period_config; }
   const std::vector<std::string>& get_sync_status() const { return sync_status; }
   rgw_pool get_pool(CephContext *cct);
@@ -1818,7 +1828,6 @@ public:
     realm_id = _realm_id;
   }
 
-  void update(const RGWZoneGroupMap& map);
   int reflect();
 
   int get_zonegroup(RGWZoneGroup& zonegroup,
@@ -2504,7 +2513,7 @@ public:
                  bool *is_truncated, RGWUsageIter& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage);
   int trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoch);
 
-  int create_pool(rgw_pool& bucket);
+  int create_pool(const rgw_pool& bucket);
 
   /**
    * create a bucket with name bucket and the given list of attrs
