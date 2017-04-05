@@ -24,6 +24,12 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
   switch (type.get_type()) {
   case ACL_TYPE_REFERER:
     referer_list.emplace_back(grant->get_referer(), perm.get_permissions());
+
+    /* We're specially handling the Swift's .r:* as the S3 API has a similar
+     * concept and thus we can have a small portion of compatibility here. */
+     if (grant->get_referer() == RGW_REFERER_WILDCARD) {
+       acl_group_map[ACL_GROUP_ALL_USERS] |= perm.get_permissions();
+     }
     break;
   case ACL_TYPE_GROUP:
     acl_group_map[grant->get_group()] |= perm.get_permissions();

@@ -29,6 +29,8 @@ using namespace std;
 #define RGW_PERM_ALL_S3          RGW_PERM_FULL_CONTROL
 #define RGW_PERM_INVALID         0xFF00
 
+static constexpr char RGW_REFERER_WILDCARD[] = "*";
+
 enum ACLGranteeTypeEnum {
 /* numbers are encoded, should not change */
   ACL_TYPE_CANON_USER = 0,
@@ -221,6 +223,10 @@ struct ACLReferer {
     const auto http_host = get_http_host(http_referer);
     if (!http_host || http_host->length() < url_spec.length()) {
       return false;
+    }
+
+    if ("*" == url_spec) {
+      return true;
     }
 
     if (http_host->compare(url_spec) == 0) {
