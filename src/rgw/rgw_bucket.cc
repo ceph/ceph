@@ -140,6 +140,10 @@ int rgw_read_user_buckets(RGWRados * store,
 
   } while (truncated && total < max);
 
+  if (is_truncated != nullptr) {
+    *is_truncated = truncated;
+  }
+
   if (need_stats) {
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
     ret = store->update_containers_stats(m);
