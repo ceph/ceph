@@ -444,7 +444,6 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
 				   bool fix)
 {
   RGWUserBuckets user_buckets;
-  bool done;
   bool is_truncated;
   string marker;
 
@@ -496,8 +495,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
         }
       }
     }
-    done = (buckets.size() < max_entries);
-  } while (!done);
+  } while (is_truncated);
 }
 
 static bool bucket_object_check_filter(const string& oid)
@@ -1431,7 +1429,6 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
 
     RGWUserBuckets buckets;
     string marker;
-    bool done;
     bool is_truncated;
 
     do {
@@ -1455,8 +1452,7 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
       }
 
       flusher.flush();
-      done = (m.size() < max_entries);
-    } while (!done);
+    } while (is_truncated);
 
     formatter->close_section();
   } else if (!bucket_name.empty()) {
