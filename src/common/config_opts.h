@@ -586,6 +586,9 @@ OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
 // Seconds to wait before retrying refused backfills
 OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
 
+// Seconds to wait before retrying refused recovery
+OPTION(osd_recovery_retry_interval, OPT_DOUBLE, 30.0)
+
 // max agent flush ops
 OPTION(osd_agent_max_ops, OPT_INT, 4)
 OPTION(osd_agent_max_low_ops, OPT_INT, 2)

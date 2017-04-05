@@ -196,6 +196,7 @@ enum {
   rs_incomplete_latency,
   rs_getmissing_latency,
   rs_waitupthru_latency,
+  rs_notrecovering_latency,
   rs_last,
 };
 

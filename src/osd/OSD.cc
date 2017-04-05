@@ -2611,6 +2611,7 @@ void OSD::create_recoverystate_perf()
   rs_perf.add_time_avg(rs_incomplete_latency, "incomplete_latency", "Incomplete recovery state latency");
   rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency", "Getmissing recovery state latency");
   rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency", "Waitupthru recovery state latency");
+  rs_perf.add_time_avg(rs_notrecovering_latency, "notrecovering_latency", "Notrecovering recovery state latency");
 
   recoverystate_perf = rs_perf.create_perf_counters();
   cct->get_perfcounters_collection()->add(recoverystate_perf);

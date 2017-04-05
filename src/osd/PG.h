@@ -1375,6 +1375,7 @@ public:
 
   void reject_reservation();
   void schedule_backfill_full_retry();
+  void schedule_recovery_full_retry();
 
   // -- recovery state --
 
@@ -1885,6 +1886,14 @@ public:
       void exit();
       boost::statechart::result react(const RemoteBackfillReserved& evt);
       boost::statechart::result react(const RemoteReservationRejected& evt);
+    };
+
+    struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {
+      typedef boost::mpl::list<
+	boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >
+	> reactions;
+      explicit NotRecovering(my_context ctx);
+      void exit();
     };
 
     struct RepNotRecovering;
