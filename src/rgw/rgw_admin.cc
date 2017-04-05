@@ -3543,7 +3543,7 @@ int main(int argc, char **argv)
 	  }
 	}
 
-	RGWZoneParams zone(zone_name);
+	RGWZoneParams zone(zone_id, zone_name);
 	ret = zone.init(g_ceph_context, store, false);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
