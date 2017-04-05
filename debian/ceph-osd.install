@@ -4,7 +4,7 @@ usr/sbin/ceph-disk
 usr/sbin/ceph-disk-udev
 usr/bin/ceph-clsinfo
 usr/bin/ceph-objectstore-tool
-usr/bin/ceph-bluefs-tool
+usr/bin/ceph-bluestore-tool
 usr/bin/ceph_objectstore_bench
 usr/bin/ceph-osd
 usr/lib/ceph/ceph-osd-prestart.sh
