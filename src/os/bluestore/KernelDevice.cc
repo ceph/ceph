@@ -125,10 +125,11 @@ int KernelDevice::open(const string& p)
     if (r < 0) {
       derr << "unable to get device name for " << path << ": "
 	   << cpp_strerror(r) << dendl;
-      goto out_fail;
+      rotational = true;
+    } else {
+      dout(20) << __func__ << " devname " << devname << dendl;
+      rotational = block_device_is_rotational(devname);
     }
-    dout(20) << __func__ << " devname " << devname << dendl;
-    rotational = block_device_is_rotational(devname);
   }
 
   // Operate as though the block size is 4 KB.  The backing file
