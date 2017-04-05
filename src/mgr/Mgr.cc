@@ -344,6 +344,10 @@ void Mgr::shutdown()
   // give up the lock for us.
   Mutex::Locker l(lock);
 
+  monc->sub_unwant("log-info");
+  monc->sub_unwant("mgrdigest");
+  monc->sub_unwant("fsmap");
+
   // First stop the server so that we're not taking any more incoming requests
   server.shutdown();
 
