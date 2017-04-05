@@ -338,8 +338,9 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
     const int flags = td_rw(td) ? CEPH_OSD_OP_FLAG_FADVISE_WILLNEED : 0;
 
     bufferlist bl;
-    bl.push_back(buffer::create_static(u->xfer_buflen,
-                                       static_cast<char*>(u->xfer_buf)));
+    bl.push_back(buffer::copy(reinterpret_cast<char*>(u->xfer_buf),
+                              u->xfer_buflen ) );
+
     // enqueue a write transaction on the collection's sequencer
     ObjectStore::Transaction t;
     t.write(coll.cid, object.oid, u->offset, u->xfer_buflen, bl, flags);
