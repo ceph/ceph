@@ -29,11 +29,11 @@ extern void rgw_flush_formatter(struct req_state *s,
 				ceph::Formatter *formatter);
 
 extern int rgw_rest_read_all_input(struct req_state *s, char **data, int *plen,
-				   int max_len);
+				   uint64_t max_len, bool allow_chunked=true);
 
 template <class T>
 int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
-			    int max_len, bool *empty)
+			    uint64_t max_len, bool *empty)
 {
   int rv, data_len;
   char *data;
@@ -72,7 +72,7 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 }
 
 template <class T>
-int rgw_rest_get_json_input_keep_data(CephContext *cct, req_state *s, T& out, int max_len, char **pdata, int *len)
+int rgw_rest_get_json_input_keep_data(CephContext *cct, req_state *s, T& out, uint64_t max_len, char **pdata, int *len)
 {
   int rv, data_len;
   char *data;
