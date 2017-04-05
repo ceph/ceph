@@ -2656,7 +2656,7 @@ int SyntheticClient::random_walk(int num_req)
     }
 
     // descend?
-    if (.9*roll_die(::pow((double).9,(double)cwd.depth())) && !subdirs.empty()) {
+    if (roll_die(::pow((double).9,(double)cwd.depth())) && !subdirs.empty()) {
       string s = get_random_subdir();
       cwd.push_dentry( s );
       dout(DBL) << "cd " << s << " -> " << cwd << dendl;
