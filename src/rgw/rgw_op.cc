@@ -3643,9 +3643,13 @@ void RGWPutACLs::execute()
     return;
   }
 
+  // forward bucket acl requests to meta master zone
   if (s->object.empty() && !store->is_meta_master()) {
     bufferlist in_data;
-    in_data.append(data, len);
+    // include acl data unless it was generated from a canned_acl
+    if (s->canned_acl.empty()) {
+      in_data.append(data, len);
+    }
     op_ret = forward_request_to_master(s, NULL, store, in_data, NULL);
     if (op_ret < 0) {
       ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
