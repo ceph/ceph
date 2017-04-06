@@ -444,7 +444,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
 				   bool fix)
 {
   RGWUserBuckets user_buckets;
-  bool is_truncated;
+  bool is_truncated = false;
   string marker;
 
   CephContext *cct = store->ctx();
@@ -1429,7 +1429,7 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
 
     RGWUserBuckets buckets;
     string marker;
-    bool is_truncated;
+    bool is_truncated = false;
 
     do {
       ret = rgw_read_user_buckets(store, op_state.get_user_id(), buckets,

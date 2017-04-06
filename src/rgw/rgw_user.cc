@@ -45,7 +45,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
 {
   CephContext *cct = store->ctx();
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
-  bool is_truncated;
+  bool is_truncated = false;
   string marker;
   int ret;
   RGWObjectCtx obj_ctx(store);
@@ -2028,7 +2028,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
     return -ENOENT;
   }
 
-  bool is_truncated;
+  bool is_truncated = false;
   string marker;
   CephContext *cct = store->ctx();
   size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
@@ -2189,7 +2189,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
       return -EINVAL;
     }
 
-    bool is_truncated;
+    bool is_truncated = false;
     string marker;
     CephContext *cct = store->ctx();
     size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
