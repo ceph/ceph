@@ -380,8 +380,18 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
     return -EINVAL;
   }
 
+  //Validate pool name while creating/renaming/copying/cloning/importing/etc image
+  if (spec_validation == SPEC_VALIDATION_FULL) {
+    boost::regex pattern("^[^@/]*?$");
+    if (!boost::regex_match (*pool_name, pattern)) {
+      std::cerr << "rbd: invalid spec '" << *pool_name << "'" << std::endl;
+      return -EINVAL;
+    }
+  }
+
   if (snap_name != nullptr) {
-    r = validate_snapshot_name(mod, *snap_name, snapshot_presence);
+    r = validate_snapshot_name(mod, *snap_name, snapshot_presence,
+	                       spec_validation);
     if (r < 0) {
       return r;
     }
@@ -492,7 +502,8 @@ int get_pool_journal_names(const po::variables_map &vm,
 
 int validate_snapshot_name(at::ArgumentModifier mod,
                            const std::string &snap_name,
-                           SnapshotPresence snapshot_presence) {
+                           SnapshotPresence snapshot_presence,
+			   SpecValidation spec_validation) {
   std::string prefix = at::get_description_prefix(mod);
   switch (snapshot_presence) {
   case SNAPSHOT_PRESENCE_PERMITTED:
@@ -514,6 +525,15 @@ int validate_snapshot_name(at::ArgumentModifier mod,
       return -EINVAL;
     }
     break;
+  }
+
+  if (spec_validation == SPEC_VALIDATION_SNAP) {
+    // disallow "/" and "@" in snap name
+    boost::regex pattern("^[^@/]*?$");
+    if (!boost::regex_match (snap_name, pattern)) {
+      std::cerr << "rbd: invalid spec '" << snap_name << "'" << std::endl;
+      return -EINVAL;
+    }
   }
   return 0;
 }
