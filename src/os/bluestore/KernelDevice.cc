@@ -21,10 +21,12 @@
 #include "KernelDevice.h"
 #include "include/types.h"
 #include "include/compat.h"
+#include "include/stringify.h"
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/blkdev.h"
 #include "common/align.h"
+#include "common/blkdev.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
@@ -112,13 +114,22 @@ int KernelDevice::open(const string& p)
     if (r < 0) {
       goto out_fail;
     }
-
-    rotational = block_device_is_rotational(path.c_str());
     size = s;
   } else {
     size = st.st_size;
-    //regular file is rotational device
-    rotational = true;
+  }
+
+  {
+    char partition[PATH_MAX], devname[PATH_MAX];
+    r = get_device_by_fd(fd_buffered, partition, devname, sizeof(devname));
+    if (r < 0) {
+      derr << "unable to get device name for " << path << ": "
+	   << cpp_strerror(r) << dendl;
+      rotational = true;
+    } else {
+      dout(20) << __func__ << " devname " << devname << dendl;
+      rotational = block_device_is_rotational(devname);
+    }
   }
 
   // Operate as though the block size is 4 KB.  The backing file
@@ -178,6 +189,72 @@ void KernelDevice::close()
   fd_buffered = -1;
 
   path.clear();
+}
+
+static string get_dev_property(const char *dev, const char *property)
+{
+  char val[1024] = {0};
+  get_block_device_string_property(dev, property, val, sizeof(val));
+  return val;
+}
+
+int KernelDevice::collect_metadata(string prefix, map<string,string> *pm) const
+{
+  (*pm)[prefix + "rotational"] = stringify((int)(bool)rotational);
+  (*pm)[prefix + "size"] = stringify(get_size());
+  (*pm)[prefix + "block_size"] = stringify(get_block_size());
+  (*pm)[prefix + "driver"] = "KernelDevice";
+  if (rotational) {
+    (*pm)[prefix + "type"] = "hdd";
+  } else {
+    (*pm)[prefix + "type"] = "ssd";
+  }
+
+  struct stat st;
+  int r = ::fstat(fd_buffered, &st);
+  if (r < 0)
+    return -errno;
+  if (S_ISBLK(st.st_mode)) {
+    (*pm)[prefix + "access_mode"] = "blk";
+    char partition_path[PATH_MAX];
+    char dev_node[PATH_MAX];
+    int rc = get_device_by_fd(fd_buffered, partition_path, dev_node, PATH_MAX);
+    switch (rc) {
+    case -EOPNOTSUPP:
+    case -EINVAL:
+      (*pm)[prefix + "partition_path"] = "unknown";
+      (*pm)[prefix + "dev_node"] = "unknown";
+      break;
+    case -ENODEV:
+      (*pm)[prefix + "partition_path"] = string(partition_path);
+      (*pm)[prefix + "dev_node"] = "unknown";
+      break;
+    default:
+      {
+	(*pm)[prefix + "partition_path"] = string(partition_path);
+	(*pm)[prefix + "dev_node"] = string(dev_node);
+	(*pm)[prefix + "model"] = get_dev_property(dev_node, "device/model");
+	(*pm)[prefix + "dev"] = get_dev_property(dev_node, "dev");
+
+	// nvme exposes a serial number
+	string serial = get_dev_property(dev_node, "device/serial");
+	if (serial.length()) {
+	  (*pm)[prefix + "serial"] = serial;
+	}
+
+	// nvme has a device/device/* structure; infer from that.  there
+	// is probably a better way?
+	string nvme_vendor = get_dev_property(dev_node, "device/device/vendor");
+	if (nvme_vendor.length()) {
+	  (*pm)[prefix + "type"] = "nvme";
+	}
+      }
+    }
+  } else {
+    (*pm)[prefix + "access_mode"] = "file";
+    (*pm)[prefix + "path"] = path;
+  }
+  return 0;
 }
 
 int KernelDevice::flush()
