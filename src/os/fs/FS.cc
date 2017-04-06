@@ -222,9 +222,6 @@ int FS::aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
     r = io_getevents(ctx, 1, max, event, &t);
   } while (r == -EINTR);
   
-  if (r <= 0) {
-    return r;
-  }
   for (int i=0; i<r; ++i) {
     paio[i] = (aio_t *)event[i].obj;
     paio[i]->rval = event[i].res;
