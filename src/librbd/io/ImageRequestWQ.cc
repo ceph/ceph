@@ -69,7 +69,7 @@ ssize_t ImageRequestWQ::write(uint64_t off, uint64_t len,
   return len;
 }
 
-int ImageRequestWQ::discard(uint64_t off, uint64_t len, bool skip_partial_discard) {
+ssize_t ImageRequestWQ::discard(uint64_t off, uint64_t len, bool skip_partial_discard) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "discard: ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
