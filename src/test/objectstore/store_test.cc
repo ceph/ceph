@@ -18,6 +18,12 @@
 #include <iostream>
 #include <time.h>
 #include <sys/mount.h>
+#include <boost/scoped_ptr.hpp>
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_int.hpp>
+#include <boost/random/binomial_distribution.hpp>
+#include <gtest/gtest.h>
+
 #include "os/ObjectStore.h"
 #include "os/filestore/FileStore.h"
 #if defined(HAVE_LIBAIO)
@@ -30,16 +36,14 @@
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/stringify.h"
-#include <boost/scoped_ptr.hpp>
-#include <boost/random/mersenne_twister.hpp>
-#include <boost/random/uniform_int.hpp>
-#include <boost/random/binomial_distribution.hpp>
-#include <gtest/gtest.h>
 
 #include "include/unordered_map.h"
 #include "store_test_fixture.h"
 
+
 typedef boost::mt11213b gen_type;
+
+#define dout_context g_ceph_context
 
 #if GTEST_HAS_PARAM_TEST
 
@@ -53,6 +57,9 @@ static bool bl_eq(bufferlist& expected, bufferlist& actual)
     cout << "--- buffer lengths mismatch " << std::hex
          << "expected 0x" << expected.length() << " != actual 0x"
          << actual.length() << std::dec << std::endl;
+    derr << "--- buffer lengths mismatch " << std::hex
+         << "expected 0x" << expected.length() << " != actual 0x"
+         << actual.length() << std::dec << dendl;
   }
   auto len = MIN(expected.length(), actual.length());
   while ( first<len && expected[first] == actual[first])
@@ -64,6 +71,9 @@ static bool bl_eq(bufferlist& expected, bufferlist& actual)
     cout << "--- buffer mismatch between offset 0x" << std::hex << first
          << " and 0x" << last << ", total 0x" << len << std::dec
          << std::endl;
+    derr << "--- buffer mismatch between offset 0x" << std::hex << first
+         << " and 0x" << last << ", total 0x" << len << std::dec
+         << dendl;
     cout << "--- expected:\n";
     expected.hexdump(cout);
     cout << "--- actual:\n";
