@@ -241,7 +241,7 @@ uint64_t PerfCounters::get(int idx) const
   return data.u64.read();
 }
 
-void PerfCounters::tinc(int idx, utime_t amt)
+void PerfCounters::tinc(int idx, utime_t amt, uint32_t avgcount)
 {
   if (!m_cct->_conf->perf)
     return;
@@ -252,15 +252,15 @@ void PerfCounters::tinc(int idx, utime_t amt)
   if (!(data.type & PERFCOUNTER_TIME))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
-    data.avgcount.inc();
+    data.avgcount.add(avgcount);
     data.u64.add(amt.to_nsec());
-    data.avgcount2.inc();
+    data.avgcount2.add(avgcount);
   } else {
     data.u64.add(amt.to_nsec());
   }
 }
 
-void PerfCounters::tinc(int idx, ceph::timespan amt)
+void PerfCounters::tinc(int idx, ceph::timespan amt, uint32_t avgcount)
 {
   if (!m_cct->_conf->perf)
     return;
@@ -271,9 +271,9 @@ void PerfCounters::tinc(int idx, ceph::timespan amt)
   if (!(data.type & PERFCOUNTER_TIME))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
-    data.avgcount.inc();
+    data.avgcount.add(avgcount);
     data.u64.add(amt.count());
-    data.avgcount2.inc();
+    data.avgcount2.add(avgcount);
   } else {
     data.u64.add(amt.count());
   }
