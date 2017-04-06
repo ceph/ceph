@@ -1177,9 +1177,12 @@ struct RGWBucketInfo
 
   map<string, uint32_t> mdsearch_config;
 
+  /* resharding */
+  bool resharding;
+  string new_bucket_instance_id;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(18, 4, bl);
+     ENCODE_START(19, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner.id, bl);
      ::encode(flags, bl);
@@ -1204,10 +1207,12 @@ struct RGWBucketInfo
      }
      ::encode(creation_time, bl);
      ::encode(mdsearch_config, bl);
+     ::encode(resharding, bl);
+     ::encode(new_bucket_instance_id, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(18, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(19, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2) {
        string s;
@@ -1267,6 +1272,10 @@ struct RGWBucketInfo
      if (struct_v >= 18) {
        ::decode(mdsearch_config, bl);
      }
+     if (struct_v >= 19) {
+       ::decode(resharding, bl);
+       ::decode(new_bucket_instance_id, bl);
+     }
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -1284,7 +1293,7 @@ struct RGWBucketInfo
   }
 
   RGWBucketInfo() : flags(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD), requester_pays(false),
-                    has_website(false), swift_versioning(false) {}
+                    has_website(false), swift_versioning(false),resharding(false) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
