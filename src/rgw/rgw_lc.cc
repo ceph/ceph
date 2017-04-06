@@ -35,13 +35,16 @@ bool LCRule::validate()
   if (id.length() > MAX_ID_LEN) {
     return false;
   }
-  else if(expiration.empty() && noncur_expiration.empty()) {
+  else if(expiration.empty() && noncur_expiration.empty() && mp_expiration.empty()) {
     return false;
   }
   else if (!expiration.empty() && expiration.get_days() <= 0) {
     return false;
   }
   else if (!noncur_expiration.empty() && noncur_expiration.get_days() <=0) {
+    return false;
+  }
+  else if (!mp_expiration.empty() && mp_expiration.get_days() <= 0) {
     return false;
   }
   return true;
@@ -66,6 +69,9 @@ bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
   if (!rule->get_noncur_expiration().empty()) {
     op.noncur_expiration = rule->get_noncur_expiration().get_days();
   }
+  if (!rule->get_mp_expiration().empty()) {
+    op.mp_expiration = rule->get_mp_expiration().get_days();
+  }
   auto ret = prefix_map.insert(pair<string, lc_op>(rule->get_prefix(), op));
   return ret.second;
 }
@@ -89,7 +95,7 @@ int RGWLifecycleConfiguration::check_and_add_rule(LCRule *rule)
 }
 
 //Rules are conflicted: if one rule's prefix starts with other rule's prefix, and these two rules
-//define same action(now only support expiration days). 
+//define same action. 
 bool RGWLifecycleConfiguration::validate() 
 {
   if (prefix_map.size() < 2) {
@@ -104,7 +110,8 @@ bool RGWLifecycleConfiguration::validate()
       string n_pre = next_iter->first;
       if (n_pre.compare(0, c_pre.length(), c_pre) == 0) {
         if ((cur_iter->second.expiration > 0 && next_iter->second.expiration > 0) ||
-          (cur_iter->second.noncur_expiration > 0 && next_iter->second.noncur_expiration > 0)) {
+          (cur_iter->second.noncur_expiration > 0 && next_iter->second.noncur_expiration > 0) || 
+          (cur_iter->second.mp_expiration > 0 && next_iter->second.mp_expiration > 0)) {
           return false;
         } else {
           ++next_iter;
@@ -264,6 +271,54 @@ int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, b
   }
 }
 
+int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map)
+{
+  MultipartMetaFilter mp_filter;
+  vector<rgw_bucket_dir_entry> objs;
+  RGWMPObj mp_obj;
+  bool is_truncated;
+  int ret;
+  RGWBucketInfo& bucket_info = target->get_bucket_info();
+  RGWRados::Bucket::List list_op(target);
+  list_op.params.list_versions = false;
+  list_op.params.ns = RGW_OBJ_NS_MULTIPART;
+  list_op.params.filter = &mp_filter;
+  for (auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
+    if (!prefix_iter->second.status || prefix_iter->second.mp_expiration <= 0) {
+      continue;
+    }
+    list_op.params.prefix = prefix_iter->first;
+    do {
+      objs.clear();
+      list_op.params.marker = list_op.get_next_marker();
+      ret = list_op.list_objects(1000, &objs, NULL, &is_truncated);
+      if (ret < 0) {
+          if (ret == (-ENOENT))
+            return 0;
+          ldout(cct, 0) << "ERROR: store->list_objects():" <<dendl;
+          return ret;
+      }
+
+      utime_t now = ceph_clock_now();
+      for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
+        if (obj_has_expired(now - ceph::real_clock::to_time_t(obj_iter->meta.mtime), prefix_iter->second.mp_expiration)) {
+          rgw_obj_key key(obj_iter->key);
+          if (!mp_obj.from_meta(key.name)) {
+            continue;
+          }
+          RGWObjectCtx rctx(store);
+          ret = abort_multipart_upload(store, cct, &rctx, bucket_info, mp_obj);
+          if (ret < 0 && ret != -ERR_NO_SUCH_UPLOAD) {
+            ldout(cct, 0) << "ERROR: abort_multipart_upload failed, ret=" << ret <<dendl;
+            return ret;
+          }
+        }
+      }
+    } while(is_truncated);
+  }
+  return 0;
+}
+
 int RGWLC::bucket_lc_process(string& shard_id)
 {
   RGWLifecycleConfiguration  config(cct);
@@ -358,7 +413,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
   //bucket versioning is enabled or suspended
     rgw_obj_key pre_marker;
     for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
-      if (!prefix_iter->second.status) {
+      if (!prefix_iter->second.status || (prefix_iter->second.expiration <= 0 && prefix_iter->second.noncur_expiration <= 0)) {
         continue;
       }
       if (prefix_iter != prefix_map.begin() && 
@@ -440,6 +495,8 @@ int RGWLC::bucket_lc_process(string& shard_id)
       } while (is_truncated);
     }
   }
+
+  ret = handle_multipart_expiration(&target, prefix_map);
 
   return ret;
 }
