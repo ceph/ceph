@@ -2150,17 +2150,38 @@ bool verify_user_permission(struct req_state * const s,
                             const int perm);
 bool verify_user_permission(struct req_state * const s,
                             const int perm);
-extern bool verify_bucket_permission(struct req_state * s,
-                                     RGWAccessControlPolicy * user_acl,
-                                     RGWAccessControlPolicy * bucket_acl,
-                                     int perm);
-extern bool verify_bucket_permission(struct req_state *s, int perm);
-extern bool verify_object_permission(struct req_state *s,
-                                     RGWAccessControlPolicy * user_acl,
-                                     RGWAccessControlPolicy * bucket_acl,
-                                     RGWAccessControlPolicy * object_acl,
-                                     int perm);
-extern bool verify_object_permission(struct req_state *s, int perm);
+bool verify_bucket_permission(
+  struct req_state * const s,
+  const rgw_bucket& bucket,
+  RGWAccessControlPolicy * const user_acl,
+  RGWAccessControlPolicy * const bucket_acl,
+  const boost::optional<rgw::IAM::Policy>& bucket_policy,
+  const uint64_t op);
+bool verify_bucket_permission(struct req_state * const s, const uint64_t op);
+bool verify_bucket_permission_no_policy(
+  struct req_state * const s,
+  RGWAccessControlPolicy * const user_acl,
+  RGWAccessControlPolicy * const bucket_acl,
+  const int perm);
+bool verify_bucket_permission_no_policy(struct req_state * const s,
+					const int perm);
+extern bool verify_object_permission(
+  struct req_state * const s,
+  const rgw_obj& obj,
+  RGWAccessControlPolicy * const user_acl,
+  RGWAccessControlPolicy * const bucket_acl,
+  RGWAccessControlPolicy * const object_acl,
+  const boost::optional<rgw::IAM::Policy>& bucket_policy,
+  const uint64_t op);
+extern bool verify_object_permission(struct req_state *s, uint64_t op);
+extern bool verify_object_permission_no_policy(
+  struct req_state * const s,
+  RGWAccessControlPolicy * const user_acl,
+  RGWAccessControlPolicy * const bucket_acl,
+  RGWAccessControlPolicy * const object_acl,
+  int perm);
+extern bool verify_object_permission_no_policy(struct req_state *s,
+					       int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern void rgw_uri_escape_char(char c, string& dst);

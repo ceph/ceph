@@ -34,6 +34,14 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+using boost::none;
+using boost::optional;
+
+using rgw::IAM::ARN;
+using rgw::IAM::Effect;
+using rgw::IAM::op_to_perm;
+using rgw::IAM::Policy;
+
 PerfCounters *perfcounter = NULL;
 
 const uint32_t RGWBucketInfo::NUM_SHARDS_BLIND_BUCKET(UINT32_MAX);
@@ -1069,17 +1077,39 @@ bool verify_requester_payer_permission(struct req_state *s)
 }
 
 bool verify_bucket_permission(struct req_state * const s,
+			      const rgw_bucket& bucket,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
-                              const int perm)
+			      const optional<Policy>& bucket_policy,
+                              const uint64_t op)
+{
+  if (!verify_requester_payer_permission(s))
+    return false;
+
+  if (bucket_policy) {
+    auto r = bucket_policy->eval(s->env, *s->auth.identity, op, ARN(bucket));
+    if (r == Effect::Allow)
+      // It looks like S3 ACLs only GRANT permissions rather than
+      // denying them, so this should be safe.
+      return true;
+    else if (r == Effect::Deny)
+      return false;
+  }
+
+  const auto perm = op_to_perm(op);
+
+  return verify_bucket_permission_no_policy(s, user_acl, bucket_acl, perm);
+}
+
+bool verify_bucket_permission_no_policy(struct req_state * const s,
+					RGWAccessControlPolicy * const user_acl,
+					RGWAccessControlPolicy * const bucket_acl,
+					const int perm)
 {
   if (!bucket_acl)
     return false;
 
   if ((perm & (int)s->perm_mask) != perm)
-    return false;
-
-  if (!verify_requester_payer_permission(s))
     return false;
 
   if (bucket_acl->verify_permission(*s->auth.identity, perm, perm,
@@ -1092,35 +1122,76 @@ bool verify_bucket_permission(struct req_state * const s,
   return user_acl->verify_permission(*s->auth.identity, perm, perm);
 }
 
-bool verify_bucket_permission(struct req_state * const s, const int perm)
-{
-  return verify_bucket_permission(s,
-                                  s->user_acl.get(),
-                                  s->bucket_acl,
-                                  perm);
-}
-
-static inline bool check_deferred_bucket_acl(struct req_state * const s,
-                                             RGWAccessControlPolicy * const user_acl,
-                                             RGWAccessControlPolicy * const bucket_acl,
-                                             const uint8_t deferred_check,
-                                             const int perm)
-{
-  return (s->defer_to_bucket_acls == deferred_check \
-              && verify_bucket_permission(s, user_acl, bucket_acl, perm));
-}
-
-bool verify_object_permission(struct req_state * const s,
-                              RGWAccessControlPolicy * const user_acl,
-                              RGWAccessControlPolicy * const bucket_acl,
-                              RGWAccessControlPolicy * const object_acl,
-                              const int perm)
+bool verify_bucket_permission_no_policy(struct req_state * const s, const int perm)
 {
   if (!verify_requester_payer_permission(s))
     return false;
 
-  if (check_deferred_bucket_acl(s, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
-      check_deferred_bucket_acl(s, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
+  return verify_bucket_permission_no_policy(s,
+					    s->user_acl.get(),
+					    s->bucket_acl,
+					    perm);
+}
+
+bool verify_bucket_permission(struct req_state * const s, const uint64_t op)
+{
+  return verify_bucket_permission(s,
+				  s->bucket,
+                                  s->user_acl.get(),
+                                  s->bucket_acl,
+				  s->iam_policy,
+                                  op);
+}
+
+static inline bool check_deferred_bucket_perms(struct req_state * const s,
+					       const rgw_bucket& bucket,
+					       RGWAccessControlPolicy * const user_acl,
+					       RGWAccessControlPolicy * const bucket_acl,
+					       const optional<Policy>& bucket_policy,
+					       const uint8_t deferred_check,
+					       const uint64_t op)
+{
+  return (s->defer_to_bucket_acls == deferred_check \
+	  && verify_bucket_permission(s, bucket, user_acl, bucket_acl, bucket_policy, op));
+}
+
+static inline bool check_deferred_bucket_only_acl(struct req_state * const s,
+						  RGWAccessControlPolicy * const user_acl,
+						  RGWAccessControlPolicy * const bucket_acl,
+						  const uint8_t deferred_check,
+						  const int perm)
+{
+  return (s->defer_to_bucket_acls == deferred_check \
+	  && verify_bucket_permission_no_policy(s, user_acl, bucket_acl, perm));
+}
+
+bool verify_object_permission(struct req_state * const s,
+			      const rgw_obj& obj,
+                              RGWAccessControlPolicy * const user_acl,
+                              RGWAccessControlPolicy * const bucket_acl,
+                              RGWAccessControlPolicy * const object_acl,
+                              const optional<Policy>& bucket_policy,
+                              const uint64_t op)
+{
+  if (!verify_requester_payer_permission(s))
+    return false;
+
+  if (bucket_policy) {
+    auto r = bucket_policy->eval(s->env, *s->auth.identity, op, ARN(obj));
+    if (r == Effect::Allow)
+      // It looks like S3 ACLs only GRANT permissions rather than
+      // denying them, so this should be safe.
+      return true;
+    else if (r == Effect::Deny)
+      return false;
+  }
+
+  const auto perm = op_to_perm(op);
+
+  if (check_deferred_bucket_perms(s, obj.bucket, user_acl, bucket_acl, bucket_policy,
+				  RGW_DEFER_TO_BUCKET_ACLS_RECURSE, op) ||
+      check_deferred_bucket_perms(s, obj.bucket, user_acl, bucket_acl, bucket_policy,
+				  RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, rgw::IAM::s3All)) {
     return true;
   }
 
@@ -1160,13 +1231,72 @@ bool verify_object_permission(struct req_state * const s,
   return user_acl->verify_permission(*s->auth.identity, swift_perm, swift_perm);
 }
 
-bool verify_object_permission(struct req_state *s, int perm)
+bool verify_object_permission_no_policy(struct req_state * const s,
+					RGWAccessControlPolicy * const user_acl,
+					RGWAccessControlPolicy * const bucket_acl,
+					RGWAccessControlPolicy * const object_acl,
+					const int perm)
+{
+  if (check_deferred_bucket_only_acl(s, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
+      check_deferred_bucket_only_acl(s, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
+    return true;
+  }
+
+  if (!object_acl) {
+    return false;
+  }
+
+  bool ret = object_acl->verify_permission(*s->auth.identity, s->perm_mask, perm);
+  if (ret) {
+    return true;
+  }
+
+  if (!s->cct->_conf->rgw_enforce_swift_acls)
+    return ret;
+
+  if ((perm & (int)s->perm_mask) != perm)
+    return false;
+
+  int swift_perm = 0;
+  if (perm & (RGW_PERM_READ | RGW_PERM_READ_ACP))
+    swift_perm |= RGW_PERM_READ_OBJS;
+  if (perm & RGW_PERM_WRITE)
+    swift_perm |= RGW_PERM_WRITE_OBJS;
+
+  if (!swift_perm)
+    return false;
+
+  /* we already verified the user mask above, so we pass swift_perm as the mask here,
+     otherwise the mask might not cover the swift permissions bits */
+  if (bucket_acl->verify_permission(*s->auth.identity, swift_perm, swift_perm,
+                                    s->info.env->get("HTTP_REFERER")))
+    return true;
+
+  if (!user_acl)
+    return false;
+
+  return user_acl->verify_permission(*s->auth.identity, swift_perm, swift_perm);
+}
+
+bool verify_object_permission_no_policy(struct req_state *s, int perm)
+{
+  if (!verify_requester_payer_permission(s))
+    return false;
+
+  return verify_object_permission_no_policy(s, s->user_acl.get(),
+					    s->bucket_acl, s->object_acl,
+					    perm);
+}
+
+bool verify_object_permission(struct req_state *s, uint64_t op)
 {
   return verify_object_permission(s,
-                                  s->user_acl.get(),
+				  rgw_obj(s->bucket, s->object),
+				  s->user_acl.get(),
                                   s->bucket_acl,
                                   s->object_acl,
-                                  perm);
+				  s->iam_policy,
+                                  op);
 }
 
 class HexTable
