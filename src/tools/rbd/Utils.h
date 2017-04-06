@@ -132,7 +132,8 @@ int get_pool_journal_names(
 
 int validate_snapshot_name(argument_types::ArgumentModifier mod,
                            const std::string &snap_name,
-                           SnapshotPresence snapshot_presence);
+                           SnapshotPresence snapshot_presence,
+			   SpecValidation spec_validation);
 
 int get_image_options(const boost::program_options::variables_map &vm,
                       bool get_format, librbd::ImageOptions* opts);
