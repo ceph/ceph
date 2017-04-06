@@ -1576,6 +1576,7 @@ void RGWListBuckets::execute()
     }
   }
 
+  is_truncated = false;
   do {
     RGWUserBuckets buckets;
     uint64_t read_count;
@@ -1701,7 +1702,7 @@ int RGWStatAccount::verify_permission()
 void RGWStatAccount::execute()
 {
   string marker;
-  bool is_truncated;
+  bool is_truncated = false;
   uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
   do {
@@ -2027,7 +2028,7 @@ int RGWCreateBucket::verify_permission()
   if (s->user->max_buckets) {
     RGWUserBuckets buckets;
     string marker;
-    bool is_truncated;
+    bool is_truncated = false;
     op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets,
 				   marker, string(), s->user->max_buckets,
 				   false, &is_truncated);
@@ -5562,7 +5563,7 @@ int RGWBulkUploadOp::handle_dir_verify_permission()
   if (s->user->max_buckets > 0) {
     RGWUserBuckets buckets;
     std::string marker;
-    bool is_truncated;
+    bool is_truncated = false;
     op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets,
                                    marker, std::string(), s->user->max_buckets,
                                    false, &is_truncated);
