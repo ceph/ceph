@@ -568,8 +568,10 @@ void Replayer::release_leader()
   m_leader_watcher->release_leader();
 }
 
-void Replayer::handle_update(const ImageIds &added_image_ids,
+void Replayer::handle_update(const std::string &mirror_uuid,
+                             const ImageIds &added_image_ids,
                              const ImageIds &removed_image_ids) {
+  assert(!mirror_uuid.empty());
   if (m_stopping.read()) {
     return;
   }
@@ -605,9 +607,7 @@ void Replayer::handle_update(const ImageIds &added_image_ids,
   for (auto &image_id : removed_image_ids) {
     auto image_it = m_image_replayers.find(image_id.global_id);
     if (image_it != m_image_replayers.end()) {
-      assert(!m_remote_mirror_uuid.empty());
-      image_it->second->remove_remote_image(m_remote_mirror_uuid,
-                                            image_id.id);
+      image_it->second->remove_remote_image(mirror_uuid, image_id.id);
 
       if (image_it->second->is_running()) {
         dout(20) << "stop image replayer for remote image "
@@ -647,16 +647,6 @@ void Replayer::handle_update(const ImageIds &added_image_ids,
     return;
   }
 
-  std::string remote_mirror_uuid;
-  r = librbd::cls_client::mirror_uuid_get(&m_remote_io_ctx,
-                                          &remote_mirror_uuid);
-  if (r < 0 || remote_mirror_uuid.empty()) {
-    derr << "failed to retrieve remote mirror uuid from pool "
-         << m_remote_io_ctx.get_pool_name() << ": " << cpp_strerror(r) << dendl;
-    return;
-  }
-  m_remote_mirror_uuid = remote_mirror_uuid;
-
   // start replayers for newly added remote image sources
   for (auto &image_id : added_image_ids) {
     auto it = m_image_replayers.find(image_id.global_id);
@@ -672,7 +662,7 @@ void Replayer::handle_update(const ImageIds &added_image_ids,
         std::make_pair(image_id.global_id, std::move(image_replayer))).first;
     }
 
-    it->second->add_remote_image(remote_mirror_uuid, image_id.id,
+    it->second->add_remote_image(mirror_uuid, image_id.id,
                                  m_remote_io_ctx);
     if (!it->second->is_running()) {
       dout(20) << "starting image replayer for remote image "
