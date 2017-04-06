@@ -728,10 +728,6 @@ COMMAND("osd pool get-quota " \
         "name=pool,type=CephPoolname ",
         "obtain object or byte limits for pool",
         "osd", "r", "cli,rest")
-COMMAND("osd pool stats " \
-        "name=name,type=CephString,req=false",
-        "obtain stats from all pools, or from specified pool",
-        "osd", "r", "cli,rest")
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r", "cli,rest")
