@@ -1037,4 +1037,30 @@ struct cls_rgw_reshard_entry
 };
 WRITE_CLASS_ENCODER(cls_rgw_reshard_entry)
 
+struct cls_rgw_bucket_instance_entry {
+  bool resharding;
+  string new_bucket_instance_id;
+  bufferlist data;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(resharding, bl);
+    ::encode(new_bucket_instance_id, bl);
+    ::encode(data, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(resharding, bl);
+    ::decode(new_bucket_instance_id, bl);
+    ::decode(data, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_bucket_instance_entry*>& o);
+};
+WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)
+
 #endif

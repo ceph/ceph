@@ -3611,6 +3611,66 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
   return ret;
 }
 
+const string resharding_attr = "resharding";
+
+static int cls_rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
+{
+  cls_rgw_set_bucket_resharding_op op;
+
+  bufferlist::iterator in_iter = in->begin();
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_rgw_set_bucket_resharding: failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  ::encode(true, bl);
+  int ret = cls_cxx_setxattr(hctx, resharding_attr.c_str(), &bl);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, resharding_attr.c_str(), ret);
+    return ret;
+  }
+
+  ret = cls_cxx_write(hctx, 0, op.entry.data.length(), &op.entry.data);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_write returned %d", __func__, ret);
+    return ret;
+  }
+
+  return 0;
+}
+
+static int cls_rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
+{
+  cls_rgw_set_bucket_resharding_op op;
+
+  bufferlist::iterator in_iter = in->begin();
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_rgw_clear_bucket_resharding: failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  ::encode(false, bl);
+  int ret = cls_cxx_setxattr(hctx, resharding_attr.c_str(), &bl);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, resharding_attr.c_str(), ret);
+    return ret;
+  }
+
+  ret = cls_cxx_write(hctx, 0, op.entry.data.length(), &op.entry.data);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_write returned %d", __func__, ret);
+    return ret;
+  }
+
+  return 0;
+}
+
 
 CLS_INIT(rgw)
 {
@@ -3656,6 +3716,8 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_reshard_get;
   cls_method_handle_t h_rgw_reshard_get_head;
   cls_method_handle_t h_rgw_reshard_remove;
+  cls_method_handle_t h_rgw_set_bucket_resharding;
+  cls_method_handle_t h_rgw_clear_bucket_resharding;
 
 
   cls_register(RGW_CLASS, &h_class);

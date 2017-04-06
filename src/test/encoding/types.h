@@ -341,10 +341,13 @@ TYPE(cls_rgw_reshard_get_ret)
 TYPE(cls_rgw_reshard_get_head_op)
 TYPE(cls_rgw_reshard_get_head_ret)
 TYPE(cls_rgw_reshard_remove_op)
+TYPE(cls_rgw_set_bucket_resharding_op)
+TYPE(cls_rgw_clear_bucket_resharding_op)
 
 #include "cls/rgw/cls_rgw_client.h"
 TYPE(rgw_bi_log_entry)
 TYPE(cls_rgw_reshard_entry)
+TYPE(cls_rgw_bucket_instance_entry)
 
 #include "cls/user/cls_user_types.h"
 TYPE(cls_user_bucket)
