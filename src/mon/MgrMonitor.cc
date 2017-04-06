@@ -25,7 +25,13 @@
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
-#define dout_prefix *_dout << "MgrMonitor " << __func__ << " "
+#define dout_prefix _prefix(_dout, mon, map)
+static ostream& _prefix(std::ostream *_dout, Monitor *mon,
+			const MgrMap& mgrmap) {
+  return *_dout << "mon." << mon->name << "@" << mon->rank
+		<< "(" << mon->get_state_name()
+		<< ").mgr e" << mgrmap.get_epoch() << " ";
+}
 
 void MgrMonitor::create_initial()
 {
@@ -70,7 +76,7 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << " " << pending_map << dendl;
   bufferlist bl;
-  pending_map.encode(bl, 0);
+  pending_map.encode(bl, mon->get_quorum_con_features());
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
 }

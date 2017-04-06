@@ -46,7 +46,6 @@ Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
   lock("Mgr::lock"),
   timer(g_ceph_context, lock),
   finisher(g_ceph_context, "Mgr", "mgr-fin"),
-  waiting_for_fs_map(NULL),
   py_modules(daemon_state, cluster_state, *monc, finisher),
   cluster_state(monc, nullptr),
   server(monc, daemon_state, cluster_state, py_modules, clog_, audit_clog_),
@@ -59,7 +58,6 @@ Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
 
 Mgr::~Mgr()
 {
-  assert(waiting_for_fs_map == nullptr);
 }
 
 
@@ -164,10 +162,19 @@ void Mgr::init()
   dout(4) << "Loading daemon metadata..." << dendl;
   load_all_metadata();
 
-  // Preload config keys (`get` for plugins is to be a fast local
-  // operation, we we don't have to synchronize these later because
-  // all sets will come via mgr)
-  load_config();
+  // subscribe to all the maps
+  monc->sub_want("log-info", 0, 0);
+  monc->sub_want("mgrdigest", 0, 0);
+  monc->sub_want("fsmap", 0, 0);
+
+  dout(4) << "waiting for OSDMap..." << dendl;
+  // Subscribe to OSDMap update to pass on to ClusterState
+  objecter->maybe_request_map();
+
+  // reset the mon session.  we get these maps through subscriptions which
+  // are stateful with the connection, so even if *we* don't have them a
+  // previous incarnation sharing the same MonClient may have.
+  monc->reopen_session();
 
   // Start Objecter and wait for OSD map
   lock.Unlock();  // Drop lock because OSDMap dispatch calls into my ms_dispatch
@@ -179,27 +186,18 @@ void Mgr::init()
     cluster_state.notify_osdmap(osd_map);
   });
 
-  // Subscribe to OSDMap update to pass on to ClusterState
-  objecter->maybe_request_map();
-
-  monc->sub_want("log-info", 0, 0);
-  monc->sub_want("mgrdigest", 0, 0);
-
-  // Prepare to receive FSMap and request it
-  dout(4) << "requesting FSMap..." << dendl;
-  C_SaferCond cond;
-  waiting_for_fs_map = &cond;
-  monc->sub_want("fsmap", 0, 0);
-  monc->renew_subs();
-
   // Wait for FSMap
   dout(4) << "waiting for FSMap..." << dendl;
-  lock.Unlock();
-  cond.wait();
-  lock.Lock();
-  waiting_for_fs_map = nullptr;
-  dout(4) << "Got FSMap." << dendl;
+  while (!cluster_state.have_fsmap()) {
+    fs_map_cond.Wait(lock);
+  }
 
+  dout(4) << "waiting for config-keys..." << dendl;
+
+  // Preload config keys (`get` for plugins is to be a fast local
+  // operation, we we don't have to synchronize these later because
+  // all sets will come via mgr)
+  load_config();
 
   // Wait for MgrDigest...?
   // TODO
@@ -308,8 +306,9 @@ void Mgr::load_config()
   dout(10) << "listing keys" << dendl;
   JSONCommand cmd;
   cmd.run(monc, "{\"prefix\": \"config-key list\"}");
-
+  lock.Unlock();
   cmd.wait();
+  lock.Lock();
   assert(cmd.r == 0);
 
   std::map<std::string, std::string> loaded;
@@ -486,10 +485,7 @@ void Mgr::handle_fs_map(MFSMap* m)
 
   const FSMap &new_fsmap = m->get_fsmap();
 
-  if (waiting_for_fs_map) {
-    waiting_for_fs_map->complete(0);
-    waiting_for_fs_map = NULL;
-  }
+  fs_map_cond.Signal();
 
   // TODO: callers (e.g. from python land) are potentially going to see
   // the new fsmap before we've bothered populating all the resulting
@@ -554,7 +550,7 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
   // Hack: use this as a tick/opportunity to prompt python-land that
   // the pgmap might have changed since last time we were here.
   py_modules.notify_all("pg_summary", "");
-  
+  dout(10) << "done." << dendl;
   m->put();
 }
 
