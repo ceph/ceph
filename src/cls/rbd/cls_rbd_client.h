@@ -272,6 +272,9 @@ namespace librbd {
 			  ::SnapContext *snapc);
 
     // operations on the rbd_mirroring object
+    void mirror_uuid_get_start(librados::ObjectReadOperation *op);
+    int mirror_uuid_get_finish(bufferlist::iterator *it,
+                               std::string *uuid);
     int mirror_uuid_get(librados::IoCtx *ioctx, std::string *uuid);
     int mirror_uuid_set(librados::IoCtx *ioctx, const std::string &uuid);
     void mirror_mode_get_start(librados::ObjectReadOperation *op);
