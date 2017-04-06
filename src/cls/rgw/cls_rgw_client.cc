@@ -866,3 +866,24 @@ void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_re
   ::encode(call, in);
   op.exec("rgw", "reshard_remove", in);
 }
+
+int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
+				  const cls_rgw_bucket_instance_entry& entry)
+{
+  bufferlist in, out;
+  struct cls_rgw_set_bucket_resharding_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  return io_ctx.exec(oid, "rgw", "set_bucket_resharding", in, out);
+}
+
+int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
+				    const cls_rgw_bucket_instance_entry& entry)
+{
+  bufferlist in, out;
+  struct cls_rgw_clear_bucket_resharding_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  return io_ctx.exec(oid, "rgw", "clear_bucket_resharding", in, out);
+}
+

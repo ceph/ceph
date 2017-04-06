@@ -592,3 +592,19 @@ void cls_rgw_reshard_entry::generate_test_instances(list<cls_rgw_reshard_entry*>
   ls.back()->old_num_shards = 8;
   ls.back()->new_num_shards = 64;
 }
+
+void cls_rgw_bucket_instance_entry::dump(Formatter *f) const
+{
+  encode_json("data", data, f);
+  encode_json("resharding", resharding, f);
+  encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
+
+}
+
+void cls_rgw_bucket_instance_entry::generate_test_instances(list<cls_rgw_bucket_instance_entry*>& ls)
+{
+  ls.push_back(new cls_rgw_bucket_instance_entry);
+  ls.push_back(new cls_rgw_bucket_instance_entry);
+  ls.back()->resharding = true;
+  ls.back()->new_bucket_instance_id = "new_instance_id";
+}
