@@ -94,6 +94,8 @@ public:
   virtual uint64_t get_size() const = 0;
   virtual uint64_t get_block_size() const = 0;
 
+  virtual int collect_metadata(string prefix, map<string,string> *pm) const = 0;
+
   virtual int read(
     uint64_t off,
     uint64_t len,

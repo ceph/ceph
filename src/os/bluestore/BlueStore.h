@@ -2046,6 +2046,8 @@ public:
 public:
   int statfs(struct store_statfs_t *buf) override;
 
+  void collect_metadata(map<string,string> *pm) override;
+
   bool exists(const coll_t& cid, const ghobject_t& oid) override;
   bool exists(CollectionHandle &c, const ghobject_t& oid) override;
   int set_collection_opts(
