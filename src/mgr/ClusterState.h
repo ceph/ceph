@@ -42,20 +42,6 @@ protected:
   bufferlist health_json;
   bufferlist mon_status_json;
 
-  void _update_creating_pgs(
-      const OSDMap &osd_map,
-      PGMap::Incremental *pending_inc);
-
-  void _register_pg(
-      const OSDMap &osd_map,
-      pg_t pgid, epoch_t epoch,
-      bool new_pool,
-      PGMap::Incremental *pending_inc);
-
-  void _register_new_pgs(
-      const OSDMap &osd_map,
-      PGMap::Incremental *pending_inc);
-
 public:
 
   void load_digest(MMgrDigest *m);
