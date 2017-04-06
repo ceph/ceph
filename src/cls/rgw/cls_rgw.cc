@@ -2752,6 +2752,15 @@ static void usage_record_name_by_user(const string& user, uint64_t epoch, string
   key = buf;
 }
 
+static void usage_record_name_by_subuser(const string& user, const string& subuser,
+					 uint64_t epoch, string& bucket, string& key)
+{
+  char buf[32 + user.size() + subuser.size() + bucket.size()];
+  snprintf(buf, sizeof(buf), "$%s:%s_%011llu_%s", user.c_str(), subuser.c_str(),
+	   (long long unsigned)epoch, bucket.c_str());
+  key = buf;
+}
+
 static int usage_record_decode(bufferlist& record_bl, rgw_usage_log_entry& e)
 {
   bufferlist::iterator kiter = record_bl.begin();
@@ -2788,9 +2797,11 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 
     rgw_user *puser = (entry.payer.empty() ? &entry.owner : &entry.payer);
 
-    usage_record_name_by_time(entry.epoch, puser->to_str(), entry.bucket, key_by_time);
-
-    CLS_LOG(10, "rgw_user_usage_log_add user=%s bucket=%s\n", puser->to_str().c_str(), entry.bucket.c_str());
+    if (entry.subuser.empty()) {
+      usage_record_name_by_time(entry.epoch, puser->to_str(), entry.bucket, key_by_time);
+      CLS_LOG(10, "rgw_user_usage_log_add user=%s bucket=%s\n",
+	      puser->to_str().c_str(), entry.bucket.c_str());
+    }
 
     bufferlist record_bl;
     int ret = cls_cxx_map_get_val(hctx, key_by_time, &record_bl);
@@ -2814,7 +2825,13 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
       return ret;
 
     string key_by_user;
-    usage_record_name_by_user(puser->to_str(), entry.epoch, entry.bucket, key_by_user);
+
+    if (entry.subuser.empty())
+      usage_record_name_by_user(puser->to_str(), entry.epoch, entry.bucket, key_by_user);
+    else
+      usage_record_name_by_subuser(puser->to_str(), entry.subuser, entry.epoch,
+				   entry.bucket, key_by_user);
+
     ret = cls_cxx_map_set_val(hctx, key_by_user, &new_record_bl);
     if (ret < 0)
       return ret;
