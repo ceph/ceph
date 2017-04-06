@@ -474,7 +474,6 @@ set(libcommon_files
   common/code_environment.cc
   common/dout.cc
   common/signal.cc
-  common/simple_spin.cc
   common/Thread.cc
   common/Formatter.cc
   common/HTMLFormatter.cc
