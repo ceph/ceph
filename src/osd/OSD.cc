@@ -3894,6 +3894,13 @@ int OSD::handle_pg_peering_evt(
     switch (result) {
     case RES_NONE: {
       const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
+      if (pp->has_flag(pg_pool_t::FLAG_EC_OVERWRITES) &&
+	  store->get_type() != "bluestore") {
+	clog->warn() << "pg " << pgid
+		     << " is at risk of silent data corruption: "
+		     << "the pool allows ec overwrites but is not stored in "
+		     << "bluestore, so deep scrubbing will not detect bitrot";
+      }
       PG::_create(*rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
       PG::_init(*rctx.transaction, pgid, pp);
 

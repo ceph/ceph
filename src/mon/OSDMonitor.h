@@ -411,6 +411,9 @@ private:
   OpTracker op_tracker;
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
+  int get_osd_objectstore_type(int osd, std::string *type);
+  bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
+				       ostream *err);
 
   // when we last received PG stats from each osd
   map<int,utime_t> last_osd_report;
