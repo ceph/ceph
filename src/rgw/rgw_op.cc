@@ -368,8 +368,13 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   if(s->dialect.compare("s3") == 0) {
     s->bucket_acl = new RGWAccessControlPolicy_S3(s->cct);
   } else if(s->dialect.compare("swift")  == 0) {
-    s->user_acl = std::unique_ptr<RGWAccessControlPolicy>(
-        new RGWAccessControlPolicy_SWIFTAcct(s->cct));
+    /* We aren't allocating the account policy for those operations using
+     * the Swift's infrastructure that don't really need req_state::user.
+     * Typical example here is the implementation of /info. */
+    if (!s->user->user_id.empty()) {
+      s->user_acl = std::unique_ptr<RGWAccessControlPolicy>(
+          new RGWAccessControlPolicy_SWIFTAcct(s->cct));
+    }
     s->bucket_acl = new RGWAccessControlPolicy_SWIFT(s->cct);
   } else {
     s->bucket_acl = new RGWAccessControlPolicy(s->cct);
