@@ -270,7 +270,12 @@ namespace crimson {
 	}
       }; // class ClientReq
 
+    public:
 
+      // NOTE: ClientRec is in the "public" section for compatibility
+      // with g++ 4.8.4, which complains if it's not. By g++ 6.3.1
+      // ClientRec could be "protected" with no issue. [See comments
+      // associated with function submit_top_request.]
       class ClientRec {
 	friend PriorityQueueBase<C,R,B>;
 
@@ -418,11 +423,7 @@ namespace crimson {
 	}
       }; // class ClientRec
 
-
       using ClientRecRef = std::shared_ptr<ClientRec>;
-
-
-    public:
 
       // when we try to get the next request, we'll be in one of three
       // situations -- we'll have one to return, have one that can
@@ -1458,6 +1459,13 @@ namespace crimson {
       // data_mtx should be held when called; furthermore, the heap
       // should not be empty and the top element of the heap should
       // not be already handled
+      //
+      // NOTE: the use of "super::ClientRec" in either the template
+      // construct or as a parameter to submit_top_request generated
+      // a compiler error in g++ 4.8.4, when ClientRec was
+      // "protected" rather than "public". By g++ 6.3.1 this was not
+      // an issue. But for backwards compatibility
+      // PriorityQueueBase::ClientRec is public.
       template<typename C1,
 	       IndIntruHeapData super::ClientRec::*C2,
 	       typename C3,
