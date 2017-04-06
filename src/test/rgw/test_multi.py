@@ -137,11 +137,11 @@ class RGWCluster:
         mstop(self.cluster_id, 'radosgw')
 
     def rgw_admin(self, cmd, check_retcode = True):
-        (s, retcode) = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.zg_num, self.cluster_num, cmd), check_retcode)
+        (s, retcode) = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.cluster_id, cmd), check_retcode)
         return (s, retcode)
 
     def rgw_admin_ro(self, cmd, check_retcode = True):
-        (s, retcode) = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.zg_num, self.cluster_num, '--rgw-cache-enabled=false ' + cmd), check_retcode)
+        (s, retcode) = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.cluster_id, '--rgw-cache-enabled=false ' + cmd), check_retcode)
         return (s, retcode)
 
 class RGWZone:
@@ -175,15 +175,15 @@ class RGWZonegroup:
         endpoints = ",".join(map(lambda x: "http://localhost:" + str(cluster.port + x), range(cluster.num_gateways)))
         if is_master:
             if self.is_master_zg:
-                bash(tpath('test-rgw-call.sh', 'init_first_zone', cluster.zg_num, cluster.cluster_num,
+                bash(tpath('test-rgw-call.sh', 'init_first_zone', cluster.cluster_id,
                     self.realm_name, zg_name, zone_name, endpoints,
                     self.credentials.access_key, self.credentials.secret))
             else:
-                bash(tpath('test-rgw-call.sh', 'init_first_zone_in_slave_zg', cluster.zg_num, cluster.cluster_num,
+                bash(tpath('test-rgw-call.sh', 'init_first_zone_in_slave_zg', cluster.cluster_id,
                        self.realm_name, zg_name, zone_name, master_zg_first_zone_port, endpoints,
                        self.credentials.access_key, self.credentials.secret))
         else:
-            bash(tpath('test-rgw-call.sh', 'init_zone_in_existing_zg', cluster.zg_num, cluster.cluster_num,
+            bash(tpath('test-rgw-call.sh', 'init_zone_in_existing_zg', cluster.cluster_id,
                        self.realm_name, zg_name, zone_name, master_zg_first_zone_port, endpoints,
                        self.credentials.access_key, self.credentials.secret))
 
