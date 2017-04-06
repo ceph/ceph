@@ -477,6 +477,14 @@ class RGWRealm:
         (period_json, retcode) = zone.cluster.rgw_admin('--rgw-realm=' + self.realm + ' period update --commit')
         self.master_zone = zone
 
+    def enable_bucket_sync(self, bucket_name):
+        cmd = '--rgw-realm=' + self.realm + ' bucket sync enable --bucket=' + bucket_name
+        self.master_zone.cluster.rgw_admin(cmd)
+
+    def disable_bucket_sync(self, bucket_name):
+        cmd = '--rgw-realm=' + self.realm + ' bucket sync disable --bucket=' + bucket_name
+        self.master_zone.cluster.rgw_admin(cmd)
+
 
 class RGWUser:
     def __init__(self, uid, display_name, access_key, secret, tenant):
@@ -902,6 +910,58 @@ def test_multi_period_incremental_sync():
             realm.zone_bucket_checkpoint(target_zone, source_zone, bucket.name)
 
             check_bucket_eq(source_zone, target_zone, bucket)
+
+def test_bucket_sync():
+    buckets, zone_bucket = create_bucket_per_zone()
+
+    all_zones = []
+    for z in zone_bucket:
+        all_zones.append(z)
+
+    objnames = [ 'obj1', 'obj2', 'obj3', 'obj4' ]
+    content = 'asdasd'
+
+    # don't wait for meta sync just yet
+    for zone, bucket_name in zone_bucket.items():
+        for objname in objnames:
+            k = new_key(zone, bucket_name, objname)
+            k.set_contents_from_string(content)
+
+    realm.meta_checkpoint()
+
+    for source_zone, bucket in zone_bucket.items():
+        for target_zone in all_zones:
+            if source_zone.zone_name == target_zone.zone_name:
+                continue
+
+            realm.zone_bucket_checkpoint(target_zone, source_zone, bucket.name)
+
+            check_bucket_eq(source_zone, target_zone, bucket)
+
+    for bucket_name in buckets:
+        realm.disable_bucket_sync(bucket_name)
+
+    realm.meta_checkpoint()
+
+    objnames_2 = [ 'obj5', 'obj6', 'obj7', 'obj8' ]
+
+    for zone, bucket_name in zone_bucket.items():
+        for objname in objnames_2:
+            k = new_key(zone, bucket_name, objname)
+            k.set_contents_from_string(content)
+
+    for bucket_name in buckets:
+        realm.enable_bucket_sync(bucket_name)
+
+    for source_zone, bucket in zone_bucket.items():
+        for target_zone in all_zones:
+            if source_zone.zone_name == target_zone.zone_name:
+                continue
+
+            realm.zone_bucket_checkpoint(target_zone, source_zone, bucket.name)
+
+            check_bucket_eq(source_zone, target_zone, bucket)
+
 
 @attr('destructive')
 def test_zonegroup_remove():
