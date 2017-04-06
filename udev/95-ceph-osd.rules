@@ -1,6 +1,7 @@
 # OSD_UUID
+# also respond to lvm2 partitions coming up as a "disk" in
+# ENV{DEVTYPE} instead of a "partition".
 ACTION=="add", SUBSYSTEM=="block", \
-  ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-062c0ceff05d", \
   OWNER:="ceph", GROUP:="ceph", MODE:="660", \
   RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
