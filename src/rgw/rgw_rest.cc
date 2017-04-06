@@ -644,6 +644,7 @@ void dump_trans_id(req_state *s)
 {
   if (s->prot_flags & RGW_REST_SWIFT) {
     dump_header(s, "X-Trans-Id", s->trans_id);
+    dump_header(s, "X-Openstack-Request-Id", s->trans_id);
   } else if (s->trans_id.length()) {
     dump_header(s, "x-amz-request-id", s->trans_id);
   }
