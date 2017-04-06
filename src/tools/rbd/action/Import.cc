@@ -802,6 +802,11 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   } else {
     r = do_import_v2(fd, image, size, imgblklen, pc, sparse_size);
   }
+  if (r < 0) {
+    std::cerr << "rbd: failed to import image" << std::endl;
+    image.close();
+    goto err;
+  }
 
   r = image.close();
 err:
