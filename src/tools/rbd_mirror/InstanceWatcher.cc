@@ -21,6 +21,7 @@ namespace mirror {
 using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
+using librbd::util::unique_lock_name;
 
 namespace {
 
@@ -98,7 +99,7 @@ InstanceWatcher<I>::InstanceWatcher(librados::IoCtx &io_ctx,
   : Watcher(io_ctx, work_queue, RBD_MIRROR_INSTANCE_PREFIX +
             (id ? *id : stringify(io_ctx.get_instance_id()))),
     m_instance_id(id ? *id : stringify(io_ctx.get_instance_id())),
-    m_lock("rbd::mirror::InstanceWatcher " + io_ctx.get_pool_name()),
+    m_lock(unique_lock_name("rbd::mirror::InstanceWatcher::m_lock", this)),
     m_instance_lock(librbd::ManagedLock<I>::create(
       m_ioctx, m_work_queue, m_oid, this, librbd::managed_lock::EXCLUSIVE, true,
       m_cct->_conf->rbd_blacklist_expire_seconds)) {
