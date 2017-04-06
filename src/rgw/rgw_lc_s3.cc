@@ -16,7 +16,6 @@ using namespace std;
 bool LCExpiration_S3::xml_end(const char * el) {
   LCDays_S3 *lc_days = static_cast<LCDays_S3 *>(find_first("Days"));
 
-  // ID is mandatory
   if (!lc_days)
     return false;
   days = lc_days->get_data();
@@ -24,11 +23,20 @@ bool LCExpiration_S3::xml_end(const char * el) {
 }
 
 bool LCNoncurExpiration_S3::xml_end(const char *el) {
-  LCNoncurDays_S3 *lc_noncur_days = static_cast<LCNoncurDays_S3 *>(find_first("NoncurrentDays"));
+  LCDays_S3 *lc_noncur_days = static_cast<LCDays_S3 *>(find_first("NoncurrentDays"));
   if (!lc_noncur_days) {
     return false;
   }
   days = lc_noncur_days->get_data();
+  return true;
+}
+
+bool LCMPExpiration_S3::xml_end(const char *el) {
+  LCDays_S3 *lc_mp_days = static_cast<LCDays_S3 *>(find_first("DaysAfterInitiation"));
+  if (!lc_mp_days) {
+    return false;
+  }
+  days = lc_mp_days->get_data();
   return true;
 }
 
@@ -48,6 +56,7 @@ bool LCRule_S3::xml_end(const char *el) {
   LCStatus_S3 *lc_status;
   LCExpiration_S3 *lc_expiration;
   LCNoncurExpiration_S3 *lc_noncur_expiration;
+  LCMPExpiration_S3 *lc_mp_expiration;
 
   id.clear();
   prefix.clear();
@@ -72,7 +81,8 @@ bool LCRule_S3::xml_end(const char *el) {
 
   lc_expiration = static_cast<LCExpiration_S3 *>(find_first("Expiration"));
   lc_noncur_expiration = static_cast<LCNoncurExpiration_S3 *>(find_first("NoncurrentVersionExpiration"));
-  if (!lc_expiration && !lc_noncur_expiration) {
+  lc_mp_expiration = static_cast<LCMPExpiration_S3 *>(find_first("AbortIncompleteMultipartUpload"));
+  if (!lc_expiration && !lc_noncur_expiration && !lc_mp_expiration) {
     return false;
   } else {
     if (lc_expiration) {
@@ -80,6 +90,9 @@ bool LCRule_S3::xml_end(const char *el) {
     }
     if (lc_noncur_expiration) {
       noncur_expiration = *lc_noncur_expiration;
+    }
+    if (lc_mp_expiration) {
+      mp_expiration = *lc_mp_expiration;
     }
   }
 
@@ -98,6 +111,10 @@ void LCRule_S3::to_xml(CephContext *cct, ostream& out) {
   if (!noncur_expiration.empty()) {
     LCNoncurExpiration_S3& noncur_expir = static_cast<LCNoncurExpiration_S3&>(noncur_expiration);
     noncur_expir.to_xml(out);
+  }
+  if (!mp_expiration.empty()) {
+    LCMPExpiration_S3& mp_expir = static_cast<LCMPExpiration_S3&>(mp_expiration);
+    mp_expir.to_xml(out);
   }
   out << "</Rule>";
 }
@@ -150,7 +167,11 @@ XMLObj *RGWLCXMLParser_S3::alloc_obj(const char *el)
   } else if (strcmp(el, "NoncurrentVersionExpiration") == 0) {
     obj = new LCNoncurExpiration_S3();
   } else if (strcmp(el, "NoncurrentDays") == 0) {
-    obj = new LCNoncurDays_S3();
+    obj = new LCDays_S3();
+  } else if (strcmp(el, "AbortIncompleteMultipartUpload") == 0) {
+    obj = new LCMPExpiration_S3();
+  } else if (strcmp(el, "DaysAfterInitiation") == 0) {
+    obj = new LCDays_S3();
   }
   return obj;
 }
