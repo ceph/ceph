@@ -554,7 +554,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
       s->user_acl->create_default(acct_acl_user.uid,
                                   acct_acl_user.display_name);
       ret = 0;
-    } else {
+    } else if (ret < 0) {
       ldpp_dout(s, 0) << "NOTICE: couldn't get user attrs for handling ACL "
           "(user_id=" << s->user->user_id << ", ret=" << ret << ")" << dendl;
       return ret;
