@@ -323,7 +323,7 @@ BitMapZone::~BitMapZone()
 inline bool BitMapZone::is_exhausted()
 {
   /* BitMapZone::get_used_blocks operates atomically. No need for lock. */
-  return get_used_blocks() == size();
+  return BitMapZone::get_used_blocks() == BitMapZone::size();
 }
 
 bool BitMapZone::is_allocated(int64_t start_block, int64_t num_blocks)
@@ -989,7 +989,7 @@ inline bool BitMapAreaLeaf::child_check_n_lock(BitMapZone* const child,
   /* The exhausted check can be performed without acquiring the lock. This
    * is because 1) BitMapZone::is_exhausted() actually operates atomically
    * and 2) it's followed by the exclusive, required-aware re-verification. */
-  if (child->is_exhausted()) {
+  if (child->BitMapZone::is_exhausted()) {
     return false;
   }
 
