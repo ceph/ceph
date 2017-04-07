@@ -2264,6 +2264,7 @@ void RGWCreateBucket::execute()
 
   RGWBucketInfo master_info;
   rgw_bucket *pmaster_bucket;
+  uint32_t *pmaster_num_shards;
   real_time creation_time;
 
   if (!store->is_meta_master()) {
@@ -2280,9 +2281,11 @@ void RGWCreateBucket::execute()
     ldout(s->cct, 20) << "got creation time: << " << master_info.creation_time << dendl;
     pmaster_bucket= &master_info.bucket;
     creation_time = master_info.creation_time;
+    pmaster_num_shards = &master_info.num_shards;
     pobjv = &objv;
   } else {
     pmaster_bucket = NULL;
+    pmaster_num_shards = NULL;
   }
 
   string zonegroup_id;
@@ -2355,7 +2358,7 @@ void RGWCreateBucket::execute()
                                 placement_rule, s->bucket_info.swift_ver_location,
                                 pquota_info, attrs,
                                 info, pobjv, &ep_objv, creation_time,
-                                pmaster_bucket, true);
+                                pmaster_bucket, pmaster_num_shards, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << op_ret << " bucket=" << s->bucket << dendl;
@@ -5428,6 +5431,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
 
   RGWBucketInfo master_info;
   rgw_bucket *pmaster_bucket = nullptr;
+  uint32_t *pmaster_num_shards = nullptr;
   real_time creation_time;
   obj_version objv, ep_objv, *pobjv = nullptr;
 
@@ -5450,9 +5454,11 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
 
     pmaster_bucket= &master_info.bucket;
     creation_time = master_info.creation_time;
+    pmaster_num_shards = &master_info.num_shards;
     pobjv = &objv;
   } else {
     pmaster_bucket = nullptr;
+    pmaster_num_shards = nullptr;
   }
 
 
@@ -5498,7 +5504,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
                                 placement_rule, binfo.swift_ver_location,
                                 pquota_info, attrs,
                                 out_info, pobjv, &ep_objv, creation_time,
-                                pmaster_bucket, true);
+                                pmaster_bucket, pmaster_num_shards, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << op_ret
