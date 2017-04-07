@@ -889,7 +889,10 @@ public:
   void send_pg_temp();
 
   void queue_for_peering(PG *pg);
+
+  AsyncReserver<spg_t> snap_reserver;
   void queue_for_snap_trim(PG *pg);
+
   void queue_for_scrub(PG *pg) {
     op_wq.queue(
       make_pair(

@@ -1421,7 +1421,7 @@ public:
     PG::_init(*t, child, pool);
   }
 private:
-  struct NotTrimming;
+
   struct DoSnapWork : boost::statechart::event< DoSnapWork > {
     DoSnapWork() : boost::statechart::event < DoSnapWork >() {}
   };
@@ -1440,49 +1440,148 @@ private:
   struct Reset : boost::statechart::event< Reset > {
     Reset() : boost::statechart::event< Reset >() {}
   };
+  struct SnapTrimReserved : boost::statechart::event< SnapTrimReserved > {
+    SnapTrimReserved() : boost::statechart::event< SnapTrimReserved >() {}
+  };
+
+  struct NotTrimming;
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
     PrimaryLogPG *pg;
-    set<hobject_t, hobject_t::BitwiseComparator> in_flight;
-    snapid_t snap_to_trim;
     explicit SnapTrimmer(PrimaryLogPG *pg) : pg(pg) {}
-    ~SnapTrimmer();
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
+    bool can_trim() {
+      return pg->is_clean() && !pg->scrubber.active && !pg->snap_trimq.empty();
+    }
   } snap_trimmer_machine;
 
-  /* SnapTrimmerStates */
-  struct AwaitAsyncWork : boost::statechart::state< AwaitAsyncWork, SnapTrimmer >, NamedState {
+  struct WaitReservation;
+  struct Trimming : boost::statechart::state< Trimming, SnapTrimmer, WaitReservation >, NamedState {
     typedef boost::mpl::list <
-      boost::statechart::custom_reaction< DoSnapWork >,
       boost::statechart::custom_reaction< KickTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
-    explicit AwaitAsyncWork(my_context ctx);
-    void exit();
-    boost::statechart::result react(const DoSnapWork&);
+
+    set<hobject_t, hobject_t::BitwiseComparator> in_flight;
+    snapid_t snap_to_trim;
+
+    explicit Trimming(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(context< SnapTrimmer >().can_trim());
+      assert(in_flight.empty());
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+      auto *pg = context< SnapTrimmer >().pg;
+      pg->osd->snap_reserver.cancel_reservation(pg->get_pgid());
+    }
     boost::statechart::result react(const KickTrim&) {
       return discard_event();
     }
   };
 
-  struct WaitRWLock : boost::statechart::state< WaitRWLock, SnapTrimmer >, NamedState {
+  /* SnapTrimmerStates */
+  struct WaitRWLock : boost::statechart::state< WaitRWLock, Trimming >, NamedState {
     typedef boost::mpl::list <
-      boost::statechart::custom_reaction< TrimWriteUnblocked >,
-      boost::statechart::custom_reaction< KickTrim >,
-      boost::statechart::transition< Reset, NotTrimming >
+      boost::statechart::custom_reaction< TrimWriteUnblocked >
       > reactions;
     explicit WaitRWLock(my_context ctx)
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRWLock") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context<SnapTrimmer>().in_flight.empty());
+      assert(context<Trimming>().in_flight.empty());
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
     }
     boost::statechart::result react(const TrimWriteUnblocked&) {
-      post_event(KickTrim());
-      return discard_event();
+      if (!context< SnapTrimmer >().can_trim()) {
+	post_event(KickTrim());
+	return transit< NotTrimming >();
+      } else {
+	return transit< AwaitAsyncWork >();
+      }
+    }
+  };
+
+  struct WaitRepops : boost::statechart::state< WaitRepops, Trimming >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< RepopsComplete >
+      > reactions;
+    explicit WaitRepops(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRepops") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(!context<Trimming>().in_flight.empty());
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+    }
+    boost::statechart::result react(const RepopsComplete&) {
+      if (!context< SnapTrimmer >().can_trim()) {
+	post_event(KickTrim());
+	return transit< NotTrimming >();
+      } else {
+	return transit< AwaitAsyncWork >();
+      }
+    }
+  };
+
+  struct AwaitAsyncWork : boost::statechart::state< AwaitAsyncWork, Trimming >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< DoSnapWork >
+      > reactions;
+    explicit AwaitAsyncWork(my_context ctx);
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+    }
+    boost::statechart::result react(const DoSnapWork&);
+  };
+
+  struct WaitReservation : boost::statechart::state< WaitReservation, Trimming >, NamedState {
+    /* WaitReservation is a sub-state of trimming simply so that exiting Trimming
+     * always cancels the reservation */
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< SnapTrimReserved >
+      > reactions;
+    struct ReservationCB : public Context {
+      PrimaryLogPGRef pg;
+      bool canceled;
+      ReservationCB(PrimaryLogPG *pg) : pg(pg), canceled(false) {}
+      void finish(int) override {
+	pg->lock();
+	if (!canceled)
+	  pg->snap_trimmer_machine.process_event(SnapTrimReserved());
+	pg->unlock();
+      }
+      void cancel() {
+	assert(pg->is_locked());
+	assert(!canceled);
+	canceled = true;
+      }
+    };
+    ReservationCB *pending = nullptr;
+
+    explicit WaitReservation(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitReservation") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(context<Trimming>().in_flight.empty());
+      auto *pg = context< SnapTrimmer >().pg;
+      pending = new ReservationCB(pg);
+      pg->osd->snap_reserver.request_reservation(
+	pg->get_pgid(),
+	pending,
+	0);
+    }
+    boost::statechart::result react(const SnapTrimReserved&);
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+      if (pending)
+	pending->cancel();
+      pending = nullptr;
     }
     boost::statechart::result react(const KickTrim&) {
       return discard_event();
@@ -1499,7 +1598,6 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitScrub") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context<SnapTrimmer>().in_flight.empty());
     }
     void exit() {
       context< SnapTrimmer >().log_exit(state_name, enter_time);
@@ -1510,35 +1608,6 @@ private:
     }
     boost::statechart::result react(const KickTrim&) {
       return discard_event();
-    }
-  };
-
-  struct WaitRepops : boost::statechart::state< WaitRepops, SnapTrimmer >, NamedState {
-    typedef boost::mpl::list <
-      boost::statechart::custom_reaction< RepopsComplete >,
-      boost::statechart::custom_reaction< KickTrim >,
-      boost::statechart::custom_reaction< Reset >
-      > reactions;
-    explicit WaitRepops(my_context ctx)
-      : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRepops") {
-      context< SnapTrimmer >().log_enter(state_name);
-      assert(!context<SnapTrimmer>().in_flight.empty());
-    }
-    void exit() {
-      context< SnapTrimmer >().log_exit(state_name, enter_time);
-      assert(context<SnapTrimmer>().in_flight.empty());
-    }
-    boost::statechart::result react(const RepopsComplete&) {
-      post_event(KickTrim());
-      return transit< NotTrimming >();
-    }
-    boost::statechart::result react(const KickTrim&) {
-      return discard_event();
-    }
-    boost::statechart::result react(const Reset&) {
-      context<SnapTrimmer>().in_flight.clear();
-      return transit< NotTrimming>();
     }
   };
 

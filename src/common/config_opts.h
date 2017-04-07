@@ -761,6 +761,8 @@ OPTION(osd_heartbeat_use_min_delay_socket, OPT_BOOL, false) // prio the heartbea
 
 // max number of parallel snap trims/pg
 OPTION(osd_pg_max_concurrent_snap_trims, OPT_U64, 2)
+// max number of trimming pgs
+OPTION(osd_max_trimming_pgs, OPT_U64, 2)
 
 // minimum number of peers that must be reachable to mark ourselves
 // back up after being wrongly marked down.
