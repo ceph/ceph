@@ -127,6 +127,7 @@ def download(ctx, config):
     s3_branches = [ 'giant', 'firefly', 'firefly-original', 'hammer' ]
     for (client, cconf) in config.items():
         branch = cconf.get('force-branch', None)
+        branch = 'wip-setuptools'
         if not branch:
             ceph_branch = ctx.config.get('branch')
             suite_branch = ctx.config.get('suite_branch', ceph_branch)
@@ -140,11 +141,13 @@ def download(ctx, config):
         else:
             log.info("Using branch '%s' for s3tests", branch)
         sha1 = cconf.get('sha1')
+        s3_tests_url = teuth_config.ceph_git_base_url + 's3-tests.git'
+        s3_tests_url = 'https://github.com/linuxbox2/s3-tests.git'
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
                 '-b', branch,
-                teuth_config.ceph_git_base_url + 's3-tests.git',
+                s3_tests_url,
                 '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
             )
