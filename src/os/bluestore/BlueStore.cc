@@ -7619,7 +7619,7 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
 {
   OpSequencer *osr = txc->osr.get();
   dout(10) << __func__ << " " << txc << " osr " << osr << dendl;
-  deferred_aggressive = true; // FIXME: maybe osr-local aggressive flag?
+  ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
   {
     // submit anything pending
     std::lock_guard<std::mutex> l(deferred_lock);
@@ -7633,7 +7633,7 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
     kv_cond.notify_one();
   }
   osr->drain_preceding(txc);
-  deferred_aggressive = false;
+  --deferred_aggressive;
   dout(10) << __func__ << " " << osr << " done" << dendl;
 }
 
@@ -7648,7 +7648,7 @@ void BlueStore::_osr_drain_all()
   }
   dout(20) << __func__ << " osr_set " << s << dendl;
 
-  deferred_aggressive = true;
+  ++deferred_aggressive;
   {
     // submit anything pending
     std::lock_guard<std::mutex> l(deferred_lock);
@@ -7663,7 +7663,7 @@ void BlueStore::_osr_drain_all()
     dout(20) << __func__ << " drain " << osr << dendl;
     osr->drain();
   }
-  deferred_aggressive = false;
+  --deferred_aggressive;
 
   dout(10) << __func__ << " done" << dendl;
 }
