@@ -248,7 +248,7 @@ private:
   AdminSocket *_admin_socket;
 
   /* lock which protects service thread creation, destruction, etc. */
-  ceph_spinlock_t _service_thread_lock;
+  ceph::Spinlock _service_thread_lock;
 
   /* The collection of profiling loggers associated with this context */
   PerfCountersCollection *_perf_counters_collection;
@@ -259,10 +259,10 @@ private:
 
   ceph::HeartbeatMap *_heartbeat_map;
 
-  ceph_spinlock_t _associated_objs_lock;
+  ceph::Spinlock _associated_objs_lock;
   std::map<std::string, SingletonWrapper*> _associated_objs;
 
-  ceph_spinlock_t _fork_watchers_lock;
+  ceph::Spinlock _fork_watchers_lock;
   std::vector<ForkWatcher*> _fork_watchers;
 
   // crypto
@@ -271,7 +271,7 @@ private:
 
   // experimental
   CephContextObs *_cct_obs;
-  ceph_spinlock_t _feature_lock;
+  ceph::Spinlock _feature_lock;
   std::set<std::string> _experimental_features;
 
   PluginRegistry *_plugin_registry;
@@ -289,7 +289,7 @@ private:
     l_cct_last
   };
   PerfCounters *_cct_perf;
-  ceph_spinlock_t _cct_perf_lock;
+  ceph::Spinlock _cct_perf_lock;
 
   friend class CephContextObs;
 };

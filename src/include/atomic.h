@@ -26,15 +26,11 @@
 namespace ceph {
   template <class T>
   class atomic_spinlock_t {
-    mutable ceph_spinlock_t lock;
+    mutable ceph::Spinlock lock;
     T val;
   public:
     atomic_spinlock_t(T i=0)
       : val(i) {
-      ceph_spin_init(&lock);
-    }
-    ~atomic_spinlock_t() {
-      ceph_spin_destroy(&lock);
     }
     void set(T v) {
       ceph_spin_lock(&lock);

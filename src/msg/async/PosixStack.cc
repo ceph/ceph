@@ -31,7 +31,9 @@
 #include "common/strtol.h"
 #include "common/dout.h"
 #include "include/assert.h"
-#include "common/simple_spin.h"
+#include "include/Spinlock.h"
+
+using namespace ceph;
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix

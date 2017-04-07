@@ -249,7 +249,7 @@ private:
   /// counter for the global seq our connection protocol uses
   __u32 global_seq;
   /// lock to protect the global_seq
-  ceph_spinlock_t global_seq_lock;
+  ceph::Spinlock global_seq_lock;
 
   /**
    * hash map of addresses to Asyncconnection

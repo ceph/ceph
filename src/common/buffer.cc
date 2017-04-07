@@ -18,7 +18,6 @@
 #include "common/environment.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-#include "common/simple_spin.h"
 #include "common/strtol.h"
 #include "common/likely.h"
 #include "common/valgrind.h"
@@ -29,6 +28,8 @@
 #include "include/compat.h"
 #include "include/inline_memory.h"
 #include "include/scope_guard.h"
+#include "include/Spinlock.h"
+
 #if defined(HAVE_XIO)
 #include "msg/xio/XioMsg.h"
 #endif
@@ -41,6 +42,8 @@
 
 #include <atomic>
 #include <ostream>
+
+using namespace ceph;
 
 #define CEPH_BUFFER_ALLOC_UNIT  (MIN(CEPH_PAGE_SIZE, 4096))
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))

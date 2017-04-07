@@ -1,6 +1,8 @@
 #include "gtest/gtest.h"
 
-#include "common/simple_spin.h"
+#include "include/Spinlock.h"
+
+using namespace ceph;
 
 #include <future>
 
