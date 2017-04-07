@@ -123,13 +123,22 @@ void escape_xml_attr(const char *buf, char *out)
 #define TAB_JESCAPE "\\t"
 #define NEWLINE_JESCAPE "\\n"
 
-int escape_json_attr_len(const char *buf, int src_len)
+int escape_json_attr_len(const char *buf, int src_len, int cooked)
 {
 	const char *b;
 	int ret = 0;
 	int i;
+	int in_html_tag = 0;
 	for (i = 0, b = buf; i < src_len; ++i, ++b) {
 		unsigned char c = *b;
+		switch (c) {
+		case '<':
+			in_html_tag = 1;
+			break;
+		case '>':
+			in_html_tag = 0;
+			break;
+		}
 		switch (c) {
 		case '"':
 			ret += SSTRL(DBL_QUOTE_JESCAPE);
@@ -138,6 +147,10 @@ int escape_json_attr_len(const char *buf, int src_len)
 			ret += SSTRL(BACKSLASH_JESCAPE);
 			break;
 		case '/':
+			if (cooked == 1 || (cooked == 2 && !in_html_tag)) {
+				ret++;
+				break;
+			}
 			ret += SSTRL(SLASH_JESCAPE);
 			break;
 		case '\t':
@@ -161,13 +174,22 @@ int escape_json_attr_len(const char *buf, int src_len)
 	return ret;
 }
 
-void escape_json_attr(const char *buf, int src_len, char *out)
+void escape_json_attr(const char *buf, int src_len, char *out, int cooked)
 {
 	char *o = out;
 	const char *b;
 	int i;
+	int in_html_tag = 0;
 	for (i = 0, b = buf; i < src_len; ++i, ++b) {
 		unsigned char c = *b;
+		switch (c) {
+		case '<':
+			in_html_tag = 1;
+			break;
+		case '>':
+			in_html_tag = 0;
+			break;
+		}
 		switch (c) {
 		case '"':
 			// cppcheck-suppress sizeofDivisionMemfunc
@@ -180,6 +202,9 @@ void escape_json_attr(const char *buf, int src_len, char *out)
 			o += SSTRL(BACKSLASH_JESCAPE);
 			break;
 		case '/':
+			if (cooked == 1 || (cooked == 2 && !in_html_tag)) {
+				goto Regular;
+			}
 			// cppcheck-suppress sizeofDivisionMemfunc
 			memcpy(o, SLASH_JESCAPE, SSTRL(SLASH_JESCAPE));
 			o += SSTRL(SLASH_JESCAPE);
@@ -201,6 +226,7 @@ void escape_json_attr(const char *buf, int src_len, char *out)
 				o += 6;
 			}
 			else {
+			Regular:
 				*o++ = c;
 			}
 			break;
