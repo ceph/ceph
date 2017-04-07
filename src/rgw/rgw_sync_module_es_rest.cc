@@ -185,7 +185,11 @@ void RGWMetadataSearchOp::execute()
   static set<string> restricted_fields = { {"permissions"} };
   es_query.set_restricted_fields(&restricted_fields);
 
-  static map<string, ESEntityTypeMap::EntityType> custom_map = { };
+  map<string, ESEntityTypeMap::EntityType> custom_map;
+  for (auto& i : s->bucket_info.mdsearch_config) {
+    custom_map[i.first] = (ESEntityTypeMap::EntityType)i.second;
+  }
+
   ESEntityTypeMap em(custom_map);
   es_query.set_custom_type_map(&em);
 
