@@ -5362,7 +5362,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
-    ret = select_bucket_placement(owner, zonegroup_id, placement_rule, bucket,
+    ret = select_bucket_placement(owner, zonegroup_id, placement_rule,
                                   &selected_placement_rule_name, &rule_info);
     if (ret < 0)
       return ret;
@@ -5453,7 +5453,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 }
 
 int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_id, const string& request_rule,
-                                         rgw_bucket& bucket, string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
+                                         string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
 
 {
   /* first check that rule exists within the specific zonegroup */
@@ -5494,16 +5494,16 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
   if (pselected_rule_name)
     *pselected_rule_name = rule;
 
-  return select_bucket_location_by_rule(rule, bucket, rule_info);
+  return select_bucket_location_by_rule(rule, rule_info);
 }
 
-int RGWRados::select_bucket_location_by_rule(const string& location_rule, rgw_bucket& bucket, RGWZonePlacementInfo *rule_info)
+int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info)
 {
   if (location_rule.empty()) {
     /* we can only reach here if we're trying to set a bucket location from a bucket
      * created on a different zone, using a legacy / default pool configuration
      */
-    return select_legacy_bucket_placement(bucket, rule_info);
+    return select_legacy_bucket_placement(rule_info);
   }
 
   /*
@@ -5534,21 +5534,21 @@ int RGWRados::select_bucket_location_by_rule(const string& location_rule, rgw_bu
 }
 
 int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& placement_rule,
-                                      rgw_bucket& bucket, string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
+                                      string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
 {
   if (!get_zone_params().placement_pools.empty()) {
     return select_new_bucket_location(user_info, zonegroup_id, placement_rule,
-                                      bucket, pselected_rule_name, rule_info);
+                                      pselected_rule_name, rule_info);
   }
 
   if (pselected_rule_name) {
     pselected_rule_name->clear();
   }
 
-  return select_legacy_bucket_placement(bucket, rule_info);
+  return select_legacy_bucket_placement(rule_info);
 }
 
-int RGWRados::select_legacy_bucket_placement(rgw_bucket& bucket, RGWZonePlacementInfo *rule_info)
+int RGWRados::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
 {
   bufferlist map_bl;
   map<string, bufferlist> m;
