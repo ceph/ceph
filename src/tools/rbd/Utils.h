@@ -33,6 +33,7 @@ void aio_completion_callback(librbd::completion_t completion,
 } // namespace detail
 
 static const std::string RBD_DIFF_BANNER ("rbd diff v1\n");
+static const size_t RBD_DEFAULT_SPARSE_SIZE = 4096;
 
 static const std::string RBD_IMAGE_BANNER_V2 ("rbd image v2\n");
 static const std::string RBD_IMAGE_DIFFS_BANNER_V2 ("rbd image diffss v2\n");
@@ -131,7 +132,8 @@ int get_pool_journal_names(
 
 int validate_snapshot_name(argument_types::ArgumentModifier mod,
                            const std::string &snap_name,
-                           SnapshotPresence snapshot_presence);
+                           SnapshotPresence snapshot_presence,
+			   SpecValidation spec_validation);
 
 int get_image_options(const boost::program_options::variables_map &vm,
                       bool get_format, librbd::ImageOptions* opts);
@@ -166,6 +168,13 @@ int init_and_open_image(const std::string &pool_name,
                         librbd::Image *image);
 
 int snap_set(librbd::Image &image, const std::string &snap_name);
+
+bool calc_sparse_extent(const bufferptr &bp,
+                        size_t sparse_size,
+                        uint64_t length,
+                        size_t *write_offset,
+                        size_t *write_length,
+                        size_t *offset);
 
 std::string image_id(librbd::Image& image);
 

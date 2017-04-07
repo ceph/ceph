@@ -124,7 +124,7 @@ protected:
   void _execute_item(
       const PurgeItem &item,
       uint64_t expire_to);
-  void execute_item_complete(
+  void _execute_item_complete(
       uint64_t expire_to);
 
 

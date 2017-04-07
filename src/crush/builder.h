@@ -76,6 +76,9 @@ extern struct crush_rule *crush_make_rule(int len, int ruleset, int type, int mi
  *
  * - __CRUSH_RULE_NOOP__ do nothing.
  * - __CRUSH_RULE_TAKE__ select the __arg1__ item
+ * - __CRUSH_RULE_EMIT__ append the selection to the results and clear
+ *     the selection
+ *
  * - __CRUSH_RULE_CHOOSE_FIRSTN__ and __CRUSH_RULE_CHOOSE_INDEP__
  *     recursively explore each bucket currently selected, looking for
  *     __arg1__ items of type __arg2__ and select them.
@@ -83,17 +86,54 @@ extern struct crush_rule *crush_make_rule(int len, int ruleset, int type, int mi
  *     recursively explore each bucket currently selected, looking for
  *     __arg1__ leaves within all the buckets of type __arg2__ and
  *     select them.
- * - __CRUSH_RULE_EMIT__ append the selection to the results and clear
- *     the selection
  *
  * In all __CHOOSE__ steps, if __arg1__ is zero, the number of items
  * to select is determined by the __max_result__ argument of
  * crush_do_rule(), i.e. __arg1__ is __max_result__ minus the number of
  * items already in the result.
  *
+ * - __CRUSH_RULE_SET_CHOOSE_TRIES__ and __CRUSH_RULE_SET_CHOOSELEAF_TRIES__
+ *
+ *   The CHOOSE_FIRSTN and CHOOSE_INDEP rule step look for buckets of
+ *   a given type, randomly selecting them. If they are unlucky and
+ *   find the same bucket twice, they will try N+1 times (N being the
+ *   value of the choose_total_tries tunable). If there is a previous
+ *   SET_CHOOSE_TRIES step in the same rule, it will try C times
+ *   instead (C being the value of the argument of the
+ *   SET_CHOOSE_TRIES step).
+ *
+ *   Note: the __choose_total_tries__ tunable defined in crush_map is
+ *   the number of retry, not the number of tries. The number of tries
+ *   is the number of retry+1. The SET_CHOOSE_TRIES rule step sets the
+ *   number of tries and does not need the + 1. This confusing
+ *   difference is inherited from an off-by-one bug from years ago.
+ *
+ *   The CHOOSELEAF_FIRSTN and CHOOSELEAF_INDEP rule step do the same
+ *   as CHOOSE_FIRSTN and CHOOSE_INDEP but also recursively explore
+ *   each bucket found, looking for a single device. The same device
+ *   may be found in two different buckets because the crush map is
+ *   not a strict hierarchy, it is a DAG. When such a collision
+ *   happens, they will try again. The number of times they try to
+ *   find a non colliding device is:
+ *
+ *   - If FIRSTN and there is no previous SET_CHOOSELEAF_TRIES rule
+ *     step: try N + 1 times (N being the value of the
+ *     __choose_total_tries__ tunable defined in crush_map)
+ *
+ *   - If FIRSTN and there is a previous SET_CHOOSELEAF_TRIES rule
+ *     step: try P times (P being the value of the argument of the
+ *     SET_CHOOSELEAF_TRIES rule step)
+ *
+ *   - If INDEP and there is no previous SET_CHOOSELEAF_TRIES rule
+ *     step: try 1 time.
+ *
+ *   - If INDEP and there is a previous SET_CHOOSELEAF_TRIES rule step: try
+ *     P times (P being the value of the argument of the SET_CHOOSELEAF_TRIES
+ *     rule step)
+ *
  * @param rule the rule in which the step is inserted
  * @param pos the zero based step index
- * @param op one of __CRUSH_RULE_NOOP__, __CRUSH_RULE_TAKE__, __CRUSH_RULE_CHOOSE_FIRSTN__, __CRUSH_RULE_CHOOSE_INDEP__, __CRUSH_RULE_CHOOSELEAF_FIRSTN__, __CRUSH_RULE_CHOOSELEAF_INDEP__ or __CRUSH_RULE_EMIT__
+ * @param op one of __CRUSH_RULE_NOOP__, __CRUSH_RULE_TAKE__, __CRUSH_RULE_CHOOSE_FIRSTN__, __CRUSH_RULE_CHOOSE_INDEP__, __CRUSH_RULE_CHOOSELEAF_FIRSTN__, __CRUSH_RULE_CHOOSELEAF_INDEP__, __CRUSH_RULE_SET_CHOOSE_TRIES__, __CRUSH_RULE_SET_CHOOSELEAF_TRIES__ or __CRUSH_RULE_EMIT__
  * @param arg1 first argument for __op__
  * @param arg2 second argument for __op__
  */
@@ -210,11 +250,11 @@ extern int crush_bucket_adjust_item_weight(struct crush_map *map, struct crush_b
  * - return -ERANGE if the sum of the weight of the items in __bucket__ overflows.
  * - return -1 if the value of __bucket->alg__ is unknown.
  *
- * @param crush a crush_map containing __bucket__
+ * @param map a crush_map containing __bucket__
  * @param bucket the root of the tree to reweight
  * @returns 0 on success, < 0 on error
  */
-extern int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *bucket);
+extern int crush_reweight_bucket(struct crush_map *map, struct crush_bucket *bucket);
 /** @ingroup API
  *
  * Remove __bucket__ from __map__ and deallocate it via crush_destroy_bucket().

@@ -1427,7 +1427,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_get_old_format(self.image, &old)
         if ret != 0:
-            raise make_ex(ret, 'error getting old_format for image' % (self.name))
+            raise make_ex(ret, 'error getting old_format for image %s' % (self.name))
         return old != 0
 
     def size(self):
@@ -1441,7 +1441,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_get_size(self.image, &image_size)
         if ret != 0:
-            raise make_ex(ret, 'error getting size for image' % (self.name))
+            raise make_ex(ret, 'error getting size for image %s' % (self.name))
         return image_size
 
     def features(self):
@@ -1454,7 +1454,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_get_features(self.image, &features)
         if ret != 0:
-            raise make_ex(ret, 'error getting features for image' % (self.name))
+            raise make_ex(ret, 'error getting features for image %s' % (self.name))
         return features
 
     def update_features(self, features, enabled):
@@ -1491,7 +1491,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_get_overlap(self.image, &overlap)
         if ret != 0:
-            raise make_ex(ret, 'error getting overlap for image' % (self.name))
+            raise make_ex(ret, 'error getting overlap for image %s' % (self.name))
         return overlap
 
     def flags(self):
@@ -1504,7 +1504,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_get_flags(self.image, &flags)
         if ret != 0:
-            raise make_ex(ret, 'error getting flags for image' % (self.name))
+            raise make_ex(ret, 'error getting flags for image %s' % (self.name))
         return flags
 
     def is_exclusive_lock_owner(self):
@@ -1517,7 +1517,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_is_exclusive_lock_owner(self.image, &owner)
         if ret != 0:
-            raise make_ex(ret, 'error getting lock status for image' % (self.name))
+            raise make_ex(ret, 'error getting lock status for image %s' % (self.name))
         return owner == 1
 
     def copy(self, dest_ioctx, dest_name, features=None, order=None,
@@ -1965,7 +1965,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_get_stripe_unit(self.image, &stripe_unit)
         if ret != 0:
-            raise make_ex(ret, 'error getting stripe unit for image' % (self.name))
+            raise make_ex(ret, 'error getting stripe unit for image %s' % (self.name))
         return stripe_unit
 
     def stripe_count(self):
@@ -1976,7 +1976,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_get_stripe_count(self.image, &stripe_count)
         if ret != 0:
-            raise make_ex(ret, 'error getting stripe count for image' % (self.name))
+            raise make_ex(ret, 'error getting stripe count for image %s' % (self.name))
         return stripe_count
 
     def flatten(self):
@@ -2333,7 +2333,7 @@ written." % (self.name, ret, length))
         :type oncomplete: completion
         :param fadvise_flags: fadvise flags for this read
         :type fadvise_flags: int
-        :returns: str - the data read
+        :returns: :class:`Completion` - the completion object
         :raises: :class:`InvalidArgument`, :class:`IOError`
         """
 
@@ -2375,20 +2375,19 @@ written." % (self.name, ret, length))
         Raises :class:`InvalidArgument` if part of the write would fall outside
         the image.
 
-        oncomplete will be called with the returned read value as
-        well as the completion:
+        oncomplete will be called with the completion:
 
-        oncomplete(completion, data_read)
+        oncomplete(completion)
 
-        :param offset: the offset to start reading at
+        :param data: the data to be written
+        :type data: bytes
+        :param offset: the offset to start writing at
         :type offset: int
-        :param length: how many bytes to read
-        :type length: int
-        :param oncomplete: what to do when the read is complete
+        :param oncomplete: what to do when the write is complete
         :type oncomplete: completion
-        :param fadvise_flags: fadvise flags for this read
+        :param fadvise_flags: fadvise flags for this write
         :type fadvise_flags: int
-        :returns: str - the data read
+        :returns: :class:`Completion` - the completion object
         :raises: :class:`InvalidArgument`, :class:`IOError`
         """
 

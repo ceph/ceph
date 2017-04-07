@@ -209,11 +209,13 @@ void Pipe::start_reader()
 
 void Pipe::maybe_start_delay_thread()
 {
-  if (!delay_thread &&
-      msgr->cct->_conf->ms_inject_delay_type.find(ceph_entity_type_name(connection_state->peer_type)) != string::npos) {
-    lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
-    delay_thread = new DelayedDelivery(this);
-    delay_thread->create("ms_pipe_delay");
+  if (!delay_thread) {
+    auto pos = msgr->cct->_conf->get_val<std::string>("ms_inject_delay_type").find(ceph_entity_type_name(connection_state->peer_type));
+    if (pos != string::npos) {
+      lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
+      delay_thread = new DelayedDelivery(this);
+      delay_thread->create("ms_pipe_delay");
+    }
   }
 }
 
@@ -923,15 +925,15 @@ void Pipe::set_socket_options()
 
     if (peer_addr.get_family() == AF_INET) {
       r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-      r = -errno;
       if (r < 0) {
+        r = -errno;
         ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
                            << ": " << cpp_strerror(r) << dendl;
       }
     } else if (peer_addr.get_family() == AF_INET6) {
       r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
-      r = -errno;
       if (r < 0) {
+        r = -errno;
         ldout(msgr->cct,0) << "couldn't set IPV6_TCLASS to " << iptos
                            << ": " << cpp_strerror(r) << dendl;
       }
@@ -2664,7 +2666,7 @@ ssize_t Pipe::buffered_recv(char *buf, size_t len, int flags)
 
 
   ssize_t got = do_recv(recv_buf, recv_max_prefetch, flags);
-  if (got <= 0) {
+  if (got < 0) {
     if (total_recv > 0)
       return total_recv;
 

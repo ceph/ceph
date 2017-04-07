@@ -152,9 +152,10 @@ private:
 template <typename I>
 SnapshotUnprotectRequest<I>::SnapshotUnprotectRequest(I &image_ctx,
                                                       Context *on_finish,
-                                                      const std::string &snap_name)
-  : Request<I>(image_ctx, on_finish), m_snap_name(snap_name), m_ret_val(0),
-    m_snap_id(CEPH_NOSNAP) {
+                                                      const cls::rbd::SnapshotNamespace &snap_namespace,
+						      const std::string &snap_name)
+  : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
+    m_snap_name(snap_name), m_ret_val(0), m_snap_id(CEPH_NOSNAP) {
 }
 
 template <typename I>
@@ -319,7 +320,7 @@ int SnapshotUnprotectRequest<I>::verify_and_send_unprotect_snap_start() {
     return -ENOSYS;
   }
 
-  m_snap_id = image_ctx.get_snap_id(m_snap_name);
+  m_snap_id = image_ctx.get_snap_id(m_snap_namespace, m_snap_name);
   if (m_snap_id == CEPH_NOSNAP) {
     return -ENOENT;
   }

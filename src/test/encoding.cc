@@ -32,6 +32,40 @@ TEST(EncodingRoundTrip, StringNewline) {
   test_encode_and_decode < std::string >(my_str);
 }
 
+template <typename Size, typename T>
+static void test_encode_and_nohead_nohead(Size len, const T& src)
+{
+  bufferlist bl(1000000);
+  encode(len, bl);
+  encode_nohead(src, bl);
+  T dst;
+  bufferlist::iterator i(bl.begin());
+  decode(len, i);
+  decode_nohead(len, dst, i);
+  ASSERT_EQ(src, dst) << "Encoding roundtrip changed the string: orig=" << src << ", but new=" << dst;
+}
+
+TEST(EncodingRoundTrip, StringNoHead) {
+  const string str("The quick brown fox jumps over the lazy dog");
+  auto size = str.size();
+  test_encode_and_nohead_nohead(static_cast<int>(size), str);
+  test_encode_and_nohead_nohead(static_cast<unsigned>(size), str);
+  test_encode_and_nohead_nohead(static_cast<uint32_t>(size), str);
+  test_encode_and_nohead_nohead(static_cast<__u32>(size), str);
+  test_encode_and_nohead_nohead(static_cast<size_t>(size), str);
+}
+
+TEST(EncodingRoundTrip, BufferListNoHead) {
+  bufferlist bl;
+  bl.append("is this a dagger which i see before me?");
+  auto size = bl.length();
+  test_encode_and_nohead_nohead(static_cast<int>(size), bl);
+  test_encode_and_nohead_nohead(static_cast<unsigned>(size), bl);
+  test_encode_and_nohead_nohead(static_cast<uint32_t>(size), bl);
+  test_encode_and_nohead_nohead(static_cast<__u32>(size), bl);
+  test_encode_and_nohead_nohead(static_cast<size_t>(size), bl);
+}
+
 typedef std::multimap < int, std::string > multimap_t;
 typedef multimap_t::value_type my_val_ty;
 

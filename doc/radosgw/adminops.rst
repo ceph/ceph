@@ -1481,9 +1481,16 @@ Request Parameters
 
 ``bucket``
 
-:Description: The bucket to unlink.
+:Description: The bucket name to unlink.
 :Type: String
 :Example: ``foo_bucket``
+:Required: Yes
+
+``bucket-id``
+
+:Description: The bucket id to unlink.
+:Type: String
+:Example: ``dev.6607669.420``
 :Required: Yes
 
 ``uid``
@@ -1834,10 +1841,11 @@ Valid parameters for quotas include:
 - **Maximum Size:** The ``max-size`` option allows you to specify a quota
   for the maximum number of bytes. A negative value disables this setting.
   
-- **Quota Scope:** The ``quota-scope`` option sets the scope for the quota.
+- **Quota Type:** The ``quota-type`` option sets the scope for the quota.
   The options are ``bucket`` and ``user``.
 
-
+- **Enable/Disable Quota:** The ``enabled`` option specifies whether the
+  quota should be enabled. The value should be either 'True' or 'False'.
 
 Get User Quota
 ~~~~~~~~~~~~~~

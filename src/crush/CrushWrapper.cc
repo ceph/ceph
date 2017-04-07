@@ -998,7 +998,7 @@ pair<string,string> CrushWrapper::get_immediate_parent(int id, int *_ret)
   return pair<string, string>();
 }
 
-int CrushWrapper::get_immediate_parent_id(int id, int *parent)
+int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
 {
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
@@ -1386,10 +1386,12 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
     ::encode(crush->chooseleaf_stable, bl);
   }
 
-  // device classes
-  ::encode(class_map, bl);
-  ::encode(class_name, bl);
-  ::encode(class_bucket, bl);
+  if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    // device classes
+    ::encode(class_map, bl);
+    ::encode(class_name, bl);
+    ::encode(class_bucket, bl);
+  }
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
@@ -1990,4 +1992,208 @@ bool CrushWrapper::is_valid_crush_loc(CephContext *cct,
     }
   }
   return true;
+}
+
+int CrushWrapper::_choose_type_stack(
+  CephContext *cct,
+  const vector<pair<int,int>>& stack,
+  const set<int>& overfull,
+  const vector<int>& underfull,
+  const vector<int>& orig,
+  vector<int>::const_iterator& i,
+  set<int>& used,
+  vector<int> *pw) const
+{
+  vector<int> w = *pw;
+  vector<int> o;
+
+  ldout(cct, 10) << __func__ << " stack " << stack
+		 << " orig " << orig
+		 << " at " << *i
+		 << " pw " << *pw
+		 << dendl;
+
+  vector<int> cumulative_fanout(stack.size());
+  int f = 1;
+  for (int j = (int)stack.size() - 1; j >= 0; --j) {
+    cumulative_fanout[j] = f;
+    f *= stack[j].second;
+  }
+  ldout(cct, 10) << __func__ << " cumulative_fanout " << cumulative_fanout
+		 << dendl;
+
+  for (unsigned j = 0; j < stack.size(); ++j) {
+    int type = stack[j].first;
+    int fanout = stack[j].second;
+    int cum_fanout = cumulative_fanout[j];
+    ldout(cct, 10) << " level " << j << ": type " << type << " fanout " << fanout
+		   << " cumulative " << cum_fanout
+		   << " w " << w << dendl;
+    vector<int> o;
+    auto tmpi = i;
+    for (auto from : w) {
+      ldout(cct, 10) << " from " << from << dendl;
+
+      for (int pos = 0; pos < fanout; ++pos) {
+	if (type > 0) {
+	  // non-leaf
+	  int item = *tmpi;
+	  do {
+	    int r = get_immediate_parent_id(item, &item);
+	    if (r < 0) {
+	      ldout(cct, 10) << __func__ << " parent of " << item << " got "
+			     << cpp_strerror(r) << dendl;
+	      return -EINVAL;
+	    }
+	  } while (get_bucket_type(item) != type);
+	  o.push_back(item);
+	  ldout(cct, 10) << __func__ << "   from " << *tmpi << " got " << item
+			 << " of type " << type << dendl;
+	  int n = cum_fanout;
+	  while (n-- && tmpi != orig.end())
+	    ++tmpi;
+	} else {
+	  // leaf
+	  bool replaced = false;
+	  if (overfull.count(*i)) {
+	    for (auto item : underfull) {
+	      ldout(cct, 10) << __func__ << " pos " << pos
+			     << " was " << *i << " considering " << item
+			     << dendl;
+	      if (used.count(item)) {
+		ldout(cct, 20) << __func__ << "   in used " << used << dendl;
+		continue;
+	      }
+	      if (!subtree_contains(from, item)) {
+		ldout(cct, 20) << __func__ << "   not in subtree " << from << dendl;
+		continue;
+	      }
+	      if (std::find(orig.begin(), orig.end(), item) != orig.end()) {
+		ldout(cct, 20) << __func__ << "   in orig " << orig << dendl;
+		continue;
+	      }
+	      o.push_back(item);
+	      used.insert(item);
+	      ldout(cct, 10) << __func__ << " pos " << pos << " replace "
+			     << *i << " -> " << item << dendl;
+	      replaced = true;
+	      ++i;
+	      break;
+	    }
+	  }
+	  if (!replaced) {
+	    ldout(cct, 10) << __func__ << " pos " << pos << " keep " << *i
+			   << dendl;
+	    o.push_back(*i);
+	    ++i;
+	  }
+	  if (i == orig.end()) {
+	    ldout(cct, 10) << __func__ << " end of orig, break 1" << dendl;
+	    break;
+	  }
+	}
+      }
+      if (i == orig.end()) {
+	ldout(cct, 10) << __func__ << " end of orig, break 2" << dendl;
+	break;
+      }
+    }
+    ldout(cct, 10) << __func__ << "  w <- " << o << " was " << w << dendl;
+    w.swap(o);
+  }
+  *pw = w;
+  return 0;
+}
+
+int CrushWrapper::try_remap_rule(
+  CephContext *cct,
+  int ruleno,
+  int maxout,
+  const set<int>& overfull,
+  const vector<int>& underfull,
+  const vector<int>& orig,
+  vector<int> *out) const
+{
+  const crush_map *map = crush;
+  const crush_rule *rule = get_rule(ruleno);
+  assert(rule);
+
+  ldout(cct, 10) << __func__ << " ruleno " << ruleno
+		<< " numrep " << maxout << " overfull " << overfull
+		<< " underfull " << underfull << " orig " << orig
+		<< dendl;
+  vector<int> w; // working set
+  out->clear();
+
+  auto i = orig.begin();
+  set<int> used;
+
+  vector<pair<int,int>> type_stack;  // (type, fan-out)
+
+  for (unsigned step = 0; step < rule->len; ++step) {
+    const crush_rule_step *curstep = &rule->steps[step];
+    ldout(cct, 10) << __func__ << " step " << step << " w " << w << dendl;
+    switch (curstep->op) {
+    case CRUSH_RULE_TAKE:
+      if ((curstep->arg1 >= 0 && curstep->arg1 < map->max_devices) ||
+	  (-1-curstep->arg1 >= 0 && -1-curstep->arg1 < map->max_buckets &&
+	   map->buckets[-1-curstep->arg1])) {
+	w.clear();
+	w.push_back(curstep->arg1);
+	ldout(cct, 10) << __func__ << " take " << w << dendl;
+      } else {
+	ldout(cct, 1) << " bad take value " << curstep->arg1 << dendl;
+      }
+      break;
+
+    case CRUSH_RULE_CHOOSELEAF_FIRSTN:
+    case CRUSH_RULE_CHOOSELEAF_INDEP:
+      {
+	int numrep = curstep->arg1;
+	int type = curstep->arg2;
+	if (numrep <= 0)
+	  numrep += maxout;
+	type_stack.push_back(make_pair(type, numrep));
+	type_stack.push_back(make_pair(0, 1));
+	int r = _choose_type_stack(cct, type_stack, overfull, underfull, orig,
+				   i, used, &w);
+	if (r < 0)
+	  return r;
+	type_stack.clear();
+      }
+      break;
+
+    case CRUSH_RULE_CHOOSE_FIRSTN:
+    case CRUSH_RULE_CHOOSE_INDEP:
+      {
+	int numrep = curstep->arg1;
+	int type = curstep->arg2;
+	if (numrep <= 0)
+	  numrep += maxout;
+	type_stack.push_back(make_pair(type, numrep));
+      }
+      break;
+
+    case CRUSH_RULE_EMIT:
+      ldout(cct, 10) << " emit " << w << dendl;
+      if (!type_stack.empty()) {
+	int r = _choose_type_stack(cct, type_stack, overfull, underfull, orig,
+				   i, used, &w);
+	if (r < 0)
+	  return r;
+	type_stack.clear();
+      }
+      for (auto item : w) {
+	out->push_back(item);
+      }
+      w.clear();
+      break;
+
+    default:
+      // ignore
+      break;
+    }
+  }
+
+  return 0;
 }

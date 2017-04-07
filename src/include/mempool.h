@@ -144,6 +144,7 @@ namespace mempool {
   f(bluestore_meta_onode)	      \
   f(bluestore_meta_other)	      \
   f(bluestore_alloc)		      \
+  f(bluestore_fsck)		      \
   f(bluefs)			      \
   f(buffer_meta)		      \
   f(buffer_data)		      \
@@ -249,8 +250,7 @@ public:
   void dump(ceph::Formatter *f) const;
 };
 
-// skip unittest_[12] by default
-void dump(ceph::Formatter *f, size_t skip=2);
+void dump(ceph::Formatter *f);
 
 
 // STL allocator for use with containers.  All actual state

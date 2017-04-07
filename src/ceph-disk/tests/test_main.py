@@ -391,6 +391,9 @@ class TestCephDisk(object):
         #
         # multipath data partition
         #
+        if platform.system() == "FreeBSD":
+            return
+
         partition_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
         disk = "Xda"
         partition = "Xda1"
@@ -1301,6 +1304,27 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         ):
             self.assertRaises(Exception, main._deallocate_osd_id,
                               cluster, osd_id)
+
+    def test_main_fix(self):
+        args = main.parse_args(['fix', '--all', '--selinux', '--permissions'])
+        commands = []
+
+        def _command(x):
+            commands.append(" ".join(x))
+            return ("", "", None)
+
+        with patch.multiple(
+            main,
+            command=_command,
+            command_init=lambda x: commands.append(x),
+            command_wait=lambda x: None,
+        ):
+            main.main_fix(args)
+            commands = " ".join(commands)
+            assert '/var/lib/ceph' in commands
+            assert 'restorecon' in commands
+            assert 'chown' in commands
+            assert 'find' in commands
 
 
 def raise_command_error(*args):

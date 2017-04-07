@@ -10,6 +10,7 @@
 #include "include/uuid.h"
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/safe_io.h"
 #include "common/strtol.h"
 #include "common/Formatter.h"
 #include "msg/msg_types.h"
@@ -182,10 +183,37 @@ static int do_kernel_showmapped(Formatter *f)
 
 }
 
+static int get_unsupported_features(librbd::Image &image,
+                                    uint64_t *unsupported_features)
+{
+  char buf[20];
+  uint64_t features, supported_features;
+  int r;
+
+  r = safe_read_file("/sys/bus/rbd/", "supported_features", buf,
+                     sizeof(buf) - 1);
+  if (r < 0)
+    return r;
+
+  buf[r] = '\0';
+  try {
+    supported_features = std::stoull(buf, nullptr, 16);
+  } catch (...) {
+    return -EINVAL;
+  }
+
+  r = image.features(&features);
+  if (r < 0)
+    return r;
+
+  *unsupported_features = features & ~supported_features;
+  return 0;
+}
+
 /*
  * hint user to check syslog for krbd related messages and provide suggestions
  * based on errno return by krbd_map(). also note that even if some librbd calls
- * fail, we atleast dump the "try dmesg..." message to aid debugging.
+ * fail, we at least dump the "try dmesg..." message to aid debugging.
  */
 static void print_error_description(const char *poolname, const char *imgname,
 				    const char *snapname, int maperrno)
@@ -213,12 +241,43 @@ static void print_error_description(const char *poolname, const char *imgname,
    * set - so, hint about that too...
    */
   if (!oldformat && (maperrno == -ENXIO)) {
-    std::cout << "RBD image feature set mismatch. You can disable features unsupported by the "
-	      << "kernel with \"rbd feature disable\"." << std::endl;
+    uint64_t unsupported_features;
+    bool need_terminate = true;
+
+    std::cout << "RBD image feature set mismatch. ";
+    r = get_unsupported_features(image, &unsupported_features);
+    if (r == 0 && (unsupported_features & ~RBD_FEATURES_ALL) == 0) {
+      uint64_t immutable = RBD_FEATURES_ALL & ~(RBD_FEATURES_MUTABLE |
+                                                RBD_FEATURES_DISABLE_ONLY);
+      if (unsupported_features & immutable) {
+        std::cout << "This image cannot be mapped because the following "
+                  << "immutable features are unsupported by the kernel:";
+        unsupported_features &= immutable;
+        need_terminate = false;
+      } else {
+        std::cout << "You can disable features unsupported by the kernel "
+                  << "with \"rbd feature disable ";
+        if (poolname != at::DEFAULT_POOL_NAME)
+          std::cout << poolname << "/";
+        std::cout << imgname;
+      }
+    } else {
+      std::cout << "Try disabling features unsupported by the kernel "
+                << "with \"rbd feature disable";
+      unsupported_features = 0;
+    }
+    for (auto it : at::ImageFeatures::FEATURE_MAPPING) {
+      if (it.first & unsupported_features) {
+        std::cout << " " << it.second;
+      }
+    }
+    if (need_terminate)
+      std::cout << "\"";
+    std::cout << "." << std::endl;
   }
 
  done:
-  std::cout << "In some cases useful info is found in syslog - try \"dmesg | tail\" or so." << std::endl;
+  std::cout << "In some cases useful info is found in syslog - try \"dmesg | tail\"." << std::endl;
 }
 
 static int do_kernel_map(const char *poolname, const char *imgname,

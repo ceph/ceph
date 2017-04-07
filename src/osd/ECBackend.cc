@@ -289,8 +289,8 @@ void ECBackend::handle_recovery_push(
     tobj = ghobject_t(op.soid, ghobject_t::NO_GEN,
 		      get_parent()->whoami_shard().shard);
   } else {
-    tobj = ghobject_t(get_parent()->get_temp_recovery_object(op.version,
-							     op.soid.snap),
+    tobj = ghobject_t(get_parent()->get_temp_recovery_object(op.soid,
+							     op.version),
 		      ghobject_t::NO_GEN,
 		      get_parent()->whoami_shard().shard);
     if (op.before_progress.first) {
@@ -457,7 +457,7 @@ struct SendPushReplies : public Context {
     }
     replies.clear();
   }
-  ~SendPushReplies() {
+  ~SendPushReplies() override {
     for (map<int, MOSDPGPushReply*>::iterator i = replies.begin();
 	 i != replies.end();
 	 ++i) {

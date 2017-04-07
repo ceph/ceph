@@ -32,7 +32,7 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 
   RGWRequest req(env.store->get_new_req_id());
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
-                            &client_io, env.olog);
+                            *env.auth_registry, &client_io, env.olog);
   if (ret < 0) {
     /* We don't really care about return code. */
     dout(20) << "process_request() returned " << ret << dendl;

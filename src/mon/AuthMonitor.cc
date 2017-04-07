@@ -111,7 +111,7 @@ void AuthMonitor::create_initial()
   inc.max_global_id = max_global_id;
   pending_auth.push_back(inc);
 
-  format_version = 1;
+  format_version = 2;
 }
 
 void AuthMonitor::update_from_paxos(bool *need_bootstrap)
@@ -1033,64 +1033,139 @@ bool AuthMonitor::prepare_global_id(MonOpRequestRef op)
 
 void AuthMonitor::upgrade_format()
 {
-  unsigned int current = 1;
+  unsigned int current = 2;
+  if (!mon->get_quorum_mon_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS)) {
+    current = 1;
+  }
   if (format_version >= current) {
     dout(20) << __func__ << " format " << format_version << " is current" << dendl;
     return;
   }
 
-  dout(1) << __func__ << " upgrading from format " << format_version << " to " << current << dendl;
   bool changed = false;
-  map<EntityName, EntityAuth>::iterator p;
-  for (p = mon->key_server.secrets_begin();
-       p != mon->key_server.secrets_end();
-       ++p) {
-    // grab mon caps, if any
-    string mon_caps;
-    if (p->second.caps.count("mon") == 0)
-      continue;
-    try {
-      bufferlist::iterator it = p->second.caps["mon"].begin();
-      ::decode(mon_caps, it);
+  if (format_version == 0) {
+    dout(1) << __func__ << " upgrading from format 0 to 1" << dendl;
+    map<EntityName, EntityAuth>::iterator p;
+    for (p = mon->key_server.secrets_begin();
+	 p != mon->key_server.secrets_end();
+	 ++p) {
+      // grab mon caps, if any
+      string mon_caps;
+      if (p->second.caps.count("mon") == 0)
+	continue;
+      try {
+	bufferlist::iterator it = p->second.caps["mon"].begin();
+	::decode(mon_caps, it);
+      }
+      catch (buffer::error) {
+	dout(10) << __func__ << " unable to parse mon cap for "
+		 << p->first << dendl;
+	continue;
+      }
+
+      string n = p->first.to_str();
+      string new_caps;
+
+      // set daemon profiles
+      if ((p->first.is_osd() || p->first.is_mds()) &&
+	  mon_caps == "allow rwx") {
+	new_caps = string("allow profile ") + string(p->first.get_type_name());
+      }
+
+      // update bootstrap keys
+      if (n == "client.bootstrap-osd") {
+	new_caps = "allow profile bootstrap-osd";
+      }
+      if (n == "client.bootstrap-mds") {
+	new_caps = "allow profile bootstrap-mds";
+      }
+
+      if (new_caps.length() > 0) {
+	dout(5) << __func__ << " updating " << p->first << " mon cap from "
+		<< mon_caps << " to " << new_caps << dendl;
+
+	bufferlist bl;
+	::encode(new_caps, bl);
+
+	KeyServerData::Incremental auth_inc;
+	auth_inc.name = p->first;
+	auth_inc.auth = p->second;
+	auth_inc.auth.caps["mon"] = bl;
+	auth_inc.op = KeyServerData::AUTH_INC_ADD;
+	push_cephx_inc(auth_inc);
+	changed = true;
+      }
     }
-    catch (buffer::error) {
-      dout(10) << __func__ << " unable to parse mon cap for "
-               << p->first << dendl;
-      continue;
+  }
+
+  if (format_version == 1) {
+    dout(1) << __func__ << " upgrading from format 1 to 2" << dendl;
+    map<EntityName, EntityAuth>::iterator p;
+    for (p = mon->key_server.secrets_begin();
+	 p != mon->key_server.secrets_end();
+	 ++p) {
+      string n = p->first.to_str();
+
+      string newcap;
+      if (n == "client.admin") {
+	// admin gets it all
+	newcap = "allow *";
+      } else if (n.find("osd.") == 0 ||
+		 n.find("mds.") == 0 ||
+		 n.find("mon.") == 0) {
+	// daemons follow their profile
+	string type = n.substr(0, 3);
+	newcap = "allow profile " + type;
+      } else if (p->second.caps.count("mon")) {
+	// if there are any mon caps, give them 'r' mgr caps
+	newcap = "allow r";
+      }
+
+      if (newcap.length() > 0) {
+	dout(5) << " giving " << n << " mgr '" << newcap << "'" << dendl;
+	bufferlist bl;
+	::encode(newcap, bl);
+
+	KeyServerData::Incremental auth_inc;
+	auth_inc.name = p->first;
+	auth_inc.auth = p->second;
+	auth_inc.auth.caps["mgr"] = bl;
+	auth_inc.op = KeyServerData::AUTH_INC_ADD;
+	push_cephx_inc(auth_inc);
+      }
+
+      if (n.find("mgr.") == 0 &&
+	  p->second.caps.count("mon")) {
+	// the kraken ceph-mgr@.service set the mon cap to 'allow *'.
+	auto blp = p->second.caps["mon"].begin();
+	string oldcaps;
+	::decode(oldcaps, blp);
+	if (oldcaps == "allow *") {
+	  dout(5) << " fixing " << n << " mon cap to 'allow profile mgr'"
+		  << dendl;
+	  bufferlist bl;
+	  ::encode("allow profile mgr", bl);
+	  KeyServerData::Incremental auth_inc;
+	  auth_inc.name = p->first;
+	  auth_inc.auth = p->second;
+	  auth_inc.auth.caps["mon"] = bl;
+	  auth_inc.op = KeyServerData::AUTH_INC_ADD;
+	  push_cephx_inc(auth_inc);
+	}
+      }
     }
 
-    string n = p->first.to_str();
-    string new_caps;
-
-    // set daemon profiles
-    if ((p->first.is_osd() || p->first.is_mds()) &&
-	mon_caps == "allow rwx") {
-      new_caps = string("allow profile ") + string(p->first.get_type_name());
-    }
-
-    // update bootstrap keys
-    if (n == "client.bootstrap-osd") {
-      new_caps = "allow profile bootstrap-osd";
-    }
-    if (n == "client.bootstrap-mds") {
-      new_caps = "allow profile bootstrap-mds";
-    }
-
-    if (new_caps.length() > 0) {
-      dout(5) << __func__ << " updating " << p->first << " mon cap from "
-	      << mon_caps << " to " << new_caps << dendl;
-
-      bufferlist bl;
-      ::encode(new_caps, bl);
-
+    // add bootstrap key
+    {
       KeyServerData::Incremental auth_inc;
-      auth_inc.name = p->first;
-      auth_inc.auth = p->second;
-      auth_inc.auth.caps["mon"] = bl;
+      bool r = auth_inc.name.from_str("client.bootstrap-mgr");
+      assert(r);
+      ::encode("allow profile bootstrap-mgr", auth_inc.auth.caps["mon"]);
       auth_inc.op = KeyServerData::AUTH_INC_ADD;
       push_cephx_inc(auth_inc);
-      changed = true;
     }
+    changed = true;
   }
 
   if (changed) {

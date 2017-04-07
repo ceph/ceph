@@ -24,8 +24,9 @@ set(prefix ${CMAKE_INSTALL_PREFIX})
 add_definitions("-DCEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\"")
 add_definitions("-DCEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS")
+add_definitions("-D_FILE_OFFSET_BITS=64")
 if(LINUX)
-  add_definitions("-D_GNU_SOURCE -D_FILE_OFFSET_BITS=64")
+  add_definitions("-D_GNU_SOURCE")
 endif()
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wtype-limits -Wignored-qualifiers -Winit-self")
@@ -81,8 +82,11 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
-set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
-set(CMAKE_ASM_FLAGS "-f elf64")
+include(SIMDExt)
+if(HAVE_INTEL)
+  set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
+  set(CMAKE_ASM_FLAGS "-f elf64")
+endif()
 
 execute_process(
   COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
@@ -287,11 +291,6 @@ configure_file(
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   @ONLY)
 
-set(arch_files
-  arch/arm.c
-  arch/intel.c
-  arch/probe.cc)
-
 set(auth_files
   auth/AuthAuthorizeHandler.cc
   auth/AuthClientHandler.cc
@@ -347,7 +346,9 @@ set(async_rdma_common_srcs)
 if(HAVE_RDMA)
   list(APPEND async_rdma_common_srcs
     msg/async/rdma/Infiniband.cc
+    msg/async/rdma/Device.cc
     msg/async/rdma/RDMAConnectedSocketImpl.cc
+    msg/async/rdma/RDMAConnTCP.cc
     msg/async/rdma/RDMAServerSocketImpl.cc
     msg/async/rdma/RDMAStack.cc)
 endif(HAVE_RDMA)
@@ -415,6 +416,7 @@ set(libcommon_files
   common/crc32c.cc
   common/crc32c_intel_baseline.c
   common/crc32c_intel_fast.c
+  common/crc32c_ppc.c
   ${yasm_srcs}
   xxHash/xxhash.c
   common/assert.cc
@@ -509,9 +511,16 @@ set(libcommon_files
   common/fs_types.cc
   common/dns_resolve.cc
   common/hostname.cc
-  ${arch_files}
+  arch/probe.cc
   ${auth_files}
   ${mds_files})
+if(HAVE_ARM)
+  list(APPEND libcommon_files arch/arm.c)
+elseif(HAVE_INTEL)
+  list(APPEND libcommon_files arch/intel.c)
+elseif(HAVE_POWER8)
+  list(APPEND libcommon_files arch/ppc.c)
+endif()
 if(LINUX)
   list(APPEND libcommon_files msg/async/EventEpoll.cc)
   message(STATUS " Using EventEpoll for events.")
@@ -519,6 +528,10 @@ elseif(FREEBSD OR APPLE)
   list(APPEND libcommon_files msg/async/EventKqueue.cc)
   message(STATUS " Using EventKqueue for events.")
 endif(LINUX)
+
+if(HAVE_POWER8)
+  list(APPEND libcommon_files common/crc32c_ppc_asm.S)
+endif(HAVE_POWER8)
 
 if(WITH_LTTNG AND WITH_EVENTTRACE)
   message(STATUS " Using EventTrace class.")
@@ -578,7 +591,6 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 
-include(SIMDExt)
 if(HAVE_ARMV8_CRC)
   add_library(common_crc_aarch64 STATIC common/crc32c_aarch64.c)
   set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")
@@ -898,8 +910,9 @@ if(WITH_LIBCEPHFS OR WITH_KRBD)
   add_library(parse_secret_objs OBJECT ${parse_secret_files})
 endif()
 
+add_subdirectory(client)
+
 if(WITH_LIBCEPHFS)
-  add_subdirectory(client)
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs})
   target_link_libraries(cephfs LINK_PRIVATE client ceph-common
@@ -937,21 +950,21 @@ if(WITH_LIBCEPHFS)
 
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
-
-  if(WITH_FUSE)
-    set(ceph_fuse_srcs
-      ceph_fuse.cc
-      client/fuse_ll.cc)
-    add_executable(ceph-fuse ${ceph_fuse_srcs})
-    target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
-      client common global-static)
-    set_target_properties(ceph-fuse PROPERTIES
-      COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}"
-      INSTALL_RPATH "")
-    install(TARGETS ceph-fuse DESTINATION bin)
-    install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
-  endif(WITH_FUSE)
 endif(WITH_LIBCEPHFS)
+
+if(WITH_FUSE)
+  set(ceph_fuse_srcs
+    ceph_fuse.cc
+    client/fuse_ll.cc)
+  add_executable(ceph-fuse ${ceph_fuse_srcs})
+  target_link_libraries(ceph-fuse ${ALLOC_LIBS} ${FUSE_LIBRARIES}
+    client common global-static)
+  set_target_properties(ceph-fuse PROPERTIES
+    COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}"
+    INSTALL_RPATH "")
+  install(TARGETS ceph-fuse DESTINATION bin)
+  install(PROGRAMS mount.fuse.ceph DESTINATION ${CMAKE_INSTALL_SBINDIR})
+endif(WITH_FUSE)
 
 add_subdirectory(journal)
 
@@ -1039,6 +1052,9 @@ if(WITH_RADOSGW)
   add_dependencies(vstart radosgw radosgw-admin)
 endif(WITH_RADOSGW)
 
+if(WITH_LTTNG)
+  add_dependencies(vstart tracepoint_libraries)
+endif(WITH_LTTNG)
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS

@@ -33,14 +33,14 @@ class CephContext;
 
 struct PGLog : DoutPrefixProvider {
   DoutPrefixProvider *prefix_provider;
-  string gen_prefix() const {
+  string gen_prefix() const override {
     return prefix_provider ? prefix_provider->gen_prefix() : "";
   }
-  unsigned get_subsys() const {
+  unsigned get_subsys() const override {
     return prefix_provider ? prefix_provider->get_subsys() :
       (unsigned)ceph_subsys_osd;
   }
-  CephContext *get_cct() const {
+  CephContext *get_cct() const override {
     return cct;
   }
 
@@ -66,7 +66,7 @@ struct PGLog : DoutPrefixProvider {
     explicit read_log_and_missing_error(const char *what) {
       snprintf(buf, sizeof(buf), "read_log_and_missing_error: %s", what);
     }
-    const char *what() const throw () {
+    const char *what() const throw () override {
       return buf;
     }
   private:
@@ -703,8 +703,7 @@ public:
     log.last_requested = 0;
   }
 
-  void proc_replica_log(ObjectStore::Transaction& t,
-			pg_info_t &oinfo,
+  void proc_replica_log(pg_info_t &oinfo,
 			const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from) const;
 
@@ -970,12 +969,13 @@ protected:
       this);
   }
 public:
-  void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
-                            pg_info_t &info, LogEntryHandler *rollbacker,
-                            bool &dirty_info, bool &dirty_big_info);
+  void rewind_divergent_log(eversion_t newhead,
+                            pg_info_t &info,
+                            LogEntryHandler *rollbacker,
+                            bool &dirty_info,
+                            bool &dirty_big_info);
 
-  void merge_log(ObjectStore::Transaction& t,
-		 pg_info_t &oinfo,
+  void merge_log(pg_info_t &oinfo,
 		 pg_log_t &olog,
 		 pg_shard_t from,
 		 pg_info_t &info, LogEntryHandler *rollbacker,

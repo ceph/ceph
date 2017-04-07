@@ -16,10 +16,21 @@ class ContextWQ;
 
 namespace librbd {
 
-class Watcher {
-  friend struct watcher::C_NotifyAck;
+namespace watcher { struct NotifyResponse; }
 
+class Watcher {
 public:
+  struct C_NotifyAck : public Context {
+    Watcher *watcher;
+    CephContext *cct;
+    uint64_t notify_id;
+    uint64_t handle;
+    bufferlist out;
+
+    C_NotifyAck(Watcher *watcher, uint64_t notify_id, uint64_t handle);
+    void finish(int r) override;
+  };
+
   Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
           const std::string& oid);
   virtual ~Watcher();
@@ -28,6 +39,7 @@ public:
   void unregister_watch(Context *on_finish);
   void flush(Context *on_finish);
 
+  std::string get_oid() const;
   void set_oid(const string& oid);
 
   uint64_t get_watch_handle() const {
@@ -62,7 +74,8 @@ protected:
   watcher::Notifier m_notifier;
   WatchState m_watch_state;
 
-  void send_notify(bufferlist &payload, bufferlist *out_bl = nullptr,
+  void send_notify(bufferlist &payload,
+                   watcher::NotifyResponse *response = nullptr,
                    Context *on_finish = nullptr);
 
   virtual void handle_notify(uint64_t notify_id, uint64_t handle,

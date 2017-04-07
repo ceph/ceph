@@ -541,12 +541,6 @@ struct spg_t {
     DECODE_FINISH(bl);
   }
 
-  hobject_t make_temp_hobject(const string& name) const {
-    return hobject_t(object_t(name), "", CEPH_NOSNAP,
-		     pgid.ps(),
-		     hobject_t::POOL_TEMP_START - pgid.pool(), "");
-  }
-
   ghobject_t make_temp_ghobject(const string& name) const {
     return ghobject_t(
       hobject_t(object_t(name), "", CEPH_NOSNAP,
@@ -954,7 +948,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_ACTIVE       (1<<1)  // i am active.  (primary: replicas too)
 #define PG_STATE_CLEAN        (1<<2)  // peers are complete, clean of stray replicas.
 #define PG_STATE_DOWN         (1<<4)  // a needed replica is down, PG offline
-#define PG_STATE_REPLAY       (1<<5)  // crashed, waiting for replay
+//#define PG_STATE_REPLAY       (1<<5)  // crashed, waiting for replay
 //#define PG_STATE_STRAY      (1<<6)  // i must notify the primary i exist.
 //#define PG_STATE_SPLITTING    (1<<7)  // i am splitting
 #define PG_STATE_SCRUBBING    (1<<8)  // scrubbing
@@ -4116,10 +4110,6 @@ struct object_info_t {
 
   explicit object_info_t(bufferlist& bl) {
     decode(bl);
-  }
-  object_info_t operator=(bufferlist& bl) {
-    decode(bl);
-    return *this;
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(object_info_t)

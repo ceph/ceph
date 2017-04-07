@@ -106,7 +106,7 @@ public:
   }
 
   void expect_rm_snap(MockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(mock_image_ctx, rm_snap(_, _)).Times(1);
+    EXPECT_CALL(mock_image_ctx, rm_snap(_, _, _)).Times(1);
   }
 
   void expect_release_snap_id(MockImageCtx &mock_image_ctx) {
@@ -148,7 +148,8 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, Success) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, "snap1", snap_id);
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
+    snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -201,7 +202,8 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, FlattenedCloneRemovesChild) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, "snap1", snap_id);
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
+    snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -232,7 +234,8 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, ObjectMapSnapRemoveError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, "snap1", snap_id);
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
+    snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -262,7 +265,8 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildParentError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, "snap1", snap_id);
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
+    snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -311,7 +315,8 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, "snap1", snap_id);
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
+    snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -348,7 +353,8 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveSnapError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, "snap1", snap_id);
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
+    snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -379,7 +385,8 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, MissingSnap) {
 
   C_SaferCond cond_ctx;
   MockSnapshotRemoveRequest *req = new MockSnapshotRemoveRequest(
-    mock_image_ctx, &cond_ctx, "snap1", snap_id);
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1",
+    snap_id);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();

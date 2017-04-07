@@ -91,6 +91,8 @@ namespace librbd {
     void remove_parent(librados::ObjectWriteOperation *op);
     int add_child(librados::IoCtx *ioctx, const std::string &oid,
 		  const ParentSpec &pspec, const std::string &c_imageid);
+    void add_child(librados::ObjectWriteOperation *op,
+		  const ParentSpec pspec, const std::string &c_imageid);
     void remove_child(librados::ObjectWriteOperation *op,
 		      const ParentSpec &pspec, const std::string &c_imageid);
     int remove_child(librados::IoCtx *ioctx, const std::string &oid,
@@ -270,6 +272,9 @@ namespace librbd {
 			  ::SnapContext *snapc);
 
     // operations on the rbd_mirroring object
+    void mirror_uuid_get_start(librados::ObjectReadOperation *op);
+    int mirror_uuid_get_finish(bufferlist::iterator *it,
+                               std::string *uuid);
     int mirror_uuid_get(librados::IoCtx *ioctx, std::string *uuid);
     int mirror_uuid_set(librados::IoCtx *ioctx, const std::string &uuid);
     void mirror_mode_get_start(librados::ObjectReadOperation *op);

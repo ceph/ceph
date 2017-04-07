@@ -20,6 +20,7 @@
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
+#include "messages/MOSDScrub.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -27,13 +28,35 @@
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
 
 DaemonServer::DaemonServer(MonClient *monc_,
-  DaemonStateIndex &daemon_state_,
-  ClusterState &cluster_state_,
-  PyModules &py_modules_)
-    : Dispatcher(g_ceph_context), msgr(nullptr), monc(monc_),
+			   DaemonStateIndex &daemon_state_,
+			   ClusterState &cluster_state_,
+			   PyModules &py_modules_,
+			   LogChannelRef clog_,
+			   LogChannelRef audit_clog_)
+    : Dispatcher(g_ceph_context),
+      client_byte_throttler(new Throttle(g_ceph_context, "mgr_client_bytes",
+					 g_conf->mgr_client_bytes)),
+      client_msg_throttler(new Throttle(g_ceph_context, "mgr_client_messages",
+					g_conf->mgr_client_messages)),
+      osd_byte_throttler(new Throttle(g_ceph_context, "mgr_osd_bytes",
+				      g_conf->mgr_osd_bytes)),
+      osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messsages",
+				     g_conf->mgr_osd_messages)),
+      mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
+				      g_conf->mgr_mds_bytes)),
+      mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messsages",
+				     g_conf->mgr_mds_messages)),
+      mon_byte_throttler(new Throttle(g_ceph_context, "mgr_mon_bytes",
+				      g_conf->mgr_mon_bytes)),
+      mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messsages",
+				     g_conf->mgr_mon_messages)),
+      msgr(nullptr),
+      monc(monc_),
       daemon_state(daemon_state_),
       cluster_state(cluster_state_),
       py_modules(py_modules_),
+      clog(clog_),
+      audit_clog(audit_clog_),
       auth_registry(g_ceph_context,
                     g_conf->auth_supported.empty() ?
                       g_conf->auth_cluster_required :
@@ -48,9 +71,30 @@ DaemonServer::~DaemonServer() {
 int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
 {
   // Initialize Messenger
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ?
+    g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
   msgr = Messenger::create(g_ceph_context, public_msgr_type,
-			   entity_name_t::MGR(gid), "server", getpid(), 0);
+			   entity_name_t::MGR(gid),
+			   "mgr",
+			   getpid(), 0);
+  msgr->set_default_policy(Messenger::Policy::stateless_server(0));
+
+  // throttle clients
+  msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
+			      client_byte_throttler.get(),
+			      client_msg_throttler.get());
+
+  // servers
+  msgr->set_policy_throttlers(entity_name_t::TYPE_OSD,
+			      osd_byte_throttler.get(),
+			      osd_msg_throttler.get());
+  msgr->set_policy_throttlers(entity_name_t::TYPE_MDS,
+			      mds_byte_throttler.get(),
+			      mds_msg_throttler.get());
+  msgr->set_policy_throttlers(entity_name_t::TYPE_MON,
+			      mon_byte_throttler.get(),
+			      mon_msg_throttler.get());
+
   int r = msgr->bind(g_conf->public_addr);
   if (r < 0) {
     derr << "unable to bind mgr to " << g_conf->public_addr << dendl;
@@ -83,23 +127,47 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
   auto handler = auth_registry.get_handler(protocol);
   if (!handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
-    ceph_abort();
     is_valid = false;
     return true;
   }
 
+  MgrSessionRef s(new MgrSession);
+  s->inst.addr = con->get_peer_addr();
   AuthCapsInfo caps_info;
-  EntityName name;
-  uint64_t global_id = 0;
 
   is_valid = handler->verify_authorizer(
     cct, monc->rotating_secrets.get(),
     authorizer_data,
-    authorizer_reply, name,
-    global_id, caps_info,
+    authorizer_reply, s->entity_name,
+    s->global_id, caps_info,
     session_key);
 
-  // TODO: invent some caps suitable for ceph-mgr
+  if (is_valid) {
+    if (caps_info.allow_all) {
+      dout(10) << " session " << s << " " << s->entity_name
+	       << " allow_all" << dendl;
+      s->caps.set_allow_all();
+    }
+    if (caps_info.caps.length() > 0) {
+      bufferlist::iterator p = caps_info.caps.begin();
+      string str;
+      try {
+	::decode(str, p);
+      }
+      catch (buffer::error& e) {
+      }
+      bool success = s->caps.parse(str);
+      if (success) {
+	dout(10) << " session " << s << " " << s->entity_name
+		 << " has caps " << s->caps << " '" << str << "'" << dendl;
+      } else {
+	dout(10) << " session " << s << " " << s->entity_name
+		 << " failed to parse caps '" << str << "'" << dendl;
+	is_valid = false;
+      }
+    }
+    con->set_priv(s->get());
+  }
 
   return true;
 }
@@ -134,7 +202,7 @@ bool DaemonServer::ms_dispatch(Message *m)
 {
   Mutex::Locker l(lock);
 
-  switch(m->get_type()) {
+  switch (m->get_type()) {
     case MSG_PGSTATS:
       cluster_state.ingest_pgstats(static_cast<MPGStats*>(m));
       m->put();
@@ -153,8 +221,10 @@ bool DaemonServer::ms_dispatch(Message *m)
 
 void DaemonServer::shutdown()
 {
+  dout(10) << __func__ << dendl;
   msgr->shutdown();
   msgr->wait();
+  dout(10) << __func__ << " done" << dendl;
 }
 
 
@@ -217,21 +287,92 @@ struct MgrCommand {
   string module;
   string perm;
   string availability;
+
+  bool requires_perm(char p) const {
+    return (perm.find(p) != string::npos);
+  }
+
 } mgr_commands[] = {
 
 #define COMMAND(parsesig, helptext, module, perm, availability) \
   {parsesig, helptext, module, perm, availability},
-
-COMMAND("foo " \
-	"name=bar,type=CephString", \
-	"do a thing", "mgr", "rw", "cli")
+#include "MgrCommands.h"
+#undef COMMAND
 };
+
+void DaemonServer::_generate_command_map(
+  map<string,cmd_vartype>& cmdmap,
+  map<string,string> &param_str_map)
+{
+  for (map<string,cmd_vartype>::const_iterator p = cmdmap.begin();
+       p != cmdmap.end(); ++p) {
+    if (p->first == "prefix")
+      continue;
+    if (p->first == "caps") {
+      vector<string> cv;
+      if (cmd_getval(g_ceph_context, cmdmap, "caps", cv) &&
+	  cv.size() % 2 == 0) {
+	for (unsigned i = 0; i < cv.size(); i += 2) {
+	  string k = string("caps_") + cv[i];
+	  param_str_map[k] = cv[i + 1];
+	}
+	continue;
+      }
+    }
+    param_str_map[p->first] = cmd_vartype_stringify(p->second);
+  }
+}
+
+const MgrCommand *DaemonServer::_get_mgrcommand(
+  const string &cmd_prefix,
+  MgrCommand *cmds,
+  int cmds_size)
+{
+  MgrCommand *this_cmd = NULL;
+  for (MgrCommand *cp = cmds;
+       cp < &cmds[cmds_size]; cp++) {
+    if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
+      this_cmd = cp;
+      break;
+    }
+  }
+  return this_cmd;
+}
+
+bool DaemonServer::_allowed_command(
+  MgrSession *s,
+  const string &module,
+  const string &prefix,
+  const map<string,cmd_vartype>& cmdmap,
+  const map<string,string>& param_str_map,
+  const MgrCommand *this_cmd) {
+
+  if (s->entity_name.is_mon()) {
+    // mon is all-powerful.  even when it is forwarding commands on behalf of
+    // old clients; we expect the mon is validating commands before proxying!
+    return true;
+  }
+
+  bool cmd_r = this_cmd->requires_perm('r');
+  bool cmd_w = this_cmd->requires_perm('w');
+  bool cmd_x = this_cmd->requires_perm('x');
+
+  bool capable = s->caps.is_capable(
+    g_ceph_context,
+    CEPH_ENTITY_TYPE_MGR,
+    s->entity_name,
+    module, prefix, param_str_map,
+    cmd_r, cmd_w, cmd_x);
+
+  dout(10) << " " << s->entity_name << " "
+	   << (capable ? "" : "not ") << "capable" << dendl;
+  return capable;
+}
 
 bool DaemonServer::handle_command(MCommand *m)
 {
   int r = 0;
   std::stringstream ss;
-  std::stringstream ds;
   bufferlist odata;
   std::string prefix;
 
@@ -239,16 +380,31 @@ bool DaemonServer::handle_command(MCommand *m)
 
   cmdmap_t cmdmap;
 
-  // TODO enforce some caps
-  
   // TODO background the call into python land so that we don't
   // block a messenger thread on python code.
 
   ConnectionRef con = m->get_connection();
+  MgrSessionRef session(static_cast<MgrSession*>(con->get_priv()));
+  if (!session) {
+    return true;
+  }
+  session->put(); // SessionRef takes a ref
+  if (session->inst.name == entity_name_t())
+    session->inst.name = m->get_source();
+
+  string format;
+  boost::scoped_ptr<Formatter> f;
+  const MgrCommand *mgr_cmd;
+  map<string,string> param_str_map;
 
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     r = -EINVAL;
     goto out;
+  }
+
+  {
+    cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+    f.reset(Formatter::create(format));
   }
 
   dout(4) << "decoded " << cmdmap.size() << dendl;
@@ -285,10 +441,96 @@ bool DaemonServer::handle_command(MCommand *m)
     }
 #endif
     f.close_section();	// command_descriptions
-
-    f.flush(ds);
     goto out;
-  } else {
+  }
+
+  // lookup command
+  mgr_cmd = _get_mgrcommand(prefix, mgr_commands,
+                                              ARRAY_SIZE(mgr_commands));
+  _generate_command_map(cmdmap, param_str_map);
+  if (!mgr_cmd) {
+    ss << "command not supported";
+    r = -EINVAL;
+    goto out;
+  }
+
+  // validate user's permissions for requested command
+  if (!_allowed_command(session.get(), mgr_cmd->module, prefix, cmdmap,
+                        param_str_map, mgr_cmd)) {
+    dout(1) << __func__ << " access denied" << dendl;
+    audit_clog->info() << "from='" << session->inst << "' "
+		       << "entity='" << session->entity_name << "' "
+		       << "cmd=" << m->cmd << ":  access denied";
+    ss << "access denied";
+    r = -EACCES;
+    goto out;
+  }
+
+  audit_clog->debug()
+    << "from='" << session->inst << "' "
+    << "entity='" << session->entity_name << "' "
+    << "cmd=" << m->cmd << ": dispatch";
+
+  // -----------
+  // PG commands
+
+  if (prefix == "pg scrub" ||
+      prefix == "pg repair" ||
+      prefix == "pg deep-scrub") {
+    string scrubop = prefix.substr(3, string::npos);
+    pg_t pgid;
+    string pgidstr;
+    cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      r = -EINVAL;
+      goto out;
+    }
+    bool pg_exists = false;
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	pg_exists = osdmap.pg_exists(pgid);
+      });
+    if (!pg_exists) {
+      ss << "pg " << pgid << " dne";
+      r = -ENOENT;
+      goto out;
+    }
+    int acting_primary = -1;
+    entity_inst_t inst;
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	acting_primary = osdmap.get_pg_acting_primary(pgid);
+	if (acting_primary >= 0) {
+	  inst = osdmap.get_inst(acting_primary);
+	}
+      });
+    if (acting_primary == -1) {
+      ss << "pg " << pgid << " has no primary osd";
+      r = -EAGAIN;
+      goto out;
+    }
+    vector<pg_t> pgs = { pgid };
+    msgr->send_message(new MOSDScrub(monc->get_fsid(),
+				     pgs,
+				     scrubop == "repair",
+				     scrubop == "deep-scrub"),
+		       inst);
+    ss << "instructing pg " << pgid << " on osd." << acting_primary
+       << " (" << inst << ") to " << scrubop;
+    r = 0;
+  }
+
+  else {
+    cluster_state.with_pgmap(
+      [&](const PGMap& pg_map) {
+	cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    r = process_pg_map_command(prefix, cmdmap, pg_map, osdmap,
+				       f.get(), &ss, &odata);
+	  });
+      });
+  }
+
+  // fall back to registered python handlers
+  if (r == -EOPNOTSUPP) {
     // Let's find you a handler!
     MgrPyModule *handler = nullptr;
     auto py_commands = py_modules.get_commands();
@@ -312,7 +554,9 @@ bool DaemonServer::handle_command(MCommand *m)
     // with a ms_dispatch, so that the python part can block if it
     // wants to.
     dout(4) << "passing through " << cmdmap.size() << dendl;
+    stringstream ds;
     r = handler->handle_command(cmdmap, &ds, &ss);
+    odata.append(ds);
     goto out;
   }
 
@@ -325,7 +569,6 @@ bool DaemonServer::handle_command(MCommand *m)
 
   std::string rs;
   rs = ss.str();
-  odata.append(ds);
   dout(1) << "do_command r=" << r << " " << rs << dendl;
   if (con) {
     MCommandReply *reply = new MCommandReply(r, rs);

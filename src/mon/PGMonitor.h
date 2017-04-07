@@ -84,23 +84,10 @@ private:
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
-  map<int,utime_t> last_sent_pg_create;  // per osd throttle
-
   // when we last received PG stats from each osd
   map<int,utime_t> last_osd_report;
 
-  void register_new_pgs();
-
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
-
-  /**
-   * Dump stats from pgs stuck in specified states.
-   *
-   * @return 0 on success, negative error code on failure
-   */
-  int dump_stuck_pg_stats(stringstream &ds, Formatter *f,
-			  int threshold,
-			  vector<string>& args) const;
 
 public:
   PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
@@ -151,7 +138,7 @@ public:
 			     const set<int>& s, const char *desc, health_status_t sev) const;
 
   void check_subs();
-  void check_sub(Subscription *sub);
+  bool check_sub(Subscription *sub);
 
 private:
   // no copying allowed

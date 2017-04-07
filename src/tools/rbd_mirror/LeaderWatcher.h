@@ -10,8 +10,9 @@
 
 #include "common/AsyncOpTracker.h"
 #include "librbd/ManagedLock.h"
-#include "librbd/managed_lock/Types.h"
 #include "librbd/Watcher.h"
+#include "librbd/managed_lock/Types.h"
+#include "librbd/watcher/Types.h"
 #include "Instances.h"
 #include "MirrorStatusWatcher.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
@@ -21,7 +22,7 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
-struct Threads;
+template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class LeaderWatcher : protected librbd::Watcher {
@@ -34,7 +35,8 @@ public:
     virtual void pre_release_handler(Context *on_finish) = 0;
   };
 
-  LeaderWatcher(Threads *threads, librados::IoCtx &io_ctx, Listener *listener);
+  LeaderWatcher(Threads<ImageCtxT> *threads, librados::IoCtx &io_ctx,
+                Listener *listener);
   ~LeaderWatcher() override;
 
   int init();
@@ -176,7 +178,7 @@ private:
     }
   };
 
-  Threads *m_threads;
+  Threads<ImageCtxT> *m_threads;
   Listener *m_listener;
 
   Mutex m_lock;
@@ -194,7 +196,7 @@ private:
   Context *m_timer_task = nullptr;
   C_TimerGate *m_timer_gate = nullptr;
 
-  bufferlist m_heartbeat_ack_bl;
+  librbd::watcher::NotifyResponse m_heartbeat_response;
 
   bool is_leader(Mutex &m_lock);
 

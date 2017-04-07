@@ -42,6 +42,10 @@
     quota set                  set quota params
     quota enable               enable quota
     quota disable              disable quota
+    global quota get           view global quota params
+    global quota set           set global quota params
+    global quota enable        enable a global quota
+    global quota disable       disable a global quota
     realm create               create a new realm
     realm delete               delete a realm
     realm get                  show realm info
@@ -68,8 +72,6 @@
     zonegroup placement modify modify a placement target of a specific zonegroup
     zonegroup placement rm     remove a placement target from a zonegroup
     zonegroup placement default  set a zonegroup's default placement target
-    zonegroup-map get          show zonegroup-map
-    zonegroup-map set          set zonegroup-map (requires infile)
     zone create                create a new zone
     zone delete                delete a zone
     zone get                   show zone cluster params
@@ -176,6 +178,8 @@
      --realm-new-name=<name>   realm new name
      --rgw-zonegroup=<name>    zonegroup name
      --zonegroup-id=<id>       zonegroup id
+     --zonegroup-new-name=<name>
+                               zonegroup new name
      --rgw-zone=<name>         name of zone in which radosgw is running
      --zone-id=<id>            zone id
      --zone-new-name=<name>    zone new name
@@ -227,7 +231,6 @@
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations
-     --reset-regions           reset regionmap when regionmap update
      --bypass-gc               when specified with bucket deletion, triggers
                                object deletions by not involving GC
      --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,

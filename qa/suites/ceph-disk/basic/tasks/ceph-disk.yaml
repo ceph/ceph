@@ -1,5 +1,6 @@
 roles:
 - - mon.a
+  - mgr.x
   - client.0
 - - osd.0
   - osd.1

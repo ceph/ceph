@@ -48,7 +48,10 @@ void PyModules::dump_server(const std::string &hostname,
     // TODO: pick the highest version, and make sure that
     // somewhere else (during health reporting?) we are
     // indicating to the user if we see mixed versions
-    ceph_version = i.second->metadata.at("ceph_version");
+    auto ver_iter = i.second->metadata.find("ceph_version");
+    if (ver_iter != i.second->metadata.end()) {
+      ceph_version = i.second->metadata.at("ceph_version");
+    }
 
     f->open_object_section("service");
     f->dump_string("type", str_type);
@@ -457,6 +460,7 @@ void PyModules::shutdown()
   }
   modules.clear();
 
+  PyGILState_Ensure();
   Py_Finalize();
 }
 
@@ -472,6 +476,25 @@ void PyModules::notify_all(const std::string &notify_type,
     // C++ code, and avoid any potential lock cycles.
     finisher.queue(new FunctionContext([module, notify_type, notify_id](int r){
       module->notify(notify_type, notify_id);
+    }));
+  }
+}
+
+void PyModules::notify_all(const LogEntry &log_entry)
+{
+  Mutex::Locker l(lock);
+
+  dout(10) << __func__ << ": notify_all (clog)" << dendl;
+  for (auto i : modules) {
+    auto module = i.second;
+    // Send all python calls down a Finisher to avoid blocking
+    // C++ code, and avoid any potential lock cycles.
+    //
+    // Note intentional use of non-reference lambda binding on
+    // log_entry: we take a copy because caller's instance is
+    // probably ephemeral.
+    finisher.queue(new FunctionContext([module, log_entry](int r){
+      module->notify_clog(log_entry);
     }));
   }
 }

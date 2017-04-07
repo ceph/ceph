@@ -254,14 +254,14 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   if (g_conf->rocksdb_separate_wal_dir) {
     opt.wal_dir = path + ".wal";
   }
-  if (g_conf->rocksdb_db_paths.length()) {
+  if (g_conf->get_val<std::string>("rocksdb_db_paths").length()) {
     list<string> paths;
-    get_str_list(g_conf->rocksdb_db_paths, "; \t", paths);
+    get_str_list(g_conf->get_val<std::string>("rocksdb_db_paths"), "; \t", paths);
     for (auto& p : paths) {
       size_t pos = p.find(',');
       if (pos == std::string::npos) {
 	derr << __func__ << " invalid db path item " << p << " in "
-	     << g_conf->rocksdb_db_paths << dendl;
+	     << g_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
 	return -EINVAL;
       }
       string path = p.substr(0, pos);
@@ -269,7 +269,7 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
       uint64_t size = atoll(size_str.c_str());
       if (!size) {
 	derr << __func__ << " invalid db path item " << p << " in "
-	     << g_conf->rocksdb_db_paths << dendl;
+	     << g_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
 	return -EINVAL;
       }
       opt.db_paths.push_back(rocksdb::DbPath(path, size));
@@ -612,6 +612,25 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
        it->valid();
        it->next()) {
     bat.Delete(combine_strings(prefix, it->key()));
+  }
+}
+
+void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
+                                                         const string &start,
+                                                         const string &end)
+{
+  if (db->enable_rmrange) {
+    bat.DeleteRange(combine_strings(prefix, start), combine_strings(prefix, end));
+  } else {
+    auto it = db->get_iterator(prefix);
+    it->lower_bound(start);
+    while (it->valid()) {
+      if (it->key() >= end) {
+        break;
+      }
+      bat.Delete(combine_strings(prefix, it->key()));
+      it->next();
+    }
   }
 }
 

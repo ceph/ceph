@@ -121,7 +121,7 @@ size_t RGWHTTPClient::simple_send_http_data(void * const ptr,
   RGWHTTPClient *client = static_cast<RGWHTTPClient *>(_info);
   int ret = client->send_data(ptr, size * nmemb);
   if (ret < 0) {
-    dout(0) << "WARNING: client->receive_data() returned ret="
+    dout(0) << "WARNING: client->send_data() returned ret="
             << ret << dendl;
   }
 
@@ -856,7 +856,7 @@ int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
  */
 int RGWHTTPManager::complete_requests()
 {
-  bool done;
+  bool done = false;
   int ret;
   do {
     ret = process_requests(true, &done);

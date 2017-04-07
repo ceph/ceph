@@ -39,7 +39,7 @@ void TracepointProvider::verify_config(const struct md_config_t *conf) {
     return;
   }
 
-  m_handle = dlopen(m_library.c_str(), RTLD_NOW);
+  m_handle = dlopen(m_library.c_str(), RTLD_NOW | RTLD_NODELETE);
   assert(m_handle);
 }
 

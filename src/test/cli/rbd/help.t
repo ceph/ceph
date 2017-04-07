@@ -196,7 +196,8 @@
                   [--data-pool <data-pool>] 
                   [--journal-splay-width <journal-splay-width>] 
                   [--journal-object-size <journal-object-size>] 
-                  [--journal-pool <journal-pool>] [--no-progress] 
+                  [--journal-pool <journal-pool>] [--sparse-size <sparse-size>] 
+                  [--no-progress] 
                   <source-image-or-snap-spec> <dest-image-spec> 
   
   Copy src image to dest.
@@ -227,6 +228,7 @@
     --journal-splay-width arg    number of active journal objects
     --journal-object-size arg    size of journal objects
     --journal-pool arg           pool for journal objects
+    --sparse-size arg            sparse size in B/K/M [default: 4K]
     --no-progress                disable progress output
   
   Image Features:
@@ -588,7 +590,8 @@
                     [--stripe-count <stripe-count>] [--data-pool <data-pool>] 
                     [--journal-splay-width <journal-splay-width>] 
                     [--journal-object-size <journal-object-size>] 
-                    [--journal-pool <journal-pool>] [--no-progress] 
+                    [--journal-pool <journal-pool>] 
+                    [--sparse-size <sparse-size>] [--no-progress] 
                     [--export-format <export-format>] [--pool <pool>] 
                     [--image <image>] 
                     <path-name> <dest-image-spec> 
@@ -620,6 +623,7 @@
     --journal-splay-width arg number of active journal objects
     --journal-object-size arg size of journal objects
     --journal-pool arg        pool for journal objects
+    --sparse-size arg         sparse size in B/K/M [default: 4K]
     --no-progress             disable progress output
     --export-format arg       format of image file
     -p [ --pool ] arg         pool name (deprecated)
@@ -632,7 +636,7 @@
   
   rbd help import-diff
   usage: rbd import-diff [--path <path>] [--pool <pool>] [--image <image>] 
-                         [--no-progress] 
+                         [--sparse-size <sparse-size>] [--no-progress] 
                          <path-name> <image-spec> 
   
   Import an incremental diff.
@@ -646,6 +650,7 @@
     --path arg           import file (or '-' for stdin)
     -p [ --pool ] arg    pool name
     --image arg          image name
+    --sparse-size arg    sparse size in B/K/M [default: 4K]
     --no-progress        disable progress output
   
   rbd help info
@@ -1131,8 +1136,8 @@
     -p [ --pool ] arg     pool name
     --image arg           image name
     --snap arg            snapshot name
-    --read-only           mount read-only
-    --exclusive           forbid other clients write
+    --read-only           map read-only
+    --exclusive           forbid writes by other clients
     --device arg          specify nbd device
     --nbds_max arg        override module param nbds_max
     --max_part arg        override module param max_part

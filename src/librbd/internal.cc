@@ -33,6 +33,7 @@
 #include "librbd/api/Image.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
+#include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/io/AioCompletion.h"
@@ -383,6 +384,31 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     *opts = static_cast<rbd_image_options_t>(opts_);
   }
 
+  void image_options_copy(rbd_image_options_t* opts,
+			  const ImageOptions &orig)
+  {
+    image_options_ref* opts_ = new image_options_ref(new image_options_t());
+
+    *opts = static_cast<rbd_image_options_t>(opts_);
+
+    std::string str_val;
+    uint64_t uint64_val;
+    for (auto &i : IMAGE_OPTIONS_TYPE_MAPPING) {
+      switch (i.second) {
+      case STR:
+	if (orig.get(i.first, &str_val) == 0) {
+	  image_options_set(*opts, i.first, str_val);
+	}
+	continue;
+      case UINT64:
+	if (orig.get(i.first, &uint64_val) == 0) {
+	  image_options_set(*opts, i.first, uint64_val);
+	}
+	continue;
+      }
+    }
+  }
+
   void image_options_destroy(rbd_image_options_t opts)
   {
     image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
@@ -555,7 +581,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(cct, 20) << "children flatten " << ictx->name << dendl;
 
     RWLock::RLocker l(ictx->snap_lock);
-    snap_t snap_id = ictx->get_snap_id(snap_name);
+    snap_t snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), snap_name);
     ParentSpec parent_spec(ictx->md_ctx.get_id(), ictx->id, snap_id);
     map< pair<int64_t, string>, set<string> > image_info;
 
@@ -674,17 +700,15 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
-
     RWLock::RLocker l(ictx->snap_lock);
-    snap_t snap_id = ictx->get_snap_id(snap_name);
+    snap_t snap_id = ictx->get_snap_id(*snap_namespace, snap_name);
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
     r = ictx->get_snap_namespace(snap_id, snap_namespace);
     return r;
   }
 
-  int snap_is_protected(ImageCtx *ictx, const char *snap_name,
-			bool *is_protected)
+  int snap_is_protected(ImageCtx *ictx, const char *snap_name, bool *is_protected)
   {
     ldout(ictx->cct, 20) << "snap_is_protected " << ictx << " " << snap_name
 			 << dendl;
@@ -694,7 +718,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
 
     RWLock::RLocker l(ictx->snap_lock);
-    snap_t snap_id = ictx->get_snap_id(snap_name);
+    snap_t snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), snap_name);
     if (snap_id == CEPH_NOSNAP)
       return -ENOENT;
     bool is_unprotected;
@@ -919,214 +943,19 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
             const std::string &non_primary_global_image_id,
             const std::string &primary_mirror_uuid)
   {
-    CephContext *cct = p_imctx->cct;
-    if (p_imctx->snap_id == CEPH_NOSNAP) {
-      lderr(cct) << "image to be cloned must be a snapshot" << dendl;
-      return -EINVAL;
-    }
+    CephContext *cct = (CephContext *)c_ioctx.cct();
 
-    ldout(cct, 20) << "clone " << &p_imctx->md_ctx << " name " << p_imctx->name
-                   << " snap " << p_imctx->snap_name << " to child " << &c_ioctx
-                   << " name " << c_name << " opts = " << c_opts << dendl;
+    ThreadPool *thread_pool;
+    ContextWQ *op_work_queue;
+    ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
 
-    bool default_format_set;
-    c_opts.is_set(RBD_IMAGE_OPTION_FORMAT, &default_format_set);
-    if (!default_format_set) {
-      c_opts.set(RBD_IMAGE_OPTION_FORMAT, static_cast<uint64_t>(2));
-    }
+    C_SaferCond cond;
+    auto *req = image::CloneRequest<>::create(
+      p_imctx, c_ioctx, std::string(c_name), c_opts, non_primary_global_image_id,
+      primary_mirror_uuid, op_work_queue, &cond);
+    req->send();
 
-    uint64_t format = 0;
-    c_opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
-    if (format < 2) {
-      lderr(cct) << "format 2 or later required for clone" << dendl;
-      return -EINVAL;
-    }
-
-    bool use_p_features = true;
-    uint64_t features;
-    if (c_opts.get(RBD_IMAGE_OPTION_FEATURES, &features) == 0) {
-      if (features & ~RBD_FEATURES_ALL) {
-	lderr(cct) << "librbd does not support requested features" << dendl;
-	return -ENOSYS;
-      }
-      use_p_features = false;
-    }
-
-    // make sure child doesn't already exist, in either format
-    int r = detect_format(c_ioctx, c_name, NULL, NULL);
-    if (r != -ENOENT) {
-      lderr(cct) << "rbd image " << c_name << " already exists" << dendl;
-      return -EEXIST;
-    }
-
-    bool snap_protected;
-
-    uint64_t order;
-    uint64_t size;
-    uint64_t p_features;
-    int partial_r;
-    librbd::NoOpProgressContext no_op;
-    ImageCtx *c_imctx = NULL;
-    map<string, bufferlist> pairs;
-    ParentSpec pspec(p_imctx->md_ctx.get_id(), p_imctx->id, p_imctx->snap_id);
-
-    if (p_imctx->old_format) {
-      lderr(cct) << "parent image must be in new format" << dendl;
-      return -EINVAL;
-    }
-
-    p_imctx->snap_lock.get_read();
-    p_features = p_imctx->features;
-    size = p_imctx->get_image_size(p_imctx->snap_id);
-    r = p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
-    p_imctx->snap_lock.put_read();
-
-    if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
-      lderr(cct) << "parent image must support layering" << dendl;
-      return -ENOSYS;
-    }
-
-    if (r < 0) {
-      // we lost the race with snap removal?
-      lderr(cct) << "unable to locate parent's snapshot" << dendl;
-      return r;
-    }
-
-    if (!snap_protected) {
-      lderr(cct) << "parent snapshot must be protected" << dendl;
-      return -EINVAL;
-    }
-
-    if ((p_features & RBD_FEATURE_JOURNALING) != 0) {
-      bool force_non_primary = !non_primary_global_image_id.empty();
-      bool is_primary;
-      int r = Journal<>::is_tag_owner(p_imctx, &is_primary);
-      if (r < 0) {
-	lderr(cct) << "failed to determine tag ownership: " << cpp_strerror(r)
-		   << dendl;
-	return r;
-      }
-      if (!is_primary && !force_non_primary) {
-	lderr(cct) << "parent is non-primary mirrored image" << dendl;
-	return -EINVAL;
-      }
-    }
-
-    if (use_p_features) {
-      features = p_features;
-    }
-
-    order = p_imctx->order;
-    if (c_opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
-      c_opts.set(RBD_IMAGE_OPTION_ORDER, order);
-    }
-
-    if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
-      lderr(cct) << "cloning image must support layering" << dendl;
-      return -ENOSYS;
-    }
-
-    c_opts.set(RBD_IMAGE_OPTION_FEATURES, features);
-    r = create(c_ioctx, c_name, size, c_opts, non_primary_global_image_id,
-               primary_mirror_uuid, true);
-    if (r < 0) {
-      lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx, false);
-    r = c_imctx->state->open(false);
-    if (r < 0) {
-      lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
-      goto err_remove;
-    }
-
-    r = cls_client::set_parent(&c_ioctx, c_imctx->header_oid, pspec, size);
-    if (r < 0) {
-      lderr(cct) << "couldn't set parent: " << cpp_strerror(r) << dendl;
-      goto err_close_child;
-    }
-
-    r = cls_client::add_child(&c_ioctx, RBD_CHILDREN, pspec, c_imctx->id);
-    if (r < 0) {
-      lderr(cct) << "couldn't add child: " << cpp_strerror(r) << dendl;
-      goto err_close_child;
-    }
-
-    r = p_imctx->state->refresh();
-    if (r == 0) {
-      p_imctx->snap_lock.get_read();
-      r = p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
-      p_imctx->snap_lock.put_read();
-    }
-    if (r < 0 || !snap_protected) {
-      // we lost the race with unprotect
-      r = -EINVAL;
-      goto err_remove_child;
-    }
-
-    r = cls_client::metadata_list(&p_imctx->md_ctx, p_imctx->header_oid, "", 0,
-                                  &pairs);
-    if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-      lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
-      goto err_remove_child;
-    } else if (r == 0 && !pairs.empty()) {
-      r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
-      if (r < 0) {
-        lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
-        goto err_remove_child;
-      }
-    }
-
-    if (c_imctx->test_features(RBD_FEATURE_JOURNALING)) {
-      cls::rbd::MirrorMode mirror_mode_internal =
-        cls::rbd::MIRROR_MODE_DISABLED;
-      r = cls_client::mirror_mode_get(&c_imctx->md_ctx, &mirror_mode_internal);
-      if (r < 0 && r != -ENOENT) {
-        lderr(cct) << "failed to retrieve mirror mode: " << cpp_strerror(r)
-                   << dendl;
-        goto err_remove_child;
-      }
-
-      // enable mirroring now that clone has been fully created
-      if (mirror_mode_internal == cls::rbd::MIRROR_MODE_POOL ||
-          !non_primary_global_image_id.empty()) {
-        C_SaferCond ctx;
-        mirror::EnableRequest<ImageCtx> *req =
-          mirror::EnableRequest<ImageCtx>::create(c_imctx->md_ctx, c_imctx->id,
-                                                  non_primary_global_image_id,
-                                                  c_imctx->op_work_queue, &ctx);
-        req->send();
-
-        r = ctx.wait();
-        if (r < 0) {
-          lderr(cct) << "failed to enable mirroring: " << cpp_strerror(r)
-                     << dendl;
-          goto err_remove_child;
-        }
-      }
-    }
-
-    ldout(cct, 2) << "done." << dendl;
-    r = c_imctx->state->close();
-    return r;
-
-  err_remove_child:
-    partial_r = cls_client::remove_child(&c_ioctx, RBD_CHILDREN, pspec,
-                                         c_imctx->id);
-    if (partial_r < 0) {
-     lderr(cct) << "Error removing failed clone from list of children: "
-                << cpp_strerror(partial_r) << dendl;
-    }
-  err_close_child:
-    c_imctx->state->close();
-  err_remove:
-    partial_r = remove(c_ioctx, c_name, "", no_op);
-    if (partial_r < 0) {
-      lderr(cct) << "Error removing failed clone: "
-		 << cpp_strerror(partial_r) << dendl;
-    }
-    return r;
+    return cond.wait();
   }
 
   int rename(IoCtx& io_ctx, const char *srcname, const char *dstname)
@@ -1289,9 +1118,22 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner)
   {
-    RWLock::RLocker l(ictx->owner_lock);
-    *is_owner = (ictx->exclusive_lock != nullptr &&
-		 ictx->exclusive_lock->is_lock_owner());
+    *is_owner = false;
+
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    if (ictx->exclusive_lock == nullptr ||
+        !ictx->exclusive_lock->is_lock_owner()) {
+      return 0;
+    }
+
+    // might have been blacklisted by peer -- ensure we still own
+    // the lock by pinging the OSD
+    int r = ictx->exclusive_lock->assert_header_locked();
+    if (r < 0) {
+      return r;
+    }
+
+    *is_owner = true;
     return 0;
   }
 
@@ -1503,7 +1345,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
-  int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists)
+  int snap_exists(ImageCtx *ictx, const cls::rbd::SnapshotNamespace& snap_namespace,
+		  const char *snap_name, bool *exists)
   {
     ldout(ictx->cct, 20) << "snap_exists " << ictx << " " << snap_name << dendl;
 
@@ -1512,24 +1355,16 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
 
     RWLock::RLocker l(ictx->snap_lock);
-    *exists = ictx->get_snap_id(snap_name) != CEPH_NOSNAP; 
+    *exists = ictx->get_snap_id(snap_namespace, snap_name) != CEPH_NOSNAP;
     return 0;
   }
 
-  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags, ProgressContext& pctx)
+  int snap_remove(ImageCtx *ictx, const char *snap_name, uint32_t flags,
+		  ProgressContext& pctx)
   {
     ldout(ictx->cct, 20) << "snap_remove " << ictx << " " << snap_name << " flags: " << flags << dendl;
 
     int r = 0;
-
-    cls::rbd::SnapshotNamespace snap_namespace;
-    r = get_snap_namespace(ictx, snap_name, &snap_namespace);
-    if (r < 0) {
-      return r;
-    }
-    if (boost::get<cls::rbd::UserSnapshotNamespace>(&snap_namespace) == nullptr) {
-      return -EINVAL;
-    }
 
     r = ictx->state->refresh_if_required();
     if (r < 0)
@@ -1549,7 +1384,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     if (is_protected && flags & RBD_SNAP_REMOVE_UNPROTECT) {
-      r = ictx->operations->snap_unprotect(snap_name);
+      r = ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), snap_name);
       if (r < 0) {
 	lderr(ictx->cct) << "failed to unprotect snapshot: " << snap_name << dendl;
 	return r;
@@ -1566,7 +1401,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     C_SaferCond ctx;
-    ictx->operations->snap_remove(snap_name, &ctx);
+    ictx->operations->snap_remove(cls::rbd::UserSnapshotNamespace(), snap_name, &ctx);
 
     r = ctx.wait();
     return r;
@@ -1608,7 +1443,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   };
 
   int copy(ImageCtx *src, IoCtx& dest_md_ctx, const char *destname,
-	   ImageOptions& opts, ProgressContext &prog_ctx)
+	   ImageOptions& opts, ProgressContext &prog_ctx, size_t sparse_size)
   {
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
     ldout(cct, 20) << "copy " << src->name
@@ -1658,7 +1493,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
     }
 
-    r = copy(src, dest, prog_ctx);
+    r = copy(src, dest, prog_ctx, sparse_size);
+
     int close_r = dest->state->close();
     if (r == 0 && close_r < 0) {
       r = close_r;
@@ -1668,22 +1504,23 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   class C_CopyWrite : public Context {
   public:
-    C_CopyWrite(SimpleThrottle *throttle, bufferlist *bl)
-      : m_throttle(throttle), m_bl(bl) {}
+    C_CopyWrite(bufferlist *bl, Context* ctx)
+      : m_bl(bl), m_ctx(ctx) {}
     void finish(int r) override {
       delete m_bl;
-      m_throttle->end_op(r);
+      m_ctx->complete(r);
     }
   private:
-    SimpleThrottle *m_throttle;
     bufferlist *m_bl;
+    Context *m_ctx;
   };
 
   class C_CopyRead : public Context {
   public:
     C_CopyRead(SimpleThrottle *throttle, ImageCtx *dest, uint64_t offset,
-	       bufferlist *bl)
-      : m_throttle(throttle), m_dest(dest), m_offset(offset), m_bl(bl) {
+	       bufferlist *bl, size_t sparse_size)
+      : m_throttle(throttle), m_dest(dest), m_offset(offset), m_bl(bl),
+      m_sparse_size(sparse_size) {
       m_throttle->start_op();
     }
     void finish(int r) override {
@@ -1702,13 +1539,47 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	return;
       }
 
-      Context *ctx = new C_CopyWrite(m_throttle, m_bl);
-      auto comp = io::AioCompletion::create(ctx);
+      if (!m_sparse_size) {
+	m_sparse_size = (1 << m_dest->order);
+      }
 
-      // coordinate through AIO WQ to ensure lock is acquired if needed
-      m_dest->io_work_queue->aio_write(comp, m_offset, m_bl->length(),
-                                       std::move(*m_bl),
-                                       LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+      auto *throttle = m_throttle;
+      auto *end_op_ctx = new FunctionContext([throttle](int r) {
+	throttle->end_op(r);
+      });
+      auto gather_ctx = new C_Gather(m_dest->cct, end_op_ctx);
+
+      bufferptr m_ptr(m_bl->length());
+      m_bl->rebuild(m_ptr);
+      size_t write_offset = 0;
+      size_t write_length = 0;
+      size_t offset = 0;
+      size_t length = m_bl->length();
+      while (offset < length) {
+	if (util::calc_sparse_extent(m_ptr,
+				     m_sparse_size,
+				     length,
+				     &write_offset,
+				     &write_length,
+				     &offset)) {
+	  bufferptr write_ptr(m_ptr, write_offset, write_length);
+	  bufferlist *write_bl = new bufferlist();
+	  write_bl->push_back(write_ptr);
+	  Context *ctx = new C_CopyWrite(write_bl, gather_ctx->new_sub());
+	  auto comp = io::AioCompletion::create(ctx);
+
+	  // coordinate through AIO WQ to ensure lock is acquired if needed
+	  m_dest->io_work_queue->aio_write(comp, m_offset + write_offset,
+					   write_length,
+					   std::move(*write_bl),
+					   LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+	  write_offset = offset;
+	  write_length = 0;
+	}
+      }
+      delete m_bl;
+      assert(gather_ctx->get_sub_created_count() > 0);
+      gather_ctx->activate();
     }
 
   private:
@@ -1716,9 +1587,10 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ImageCtx *m_dest;
     uint64_t m_offset;
     bufferlist *m_bl;
+    size_t m_sparse_size;
   };
 
-  int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx)
+  int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx, size_t sparse_size)
   {
     src->snap_lock.get_read();
     uint64_t src_size = src->get_image_size(src->snap_id);
@@ -1760,7 +1632,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
       uint64_t len = min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
-      Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
+      Context *ctx = new C_CopyRead(&throttle, dest, offset, bl, sparse_size);
       auto comp = io::AioCompletion::create_and_start(ctx, src,
                                                       io::AIO_TYPE_READ);
       io::ImageRequest<>::aio_read(src, comp, {{offset, len}},
@@ -1774,7 +1646,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return r;
   }
 
-  int snap_set(ImageCtx *ictx, const char *snap_name)
+  int snap_set(ImageCtx *ictx, const cls::rbd::SnapshotNamespace &snap_namespace,
+	       const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
 			 << (snap_name ? snap_name : "NULL") << dendl;
@@ -1785,7 +1658,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond ctx;
     std::string name(snap_name == nullptr ? "" : snap_name);
-    ictx->state->snap_set(name, &ctx);
+    ictx->state->snap_set(snap_namespace, name, &ctx);
 
     int r = ctx.wait();
     if (r < 0) {

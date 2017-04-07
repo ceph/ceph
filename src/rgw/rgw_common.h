@@ -17,21 +17,9 @@
 #define CEPH_RGW_COMMON_H
 
 #include "common/ceph_crypto.h"
-
-#include "common/debug.h"
 #include "common/perf_counters.h"
-
 #include "acconfig.h"
-
-#include <errno.h>
-#include <string.h>
-#include <string>
-#include <map>
-#include <boost/utility/string_ref.hpp>
-#include "include/types.h"
-#include "include/utime.h"
 #include "rgw_acl.h"
-#include "rgw_basic_types.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"
@@ -325,7 +313,7 @@ class RGWHTTPArgs
   void get_bool(const char *name, bool *val, bool def_val);
 
   /** Get the value for specific system argument parameter */
-  string sys_get(const string& name, bool *exists = nullptr);
+  std::string sys_get(const string& name, bool *exists = nullptr) const;
 
   /** see if a parameter is contained in this RGWHTTPArgs */
   bool exists(const char *name) const {
@@ -337,7 +325,9 @@ class RGWHTTPArgs
   map<string, string>& get_params() {
     return val_map;
   }
-  map<string, string>& get_sub_resources() { return sub_resources; }
+  const std::map<std::string, std::string>& get_sub_resources() const {
+    return sub_resources;
+  }
   unsigned get_num_params() const {
     return val_map.size();
   }
@@ -459,6 +449,8 @@ enum RGWOpType {
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA,
   RGW_OP_GET_OBJ_LAYOUT,
+
+  RGW_OP_BULK_UPLOAD
 };
 
 class RGWAccessControlPolicy;
@@ -1332,10 +1324,16 @@ struct req_state;
 
 class RGWEnv;
 
+/* Namespaced forward declarations. */
 namespace rgw {
-namespace io {
-class BasicClient;
-}
+  namespace auth {
+    namespace s3 {
+      class RGWGetPolicyV2Extractor;
+    }
+  }
+  namespace io {
+    class BasicClient;
+  }
 }
 
 struct req_info {
@@ -1693,7 +1691,6 @@ struct req_state {
   bool enable_usage_log;
   uint8_t defer_to_bucket_acls;
   uint32_t perm_mask;
-  utime_t header_time;
 
   /* Set once when url_bucket is parsed and not violated thereafter. */
   string account_name;
@@ -1724,11 +1721,32 @@ struct req_state {
 
   RGWUserInfo *user;
 
-  /* Object having the knowledge about an authenticated identity and allowing
-   * to apply it during the authorization phase (verify_permission() methods
-   * of a given RGWOp). Thus, it bounds authentication and authorization steps
-   * through a well-defined interface. For more details, see rgw_auth.h. */
-  std::unique_ptr<RGWIdentityApplier> auth_identity;
+  struct {
+    /* TODO(rzarzynski): switch out to the static_ptr for both members. */
+
+    /* Object having the knowledge about an authenticated identity and allowing
+     * to apply it during the authorization phase (verify_permission() methods
+     * of a given RGWOp). Thus, it bounds authentication and authorization steps
+     * through a well-defined interface. For more details, see rgw_auth.h. */
+    std::unique_ptr<rgw::auth::Identity> identity;
+
+    std::unique_ptr<rgw::auth::Completer> completer;
+
+    /* A container for credentials of the S3's browser upload. It's necessary
+     * because: 1) the ::authenticate() method of auth engines and strategies
+     * take req_state only; 2) auth strategies live much longer than RGWOps -
+     * there is no way to pass additional data dependencies through ctors. */
+    class {
+      /* Writer. */
+      friend class RGWPostObj_ObjStore_S3;
+      /* Reader. */
+      friend class rgw::auth::s3::RGWGetPolicyV2Extractor;
+
+      std::string access_key;
+      std::string signature;
+      ceph::bufferlist encoded_policy;
+    } s3_postobj_creds;
+  } auth;
 
   std::unique_ptr<RGWAccessControlPolicy> user_acl;
   RGWAccessControlPolicy *bucket_acl;

@@ -48,9 +48,9 @@ TEST(BlueFS, mkfs) {
   string fn = get_temp_bdev(size);
   uuid_d fsid;
   BlueFS fs(g_ceph_context);
-  fs.add_block_device(BlueFS::BDEV_DB, fn);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
-  fs.mkfs(fsid);
+  ASSERT_EQ(0, fs.mkfs(fsid));
   rm_temp_bdev(fn);
 }
 
@@ -194,7 +194,7 @@ void write_single_file(BlueFS &fs, uint64_t rationed_bytes)
     stringstream ss;
     string dir = "dir.test";
     string file = "testfile";
-    int r=0, j=0;
+    int r=0;
     uint64_t written_bytes = 0;
     rationed_bytes -= ALLOC_SIZE;
     while (1) {
@@ -211,7 +211,6 @@ void write_single_file(BlueFS &fs, uint64_t rationed_bytes)
       }
       written_bytes += g_conf->bluefs_alloc_size;
       fs.close_writer(h);
-      j++;
       if ((rationed_bytes - written_bytes) <= g_conf->bluefs_alloc_size) {
         break;
       }

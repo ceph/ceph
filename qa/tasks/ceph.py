@@ -39,6 +39,7 @@ def generate_caps(type_):
     defaults = dict(
         osd=dict(
             mon='allow *',
+            mgr='allow *',
             osd='allow *',
         ),
         mgr=dict(
@@ -46,11 +47,13 @@ def generate_caps(type_):
         ),
         mds=dict(
             mon='allow *',
+            mgr='allow *',
             osd='allow *',
             mds='allow',
         ),
         client=dict(
             mon='allow rw',
+            mgr='allow r',
             osd='allow rwx',
             mds='allow',
         ),
@@ -542,6 +545,7 @@ def cluster(ctx, config):
             '--cap', 'mon', 'allow *',
             '--cap', 'osd', 'allow *',
             '--cap', 'mds', 'allow *',
+            '--cap', 'mgr', 'allow *',
             keyring_path,
         ],
     )
@@ -596,34 +600,35 @@ def cluster(ctx, config):
         ),
     )
 
-    log.info('Setting up mgr nodes...')
-    mgrs = ctx.cluster.only(teuthology.is_type('mgr', cluster_name))
-    for remote, roles_for_host in mgrs.remotes.iteritems():
-        for role in teuthology.cluster_roles_of_type(roles_for_host, 'mgr',
-                                                     cluster_name):
-            _, _, id_ = teuthology.split_role(role)
-            mgr_dir = '/var/lib/ceph/mgr/{cluster}-{id}'.format(
-                cluster=cluster_name,
-                id=id_,
-            )
-            remote.run(
-                args=[
-                    'sudo',
-                    'mkdir',
-                    '-p',
-                    mgr_dir,
-                    run.Raw('&&'),
-                    'sudo',
-                    'adjust-ulimits',
-                    'ceph-coverage',
-                    coverage_dir,
-                    'ceph-authtool',
-                    '--create-keyring',
-                    '--gen-key',
-                    '--name=mgr.{id}'.format(id=id_),
-                    mgr_dir + '/keyring',
-                ],
-            )
+    if not config.get('skip_mgr_daemons', False):
+        log.info('Setting up mgr nodes...')
+        mgrs = ctx.cluster.only(teuthology.is_type('mgr', cluster_name))
+        for remote, roles_for_host in mgrs.remotes.iteritems():
+            for role in teuthology.cluster_roles_of_type(roles_for_host, 'mgr',
+                                                         cluster_name):
+                _, _, id_ = teuthology.split_role(role)
+                mgr_dir = '/var/lib/ceph/mgr/{cluster}-{id}'.format(
+                    cluster=cluster_name,
+                    id=id_,
+                )
+                remote.run(
+                    args=[
+                        'sudo',
+                        'mkdir',
+                        '-p',
+                        mgr_dir,
+                        run.Raw('&&'),
+                        'sudo',
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        coverage_dir,
+                        'ceph-authtool',
+                        '--create-keyring',
+                        '--gen-key',
+                        '--name=mgr.{id}'.format(id=id_),
+                        mgr_dir + '/keyring',
+                    ],
+                )
 
     log.info('Setting up mds nodes...')
     mdss = ctx.cluster.only(teuthology.is_type('mds', cluster_name))
@@ -787,6 +792,8 @@ def cluster(ctx, config):
     keys = []
     for remote, roles_for_host in ctx.cluster.remotes.iteritems():
         for type_ in ['mgr',  'mds', 'osd']:
+            if type_ == 'mgr' and config.get('skip_mgr_daemons', False):
+                continue
             for role in teuthology.cluster_roles_of_type(roles_for_host, type_, cluster_name):
                 _, _, id_ = teuthology.split_role(role)
                 data = teuthology.get_file(
@@ -1137,13 +1144,18 @@ def run_daemon(ctx, config, type_):
 
             run_cmd.extend(run_cmd_tail)
 
-            ctx.daemons.add_daemon(remote, type_, id_,
-                                   cluster=cluster_name,
-                                   args=run_cmd,
-                                   logger=log.getChild(role),
-                                   stdin=run.PIPE,
-                                   wait=False,
-                                   )
+            # always register mgr; don't necessarily start
+            ctx.daemons.register_daemon(
+                remote, type_, id_,
+                cluster=cluster_name,
+                args=run_cmd,
+                logger=log.getChild(role),
+                stdin=run.PIPE,
+                wait=False
+            )
+            if type_ != 'mgr' or not config.get('skip_mgr_daemons', False):
+                role = cluster_name + '.' + type_
+                ctx.daemons.get_daemon(type_, id_, cluster_name).restart()
 
     try:
         yield
@@ -1547,6 +1559,7 @@ def task(ctx, config):
             mount_options=config.get('mount_options', None),
             block_journal=config.get('block_journal', None),
             tmpfs_journal=config.get('tmpfs_journal', None),
+            skip_mgr_daemons=config.get('skip_mgr_daemons', False),
             log_whitelist=config.get('log-whitelist', []),
             cpu_profile=set(config.get('cpu_profile', []),),
             cluster=config['cluster'],

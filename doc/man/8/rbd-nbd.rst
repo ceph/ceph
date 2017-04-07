@@ -9,7 +9,7 @@
 Synopsis
 ========
 
-| **rbd-nbd** [-c conf] [--nbds_max *limit*] [--read-only] [--device *nbd device*] map *image-spec* | *snap-spec*
+| **rbd-nbd** [-c conf] [--read-only] [--device *nbd device*] [--nbds_max *limit*] [--max_part *limit*] [--exclusive] map *image-spec* | *snap-spec*
 | **rbd-nbd** unmap *nbd device*
 | **rbd-nbd** list-mapped
 
@@ -28,10 +28,22 @@ Options
    Use *ceph.conf* configuration file instead of the default
    ``/etc/ceph/ceph.conf`` to determine monitor addresses during startup.
 
+.. option:: --read-only
+
+   Map read-only.
+
 .. option:: --nbds_max *limit*
 
    Override the parameter of NBD kernel module when modprobe, used to
    limit the count of nbd device.
+
+.. option:: --max_part *limit*
+
+    Override for module param nbds_max.
+
+.. option:: --exclusive
+
+   Forbid writes by other clients.
 
 Image and snap specs
 ====================

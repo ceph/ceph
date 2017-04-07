@@ -18,6 +18,12 @@
 #include <iostream>
 #include <time.h>
 #include <sys/mount.h>
+#include <boost/scoped_ptr.hpp>
+#include <boost/random/mersenne_twister.hpp>
+#include <boost/random/uniform_int.hpp>
+#include <boost/random/binomial_distribution.hpp>
+#include <gtest/gtest.h>
+
 #include "os/ObjectStore.h"
 #include "os/filestore/FileStore.h"
 #if defined(HAVE_LIBAIO)
@@ -30,16 +36,14 @@
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/stringify.h"
-#include <boost/scoped_ptr.hpp>
-#include <boost/random/mersenne_twister.hpp>
-#include <boost/random/uniform_int.hpp>
-#include <boost/random/binomial_distribution.hpp>
-#include <gtest/gtest.h>
 
 #include "include/unordered_map.h"
 #include "store_test_fixture.h"
 
+
 typedef boost::mt11213b gen_type;
+
+#define dout_context g_ceph_context
 
 #if GTEST_HAS_PARAM_TEST
 
@@ -53,6 +57,9 @@ static bool bl_eq(bufferlist& expected, bufferlist& actual)
     cout << "--- buffer lengths mismatch " << std::hex
          << "expected 0x" << expected.length() << " != actual 0x"
          << actual.length() << std::dec << std::endl;
+    derr << "--- buffer lengths mismatch " << std::hex
+         << "expected 0x" << expected.length() << " != actual 0x"
+         << actual.length() << std::dec << dendl;
   }
   auto len = MIN(expected.length(), actual.length());
   while ( first<len && expected[first] == actual[first])
@@ -64,6 +71,9 @@ static bool bl_eq(bufferlist& expected, bufferlist& actual)
     cout << "--- buffer mismatch between offset 0x" << std::hex << first
          << " and 0x" << last << ", total 0x" << len << std::dec
          << std::endl;
+    derr << "--- buffer mismatch between offset 0x" << std::hex << first
+         << " and 0x" << last << ", total 0x" << len << std::dec
+         << dendl;
     cout << "--- expected:\n";
     expected.hexdump(cout);
     cout << "--- actual:\n";
@@ -1776,6 +1786,61 @@ TEST_P(StoreTest, ManySmallWrite) {
   }
 }
 
+TEST_P(StoreTest, MultiSmallWriteSameBlock) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl;
+  bl.append("short");
+  C_SaferCond c, d;
+  // touch same block in both same transaction, tls, and pipelined txns
+  {
+    ObjectStore::Transaction t, u;
+    t.write(cid, a, 0, 5, bl, 0);
+    t.write(cid, a, 5, 5, bl, 0);
+    t.write(cid, a, 4094, 5, bl, 0);
+    t.write(cid, a, 9000, 5, bl, 0);
+    u.write(cid, a, 10, 5, bl, 0);
+    u.write(cid, a, 7000, 5, bl, 0);
+    vector<ObjectStore::Transaction> v = {t, u};
+    store->queue_transactions(&osr, v, nullptr, &c);
+  }
+  {
+    ObjectStore::Transaction t, u;
+    t.write(cid, a, 40, 5, bl, 0);
+    t.write(cid, a, 45, 5, bl, 0);
+    t.write(cid, a, 4094, 5, bl, 0);
+    t.write(cid, a, 6000, 5, bl, 0);
+    u.write(cid, a, 610, 5, bl, 0);
+    u.write(cid, a, 11000, 5, bl, 0);
+    vector<ObjectStore::Transaction> v = {t, u};
+    store->queue_transactions(&osr, v, nullptr, &d);
+  }
+  c.wait();
+  d.wait();
+  {
+    bufferlist bl2;
+    r = store->read(cid, a, 0, 16000, bl2);
+    ASSERT_GE(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, SmallSkipFront) {
   ObjectStore::Sequencer osr("test");
   int r;
@@ -1823,7 +1888,7 @@ TEST_P(StoreTest, SmallSkipFront) {
   }
 }
 
-TEST_P(StoreTest, AppendWalVsTailCache) {
+TEST_P(StoreTest, AppendDeferredVsTailCache) {
   ObjectStore::Sequencer osr("test");
   int r;
   coll_t cid;
@@ -1836,7 +1901,7 @@ TEST_P(StoreTest, AppendWalVsTailCache) {
     ASSERT_EQ(r, 0);
   }
   unsigned min_alloc = g_conf->bluestore_min_alloc_size;
-  g_conf->set_val("bluestore_inject_wal_apply_delay", "1.0");
+  g_conf->set_val("bluestore_inject_deferred_apply_delay", "1.0");
   g_ceph_context->_conf->apply_changes(NULL);
   unsigned size = min_alloc / 3;
   bufferptr bpa(size);
@@ -1896,7 +1961,7 @@ TEST_P(StoreTest, AppendWalVsTailCache) {
     r = store->apply_transaction(&osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  g_conf->set_val("bluestore_inject_wal_apply_delay", "0");
+  g_conf->set_val("bluestore_inject_deferred_apply_delay", "0");
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
@@ -3150,8 +3215,9 @@ TEST_P(StoreTest, ManyObjectTest) {
   }
   cerr << "listed.size() is " << listed.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
-  if (listed2.size())
+  if (listed2.size()) {
     ASSERT_EQ(listed.size(), listed2.size());
+  }
   for (set<ghobject_t>::iterator i = listed.begin();
        i != listed.end();
        ++i) {
@@ -3512,11 +3578,8 @@ public:
     ++in_flight;
     in_flight_objects.insert(old_obj);
 
-    // *copy* the data buffer, since we may modify it later.
     contents[new_obj].attrs = contents[old_obj].attrs;
-    contents[new_obj].data.clear();
-    contents[new_obj].data.append(contents[old_obj].data.c_str(),
-				  contents[old_obj].data.length());
+    contents[new_obj].data = contents[old_obj].data;
     contents.erase(old_obj);
     int status = store->queue_transaction(
       osr, std::move(t),
@@ -3549,12 +3612,12 @@ public:
     ++in_flight;
     in_flight_objects.insert(old_obj);
 
-    // *copy* the data buffer, since we may modify it later.
     contents[new_obj].attrs = contents[old_obj].attrs;
-    contents[new_obj].data.clear();
-    contents[new_obj].data.append(contents[old_obj].data.c_str(),
-				  contents[old_obj].data.length());
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnClone(this, old_obj, new_obj));
+    contents[new_obj].data = contents[old_obj].data;
+
+    int status = store->queue_transaction(
+      osr, std::move(t),
+      new C_SyntheticOnClone(this, old_obj, new_obj));
     return status;
   }
 
@@ -3617,13 +3680,6 @@ public:
       }
     }
 
-    // *copy* the data buffer, since we may modify it later.
-    {
-      bufferlist t;
-      t.append(bl.c_str(), bl.length());
-      t.swap(bl);
-    }
-
     bufferlist& dstdata = contents[new_obj].data;
     if (dstdata.length() <= dstoff) {
       if (bl.length() > 0) {
@@ -3641,8 +3697,173 @@ public:
       value.swap(dstdata);
     }
 
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnClone(this, old_obj, new_obj));
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnClone(this, old_obj, new_obj));
     return status;
+  }
+
+
+  int write() {
+    Mutex::Locker locker(lock);
+    EnterExit ee("write");
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready();
+
+    ghobject_t new_obj = get_uniform_random_object();
+    available_objects.erase(new_obj);
+    ObjectStore::Transaction t;
+
+    boost::uniform_int<> u1(0, max_object_len - max_write_len);
+    boost::uniform_int<> u2(0, max_write_len);
+    uint64_t offset = u1(*rng);
+    uint64_t len = u2(*rng);
+    bufferlist bl;
+    if (write_alignment) {
+      offset = ROUND_UP_TO(offset, write_alignment);
+      len = ROUND_UP_TO(len, write_alignment);
+    }
+
+    filled_byte_array(bl, len);
+
+    bufferlist& data = contents[new_obj].data;
+    if (data.length() <= offset) {
+      if (len > 0) {
+        data.append_zero(offset-data.length());
+        data.append(bl);
+      }
+    } else {
+      bufferlist value;
+      assert(data.length() > offset);
+      data.copy(0, offset, value);
+      value.append(bl);
+      if (value.length() < data.length())
+        data.copy(value.length(),
+		  data.length()-value.length(), value);
+      value.swap(data);
+    }
+
+    t.write(cid, new_obj, offset, len, bl);
+    ++in_flight;
+    in_flight_objects.insert(new_obj);
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnReadable(this, new_obj));
+    return status;
+  }
+
+  int truncate() {
+    Mutex::Locker locker(lock);
+    EnterExit ee("truncate");
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready();
+
+    ghobject_t obj = get_uniform_random_object();
+    available_objects.erase(obj);
+    ObjectStore::Transaction t;
+
+    boost::uniform_int<> choose(0, max_object_len);
+    size_t len = choose(*rng);
+    if (write_alignment) {
+      len = ROUND_UP_TO(len, write_alignment);
+    }
+
+    t.truncate(cid, obj, len);
+    ++in_flight;
+    in_flight_objects.insert(obj);
+    bufferlist& data = contents[obj].data;
+    if (data.length() <= len) {
+      data.append_zero(len - data.length());
+    } else {
+      bufferlist bl;
+      data.copy(0, len, bl);
+      bl.swap(data);
+    }
+
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnReadable(this, obj));
+    return status;
+  }
+
+  int zero() {
+    Mutex::Locker locker(lock);
+    EnterExit ee("zero");
+    if (!can_unlink())
+      return -ENOENT;
+    wait_for_ready();
+
+    ghobject_t new_obj = get_uniform_random_object();
+    available_objects.erase(new_obj);
+    ObjectStore::Transaction t;
+
+    boost::uniform_int<> u1(0, max_object_len - max_write_len);
+    boost::uniform_int<> u2(0, max_write_len);
+    uint64_t offset = u1(*rng);
+    uint64_t len = u2(*rng);
+    if (write_alignment) {
+      offset = ROUND_UP_TO(offset, write_alignment);
+      len = ROUND_UP_TO(len, write_alignment);
+    }
+
+    auto& data = contents[new_obj].data;
+    if (data.length() < offset + len) {
+      data.append_zero(offset+len-data.length());
+    }
+    bufferlist n;
+    n.substr_of(data, 0, offset);
+    n.append_zero(len);
+    if (data.length() > offset + len)
+      data.copy(offset + len, data.length() - offset - len, n);
+    data.swap(n);
+
+    t.zero(cid, new_obj, offset, len);
+    ++in_flight;
+    in_flight_objects.insert(new_obj);
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnReadable(this, new_obj));
+    return status;
+  }
+
+  void read() {
+    EnterExit ee("read");
+    boost::uniform_int<> u1(0, max_object_len/2);
+    boost::uniform_int<> u2(0, max_object_len);
+    uint64_t offset = u1(*rng);
+    uint64_t len = u2(*rng);
+    if (offset > len)
+      swap(offset, len);
+
+    ghobject_t obj;
+    bufferlist expected;
+    int r;
+    {
+      Mutex::Locker locker(lock);
+      EnterExit ee("read locked");
+      if (!can_unlink())
+        return ;
+      wait_for_ready();
+
+      obj = get_uniform_random_object();
+      expected = contents[obj].data;
+    }
+    bufferlist bl, result;
+    if (0) cout << " obj " << obj
+	 << " size " << expected.length()
+	 << " offset " << offset
+	 << " len " << len << std::endl;
+    r = store->read(cid, obj, offset, len, result);
+    if (offset >= expected.length()) {
+      ASSERT_EQ(r, 0);
+    } else {
+      size_t max_len = expected.length() - offset;
+      if (len > max_len)
+        len = max_len;
+      assert(len == result.length());
+      ASSERT_EQ(len, result.length());
+      expected.copy(offset, len, bl);
+      ASSERT_EQ(r, (int)len);
+      ASSERT_TRUE(bl_eq(bl, result));
+    }
   }
 
   int setattrs() {
@@ -3688,7 +3909,8 @@ public:
     t.setattrs(cid, obj, attrs);
     ++in_flight;
     in_flight_objects.insert(obj);
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, obj));
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnReadable(this, obj));
     return status;
   }
 
@@ -3786,130 +4008,8 @@ public:
     contents[obj].attrs.erase(it->first);
     ++in_flight;
     in_flight_objects.insert(obj);
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, obj));
-    return status;
-  }
-
-  int write() {
-    Mutex::Locker locker(lock);
-    EnterExit ee("write");
-    if (!can_unlink())
-      return -ENOENT;
-    wait_for_ready();
-
-    ghobject_t new_obj = get_uniform_random_object();
-    available_objects.erase(new_obj);
-    ObjectStore::Transaction t;
-
-    boost::uniform_int<> u1(0, max_object_len - max_write_len);
-    boost::uniform_int<> u2(0, max_write_len);
-    uint64_t offset = u1(*rng);
-    uint64_t len = u2(*rng);
-    bufferlist bl;
-    if (write_alignment) {
-      offset = ROUND_UP_TO(offset, write_alignment);
-      len = ROUND_UP_TO(len, write_alignment);
-    }
-
-    filled_byte_array(bl, len);
-
-    bufferlist& data = contents[new_obj].data;
-    if (data.length() <= offset) {
-      if (len > 0) {
-        data.append_zero(offset-data.length());
-        data.append(bl);
-      }
-    } else {
-      bufferlist value;
-      assert(data.length() > offset);
-      data.copy(0, offset, value);
-      value.append(bl);
-      if (value.length() < data.length())
-        data.copy(value.length(),
-		  data.length()-value.length(), value);
-      value.swap(data);
-    }
-
-    t.write(cid, new_obj, offset, len, bl);
-    ++in_flight;
-    in_flight_objects.insert(new_obj);
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, new_obj));
-    return status;
-  }
-
-  void read() {
-    EnterExit ee("read");
-    boost::uniform_int<> u1(0, max_object_len/2);
-    boost::uniform_int<> u2(0, max_object_len);
-    uint64_t offset = u1(*rng);
-    uint64_t len = u2(*rng);
-    if (offset > len)
-      swap(offset, len);
-
-    ghobject_t obj;
-    bufferlist expected;
-    int r;
-    {
-      Mutex::Locker locker(lock);
-      EnterExit ee("read locked");
-      if (!can_unlink())
-        return ;
-      wait_for_ready();
-
-      obj = get_uniform_random_object();
-      expected = contents[obj].data;
-    }
-    bufferlist bl, result;
-    if (0) cout << " obj " << obj
-	 << " size " << expected.length()
-	 << " offset " << offset
-	 << " len " << len << std::endl;
-    r = store->read(cid, obj, offset, len, result);
-    if (offset >= expected.length()) {
-      ASSERT_EQ(r, 0);
-    } else {
-      size_t max_len = expected.length() - offset;
-      if (len > max_len)
-        len = max_len;
-      assert(len == result.length());
-      ASSERT_EQ(len, result.length());
-      expected.copy(offset, len, bl);
-      ASSERT_EQ(r, (int)len);
-      ASSERT_TRUE(bl_eq(bl, result));
-    }
-  }
-
-  int truncate() {
-    Mutex::Locker locker(lock);
-    EnterExit ee("truncate");
-    if (!can_unlink())
-      return -ENOENT;
-    wait_for_ready();
-
-    ghobject_t obj = get_uniform_random_object();
-    available_objects.erase(obj);
-    ObjectStore::Transaction t;
-
-    boost::uniform_int<> choose(0, max_object_len);
-    size_t len = choose(*rng);
-    if (write_alignment) {
-      len = ROUND_UP_TO(len, write_alignment);
-    }
-
-    bufferlist bl;
-
-    t.truncate(cid, obj, len);
-    ++in_flight;
-    in_flight_objects.insert(obj);
-    bufferlist& data = contents[obj].data;
-    if (data.length() <= len)
-      data.append_zero(len - data.length());
-    else {
-      data.copy(0, len, bl);
-      bl.swap(data);
-    }
-
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, obj));
+    int status = store->queue_transaction(
+      osr, std::move(t), new C_SyntheticOnReadable(this, obj));
     return status;
   }
 
@@ -4026,38 +4126,6 @@ public:
     in_flight_objects.insert(to_remove);
     contents.erase(to_remove);
     int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, to_remove));
-    return status;
-  }
-
-  int zero() {
-    Mutex::Locker locker(lock);
-    EnterExit ee("zero");
-    if (!can_unlink())
-      return -ENOENT;
-    wait_for_ready();
-
-    ghobject_t new_obj = get_uniform_random_object();
-    available_objects.erase(new_obj);
-    ObjectStore::Transaction t;
-
-    boost::uniform_int<> u1(0, max_object_len - max_write_len);
-    boost::uniform_int<> u2(0, max_write_len);
-    uint64_t offset = u1(*rng);
-    uint64_t len = u2(*rng);
-    if (write_alignment) {
-      offset = ROUND_UP_TO(offset, write_alignment);
-      len = ROUND_UP_TO(len, write_alignment);
-    }
-
-    if (contents[new_obj].data.length() < offset + len) {
-      contents[new_obj].data.append_zero(offset+len-contents[new_obj].data.length());
-    }
-    contents[new_obj].data.zero(offset, len);
-
-    t.zero(cid, new_obj, offset, len);
-    ++in_flight;
-    in_flight_objects.insert(new_obj);
-    int status = store->queue_transaction(osr, std::move(t), new C_SyntheticOnReadable(this, new_obj));
     return status;
   }
 
@@ -4292,7 +4360,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixNoCsum) {
   do_matrix(m, store, doSyntheticTest);
 }
 
-TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferWAL) {
+TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferDeferred) {
   if (string(GetParam()) != "bluestore")
     return;
 
@@ -4303,9 +4371,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferWAL) {
     { "alignment", "512", 0 },
     { "bluestore_max_blob_size", "262144", 0 },
     { "bluestore_compression_mode", "force", "none", 0},
-    { "bluestore_prefer_wal_size", "32768", "0", 0},
-    { "bluestore_sync_wal_apply_hdd", "false", 0},
-    { "bluestore_sync_wal_apply_ssd", "false", 0},
+    { "bluestore_prefer_deferred_size", "32768", "0", 0},
     { 0 },
   };
   do_matrix(m, store, doSyntheticTest);
@@ -4918,7 +4984,8 @@ void colsplittest(
 		     CEPH_NOSNAP,
 		     i<<common_suffix_size,
 		     52, ""));
-      t.write(cid, a, 0, small.length(), small);
+      t.write(cid, a, 0, small.length(), small,
+	      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
       if (clones) {
 	objname << "-clone";
 	ghobject_t b(hobject_t(
@@ -5632,6 +5699,7 @@ TEST_P(StoreTest, TooManyBlobsTest) {
   ASSERT_EQ(res_stat.allocated, max_object);
 }
 
+#if defined(HAVE_LIBAIO)
 void get_mempool_stats(uint64_t* total_bytes, uint64_t* total_items)
 {
   uint64_t onode_allocated = mempool::bluestore_meta_onode::allocated_bytes();
@@ -5687,6 +5755,13 @@ TEST_P(StoreTestSpecificAUSize, OnodeSizeTracking) {
   ASSERT_NE(total_bytes, 0u);
   ASSERT_EQ(total_onodes, 1u);
 
+  {
+    ObjectStore::Transaction t;
+    t.truncate(cid, hoid, 0);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+ 
   for(size_t i = 0; i < 1; ++i) {
     bufferlist bl;
     bl.append(std::string(block_size * (i+1), 'a'));
@@ -5740,6 +5815,437 @@ TEST_P(StoreTestSpecificAUSize, OnodeSizeTracking) {
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->set_val("bluestore_csum_type", "crc32c");
 
+}
+
+TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+  g_conf->set_val("bluestore_max_blob_size", "65536");
+  g_conf->apply_changes(NULL);
+
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test_hint", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size * 2, 'a'));
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // overwrite at the beginning
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'b'));
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // append
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size * 2, 'c'));
+    t.write(cid, hoid, block_size * 2, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // append with a gap
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size * 2, 'd'));
+    t.write(cid, hoid, block_size * 5, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // We need to issue a read to trigger cache stat update that refresh
+    // perf counters. additionally we need to wait some time for mempool
+    // thread to update stats.
+    sleep(1);
+    bufferlist bl, expected;
+    r = store->read(cid, hoid, 0, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'b'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_extents), 2u);
+  }
+  {
+    // overwrite at end
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size * 2, 'e'));
+
+    // Currently we are unable to reuse blob when overwriting in a single step
+    t.write(cid, hoid, block_size * 6, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // We need to issue a read to trigger cache stat update that refresh
+    // perf counters. additionally we need to wait some time for mempool
+    // thread to update stats.
+    sleep(1);
+    bufferlist bl, expected;
+    r = store->read(cid, hoid, 0, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'b'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_extents), 2u);
+  }
+  {
+    // fill the gap
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'f'));
+
+    t.write(cid, hoid, block_size * 4, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // we need to wait some time for mempool
+    // thread to update stats to be able to check blob/extent numbers from
+    // perf counters.
+    sleep(1);
+
+    bufferlist bl, expected;
+    r = store->read(cid, hoid, 0, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'b'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+
+    bl.clear();
+    expected.clear();
+    r = store->read(cid, hoid, block_size, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'a'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+
+    bl.clear();
+    expected.clear();
+    r = store->read(cid, hoid, block_size * 2, block_size * 2, bl);
+    ASSERT_EQ(r, (int)block_size * 2);
+    expected.append(string(block_size * 2, 'c'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+
+    bl.clear();
+    expected.clear();
+    r = store->read(cid, hoid, block_size * 4, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'f'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+
+    bl.clear();
+    expected.clear();
+    r = store->read(cid, hoid, block_size * 5, block_size, bl);
+    ASSERT_EQ(r, (int)block_size);
+    expected.append(string(block_size, 'd'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+
+    bl.clear();
+    expected.clear();
+    r = store->read(cid, hoid, block_size * 5, block_size * 3, bl);
+    ASSERT_EQ(r, (int)block_size * 3);
+    expected.append(string(block_size, 'd'));
+    expected.append(string(block_size * 2, 'e'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+  }
+  ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
+  ASSERT_EQ(logger->get(l_bluestore_extents), 1u);
+
+
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  g_conf->set_val("bluestore_max_blob_size", "524288");
+
+}
+
+TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+  g_conf->set_val("bluestore_max_blob_size", "65536");
+
+  g_conf->apply_changes(NULL);
+
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test_hint", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size * 2, 'a'));
+    t.write(cid, hoid, block_size * 10, bl.length(), bl, 
+            CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // prepend existing
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'b'));
+    t.write(cid, hoid, block_size * 9, bl.length(), bl,
+            CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // We need to issue a read to trigger cache stat update that refresh
+    // perf counters. additionally we need to wait some time for mempool
+    // thread to update stats.
+    sleep(1);
+    bufferlist bl, expected;
+    r = store->read(cid, hoid, block_size * 9, block_size * 2, bl);
+    ASSERT_EQ(r, (int)block_size * 2);
+    expected.append(string(block_size, 'b'));
+    expected.append(string(block_size, 'a'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_extents), 1u);
+  }
+
+
+  {
+    // prepend existing with a gap
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'c'));
+    t.write(cid, hoid, block_size * 7, bl.length(), bl,
+            CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // We need to issue a read to trigger cache stat update that refresh
+    // perf counters. additionally we need to wait some time for mempool
+    // thread to update stats.
+    sleep(1);
+    bufferlist bl, expected;
+    r = store->read(cid, hoid, block_size * 7, block_size * 3, bl);
+    ASSERT_EQ(r, (int)block_size * 3);
+    expected.append(string(block_size, 'c'));
+    expected.append(string(block_size, 0));
+    expected.append(string(block_size, 'b'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_extents), 2u);
+  }
+
+  {
+    // append after existing with a gap
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'd'));
+    t.write(cid, hoid, block_size * 13, bl.length(), bl,
+            CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // We need to issue a read to trigger cache stat update that refresh
+    // perf counters. additionally we need to wait some time for mempool
+    // thread to update stats.
+    sleep(1);
+    bufferlist bl, expected;
+    r = store->read(cid, hoid, block_size * 11, block_size * 3, bl);
+    ASSERT_EQ(r, (int)block_size * 3);
+    expected.append(string(block_size, 'a'));
+    expected.append(string(block_size, 0));
+    expected.append(string(block_size, 'd'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_extents), 3u);
+  }
+
+  {
+    // append twice to the next max_blob slot
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'e'));
+    t.write(cid, hoid, block_size * 17, bl.length(), bl,
+            CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    t.write(cid, hoid, block_size * 19, bl.length(), bl,
+            CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // We need to issue a read to trigger cache stat update that refresh
+    // perf counters. additionally we need to wait some time for mempool
+    // thread to update stats.
+    sleep(1);
+    bufferlist bl, expected;
+    r = store->read(cid, hoid, block_size * 17, block_size * 3, bl);
+    ASSERT_EQ(r, (int)block_size * 3);
+    expected.append(string(block_size, 'e'));
+    expected.append(string(block_size, 0));
+    expected.append(string(block_size, 'e'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    ASSERT_EQ(logger->get(l_bluestore_blobs), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_extents), 5u);
+  }
+  {
+    // fill gaps at the second slot
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'f'));
+    t.write(cid, hoid, block_size * 16, bl.length(), bl,
+            CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    t.write(cid, hoid, block_size * 18, bl.length(), bl,
+            CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // We need to issue a read to trigger cache stat update that refresh
+    // perf counters. additionally we need to wait some time for mempool
+    // thread to update stats.
+    sleep(1);
+    bufferlist bl, expected;
+    r = store->read(cid, hoid, block_size * 16, block_size * 4, bl);
+    ASSERT_EQ(r, (int)block_size * 4);
+    expected.append(string(block_size, 'f'));
+    expected.append(string(block_size, 'e'));
+    expected.append(string(block_size, 'f'));
+    expected.append(string(block_size, 'e'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+    ASSERT_EQ(logger->get(l_bluestore_blobs), 2u);
+    ASSERT_EQ(logger->get(l_bluestore_extents), 4u);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  g_conf->set_val("bluestore_max_blob_size", "524288");
+}
+
+TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
+
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  size_t block_size = 4096;
+  StartDeferred(block_size);
+  g_conf->set_val("bluestore_max_blob_size", "65536");
+  g_conf->apply_changes(NULL);
+
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test_hint", "", CEPH_NOSNAP, 0, -1, ""));
+
+  const PerfCounters* logger = store->get_perf_counters();
+
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(block_size, 'a'));
+    t.write(cid, hoid, 0, bl.length(), bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    t.write(cid, hoid, block_size * 2, bl.length(), bl,
+      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // write small into the gap
+    ObjectStore::Transaction t;
+    bufferlist bl;
+
+    bl.append(std::string(3, 'b'));
+    t.write(cid, hoid, block_size + 1, bl.length(), bl,
+      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    // We need to issue a read to trigger cache stat update that refresh
+    // perf counters. additionally we need to wait some time for mempool
+    // thread to update stats.
+    sleep(1);
+    bufferlist bl, expected;
+    r = store->read(cid, hoid, 0, block_size * 3, bl);
+    ASSERT_EQ(r, (int)block_size * 3);
+    expected.append(string(block_size, 'a'));
+    expected.append(string(1, 0));
+    expected.append(string(3, 'b'));
+    expected.append(string(block_size - 4, 0));
+    expected.append(string(block_size, 'a'));
+    ASSERT_TRUE(bl_eq(expected, bl));
+
+    ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_extents), 3u);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  g_conf->set_val("bluestore_max_blob_size", "524288");
 }
 
 // The test case to reproduce an issue when write happens
@@ -5816,6 +6322,7 @@ TEST_P(StoreTestSpecificAUSize, SmallWriteOnShardedExtents) {
     expected.append(string(0xc70, 'a'));
     ASSERT_TRUE(bl_eq(expected, bl));
     bl.clear();
+
   }
 
   {
@@ -5829,6 +6336,8 @@ TEST_P(StoreTestSpecificAUSize, SmallWriteOnShardedExtents) {
   g_conf->set_val("bluestore_max_target_blob", "524288");
   g_conf->set_val("bluestore_csum_type", "crc32c");
 }
+
+#endif //#if defined(HAVE_LIBAIO)
 
 TEST_P(StoreTest, KVDBHistogramTest) {
   if (string(GetParam()) != "bluestore")

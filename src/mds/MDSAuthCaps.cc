@@ -215,8 +215,8 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
       
 
       // Spec is non-allowing if caller asked for set pool but spec forbids it
-      if (mask & MAY_SET_POOL) {
-        if (!i->spec.allows_set_pool()) {
+      if (mask & MAY_SET_VXATTR) {
+        if (!i->spec.allows_set_vxattr()) {
           continue;
         }
       }

@@ -10,36 +10,54 @@ Synopsis
 ========
 
 | **ceph-disk** [-h] [-v] [--log-stdout] [--prepend-to-path PATH]
-                [--statedir PATH] [--sysconfdir PATH]
-                [--setuser USER] [--setgroup GROUP]
-                ...
+|               [--statedir PATH] [--sysconfdir PATH]
+|               [--setuser USER] [--setgroup GROUP]
+|               ...
 
-| optional arguments:
-  -h, --help            show this help message and exit
-  -v, --verbose         be more verbose
-  --log-stdout          log to stdout
-  --prepend-to-path PATH
-                        prepend PATH to $PATH for backward compatibility (default /usr/bin)
-  --statedir PATH       directory in which ceph state is preserved (default /var/lib/ceph)
-  --sysconfdir PATH     directory in which ceph configuration files are found (default /etc/ceph)
-  --setuser USER        use the given user for subprocesses, rather than ceph or root
-  --setgroup GROUP      use the given group for subprocesses, rather than ceph or root
+optional arguments
+------------------
 
-| subcommands:
+-h, --help          show this help message and exit
+-v, --verbose       be more verbose
+--log-stdout        log to stdout
+--prepend-to-path PATH
+                    prepend PATH to $PATH for backward compatibility (default /usr/bin)
+--statedir PATH     directory in which ceph state is preserved (default /var/lib/ceph)
+--sysconfdir PATH   directory in which ceph configuration files are found (default /etc/ceph)
+--setuser USER      use the given user for subprocesses, rather than ceph or root
+--setgroup GROUP    use the given group for subprocesses, rather than ceph or root
 
-    prepare              Prepare a directory or disk for a Ceph OSD
-    activate             Activate a Ceph OSD
-    activate-lockbox     Activate a Ceph lockbox
-    activate-block       Activate an OSD via its block device
-    activate-journal     Activate an OSD via its journal device
-    activate-all         Activate all tagged OSD partitions
-    list                 List disks, partitions, and Ceph OSDs
-    suppress-activate    Suppress activate on a device (prefix)
-    unsuppress-activate  Stop suppressing activate on a device (prefix)
-    deactivate           Deactivate a Ceph OSD
-    destroy              Destroy a Ceph OSD
-    zap                  Zap/erase/destroy a device's partition table (and contents)
-    trigger              Trigger an event (caled by udev)
+subcommands
+-----------
+
+prepare
+    Prepare a directory or disk for a Ceph OSD
+activate
+    Activate a Ceph OSD
+activate-lockbox
+    Activate a Ceph lockbox
+activate-block
+    Activate an OSD via its block device
+activate-journal
+    Activate an OSD via its journal device
+activate-all
+    Activate all tagged OSD partitions
+list
+    List disks, partitions, and Ceph OSDs
+suppress-activate
+    Suppress activate on a device (prefix)
+unsuppress-activate
+    Stop suppressing activate on a device (prefix)
+deactivate
+    Deactivate a Ceph OSD
+destroy
+    Destroy a Ceph OSD
+zap
+    Zap/erase/destroy a device's partition table (and contents)
+trigger
+    Trigger an event (caled by udev)
+fix
+    Fix SELinux labels and/or file permissions
 
 Description
 ===========

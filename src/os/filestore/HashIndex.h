@@ -146,43 +146,43 @@ public:
       split_multiplier(split_multiple) {}
 
   /// @see CollectionIndex
-  uint32_t collection_version() { return index_version; }
+  uint32_t collection_version() override { return index_version; }
 
   /// @see CollectionIndex
-  int cleanup();
+  int cleanup() override;
 
   /// @see CollectionIndex
-  int prep_delete();
+  int prep_delete() override;
 
   /// @see CollectionIndex
   int _split(
     uint32_t match,
     uint32_t bits,
     CollectionIndex* dest
-    );
+    ) override;
 
   /// @see CollectionIndex
-  virtual int apply_layout_settings();
+  int apply_layout_settings() override;
 
 protected:
-  int _init();
+  int _init() override;
 
   int _created(
     const vector<string> &path,
     const ghobject_t &oid,
     const string &mangled_name
-    );
+    ) override;
   int _remove(
     const vector<string> &path,
     const ghobject_t &oid,
     const string &mangled_name
-    );
+    ) override;
   int _lookup(
     const ghobject_t &oid,
     vector<string> *path,
     string *mangled_name,
     int *hardlink
-    );
+    ) override;
 
   /**
    * Pre-hash the collection to create folders according to the expected number
@@ -191,7 +191,7 @@ protected:
   int _pre_hash_collection(
       uint32_t pg_num,
       uint64_t expected_num_objs
-      );
+      ) override;
 
   int _collection_list_partial(
     const ghobject_t &start,
@@ -199,7 +199,7 @@ protected:
     int max_count,
     vector<ghobject_t> *ls,
     ghobject_t *next
-    );
+    ) override;
 private:
   /// Internal recursively remove path and its subdirs
   int _recursive_remove(

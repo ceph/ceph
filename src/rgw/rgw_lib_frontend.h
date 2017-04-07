@@ -30,7 +30,7 @@ namespace rgw {
 		  RGWFrontendConfig* _conf) :
       RGWProcess(cct, pe, num_threads, _conf), gen(0), shutdown(false) {}
 
-    void run();
+    void run() override;
     void checkpoint();
 
     void stop() {
@@ -66,7 +66,7 @@ namespace rgw {
     } /* enqueue_req */
 
     /* "regular" requests */
-    void handle_request(RGWRequest* req); // async handler, deletes req
+    void handle_request(RGWRequest* req) override; // async handler, deletes req
     int process_request(RGWLibRequest* req);
     int process_request(RGWLibRequest* req, RGWLibIO* io);
     void set_access_key(RGWAccessKey& key) { access_key = key; }
@@ -81,9 +81,9 @@ namespace rgw {
     RGWLibFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf)
       : RGWProcessFrontend(pe, _conf) {}
 		
-    int init();
+    int init() override;
 
-    virtual void stop() {
+    void stop() override {
       RGWProcessFrontend::stop();
       get_process()->stop();
     }

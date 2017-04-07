@@ -15,12 +15,13 @@ import json
 import socket
 import struct
 import time
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 from ceph_argparse import parse_json_funcsigs, validate_command
 
 COUNTER = 0x8
 LONG_RUNNING_AVG = 0x4
+READ_CHUNK_SIZE = 4096
 
 
 def admin_socket(asok_path, cmd, format=''):
@@ -45,7 +46,10 @@ def admin_socket(asok_path, cmd, format=''):
 
             got = 0
             while got < l:
-                bit = sock.recv(l - got)
+                # recv() receives signed int, i.e max 2GB
+                # workaround by capping READ_CHUNK_SIZE per call.
+                want = min(l - got, READ_CHUNK_SIZE)
+                bit = sock.recv(want)
                 sock_ret += bit
                 got += len(bit)
 
@@ -234,14 +238,18 @@ class DaemonWatcher(object):
         Populate our instance-local copy of the daemon's performance counter
         schema, and work out which stats we will display.
         """
-        self._schema = json.loads(admin_socket(self.asok_path, ["perf", "schema"]).decode('utf-8'))
+        self._schema = json.loads(
+            admin_socket(self.asok_path, ["perf", "schema"]).decode('utf-8'),
+            object_pairs_hook=OrderedDict)
 
         # Build list of which stats we will display, based on which
         # stats have a nickname
-        self._stats = defaultdict(dict)
+        self._stats = OrderedDict()
         for section_name, section_stats in self._schema.items():
             for name, schema_data in section_stats.items():
                 if schema_data.get('nick'):
+                    if section_name not in self._stats:
+                        self._stats[section_name] = OrderedDict()
                     self._stats[section_name][name] = schema_data['nick']
 
     def run(self, interval, count=None, ostr=sys.stdout):

@@ -2,7 +2,7 @@
 # the choice between uds or tcp with mod_proxy_fcgi depends on the distro
 roles:
 - [mon.a, mon.c, osd.0, osd.1, osd.2, client.0]
-- [mon.b, osd.3, osd.4, osd.5, client.1]
+- [mon.b, mgr.x, osd.3, osd.4, osd.5, client.1]
 
 tasks:
 - install:

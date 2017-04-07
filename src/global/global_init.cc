@@ -89,7 +89,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
 {
   std::string conf_file_list;
   std::string cluster = "";
-  CephInitParameters iparams = ceph_argparse_early_args(args, module_type, flags,
+  CephInitParameters iparams = ceph_argparse_early_args(args, module_type,
 							&cluster, &conf_file_list);
   CephContext *cct = common_preinit(iparams, code_env, flags, data_dir_option);
   cct->_conf->cluster = cluster;
@@ -166,24 +166,21 @@ global_init(std::vector < const char * > *alt_def_args,
   if (g_conf->log_flush_on_exit)
     g_ceph_context->_log->set_flush_on_exit();
 
+  // drop privileges?
+  ostringstream priv_ss;
+ 
   // consider --setuser root a no-op, even if we're not root
   if (getuid() != 0) {
     if (g_conf->setuser.length()) {
       cerr << "ignoring --setuser " << g_conf->setuser << " since I am not root"
 	   << std::endl;
-      g_conf->set_val("setuser", "", false, false);
     }
     if (g_conf->setgroup.length()) {
       cerr << "ignoring --setgroup " << g_conf->setgroup
 	   << " since I am not root" << std::endl;
-      g_conf->set_val("setgroup", "", false, false);
     }
-  }
-
-  // drop privileges?
-  ostringstream priv_ss;
-  if (g_conf->setgroup.length() ||
-      g_conf->setuser.length()) {
+  } else if (g_conf->setgroup.length() ||
+             g_conf->setuser.length()) {
     uid_t uid = 0;  // zero means no change; we can only drop privs here.
     gid_t gid = 0;
     std::string uid_string;
@@ -521,7 +518,7 @@ int global_init_preload_erasure_code(const CephContext *cct)
   stringstream ss;
   int r = ErasureCodePluginRegistry::instance().preload(
     plugins,
-    conf->erasure_code_dir,
+    conf->get_val<std::string>("erasure_code_dir"),
     &ss);
   if (r)
     derr << ss.str() << dendl;

@@ -411,13 +411,21 @@ namespace librbd {
     int add_child(librados::IoCtx *ioctx, const std::string &oid,
 		  const ParentSpec &pspec, const std::string &c_imageid)
     {
-      bufferlist in, out;
+      librados::ObjectWriteOperation op;
+      add_child(&op, pspec, c_imageid);
+      return ioctx->operate(oid, &op);
+    }
+
+    void add_child(librados::ObjectWriteOperation *op,
+		  const ParentSpec pspec, const std::string &c_imageid)
+    {
+      bufferlist in;
       ::encode(pspec.pool_id, in);
       ::encode(pspec.image_id, in);
       ::encode(pspec.snap_id, in);
       ::encode(c_imageid, in);
 
-      return ioctx->exec(oid, "rbd", "add_child", in, out);
+      op->exec("rbd", "add_child", in);
     }
 
     void remove_child(librados::ObjectWriteOperation *op,
@@ -1280,20 +1288,35 @@ namespace librbd {
       return 0;
     }
 
+    void mirror_uuid_get_start(librados::ObjectReadOperation *op) {
+      bufferlist bl;
+      op->exec("rbd", "mirror_uuid_get", bl);
+    }
+
+    int mirror_uuid_get_finish(bufferlist::iterator *it,
+                               std::string *uuid) {
+      try {
+        ::decode(*uuid, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
     int mirror_uuid_get(librados::IoCtx *ioctx, std::string *uuid) {
-      bufferlist in_bl;
+      librados::ObjectReadOperation op;
+      mirror_uuid_get_start(&op);
+
       bufferlist out_bl;
-      int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_uuid_get", in_bl,
-                          out_bl);
+      int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
       if (r < 0) {
         return r;
       }
 
-      try {
-        bufferlist::iterator bl_it = out_bl.begin();
-        ::decode(*uuid, bl_it);
-      } catch (const buffer::error &err) {
-        return -EBADMSG;
+      bufferlist::iterator it = out_bl.begin();
+      r = mirror_uuid_get_finish(&it, uuid);
+      if (r < 0) {
+        return r;
       }
       return 0;
     }

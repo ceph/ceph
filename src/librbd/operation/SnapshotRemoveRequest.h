@@ -57,17 +57,20 @@ public:
   };
 
   SnapshotRemoveRequest(ImageCtxT &image_ctx, Context *on_finish,
-		        const std::string &snap_name, uint64_t snap_id);
+			const cls::rbd::SnapshotNamespace &snap_namespace,
+		        const std::string &snap_name,
+			uint64_t snap_id);
 
 protected:
   void send_op() override;
   bool should_complete(int r) override;
 
   journal::Event create_event(uint64_t op_tid) const override {
-    return journal::SnapRemoveEvent(op_tid, m_snap_name);
+    return journal::SnapRemoveEvent(op_tid, m_snap_namespace, m_snap_name);
   }
 
 private:
+  cls::rbd::SnapshotNamespace m_snap_namespace;
   std::string m_snap_name;
   uint64_t m_snap_id;
   State m_state;

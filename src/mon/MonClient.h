@@ -191,6 +191,7 @@ private:
   // authenticate
   std::unique_ptr<AuthClientHandler> auth;
   uint32_t want_keys = 0;
+  uint64_t global_id = 0;
   Cond auth_cond;
   int authenticate_err = 0;
 
@@ -394,11 +395,7 @@ public:
 
   uint64_t get_global_id() const {
     Mutex::Locker l(monc_lock);
-    if (active_con) {
-      return active_con->get_global_id();
-    } else {
-      return 0;
-    }
+    return global_id;
   }
 
   void set_messenger(Messenger *m) { messenger = m; }
@@ -439,14 +436,14 @@ private:
   void handle_mon_command_ack(MMonCommandAck *ack);
 
 public:
-  int start_mon_command(const vector<string>& cmd, const bufferlist& inbl,
+  void start_mon_command(const vector<string>& cmd, const bufferlist& inbl,
 			bufferlist *outbl, string *outs,
 			Context *onfinish);
-  int start_mon_command(int mon_rank,
+  void start_mon_command(int mon_rank,
 			const vector<string>& cmd, const bufferlist& inbl,
 			bufferlist *outbl, string *outs,
 			Context *onfinish);
-  int start_mon_command(const string &mon_name,  ///< mon name, with mon. prefix
+  void start_mon_command(const string &mon_name,  ///< mon name, with mon. prefix
 			const vector<string>& cmd, const bufferlist& inbl,
 			bufferlist *outbl, string *outs,
 			Context *onfinish);

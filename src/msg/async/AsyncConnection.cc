@@ -158,10 +158,12 @@ AsyncConnection::~AsyncConnection()
 
 void AsyncConnection::maybe_start_delay_thread()
 {
-  if (!delay_state &&
-      async_msgr->cct->_conf->ms_inject_delay_type.find(ceph_entity_type_name(peer_type)) != string::npos) {
-    ldout(msgr->cct, 1) << __func__ << " setting up a delay queue" << dendl;
-    delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue, conn_id);
+  if (!delay_state) {
+    auto pos = async_msgr->cct->_conf->get_val<std::string>("ms_inject_delay_type").find(ceph_entity_type_name(peer_type));
+    if (pos != string::npos) {
+      ldout(msgr->cct, 1) << __func__ << " setting up a delay queue" << dendl;
+      delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue, conn_id);
+    }
   }
 }
 
@@ -768,8 +770,10 @@ void AsyncConnection::process()
                                     << message->get_seq() << " " << message
 				    << " " << *message << dendl;
 
-          ack_left.inc();
-          need_dispatch_writer = true;
+          if (!policy.lossy) {
+            ack_left.inc();
+            need_dispatch_writer = true;
+          }
           state = STATE_OPEN;
 
           logger->inc(l_msgr_recv_messages);
@@ -1906,6 +1910,7 @@ int AsyncConnection::send_message(Message *m)
     return 0;
   }
 
+  last_active = ceph::coarse_mono_clock::now();
   // we don't want to consider local message here, it's too lightweight which
   // may disturb users
   logger->inc(l_msgr_send_messages);

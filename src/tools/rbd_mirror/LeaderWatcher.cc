@@ -25,7 +25,7 @@ using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
 template <typename I>
-LeaderWatcher<I>::LeaderWatcher(Threads *threads, librados::IoCtx &io_ctx,
+LeaderWatcher<I>::LeaderWatcher(Threads<I> *threads, librados::IoCtx &io_ctx,
                                 Listener *listener)
   : Watcher(io_ctx, threads->work_queue, RBD_MIRROR_LEADER),
     m_threads(threads), m_listener(listener),
@@ -903,8 +903,8 @@ void LeaderWatcher<I>::notify_heartbeat() {
   bufferlist bl;
   ::encode(NotifyMessage{HeartbeatPayload{}}, bl);
 
-  m_heartbeat_ack_bl.clear();
-  send_notify(bl, &m_heartbeat_ack_bl, ctx);
+  m_heartbeat_response.acks.clear();
+  send_notify(bl, &m_heartbeat_response, ctx);
 }
 
 template <typename I>
@@ -930,31 +930,17 @@ void LeaderWatcher<I>::handle_notify_heartbeat(int r) {
     return;
   }
 
-  try {
-    bufferlist::iterator iter = m_heartbeat_ack_bl.begin();
-    uint32_t num_acks;
-    ::decode(num_acks, iter);
+  dout(20) << m_heartbeat_response.acks.size() << " acks received, "
+           << m_heartbeat_response.timeouts.size() << " timed out" << dendl;
 
-    dout(20) << num_acks << " acks received" << dendl;
-
-    for (uint32_t i = 0; i < num_acks; i++) {
-      uint64_t notifier_id;
-      uint64_t cookie;
-      bufferlist reply_bl;
-
-      ::decode(notifier_id, iter);
-      ::decode(cookie, iter);
-      ::decode(reply_bl, iter);
-
-      if (notifier_id == m_notifier_id) {
-	continue;
-      }
-
-      std::string instance_id = stringify(notifier_id);
-      m_instances->notify(instance_id);
+  for (auto &it: m_heartbeat_response.acks) {
+    uint64_t notifier_id = it.first.gid;
+    if (notifier_id == m_notifier_id) {
+      continue;
     }
-  } catch (const buffer::error &err) {
-    derr << ": error decoding heartbeat acks: " << err.what() << dendl;
+
+    std::string instance_id = stringify(notifier_id);
+    m_instances->notify(instance_id);
   }
 
   schedule_timer_task("heartbeat", 1, true,
@@ -1022,7 +1008,7 @@ void LeaderWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
   dout(20) << "notify_id=" << notify_id << ", handle=" << handle << ", "
            << "notifier_id=" << notifier_id << dendl;
 
-  Context *ctx = new librbd::watcher::C_NotifyAck(this, notify_id, handle);
+  Context *ctx = new C_NotifyAck(this, notify_id, handle);
 
   if (notifier_id == m_notifier_id) {
     dout(20) << "our own notification, ignoring" << dendl;

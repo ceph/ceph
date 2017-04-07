@@ -112,7 +112,7 @@ public:
 				false, features, &order, 0, 0));
     m_remote_image_id = get_image_id(m_remote_ioctx, m_image_name);
 
-    m_threads = new rbd::mirror::Threads(reinterpret_cast<CephContext*>(
+    m_threads = new rbd::mirror::Threads<>(reinterpret_cast<CephContext*>(
       m_local_ioctx.cct()));
 
     m_image_deleter.reset(new rbd::mirror::ImageDeleter(m_threads->work_queue,
@@ -360,7 +360,7 @@ public:
 
   static int _image_number;
 
-  rbd::mirror::Threads *m_threads = nullptr;
+  rbd::mirror::Threads<> *m_threads = nullptr;
   std::shared_ptr<rbd::mirror::ImageDeleter> m_image_deleter;
   std::shared_ptr<librados::Rados> m_local_cluster;
   librados::Rados m_remote_cluster;
@@ -800,12 +800,14 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_SingleEpoch) {
   librbd::ImageCtx *ictx;
   open_image(m_local_ioctx, m_image_name, false, &ictx);
   ictx->features &= ~RBD_FEATURE_JOURNALING;
-  ASSERT_EQ(0, ictx->operations->snap_create("foo",
-					     cls::rbd::UserSnapshotNamespace()));
-  ASSERT_EQ(0, ictx->operations->snap_protect("foo"));
+  ASSERT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
+					     "foo"));
+  ASSERT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
+					      "foo"));
   ASSERT_EQ(0, librbd::cls_client::add_child(&ictx->md_ctx, RBD_CHILDREN,
                                              {ictx->md_ctx.get_id(),
-                                              ictx->id, ictx->snap_ids["foo"]},
+                                              ictx->id,
+					      ictx->snap_ids[{cls::rbd::UserSnapshotNamespace(), "foo"}]},
                                              "dummy child id"));
   close_image(ictx);
 
@@ -821,7 +823,9 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_SingleEpoch) {
     ictx->journal->append_op_event(
       i,
       librbd::journal::EventEntry{
-        librbd::journal::SnapUnprotectEvent{i, "foo"}},
+        librbd::journal::SnapUnprotectEvent{i,
+					    cls::rbd::UserSnapshotNamespace(),
+					    "foo"}},
       &append_ctx);
     ASSERT_EQ(0, append_ctx.wait());
 
@@ -848,12 +852,15 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
   librbd::ImageCtx *ictx;
   open_image(m_local_ioctx, m_image_name, false, &ictx);
   ictx->features &= ~RBD_FEATURE_JOURNALING;
-  ASSERT_EQ(0, ictx->operations->snap_create("foo",
-					     cls::rbd::UserSnapshotNamespace()));
-  ASSERT_EQ(0, ictx->operations->snap_protect("foo"));
+  ASSERT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
+					     "foo"));
+  ASSERT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
+					      "foo"));
   ASSERT_EQ(0, librbd::cls_client::add_child(&ictx->md_ctx, RBD_CHILDREN,
                                              {ictx->md_ctx.get_id(),
-                                              ictx->id, ictx->snap_ids["foo"]},
+                                              ictx->id,
+					      ictx->snap_ids[{cls::rbd::UserSnapshotNamespace(),
+							      "foo"}]},
                                              "dummy child id"));
   close_image(ictx);
 
@@ -869,7 +876,9 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
     ictx->journal->append_op_event(
       1U,
       librbd::journal::EventEntry{
-        librbd::journal::SnapUnprotectEvent{1U, "foo"}},
+        librbd::journal::SnapUnprotectEvent{1U,
+					    cls::rbd::UserSnapshotNamespace(),
+					    "foo"}},
       &append_ctx);
     ASSERT_EQ(0, append_ctx.wait());
 

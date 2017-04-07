@@ -179,6 +179,10 @@ public:
     m_name = s;
   }
 
+  void set_suppress_nicks(bool b) {
+    suppress_nicks = b;
+  }
+
 private:
   PerfCounters(CephContext *cct, const std::string &name,
 	     int lower_bound, int upper_bound);
@@ -194,6 +198,8 @@ private:
   int m_upper_bound;
   std::string m_name;
   const std::string m_lock_name;
+
+  bool suppress_nicks = false;
 
   /** Protects m_data */
   mutable Mutex m_lock;

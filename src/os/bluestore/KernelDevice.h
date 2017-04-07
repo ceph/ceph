@@ -33,8 +33,8 @@ class KernelDevice : public BlockDevice {
   Mutex debug_lock;
   interval_set<uint64_t> debug_inflight;
 
-  Mutex flush_lock;
-  atomic_t io_since_flush;
+  std::atomic<bool> io_since_flush = {false};
+  std::mutex flush_mutex;
 
   FS::aio_queue_t aio_queue;
   aio_callback_t aio_callback;
@@ -44,7 +44,7 @@ class KernelDevice : public BlockDevice {
   struct AioCompletionThread : public Thread {
     KernelDevice *bdev;
     explicit AioCompletionThread(KernelDevice *b) : bdev(b) {}
-    void *entry() {
+    void *entry() override {
       bdev->_aio_thread();
       return NULL;
     }
@@ -82,6 +82,8 @@ public:
   uint64_t get_block_size() const override {
     return block_size;
   }
+
+  int collect_metadata(string prefix, map<string,string> *pm) const override;
 
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc,

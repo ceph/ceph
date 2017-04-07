@@ -91,7 +91,8 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
   dout(10) << __func__ << " " << *m << dendl;
 
   if (!in_quorum()) {
-    dout(1) << __func__ << " not in quorum -- ignore message" << dendl;
+    dout(1) << __func__ << " not in quorum -- waiting" << dendl;
+    paxos->wait_for_readable(op, new Monitor::C_RetryMessage(mon, op));
     return false;
   }
 

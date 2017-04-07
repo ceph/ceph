@@ -180,7 +180,7 @@ template <typename I>
 int ImageRequest<I>::clip_request() {
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
   for (auto &image_extent : m_image_extents) {
-    size_t clip_len = image_extent.second;
+    auto clip_len = image_extent.second;
     int r = clip_io(get_image_ctx(&m_image_ctx), image_extent.first, &clip_len);
     if (r < 0) {
       return r;

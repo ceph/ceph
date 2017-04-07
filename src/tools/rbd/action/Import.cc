@@ -203,7 +203,7 @@ static int do_image_resize(ImportDiffContext *idiffctx)
   return 0;
 }
 
-static int do_image_io(ImportDiffContext *idiffctx, bool discard)
+static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_size)
 {
   int r;
   char buf[16];
@@ -227,11 +227,37 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard)
     if (r < 0) {
       return r;
     }
-    data.append(bp);
-  }
 
-  C_ImportDiff *ctx = new C_ImportDiff(idiffctx, data, off, len, discard);
-  return ctx->send();
+    // skip writing zeros
+    size_t write_offset = 0;
+    size_t write_length = 0;
+    size_t offset = 0;
+    while (offset < len) {
+      if (utils::calc_sparse_extent(bp,
+                                    sparse_size,
+                                    len,
+                                    &write_offset,
+                                    &write_length,
+                                    &offset)) {
+	bufferptr write_ptr(bp, write_offset, write_length);
+        bufferlist write_bl;
+        write_bl.push_back(write_ptr);
+	C_ImportDiff *ctx = new C_ImportDiff(idiffctx, data, off, len, discard);
+	r = ctx->send();
+
+	if (r < 0) {
+	  return r;
+	}
+        // Reset write offset and write length after current write submitted
+        write_offset = offset;
+        write_length = 0;
+      }
+    }
+  } else {
+    C_ImportDiff *ctx = new C_ImportDiff(idiffctx, data, off, len, discard);
+    return ctx->send();
+  }
+  return r;
 }
 
 static int validate_banner(int fd, std::string banner)
@@ -259,13 +285,13 @@ static int skip_tag(int fd, uint64_t length)
   if (fd == STDIN_FILENO) {
     // read the appending data out to skip this tag.
     char buf[4096];
-    uint64_t len = min(length, sizeof(buf));
+    uint64_t len = min<uint64_t>(length, sizeof(buf));
     while (len > 0) {
       r = safe_read_exact(fd, buf, len);
       if (r < 0)
         return r;
       length -= len;
-      len = min(length, sizeof(buf));
+      len = min<uint64_t>(length, sizeof(buf));
     }
   } else {
     // lseek to skip this tag
@@ -305,7 +331,7 @@ static int read_tag(int fd, __u8 end_tag, int format, __u8 *tag, uint64_t *readl
   return 0;
 }
 
-int do_import_diff_fd(librbd::Image &image, int fd, bool no_progress, int format)
+int do_import_diff_fd(librbd::Image &image, int fd, bool no_progress, int format, size_t sparse_size)
 {
   int r;
 
@@ -345,7 +371,7 @@ int do_import_diff_fd(librbd::Image &image, int fd, bool no_progress, int format
     } else if (tag == RBD_DIFF_IMAGE_SIZE) {
       r = do_image_resize(&idiffctx);
     } else if (tag == RBD_DIFF_WRITE || tag == RBD_DIFF_ZERO) {
-      r = do_image_io(&idiffctx, (tag == RBD_DIFF_ZERO));
+      r = do_image_io(&idiffctx, (tag == RBD_DIFF_ZERO), sparse_size);
     } else {
       std::cerr << "unrecognized tag byte " << (int)tag << " in stream; skipping"
                 << std::endl;
@@ -364,7 +390,7 @@ int do_import_diff_fd(librbd::Image &image, int fd, bool no_progress, int format
 }
 
 int do_import_diff(librbd::Image &image, const char *path,
-                bool no_progress)
+                bool no_progress, size_t sparse_size)
 {
   int r;
   int fd;
@@ -379,7 +405,7 @@ int do_import_diff(librbd::Image &image, const char *path,
       return r;
     }
   }
-  r = do_import_diff_fd(image, fd, no_progress, 1);
+  r = do_import_diff_fd(image, fd, no_progress, 1, sparse_size);
 
   if (fd != 0)
     close(fd);
@@ -394,6 +420,7 @@ void get_arguments_diff(po::options_description *positional,
   at::add_path_options(positional, options,
                        "import file (or '-' for stdin)");
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_sparse_size_option(options);
   at::add_no_progress_option(options);
 }
 
@@ -415,6 +442,11 @@ int execute_diff(const po::variables_map &vm) {
     return r;
   }
 
+  size_t sparse_size = utils::RBD_DEFAULT_SPARSE_SIZE;
+  if (vm.count(at::IMAGE_SPARSE_SIZE)) {
+    sparse_size = vm[at::IMAGE_SPARSE_SIZE].as<size_t>();
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
@@ -424,7 +456,7 @@ int execute_diff(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_import_diff(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>());
+  r = do_import_diff(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>(), sparse_size);
   if (r < 0) {
     cerr << "rbd: import-diff failed: " << cpp_strerror(r) << std::endl;
     return r;
@@ -555,7 +587,8 @@ static int do_import_header(int fd, int import_format, uint64_t &size, librbd::I
 }
 
 static int do_import_v2(int fd, librbd::Image &image, uint64_t size,
-                        size_t imgblklen, utils::ProgressContext &pc)
+                        size_t imgblklen, utils::ProgressContext &pc,
+			size_t sparse_size)
 {
   int r = 0;
   r = validate_banner(fd, utils::RBD_IMAGE_DIFFS_BANNER_V2);
@@ -575,7 +608,7 @@ static int do_import_v2(int fd, librbd::Image &image, uint64_t size,
   ::decode(diff_num, p);
 
   for (size_t i = 0; i < diff_num; i++) {
-    r = do_import_diff_fd(image, fd, true, 2);
+    r = do_import_diff_fd(image, fd, true, 2, sparse_size);
     if (r < 0) {
       pc.fail();
       std::cerr << "rbd: import-diff failed: " << cpp_strerror(r) << std::endl;
@@ -588,7 +621,8 @@ static int do_import_v2(int fd, librbd::Image &image, uint64_t size,
 }
 
 static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
-                        size_t imgblklen, utils::ProgressContext &pc)
+                        size_t imgblklen, utils::ProgressContext &pc,
+			size_t sparse_size)
 {
   int r = 0;
   size_t reqlen = imgblklen;    // amount requested from read
@@ -606,7 +640,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
                      max(g_conf->rbd_concurrent_management_ops, 1), false));
   }
 
-  reqlen = min(reqlen, size);
+  reqlen = min<uint64_t>(reqlen, size);
   // loop body handles 0 return, as we may have a block to flush
   while ((readlen = ::read(fd, p + blklen, reqlen)) >= 0) {
     if (throttle->pending_error()) {
@@ -622,8 +656,7 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
     if (!from_stdin)
       pc.update_progress(image_pos, size);
 
-    bufferlist bl(blklen);
-    bl.append(p, blklen);
+    bufferptr blkptr(p, blklen); 
     // resize output image by binary expansion as we go for stdin
     if (from_stdin && (image_pos + (size_t)blklen) > size) {
       size *= 2;
@@ -636,9 +669,26 @@ static int do_import_v1(int fd, librbd::Image &image, uint64_t size,
 
     // write as much as we got; perhaps less than imgblklen
     // but skip writing zeros to create sparse images
-    if (!bl.is_zero()) {
-      C_Import *ctx = new C_Import(*throttle, image, bl, image_pos);
-      ctx->send();
+    size_t write_offset = 0;
+    size_t write_length = 0;
+    size_t offset = 0;
+    while (offset < blklen) {
+      if (utils::calc_sparse_extent(blkptr,
+                                    sparse_size,
+                                    blklen,
+                                    &write_offset,
+                                    &write_length,
+                                    &offset)) {
+        bufferptr write_ptr(blkptr, write_offset, write_length);
+        bufferlist write_bl;
+        write_bl.push_back(write_ptr);
+        C_Import *ctx = new C_Import(*throttle, image, write_bl, image_pos + write_offset);
+        ctx->send();
+
+        // Reset write offset and write length after current write submitted
+        write_offset = offset;
+        write_length = 0;
+      }
     }
 
     // done with whole block, whether written or not
@@ -671,7 +721,7 @@ out:
 static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
                      const char *imgname, const char *path,
 		     librbd::ImageOptions& opts, bool no_progress,
-		     int import_format)
+		     int import_format, size_t sparse_size)
 {
   int fd, r;
   struct stat stat_buf;
@@ -748,9 +798,14 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   }
 
   if (import_format == 1) {
-    r = do_import_v1(fd, image, size, imgblklen, pc);
+    r = do_import_v1(fd, image, size, imgblklen, pc, sparse_size);
   } else {
-    r = do_import_v2(fd, image, size, imgblklen, pc);
+    r = do_import_v2(fd, image, size, imgblklen, pc, sparse_size);
+  }
+  if (r < 0) {
+    std::cerr << "rbd: failed to import image" << std::endl;
+    image.close();
+    goto err;
   }
 
   r = image.close();
@@ -774,6 +829,7 @@ void get_arguments(po::options_description *positional,
                        "import file (or '-' for stdin)");
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
   at::add_create_image_options(options, true);
+  at::add_sparse_size_option(options);
   at::add_no_progress_option(options);
   at::add_export_format_option(options);
 
@@ -807,6 +863,11 @@ int execute(const po::variables_map &vm) {
               << std::endl;
   } else {
     deprecated_image_name = path.substr(path.find_last_of("/") + 1);
+  }
+
+  size_t sparse_size = utils::RBD_DEFAULT_SPARSE_SIZE;
+  if (vm.count(at::IMAGE_SPARSE_SIZE)) {
+    sparse_size = vm[at::IMAGE_SPARSE_SIZE].as<size_t>();
   }
 
   size_t arg_index = 1;
@@ -844,7 +905,7 @@ int execute(const po::variables_map &vm) {
 
   librbd::RBD rbd;
   r = do_import(rbd, io_ctx, image_name.c_str(), path.c_str(),
-                opts, vm[at::NO_PROGRESS].as<bool>(), format);
+                opts, vm[at::NO_PROGRESS].as<bool>(), format, sparse_size);
   if (r < 0) {
     std::cerr << "rbd: import failed: " << cpp_strerror(r) << std::endl;
     return r;

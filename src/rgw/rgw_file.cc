@@ -44,6 +44,26 @@ namespace rgw {
   ceph::timer<ceph::mono_clock> RGWLibFS::write_timer{
     ceph::construct_suspended};
 
+  inline int valid_fs_bucket_name(const string& name) {
+    int rc = valid_s3_bucket_name(name, false /* relaxed */);
+    if (rc != 0) {
+      if (name.size() > 255)
+        return -ENAMETOOLONG;
+      return -EINVAL;
+    }
+    return 0;
+  }
+
+  inline int valid_fs_object_name(const string& name) {
+    int rc = valid_s3_object_name(name);
+    if (rc != 0) {
+      if (name.size() > 1024)
+        return -ENAMETOOLONG;
+      return -EINVAL;
+    }
+    return 0;
+  }
+
   LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent,
 				       const char *path, uint32_t flags)
   {
@@ -257,8 +277,16 @@ namespace rgw {
       }
 
       std::string oname = rgw_fh->relative_object_name();
-      if (rgw_fh->is_dir())
+      if (rgw_fh->is_dir()) {
+	/* for the duration of our cache timer, trust positive
+	 * child cache */
+	if (rgw_fh->has_children()) {
+	  rgw_fh->mtx.unlock();
+	  unref(rgw_fh);
+	  return(-ENOTEMPTY);
+	}
 	oname += "/";
+      }
       RGWDeleteObjRequest req(cct, get_user(), parent->bucket_name(),
 			      oname);
       rc = rgwlib.get_fe()->execute_req(&req);
@@ -396,7 +424,7 @@ namespace rgw {
 	    << dendl;
 	}
       }
-      break;
+      goto out;
       default:
 	abort();
       } /* switch */
@@ -441,7 +469,7 @@ namespace rgw {
       /* bucket */
       string bname{name};
       /* enforce S3 name restrictions */
-      rc = valid_s3_bucket_name(bname, false /* relaxed */);
+      rc = valid_fs_bucket_name(bname);
       if (rc != 0) {
 	rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
 	fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
@@ -449,6 +477,7 @@ namespace rgw {
 	rgw_fh->mtx.unlock();
 	unref(rgw_fh);
 	get<0>(mkr) = nullptr;
+	get<1>(mkr) = rc;
 	return mkr;
       }
 
@@ -475,13 +504,15 @@ namespace rgw {
       dir_name += "/";
 
       /* need valid S3 name (characters, length <= 1024, etc) */
-      if (! valid_s3_object_name(dir_name)) {
+      rc = valid_fs_object_name(dir_name);
+      if (rc != 0) {
 	rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
 	fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
 			RGWFileHandle::FHCache::FLAG_LOCK);
 	rgw_fh->mtx.unlock();
 	unref(rgw_fh);
 	get<0>(mkr) = nullptr;
+	get<1>(mkr) = rc;
 	return mkr;
       }
 
@@ -540,8 +571,9 @@ namespace rgw {
 	(obj_name.back() != '/'))
       obj_name += "/";
     obj_name += name;
-    if (! valid_s3_object_name(obj_name)) {
-      return MkObjResult{nullptr, -EINVAL};
+    rc = valid_fs_object_name(obj_name);
+    if (rc != 0) {
+      return MkObjResult{nullptr, rc};
     }
 
     /* create it */
@@ -845,6 +877,28 @@ namespace rgw {
     return true;
   } /* RGWFileHandle::reclaim */
 
+  bool RGWFileHandle::has_children() const
+  {
+    if (unlikely(! is_dir()))
+      return false;
+
+#if 0
+    /* XXX pretty, but unsafe w/o consistent caching */
+    const directory* d = get<directory>(&variant_type);
+    if ((d->flags & RGWFileHandle::directory::FLAG_CACHED) &&
+	(state.nlink > 2 /* . and .. */))
+      return true;
+#endif /* 0 */
+
+    RGWRMdirCheck req(fs->get_context(), fs->get_user(), this);
+    int rc = rgwlib.get_fe()->execute_req(&req);
+    if (! rc) {
+      return req.valid && req.has_children;
+    }
+
+    return false;
+  }
+
   int RGWFileHandle::readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset,
 			     bool *eof, uint32_t flags)
   {
@@ -855,7 +909,8 @@ namespace rgw {
 
     (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 
-    if (flags & RGW_READDIR_FLAG_DOTDOT) {
+    if ((*offset == 0) &&
+	(flags & RGW_READDIR_FLAG_DOTDOT)) {
       /* send '.' and '..' with their NFS-defined offsets */
       rcb(".", cb_arg, 1);
       rcb("..", cb_arg, 2);
@@ -868,19 +923,18 @@ namespace rgw {
       if (! rc) {
 	lock_guard guard(mtx);
 	state.atime = now;
-	set_nlink(2 + 1);
+	set_nlink(2 + 1); // XXXX
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
 	fs->state.push_event(ev);
       }
     } else {
-      rgw_obj_key marker{"", ""};
       RGWReaddirRequest req(cct, fs->get_user(), this, rcb, cb_arg, offset);
       rc = rgwlib.get_fe()->execute_req(&req);
       if (! rc) {
 	lock_guard guard(mtx);
 	state.atime = now;
-	set_nlink(2 + 1);
+	set_nlink(2 + 1); // XXXX
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
 	fs->state.push_event(ev);
@@ -1039,6 +1093,7 @@ namespace rgw {
 
   void RGWFileHandle::directory::clear_state()
   {
+    flags &= ~RGWFileHandle::directory::FLAG_CACHED;
     marker_cache.clear();
   }
 
@@ -1200,8 +1255,8 @@ namespace rgw {
       emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
     }
 
-    op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs, delete_at,
-				 if_match, if_nomatch);
+    op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
+                                 (delete_at ? *delete_at : real_time()), if_match, if_nomatch);
     if (! op_ret) {
       /* update stats */
       rgw_fh->set_mtime(real_clock::to_timespec(mtime));
@@ -1494,7 +1549,7 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  return -(fs->getattr(rgw_fh, st));
+  return fs->getattr(rgw_fh, st);
 }
 
 /*
