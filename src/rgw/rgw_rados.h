@@ -2520,7 +2520,7 @@ public:
   int read_usage(const rgw_user& user, string& subuser, uint64_t start_epoch, uint64_t end_epoch, 
                  uint32_t max_entries, bool *is_truncated, RGWUsageIter& read_iter, map<rgw_user_bucket,
 		 rgw_usage_log_entry>& usage);
-  int trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoch);
+  int trim_usage(rgw_user& user, string& subuser, uint64_t start_epoch, uint64_t end_epoch);
 
   int create_pool(const rgw_pool& pool);
 
@@ -3341,7 +3341,7 @@ public:
 			     uint32_t max_entries, string& read_iter,
 			     map<rgw_user_bucket, rgw_usage_log_entry>& usage,
 			     bool *is_truncated);
-  int cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch);
+  int cls_obj_usage_log_trim(string& oid, string& user, string& subuser, uint64_t start_epoch, uint64_t end_epoch);
 
   int key_to_shard_id(const string& key, int max_shards);
   void shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id);

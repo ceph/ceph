@@ -3022,8 +3022,12 @@ static int usage_log_trim_cb(cls_method_context_t hctx, const string& key, rgw_u
   string key_by_user;
 
   string o = entry.owner.to_str();
-  usage_record_name_by_time(entry.epoch, o, entry.bucket, key_by_time);
-  usage_record_name_by_user(o, entry.epoch, entry.bucket, key_by_user);
+  if (entry.subuser.empty()) {
+    usage_record_name_by_time(entry.epoch, o, entry.bucket, key_by_time);
+    usage_record_name_by_user(o, entry.epoch, entry.bucket, key_by_user);
+  } else {
+    usage_record_name_by_subuser(o, entry.subuser, entry.epoch, entry.bucket, key_by_user);
+  }
 
   int ret = cls_cxx_map_remove_key(hctx, key_by_time);
   if (ret < 0)
@@ -3052,7 +3056,9 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
   }
 
   string iter;
-  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, iter, 0, NULL, usage_log_trim_cb, NULL);
+  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch,
+			    op.user, op.subuser,
+			    iter, 0, NULL, usage_log_trim_cb, NULL);
   if (ret < 0)
     return ret;
 

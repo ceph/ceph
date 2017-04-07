@@ -5247,7 +5247,7 @@ next:
       }
     }
 
-    ret = RGWUsage::trim(store, user_id, start_epoch, end_epoch);
+    ret = RGWUsage::trim(store, user_id, subuser, start_epoch, end_epoch);
     if (ret < 0) {
       cerr << "ERROR: trim_usage() returned ret=" << ret << std::endl;
       return 1;
