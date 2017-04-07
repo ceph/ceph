@@ -9274,6 +9274,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
   dout(10) << __func__ << ": " << obc << " " << soid
 	   << " " << obc->rwstate
 	   << " oi: " << obc->obs.oi
+	   << " exists: " << (int)obc->obs.exists
 	   << " ssc: " << obc->ssc
 	   << " snapset: " << obc->ssc->snapset << dendl;
   return obc;
