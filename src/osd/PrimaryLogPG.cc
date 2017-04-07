@@ -5022,7 +5022,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (result < 0)
 	    break;
 	}
-	result = _delete_oid(ctx, true);
+	result = _delete_oid(ctx, true, false);
 	if (result >= 0) {
 	  // mark that this is a cache eviction to avoid triggering normal
 	  // make_writeable() clone or snapdir object creation in finish_ctx()
@@ -5615,7 +5615,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_DELETE:
       ++ctx->num_write;
       tracepoint(osd, do_osd_op_pre_delete, soid.oid.name.c_str(), soid.snap.val);
-      result = _delete_oid(ctx, ctx->ignore_cache);
+      {
+	result = _delete_oid(ctx, false, ctx->ignore_cache);
+      }
       break;
 
     case CEPH_OSD_OP_WATCH:
@@ -6375,7 +6377,10 @@ int PrimaryLogPG::_verify_no_head_clones(const hobject_t& soid,
   return 0;
 }
 
-inline int PrimaryLogPG::_delete_oid(OpContext *ctx, bool no_whiteout)
+inline int PrimaryLogPG::_delete_oid(
+  OpContext *ctx,
+  bool no_whiteout,     // no whiteouts, no matter what.
+  bool try_no_whiteout) // try not to whiteout
 {
   SnapSet& snapset = ctx->new_snapset;
   ObjectState& obs = ctx->new_obs;
@@ -6385,21 +6390,31 @@ inline int PrimaryLogPG::_delete_oid(OpContext *ctx, bool no_whiteout)
 
   // cache: cache: set whiteout on delete?
   bool whiteout = false;
-  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE && !no_whiteout) {
+  if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE
+      && !no_whiteout
+      && !try_no_whiteout) {
     whiteout = true;
   }
   if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
     // in luminous or later, we can't delete the head if there are
     // clones. we trust the caller passing no_whiteout has already
     // verified they don't exist.
-    if (!no_whiteout &&
-	(!snapset.clones.empty() ||
-	 (!ctx->snapc.snaps.empty() && ctx->snapc.snaps[0] > snapset.seq))) {
-      dout(20) << __func__ << " has or will have clones; will whiteout" << dendl;
-      whiteout = true;
+    if (!snapset.clones.empty() ||
+	(!ctx->snapc.snaps.empty() && ctx->snapc.snaps[0] > snapset.seq)) {
+      if (no_whiteout) {
+	dout(20) << __func__ << " has or will have clones but no_whiteout=1"
+		 << dendl;
+      } else {
+	dout(20) << __func__ << " has or will have clones; will whiteout"
+		 << dendl;
+	whiteout = true;
+      }
     }
   }
-  dout(20) << __func__ << " " << soid << " whiteout=" << (int)whiteout << dendl;
+  dout(20) << __func__ << " " << soid << " whiteout=" << (int)whiteout
+	   << " no_whiteout=" << (int)no_whiteout
+	   << " try_no_whiteout=" << (int)try_no_whiteout
+	   << dendl;
   if (!obs.exists || (obs.oi.is_whiteout() && whiteout))
     return -ENOENT;
 
@@ -6519,7 +6534,7 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       // Cannot delete an object with watchers
       ret = -EBUSY;
     } else {
-      _delete_oid(ctx, false);
+      _delete_oid(ctx, false, false);
       ret = 0;
     }
   } else if (ret) {
@@ -12475,7 +12490,7 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
 
   ctx->at_version = get_next_version();
   assert(ctx->new_obs.exists);
-  int r = _delete_oid(ctx.get(), true);
+  int r = _delete_oid(ctx.get(), true, false);
   if (obc->obs.oi.is_omap())
     ctx->delta_stats.num_objects_omap--;
   ctx->delta_stats.num_evict++;
