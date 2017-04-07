@@ -362,7 +362,7 @@ if __name__ == '__main__':
     expect('osd/set-nearfull-ratio?ratio=0.90', 'PUT', 200, '')
     r = expect('osd/dump', 'GET', 200, 'json', JSONHDR)
     assert(float(r.myjson['output']['nearfull_ratio']) == 0.90)
-    expect('osd/set-full-ratio?ratio=0.85', 'PUT', 200, '')
+    expect('osd/set-nearfull-ratio?ratio=0.85', 'PUT', 200, '')
 
     r = expect('pg/stat', 'GET', 200, 'json', JSONHDR)
     assert('num_pgs' in r.myjson['output'])
