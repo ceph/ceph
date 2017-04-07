@@ -289,6 +289,8 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
 					 std::ostream *warnings)
 {
   assert(lock.is_locked());
+  if (conf_files.size() == 0)
+    return -EINVAL;
 
   // open new conf
   list<string>::const_iterator c;
@@ -303,7 +305,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
       return ret;
   }
   if (c == conf_files.end())
-    return -EINVAL;
+    return -ENOENT;
 
   if (cluster.size() == 0) {
     /*
