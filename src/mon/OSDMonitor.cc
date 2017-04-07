@@ -3233,19 +3233,41 @@ void OSDMonitor::scan_for_creating_pgs(const map<int64_t,pg_pool_t>& pools,
 
 void OSDMonitor::update_creating_pgs()
 {
-  creating_pgs_by_osd_epoch.clear();
+  decltype(creating_pgs_by_osd_epoch) new_pgs_by_osd_epoch;
   std::lock_guard<std::mutex> l(creating_pgs_lock);
-  for (const auto& pg : creating_pgs.pgs) {
+  for (auto& pg : creating_pgs.pgs) {
     int acting_primary = -1;
     auto pgid = pg.first;
-    auto created = pg.second.first;
+    auto& created = pg.second.first;
     mapping.get(pgid, nullptr, nullptr, nullptr, &acting_primary);
-    if (acting_primary >= 0) {
-      dout(10) << __func__ << " will instruct osd." << acting_primary
-	       << " to create " << pgid << dendl;
-      creating_pgs_by_osd_epoch[acting_primary][created].insert(pgid);
+    if (acting_primary < 0) {
+      continue;
     }
+    // check the previous creating_pgs, look for the target to whom the pg was
+    // previously mapped
+    for (const auto& pgs_by_epoch : creating_pgs_by_osd_epoch) {
+      const auto last_acting_primary = pgs_by_epoch.first;
+      for (auto& pgs: pgs_by_epoch.second) {
+	if (pgs.second.count(pgid)) {
+	  if (last_acting_primary != acting_primary) {
+	    dout(20) << __func__ << " " << pgid << " "
+		     << " acting_primary:" << last_acting_primary
+		     << " -> " << acting_primary << dendl;
+	    // note epoch if the target of the create message changed.
+	    // creating_pgs is updated here instead of in
+	    // scan_for_creating_pgs() because we don't have the updated pg
+	    // mapping by then.
+	    created = mapping.get_epoch();
+          }
+          break;
+        }
+      }
+    }
+    dout(10) << __func__ << " will instruct osd." << acting_primary
+	     << " to create " << pgid << dendl;
+    new_pgs_by_osd_epoch[acting_primary][created].insert(pgid);
   }
+  creating_pgs_by_osd_epoch = std::move(new_pgs_by_osd_epoch);
   creating_pgs_epoch = mapping.get_epoch();
 }
 
