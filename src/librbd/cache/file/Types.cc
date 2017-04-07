@@ -8,6 +8,23 @@ namespace librbd {
 namespace cache {
 namespace file {
 
+namespace stupid_policy {
+void Entry_t::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(dirty, bl);
+  ::encode(block, bl);
+  ENCODE_FINISH(bl);
+}
+
+void Entry_t::decode(bufferlist::iterator& it) {
+  DECODE_START(1, it);
+  ::decode(dirty, it);
+  ::decode(block, it);
+  DECODE_FINISH(it);
+}
+
+}
+
 namespace meta_store {
 
 void Header::encode(bufferlist& bl) const {

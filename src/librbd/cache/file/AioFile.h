@@ -41,6 +41,7 @@ public:
 
   void fsync(Context *on_finish);
   void fdatasync(Context *on_finish);
+  uint64_t filesize();
 
 private:
   ImageCtxT &m_image_ctx;

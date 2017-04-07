@@ -241,6 +241,40 @@ void StupidPolicy<I>::tick() {
   // stupid policy -- do nothing
 }
 
+template <typename I>
+void StupidPolicy<I>::entry_to_bufferlist(uint64_t block, bufferlist *bl){
+  Mutex::Locker locker(m_lock);
+  auto entry_it = m_block_to_entries.find(block);
+  assert(entry_it != m_block_to_entries.end());
+
+  //TODO
+  Entry_t entry;
+  entry.block = entry_it->second->block;
+  entry.dirty = entry_it->second->dirty;
+  bufferlist encode_bl;
+  entry.encode(encode_bl);
+  bl->append(encode_bl);
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "block=" << block << " bl=" << *bl << dendl;
+}
+
+template <typename I>
+void StupidPolicy<I>::bufferlist_to_entry(bufferlist &bl){
+  Mutex::Locker locker(m_lock);
+  uint64_t entry_index = 0;
+  //TODO
+  Entry_t entry;
+  for (bufferlist::iterator it = bl.begin(); it != bl.end(); ++it) {
+	entry.decode(it);
+	auto entry_it = m_entries[entry_index++];
+	entry_it.block = entry.block;
+	entry_it.dirty = entry.dirty;
+  }
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "Total load " << entry_index << " entries" << dendl;
+
+}
+
 } // namespace file
 } // namespace cache
 } // namespace librbd

@@ -278,6 +278,17 @@ int AioFile<I>::fdatasync() {
   return 0;
 }
 
+template <typename I>
+uint64_t AioFile<I>::filesize() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+
+  struct stat file_st;
+  memset(&file_st, 0, sizeof(file_st));
+  fstat(m_fd, &file_st);
+  return file_st.st_size;
+}
+
 } // namespace file
 } // namespace cache
 } // namespace librbd

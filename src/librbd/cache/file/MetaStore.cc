@@ -11,6 +11,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::file::MetaStore: " << this \
                            << " " <<  __func__ << ": "
+#define META_BLOCK_SIZE sizeof(uint64_t) + sizeof(bool)
 
 namespace librbd {
 namespace cache {
@@ -19,16 +20,29 @@ namespace file {
 template <typename I>
 MetaStore<I>::MetaStore(I &image_ctx, uint32_t block_size)
   : m_image_ctx(image_ctx), m_block_size(block_size),
-    m_aio_file(image_ctx, *image_ctx.op_work_queue, image_ctx.id + ".meta") {
+    m_meta_file(image_ctx, *image_ctx.op_work_queue, image_ctx.id + ".meta") {
 }
 
 template <typename I>
-void MetaStore<I>::init(Context *on_finish) {
+void MetaStore<I>::init(bufferlist *bl, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
   // TODO
-  m_aio_file.open(on_finish);
+  Context *ctx = new FunctionContext(
+    [this, bl, on_finish](int r) {
+      if (r < 0) {
+        on_finish->complete(r);
+        return;
+      }
+      //check if exists? yes: load_all, no: truncate
+      if(m_meta_file.filesize() == 0) {
+        reset(on_finish);
+      } else {
+        load_all(bl, on_finish);
+      }
+    });
+  m_meta_file.open(ctx);
 }
 
 template <typename I>
@@ -37,7 +51,51 @@ void MetaStore<I>::shut_down(Context *on_finish) {
   ldout(cct, 20) << dendl;
 
   // TODO
-  m_aio_file.close(on_finish);
+  m_meta_file.close(on_finish);
+}
+
+template <typename I>
+void MetaStore<I>::reset(Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+
+  // TODO
+  m_meta_file.truncate( offset_to_block(m_image_ctx.size)*META_BLOCK_SIZE , false, on_finish);
+}
+
+template <typename I>
+void MetaStore<I>::write_block(uint64_t cache_block, bufferlist bl, Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+  uint64_t meta_block_offset = cache_block * META_BLOCK_SIZE;
+  m_meta_file.write(meta_block_offset, std::move(bl), true, on_finish);
+}
+
+template <typename I>
+void MetaStore<I>::read_block(uint64_t cache_block, bufferlist *bl, Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+  uint64_t meta_block_offset = cache_block * META_BLOCK_SIZE;
+  m_meta_file.read(meta_block_offset, META_BLOCK_SIZE, bl, on_finish);
+}
+
+template <typename I>
+void MetaStore<I>::load_all(bufferlist *bl, Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+  //1. get total file length
+  Context *ctx = new FunctionContext(
+    [this, on_finish](int r) {
+      if (r < 0) {
+        on_finish->complete(r);
+        return;
+      }
+  });
+  for(uint64_t block_id = 0; block_id < offset_to_block(m_image_ctx.size); block_id++){
+    read_block(block_id, bl, ctx);
+    if (bl->is_zero()) break;
+  }
+  on_finish->complete(0);
 }
 
 } // namespace file

@@ -25,10 +25,12 @@ namespace file {
 
 namespace stupid_policy {
 
-struct Entry {
-  bool dirty;
-  bool allocated;
-  uint64_t block;
+struct Entry_t {
+  bool dirty = false;
+  uint64_t block = 0;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
 };
 
 } // namespace stupid_policy
@@ -93,6 +95,7 @@ struct EventBlock {
 } // namespace cache
 } // namespace librbd
 
+WRITE_CLASS_ENCODER(librbd::cache::file::stupid_policy::Entry_t);
 WRITE_CLASS_ENCODER(librbd::cache::file::meta_store::Header);
 WRITE_CLASS_ENCODER(librbd::cache::file::journal_store::Event);
 WRITE_CLASS_ENCODER(librbd::cache::file::journal_store::EventBlock);

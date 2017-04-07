@@ -221,6 +221,33 @@ struct C_ReadFromImageRequest : public C_BlockIORequest {
 };
 
 template <typename I>
+struct C_WriteToMetaRequest : public C_BlockIORequest {
+  MetaStore<I> &meta_store;
+  uint64_t cache_block_id;
+  Policy *policy;
+
+  C_WriteToMetaRequest(CephContext *cct, MetaStore<I> &meta_store,
+		                uint64_t cache_block_id, Policy *policy,
+                        C_BlockIORequest *next_block_request)
+    : C_BlockIORequest(cct, next_block_request), meta_store(meta_store),
+    policy(policy), cache_block_id(cache_block_id) {
+  }
+
+  virtual void send() override {
+    ldout(cct, 20) << "(" << get_name() << "): "
+                   << "cache_block_id=" << cache_block_id << dendl;
+
+    bufferlist meta_bl;
+    policy->entry_to_bufferlist(cache_block_id, &meta_bl);
+    ldout(cct, 20) << "entry_to_bufferlist bl:" << meta_bl << dendl;
+    meta_store.write_block(cache_block_id, std::move(meta_bl), this);
+  }
+  virtual const char *get_name() const override {
+    return "C_WriteToMetaRequest";
+  }
+};
+
+template <typename I>
 struct C_WriteToImageRequest : public C_BlockIORequest {
   ImageWriteback<I> &image_writeback;
   BlockGuard::BlockIO block_io;
@@ -523,6 +550,7 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
   Policy &policy;
   JournalStore<I> &journal_store;
   ImageStore<I> &image_store;
+  MetaStore<I> &meta_store;
   ReleaseBlock &release_block;
   bufferlist bl;
   uint32_t block_size;
@@ -531,12 +559,14 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
 
   C_WriteBlockRequest(I &image_ctx, ImageWriteback<I> &image_writeback,
                       Policy &policy, JournalStore<I> &journal_store,
-                      ImageStore<I> &image_store, ReleaseBlock &release_block,
-                      bufferlist &&bl, uint32_t block_size, Context *on_finish)
+                      ImageStore<I> &image_store, MetaStore<I> &meta_store,
+                      ReleaseBlock &release_block, bufferlist &&bl,
+                      uint32_t block_size, Context *on_finish)
     : C_BlockRequest(on_finish),
       image_ctx(image_ctx), image_writeback(image_writeback), policy(policy),
       journal_store(journal_store), image_store(image_store),
-      release_block(release_block), bl(std::move(bl)), block_size(block_size) {
+      meta_store(meta_store), release_block(release_block), bl(std::move(bl)),
+      block_size(block_size) {
   }
 
   virtual void remap(PolicyMapResult policy_map_result,
@@ -549,12 +579,15 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
     // NOTE: block guard active -- must be released after IO completes
     C_BlockIORequest *req = new C_ReleaseBlockGuard(cct, block_io.block,
                                                          release_block, this);
+
     if (policy_map_result == POLICY_MAP_RESULT_MISS) {
       req = new C_WriteToImageRequest<I>(cct, image_writeback,
                                          std::move(block_io), bl, req);
     } else {
       // block is now dirty -- can't be replaced until flushed
       policy.set_dirty(block_io.block);
+	  // TODO: persistent metadata
+      req = new C_WriteToMetaRequest<I>(cct, meta_store, block_io.block, &policy, req);
 
       if (block_io.partial_block) {
         // block needs to be promoted to cache but we require a
@@ -590,6 +623,12 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
         }
       } else {
         // full block overwrite
+        if (block_io.tid > 0) {
+          req = new C_AppendEventToJournal<I>(cct, journal_store, block_io.tid,
+                                              block_io.block, IO_TYPE_WRITE,
+                                              req);
+        }
+
         req = new C_PromoteToCache<I>(cct, image_store, block_io.block,
                                       bl, req);
       }
@@ -793,7 +832,7 @@ void FileImageCache<I>::aio_write(Extents &&image_extents,
   // TODO handle fadvise flags
   BlockGuard::C_BlockRequest *req = new C_WriteBlockRequest<I>(
     m_image_ctx, m_image_writeback, *m_policy, *m_journal_store, *m_image_store,
-    m_release_block, std::move(bl), BLOCK_SIZE, on_finish);
+    *m_meta_store, m_release_block, std::move(bl), BLOCK_SIZE, on_finish);
   map_blocks(IO_TYPE_WRITE, std::move(image_extents), req);
 }
 
@@ -881,6 +920,7 @@ void FileImageCache<I>::init(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
+  bufferlist meta_bl;
   // chain the initialization of the meta, image, and journal stores
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
@@ -904,17 +944,19 @@ void FileImageCache<I>::init(Context *on_finish) {
       m_journal_store->init(ctx);
     });
   ctx = new FunctionContext(
-    [this, ctx](int r) {
+    [this, meta_bl, ctx](int r) mutable {
       if (r < 0) {
         ctx->complete(r);
         return;
       }
-
+      //load meta_bl to policy entry
+      m_policy->bufferlist_to_entry(meta_bl);
       m_image_store = new ImageStore<I>(m_image_ctx, *m_meta_store);
       m_image_store->init(ctx);
+
     });
   m_meta_store = new MetaStore<I>(m_image_ctx, BLOCK_SIZE);
-  m_meta_store->init(ctx);
+  m_meta_store->init(&meta_bl, ctx);
 }
 
 template <typename I>

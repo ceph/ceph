@@ -20,7 +20,7 @@ namespace file {
 using namespace journal_store;
 
 /// TODO use dynamic amount of in-memory event ref slots
-static const uint32_t EVENT_REF_COUNT = 2048;
+static const uint32_t EVENT_REF_COUNT = 5*1024*1024L;
 
 /// TODO use dynamic ring buffer size
 static const uint32_t RING_BUFFER_COUNT = 131072; /// ~512MB of 4K writeback

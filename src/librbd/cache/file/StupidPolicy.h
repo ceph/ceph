@@ -24,6 +24,8 @@ namespace file {
 /**
  * Stupid LRU-style policy
  */
+using namespace stupid_policy;
+
 template <typename ImageCtxT>
 class StupidPolicy : public Policy {
 public:
@@ -44,6 +46,8 @@ public:
                   PolicyMapResult *policy_map_result,
                   uint64_t *replace_cache_block);
   virtual void tick();
+  virtual void entry_to_bufferlist(uint64_t block, bufferlist *bl);
+  virtual void bufferlist_to_entry(bufferlist &bl);
 
 private:
 

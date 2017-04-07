@@ -7,6 +7,7 @@
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
 #include "librbd/cache/Types.h"
+#include "common/Mutex.h"
 
 namespace librbd {
 namespace cache {
@@ -35,6 +36,10 @@ public:
                   PolicyMapResult *policy_map_result,
                   uint64_t *replace_cache_block) = 0;
   virtual void tick() = 0;
+
+  virtual void entry_to_bufferlist(uint64_t block, bufferlist *bl) = 0;
+  virtual void bufferlist_to_entry(bufferlist &bl) = 0;
+
 
 };
 
