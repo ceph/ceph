@@ -6599,7 +6599,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
 
   // clone?
   assert(soid.snap == CEPH_NOSNAP);
-  dout(20) << "make_writeable " << soid << " snapset=" << ctx->snapset
+  dout(20) << "make_writeable " << soid << " snapset=" << ctx->new_snapset
 	   << "  snapc=" << snapc << dendl;
   
   bool was_dirty = ctx->obc->obs.oi.is_dirty();
