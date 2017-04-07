@@ -213,8 +213,9 @@ public:
     return true;
   }
   void encode_json(const string& field, Formatter *f) const {
-    utime_t ut(val);
-    ::encode_json(field.c_str(), ut, f);
+    string s;
+    rgw_to_iso8601(val, &s);
+    ::encode_json(field.c_str(), s, f);
   }
 };
 
