@@ -177,6 +177,9 @@ void PGLog::trim(
     /* If we are trimming, we must be complete up to trim_to, time
      * to throw out any divergent_priors
      */
+    if (!divergent_priors.empty()) {
+      dirty_divergent_priors = true;
+    }
     divergent_priors.clear();
     // We shouldn't be trimming the log past last_complete
     assert(trim_to <= info.last_complete);
@@ -1044,7 +1047,20 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	 * version would not have been recovered, and a newer version
 	 * would show up in the log above.
 	 */
-	assert(oi.version == i->first);
+	/**
+	 * Unfortunately the assessment above is incorrect because of
+	 * http://tracker.ceph.com/issues/17916 (we were incorrectly
+	 * not removing the divergent_priors set from disk state!),
+	 * so let's check that.
+	 */
+	if (oi.version > i->first) {
+	  ldpp_dout(dpp, 0) << "read_log divergent_priors entry (" << *i
+			    << ") inconsistent with disk state (" <<  oi
+			    << "), assuming it is tracker.ceph.com/issues/17916"
+			    << dendl;
+	} else {
+	  assert(oi.version == i->first);
+	}
       } else {
 	ldpp_dout(dpp, 15) << "read_log  missing " << *i << dendl;
 	missing.add(i->second, i->first, eversion_t());
