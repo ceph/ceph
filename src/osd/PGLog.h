@@ -1097,11 +1097,13 @@ public:
     coll_t log_coll, ghobject_t log_oid,
     const pg_info_t &info,
     ostringstream &oss,
+    bool tolerate_divergent_missing_log,
     bool debug_verify_stored_missing = false
     ) {
     return read_log_and_missing(
       store, pg_coll, log_coll, log_oid, info,
       log, missing, oss,
+      tolerate_divergent_missing_log,
       &clear_divergent_priors,
       this,
       (pg_log_debug ? &log_keys_debug : 0),
@@ -1114,6 +1116,7 @@ public:
     const pg_info_t &info,
     IndexedLog &log,
     missing_type &missing, ostringstream &oss,
+    bool tolerate_divergent_missing_log,
     bool *clear_divergent_priors = NULL,
     const DoutPrefixProvider *dpp = NULL,
     set<string> *log_keys_debug = 0,
@@ -1289,7 +1292,20 @@ public:
 		 * version would not have been recovered, and a newer version
 		 * would show up in the log above.
 		 */
-	      assert(oi.version == i->first);
+	      	/**
+		 * Unfortunately the assessment above is incorrect because of
+		 * http://tracker.ceph.com/issues/17916 (we were incorrectly
+		 * not removing the divergent_priors set from disk state!),
+		 * so let's check that.
+		 */
+	      if (oi.version > i->first && tolerate_divergent_missing_log) {
+		ldpp_dout(dpp, 0) << "read_log divergent_priors entry (" << *i
+				  << ") inconsistent with disk state (" <<  oi
+				  << "), assuming it is tracker.ceph.com/issues/17916"
+				  << dendl;
+	      } else {
+		assert(oi.version == i->first);
+	      }
 	    } else {
 	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
 	      missing.add(i->second, i->first, eversion_t());
