@@ -2521,11 +2521,11 @@ public:
    */
   int init_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
   int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
-                              rgw_bucket& bucket, string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
-  int select_legacy_bucket_placement(rgw_bucket& bucket, RGWZonePlacementInfo *rule_info);
+                              string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
+  int select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info);
   int select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
-                                 rgw_bucket& bucket, string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
-  int select_bucket_location_by_rule(const string& location_rule, rgw_bucket& bucket, RGWZonePlacementInfo *rule_info);
+                                 string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
+  int select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info);
   void create_bucket_id(string *bucket_id);
 
   bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool);
