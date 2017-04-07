@@ -162,7 +162,11 @@ void RGWMetadataSearchOp::execute()
 
   ESQueryCompiler es_query(expression, &conds, custom_prefix);
   
-  static map<string, string> aliases = { { "key", "name" },
+  static map<string, string, ltstr_nocase> aliases = {
+                                  { "bucket", "bucket" }, /* forces lowercase */
+                                  { "name", "name" },
+                                  { "key", "name" },
+                                  { "instance", "instance" },
                                   { "etag", "meta.etag" },
                                   { "size", "meta.size" },
                                   { "mtime", "meta.mtime" },

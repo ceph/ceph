@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
 
   ESQueryCompiler es_query(expr, nullptr, "x-amz-meta-");
 
-  map<string, string> aliases = { { "key", "name" },
+  map<string, string, ltstr_nocase> aliases = { { "key", "name" },
                                   { "etag", "meta.etag" },
                                   { "size", "meta.size" },
                                   { "mtime", "meta.mtime" },

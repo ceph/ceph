@@ -1,6 +1,8 @@
 #ifndef CEPH_RGW_ES_QUERY_H
 #define CEPH_RGW_ES_QUERY_H
 
+#include "rgw_string.h"
+
 class ESQueryStack {
   list<string> l;
   list<string>::iterator iter;
@@ -100,7 +102,7 @@ class ESQueryCompiler {
   ESEntityTypeMap *generic_type_map{nullptr};
   ESEntityTypeMap *custom_type_map{nullptr};
 
-  map<string, string> *field_aliases;
+  map<string, string, ltstr_nocase> *field_aliases;
   set<string> *restricted_fields;
 
 public:
@@ -131,7 +133,7 @@ public:
     return custom_type_map;
   }
 
-  void set_field_aliases(map<string, string> *fa) {
+  void set_field_aliases(map<string, string, ltstr_nocase> *fa) {
     field_aliases = fa;
   }
 
