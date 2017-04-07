@@ -539,6 +539,13 @@ void PGMap::stat_pg_update(const pg_t pgid, pg_stat_t& s,
     s.blocked_by == n.blocked_by;
 
   stat_pg_sub(pgid, s, sameosds);
+
+  // if acting_primary has shift to an just restored osd, and pg yet to finish
+  // peering, many attributes in current stats remain stale. others seem don't
+  // mater much while faulty last_active will make "pg stuck in" check unhappy.
+  if (!(n.state & (PG_STATE_ACTIVE | PG_STATE_PEERED)) &&
+      n.last_active < s.last_active)
+    n.last_active = s.last_active;
   s = n;
   stat_pg_add(pgid, n, sameosds);
 }
