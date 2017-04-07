@@ -614,3 +614,10 @@ if(WITH_SYSTEMD)
 endif()
 
 include(CTags)
+option(CTAG_EXCLUDES "Exclude files/directories when running ctag.")
+add_tags(ctags
+  SRC_DIR src
+  TAG_FILE tags
+  EXCLUDE_OPTS ${CTAG_EXCLUDES}
+  EXCLUDES "*.js")
+add_custom_target(tags DEPENDS ctags)
