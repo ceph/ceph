@@ -13,7 +13,13 @@
 #else // !WITH_BLKIN
 
 // add stubs for noop Trace and Endpoint
-struct blkin_trace_info {};
+
+// match the "real" struct
+struct blkin_trace_info {
+    int64_t trace_id;
+    int64_t span_id;
+    int64_t parent_span_id;
+};
 
 namespace ZTracer
 {
@@ -65,5 +71,21 @@ class Trace {
 } // namespace ZTrace
 
 #endif // !WITH_BLKIN
+
+static inline void encode(const blkin_trace_info& b, bufferlist& bl)
+{
+  ::encode(b.trace_id, bl);
+  ::encode(b.span_id, bl);
+  ::encode(b.parent_span_id, bl);
+}
+
+static inline void decode(blkin_trace_info& b, bufferlist::iterator& p)
+{
+  ::decode(b.trace_id, p);
+  ::decode(b.span_id, p);
+  ::decode(b.parent_span_id, p);
+}
+
+
 
 #endif // COMMON_ZIPKIN_TRACE_H

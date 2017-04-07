@@ -841,9 +841,6 @@ Message *decode_message(CephContext *cct, int crcflags,
   return m;
 }
 
-
-WRITE_RAW_ENCODER(blkin_trace_info)
-
 void Message::encode_trace(bufferlist &bl, uint64_t features) const
 {
   auto p = trace.get_info();
