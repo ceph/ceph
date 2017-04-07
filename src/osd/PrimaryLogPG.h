@@ -1443,6 +1443,9 @@ private:
   struct SnapTrimReserved : boost::statechart::event< SnapTrimReserved > {
     SnapTrimReserved() : boost::statechart::event< SnapTrimReserved >() {}
   };
+  struct SnapTrimTimerReady : boost::statechart::event< SnapTrimTimerReady > {
+    SnapTrimTimerReady() : boost::statechart::event< SnapTrimTimerReady >() {}
+  };
 
   struct NotTrimming;
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
@@ -1485,6 +1488,57 @@ private:
   };
 
   /* SnapTrimmerStates */
+  struct WaitTrimTimer : boost::statechart::state< WaitTrimTimer, Trimming >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< SnapTrimTimerReady >
+      > reactions;
+    Context *wakeup = nullptr;
+    explicit WaitTrimTimer(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitTrimTimer") {
+      context< SnapTrimmer >().log_enter(state_name);
+      assert(context<Trimming>().in_flight.empty());
+      struct OnTimer : Context {
+	PrimaryLogPGRef pg;
+	epoch_t epoch;
+	OnTimer(PrimaryLogPGRef pg, epoch_t epoch) : pg(pg), epoch(epoch) {}
+	void finish(int) override {
+	  pg->lock();
+	  if (!pg->pg_has_reset_since(epoch))
+	    pg->snap_trimmer_machine.process_event(SnapTrimTimerReady());
+	  pg->unlock();
+	}
+      };
+      auto *pg = context< SnapTrimmer >().pg;
+      if (pg->cct->_conf->osd_snap_trim_sleep > 0) {
+	wakeup = new OnTimer{pg, pg->get_osdmap()->get_epoch()};
+	Mutex::Locker l(pg->osd->snap_sleep_lock);
+	pg->osd->snap_sleep_timer.add_event_after(
+	  pg->cct->_conf->osd_snap_trim_sleep, wakeup);
+      } else {
+	post_event(SnapTrimTimerReady());
+      }
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+      auto *pg = context< SnapTrimmer >().pg;
+      if (wakeup) {
+	Mutex::Locker l(pg->osd->snap_sleep_lock);
+	pg->osd->snap_sleep_timer.cancel_event(wakeup);
+	wakeup = nullptr;
+      }
+    }
+    boost::statechart::result react(const SnapTrimTimerReady &) {
+      wakeup = nullptr;
+      if (!context< SnapTrimmer >().can_trim()) {
+	post_event(KickTrim());
+	return transit< NotTrimming >();
+      } else {
+	return transit< AwaitAsyncWork >();
+      }
+    }
+  };
+
   struct WaitRWLock : boost::statechart::state< WaitRWLock, Trimming >, NamedState {
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< TrimWriteUnblocked >
@@ -1526,7 +1580,7 @@ private:
 	post_event(KickTrim());
 	return transit< NotTrimming >();
       } else {
-	return transit< AwaitAsyncWork >();
+	return transit< WaitTrimTimer >();
       }
     }
   };

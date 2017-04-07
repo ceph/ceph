@@ -890,6 +890,9 @@ public:
 
   void queue_for_peering(PG *pg);
 
+  Mutex snap_sleep_lock;
+  SafeTimer snap_sleep_timer;
+
   AsyncReserver<spg_t> snap_reserver;
   void queue_for_snap_trim(PG *pg);
 
