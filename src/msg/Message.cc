@@ -846,26 +846,25 @@ WRITE_RAW_ENCODER(blkin_trace_info)
 
 void Message::encode_trace(bufferlist &bl, uint64_t features) const
 {
-#ifdef WITH_BLKIN
-  if (features & CEPH_FEATURE_BLKIN_TRACING)
-    ::encode(*trace.get_info(), bl);
-#endif
+  auto p = trace.get_info();
+  static const blkin_trace_info empty = { 0, 0, 0 };
+  if (!p) {
+    p = &empty;
+  }
+  ::encode(*p, bl);
 }
 
 void Message::decode_trace(bufferlist::iterator &p, bool create)
 {
+  blkin_trace_info info = {};
+  ::decode(info, p);
+
 #ifdef WITH_BLKIN
   if (!connection)
     return;
 
   const auto msgr = connection->get_messenger();
   const auto endpoint = msgr->get_trace_endpoint();
-  blkin_trace_info info = {};
-
-  // only decode a trace if both sides of the connection agree
-  if (connection->has_feature(CEPH_FEATURE_BLKIN_TRACING))
-    ::decode(info, p);
-
   if (info.trace_id) {
     trace.init(get_type_name(), endpoint, &info, true);
     trace.event("decoded trace");
