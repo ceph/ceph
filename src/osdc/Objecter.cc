@@ -179,7 +179,7 @@ public:
     second = NULL;
   }
 
-  ~C_TwoContexts() {
+  ~C_TwoContexts() override {
     delete first;
     delete second;
   }
@@ -2352,10 +2352,19 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
 
   assert(op->target.flags & (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE));
 
+  if (osdmap_full_try) {
+    op->target.flags |= CEPH_OSD_FLAG_FULL_TRY;
+  }
+
   bool need_send = false;
 
-  if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
-      osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
+  if (osdmap->get_epoch() < epoch_barrier) {
+    ldout(cct, 10) << " barrier, paused " << op << " tid " << op->tid
+		   << dendl;
+    op->target.paused = true;
+    _maybe_request_map();
+  } else if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
+             osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
     ldout(cct, 10) << " paused modify " << op << " tid " << op->tid
 		   << dendl;
     op->target.paused = true;
@@ -3062,9 +3071,6 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   if (!honor_osdmap_full)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
-
-  if (osdmap_full_try)
-    flags |= CEPH_OSD_FLAG_FULL_TRY;
 
   op->target.paused = false;
   op->stamp = ceph::mono_clock::now();
@@ -4674,7 +4680,7 @@ void Objecter::handle_command_reply(MCommandReply *m)
     s->put();
 }
 
-int Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
+void Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
 {
   shunique_lock sul(rwlock, ceph::acquire_unique);
 
@@ -4706,8 +4712,6 @@ int Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
   *ptid = tid;
 
   logger->inc(l_osdc_command_active);
-
-  return 0;
 }
 
 int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)

@@ -553,7 +553,7 @@ public:
       user_sync_thread = NULL;
     }
   }
-  ~RGWUserStatsCache() {
+  ~RGWUserStatsCache() override {
     stop();
   }
 
@@ -619,7 +619,7 @@ int RGWUserStatsCache::sync_user(const rgw_user& user)
   string user_str = user.to_str();
   int ret = store->cls_user_get_header(user_str, &header);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: can't read user header: ret=" << ret << dendl;
+    ldout(store->ctx(), 5) << "ERROR: can't read user header: ret=" << ret << dendl;
     return ret;
   }
 
@@ -672,7 +672,7 @@ int RGWUserStatsCache::sync_all_users()
       ldout(store->ctx(), 20) << "RGWUserStatsCache: sync user=" << user << dendl;
       int ret = sync_user(user);
       if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: sync_user() failed, user=" << user << " ret=" << ret << dendl;
+        ldout(store->ctx(), 5) << "ERROR: sync_user() failed, user=" << user << " ret=" << ret << dendl;
 
         /* continuing to next user */
         continue;

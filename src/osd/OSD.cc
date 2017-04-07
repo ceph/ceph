@@ -68,10 +68,9 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDBackoff.h"
+#include "messages/MOSDBeacon.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
-#include "messages/MOSDSubOp.h"
-#include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDPGTemp.h"
 
@@ -92,12 +91,14 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 
 #include "messages/MOSDAlive.h"
 
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepScrub.h"
 
 #include "messages/MMonCommand.h"
@@ -511,6 +512,10 @@ void OSDService::init()
   reserver_finisher.start();
   objecter_finisher.start();
   objecter->set_client_incarnation(0);
+
+  // exclude objecter from daemonperf output
+  objecter->get_logger()->set_suppress_nicks(true);
+
   watch_timer.init();
   agent_timer.init();
   snap_sleep_timer.init();
@@ -732,11 +737,18 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
   float full_ratio = std::max(osdmap->get_full_ratio(), nearfull_ratio);
   float failsafe_ratio = std::max(get_failsafe_full_ratio(), full_ratio);
 
-  if (full_ratio <= 0 ||
-      nearfull_ratio <= 0) {
+  if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    // use the failsafe for nearfull and full; the mon isn't using the
+    // flags anyway because we're mid-upgrade.
+    full_ratio = failsafe_ratio;
+    nearfull_ratio = failsafe_ratio;
+  } else if (full_ratio <= 0 ||
+	     nearfull_ratio <= 0) {
     derr << __func__ << " full_ratio or nearfull_ratio is <= 0" << dendl;
-    cur_state = NONE;
-    return;
+    // use failsafe flag.  ick.  the monitor did something wrong or the user
+    // did something stupid.
+    full_ratio = failsafe_ratio;
+    nearfull_ratio = failsafe_ratio;
   }
 
   enum s_names new_state;
@@ -961,6 +973,11 @@ void OSDService::send_pg_temp()
   _sent_pg_temp();
 }
 
+void OSDService::send_pg_created(pg_t pgid)
+{
+  dout(20) << __func__ << dendl;
+  monc->send_mon_message(new MOSDPGCreated(pgid));
+}
 
 // --------------------------------------
 // dispatch
@@ -1885,7 +1902,12 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "dump_historic_ops") {
-    if (!op_tracker.dump_historic_ops(f)) {
+    if (!op_tracker.dump_historic_ops(f, false)) {
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    }
+  } else if (command == "dump_historic_ops_by_duration") {
+    if (!op_tracker.dump_historic_ops(f, true)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
@@ -2435,6 +2457,10 @@ void OSD::final_init()
 				     asok_hook,
 				     "show slowest recent ops");
   assert(r == 0);
+  r = admin_socket->register_command("dump_historic_ops_by_duration", "dump_historic_ops_by_duration",
+				     asok_hook,
+				     "show slowest recent ops, sorted by duration");
+  assert(r == 0);
   r = admin_socket->register_command("dump_op_pq_state", "dump_op_pq_state",
 				     asok_hook,
 				     "dump op priority queue state");
@@ -2849,6 +2875,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("ops");
   cct->get_admin_socket()->unregister_command("dump_blocked_ops");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
+  cct->get_admin_socket()->unregister_command("dump_historic_ops_by_duration");
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
   cct->get_admin_socket()->unregister_command("dump_blacklist");
   cct->get_admin_socket()->unregister_command("dump_watchers");
@@ -3039,9 +3066,8 @@ int OSD::update_crush_location()
     bufferlist inbl;
     C_SaferCond w;
     string outs;
-    int r = monc->start_mon_command(vcmd, inbl, NULL, &outs, &w);
-    if (r == 0)
-      r = w.wait();
+    monc->start_mon_command(vcmd, inbl, NULL, &outs, &w);
+    int r = w.wait();
     if (r < 0) {
       if (r == -ENOENT && !created) {
 	string newcmd = "{\"prefix\": \"osd create\", \"id\": " + stringify(whoami)
@@ -3050,9 +3076,8 @@ int OSD::update_crush_location()
 	bufferlist inbl;
 	C_SaferCond w;
 	string outs;
-	int r = monc->start_mon_command(vnewcmd, inbl, NULL, &outs, &w);
-	if (r == 0)
-	  r = w.wait();
+	monc->start_mon_command(vnewcmd, inbl, NULL, &outs, &w);
+	int r = w.wait();
 	if (r < 0) {
 	  derr << __func__ << " fail: osd does not exist and created failed: "
 	       << cpp_strerror(r) << dendl;
@@ -3703,7 +3728,7 @@ void OSD::build_past_intervals_parallel()
  * look up a pg.  if we have it, great.  if not, consider creating it IF the pg mapping
  * hasn't changed since the given epoch and we are the primary.
  */
-void OSD::handle_pg_peering_evt(
+int OSD::handle_pg_peering_evt(
   spg_t pgid,
   const pg_history_t& orig_history,
   const pg_interval_map_t& pi,
@@ -3712,14 +3737,14 @@ void OSD::handle_pg_peering_evt(
 {
   if (service.splitting(pgid)) {
     peering_wait_for_split[pgid].push_back(evt);
-    return;
+    return -EEXIST;
   }
 
   PG *pg = _lookup_lock_pg(pgid);
   if (!pg) {
     // same primary?
     if (!osdmap->have_pg_pool(pgid.pool()))
-      return;
+      return -EINVAL;
     int up_primary, acting_primary;
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(
@@ -3733,7 +3758,7 @@ void OSD::handle_pg_peering_evt(
       dout(10) << __func__ << pgid << " acting changed in "
 	       << history.same_interval_since << " (msg from " << epoch << ")"
 	       << dendl;
-      return;
+      return -EINVAL;
     }
 
     if (service.splitting(pgid)) {
@@ -3777,7 +3802,7 @@ void OSD::handle_pg_peering_evt(
       pg->queue_peering_event(evt);
       wake_pg_waiters(pg);
       pg->unlock();
-      return;
+      return 0;
     }
     case RES_SELF: {
       old_pg_state->lock();
@@ -3812,7 +3837,7 @@ void OSD::handle_pg_peering_evt(
       pg->queue_peering_event(evt);
       wake_pg_waiters(pg);
       pg->unlock();
-      return;
+      return 0;
     }
     case RES_PARENT: {
       assert(old_pg_state);
@@ -3853,8 +3878,11 @@ void OSD::handle_pg_peering_evt(
       parent->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
       wake_pg_waiters(parent);
       parent->unlock();
-      return;
+      return 0;
     }
+    default:
+      assert(0);
+      return 0;
     }
   } else {
     // already had it.  did the mapping change?
@@ -3862,12 +3890,11 @@ void OSD::handle_pg_peering_evt(
       dout(10) << *pg << __func__ << " acting changed in "
 	       << pg->info.history.same_interval_since
 	       << " (msg from " << epoch << ")" << dendl;
-      pg->unlock();
-      return;
+    } else {
+      pg->queue_peering_event(evt);
     }
-    pg->queue_peering_event(evt);
     pg->unlock();
-    return;
+    return -EEXIST;
   }
 }
 
@@ -4495,6 +4522,15 @@ void OSD::tick()
   do_waiters();
 
   tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
+
+  if (is_active()) {
+    const auto now = ceph::coarse_mono_clock::now();
+    const auto elapsed = now - last_sent_beacon;
+    if (chrono::duration_cast<chrono::seconds>(elapsed).count() >
+	cct->_conf->osd_beacon_report_interval) {
+      send_beacon(now);
+    }
+  }
 }
 
 void OSD::tick_without_osd_lock()
@@ -4945,6 +4981,9 @@ void OSD::ms_handle_connect(Connection *con)
       send_pg_stats(now);
 
       map_lock.put_read();
+      if (is_active()) {
+	send_beacon(ceph::coarse_mono_clock::now());
+      }
     }
 
     // full map requests may happen while active or pre-boot
@@ -5396,6 +5435,7 @@ void OSD::send_pg_stats(const utime_t &now)
     had_for -= had_map_since;
 
     MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
+
     uint64_t tid = ++pg_stat_tid;
     m->set_tid(tid);
     m->osd_stat = cur_stat;
@@ -5519,6 +5559,21 @@ void OSD::flush_pg_stats()
   osd_lock.Lock();
 }
 
+void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
+{
+  const auto& monmap = monc->monmap;
+  // send beacon to mon even if we are just connected, and the monmap is not
+  // initialized yet by then.
+  if (monmap.epoch > 0 &&
+      monmap.get_required_features().contains_all(
+        ceph::features::mon::FEATURE_LUMINOUS)) {
+    dout(20) << __func__ << " sending" << dendl;
+    last_sent_beacon = now;
+    monc->send_mon_message(new MOSDBeacon());
+  } else {
+    dout(20) << __func__ << " not sending" << dendl;
+  }
+}
 
 void OSD::handle_command(MMonCommand *m)
 {
@@ -6462,7 +6517,7 @@ void OSD::handle_pg_scrub(MOSDScrub *m, PG *pg)
 void OSD::handle_scrub(MOSDScrub *m)
 {
   dout(10) << "handle_scrub " << *m << dendl;
-  if (!require_mon_peer(m)) {
+  if (!require_mon_or_mgr_peer(m)) {
     m->put();
     return;
   }
@@ -6805,7 +6860,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     session->put();
 
   // share with the objecter
-  service.objecter->handle_osd_map(m);
+  if (!is_preboot())
+    service.objecter->handle_osd_map(m);
 
   epoch_t first = m->get_first();
   epoch_t last = m->get_last();
@@ -7506,6 +7562,18 @@ bool OSD::require_mon_peer(const Message *m)
   return true;
 }
 
+bool OSD::require_mon_or_mgr_peer(const Message *m)
+{
+  if (!m->get_connection()->peer_is_mon() &&
+      !m->get_connection()->peer_is_mgr()) {
+    dout(0) << "require_mon_or_mgr_peer received from non-mon, non-mgr "
+	    << m->get_connection()->get_peer_addr()
+	    << " " << *m << dendl;
+    return false;
+  }
+  return true;
+}
+
 bool OSD::require_osd_peer(const Message *m)
 {
   if (!m->get_connection()->peer_is_osd()) {
@@ -7750,19 +7818,20 @@ void OSD::handle_pg_create(OpRequestRef op)
       continue;
     }
 
-    handle_pg_peering_evt(
-      pgid,
-      history,
-      pi,
-      osdmap->get_epoch(),
-      PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
-	  osdmap->get_epoch(),
-	  osdmap->get_epoch(),
-	  PG::NullEvt()))
-      );
+    if (handle_pg_peering_evt(
+          pgid,
+          history,
+          pi,
+          osdmap->get_epoch(),
+          PG::CephPeeringEvtRef(
+	    new PG::CephPeeringEvt(
+	      osdmap->get_epoch(),
+	      osdmap->get_epoch(),
+	      PG::NullEvt()))
+          ) == -EEXIST) {
+      service.send_pg_created(pgid.pgid);
+    }
   }
-
   last_pg_create_epoch = m->epoch;
 
   maybe_update_heartbeat_peers();

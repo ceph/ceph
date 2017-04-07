@@ -96,8 +96,24 @@ for bind in rados rbd cephfs rgw; do
     fi
 done
 
-$vdir/bin/sphinx-build -a -n -b dirhtml -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/html
-$vdir/bin/sphinx-build -a -b man -t man -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/man
+if [ -z "$@" ]; then
+    sphinx_targets="html man"
+else
+    sphinx_targets=$@
+fi
+for target in $sphinx_targets; do
+    builder=$target
+    case $target in
+        html)
+            builder=dirhtml
+            ;;
+        man)
+            extra_opt="-t man"
+            ;;
+    esac
+    $vdir/bin/sphinx-build -a -b $builder $extra_opt -d doctrees \
+                           $TOPDIR/doc $TOPDIR/build-doc/output/$target
+done
 
 #
 # Build and install JavaDocs

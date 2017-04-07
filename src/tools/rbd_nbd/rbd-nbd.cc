@@ -26,7 +26,6 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <assert.h>
 
 #include <linux/nbd.h>
 #include <linux/fs.h>
@@ -46,6 +45,7 @@
 #include "common/ceph_argparse.h"
 #include "common/Preforker.h"
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
@@ -59,15 +59,15 @@
 
 static void usage()
 {
-  std::cout << "Usage: rbd-nbd [options] map <image-or-snap-spec>  Map a image to nbd device\n"
+  std::cout << "Usage: rbd-nbd [options] map <image-or-snap-spec>  Map an image to nbd device\n"
             << "               unmap <device path>                 Unmap nbd device\n"
             << "               list-mapped                         List mapped nbd devices\n"
             << "Options:\n"
-            << "  --device <device path>                    Specify nbd device path\n"
-            << "  --read-only                               Map readonly\n"
-            << "  --nbds_max <limit>                        Override for module param nbds_max\n"
-            << "  --max_part <limit>                        Override for module param max_part\n"
-            << "  --exclusive                               Forbid other clients write\n"
+            << "  --device <device path>  Specify nbd device path\n"
+            << "  --read-only             Map read-only\n"
+            << "  --nbds_max <limit>      Override for module param nbds_max\n"
+            << "  --max_part <limit>      Override for module param max_part\n"
+            << "  --exclusive             Forbid writes by other clients\n"
             << std::endl;
   generic_server_usage();
 }
@@ -78,6 +78,7 @@ static int nbds_max = 0;
 static int max_part = 255;
 static bool set_max_part = false;
 static bool exclusive = false;
+static int nbd = -1;
 
 #define RBD_NBD_BLKSIZE 512UL
 
@@ -89,6 +90,18 @@ static bool exclusive = false;
 #error "Could not determine endianess"
 #endif
 #define htonll(a) ntohll(a)
+
+static void handle_signal(int signum)
+{
+  assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
+  dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
+  if (ioctl(nbd, NBD_DISCONNECT) < 0) {
+    derr << "rbd-nbd: disconnect failed: " << cpp_strerror(errno) << dendl;
+  } else {
+    dout(20) << __func__ << ": " << "disconnected" << dendl;
+  }
+}
 
 class NBDServer
 {
@@ -253,7 +266,7 @@ private:
       switch (ctx->command)
       {
         case NBD_CMD_DISC:
-          // RBD_DO_IT will return when pipe is closed
+          // NBD_DO_IT will return when pipe is closed
 	  dout(0) << "disconnect request received" << dendl;
           return;
         case NBD_CMD_WRITE:
@@ -440,11 +453,13 @@ public:
       if (new_size != size) {
         if (ioctl(fd, BLKFLSBUF, NULL) < 0)
             derr << "invalidate page cache failed: " << cpp_strerror(errno) << dendl;
-        if (ioctl(fd, NBD_SET_SIZE, new_size) < 0)
+        if (ioctl(fd, NBD_SET_SIZE, new_size) < 0) {
             derr << "resize failed: " << cpp_strerror(errno) << dendl;
+        } else {
+          size = new_size;
+        }
         if (image.invalidate_cache() < 0)
             derr << "invalidate rbd cache failed" << dendl;
-        size = new_size;
       }
     }
   }
@@ -514,13 +529,12 @@ static int do_map(int argc, const char *argv[])
   librados::IoCtx io_ctx;
   librbd::Image image;
 
-  int read_only;
+  int read_only = 0;
   unsigned long flags;
   unsigned long size;
 
   int index = 0;
   int fd[2];
-  int nbd;
 
   librbd::image_info_t info;
 
@@ -608,8 +622,10 @@ static int do_map(int argc, const char *argv[])
   }
 
   flags = NBD_FLAG_SEND_FLUSH | NBD_FLAG_SEND_TRIM | NBD_FLAG_HAS_FLAGS;
-  if (!snapname.empty() || readonly)
+  if (!snapname.empty() || readonly) {
     flags |= NBD_FLAG_READ_ONLY;
+    read_only = 1;
+  }
 
   r = rados.init_with_context(g_ceph_context);
   if (r < 0)
@@ -674,7 +690,6 @@ static int do_map(int argc, const char *argv[])
 
   ioctl(nbd, NBD_SET_FLAGS, flags);
 
-  read_only = snapname.empty() ? 0 : 1;
   r = ioctl(nbd, BLKROSET, (unsigned long) &read_only);
   if (r < 0) {
     r = -errno;
@@ -701,7 +716,19 @@ static int do_map(int argc, const char *argv[])
       NBDServer server(fd[1], image);
 
       server.start();
+      
+      init_async_signal_handler();
+      register_async_signal_handler(SIGHUP, sighup_handler);
+      register_async_signal_handler_oneshot(SIGINT, handle_signal);
+      register_async_signal_handler_oneshot(SIGTERM, handle_signal);
+
       ioctl(nbd, NBD_DO_IT);
+     
+      unregister_async_signal_handler(SIGHUP, sighup_handler);
+      unregister_async_signal_handler(SIGINT, handle_signal);
+      unregister_async_signal_handler(SIGTERM, handle_signal);
+      shutdown_async_signal_handler();
+      
       server.stop();
     }
 
@@ -736,10 +763,10 @@ static int do_unmap()
     return nbd;
   }
 
-  // alert the reader thread to shut down
   if (ioctl(nbd, NBD_DISCONNECT) < 0) {
     cerr << "rbd-nbd: the device is not used" << std::endl;
   }
+
   close(nbd);
 
   return 0;

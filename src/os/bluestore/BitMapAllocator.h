@@ -26,7 +26,7 @@ class BitMapAllocator : public Allocator {
 
 public:
   BitMapAllocator(CephContext* cct, int64_t device_size, int64_t block_size);
-  ~BitMapAllocator();
+  ~BitMapAllocator() override;
 
   int reserve(uint64_t need) override;
   void unreserve(uint64_t unused) override;
@@ -35,7 +35,7 @@ public:
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
     int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents) override;
 
-  int release(
+  void release(
     uint64_t offset, uint64_t length) override;
 
   uint64_t get_free() override;

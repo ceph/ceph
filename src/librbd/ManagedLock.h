@@ -60,6 +60,8 @@ public:
   void break_lock(const managed_lock::Locker &locker, bool force_break_lock,
                   Context *on_finish);
 
+  int assert_header_locked();
+
   bool is_shutdown() const {
     Mutex::Locker l(m_lock);
     return is_state_shutdown();

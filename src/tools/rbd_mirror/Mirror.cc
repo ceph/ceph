@@ -7,6 +7,7 @@
 #include "common/admin_socket.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "librbd/ImageCtx.h"
 #include "Mirror.h"
 #include "Threads.h"
 #include "ImageSync.h"
@@ -203,8 +204,8 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_local(new librados::Rados()),
   m_asok_hook(new MirrorAdminSocketHook(cct, this))
 {
-  cct->lookup_or_create_singleton_object<Threads>(m_threads,
-                                                  "rbd_mirror::threads");
+  cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx> >(
+    m_threads, "rbd_mirror::threads");
 }
 
 Mirror::~Mirror()

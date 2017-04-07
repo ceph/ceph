@@ -368,7 +368,7 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
     }
   }
 
-  if (pool_name->empty()) {
+  if (pool_name != nullptr && pool_name->empty()) {
     *pool_name = at::DEFAULT_POOL_NAME;
   }
 
@@ -380,8 +380,18 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
     return -EINVAL;
   }
 
+  //Validate pool name while creating/renaming/copying/cloning/importing/etc image
+  if (spec_validation == SPEC_VALIDATION_FULL) {
+    boost::regex pattern("^[^@/]*?$");
+    if (!boost::regex_match (*pool_name, pattern)) {
+      std::cerr << "rbd: invalid spec '" << *pool_name << "'" << std::endl;
+      return -EINVAL;
+    }
+  }
+
   if (snap_name != nullptr) {
-    r = validate_snapshot_name(mod, *snap_name, snapshot_presence);
+    r = validate_snapshot_name(mod, *snap_name, snapshot_presence,
+	                       spec_validation);
     if (r < 0) {
       return r;
     }
@@ -492,7 +502,8 @@ int get_pool_journal_names(const po::variables_map &vm,
 
 int validate_snapshot_name(at::ArgumentModifier mod,
                            const std::string &snap_name,
-                           SnapshotPresence snapshot_presence) {
+                           SnapshotPresence snapshot_presence,
+			   SpecValidation spec_validation) {
   std::string prefix = at::get_description_prefix(mod);
   switch (snapshot_presence) {
   case SNAPSHOT_PRESENCE_PERMITTED:
@@ -514,6 +525,15 @@ int validate_snapshot_name(at::ArgumentModifier mod,
       return -EINVAL;
     }
     break;
+  }
+
+  if (spec_validation == SPEC_VALIDATION_SNAP) {
+    // disallow "/" and "@" in snap name
+    boost::regex pattern("^[^@/]*?$");
+    if (!boost::regex_match (snap_name, pattern)) {
+      std::cerr << "rbd: invalid spec '" << snap_name << "'" << std::endl;
+      return -EINVAL;
+    }
   }
   return 0;
 }
@@ -814,6 +834,36 @@ int snap_set(librbd::Image &image, const std::string &snap_name) {
     return r;
   }
   return 0;
+}
+
+bool calc_sparse_extent(const bufferptr &bp,
+                        size_t sparse_size,
+                        uint64_t length,
+                        size_t *write_offset,
+                        size_t *write_length,
+                        size_t *offset) {
+  size_t extent_size;
+  if (*offset + sparse_size > length) {
+    extent_size = length - *offset;
+  } else {
+    extent_size = sparse_size;
+  }
+
+  bufferptr extent(bp, *offset, extent_size);
+  *offset += extent_size;
+
+  bool extent_is_zero = extent.is_zero();
+  if (!extent_is_zero) {
+    *write_length += extent_size;
+  }
+  if (extent_is_zero &&  *write_length == 0) {
+    *write_offset += extent_size;
+  }
+
+  if ((extent_is_zero || *offset == length) && *write_length != 0) {
+    return true;
+  }
+  return false;
 }
 
 std::string image_id(librbd::Image& image) {

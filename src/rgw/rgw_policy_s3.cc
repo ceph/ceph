@@ -130,7 +130,7 @@ int RGWPolicy::set_expires(const string& e)
   if (!parse_iso8601(e.c_str(), &t))
       return -EINVAL;
 
-  expires = timegm(&t);
+  expires = internal_timegm(&t);
 
   return 0;
 }

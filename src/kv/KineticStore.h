@@ -92,6 +92,10 @@ public:
     void rmkeys_by_prefix(
       const string &prefix
       );
+    void rm_range_keys(
+        const string &prefix,
+        const string &start,
+        const string &end);
   };
 
   KeyValueDB::Transaction get_transaction() {

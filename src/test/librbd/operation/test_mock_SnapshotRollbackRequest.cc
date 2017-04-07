@@ -176,7 +176,8 @@ public:
     C_SaferCond cond_ctx;
     librbd::NoOpProgressContext prog_ctx;
     MockSnapshotRollbackRequest *req = new MockSnapshotRollbackRequest(
-      mock_image_ctx, &cond_ctx, snap_name, snap_id, snap_size, prog_ctx);
+	mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), snap_name,
+	snap_id, snap_size, prog_ctx);
     {
       RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
       req->send();

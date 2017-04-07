@@ -37,9 +37,11 @@
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGBackfill.h"
+#include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MCommandReply.h"
+#include "messages/MOSDScrubReserve.h"
 #include "mds/inode_backtrace.h" // Ugh
 #include "common/EventTrace.h"
 
@@ -122,7 +124,7 @@ protected:
 
 public:
   /// Provide the final size of the copied object to the CopyCallback
-  ~CopyCallback() {}
+  ~CopyCallback() override {}
 };
 
 template <typename T>
@@ -209,7 +211,7 @@ struct OnReadComplete : public Context {
       opcontext->async_read_result = r;
     opcontext->finish_read(pg);
   }
-  ~OnReadComplete() {}
+  ~OnReadComplete() override {}
 };
 
 class PrimaryLogPG::C_OSD_AppliedRecoveredObject : public Context {
@@ -280,7 +282,7 @@ public:
     : results(NULL),
       retval(0),
       ctx(ctx_) {}
-  ~CopyFromCallback() {}
+  ~CopyFromCallback() override {}
 
   void finish(PrimaryLogPG::CopyCallbackResults results_) override {
     results = results_.get<1>();
@@ -689,7 +691,7 @@ public:
 
     return 0;
   }
-  ~PGLSPlainFilter() {}
+  ~PGLSPlainFilter() override {}
   bool filter(const hobject_t &obj, bufferlist& xattr_data,
                       bufferlist& outdata) override;
 };
@@ -712,7 +714,7 @@ public:
 
     return 0;
   }
-  ~PGLSParentFilter() {}
+  ~PGLSParentFilter() override {}
   bool filter(const hobject_t &obj, bufferlist& xattr_data,
                       bufferlist& outdata) override;
 };
@@ -1680,8 +1682,37 @@ void PrimaryLogPG::do_request(
     do_backfill(op);
     break;
 
+  case MSG_OSD_PG_BACKFILL_REMOVE:
+    do_backfill_remove(op);
+    break;
+
+  case MSG_OSD_SCRUB_RESERVE:
+    {
+      const MOSDScrubReserve *m =
+	static_cast<const MOSDScrubReserve*>(op->get_req());
+      switch (m->type) {
+      case MOSDScrubReserve::REQUEST:
+	handle_scrub_reserve_request(op);
+	break;
+      case MOSDScrubReserve::GRANT:
+	handle_scrub_reserve_grant(op, m->from);
+	break;
+      case MOSDScrubReserve::REJECT:
+	handle_scrub_reserve_reject(op, m->from);
+	break;
+      case MOSDScrubReserve::RELEASE:
+	handle_scrub_reserve_release(op);
+	break;
+      }
+    }
+    break;
+
   case MSG_OSD_REP_SCRUB:
     replica_scrub(op, handle);
+    break;
+
+  case MSG_OSD_REP_SCRUBMAP:
+    do_replica_scrub_map(op);
     break;
 
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
@@ -1960,13 +1991,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   // degraded object?
   if (write_ordered && is_degraded_or_backfilling_object(snapdir)) {
     wait_for_degraded_object(snapdir, op);
-    return;
-  }
- 
-  // asking for SNAPDIR is only ok for reads
-  if (m->get_snapid() == CEPH_SNAPDIR && op->may_write()) {
-    dout(20) << __func__ << ": write to snapdir not valid " << *m << dendl;
-    osd->reply_op_error(op, -EINVAL);
     return;
   }
 
@@ -3130,7 +3154,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
       if (m && !ctx->sent_reply) {
 	MOSDOpReply *reply = ctx->reply;
 	if (reply)
-	  ctx->reply = NULL;
+	  ctx->reply = nullptr;
 	else {
 	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
 	  reply->set_reply_versions(ctx->at_version,
@@ -3253,10 +3277,10 @@ void PrimaryLogPG::do_sub_op(OpRequestRef op)
       sub_op_remove(op);
       return;
     case CEPH_OSD_OP_SCRUB_RESERVE:
-      sub_op_scrub_reserve(op);
+      handle_scrub_reserve_request(op);
       return;
     case CEPH_OSD_OP_SCRUB_UNRESERVE:
-      sub_op_scrub_unreserve(op);
+      handle_scrub_reserve_release(op);
       return;
     case CEPH_OSD_OP_SCRUB_MAP:
       sub_op_scrub_map(op);
@@ -3273,7 +3297,17 @@ void PrimaryLogPG::do_sub_op_reply(OpRequestRef op)
     const OSDOp& first = r->ops[0];
     switch (first.op.op) {
     case CEPH_OSD_OP_SCRUB_RESERVE:
-      sub_op_scrub_reserve_reply(op);
+      {
+	pg_shard_t from = r->from;
+	bufferlist::iterator p = const_cast<bufferlist&>(r->get_data()).begin();
+	bool reserved;
+	::decode(reserved, p);
+	if (reserved) {
+	  handle_scrub_reserve_grant(op, from);
+	} else {
+	  handle_scrub_reserve_reject(op, from);
+	}
+      }
       return;
     }
   }
@@ -3410,6 +3444,23 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
     }
     break;
   }
+}
+
+void PrimaryLogPG::do_backfill_remove(OpRequestRef op)
+{
+  const MOSDPGBackfillRemove *m = static_cast<const MOSDPGBackfillRemove*>(
+    op->get_req());
+  assert(m->get_type() == MSG_OSD_PG_BACKFILL_REMOVE);
+  dout(7) << __func__ << " " << m->ls << dendl;
+
+  op->mark_started();
+
+  ObjectStore::Transaction t;
+  for (auto& p : m->ls) {
+    remove_snap_mapped_object(t, p.first);
+  }
+  int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+  assert(r == 0);
 }
 
 PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(bool first, const hobject_t &coid)
@@ -4455,8 +4506,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
           bufferlist tmpbl;
 	  r = pgbackend->objects_read_sync(soid, miter->first, miter->second, op.flags, &tmpbl);
-          if (r < 0)
+          if (r < 0) {
+            result = r;
             break;
+          }
 
           if (r < (int)miter->second) /* this is usually happen when we get extent that exceeds the actual file size */
             miter->second = r;
@@ -6580,24 +6633,27 @@ void PrimaryLogPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
   }
 }
 
-hobject_t PrimaryLogPG::generate_temp_object()
+hobject_t PrimaryLogPG::generate_temp_object(const hobject_t& target)
 {
   ostringstream ss;
-  ss << "temp_" << info.pgid << "_" << get_role() << "_" << osd->monc->get_global_id() << "_" << (++temp_seq);
-  hobject_t hoid = info.pgid.make_temp_hobject(ss.str());
+  ss << "temp_" << info.pgid << "_" << get_role()
+     << "_" << osd->monc->get_global_id() << "_" << (++temp_seq);
+  hobject_t hoid = target.make_temp_hobject(ss.str());
   dout(20) << __func__ << " " << hoid << dendl;
   return hoid;
 }
 
-hobject_t PrimaryLogPG::get_temp_recovery_object(eversion_t version, snapid_t snap)
+hobject_t PrimaryLogPG::get_temp_recovery_object(
+  const hobject_t& target,
+  eversion_t version)
 {
   ostringstream ss;
   ss << "temp_recovering_" << info.pgid  // (note this includes the shardid)
      << "_" << version
      << "_" << info.history.same_interval_since
-     << "_" << snap;
+     << "_" << target.snap;
   // pgid + version + interval + snapid is unique, and short
-  hobject_t hoid = info.pgid.make_temp_hobject(ss.str());
+  hobject_t hoid = target.make_temp_hobject(ss.str());
   dout(20) << __func__ << " " << hoid << dendl;
   return hoid;
 }
@@ -6871,7 +6927,7 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
   ctx->reply->get_header().data_off = ctx->data_off;
 
   MOSDOpReply *reply = ctx->reply;
-  ctx->reply = NULL;
+  ctx->reply = nullptr;
 
   if (result >= 0) {
     if (!ctx->ignore_log_op_stats) {
@@ -7307,7 +7363,7 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     if (cop->temp_cursor.is_initial()) {
       assert(!cop->results.started_temp_obj);
       cop->results.started_temp_obj = true;
-      cop->results.temp_oid = generate_temp_object();
+      cop->results.temp_oid = generate_temp_object(oid);
       dout(20) << __func__ << " using temp " << cop->results.temp_oid << dendl;
     }
     ObjectContextRef tempobc = get_object_context(cop->results.temp_oid, true);
@@ -11070,14 +11126,43 @@ uint64_t PrimaryLogPG::recover_backfill(
     add_object_context_to_pg_stat(obc, &stat);
     pending_backfill_updates[*i] = stat;
   }
-  for (unsigned i = 0; i < to_remove.size(); ++i) {
-    handle.reset_tp_timeout();
+  if (HAVE_FEATURE(get_min_upacting_features(), SERVER_LUMINOUS)) {
+    map<pg_shard_t,MOSDPGBackfillRemove*> reqs;
+    for (unsigned i = 0; i < to_remove.size(); ++i) {
+      handle.reset_tp_timeout();
+      const hobject_t& oid = to_remove[i].get<0>();
+      eversion_t v = to_remove[i].get<1>();
+      pg_shard_t peer = to_remove[i].get<2>();
+      MOSDPGBackfillRemove *m;
+      auto it = reqs.find(peer);
+      if (it != reqs.end()) {
+	m = it->second;
+      } else {
+	m = reqs[peer] = new MOSDPGBackfillRemove(
+	  spg_t(info.pgid.pgid, peer.shard),
+	  get_osdmap()->get_epoch());
+      }
+      m->ls.push_back(make_pair(oid, v));
 
-    // ordered before any subsequent updates
-    send_remove_op(to_remove[i].get<0>(), to_remove[i].get<1>(), to_remove[i].get<2>());
+      if (oid <= last_backfill_started)
+	pending_backfill_updates[oid]; // add empty stat!
+    }
+    for (auto p : reqs) {
+      osd->send_message_osd_cluster(p.first.osd, p.second,
+				    get_osdmap()->get_epoch());
+    }
+  } else {
+    // for jewel targets
+    for (unsigned i = 0; i < to_remove.size(); ++i) {
+      handle.reset_tp_timeout();
 
-    if (to_remove[i].get<0>() <= last_backfill_started)
-      pending_backfill_updates[to_remove[i].get<0>()]; // add empty stat!
+      // ordered before any subsequent updates
+      send_remove_op(to_remove[i].get<0>(), to_remove[i].get<1>(),
+		     to_remove[i].get<2>());
+
+      if (to_remove[i].get<0>() <= last_backfill_started)
+	pending_backfill_updates[to_remove[i].get<0>()]; // add empty stat!
+    }
   }
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();

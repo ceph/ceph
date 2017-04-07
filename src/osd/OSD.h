@@ -767,7 +767,7 @@ private:
   struct AgentThread : public Thread {
     OSDService *osd;
     explicit AgentThread(OSDService *o) : osd(o) {}
-    void *entry() {
+    void *entry() override {
       osd->agent_entry();
       return NULL;
     }
@@ -944,6 +944,8 @@ public:
   void remove_want_pg_temp(pg_t pgid);
   void requeue_pg_temp();
   void send_pg_temp();
+
+  void send_pg_created(pg_t pgid);
 
   void queue_for_peering(PG *pg);
 
@@ -1263,9 +1265,9 @@ class OSD : public Dispatcher,
   SafeTimer tick_timer_without_osd_lock;
 public:
   // config observer bits
-  virtual const char** get_tracked_conf_keys() const;
-  virtual void handle_conf_change(const struct md_config_t *conf,
-				  const std::set <std::string> &changed);
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set <std::string> &changed) override;
   void update_log_config();
   void check_config();
 
@@ -1299,7 +1301,6 @@ protected:
   void tick_without_osd_lock();
   void _dispatch(Message *m);
   void dispatch_op(OpRequestRef op);
-  bool dispatch_op_fast(OpRequestRef op, OSDMapRef& osdmap);
 
   void check_osdmap_features(ObjectStore *store);
 
@@ -1594,7 +1595,7 @@ private:
   struct T_Heartbeat : public Thread {
     OSD *osd;
     explicit T_Heartbeat(OSD *o) : osd(o) {}
-    void *entry() {
+    void *entry() override {
       osd->heartbeat_entry();
       return 0;
     }
@@ -1607,7 +1608,7 @@ public:
     OSD *osd;
     explicit HeartbeatDispatcher(OSD *o) : Dispatcher(o->cct), osd(o) {}
 
-    bool ms_can_fast_dispatch_any() const { return true; }
+    bool ms_can_fast_dispatch_any() const override { return true; }
     bool ms_can_fast_dispatch(const Message *m) const override {
       switch (m->get_type()) {
 	case CEPH_MSG_PING:
@@ -1617,22 +1618,22 @@ public:
           return false;
 	}
     }
-    void ms_fast_dispatch(Message *m) {
+    void ms_fast_dispatch(Message *m) override {
       osd->heartbeat_dispatch(m);
     }
-    bool ms_dispatch(Message *m) {
+    bool ms_dispatch(Message *m) override {
       return osd->heartbeat_dispatch(m);
     }
-    bool ms_handle_reset(Connection *con) {
+    bool ms_handle_reset(Connection *con) override {
       return osd->heartbeat_reset(con);
     }
-    void ms_handle_remote_reset(Connection *con) {}
-    bool ms_handle_refused(Connection *con) {
+    void ms_handle_remote_reset(Connection *con) override {}
+    bool ms_handle_refused(Connection *con) override {
       return osd->ms_handle_refused(con);
     }
     bool ms_verify_authorizer(Connection *con, int peer_type,
 			      int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			      bool& isvalid, CryptoKey& session_key) {
+			      bool& isvalid, CryptoKey& session_key) override {
       isvalid = true;
       return true;
     }
@@ -1778,7 +1779,7 @@ private:
 	shard_list.push_back(one_shard);
       }
     }
-    ~ShardedOpWQ() {
+    ~ShardedOpWQ() override {
       while (!shard_list.empty()) {
 	delete shard_list.back();
 	shard_list.pop_back();
@@ -1798,15 +1799,15 @@ private:
     void clear_pg_slots();
 
     /// try to do some work
-    void _process(uint32_t thread_index, heartbeat_handle_d *hb);
+    void _process(uint32_t thread_index, heartbeat_handle_d *hb) override;
 
     /// enqueue a new item
-    void _enqueue(pair <spg_t, PGQueueable> item);
+    void _enqueue(pair <spg_t, PGQueueable> item) override;
 
     /// requeue an old item (at the front of the line)
-    void _enqueue_front(pair <spg_t, PGQueueable> item);
+    void _enqueue_front(pair <spg_t, PGQueueable> item) override;
       
-    void return_waiting_threads() {
+    void return_waiting_threads() override {
       for(uint32_t i = 0; i < num_shards; i++) {
 	ShardData* sdata = shard_list[i];
 	assert (NULL != sdata); 
@@ -2030,7 +2031,7 @@ protected:
   void add_newly_split_pg(PG *pg,
 			  PG::RecoveryCtx *rctx);
 
-  void handle_pg_peering_evt(
+  int handle_pg_peering_evt(
     spg_t pgid,
     const pg_history_t& orig_history,
     const pg_interval_map_t& pi,
@@ -2132,6 +2133,9 @@ protected:
   void handle_pg_stats_ack(class MPGStatsAck *ack);
   void flush_pg_stats();
 
+  ceph::coarse_mono_clock::time_point last_sent_beacon;
+  void send_beacon(const ceph::coarse_mono_clock::time_point& now);
+
   void pg_stat_queue_enqueue(PG *pg) {
     pg_stat_queue_lock.Lock();
     if (pg->is_primary() && !pg->stat_queue_item.is_on_list()) {
@@ -2178,6 +2182,7 @@ protected:
 		OSDMapRef map);
 
   bool require_mon_peer(const Message *m);
+  bool require_mon_or_mgr_peer(const Message *m);
   bool require_osd_peer(const Message *m);
   /***
    * Verifies that we were alive in the given epoch, and that
@@ -2312,7 +2317,7 @@ protected:
   } remove_wq;
 
  private:
-  bool ms_can_fast_dispatch_any() const { return true; }
+  bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OP:
@@ -2326,11 +2331,14 @@ protected:
     case MSG_OSD_PG_PUSH_REPLY:
     case MSG_OSD_PG_SCAN:
     case MSG_OSD_PG_BACKFILL:
+    case MSG_OSD_PG_BACKFILL_REMOVE:
     case MSG_OSD_EC_WRITE:
     case MSG_OSD_EC_WRITE_REPLY:
     case MSG_OSD_EC_READ:
     case MSG_OSD_EC_READ_REPLY:
+    case MSG_OSD_SCRUB_RESERVE:
     case MSG_OSD_REP_SCRUB:
+    case MSG_OSD_REP_SCRUBMAP:
     case MSG_OSD_PG_UPDATE_LOG_MISSING:
     case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
       return true;
@@ -2338,19 +2346,19 @@ protected:
       return false;
     }
   }
-  void ms_fast_dispatch(Message *m);
-  void ms_fast_preprocess(Message *m);
-  bool ms_dispatch(Message *m);
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
+  void ms_fast_dispatch(Message *m) override;
+  void ms_fast_preprocess(Message *m) override;
+  bool ms_dispatch(Message *m) override;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key);
-  void ms_handle_connect(Connection *con);
-  void ms_handle_fast_connect(Connection *con);
-  void ms_handle_fast_accept(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_handle_refused(Connection *con);
+			    bool& isvalid, CryptoKey& session_key) override;
+  void ms_handle_connect(Connection *con) override;
+  void ms_handle_fast_connect(Connection *con) override;
+  void ms_handle_fast_accept(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override;
 
   io_queue get_io_queue() const {
     if (cct->_conf->osd_op_queue == "debug_random") {
@@ -2388,7 +2396,7 @@ protected:
       Messenger *hb_back_server,
       Messenger *osdc_messenger,
       MonClient *mc, const std::string &dev, const std::string &jdev);
-  ~OSD();
+  ~OSD() override;
 
   // static bits
   static int mkfs(CephContext *cct, ObjectStore *store,

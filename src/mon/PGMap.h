@@ -289,7 +289,7 @@ public:
   void dump_pool_stats(Formatter *f) const;
   void dump_osd_stats(Formatter *f) const;
   void dump_delta(Formatter *f) const;
-  void dump_filtered_pg_stats(Formatter *f, set<pg_t>& pgs);
+  void dump_filtered_pg_stats(Formatter *f, set<pg_t>& pgs) const;
 
   void dump_pg_stats_plain(ostream& ss,
 			   const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats,
@@ -299,7 +299,10 @@ public:
   bool get_stuck_counts(const utime_t cutoff, map<string, int>& note) const;
   void dump_stuck(Formatter *f, int types, utime_t cutoff) const;
   void dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const;
-
+  int dump_stuck_pg_stats(stringstream &ds,
+			   Formatter *f,
+			   int threshold,
+			   vector<string>& args) const;
   void dump(ostream& ss) const;
   void dump_basic(ostream& ss) const;
   void dump_pg_stats(ostream& ss, bool brief) const;
@@ -307,7 +310,7 @@ public:
   void dump_pool_stats(ostream& ss, bool header) const;
   void dump_osd_stats(ostream& ss) const;
   void dump_osd_sum_stats(ostream& ss) const;
-  void dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs);
+  void dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const;
 
   void dump_osd_perf_stats(Formatter *f) const;
   void print_osd_perf_stats(std::ostream *ss) const;
@@ -316,7 +319,7 @@ public:
   void print_osd_blocked_by_stats(std::ostream *ss) const;
 
   void get_filtered_pg_stats(uint32_t state, int64_t poolid, int64_t osdid,
-                             bool primary, set<pg_t>& pgs);
+                             bool primary, set<pg_t>& pgs) const;
   void recovery_summary(Formatter *f, list<string> *psl,
                         const pool_stat_t& delta_sum) const;
   void overall_recovery_summary(Formatter *f, list<string> *psl) const;
@@ -386,6 +389,15 @@ inline ostream& operator<<(ostream& out, const PGMap& m) {
   return out;
 }
 
+int process_pg_map_command(
+  const string& prefix,
+  const map<string,cmd_vartype>& cmdmap,
+  const PGMap& pg_map,
+  const OSDMap& osdmap,
+  Formatter *f,
+  stringstream *ss,
+  bufferlist *odata);
+
 class PGMapUpdater
 {
 public:
@@ -401,7 +413,7 @@ public:
    */
   static void register_new_pgs(
       const OSDMap &osd_map,
-      PGMap *pg_map,
+      const PGMap &pg_map,
       PGMap::Incremental *pending_inc);
 
   /**
@@ -409,19 +421,20 @@ public:
    */
   static void update_creating_pgs(
       const OSDMap &osd_map,
-      PGMap *pg_map,
+      const PGMap &pg_map,
       PGMap::Incremental *pending_inc);
 
   static void register_pg(
       const OSDMap &osd_map,
       pg_t pgid, epoch_t epoch,
       bool new_pool,
-      PGMap *pg_map,
+      const PGMap &pg_map,
       PGMap::Incremental *pending_inc);
 
+  // mark pg's state stale if its acting primary osd is down
   static void check_down_pgs(
       const OSDMap &osd_map,
-      const PGMap *pg_map,
+      const PGMap &pg_map,
       bool check_all,
       const set<int>& need_check_down_pg_osds,
       PGMap::Incremental *pending_inc);

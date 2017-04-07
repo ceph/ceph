@@ -110,6 +110,7 @@ For developers
 .. toctree:: 
     :maxdepth: 1
 
+    Client's Capabilities <capabilities>
     libcephfs <../../api/libcephfs-java/>
     Mantle <mantle>
 

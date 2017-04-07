@@ -18,7 +18,7 @@
 
 static std::map<std::string, std::string>* ext_mime_map;
 
-int rgw_put_system_obj(RGWRados *rgwstore, rgw_pool& pool, const string& oid, const char *data, size_t size, bool exclusive,
+int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, const char *data, size_t size, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
@@ -38,7 +38,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_pool& pool, const string& oid, co
   return ret;
 }
 
-int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_pool& pool, const string& key, bufferlist& bl,
+int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info)
 {
@@ -91,7 +91,7 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_pool& pool
   return 0;
 }
 
-int rgw_delete_system_obj(RGWRados *rgwstore, rgw_pool& pool, const string& oid,
+int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker)
 {
   rgw_raw_obj obj(pool, oid);

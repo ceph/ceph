@@ -21,15 +21,17 @@
 #include "KernelDevice.h"
 #include "include/types.h"
 #include "include/compat.h"
+#include "include/stringify.h"
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/blkdev.h"
 #include "common/align.h"
+#include "common/blkdev.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
-#define dout_prefix *_dout << "bdev(" << path << ") "
+#define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
 
 KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
   : BlockDevice(cct),
@@ -38,7 +40,6 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
     size(0), block_size(0),
     fs(NULL), aio(false), dio(false),
     debug_lock("KernelDevice::debug_lock"),
-    flush_lock("KernelDevice::flush_lock"),
     aio_queue(cct->_conf->bdev_aio_max_queue_depth),
     aio_callback(cb),
     aio_callback_priv(cbpriv),
@@ -113,13 +114,22 @@ int KernelDevice::open(const string& p)
     if (r < 0) {
       goto out_fail;
     }
-
-    rotational = block_device_is_rotational(path.c_str());
     size = s;
   } else {
     size = st.st_size;
-    //regular file is rotational device
-    rotational = true;
+  }
+
+  {
+    char partition[PATH_MAX], devname[PATH_MAX];
+    r = get_device_by_fd(fd_buffered, partition, devname, sizeof(devname));
+    if (r < 0) {
+      derr << "unable to get device name for " << path << ": "
+	   << cpp_strerror(r) << dendl;
+      rotational = true;
+    } else {
+      dout(20) << __func__ << " devname " << devname << dendl;
+      rotational = block_device_is_rotational(devname);
+    }
   }
 
   // Operate as though the block size is 4 KB.  The backing file
@@ -181,13 +191,91 @@ void KernelDevice::close()
   path.clear();
 }
 
+static string get_dev_property(const char *dev, const char *property)
+{
+  char val[1024] = {0};
+  get_block_device_string_property(dev, property, val, sizeof(val));
+  return val;
+}
+
+int KernelDevice::collect_metadata(string prefix, map<string,string> *pm) const
+{
+  (*pm)[prefix + "rotational"] = stringify((int)(bool)rotational);
+  (*pm)[prefix + "size"] = stringify(get_size());
+  (*pm)[prefix + "block_size"] = stringify(get_block_size());
+  (*pm)[prefix + "driver"] = "KernelDevice";
+  if (rotational) {
+    (*pm)[prefix + "type"] = "hdd";
+  } else {
+    (*pm)[prefix + "type"] = "ssd";
+  }
+
+  struct stat st;
+  int r = ::fstat(fd_buffered, &st);
+  if (r < 0)
+    return -errno;
+  if (S_ISBLK(st.st_mode)) {
+    (*pm)[prefix + "access_mode"] = "blk";
+    char partition_path[PATH_MAX];
+    char dev_node[PATH_MAX];
+    int rc = get_device_by_fd(fd_buffered, partition_path, dev_node, PATH_MAX);
+    switch (rc) {
+    case -EOPNOTSUPP:
+    case -EINVAL:
+      (*pm)[prefix + "partition_path"] = "unknown";
+      (*pm)[prefix + "dev_node"] = "unknown";
+      break;
+    case -ENODEV:
+      (*pm)[prefix + "partition_path"] = string(partition_path);
+      (*pm)[prefix + "dev_node"] = "unknown";
+      break;
+    default:
+      {
+	(*pm)[prefix + "partition_path"] = string(partition_path);
+	(*pm)[prefix + "dev_node"] = string(dev_node);
+	(*pm)[prefix + "model"] = get_dev_property(dev_node, "device/model");
+	(*pm)[prefix + "dev"] = get_dev_property(dev_node, "dev");
+
+	// nvme exposes a serial number
+	string serial = get_dev_property(dev_node, "device/serial");
+	if (serial.length()) {
+	  (*pm)[prefix + "serial"] = serial;
+	}
+
+	// nvme has a device/device/* structure; infer from that.  there
+	// is probably a better way?
+	string nvme_vendor = get_dev_property(dev_node, "device/device/vendor");
+	if (nvme_vendor.length()) {
+	  (*pm)[prefix + "type"] = "nvme";
+	}
+      }
+    }
+  } else {
+    (*pm)[prefix + "access_mode"] = "file";
+    (*pm)[prefix + "path"] = path;
+  }
+  return 0;
+}
+
 int KernelDevice::flush()
 {
-  bool ret = io_since_flush.compare_and_swap(1, 0);
-  if (!ret) {
-    dout(10) << __func__ << " no-op (no ios since last flush)" << dendl;
+  // protect flush with a mutex.  not that we are not really protected
+  // data here.  instead, we're ensuring that if any flush() caller
+  // sees that io_since_flush is true, they block any racing callers
+  // until the flush is observed.  that allows racing threads to be
+  // calling flush while still ensuring that *any* of them that got an
+  // aio completion notification will not return before that aio is
+  // stable on disk: whichever thread sees the flag first will block
+  // followers until the aio is stable.
+  std::lock_guard<std::mutex> l(flush_mutex);
+
+  bool expect = true;
+  if (!io_since_flush.compare_exchange_strong(expect, false)) {
+    dout(10) << __func__ << " no-op (no ios since last flush), flag is "
+	     << (int)io_since_flush.load() << dendl;
     return 0;
   }
+
   dout(10) << __func__ << " start" << dendl;
   if (cct->_conf->bdev_inject_crash) {
     ++injecting_crash;
@@ -259,12 +347,22 @@ void KernelDevice::_aio_thread()
 	  std::lock_guard<std::mutex> l(debug_queue_lock);
 	  debug_aio_unlink(*aio[i]);
 	}
+
+	// set flag indicating new ios have completed.  we do this *before*
+	// any completion or notifications so that any user flush() that
+	// follows the observed io completion will include this io.  Note
+	// that an earlier, racing flush() could observe and clear this
+	// flag, but that also ensures that the IO will be stable before the
+	// later flush() occurs.
+	io_since_flush.store(true);
+
 	int r = aio[i]->get_return_value();
 	dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
 		 << " ioc " << ioc
 		 << " with " << (ioc->num_running.load() - 1)
 		 << " aios left" << dendl;
 	assert(r >= 0);
+
 	int left = --ioc->num_running;
 	// NOTE: once num_running is decremented we can no longer
 	// trust aio[] values; they my be freed (e.g., by BlueFS::_fsync)
@@ -511,8 +609,6 @@ int KernelDevice::aio_write(
       }
     }
   }
-
-  io_since_flush.set(1);
   return 0;
 }
 

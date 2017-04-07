@@ -76,7 +76,6 @@ class MDSMonitor : public PaxosService {
 
   // my helpers
   void print_map(FSMap &m, int dbl=7);
-  void create_new_fs(FSMap &m, const std::string &name, int metadata_pool, int data_pool);
   void update_logger();
 
   void _updated(MonOpRequestRef op);

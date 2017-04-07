@@ -15,7 +15,7 @@ RADOS Health
 
 If part of the CephFS metadata or data pools is unavaible and CephFS isn't
 responding, it is probably because RADOS itself is unhealthy. Resolve those
-problems first (:doc:`/rados/troubleshooting`).
+problems first (:doc:`../../rados/troubleshooting/index`).
 
 The MDS
 =======

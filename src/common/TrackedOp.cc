@@ -88,6 +88,39 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
   f->close_section();
 }
 
+void OpHistory::dump_ops_by_duration(utime_t now, Formatter *f)
+{
+  Mutex::Locker history_lock(ops_history_lock);
+  cleanup(now);
+  f->open_object_section("op_history");
+  f->dump_int("size", history_size);
+  f->dump_int("duration", history_duration);
+  {
+    f->open_array_section("ops");
+    if (arrived.size()) {
+      vector<pair<double, TrackedOpRef> > durationvec;
+      durationvec.reserve(arrived.size());
+
+      for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
+	     arrived.begin();
+	   i != arrived.end();
+	   ++i) {
+	durationvec.push_back(pair<double, TrackedOpRef>(i->second->get_duration(), i->second));
+      }
+
+      sort(durationvec.begin(), durationvec.end());
+
+      for (auto i = durationvec.rbegin(); i != durationvec.rend(); ++i) {
+	f->open_object_section("op");
+	i->second->dump(now, f);
+	f->close_section();
+      }
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+
 struct ShardedTrackingData {
   Mutex ops_in_flight_lock_sharded;
   TrackedOp::tracked_op_list_t ops_in_flight_sharded;
@@ -117,14 +150,18 @@ OpTracker::~OpTracker() {
   }
 }
 
-bool OpTracker::dump_historic_ops(Formatter *f)
+bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration)
 {
   RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
   utime_t now = ceph_clock_now();
-  history.dump_ops(now, f);
+  if (by_duration) {
+    history.dump_ops_by_duration(now, f);
+  } else {
+    history.dump_ops(now, f);
+  }
   return true;
 }
 

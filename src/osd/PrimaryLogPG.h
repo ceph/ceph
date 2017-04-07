@@ -27,8 +27,6 @@
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
 
-class MOSDSubOpReply;
-
 class CopyFromCallback;
 class PromoteCallback;
 
@@ -38,7 +36,6 @@ class HitSet;
 struct TierAgentState;
 class MOSDOp;
 class MOSDOpReply;
-class MOSDSubOp;
 class OSDService;
 
 void intrusive_ptr_add_ref(PrimaryLogPG *pg);
@@ -351,7 +348,7 @@ public:
     return manager.try_get_read_lock(hoid, obc);
   }
 
-  void release_locks(ObcLockManager &manager) {
+  void release_locks(ObcLockManager &manager) override {
     release_object_locks(manager);
   }
 
@@ -376,7 +373,6 @@ public:
     ObjectStore::Transaction &t) override {
     if (hset_history) {
       info.hit_set = *hset_history;
-      dirty_info = true;
     }
     append_log(logv, trim_to, roll_forward_to, t, transaction_applied);
   }
@@ -1288,17 +1284,17 @@ protected:
   friend struct C_Flush;
 
   // -- scrub --
-  virtual bool _range_available_for_scrub(
+  bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end) override;
-  virtual void scrub_snapshot_metadata(
+  void scrub_snapshot_metadata(
     ScrubMap &map,
     const std::map<hobject_t, pair<uint32_t, uint32_t>> &missing_digest) override;
-  virtual void _scrub_clear_state() override;
-  virtual void _scrub_finish() override;
+  void _scrub_clear_state() override;
+  void _scrub_finish() override;
   object_stat_collection_t scrub_cstat;
 
-  virtual void _split_into(pg_t child_pgid, PG *child,
-			   unsigned split_bits) override;
+  void _split_into(pg_t child_pgid, PG *child,
+                   unsigned split_bits) override;
   void apply_and_flush_repops(bool requeue);
 
   void calc_trim_to() override;
@@ -1336,7 +1332,7 @@ protected:
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
 	       const PGPool &_pool, spg_t p);
-  ~PrimaryLogPG() {}
+  ~PrimaryLogPG() override {}
 
   int do_command(
     cmdmap_t cmdmap,
@@ -1359,6 +1355,7 @@ public:
     OpRequestRef op,
     ThreadPool::TPHandle &handle) override;
   void do_backfill(OpRequestRef op) override;
+  void do_backfill_remove(OpRequestRef op);
 
   void handle_backoff(OpRequestRef& op);
 
@@ -1380,10 +1377,11 @@ private:
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
 
   uint64_t temp_seq; ///< last id for naming temp objects
-  hobject_t generate_temp_object();  ///< generate a new temp object name
+  /// generate a new temp object name
+  hobject_t generate_temp_object(const hobject_t& target);
   /// generate a new temp object name (for recovery)
-  hobject_t get_temp_recovery_object(eversion_t version,
-				     snapid_t snap) override;
+  hobject_t get_temp_recovery_object(const hobject_t& target,
+				     eversion_t version) override;
   int get_recovery_op_priority() const {
       int pri = 0;
       pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
@@ -1648,9 +1646,6 @@ private:
       auto *pg = context< SnapTrimmer >().pg;
       pg->state_clear(PG_STATE_SNAPTRIM_WAIT);
       pg->publish_stats_to_osd();
-    }
-    boost::statechart::result react(const KickTrim&) {
-      return discard_event();
     }
   };
 

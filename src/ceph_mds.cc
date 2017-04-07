@@ -15,12 +15,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <pthread.h>
 
 #include <iostream>
 #include <string>
 using namespace std;
 
 #include "include/ceph_features.h"
+#include "include/compat.h"
 
 #include "common/config.h"
 #include "common/strtol.h"
@@ -92,6 +94,8 @@ extern "C" int cephd_mds(int argc, const char **argv)
 int main(int argc, const char **argv)
 #endif
 {
+  ceph_pthread_setname(pthread_self(), "ceph-mds");
+
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -143,7 +147,7 @@ int main(int argc, const char **argv)
   uint64_t nonce = 0;
   get_random_bytes((char*)&nonce, sizeof(nonce));
 
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->ms_type : g_conf->ms_public_type;
+  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MDS(-1), "mds",
 				      nonce, Messenger::HAS_MANY_CONNECTIONS);

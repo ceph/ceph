@@ -21,7 +21,7 @@ public:
   explicit RGWAccessControlPolicy_SWIFT(CephContext* const cct)
     : RGWAccessControlPolicy(cct) {
   }
-  ~RGWAccessControlPolicy_SWIFT() = default;
+  ~RGWAccessControlPolicy_SWIFT() override = default;
 
   int create(RGWRados *store,
              const rgw_user& id,
@@ -37,7 +37,7 @@ public:
   RGWAccessControlPolicy_SWIFTAcct(CephContext * const cct)
     : RGWAccessControlPolicy(cct) {
   }
-  ~RGWAccessControlPolicy_SWIFTAcct() {}
+  ~RGWAccessControlPolicy_SWIFTAcct() override {}
 
   void add_grants(RGWRados *store,
                   const std::vector<std::string>& uids,

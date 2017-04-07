@@ -767,12 +767,14 @@ int MonmapMonitor::get_monmap(bufferlist &bl)
 void MonmapMonitor::check_subs()
 {
   const string type = "monmap";
-  auto subs = mon->session_map.subs.find(type);
-  if (subs == mon->session_map.subs.end())
-    return;
-  for (auto sub : *subs->second) {
-    check_sub(sub);
-  }
+  mon->with_session_map([this, &type](const MonSessionMap& session_map) {
+      auto subs = session_map.subs.find(type);
+      if (subs == session_map.subs.end())
+	return;
+      for (auto sub : *subs->second) {
+	check_sub(sub);
+      }
+    });
 }
 
 void MonmapMonitor::check_sub(Subscription *sub)
@@ -783,9 +785,12 @@ void MonmapMonitor::check_sub(Subscription *sub)
 	   << " have " << epoch << dendl;
   if (sub->next <= epoch) {
     mon->send_latest_monmap(sub->session->con.get());
-    if (sub->onetime)
-      mon->session_map.remove_sub(sub);
-    else
+    if (sub->onetime) {
+      mon->with_session_map([this, sub](MonSessionMap& session_map) {
+	  session_map.remove_sub(sub);
+	});
+    } else {
       sub->next = epoch + 1;
+    }
   }
 }

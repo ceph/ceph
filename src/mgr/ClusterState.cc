@@ -100,13 +100,13 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
   PGMap::Incremental pending_inc;
   pending_inc.version = pg_map.version + 1; // to make apply_incremental happy
 
-  PGMapUpdater::update_creating_pgs(osd_map, &pg_map, &pending_inc);
-  PGMapUpdater::register_new_pgs(osd_map, &pg_map, &pending_inc);
+  PGMapUpdater::update_creating_pgs(osd_map, pg_map, &pending_inc);
+  PGMapUpdater::register_new_pgs(osd_map, pg_map, &pending_inc);
 
   // brute force this for now (don't bother being clever by only
   // checking osds that went up/down)
   set<int> need_check_down_pg_osds;
-  PGMapUpdater::check_down_pgs(osd_map, &pg_map, true,
+  PGMapUpdater::check_down_pgs(osd_map, pg_map, true,
 			       need_check_down_pg_osds, &pending_inc);
 
   pg_map.apply_incremental(g_ceph_context, pending_inc);

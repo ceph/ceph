@@ -129,8 +129,8 @@ TYPE(bluestore_pextent_t)
 // approach.
 // TYPE_FEATUREFUL(bluestore_blob_t)
 TYPE(bluestore_onode_t)
-TYPE(bluestore_wal_op_t)
-TYPE(bluestore_wal_transaction_t)
+TYPE(bluestore_deferred_op_t)
+TYPE(bluestore_deferred_transaction_t)
 #endif
 
 #include "common/hobject.h"
@@ -154,8 +154,14 @@ TYPE_FEATUREFUL(MonMap)
 #include "mon/MonCap.h"
 TYPE(MonCap)
 
+#include "mon/MgrMap.h"
+TYPE_FEATUREFUL(MgrMap)
+
 #include "mon/mon_types.h"
 TYPE(LevelDBStoreStats)
+
+#include "mon/CreatingPGs.h"
+TYPE(creating_pgs_t)
 
 #include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)

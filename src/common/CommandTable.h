@@ -93,6 +93,10 @@ public:
   {
     commands.erase(tid);
   }
+
+  void clear() {
+    commands.clear();
+  }
 };
 
 #endif

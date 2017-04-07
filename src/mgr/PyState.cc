@@ -99,13 +99,12 @@ ceph_send_command(PyObject *self, PyObject *args)
   Py_DECREF(set_fn);
 
   auto c = new MonCommandCompletion(completion, tag);
-  auto r = global_handle->get_monc().start_mon_command(
+  global_handle->get_monc().start_mon_command(
       {cmd_json},
       {},
       &c->outbl,
       &c->outs,
       c);
-  assert(r == 0);  // start_mon_command is forbidden to fail
 
   Py_RETURN_NONE;
 }

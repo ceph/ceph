@@ -398,16 +398,40 @@ void PurgeQueue::_execute_item(
   assert(gather.has_subs());
 
   gather.set_finisher(new FunctionContext([this, expire_to](int r){
-    execute_item_complete(expire_to);
+    if (lock.is_locked_by_me()) {
+      // Fast completion, Objecter ops completed before we hit gather.activate()
+      // and we're being called inline.  We are still inside _consume so
+      // no need to call back into it.
+      _execute_item_complete(expire_to);
+    } else {
+      // Normal completion, we're being called back from outside PurgeQueue::lock
+      // by the Objecter.  Take the lock, and call back into _consume to
+      // find more work.
+      Mutex::Locker l(lock);
+      _execute_item_complete(expire_to);
+
+      _consume();
+    }
+
+    // Have we gone idle?  If so, do an extra write_head now instead of
+    // waiting for next flush after journaler_write_head_interval.
+    // Also do this periodically even if not idle, so that the persisted
+    // expire_pos doesn't fall too far behind our progress when consuming
+    // a very long queue.
+    if (in_flight.empty() || journaler.write_head_needed()) {
+      journaler.write_head(new FunctionContext([this](int r){
+            journaler.trim();
+            }));
+    }
   }));
   gather.activate();
 }
 
-void PurgeQueue::execute_item_complete(
+void PurgeQueue::_execute_item_complete(
     uint64_t expire_to)
 {
+  assert(lock.is_locked_by_me());
   dout(10) << "complete at 0x" << std::hex << expire_to << std::dec << dendl;
-  Mutex::Locker l(lock);
   assert(in_flight.count(expire_to) == 1);
 
   auto iter = in_flight.find(expire_to);
@@ -434,19 +458,6 @@ void PurgeQueue::execute_item_complete(
   dout(10) << "in_flight.size() now " << in_flight.size() << dendl;
 
   logger->inc(l_pq_executed);
-
-  _consume();
-
-  // Have we gone idle?  If so, do an extra write_head now instead of
-  // waiting for next flush after journaler_write_head_interval.
-  // Also do this periodically even if not idle, so that the persisted
-  // expire_pos doesn't fall too far behind our progress when consuming
-  // a very long queue.
-  if (in_flight.empty() || journaler.write_head_needed()) {
-    journaler.write_head(new FunctionContext([this](int r){
-          journaler.trim();
-          }));
-  }
 }
 
 void PurgeQueue::update_op_limit(const MDSMap &mds_map)

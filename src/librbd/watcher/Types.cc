@@ -2,40 +2,43 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/watcher/Types.h"
-#include "librbd/Watcher.h"
-#include "common/dout.h"
-
-#include "librbd/ImageCtx.h"
-#include "librbd/MirroringWatcher.h"
-#include "librbd/ImageWatcher.h"
-
-#define dout_subsys ceph_subsys_rbd
-#undef dout_prefix
-#define dout_prefix *_dout << "librbd::Watcher: "
+#include "common/Formatter.h"
 
 namespace librbd {
 namespace watcher {
 
-C_NotifyAck::C_NotifyAck(Watcher *watcher, uint64_t notify_id,
-                         uint64_t handle)
-  : watcher(watcher), cct(watcher->m_cct), notify_id(notify_id),
-    handle(handle) {
-  ldout(cct, 10) << this << " C_NotifyAck start: id=" << notify_id << ", "
-                 << "handle=" << handle << dendl;
+void ClientId::encode(bufferlist &bl) const {
+  ::encode(gid, bl);
+  ::encode(handle, bl);
 }
 
-void C_NotifyAck::finish(int r) {
-  assert(r == 0);
-  ldout(cct, 10) << this << " C_NotifyAck finish: id=" << notify_id << ", "
-                 << "handle=" << handle << dendl;
-  watcher->acknowledge_notify(notify_id, handle, out);
+void ClientId::decode(bufferlist::iterator &iter) {
+  ::decode(gid, iter);
+  ::decode(handle, iter);
+}
+
+void ClientId::dump(Formatter *f) const {
+  f->dump_unsigned("gid", gid);
+  f->dump_unsigned("handle", handle);
+}
+
+WRITE_CLASS_ENCODER(ClientId);
+
+void NotifyResponse::encode(bufferlist& bl) const {
+  ::encode(acks, bl);
+  ::encode(timeouts, bl);
+}
+
+void NotifyResponse::decode(bufferlist::iterator& iter) {
+  ::decode(acks, iter);
+  ::decode(timeouts, iter);
 }
 
 } // namespace watcher
 } // namespace librbd
 
-template struct librbd::watcher::HandlePayloadVisitor<
-    librbd::MirroringWatcher<librbd::ImageCtx>>;
-
-template struct librbd::watcher::HandlePayloadVisitor<
-    librbd::ImageWatcher<librbd::ImageCtx>>;
+std::ostream &operator<<(std::ostream &out,
+                         const librbd::watcher::ClientId &client_id) {
+  out << "[" << client_id.gid << "," << client_id.handle << "]";
+  return out;
+}

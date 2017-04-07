@@ -90,12 +90,14 @@ public:
   int values_r;  //< Return value from OMAP value read
   bufferlist header_bl;
   std::map<std::string, bufferlist> session_vals;
+  bool more_session_vals = false;
 
   C_IO_SM_Load(SessionMap *cm, const bool f)
     : SessionMapIOContext(cm), first(f), header_r(0), values_r(0) {}
 
   void finish(int r) override {
-    sessionmap->_load_finish(r, header_r, values_r, first, header_bl, session_vals);
+    sessionmap->_load_finish(r, header_r, values_r, first, header_bl, session_vals,
+      more_session_vals);
   }
 };
 }
@@ -155,7 +157,8 @@ void SessionMap::_load_finish(
     int values_r,
     bool first,
     bufferlist &header_bl,
-    std::map<std::string, bufferlist> &session_vals)
+    std::map<std::string, bufferlist> &session_vals,
+    bool more_session_vals)
 {
   if (operation_r < 0) {
     derr << "_load_finish got " << cpp_strerror(operation_r) << dendl;
@@ -210,7 +213,7 @@ void SessionMap::_load_finish(
     ceph_abort();  // Should be unreachable because damaged() calls respawn()
   }
 
-  if (session_vals.size() == g_conf->mds_sessionmap_keys_per_op) {
+  if (more_session_vals) {
     // Issue another read if we're not at the end of the omap
     const std::string last_key = session_vals.rbegin()->first;
     dout(10) << __func__ << ": continue omap load from '"
@@ -219,9 +222,8 @@ void SessionMap::_load_finish(
     object_locator_t oloc(mds->mdsmap->get_metadata_pool());
     C_IO_SM_Load *c = new C_IO_SM_Load(this, false);
     ObjectOperation op;
-#warning fixme use the pmore arg
     op.omap_get_vals(last_key, "", g_conf->mds_sessionmap_keys_per_op,
-		     &c->session_vals, nullptr, &c->values_r);
+		     &c->session_vals, &c->more_session_vals, &c->values_r);
     mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0,
         new C_OnFinisher(c, mds->finisher));
   } else {
@@ -263,9 +265,8 @@ void SessionMap::load(MDSInternalContextBase *onload)
 
   ObjectOperation op;
   op.omap_get_header(&c->header_bl, &c->header_r);
-#warning use the pmore arg
   op.omap_get_vals("", "", g_conf->mds_sessionmap_keys_per_op,
-		   &c->session_vals, nullptr, &c->values_r);
+		   &c->session_vals, &c->more_session_vals, &c->values_r);
 
   mds->objecter->read(oid, oloc, op, CEPH_NOSNAP, NULL, 0, new C_OnFinisher(c, mds->finisher));
 }

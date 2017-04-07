@@ -152,11 +152,12 @@ public:
     EXPECT_EQ(0, ictx->state->open(false));
     promote_image(ictx);
 
-    EXPECT_EQ(0, ictx->operations->snap_create(snap_name.c_str(),
-					       cls::rbd::UserSnapshotNamespace()));
+    EXPECT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
+					       snap_name.c_str()));
 
     if (protect) {
-      EXPECT_EQ(0, ictx->operations->snap_protect(snap_name.c_str()));
+      EXPECT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
+						  snap_name.c_str()));
     }
 
     demote_image(ictx);
@@ -169,9 +170,10 @@ public:
     EXPECT_EQ(0, ictx->state->open(false));
     promote_image(ictx);
 
-    EXPECT_EQ(0, ictx->operations->snap_create("snap1",
-					       cls::rbd::UserSnapshotNamespace()));
-    EXPECT_EQ(0, ictx->operations->snap_protect("snap1"));
+    EXPECT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
+					       "snap1"));
+    EXPECT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
+						"snap1"));
     int order = 20;
     EXPECT_EQ(0, librbd::clone(m_local_io_ctx, ictx->name.c_str(), "snap1",
                                m_local_io_ctx,  "clone1", ictx->features,

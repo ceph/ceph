@@ -26,7 +26,7 @@ class StupidAllocator : public Allocator {
 
 public:
   StupidAllocator(CephContext* cct);
-  ~StupidAllocator();
+  ~StupidAllocator() override;
 
   int reserve(uint64_t need) override;
   void unreserve(uint64_t unused) override;
@@ -39,7 +39,7 @@ public:
     uint64_t want_size, uint64_t alloc_unit, int64_t hint,
     uint64_t *offset, uint32_t *length);
 
-  int release(
+  void release(
     uint64_t offset, uint64_t length) override;
 
   uint64_t get_free() override;

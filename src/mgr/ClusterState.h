@@ -71,6 +71,11 @@ public:
 
   void notify_osdmap(const OSDMap &osd_map);
 
+  bool have_fsmap() {
+    Mutex::Locker l(lock);
+    return fsmap.get_epoch() > 0;
+  }
+
   template<typename Callback, typename...Args>
   void with_fsmap(Callback&& cb, Args&&...args)
   {

@@ -39,6 +39,7 @@ import shlex
 import pwd
 import grp
 import textwrap
+import glob
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 CEPH_LOCKBOX_ONDISK_MAGIC = 'ceph lockbox volume v001'
@@ -475,6 +476,40 @@ def _bytes2str(string):
     return string.decode('utf-8') if isinstance(string, bytes) else string
 
 
+def command_init(arguments, **kwargs):
+    """
+    Safely execute a non-blocking ``subprocess.Popen`` call
+    making sure that the executable exists and raising a helpful
+    error message if it does not.
+
+    .. note:: This should be the preferred way of calling ``subprocess.Popen``
+    since it provides the caller with the safety net of making sure that
+    executables *will* be found and will error nicely otherwise.
+
+    This returns the process.
+    """
+
+    arguments = list(map(_bytes2str, _get_command_executable(arguments)))
+
+    LOG.info('Running command: %s' % ' '.join(arguments))
+    process = subprocess.Popen(
+        arguments,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        **kwargs)
+    return process
+
+
+def command_wait(process):
+    """
+    Wait for the process finish and parse its output.
+    """
+
+    out, err = process.communicate()
+
+    return _bytes2str(out), _bytes2str(err), process.returncode
+
+
 def command_check_call(arguments, exit=False):
     """
     Safely execute a ``subprocess.check_call`` call making sure that the
@@ -688,22 +723,36 @@ def get_partition_dev(dev, pnum):
        sda 1 -> sda1
        cciss/c0d1 1 -> cciss!c0d1p1
     """
-    partname = None
-    if is_mpath(dev):
-        partname = get_partition_mpath(dev, pnum)
-    else:
-        name = get_dev_name(os.path.realpath(dev))
-        for f in os.listdir(os.path.join('/sys/block', name)):
-            if f.startswith(name) and f.endswith(str(pnum)):
-                # we want the shortest name that starts with the base name
-                # and ends with the partition number
-                if not partname or len(f) < len(partname):
-                    partname = f
-    if partname:
-        return get_dev_path(partname)
-    else:
-        raise Error('partition %d for %s does not appear to exist' %
-                    (pnum, dev))
+    max_retry = 10
+    for retry in range(0, max_retry + 1):
+        partname = None
+        error_msg = ""
+        if is_mpath(dev):
+            partname = get_partition_mpath(dev, pnum)
+        else:
+            name = get_dev_name(os.path.realpath(dev))
+            sys_entry = os.path.join('/sys/block', name)
+            error_msg = " in %s" % sys_entry
+            for f in os.listdir(sys_entry):
+                if f.startswith(name) and f.endswith(str(pnum)):
+                    # we want the shortest name that starts with the base name
+                    # and ends with the partition number
+                    if not partname or len(f) < len(partname):
+                        partname = f
+        if partname:
+            if retry:
+                LOG.info('Found partition %d for %s after %d tries' %
+                         (pnum, dev, retry))
+            return get_dev_path(partname)
+        else:
+            if retry < max_retry:
+                LOG.info('Try %d/%d : partition %d for %s does not exist%s' %
+                         (retry + 1, max_retry, pnum, dev, error_msg))
+                time.sleep(.2)
+                continue
+            else:
+                raise Error('partition %d for %s does not appear to exist%s' %
+                            (pnum, dev, error_msg))
 
 
 def list_all_partitions():
@@ -1519,6 +1568,36 @@ def zap(dev):
     if not stat.S_ISBLK(dmode) or is_partition(dev):
         raise Error('not full block device; cannot zap', dev)
     try:
+        # Thoroughly wipe all partitions of any traces of
+        # Filesystems or OSD Journals
+        #
+        # In addition we need to write 10M of data to each partition
+        # to make sure that after re-creating the same partition
+        # there is no trace left of any previous Filesystem or OSD
+        # Journal
+
+        LOG.debug('Writing zeros to existing partitions on %s', dev)
+
+        for partname in list_partitions(dev):
+            partition = get_dev_path(partname)
+            command_check_call(
+                [
+                    'wipefs',
+                    '--all',
+                    partition,
+                ],
+            )
+
+            command_check_call(
+                [
+                    'dd',
+                    'if=/dev/zero',
+                    'of={path}'.format(path=partition),
+                    'bs=1M',
+                    'count=10',
+                ],
+            )
+
         LOG.debug('Zapping partition table on %s', dev)
 
         # try to wipe out any GPT partition table backups.  sgdisk
@@ -1577,6 +1656,26 @@ def adjust_symlink(target, path):
             os.symlink(target, path)
         except:
             raise Error('unable to create symlink %s -> %s' % (path, target))
+
+
+def get_mount_options(cluster, fs_type):
+    mount_options = get_conf(
+        cluster,
+        variable='osd_mount_options_{fstype}'.format(
+            fstype=fs_type,
+        ),
+    )
+    if mount_options is None:
+        mount_options = get_conf(
+            cluster,
+            variable='osd_fs_mount_options_{fstype}'.format(
+                fstype=fs_type,
+            ),
+        )
+    else:
+        # remove whitespaces
+        mount_options = "".join(mount_options.split())
+    return mount_options
 
 
 class Device(object):
@@ -2751,22 +2850,8 @@ class PrepareData(object):
                 ),
             )
 
-        self.mount_options = get_conf(
-            cluster=self.args.cluster,
-            variable='osd_mount_options_{fstype}'.format(
-                fstype=self.args.fs_type,
-            ),
-        )
-        if self.mount_options is None:
-            self.mount_options = get_conf(
-                cluster=self.args.cluster,
-                variable='osd_fs_mount_options_{fstype}'.format(
-                    fstype=self.args.fs_type,
-                ),
-            )
-        else:
-            # remove whitespaces
-            self.mount_options = "".join(self.mount_options.split())
+        self.mount_options = get_mount_options(cluster=self.args.cluster,
+                                               fs_type=self.args.fs_type)
 
         if self.args.osd_uuid is None:
             self.args.osd_uuid = str(uuid.uuid4())
@@ -3311,24 +3396,7 @@ def mount_activate(
 
     # TODO always using mount options from cluster=ceph for
     # now; see http://tracker.newdream.net/issues/3253
-    mount_options = get_conf(
-        cluster='ceph',
-        variable='osd_mount_options_{fstype}'.format(
-            fstype=fstype,
-        ),
-    )
-
-    if mount_options is None:
-        mount_options = get_conf(
-            cluster='ceph',
-            variable='osd_fs_mount_options_{fstype}'.format(
-                fstype=fstype,
-            ),
-        )
-
-    # remove whitespaces from mount_options
-    if mount_options is not None:
-        mount_options = "".join(mount_options.split())
+    mount_options = get_mount_options(cluster='ceph', fs_type=fstype)
 
     path = mount(dev=dev, fstype=fstype, options=mount_options)
 
@@ -4415,9 +4483,11 @@ def list_devices():
 
                 fs_type = get_dev_fs(dev_to_mount)
                 if fs_type is not None:
+                    mount_options = get_mount_options(cluster='ceph',
+                                                      fs_type=fs_type)
                     try:
                         tpath = mount(dev=dev_to_mount,
-                                      fstype=fs_type, options='')
+                                      fstype=fs_type, options=mount_options)
                         try:
                             for name in Space.NAMES:
                                 space_uuid = get_oneliner(tpath,
@@ -4690,6 +4760,176 @@ def main_trigger(args):
         LOG.debug(err)
 
 
+def main_fix(args):
+    # A hash table containing 'path': ('uid', 'gid', blocking, recursive)
+    fix_table = [
+        ('/etc/ceph', 'ceph', 'ceph', True, True),
+        ('/var/run/ceph', 'ceph', 'ceph', True, True),
+        ('/var/log/ceph', 'ceph', 'ceph', True, True),
+        ('/var/lib/ceph', 'ceph', 'ceph', True, False),
+    ]
+
+    # Relabel/chown all files under /var/lib/ceph/ recursively (except for osd)
+    for directory in glob.glob('/var/lib/ceph/*'):
+        if directory == '/var/lib/ceph/osd':
+            fix_table.append((directory, 'ceph', 'ceph', True, False))
+        else:
+            fix_table.append((directory, 'ceph', 'ceph', True, True))
+
+    # Relabel/chown the osds recursively and in parallel
+    for directory in glob.glob('/var/lib/ceph/osd/*'):
+        fix_table.append((directory, 'ceph', 'ceph', False, True))
+
+    LOG.debug("fix_table: " + str(fix_table))
+
+    # The lists of background processes
+    all_processes = []
+    permissions_processes = []
+    selinux_processes = []
+
+    # Preliminary checks
+    if args.selinux or args.all:
+        out, err, ret = command(['selinuxenabled'])
+        if ret:
+            LOG.error('SELinux is not enabled, please enable it, first.')
+            raise Error('no SELinux')
+
+    for daemon in ['ceph-mon', 'ceph-osd', 'ceph-mds', 'radosgw', 'ceph-mgr']:
+        out, err, ret = command(['pgrep', daemon])
+        if ret == 0:
+            LOG.error(daemon + ' is running, please stop it, first')
+            raise Error(daemon + ' running')
+
+    # Relabel the basic system data without the ceph files
+    if args.system or args.all:
+        c = ['restorecon', '-R', '/']
+        for directory, _, _, _, _ in fix_table:
+            # Skip /var/lib/ceph subdirectories
+            if directory.startswith('/var/lib/ceph/'):
+                continue
+            c.append('-e')
+            c.append(directory)
+
+        out, err, ret = command(c)
+
+        if ret:
+            LOG.error("Failed to restore labels of the underlying system")
+            LOG.error(err)
+            raise Error("basic restore failed")
+
+    # Use find to relabel + chown ~simultaenously
+    if args.all:
+        for directory, uid, gid, blocking, recursive in fix_table:
+            c = [
+                'find',
+                directory,
+                '-exec',
+                'chown',
+                ':'.join((uid, gid)),
+                '{}',
+                '+',
+                '-exec',
+                'restorecon',
+                '{}',
+                '+',
+            ]
+
+            # Just pass -maxdepth 0 for non-recursive calls
+            if not recursive:
+                c += ['-maxdepth', '0']
+
+            if blocking:
+                out, err, ret = command(c)
+
+                if ret:
+                    LOG.error("Failed to fix " + directory)
+                    LOG.error(err)
+                    raise Error(directory + " fix failed")
+            else:
+                all_processes.append(command_init(c))
+
+    LOG.debug("all_processes: " + str(all_processes))
+    for process in all_processes:
+        out, err, ret = command_wait(process)
+        if ret:
+            LOG.error("A background find process failed")
+            LOG.error(err)
+            raise Error("background failed")
+
+    # Fix permissions
+    if args.permissions:
+        for directory, uid, gid, blocking, recursive in fix_table:
+            if recursive:
+                c = [
+                    'chown',
+                    '-R',
+                    ':'.join((uid, gid)),
+                    directory
+                ]
+            else:
+                c = [
+                    'chown',
+                    ':'.join((uid, gid)),
+                    directory
+                ]
+
+            if blocking:
+                out, err, ret = command(c)
+
+                if ret:
+                    LOG.error("Failed to chown " + directory)
+                    LOG.error(err)
+                    raise Error(directory + " chown failed")
+            else:
+                permissions_processes.append(command_init(c))
+
+    LOG.debug("permissions_processes: " + str(permissions_processes))
+    for process in permissions_processes:
+        out, err, ret = command_wait(process)
+        if ret:
+            LOG.error("A background permissions process failed")
+            LOG.error(err)
+            raise Error("background failed")
+
+    # Fix SELinux labels
+    if args.selinux:
+        for directory, uid, gid, blocking, recursive in fix_table:
+            if recursive:
+                c = [
+                    'restorecon',
+                    '-R',
+                    directory
+                ]
+            else:
+                c = [
+                    'restorecon',
+                    directory
+                ]
+
+            if blocking:
+                out, err, ret = command(c)
+
+                if ret:
+                    LOG.error("Failed to restore labels for " + directory)
+                    LOG.error(err)
+                    raise Error(directory + " relabel failed")
+            else:
+                selinux_processes.append(command_init(c))
+
+    LOG.debug("selinux_processes: " + str(selinux_processes))
+    for process in selinux_processes:
+        out, err, ret = command_wait(process)
+        if ret:
+            LOG.error("A background selinux process failed")
+            LOG.error(err)
+            raise Error("background failed")
+
+    LOG.info(
+        "The ceph files has been fixed, please reboot "
+        "the system for the changes to take effect."
+    )
+
+
 def setup_statedir(dir):
     # XXX The following use of globals makes linting
     # really hard. Global state in Python is iffy and
@@ -4787,9 +5027,48 @@ def parse_args(argv):
     make_destroy_parser(subparsers)
     make_zap_parser(subparsers)
     make_trigger_parser(subparsers)
+    make_fix_parser(subparsers)
 
     args = parser.parse_args(argv)
     return args
+
+
+def make_fix_parser(subparsers):
+    fix_parser = subparsers.add_parser(
+        'fix',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(textwrap.dedent("""\
+        """)),
+        help='fix SELinux labels and/or file permissions')
+
+    fix_parser.add_argument(
+        '--system',
+        action='store_true',
+        default=False,
+        help='fix SELinux labels for the non-ceph system data'
+    )
+    fix_parser.add_argument(
+        '--selinux',
+        action='store_true',
+        default=False,
+        help='fix SELinux labels for ceph data'
+    )
+    fix_parser.add_argument(
+        '--permissions',
+        action='store_true',
+        default=False,
+        help='fix file permissions for ceph data'
+    )
+    fix_parser.add_argument(
+        '--all',
+        action='store_true',
+        default=False,
+        help='perform all the fix-related operations'
+    )
+    fix_parser.set_defaults(
+        func=main_fix,
+    )
+    return fix_parser
 
 
 def make_trigger_parser(subparsers):

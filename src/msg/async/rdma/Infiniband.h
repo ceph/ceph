@@ -30,6 +30,12 @@
 #include "msg/async/net_handler.h"
 #include "common/Mutex.h"
 
+#define RDMA_DEBUG 0
+
+#if RDMA_DEBUG
+#include "ib_dbg.h"
+#endif
+
 #define HUGE_PAGE_SIZE (2 * 1024 * 1024)
 #define ALIGN_TO_PAGE_SIZE(x) \
   (((x) + HUGE_PAGE_SIZE -1) / HUGE_PAGE_SIZE * HUGE_PAGE_SIZE)
@@ -44,83 +50,10 @@ struct IBSYNMsg {
 
 class RDMAStack;
 class CephContext;
-
-class Port {
-  struct ibv_context* ctxt;
-  uint8_t port_num;
-  struct ibv_port_attr* port_attr;
-  uint16_t lid;
-  int gid_idx;
-  union ibv_gid gid;
-
- public:
-  explicit Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn);
-  uint16_t get_lid() { return lid; }
-  ibv_gid  get_gid() { return gid; }
-  uint8_t get_port_num() { return port_num; }
-  ibv_port_attr* get_port_attr() { return port_attr; }
-  int get_gid_idx() { return gid_idx; }
-};
-
-
-class Device {
-  ibv_device *device;
-  const char* name;
-  uint8_t  port_cnt;
- public:
-  explicit Device(CephContext *c, ibv_device* d);
-  ~Device() {
-    if (active_port) {
-      delete active_port;
-      assert(ibv_close_device(ctxt) == 0);
-    }
-  }
-  const char* get_name() { return name;}
-  uint16_t get_lid() { return active_port->get_lid(); }
-  ibv_gid get_gid() { return active_port->get_gid(); }
-  int get_gid_idx() { return active_port->get_gid_idx(); }
-  void binding_port(CephContext *c, uint8_t port_num);
-  struct ibv_context *ctxt;
-  ibv_device_attr *device_attr;
-  Port* active_port;
-};
-
-
-class DeviceList {
-  struct ibv_device ** device_list;
-  int num;
-  Device** devices;
- public:
-  DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)) {
-    if (device_list == NULL || num == 0) {
-      lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
-      ceph_abort();
-    }
-    devices = new Device*[num];
-
-    for (int i = 0;i < num; ++i) {
-      devices[i] = new Device(cct, device_list[i]);
-    }
-  }
-  ~DeviceList() {
-    for (int i=0; i < num; ++i) {
-      delete devices[i];
-    }
-    delete []devices;
-    ibv_free_device_list(device_list);
-  }
-
-  Device* get_device(const char* device_name) {
-    assert(devices);
-    for (int i = 0; i < num; ++i) {
-      if (!strlen(device_name) || !strcmp(device_name, devices[i]->get_name())) {
-        return devices[i];
-      }
-    }
-    return NULL;
-  }
-};
-
+class Port;
+class Device;
+class DeviceList;
+class RDMADispatcher;
 
 class Infiniband {
  public:
@@ -150,7 +83,6 @@ class Infiniband {
       bool full();
       bool over();
       void clear();
-      void post_srq(Infiniband *ib);
 
      public:
       ibv_mr* mr;
@@ -215,32 +147,25 @@ class Infiniband {
   };
 
  private:
-  uint32_t max_send_wr;
-  uint32_t max_recv_wr;
-  uint32_t max_sge;
-  uint8_t  ib_physical_port;
-  MemoryManager* memory_manager;
-  ibv_srq* srq;             // shared receive work queue
-  Device *device;
-  ProtectionDomain *pd;
-  DeviceList device_list;
-  void wire_gid_to_gid(const char *wgid, union ibv_gid *gid);
-  void gid_to_wire_gid(const union ibv_gid *gid, char wgid[]);
+  DeviceList *device_list;
+  RDMADispatcher *dispatcher = nullptr;
 
  public:
-  explicit Infiniband(CephContext *c, const std::string &device_name, uint8_t p);
+  explicit Infiniband(CephContext *c);
   ~Infiniband();
+
+  void set_dispatcher(RDMADispatcher *d);
 
   class CompletionChannel {
     static const uint32_t MAX_ACK_EVENT = 5000;
     CephContext *cct;
-    Infiniband& infiniband;
+    Device &ibdev;
     ibv_comp_channel *channel;
     ibv_cq *cq;
     uint32_t cq_events_that_need_ack;
 
    public:
-    CompletionChannel(CephContext *c, Infiniband &ib);
+    CompletionChannel(CephContext *c, Device &ibdev);
     ~CompletionChannel();
     int init();
     bool get_cq_event();
@@ -256,9 +181,9 @@ class Infiniband {
   // You need to call init and it will create a cq and associate to comp channel
   class CompletionQueue {
    public:
-    CompletionQueue(CephContext *c, Infiniband &ib,
+    CompletionQueue(CephContext *c, Device &ibdev,
                     const uint32_t qd, CompletionChannel *cc)
-      : cct(c), infiniband(ib), channel(cc), cq(NULL), queue_depth(qd) {}
+      : cct(c), ibdev(ibdev), channel(cc), cq(NULL), queue_depth(qd) {}
     ~CompletionQueue();
     int init();
     int poll_cq(int num_entries, ibv_wc *ret_wc_array);
@@ -268,7 +193,7 @@ class Infiniband {
     CompletionChannel* get_cc() const { return channel; }
    private:
     CephContext *cct;
-    Infiniband&  infiniband;     // Infiniband to which this QP belongs
+    Device &ibdev;
     CompletionChannel *channel;
     ibv_cq *cq;
     uint32_t queue_depth;
@@ -282,7 +207,7 @@ class Infiniband {
   // must call plumb() to bring the queue pair to the RTS state.
   class QueuePair {
    public:
-    QueuePair(CephContext *c, Infiniband& infiniband, ibv_qp_type type,
+    QueuePair(CephContext *c, Device &device, ibv_qp_type type,
               int ib_physical_port,  ibv_srq *srq,
               Infiniband::CompletionQueue* txcq,
               Infiniband::CompletionQueue* rxcq,
@@ -329,7 +254,7 @@ class Infiniband {
 
    private:
     CephContext  *cct;
-    Infiniband&  infiniband;     // Infiniband to which this QP belongs
+    Device       &ibdev;     // Infiniband to which this QP belongs
     ibv_qp_type  type;           // QP type (IBV_QPT_RC, etc.)
     ibv_context* ctxt;           // device context of the HCA to use
     int ib_physical_port;
@@ -346,28 +271,24 @@ class Infiniband {
   };
 
  public:
-  typedef MemoryManager::Cluster Cluster;
-  typedef MemoryManager::Chunk Chunk;
-  QueuePair* create_queue_pair(CephContext *c, CompletionQueue*, CompletionQueue*, ibv_qp_type type);
-  ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
-  int post_chunk(Chunk* chunk);
-  int post_channel_cluster();
-  int get_tx_buffers(std::vector<Chunk*> &c, size_t bytes);
-  CompletionChannel *create_comp_channel(CephContext *c);
-  CompletionQueue *create_comp_queue(CephContext *c, CompletionChannel *cc=NULL);
-  uint8_t get_ib_physical_port() { return ib_physical_port; }
-  int send_msg(CephContext *cct, int sd, IBSYNMsg& msg);
-  int recv_msg(CephContext *cct, int sd, IBSYNMsg& msg);
-  uint16_t get_lid() { return device->get_lid(); }
-  ibv_gid get_gid() { return device->get_gid(); }
-  MemoryManager* get_memory_manager() { return memory_manager; }
-  Device* get_device() { return device; }
-  int get_async_fd() { return device->ctxt->async_fd; }
-  bool is_tx_buffer(const char* c) { return memory_manager->is_tx_buffer(c);}
-  bool is_rx_buffer(const char* c) { return memory_manager->is_rx_buffer(c);}
-  Chunk *get_tx_chunk_by_buffer(const char *c) { return memory_manager->get_tx_chunk_by_buffer(c); }
   static const char* wc_status_to_string(int status);
   static const char* qp_state_string(int status);
+
+  void handle_pre_fork();
+
+  Device* get_device(const char* device_name);
+
+  int poll_tx(int n, Device **d, ibv_wc *wc);
+  int poll_rx(int n, Device **d, ibv_wc *wc);
+  int poll_blocking(bool &done);
+  void rearm_notify();
+  void handle_async_event();
+  RDMADispatcher *get_dispatcher() { return dispatcher; }
 };
+
+inline ostream& operator<<(ostream& out, const Infiniband::QueuePair &qp)
+{
+    return out << qp.get_local_qp_number();
+}
 
 #endif

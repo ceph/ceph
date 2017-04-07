@@ -96,6 +96,7 @@ public:
   struct PageSetObject;
   struct Collection : public CollectionImpl {
     coll_t cid;
+    int bits;
     CephContext *cct;
     bool use_page_set;
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
@@ -223,7 +224,7 @@ private:
 
   int _collection_hint_expected_num_objs(const coll_t& cid, uint32_t pg_num,
       uint64_t num_objs) const { return 0; }
-  int _create_collection(const coll_t& c);
+  int _create_collection(const coll_t& c, int bits);
   int _destroy_collection(const coll_t& c);
   int _collection_add(const coll_t& cid, const coll_t& ocid, const ghobject_t& oid);
   int _collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
@@ -242,7 +243,7 @@ public:
       coll_lock("MemStore::coll_lock"),
       finisher(cct),
       used_bytes(0) {}
-  ~MemStore() { }
+  ~MemStore() override { }
 
   string get_type() override {
     return "memstore";
@@ -290,7 +291,7 @@ public:
 	   struct stat *st, bool allow_eio = false) override;
   int set_collection_opts(
     const coll_t& cid,
-    const pool_opts_t& opts);
+    const pool_opts_t& opts) override;
   int read(
     const coll_t& cid,
     const ghobject_t& oid,
@@ -325,6 +326,7 @@ public:
   }
   bool collection_exists(const coll_t& c) override;
   int collection_empty(const coll_t& c, bool *empty) override;
+  int collection_bits(const coll_t& c) override;
   using ObjectStore::collection_list;
   int collection_list(const coll_t& cid,
 		      const ghobject_t& start, const ghobject_t& end, int max,
@@ -388,7 +390,7 @@ public:
 
   objectstore_perf_stat_t get_cur_stats() override;
 
-  const PerfCounters* get_perf_counters() const {
+  const PerfCounters* get_perf_counters() const override {
     return nullptr;
   }
 

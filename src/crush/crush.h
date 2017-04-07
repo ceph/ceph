@@ -315,28 +315,54 @@ struct crush_map {
          */
 	__s32 max_devices;
 
-	/*! choose local retries before re-descent */
+	/*! Backward compatibility tunable. It implements a bad solution
+         * and must always be set to 0 except for backward compatibility
+         * purposes
+         */
 	__u32 choose_local_tries;
-	/*! choose local attempts using a fallback permutation before
-	 *! re-descent */
+	/*! Backward compatibility tunable. It implements a bad solution
+         * and must always be set to 0 except for backward compatibility
+         * purposes
+         */
 	__u32 choose_local_fallback_tries;
-	/*! choose attempts before giving up */
+	/*! Tunable. The default value when the CHOOSE_TRIES or
+         * CHOOSELEAF_TRIES steps are omitted in a rule. See the
+         * documentation for crush_rule_set_step() for more
+         * information
+         */
 	__u32 choose_total_tries;
-	/*! attempt chooseleaf inner descent once for firstn mode; on
-	 *! reject retry outer descent.  Note that this does *not*
-	 *! apply to a collision: in that case we will retry as we used
-	 *! to. */
+	/*! Backward compatibility tunable. It should always be set
+         *  to 1 except for backward compatibility. Implemented in 2012
+         *  it was generalized late 2013 and is mostly unused except
+         *  in one border case, reason why it must be set to 1.
+         *
+         *  Attempt chooseleaf inner descent once for firstn mode; on
+         *  reject retry outer descent.  Note that this does *not*
+         *  apply to a collision: in that case we will retry as we
+         *  used to.
+         */
 	__u32 chooseleaf_descend_once;
-
-	/*! if non-zero, feed r into chooseleaf, bit-shifted right by (r-1)
-	 *! bits.  a value of 1 is best for new clusters.  for legacy clusters
-	 *! that want to limit reshuffling, a value of 3 or 4 will make the
-	 *! mappings line up a bit better with previous mappings. */
+	/*! Backward compatibility tunable. It is a fix for bad
+         *  mappings implemented in 2014 at
+         *  https://github.com/ceph/ceph/pull/1185. It should always
+         *  be set to 1 except for backward compatibility.
+         *
+         *  If non-zero, feed r into chooseleaf, bit-shifted right by
+	 *  (r-1) bits.  a value of 1 is best for new clusters.  for
+	 *  legacy clusters that want to limit reshuffling, a value of
+	 *  3 or 4 will make the mappings line up a bit better with
+	 *  previous mappings.
+         */
 	__u8 chooseleaf_vary_r;
 
-	/*! if true, it makes chooseleaf firstn to return stable results (if
-	 *! no local retry) so that data migrations would be optimal when some
-	 *! device fails. */
+	/*! Backward compatibility tunable. It is an improvement that
+         *  avoids unnecessary mapping changes, implemented at
+         *  https://github.com/ceph/ceph/pull/6572 and explained in
+         *  this post: "chooseleaf may cause some unnecessary pg
+         *  migrations" in October 2015
+         *  https://www.mail-archive.com/ceph-devel@vger.kernel.org/msg26075.html
+         *  It should always be set to 1 except for backward compatibility.
+         */
 	__u8 chooseleaf_stable;
 
         /*! @cond INTERNAL */
@@ -354,12 +380,17 @@ struct crush_map {
 	size_t working_size;
 
 #ifndef __KERNEL__
-	/*
-	 * version 0 (original) of straw_calc has various flaws.  version 1
-	 * fixes a few of them.
+	/*! @endcond */
+	/*! Backward compatibility tunable. It is a fix for the straw
+         *  scaler values for the straw algorithm which is deprecated
+         *  (straw2 replaces it) implemented at
+         *  https://github.com/ceph/ceph/pull/3057. It should always
+         *  be set to 1 except for backward compatibility.
+         *
 	 */
 	__u8 straw_calc_version;
 
+        /*! @cond INTERNAL */
 	/*
 	 * allowed bucket algs is a bitmask, here the bit positions
 	 * are CRUSH_BUCKET_*.  note that these are *bits* and

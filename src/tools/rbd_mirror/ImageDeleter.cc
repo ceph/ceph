@@ -375,7 +375,8 @@ bool ImageDeleter::process_image_delete() {
         dout(20) << "snapshot " << imgctx->name << "@" << snap.name
                  << " is protected, issuing unprotect command" << dendl;
 
-        r = imgctx->operations->snap_unprotect(snap.name.c_str());
+        r = imgctx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(),
+					       snap.name.c_str());
         if (r == -EBUSY) {
           // there are still clones of snapshots of this image, therefore send
           // the delete request to the end of the queue
@@ -396,7 +397,8 @@ bool ImageDeleter::process_image_delete() {
         }
       }
 
-      r = imgctx->operations->snap_remove(snap.name.c_str());
+      r = imgctx->operations->snap_remove(cls::rbd::UserSnapshotNamespace(),
+					  snap.name.c_str());
       if (r < 0) {
         derr << "error removing snapshot " << imgctx->name << "@"
              << snap.name << ": " << cpp_strerror(r) << dendl;

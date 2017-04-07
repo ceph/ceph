@@ -111,6 +111,7 @@
  *  NOFORWARD - command may not be forwarded
  *  OBSOLETE  - command is considered obsolete
  *  DEPRECATED - command is considered deprecated
+ *  MGR       - command goes to ceph-mgr (for luminous+)
  *
  * A command should always be first considered DEPRECATED before being
  * considered OBSOLETE, giving due consideration to users and conforming
@@ -118,60 +119,16 @@
  */
 
 /*
- * pg commands PgMonitor.cc
+ * pg commands PGMonitor.cc
  */
 
-COMMAND("pg stat", "show placement group status.", "pg", "r", "cli,rest")
-COMMAND("pg getmap", "get binary pg map to -o/stdout", "pg", "r", "cli,rest")
-COMMAND("pg dump " \
-	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|delta|pools|osds|pgs|pgs_brief,n=N,req=false", \
-	"show human-readable versions of pg map (only 'all' valid with plain)", "pg", "r", "cli,rest")
-COMMAND("pg dump_json " \
-	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs,n=N,req=false", \
-	"show human-readable version of pg map in json only",\
-	"pg", "r", "cli,rest")
-COMMAND("pg dump_pools_json", "show pg pools info in json only",\
-	"pg", "r", "cli,rest")
-COMMAND("pg dump_stuck " \
-	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale|undersized|degraded,n=N,req=false " \
-	"name=threshold,type=CephInt,req=false",
-	"show information about stuck pgs",\
-	"pg", "r", "cli,rest")
-COMMAND("pg ls-by-pool " \
-        "name=poolstr,type=CephString " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
-	"list pg with pool = [poolname]", "pg", "r", "cli,rest")
-COMMAND("pg ls-by-primary " \
-        "name=osd,type=CephOsdName " \
-        "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
-	"list pg with primary = [osd]", "pg", "r", "cli,rest")
-COMMAND("pg ls-by-osd " \
-        "name=osd,type=CephOsdName " \
-        "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
-	"list pg on osd [osd]", "pg", "r", "cli,rest")
-COMMAND("pg ls " \
-        "name=pool,type=CephInt,req=false " \
-	"name=states,type=CephChoices,strings=active|clean|down|replay|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
-	"list pg with specific pool, osd, state", "pg", "r", "cli,rest")
-COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
-	"pg", "r", "cli,rest")
-COMMAND("pg scrub name=pgid,type=CephPgid", "start scrub on <pgid>", \
-	"pg", "rw", "cli,rest")
-COMMAND("pg deep-scrub name=pgid,type=CephPgid", "start deep-scrub on <pgid>", \
-	"pg", "rw", "cli,rest")
-COMMAND("pg repair name=pgid,type=CephPgid", "start repair on <pgid>", \
-	"pg", "rw", "cli,rest")
-COMMAND("pg debug " \
-	"name=debugop,type=CephChoices,strings=unfound_objects_exist|degraded_pgs_exist", \
-	"show debug info about pgs", "pg", "r", "cli,rest")
+// note: this should be replaced shortly!
 COMMAND("pg force_create_pg name=pgid,type=CephPgid", \
 	"force creation of pg <pgid>", "pg", "rw", "cli,rest")
 COMMAND("pg set_full_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
 	"set ratio at which pgs are considered full", "pg", "rw", "cli,rest")
 COMMAND("pg set_nearfull_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
-	"set ratio at which pgs are considered nearly full", \
+	"set ratio at which pgs are considered nearly full",		\
 	"pg", "rw", "cli,rest")
 
 /*
@@ -313,10 +270,10 @@ COMMAND_WITH_FLAG("mds getmap " \
 COMMAND("mds metadata name=who,type=CephString,req=false",
 	"fetch metadata for mds <who>",
 	"mds", "r", "cli,rest")
-COMMAND("mds tell " \
+COMMAND_WITH_FLAG("mds tell " \
 	"name=who,type=CephString " \
 	"name=args,type=CephString,n=N", \
-	"send command to particular mds", "mds", "rw", "cli,rest")
+	"send command to particular mds", "mds", "rw", "cli,rest", FLAG(OBSOLETE))
 COMMAND("mds compat show", "show mds compatibility settings", \
 	"mds", "r", "cli,rest")
 COMMAND_WITH_FLAG("mds stop name=who,type=CephString", "stop mds", \
@@ -370,7 +327,7 @@ COMMAND_WITH_FLAG("mds newfs " \
 	"name=data,type=CephInt,range=0 " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"make new filesystem using pools <metadata> and <data>", \
-	"mds", "rw", "cli,rest", FLAG(DEPRECATED))
+	"mds", "rw", "cli,rest", FLAG(OBSOLETE))
 COMMAND("fs new " \
 	"name=fs_name,type=CephString " \
 	"name=metadata,type=CephString " \
@@ -397,7 +354,8 @@ COMMAND("fs get name=fs_name,type=CephString", \
 COMMAND("fs set " \
 	"name=fs_name,type=CephString " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
-        "|allow_new_snaps|inline_data|cluster_down|allow_multimds|allow_dirfrags|balancer " \
+        "|allow_new_snaps|inline_data|cluster_down|allow_multimds|allow_dirfrags|balancer" \
+        "|standby_count_wanted " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
@@ -470,14 +428,6 @@ COMMAND("osd getmap " \
 COMMAND("osd getcrushmap " \
 	"name=epoch,type=CephInt,range=0,req=false", \
 	"get CRUSH map", "osd", "r", "cli,rest")
-COMMAND("osd perf", \
-        "print dump of OSD perf summary stats", \
-        "osd", \
-        "r", \
-        "cli,rest")
-COMMAND("osd blocked-by", \
-	"print histogram of which OSDs are blocking their peers", \
-	"osd", "r", "cli,rest")
 COMMAND("osd getmaxosd", "show largest OSD id", "osd", "r", "cli,rest")
 COMMAND("osd find " \
 	"name=id,type=CephOsdName", \
@@ -675,6 +625,25 @@ COMMAND("osd pg-temp " \
 	"name=pgid,type=CephPgid " \
 	"name=id,type=CephOsdName,n=N,req=false", \
 	"set pg_temp mapping pgid:[<id> [<id>...]] (developers only)", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd pg-remap " \
+	"name=pgid,type=CephPgid " \
+	"name=id,type=CephOsdName,n=N", \
+	"set pg_remap mapping <pgid>:[<id> [<id>...]] primary <primary> (developers only)", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd rm-pg-remap " \
+	"name=pgid,type=CephPgid",					\
+	"clear pg_remap mapping for <pgid> (developers only)", \
+        "osd", "rw", "cli,rest")
+
+COMMAND("osd pg-remap-items " \
+	"name=pgid,type=CephPgid " \
+	"name=id,type=CephOsdName,n=N", \
+	"set pg_remap_items mapping <pgid>:{<id> to <id>, [...]} (developers only)", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd rm-pg-remap-items " \
+	"name=pgid,type=CephPgid",		  \
+	"clear pg_remap_items mapping for <pgid> (developers only)", \
         "osd", "rw", "cli,rest")
 COMMAND("osd primary-temp " \
 	"name=pgid,type=CephPgid " \

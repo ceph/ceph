@@ -1093,6 +1093,182 @@ TEST(CrushWrapper, populate_and_cleanup_classes) {
   ASSERT_FALSE(c.name_exists("default~ssd"));
 }
 
+TEST(CrushWrapper, try_remap_rule) {
+  // build a simple 2 level map
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(0, "osd");
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "rack");
+  c.set_type_name(3, "root");
+  int bno;
+  int r = c.add_bucket(0, CRUSH_BUCKET_STRAW2,
+		       CRUSH_HASH_DEFAULT, 3, 0, NULL,
+		       NULL, &bno);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(-1, bno);
+  c.set_item_name(bno, "default");
+
+  c.set_max_devices(20);
+
+  //JSONFormatter jf(true);
+
+  map<string,string> loc;
+  loc["host"] = "foo";
+  loc["rack"] = "a";
+  loc["root"] = "default";
+  c.insert_item(g_ceph_context, 0, 1, "osd.0", loc);
+  c.insert_item(g_ceph_context, 1, 1, "osd.1", loc);
+  c.insert_item(g_ceph_context, 2, 1, "osd.2", loc);
+
+  loc.clear();
+  loc["host"] = "bar";
+  loc["rack"] = "a";
+  loc["root"] = "default";
+  c.insert_item(g_ceph_context, 3, 1, "osd.3", loc);
+  c.insert_item(g_ceph_context, 4, 1, "osd.4", loc);
+  c.insert_item(g_ceph_context, 5, 1, "osd.5", loc);
+
+  loc.clear();
+  loc["host"] = "baz";
+  loc["rack"] = "b";
+  loc["root"] = "default";
+  c.insert_item(g_ceph_context, 6, 1, "osd.6", loc);
+  c.insert_item(g_ceph_context, 7, 1, "osd.7", loc);
+  c.insert_item(g_ceph_context, 8, 1, "osd.8", loc);
+
+  loc.clear();
+  loc["host"] = "qux";
+  loc["rack"] = "b";
+  loc["root"] = "default";
+  c.insert_item(g_ceph_context, 9, 1, "osd.9", loc);
+  c.insert_item(g_ceph_context, 10, 1, "osd.10", loc);
+  c.insert_item(g_ceph_context, 11, 1, "osd.11", loc);
+  c.finalize();
+
+  loc.clear();
+  loc["host"] = "bif";
+  loc["rack"] = "c";
+  loc["root"] = "default";
+  c.insert_item(g_ceph_context, 12, 1, "osd.12", loc);
+  c.insert_item(g_ceph_context, 13, 1, "osd.13", loc);
+  c.insert_item(g_ceph_context, 14, 1, "osd.14", loc);
+  c.finalize();
+
+  loc.clear();
+  loc["host"] = "pop";
+  loc["rack"] = "c";
+  loc["root"] = "default";
+  c.insert_item(g_ceph_context, 15, 1, "osd.15", loc);
+  c.insert_item(g_ceph_context, 16, 1, "osd.16", loc);
+  c.insert_item(g_ceph_context, 17, 1, "osd.17", loc);
+  c.finalize();
+
+  //c.dump(&jf);
+  //jf.flush(cout);
+
+  // take + emit
+  {
+  }
+
+  // take + choose device + emit
+  {
+    cout << "take + choose + emit" << std::endl;
+    ostringstream err;
+    int rule = c.add_simple_ruleset("one", "default", "osd", "firstn", 0, &err);
+    ASSERT_EQ(rule, 0);
+
+    vector<int> orig = { 0, 3, 9 };
+    set<int> overfull = { 3 };
+    vector<int> underfull = { 0, 2, 5, 8, 11 };
+    vector<int> out;
+    int r = c.try_remap_rule(g_ceph_context, rule, 3,
+			      overfull, underfull,
+			      orig, &out);
+    cout << orig << " -> r = " << (int)r << " out " << out << std::endl;
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(3u, out.size());
+    ASSERT_EQ(0, out[0]);
+    ASSERT_EQ(2, out[1]);
+    ASSERT_EQ(9, out[2]);
+
+    // make sure we cope with dups between underfull and future values in orig
+    underfull = {9, 0, 2, 5};
+    orig = {1, 3, 9};
+
+    r = c.try_remap_rule(g_ceph_context, rule, 3,
+			 overfull, underfull,
+			 orig, &out);
+    cout << orig << " -> r = " << (int)r << " out " << out << std::endl;
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(3u, out.size());
+    ASSERT_EQ(1, out[0]);
+    ASSERT_EQ(0, out[1]);
+    ASSERT_EQ(9, out[2]);
+  }
+
+  // chooseleaf
+  {
+    cout << "take + chooseleaf + emit" << std::endl;
+    ostringstream err;
+    int rule = c.add_simple_ruleset("two", "default", "host", "firstn", 0, &err);
+    ASSERT_EQ(rule, 1);
+
+    vector<int> orig = { 0, 3, 9 };
+    set<int> overfull = { 3 };
+    vector<int> underfull = { 0, 2, 5, 8, 11 };
+    vector<int> out;
+    int r = c.try_remap_rule(g_ceph_context, rule, 3,
+			      overfull, underfull,
+			      orig, &out);
+    cout << orig << " -> r = " << (int)r << " out " << out << std::endl;
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(3u, out.size());
+    ASSERT_EQ(0, out[0]);
+    ASSERT_EQ(5, out[1]);
+    ASSERT_EQ(9, out[2]);
+  }
+
+  // choose + choose
+  {
+    cout << "take + choose + choose + choose + emit" << std::endl;
+    int rule = c.add_rule(5, 2, 0, 1, 10, 2);
+    ASSERT_EQ(2, rule);
+    c.set_rule_step_take(rule, 0, bno);
+    c.set_rule_step_choose_indep(rule, 1, 2, 2);
+    c.set_rule_step_choose_indep(rule, 2, 2, 1);
+    c.set_rule_step_choose_indep(rule, 3, 1, 0);
+    c.set_rule_step_emit(rule, 4);
+
+    vector<int> orig = { 0, 3, 16, 12 };
+    set<int> overfull = { 3, 12 };
+    vector<int> underfull = { 6, 7, 9, 3, 0, 1, 15, 16, 13, 2, 5, 8, 11 };
+    vector<int> out;
+    int r = c.try_remap_rule(g_ceph_context, rule, 3,
+			      overfull, underfull,
+			      orig, &out);
+    cout << orig << " -> r = " << (int)r << " out " << out << std::endl;
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(4u, out.size());
+    ASSERT_EQ(0, out[0]);
+    ASSERT_EQ(5, out[1]);
+    ASSERT_EQ(16, out[2]);
+    ASSERT_EQ(13, out[3]);
+
+    orig.pop_back();
+    out.clear();
+    r = c.try_remap_rule(g_ceph_context, rule, 3,
+			 overfull, underfull,
+			 orig, &out);
+    cout << orig << " -> r = " << (int)r << " out " << out << std::endl;
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(3u, out.size());
+    ASSERT_EQ(0, out[0]);
+    ASSERT_EQ(5, out[1]);
+    ASSERT_EQ(16, out[2]);
+  }
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);

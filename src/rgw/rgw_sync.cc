@@ -421,7 +421,7 @@ public:
       shard_id(_shard_id), pmarker(_marker), max_entries(_max_entries),
       entries(_entries), truncated(_truncated) {}
 
-  ~RGWReadMDLogEntriesCR() {
+  ~RGWReadMDLogEntriesCR() override {
     if (req) {
       req->finish();
     }
@@ -599,7 +599,7 @@ public:
       status(status), shards_info(status.num_shards),
       lease_cr(nullptr), lease_stack(nullptr) {}
 
-  ~RGWInitSyncStatusCoroutine() {
+  ~RGWInitSyncStatusCoroutine() override {
     if (lease_cr) {
       lease_cr->abort();
       lease_cr->put();
@@ -755,7 +755,7 @@ public:
                                                       lost_lock(false), failed(false), markers(_markers) {
   }
 
-  ~RGWFetchAllMetaCR() {
+  ~RGWFetchAllMetaCR() override {
     if (lease_cr) {
       lease_cr->put();
     }
@@ -1005,7 +1005,7 @@ public:
                                           raw_key(_raw_key), bl(_bl), req(NULL) {
   }
 
-  ~RGWMetaStoreEntryCR() {
+  ~RGWMetaStoreEntryCR() override {
     if (req) {
       req->finish();
     }
@@ -1054,7 +1054,7 @@ public:
                                           raw_key(_raw_key), req(NULL) {
   }
 
-  ~RGWMetaRemoveEntryCR() {
+  ~RGWMetaRemoveEntryCR() override {
     if (req) {
       req->finish();
     }
@@ -1219,7 +1219,7 @@ public:
       *new_marker = marker;
     }
   }
-  ~RGWCloneMetaLogCoroutine() {
+  ~RGWCloneMetaLogCoroutine() override {
     if (http_op) {
       http_op->put();
     }
@@ -1301,7 +1301,7 @@ public:
     *reset_backoff = false;
   }
 
-  ~RGWMetaSyncShardCR() {
+  ~RGWMetaSyncShardCR() override {
     delete marker_tracker;
     if (lease_cr) {
       lease_cr->abort();

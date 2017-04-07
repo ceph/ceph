@@ -1400,6 +1400,18 @@ int KStore::collection_empty(const coll_t& cid, bool *empty)
   return 0;
 }
 
+int KStore::collection_bits(const coll_t& cid)
+{
+  dout(15) << __func__ << " " << cid << dendl;
+  CollectionHandle ch = _get_collection(cid);
+  if (!ch)
+    return -ENOENT;
+  Collection *c = static_cast<Collection*>(ch.get());
+  RWLock::RLocker l(c->lock);
+  dout(10) << __func__ << " " << cid << " = " << c->cnode.bits << dendl;
+  return c->cnode.bits;
+}
+
 int KStore::collection_list(
   const coll_t& cid, const ghobject_t& start, const ghobject_t& end, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
@@ -3186,6 +3198,8 @@ int KStore::_clone_range(TransContext *txc,
     goto out;
 
   r = _do_write(txc, newo, dstoff, bl.length(), bl, 0);
+  if (r < 0)
+    goto out;
 
   txc->write_onode(newo);
 

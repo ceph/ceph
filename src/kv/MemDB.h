@@ -90,6 +90,10 @@ public:
     void rmkey(const std::string &prefix, const std::string &k) override;
     using KeyValueDB::TransactionImpl::rmkey;
     void rmkeys_by_prefix(const std::string &prefix) override;
+    void rm_range_keys(
+        const string &prefix,
+        const string &start,
+        const string &end) override;
 
     void merge(const std::string &prefix, const std::string &key, const bufferlist  &value) override;
     void clear() {

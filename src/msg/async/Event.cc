@@ -323,8 +323,10 @@ void EventCenter::wakeup()
   // wake up "event_wait"
   int n = write(notify_send_fd, &buf, sizeof(buf));
   if (n < 0) {
-    ldout(cct, 1) << __func__ << " write notify pipe failed: " << cpp_strerror(errno) << dendl;
-    ceph_abort();
+    if (errno != EAGAIN) {
+      ldout(cct, 1) << __func__ << " write notify pipe failed: " << cpp_strerror(errno) << dendl;
+      ceph_abort();
+    }
   }
 }
 

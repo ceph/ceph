@@ -273,7 +273,7 @@ Context *DisableRequest<I>::handle_get_clients(int *result) {
       boost::get<journal::MirrorPeerClientMeta>(client_data.client_meta);
 
     for (const auto& sync : client_meta.sync_points) {
-      send_remove_snap(client.id, sync.snap_name);
+      send_remove_snap(client.id, sync.snap_namespace, sync.snap_name);
     }
 
     if (m_current_ops[client.id] == 0) {
@@ -299,7 +299,8 @@ Context *DisableRequest<I>::handle_get_clients(int *result) {
 
 template <typename I>
 void DisableRequest<I>::send_remove_snap(const std::string &client_id,
-                                               const std::string &snap_name) {
+					 const cls::rbd::SnapshotNamespace &snap_namespace,
+					 const std::string &snap_name) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": client_id=" << client_id
                  << ", snap_name=" << snap_name << dendl;
@@ -311,9 +312,11 @@ void DisableRequest<I>::send_remove_snap(const std::string &client_id,
   Context *ctx = create_context_callback(
     &DisableRequest<I>::handle_remove_snap, client_id);
 
-  ctx = new FunctionContext([this, snap_name, ctx](int r) {
+  ctx = new FunctionContext([this, snap_namespace, snap_name, ctx](int r) {
       RWLock::WLocker owner_locker(m_image_ctx->owner_lock);
-      m_image_ctx->operations->execute_snap_remove(snap_name.c_str(), ctx);
+      m_image_ctx->operations->execute_snap_remove(snap_namespace,
+						   snap_name.c_str(),
+						   ctx);
     });
 
   m_image_ctx->op_work_queue->queue(ctx, 0);

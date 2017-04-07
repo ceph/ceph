@@ -487,6 +487,8 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
       dout(0) << "unrecognized message " << *m << dendl;
       return false;
     }
+
+    heartbeat_reset();
   }
 
   if (dispatch_depth > 1)
@@ -1718,6 +1720,11 @@ bool MDSRankDispatcher::handle_asok_command(
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
+  } else if (command == "dump_historic_ops_by_duration") {
+    if (!op_tracker.dump_historic_ops(f, true)) {
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    }
   } else if (command == "osdmap barrier") {
     int64_t target_epoch = 0;
     bool got_val = cmd_getval(g_ceph_context, cmdmap, "target_epoch", target_epoch);
@@ -2513,91 +2520,6 @@ void MDSRank::bcast_mds_map()
        ++p)
     (*p)->connection->send_message(new MMDSMap(monc->get_fsid(), mdsmap));
   last_client_mdsmap_bcast = mdsmap->get_epoch();
-}
-
-
-bool MDSRankDispatcher::handle_command_legacy(std::vector<std::string> args)
-{
-  if (args[0] == "dumpcache") {
-    if (args.size() > 1)
-      mdcache->dump_cache(args[1].c_str());
-    else
-      mdcache->dump_cache();
-  }
-  else if (args[0] == "session" && args[1] == "kill") {
-    std::stringstream ss;
-    bool killed = kill_session(strtol(args[2].c_str(), 0, 10), false, ss);
-    if (!killed)
-      dout(15) << ss.str() << dendl;
-
-  } else if (args[0] == "issue_caps") {
-    long inum = strtol(args[1].c_str(), 0, 10);
-    CInode *in = mdcache->get_inode(inodeno_t(inum));
-    if (in) {
-      bool r = locker->issue_caps(in);
-      dout(20) << "called issue_caps on inode "  << inum
-	       << " with result " << r << dendl;
-    } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
-  } else if (args[0] == "try_eval") {
-    long inum = strtol(args[1].c_str(), 0, 10);
-    int mask = strtol(args[2].c_str(), 0, 10);
-    CInode * ino = mdcache->get_inode(inodeno_t(inum));
-    if (ino) {
-      locker->try_eval(ino, mask);
-      dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
-    } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
-  } else if (args[0] == "fragment_dir") {
-    if (mdsmap->allows_dirfrags()) {
-      if (args.size() == 4) {
-	filepath fp(args[1].c_str());
-	CInode *in = mdcache->cache_traverse(fp);
-	if (in) {
-	  frag_t fg;
-	  if (fg.parse(args[2].c_str())) {
-	    CDir *dir = in->get_dirfrag(fg);
-	    if (dir) {
-	      if (dir->is_auth()) {
-		int by = atoi(args[3].c_str());
-		if (by)
-		  mdcache->split_dir(dir, by);
-		else
-		  dout(0) << "need to split by >0 bits" << dendl;
-	      } else dout(0) << "dir " << dir->dirfrag() << " not auth" << dendl;
-	    } else dout(0) << "dir " << in->ino() << " " << fg << " dne" << dendl;
-	  } else dout(0) << " frag " << args[2] << " does not parse" << dendl;
-	} else dout(0) << "path " << fp << " not found" << dendl;
-      } else dout(0) << "bad syntax" << dendl;
-    } else dout(0) << "dirfrags are disallowed by the mds map!" << dendl;
-  } else if (args[0] == "merge_dir") {
-    if (args.size() == 3) {
-      filepath fp(args[1].c_str());
-      CInode *in = mdcache->cache_traverse(fp);
-      if (in) {
-	frag_t fg;
-	if (fg.parse(args[2].c_str())) {
-	  mdcache->merge_dir(in, fg);
-	} else dout(0) << " frag " << args[2] << " does not parse" << dendl;
-      } else dout(0) << "path " << fp << " not found" << dendl;
-    } else dout(0) << "bad syntax" << dendl;
-  } else if (args[0] == "export_dir") {
-    if (args.size() == 3) {
-      filepath fp(args[1].c_str());
-      mds_rank_t target = mds_rank_t(atoi(args[2].c_str()));
-      if (target != whoami && mdsmap->is_up(target) && mdsmap->is_in(target)) {
-	CInode *in = mdcache->cache_traverse(fp);
-	if (in) {
-	  CDir *dir = in->get_dirfrag(frag_t());
-	  if (dir && dir->is_auth()) {
-	    mdcache->migrator->export_dir(dir, target);
-	  } else dout(0) << "bad export_dir path dirfrag frag_t() or dir not auth" << dendl;
-	} else dout(0) << "bad export_dir path" << dendl;
-      } else dout(0) << "bad export_dir target syntax" << dendl;
-    } else dout(0) << "bad export_dir syntax" << dendl;
-  } else {
-    return false;
-  }
-
-  return true;
 }
 
 MDSRankDispatcher::MDSRankDispatcher(

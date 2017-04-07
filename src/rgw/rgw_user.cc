@@ -338,10 +338,15 @@ extern int rgw_get_user_info_by_swift(RGWRados * const store,
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
-                                           RGWObjVersionTracker *objv_tracker, real_time *pmtime)
+extern int rgw_get_user_info_by_access_key(RGWRados* store,
+                                           const std::string& access_key,
+                                           RGWUserInfo& info,
+                                           RGWObjVersionTracker* objv_tracker,
+                                           real_time *pmtime)
 {
-  return rgw_get_user_info_from_index(store, access_key, store->get_zone_params().user_keys_pool, info, objv_tracker, pmtime);
+  return rgw_get_user_info_from_index(store, access_key,
+                                      store->get_zone_params().user_keys_pool,
+                                      info, objv_tracker, pmtime);
 }
 
 int rgw_get_user_attrs_by_uid(RGWRados *store,
@@ -404,34 +409,7 @@ int rgw_remove_swift_name_index(RGWRados *store, string& swift_name)
  * themselves alone, as well as any ACLs embedded in object xattrs.
  */
 int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& objv_tracker) {
-  string marker;
-  vector<rgw_bucket> buckets_vec;
-
-  bool done;
-  bool is_truncated;
   int ret;
-  CephContext *cct = store->ctx();
-  size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
-
-  do {
-    RGWUserBuckets user_buckets;
-    ret = rgw_read_user_buckets(store, info.user_id, user_buckets, marker,
-				string(), max_buckets, false, &is_truncated);
-    if (ret < 0)
-      return ret;
-
-    map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
-    for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
-        i != buckets.end();
-        ++i) {
-      RGWBucketEnt& bucket = i->second;
-      buckets_vec.push_back(bucket.bucket);
-
-      marker = i->first;
-    }
-
-    done = (buckets.size() < max_buckets);
-  } while (!done);
 
   map<string, RGWAccessKey>::iterator kiter = info.access_keys.begin();
   for (; kiter != info.access_keys.end(); ++kiter) {

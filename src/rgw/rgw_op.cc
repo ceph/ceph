@@ -31,6 +31,7 @@
 #include "rgw_cors_s3.h"
 #include "rgw_rest_conn.h"
 #include "rgw_rest_s3.h"
+#include "rgw_tar.h"
 #include "rgw_client_io.h"
 #include "rgw_compression.h"
 #include "rgw_role.h"
@@ -55,31 +56,6 @@ static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
 static int forward_request_to_master(struct req_state *s, obj_version *objv, RGWRados *store, bufferlist& in_data, JSONParser *jp);
-
-#define MULTIPART_UPLOAD_ID_PREFIX_LEGACY "2/"
-#define MULTIPART_UPLOAD_ID_PREFIX "2~" // must contain a unique char that may not come up in gen_rand_alpha()
-
-class MultipartMetaFilter : public RGWAccessListFilter {
-public:
-  MultipartMetaFilter() {}
-  bool filter(string& name, string& key) override {
-    int len = name.size();
-    if (len < 6)
-      return false;
-
-    size_t pos = name.find(MP_META_SUFFIX, len - 5);
-    if (pos == string::npos)
-      return false;
-
-    pos = name.rfind('.', pos - 1);
-    if (pos == string::npos)
-      return false;
-
-    key = name.substr(0, pos);
-
-    return true;
-  }
-};
 
 static MultipartMetaFilter mp_filter;
 
@@ -362,9 +338,9 @@ static int read_obj_policy(RGWRados *store,
 
     const rgw_user& bucket_owner = bucket_policy.get_owner().get_id();
     if (bucket_owner.compare(s->user->user_id) != 0 &&
-        !s->auth_identity->is_admin_of(bucket_owner) &&
-        !bucket_policy.verify_permission(*s->auth_identity, s->perm_mask,
-                                         RGW_PERM_READ)) {
+        ! s->auth.identity->is_admin_of(bucket_owner) &&
+        ! bucket_policy.verify_permission(*s->auth.identity, s->perm_mask,
+                                          RGW_PERM_READ)) {
       ret = -EACCES;
     } else {
       ret = -ENOENT;
@@ -476,8 +452,8 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
        */
-      if (store->get_zonegroup().is_master && s->op == OP_DELETE && s->system_request) {
-        /*If the operation is delete and if this is the master, don't redirect*/
+      if (store->get_zonegroup().is_master && s->system_request) {
+        /*If this is the master, don't redirect*/
       } else if (!s->local_source ||
           (s->op != OP_PUT && s->op != OP_COPY) ||
           s->object.empty()) {
@@ -876,8 +852,12 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
 
   /* We can use global user_acl because LOs cannot have segments
    * stored inside different accounts. */
-  if (!verify_object_permission(s, s->user_acl.get(), bucket_policy,
-          &obj_policy, RGW_PERM_READ)) {
+  if (s->system_request) {
+    ldout(s->cct, 2) << "overriding permissions due to system operation" << dendl;
+  } else if (s->auth.identity->is_admin_of(s->user->user_id)) {
+    ldout(s->cct, 2) << "overriding permissions due to admin operation" << dendl;
+  } else if (!verify_object_permission(s, s->user_acl.get(), bucket_policy,
+                                       &obj_policy, RGW_PERM_READ)) {
     return -EPERM;
   }
 
@@ -1344,7 +1324,7 @@ static bool object_is_expired(map<string, bufferlist>& attrs) {
       return false;
     }
 
-    if (delete_at <= ceph_clock_now()) {
+    if (delete_at <= ceph_clock_now() && !delete_at.is_zero()) {
       return true;
     }
   }
@@ -1395,6 +1375,11 @@ void RGWGetObj::execute()
   op_ret = read_op.prepare();
   if (op_ret < 0)
     goto done_err;
+
+  /* STAT ops don't need data, and do no i/o */
+  if (get_type() == RGW_OP_STAT_OBJ) {
+    return;
+  }
 
   /* start gettorrent */
   if (torrent.get_flag())
@@ -1452,7 +1437,7 @@ void RGWGetObj::execute()
     return;
   }
   attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
-  if (attr_iter != attrs.end()) {
+  if (attr_iter != attrs.end() && !skip_manifest) {
     is_slo = true;
     op_ret = handle_slo_manifest(attr_iter->second);
     if (op_ret < 0) {
@@ -1471,11 +1456,6 @@ void RGWGetObj::execute()
   }
 
   start = ofs;
-
-  /* STAT ops don't need data, and do no i/o */
-  if (get_type() == RGW_OP_STAT_OBJ) {
-    return;
-  }
 
   if (!get_data || ofs > end) {
     send_response_data(bl, 0, 0);
@@ -1544,7 +1524,7 @@ int RGWListBuckets::verify_permission()
 
 int RGWGetUsage::verify_permission()
 {
-  if (s->auth_identity->is_anonymous()) {
+  if (s->auth.identity->is_anonymous()) {
     return -EACCES;
   }
 
@@ -1731,7 +1711,7 @@ void RGWStatAccount::execute()
 
 int RGWGetBucketVersioning::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -1751,7 +1731,7 @@ void RGWGetBucketVersioning::execute()
 
 int RGWSetBucketVersioning::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -1981,7 +1961,7 @@ void RGWListBucket::execute()
 
 int RGWGetBucketLogging::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -1990,7 +1970,7 @@ int RGWGetBucketLogging::verify_permission()
 
 int RGWGetBucketLocation::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -2002,7 +1982,7 @@ int RGWCreateBucket::verify_permission()
   /* This check is mostly needed for S3 that doesn't support account ACL.
    * Swift doesn't allow to delegate any permission to an anonymous user,
    * so it will become an early exit in such case. */
-  if (s->auth_identity->is_anonymous()) {
+  if (s->auth.identity->is_anonymous()) {
     return -EACCES;
   }
 
@@ -2519,6 +2499,11 @@ void RGWDeleteBucket::execute()
   if ( op_ret < 0) {
      ldout(s->cct, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
+  
+  op_ret = store->check_bucket_empty(s->bucket_info);
+  if (op_ret < 0) {
+    return;
+  }
 
   if (!store->is_meta_master()) {
     bufferlist in_data;
@@ -2534,7 +2519,7 @@ void RGWDeleteBucket::execute()
     }
   }
 
-  op_ret = store->delete_bucket(s->bucket_info, ot);
+  op_ret = store->delete_bucket(s->bucket_info, ot, false);
 
   if (op_ret == -ECANCELED) {
     // lost a race, either with mdlog sync or another delete bucket operation.
@@ -2578,8 +2563,8 @@ int RGWPutObj::verify_permission()
     }
 
     /* admin request overrides permission checks */
-    if (!s->auth_identity->is_admin_of(cs_policy.get_owner().get_id()) &&
-        !cs_policy.verify_permission(*s->auth_identity, s->perm_mask, RGW_PERM_READ)) {
+    if (! s->auth.identity->is_admin_of(cs_policy.get_owner().get_id()) &&
+        ! cs_policy.verify_permission(*s->auth.identity, s->perm_mask, RGW_PERM_READ)) {
       return -EACCES;
     }
 
@@ -2666,14 +2651,6 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
   }
 
   return 0;
-}
-
-static bool is_v2_upload_id(const string& upload_id)
-{
-  const char *uid = upload_id.c_str();
-
-  return (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX, sizeof(MULTIPART_UPLOAD_ID_PREFIX) - 1) == 0) ||
-         (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX_LEGACY, sizeof(MULTIPART_UPLOAD_ID_PREFIX_LEGACY) - 1) == 0);
 }
 
 int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
@@ -2785,7 +2762,7 @@ class RGWPutObj_CB : public RGWGetDataCB
   RGWPutObj *op;
 public:
   RGWPutObj_CB(RGWPutObj *_op) : op(_op) {}
-  ~RGWPutObj_CB() {}
+  ~RGWPutObj_CB() override {}
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
     return op->get_data_cb(bl, bl_ofs, bl_len);
@@ -3199,7 +3176,7 @@ void RGWPutObj::execute()
   }
 
   op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
-                               delete_at, if_match, if_nomatch);
+                               (delete_at ? *delete_at : real_time()), if_match, if_nomatch);
 
   /* produce torrent */
   if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
@@ -3370,7 +3347,8 @@ void RGWPostObj::execute()
     emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
   }
 
-  op_ret = processor.complete(s->obj_size, etag, NULL, real_time(), attrs, delete_at);
+  op_ret = processor.complete(s->obj_size, etag, NULL, real_time(), attrs,
+                              (delete_at ? *delete_at : real_time()));
 }
 
 
@@ -3450,7 +3428,7 @@ int RGWPutMetadataAccount::init_processing()
 
 int RGWPutMetadataAccount::verify_permission()
 {
-  if (s->auth_identity->is_anonymous()) {
+  if (s->auth.identity->is_anonymous()) {
     return -EACCES;
   }
 
@@ -3879,9 +3857,9 @@ int RGWCopyObj::verify_permission()
     }
 
     /* admin request overrides permission checks */
-    if (!s->auth_identity->is_admin_of(src_policy.get_owner().get_id()) &&
-        !src_policy.verify_permission(*s->auth_identity, s->perm_mask,
-                                      RGW_PERM_READ)) {
+    if (! s->auth.identity->is_admin_of(src_policy.get_owner().get_id()) &&
+        ! src_policy.verify_permission(*s->auth.identity, s->perm_mask,
+                                       RGW_PERM_READ)) {
       return -EACCES;
     }
   }
@@ -3917,9 +3895,9 @@ int RGWCopyObj::verify_permission()
   }
 
   /* admin request overrides permission checks */
-  if (!s->auth_identity->is_admin_of(dest_policy.get_owner().get_id()) &&
-      !dest_bucket_policy.verify_permission(*s->auth_identity, s->perm_mask,
-                                            RGW_PERM_WRITE)) {
+  if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id()) &&
+      ! dest_bucket_policy.verify_permission(*s->auth.identity, s->perm_mask,
+                                             RGW_PERM_WRITE)) {
     return -EACCES;
   }
 
@@ -4031,7 +4009,7 @@ void RGWCopyObj::execute()
                            copy_if_newer,
 			   attrs, RGW_OBJ_CATEGORY_MAIN,
 			   olh_epoch,
-			   delete_at,
+			   (delete_at ? *delete_at : real_time()),
 			   (version_id.empty() ? NULL : &version_id),
 			   &s->req_id, /* use req_id as tag */
 			   &etag,
@@ -4087,7 +4065,7 @@ int RGWPutACLs::verify_permission()
 int RGWGetLC::verify_permission()
 {
   bool perm;
-  perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
+  perm = verify_bucket_permission(s, RGW_PERM_READ_ACP);
   if (!perm)
     return -EACCES;
 
@@ -4189,6 +4167,16 @@ void RGWPutACLs::execute()
     return;
   }
 
+  if (s->object.empty() && !store->is_meta_master()) {
+    bufferlist in_data;
+    in_data.append(data, len);
+    op_ret = forward_request_to_master(s, NULL, store, in_data, NULL);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
     ldout(s->cct, 15) << "Old AccessControlPolicy";
     policy->to_xml(*_dout);
@@ -4265,7 +4253,7 @@ void RGWPutLC::execute()
   }
 
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
-    ldout(s->cct, 15) << "Old LifecycleConfiguration";
+    ldout(s->cct, 15) << "Old LifecycleConfiguration:";
     config->to_xml(*_dout);
     *_dout << dendl;
   }
@@ -4352,17 +4340,17 @@ void RGWDeleteLC::execute()
   do {
     op_ret = l.lock_exclusive(ctx, oid);
     if (op_ret == -EBUSY) {
-      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
       sleep(5);
       continue;
     }
     if (op_ret < 0) {
-      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock " << oid << op_ret << dendl;
+      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock " << oid << op_ret << dendl;
       break;
     }
     op_ret = cls_rgw_lc_rm_entry(*ctx, oid, entry);
     if (op_ret < 0) {
-      dout(0) << "RGWLC::RGWPutLC() failed to set entry " << oid << op_ret << dendl;     
+      dout(0) << "RGWLC::RGWDeleteLC() failed to set entry " << oid << op_ret << dendl;
     }
     break;
   }while(1);
@@ -4372,7 +4360,7 @@ void RGWDeleteLC::execute()
 
 int RGWGetCORS::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -4394,7 +4382,7 @@ void RGWGetCORS::execute()
 
 int RGWPutCORS::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -4416,7 +4404,7 @@ void RGWPutCORS::execute()
 
 int RGWDeleteCORS::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -4528,7 +4516,7 @@ void RGWGetRequestPayment::execute()
 
 int RGWSetRequestPayment::verify_permission()
 {
-  if (false == s->auth_identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return -EACCES;
   }
 
@@ -4575,7 +4563,6 @@ void RGWInitMultipart::execute()
   bufferlist aclbl;
   map<string, bufferlist> attrs;
   rgw_obj obj;
-  map<string, string>::iterator iter;
 
   if (get_params() < 0)
     return;
@@ -4652,105 +4639,6 @@ static int get_multipart_info(RGWRados *store, struct req_state *s,
         break;
       }
     }
-  }
-
-  return 0;
-}
-
-static int list_multipart_parts(RGWRados *store, struct req_state *s,
-                                const string& upload_id,
-                                string& meta_oid, int num_parts,
-                                int marker, map<uint32_t, RGWUploadPartInfo>& parts,
-                                int *next_marker, bool *truncated,
-                                bool assume_unsorted = false)
-{
-  map<string, bufferlist> parts_map;
-  map<string, bufferlist>::iterator iter;
-  bufferlist header;
-
-  rgw_obj obj;
-  obj.init_ns(s->bucket, meta_oid, mp_ns);
-  obj.set_in_extra_data(true);
-
-  rgw_raw_obj raw_obj;
-  store->obj_to_raw(s->bucket_info.placement_rule, obj, &raw_obj);
-
-  bool sorted_omap = is_v2_upload_id(upload_id) && !assume_unsorted;
-
-  int ret;
-
-  parts.clear();
-
-  if (sorted_omap) {
-    string p;
-    p = "part.";
-    char buf[32];
-
-    snprintf(buf, sizeof(buf), "%08d", marker);
-    p.append(buf);
-
-    ret = store->omap_get_vals(raw_obj, header, p, num_parts + 1, parts_map);
-  } else {
-    ret = store->omap_get_all(raw_obj, header, parts_map);
-  }
-  if (ret < 0)
-    return ret;
-
-  int i;
-  int last_num = 0;
-
-  uint32_t expected_next = marker + 1;
-
-  for (i = 0, iter = parts_map.begin(); (i < num_parts || !sorted_omap) && iter != parts_map.end(); ++iter, ++i) {
-    bufferlist& bl = iter->second;
-    bufferlist::iterator bli = bl.begin();
-    RGWUploadPartInfo info;
-    try {
-      ::decode(info, bli);
-    } catch (buffer::error& err) {
-      ldout(s->cct, 0) << "ERROR: could not part info, caught buffer::error" << dendl;
-      return -EIO;
-    }
-    if (sorted_omap) {
-      if (info.num != expected_next) {
-        /* ouch, we expected a specific part num here, but we got a different one. Either
-         * a part is missing, or it could be a case of mixed rgw versions working on the same
-         * upload, where one gateway doesn't support correctly sorted omap keys for multipart
-         * upload just assume data is unsorted.
-         */
-        return list_multipart_parts(store, s, upload_id, meta_oid, num_parts, marker, parts, next_marker, truncated, true);
-      }
-      expected_next++;
-    }
-    if (sorted_omap ||
-      (int)info.num > marker) {
-      parts[info.num] = info;
-      last_num = info.num;
-    }
-  }
-
-  if (sorted_omap) {
-    if (truncated)
-      *truncated = (iter != parts_map.end());
-  } else {
-    /* rebuild a map with only num_parts entries */
-
-    map<uint32_t, RGWUploadPartInfo> new_parts;
-    map<uint32_t, RGWUploadPartInfo>::iterator piter;
-
-    for (i = 0, piter = parts.begin(); i < num_parts && piter != parts.end(); ++i, ++piter) {
-      new_parts[piter->first] = piter->second;
-      last_num = piter->first;
-    }
-
-    if (truncated)
-      *truncated = (piter != parts.end());
-
-    parts.swap(new_parts);
-  }
-
-  if (next_marker) {
-    *next_marker = last_num;
   }
 
   return 0;
@@ -5021,8 +4909,6 @@ void RGWAbortMultipart::execute()
   string upload_id;
   string meta_oid;
   upload_id = s->info.args.get("uploadId");
-  map<uint32_t, RGWUploadPartInfo> obj_parts;
-  map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
   map<string, bufferlist> attrs;
   rgw_obj meta_obj;
   RGWMPObj mp;
@@ -5037,75 +4923,8 @@ void RGWAbortMultipart::execute()
   if (op_ret < 0)
     return;
 
-  bool truncated;
-  int marker = 0;
-  int max_parts = 1000;
-
-
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
-
-  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
-  meta_obj.set_in_extra_data(true);
-  meta_obj.index_hash_source = s->object.name;
-
-  cls_rgw_obj_chain chain;
-  list<rgw_obj_index_key> remove_objs;
-
-  do {
-    op_ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts,
-				  marker, obj_parts, &marker, &truncated);
-    if (op_ret < 0)
-      return;
-
-    for (obj_iter = obj_parts.begin();
-	 obj_iter != obj_parts.end(); ++obj_iter) {
-      RGWUploadPartInfo& obj_part = obj_iter->second;
-      rgw_obj obj;
-
-      if (obj_part.manifest.empty()) {
-        string oid = mp.get_part(obj_iter->second.num);
-        obj.init_ns(s->bucket, oid, mp_ns);
-        obj.index_hash_source = s->object.name;
-        op_ret = store->delete_obj(*obj_ctx, s->bucket_info, obj, 0);
-        if (op_ret < 0 && op_ret != -ENOENT)
-          return;
-      } else {
-        store->update_gc_chain(meta_obj, obj_part.manifest, &chain);
-        RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
-        if (oiter != obj_part.manifest.obj_end()) {
-          rgw_obj head;
-          rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store);
-          rgw_raw_obj_to_obj(s->bucket, raw_head, &head);
-
-          rgw_obj_index_key key;
-          head.key.get_index_key(&key);
-          remove_objs.push_back(key);
-        }
-      }
-    }
-  } while (truncated);
-
-  /* use upload id as tag */
-  op_ret = store->send_chain_to_gc(chain, upload_id , false);  // do it async
-  if (op_ret < 0) {
-    ldout(store->ctx(), 5) << "gc->send_chain() returned " << op_ret << dendl;
-    return;
-  }
-
-  RGWRados::Object del_target(store, s->bucket_info, *obj_ctx, meta_obj);
-  RGWRados::Object::Delete del_op(&del_target);
-
-  del_op.params.bucket_owner = s->bucket_info.owner;
-  del_op.params.versioning_status = 0;
-  if (!remove_objs.empty()) {
-    del_op.params.remove_objs = &remove_objs;
-  }
-
-  // and also remove the metadata obj
-  op_ret = del_op.delete_obj();
-  if (op_ret == -ENOENT) {
-    op_ret = -ERR_NO_SUCH_BUCKET;
-  }
+  op_ret = abort_multipart_upload(store, s->cct, obj_ctx, s->bucket_info, mp);
 }
 
 int RGWListMultipart::verify_permission()
@@ -5478,6 +5297,542 @@ void RGWBulkDelete::execute()
   return;
 }
 
+
+constexpr std::array<int, 2> RGWBulkUploadOp::terminal_errors;
+
+int RGWBulkUploadOp::verify_permission()
+{
+  if (s->auth.identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if (! verify_user_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  if (s->user->user_id.tenant != s->bucket_tenant) {
+    ldout(s->cct, 10) << "user cannot create a bucket in a different tenant"
+                      << " (user_id.tenant=" << s->user->user_id.tenant
+                      << " requested=" << s->bucket_tenant << ")"
+                      << dendl;
+    return -EACCES;
+  }
+
+  if (s->user->max_buckets < 0) {
+    return -EPERM;
+  }
+
+  return 0;
+}
+
+void RGWBulkUploadOp::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+boost::optional<std::pair<std::string, rgw_obj_key>>
+RGWBulkUploadOp::parse_path(const boost::string_ref& path)
+{
+  /* We need to skip all slashes at the beginning in order to preserve
+   * compliance with Swift. */
+  const size_t start_pos = path.find_first_not_of('/');
+
+  if (boost::string_ref::npos != start_pos) {
+    /* Seperator is the first slash after the leading ones. */
+    const size_t sep_pos = path.substr(start_pos).find('/');
+
+    if (boost::string_ref::npos != sep_pos) {
+      const auto bucket_name = path.substr(start_pos, sep_pos - start_pos);
+      const auto obj_name = path.substr(sep_pos + 1);
+
+      return std::make_pair(bucket_name.to_string(),
+                            rgw_obj_key(obj_name.to_string()));
+    } else {
+      /* It's guaranteed here that bucket name is at least one character
+       * long and is different than slash. */
+      return std::make_pair(path.substr(start_pos).to_string(),
+                            rgw_obj_key());
+    }
+  }
+
+  return boost::none;
+}
+
+int RGWBulkUploadOp::handle_dir_verify_permission()
+{
+  if (s->user->max_buckets > 0) {
+    RGWUserBuckets buckets;
+    std::string marker;
+    bool is_truncated;
+    op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets,
+                                   marker, std::string(), s->user->max_buckets,
+                                   false, &is_truncated);
+    if (op_ret < 0) {
+      return op_ret;
+    }
+
+    if (buckets.count() >= static_cast<size_t>(s->user->max_buckets)) {
+      return -ERR_TOO_MANY_BUCKETS;
+    }
+  }
+
+  return 0;
+}
+
+int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
+{
+  ldout(s->cct, 20) << "bulk upload: got directory=" << path << dendl;
+
+  op_ret = handle_dir_verify_permission();
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  std::string bucket_name;
+  rgw_obj_key object_junk;
+  std::tie(bucket_name, object_junk) =  *parse_path(path);
+
+  rgw_raw_obj obj(store->get_zone_params().domain_root,
+                  rgw_make_bucket_entry_name(s->bucket_tenant, bucket_name));
+
+  /* Swift API doesn't support location constraint. We're just checking here
+   * whether creation is taking place in the master zone or not. */
+  if (! store->get_zonegroup().is_master) {
+    ldout(s->cct, 0) << "creating bucket in a non-master zone." << dendl;
+    op_ret = -EINVAL;
+    return op_ret;
+  }
+
+  /* we need to make sure we read bucket info, it's not read before for this
+   * specific request */
+  RGWBucketInfo binfo;
+  std::map<std::string, ceph::bufferlist> battrs;
+  op_ret = store->get_bucket_info(*dir_ctx, s->bucket_tenant, bucket_name,
+                                  binfo, NULL, &battrs);
+  if (op_ret < 0 && op_ret != -ENOENT) {
+    return op_ret;
+  }
+  const bool bucket_exists = (op_ret != -ENOENT);
+
+  if (bucket_exists) {
+    RGWAccessControlPolicy old_policy(s->cct);
+    int r = get_bucket_policy_from_attr(s->cct, store, binfo,
+                                        battrs, &old_policy);
+    if (r >= 0)  {
+      if (old_policy.get_owner().get_id().compare(s->user->user_id) != 0) {
+        op_ret = -EEXIST;
+        return op_ret;
+      }
+    }
+  }
+
+  RGWBucketInfo master_info;
+  rgw_bucket *pmaster_bucket = nullptr;
+  real_time creation_time;
+  obj_version objv, ep_objv, *pobjv = nullptr;
+
+  if (! store->is_meta_master()) {
+    JSONParser jp;
+    ceph::bufferlist in_data;
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, &jp);
+    if (op_ret < 0) {
+      return op_ret;
+    }
+
+    JSONDecoder::decode_json("entry_point_object_ver", ep_objv, &jp);
+    JSONDecoder::decode_json("object_ver", objv, &jp);
+    JSONDecoder::decode_json("bucket_info", master_info, &jp);
+
+    ldout(s->cct, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver="
+                      << objv.ver << dendl;
+    ldout(s->cct, 20) << "got creation_time="<< master_info.creation_time
+                      << dendl;
+
+    pmaster_bucket= &master_info.bucket;
+    creation_time = master_info.creation_time;
+    pobjv = &objv;
+  } else {
+    pmaster_bucket = nullptr;
+  }
+
+
+  std::string placement_rule;
+  if (bucket_exists) {
+    std::string selected_placement_rule;
+    rgw_bucket bucket;
+    bucket.tenant = s->bucket_tenant;
+    bucket.name = s->bucket_name;
+    op_ret = store->select_bucket_placement(*(s->user),
+                                            store->get_zonegroup().get_id(),
+                                            placement_rule,
+                                            bucket,
+                                            &selected_placement_rule,
+                                            nullptr);
+    if (selected_placement_rule != binfo.placement_rule) {
+      op_ret = -EEXIST;
+      ldout(s->cct, 20) << "bulk upload: non-coherent placement rule" << dendl;
+      return op_ret;
+    }
+  }
+
+  /* Create metadata: ACLs. */
+  std::map<std::string, ceph::bufferlist> attrs;
+  RGWAccessControlPolicy policy;
+  policy.create_default(s->user->user_id, s->user->display_name);
+  ceph::bufferlist aclbl;
+  policy.encode(aclbl);
+  attrs.emplace(RGW_ATTR_ACL, std::move(aclbl));
+
+  RGWQuotaInfo quota_info;
+  const RGWQuotaInfo * pquota_info = nullptr;
+
+  rgw_bucket bucket;
+  bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
+  bucket.name = bucket_name;
+
+
+  RGWBucketInfo out_info;
+  op_ret = store->create_bucket(*(s->user),
+                                bucket,
+                                store->get_zonegroup().get_id(),
+                                placement_rule, binfo.swift_ver_location,
+                                pquota_info, attrs,
+                                out_info, pobjv, &ep_objv, creation_time,
+                                pmaster_bucket, true);
+  /* continue if EEXIST and create_bucket will fail below.  this way we can
+   * recover from a partial create by retrying it. */
+  ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << op_ret
+                    << ", bucket=" << bucket << dendl;
+
+  if (op_ret && op_ret != -EEXIST) {
+    return op_ret;
+  }
+
+  const bool existed = (op_ret == -EEXIST);
+  if (existed) {
+    /* bucket already existed, might have raced with another bucket creation, or
+     * might be partial bucket creation that never completed. Read existing bucket
+     * info, verify that the reported bucket owner is the current user.
+     * If all is ok then update the user's list of buckets.
+     * Otherwise inform client about a name conflict.
+     */
+    if (out_info.owner.compare(s->user->user_id) != 0) {
+      op_ret = -EEXIST;
+      ldout(s->cct, 20) << "bulk upload: conflicting bucket name" << dendl;
+      return op_ret;
+    }
+    bucket = out_info.bucket;
+  }
+
+  op_ret = rgw_link_bucket(store, s->user->user_id, bucket,
+                           out_info.creation_time, false);
+  if (op_ret && !existed && op_ret != -EEXIST) {
+    /* if it exists (or previously existed), don't remove it! */
+    op_ret = rgw_unlink_bucket(store, s->user->user_id,
+                               bucket.tenant, bucket.name);
+    if (op_ret < 0) {
+      ldout(s->cct, 0) << "bulk upload: WARNING: failed to unlink bucket: ret="
+                       << op_ret << dendl;
+    }
+  } else if (op_ret == -EEXIST || (op_ret == 0 && existed)) {
+    ldout(s->cct, 20) << "bulk upload: containers already exists"
+                      << dendl;
+    op_ret = -ERR_BUCKET_EXISTS;
+  }
+
+  return op_ret;
+}
+
+
+bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
+                                                    std::map<std::string, ceph::bufferlist>& battrs,
+                                                    ACLOwner& bucket_owner /* out */)
+{
+  RGWAccessControlPolicy bacl(store->ctx());
+  op_ret = read_bucket_policy(store, s, binfo, battrs, &bacl, binfo.bucket);
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "bulk upload: cannot read_policy() for bucket"
+                      << dendl;
+    return false;
+  }
+
+  bucket_owner = bacl.get_owner();
+  return verify_bucket_permission(s, s->user_acl.get(), &bacl, RGW_PERM_WRITE);
+}
+
+int RGWBulkUploadOp::handle_file(const boost::string_ref path,
+                                 const size_t size,
+                                 AlignedStreamGetter& body)
+{
+
+  ldout(s->cct, 20) << "bulk upload: got file=" << path << ", size=" << size
+                    << dendl;
+
+  RGWPutObjDataProcessor *filter = nullptr;
+  boost::optional<RGWPutObj_Compress> compressor;
+
+  if (size > static_cast<const size_t>(s->cct->_conf->rgw_max_put_size)) {
+    op_ret = -ERR_TOO_LARGE;
+    return op_ret;
+  }
+
+  std::string bucket_name;
+  rgw_obj_key object;
+  std::tie(bucket_name, object) = *parse_path(path);
+
+  auto& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  RGWBucketInfo binfo;
+  std::map<std::string, ceph::bufferlist> battrs;
+  ACLOwner bowner;
+  op_ret = store->get_bucket_info(obj_ctx, s->user->user_id.tenant,
+                                  bucket_name, binfo, nullptr, &battrs);
+  if (op_ret == -ENOENT) {
+    ldout(s->cct, 20) << "bulk upload: non existent directory=" << bucket_name
+                      << dendl;
+  } else if (op_ret < 0) {
+    return op_ret;
+  }
+
+  if (! handle_file_verify_permission(binfo, battrs, bowner)) {
+    ldout(s->cct, 20) << "bulk upload: object creation unauthorized" << dendl;
+    op_ret = -EACCES;
+    return op_ret;
+  }
+
+  op_ret = store->check_quota(bowner.get_id(), binfo.bucket,
+                              user_quota, bucket_quota, size);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  RGWPutObjProcessor_Atomic processor(obj_ctx,
+                                      binfo,
+                                      binfo.bucket,
+                                      object.name,
+                                      /* part size */
+                                      s->cct->_conf->rgw_obj_stripe_size,
+                                      s->req_id,
+                                      binfo.versioning_enabled());
+
+  /* No filters by default. */
+  filter = &processor;
+
+  op_ret = processor.prepare(store, nullptr);
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "bulk upload: cannot prepare processor due to ret="
+                      << op_ret << dendl;
+    return op_ret;
+  }
+
+  const auto& compression_type = store->get_zone_params().get_compression_type(
+      binfo.placement_rule);
+  CompressorRef plugin;
+  if (compression_type != "none") {
+    plugin = Compressor::create(s->cct, compression_type);
+    if (! plugin) {
+      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+                       << compression_type << dendl;
+    } else {
+      compressor.emplace(s->cct, plugin, filter);
+      filter = &*compressor;
+    }
+  }
+
+  /* Upload file content. */
+  ssize_t len = 0;
+  size_t ofs = 0;
+  MD5 hash;
+  do {
+    ceph::bufferlist data;
+    len = body.get_at_most(s->cct->_conf->rgw_max_chunk_size, data);
+
+    ldout(s->cct, 20) << "bulk upload: body=" << data.c_str() << dendl;
+    if (len < 0) {
+      op_ret = len;
+      return op_ret;
+    } else if (len > 0) {
+      hash.Update((const byte *)data.c_str(), data.length());
+      op_ret = put_data_and_throttle(filter, data, ofs, false);
+      if (op_ret < 0) {
+        ldout(s->cct, 20) << "processor->thottle_data() returned ret="
+			  << op_ret << dendl;
+        return op_ret;
+      }
+
+      ofs += len;
+    }
+
+  } while (len > 0);
+
+  if (ofs != size) {
+    ldout(s->cct, 10) << "bulk upload: real file size different from declared"
+                      << dendl;
+    op_ret = -EINVAL;
+  }
+
+  op_ret = store->check_quota(bowner.get_id(), binfo.bucket,
+			      user_quota, bucket_quota, size);
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "bulk upload: quota exceeded for path=" << path
+                      << dendl;
+    return op_ret;
+  }
+
+  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  hash.Final(m);
+  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+
+  /* Create metadata: ETAG. */
+  std::map<std::string, ceph::bufferlist> attrs;
+  std::string etag = calc_md5;
+  ceph::bufferlist etag_bl;
+  etag_bl.append(etag.c_str(), etag.size() + 1);
+  attrs.emplace(RGW_ATTR_ETAG, std::move(etag_bl));
+
+  /* Create metadata: ACLs. */
+  RGWAccessControlPolicy policy;
+  policy.create_default(s->user->user_id, s->user->display_name);
+  ceph::bufferlist aclbl;
+  policy.encode(aclbl);
+  attrs.emplace(RGW_ATTR_ACL, std::move(aclbl));
+
+  /* Create metadata: compression info. */
+  if (compressor && compressor->is_compressed()) {
+    ceph::bufferlist tmp;
+    RGWCompressionInfo cs_info;
+    cs_info.compression_type = plugin->get_type_name();
+    cs_info.orig_size = s->obj_size;
+    cs_info.blocks = std::move(compressor->get_compression_blocks());
+    ::encode(cs_info, tmp);
+    attrs.emplace(RGW_ATTR_COMPRESSION, std::move(tmp));
+  }
+
+  /* Complete the transaction. */
+  op_ret = processor.complete(size, etag, nullptr, ceph::real_time(), attrs,
+                              ceph::real_time() /* delete_at */);
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "bulk upload: processor::complete returned op_ret="
+                      << op_ret << dendl;
+  }
+
+  return op_ret;
+}
+
+void RGWBulkUploadOp::execute()
+{
+  ceph::bufferlist buffer(64 * 1024);
+
+  ldout(s->cct, 20) << "bulk upload: start" << dendl;
+
+  /* Create an instance of stream-abstracting class. Having this indirection
+   * allows for easy introduction of decompressors like gzip and bzip2. */
+  auto stream = create_stream();
+  if (! stream) {
+    return;
+  }
+
+  auto status = rgw::tar::StatusIndicator::create();
+  do {
+    op_ret = stream->get_exactly(rgw::tar::BLOCK_SIZE, buffer);
+    if (op_ret < 0) {
+      ldout(s->cct, 2) << "bulk upload: cannot read header" << dendl;
+      return;
+    }
+
+    /* We need to re-interpret the buffer as a TAR block. Exactly two blocks
+     * must be tracked to detect out end-of-archive. It occurs when both of
+     * them are empty (zeroed). Tracing this particular inter-block dependency
+     * is responsibility of the rgw::tar::StatusIndicator class. */
+    boost::optional<rgw::tar::HeaderView> header;
+    std::tie(status, header) = rgw::tar::interpret_block(status, buffer);
+
+    if (! status.empty() && header) {
+      /* This specific block isn't empty (entirely zeroed), so we can parse
+       * it as a TAR header and dispatch. At the moment we do support only
+       * regular files and directories. Everything else (symlinks, devices)
+       * will be ignored but won't cease the whole upload. */
+      switch (header->get_filetype()) {
+        case rgw::tar::FileType::NORMAL_FILE: {
+          ldout(s->cct, 2) << "bulk upload: handling regular file" << dendl;
+
+          auto body = AlignedStreamGetter(0, header->get_filesize(),
+                                          rgw::tar::BLOCK_SIZE, *stream);
+          op_ret = handle_file(header->get_filename(),
+                               header->get_filesize(),
+                               body);
+          if (! op_ret) {
+            /* Only regular files counts. */
+            num_created++;
+          } else {
+            failures.emplace_back(op_ret, header->get_filename().to_string());
+          }
+          break;
+        }
+        case rgw::tar::FileType::DIRECTORY: {
+          ldout(s->cct, 2) << "bulk upload: handling regular directory" << dendl;
+
+          op_ret = handle_dir(header->get_filename());
+          if (op_ret < 0 && op_ret != -ERR_BUCKET_EXISTS) {
+            failures.emplace_back(op_ret, header->get_filename().to_string());
+          }
+          break;
+        }
+        default: {
+          /* Not recognized. Skip. */
+          op_ret = 0;
+          break;
+        }
+      }
+
+      /* In case of any problems with sub-request authorization Swift simply
+       * terminates whole upload immediately. */
+      if (boost::algorithm::contains(std::initializer_list<int>{ op_ret },
+                                     terminal_errors)) {
+        ldout(s->cct, 2) << "bulk upload: terminating due to ret=" << op_ret
+                         << dendl;
+        break;
+      }
+    } else {
+      ldout(s->cct, 2) << "bulk upload: an empty block" << dendl;
+      op_ret = 0;
+    }
+
+    buffer.clear();
+  } while (! status.eof());
+
+  return;
+}
+
+RGWBulkUploadOp::AlignedStreamGetter::~AlignedStreamGetter()
+{
+  const size_t aligned_legnth = length + (-length % alignment);
+  ceph::bufferlist junk;
+
+  DecoratedStreamGetter::get_exactly(aligned_legnth - position, junk);
+}
+
+ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_at_most(const size_t want,
+                                                          ceph::bufferlist& dst)
+{
+  const size_t max_to_read = std::min(want, length - position);
+  const auto len = DecoratedStreamGetter::get_at_most(max_to_read, dst);
+  if (len > 0) {
+    position += len;
+  }
+  return len;
+}
+
+ssize_t RGWBulkUploadOp::AlignedStreamGetter::get_exactly(const size_t want,
+                                                          ceph::bufferlist& dst)
+{
+  const auto len = DecoratedStreamGetter::get_exactly(want, dst);
+  if (len > 0) {
+    position += len;
+  }
+  return len;
+}
+
 int RGWSetAttrs::verify_permission()
 {
   bool perm;
@@ -5526,8 +5881,11 @@ void RGWGetObjLayout::pre_exec()
 void RGWGetObjLayout::execute()
 {
   rgw_obj obj(s->bucket, s->object);
-  target = new RGWRados::Object(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), rgw_obj(s->bucket, s->object));
-  RGWRados::Object::Read stat_op(target);
+  RGWRados::Object target(store,
+                          s->bucket_info,
+                          *static_cast<RGWObjectCtx *>(s->obj_ctx),
+                          rgw_obj(s->bucket, s->object));
+  RGWRados::Object::Read stat_op(&target);
 
   op_ret = stat_op.prepare();
   if (op_ret < 0) {
@@ -5536,7 +5894,7 @@ void RGWGetObjLayout::execute()
 
   head_obj = stat_op.state.head_obj;
 
-  op_ret = target->get_manifest(&manifest);
+  op_ret = target.get_manifest(&manifest);
 }
 
 

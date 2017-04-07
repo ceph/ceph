@@ -589,6 +589,11 @@ int RGWOrphanSearch::build_linked_oids_index()
       for (map<string, bufferlist>::iterator eiter = entries.begin(); eiter != entries.end(); ++eiter) {
         ldout(store->ctx(), 20) << " indexed entry: " << eiter->first << dendl;
         ret = build_linked_oids_for_bucket(eiter->first, oids);
+        if (ret < 0) {
+          lderr(store->ctx()) << __func__ << ": ERROR: build_linked_oids_for_bucket() indexed entry=" << eiter->first
+                              << " returned ret=" << ret << dendl;
+          return ret;
+        }
       }
 
       search_stage.shard = iter->first;

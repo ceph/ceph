@@ -8,11 +8,13 @@ overrides:
 roles:
 - - ceph.mon.a
   - ceph.mon.b
+  - ceph.mgr.x
   - backup.osd.0
   - backup.osd.1
   - backup.osd.2
   - backup.client.0
 - - backup.mon.a
+  - backup.mgr.x
   - ceph.osd.0
   - ceph.osd.1
   - ceph.osd.2

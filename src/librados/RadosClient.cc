@@ -78,7 +78,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     timer(cct, lock),
     refcnt(1),
     log_last_version(0), log_cb(NULL), log_cb_arg(NULL),
-    finisher(cct)
+    finisher(cct, "radosclient", "fn-radosclient")
 {
 }
 
@@ -825,10 +825,12 @@ int librados::RadosClient::mgr_command(const vector<string>& cmd,
   Mutex::Locker l(lock);
 
   C_SaferCond cond;
-  mgrclient.start_command(cmd, inbl, outbl, outs, &cond);
+  int r = mgrclient.start_command(cmd, inbl, outbl, outs, &cond);
+  if (r < 0)
+    return r;
 
   lock.Unlock();
-  int r = cond.wait();
+  r = cond.wait();
   lock.Lock();
 
   return r;
@@ -888,10 +890,9 @@ int librados::RadosClient::osd_command(int osd, vector<string>& cmd,
 
   lock.Lock();
   // XXX do anything with tid?
-  int r = objecter->osd_command(osd, cmd, inbl, &tid, poutbl, prs,
-			 new C_SafeCond(&mylock, &cond, &done, &ret));
+  objecter->osd_command(osd, cmd, inbl, &tid, poutbl, prs,
+			new C_SafeCond(&mylock, &cond, &done, &ret));
   lock.Unlock();
-  assert(r == 0);
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
@@ -909,10 +910,9 @@ int librados::RadosClient::pg_command(pg_t pgid, vector<string>& cmd,
   int ret;
   ceph_tid_t tid;
   lock.Lock();
-  int r = objecter->pg_command(pgid, cmd, inbl, &tid, poutbl, prs,
-		        new C_SafeCond(&mylock, &cond, &done, &ret));
+  objecter->pg_command(pgid, cmd, inbl, &tid, poutbl, prs,
+		       new C_SafeCond(&mylock, &cond, &done, &ret));
   lock.Unlock();
-  assert(r == 0);
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
