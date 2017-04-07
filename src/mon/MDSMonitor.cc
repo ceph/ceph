@@ -449,8 +449,48 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
   MDSMap::DaemonState state = m->get_state();
   version_t seq = m->get_seq();
 
-  // Store health
   dout(20) << __func__ << " got health from gid " << gid << " with " << m->get_health().metrics.size() << " metrics." << dendl;
+
+  // Calculate deltas of health metrics created and removed
+  // Do this by type rather than MDSHealthMetric equality, because messages can
+  // change a lot when they include e.g. a number of items.
+  const auto &old_health = pending_daemon_health[gid].metrics;
+  const auto &new_health = m->get_health().metrics;
+
+  std::set<mds_metric_t> old_types;
+  for (const auto &i : old_health) {
+    old_types.insert(i.type);
+  }
+
+  std::set<mds_metric_t> new_types;
+  for (const auto &i : new_health) {
+    new_types.insert(i.type);
+  }
+
+  for (const auto &new_metric: new_health) {
+    if (old_types.count(new_metric.type) == 0) {
+      std::stringstream msg;
+      msg << "MDS health message (" << m->get_orig_source_inst().name << "): "
+          << new_metric.message;
+      if (new_metric.sev == HEALTH_ERR) {
+        mon->clog->error() << msg.str();
+      } else if (new_metric.sev == HEALTH_WARN) {
+        mon->clog->warn() << msg.str();
+      } else {
+        mon->clog->info() << msg.str();
+      }
+    }
+  }
+
+  // Log the disappearance of health messages at INFO
+  for (const auto &old_metric : old_health) {
+    if (new_types.count(old_metric.type) == 0) {
+      mon->clog->info() << "MDS health message cleared ("
+        << m->get_orig_source_inst().name << "): " << old_metric.message;
+    }
+  }
+
+  // Store health
   pending_daemon_health[gid] = m->get_health();
 
   // boot?
@@ -727,30 +767,30 @@ void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
     bufferlist::iterator bl_i = bl.begin();
     health.decode(bl_i);
 
-    for (std::list<MDSHealthMetric>::iterator j = health.metrics.begin(); j != health.metrics.end(); ++j) {
+    for (const auto &metric : health.metrics) {
       int const rank = info.rank;
       std::ostringstream message;
-      message << "mds" << rank << ": " << j->message;
-      summary.push_back(std::make_pair(j->sev, message.str()));
+      message << "mds" << rank << ": " << metric.message;
+      summary.push_back(std::make_pair(metric.sev, message.str()));
 
       if (detail) {
         // There is no way for us to clealy associate detail entries with summary entries (#7192), so
         // we duplicate the summary message in the detail string and tag the metadata on.
         std::ostringstream detail_message;
         detail_message << message.str();
-        if (j->metadata.size()) {
+        if (metric.metadata.size()) {
           detail_message << "(";
-          std::map<std::string, std::string>::iterator k = j->metadata.begin();
-          while (k != j->metadata.end()) {
+          auto k = metric.metadata.begin();
+          while (k != metric.metadata.end()) {
             detail_message << k->first << ": " << k->second;
-            if (boost::next(k) != j->metadata.end()) {
+            if (boost::next(k) != metric.metadata.end()) {
               detail_message << ", ";
             }
             ++k;
           }
           detail_message << ")";
         }
-        detail->push_back(std::make_pair(j->sev, detail_message.str()));
+        detail->push_back(std::make_pair(metric.sev, detail_message.str()));
       }
     }
   }
