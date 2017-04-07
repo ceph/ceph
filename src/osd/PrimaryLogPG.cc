@@ -6471,7 +6471,9 @@ inline int PrimaryLogPG::_delete_oid(
       && !try_no_whiteout) {
     whiteout = true;
   }
+  bool legacy;
   if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    legacy = false;
     // in luminous or later, we can't delete the head if there are
     // clones. we trust the caller passing no_whiteout has already
     // verified they don't exist.
@@ -6486,6 +6488,8 @@ inline int PrimaryLogPG::_delete_oid(
 	whiteout = true;
       }
     }
+  } else {
+    legacy = false;
   }
   dout(20) << __func__ << " " << soid << " whiteout=" << (int)whiteout
 	   << " no_whiteout=" << (int)no_whiteout
@@ -6544,8 +6548,9 @@ inline int PrimaryLogPG::_delete_oid(
   if (oi.is_cache_pinned()) {
     ctx->delta_stats.num_objects_pinned--;
   }
-  if (soid.is_head())
+  if ((legacy || snapset.is_legacy()) && soid.is_head()) {
     snapset.head_exists = false;
+  }
   obs.exists = false;
   return 0;
 }
@@ -6859,13 +6864,15 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
   // update snapset with latest snap context
   ctx->new_snapset.seq = snapc.seq;
   ctx->new_snapset.snaps = snapc.snaps;
-  ctx->new_snapset.head_exists = ctx->new_obs.exists;
-  dout(20) << "make_writeable " << soid << " done, snapset=" << ctx->new_snapset << dendl;
-
   if (!get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
     // pessimistic assumption that this is a net-new legacy SnapSet
     ctx->delta_stats.num_legacy_snapsets++;
+    ctx->new_snapset.head_exists = ctx->new_obs.exists;
+  } else if (ctx->new_snapset.is_legacy()) {
+    ctx->new_snapset.head_exists = ctx->new_obs.exists;
   }
+  dout(20) << "make_writeable " << soid
+	   << " done, snapset=" << ctx->new_snapset << dendl;
 }
 
 
@@ -7106,7 +7113,8 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 
   if (soid.snap == CEPH_NOSNAP && maintain_ssc) {
     ::encode(ctx->new_snapset, bss);
-    assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
+    assert(ctx->new_obs.exists == ctx->new_snapset.head_exists ||
+	   !ctx->new_snapset.is_legacy());
 
     if (ctx->new_obs.exists) {
       if (!ctx->obs->exists) {
@@ -7126,6 +7134,7 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       }
     } else if (!ctx->new_snapset.clones.empty() &&
 	       !ctx->cache_evict &&
+	       !ctx->new_snapset.head_exists &&
 	       (!ctx->snapset_obc || !ctx->snapset_obc->obs.exists)) {
       // save snapset on _snap
       hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.get_hash(),
