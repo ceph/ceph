@@ -1632,6 +1632,17 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
     remote = master_zone;
     cout << "Sending period to new master zone " << remote << std::endl;
   }
+  boost::optional<RGWRESTConn> conn;
+  RGWRESTConn *remote_conn = nullptr;
+  if (!remote.empty()) {
+    conn = get_remote_conn(store, period.get_map(), remote);
+    if (!conn) {
+      cerr << "failed to find a zone or zonegroup for remote "
+          << remote << std::endl;
+      return -ENOENT;
+    }
+    remote_conn = &*conn;
+  }
 
   // push period to the master with an empty period id
   period.set_id("");
@@ -1648,7 +1659,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
   jf.flush(bl);
 
   JSONParser p;
-  int ret = send_to_remote_or_url(nullptr, url, access, secret, info, bl, p);
+  int ret = send_to_remote_or_url(remote_conn, url, access, secret, info, bl, p);
   if (ret < 0) {
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
 
