@@ -440,4 +440,23 @@ public:
       PGMap::Incremental *pending_inc);
 };
 
+namespace reweight {
+/* Assign a lower weight to overloaded OSDs.
+ *
+ * The osds that will get a lower weight are those with with a utilization
+ * percentage 'oload' percent greater than the average utilization.
+ */
+  int by_utilization(const OSDMap &osd_map,
+		     const PGMap &pg_map,
+		     int oload,
+		     double max_changef,
+		     int max_osds,
+		     bool by_pg, const set<int64_t> *pools,
+		     bool no_increasing,
+		     map<int32_t, uint32_t>* new_weights,
+		     std::stringstream *ss,
+		     std::string *out_str,
+		     Formatter *f);
+}
+
 #endif
