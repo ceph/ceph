@@ -1511,6 +1511,41 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
   return 0;
 }
 
+/// search for a matching zone/zonegroup id and return a connection if found
+static boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store,
+                                                    const RGWZoneGroup& zonegroup,
+                                                    const std::string& remote)
+{
+  boost::optional<RGWRESTConn> conn;
+  if (remote == zonegroup.get_id()) {
+    conn.emplace(store->ctx(), store, remote, zonegroup.endpoints);
+  } else {
+    for (const auto& z : zonegroup.zones) {
+      const auto& zone = z.second;
+      if (remote == zone.id) {
+        conn.emplace(store->ctx(), store, remote, zone.endpoints);
+        break;
+      }
+    }
+  }
+  return conn;
+}
+
+/// search each zonegroup for a connection
+static boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store,
+                                                    const RGWPeriodMap& period_map,
+                                                    const std::string& remote)
+{
+  boost::optional<RGWRESTConn> conn;
+  for (const auto& zg : period_map.zonegroups) {
+    conn = get_remote_conn(store, zg.second, remote);
+    if (conn) {
+      break;
+    }
+  }
+  return conn;
+}
+
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
 static int send_to_remote_gateway(const string& remote, req_info& info,
                                   bufferlist& in_data, JSONParser& parser)
