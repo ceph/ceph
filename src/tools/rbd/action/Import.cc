@@ -220,7 +220,6 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_
   ::decode(off, p);
   ::decode(len, p);
 
-  bufferlist data;
   if (!discard) {
     bufferptr bp = buffer::create(len);
     r = safe_read_exact(idiffctx->fd, bp.c_str(), len);
@@ -242,7 +241,11 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_
 	bufferptr write_ptr(bp, write_offset, write_length);
         bufferlist write_bl;
         write_bl.push_back(write_ptr);
-	C_ImportDiff *ctx = new C_ImportDiff(idiffctx, data, off, len, discard);
+	assert(write_bl.length() == write_length);
+
+	C_ImportDiff *ctx = new C_ImportDiff(idiffctx, write_bl,
+					     off + write_offset, write_length,
+					     false);
 	r = ctx->send();
 
 	if (r < 0) {
@@ -254,7 +257,8 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_
       }
     }
   } else {
-    C_ImportDiff *ctx = new C_ImportDiff(idiffctx, data, off, len, discard);
+    bufferlist data;
+    C_ImportDiff *ctx = new C_ImportDiff(idiffctx, data, off, len, true);
     return ctx->send();
   }
   return r;
