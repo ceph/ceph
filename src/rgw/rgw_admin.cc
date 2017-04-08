@@ -1622,8 +1622,10 @@ static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
   return 0;
 }
 
-static int do_period_pull(const string& remote, const string& url, const string& access_key, const string& secret_key,
-                          const string& realm_id, const string& realm_name, const string& period_id, const string& period_epoch,
+static int do_period_pull(RGWRESTConn *remote_conn, const string& url,
+                          const string& access_key, const string& secret_key,
+                          const string& realm_id, const string& realm_name,
+                          const string& period_id, const string& period_epoch,
                           RGWPeriod *period)
 {
   RGWEnv env;
@@ -1643,7 +1645,7 @@ static int do_period_pull(const string& remote, const string& url, const string&
 
   bufferlist bl;
   JSONParser p;
-  int ret = send_to_remote_or_url(nullptr, url, access_key, secret_key,
+  int ret = send_to_remote_or_url(remote_conn, url, access_key, secret_key,
                                   info, bl, p);
   if (ret < 0) {
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
@@ -2717,9 +2719,6 @@ int main(int argc, char **argv)
 
   // not a raw op if 'period update' needs to commit to master
   bool raw_period_update = opt_cmd == OPT_PERIOD_UPDATE && !commit;
-  // not a raw op if 'period pull' needs to look up remotes
-  bool raw_period_pull = opt_cmd == OPT_PERIOD_PULL && remote.empty() && !url.empty();
-
   std::set<int> raw_storage_ops_list = {OPT_ZONEGROUP_ADD, OPT_ZONEGROUP_CREATE, OPT_ZONEGROUP_DELETE,
 			 OPT_ZONEGROUP_GET, OPT_ZONEGROUP_LIST,
                          OPT_ZONEGROUP_SET, OPT_ZONEGROUP_DEFAULT,
@@ -2735,6 +2734,7 @@ int main(int argc, char **argv)
 			 OPT_ZONE_PLACEMENT_MODIFY, OPT_ZONE_PLACEMENT_LIST,
 			 OPT_REALM_CREATE,
 			 OPT_PERIOD_DELETE, OPT_PERIOD_GET,
+			 OPT_PERIOD_PULL,
 			 OPT_PERIOD_GET_CURRENT, OPT_PERIOD_LIST,
 			 OPT_REALM_DELETE, OPT_REALM_GET, OPT_REALM_LIST,
 			 OPT_REALM_LIST_PERIODS,
@@ -2744,7 +2744,7 @@ int main(int argc, char **argv)
 
 
   bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
-                         raw_period_update || raw_period_pull);
+                         raw_period_update);
 
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
@@ -2856,14 +2856,39 @@ int main(int argc, char **argv)
 	}
       }
       break;
-    case OPT_PERIOD_PULL: // period pull --url
+    case OPT_PERIOD_PULL:
       {
+        boost::optional<RGWRESTConn> conn;
+        RGWRESTConn *remote_conn = nullptr;
         if (url.empty()) {
-          cerr << "A --url or --remote must be provided." << std::endl;
-          return -EINVAL;
+          // load current period for endpoints
+          RGWRealm realm(realm_id, realm_name);
+          int ret = realm.init(g_ceph_context, store);
+          if (ret < 0) {
+            cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+          RGWPeriod current_period(realm.get_current_period());
+          ret = current_period.init(g_ceph_context, store);
+          if (ret < 0) {
+            cerr << "failed to init current period: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+          if (remote.empty()) {
+            // use realm master zone as remote
+            remote = current_period.get_master_zone();
+          }
+          conn = get_remote_conn(store, current_period.get_map(), remote);
+          if (!conn) {
+            cerr << "failed to find a zone or zonegroup for remote "
+                << remote << std::endl;
+            return -ENOENT;
+          }
+          remote_conn = &*conn;
         }
+
         RGWPeriod period;
-        int ret = do_period_pull(remote, url, access_key, secret_key,
+        int ret = do_period_pull(remote_conn, url, access_key, secret_key,
                                  realm_id, realm_name, period_id, period_epoch,
                                  &period);
         if (ret < 0) {
@@ -3131,7 +3156,7 @@ int main(int argc, char **argv)
         auto& current_period = realm.get_current_period();
         if (!current_period.empty()) {
           // pull the latest epoch of the realm's current period
-          ret = do_period_pull(remote, url, access_key, secret_key,
+          ret = do_period_pull(nullptr, url, access_key, secret_key,
                                realm_id, realm_name, current_period, "",
                                &period);
           if (ret < 0) {
@@ -4250,38 +4275,6 @@ int main(int argc, char **argv)
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
         return ret;
       }
-    }
-    return 0;
-  case OPT_PERIOD_PULL: // period pull --remote
-    {
-      if (remote.empty()) {
-	/* use realm master zonegroup as remote */
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-	RGWPeriod current_period(realm.get_current_period());
-	ret = current_period.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init current period: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-	remote = current_period.get_master_zonegroup();
-      }
-      RGWPeriod period;
-      int ret = do_period_pull(remote, url, access_key, secret_key,
-                               realm_id, realm_name, period_id, period_epoch,
-                               &period);
-      if (ret < 0) {
-        cerr << "period pull failed: " << cpp_strerror(-ret) << std::endl;
-        return ret;
-      }
-
-      encode_json("period", period, formatter);
-      formatter->flush(cout);
-      cout << std::endl;
     }
     return 0;
   case OPT_PERIOD_UPDATE:
