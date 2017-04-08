@@ -70,6 +70,8 @@
 #include "include/str_list.h"
 #include "include/str_map.h"
 
+#include "json_spirit/json_spirit_reader.h"
+
 #define dout_subsys ceph_subsys_mon
 #define OSD_PG_CREATING_PREFIX "osd_pg_creating"
 
@@ -5837,6 +5839,42 @@ bool OSDMonitor::prepare_command(MonOpRequestRef op)
   return prepare_command_impl(op, cmdmap);
 }
 
+static int parse_reweights(CephContext *cct,
+			   const map<string,cmd_vartype> &cmdmap,
+			   const OSDMap& osdmap,
+			   map<int32_t, uint32_t>* weights)
+{
+  string weights_str;
+  if (!cmd_getval(g_ceph_context, cmdmap, "weights", weights_str)) {
+    return -EINVAL;
+  }
+  std::replace(begin(weights_str), end(weights_str), '\'', '"');
+  json_spirit::mValue json_value;
+  if (!json_spirit::read(weights_str, json_value)) {
+    return -EINVAL;
+  }
+  if (json_value.type() != json_spirit::obj_type) {
+    return -EINVAL;
+  }
+  const auto obj = json_value.get_obj();
+  try {
+    for (auto& osd_weight : obj) {
+      auto osd_id = std::stoi(osd_weight.first);
+      if (!osdmap.exists(osd_id)) {
+	return -ENOENT;
+      }
+      if (osd_weight.second.type() != json_spirit::str_type) {
+	return -EINVAL;
+      }
+      auto weight = std::stoul(osd_weight.second.get_str());
+      weights->insert({osd_id, weight});
+    }
+  } catch (const std::logic_error& e) {
+    return -EINVAL;
+  }
+  return 0;
+}
+
 bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 				      map<string,cmd_vartype> &cmdmap)
 {
@@ -7338,6 +7376,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply;
     }
+  } else if (prefix == "osd reweightn") {
+    map<int32_t, uint32_t> weights;
+    err = parse_reweights(g_ceph_context, cmdmap, osdmap, &weights);
+    if (err) {
+      ss << "unable to parse 'weights' value '"
+         << cmd_vartype_stringify(cmdmap["weights"]) << "'";
+      goto reply;
+    }
+    pending_inc.new_weight = std::move(weights);
+    wait_for_finished_proposal(
+	op,
+	new Monitor::C_Command(mon, op, 0, rs, rdata, get_last_committed() + 1));
+      return true;
   } else if (prefix == "osd lost") {
     int64_t id;
     if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
