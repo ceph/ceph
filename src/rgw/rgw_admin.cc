@@ -1399,31 +1399,10 @@ static boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store,
 }
 
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-static int send_to_remote_gateway(const string& remote, req_info& info,
+static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
                                   bufferlist& in_data, JSONParser& parser)
 {
   bufferlist response;
-  RGWRESTConn *conn;
-  if (remote.empty()) {
-    if (!store->rest_master_conn) {
-      cerr << "Invalid rest master connection" << std::endl;
-      return -EINVAL;
-    }
-    conn = store->rest_master_conn;
-  } else {
-    // check zonegroups
-    auto iter = store->zonegroup_conn_map.find(remote);
-    if (iter == store->zonegroup_conn_map.end()) {
-      // check zones
-      iter = store->zone_conn_map.find(remote);
-      if (iter == store->zone_conn_map.end()) {
-        cerr << "could not find connection for zone or zonegroup id: "
-            << remote << std::endl;
-        return -ENOENT;
-      }
-    }
-    conn = iter->second;
-  }
   rgw_user user;
   int ret = conn->forward(user, info, NULL, MAX_REST_RESPONSE, &in_data, &response);
 
@@ -1461,13 +1440,13 @@ static int send_to_url(const string& url, const string& access,
   return ret;
 }
 
-static int send_to_remote_or_url(const string& remote, const string& url,
+static int send_to_remote_or_url(RGWRESTConn *conn, const string& url,
                                  const string& access, const string& secret,
                                  req_info& info, bufferlist& in_data,
                                  JSONParser& parser)
 {
   if (url.empty()) {
-    return send_to_remote_gateway(remote, info, in_data, parser);
+    return send_to_remote_gateway(conn, info, in_data, parser);
   }
   return send_to_url(url, access, secret, info, in_data, parser);
 }
@@ -1520,7 +1499,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
   jf.flush(bl);
 
   JSONParser p;
-  int ret = send_to_remote_or_url(remote, url, access, secret, info, bl, p);
+  int ret = send_to_remote_or_url(nullptr, url, access, secret, info, bl, p);
   if (ret < 0) {
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
 
@@ -1653,7 +1632,7 @@ static int do_period_pull(const string& remote, const string& url, const string&
 
   bufferlist bl;
   JSONParser p;
-  int ret = send_to_remote_or_url(remote, url, access_key, secret_key,
+  int ret = send_to_remote_or_url(nullptr, url, access_key, secret_key,
                                   info, bl, p);
   if (ret < 0) {
     cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
@@ -4254,7 +4233,7 @@ int main(int argc, char **argv)
       jf.flush(bl);
 
       JSONParser p;
-      ret = send_to_remote_or_url(remote, url, access_key, secret_key,
+      ret = send_to_remote_or_url(nullptr, url, access_key, secret_key,
                                   info, bl, p);
       if (ret < 0) {
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
