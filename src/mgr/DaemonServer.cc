@@ -398,8 +398,7 @@ bool DaemonServer::handle_command(MCommand *m)
   map<string,string> param_str_map;
 
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
-    r = -EINVAL;
-    goto out;
+    return _reply(m, -EINVAL, ss.str(), odata);
   }
 
   {
@@ -441,7 +440,8 @@ bool DaemonServer::handle_command(MCommand *m)
     }
 #endif
     f.close_section();	// command_descriptions
-    goto out;
+    f.flush(odata);
+    return _reply(m, r, ss.str(), odata);
   }
 
   // lookup command
@@ -449,9 +449,7 @@ bool DaemonServer::handle_command(MCommand *m)
                                               ARRAY_SIZE(mgr_commands));
   _generate_command_map(cmdmap, param_str_map);
   if (!mgr_cmd) {
-    ss << "command not supported";
-    r = -EINVAL;
-    goto out;
+    return _reply(m, -EINVAL, "command not supported", odata);
   }
 
   // validate user's permissions for requested command
@@ -461,9 +459,7 @@ bool DaemonServer::handle_command(MCommand *m)
     audit_clog->info() << "from='" << session->inst << "' "
 		       << "entity='" << session->entity_name << "' "
 		       << "cmd=" << m->cmd << ":  access denied";
-    ss << "access denied";
-    r = -EACCES;
-    goto out;
+    return _reply(m, -EACCES, "access denied", odata);
   }
 
   audit_clog->debug()
@@ -483,8 +479,7 @@ bool DaemonServer::handle_command(MCommand *m)
     cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
     if (!pgid.parse(pgidstr.c_str())) {
       ss << "invalid pgid '" << pgidstr << "'";
-      r = -EINVAL;
-      goto out;
+      return _reply(m, -EINVAL, ss.str(), odata);
     }
     bool pg_exists = false;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
@@ -492,8 +487,7 @@ bool DaemonServer::handle_command(MCommand *m)
       });
     if (!pg_exists) {
       ss << "pg " << pgid << " dne";
-      r = -ENOENT;
-      goto out;
+      return _reply(m, -ENOENT, ss.str(), odata);
     }
     int acting_primary = -1;
     entity_inst_t inst;
@@ -505,8 +499,7 @@ bool DaemonServer::handle_command(MCommand *m)
       });
     if (acting_primary == -1) {
       ss << "pg " << pgid << " has no primary osd";
-      r = -EAGAIN;
-      goto out;
+      return _reply(m, -EAGAIN, ss.str(), odata);
     }
     vector<pg_t> pgs = { pgid };
     msgr->send_message(new MOSDScrub(monc->get_fsid(),
@@ -516,10 +509,8 @@ bool DaemonServer::handle_command(MCommand *m)
 		       inst);
     ss << "instructing pg " << pgid << " on osd." << acting_primary
        << " (" << inst << ") to " << scrubop;
-    r = 0;
-  }
-
-  else {
+    return _reply(m, 0, ss.str(), odata);
+  } else {
     cluster_state.with_pgmap(
       [&](const PGMap& pg_map) {
 	cluster_state.with_osdmap([&](const OSDMap& osdmap) {
@@ -528,9 +519,10 @@ bool DaemonServer::handle_command(MCommand *m)
 	  });
       });
   }
-
+  if (r != -EOPNOTSUPP)
+      return _reply(m, r, ss.str(), odata);
   // fall back to registered python handlers
-  if (r == -EOPNOTSUPP) {
+  else {
     // Let's find you a handler!
     MgrPyModule *handler = nullptr;
     auto py_commands = py_modules.get_commands();
@@ -546,8 +538,7 @@ bool DaemonServer::handle_command(MCommand *m)
     if (handler == nullptr) {
       ss << "No handler found for '" << prefix << "'";
       dout(4) << "No handler found for '" << prefix << "'" << dendl;
-      r = -EINVAL;
-      goto out;
+      return _reply(m, -EINVAL, ss.str(), odata);
     }
 
     // FIXME: go run this python part in another thread, not inline
@@ -557,27 +548,29 @@ bool DaemonServer::handle_command(MCommand *m)
     stringstream ds;
     r = handler->handle_command(cmdmap, &ds, &ss);
     odata.append(ds);
-    goto out;
+    return _reply(m, 0, ss.str(), odata);
   }
+}
 
- out:
-
+bool DaemonServer::_reply(MCommand* m,
+			  int ret,
+			  const std::string& s,
+			  const bufferlist& payload)
+{
+  dout(1) << __func__ << " r=" << ret << " " << s << dendl;
+  auto con = m->get_connection();
+  if (!con) {
+    dout(10) << __func__ << " connection dropped for command" << dendl;
+    m->put();
+    return true;
+  }
   // Let the connection drop as soon as we've sent our response
-  if (m->get_connection()) {
-    m->get_connection()->mark_disposable();
-  }
+  con->mark_disposable();
 
-  std::string rs;
-  rs = ss.str();
-  dout(1) << "do_command r=" << r << " " << rs << dendl;
-  if (con) {
-    MCommandReply *reply = new MCommandReply(r, rs);
-    reply->set_tid(m->get_tid());
-    reply->set_data(odata);
-    con->send_message(reply);
-  }
-
+  auto response = new MCommandReply(ret, s);
+  response->set_tid(m->get_tid());
+  response->set_data(payload);
+  con->send_message(response);
   m->put();
   return true;
 }
-
