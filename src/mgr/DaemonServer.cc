@@ -15,6 +15,8 @@
 
 #include "auth/RotatingKeyRing.h"
 
+#include "json_spirit/json_spirit_writer.h"
+
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MCommand.h"
@@ -369,6 +371,24 @@ bool DaemonServer::_allowed_command(
   return capable;
 }
 
+class ReplyOnFinish : public Context {
+  DaemonServer* mgr;
+  MCommand *m;
+  bufferlist odata;
+
+public:
+  bufferlist from_mon;
+  string outs;
+
+  ReplyOnFinish(DaemonServer* mgr, MCommand *m, bufferlist&& odata)
+    : mgr(mgr), m(m), odata(std::move(odata))
+  {}
+  void finish(int r) override {
+    odata.claim_append(from_mon);
+    mgr->_reply(m, r, outs, odata);
+  }
+};
+
 bool DaemonServer::handle_command(MCommand *m)
 {
   int r = 0;
@@ -510,6 +530,95 @@ bool DaemonServer::handle_command(MCommand *m)
     ss << "instructing pg " << pgid << " on osd." << acting_primary
        << " (" << inst << ") to " << scrubop;
     return _reply(m, 0, ss.str(), odata);
+  } else if (prefix == "osd reweight-by-pg" ||
+	     prefix == "osd reweight-by-utilization" ||
+	     prefix == "osd test-reweight-by-pg" ||
+	     prefix == "osd test-reweight-by-utilization") {
+    bool by_pg =
+      prefix == "osd reweight-by-pg" || prefix == "osd test-reweight-by-pg";
+    bool dry_run =
+      prefix == "osd test-reweight-by-pg" ||
+      prefix == "osd test-reweight-by-utilization";
+    int64_t oload;
+    cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
+    set<int64_t> pools;
+    vector<string> poolnames;
+    cmd_getval(g_ceph_context, cmdmap, "pools", poolnames);
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	for (const auto& poolname : poolnames) {
+	  int64_t pool = osdmap.lookup_pg_pool_name(poolname);
+	  if (pool < 0) {
+	    ss << "pool '" << poolname << "' does not exist";
+	    r = -ENOENT;
+	  }
+	  pools.insert(pool);
+	}
+      });
+    if (r) {
+      return _reply(m, r, ss.str(), odata);
+    }
+    double max_change = g_conf->mon_reweight_max_change;
+    cmd_getval(g_ceph_context, cmdmap, "max_change", max_change);
+    if (max_change <= 0.0) {
+      ss << "max_change " << max_change << " must be positive";
+      return _reply(m, -EINVAL, ss.str(), odata);
+    }
+    int64_t max_osds = g_conf->mon_reweight_max_osds;
+    cmd_getval(g_ceph_context, cmdmap, "max_osds", max_osds);
+    if (max_osds <= 0) {
+      ss << "max_osds " << max_osds << " must be positive";
+      return _reply(m, -EINVAL, ss.str(), odata);
+    }
+    string no_increasing;
+    cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
+    string out_str;
+    map<int32_t, uint32_t> new_weights;
+    cluster_state.with_pgmap(
+      [&](const PGMap& pgmap) {
+	cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    r = reweight::by_utilization(osdmap, pgmap,
+					 oload,
+					 max_change,
+					 max_osds,
+					 by_pg,
+					 pools.empty() ? NULL : &pools,
+					 no_increasing == "--no-increasing",
+					 &new_weights,
+					 &ss, &out_str, f.get());
+	  });
+      });
+    if (r >= 0) {
+      dout(10) << "reweight::by_utilization: finished with " << out_str << dendl;
+    }
+    if (f)
+      f->flush(odata);
+    else
+      odata.append(out_str);
+    if (r < 0) {
+      ss << "FAILED reweight-by-pg";
+      return _reply(m, r, ss.str(), odata);
+    } else if (r == 0 || dry_run) {
+      ss << "no change";
+      return _reply(m, r, ss.str(), odata);
+    } else {
+      json_spirit::Object json_object;
+      for (const auto& osd_weight : new_weights) {
+	json_spirit::Config::add(json_object,
+				 std::to_string(osd_weight.first),
+				 std::to_string(osd_weight.second));
+      }
+      string s = json_spirit::write(json_object);
+      std::replace(begin(s), end(s), '\"', '\'');
+      const string cmd =
+	"{"
+	"\"prefix\": \"osd reweightn\", "
+	"\"weights\": \"" + s + "\""
+	"}";
+      auto on_finish = new ReplyOnFinish(this, m, std::move(odata));
+      monc->start_mon_command({cmd}, {},
+			      &on_finish->from_mon, &on_finish->outs, on_finish);
+      return true;
+    }
   } else {
     cluster_state.with_pgmap(
       [&](const PGMap& pg_map) {
