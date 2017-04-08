@@ -74,6 +74,7 @@ protected:
     const MgrCommand *this_cmd);
 
 private:
+  friend class ReplyOnFinish;
   bool _reply(MCommand* m,
 	      int ret, const std::string& s, const bufferlist& payload);
 
