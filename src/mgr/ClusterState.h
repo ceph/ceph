@@ -71,11 +71,13 @@ public:
   }
 
   template<typename Callback, typename...Args>
-  void with_pgmap(Callback&& cb, Args&&...args)
+  auto with_pgmap(Callback&& cb, Args&&...args) ->
+    decltype(cb(const_cast<const PGMap&>(pg_map),
+		std::forward<Args>(args)...))
   {
     Mutex::Locker l(lock);
-    std::forward<Callback>(cb)(const_cast<const PGMap&>(pg_map),
-        std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(const_cast<const PGMap&>(pg_map),
+				      std::forward<Args>(args)...);
   }
 
   template<typename... Args>
@@ -87,10 +89,11 @@ public:
   }
 
   template<typename... Args>
-  void with_osdmap(Args &&... args)
+  auto with_osdmap(Args &&... args) ->
+    decltype(objecter->with_osdmap(std::forward<Args>(args)...))
   {
     assert(objecter != nullptr);
-    objecter->with_osdmap(std::forward<Args>(args)...);
+    return objecter->with_osdmap(std::forward<Args>(args)...);
   }
 
 };

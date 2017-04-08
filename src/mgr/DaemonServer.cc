@@ -573,18 +573,17 @@ bool DaemonServer::handle_command(MCommand *m)
     cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
     string out_str;
     map<int32_t, uint32_t> new_weights;
-    cluster_state.with_pgmap(
-      [&](const PGMap& pgmap) {
-	cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	    r = reweight::by_utilization(osdmap, pgmap,
-					 oload,
-					 max_change,
-					 max_osds,
-					 by_pg,
-					 pools.empty() ? NULL : &pools,
-					 no_increasing == "--no-increasing",
-					 &new_weights,
-					 &ss, &out_str, f.get());
+    r = cluster_state.with_pgmap([&](const PGMap& pgmap) {
+	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    return reweight::by_utilization(osdmap, pgmap,
+					    oload,
+					    max_change,
+					    max_osds,
+					    by_pg,
+					    pools.empty() ? NULL : &pools,
+					    no_increasing == "--no-increasing",
+					    &new_weights,
+					    &ss, &out_str, f.get());
 	  });
       });
     if (r >= 0) {
@@ -620,11 +619,10 @@ bool DaemonServer::handle_command(MCommand *m)
       return true;
     }
   } else {
-    cluster_state.with_pgmap(
-      [&](const PGMap& pg_map) {
-	cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	    r = process_pg_map_command(prefix, cmdmap, pg_map, osdmap,
-				       f.get(), &ss, &odata);
+    r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
+	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    return process_pg_map_command(prefix, cmdmap, pg_map, osdmap,
+					  f.get(), &ss, &odata);
 	  });
       });
   }
