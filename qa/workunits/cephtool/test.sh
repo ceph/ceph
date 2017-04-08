@@ -1059,11 +1059,9 @@ function test_mon_osd()
   # osd blacklist
   #
   bl=192.168.0.1:0/1000
-  # Escaped form which may appear in JSON output
-  bl_json=192.168.0.1:0\\\\/1000
   ceph osd blacklist add $bl
   ceph osd blacklist ls | grep $bl
-  ceph osd blacklist ls --format=json-pretty | grep $bl_json
+  ceph osd blacklist ls --format=json-pretty  | sed 's/\\\//\//' | grep $bl
   ceph osd dump --format=json-pretty | grep $bl
   ceph osd dump | grep "^blacklist $bl"
   ceph osd blacklist rm $bl
