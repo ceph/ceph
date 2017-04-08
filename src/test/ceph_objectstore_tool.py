@@ -399,7 +399,7 @@ CEPH_DIR = CEPH_BUILD_DIR + "/cot_dir"
 CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
 def kill_daemons():
-    call("{path}/init-ceph -c {conf} stop osd mon > /dev/null 2>&1".format(conf=CEPH_CONF, path=CEPH_BIN), shell=True)
+    call("{path}/init-ceph -c {conf} stop > /dev/null 2>&1".format(conf=CEPH_CONF, path=CEPH_BIN), shell=True)
 
 
 def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
