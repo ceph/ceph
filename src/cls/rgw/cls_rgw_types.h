@@ -762,6 +762,9 @@ struct rgw_usage_log_entry {
       payer = e.payer;
     }
 
+    if (subuser.empty() && !(e.subuser.empty()))
+      subuser = e.subuser;
+
     map<string, rgw_usage_data>::const_iterator iter;
     for (iter = e.usage_map.begin(); iter != e.usage_map.end(); ++iter) {
       if (!categories || !categories->size() || categories->count(iter->first)) {

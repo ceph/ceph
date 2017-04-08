@@ -555,7 +555,7 @@ int cls_rgw_get_dir_header_async(IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB 
   return 0;
 }
 
-int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,
+int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,const string& subuser,
                            uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                            string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
                            bool *is_truncated)
@@ -568,6 +568,7 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,
   call.start_epoch = start_epoch;
   call.end_epoch = end_epoch;
   call.owner = user;
+  call.subuser = subuser;
   call.max_entries = max_entries;
   call.iter = read_iter;
   ::encode(call, in);

@@ -30,14 +30,16 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
   formatter->close_section(); // categories
 }
 
-int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
-		   uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
+int RGWUsage::show(RGWRados *store, rgw_user& uid, string& subuser,
+		   uint64_t start_epoch, uint64_t end_epoch,
+		   bool show_log_entries, bool show_log_sum,
 		   map<string, bool> *categories,
 		   RGWFormatterFlusher& flusher)
 {
   uint32_t max_entries = 1000;
 
   bool is_truncated = true;
+  bool by_subuser = !subuser.empty();
 
   RGWUsageIter usage_iter;
   Formatter *formatter = flusher.get_formatter();
@@ -54,7 +56,7 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
   bool user_section_open = false;
   map<string, rgw_usage_log_entry> summary_map;
   while (is_truncated) {
-    int ret = store->read_usage(uid, start_epoch, end_epoch, max_entries,
+    int ret = store->read_usage(uid, subuser, start_epoch, end_epoch, max_entries,
                                 &is_truncated, usage_iter, usage);
 
     if (ret == -ENOENT) {
@@ -79,6 +81,8 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
           }
           formatter->open_object_section("user");
           formatter->dump_string("user", ub.user);
+	  if (by_subuser)
+            formatter->dump_string("subuser", ub.subuser);
           formatter->open_array_section("buckets");
           user_section_open = true;
           last_owner = ub.user;
@@ -117,6 +121,8 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
       const rgw_usage_log_entry& entry = siter->second;
       formatter->open_object_section("user");
       formatter->dump_string("user", siter->first);
+      if (by_subuser)
+        formatter->dump_string("subuser", entry.subuser);
       dump_usage_categories_info(formatter, entry, categories);
       rgw_usage_data total_usage;
       entry.sum(total_usage, *categories);
