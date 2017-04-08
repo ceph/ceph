@@ -61,6 +61,10 @@ class RGWRESTConn
 public:
 
   RGWRESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints);
+  // custom move needed for atomic
+  RGWRESTConn(RGWRESTConn&& other);
+  RGWRESTConn& operator=(RGWRESTConn&& other);
+
   int get_url(string& endpoint);
   string get_url();
   const string& get_self_zonegroup() {
