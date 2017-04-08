@@ -19,6 +19,27 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
   }
 }
 
+RGWRESTConn::RGWRESTConn(RGWRESTConn&& other)
+  : cct(other.cct),
+    endpoints(std::move(other.endpoints)),
+    key(std::move(other.key)),
+    self_zone_group(std::move(other.self_zone_group)),
+    remote_id(std::move(other.remote_id)),
+    counter(other.counter.load())
+{
+}
+
+RGWRESTConn& RGWRESTConn::operator=(RGWRESTConn&& other)
+{
+  cct = other.cct;
+  endpoints = std::move(other.endpoints);
+  key = std::move(other.key);
+  self_zone_group = std::move(other.self_zone_group);
+  remote_id = std::move(other.remote_id);
+  counter = other.counter.load();
+  return *this;
+}
+
 int RGWRESTConn::get_url(string& endpoint)
 {
   if (endpoints.empty()) {
