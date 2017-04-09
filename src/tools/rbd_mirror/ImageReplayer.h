@@ -69,6 +69,20 @@ public:
     STATE_STOPPED,
   };
 
+  static ImageReplayer *create(
+    Threads<librbd::ImageCtx> *threads,
+    std::shared_ptr<ImageDeleter> image_deleter,
+    ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
+    RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
+    const std::string &global_image_id) {
+    return new ImageReplayer(threads, image_deleter, image_sync_throttler,
+                             local, local_mirror_uuid, local_pool_id,
+                             global_image_id);
+  }
+  void destroy() {
+    delete this;
+  }
+
   ImageReplayer(Threads<librbd::ImageCtx> *threads,
                 std::shared_ptr<ImageDeleter> image_deleter,
                 ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
@@ -96,6 +110,8 @@ public:
                         librados::IoCtx &remote_io_ctx);
   void remove_remote_image(const std::string &remote_mirror_uuid,
                            const std::string &remote_image_id);
+  void set_remote_images(const PeerImages &remote_images);
+
   bool remote_images_empty() const;
 
   inline int64_t get_local_pool_id() const {
@@ -204,37 +220,6 @@ protected:
   bool on_replay_interrupted();
 
 private:
-  struct RemoteImage {
-    std::string mirror_uuid;
-    std::string image_id;
-    librados::IoCtx io_ctx;
-
-    RemoteImage() {
-    }
-    RemoteImage(const std::string &mirror_uuid,
-                const std::string &image_id)
-      : mirror_uuid(mirror_uuid), image_id(image_id) {
-    }
-    RemoteImage(const std::string &mirror_uuid,
-                const std::string &image_id,
-                librados::IoCtx &io_ctx)
-      : mirror_uuid(mirror_uuid), image_id(image_id), io_ctx(io_ctx) {
-    }
-
-    inline bool operator<(const RemoteImage &rhs) const {
-      if (mirror_uuid != rhs.mirror_uuid) {
-        return mirror_uuid < rhs.mirror_uuid;
-      } else {
-        return image_id < rhs.image_id;
-      }
-    }
-    inline bool operator==(const RemoteImage &rhs) const {
-      return (mirror_uuid == rhs.mirror_uuid && image_id == rhs.image_id);
-    }
-  };
-
-  typedef std::set<RemoteImage> RemoteImages;
-
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
   typedef boost::optional<State> OptionalState;
 
@@ -274,8 +259,8 @@ private:
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
 
-  RemoteImages m_remote_images;
-  RemoteImage m_remote_image;
+  PeerImages m_remote_images;
+  PeerImage m_remote_image;
 
   RadosRef m_local;
   std::string m_local_mirror_uuid;

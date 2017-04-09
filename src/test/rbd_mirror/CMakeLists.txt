@@ -19,6 +19,7 @@ add_executable(unittest_rbd_mirror
   test_mock_ImageReplayer.cc
   test_mock_ImageSync.cc
   test_mock_ImageSyncThrottler.cc
+  test_mock_InstanceReplayer.cc
   test_mock_InstanceWatcher.cc
   test_mock_LeaderWatcher.cc
   test_mock_PoolWatcher.cc
