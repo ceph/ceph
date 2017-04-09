@@ -79,9 +79,6 @@ using namespace librados;
 
 using namespace std;
 
-static RGWCache<RGWRados> cached_rados_provider;
-static RGWRados rados_provider;
-
 static string notify_oid_prefix = "notify";
 static string *notify_oids = NULL;
 static string shadow_ns = "shadow";
