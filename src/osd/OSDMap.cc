@@ -193,30 +193,30 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
 {
   assert(epoch == osdmap.get_epoch() + 1);
 
-  for (auto &elemm : new_pools) {
-    if (!elemm.second.tiers.empty()) {
-      pg_pool_t& base = elemm.second;
+  for (auto &new_pool : new_pools) {
+    if (!new_pool.second.tiers.empty()) {
+      pg_pool_t& base = new_pool.second;
 
-      for (const auto &elems : base.tiers) {
-	const auto &r = new_pools.find(elems);
+      for (const auto &tier_pool : base.tiers) {
+	const auto &r = new_pools.find(tier_pool);
 	pg_pool_t *tier = 0;
 	if (r == new_pools.end()) {
-	  const pg_pool_t *orig = osdmap.get_pg_pool(elems);
+	  const pg_pool_t *orig = osdmap.get_pg_pool(tier_pool);
 	  if (!orig) {
-	    lderr(cct) << __func__ << " no pool " << elems << dendl;
+	    lderr(cct) << __func__ << " no pool " << tier_pool << dendl;
 	    return -EIO;
 	  }
-	  tier = get_new_pool(elems, orig);
+	  tier = get_new_pool(tier_pool, orig);
 	} else {
 	  tier = &r->second;
 	}
-	if (tier->tier_of != elemm.first) {
-	  lderr(cct) << __func__ << " " << r->first << " tier_of != " << elemm.first << dendl;
+	if (tier->tier_of != new_pool.first) {
+	  lderr(cct) << __func__ << " " << r->first << " tier_of != " << new_pool.first << dendl;
 	  return -EIO;
 	}
 
-        ldout(cct, 10) << __func__ << " from " << elemm.first << " to "
-                       << elems << dendl;
+        ldout(cct, 10) << __func__ << " from " << new_pool.first << " to "
+                       << tier_pool << dendl;
 	tier->snap_seq = base.snap_seq;
 	tier->snap_epoch = base.snap_epoch;
 	tier->snaps = base.snaps;
@@ -240,8 +240,8 @@ bool OSDMap::subtree_is_down(int id, set<int> *down_cache) const
 
   list<int> children;
   crush->get_children(id, &children);
-  for (const auto &elem : children) {
-    if (!subtree_is_down(elem, down_cache)) {
+  for (const auto &child : children) {
+    if (!subtree_is_down(child, down_cache)) {
       return false;
     }
   }
@@ -306,25 +306,25 @@ void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
   // for ::encode(new_pools, bl);
   __u32 n = new_pools.size();
   ::encode(n, bl);
-  for (const auto &elem : new_pools) {
-    n = elem.first;
+  for (const auto &new_pool : new_pools) {
+    n = new_pool.first;
     ::encode(n, bl);
-    ::encode(elem.second, bl, 0);
+    ::encode(new_pool.second, bl, 0);
   }
   // for ::encode(new_pool_names, bl);
   n = new_pool_names.size();
   ::encode(n, bl);
 
-  for (const auto &elem : new_pool_names) {
-    n = elem.first;
+  for (const auto &new_pool_name : new_pool_names) {
+    n = new_pool_name.first;
     ::encode(n, bl);
-    ::encode(elem.second, bl);
+    ::encode(new_pool_name.second, bl);
   }
   // for ::encode(old_pools, bl);
   n = old_pools.size();
   ::encode(n, bl);
-  for (auto &elem : old_pools) {
-    n = elem;
+  for (auto &old_pool : old_pools) {
+    n = old_pool;
     ::encode(n, bl);
   }
   ::encode(new_up_client, bl, 0);
@@ -334,10 +334,10 @@ void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
   n = new_pg_temp.size();
   ::encode(n, bl);
 
-  for (const auto &elem : new_pg_temp) {
-    old_pg_t opg = elem.first.get_old_pg();
+  for (const auto &pg_temp : new_pg_temp) {
+    old_pg_t opg = pg_temp.first.get_old_pg();
     ::encode(opg, bl);
-    ::encode(elem.second, bl);
+    ::encode(pg_temp.second, bl);
   }
 }
 
@@ -735,26 +735,26 @@ void OSDMap::Incremental::dump(Formatter *f) const
 
   f->open_array_section("new_pools");
 
-  for (const auto &elem : new_pools) {
+  for (const auto &new_pool : new_pools) {
     f->open_object_section("pool");
-    f->dump_int("pool", elem.first);
-    elem.second.dump(f);
+    f->dump_int("pool", new_pool.first);
+    new_pool.second.dump(f);
     f->close_section();
   }
   f->close_section();
   f->open_array_section("new_pool_names");
 
-  for (const auto &elem : new_pool_names) {
+  for (const auto &new_pool_name : new_pool_names) {
     f->open_object_section("pool_name");
-    f->dump_int("pool", elem.first);
-    f->dump_string("name", elem.second);
+    f->dump_int("pool", new_pool_name.first);
+    f->dump_string("name", new_pool_name.second);
     f->close_section();
   }
   f->close_section();
   f->open_array_section("old_pools");
 
-  for (const auto &elem : old_pools)
-    f->dump_int("pool", elem);
+  for (const auto &old_pool : old_pools)
+    f->dump_int("pool", old_pool);
   f->close_section();
 
   f->open_array_section("new_up_osds");
@@ -783,27 +783,27 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("osd_state_xor");
-  for (const auto &elemm : new_state) {
+  for (const auto &ns : new_state) {
     f->open_object_section("osd");
-    f->dump_int("osd", elemm.first);
+    f->dump_int("osd", ns.first);
     set<string> st;
-    calc_state_set(new_state.find(elemm.first)->second, st);
+    calc_state_set(new_state.find(ns.first)->second, st);
     f->open_array_section("state_xor");
-    for (auto &elems : st)
-      f->dump_string("state", elems);
+    for (auto &elemst : st)
+      f->dump_string("state", elemst);
     f->close_section();
   }
   f->close_section();
 
   f->open_array_section("new_pg_temp");
 
-  for (const auto &elemm : new_pg_temp) {
+  for (const auto &pg_temp : new_pg_temp) {
     f->open_object_section("pg");
-    f->dump_stream("pgid") << elemm.first;
+    f->dump_stream("pgid") << pg_temp.first;
     f->open_array_section("osds");
 
-    for (const auto &elemv : elemm.second)
-      f->dump_int("osd", elemv);
+    for (const auto &elems : pg_temp.second)
+      f->dump_int("osd", elems);
     f->close_section();
     f->close_section();    
   }
@@ -2407,9 +2407,9 @@ void OSDMap::dump_erasure_code_profiles(const map<string,map<string,string> > &p
 					Formatter *f)
 {
   f->open_object_section("erasure_code_profiles");
-  for (const auto &elemp : profiles) {
-    f->open_object_section(elemp.first.c_str());
-    for (const auto &elems : elemp.second) {
+  for (const auto &profile : profiles) {
+    f->open_object_section(profile.first.c_str());
+    for (const auto &elems : profile.second) {
       f->dump_string(elems.first.c_str(), elems.second.c_str());
     }
     f->close_section();
@@ -2510,11 +2510,11 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section();
   f->open_array_section("pg_temp");
-  for (const auto &elemp : *pg_temp) {
+  for (const auto &elempg : *pg_temp) {
     f->open_object_section("osds");
-    f->dump_stream("pgid") << elemp.first;
+    f->dump_stream("pgid") << elempg.first;
     f->open_array_section("osds");
-    for (const auto &elems : elemp.second)
+    for (const auto &elems : elempg.second)
       f->dump_int("osd", elems);
     f->close_section();
     f->close_section();
@@ -2613,20 +2613,20 @@ struct qi {
 
 void OSDMap::print_pools(ostream& out) const
 {
-  for (const auto &elemp : pools) {
+  for (const auto &pool : pools) {
     std::string name("<unknown>");
-    const auto &pni = pool_name.find(elemp.first);
+    const auto &pni = pool_name.find(pool.first);
     if (pni != pool_name.end())
       name = pni->second;
-    out << "pool " << elemp.first
+    out << "pool " << pool.first
 	<< " '" << name
-	<< "' " << elemp.second << "\n";
+	<< "' " << pool.second << "\n";
 
-    for (const auto &elems : elemp.second.snaps)
-      out << "\tsnap " << elems.second.snapid << " '" << elems.second.name << "' " << elems.second.stamp << "\n";
+    for (const auto &snap : pool.second.snaps)
+      out << "\tsnap " << snap.second.snapid << " '" << snap.second.name << "' " << snap.second.stamp << "\n";
 
-    if (!elemp.second.removed_snaps.empty())
-      out << "\tremoved_snaps " << elemp.second.removed_snaps << "\n";
+    if (!pool.second.removed_snaps.empty())
+      out << "\tremoved_snaps " << pool.second.removed_snaps << "\n";
   }
   out << std::endl;
 }
