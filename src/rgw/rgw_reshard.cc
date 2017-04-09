@@ -5,6 +5,7 @@
 #include "rgw_reshard.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/lock/cls_lock_client.h"
+#include "common/errno.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -158,7 +159,7 @@ int RGWReshard::remove(cls_rgw_reshard_entry& entry)
   return ret;
 }
 
-int RGWReshard::remove(cls_rgw_reshard_entry& entry)
+int RGWReshard::set_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
 {
   rados::cls::lock::Lock l(reshard_lock_name);
   librados::IoCtx io_ctx;
@@ -167,7 +168,12 @@ int RGWReshard::remove(cls_rgw_reshard_entry& entry)
   if (ret < 0)
     return ret;
 
-  ret = l.lock_exclusive(&io_ctx, reshard_oid);
+  if (entry.new_instance_id.empty()) {
+    ldout(cct, 0) << "RGWReshard::" << __func__ << " missing new bucket instance id" << dendl;
+    return -EEXIST;
+  }
+
+  ret = l.lock_exclusive(&io_ctx, bucket_instance_oid);
   if (ret == -EBUSY) {
     dout(0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
     return 0;
@@ -175,11 +181,40 @@ int RGWReshard::remove(cls_rgw_reshard_entry& entry)
   if (ret < 0)
     return ret;
 
-  librados::ObjectWriteOperation op;
-  cls_rgw_reshard_remove(op);
+  RGWBucketInfo new_bucket_info;
+  map<string, bufferlist> attrs;
+  RGWObjectCtx obj_ctx(store);
+  cls_rgw_bucket_instance_entry instance_entry;
 
-  ret =  io_ctx.operate(reshard_oid, &op);
+  ret = store->get_bucket_info(obj_ctx, entry.tenant, entry.bucket_name, new_bucket_info, nullptr, &attrs);
+  if (ret < 0) {
+    ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: could not init bucket: " << cpp_strerror(-ret)
+		  << dendl;
+    return ret;
+  }
 
-  l.unlock(&io_ctx, reshard_oid);
+  new_bucket_info.new_bucket_instance_id = entry.new_instance_id;
+  new_bucket_info.resharding = true;
+  instance_entry.new_bucket_instance_id = entry.new_instance_id;
+
+  try {
+    ::encode(new_bucket_info, instance_entry.data);
+  } catch(buffer::error& err) {
+    ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: could not decode buffer info, caught buffer::error"
+		  << dendl;
+    ret = -EIO;
+    goto done;
+  }
+
+  ret =   cls_rgw_set_bucket_resharding(io_ctx, bucket_instance_oid, instance_entry);
+  if (ret < 0) {
+    ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: cls_rgw_set_bucket_reshardind: "
+		  << cpp_strerror(-ret) << dendl;
+    goto done;
+  }
+done:
+  l.unlock(&io_ctx, bucket_instance_oid);
   return ret;
 }
+
+
