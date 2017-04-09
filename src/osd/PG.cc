@@ -5850,7 +5850,10 @@ void PG::update_store_with_options()
   if(r < 0 && r != -EOPNOTSUPP) {
     derr << __func__ << "set_collection_opts returns error:" << r << dendl;
   }
+}
 
+void PG::update_store_on_load()
+{
   if (osd->store->get_type() == "filestore") {
     // legacy filestore didn't store collection bit width; fix.
     int bits = osd->store->collection_bits(coll);
@@ -5906,6 +5909,8 @@ boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
   // do we tell someone we're here?
   pg->send_notify = (!pg->is_primary());
   pg->update_store_with_options();
+
+  pg->update_store_on_load();
 
   return transit< Reset >();
 }
