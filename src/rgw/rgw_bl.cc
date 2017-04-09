@@ -24,6 +24,8 @@
 #include "rgw_bucket.h"
 #include "rgw_bl.h"
 #include "rgw_rados.h"
+#include "common/Clock.h"
+#include "rgw_rest_client.h"
 
 
 #define dout_context g_ceph_context
@@ -164,27 +166,27 @@ static vector<string> split_opslog_obj_name(const string&obj_name){
   return elems;
 }
 
-static string generate_target_object(const string prefix, string obj_name)
+static string generate_target_key(const string prefix, string obj_name)
 {
-  string target_object = "";
+  string target_key;
 
   char unique_string_buf[BL_UNIQUE_STRING_LEN + 1];
   int ret = gen_rand_alphanumeric_plain(g_ceph_context, unique_string_buf,
 					sizeof(unique_string_buf));
   if (ret < 0) {
-      return "";
+      return target_key;
   } else {
     vector<std::string> _result;
     _result = split_opslog_obj_name(obj_name);
     string date = _result[0];
 
-    target_object += prefix;
-    target_object += date;
-    target_object += "-";
-    target_object += string(unique_string_buf);
+    target_key += prefix;
+    target_key += date;
+    target_key += "-";
+    target_key += string(unique_string_buf);
   }
 
-  return target_object;
+  return target_key;
 }
 
 int RGWBL::bucket_bl_fetch(const string opslog_obj, bufferlist *buffer)
@@ -192,14 +194,14 @@ int RGWBL::bucket_bl_fetch(const string opslog_obj, bufferlist *buffer)
   RGWAccessHandle sh;
   int r = store->log_show_init(opslog_obj, &sh);
   if (r < 0) {
-    ldout(cct, 0) << __func__ << "log_show_init() failed ret="
+    ldout(cct, 0) << "RGWBL::bucket_bl_fetch" << "log_show_init() failed ret="
                  << cpp_strerror(-r) << dendl;
   }
 
   struct rgw_log_entry entry;
   r = store->log_show_next(sh, &entry);
   if (r < 0) {
-    ldout(cct, 0) << __func__ << "log_show_next() failed ret="
+    ldout(cct, 0) << "RGWBL::bucket_bl_fetch" << "log_show_next() failed ret="
 		  << cpp_strerror(-r) << dendl;
     return r;
   }
@@ -242,26 +244,75 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
   buffer->append(pending_column.str());
 }
 
-int RGWBL::bucket_bl_upload(bufferlist* opslog_buffer, const string target_bucket,
-			    const string target_object)
+int RGWBL::bucket_bl_upload(bufferlist* opslog_buffer, rgw_obj obj)
 {
-  int r = 0;
+  string url = cct->_conf->rgw_bl_url;
+  if (url.empty()) {
+    ldout(cct, 0) << "RGWBL::bucket_bl_upload"
+                  << " rgw_bl_url should not be empty." << dendl;
+    return -EINVAL;
+  }
+  RGWRESTStreamWriteRequest req(cct, url, NULL, NULL);
 
-  return r;
+  RGWAccessKey& key = store->get_zone_params().bl_deliver_key;
+  if (key.id.empty()) {
+    ldout(cct, 0) << "RGWBL::bucket_bl_upload"
+                  << " bl_deliver access key should not be empty." << dendl;
+    return -EPERM;
+  }
+
+  if (key.key.empty()) {
+    ldout(cct, 0) << "RGWBL::bucket_bl_upload"
+                  << "bl_deliver secret key should not be empty." << dendl;
+    return -EPERM;
+  }
+
+  map<string, bufferlist> attrs;
+  attrs.clear();
+
+  int ret = req.put_obj_init(key, obj, opslog_buffer->length(), attrs);
+  if(ret < 0) {
+    ldout(cct, 0) << "RGWBL::bucket_bl_upload"
+                  << " req.put_obj_init failed ret="
+		  << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+    
+  // load buffer
+  ret = req.get_out_cb()->handle_data(*opslog_buffer, 0,
+                                      ((uint64_t)opslog_buffer->length()));
+  if(ret < 0) {
+    ldout(cct, 0) << "RGWBL::bucket_bl_upload"
+                  << " req.get_out_cb()->handle_data failed ret="
+		  << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  string etag; 
+  ret = req.complete(etag, nullptr);
+  if(ret < 0) {
+    ldout(cct, 0) << "RGWBL::bucket_bl_upload"
+                  << "req.complete failed ret="
+		  << cpp_strerror(-ret) << dendl;
+
+    return ret;
+  }
+  return ret;
 }
 
 int RGWBL::bucket_bl_remove(const string obj_name)
 {
   int r = store->log_remove(obj_name);
   if (r < 0) {
-    ldout(cct, 0) << __func__ << "uploaded, log_remove() failed ret="
+    ldout(cct, 0) << "RGWBL::bucket_bl_remove" 
+                  << " log_remove() failed uploaded ret="
 		  << cpp_strerror(-r) << dendl;
 
   }
   return r;
 } 
 
-int RGWBL::bucket_bl_deliver(string opslog_obj, const string target_bucket,
+int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
 			     const string target_prefix)
 {
   bufferlist opslog_buffer;
@@ -272,13 +323,15 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const string target_bucket,
     return r;
   }
 
-  string target_object = generate_target_object(target_prefix, opslog_obj);
-  if (target_object.empty()) {
+  string target_key = generate_target_key(target_prefix, opslog_obj);
+  if (target_key.empty()) {
     ldout(cct, 0) << __func__ << "generate target object failed ret=" << dendl;
     return -1;
   }
 
-  r = bucket_bl_upload(&opslog_buffer, target_bucket, target_object);
+  rgw_obj tobject(target_bucket, target_key);
+
+  r = bucket_bl_upload(&opslog_buffer, tobject);
   opslog_buffer.clear();
   if (r < 0) {
     ldout(cct, 0) << __func__ << "bucket_bl_upload() failed ret="
@@ -307,6 +360,11 @@ int RGWBL::bucket_bl_process(string& shard_id)
   string sbucket_name = result[1];
   string sbucket_id = result[2];
 
+
+  ldout(cct, 20) << "RGWBL:bucket_bl_process shard_id=" << shard_id
+                 << " source bucket tenant=" << sbucket_tenant
+                 << " source bucket name=" << sbucket_name
+                 << " source bucket id=" << sbucket_id << dendl;
   int ret = store->get_bucket_info(obj_ctx, sbucket_tenant, sbucket_name,
                                    sbucket_info, NULL, &sbucket_attrs);
   if (ret < 0) {
@@ -318,7 +376,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
   ret = sbucket_info.bucket.bucket_id.compare(sbucket_id) ;
   if (ret != 0) {
     ldout(cct, 0) << "RGWBL:old bucket id found, source_bucket_name="
-		  << sbucket_name << "should be deleted." << dendl;
+		  << sbucket_name << " should be deleted." << dendl;
     return -ENOENT;
   }
 
@@ -330,7 +388,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
   try {
     status.decode(iter);
   } catch (const buffer::error& e) {
-    ldout(cct, 0) << __func__ << "decode bucket logging status failed" << dendl;
+    ldout(cct, 0) << __func__ << " decode bucket logging status failed" << dendl;
     return -1;
   }
 
@@ -356,23 +414,42 @@ int RGWBL::bucket_bl_process(string& shard_id)
       return ret;
     }
 
-    string tbucket = status.get_target_bucket();
-    if (tbucket.empty()) {
-      tbucket = sbucket_name; // source bucket as the default when target bucket didn't be specified.
+    rgw_bucket tbucket;
+    string tbucket_name = status.get_target_bucket();
+    if (tbucket_name.empty()) {
+      tbucket = sbucket_info.bucket; // source bucket as the default when target bucket didn't be specified.
     } else {
-      // TODO(jiaying) check tbucket deliver group acl
+      RGWBucketInfo tbucket_info;
+      map<string, bufferlist> tbucket_attrs;
+      RGWObjectCtx tobj_ctx(store);
+
+      // source/target bucket owned by same user
+      int ret = store->get_bucket_info(tobj_ctx, sbucket_tenant, tbucket_name, 
+                                       tbucket_info, NULL, &tbucket_attrs);
+      if (ret < 0) {
+        ldout(cct, 0) << "RGWBL:get_bucket_info failed, target_bucket_name="
+                      << tbucket_name << dendl;
+        return ret;
+      } else {
+        if (ret == 0) {
+           tbucket = tbucket_info.bucket;
+           // TODO(jiaying) check tbucket deliver group acl
+        } 
+      }
     }
+
     string tprefix = status.get_target_prefix(); // prefix is optional
 
+    string opslog_obj;
     while (true){
-      string opslog_obj;
+      opslog_obj.clear();
       int r = store->log_list_next(lh, &opslog_obj);
       if (r == -ENOENT) {
 	ret = 0; // no opslog
 	break;
       }
       if (r < 0) {
-	ldout(cct, 0) << __func__ << "log_list_next() failed ret="
+	ldout(cct, 0) << __func__ << " log_list_next() failed ret="
 		      << cpp_strerror(-r) << dendl;
 	ret = r;
 	break;
@@ -407,7 +484,7 @@ int RGWBL::bucket_bl_post(int index, int max_lock_sec,
     }
     if (ret < 0)
       return 0;
-    dout(20) << "RGWBL::bucket_bl_post() get lock" << obj_names[index] << dendl;
+    dout(20) << "RGWBL::bucket_bl_post() get lock " << obj_names[index] << dendl;
     if (result == -ENOENT) {
       ret = cls_rgw_bl_rm_entry(store->bl_pool_ctx, obj_names[index],  entry);
       if (ret < 0) {
@@ -416,7 +493,10 @@ int RGWBL::bucket_bl_post(int index, int max_lock_sec,
       }
       goto clean;
     } else if (result < 0) {
-      entry.second = bl_failed;
+      if (result == -EPERM)
+        entry.second = bl_perm_error;
+      else  
+        entry.second = bl_failed;
     } else {
       entry.second = bl_complete;
     }
@@ -428,7 +508,7 @@ int RGWBL::bucket_bl_post(int index, int max_lock_sec,
     }
  clean:
     l.unlock(&store->bl_pool_ctx, obj_names[index]);
-    dout(20) << "RGWBL::bucket_bl_post() unlock" << obj_names[index] << dendl;
+    dout(20) << "RGWBL::bucket_bl_post() unlock " << obj_names[index] << dendl;
     return 0;
   } while (true);
 }

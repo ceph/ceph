@@ -44,6 +44,7 @@ typedef enum {
   bl_uninitial = 0,
   bl_processing,
   bl_failed,
+  bl_perm_error,
   bl_complete,
 }BL_BUCKET_STATUS;
 
@@ -92,11 +93,10 @@ class RGWBL {
 
   void format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer);
   int bucket_bl_fetch(const string opslog_obj, bufferlist* opslog_entries);
-  int bucket_bl_upload(bufferlist* opslog_entries, const string target_bucket,
-		       const string target_object);
+  int bucket_bl_upload(bufferlist* opslog_buffer, rgw_obj target_object);
   int bucket_bl_remove(const string opslog_obj);
-  int bucket_bl_deliver(string opslog_obj, const string target_bucket,
-			       const string target_object);
+  int bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
+			       const string target_prefix);
 
   bool going_down();
   void start_processor();
