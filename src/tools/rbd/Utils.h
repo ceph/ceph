@@ -183,6 +183,10 @@ bool calc_sparse_extent(const bufferptr &bp,
                         size_t *write_length,
                         size_t *offset);
 
+bool check_if_image_spec_present(const boost::program_options::variables_map &vm,
+                                 argument_types::ArgumentModifier mod,
+                                 size_t spec_arg_index);
+
 std::string image_id(librbd::Image& image);
 
 std::string mirror_image_state(librbd::mirror_image_state_t mirror_image_state);
