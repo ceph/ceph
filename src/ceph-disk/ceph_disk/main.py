@@ -577,6 +577,9 @@ def platform_information():
                     codename = minor
                 else:
                     codename = major
+        # this could be an empty string in Virtuozzo linux
+        if not codename and 'virtuozzo linux' in distro.lower():
+            codename = 'virtuozzo'
 
     return (
         str(distro).strip(),
