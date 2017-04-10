@@ -623,7 +623,7 @@ MonConnection& MonClient::_add_conn(unsigned rank, uint64_t global_id)
   auto peer = monmap.get_addr(rank);
   auto conn = messenger->get_connection(monmap.get_inst(rank));
   MonConnection mc(cct, conn, global_id);
-  auto inserted = pending_cons.insert(move(make_pair(peer, move(mc))));
+  auto inserted = pending_cons.insert(make_pair(peer, move(mc)));
   ldout(cct, 10) << "picked mon." << monmap.get_name(rank)
                  << " con " << conn
                  << " addr " << conn->get_peer_addr()
