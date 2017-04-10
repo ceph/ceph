@@ -47,6 +47,7 @@ TEST(ErasureCodePlugin, factory)
     0
   };
   for(const char **technique = techniques; *technique; technique++) {
+    kill(getpid(), SIGSEGV);
     ErasureCodeInterfaceRef erasure_code;
     ErasureCodeProfile profile;
     profile["technique"] = *technique;
