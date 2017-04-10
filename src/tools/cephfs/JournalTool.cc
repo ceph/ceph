@@ -56,12 +56,15 @@ void JournalTool::usage()
     << "      --inode=<integer>\n"
     << "      --type=<UPDATE|OPEN|SESSION...><\n"
     << "      --frag=<ino>.<frag> [--dname=<dentry string>]\n"
+    << "      --alternate-pool=pool-name\n"
     << "      --client=<session id integer>\n"
     << "    <effect>: [get|apply|recover_dentries|splice]\n"
     << "    <output>: [summary|list|binary|json] [--path <path>]\n"
     << "\n"
     << "Options:\n"
-    << "  --rank=<str>  Journal rank (default 0)\n";
+    << "  --rank=filesystem:mds-rank  Journal rank (required if multiple\n"
+    << "                              file systems, default is rank 0 on\n"
+    << "                              the only filesystem otherwise.\n";
 
   generic_client_usage();
 }
@@ -93,6 +96,7 @@ int JournalTool::main(std::vector<const char*> &argv)
 
   r = role_selector.parse(*fsmap, rank_str);
   if (r != 0) {
+    derr << "Couldn't determine MDS rank." << dendl;
     return r;
   }
 
@@ -131,8 +135,9 @@ int JournalTool::main(std::vector<const char*> &argv)
   }
 
   dout(4) << "JournalTool: creating IoCtx.." << dendl;
-  r = rados.ioctx_create(pool_name.c_str(), io);
+  r = rados.ioctx_create(pool_name.c_str(), input);
   assert(r == 0);
+  output.dup(input);
 
   // Execution
   // =========
@@ -209,7 +214,7 @@ int JournalTool::main_journal(std::vector<const char*> &argv)
 int JournalTool::main_header(std::vector<const char*> &argv)
 {
   JournalFilter filter;
-  JournalScanner js(io, rank, filter);
+  JournalScanner js(input, rank, filter);
   int r = js.scan(false);
   if (r < 0) {
     std::cerr << "Unable to scan journal" << std::endl;
@@ -280,7 +285,7 @@ int JournalTool::main_header(std::vector<const char*> &argv)
     dout(4) << "Writing object..." << dendl;
     bufferlist header_bl;
     ::encode(*(js.header), header_bl);
-    io.write_full(js.obj_name(0), header_bl);
+    output.write_full(js.obj_name(0), header_bl);
     dout(4) << "Write complete." << dendl;
     std::cout << "Successfully updated header." << std::endl;
   } else {
@@ -343,6 +348,12 @@ int JournalTool::main_event(std::vector<const char*> &argv)
     std::string arg_str;
     if (ceph_argparse_witharg(argv, arg, &arg_str, "--path", (char*)NULL)) {
       output_path = arg_str;
+    } else if (ceph_argparse_witharg(argv, arg, &arg_str, "--alternate-pool",
+				     nullptr)) {
+      dout(1) << "Using alternate pool " << arg_str << dendl;
+      int r = rados.ioctx_create(arg_str.c_str(), output);
+      assert(r == 0);
+      other_pool = true;
     } else {
       derr << "Unknown argument: '" << *arg << "'" << dendl;
       usage();
@@ -352,7 +363,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
 
   // Execute command
   // ===============
-  JournalScanner js(io, rank, filter);
+  JournalScanner js(input, rank, filter);
   if (command == "get") {
     r = js.scan();
     if (r) {
@@ -428,6 +439,24 @@ int JournalTool::main_event(std::vector<const char*> &argv)
         }
       }
     }
+
+    // Remove consumed dentries from lost+found.
+    if (other_pool && !dry_run) {
+      std::set<std::string> found;
+
+      for (auto i : consumed_inos) {
+	char s[20];
+
+	snprintf(s, sizeof(s), "%llx_head", (unsigned long long) i);
+	dout(20) << "removing " << s << dendl;
+	found.insert(std::string(s));
+      }
+
+      object_t frag_oid;
+      frag_oid = InodeStore::get_object_name(CEPH_INO_LOST_AND_FOUND,
+					     frag_t(), "");
+      output.omap_rm_keys(frag_oid.name, found);
+    }
   } else if (command == "splice") {
     r = js.scan();
     if (r) {
@@ -500,7 +529,7 @@ int JournalTool::journal_inspect()
   int r;
 
   JournalFilter filter;
-  JournalScanner js(io, rank, filter);
+  JournalScanner js(input, rank, filter);
   r = js.scan();
   if (r) {
     std::cerr << "Failed to scan journal (" << cpp_strerror(r) << ")" << std::endl;
@@ -524,7 +553,7 @@ int JournalTool::journal_inspect()
 int JournalTool::journal_export(std::string const &path, bool import)
 {
   int r = 0;
-  JournalScanner js(io, rank);
+  JournalScanner js(input, rank);
 
   if (!import) {
     /*
@@ -634,7 +663,7 @@ int JournalTool::scavenge_dentries(
     // Update fnode in omap header of dirfrag object
     bool write_fnode = false;
     bufferlist old_fnode_bl;
-    r = io.omap_get_header(frag_oid.name, &old_fnode_bl);
+    r = input.omap_get_header(frag_oid.name, &old_fnode_bl);
     if (r == -ENOENT) {
       // Creating dirfrag from scratch
       dout(4) << "failed to read OMAP header from directory fragment "
@@ -664,11 +693,13 @@ int JournalTool::scavenge_dentries(
       return r;
     }
 
-    if (write_fnode && !dry_run) {
+    if ((other_pool || write_fnode) && !dry_run) {
       dout(4) << "writing fnode to omap header" << dendl;
       bufferlist fnode_bl;
       lump.fnode.encode(fnode_bl);
-      r = io.omap_set_header(frag_oid.name, fnode_bl);
+      if (!other_pool || frag.ino >= MDS_INO_SYSTEM_BASE) {
+	r = output.omap_set_header(frag_oid.name, fnode_bl);
+      }
       if (r != 0) {
         derr << "Failed to write fnode for frag object "
              << frag_oid.name << dendl;
@@ -707,7 +738,10 @@ int JournalTool::scavenge_dentries(
 
     // Perform bulk read of existing dentries
     std::map<std::string, bufferlist> read_vals;
-    r = io.omap_get_vals_by_keys(frag_oid.name, read_keys, &read_vals);
+    r = input.omap_get_vals_by_keys(frag_oid.name, read_keys, &read_vals);
+    if (r == -ENOENT && other_pool) {
+      r = output.omap_get_vals_by_keys(frag_oid.name, read_keys, &read_vals);
+    }
     if (r != 0) {
       derr << "unexpected error reading fragment object "
            << frag_oid.name << ": " << cpp_strerror(r) << dendl;
@@ -769,7 +803,7 @@ int JournalTool::scavenge_dentries(
         }
       }
 
-      if (write_dentry && !dry_run) {
+      if ((other_pool || write_dentry) && !dry_run) {
         dout(4) << "writing I dentry " << key << " into frag "
           << frag_oid.name << dendl;
 
@@ -831,7 +865,7 @@ int JournalTool::scavenge_dentries(
         }
       }
 
-      if (write_dentry && !dry_run) {
+      if ((other_pool || write_dentry) && !dry_run) {
         dout(4) << "writing L dentry " << key << " into frag "
           << frag_oid.name << dendl;
 
@@ -850,12 +884,12 @@ int JournalTool::scavenge_dentries(
 
     // Write back any new/changed dentries
     if (!write_vals.empty()) {
-        r = io.omap_set(frag_oid.name, write_vals);
-        if (r != 0) {
-          derr << "error writing dentries to " << frag_oid.name
-              << ": " << cpp_strerror(r) << dendl;
-          return r;
-        }
+      r = output.omap_set(frag_oid.name, write_vals);
+      if (r != 0) {
+	derr << "error writing dentries to " << frag_oid.name
+	     << ": " << cpp_strerror(r) << dendl;
+	return r;
+      }
     }
   }
 
@@ -876,7 +910,7 @@ int JournalTool::scavenge_dentries(
 
     bool write_root_ino = false;
     bufferlist old_root_ino_bl;
-    r = io.read(root_oid.name, old_root_ino_bl, (1<<22), 0);
+    r = input.read(root_oid.name, old_root_ino_bl, (1<<22), 0);
     if (r == -ENOENT) {
       dout(4) << "root does not exist, will create" << dendl;
       write_root_ino = true;
@@ -915,7 +949,7 @@ int JournalTool::scavenge_dentries(
       encode_fullbit_as_inode(fb, false, &new_root_ino_bl);
 
       // Write to RADOS
-      r = io.write_full(root_oid.name, new_root_ino_bl);
+      r = output.write_full(root_oid.name, new_root_ino_bl);
       if (r != 0) {
         derr << "error writing inode object " << root_oid.name
               << ": " << cpp_strerror(r) << dendl;
@@ -942,7 +976,7 @@ int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
     dout(4) << "object id " << root_oid.name << dendl;
 
     bufferlist inode_bl;
-    r = io.read(root_oid.name, inode_bl, (1<<22), 0);
+    r = input.read(root_oid.name, inode_bl, (1<<22), 0);
     InodeStore inode;
     if (r == -ENOENT) {
       dout(4) << "root does not exist, will create" << dendl;
@@ -977,7 +1011,7 @@ int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
     inode.encode(inode_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
     if (!dry_run) {
-      r = io.write_full(root_oid.name, inode_bl);
+      r = output.write_full(root_oid.name, inode_bl);
       assert(r == 0);
     }
   }
@@ -997,7 +1031,7 @@ int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
     // Check for presence of dirfrag object
     uint64_t psize;
     time_t pmtime;
-    r = io.stat(frag_object_id.name, &psize, &pmtime);
+    r = input.stat(frag_object_id.name, &psize, &pmtime);
     if (r == -ENOENT) {
       dout(4) << "Frag object " << frag_object_id.name << " did not exist, will create" << dendl;
     } else if (r != 0) {
@@ -1011,7 +1045,7 @@ int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
     bufferlist fnode_bl;
     lump.fnode.encode(fnode_bl);
     if (!dry_run) {
-      r = io.omap_set_header(frag_object_id.name, fnode_bl);
+      r = output.omap_set_header(frag_object_id.name, fnode_bl);
       if (r != 0) {
         derr << "Failed to write fnode for frag object " << frag_object_id.name << dendl;
         return r;
@@ -1032,7 +1066,7 @@ int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
       std::set<std::string> keys;
       keys.insert(key);
       std::map<std::string, bufferlist> vals;
-      r = io.omap_get_vals_by_keys(frag_object_id.name, keys, &vals);
+      r = input.omap_get_vals_by_keys(frag_object_id.name, keys, &vals);
       assert (r == 0);  // I assume success because I checked object existed and absence of 
                         // dentry gives me empty map instead of failure
                         // FIXME handle failures so we can replay other events
@@ -1061,7 +1095,7 @@ int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
       
       vals[key] = dentry_bl;
       if (!dry_run) {
-        r = io.omap_set(frag_object_id.name, vals);
+        r = output.omap_set(frag_object_id.name, vals);
         assert(r == 0);  // FIXME handle failures
       }
     }
@@ -1082,7 +1116,7 @@ int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
       std::set<std::string> keys;
       keys.insert(key);
       if (!dry_run) {
-        r = io.omap_rm_keys(frag_object_id.name, keys);
+        r = output.omap_rm_keys(frag_object_id.name, keys);
         assert(r == 0);
       }
     }
@@ -1151,7 +1185,7 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
     uint32_t offset_in_obj = write_offset % object_size;
     uint32_t write_len = min(log_data.length(), object_size - offset_in_obj);
 
-    r = io.write(oid, log_data, write_len, offset_in_obj);
+    r = output.write(oid, log_data, write_len, offset_in_obj);
     if (r < 0) {
       return r;
     } else {
@@ -1237,7 +1271,7 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
 
     // Read object
     bufferlist inotable_bl;
-    int read_r = io.read(inotable_oid.name, inotable_bl, (1<<22), 0);
+    int read_r = input.read(inotable_oid.name, inotable_bl, (1<<22), 0);
     if (read_r < 0) {
       // Things are really bad if we can't read inotable.  Beyond our powers.
       derr << "unable to read inotable '" << inotable_oid.name << "': "
@@ -1273,7 +1307,7 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
       bufferlist inotable_new_bl;
       ::encode(inotable_ver, inotable_new_bl);
       ino_table.encode_state(inotable_new_bl);
-      int write_r = io.write_full(inotable_oid.name, inotable_new_bl);
+      int write_r = output.write_full(inotable_oid.name, inotable_new_bl);
       if (write_r != 0) {
         derr << "error writing modified inotable " << inotable_oid.name
           << ": " << cpp_strerror(write_r) << dendl;

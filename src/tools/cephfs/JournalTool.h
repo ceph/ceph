@@ -56,9 +56,13 @@ class JournalTool : public MDSUtility
 
     // I/O handles
     librados::Rados rados;
-    librados::IoCtx io;
+    librados::IoCtx input;
+    librados::IoCtx output;
+
+    bool other_pool;
 
     // Metadata backing store manipulation
+    int read_lost_found(std::set<std::string> &lost);
     int scavenge_dentries(
         EMetaBlob const &metablob,
         bool const dry_run,
@@ -78,7 +82,7 @@ class JournalTool : public MDSUtility
   public:
     void usage();
     JournalTool() :
-      rank(0) {}
+      rank(0), other_pool(false) {}
     int main(std::vector<const char*> &argv);
 };
 

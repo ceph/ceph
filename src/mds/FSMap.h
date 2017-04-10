@@ -434,6 +434,14 @@ public:
     }
     return nullptr;
   }
+  std::list<std::shared_ptr<const Filesystem> > get_filesystems(void) const
+    {
+      std::list<std::shared_ptr<const Filesystem> > ret;
+      for (const auto &i : filesystems) {
+	ret.push_back(std::const_pointer_cast<const Filesystem>(i.second));
+      }
+      return ret;
+    }
 
   int parse_filesystem(
       std::string const &ns_str,
