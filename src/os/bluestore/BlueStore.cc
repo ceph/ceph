@@ -3249,7 +3249,11 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_compression_mode",
     "bluestore_compression_algorithm",
     "bluestore_compression_min_blob_size",
+    "bluestore_compression_min_blob_size_ssd",
+    "bluestore_compression_min_blob_size_hdd",
     "bluestore_compression_max_blob_size",
+    "bluestore_compression_max_blob_size_ssd",
+    "bluestore_compression_max_blob_size_hdd",
     "bluestore_max_alloc_size",
     "bluestore_prefer_deferred_size",
     "bleustore_deferred_batch_ops",
@@ -3274,7 +3278,9 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("bluestore_compression_algorithm") ||
       changed.count("bluestore_compression_min_blob_size") ||
       changed.count("bluestore_compression_max_blob_size")) {
-    _set_compression();
+    if (bdev) {
+      _set_compression();
+    }
   }
   if (changed.count("bluestore_prefer_deferred_size") ||
       changed.count("bluestore_max_alloc_size") ||
@@ -3306,8 +3312,27 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
 
 void BlueStore::_set_compression()
 {
-  comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size;
-  comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+  if (cct->_conf->bluestore_compression_max_blob_size) {
+    comp_min_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size_hdd;
+    } else {
+      comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size_ssd;
+    }
+  }
+
+  if (cct->_conf->bluestore_compression_max_blob_size) {
+    comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_hdd;
+    } else {
+      comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_ssd;
+    }
+  }
 
   auto m = Compressor::get_comp_mode_type(cct->_conf->bluestore_compression_mode);
   if (m) {
