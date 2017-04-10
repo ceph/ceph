@@ -675,7 +675,16 @@ int crush_add_uniform_bucket_item(struct crush_bucket_uniform *bucket, int item,
 {
         int newsize = bucket->h.size + 1;
 	void *_realloc = NULL;
-	
+
+	/* In such situation 'CRUSH_BUCKET_UNIFORM', the weight
+	   provided for the item should be the same as
+	   bucket->item_weight defined with 'crush_make_bucket'. This
+	   assumption is enforced by the return value which is always
+	   0. */
+	if (bucket->item_weight != weight) {
+	  return -EINVAL;
+	}
+
 	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
 		return -ENOMEM;
 	} else {

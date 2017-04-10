@@ -219,6 +219,8 @@ struct crush_bucket *crush_make_bucket(struct crush_map *map, int alg, int hash,
  *
  * - return -ENOMEM if the __bucket__ cannot be resized with __realloc(3)__.
  * - return -ERANGE if adding __weight__ to the weight of the bucket overflows.
+ * - return -EINVAL if __bucket->alg__ is ::CRUSH_BUCKET_UNIFORM and
+ *   the __weight__ is not equal to __(struct crush_bucket_uniform *)bucket->item_weight__.
  * - return -1 if the value of __bucket->alg__ is unknown.
  *
  * @returns 0 on success, < 0 on error
@@ -234,7 +236,7 @@ extern int crush_bucket_add_item(struct crush_map *map, struct crush_bucket *buc
  *
  * If __bucket->alg__ is different from ::CRUSH_BUCKET_UNIFORM,
  * set the  __weight__ of  __item__ in __bucket__. The former weight of the
- * item is subtracted from the weight of of the bucket and the new weight is added.
+ * item is subtracted from the weight of the bucket and the new weight is added.
  * The return value is the difference between the new item weight and the former
  * item weight.
  *
