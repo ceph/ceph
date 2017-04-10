@@ -3676,7 +3676,9 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
 
     // warn about upgrade flags that can be set but are not.
-    if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS) &&
+    if (g_conf->mon_debug_no_require_luminous) {
+      // ignore these checks
+    } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS) &&
 	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       string msg = "all OSDs are running luminous or later but the"
 	" 'require_luminous_osds' osdmap flag is not set";
