@@ -1693,7 +1693,7 @@ TEST_F(PITest, past_intervals_rep_no_subsets) {
     /* intervals  */
     { ival{{0,    2}, {0,    2}, 10, 20,  true, 0, 0}
     , ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
-    , ival{{0, 1   }, {0, 1   }, 31, 35,  true, 2, 2}
+    , ival{{0, 1   }, {0, 1   }, 31, 35,  true, 0, 0}
     },
     /* les        */ 5,
     /* min_peer   */ 1,
@@ -1716,7 +1716,7 @@ TEST_F(PITest, past_intervals_ec_no_subsets) {
     /* intervals  */
     { ival{{0, N, 2}, {0, N, 2}, 10, 20,  true, 0, 0}
     , ival{{N, 1, 2}, {N, 1, 2}, 21, 30,  true, 1, 1}
-    , ival{{0, 1, N}, {0, 1, N}, 31, 35,  true, 2, 2}
+    , ival{{0, 1, N}, {0, 1, N}, 31, 35,  true, 0, 0}
     },
     /* les        */ 5,
     /* min_peer   */ 2,
@@ -1739,7 +1739,7 @@ TEST_F(PITest, past_intervals_ec_no_subsets2) {
     /* intervals  */
     { ival{{N, 1, 2}, {N, 1, 2}, 10, 20,  true, 0, 0}
     , ival{{0, N, 2}, {0, N, 2}, 21, 30,  true, 1, 1}
-    , ival{{0, 3, N}, {0, 3, N}, 31, 35,  true, 2, 2}
+    , ival{{0, 3, N}, {0, 3, N}, 31, 35,  true, 0, 0}
     },
     /* les        */ 31,
     /* min_peer   */ 2,
@@ -1787,7 +1787,7 @@ TEST_F(PITest, past_intervals_ec_lost) {
     /* intervals  */
     { ival{{0, N, 2}, {0, N, 2}, 10, 20,  true, 0, 0}
     , ival{{N, 1, 2}, {N, 1, 2}, 21, 30,  true, 1, 1}
-    , ival{{0, 1, N}, {0, 1, N}, 31, 35,  true, 2, 2}
+    , ival{{0, 1, N}, {0, 1, N}, 31, 35,  true, 0, 0}
     },
     /* les        */ 5,
     /* min_peer   */ 2,
