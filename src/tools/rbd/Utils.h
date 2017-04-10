@@ -170,6 +170,7 @@ int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
 
 int init_and_open_image(const std::string &pool_name,
                         const std::string &image_name,
+                        const std::string &image_id,
                         const std::string &snap_name, bool read_only,
                         librados::Rados *rados, librados::IoCtx *io_ctx,
                         librbd::Image *image);

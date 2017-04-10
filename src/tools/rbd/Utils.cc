@@ -525,7 +525,7 @@ int get_pool_journal_names(const po::variables_map &vm,
     librados::Rados rados;
     librados::IoCtx io_ctx;
     librbd::Image image;
-    int r = init_and_open_image(*pool_name, image_name, "", true, &rados,
+    int r = init_and_open_image(*pool_name, image_name, "", "", true, &rados,
                                 &io_ctx, &image);
     if (r < 0) {
       std::cerr << "rbd: failed to open image " << image_name
@@ -861,6 +861,7 @@ int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
 
 int init_and_open_image(const std::string &pool_name,
                         const std::string &image_name,
+                        const std::string &image_id,
                         const std::string &snap_name, bool read_only,
                         librados::Rados *rados, librados::IoCtx *io_ctx,
                         librbd::Image *image) {
@@ -869,7 +870,11 @@ int init_and_open_image(const std::string &pool_name,
     return r;
   }
 
-  r = open_image(*io_ctx, image_name, read_only, image);
+  if (image_id.empty()) {
+    r = open_image(*io_ctx, image_name, read_only, image);
+  } else {
+    r = open_image_by_id(*io_ctx, image_id, read_only, image);
+  }
   if (r < 0) {
     return r;
   }
