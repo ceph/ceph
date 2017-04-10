@@ -2879,8 +2879,9 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
     if (get_num_pg_temp())
       out << "; " << get_num_pg_temp() << " remapped pgs";
     out << "\n";
-    if (flags)
-      out << "            flags " << get_flag_string() << "\n";
+    uint64_t important_flags = flags & ~CEPH_OSDMAP_SEMIHIDDEN_FLAGS;
+    if (important_flags)
+      out << "            flags " << get_flag_string(important_flags) << "\n";
   }
 }
 
