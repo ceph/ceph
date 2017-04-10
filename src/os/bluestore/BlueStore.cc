@@ -4899,9 +4899,6 @@ int BlueStore::mount()
 
   mempool_thread.init();
 
-  _set_csum();
-  _set_compression();
-  _set_blob_size();
 
   mounted = true;
   return 0;
@@ -7170,6 +7167,10 @@ int BlueStore::_open_super_meta()
   }
   _set_alloc_sizes();
   _set_throttle_params();
+
+  _set_csum();
+  _set_compression();
+  _set_blob_size();
 
   return 0;
 }
