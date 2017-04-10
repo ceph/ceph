@@ -1790,13 +1790,19 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
-  uint64_t prefer_deferred_size = 0; ///< size threshold for forced deferred writes
   int deferred_batch_ops = 0; ///< deferred batch size
 
-  uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
+  ///< bits for min_alloc_size
+  std::atomic<size_t> min_alloc_size_order = {0};
+  
+  ///< size threshold for forced deferred writes
+  std::atomic<uint64_t> prefer_deferred_size = {0};
 
-  uint64_t throttle_cost_per_io = 0;   ///< approx cost per io, in bytes
+  ///< maximum allocation unit (power of 2)
+  std::atomic<uint64_t> max_alloc_size = {0};
+
+  ///< approx cost per io, in bytes
+  std::atomic<uint64_t> throttle_cost_per_io = {0};
 
   std::atomic<Compressor::CompressionMode> comp_mode = {Compressor::COMP_NONE}; ///< compression mode
   CompressorRef compressor;
