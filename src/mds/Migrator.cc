@@ -1500,13 +1500,6 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, mds_rank_t peer,
   in->finish_export(now);
   
   finish_export_inode_caps(in, peer, peer_imported);
-
-  // *** other state too?
-
-  // move to end of LRU so we drop out of cache quickly!
-  if (in->get_parent_dn()) 
-    cache->lru.lru_bottouch(in->get_parent_dn());
-
 }
 
 uint64_t Migrator::encode_export_dir(bufferlist& exportbl,

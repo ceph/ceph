@@ -114,6 +114,7 @@ class MDCache {
 
   // -- my cache --
   LRU lru;   // dentry lru for expiring items from cache
+  LRU bottom_lru; // dentries that should be trimmed ASAP
  protected:
   ceph::unordered_map<vinodeno_t,CInode*> inode_map;  // map of inodes by ino
   CInode *root;                            // root inode
@@ -766,28 +767,19 @@ public:
   }
 public:
   void touch_dentry(CDentry *dn) {
-    // touch ancestors
-    if (dn->get_dir()->get_inode()->get_projected_parent_dn())
-      touch_dentry(dn->get_dir()->get_inode()->get_projected_parent_dn());
-    
-    // touch me
-    if (dn->is_auth())
-      lru.lru_touch(dn);
-    else
-      lru.lru_midtouch(dn);
+    if (dn->state_test(CDentry::STATE_BOTTOMLRU)) {
+      bottom_lru.lru_midtouch(dn);
+    } else {
+      if (dn->is_auth())
+	lru.lru_touch(dn);
+      else
+	lru.lru_midtouch(dn);
+    }
   }
   void touch_dentry_bottom(CDentry *dn) {
+    if (dn->state_test(CDentry::STATE_BOTTOMLRU))
+      return;
     lru.lru_bottouch(dn);
-    if (dn->get_projected_linkage()->is_primary() &&
-	dn->get_dir()->inode->is_stray()) {
-      CInode *in = dn->get_projected_linkage()->get_inode();
-      if (in->has_dirfrags()) {
-	list<CDir*> ls;
-	in->get_dirfrags(ls);
-	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p)
-	  (*p)->touch_dentries_bottom();
-      }
-    }
   }
 protected:
 
