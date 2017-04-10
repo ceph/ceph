@@ -133,7 +133,6 @@ TEST(cls_rgw, test_put_snap) {
   ASSERT_EQ(0, ioctx.snap_create("snapbar"));
 
   librados::ObjectWriteOperation *op = new_op();
-  op->create(false);
   cls_refcount_put(*op, "notag", true);
   ASSERT_EQ(-ENOENT, ioctx.operate("foo", op));
 
