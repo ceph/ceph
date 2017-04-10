@@ -235,6 +235,30 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
 		 << " group name " << group_name << " image "
 		 << &image_ioctx << " name " << image_name << dendl;
 
+  string image_id;
+  int r = cls_client::dir_get_id(&image_ioctx, RBD_DIRECTORY, image_name,
+                                 &image_id);
+  if (r < 0) {
+    lderr(cct) << "error reading image id object: "
+               << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  return Group<I>::image_remove_by_id(group_ioctx, group_name, image_ioctx,
+                                      image_id.c_str());
+}
+
+template <typename I>
+int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
+                                 const char *group_name,
+                                 librados::IoCtx& image_ioctx,
+                                 const char *image_id)
+{
+  CephContext *cct = (CephContext *)group_ioctx.cct();
+  ldout(cct, 20) << "group_remove_image_by_id " << &group_ioctx
+                 << " group name " << group_name << " image "
+                 << &image_ioctx << " id " << image_id << dendl;
+
   string group_id;
 
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name,
@@ -250,19 +274,9 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
   ldout(cct, 20) << "adding image to group name " << group_name
 		 << " group id " << group_header_oid << dendl;
 
-  string image_id;
-  r = cls_client::dir_get_id(&image_ioctx, RBD_DIRECTORY, image_name,
-                             &image_id);
-  if (r < 0) {
-    lderr(cct) << "error reading image id object: "
-	       << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
   string image_header_oid = util::header_name(image_id);
 
-  ldout(cct, 20) << "removing image " << image_name
-		 << " image id " << image_header_oid << dendl;
+  ldout(cct, 20) << "removing " << " image id " << image_header_oid << dendl;
 
   cls::rbd::GroupSpec group_spec(group_id, group_ioctx.get_id());
 

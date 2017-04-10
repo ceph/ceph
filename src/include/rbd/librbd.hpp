@@ -193,6 +193,8 @@ public:
 		      IoCtx& image_io_ctx, const char *image_name);
   int group_image_remove(IoCtx& io_ctx, const char *group_name,
 			 IoCtx& image_io_ctx, const char *image_name);
+  int group_image_remove_by_id(IoCtx& io_ctx, const char *group_name,
+                               IoCtx& image_io_ctx, const char *image_id);
   int group_image_list(IoCtx& io_ctx, const char *group_name,
 		       std::vector<group_image_status_t> *images);
 

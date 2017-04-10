@@ -827,6 +827,9 @@ CEPH_RBD_API int rbd_group_image_add(
 CEPH_RBD_API int rbd_group_image_remove(
 				rados_ioctx_t group_p, const char *group_name,
 				rados_ioctx_t image_p, const char *image_name);
+CEPH_RBD_API int rbd_group_image_remove_by_id(
+				rados_ioctx_t group_p, const char *group_name,
+				rados_ioctx_t image_p, const char *image_id);
 CEPH_RBD_API int rbd_group_image_list(
 				  rados_ioctx_t group_p, const char *group_name,
 				  rbd_group_image_status_t *images,
