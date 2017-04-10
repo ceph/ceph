@@ -3252,6 +3252,9 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_compression_max_blob_size",
     "bluestore_max_alloc_size",
     "bluestore_prefer_deferred_size",
+    "bleustore_deferred_batch_ops",
+    "bleustore_deferred_batch_ops_hdd",
+    "bleustore_deferred_batch_ops_ssd",
     "bluestore_max_ops",
     "bluestore_max_bytes",
     "bluestore_deferred_max_ops",
@@ -3274,7 +3277,10 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
     _set_compression();
   }
   if (changed.count("bluestore_prefer_deferred_size") ||
-      changed.count("bluestore_max_alloc_size")) {
+      changed.count("bluestore_max_alloc_size") ||
+      changed.count("bluestore_deferred_batch_ops") ||
+      changed.count("bluestore_deferred_batch_ops_hdd") ||
+      changed.count("bluestore_deferred_batch_ops_ssd")) {
     if (bdev) {
       // only after startup
       _set_alloc_sizes();
@@ -3659,10 +3665,24 @@ void BlueStore::_set_alloc_sizes(void)
     }
   }
 
+  if (cct->_conf->bluestore_deferred_batch_ops) {
+    deferred_batch_ops = cct->_conf->bluestore_deferred_batch_ops;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      deferred_batch_ops = cct->_conf->bluestore_deferred_batch_ops_hdd;
+    } else {
+      deferred_batch_ops = cct->_conf->bluestore_deferred_batch_ops_ssd;
+    }
+  }
+
   dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
 	   << std::dec << " order " << min_alloc_size_order
 	   << " max_alloc_size 0x" << std::hex << max_alloc_size
-	   << std::dec << dendl;
+	   << " prefer_deferred_size 0x" << prefer_deferred_size
+	   << std::dec
+	   << " deferred_batch_ops " << deferred_batch_ops
+	   << dendl;
 }
 
 int BlueStore::_open_bdev(bool create)
@@ -7919,7 +7939,7 @@ void BlueStore::_kv_sync_thread()
 
       if (!deferred_aggressive) {
 	std::lock_guard<std::mutex> l(deferred_lock);
-	if (deferred_queue_size >= (int)g_conf->bluestore_deferred_batch_ops ||
+	if (deferred_queue_size >= deferred_batch_ops ||
 	    throttle_deferred_bytes.past_midpoint()) {
 	  _deferred_try_submit();
 	}
