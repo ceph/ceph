@@ -5189,6 +5189,7 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, -1);
     mdcache->journal_cow_dentry(mdr.get(), &le->metablob, dn);
     le->metablob.add_null_dentry(dn, true);
+    dn->push_projected_linkage();
   }
 
   journal_and_reply(mdr, targeti, dn, le, new C_MDS_link_remote_finish(this, mdr, inc, dn, targeti));
@@ -5214,6 +5215,7 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
   } else {
     // unlink main dentry
     dn->get_dir()->unlink_inode(dn);
+    dn->pop_projected_linkage();
     dn->mark_dirty(dn->get_projected_version(), mdr->ls);  // dirty old dentry
   }
 
@@ -7066,7 +7068,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
     if (destdnl->is_primary()) {
       assert(straydn);
       dout(10) << "straydn is " << *straydn << dendl;
-      destdn->get_dir()->unlink_inode(destdn);
+      destdn->get_dir()->unlink_inode(destdn, false);
 
       straydn->pop_projected_linkage();
       if (mdr->is_slave() && !mdr->more()->slave_update_journaled)
@@ -7085,7 +7087,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
 	//oldin->open_snaprealm();  might be sufficient..	
       }
     } else if (destdnl->is_remote()) {
-      destdn->get_dir()->unlink_inode(destdn);
+      destdn->get_dir()->unlink_inode(destdn, false);
       if (oldin->is_auth())
   	oldin->pop_and_dirty_projected_inode(mdr->ls);
     }
@@ -7119,7 +7121,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   } else { // primary
     if (linkmerge) {
       dout(10) << "merging primary onto remote link" << dendl;
-      destdn->get_dir()->unlink_inode(destdn);
+      destdn->get_dir()->unlink_inode(destdn, false);
     }
     destdnl = destdn->pop_projected_linkage();
     if (mdr->is_slave() && !mdr->more()->slave_update_journaled)

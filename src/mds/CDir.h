@@ -450,7 +450,7 @@ protected:
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
   void link_remote_inode( CDentry *dn, CInode *in );
   void link_primary_inode( CDentry *dn, CInode *in );
-  void unlink_inode( CDentry *dn );
+  void unlink_inode(CDentry *dn, bool adjust_lru=true);
   void try_remove_unlinked_dn(CDentry *dn);
 
   void add_to_bloom(CDentry *dn);
@@ -465,7 +465,6 @@ private:
   void remove_null_dentries();
   void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 public:
-  void touch_dentries_bottom();
   void try_remove_dentries_for_stray();
   bool try_trim_snap_dentry(CDentry *dn, const std::set<snapid_t>& snaps);
 

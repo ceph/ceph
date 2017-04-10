@@ -237,9 +237,11 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
 
   assert(!in->state_test(CInode::STATE_RECOVERING));
 
+  bool new_dn = dn->is_new();
+
   // unlink
   assert(dn->get_projected_linkage()->is_null());
-  dn->dir->unlink_inode(dn);
+  dn->dir->unlink_inode(dn, !new_dn);
   dn->pop_projected_linkage();
   dn->mark_dirty(pdv, ls);
 
@@ -250,12 +252,10 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
   dn->put(CDentry::PIN_PURGING);
 
   // drop dentry?
-  if (dn->is_new()) {
+  if (new_dn) {
     dout(20) << " dn is new, removing" << dendl;
     dn->mark_clean();
     dn->dir->remove_dentry(dn);
-  } else {
-    in->mdcache->touch_dentry_bottom(dn);  // drop dn as quickly as possible.
   }
 
   // drop inode
@@ -431,10 +431,6 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
   assert(!dn->state_test(CDentry::STATE_PURGING));
 
   if (!dn->is_auth()) {
-    // has to be mine
-    // move to bottom of lru so that we trim quickly!
-
-    in->mdcache->touch_dentry_bottom(dn);
     return false;
   }
 
