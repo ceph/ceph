@@ -526,7 +526,7 @@ RDMAStack::~RDMAStack()
 void RDMAStack::spawn_worker(unsigned i, std::function<void ()> &&func)
 {
   threads.resize(i+1);
-  threads[i] = std::move(std::thread(func));
+  threads[i] = std::thread(func);
 }
 
 void RDMAStack::join_worker(unsigned i)
