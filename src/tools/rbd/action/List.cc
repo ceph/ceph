@@ -19,9 +19,15 @@ namespace list {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
-                   Formatter *f) {
+int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx,
+            const po::variables_map &vm, Formatter *f) {
+  bool   lflag;
+  size_t arg_index = 0;
+  std::string pool_name = utils::get_pool_name(vm, &arg_index);
   std::vector<std::string> names;
+
+  lflag = vm["long"].as<bool>();
+
   int r = rbd.list(io_ctx, names);
   if (r == -ENOENT)
     r = 0;
@@ -56,6 +62,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
     tbl.define_column("FMT", TextTable::RIGHT, TextTable::RIGHT);
     tbl.define_column("PROT", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("LOCK", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
   }
 
   std::string pool, image, snap, parent;
@@ -130,6 +137,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
           << ((old_format) ? '1' : '2')
           << ""                         // protect doesn't apply to images
           << lockstr
+	  << pool_name
           << TextTable::endrow;
     }
 
@@ -213,7 +221,7 @@ int execute(const po::variables_map &vm) {
   }
 
   librbd::RBD rbd;
-  r = do_list(rbd, io_ctx, vm["long"].as<bool>(), formatter.get());
+  r = do_list(rbd, io_ctx, vm, formatter.get());
   if (r < 0) {
     std::cerr << "rbd: list: " << cpp_strerror(r) << std::endl;
     return r;
