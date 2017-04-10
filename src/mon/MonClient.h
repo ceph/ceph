@@ -167,7 +167,7 @@ private:
   LogClient *log_client;
   bool more_log_pending;
 
-  void send_log();
+  void send_log(bool flush = false);
 
   std::unique_ptr<AuthMethodList> auth_supported;
 
