@@ -34,7 +34,7 @@ static void log_on_exit(void *p)
 {
   Log *l = *(Log **)p;
   if (l)
-    l->flush();
+    l->stop();
   delete (Log **)p;// Delete allocated pointer (not Log object, the pointer only!)
 }
 
@@ -294,7 +294,9 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
     bool do_stderr = m_stderr_crash >= e->m_prio && should_log;
     bool do_graylog2 = m_graylog_crash >= e->m_prio && should_log;
 
-    e->hint_size();
+    if (!m_stop) {
+      e->hint_size();
+    }
     if (do_fd || do_syslog || do_stderr) {
       size_t buflen = 0;
 
