@@ -269,14 +269,14 @@ void ECSubRead::generate_test_instances(list<ECSubRead*>& o)
   hobject_t hoid1(sobject_t("asdf", 1));
   hobject_t hoid2(sobject_t("asdf2", CEPH_NOSNAP));
   o.push_back(new ECSubRead());
-  o.back()->from = pg_shard_t(2, shard_id_t(255));
+  o.back()->from = pg_shard_t(2, shard_id_t(-1));
   o.back()->tid = 1;
   o.back()->to_read[hoid1].push_back(boost::make_tuple(100, 200, 0));
   o.back()->to_read[hoid1].push_back(boost::make_tuple(400, 600, 0));
   o.back()->to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
   o.back()->attrs_to_read.insert(hoid1);
   o.push_back(new ECSubRead());
-  o.back()->from = pg_shard_t(2, shard_id_t(255));
+  o.back()->from = pg_shard_t(2, shard_id_t(-1));
   o.back()->tid = 300;
   o.back()->to_read[hoid1].push_back(boost::make_tuple(300, 200, 0));
   o.back()->to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
@@ -383,7 +383,7 @@ void ECSubReadReply::generate_test_instances(list<ECSubReadReply*>& o)
   bufferlist bl2;
   bl2.append_zero(200);
   o.push_back(new ECSubReadReply());
-  o.back()->from = pg_shard_t(2, shard_id_t(255));
+  o.back()->from = pg_shard_t(2, shard_id_t(-1));
   o.back()->tid = 1;
   o.back()->buffers_read[hoid1].push_back(make_pair(20, bl));
   o.back()->buffers_read[hoid1].push_back(make_pair(2000, bl2));
@@ -391,7 +391,7 @@ void ECSubReadReply::generate_test_instances(list<ECSubReadReply*>& o)
   o.back()->attrs_read[hoid1]["foo"] = bl;
   o.back()->attrs_read[hoid1]["_"] = bl2;
   o.push_back(new ECSubReadReply());
-  o.back()->from = pg_shard_t(2, shard_id_t(255));
+  o.back()->from = pg_shard_t(2, shard_id_t(-1));
   o.back()->tid = 300;
   o.back()->buffers_read[hoid2].push_back(make_pair(0, bl2));
   o.back()->attrs_read[hoid2]["foo"] = bl;
