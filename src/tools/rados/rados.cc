@@ -2832,6 +2832,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cout << "successfully deleted pool " << nargs[1] << std::endl;
     } else { //error
       cerr << "pool " << nargs[1] << " could not be removed" << std::endl;
+      cerr << "Check your monitor configuration - `mon allow pool delete` is set to false by default,"
+     << " change it to true to allow deletion of pools" << std::endl;
     }
   }
   else if (strcmp(nargs[0], "purge") == 0) {
@@ -2859,6 +2861,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cout << "successfully purged pool " << nargs[1] << std::endl;
     } else { //error
       cerr << "pool " << nargs[1] << " could not be purged" << std::endl;
+      cerr << "Check your monitor configuration - `mon allow pool delete` is set to false by default,"
+     << " change it to true to allow deletion of pools" << std::endl;
     }
   }
   else if (strcmp(nargs[0], "lssnap") == 0) {
