@@ -400,7 +400,7 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
   }
   if (vm.count(snap_key) && snap_name != nullptr) {
      *snap_name = vm[snap_key].as<std::string>();
-   }
+  }
 
   int r;
   if (image_name != nullptr && !image_name->empty()) {
@@ -449,6 +449,39 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
   if (snap_name != nullptr) {
     r = validate_snapshot_name(mod, *snap_name, snapshot_presence,
 	                       spec_validation);
+    if (r < 0) {
+      return r;
+    }
+  }
+  return 0;
+}
+
+int get_pool_snapshot_names(const po::variables_map &vm,
+                            at::ArgumentModifier mod,
+                            size_t *spec_arg_index,
+                            std::string *pool_name,
+                            std::string *snap_name,
+                            SnapshotPresence snapshot_presence,
+                            SpecValidation spec_validation) {
+  std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_POOL_NAME : at::POOL_NAME);
+  std::string snap_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+	at::DEST_SNAPSHOT_NAME : at::SNAPSHOT_NAME);
+
+  if (vm.count(pool_key) && pool_name != nullptr) {
+    *pool_name = vm[pool_key].as<std::string>();
+  }
+  if (vm.count(snap_key) && snap_name != nullptr) {
+     *snap_name = vm[snap_key].as<std::string>();
+  }
+
+  if (pool_name != nullptr && pool_name->empty()) {
+    *pool_name = at::DEFAULT_POOL_NAME;
+  }
+
+  if (snap_name != nullptr) {
+    int r = validate_snapshot_name(mod, *snap_name, snapshot_presence,
+                                   spec_validation);
     if (r < 0) {
       return r;
     }
@@ -853,6 +886,24 @@ int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
 
   if (r < 0) {
     std::cerr << "rbd: error opening image " << image_name << ": "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  return 0;
+}
+
+int open_image_by_id(librados::IoCtx &io_ctx, const std::string &image_id,
+                     bool read_only, librbd::Image *image) {
+  int r;
+  librbd::RBD rbd;
+  if (read_only) {
+    r = rbd.open_by_id_read_only(io_ctx, *image, image_id.c_str(), NULL);
+  } else {
+    r = rbd.open_by_id(io_ctx, *image, image_id.c_str());
+  }
+
+  if (r < 0) {
+    std::cerr << "rbd: error opening image with id " << image_id << ": "
               << cpp_strerror(r) << std::endl;
     return r;
   }

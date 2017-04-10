@@ -1296,8 +1296,8 @@
     --limit arg          maximum allowed snapshot count
   
   rbd help snap list
-  usage: rbd snap list [--pool <pool>] [--image <image>] [--format <format>] 
-                       [--pretty-format] 
+  usage: rbd snap list [--pool <pool>] [--image <image>] [--image-id <image-id>] 
+                       [--format <format>] [--pretty-format] 
                        <image-spec> 
   
   Dump list of image snapshots.
@@ -1309,6 +1309,7 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
+    --image-id arg       image id
     --format arg         output format [plain, json, or xml]
     --pretty-format      pretty formatting (json and xml)
   
@@ -1328,7 +1329,8 @@
     --snap arg           snapshot name
   
   rbd help snap purge
-  usage: rbd snap purge [--pool <pool>] [--image <image>] [--no-progress] 
+  usage: rbd snap purge [--pool <pool>] [--image <image>] 
+                        [--image-id <image-id>] [--no-progress] 
                         <image-spec> 
   
   Deletes all snapshots.
@@ -1340,11 +1342,12 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
+    --image-id arg       image id
     --no-progress        disable progress output
   
   rbd help snap remove
   usage: rbd snap remove [--pool <pool>] [--image <image>] [--snap <snap>] 
-                         [--no-progress] [--force] 
+                         [--no-progress] [--image-id <image-id>] [--force] 
                          <snap-spec> 
   
   Deletes a snapshot.
@@ -1358,6 +1361,7 @@
     --image arg          image name
     --snap arg           snapshot name
     --no-progress        disable progress output
+    --image-id arg       image id
     --force              flatten children and unprotect snapshot if needed.
   
   rbd help snap rename
@@ -1401,6 +1405,7 @@
   
   rbd help snap unprotect
   usage: rbd snap unprotect [--pool <pool>] [--image <image>] [--snap <snap>] 
+                            [--image-id <image-id>] 
                             <snap-spec> 
   
   Allow a snapshot to be deleted.
@@ -1413,6 +1418,7 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --snap arg           snapshot name
+    --image-id arg       image id
   
   rbd help status
   usage: rbd status [--pool <pool>] [--image <image>] [--format <format>] 

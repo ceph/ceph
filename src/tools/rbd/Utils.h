@@ -112,6 +112,13 @@ int get_pool_image_snapshot_names(
     SnapshotPresence snapshot_presence, SpecValidation spec_validation,
     bool image_required = true);
 
+int get_pool_snapshot_names(const boost::program_options::variables_map &vm,
+                            argument_types::ArgumentModifier mod,
+                            size_t *spec_arg_index, std::string *pool_name,
+                            std::string *snap_name,
+                            SnapshotPresence snapshot_presence,
+                            SpecValidation spec_validation);
+
 int get_special_pool_group_names(const boost::program_options::variables_map &vm,
 				 size_t *arg_index,
 				 std::string *group_pool_name,
@@ -167,6 +174,9 @@ int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
 
 int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
                bool read_only, librbd::Image *image);
+
+int open_image_by_id(librados::IoCtx &io_ctx, const std::string &image_id,
+                     bool read_only, librbd::Image *image);
 
 int init_and_open_image(const std::string &pool_name,
                         const std::string &image_name,
