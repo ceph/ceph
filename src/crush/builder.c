@@ -23,17 +23,7 @@ struct crush_map *crush_create()
                 return NULL;
 	memset(m, 0, sizeof(*m));
 
-	/* initialize legacy tunable values */
-	m->choose_local_tries = 2;
-	m->choose_local_fallback_tries = 5;
-	m->choose_total_tries = 19;
-	m->chooseleaf_descend_once = 0;
-	m->chooseleaf_vary_r = 0;
-	m->straw_calc_version = 0;
-
-	// by default, use legacy types, and also exclude tree,
-	// since it was buggy.
-	m->allowed_bucket_algs = CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+	set_optimal_crush_map(m);
 	return m;
 }
 
@@ -1424,4 +1414,36 @@ int crush_multiplication_is_unsafe(__u32  a, __u32 b)
 		return 1;
 	else
 		return 0;
+}
+
+/***************************/
+
+/* methods to configure crush_map */
+
+void set_legacy_crush_map(struct crush_map *map) {
+  /* initialize legacy tunable values */
+  map->choose_local_tries = 2;
+  map->choose_local_fallback_tries = 5;
+  map->choose_total_tries = 19;
+  map->chooseleaf_descend_once = 0;
+  map->chooseleaf_vary_r = 0;
+  map->straw_calc_version = 0;
+
+  // by default, use legacy types, and also exclude tree,
+  // since it was buggy.
+  map->allowed_bucket_algs = CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+}
+
+void set_optimal_crush_map(struct crush_map *map) {
+  map->choose_local_tries = 0;
+  map->choose_local_fallback_tries = 0;
+  map->choose_total_tries = 50;
+  map->chooseleaf_descend_once = 1;
+  map->chooseleaf_vary_r = 1;
+  map->chooseleaf_stable = 1;
+  map->allowed_bucket_algs = (
+    (1 << CRUSH_BUCKET_UNIFORM) |
+    (1 << CRUSH_BUCKET_LIST) |
+    (1 << CRUSH_BUCKET_STRAW) |
+    (1 << CRUSH_BUCKET_STRAW2));
 }
