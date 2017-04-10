@@ -57,7 +57,7 @@ get_canon_amz_hdr(const std::map<std::string, std::string>& meta_map)
     dest.append("\n");
   }
 
-  return std::move(dest);
+  return dest;
 }
 
 /*
@@ -95,7 +95,7 @@ get_canon_resource(const char* const request_uri,
   }
 
   dout(10) << "get_canon_resource(): dest=" << dest << dendl;
-  return std::move(dest);
+  return dest;
 }
 
 /*
