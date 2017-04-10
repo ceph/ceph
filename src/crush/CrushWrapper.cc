@@ -259,9 +259,9 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
   return true;
 }
 
-int CrushWrapper::remove_unused_root(int item)
+int CrushWrapper::remove_root(int item, bool unused)
 {
-  if (_bucket_is_in_use(item))
+  if (unused && _bucket_is_in_use(item))
     return 0;
 
   crush_bucket *b = get_bucket(item);
@@ -271,7 +271,7 @@ int CrushWrapper::remove_unused_root(int item)
   for (unsigned n = 0; n < b->size; n++) {
     if (b->items[n] >= 0)
       continue;
-    int r = remove_unused_root(b->items[n]);
+    int r = remove_root(b->items[n], unused);
     if (r < 0)
       return r;
   }
@@ -1014,6 +1014,20 @@ int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
   return -ENOENT;
 }
 
+bool CrushWrapper::class_is_in_use(int class_id)
+{
+  for (auto &i : class_bucket)
+    for (auto &j : i.second)
+      if (j.first == class_id)
+	return true;
+
+  for (auto &i : class_map)
+    if (i.second == class_id)
+      return true;
+
+  return false;
+}
+
 int CrushWrapper::populate_classes()
 {
   set<int> roots;
@@ -1035,13 +1049,11 @@ int CrushWrapper::populate_classes()
 
 int CrushWrapper::cleanup_classes()
 {
-  return trim_roots_with_class();
+  return trim_roots_with_class(true);
 }
 
-int CrushWrapper::trim_roots_with_class()
+int CrushWrapper::trim_roots_with_class(bool unused)
 {
-  set<int> takes;
-  find_takes(takes);
   set<int> roots;
   find_roots(roots);
   for (auto &r : roots) {
@@ -1049,7 +1061,7 @@ int CrushWrapper::trim_roots_with_class()
       continue;
     if (!id_has_class(r))
       continue;
-    int res = remove_unused_root(r);
+    int res = remove_root(r, unused);
     if (res)
       return res;
   }
@@ -1232,6 +1244,32 @@ int CrushWrapper::remove_rule(int ruleno)
   return 0;
 }
 
+int CrushWrapper::update_device_class(CephContext *cct, int id, const string& class_name, const string& name)
+{
+  int class_id = get_class_id(class_name);
+  if (class_id < 0) {
+    ldout(cct, 0) << "update_device_class class " << class_name << " does not exist " << dendl;
+    return -ENOENT;
+  }
+  if (id < 0) {
+    ldout(cct, 0) << "update_device_class " << name << " id " << id << " is negative " << dendl;
+    return -EINVAL;
+  }
+  assert(item_exists(id));
+
+  if (class_map.count(id) != 0 && class_map[id] == class_id) {
+    ldout(cct, 5) << "update_device_class " << name << " already set to class " << class_name << dendl;
+    return 0;
+  }
+
+  set_item_class(id, class_id);
+
+  int r = rebuild_roots_with_classes();
+  if (r < 0)
+    return r;
+  return 1;
+}
+
 int CrushWrapper::device_class_clone(int original_id, int device_class, int *clone)
 {
   const char *item_name = get_item_name(original_id);
@@ -1289,6 +1327,17 @@ int CrushWrapper::device_class_clone(int original_id, int device_class, int *clo
     name_rmap[copy_name] = *clone;
   class_bucket[original_id][device_class] = *clone;
   return 0;
+}
+
+int CrushWrapper::rebuild_roots_with_classes()
+{
+  int r = trim_roots_with_class(false);
+  if (r < 0)
+    return r;
+  r = populate_classes();
+  if (r < 0)
+    return r;
+  return trim_roots_with_class(true);
 }
 
 void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
