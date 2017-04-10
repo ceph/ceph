@@ -303,12 +303,14 @@ int MgrStandby::main(vector<const char *> args)
   // Enable signal handlers
   signal_mgr = this;
   init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
 
   client_messenger->wait();
 
   // Disable signal handlers
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_mgr_signal);
   unregister_async_signal_handler(SIGTERM, handle_mgr_signal);
   shutdown_async_signal_handler();
