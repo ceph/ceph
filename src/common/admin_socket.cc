@@ -320,8 +320,10 @@ bool AdminSocket::do_accept()
   while (1) {
     int ret = safe_read(connection_fd, &cmd[pos], 1);
     if (ret <= 0) {
-      lderr(m_cct) << "AdminSocket: error reading request code: "
-		   << cpp_strerror(ret) << dendl;
+      if (ret < 0) {
+        lderr(m_cct) << "AdminSocket: error reading request code: "
+		     << cpp_strerror(ret) << dendl;
+      }
       VOID_TEMP_FAILURE_RETRY(close(connection_fd));
       return false;
     }
