@@ -2382,6 +2382,12 @@ int OSD::init()
     }
   }
 
+  r = update_crush_device_class();
+  if (r < 0) {
+    osd_lock.Lock();
+    goto monout;
+  }
+
   r = update_crush_location();
   if (r < 0) {
     osd_lock.Lock();
@@ -3100,6 +3106,20 @@ int OSD::update_crush_location()
   return mon_cmd_maybe_osd_create(cmd);
 }
 
+int OSD::update_crush_device_class()
+{
+  string device_class;
+  int r = store->read_meta("crush_device_class", &device_class);
+  if (r < 0)
+    return 0;
+
+  string cmd =
+    string("{\"prefix\": \"osd crush set-device-class\", ") +
+    string("\"id\": ") + stringify(whoami) + string(", ") +
+    string("\"class\": \"") + device_class + string("\"}");
+
+  return mon_cmd_maybe_osd_create(cmd);
+}
 
 void OSD::write_superblock(ObjectStore::Transaction& t)
 {

@@ -2415,6 +2415,7 @@ protected:
 
 private:
   int mon_cmd_maybe_osd_create(string &cmd);
+  int update_crush_device_class();
   int update_crush_location();
 
   static int write_meta(ObjectStore *store,
