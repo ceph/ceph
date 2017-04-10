@@ -157,7 +157,7 @@ ostream& operator<<(ostream& out, const osd_xinfo_t& xi)
 int OSDMap::Incremental::get_net_marked_out(const OSDMap *previous) const
 {
   int n = 0;
-  for (const auto &weight : new_weight) {
+  for (auto &weight : new_weight) {
     if (weight.second == CEPH_OSD_OUT && !previous->is_out(weight.first))
       n++;  // marked out
     else if (weight.second != CEPH_OSD_OUT && previous->is_out(weight.first))
@@ -169,7 +169,7 @@ int OSDMap::Incremental::get_net_marked_out(const OSDMap *previous) const
 int OSDMap::Incremental::get_net_marked_down(const OSDMap *previous) const
 {
   int n = 0;
-  for (const auto &state : new_state) { // 
+  for (auto &state : new_state) { // 
     if (state.second & CEPH_OSD_UP) {
       if (previous->is_up(state.first))
 	n++;  // marked down
@@ -182,7 +182,7 @@ int OSDMap::Incremental::get_net_marked_down(const OSDMap *previous) const
 
 int OSDMap::Incremental::identify_osd(uuid_d u) const
 {
-  for (const auto &uuid : new_uuid)
+  for (auto &uuid : new_uuid)
     if (uuid.second == u)
       return uuid.first;
   return -1;
@@ -888,15 +888,15 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("new_blacklist");
-  for (const auto &blacklist : new_blacklist) {
+  for (const auto &blist : new_blacklist) {
     stringstream ss;
-    ss << blacklist.first;
-    f->dump_stream(ss.str().c_str()) << blacklist.second;
+    ss << blist.first;
+    f->dump_stream(ss.str().c_str()) << blist.second;
   }
   f->close_section();
   f->open_array_section("old_blacklist");
-  for (const auto &blacklist : old_blacklist)
-    f->dump_stream("addr") << blacklist;
+  for (const auto &blist : old_blacklist)
+    f->dump_stream("addr") << blist;
   f->close_section();
 
   f->open_array_section("new_xinfo");
@@ -1321,7 +1321,7 @@ void OSDMap::clean_temps(CephContext *cct,
     }
   }
   
-  for (auto pg : *tmpmap.primary_temp) {
+  for (auto &pg : *tmpmap.primary_temp) {
     // primary down?
     if (tmpmap.is_down(pg.second)) {
       ldout(cct, 10) << __func__ << "  removing primary_temp " << pg.first
@@ -2468,7 +2468,7 @@ void OSDMap::dump(Formatter *f) const
       set<string> st;
       get_state(i, st);
       f->open_array_section("state");
-      for (auto &state : st)
+      for (const auto &state : st)
 	f->dump_string("state", state);
       f->close_section();
 
@@ -2515,7 +2515,7 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section();
   f->open_array_section("pg_temp");
-  for (const auto pg : *pg_temp) {
+  for (const auto &pg : *pg_temp) {
     f->open_object_section("osds");
     f->dump_stream("pgid") << pg.first;
     f->open_array_section("osds");
@@ -2527,7 +2527,7 @@ void OSDMap::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("primary_temp");
-  for (const auto pg : *primary_temp) {
+  for (const auto &pg : *primary_temp) {
     f->dump_stream("pgid") << pg.first;
     f->dump_int("osd", pg.second);
   }
