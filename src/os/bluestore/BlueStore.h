@@ -1789,6 +1789,7 @@ private:
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
   uint64_t prefer_deferred_size = 0; ///< size threshold for forced deferred writes
+  int deferred_batch_ops = 0; ///< deferred batch size
 
   uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
 
