@@ -40,6 +40,7 @@
 #include "Watch.h"
 #include "osdc/Objecter.h"
 
+#include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include "common/version.h"
 #include "common/io_priority.h"
@@ -1560,6 +1561,14 @@ void OSDService::queue_for_snap_trim(PG *pg)
 #undef dout_prefix
 #define dout_prefix *_dout
 
+// Commands shared between OSD's console and admin console:
+namespace ceph { 
+namespace osd_cmds { 
+
+int heap(CephContext& cct, cmdmap_t& cmdmap, Formatter& f, std::ostream& os);
+ 
+}} // namespace ceph::osd_cmds
+
 int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 	      uuid_d fsid, int whoami)
 {
@@ -1862,20 +1871,20 @@ class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
   explicit OSDSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+  bool call(std::string admin_command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) override {
     stringstream ss;
-    bool r = osd->asok_command(command, cmdmap, format, ss);
+    bool r = osd->asok_command(admin_command, cmdmap, format, ss);
     out.append(ss);
     return r;
   }
 };
 
-bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
+bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
 		       ostream& ss)
 {
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
-  if (command == "status") {
+  if (admin_command == "status") {
     f->open_object_section("status");
     f->dump_stream("cluster_fsid") << superblock.cluster_fsid;
     f->dump_stream("osd_fsid") << superblock.osd_fsid;
@@ -1888,34 +1897,34 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
       f->dump_unsigned("num_pgs", pg_map.size());
     }
     f->close_section();
-  } else if (command == "flush_journal") {
+  } else if (admin_command == "flush_journal") {
     store->flush_journal();
-  } else if (command == "dump_ops_in_flight" ||
-	     command == "ops") {
+  } else if (admin_command == "dump_ops_in_flight" ||
+	     admin_command == "ops") {
     if (!op_tracker.dump_ops_in_flight(f)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
-  } else if (command == "dump_blocked_ops") {
+  } else if (admin_command == "dump_blocked_ops") {
     if (!op_tracker.dump_ops_in_flight(f, true)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
-  } else if (command == "dump_historic_ops") {
+  } else if (admin_command == "dump_historic_ops") {
     if (!op_tracker.dump_historic_ops(f, false)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
-  } else if (command == "dump_historic_ops_by_duration") {
+  } else if (admin_command == "dump_historic_ops_by_duration") {
     if (!op_tracker.dump_historic_ops(f, true)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
-  } else if (command == "dump_op_pq_state") {
+  } else if (admin_command == "dump_op_pq_state") {
     f->open_object_section("pq");
     op_shardedwq.dump(f);
     f->close_section();
-  } else if (command == "dump_blacklist") {
+  } else if (admin_command == "dump_blacklist") {
     list<pair<entity_addr_t,utime_t> > bl;
     OSDMapRef curmap = service.get_osdmap();
 
@@ -1931,7 +1940,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
       f->close_section(); //entry
     }
     f->close_section(); //blacklist
-  } else if (command == "dump_watchers") {
+  } else if (admin_command == "dump_watchers") {
     list<obj_watch_item_t> watchers;
     // scan pg's
     {
@@ -1974,7 +1983,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     }
 
     f->close_section(); //watchers
-  } else if (command == "dump_reservations") {
+  } else if (admin_command == "dump_reservations") {
     f->open_object_section("reservations");
     f->open_object_section("local_reservations");
     service.local_reserver.dump(f);
@@ -1983,9 +1992,17 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     service.remote_reserver.dump(f);
     f->close_section();
     f->close_section();
-  } else if (command == "get_latest_osdmap") {
+  } else if (admin_command == "get_latest_osdmap") {
     get_latest_osdmap();
-  } else if (command == "set_heap_property") {
+  } else if (admin_command == "heap") {
+    auto result = ceph::osd_cmds::heap(*cct, cmdmap, *f, ss);
+
+    // Note: Failed heap profile commands won't necessarily trigger an error:
+    f->open_object_section("result");
+    f->dump_string("error", cpp_strerror(result));
+    f->dump_bool("success", result >= 0);
+    f->close_section();
+  } else if (admin_command == "set_heap_property") {
     string property;
     int64_t value = 0;
     string error;
@@ -2009,7 +2026,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->dump_string("error", error);
     f->dump_bool("success", success);
     f->close_section();
-  } else if (command == "get_heap_property") {
+  } else if (admin_command == "get_heap_property") {
     string property;
     size_t value = 0;
     string error;
@@ -2028,13 +2045,13 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->dump_bool("success", success);
     f->dump_int("value", value);
     f->close_section();
-  } else if (command == "dump_objectstore_kv_stats") {
+  } else if (admin_command == "dump_objectstore_kv_stats") {
     store->get_db_statistics(f);
-  } else if (command == "dump_scrubs") {
+  } else if (admin_command == "dump_scrubs") {
     service.dumps_scrub(f);
-  } else if (command == "calc_objectstore_db_histogram") {
+  } else if (admin_command == "calc_objectstore_db_histogram") {
     store->generate_db_histogram(f);
-  } else if (command == "flush_store_cache") {
+  } else if (admin_command == "flush_store_cache") {
     store->flush_cache();
   } else {
     assert(0 == "broken asok registration");
@@ -2482,6 +2499,14 @@ void OSD::final_init()
 				     asok_hook,
 				     "force osd to update the latest map from "
 				     "the mon");
+  assert(r == 0);
+
+  r = admin_socket->register_command( "heap",
+                                      "heap " \
+                                      "name=heapcmd,type=CephString",
+                                      asok_hook,
+                                      "show heap usage info (available only if "
+                                      "compiled with tcmalloc)");
   assert(r == 0);
 
   r = admin_socket->register_command("set_heap_property",
@@ -6010,17 +6035,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   }
 
   else if (prefix == "heap") {
-    if (!ceph_using_tcmalloc()) {
-      r = -EOPNOTSUPP;
-      ss << "could not issue heap profiler command -- not using tcmalloc!";
-    } else {
-      string heapcmd;
-      cmd_getval(cct, cmdmap, "heapcmd", heapcmd);
-      // XXX 1-element vector, change at callee or make vector here?
-      vector<string> heapcmd_vec;
-      get_str_vec(heapcmd, heapcmd_vec);
-      ceph_heap_profiler_handle_command(heapcmd_vec, ds);
-    }
+    r = ceph::osd_cmds::heap(*cct, cmdmap, *f, ds);
   }
 
   else if (prefix == "debug dump_missing") {
@@ -9178,8 +9193,6 @@ void OSD::PeeringWQ::_dequeue(list<PG*> *out) {
   in_use.insert(out->begin(), out->end());
 }
 
-
-
 // =============================================================
 
 #undef dout_context
@@ -9545,3 +9558,30 @@ void OSD::ShardedOpWQ::_enqueue_front(pair<spg_t, PGQueueable> item)
   sdata->sdata_cond.SignalOne();
   sdata->sdata_lock.Unlock();
 }
+
+namespace ceph { 
+namespace osd_cmds { 
+
+int heap(CephContext& cct, cmdmap_t& cmdmap, Formatter& f, std::ostream& os)
+{
+  if (!ceph_using_tcmalloc()) {
+        os << "could not issue heap profiler command -- not using tcmalloc!";
+        return -EOPNOTSUPP;
+  }
+  
+  string cmd;
+  if (!cmd_getval(&cct, cmdmap, "heapcmd", cmd)) {
+        os << "unable to get value for command \"" << cmd << "\"";
+       return -EINVAL;
+   }
+  
+  std::vector<std::string> cmd_vec;
+  get_str_vec(cmd, cmd_vec);
+  
+  ceph_heap_profiler_handle_command(cmd_vec, os);
+  
+  return 0;
+}
+ 
+}} // namespace ceph::osd_cmds
+
