@@ -480,7 +480,7 @@
   rbd help group image remove
   usage: rbd group image remove [--group-pool <group-pool>] [--group <group>] 
                                 [--image-pool <image-pool>] [--image <image>] 
-                                [--pool <pool>] 
+                                [--pool <pool>] [--image-id <image-id>] 
                                 <group-spec> <image-spec> 
   
   Remove an image from a consistency group.
@@ -497,6 +497,7 @@
     --image-pool arg     image pool name
     --image arg          image name
     -p [ --pool ] arg    pool name unless overridden
+    --image-id arg       image id
   
   rbd help group list
   usage: rbd group list [--pool <pool>] [--format <format>] [--pretty-format] 

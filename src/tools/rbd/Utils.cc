@@ -987,5 +987,23 @@ uint64_t get_rbd_default_features(CephContext* cct) {
   return boost::lexical_cast<uint64_t>(features);
 }
 
+bool check_if_image_spec_present(const po::variables_map &vm,
+                                 at::ArgumentModifier mod,
+                                 size_t spec_arg_index) {
+  std::string image_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_IMAGE_NAME : at::IMAGE_NAME);
+
+  if (vm.count(image_key)) {
+    return true;
+  }
+
+  std::string spec = get_positional_argument(vm, spec_arg_index);
+  if (!spec.empty()) {
+    return true;
+  }
+
+  return false;
+}
+
 } // namespace utils
 } // namespace rbd
