@@ -925,10 +925,14 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             'cpus': 1,
         }
         if self.args.simultaneous_jobs >= 100:
+            hint['ram'] = 60000 # MB
+        elif self.args.simultaneous_jobs >= 50:
             hint['ram'] = 30000 # MB
         elif self.args.simultaneous_jobs >= 25:
-            hint['ram'] = 8000 # MB
+            hint['ram'] = 15000 # MB
         elif self.args.simultaneous_jobs >= 10:
+            hint['ram'] = 8000 # MB
+        elif self.args.simultaneous_jobs >= 2:
             hint['ram'] = 4000 # MB
         if self.args.controller_cpus > 0:
             hint['cpus'] = self.args.controller_cpus
