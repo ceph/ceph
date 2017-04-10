@@ -3021,6 +3021,44 @@ int OSD::shutdown()
   return r;
 }
 
+int OSD::mon_cmd_maybe_osd_create(string &cmd)
+{
+  bool created = false;
+  while (true) {
+    dout(10) << __func__ << " cmd: " << cmd << dendl;
+    vector<string> vcmd{cmd};
+    bufferlist inbl;
+    C_SaferCond w;
+    string outs;
+    monc->start_mon_command(vcmd, inbl, NULL, &outs, &w);
+    int r = w.wait();
+    if (r < 0) {
+      if (r == -ENOENT && !created) {
+	string newcmd = "{\"prefix\": \"osd create\", \"id\": " + stringify(whoami)
+	  + ", \"uuid\": \"" + stringify(superblock.osd_fsid) + "\"}";
+	vector<string> vnewcmd{newcmd};
+	bufferlist inbl;
+	C_SaferCond w;
+	string outs;
+	monc->start_mon_command(vnewcmd, inbl, NULL, &outs, &w);
+	int r = w.wait();
+	if (r < 0) {
+	  derr << __func__ << " fail: osd does not exist and created failed: "
+	       << cpp_strerror(r) << dendl;
+	  return r;
+	}
+	created = true;
+	continue;
+      }
+      derr << __func__ << " fail: '" << outs << "': " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    break;
+  }
+
+  return 0;
+}
+
 int OSD::update_crush_location()
 {
   if (!cct->_conf->osd_crush_update_on_start) {
@@ -3059,40 +3097,7 @@ int OSD::update_crush_location()
   }
   cmd += "]}";
 
-  bool created = false;
-  while (true) {
-    dout(10) << __func__ << " cmd: " << cmd << dendl;
-    vector<string> vcmd{cmd};
-    bufferlist inbl;
-    C_SaferCond w;
-    string outs;
-    monc->start_mon_command(vcmd, inbl, NULL, &outs, &w);
-    int r = w.wait();
-    if (r < 0) {
-      if (r == -ENOENT && !created) {
-	string newcmd = "{\"prefix\": \"osd create\", \"id\": " + stringify(whoami)
-	  + ", \"uuid\": \"" + stringify(superblock.osd_fsid) + "\"}";
-	vector<string> vnewcmd{newcmd};
-	bufferlist inbl;
-	C_SaferCond w;
-	string outs;
-	monc->start_mon_command(vnewcmd, inbl, NULL, &outs, &w);
-	int r = w.wait();
-	if (r < 0) {
-	  derr << __func__ << " fail: osd does not exist and created failed: "
-	       << cpp_strerror(r) << dendl;
-	  return r;
-	}
-	created = true;
-	continue;
-      }
-      derr << __func__ << " fail: '" << outs << "': " << cpp_strerror(r) << dendl;
-      return r;
-    }
-    break;
-  }
-
-  return 0;
+  return mon_cmd_maybe_osd_create(cmd);
 }
 
 
