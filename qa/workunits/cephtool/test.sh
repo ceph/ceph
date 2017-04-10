@@ -1726,6 +1726,28 @@ function test_mon_heap_profiler()
   ceph heap release
 }
 
+function test_admin_heap_profiler()
+{
+  do_test=1
+  set +e
+  # expect 'heap' commands to be correctly parsed
+  ceph heap stats 2>$TMPFILE
+  if [[ $? -eq 22 && `grep 'tcmalloc not enabled' $TMPFILE` ]]; then
+    echo "tcmalloc not enabled; skip heap profiler test"
+    do_test=0
+  fi
+  set -e
+
+  [[ $do_test -eq 0 ]] && return 0
+
+  admin_socket = "--admin-daemon out/osd.0.asok"
+
+  ceph --admin $admin_socket heap start_profiler
+  ceph --admin $admin_socket heap dump
+  ceph --admin $admin_socket heap stop_profiler
+  ceph --admin $admin_socket heap release
+}
+
 function test_osd_bench()
 {
   # test osd bench limits
