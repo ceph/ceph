@@ -5988,7 +5988,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  g_conf->set_val("bluestore_max_blob_size", "524288");
+  g_conf->set_val("bluestore_max_blob_size", "0");
 
 }
 
@@ -6171,7 +6171,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  g_conf->set_val("bluestore_max_blob_size", "524288");
+  g_conf->set_val("bluestore_max_blob_size", "0");
 }
 
 TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
@@ -6245,7 +6245,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  g_conf->set_val("bluestore_max_blob_size", "524288");
+  g_conf->set_val("bluestore_max_blob_size", "0");
 }
 
 // The test case to reproduce an issue when write happens

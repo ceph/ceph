@@ -3263,6 +3263,9 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_max_bytes",
     "bluestore_deferred_max_ops",
     "bluestore_deferred_max_bytes",
+    "bluestore_max_blob_size",
+    "bluestore_max_blob_size_ssd",
+    "bluestore_max_blob_size_hdd",
     NULL
   };
   return KEYS;
@@ -3280,6 +3283,14 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("bluestore_compression_max_blob_size")) {
     if (bdev) {
       _set_compression();
+    }
+  }
+  if (changed.count("bluestore_max_blob_size") ||
+      changed.count("bluestore_max_blob_size_ssd") ||
+      changed.count("bluestore_max_blob_size_hdd")) {
+    if (bdev) {
+      // only after startup
+      _set_blob_size();
     }
   }
   if (changed.count("bluestore_prefer_deferred_size") ||
@@ -3388,6 +3399,21 @@ void BlueStore::_set_throttle_params()
 
   dout(10) << __func__ << " throttle_cost_per_io " << throttle_cost_per_io
 	   << dendl;
+}
+void BlueStore::_set_blob_size()
+{
+  if (cct->_conf->bluestore_max_blob_size) {
+    max_blob_size = cct->_conf->bluestore_max_blob_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      max_blob_size = cct->_conf->bluestore_max_blob_size_hdd;
+    } else {
+      max_blob_size = cct->_conf->bluestore_max_blob_size_ssd;
+    }
+  }
+  dout(10) << __func__ << " max_blob_size 0x" << std::hex << max_blob_size
+           << std::dec << dendl;
 }
 
 void BlueStore::_init_logger()
@@ -4875,6 +4901,7 @@ int BlueStore::mount()
 
   _set_csum();
   _set_compression();
+  _set_blob_size();
 
   mounted = true;
   return 0;
@@ -9613,9 +9640,9 @@ int BlueStore::_do_write(
       );
     }
   }
-  if (wctx.target_blob_size == 0 ||
-      wctx.target_blob_size > cct->_conf->bluestore_max_blob_size) {
-    wctx.target_blob_size = cct->_conf->bluestore_max_blob_size;
+  uint64_t max_bsize = max_blob_size.load();
+  if (wctx.target_blob_size == 0 || wctx.target_blob_size > max_bsize) {
+    wctx.target_blob_size = max_bsize;
   }
   // set the min blob size floor at 2x the min_alloc_size, or else we
   // won't be able to allocate a smaller extent for the compressed

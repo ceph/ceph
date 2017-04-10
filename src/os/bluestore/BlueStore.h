@@ -1803,6 +1803,8 @@ private:
   std::atomic<uint64_t> comp_min_blob_size = {0};
   std::atomic<uint64_t> comp_max_blob_size = {0};
 
+  std::atomic<uint64_t> max_blob_size = {0};  ///< maximum blob size
+
   // cache trim control
 
   // note that these update in a racy way, but we don't *really* care if
@@ -1856,6 +1858,8 @@ private:
   int _write_fsid();
   void _close_fsid();
   void _set_alloc_sizes();
+  void _set_blob_size();
+
   int _open_bdev(bool create);
   void _close_bdev();
   int _open_db(bool create);
