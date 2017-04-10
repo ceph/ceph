@@ -301,7 +301,7 @@ Quota Management
 
 The Ceph Object Gateway enables you to set quotas on users and buckets owned by
 users. Quotas include the maximum number of objects in a bucket and the maximum
-storage size in megabytes.
+storage size a bucket can hold.
 
 - **Bucket:** The ``--bucket`` option allows you to specify a quota for
   buckets the user owns.
@@ -310,7 +310,7 @@ storage size in megabytes.
   the maximum number of objects. A negative value disables this setting.
   
 - **Maximum Size:** The ``--max-size`` option allows you to specify a quota
-  size in B/K/M/G/T. A negative value disables this setting.
+  size in B/K/M/G/T, where B is the default. A negative value disables this setting.
   
 - **Quota Scope:** The ``--quota-scope`` option sets the scope for the quota.
   The options are ``bucket`` and ``user``. Bucket quotas apply to buckets a 
