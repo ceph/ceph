@@ -12,6 +12,7 @@
 
 const string reshard_oid = "reshard";
 const string reshard_lock_name = "reshard_process";
+const string bucket_instance_lock_name = "bucket_instance_lock";
 
 RGWReshard::RGWReshard(CephContext *_cct, RGWRados* _store):cct(_cct), store(_store)
 {
@@ -213,6 +214,55 @@ int RGWReshard::set_bucket_resharding(const string& bucket_instance_oid, cls_rgw
     goto done;
   }
 done:
+  l.unlock(&io_ctx, bucket_instance_oid);
+  return ret;
+}
+
+int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
+{
+  rados::cls::lock::Lock l(bucket_instance_lock_name);
+  librados::IoCtx io_ctx;
+
+  int ret = get_io_ctx(io_ctx);
+  if (ret < 0)
+    return ret;
+
+  ret = l.lock_exclusive(&io_ctx, bucket_instance_oid);
+  if (ret == -EBUSY) {
+    dout(0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
+    return 0;
+  }
+  if (ret < 0)
+    return ret;
+
+  entry.new_instance_id.clear();
+
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
+  RGWObjectCtx obj_ctx(store);
+
+  ret = store->get_bucket_info(obj_ctx, entry.tenant, entry.bucket_name, bucket_info, nullptr, &attrs);
+  if (ret < 0) {
+    ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: could not init bucket: " << cpp_strerror(-ret)
+		  << dendl;
+    return ret;
+  }
+
+  bucket_info.resharding = false;
+  bucket_info.new_bucket_instance_id.clear();
+  cls_rgw_bucket_instance_entry instance_entry;
+
+  try {
+    ::encode(bucket_info, instance_entry.data);
+  } catch(buffer::error& err) {
+    ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: could not decode buffer info, caught buffer::error"
+		  << dendl;
+    l.unlock(&io_ctx, bucket_instance_oid);
+    return -EIO;
+  }
+
+  ret =   cls_rgw_clear_bucket_resharding(io_ctx, bucket_instance_oid, instance_entry);
+
   l.unlock(&io_ctx, bucket_instance_oid);
   return ret;
 }

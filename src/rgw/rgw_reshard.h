@@ -26,6 +26,8 @@ class RGWReshard {
     int remove(cls_rgw_reshard_entry& entry);
     int list(string& marker, uint32_t max, list<cls_rgw_reshard_entry>& entries, bool& is_truncated);
     int set_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
+    int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
+    int get_bucket_instance_info(const rgw_bucket& bucket, RGWBucketInfo& bucket_info);
 };
 
 #endif
