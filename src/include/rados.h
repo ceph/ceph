@@ -150,6 +150,12 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_REQUIRE_KRAKEN (1<<17) /* require kraken for booting osds */
 #define CEPH_OSDMAP_REQUIRE_LUMINOUS (1<<18) /* require l for booting osds */
 
+/* these are hidden in 'ceph status' view */
+#define CEPH_OSDMAP_SEMIHIDDEN_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL|	\
+				      CEPH_OSDMAP_REQUIRE_KRAKEN |	\
+				      CEPH_OSDMAP_REQUIRE_LUMINOUS |	\
+				      CEPH_OSDMAP_SORTBITWISE)
+
 /*
  * The error code to return when an OSD can't handle a write
  * because it is too large.
