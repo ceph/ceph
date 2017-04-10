@@ -36,7 +36,7 @@ static const std::string RBD_DIFF_BANNER ("rbd diff v1\n");
 static const size_t RBD_DEFAULT_SPARSE_SIZE = 4096;
 
 static const std::string RBD_IMAGE_BANNER_V2 ("rbd image v2\n");
-static const std::string RBD_IMAGE_DIFFS_BANNER_V2 ("rbd image diffss v2\n");
+static const std::string RBD_IMAGE_DIFFS_BANNER_V2 ("rbd image diffs v2\n");
 static const std::string RBD_DIFF_BANNER_V2 ("rbd diff v2\n");
 
 #define RBD_DIFF_FROM_SNAP	'f'
