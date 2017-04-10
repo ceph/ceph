@@ -265,15 +265,13 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
   }
 }
 
-void LogClient::reset_session()
+Message *LogClient::get_mon_log_message(bool flush)
 {
   Mutex::Locker l(log_lock);
-  last_log_sent = last_log - log_queue.size();
-}
-
-Message *LogClient::get_mon_log_message()
-{
-  Mutex::Locker l(log_lock);
+  if (flush) {
+    // reset session
+    last_log_sent = last_log - log_queue.size();
+  }
   return _get_mon_log_message();
 }
 

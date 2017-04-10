@@ -205,8 +205,7 @@ public:
   }
 
   bool handle_log_ack(MLogAck *m);
-  void reset_session();
-  Message *get_mon_log_message();
+  Message *get_mon_log_message(bool flush);
   bool are_pending();
 
   LogChannelRef create_channel() {
