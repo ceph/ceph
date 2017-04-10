@@ -2350,6 +2350,32 @@ TRACEPOINT_EVENT(librbd, group_image_remove_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, group_image_remove_by_id_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, group_name,
+        const char*, image_pool_name,
+        int64_t, image_ioctx_id,
+        const char*, image_id),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(group_name, group_name)
+        ctf_string(image_pool_name, image_pool_name)
+        ctf_integer(int64_t, image_ioctx_id, image_ioctx_id)
+        ctf_string(image_id, image_id)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_image_remove_by_id_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, group_image_list_enter,
     TP_ARGS(
         const char*, pool_name,
