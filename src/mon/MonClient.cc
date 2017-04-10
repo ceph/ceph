@@ -899,6 +899,9 @@ int MonClient::wait_auth_rotating(double timeout)
   utime_t until = now;
   until += timeout;
 
+  // Must be initialized
+  assert(auth != nullptr);
+
   if (auth->get_protocol() == CEPH_AUTH_NONE)
     return 0;
   
