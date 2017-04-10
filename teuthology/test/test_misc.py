@@ -49,8 +49,11 @@ def test_sh_progress(caplog):
     t2 = datetime.strptime(records[2].asctime.split(',')[0], "%Y-%m-%d %H:%M:%S")
     assert (t2 - t1).total_seconds() > 2
 
+
 def test_wait_until_osds_up():
     ctx = argparse.Namespace()
+    ctx.daemons = Mock()
+    ctx.daemons.iter_daemons_of_role.return_value = list()
     remote = FakeRemote()
 
     class r():
