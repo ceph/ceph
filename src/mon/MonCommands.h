@@ -493,6 +493,11 @@ COMMAND("osd crush add " \
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
 	"add or update crushmap position and weight for <name> with <weight> and location <args>", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush set-device-class " \
+	"name=id,type=CephOsdName " \
+	"name=class,type=CephString ", \
+	"set the <class> of the device <name>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush create-or-move " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
@@ -568,6 +573,17 @@ COMMAND("osd crush rule rm " \
 	"remove crush rule <name>", "osd", "rw", "cli,rest")
 COMMAND("osd crush tree",
 	"dump crush buckets and items in a tree view",
+	"osd", "r", "cli,rest")
+COMMAND("osd crush class create " \
+	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
+	"create crush device class <class>", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush class rm " \
+	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
+	"remove crush device class <class>", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush class ls", \
+	"list all crush device classes", \
 	"osd", "r", "cli,rest")
 COMMAND("osd setmaxosd " \
 	"name=newmax,type=CephInt,range=0", \

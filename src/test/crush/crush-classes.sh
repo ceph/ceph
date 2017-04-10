@@ -106,6 +106,39 @@ function TEST_classes() {
     ceph osd crush dump | grep -q '~ssd' || return 1
 }
 
+function TEST_set_device_class() {
+    local dir=$1
+
+    TEST_classes $dir || return 1
+
+    ceph osd crush set-device-class osd.0 ssd || return 1
+    ceph osd crush set-device-class osd.1 ssd || return 1
+
+    ok=false
+    for delay in 2 4 8 16 32 64 128 256 ; do
+        if test "$(get_osds_up rbd SOMETHING_ELSE)" == "0 1" ; then
+            ok=true
+            break
+        fi
+        sleep $delay
+        ceph osd crush dump
+        ceph osd dump # for debugging purposes
+        ceph pg dump # for debugging purposes
+    done
+    $ok || return 1
+}
+
+function TEST_mon_classes() {
+    local dir=$1
+
+    run_mon $dir a || return 1
+    ceph osd crush class create CLASS || return 1
+    ceph osd crush class create CLASS || return 1 # idempotent
+    ceph osd crush class ls | grep CLASS  || return 1
+    ceph osd crush class rm CLASS || return 1
+    expect_failure $dir ENOENT ceph osd crush class rm CLASS || return 1
+}
+
 main crush-classes "$@"
 
 # Local Variables:

@@ -966,7 +966,7 @@ TEST(CrushWrapper, remove_unused_root) {
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));
   ASSERT_TRUE(c.name_exists("r12"));
-  ASSERT_EQ(c.remove_unused_root(c.get_item_id("default")), 0);
+  ASSERT_EQ(c.remove_root(c.get_item_id("default"), true), 0);
   ASSERT_FALSE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));
   ASSERT_FALSE(c.name_exists("r12"));
@@ -993,11 +993,11 @@ TEST(CrushWrapper, trim_roots_with_class) {
 
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("default~ssd"));
-  c.trim_roots_with_class(); // do nothing because still in use
+  c.trim_roots_with_class(true); // do nothing because still in use
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("default~ssd"));
   c.class_bucket.clear();
-  c.trim_roots_with_class(); // do nothing because still in use
+  c.trim_roots_with_class(true); // do nothing because still in use
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_FALSE(c.name_exists("default~ssd"));
 }
@@ -1091,6 +1091,37 @@ TEST(CrushWrapper, populate_and_cleanup_classes) {
   c.class_bucket.clear();
   ASSERT_EQ(c.cleanup_classes(), 0);
   ASSERT_FALSE(c.name_exists("default~ssd"));
+}
+
+TEST(CrushWrapper, class_is_in_use) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "root");
+
+  int weight = 1;
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  ASSERT_FALSE(c.class_is_in_use(0));
+
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  int class_id = c.get_or_create_class_id("ssd");
+  c.class_map[item] = class_id;
+
+  ASSERT_TRUE(c.class_is_in_use(c.get_class_id("ssd")));
+  ASSERT_EQ(0, c.remove_class_name("ssd"));
+  ASSERT_FALSE(c.class_is_in_use(c.get_class_id("ssd")));
+}
+
+TEST(CrushWrapper, remove_class_name) {
+  CrushWrapper c;
+  c.create();
+
+  ASSERT_EQ(-ENOENT, c.remove_class_name("ssd"));
+  ASSERT_GE(0, c.get_or_create_class_id("ssd"));
+  ASSERT_EQ(0, c.remove_class_name("ssd"));
+  ASSERT_EQ(-ENOENT, c.remove_class_name("ssd"));
 }
 
 TEST(CrushWrapper, try_remap_rule) {
@@ -1282,3 +1313,6 @@ int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+// Local Variables:
+// compile-command: "cd ../../../build ; make -j4 unittest_crush_wrapper && bin/unittest_crush_wrapper"
+// End:
