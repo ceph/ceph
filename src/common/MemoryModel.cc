@@ -1,5 +1,6 @@
 
 #include "acconfig.h"
+#include "include/compat.h"
 #include "include/types.h"
 #include "MemoryModel.h"
 #include "common/config.h"
@@ -21,9 +22,9 @@ void MemoryModel::_sample(snap *psnap)
 {
   ifstream f;
 
-  f.open("/proc/self/status");
+  f.open(PROCPREFIX "/proc/self/status");
   if (!f.is_open()) {
-    ldout(cct, 0) << "check_memory_usage unable to open /proc/self/status" << dendl;
+    ldout(cct, 0) << "check_memory_usage unable to open " PROCPREFIX "/proc/self/status" << dendl;
     return;
   }
   while (!f.eof()) {
@@ -45,9 +46,9 @@ void MemoryModel::_sample(snap *psnap)
   }
   f.close();
 
-  f.open("/proc/self/maps");
+  f.open(PROCPREFIX "/proc/self/maps");
   if (!f.is_open()) {
-    ldout(cct, 0) << "check_memory_usage unable to open /proc/self/maps" << dendl;
+    ldout(cct, 0) << "check_memory_usage unable to open " PROCPREFIX "/proc/self/maps" << dendl;
     return;
   }
 
