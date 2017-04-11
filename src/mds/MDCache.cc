@@ -6460,14 +6460,27 @@ bool MDCache::trim(int max, int count)
        p != subtrees.end();) {
     CDir *dir = p->first;
     ++p;
-    if (!dir->is_auth() && !dir->get_inode()->is_auth()) {
-      // don't trim subtree root if its auth MDS is recovering.
-      // This simplify the cache rejoin code.
-      if (dir->is_subtree_root() &&
-	  rejoin_ack_gather.count(dir->get_dir_auth().first))
-	continue;
-      if (dir->get_num_ref() == 1)  // subtree pin
+    CInode *diri = dir->get_inode();
+    if (dir->is_auth()) {
+      if (!diri->is_auth() && !diri->is_base() &&
+	  dir->get_num_head_items() == 0) {
+	if (dir->state_test(CDir::STATE_EXPORTING) ||
+	    dir->is_freezing() || dir->is_frozen())
+	  continue;
+
+	migrator->export_empty_import(dir);
+      }
+    } else {
+      if (!diri->is_auth()) {
+	if (dir->get_num_ref() > 1)  // only subtree pin
+	  continue;
+	// don't trim subtree root if its auth MDS is recovering.
+	// This simplify the cache rejoin code.
+	if (dir->is_subtree_root() &&
+	    rejoin_ack_gather.count(dir->get_dir_auth().first))
+	  continue;
 	trim_dirfrag(dir, 0, expiremap);
+      }
     }
   }
 
@@ -6628,10 +6641,6 @@ bool MDCache::trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap
 
   if (clear_complete)
     dir->state_clear(CDir::STATE_COMPLETE);
-  
-  // reexport?
-  if (dir->get_num_head_items() == 0 && dir->is_subtree_root())
-    migrator->export_empty_import(dir);
   
   if (mds->logger) mds->logger->inc(l_mds_inodes_expired);
   return false;
