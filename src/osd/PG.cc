@@ -724,21 +724,21 @@ void PG::check_past_interval_bounds() const
     osd->get_superblock().oldest_map);
   if (rpib.first == rpib.second) {
     if (!past_intervals.empty()) {
-      osd->clog->error() << info.pgid << " required past_interval bounds are "
-			 << " empty " << rpib << " but past_intervals is not "
+      osd->clog->error() << info.pgid << " required past_interval bounds are"
+			 << " empty [" << rpib << ") but past_intervals is not "
 			 << past_intervals;
       derr << info.pgid << " required past_interval bounds are "
-	   << " empty " << rpib << " but past_intervals is not "
+	   << " empty [" << rpib << ") but past_intervals is not "
 	   << past_intervals << dendl;
       assert(past_intervals.empty());
     }
   }
   if (past_intervals.empty()) {
-    osd->clog->error() << info.pgid << " required past_interval bounds are "
-		       << " not empty " << rpib << " but past_intervals "
+    osd->clog->error() << info.pgid << " required past_interval bounds are"
+		       << " not empty [" << rpib << ") but past_intervals "
 		       << past_intervals << " is empty";
     derr << info.pgid << " required past_interval bounds are "
-	 << " not empty " << rpib << " but past_intervals "
+	 << " not empty [" << rpib << ") but past_intervals "
 	 << past_intervals << " is empty" << dendl;
     assert(!past_intervals.empty());
   }
@@ -746,21 +746,21 @@ void PG::check_past_interval_bounds() const
 
   if ((apib.first.first > rpib.first) ||
       (apib.first.second <= rpib.first)) {
-    osd->clog->error() << info.pgid << " past_intervals " << apib
-		       << " start interval does not contain the required"
-		       << " bound " << rpib << " start";
-    derr << info.pgid << " past_intervals " << apib
-	 << " start interval does not contain the required"
-	 << " bound " << rpib << " start" << dendl;
+    osd->clog->error() << info.pgid << " past_intervals [" << apib
+		       << ") start interval does not contain the required"
+		       << " bound [" << rpib << ") start";
+    derr << info.pgid << " past_intervals [" << apib
+	 << ") start interval does not contain the required"
+	 << " bound [" << rpib << ") start" << dendl;
     assert(0 == "past_interval start interval mismatch");
   }
   if (apib.second != rpib.second) {
-    osd->clog->error() << info.pgid << " past_interal bound " << apib
-		       << " end does not match required " << rpib
-		       << " end";
-    derr << info.pgid << " past_interal bound " << apib
-	 << " end does not match required " << rpib
-	 << " end" << dendl;
+    osd->clog->error() << info.pgid << " past_interal bound [" << apib
+		       << ") end does not match required [" << rpib
+		       << ") end";
+    derr << info.pgid << " past_interal bound [" << apib
+	 << ") end does not match required [" << rpib
+	 << ") end" << dendl;
     assert(0 == "past_interval end mismatch");
   }
 }
