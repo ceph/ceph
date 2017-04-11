@@ -110,6 +110,10 @@ int RDMAServerConnTCP::accept(ConnectedSocket *sock, const SocketOptions &opt, e
     ::close(sd);
     return -errno;
   }
+
+  assert(NULL != out); //out should not be NULL in accept connection
+
+  out->set_sockaddr((sockaddr*)&ss);
   net.set_priority(sd, opt.priority, out->get_family());
 
   RDMAConnectedSocketImpl *server;
@@ -119,8 +123,6 @@ int RDMAServerConnTCP::accept(ConnectedSocket *sock, const SocketOptions &opt, e
   ldout(cct, 20) << __func__ << " accepted a new QP, tcp_fd: " << sd << dendl;
   std::unique_ptr<RDMAConnectedSocketImpl> csi(server);
   *sock = ConnectedSocket(std::move(csi));
-  if (out)
-    out->set_sockaddr((sockaddr*)&ss);
 
   return 0;
 }
