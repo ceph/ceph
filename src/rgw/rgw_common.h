@@ -624,6 +624,7 @@ struct RGWUserInfo
   RGWUserCaps caps;
   __u8 admin;
   __u8 system;
+  __u8 bl_deliver;
   string default_placement;
   list<string> placement_tags;
   RGWQuotaInfo bucket_quota;
@@ -638,6 +639,7 @@ struct RGWUserInfo
       op_mask(RGW_OP_TYPE_ALL),
       admin(0),
       system(0),
+      bl_deliver(0),
       type(TYPE_NONE) {
   }
 
@@ -649,7 +651,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(19, 9, bl);
+     ENCODE_START(20, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -690,10 +692,11 @@ struct RGWUserInfo
      ::encode(user_id.tenant, bl);
      ::encode(admin, bl);
      ::encode(type, bl);
+     ::encode(bl_deliver, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(19, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(20, 9, 9, bl);
      if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -765,6 +768,9 @@ struct RGWUserInfo
     }
     if (struct_v >= 19) {
       ::decode(type, bl);
+    }
+    if (struct_v >= 20) {
+      ::decode(bl_deliver, bl);
     }
     DECODE_FINISH(bl);
   }

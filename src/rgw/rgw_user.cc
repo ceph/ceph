@@ -1963,6 +1963,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   user_info.suspended = op_state.get_suspension_status();
   user_info.admin = op_state.admin;
   user_info.system = op_state.system;
+  user_info.bl_deliver = op_state.bl_deliver;
 
   if (op_state.op_mask_specified)
     user_info.op_mask = op_state.get_op_mask();
@@ -2202,6 +2203,9 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   if (op_state.system_specified)
     user_info.system = op_state.system;
+
+  if (op_state.bl_deliver_specified)
+    user_info.bl_deliver = op_state.bl_deliver;
 
   if (op_state.temp_url_key_specified) {
     map<int, string>::iterator iter;
