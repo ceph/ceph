@@ -32,11 +32,11 @@ RDMAConnMgr::RDMAConnMgr(CephContext *cct, RDMAConnectedSocketImpl *sock,
 }
 
 RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
-						 RDMAWorker *w)
+						 RDMAWorker *w, void *info)
   : cct(cct), infiniband(ib), dispatcher(s), worker(w),
     error(0), lock("RDMAConnectedSocketImpl::lock")
 {
-  cmgr = new RDMAConnTCP(cct, this, ib, s, w);
+    cmgr = new RDMAConnTCP(cct, this, ib, s, w, info);
 }
 
 QueuePair *RDMAConnectedSocketImpl::create_queue_pair(Device *d, int p)
@@ -52,7 +52,8 @@ QueuePair *RDMAConnectedSocketImpl::create_queue_pair(Device *d, int p)
 }
 
 RDMAConnTCP::RDMAConnTCP(CephContext *cct, RDMAConnectedSocketImpl *sock,
-			 Infiniband* ib, RDMADispatcher* s, RDMAWorker *w)
+			 Infiniband* ib, RDMADispatcher* s, RDMAWorker *w,
+			 void *_info)
   : RDMAConnMgr(cct, sock, ib, s, w), con_handler(new C_handle_connection(this))
 {
   Device *ibdev = ib->get_device(cct->_conf->ms_async_rdma_device_name.c_str());
@@ -71,6 +72,16 @@ RDMAConnTCP::RDMAConnTCP(CephContext *cct, RDMAConnectedSocketImpl *sock,
   my_msg.peer_qpn = 0;
   my_msg.gid = ibdev->get_gid(ibport);
   socket->register_qp(qp);
+
+  if (_info) {
+    RDMAConnTCPInfo *info = (struct RDMAConnTCPInfo *)_info;
+
+    tcp_fd = info->sd;
+    is_server = true;
+    worker->center.submit_to(worker->center.get_id(), [this]() {
+			     worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
+			     }, true);
+  }
 }
 
 void RDMAConnectedSocketImpl::register_qp(QueuePair *qp)
@@ -670,13 +681,4 @@ void RDMAConnectedSocketImpl::fault()
   error = ECONNRESET;
   cmgr->connected = 1;
   notify();
-}
-
-void RDMAConnTCP::set_accept_fd(int sd)
-{
-  tcp_fd = sd;
-  is_server = true;
-  worker->center.submit_to(worker->center.get_id(), [this]() {
-			   worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
-			   }, true);
 }
