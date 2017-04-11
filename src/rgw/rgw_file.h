@@ -61,6 +61,20 @@ namespace rgw {
   class RGWFileHandle;
   class RGWWriteRequest;
 
+  static inline bool operator <(const struct timespec& lhs,
+				const struct timespec& rhs) {
+    if (lhs.tv_sec == rhs.tv_sec)
+      return lhs.tv_nsec < rhs.tv_nsec;
+    else
+      return lhs.tv_sec < rhs.tv_sec;
+  }
+
+  static inline bool operator ==(const struct timespec& lhs,
+				 const struct timespec& rhs) {
+    return ((lhs.tv_sec == rhs.tv_sec) &&
+	    (lhs.tv_nsec == rhs.tv_nsec));
+  }
+
   /*
    * XXX
    * The current 64-bit, non-cryptographic hash used here is intended
@@ -197,8 +211,9 @@ namespace rgw {
 
       uint32_t flags;
       rgw_obj_key last_marker;
+      struct timespec last_readdir;
 
-      directory() : flags(FLAG_NONE) {}
+      directory() : flags(FLAG_NONE), last_readdir{0,0} {}
     };
 
     void clear_state();
