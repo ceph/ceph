@@ -7836,7 +7836,7 @@ void BlueStore::_kv_sync_thread()
 	if (txc->had_ios) {
 	  --txc->osr->txc_with_unstable_io;
 	}
-
+	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	// release throttle *before* we commit.  this allows new ops
 	// to be prepared and enter pipeline while we are waiting on
 	// the kv commit sync/flush.  then hopefully on the next
