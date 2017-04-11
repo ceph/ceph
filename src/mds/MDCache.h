@@ -252,7 +252,8 @@ public:
 
   // -- subtrees --
 protected:
-  map<CDir*,set<CDir*> > subtrees;   // nested bounds on subtrees.
+  /* subtree keys and each tree's non-recursive nested subtrees (the "bounds") */
+  map<CDir*,set<CDir*> > subtrees;
   map<CInode*,list<pair<CDir*,CDir*> > > projected_subtree_renames;  // renamed ino -> target dir
   
   // adjust subtree auth specification
