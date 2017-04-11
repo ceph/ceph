@@ -424,6 +424,8 @@ class ServeThread : public Thread
   MgrPyModule *mod;
 
 public:
+  bool running;
+
   ServeThread(MgrPyModule *mod_)
     : mod(mod_) {}
 
@@ -431,12 +433,14 @@ public:
   {
     PyGILState_STATE gstate;
     gstate = PyGILState_Ensure();
+    running = true;
 
     dout(4) << "Entering thread for " << mod->get_name() << dendl;
     mod->serve();
 
     PyGILState_Release(gstate);
 
+    running = false;
     return nullptr;
   }
 };
@@ -499,6 +503,8 @@ void PyModules::notify_all(const std::string &notify_type,
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
   for (auto& i : modules) {
     auto module = i.second.get();
+    if (!serve_threads[i.first]->running)
+      continue;
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     finisher.queue(new FunctionContext([module, notify_type, notify_id](int r){
@@ -514,6 +520,8 @@ void PyModules::notify_all(const LogEntry &log_entry)
   dout(10) << __func__ << ": notify_all (clog)" << dendl;
   for (auto& i : modules) {
     auto module = i.second.get();
+    if (!serve_threads[i.first]->running)
+      continue;
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     //
