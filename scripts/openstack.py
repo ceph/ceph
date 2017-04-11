@@ -203,6 +203,24 @@ def get_openstack_parser():
         default=1,
     )
     parser.add_argument(
+        '--controller-cpus',
+        help='override default minimum vCPUs when selecting flavor for teuthology VM',
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        '--controller-ram',
+        help='override default minimum RAM (in megabytes) when selecting flavor for teuthology VM',
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        '--controller-disk',
+        help='override default minimum disk size (in gigabytes) when selecting flavor for teuthology VM',
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
         '--teardown',
         action='store_true', default=None,
         help='destroy the cluster, if it exists',

@@ -735,7 +735,10 @@ class TeuthologyOpenStack(OpenStack):
                                     '--archive-upload-url',
                                     '--key-name',
                                     '--key-filename',
-                                    '--simultaneous-jobs'):
+                                    '--simultaneous-jobs',
+                                    '--controller-cpus',
+                                    '--controller-ram',
+                                    '--controller-disk'):
                 del original_argv[0:2]
             elif original_argv[0] in ('--teardown',
                                       '--upload',
@@ -892,6 +895,12 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             hint['ram'] = 8000 # MB
         elif self.args.simultaneous_jobs >= 10:
             hint['ram'] = 4000 # MB
+        if self.args.controller_cpus > 0:
+            hint['cpus'] = self.args.controller_cpus
+        if self.args.controller_ram > 0:
+            hint['ram'] = self.args.controller_ram
+        if self.args.controller_disk > 0:
+            hint['disk'] = self.args.controller_disk
 
         select = None
         if self.get_provider() == 'ovh':
