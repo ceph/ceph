@@ -2780,9 +2780,9 @@ void pg_notify_t::generate_test_instances(list<pg_notify_t*>& o)
 
 ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
 {
-  lhs << "(query_epoch:" << notify.query_epoch
-      << ", epoch_sent:" << notify.epoch_sent
-      << ", info:" << notify.info;
+  lhs << "(query:" << notify.query_epoch
+      << " sent:" << notify.epoch_sent
+      << " " << notify.info;
   if (notify.from != shard_id_t::NO_SHARD ||
       notify.to != shard_id_t::NO_SHARD)
     lhs << " " << (unsigned)notify.from
