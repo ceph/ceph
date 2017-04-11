@@ -1549,9 +1549,10 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
-TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
+TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
   if(string(GetParam()) != "bluestore")
     return;
+  StartDeferred(0x10000);
 
   ObjectStore::Sequencer osr("test");
   int r;
@@ -5662,9 +5663,12 @@ void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
   test_obj.shutdown();
 }
 
-TEST_P(StoreTest, Many4KWritesTest) {
+TEST_P(StoreTestSpecificAUSize, Many4KWritesTest) {
   if (string(GetParam()) != "bluestore")
     return;
+
+  StartDeferred(0x10000);
+
   store_statfs_t res_stat;
   unsigned max_object = 4*1024*1024;
 
@@ -5674,9 +5678,10 @@ TEST_P(StoreTest, Many4KWritesTest) {
   ASSERT_EQ(res_stat.allocated, max_object);
 }
 
-TEST_P(StoreTest, Many4KWritesNoCSumTest) {
+TEST_P(StoreTestSpecificAUSize, Many4KWritesNoCSumTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  StartDeferred(0x10000);
   g_conf->set_val("bluestore_csum_type", "none");
   g_ceph_context->_conf->apply_changes(NULL);
   store_statfs_t res_stat;
@@ -5689,9 +5694,10 @@ TEST_P(StoreTest, Many4KWritesNoCSumTest) {
   g_conf->set_val("bluestore_csum_type", "crc32c");
 }
 
-TEST_P(StoreTest, TooManyBlobsTest) {
+TEST_P(StoreTestSpecificAUSize, TooManyBlobsTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  StartDeferred(0x10000);
   store_statfs_t res_stat;
   unsigned max_object = 4*1024*1024;
   doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0, &res_stat);
