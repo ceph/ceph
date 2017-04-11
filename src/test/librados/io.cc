@@ -827,12 +827,12 @@ TEST_F(LibRadosIoEC, OverlappingWriteRoundTrip) {
   char *buf = (char *)new char[dbsize];
   char *buf2 = (char *)new char[bsize];
   char *buf3 = (char *)new char[dbsize];
-  auto lam = [&] {
-            delete[] buf;
-            delete[] buf2;
-            delete[] buf3;
-          };
-  scope_guard<decltype(lam)> sg(std::forward<decltype(lam)>(lam));
+  auto cleanup = [&] {
+    delete[] buf;
+    delete[] buf2;
+    delete[] buf3;
+  };
+  scope_guard<decltype(cleanup)> sg(std::move(cleanup));
   memset(buf, 0xcc, dbsize);
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, dbsize, 0));
   memset(buf2, 0xdd, bsize);
@@ -848,11 +848,11 @@ TEST_F(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
   int dbsize = bsize * 2;
   char *buf = (char *)new char[dbsize];
   char *buf2 = (char *)new char[bsize];
-  auto lam = [&] {
-            delete[] buf;
-            delete[] buf2;
-          };
-  scope_guard<decltype(lam)> sg(std::forward<decltype(lam)>(lam));
+  auto cleanup = [&] {
+    delete[] buf;
+    delete[] buf2;
+  };
+  scope_guard<decltype(cleanup)> sg(std::move(cleanup));
   memset(buf, 0xcc, dbsize);
   bufferlist bl1;
   bl1.append(buf, dbsize);
@@ -918,13 +918,13 @@ TEST_F(LibRadosIoEC, AppendRoundTrip) {
   char *buf3 = (char *)new char[alignment *2];
   int uasize = alignment/2;
   char *unalignedbuf = (char *)new char[uasize];
-  auto lam = [&] {
-            delete[] buf;
-            delete[] buf2;
-            delete[] buf3;
-            delete[] unalignedbuf;
-          };
-  scope_guard<decltype(lam)> sg(std::forward<decltype(lam)>(lam));
+  auto cleanup = [&] {
+    delete[] buf;
+    delete[] buf2;
+    delete[] buf3;
+    delete[] unalignedbuf;
+  };
+  scope_guard<decltype(cleanup)> sg(std::move(cleanup));
   memset(buf, 0xde, alignment);
   ASSERT_EQ(0, rados_append(ioctx, "foo", buf, alignment));
   memset(buf2, 0xad, alignment);
@@ -941,11 +941,11 @@ TEST_F(LibRadosIoEC, AppendRoundTrip) {
 TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
   char *buf = (char *)new char[alignment];
   char *buf2 = (char *)new char[alignment];
-  auto lam = [&] {
-            delete[] buf;
-            delete[] buf2;
-          };
-  scope_guard<decltype(lam)> sg(std::forward<decltype(lam)>(lam));
+  auto cleanup = [&] {
+    delete[] buf;
+    delete[] buf2;
+  };
+  scope_guard<decltype(cleanup)> sg(std::move(cleanup));
   memset(buf, 0xde, alignment);
   bufferlist bl1;
   bl1.append(buf, alignment);
