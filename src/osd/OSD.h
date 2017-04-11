@@ -861,6 +861,8 @@ public:
 	  ceph_clock_now(cct),
 	  entity_inst_t())));
   }
+  AsyncReserver<spg_t> snap_reserver;
+
   void queue_for_scrub(PG *pg) {
     op_wq.queue(
       make_pair(

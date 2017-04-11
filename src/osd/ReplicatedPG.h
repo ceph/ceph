@@ -1555,11 +1555,15 @@ public:
   }
 private:
   struct NotTrimming;
+  struct WaitReservation;
   struct SnapTrim : boost::statechart::event< SnapTrim > {
     SnapTrim() : boost::statechart::event < SnapTrim >() {}
   };
   struct Reset : boost::statechart::event< Reset > {
     Reset() : boost::statechart::event< Reset >() {}
+  };
+  struct SnapTrimReserved : boost::statechart::event< SnapTrimReserved > {
+    SnapTrimReserved() : boost::statechart::event< SnapTrimReserved >() {}
   };
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
     ReplicatedPG *pg;
@@ -1573,18 +1577,80 @@ private:
   } snap_trimmer_machine;
 
   /* SnapTrimmerStates */
-  struct TrimmingObjects : boost::statechart::state< TrimmingObjects, SnapTrimmer >, NamedState {
+  struct Trimming : boost::statechart::state< Trimming,
+					      SnapTrimmer,
+					      WaitReservation >,
+			   NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< SnapTrim >,
+      boost::statechart::transition< Reset, NotTrimming >
+      > reactions;
+    explicit Trimming(my_context ctx);
+    void exit();
+    boost::statechart::result react(const SnapTrim&) { return discard_event(); }
+  };
+
+  struct TrimmingObjects : boost::statechart::state<TrimmingObjects, Trimming>, NamedState {
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< SnapTrim >,
       boost::statechart::transition< Reset, NotTrimming >
       > reactions;
     hobject_t pos;
     explicit TrimmingObjects(my_context ctx);
-    void exit();
+    void exit() { context< SnapTrimmer >().log_exit(state_name, enter_time); }
     boost::statechart::result react(const SnapTrim&);
   };
 
-  struct WaitingOnReplicas : boost::statechart::state< WaitingOnReplicas, SnapTrimmer >, NamedState {
+  struct WaitReservation : boost::statechart::state< WaitReservation, Trimming >, NamedState {
+    /* WaitReservation is a sub-state of trimming simply so that exiting Trimming
+     * always cancels the reservation */
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< SnapTrimReserved >
+      > reactions;
+    struct ReservationCB : public Context {
+      ReplicatedPGRef pg;
+      bool canceled;
+      ReservationCB(ReplicatedPG *pg) : pg(pg), canceled(false) {}
+      void finish(int) override {
+        pg->lock();
+        if (!canceled)
+          pg->snap_trimmer_machine.process_event(SnapTrimReserved());
+        pg->unlock();
+      }
+      void cancel() {
+        assert(pg->is_locked());
+        assert(!canceled);
+        canceled = true;
+      }
+    };
+    ReservationCB *pending = nullptr;
+
+    explicit WaitReservation(my_context ctx)
+      : my_base(ctx),
+        NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitReservation") {
+      context< SnapTrimmer >().log_enter(state_name);
+      auto *pg = context< SnapTrimmer >().pg;
+      pending = new ReservationCB(pg);
+      pg->osd->snap_reserver.request_reservation(pg->get_pgid(), pending, 0);
+      pg->state_set(PG_STATE_SNAPTRIM_WAIT);
+      pg->publish_stats_to_osd();
+    }
+    boost::statechart::result react(const SnapTrimReserved&);
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+      if (pending)
+        pending->cancel();
+      pending = nullptr;
+      auto *pg = context< SnapTrimmer >().pg;
+      pg->state_clear(PG_STATE_SNAPTRIM_WAIT);
+      pg->publish_stats_to_osd();
+    }
+    boost::statechart::result react(const SnapTrim&) {
+      return discard_event();
+    }
+  };
+
+  struct WaitingOnReplicas : boost::statechart::state< WaitingOnReplicas, Trimming >, NamedState {
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< SnapTrim >,
       boost::statechart::transition< Reset, NotTrimming >

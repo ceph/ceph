@@ -13044,8 +13044,28 @@ boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
 	     << pg->snap_trimq.range_start()
 	     << dendl;
     post_event(SnapTrim());
-    return transit<TrimmingObjects>();
+    return transit<Trimming>();
   }
+}
+
+boost::statechart::result ReplicatedPG::WaitReservation::react(const SnapTrimReserved&)
+{
+  ReplicatedPG *pg = context< SnapTrimmer >().pg;
+  ldout(pg->cct, 10) << "WaitReservation react SnapTrimReserved" << dendl;
+
+  pending = nullptr;
+  if (!pg->is_primary() || !pg->is_active() || !pg->is_clean() ||
+      pg->scrubber.active) {
+    post_event(SnapTrim());
+    return transit< NotTrimming >();
+  }
+
+  context<SnapTrimmer>().snap_to_trim = pg->snap_trimq.range_start();
+  ldout(pg->cct, 10) << "NotTrimming: trimming "
+                     << pg->snap_trimq.range_start()
+                     << dendl;
+  pg->queue_snap_trim();
+  return transit< TrimmingObjects >();
 }
 
 /* TrimmingObjects */
@@ -13053,12 +13073,26 @@ ReplicatedPG::TrimmingObjects::TrimmingObjects(my_context ctx)
   : my_base(ctx),
     NamedState(context< SnapTrimmer >().pg->cct, "Trimming/TrimmingObjects")
 {
+  auto *pg = context< SnapTrimmer >().pg;
+  context< SnapTrimmer >().log_enter(state_name);
+  pg->state_set(PG_STATE_SNAPTRIM);
+  pg->publish_stats_to_osd();
+}
+
+ReplicatedPG::Trimming::Trimming(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< SnapTrimmer >().pg->cct, "Trimming")
+{
   context< SnapTrimmer >().log_enter(state_name);
 }
 
-void ReplicatedPG::TrimmingObjects::exit()
+void ReplicatedPG::Trimming::exit()
 {
   context< SnapTrimmer >().log_exit(state_name, enter_time);
+  auto *pg = context< SnapTrimmer >().pg;
+  pg->osd->snap_reserver.cancel_reservation(pg->get_pgid());
+  pg->state_clear(PG_STATE_SNAPTRIM);
+  pg->publish_stats_to_osd();
   context<SnapTrimmer>().in_flight.clear();
 }
 

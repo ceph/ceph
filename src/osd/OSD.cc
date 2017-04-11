@@ -254,6 +254,8 @@ OSDService::OSDService(OSD *osd) :
   remote_reserver(&reserver_finisher, cct->_conf->osd_max_backfills,
 		  cct->_conf->osd_min_recovery_priority),
   pg_temp_lock("OSDService::pg_temp_lock"),
+  snap_reserver(&reserver_finisher,
+		cct->_conf->osd_max_trimming_pgs),
   map_cache_lock("OSDService::map_lock"),
   map_cache(cct, cct->_conf->osd_map_cache_size),
   map_bl_cache(cct->_conf->osd_map_cache_size),
@@ -8960,6 +8962,9 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("osd_min_recovery_priority")) {
     service.local_reserver.set_min_priority(cct->_conf->osd_min_recovery_priority);
     service.remote_reserver.set_min_priority(cct->_conf->osd_min_recovery_priority);
+  }
+  if (changed.count("osd_max_trimming_pgs")) {
+    service.snap_reserver.set_max(cct->_conf->osd_max_trimming_pgs);
   }
   if (changed.count("osd_op_complaint_time") ||
       changed.count("osd_op_log_threshold")) {
