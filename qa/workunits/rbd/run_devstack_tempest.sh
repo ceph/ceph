@@ -1,5 +1,7 @@
 #!/bin/bash -ex
 
+STACK_BRANCH=stable/ocata
+
 STACK_USER=${STACK_USER:-stack}
 STACK_GROUP=${STACK_GROUP:-stack}
 TEMPEST_USER=${TEMPEST_USER:-tempest}
@@ -81,9 +83,8 @@ EOF
 cat<<EOF > ${STACK_HOME_PATH}/start.sh
 #!/bin/bash -ex
 cd ${STACK_OPT_PATH}
-git clone https://git.openstack.org/openstack-dev/devstack
+git clone https://git.openstack.org/openstack-dev/devstack -b ${STACK_BRANCH}
 cd devstack
-git checkout stable/newton
 
 cp ${STACK_HOME_PATH}/local.conf .
 
