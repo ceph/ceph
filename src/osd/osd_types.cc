@@ -3090,7 +3090,9 @@ public:
   pi_compact_rep &operator=(pi_compact_rep &&) = default;
 
   size_t size() const override { return intervals.size(); }
-  bool empty() const override { return intervals.empty(); }
+  bool empty() const override {
+    return first > last || (first == 0 && last == 0);
+  }
   void clear() override {
     *this = pi_compact_rep();
   }
