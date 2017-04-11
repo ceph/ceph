@@ -3731,7 +3731,7 @@ void OSD::build_past_intervals_parallel()
       } else {
 	auto apib = pg->past_intervals.get_bounds();
 	if (rpib.second == apib.second &&
-	    apib.first.first <= rpib.first) {
+	    apib.first <= rpib.first) {
 	  if (pg->info.history.same_interval_since == 0) {
 	    pg->info.history.same_interval_since = rpib.second;
 	  }

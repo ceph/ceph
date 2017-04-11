@@ -2879,16 +2879,16 @@ public:
   size_t size() const override { return interval_map.size(); }
   bool empty() const override { return interval_map.empty(); }
   void clear() override { interval_map.clear(); }
-  pair<pair<epoch_t, epoch_t>, epoch_t> get_bounds() const override {
+  pair<epoch_t, epoch_t> get_bounds() const override {
     auto iter = interval_map.begin();
     if (iter != interval_map.end()) {
       auto riter = interval_map.rbegin();
       return make_pair(
-	make_pair(iter->second.first, iter->second.last + 1),
+	iter->second.first,
 	riter->second.last + 1);
     } else {
       assert(0 == "get_bounds only valid if !empty()");
-      return make_pair(make_pair(0, 0), 0);
+      return make_pair(0, 0);
     }
   }
   set<pg_shard_t> get_all_participants(
@@ -3096,8 +3096,8 @@ public:
   void clear() override {
     *this = pi_compact_rep();
   }
-  pair<pair<epoch_t, epoch_t>, epoch_t> get_bounds() const override {
-    return make_pair(make_pair(first, first + 1), last + 1);
+  pair<epoch_t, epoch_t> get_bounds() const override {
+    return make_pair(first, last + 1);
   }
   set<pg_shard_t> get_all_participants(
     bool ec_pool) const override {
