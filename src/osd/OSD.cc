@@ -4047,6 +4047,78 @@ int OSD::handle_pg_peering_evt(
 }
 
 
+void OSD::build_initial_pg_history(
+  spg_t pgid,
+  epoch_t created,
+  utime_t created_stamp,
+  pg_history_t *h,
+  PastIntervals *pi)
+{
+  dout(10) << __func__ << " " << pgid << " created " << created << dendl;
+  h->epoch_created = created;
+  h->same_interval_since = created;
+  h->same_up_since = created;
+  h->same_primary_since = created;
+  h->last_scrub_stamp = created_stamp;
+  h->last_deep_scrub_stamp = created_stamp;
+  h->last_clean_scrub_stamp = created_stamp;
+
+  OSDMapRef lastmap = service.get_map(created);
+  int up_primary, acting_primary;
+  vector<int> up, acting;
+  lastmap->pg_to_up_acting_osds(
+    pgid.pgid, &up, &up_primary, &acting, &acting_primary);
+
+  ostringstream debug;
+  for (epoch_t e = created + 1; e <= osdmap->get_epoch(); ++e) {
+    OSDMapRef osdmap = service.get_map(e);
+    int new_up_primary, new_acting_primary;
+    vector<int> new_up, new_acting;
+    osdmap->pg_to_up_acting_osds(
+      pgid.pgid, &new_up, &new_up_primary, &new_acting, &new_acting_primary);
+
+    // this is a bit imprecise, but sufficient?
+    struct min_size_predicate_t : public IsPGRecoverablePredicate {
+      const pg_pool_t *pi;
+      bool operator()(const set<pg_shard_t> &have) const {
+	return have.size() >= pi->min_size;
+      }
+      min_size_predicate_t(const pg_pool_t *i) : pi(i) {}
+    } min_size_predicate(osdmap->get_pg_pool(pgid.pgid.pool()));
+
+    bool new_interval = PastIntervals::check_new_interval(
+      acting_primary,
+      new_acting_primary,
+      acting, new_acting,
+      up_primary,
+      new_up_primary,
+      up, new_up,
+      h->same_interval_since,
+      h->last_epoch_clean,
+      osdmap,
+      lastmap,
+      pgid.pgid,
+      &min_size_predicate,
+      pi,
+      &debug);
+    if (new_interval) {
+      h->same_interval_since = e;
+    }
+    if (up != new_up) {
+      h->same_up_since = e;
+    }
+    if (acting_primary != new_acting_primary) {
+      h->same_primary_since = e;
+    }
+    lastmap = osdmap;
+  }
+  dout(20) << __func__ << " " << debug.str() << dendl;
+  dout(10) << __func__ << " " << *h << " " << *pi
+	   << " [" << (pi->empty() ? pair<epoch_t,epoch_t>(0,0) :
+		       pi->get_bounds()) << ")"
+	   << dendl;
+}
+
 /**
  * Fill in the passed history so you know same_interval_since, same_up_since,
  * and same_primary_since.
@@ -7958,18 +8030,7 @@ void OSD::handle_pg_create(OpRequestRef op)
       osdmap->get_pools().at(pgid.pool()).ec_pool(),
       *osdmap);
     pg_history_t history;
-    history.epoch_created = created;
-    history.last_scrub_stamp = ci->second;
-    history.last_deep_scrub_stamp = ci->second;
-    history.last_clean_scrub_stamp = ci->second;
-
-    // project history from created epoch (handle_pg_peering_evt does
-    // it from msg send epoch)
-    bool valid_history = project_pg_history(
-      pgid, history, created, up, up_primary, acting, acting_primary);
-    // the pg creation message must have come from a mon and therefore
-    // cannot be on the other side of a map gap
-    assert(valid_history);
+    build_initial_pg_history(pgid, created, ci->second, &history, &pi);
 
     // The mon won't resend unless the primary changed, so
     // we ignore same_interval_since.  We'll pass this history
