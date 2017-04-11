@@ -3905,7 +3905,205 @@ TEST_F(TestLibRBD, ObjectMapConsistentSnap)
   ASSERT_PASSED(validate_object_map, image1);
 }
 
+void memset_rand(char *buf, size_t len) {
+  for (size_t i = 0; i < len; ++i) {
+    buf[i] = (char) (rand() % (126 - 33) + 33);
+  }
+}
+
 TEST_F(TestLibRBD, Metadata)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+
+  rbd_image_t image;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  rbd_image_t image1;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image1, NULL));
+
+  char keys[1024];
+  char vals[1024];
+  size_t keys_len = sizeof(keys);
+  size_t vals_len = sizeof(vals);
+
+  memset_rand(keys, keys_len);
+  memset_rand(vals, vals_len);
+
+  ASSERT_EQ(0, rbd_metadata_list(image, "", 0, keys, &keys_len, vals,
+                                 &vals_len));
+  ASSERT_EQ(0U, keys_len);
+  ASSERT_EQ(0U, vals_len);
+
+  char value[1024];
+  size_t value_len = sizeof(value);
+  memset_rand(value, value_len);
+
+  ASSERT_EQ(0, rbd_metadata_set(image1, "key1", "value1"));
+  ASSERT_EQ(0, rbd_metadata_set(image1, "key2", "value2"));
+  ASSERT_EQ(0, rbd_metadata_get(image1, "key1", value, &value_len));
+  ASSERT_STREQ(value, "value1");
+  value_len = 1;
+  ASSERT_EQ(-ERANGE, rbd_metadata_get(image1, "key1", value, &value_len));
+  ASSERT_EQ(value_len, strlen("value1") + 1);
+
+  ASSERT_EQ(-ERANGE, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+                                       &vals_len));
+  keys_len = sizeof(keys);
+  vals_len = sizeof(vals);
+  memset_rand(keys, keys_len);
+  memset_rand(vals, vals_len);
+  ASSERT_EQ(0, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+                                 &vals_len));
+  ASSERT_EQ(keys_len, strlen("key1") + 1 + strlen("key2") + 1);
+  ASSERT_EQ(vals_len, strlen("value1") + 1 + strlen("value2") + 1);
+  ASSERT_STREQ(keys, "key1");
+  ASSERT_STREQ(keys + strlen(keys) + 1, "key2");
+  ASSERT_STREQ(vals, "value1");
+  ASSERT_STREQ(vals + strlen(vals) + 1, "value2");
+
+  ASSERT_EQ(0, rbd_metadata_remove(image1, "key1"));
+  ASSERT_EQ(0, rbd_metadata_remove(image1, "key3"));
+  value_len = sizeof(value);
+  ASSERT_EQ(-ENOENT, rbd_metadata_get(image1, "key3", value, &value_len));
+  ASSERT_EQ(0, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+                                 &vals_len));
+  ASSERT_EQ(keys_len, strlen("key2") + 1);
+  ASSERT_EQ(vals_len, strlen("value2") + 1);
+  ASSERT_STREQ(keys, "key2");
+  ASSERT_STREQ(vals, "value2");
+
+  // test config setting
+  ASSERT_EQ(0, rbd_metadata_set(image1, "conf_rbd_cache", "false"));
+  ASSERT_EQ(-EINVAL, rbd_metadata_set(image1, "conf_rbd_cache", "INVALID_VAL"));
+  ASSERT_EQ(0, rbd_metadata_remove(image1, "conf_rbd_cache"));
+
+  // test metadata with snapshot adding
+  ASSERT_EQ(0, rbd_snap_create(image1, "snap1"));
+  ASSERT_EQ(0, rbd_snap_protect(image1, "snap1"));
+  ASSERT_EQ(0, rbd_snap_set(image1, "snap1"));
+
+  ASSERT_EQ(0, rbd_metadata_set(image1, "key1", "value1"));
+  ASSERT_EQ(0, rbd_metadata_set(image1, "key3", "value3"));
+
+  keys_len = sizeof(keys);
+  vals_len = sizeof(vals);
+  memset_rand(keys, keys_len);
+  memset_rand(vals, vals_len);
+  ASSERT_EQ(0, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+                                 &vals_len));
+  ASSERT_EQ(keys_len,
+            strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") + 1);
+  ASSERT_EQ(vals_len,
+            strlen("value1") + 1 + strlen("value2") + 1 + strlen("value3") + 1);
+  ASSERT_STREQ(keys, "key1");
+  ASSERT_STREQ(keys + strlen("key1") + 1, "key2");
+  ASSERT_STREQ(keys + strlen("key1") + 1 + strlen("key2") + 1, "key3");
+  ASSERT_STREQ(vals, "value1");
+  ASSERT_STREQ(vals + strlen("value1") + 1, "value2");
+  ASSERT_STREQ(vals + strlen("value1") + 1 + strlen("value2") + 1, "value3");
+
+  ASSERT_EQ(0, rbd_snap_set(image1, NULL));
+  keys_len = sizeof(keys);
+  vals_len = sizeof(vals);
+  memset_rand(keys, keys_len);
+  memset_rand(vals, vals_len);
+  ASSERT_EQ(0, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+                                 &vals_len));
+  ASSERT_EQ(keys_len,
+            strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") + 1);
+  ASSERT_EQ(vals_len,
+            strlen("value1") + 1 + strlen("value2") + 1 + strlen("value3") + 1);
+  ASSERT_STREQ(keys, "key1");
+  ASSERT_STREQ(keys + strlen("key1") + 1, "key2");
+  ASSERT_STREQ(keys + strlen("key1") + 1 + strlen("key2") + 1, "key3");
+  ASSERT_STREQ(vals, "value1");
+  ASSERT_STREQ(vals + strlen("value1") + 1, "value2");
+  ASSERT_STREQ(vals + strlen("value1") + 1 + strlen("value2") + 1, "value3");
+
+  // test metadata with cloning
+  uint64_t features;
+  ASSERT_EQ(0, rbd_get_features(image1, &features));
+
+  string cname = get_temp_image_name();
+  EXPECT_EQ(0, rbd_clone(ioctx, name.c_str(), "snap1", ioctx,
+                         cname.c_str(), features, &order));
+  rbd_image_t image2;
+  ASSERT_EQ(0, rbd_open(ioctx, cname.c_str(), &image2, NULL));
+  ASSERT_EQ(0, rbd_metadata_set(image2, "key4", "value4"));
+
+  keys_len = sizeof(keys);
+  vals_len = sizeof(vals);
+  memset_rand(keys, keys_len);
+  memset_rand(vals, vals_len);
+  ASSERT_EQ(0, rbd_metadata_list(image2, "", 0, keys, &keys_len, vals,
+                                 &vals_len));
+  ASSERT_EQ(keys_len, strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") +
+            1 + strlen("key4") + 1);
+  ASSERT_EQ(vals_len, strlen("value1") + 1 + strlen("value2") + 1 +
+            strlen("value3") + 1 + strlen("value4") + 1);
+  ASSERT_STREQ(keys + strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") +
+               1, "key4");
+  ASSERT_STREQ(vals + strlen("value1") + 1 + strlen("value2") + 1 +
+               strlen("value3") + 1, "value4");
+
+  ASSERT_EQ(0, rbd_metadata_list(image1, "", 0, keys, &keys_len, vals,
+                                 &vals_len));
+  ASSERT_EQ(keys_len,
+            strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") + 1);
+  ASSERT_EQ(vals_len,
+            strlen("value1") + 1 + strlen("value2") + 1 + strlen("value3") + 1);
+  ASSERT_EQ(-ENOENT, rbd_metadata_get(image1, "key4", value, &value_len));
+
+  // test short buffer cases
+  keys_len = strlen("key1") + 1;
+  vals_len = strlen("value1") + 1;
+  memset_rand(keys, keys_len);
+  memset_rand(vals, vals_len);
+  ASSERT_EQ(0, rbd_metadata_list(image2, "", 1, keys, &keys_len, vals,
+                                 &vals_len));
+  ASSERT_EQ(keys_len, strlen("key1") + 1);
+  ASSERT_EQ(vals_len, strlen("value1") + 1);
+  ASSERT_STREQ(keys, "key1");
+  ASSERT_STREQ(vals, "value1");
+
+  ASSERT_EQ(-ERANGE, rbd_metadata_list(image2, "", 2, keys, &keys_len, vals,
+                                       &vals_len));
+  ASSERT_EQ(keys_len, strlen("key1") + 1 + strlen("key2") + 1);
+  ASSERT_EQ(vals_len, strlen("value1") + 1 + strlen("value2") + 1);
+
+  ASSERT_EQ(-ERANGE, rbd_metadata_list(image2, "", 0, keys, &keys_len, vals,
+                                       &vals_len));
+  ASSERT_EQ(keys_len, strlen("key1") + 1 + strlen("key2") + 1 + strlen("key3") +
+            1 + strlen("key4") + 1);
+  ASSERT_EQ(vals_len, strlen("value1") + 1 + strlen("value2") + 1 +
+            strlen("value3") + 1 + strlen("value4") + 1);
+
+  // test `start` param
+  keys_len = sizeof(keys);
+  vals_len = sizeof(vals);
+  memset_rand(keys, keys_len);
+  memset_rand(vals, vals_len);
+  ASSERT_EQ(0, rbd_metadata_list(image2, "key2", 0, keys, &keys_len, vals,
+                                 &vals_len));
+  ASSERT_EQ(keys_len, strlen("key3") + 1 + strlen("key4") + 1);
+  ASSERT_EQ(vals_len, strlen("value3") + 1 + strlen("value4") + 1);
+  ASSERT_STREQ(keys, "key3");
+  ASSERT_STREQ(vals, "value3");
+
+  ASSERT_EQ(0, rbd_close(image));
+  ASSERT_EQ(0, rbd_close(image1));
+  ASSERT_EQ(0, rbd_close(image2));
+}
+
+TEST_F(TestLibRBD, MetadataPP)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
