@@ -448,7 +448,7 @@ void rgw::auth::LocalApplier::to_str(std::ostream& out) const {
 void rgw::auth::LocalApplier::parse_subuser_info(const std::string& subuser_name,
                                                  const RGWUserInfo &uinfo)
 {
-  if (! subuser_name.empty() && subuser_name != NO_SUBUSER) {
+  if (subuser_name != NO_SUBUSER) {
     const auto iter = uinfo.subusers.find(subuser_name);
 
     if (iter != std::end(uinfo.subusers)) {
