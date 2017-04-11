@@ -18,6 +18,8 @@
 
 #include "MgrPyModule.h"
 
+// FIXME: import sanely
+extern std::string handle_pyerror(void);
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -86,9 +88,9 @@ int MgrPyModule::serve()
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    derr << "Failed to invoke serve() on " << module_name << dendl;
-    PyErr_Print();
-    r = -EINVAL;
+    derr << module_name << ".serve:" << dendl;
+    derr << handle_pyerror() << dendl;
+    return -EINVAL;
   }
 
   PyGILState_Release(gstate);
@@ -111,7 +113,7 @@ void MgrPyModule::shutdown()
     Py_DECREF(pValue);
   } else {
     derr << "Failed to invoke shutdown() on " << module_name << dendl;
-    PyErr_Print();
+    derr << handle_pyerror() << dendl;
   }
 
   PyGILState_Release(gstate);
@@ -132,8 +134,8 @@ void MgrPyModule::notify(const std::string &notify_type, const std::string &noti
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    derr << "Failed to invoke notify() on " << module_name << dendl;
-    PyErr_Print();
+    derr << module_name << ".notify:" << dendl;
+    derr << handle_pyerror() << dendl;
     // FIXME: callers can't be expected to handle a python module
     // that has spontaneously broken, but Mgr() should provide
     // a hook to unload misbehaving modules when they have an
@@ -163,7 +165,8 @@ void MgrPyModule::notify_clog(const LogEntry &log_entry)
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
+    derr << module_name << ".notify_clog:" << dendl;
+    derr << handle_pyerror() << dendl;
     // FIXME: callers can't be expected to handle a python module
     // that has spontaneously broken, but Mgr() should provide
     // a hook to unload misbehaving modules when they have an
@@ -246,8 +249,8 @@ int MgrPyModule::handle_command(
 
     Py_DECREF(pResult);
   } else {
-    derr << "Failed to invoke handle_command() on " << module_name << dendl;
-    PyErr_Print();
+    *ds << "";
+    *ss << handle_pyerror();
     r = -EINVAL;
   }
 
