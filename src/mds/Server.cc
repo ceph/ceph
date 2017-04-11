@@ -4406,6 +4406,28 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 
     pi = cur->project_inode();
     pi->quota = quota;
+  } else if (name.find("ceph.dir.pin") == 0) {
+    if (!cur->is_dir() || cur->is_root()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    mds_rank_t rank;
+    try {
+      rank = boost::lexical_cast<mds_rank_t>(value);
+      if (rank < 0) rank = MDS_RANK_NONE;
+    } catch (boost::bad_lexical_cast const&) {
+      dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    xlocks.insert(&cur->policylock);
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
+
+    pi = cur->project_inode();
+    cur->set_export_pin(rank);
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -EINVAL);

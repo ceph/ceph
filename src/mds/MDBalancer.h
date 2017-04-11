@@ -85,6 +85,8 @@ private:
   void prep_rebalance(int beat);
   int mantle_prep_rebalance();
 
+  void handle_export_pins(void);
+
   void export_empties();
   int localize_balancer();
   bool check_targets(const balance_state_t& state);

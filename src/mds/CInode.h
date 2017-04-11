@@ -1087,6 +1087,13 @@ public:
     projected_parent.pop_front();
   }
 
+private:
+  void maybe_export_pin();
+public:
+  void set_export_pin(mds_rank_t rank);
+  mds_rank_t get_export_pin(void) const;
+  bool is_exportable(mds_rank_t dest) const;
+
   void print(ostream& out) override;
   void dump(Formatter *f) const;
 
