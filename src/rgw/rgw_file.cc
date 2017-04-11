@@ -1134,7 +1134,7 @@ namespace rgw {
      * like data it and other attrs would arrive after open */
     processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
 				 &multipart);
-    op_ret = processor->prepare(get_store(), NULL);
+    op_ret = processor->prepare(rgwlib.get_store(), NULL);
 
   done:
     return op_ret;
@@ -1183,10 +1183,10 @@ namespace rgw {
 
       string oid_rand;
       char buf[33];
-      gen_rand_alphanumeric(get_store()->ctx(), buf, sizeof(buf) - 1);
+      gen_rand_alphanumeric(rgwlib.get_store()->ctx(), buf, sizeof(buf) - 1);
       oid_rand.append(buf);
 
-      op_ret = processor->prepare(get_store(), &oid_rand);
+      op_ret = processor->prepare(rgwlib.get_store(), &oid_rand);
       if (op_ret < 0) {
 	ldout(s->cct, 0) << "ERROR: processor->prepare() returned "
 			 << op_ret << dendl;
@@ -1215,8 +1215,9 @@ namespace rgw {
     s->obj_size = ofs; // XXX check ofs
     perfcounter->inc(l_rgw_put_b, s->obj_size);
 
-    op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
-				      user_quota, bucket_quota, s->obj_size);
+    op_ret = rgwlib.get_store()->check_quota(s->bucket_owner.get_id(),
+                                             s->bucket, user_quota,
+                                             bucket_quota, s->obj_size);
     if (op_ret < 0) {
       goto done;
     }

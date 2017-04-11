@@ -208,8 +208,6 @@ namespace rgw {
 		   get_state()->trans_id.c_str());
       }
 
-    inline RGWRados* get_store() { return store; }
-
     virtual int execute() final { abort(); }
     virtual int exec_start() = 0;
     virtual int exec_continue() = 0;
