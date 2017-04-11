@@ -2712,7 +2712,7 @@ public:
   }
 
   /* Return the set of epochs
-   * [(start_interval_start, start_interval_end), end) represented by the
+   * [[start_interval_start, start_interval_end), end) represented by the
    * past_interval set.  Annoyingly, pg_info_t records last_epoch_started,
    * but doesn't pin it to the start of the interval, so we have to return
    * the first interval so a user can verify that last_epoch_started falls

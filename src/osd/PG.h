@@ -908,6 +908,7 @@ public:
 
   void mark_clean();  ///< mark an active pg clean
 
+  /// return [start,end) bounds for required past_intervals
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
     const pg_info_t &info,
     epoch_t oldest_map) {
