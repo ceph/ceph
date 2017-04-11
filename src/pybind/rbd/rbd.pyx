@@ -326,6 +326,14 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_aio_release(rbd_completion_t c)
     int rbd_aio_flush(rbd_image_t image, rbd_completion_t c)
 
+    int rbd_metadata_get(rbd_image_t image, const char *key, char *value,
+                         size_t *val_len)
+    int rbd_metadata_set(rbd_image_t image, const char *key, const char *value)
+    int rbd_metadata_remove(rbd_image_t image, const char *key)
+    int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
+                          char *keys, size_t *key_len, char *values,
+                          size_t *vals_len)
+
 RBD_FEATURE_LAYERING = _RBD_FEATURE_LAYERING
 RBD_FEATURE_STRIPINGV2 = _RBD_FEATURE_STRIPINGV2
 RBD_FEATURE_EXCLUSIVE_LOCK = _RBD_FEATURE_EXCLUSIVE_LOCK
@@ -2552,6 +2560,81 @@ written." % (self.name, ret, length))
 
         return completion
 
+    def metadata_get(self, key):
+        """
+        Get image metadata for the given key.
+
+        :param key: metadata key
+        :type key: str
+        :returns: str - image id
+        """
+        key = cstr(key, 'key')
+        cdef:
+            char *_key = key
+            size_t size = 4096
+            char *value = NULL
+            int ret
+        try:
+            while True:
+                value = <char *>realloc_chk(value, size)
+                with nogil:
+                    ret = rbd_metadata_get(self.image, _key, value, &size)
+                if ret != -errno.ERANGE:
+                    break
+            if ret != 0:
+                raise make_ex(ret, 'error getting metadata %s for image %s' %
+                              (self.key, self.name,))
+            return decode_cstr(value)
+        finally:
+            free(value)
+
+    def metadata_set(self, key, value):
+        """
+        Set image metadata for the given key.
+
+        :param key: metadata key
+        :type key: str
+        :param value: metadata value
+        :type value: str
+        """
+        key = cstr(key, 'key')
+        value = cstr(value, 'value')
+        cdef:
+            char *_key = key
+            char *_value = value
+        with nogil:
+            ret = rbd_metadata_set(self.image, _key, _value)
+
+        if ret != 0:
+            raise make_ex(ret, 'error setting metadata %s for image %s' %
+                          (self.key, self.name,))
+
+
+    def metadata_remove(self, key):
+        """
+        Remove image metadata for the given key.
+
+        :param key: metadata key
+        :type key: str
+        """
+        key = cstr(key, 'key')
+        cdef:
+            char *_key = key
+        with nogil:
+            ret = rbd_metadata_remove(self.image, _key)
+
+        if ret != 0:
+            raise make_ex(ret, 'error removing metadata %s for image %s' %
+                          (self.key, self.name,))
+
+    def metadata_list(self):
+        """
+        List image metadata.
+
+        :returns: :class:`MetadataIterator`
+        """
+        return MetadataIterator(self)
+
 cdef class LockOwnerIterator(object):
     """
     Iterator over managed lock owners for an image
@@ -2599,6 +2682,69 @@ cdef class LockOwnerIterator(object):
         if self.lock_owners:
             rbd_lock_get_owners_cleanup(self.lock_owners, self.num_lock_owners)
             free(self.lock_owners)
+
+cdef class MetadataIterator(object):
+    """
+    Iterator over metadata list for an image.
+
+    Yields ``(key, value)`` tuple.
+
+    * ``key`` (str) - metadata key
+    * ``value`` (str) - metadata value
+    """
+
+    cdef:
+        object image_name
+        rbd_image_t image
+        char *last_read
+        uint64_t max_read
+        object next_chunk
+
+    def __init__(self, Image image):
+        self.image_name = image.name
+        self.image = image.image
+        self.last_read = strdup("")
+        self.max_read = 32
+        self.get_next_chunk()
+
+    def __iter__(self):
+        while len(self.next_chunk) > 0:
+            for pair in self.next_chunk:
+                yield pair
+            if len(self.next_chunk) < self.max_read:
+                break
+            self.get_next_chunk()
+
+    def get_next_chunk(self):
+        cdef:
+            char *c_keys = NULL
+            size_t keys_size = 4096
+            char *c_vals = NULL
+            size_t vals_size = 4096
+        try:
+            while True:
+                c_keys = <char *>realloc_chk(c_keys, keys_size)
+                c_vals = <char *>realloc_chk(c_vals, vals_size)
+                with nogil:
+                    ret = rbd_metadata_list(self.image, self.last_read,
+                                            self.max_read, c_keys, &keys_size,
+                                            c_vals, &vals_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error listing metadata for image %s' %
+                                  (self.image_name,))
+            keys = [decode_cstr(key) for key in
+                        c_keys[:keys_size].split(b'\0') if key]
+            vals = [decode_cstr(val) for val in
+                        c_vals[:vals_size].split(b'\0') if val]
+            if len(keys) > 0:
+                free(self.last_read)
+                self.last_read = strdup(keys[-1])
+            self.next_chunk = zip(keys, vals)
+        finally:
+            free(c_keys)
+            free(c_vals)
 
 cdef class SnapIterator(object):
     """

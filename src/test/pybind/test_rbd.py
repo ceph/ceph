@@ -819,7 +819,34 @@ class TestImage(object):
         eq(retval[0], 0)
         eq(sys.getrefcount(comp), 2)
 
+    def test_metadata(self):
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 0)
+        self.image.metadata_set("key1", "value1")
+        self.image.metadata_set("key2", "value2")
+        value = self.image.metadata_get("key1")
+        eq(value, "value1")
+        value = self.image.metadata_get("key2")
+        eq(value, "value2")
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 2)
+        self.image.metadata_remove("key1")
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 1)
+        eq(metadata[0], ("key2", "value2"))
+        self.image.metadata_remove("key2")
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 0)
 
+        N = 65
+        for i in xrange(N):
+            self.image.metadata_set("key" + str(i), "X" * 1025)
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), N)
+        for i in xrange(N):
+            self.image.metadata_remove("key" + str(i))
+            metadata = list(self.image.metadata_list())
+            eq(len(metadata), N - i - 1)
 
 def check_diff(image, offset, length, from_snapshot, expected):
     extents = []
