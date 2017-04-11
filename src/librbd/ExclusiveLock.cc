@@ -46,7 +46,7 @@ template <typename I>
 ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
   : m_image_ctx(image_ctx),
     m_lock(util::unique_lock_name("librbd::ExclusiveLock::m_lock", this)),
-    m_state(STATE_UNINITIALIZED), m_watch_handle(0) {
+    m_state(STATE_UNINITIALIZED), m_watch_handle(0), m_can_delete(false) {
 }
 
 template <typename I>
@@ -134,11 +134,13 @@ void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
   {
     Mutex::Locker locker(m_lock);
     assert(!is_shutdown());
+    m_can_delete.store(false);
     execute_action(ACTION_SHUT_DOWN, on_shut_down);
   }
 
   // if stalled in request state machine -- abort
   handle_peer_notification(0);
+  m_can_delete.store(true);
 }
 
 template <typename I>

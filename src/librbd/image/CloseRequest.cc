@@ -148,7 +148,7 @@ void CloseRequest<I>::handle_shut_down_exclusive_lock(int r) {
     assert(m_image_ctx->object_map == nullptr);
   }
 
-  delete m_exclusive_lock;
+  m_exclusive_lock->destroy();
   m_exclusive_lock = nullptr;
 
   save_result(r);
