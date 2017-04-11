@@ -890,7 +890,7 @@ void NVMEDevice::close()
   dout(1) << __func__ << " end" << dendl;
 }
 
-void NVMEDevice::collect_metadata(map<string,string> *pm)
+int NVMEDevice::collect_metadata(string prefix, map<string,string> *pm) const
 {
   (*pm)[prefix + "rotational"] = "0";
   (*pm)[prefix + "size"] = stringify(get_size());
@@ -899,6 +899,8 @@ void NVMEDevice::collect_metadata(map<string,string> *pm)
   (*pm)[prefix + "type"] = "nvme";
   (*pm)[prefix + "access_mode"] = "spdk";
   (*pm)[prefix + "nvme_serial_number"] = name;
+
+  return 0;
 }
 
 int NVMEDevice::flush()

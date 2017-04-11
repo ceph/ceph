@@ -236,7 +236,7 @@ class NVMEDevice : public BlockDevice {
   int invalidate_cache(uint64_t off, uint64_t len) override;
   int open(const string& path) override;
   void close() override;
-  void collect_metadata(map<string,string> *pm) override;
+  int collect_metadata(string prefix, map<string,string> *pm) const override;
 };
 
 #endif
