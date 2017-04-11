@@ -306,7 +306,7 @@ std::string handle_pyerror()
         object format_exception(traceback.attr("format_exception"));
         formatted_list = format_exception(hexc,hval,htb);
     }
-    formatted = str("\n").join(formatted_list);
+    formatted = str("").join(formatted_list);
     return extract<std::string>(formatted);
 }
 
