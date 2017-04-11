@@ -762,7 +762,7 @@ namespace rgw {
 	    d = get<directory>(&rgw_fh->variant_type);
 	    if (d) {
 	      lock_guard guard(rgw_fh->mtx);
-	      d->clear_state();
+	      rgw_fh->clear_state();
 	      rgw_fh->invalidate();
 	    }
 	  rele:
@@ -853,14 +853,6 @@ namespace rgw {
     if (unlikely(! is_dir()))
       return false;
 
-#if 0
-    /* XXX pretty, but unsafe w/o consistent caching */
-    const directory* d = get<directory>(&variant_type);
-    if ((d->flags & RGWFileHandle::directory::FLAG_CACHED) &&
-	(state.nlink > 2 /* . and .. */))
-      return true;
-#endif /* 0 */
-
     RGWRMdirCheck req(fs->get_context(), fs->get_user(), this);
     int rc = rgwlib.get_fe()->execute_req(&req);
     if (! rc) {
@@ -886,6 +878,11 @@ namespace rgw {
       rcb("..", cb_arg, 2, RGW_LOOKUP_FLAG_DIR);
     }
 
+    lsubdout(fs->get_context(), rgw, 15)
+      << __func__
+      << " offset=" << *offset
+      << dendl;
+
     if (is_root()) {
       RGWListBucketsRequest req(cct, fs->get_user(), this, rcb, cb_arg,
 				offset);
@@ -893,7 +890,7 @@ namespace rgw {
       if (! rc) {
 	lock_guard guard(mtx);
 	state.atime = now;
-	set_nlink(2 + 1); // XXXX
+	inc_nlink(req.d_count);
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
 	fs->state.push_event(ev);
@@ -905,12 +902,18 @@ namespace rgw {
       if (! rc) {
 	lock_guard guard(mtx);
 	state.atime = now;
-	set_nlink(2 + 1); // XXXX
+	inc_nlink(req.d_count);
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
 	fs->state.push_event(ev);
       }
     }
+
+    lsubdout(fs->get_context(), rgw, 15)
+      << __func__
+      << " final link count=" << state.nlink
+      << dendl;
+
     return rc;
   } /* RGWFileHandle::readdir */
 
@@ -1062,10 +1065,13 @@ namespace rgw {
     delete write_req;
   }
 
-  void RGWFileHandle::directory::clear_state()
+  void RGWFileHandle::clear_state()
   {
-    flags &= ~RGWFileHandle::directory::FLAG_CACHED;
-    marker_cache.clear();
+    directory* d = get<directory>(&variant_type);
+    if (d) {
+      state.nlink = 2;
+      d->last_marker = rgw_obj_key{};
+    }
   }
 
   void RGWFileHandle::invalidate() {
