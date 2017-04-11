@@ -913,16 +913,13 @@ public:
     const pg_info_t &info,
     epoch_t oldest_map) {
     epoch_t start = MAX(
-      info.history.last_epoch_started,
-      MAX(oldest_map, info.history.epoch_created));
+      info.history.last_epoch_clean ? info.history.last_epoch_clean :
+       info.history.epoch_created,
+      oldest_map);
     epoch_t end = MAX(
       info.history.same_interval_since,
       info.history.epoch_created);
-    if (start == end) {
-      return make_pair(0, 0);
-    } else {
-      return make_pair(start, end);
-    }
+    return make_pair(start, end);
   }
   void check_past_interval_bounds() const;
   PastIntervals::PriorSet build_prior();

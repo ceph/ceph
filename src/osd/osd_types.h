@@ -2528,7 +2528,7 @@ public:
     virtual size_t size() const = 0;
     virtual bool empty() const = 0;
     virtual void clear() = 0;
-    virtual pair<pair<epoch_t, epoch_t>, epoch_t> get_bounds() const = 0;
+    virtual pair<epoch_t, epoch_t> get_bounds() const = 0;
     virtual set<pg_shard_t> get_all_participants(
       bool ec_pool) const = 0;
     virtual void add_interval(bool ec_pool, const pg_interval_t &interval) = 0;
@@ -2718,13 +2718,10 @@ public:
     return past_intervals->get_all_participants(ec_pool);
   }
 
-  /* Return the set of epochs
-   * [[start_interval_start, start_interval_end), end) represented by the
-   * past_interval set.  Annoyingly, pg_info_t records last_epoch_started,
-   * but doesn't pin it to the start of the interval, so we have to return
-   * the first interval so a user can verify that last_epoch_started falls
-   * within it */
-  pair<pair<epoch_t, epoch_t>, epoch_t> get_bounds() const {
+  /* Return the set of epochs [start, end) represented by the
+   * past_interval set.
+   */
+  pair<epoch_t, epoch_t> get_bounds() const {
     assert(past_intervals);
     return past_intervals->get_bounds();
   }
