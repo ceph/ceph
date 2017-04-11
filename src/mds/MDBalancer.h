@@ -70,7 +70,6 @@ public:
 
   void hit_inode(utime_t now, CInode *in, int type, int who=-1);
   void hit_dir(utime_t now, CDir *dir, int type, int who=-1, double amount=1.0);
-  void hit_recursive(utime_t now, CDir *dir, int type, double amount, double rd_adj);
 
   void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);
