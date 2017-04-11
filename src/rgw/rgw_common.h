@@ -1102,6 +1102,18 @@ enum RGWBucketIndexType {
   RGWBIType_Indexless = 1,
 };
 
+inline ostream& operator<<(ostream& out, const RGWBucketIndexType &index_type) 
+{
+  switch (index_type) {
+    case RGWBIType_Normal:
+      return out << "Normal";
+    case RGWBIType_Indexless:
+      return out << "Indexless";
+    default:
+      return out << "Unknown";
+  }
+}
+
 struct RGWBucketInfo
 {
   enum BIShardsHashType {
