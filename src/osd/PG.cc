@@ -1837,6 +1837,7 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
     peer_activated.insert(pg_whoami);
     dout(10) << "_activate_committed " << epoch
 	     << " peer_activated now " << peer_activated 
+	     << " last_interval_started " << info.history.last_interval_started
 	     << " last_epoch_started " << info.history.last_epoch_started
 	     << " same_interval_since " << info.history.same_interval_since << dendl;
     assert(!actingbackfill.empty());
@@ -1852,6 +1853,7 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
       info);
 
     i.info.history.last_epoch_started = activation_epoch;
+    i.info.history.last_interval_started = i.info.history.same_interval_since;
     if (acting.size() >= pool.info.min_size) {
       state_set(PG_STATE_ACTIVE);
     } else {
@@ -1970,6 +1972,7 @@ void PG::mark_clean()
   // NOTE: this is actually a bit premature: we haven't purged the
   // strays yet.
   info.history.last_epoch_clean = get_osdmap()->get_epoch();
+  info.history.last_interval_clean = info.history.same_interval_since;
 
   past_intervals.clear();
 

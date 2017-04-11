@@ -2087,7 +2087,9 @@ WRITE_CLASS_ENCODER(pg_hit_set_history_t)
 struct pg_history_t {
   epoch_t epoch_created;       // epoch in which PG was created
   epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
+  epoch_t last_interval_started; // first epoch of last_epoch_started interval
   epoch_t last_epoch_clean;    // lower bound on last epoch the PG was completely clean.
+  epoch_t last_interval_clean; // first epoch of last_epoch_clean interval
   epoch_t last_epoch_split;    // as parent
   epoch_t last_epoch_marked_full;  // pool or cluster
   
@@ -2112,7 +2114,9 @@ struct pg_history_t {
     return
       l.epoch_created == r.epoch_created &&
       l.last_epoch_started == r.last_epoch_started &&
+      l.last_interval_started == r.last_interval_started &&
       l.last_epoch_clean == r.last_epoch_clean &&
+      l.last_interval_clean == r.last_interval_clean &&
       l.last_epoch_split == r.last_epoch_split &&
       l.last_epoch_marked_full == r.last_epoch_marked_full &&
       l.same_up_since == r.same_up_since &&
@@ -2127,7 +2131,11 @@ struct pg_history_t {
 
   pg_history_t()
     : epoch_created(0),
-      last_epoch_started(0), last_epoch_clean(0), last_epoch_split(0),
+      last_epoch_started(0),
+      last_interval_started(0),
+      last_epoch_clean(0),
+      last_interval_clean(0),
+      last_epoch_split(0),
       last_epoch_marked_full(0),
       same_up_since(0), same_interval_since(0), same_primary_since(0) {}
   
@@ -2142,8 +2150,16 @@ struct pg_history_t {
       last_epoch_started = other.last_epoch_started;
       modified = true;
     }
+    if (last_interval_started < other.last_interval_started) {
+      last_interval_started = other.last_interval_started;
+      modified = true;
+    }
     if (last_epoch_clean < other.last_epoch_clean) {
       last_epoch_clean = other.last_epoch_clean;
+      modified = true;
+    }
+    if (last_interval_clean < other.last_interval_clean) {
+      last_interval_clean = other.last_interval_clean;
       modified = true;
     }
     if (last_epoch_split < other.last_epoch_split) {
@@ -2186,9 +2202,13 @@ WRITE_CLASS_ENCODER(pg_history_t)
 
 inline ostream& operator<<(ostream& out, const pg_history_t& h) {
   return out << "ec=" << h.epoch_created
+	     << " lis/c " << h.last_interval_started
+	     << "/" << h.last_interval_clean
 	     << " les/c/f " << h.last_epoch_started << "/" << h.last_epoch_clean
 	     << "/" << h.last_epoch_marked_full
-	     << " " << h.same_up_since << "/" << h.same_interval_since << "/" << h.same_primary_since;
+	     << " " << h.same_up_since
+	     << "/" << h.same_interval_since
+	     << "/" << h.same_primary_since;
 }
 
 
