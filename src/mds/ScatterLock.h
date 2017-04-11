@@ -58,6 +58,7 @@ class ScatterLock : public SimpleLock {
     DIRTY            = 1 << 2,
     FLUSHING         = 1 << 3,
     FLUSHED          = 1 << 4,
+    REJOIN_MIX	     = 1 << 5, // no rdlock until the recovering mds become active
   };
 
 public:
@@ -147,6 +148,9 @@ public:
   bool is_dirty_or_flushing() const {
     return have_more() ? (is_dirty() || is_flushing()) : false;
   }
+  bool is_rejoin_mix() const {
+    return have_more() ? _more->state_flags & REJOIN_MIX : false;
+  }
 
   void mark_dirty() { 
     if (!is_dirty()) {
@@ -182,6 +186,13 @@ public:
     }
   }
 
+  void clear_rejoin_mix() {
+    if (have_more()) {
+      _more->state_flags &= ~REJOIN_MIX;
+      try_clear_more();
+    }
+  }
+
   void set_last_scatter(utime_t t) { more()->last_scatter = t; }
   utime_t get_last_scatter() {
     return more()->last_scatter;
@@ -190,14 +201,13 @@ public:
   void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
     if (rstate == LOCK_MIX || 
 	rstate == LOCK_MIX_LOCK || // replica still has wrlocks?
-	rstate == LOCK_MIX_SYNC || // "
-	rstate == LOCK_MIX_TSYN)  // "
+	rstate == LOCK_MIX_SYNC)
       state = LOCK_MIX;
     else if (locktoo && rstate == LOCK_LOCK)
       state = LOCK_LOCK;
   }
 
-  void encode_state_for_rejoin(bufferlist& bl, int rep) const {
+  void encode_state_for_rejoin(bufferlist& bl, int rep) {
     __s16 s = get_replica_state();
     if (is_gathering(rep)) {
       // the recovering mds may hold rejoined wrlocks
@@ -206,6 +216,10 @@ public:
       else
 	s = LOCK_MIX_LOCK;
     }
+
+    if (s == LOCK_MIX || s == LOCK_MIX_LOCK || s == LOCK_MIX_SYNC)
+      more()->state_flags |= REJOIN_MIX;
+
     ::encode(s, bl);
   }
 
