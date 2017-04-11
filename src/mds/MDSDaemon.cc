@@ -14,6 +14,7 @@
 
 #include <unistd.h>
 
+#include "include/compat.h"
 #include "global/signal_handler.h"
 
 #include "include/types.h"
@@ -1041,7 +1042,7 @@ void MDSDaemon::respawn()
    * unlinked.
    */
   char exe_path[PATH_MAX] = "";
-  if (readlink("/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
+  if (readlink(PROCPREFIX "/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
@@ -1052,7 +1053,7 @@ void MDSDaemon::respawn()
     strncpy(exe_path, orig_argv[0], PATH_MAX-1);
   } else {
     dout(1) << "respawning with exe " << exe_path << dendl;
-    strcpy(exe_path, "/proc/self/exe");
+    strcpy(exe_path, PROCPREFIX "/proc/self/exe");
   }
 
   dout(1) << " exe_path " << exe_path << dendl;
