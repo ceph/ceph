@@ -2105,6 +2105,9 @@ void EUpdate::update_segment()
 {
   metablob.update_segment(_segment);
 
+  if (client_map.length())
+    _segment->sessionmapv = cmapv;
+
   if (had_slaves)
     _segment->uncommitted_masters.insert(reqid);
 }
@@ -2137,6 +2140,7 @@ void EUpdate::replay(MDSRank *mds)
       mds->sessionmap.set_projected(mds->sessionmap.get_version());
     }
   }
+  update_segment();
 }
 
 

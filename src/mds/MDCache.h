@@ -694,8 +694,7 @@ public:
    */
   bool expire_recursive(
     CInode *in,
-    std::map<mds_rank_t, MCacheExpire*>& expiremap,
-    CDir *subtree);
+    std::map<mds_rank_t, MCacheExpire*>& expiremap);
 
   void trim_client_leases();
   void check_memory_usage();
@@ -703,11 +702,13 @@ public:
   utime_t last_recall_state;
 
   // shutdown
+private:
+  set<inodeno_t> shutdown_exported_strays;
+public:
   void shutdown_start();
   void shutdown_check();
   bool shutdown_pass();
   bool shutdown_export_strays();
-  bool shutdown_export_caps();
   bool shutdown();                    // clear cache (ie at shutodwn)
 
   bool did_shutdown_log_cap;
