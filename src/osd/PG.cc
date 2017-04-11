@@ -2711,7 +2711,7 @@ void PG::init(
 {
   dout(10) << "init role " << role << " up " << newup << " acting " << newacting
 	   << " history " << history
-	   << " " << pi.size() << " past_intervals"
+	   << " past_intervals " << pi
 	   << dendl;
 
   set_role(role);
@@ -5321,8 +5321,8 @@ ostream& operator<<(ostream& out, const PG& pg)
   out << " lpr=" << pg.get_last_peering_reset();
 
   if (!pg.past_intervals.empty()) {
-    out << " pi=" << pg.past_intervals.get_bounds()
-	<< "/" << pg.past_intervals.size();
+    out << " pi=[" << pg.past_intervals.get_bounds()
+	<< ")/" << pg.past_intervals.size();
   }
 
   if (pg.is_peered()) {
