@@ -1024,6 +1024,7 @@ int bucket_stats(rgw_bucket& bucket, int shard_id, Formatter *formatter)
 
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
+  formatter->dump_stream("index_type") << bucket_info.index_type;
   ::encode_json("owner", bucket_info.owner, formatter);
   formatter->dump_int("mtime", utime_t(mtime));
   formatter->dump_string("ver", bucket_ver);
