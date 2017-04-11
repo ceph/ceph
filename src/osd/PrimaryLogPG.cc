@@ -1533,7 +1533,7 @@ void PrimaryLogPG::get_src_oloc(const object_t& oid, const object_locator_t& olo
 void PrimaryLogPG::handle_backoff(OpRequestRef& op)
 {
   const MOSDBackoff *m = static_cast<const MOSDBackoff*>(op->get_req());
-  SessionRef session((Session *)m->get_connection()->get_priv());
+  SessionRef session = static_cast<Session*>(m->get_connection()->get_priv());
   if (!session)
     return;  // drop it.
   session->put();  // get_priv takes a ref, and so does the SessionRef
@@ -1579,7 +1579,7 @@ void PrimaryLogPG::do_request(
   // pg-wide backoffs
   const Message *m = op->get_req();
   if (m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF)) {
-    SessionRef session((Session *)m->get_connection()->get_priv());
+    SessionRef session = static_cast<Session*>(m->get_connection()->get_priv());
     if (!session)
       return;  // drop it.
     session->put();  // get_priv takes a ref, and so does the SessionRef
@@ -1779,7 +1779,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF);
   SessionRef session;
   if (can_backoff) {
-    session = ((Session *)m->get_connection()->get_priv());
+    session = static_cast<Session*>(m->get_connection()->get_priv());
     if (!session.get()) {
       dout(10) << __func__ << " no session" << dendl;
       return;

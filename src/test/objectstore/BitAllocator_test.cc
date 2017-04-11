@@ -99,7 +99,7 @@ TEST(BitAllocator, test_bmap_iter)
   i = off;
   last_idx = off;
   count = 0;
-  while ((obj = (BmapEntityTmp*) iter.next())) {
+  while ((obj = static_cast<BmapEntityTmp*>(iter.next()))) {
     bmap_test_assert(obj->get_index() == last_idx);
     bmap_test_assert(obj->get_index() == i);
     bmap_test_assert(obj == &(*arr)[i]);

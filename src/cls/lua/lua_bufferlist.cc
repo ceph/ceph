@@ -35,7 +35,7 @@ bufferlist *clslua_checkbufferlist(lua_State *L, int pos)
  */
 bufferlist *clslua_pushbufferlist(lua_State *L, bufferlist *set)
 {
-  bufferlist_wrap *blw = (bufferlist_wrap *)lua_newuserdata(L, sizeof(*blw));
+  bufferlist_wrap *blw = static_cast<bufferlist_wrap *>(lua_newuserdata(L, sizeof(*blw)));
   blw->bl = set ? set : new bufferlist();
   blw->gc = set ? 0 : 1;
   luaL_getmetatable(L, LUA_BUFFERLIST);

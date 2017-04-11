@@ -1234,7 +1234,7 @@ int RGWPutObj_ObjStore_S3::validate_and_unwrap_available_aws4_chunked_data(buffe
 
     /* grab chunk size */
 
-    while ((*(chunk_str+chunk_offset) != ';') && (chunk_offset < chunk_str_min_len))
+    while ((chunk_offset < chunk_str_min_len) && (chunk_str[chunk_offset] != ';'))
       chunk_offset++;
     string str = string(chunk_str, chunk_offset);
     unsigned int chunk_data_size;
@@ -4032,7 +4032,7 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
   int ret = 0;
   s->formatter->reset(); /* Try to throw it all away */
 
-  std::shared_ptr<RGWGetObj_ObjStore_S3Website> getop( (RGWGetObj_ObjStore_S3Website*) op_get() );
+  std::shared_ptr<RGWGetObj_ObjStore_S3Website> getop( static_cast<RGWGetObj_ObjStore_S3Website*>(op_get()));
   if (getop.get() == NULL) {
     return -1; // Trigger double error handler
   }
