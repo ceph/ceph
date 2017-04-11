@@ -2572,17 +2572,24 @@ public:
   }
 
   void encode(bufferlist &bl) const {
-    assert(past_intervals);
     ENCODE_START(1, 1, bl);
-    __u8 classic = is_classic();
-    ::encode(classic, bl);
-    past_intervals->encode(bl);
+    if (past_intervals) {
+      __u8 type = is_classic() ? 1 : 2;
+      ::encode(type, bl);
+      past_intervals->encode(bl);
+    } else {
+      ::encode((__u8)0, bl);
+    }
     ENCODE_FINISH(bl);
   }
   void encode_classic(bufferlist &bl) const {
-    assert(past_intervals);
-    assert(past_intervals->is_classic());
-    past_intervals->encode(bl);
+    if (past_intervals) {
+      assert(past_intervals->is_classic());
+      past_intervals->encode(bl);
+    } else {
+      // it's a map<>
+      ::encode((uint32_t)0, bl);
+    }
   }
 
   void decode(bufferlist::iterator &bl);

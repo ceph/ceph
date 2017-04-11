@@ -3219,8 +3219,11 @@ PastIntervals &PastIntervals::operator=(const PastIntervals &rhs)
 
 ostream& operator<<(ostream& out, const PastIntervals &i)
 {
-  assert(i.past_intervals);
-  return i.past_intervals->print(out);
+  if (i.past_intervals) {
+    return i.past_intervals->print(out);
+  } else {
+    return out << "(empty)";
+  }
 }
 
 ostream& operator<<(ostream& out, const PastIntervals::PriorSet &i)
@@ -3237,14 +3240,20 @@ ostream& operator<<(ostream& out, const PastIntervals::PriorSet &i)
 void PastIntervals::decode(bufferlist::iterator &bl)
 {
   DECODE_START(1, bl);
-  __u8 classic = 0;
-  ::decode(classic, bl);
-  if (classic) {
+  __u8 type = 0;
+  ::decode(type, bl);
+  switch (type) {
+  case 0:
+    break;
+  case 1:
     past_intervals.reset(new pi_simple_rep);
-  } else {
+    past_intervals->decode(bl);
+    break;
+  case 2:
     past_intervals.reset(new pi_compact_rep);
+    past_intervals->decode(bl);
+    break;
   }
-  past_intervals->decode(bl);
   DECODE_FINISH(bl);
 }
 
