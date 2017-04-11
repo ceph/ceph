@@ -10,6 +10,7 @@
 # ifdef MAP_ANON
 #  define MAP_ANONYMOUS MAP_ANON
 # else
+// cppcheck-suppress preprocessorErrorDirective
 #  error "Don't know how to create anonymous mmap"
 # endif
 #endif
