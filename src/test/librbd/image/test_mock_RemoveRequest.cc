@@ -247,7 +247,7 @@ TEST_F(TestMockImageRemoveRequest, SuccessV1) {
   expect_wq_queue(op_work_queue, 0);
 
   MockRemoveRequest *req = MockRemoveRequest::create(m_ioctx, m_image_name, "",
-					      true, no_op, &op_work_queue, &ctx);
+					      true, false, no_op, &op_work_queue, &ctx);
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
@@ -269,7 +269,7 @@ TEST_F(TestMockImageRemoveRequest, OpenFailV1) {
   expect_wq_queue(op_work_queue, 0);
 
   MockRemoveRequest *req = MockRemoveRequest::create(m_ioctx, m_image_name, "",
-					      true, no_op, &op_work_queue, &ctx);
+					      true, false, no_op, &op_work_queue, &ctx);
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
@@ -303,7 +303,7 @@ TEST_F(TestMockImageRemoveRequest, SuccessV2) {
   expect_dir_remove_image(m_ioctx, 0);
 
   MockRemoveRequest *req = MockRemoveRequest::create(m_ioctx, m_image_name, "",
-					      true, no_op, &op_work_queue, &ctx);
+					      true, false, no_op, &op_work_queue, &ctx);
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
@@ -337,7 +337,7 @@ TEST_F(TestMockImageRemoveRequest, NotExistsV2) {
   expect_dir_remove_image(m_ioctx, -ENOENT);
 
   MockRemoveRequest *req = MockRemoveRequest::create(m_ioctx, m_image_name, "",
-					      true, no_op, &op_work_queue, &ctx);
+					      true, false, no_op, &op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 

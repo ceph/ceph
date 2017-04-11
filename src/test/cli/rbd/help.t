@@ -86,6 +86,10 @@
       snap rollback (snap revert) Rollback image to snapshot.
       snap unprotect              Allow a snapshot to be deleted.
       status                      Show the status of this image.
+      trash list (trash ls)       List trash images.
+      trash move (trash mv)       Moves an image to the trash.
+      trash remove (trash rm)     Removes an image from trash.
+      trash restore               Restores an image from trash.
       unmap                       Unmap a rbd device that was used by the kernel.
       watch                       Watch events on image.
   
@@ -476,7 +480,7 @@
   rbd help group image remove
   usage: rbd group image remove [--group-pool <group-pool>] [--group <group>] 
                                 [--image-pool <image-pool>] [--image <image>] 
-                                [--pool <pool>] 
+                                [--pool <pool>] [--image-id <image-id>] 
                                 <group-spec> <image-spec> 
   
   Remove an image from a consistency group.
@@ -493,6 +497,7 @@
     --image-pool arg     image pool name
     --image arg          image name
     -p [ --pool ] arg    pool name unless overridden
+    --image-id arg       image id
   
   rbd help group list
   usage: rbd group list [--pool <pool>] [--format <format>] [--pretty-format] 
@@ -655,7 +660,7 @@
   
   rbd help info
   usage: rbd info [--pool <pool>] [--image <image>] [--snap <snap>] 
-                  [--format <format>] [--pretty-format] 
+                  [--image-id <image-id>] [--format <format>] [--pretty-format] 
                   <image-or-snap-spec> 
   
   Show information about image size, striping, etc.
@@ -668,6 +673,7 @@
     -p [ --pool ] arg     pool name
     --image arg           image name
     --snap arg            snapshot name
+    --image-id arg        image id
     --format arg          output format [plain, json, or xml]
     --pretty-format       pretty formatting (json and xml)
   
@@ -1291,8 +1297,8 @@
     --limit arg          maximum allowed snapshot count
   
   rbd help snap list
-  usage: rbd snap list [--pool <pool>] [--image <image>] [--format <format>] 
-                       [--pretty-format] 
+  usage: rbd snap list [--pool <pool>] [--image <image>] [--image-id <image-id>] 
+                       [--format <format>] [--pretty-format] 
                        <image-spec> 
   
   Dump list of image snapshots.
@@ -1304,6 +1310,7 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
+    --image-id arg       image id
     --format arg         output format [plain, json, or xml]
     --pretty-format      pretty formatting (json and xml)
   
@@ -1323,7 +1330,8 @@
     --snap arg           snapshot name
   
   rbd help snap purge
-  usage: rbd snap purge [--pool <pool>] [--image <image>] [--no-progress] 
+  usage: rbd snap purge [--pool <pool>] [--image <image>] 
+                        [--image-id <image-id>] [--no-progress] 
                         <image-spec> 
   
   Deletes all snapshots.
@@ -1335,11 +1343,12 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
+    --image-id arg       image id
     --no-progress        disable progress output
   
   rbd help snap remove
   usage: rbd snap remove [--pool <pool>] [--image <image>] [--snap <snap>] 
-                         [--no-progress] [--force] 
+                         [--no-progress] [--image-id <image-id>] [--force] 
                          <snap-spec> 
   
   Deletes a snapshot.
@@ -1353,6 +1362,7 @@
     --image arg          image name
     --snap arg           snapshot name
     --no-progress        disable progress output
+    --image-id arg       image id
     --force              flatten children and unprotect snapshot if needed.
   
   rbd help snap rename
@@ -1396,6 +1406,7 @@
   
   rbd help snap unprotect
   usage: rbd snap unprotect [--pool <pool>] [--image <image>] [--snap <snap>] 
+                            [--image-id <image-id>] 
                             <snap-spec> 
   
   Allow a snapshot to be deleted.
@@ -1408,6 +1419,7 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --snap arg           snapshot name
+    --image-id arg       image id
   
   rbd help status
   usage: rbd status [--pool <pool>] [--image <image>] [--format <format>] 
@@ -1425,6 +1437,71 @@
     --image arg          image name
     --format arg         output format [plain, json, or xml]
     --pretty-format      pretty formatting (json and xml)
+  
+  rbd help trash list
+  usage: rbd trash list [--pool <pool>] [--all] [--long] [--format <format>] 
+                        [--pretty-format] 
+                        <pool-name> 
+  
+  List trash images.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    -a [ --all ]         list images from all sources
+    -l [ --long ]        long listing format
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help trash move
+  usage: rbd trash move [--pool <pool>] [--image <image>] [--delay <delay>] 
+                        <image-spec> 
+  
+  Moves an image to the trash.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --delay arg          time delay in seconds until effectively remove the image
+  
+  rbd help trash remove
+  usage: rbd trash remove [--pool <pool>] [--image-id <image-id>] 
+                          [--no-progress] [--force] 
+                          <image-id> 
+  
+  Removes an image from trash.
+  
+  Positional arguments
+    <image-id>           image id
+                         (example: [<pool-name>/]<image-id>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image-id arg       image id
+    --no-progress        disable progress output
+    --force              force remove of non-expired delayed images
+  
+  rbd help trash restore
+  usage: rbd trash restore [--pool <pool>] [--image-id <image-id>] 
+                           [--image <image>] 
+                           <image-id> 
+  
+  Restores an image from trash.
+  
+  Positional arguments
+    <image-id>           image id
+                         (example: [<pool-name>/]<image-id>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image-id arg       image id
+    --image arg          image name
   
   rbd help unmap
   usage: rbd unmap [--pool <pool>] [--image <image>] [--snap <snap>] 
