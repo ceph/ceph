@@ -101,6 +101,8 @@ public:
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectReadOperation*)op, NULL);
     if (r >= 0) {
       add_pending(arg->id, c, oid);
+    } else {
+      c->release();
     }
     return r;
   }
@@ -115,6 +117,8 @@ public:
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectWriteOperation*)op);
     if (r >= 0) {
       add_pending(arg->id, c, oid);
+    } else {
+      c->release();
     }
     return r;
   }
