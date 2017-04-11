@@ -391,8 +391,9 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
 	  ASSERT_LT(0, first[i]);
 	  ASSERT_LT(0, primary[i]);
 	} else {
-	  if (p->second.is_replicated())
+	  if (p->second.is_replicated()) {
 	    ASSERT_EQ(0, first[i]);
+	  }
 	  ASSERT_EQ(0, primary[i]);
 	}
       }
@@ -412,8 +413,9 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
 	  ASSERT_LT(0, first[i]);
 	  ASSERT_LT(0, primary[i]);
 	} else if (i == 1) {
-	  if (p->second.is_replicated())
+	  if (p->second.is_replicated()) {
 	    ASSERT_EQ(0, first[i]);
+	  }
 	  ASSERT_EQ(0, primary[i]);
 	} else {
 	  ASSERT_LT(10000/6/4, primary[0]);
