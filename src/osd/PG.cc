@@ -5160,7 +5160,7 @@ void PG::start_peering_interval(
 
   on_new_interval();
 
-  dout(10) << " up " << oldup << " -> " << up 
+  dout(1) << __func__ << " up " << oldup << " -> " << up
 	   << ", acting " << oldacting << " -> " << acting 
 	   << ", acting_primary " << old_acting_primary << " -> " << new_acting_primary
 	   << ", up_primary " << old_up_primary << " -> " << new_up_primary
