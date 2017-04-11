@@ -2067,6 +2067,14 @@ protected:
   void load_pgs();
   void build_past_intervals_parallel();
 
+  /// build initial pg history and intervals on create
+  void build_initial_pg_history(
+    spg_t pgid,
+    epoch_t created,
+    utime_t created_stamp,
+    pg_history_t *h,
+    PastIntervals *pi);
+
   /// project pg history from from to now
   bool project_pg_history(
     spg_t pgid, pg_history_t& h, epoch_t from,
