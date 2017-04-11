@@ -3071,8 +3071,8 @@ ostream &operator<<(ostream &o, const compact_interval_t &rhs)
 WRITE_CLASS_ENCODER(compact_interval_t)
 
 class pi_compact_rep : public PastIntervals::interval_rep {
-  epoch_t start = 0;
-  epoch_t end = 0; // inclusive
+  epoch_t first = 0;
+  epoch_t last = 0; // inclusive
   set<pg_shard_t> all_participants;
 
   list<compact_interval_t> intervals;
@@ -3095,7 +3095,7 @@ public:
     *this = pi_compact_rep();
   }
   pair<pair<epoch_t, epoch_t>, epoch_t> get_bounds() const override {
-    return make_pair(make_pair(start, start), end);
+    return make_pair(make_pair(first, first + 1), last + 1);
   }
   set<pg_shard_t> get_all_participants(
     bool ec_pool) const override {
@@ -3103,10 +3103,10 @@ public:
   }
   void add_interval(
     bool ec_pool, const PastIntervals::pg_interval_t &interval) override {
-    if (start == 0)
-      start = interval.first;
-    assert(interval.last > end);
-    end = interval.last;
+    if (first == 0)
+      first = interval.first;
+    assert(interval.last > last);
+    last = interval.last;
     set<pg_shard_t> acting;
     for (unsigned i = 0; i < interval.acting.size(); ++i) {
       if (interval.acting[i] == CRUSH_ITEM_NONE)
@@ -3121,10 +3121,10 @@ public:
       return;
     intervals.push_back(
       compact_interval_t{interval.first, interval.last, acting});
-    auto last = intervals.end();
-    --last;
-    for (auto cur = intervals.begin(); cur != last; ) {
-      if (last->supersedes(*cur)) {
+    auto plast = intervals.end();
+    --plast;
+    for (auto cur = intervals.begin(); cur != plast; ) {
+      if (plast->supersedes(*cur)) {
 	intervals.erase(cur++);
       } else {
 	++cur;
@@ -3135,10 +3135,7 @@ public:
     return unique_ptr<PastIntervals::interval_rep>(new pi_compact_rep(*this));
   }
   ostream &print(ostream &out) const override {
-    return out << "(start: " << start
-	       << ", end: " << end
-	       << ", intervals: " << intervals
-	       << ")";
+    return out << "([" << first << "," << last << "] " << intervals << ")";
   }
   void encode(bufferlist &bl) const override {
     ENCODE_START(1, 1, bl);
@@ -3152,8 +3149,8 @@ public:
   }
   void dump(Formatter *f) const override {
     f->open_object_section("PastIntervals::compact_rep");
-    f->dump_stream("start") << start;
-    f->dump_stream("end") << end;
+    f->dump_stream("first") << first;
+    f->dump_stream("last") << last;
     f->open_array_section("intervals");
     for (auto &&i: intervals) {
       i.dump(f);
