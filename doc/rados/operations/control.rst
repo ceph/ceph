@@ -279,14 +279,14 @@ Sends a repair command to OSD.N. To send the command to all OSDs, use ``*``. ::
 
 	ceph osd repair N
 
-Runs a simple throughput benchmark against OSD.N, writing ``NUMBER_OF_OBJECTS``
+Runs a simple throughput benchmark against OSD.N, writing ``TOTAL_DATA_BYTES``
 in write requests of ``BYTES_PER_WRITE`` each. By default, the test
 writes 1 GB in total in 4-MB increments.
 The benchmark is non-destructive and will not overwrite existing live
 OSD data, but might temporarily affect the performance of clients
 concurrently accessing the OSD. ::
 
-	ceph tell osd.N bench [NUMER_OF_OBJECTS] [BYTES_PER_WRITE]
+	ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE]
 
 
 MDS Subsystem
