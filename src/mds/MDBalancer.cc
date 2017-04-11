@@ -337,14 +337,10 @@ void MDBalancer::export_empties()
 {
   dout(5) << "export_empties checking for empty imports" << dendl;
 
-  for (map<CDir*,set<CDir*> >::iterator it = mds->mdcache->subtrees.begin();
-       it != mds->mdcache->subtrees.end();
-       ++it) {
-    CDir *dir = it->first;
-    if (!dir->is_auth() ||
-	dir->is_ambiguous_auth() ||
-	dir->is_freezing() ||
-	dir->is_frozen())
+  std::set<CDir *> subtrees;
+  mds->mdcache->get_fullauth_subtrees(subtrees);
+  for (auto &dir : subtrees) {
+    if (dir->is_freezing() || dir->is_frozen())
       continue;
 
     if (!dir->inode->is_base() &&

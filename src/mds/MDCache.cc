@@ -1257,19 +1257,15 @@ void MDCache::verify_subtree_bounds(CDir *dir, const set<CDir*>& bounds)
   if (bounds != subtrees[dir]) {
     dout(0) << "verify_subtree_bounds failed" << dendl;
     set<CDir*> b = bounds;
-    for (set<CDir*>::iterator p = subtrees[dir].begin();
-	 p != subtrees[dir].end();
-	 ++p) {
-      if (bounds.count(*p)) {
-	b.erase(*p);
+    for (auto &cd : subtrees[dir]) {
+      if (bounds.count(cd)) {
+	b.erase(cd);
 	continue;
       }
-      dout(0) << "  missing bound " << **p << dendl;
+      dout(0) << "  missing bound " << *cd << dendl;
     }
-    for (set<CDir*>::iterator p = b.begin();
-	 p != b.end();
-	 ++p) 
-      dout(0) << "    extra bound " << **p << dendl;
+    for (const auto &cd : b)
+      dout(0) << "    extra bound " << *cd << dendl;
   }
   assert(bounds == subtrees[dir]);
 }
@@ -1281,10 +1277,8 @@ void MDCache::verify_subtree_bounds(CDir *dir, const list<dirfrag_t>& bounds)
 
   // make sure that any bounds i do have are properly noted as such.
   int failed = 0;
-  for (list<dirfrag_t>::const_iterator p = bounds.begin();
-       p != bounds.end();
-       ++p) {
-    CDir *bd = get_dirfrag(*p);
+  for (const auto &fg : bounds) {
+    CDir *bd = get_dirfrag(fg);
     if (!bd) continue;
     if (subtrees[dir].count(bd) == 0) {
       dout(0) << "verify_subtree_bounds failed: extra bound " << *bd << dendl;
