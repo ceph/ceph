@@ -336,6 +336,10 @@ void PG::proc_master_log(
     info.last_epoch_started = oinfo.last_epoch_started;
     dirty_info = true;
   }
+  if (oinfo.last_interval_started > info.last_interval_started) {
+    info.last_interval_started = oinfo.last_interval_started;
+    dirty_info = true;
+  }
   if (info.history.merge(oinfo.history))
     dirty_info = true;
   assert(cct->_conf->osd_find_best_info_ignore_history_les ||
@@ -1512,13 +1516,16 @@ void PG::activate(ObjectStore::Transaction& t,
       assert(cct->_conf->osd_find_best_info_ignore_history_les ||
 	     info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
+      info.last_interval_started = info.history.same_interval_since;
     }
   } else if (is_acting(pg_whoami)) {
     /* update last_epoch_started on acting replica to whatever the primary sent
      * unless it's smaller (could happen if we are going peered rather than
      * active, see doc/dev/osd_internals/last_epoch_started.rst) */
-    if (info.last_epoch_started < activation_epoch)
+    if (info.last_epoch_started < activation_epoch) {
       info.last_epoch_started = activation_epoch;
+      info.last_interval_started = info.history.same_interval_since;
+    }
   }
 
   auto &missing = pg_log.get_missing();
@@ -1648,6 +1655,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	pi.last_complete = info.last_update;
 	pi.set_last_backfill(hobject_t());
 	pi.last_epoch_started = info.last_epoch_started;
+	pi.last_interval_started = info.last_interval_started;
 	pi.history = info.history;
 	pi.hit_set = info.hit_set;
 	pi.stats.stats.clear();
@@ -2162,6 +2170,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   info.stats.stats_invalid = true;
   child->info.stats.stats_invalid = true;
   child->info.last_epoch_started = info.last_epoch_started;
+  child->info.last_interval_started = info.last_interval_started;
 
   child->snap_trimq = snap_trimq;
 
@@ -3058,6 +3067,9 @@ void PG::append_log(
    */
   if (info.last_epoch_started != info.history.last_epoch_started) {
     info.history.last_epoch_started = info.last_epoch_started;
+  }
+  if (info.last_interval_started != info.history.last_interval_started) {
+    info.history.last_interval_started = info.last_interval_started;
   }
   dout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
@@ -4793,6 +4805,7 @@ void PG::share_pg_info()
     pg_shard_t peer = *i;
     if (peer_info.count(peer)) {
       peer_info[peer].last_epoch_started = info.last_epoch_started;
+      peer_info[peer].last_interval_started = info.last_interval_started;
       peer_info[peer].history.merge(info.history);
     }
     MOSDPGInfo *m = new MOSDPGInfo(get_osdmap()->get_epoch());
@@ -7114,6 +7127,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
 
   // info.last_epoch_started is set during activate()
   pg->info.history.last_epoch_started = pg->info.last_epoch_started;
+  pg->info.history.last_interval_started = pg->info.last_interval_started;
   pg->dirty_info = true;
 
   pg->share_pg_info();

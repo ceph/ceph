@@ -2226,6 +2226,7 @@ struct pg_info_t {
   eversion_t last_update;      ///< last object version applied to store.
   eversion_t last_complete;    ///< last version pg was complete through.
   epoch_t last_epoch_started;  ///< last epoch at which this pg started on this osd
+  epoch_t last_interval_started; ///< first epoch of last_epoch_started interval
   
   version_t last_user_version; ///< last user object version applied to store
 
@@ -2247,6 +2248,7 @@ struct pg_info_t {
       l.last_update == r.last_update &&
       l.last_complete == r.last_complete &&
       l.last_epoch_started == r.last_epoch_started &&
+      l.last_interval_started == r.last_interval_started &&
       l.last_user_version == r.last_user_version &&
       l.log_tail == r.log_tail &&
       l.last_backfill == r.last_backfill &&
@@ -2258,14 +2260,18 @@ struct pg_info_t {
   }
 
   pg_info_t()
-    : last_epoch_started(0), last_user_version(0),
+    : last_epoch_started(0),
+      last_interval_started(0),
+      last_user_version(0),
       last_backfill(hobject_t::get_max()),
       last_backfill_bitwise(false)
   { }
   // cppcheck-suppress noExplicitConstructor
   pg_info_t(spg_t p)
     : pgid(p),
-      last_epoch_started(0), last_user_version(0),
+      last_epoch_started(0),
+      last_interval_started(0),
+      last_user_version(0),
       last_backfill(hobject_t::get_max()),
       last_backfill_bitwise(false)
   { }
@@ -2309,7 +2315,8 @@ inline ostream& operator<<(ostream& out, const pg_info_t& pgi)
     out << " lb " << pgi.last_backfill
 	<< (pgi.last_backfill_bitwise ? " (bitwise)" : " (NIBBLEWISE)");
   //out << " c " << pgi.epoch_created;
-  out << " local-les=" << pgi.last_epoch_started;
+  out << " local-lis/les=" << pgi.last_interval_started
+      << "/" << pgi.last_epoch_started;
   out << " n=" << pgi.stats.stats.sum.num_objects;
   out << " " << pgi.history
       << ")";
