@@ -2539,7 +2539,7 @@ void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
 
 void pg_history_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(7, 4, bl);
+  ENCODE_START(8, 4, bl);
   ::encode(epoch_created, bl);
   ::encode(last_epoch_started, bl);
   ::encode(last_epoch_clean, bl);
@@ -2553,12 +2553,14 @@ void pg_history_t::encode(bufferlist &bl) const
   ::encode(last_deep_scrub_stamp, bl);
   ::encode(last_clean_scrub_stamp, bl);
   ::encode(last_epoch_marked_full, bl);
+  ::encode(last_interval_started, bl);
+  ::encode(last_interval_clean, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_history_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 4, 4, bl);
   ::decode(epoch_created, bl);
   ::decode(last_epoch_started, bl);
   if (struct_v >= 3)
@@ -2583,6 +2585,21 @@ void pg_history_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 7) {
     ::decode(last_epoch_marked_full, bl);
   }
+  if (struct_v >= 8) {
+    ::decode(last_interval_started, bl);
+    ::decode(last_interval_clean, bl);
+  } else {
+    if (last_epoch_started >= same_interval_since) {
+      last_interval_started = same_interval_since;
+    } else {
+      last_interval_started = last_epoch_started; // best guess
+    }
+    if (last_epoch_clean >= same_interval_since) {
+      last_interval_clean = same_interval_since;
+    } else {
+      last_interval_clean = last_epoch_clean; // best guess
+    }
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2590,7 +2607,9 @@ void pg_history_t::dump(Formatter *f) const
 {
   f->dump_int("epoch_created", epoch_created);
   f->dump_int("last_epoch_started", last_epoch_started);
+  f->dump_int("last_interval_started", last_interval_started);
   f->dump_int("last_epoch_clean", last_epoch_clean);
+  f->dump_int("last_interval_clean", last_interval_clean);
   f->dump_int("last_epoch_split", last_epoch_split);
   f->dump_int("last_epoch_marked_full", last_epoch_marked_full);
   f->dump_int("same_up_since", same_up_since);
@@ -2609,7 +2628,9 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
   o.push_back(new pg_history_t);
   o.back()->epoch_created = 1;
   o.back()->last_epoch_started = 2;
+  o.back()->last_interval_started = 2;
   o.back()->last_epoch_clean = 3;
+  o.back()->last_interval_clean = 2;
   o.back()->last_epoch_split = 4;
   o.back()->same_up_since = 5;
   o.back()->same_interval_since = 6;
