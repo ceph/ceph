@@ -1700,10 +1700,7 @@ void Migrator::export_reverse(CDir *dir)
   }
   
   // unpin bounds
-  for (set<CDir*>::iterator p = bounds.begin();
-       p != bounds.end();
-       ++p) {
-    CDir *bd = *p;
+  for (const auto &bd : bounds) {
     bd->put(CDir::PIN_EXPORTBOUND);
     bd->state_clear(CDir::STATE_EXPORTBOUND);
   }
