@@ -1173,6 +1173,10 @@ public:
 		     Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);
   void repair_dirfrag_stats(CDir *dir);
+
+public:
+  /* Because exports may fail, this set lets us keep track of inodes that need exporting. */
+  std::set<CInode *> export_pin_queue;
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

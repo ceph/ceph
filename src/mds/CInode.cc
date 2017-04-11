@@ -247,6 +247,10 @@ ostream& operator<<(ostream& out, const CInode& in)
     in.print_pin_set(out);
   }
 
+  if (in.inode.export_pin != MDS_RANK_NONE) {
+    out << " export_pin=" << in.inode.export_pin;
+  }
+
   out << " " << &in;
   out << "]";
   return out;
@@ -1526,6 +1530,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
       ::encode(inode.ctime, bl);
       ::encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
       ::encode(inode.quota, bl);
+      ::encode(inode.export_pin, bl);
     }
     break;
   
@@ -1788,6 +1793,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       if (inode.ctime < tm) inode.ctime = tm;
       ::decode(inode.layout, p);
       ::decode(inode.quota, p);
+      ::decode(inode.export_pin, p);
+      maybe_export_pin();
     }
     break;
 
@@ -4381,5 +4388,78 @@ int64_t CInode::get_backtrace_pool() const
     // a pool
     assert(inode.layout.pool_id != -1);
     return inode.layout.pool_id;
+  }
+}
+
+void CInode::maybe_export_pin()
+{
+  if (g_conf->mds_bal_export_pin && is_dir() && !mdcache->export_pin_queue.count(this)) {
+    dout(20) << "maybe_export_pin " << *this << dendl;
+    mds_rank_t pin = get_projected_inode()->export_pin;
+    if (pin == MDS_RANK_NONE) {
+      /* Try to find farthest full auth parent fragment which is pinned
+       * elsewhere.  There cannot be a break in the authority chain of
+       * directories, otherwise this inode itself will not be exported.
+       */
+      CInode *auth_last = this; /* N.B. we may not be full auth for any fragments of this inode, but adding it to the queue is harmless. */
+      bool auth_barrier = false;
+      for (CDir *cd = get_projected_parent_dir(); cd && !cd->inode->is_base() && !cd->inode->is_system(); cd = cd->inode->get_projected_parent_dir()) {
+        if (cd->is_full_dir_auth() && !auth_barrier) {
+          auth_last = cd->inode;
+        } else {
+          auth_barrier = true;
+        }
+        pin = cd->inode->get_projected_inode()->export_pin;
+        if (pin != MDS_RANK_NONE) {
+          if (pin != mdcache->mds->get_nodeid()) {
+            dout(20) << "adding ancestor to export_pin_queue " << *auth_last << dendl;
+            mdcache->export_pin_queue.insert(auth_last);
+          } else {
+            break; /* it is correctly pinned here! */
+          }
+        }
+      }
+    } else {
+      if (pin != mdcache->mds->get_nodeid()) {
+        dout(20) << "adding to export_pin_queue " << *this << dendl;
+        mdcache->export_pin_queue.insert(this);
+      }
+    }
+  }
+}
+
+void CInode::set_export_pin(mds_rank_t rank)
+{
+  assert(is_dir());
+  assert(is_projected());
+  get_projected_inode()->export_pin = rank;
+  maybe_export_pin();
+}
+
+mds_rank_t CInode::get_export_pin(void) const
+{
+  /* An inode that is export pinned may not necessarily be a subtree root, we
+   * need to traverse the parents. A base or system inode cannot be pinned.
+   * N.B. inodes not yet linked into a dir (i.e. anonymous inodes) will not
+   * have a parent yet.
+   */
+  for (const CInode *in = this; !in->is_base() && !in->is_system() && in->get_projected_parent_dn(); in = in->get_projected_parent_dn()->dir->inode) {
+    mds_rank_t pin = in->get_projected_inode()->export_pin;
+    if (pin >= 0) {
+      return pin;
+    }
+  }
+  return MDS_RANK_NONE;
+}
+
+bool CInode::is_exportable(mds_rank_t dest) const
+{
+  mds_rank_t pin = get_export_pin();
+  if (pin == dest) {
+    return true;
+  } else if (pin >= 0) {
+    return false;
+  } else {
+    return true;
   }
 }

@@ -271,6 +271,9 @@ void MDCache::add_inode(CInode *in)
         g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
     exceeded_size_limit = true;
   }
+
+  /* This is the place where inodes are thrown in the cache, so check if the inode should be somewhere else: */
+  in->maybe_export_pin();
 }
 
 void MDCache::remove_inode(CInode *o) 
@@ -292,6 +295,8 @@ void MDCache::remove_inode(CInode *o)
   o->clear_scatter_dirty();
 
   o->item_open_file.remove_myself();
+
+  export_pin_queue.erase(o);
 
   // remove from inode map
   inode_map.erase(o->vino());    
@@ -351,6 +356,7 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
   in->inode.nlink = 1;
   in->inode.truncate_size = -1ull;
   in->inode.change_attr = 0;
+  in->inode.export_pin = MDS_RANK_NONE;
 
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {

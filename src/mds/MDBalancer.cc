@@ -67,8 +67,51 @@ int MDBalancer::proc_message(Message *m)
   return 0;
 }
 
+void MDBalancer::handle_export_pins(void)
+{
+  auto &q = mds->mdcache->export_pin_queue;
+  auto it = q.begin();
+  dout(20) << "export_pin_queue size=" << q.size() << dendl;
+  while (it != q.end()) {
+    auto current = it++;
+    CInode *in = *current;
+    assert(in->is_dir());
+    mds_rank_t export_pin = in->get_export_pin();
+    if (!in->is_exportable(export_pin)) {
+      dout(10) << "can no longer export " << *in << " because export pins have since changed" << dendl;
+      q.erase(current);
+      continue;
+    }
+    dout(10) << "exporting dirfrags of " << *in << " to " << export_pin << dendl;
+    bool has_auth = false;
+    list<frag_t> ls;
+    in->dirfragtree.get_leaves(ls);
+    for (const auto &fg : ls) {
+      CDir *cd = in->get_dirfrag(fg);
+      if (cd && cd->is_auth()) {
+        /* N.B. when we are no longer auth after exporting, this function will remove the inode from the queue */
+        mds->mdcache->migrator->export_dir(cd, export_pin);
+        has_auth = true;
+      }
+    }
+    if (!has_auth) {
+      dout(10) << "can no longer export " << *in << " because I am not auth for any dirfrags" << dendl;
+      q.erase(current);
+      continue;
+    }
+  }
 
-
+  set<CDir *> authsubs;
+  mds->mdcache->get_auth_subtrees(authsubs);
+  for (auto &cd : authsubs) {
+    mds_rank_t export_pin = cd->inode->get_export_pin();
+    dout(10) << "auth tree " << *cd << " export_pin=" << export_pin << dendl;
+    if (export_pin >= 0 && export_pin != mds->get_nodeid()) {
+      dout(10) << "exporting auth subtree " << *cd->inode << " to " << export_pin << dendl;
+      mds->mdcache->migrator->export_dir(cd, export_pin);
+    }
+  }
+}
 
 void MDBalancer::tick()
 {
@@ -77,6 +120,10 @@ void MDBalancer::tick()
   utime_t now = ceph_clock_now();
   utime_t elapsed = now;
   elapsed -= first;
+
+  if (g_conf->mds_bal_export_pin) {
+    handle_export_pins();
+  }
 
   // sample?
   if ((double)now - (double)last_sample > g_conf->mds_bal_sample_interval) {

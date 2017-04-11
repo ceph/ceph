@@ -809,6 +809,16 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
     return;
   }
 
+  if (!mds->is_stopping() && !dir->inode->is_exportable(dest)) {
+    dout(7) << "dir is export pinned" << dendl;
+    return;
+  }
+
+  if (dest == mds->get_nodeid() || !mds->mdsmap->is_up(dest)) {
+    dout(7) << "cannot export: dest " << dest << " is me or is not active" << dendl;
+    return;
+  }
+
   mds->hit_export_target(ceph_clock_now(), dest, -1);
 
   dir->auth_pin(this);
@@ -1531,7 +1541,17 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
       ::encode(d_type, exportbl);
       continue;
     }
-    
+
+    /* XXX The inode may be pinned to me (in->get_inode().export_pin) but it is
+     * not a subtree by the time I've found it here. So, keeping it is
+     * difficult as we've already notified the importer of the subtree bounds
+     * (MExportDirPrep).  Creating a new subtree for this pinned inode would
+     * probably require widespread changes and is not worth the effort since
+     * the importer will simply export this inode and its subtrees back to us
+     * (Migrator::decode_import_inode). This should be rare enough to not
+     * justify mucking with things here.
+     */
+
     // primary link
     // -- inode
     exportbl.append("I", 1);    // inode dentry
@@ -2904,7 +2924,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
   in->add_replica(oldauth, CInode::EXPORT_NONCE);
   if (in->is_replica(mds->get_nodeid()))
     in->remove_replica(mds->get_nodeid());
-  
+
+  in->maybe_export_pin();
 }
 
 void Migrator::decode_import_inode_caps(CInode *in, bool auth_cap,
