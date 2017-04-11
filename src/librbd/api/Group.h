@@ -27,6 +27,10 @@ struct Group {
 		       librados::IoCtx& image_ioctx, const char *image_name);
   static int image_remove(librados::IoCtx& group_ioctx, const char *group_name,
 		          librados::IoCtx& image_ioctx, const char *image_name);
+  static int image_remove_by_id(librados::IoCtx& group_ioctx,
+                                const char *group_name,
+                                librados::IoCtx& image_ioctx,
+                                const char *image_id);
   static int image_list(librados::IoCtx& group_ioctx, const char *group_name,
 		        std::vector<group_image_status_t> *images);
 

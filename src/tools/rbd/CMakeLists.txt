@@ -33,6 +33,7 @@ set(rbd_srcs
   action/Resize.cc
   action/Snap.cc
   action/Status.cc
+  action/Trash.cc
   action/Watch.cc)
 add_executable(rbd ${rbd_srcs}
   $<TARGET_OBJECTS:common_util_obj>

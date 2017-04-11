@@ -50,7 +50,7 @@ int execute_rebuild(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, snap_name, false,
+  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -100,7 +100,7 @@ int execute_check(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, snap_name, false,
+  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, false,
 				 &rados, &io_ctx, &image);
   if (r < 0) {
     return r;

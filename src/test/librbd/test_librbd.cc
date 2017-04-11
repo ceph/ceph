@@ -5503,3 +5503,137 @@ TEST_F(TestLibRBD, DefaultFeatures) {
     ASSERT_EQ(pair.second, features);
   }
 }
+
+TEST_F(TestLibRBD, TestTrashMoveAndPurge) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+
+  uint64_t size = 1 << 18;
+  int order = 12;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+  uint8_t old_format;
+  ASSERT_EQ(0, image.old_format(&old_format));
+
+  if (old_format) {
+    ASSERT_EQ(-EOPNOTSUPP, rbd.trash_move(ioctx, name.c_str(), 0));
+    image.close();
+    return;
+  }
+  std::string image_id;
+  ASSERT_EQ(0, image.get_id(&image_id));
+  image.close();
+
+  ASSERT_EQ(0, rbd.trash_move(ioctx, name.c_str(), 0));
+
+  std::vector<std::string> images;
+  ASSERT_EQ(0, rbd.list(ioctx, images));
+  for (const auto& image : images) {
+    ASSERT_TRUE(image != name);
+  }
+
+  std::vector<librbd::trash_image_info_t> entries;
+  ASSERT_EQ(0, rbd.trash_list(ioctx, entries));
+  ASSERT_FALSE(entries.empty());
+  ASSERT_EQ(entries.begin()->id, image_id);
+
+  entries.clear();
+  PrintProgress pp;
+  ASSERT_EQ(0, rbd.trash_remove_with_progress(ioctx, image_id.c_str(),
+                                              false, pp));
+  ASSERT_EQ(0, rbd.trash_list(ioctx, entries));
+  ASSERT_TRUE(entries.empty());
+}
+
+TEST_F(TestLibRBD, TestTrashMoveAndPurgeNonExpiredDelay) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+
+  uint64_t size = 1 << 18;
+  int order = 12;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+  uint8_t old_format;
+  ASSERT_EQ(0, image.old_format(&old_format));
+
+  if (old_format) {
+    ASSERT_EQ(-EOPNOTSUPP, rbd.trash_move(ioctx, name.c_str(), 0));
+    image.close();
+    return;
+  }
+  std::string image_id;
+  ASSERT_EQ(0, image.get_id(&image_id));
+  image.close();
+
+  ASSERT_EQ(0, rbd.trash_move(ioctx, name.c_str(), 100));
+
+  PrintProgress pp;
+  ASSERT_EQ(-EPERM, rbd.trash_remove_with_progress(ioctx, image_id.c_str(),
+                                                   false, pp));
+
+  PrintProgress pp2;
+  ASSERT_EQ(0, rbd.trash_remove_with_progress(ioctx, image_id.c_str(),
+                                              true, pp2));
+}
+
+TEST_F(TestLibRBD, TestTrashMoveAndRestore) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+
+  uint64_t size = 1 << 18;
+  int order = 12;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+  uint8_t old_format;
+  ASSERT_EQ(0, image.old_format(&old_format));
+
+  if (old_format) {
+    ASSERT_EQ(-EOPNOTSUPP, rbd.trash_move(ioctx, name.c_str(), 0));
+    image.close();
+    return;
+  }
+  std::string image_id;
+  ASSERT_EQ(0, image.get_id(&image_id));
+  image.close();
+
+  ASSERT_EQ(0, rbd.trash_move(ioctx, name.c_str(), 10));
+
+  std::vector<std::string> images;
+  ASSERT_EQ(0, rbd.list(ioctx, images));
+  for (const auto& image : images) {
+    ASSERT_TRUE(image != name);
+  }
+
+  std::vector<librbd::trash_image_info_t> entries;
+  ASSERT_EQ(0, rbd.trash_list(ioctx, entries));
+  ASSERT_FALSE(entries.empty());
+  ASSERT_EQ(entries.begin()->id, image_id);
+
+  images.clear();
+  ASSERT_EQ(0, rbd.trash_restore(ioctx, image_id.c_str(), ""));
+  ASSERT_EQ(0, rbd.list(ioctx, images));
+  ASSERT_FALSE(images.empty());
+  bool found = false;
+  for (const auto& image : images) {
+    if (image == name) {
+      found = true;
+      break;
+    }
+  }
+  ASSERT_TRUE(found);
+}

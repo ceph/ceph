@@ -227,7 +227,7 @@ static void print_error_description(const char *poolname, const char *imgname,
   if (maperrno == -ENOENT)
     goto done;
 
-  r = utils::init_and_open_image(poolname, imgname, snapname,
+  r = utils::init_and_open_image(poolname, imgname, "", snapname,
 				 true, &rados, &ioctx, &image);
   if (r < 0)
     goto done;

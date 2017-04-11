@@ -96,6 +96,9 @@ int extract_group_spec(const std::string &spec,
 		       std::string *pool_name,
 		       std::string *group_name);
 
+int extract_image_id_spec(const std::string &spec, std::string *pool_name,
+                          std::string *image_id);
+
 std::string get_positional_argument(
     const boost::program_options::variables_map &vm, size_t index);
 
@@ -109,6 +112,13 @@ int get_pool_image_snapshot_names(
     SnapshotPresence snapshot_presence, SpecValidation spec_validation,
     bool image_required = true);
 
+int get_pool_snapshot_names(const boost::program_options::variables_map &vm,
+                            argument_types::ArgumentModifier mod,
+                            size_t *spec_arg_index, std::string *pool_name,
+                            std::string *snap_name,
+                            SnapshotPresence snapshot_presence,
+                            SpecValidation spec_validation);
+
 int get_special_pool_group_names(const boost::program_options::variables_map &vm,
 				 size_t *arg_index,
 				 std::string *group_pool_name,
@@ -118,6 +128,10 @@ int get_special_pool_image_names(const boost::program_options::variables_map &vm
 				 size_t *arg_index,
 				 std::string *image_pool_name,
 				 std::string *image_name);
+
+int get_pool_image_id(const boost::program_options::variables_map &vm,
+		      size_t *arg_index, std::string *image_pool_name,
+		      std::string *image_id);
 
 int get_pool_group_names(const boost::program_options::variables_map &vm,
 			 argument_types::ArgumentModifier mod,
@@ -161,8 +175,12 @@ int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
 int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
                bool read_only, librbd::Image *image);
 
+int open_image_by_id(librados::IoCtx &io_ctx, const std::string &image_id,
+                     bool read_only, librbd::Image *image);
+
 int init_and_open_image(const std::string &pool_name,
                         const std::string &image_name,
+                        const std::string &image_id,
                         const std::string &snap_name, bool read_only,
                         librados::Rados *rados, librados::IoCtx *io_ctx,
                         librbd::Image *image);
@@ -175,6 +193,10 @@ bool calc_sparse_extent(const bufferptr &bp,
                         size_t *write_offset,
                         size_t *write_length,
                         size_t *offset);
+
+bool check_if_image_spec_present(const boost::program_options::variables_map &vm,
+                                 argument_types::ArgumentModifier mod,
+                                 size_t spec_arg_index);
 
 std::string image_id(librbd::Image& image);
 

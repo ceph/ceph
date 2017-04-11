@@ -43,6 +43,7 @@ static const std::string SNAPSHOT_SPEC("snap-spec");
 static const std::string IMAGE_OR_SNAPSHOT_SPEC("image-or-snap-spec");
 static const std::string JOURNAL_SPEC("journal-spec");
 static const std::string PATH_NAME("path-name");
+static const std::string IMAGE_ID("image-id");
 
 // optional arguments
 static const std::string CONFIG_PATH("conf");
@@ -81,6 +82,8 @@ static const std::string FORMAT("format");
 static const std::string PRETTY_FORMAT("pretty-format");
 static const std::string VERBOSE("verbose");
 static const std::string NO_ERROR("no-error");
+
+static const std::string DELAY("delay");
 
 static const std::string LIMIT("limit");
 
@@ -135,6 +138,9 @@ void add_pool_option(boost::program_options::options_description *opt,
 void add_image_option(boost::program_options::options_description *opt,
                       ArgumentModifier modifier,
                       const std::string &desc_suffix = "");
+
+void add_image_id_option(boost::program_options::options_description *opt,
+                         const std::string &desc_suffix = "");
 
 void add_group_option(boost::program_options::options_description *opt,
 		      ArgumentModifier modifier,

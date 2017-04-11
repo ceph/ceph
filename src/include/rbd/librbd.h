@@ -183,6 +183,19 @@ enum {
   RBD_IMAGE_OPTION_DATA_POOL = 10
 };
 
+typedef enum {
+  RBD_TRASH_IMAGE_SOURCE_USER = 0,
+  RBD_TRASH_IMAGE_SOURCE_MIRRORING = 1
+} rbd_trash_image_source_t;
+
+typedef struct {
+  char *id;
+  char *name;
+  rbd_trash_image_source_t source;
+  time_t deletion_time;
+  time_t deferment_end_time;
+} rbd_trash_image_info_t;
+
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);
 CEPH_RBD_API void rbd_image_options_destroy(rbd_image_options_t opts);
 CEPH_RBD_API int rbd_image_options_set_string(rbd_image_options_t opts,
@@ -242,6 +255,19 @@ CEPH_RBD_API int rbd_remove(rados_ioctx_t io, const char *name);
 CEPH_RBD_API int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
 			                  librbd_progress_fn_t cb,
                                           void *cbdata);
+CEPH_RBD_API int rbd_trash_move(rados_ioctx_t io, const char *name,
+                                uint64_t delay);
+CEPH_RBD_API int rbd_trash_list(rados_ioctx_t io,
+                                rbd_trash_image_info_t *trash_entries,
+                                size_t *num_entries);
+CEPH_RBD_API void rbd_trash_list_cleanup(rbd_trash_image_info_t *trash_entries,
+                                         size_t num_entries);
+CEPH_RBD_API int rbd_trash_remove(rados_ioctx_t io, const char *id, bool force);
+CEPH_RBD_API int rbd_trash_remove_with_progress(rados_ioctx_t io, const char *id,
+                                                bool force, librbd_progress_fn_t cb,
+                                                void *cbdata);
+CEPH_RBD_API int rbd_trash_restore(rados_ioctx_t io, const char *id,
+                                   const char *name);
 CEPH_RBD_API int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname,
                             const char *destname);
 
@@ -278,10 +304,16 @@ CEPH_RBD_API int rbd_mirror_image_status_summary(rados_ioctx_t io_ctx,
 
 CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
                           rbd_image_t *image, const char *snap_name);
+CEPH_RBD_API int rbd_open_by_id(rados_ioctx_t io, const char *id,
+                                rbd_image_t *image, const char *snap_name);
 
 CEPH_RBD_API int rbd_aio_open(rados_ioctx_t io, const char *name,
 			      rbd_image_t *image, const char *snap_name,
 			      rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_open_by_id(rados_ioctx_t io, const char *id,
+                                    rbd_image_t *image, const char *snap_name,
+                                    rbd_completion_t c);
+
 /**
  * Open an image in read-only mode.
  *
@@ -303,9 +335,14 @@ CEPH_RBD_API int rbd_aio_open(rados_ioctx_t io, const char *name,
  */
 CEPH_RBD_API int rbd_open_read_only(rados_ioctx_t io, const char *name,
                                     rbd_image_t *image, const char *snap_name);
+CEPH_RBD_API int rbd_open_by_id_read_only(rados_ioctx_t io, const char *id,
+                                          rbd_image_t *image, const char *snap_name);
 CEPH_RBD_API int rbd_aio_open_read_only(rados_ioctx_t io, const char *name,
 					rbd_image_t *image, const char *snap_name,
 					rbd_completion_t c);
+CEPH_RBD_API int rbd_aio_open_by_id_read_only(rados_ioctx_t io, const char *id,
+                                              rbd_image_t *image, const char *snap_name,
+                                              rbd_completion_t c);
 CEPH_RBD_API int rbd_close(rbd_image_t image);
 CEPH_RBD_API int rbd_aio_close(rbd_image_t image, rbd_completion_t c);
 CEPH_RBD_API int rbd_resize(rbd_image_t image, uint64_t size);
@@ -790,6 +827,9 @@ CEPH_RBD_API int rbd_group_image_add(
 CEPH_RBD_API int rbd_group_image_remove(
 				rados_ioctx_t group_p, const char *group_name,
 				rados_ioctx_t image_p, const char *image_name);
+CEPH_RBD_API int rbd_group_image_remove_by_id(
+				rados_ioctx_t group_p, const char *group_name,
+				rados_ioctx_t image_p, const char *image_id);
 CEPH_RBD_API int rbd_group_image_list(
 				  rados_ioctx_t group_p, const char *group_name,
 				  rbd_group_image_status_t *images,
