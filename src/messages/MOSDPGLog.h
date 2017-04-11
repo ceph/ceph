@@ -71,6 +71,7 @@ public:
     // swapped out by OSD code.
     out << "pg_log(" << info.pgid << " epoch " << epoch
 	<< " log " << log
+	<< " pi " << past_intervals
 	<< " query_epoch " << query_epoch << ")";
   }
 
