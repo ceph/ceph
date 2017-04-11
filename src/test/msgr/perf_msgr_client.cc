@@ -19,10 +19,10 @@
 #include <string>
 #include <unistd.h>
 #include <iostream>
+#include <atomic>
 
 using namespace std;
 
-#include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "common/Cycles.h"
@@ -67,7 +67,7 @@ class MessengerClient {
     Messenger *msgr;
     int concurrent;
     ConnectionRef conn;
-    atomic_t client_inc;
+    std::atomic<unsigned> client_inc;
     object_t oid;
     object_locator_t oloc;
     pg_t pgid;
@@ -98,7 +98,7 @@ class MessengerClient {
 	hobject_t hobj(oid, oloc.key, CEPH_NOSNAP, pgid.ps(), pgid.pool(),
 		       oloc.nspace);
 	spg_t spgid(pgid);
-        MOSDOp *m = new MOSDOp(client_inc.read(), 0, hobj, spgid, 0, 0, 0);
+        MOSDOp *m = new MOSDOp(client_inc.load(), 0, hobj, spgid, 0, 0, 0);
         m->write(0, msg_len, data);
         inflight++;
         conn->send_message(m);

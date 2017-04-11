@@ -39,9 +39,11 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include <atomic>
+
 using namespace Hypertable;
 
-atomic_t CephBroker::ms_next_fd = ATOMIC_INIT(0);
+std::atomic<unsigned> CephBroker::ms_next_fd = ATOMIC_VAR_INIT;
 
 /* A thread-safe version of strerror */
 static std::string cpp_strerror(int err)

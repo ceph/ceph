@@ -19,6 +19,8 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <atomic>
+
 #include <pthread.h>
 #include <errno.h>
 
@@ -351,7 +353,7 @@ void librados::RadosClient::shutdown()
   }
 
   bool need_objecter = false;
-  if (objecter && objecter->initialized.read()) {
+  if (objecter && objecter->initialized.load()) {
     need_objecter = true;
   }
 

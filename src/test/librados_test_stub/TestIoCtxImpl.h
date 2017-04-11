@@ -5,11 +5,12 @@
 #define CEPH_TEST_IO_CTX_IMPL_H
 
 #include "include/rados/librados.hpp"
-#include "include/atomic.h"
 #include "include/Context.h"
 #include "common/snap_types.h"
 #include <boost/function.hpp>
+
 #include <list>
+#include <atomic>
 
 namespace librados {
 
@@ -30,7 +31,7 @@ public:
 
   ObjectOperations ops;
 private:
-  atomic_t m_refcount;
+  std::atomic<unsigned> m_refcount;
 };
 
 class TestIoCtxImpl {
@@ -179,8 +180,8 @@ private:
   std::string m_pool_name;
   snap_t m_snap_seq;
   SnapContext m_snapc;
-  atomic_t m_refcount;
-  atomic_t m_pending_ops;
+  std::atomic<unsigned> m_refcount;
+  std::atomic<unsigned> m_pending_ops;
 
   void handle_aio_notify_complete(AioCompletionImpl *aio_comp, int r);
 };

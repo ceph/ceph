@@ -76,13 +76,13 @@ bool HeartbeatMap::_check(const heartbeat_handle_d *h, const char *who, time_t n
   bool healthy = true;
   time_t was;
 
-  was = h->timeout.read();
+  was = h->timeout.load();
   if (was && was < now) {
     ldout(m_cct, 1) << who << " '" << h->name << "'"
 		    << " had timed out after " << h->grace << dendl;
     healthy = false;
   }
-  was = h->suicide_timeout.read();
+  was = h->suicide_timeout.load();
   if (was && was < now) {
     ldout(m_cct, 1) << who << " '" << h->name << "'"
 		    << " had suicide timed out after " << h->suicide_grace << dendl;
@@ -100,13 +100,13 @@ void HeartbeatMap::reset_timeout(heartbeat_handle_d *h, time_t grace, time_t sui
   time_t now = time(NULL);
   _check(h, "reset_timeout", now);
 
-  h->timeout.set(now + grace);
+  h->timeout = now + grace;
   h->grace = grace;
 
   if (suicide_grace)
-    h->suicide_timeout.set(now + suicide_grace);
+    h->suicide_timeout = now + suicide_grace;
   else
-    h->suicide_timeout.set(0);
+    h->suicide_timeout = 0;
   h->suicide_grace = suicide_grace;
 }
 
@@ -115,8 +115,8 @@ void HeartbeatMap::clear_timeout(heartbeat_handle_d *h)
   ldout(m_cct, 20) << "clear_timeout '" << h->name << "'" << dendl;
   time_t now = time(NULL);
   _check(h, "clear_timeout", now);
-  h->timeout.set(0);
-  h->suicide_timeout.set(0);
+  h->timeout = 0;
+  h->suicide_timeout = 0;
 }
 
 bool HeartbeatMap::is_healthy()
@@ -149,8 +149,8 @@ bool HeartbeatMap::is_healthy()
   }
   m_rwlock.put_read();
 
-  m_unhealthy_workers.set(unhealthy);
-  m_total_workers.set(total);
+  m_unhealthy_workers = unhealthy;
+  m_total_workers = total;
 
   ldout(m_cct, 20) << "is_healthy = " << (healthy ? "healthy" : "NOT HEALTHY")
     << ", total workers: " << total << ", number of unhealthy: " << unhealthy << dendl;
@@ -159,12 +159,12 @@ bool HeartbeatMap::is_healthy()
 
 int HeartbeatMap::get_unhealthy_workers() const
 {
-  return m_unhealthy_workers.read();
+  return m_unhealthy_workers.load();
 }
 
 int HeartbeatMap::get_total_workers() const
 {
-  return m_total_workers.read();
+  return m_total_workers.load();
 }
 
 void HeartbeatMap::check_touch_file()

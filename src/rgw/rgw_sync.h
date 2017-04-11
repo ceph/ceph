@@ -8,6 +8,8 @@
 #include "include/stringify.h"
 #include "common/RWLock.h"
 
+#include <atomic>
+
 #define ERROR_LOGGER_SHARDS 32
 #define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
 
@@ -65,7 +67,7 @@ class RGWSyncErrorLogger {
   vector<string> oids;
   int num_shards;
 
-  atomic_t counter;
+  std::atomic<unsigned> counter;
 public:
   RGWSyncErrorLogger(RGWRados *_store, const string &oid_prefix, int _num_shards);
   RGWCoroutine *log_error_cr(const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message);
@@ -196,7 +198,7 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   void init_sync_env(RGWMetaSyncEnv *env);
   int store_sync_info();
 
-  atomic_t going_down;
+  std::atomic<unsigned> going_down;
 
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,

@@ -215,7 +215,7 @@ Mirror::~Mirror()
 
 void Mirror::handle_signal(int signum)
 {
-  m_stopping.set(1);
+  m_stopping = 1;
   {
     Mutex::Locker l(m_lock);
     m_cond.Signal();
@@ -250,7 +250,7 @@ int Mirror::init()
 void Mirror::run()
 {
   dout(20) << "enter" << dendl;
-  while (!m_stopping.read()) {
+  while (!m_stopping.load()) {
     m_local_cluster_watcher->refresh_pools();
     Mutex::Locker l(m_lock);
     if (!m_manual_stop) {
@@ -276,7 +276,7 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
 
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping.load()) {
     return;
   }
 
@@ -316,7 +316,7 @@ void Mirror::start()
   dout(20) << "enter" << dendl;
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping.load()) {
     return;
   }
 
@@ -333,7 +333,7 @@ void Mirror::stop()
   dout(20) << "enter" << dendl;
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping.load()) {
     return;
   }
 
@@ -350,7 +350,7 @@ void Mirror::restart()
   dout(20) << "enter" << dendl;
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping.load()) {
     return;
   }
 
@@ -367,7 +367,7 @@ void Mirror::flush()
   dout(20) << "enter" << dendl;
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read() || m_manual_stop) {
+  if (m_stopping.load() || m_manual_stop) {
     return;
   }
 
@@ -382,7 +382,7 @@ void Mirror::release_leader()
   dout(20) << "enter" << dendl;
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping.load()) {
     return;
   }
 

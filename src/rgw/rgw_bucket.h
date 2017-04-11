@@ -20,6 +20,7 @@
 #include "common/ceph_time.h"
 #include "rgw_formats.h"
 
+#include <atomic>
 
 using namespace std;
 
@@ -397,7 +398,7 @@ class RGWDataChangesLog {
   RWLock modified_lock;
   map<int, set<string> > modified_shards;
 
-  atomic_t down_flag;
+  std::atomic<unsigned> down_flag;
 
   struct ChangeStatus {
     real_time cur_expiration;

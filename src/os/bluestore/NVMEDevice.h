@@ -17,19 +17,19 @@
 #ifndef CEPH_OS_BLUESTORE_NVMEDEVICE
 #define CEPH_OS_BLUESTORE_NVMEDEVICE
 
-#include <queue>
-#include <map>
-#include <limits>
-
 // since _Static_assert introduced in c11
 #define _Static_assert static_assert
 
 
-#include "include/atomic.h"
 #include "include/interval_set.h"
 #include "common/ceph_time.h"
 #include "common/Mutex.h"
 #include "BlockDevice.h"
+
+#include <queue>
+#include <map>
+#include <limits>
+#include <atomic>
 
 enum class IOCommand {
   READ_COMMAND,

@@ -52,6 +52,8 @@
 #include "include/stringify.h"
 #include "include/xlist.h"
 
+#include <atomic>
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -121,11 +123,12 @@ public:
   {}
 
 private:
-  atomic_t terminated;
+  std::atomic<unsigned> terminated;
 
   void shutdown()
   {
-    if (terminated.compare_and_swap(false, true)) {
+    unsigned expected = false;
+    if (terminated.compare_exchange_weak(expected, true)) {
       ::shutdown(fd, SHUT_RDWR);
 
       Mutex::Locker l(lock);
@@ -172,7 +175,7 @@ private:
   IOContext *wait_io_finish()
   {
     Mutex::Locker l(lock);
-    while(io_finished.empty() && !terminated.read())
+    while(io_finished.empty() && !terminated.load())
       cond.Wait(lock);
 
     if (io_finished.empty())
@@ -234,7 +237,7 @@ private:
 
   void reader_entry()
   {
-    while (!terminated.read()) {
+    while (!terminated.load()) {
       ceph::unique_ptr<IOContext> ctx(new IOContext());
       ctx->server = this;
 
@@ -309,7 +312,7 @@ private:
 
   void writer_entry()
   {
-    while (!terminated.read()) {
+    while (!terminated.load()) {
       dout(20) << __func__ << ": waiting for io request" << dendl;
       ceph::unique_ptr<IOContext> ctx(wait_io_finish());
       if (!ctx) {

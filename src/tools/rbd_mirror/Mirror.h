@@ -7,10 +7,10 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <atomic>
 
 #include "common/ceph_context.h"
 #include "common/Mutex.h"
-#include "include/atomic.h"
 #include "include/rados/librados.hpp"
 #include "ClusterWatcher.h"
 #include "Replayer.h"
@@ -67,7 +67,7 @@ private:
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<> m_image_sync_throttler;
   std::map<PoolPeer, std::unique_ptr<Replayer> > m_replayers;
-  atomic_t m_stopping;
+  std::atomic<unsigned> m_stopping;
   bool m_manual_stop = false;
   MirrorAdminSocketHook *m_asok_hook;
 };

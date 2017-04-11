@@ -316,12 +316,12 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
   ss << name << " thread " << name;
   heartbeat_handle_d *hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
 
-  while (!stop_threads.read()) {
-    if(pause_threads.read()) {
+  while (!stop_threads.load()) {
+    if(pause_threads.load()) {
       shardedpool_lock.Lock();
       ++num_paused;
       wait_cond.Signal();
-      while(pause_threads.read()) {
+      while(pause_threads.load()) {
        cct->get_heartbeat_map()->reset_timeout(
 	 hb,
 	 wq->timeout_interval, wq->suicide_interval);
@@ -332,12 +332,12 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
       --num_paused;
       shardedpool_lock.Unlock();
     }
-    if (drain_threads.read()) {
+    if (drain_threads.load()) {
       shardedpool_lock.Lock();
       if (wq->is_shard_empty(thread_index)) {
         ++num_drained;
         wait_cond.Signal();
-        while (drain_threads.read()) {
+        while (drain_threads.load()) {
 	  cct->get_heartbeat_map()->reset_timeout(
 	    hb,
 	    wq->timeout_interval, wq->suicide_interval);
@@ -390,7 +390,7 @@ void ShardedThreadPool::start()
 void ShardedThreadPool::stop()
 {
   ldout(cct,10) << "stop" << dendl;
-  stop_threads.set(1);
+  stop_threads = 1;
   assert(wq != NULL);
   wq->return_waiting_threads();
   for (vector<WorkThreadSharded*>::iterator p = threads_shardedpool.begin();
@@ -407,7 +407,7 @@ void ShardedThreadPool::pause()
 {
   ldout(cct,10) << "pause" << dendl;
   shardedpool_lock.Lock();
-  pause_threads.set(1);
+  pause_threads = 1;
   assert(wq != NULL);
   wq->return_waiting_threads();
   while (num_threads != num_paused){
@@ -421,7 +421,7 @@ void ShardedThreadPool::pause_new()
 {
   ldout(cct,10) << "pause_new" << dendl;
   shardedpool_lock.Lock();
-  pause_threads.set(1);
+  pause_threads = 1;
   assert(wq != NULL);
   wq->return_waiting_threads();
   shardedpool_lock.Unlock();
@@ -432,7 +432,7 @@ void ShardedThreadPool::unpause()
 {
   ldout(cct,10) << "unpause" << dendl;
   shardedpool_lock.Lock();
-  pause_threads.set(0);
+  pause_threads = 0;
   shardedpool_cond.Signal();
   shardedpool_lock.Unlock();
   ldout(cct,10) << "unpaused" << dendl;
@@ -442,13 +442,13 @@ void ShardedThreadPool::drain()
 {
   ldout(cct,10) << "drain" << dendl;
   shardedpool_lock.Lock();
-  drain_threads.set(1);
+  drain_threads = 1;
   assert(wq != NULL);
   wq->return_waiting_threads();
   while (num_threads != num_drained) {
     wait_cond.Wait(shardedpool_lock);
   }
-  drain_threads.set(0);
+  drain_threads = 0;
   shardedpool_cond.Signal();
   shardedpool_lock.Unlock();
   ldout(cct,10) << "drained" << dendl;

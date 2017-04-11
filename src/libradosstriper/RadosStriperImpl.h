@@ -15,10 +15,6 @@
 #ifndef CEPH_LIBRADOSSTRIPER_RADOSSTRIPERIMPL_H
 #define CEPH_LIBRADOSSTRIPER_RADOSSTRIPERIMPL_H
 
-#include <string>
-
-#include "include/atomic.h"
-
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/radosstriper/libradosstriper.h"
@@ -27,6 +23,9 @@
 #include "librados/IoCtxImpl.h"
 #include "librados/AioCompletionImpl.h"
 #include "common/RefCountedObj.h"
+
+#include <atomic>
+#include <string>
 
 struct libradosstriper::RadosStriperImpl {
 

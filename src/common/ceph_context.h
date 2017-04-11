@@ -15,18 +15,18 @@
 #ifndef CEPH_CEPHCONTEXT_H
 #define CEPH_CEPHCONTEXT_H
 
-#include <iosfwd>
-#include <stdint.h>
-#include <string>
-#include <set>
-
 #include "include/assert.h"
 #include "include/buffer_fwd.h"
-#include "include/atomic.h"
 #include "common/cmdparse.h"
 #include "include/Spinlock.h"
 #include "crush/CrushLocation.h"
 #include <boost/noncopyable.hpp>
+
+#include <iosfwd>
+#include <stdint.h>
+#include <atomic>
+#include <string>
+#include <set>
 
 class AdminSocket;
 class CephContextServiceThread;
@@ -62,10 +62,10 @@ public:
   // ref count!
 private:
   ~CephContext();
-  atomic_t nref;
+  std::atomic<unsigned> nref;
 public:
   CephContext *get() {
-    nref.inc();
+    nref++;
     return this;
   }
   void put();

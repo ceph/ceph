@@ -5,7 +5,6 @@
 #define CEPH_JOURNAL_JOURNAL_RECORDER_H
 
 #include "include/int_types.h"
-#include "include/atomic.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
@@ -13,8 +12,10 @@
 #include "journal/FutureImpl.h"
 #include "journal/JournalMetadata.h"
 #include "journal/ObjectRecorder.h"
+
 #include <map>
 #include <string>
+#include <atomic>
 
 class SafeTimer;
 

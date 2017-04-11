@@ -25,8 +25,9 @@ extern "C" {
 #include "XioSubmit.h"
 #include "msg/Connection.h"
 #include "msg/Messenger.h"
-#include "include/atomic.h"
 #include "auth/AuthSessionHandler.h"
+
+#include <atomic>
 
 #define XIO_ALL_FEATURES (CEPH_FEATURES_ALL)
 
@@ -65,13 +66,13 @@ public:
 private:
   XioConnection::type xio_conn_type;
   XioPortal *portal;
-  atomic_t connected;
+  std::atomic<unsigned> connected;
   entity_inst_t peer;
   struct xio_session *session;
   struct xio_connection	*conn;
   pthread_spinlock_t sp;
-  atomic_t send;
-  atomic_t recv;
+  std::atomic<unsigned> send;
+  std::atomic<unsigned> recv;
   uint32_t n_reqs; // Accelio-initiated reqs in progress (!counting partials)
   uint32_t magic;
   uint32_t special_handling;
@@ -94,7 +95,7 @@ private:
     uint32_t reconnects;
     uint32_t connect_seq, peer_global_seq;
     uint64_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
-    atomic64_t out_seq; // atomic<uint32_t>
+    std::atomic<int64_t> out_seq; // atomic<uint32_t>
 
     lifecycle() : state(lifecycle::INIT), reconnects(0), connect_seq(0),
 		  peer_global_seq(0), in_seq(0), out_seq_acked(0), 
@@ -134,13 +135,13 @@ private:
     XioConnection *xcon;
     uint32_t protocol_version;
 
-    atomic_t session_state;
-    atomic_t startup_state;
+    std::atomic<unsigned> session_state;
+    std::atomic<unsigned> startup_state;
 
     uint32_t reconnects;
     uint32_t connect_seq, global_seq, peer_global_seq;
-    uint64_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
-    atomic64_t out_seq; // atomic<uint64_t>
+    uint64_t in_seq, out_seq_acked; 
+    std::atomic<int64_t> out_seq; 
 
     uint32_t flags;
 
@@ -340,7 +341,7 @@ typedef boost::intrusive_ptr<XioConnection> XioConnectionRef;
 class XioLoopbackConnection : public Connection
 {
 private:
-  atomic64_t seq;
+  std::atomic<int64_t> seq;
 public:
   explicit XioLoopbackConnection(Messenger *m) : Connection(m->cct, m), seq(0)
     {

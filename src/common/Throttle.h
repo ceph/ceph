@@ -6,13 +6,14 @@
 
 #include "Mutex.h"
 #include "Cond.h"
+#include "include/Context.h"
+
 #include <list>
 #include <map>
+#include <atomic>
 #include <iostream>
 #include <condition_variable>
 #include <chrono>
-#include "include/atomic.h"
-#include "include/Context.h"
 
 class CephContext;
 class PerfCounters;
@@ -29,7 +30,7 @@ class Throttle {
   CephContext *cct;
   const std::string name;
   PerfCounters *logger;
-  ceph::atomic_t count, max;
+  std::atomic<unsigned> count, max;
   Mutex lock;
   list<Cond*> cond;
   const bool use_perf;
@@ -41,8 +42,8 @@ public:
 private:
   void _reset_max(int64_t m);
   bool _should_wait(int64_t c) const {
-    int64_t m = max.read();
-    int64_t cur = count.read();
+    int64_t m = max.load();
+    int64_t cur = count.load();
     return
       m &&
       ((c <= m && cur + c > m) || // normally stay under max
@@ -57,20 +58,20 @@ public:
    * @returns the number of taken slots
    */
   int64_t get_current() const {
-    return count.read();
+    return count.load();
   }
 
   /**
    * get the max number of slots
    * @returns the max number of slots
    */
-  int64_t get_max() const { return max.read(); }
+  int64_t get_max() const { return max.load(); }
 
   /**
    * return true if past midpoint
    */
   bool past_midpoint() const {
-    return count.read() >= max.read() / 2;
+    return count.load() >= max.load() / 2;
   }
 
   /**

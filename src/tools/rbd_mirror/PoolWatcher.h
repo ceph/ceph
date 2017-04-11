@@ -38,8 +38,7 @@ public:
     virtual ~Listener() {
     }
 
-    virtual void handle_update(const std::string &mirror_uuid,
-                               const ImageIds &added_image_ids,
+    virtual void handle_update(const ImageIds &added_image_ids,
                                const ImageIds &removed_image_ids) = 0;
   };
 
@@ -72,9 +71,6 @@ private:
    * REFRESH_IMAGES                       |
    *    |                                 |
    *    |/----------------------------\   |
-   *    |                             |   |
-   *    v                             |   |
-   * GET_MIRROR_UUID                  |   |
    *    |                             |   |
    *    v                             |   |
    * NOTIFY_LISTENER                  |   |
@@ -138,15 +134,12 @@ private:
   Context *m_on_init_finish = nullptr;
 
   ImageIds m_image_ids;
-  std::string m_mirror_uuid;
 
   bool m_pending_updates = false;
   bool m_notify_listener_in_progress = false;
   ImageIds m_pending_image_ids;
   ImageIds m_pending_added_image_ids;
   ImageIds m_pending_removed_image_ids;
-
-  std::string m_pending_mirror_uuid;
 
   MirroringWatcher *m_mirroring_watcher;
 
@@ -157,7 +150,6 @@ private:
   bool m_shutting_down = false;
   bool m_image_ids_invalid = true;
   bool m_refresh_in_progress = false;
-  bool m_deferred_refresh = false;
 
   UpdatedImages m_updated_images;
   IdToUpdatedImages m_id_to_updated_images;
@@ -171,10 +163,7 @@ private:
   void handle_refresh_images(int r);
 
   void schedule_refresh_images(double interval);
-  void process_refresh_images();
-
-  void get_mirror_uuid();
-  void handle_get_mirror_uuid(int r);
+  void processs_refresh_images();
 
   void handle_rewatch_complete(int r);
   void handle_image_updated(const std::string &remote_image_id,

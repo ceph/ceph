@@ -21,12 +21,12 @@
 #include "include/xlist.h"
 
 #include <map>
+#include <atomic>
 using namespace std;
 #include "include/unordered_map.h"
 #include "include/unordered_set.h"
 
 #include "common/Mutex.h"
-#include "include/atomic.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 

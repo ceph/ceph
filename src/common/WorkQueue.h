@@ -623,9 +623,9 @@ class ShardedThreadPool {
   Cond shardedpool_cond;
   Cond wait_cond;
   uint32_t num_threads;
-  atomic_t stop_threads;
-  atomic_t pause_threads;
-  atomic_t drain_threads;
+  std::atomic<unsigned> stop_threads;
+  std::atomic<unsigned> pause_threads;
+  std::atomic<unsigned> drain_threads;
   uint32_t num_paused;
   uint32_t num_drained;
 

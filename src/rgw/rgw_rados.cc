@@ -51,6 +51,7 @@
 #include "include/rados/librados.hpp"
 using namespace librados;
 
+#include <atomic>
 #include <string>
 #include <iostream>
 #include <vector>
@@ -2927,7 +2928,7 @@ protected:
   CephContext *cct;
   RGWRados *store;
 
-  atomic_t down_flag;
+  std::atomic<unsigned> down_flag;
 
   string thread_name;
 
@@ -2943,7 +2944,7 @@ public:
   virtual int init() { return 0; }
   virtual int process() = 0;
 
-  bool going_down() { return down_flag.read() != 0; }
+  bool going_down() { return down_flag.load() != 0; }
   void start();
   void stop();
 };
@@ -2956,7 +2957,7 @@ void RGWRadosThread::start()
 
 void RGWRadosThread::stop()
 {
-  down_flag.set(1);
+  down_flag = 1;
   stop_process();
   if (worker) {
     worker->stop();
@@ -9736,8 +9737,8 @@ struct get_obj_data : public RefCountedObject {
   Mutex data_lock;
   list<get_obj_aio_data> aio_data;
   RGWGetDataCB *client_cb;
-  atomic_t cancelled;
-  atomic_t err_code;
+  std::atomic<unsigned> cancelled;
+  std::atomic<unsigned> err_code;
   Throttle throttle;
   list<bufferlist> read_list;
 
@@ -9749,16 +9750,16 @@ struct get_obj_data : public RefCountedObject {
       throttle(cct, "get_obj_data", cct->_conf->rgw_get_obj_window_size, false) {}
   ~get_obj_data() override { } 
   void set_cancelled(int r) {
-    cancelled.set(1);
-    err_code.set(r);
+    cancelled = 1;
+    err_code = r;
   }
 
   bool is_cancelled() {
-    return cancelled.read() == 1;
+    return cancelled.load() == 1;
   }
 
   int get_err_code() {
-    return err_code.read();
+    return err_code.load();
   }
 
   int wait_next_io(bool *done) {

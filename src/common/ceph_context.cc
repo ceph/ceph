@@ -641,7 +641,7 @@ CephContext::~CephContext()
 }
 
 void CephContext::put() {
-  if (nref.dec() == 0) {
+  if (--nref == 0) {
     ANNOTATE_HAPPENS_AFTER(&nref);
     ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&nref);
     delete this;

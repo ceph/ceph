@@ -115,14 +115,8 @@ public:
     EXPECT_CALL(mock_managed_lock, shut_down(_)).WillOnce(CompleteContext(r));
   }
 
-  void expect_destroy_lock(MockManagedLock &mock_managed_lock,
-                           Context *ctx = nullptr) {
-    EXPECT_CALL(mock_managed_lock, destroy())
-      .WillOnce(Invoke([ctx]() {
-            if (ctx != nullptr) {
-              ctx->complete(0);
-            }
-          }));
+  void expect_destroy_lock(MockManagedLock &mock_managed_lock) {
+    EXPECT_CALL(mock_managed_lock, destroy());
   }
 
   void expect_get_locker(MockManagedLock &mock_managed_lock,
@@ -224,14 +218,12 @@ TEST_F(TestMockInstanceWatcher, Remove) {
   expect_get_locker(mock_managed_lock, locker, 0);
   expect_break_lock(mock_managed_lock, locker, 0);
   expect_unregister_instance(mock_io_ctx, 0);
-  C_SaferCond on_destroy;
-  expect_destroy_lock(mock_managed_lock, &on_destroy);
+  expect_destroy_lock(mock_managed_lock);
 
   C_SaferCond on_remove;
   MockInstanceWatcher::remove_instance(m_local_io_ctx, m_threads->work_queue,
                                        "instance_id", &on_remove);
   ASSERT_EQ(0, on_remove.wait());
-  ASSERT_EQ(0, on_destroy.wait());
 }
 
 TEST_F(TestMockInstanceWatcher, RemoveNoent) {
@@ -242,14 +234,12 @@ TEST_F(TestMockInstanceWatcher, RemoveNoent) {
 
   expect_get_locker(mock_managed_lock, librbd::managed_lock::Locker(), -ENOENT);
   expect_unregister_instance(mock_io_ctx, 0);
-  C_SaferCond on_destroy;
-  expect_destroy_lock(mock_managed_lock, &on_destroy);
+  expect_destroy_lock(mock_managed_lock);
 
   C_SaferCond on_remove;
   MockInstanceWatcher::remove_instance(m_local_io_ctx, m_threads->work_queue,
                                        "instance_id", &on_remove);
   ASSERT_EQ(0, on_remove.wait());
-  ASSERT_EQ(0, on_destroy.wait());
 }
 
 } // namespace mirror

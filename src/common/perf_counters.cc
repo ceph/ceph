@@ -22,11 +22,15 @@
 #include "common/valgrind.h"
 
 #include <errno.h>
-#include <map>
-#include <sstream>
 #include <stdint.h>
 #include <string.h>
+#include <map>
+#include <atomic>
+#include <sstream>
 #include <string>
+
+// reinclude our assert to clobber the system one
+#include "include/assert.h"
 
 using std::ostringstream;
 
@@ -184,11 +188,11 @@ void PerfCounters::inc(int idx, uint64_t amt)
   if (!(data.type & PERFCOUNTER_U64))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
-    data.avgcount.inc();
-    data.u64.add(amt);
-    data.avgcount2.inc();
+    data.avgcount++;
+    data.u64 += amt;
+    data.avgcount2++;
   } else {
-    data.u64.add(amt);
+    data.u64 += amt;
   }
 }
 
@@ -203,7 +207,7 @@ void PerfCounters::dec(int idx, uint64_t amt)
   assert(!(data.type & PERFCOUNTER_LONGRUNAVG));
   if (!(data.type & PERFCOUNTER_U64))
     return;
-  data.u64.sub(amt);
+  data.u64 -= amt;
 }
 
 void PerfCounters::set(int idx, uint64_t amt)
@@ -220,11 +224,11 @@ void PerfCounters::set(int idx, uint64_t amt)
   ANNOTATE_BENIGN_RACE_SIZED(&data.u64, sizeof(data.u64),
                              "perf counter atomic");
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
-    data.avgcount.inc();
-    data.u64.set(amt);
-    data.avgcount2.inc();
+    data.avgcount++;
+    data.u64.store(amt);
+    data.avgcount2++;
   } else {
-    data.u64.set(amt);
+    data.u64.store(amt);
   }
 }
 
@@ -238,7 +242,7 @@ uint64_t PerfCounters::get(int idx) const
   const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return 0;
-  return data.u64.read();
+  return data.u64.load();
 }
 
 void PerfCounters::tinc(int idx, utime_t amt)
@@ -252,11 +256,11 @@ void PerfCounters::tinc(int idx, utime_t amt)
   if (!(data.type & PERFCOUNTER_TIME))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
-    data.avgcount.inc();
-    data.u64.add(amt.to_nsec());
-    data.avgcount2.inc();
+    data.avgcount++;
+    data.u64 += amt.to_nsec();
+    data.avgcount2++;
   } else {
-    data.u64.add(amt.to_nsec());
+    data.u64 += amt.to_nsec();
   }
 }
 
@@ -271,11 +275,11 @@ void PerfCounters::tinc(int idx, ceph::timespan amt)
   if (!(data.type & PERFCOUNTER_TIME))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
-    data.avgcount.inc();
-    data.u64.add(amt.count());
-    data.avgcount2.inc();
+    data.avgcount++;
+    data.u64 += amt.count();
+    data.avgcount2++;
   } else {
-    data.u64.add(amt.count());
+    data.u64 += amt.count();
   }
 }
 
@@ -289,7 +293,7 @@ void PerfCounters::tset(int idx, utime_t amt)
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_TIME))
     return;
-  data.u64.set(amt.to_nsec());
+  data.u64.store(amt.to_nsec());
   if (data.type & PERFCOUNTER_LONGRUNAVG)
     ceph_abort();
 }
@@ -304,7 +308,7 @@ utime_t PerfCounters::tget(int idx) const
   const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_TIME))
     return utime_t();
-  uint64_t v = data.u64.read();
+  uint64_t v = data.u64.load();
   return utime_t(v / 1000000000ull, v % 1000000000ull);
 }
 
@@ -407,7 +411,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
         d->histogram->dump_formatted(f);
         f->close_section();
       } else {
-	uint64_t v = d->u64.read();
+	uint64_t v = d->u64.load();
 	if (d->type & PERFCOUNTER_U64) {
 	  f->dump_unsigned(d->name, v);
 	} else if (d->type & PERFCOUNTER_TIME) {

@@ -18,6 +18,7 @@
 #include "include/types.h"
 #include "include/xlist.h"
 
+#include <atomic>
 #include <list>
 #include <map>
 using namespace std;
@@ -25,7 +26,6 @@ using namespace std;
 #include "include/unordered_set.h"
 
 #include "common/Mutex.h"
-#include "include/atomic.h"
 #include "include/Spinlock.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
@@ -322,7 +322,7 @@ private:
     if (p == rank_pipe.end())
       return NULL;
     // see lock cribbing in Pipe::fault()
-    if (p->second->state_closed.read())
+    if (p->second->state_closed.load())
       return NULL;
     return p->second;
   }
