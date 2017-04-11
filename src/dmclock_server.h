@@ -66,15 +66,15 @@ namespace crimson {
     constexpr uint tag_modulo = 1000000;
 
     struct ClientInfo {
-      const double reservation;  // minimum
-      const double weight;       // proportional
-      const double limit;        // maximum
+      double reservation;  // minimum
+      double weight;       // proportional
+      double limit;        // maximum
 
       // multiplicative inverses of above, which we use in calculations
       // and don't want to recalculate repeatedly
-      const double reservation_inv;
-      const double weight_inv;
-      const double limit_inv;
+      double reservation_inv;
+      double weight_inv;
+      double limit_inv;
 
       // order parameters -- min, "normal", max
       ClientInfo(double _reservation, double _weight, double _limit) :
@@ -229,9 +229,10 @@ namespace crimson {
     }; // class RequestTag
 
 
-    // C is client identifier type, R is request type, B is heap
-    // branching factor
-    template<typename C, typename R, uint B>
+    // C is client identifier type, R is request type,
+    // U1 determines whether to use client information function dynamically,
+    // B is heap branching factor
+    template<typename C, typename R, bool U1, uint B>
     class PriorityQueueBase {
       // we don't want to include gtest.h just for FRIEND_TEST
       friend class dmclock_server_client_idle_erase_Test;
@@ -285,7 +286,7 @@ namespace crimson {
       // ClientRec could be "protected" with no issue. [See comments
       // associated with function submit_top_request.]
       class ClientRec {
-	friend PriorityQueueBase<C,R,B>;
+	friend PriorityQueueBase<C,R,U1,B>;
 
 	C                     client;
 	RequestTag            prev_tag;
@@ -414,7 +415,7 @@ namespace crimson {
 
 	friend std::ostream&
 	operator<<(std::ostream& out,
-		   const typename PriorityQueueBase<C,R,B>::ClientRec& e) {
+		   const typename PriorityQueueBase<C,R,U1,B>::ClientRec& e) {
 	  out << "{ ClientRec::" <<
 	    " client:" << e.client <<
 	    " prev_tag:" << e.prev_tag <<
@@ -543,6 +544,24 @@ namespace crimson {
       }
 
 
+      void update_client_info(const C& client_id) {
+	DataGuard g(data_mtx);
+	auto client_it = client_map.find(client_id);
+	if (client_map.end() != client_it) {
+	  ClientRec& client = (*client_it->second);
+	  client.info = client_info_f(client_id);
+	}
+      }
+
+
+      void update_client_infos() {
+	DataGuard g(data_mtx);
+	for (auto i : client_map) {
+	  i.second->info = client_info_f(i.second->client);
+	}
+      }
+
+
       friend std::ostream& operator<<(std::ostream& out,
 				      const PriorityQueueBase& q) {
 	std::lock_guard<decltype(q.data_mtx)> guard(q.data_mtx);
@@ -651,7 +670,8 @@ namespace crimson {
 	}
       };
 
-      ClientInfoFunc       client_info_f;
+      ClientInfoFunc        client_info_f;
+      static constexpr bool is_dynamic_cli_info_f = U1;
 
       mutable std::mutex data_mtx;
       using DataGuard = std::lock_guard<decltype(data_mtx)>;
@@ -744,6 +764,14 @@ namespace crimson {
       }
 
 
+      inline const ClientInfo get_cli_info(ClientRec& client) const {
+	if (is_dynamic_cli_info_f) {
+	  client.info = client_info_f(client.client);
+	}
+	return client.info;
+      }
+
+
       // data_mtx must be held by caller
       void do_add_request(RequestRef&& request,
 			  const C& client_id,
@@ -831,7 +859,7 @@ namespace crimson {
 
 	if (!client.has_request()) {
 	  tag = RequestTag(client.get_req_tag(),
-			   client.info,
+			   get_cli_info(client),
 			   req_params,
 			   time,
 			   cost);
@@ -840,7 +868,7 @@ namespace crimson {
 	  client.update_req_tag(tag, tick);
 	}
 #else
-	RequestTag tag(client.get_req_tag(), client.info, req_params, time, cost);
+	RequestTag tag(client.get_req_tag(), get_cli_info(client), req_params, time, cost);
 	// copy tag to previous tag for client
 	client.update_req_tag(tag, tick);
 #endif
@@ -890,7 +918,7 @@ namespace crimson {
 #ifndef DO_NOT_DELAY_TAG_CALC
 	if (top.has_request()) {
 	  ClientReq& next_first = top.next_request();
-	  next_first.tag = RequestTag(tag, top.info,
+	  next_first.tag = RequestTag(tag, get_cli_info(top),
 				      top.cur_delta, top.cur_rho,
 				      next_first.tag.arrival);
 
@@ -1102,9 +1130,9 @@ namespace crimson {
     }; // class PriorityQueueBase
 
 
-    template<typename C, typename R, uint B=2>
-    class PullPriorityQueue : public PriorityQueueBase<C,R,B> {
-      using super = PriorityQueueBase<C,R,B>;
+    template<typename C, typename R, bool U1=false, uint B=2>
+    class PullPriorityQueue : public PriorityQueueBase<C,R,U1,B> {
+      using super = PriorityQueueBase<C,R,U1,B>;
 
     public:
 
@@ -1318,12 +1346,12 @@ namespace crimson {
 
 
     // PUSH version
-    template<typename C, typename R, uint B=2>
-    class PushPriorityQueue : public PriorityQueueBase<C,R,B> {
+    template<typename C, typename R, bool U1=false, uint B=2>
+    class PushPriorityQueue : public PriorityQueueBase<C,R,U1,B> {
 
     protected:
 
-      using super = PriorityQueueBase<C,R,B>;
+      using super = PriorityQueueBase<C,R,U1,B>;
 
     public:
 
