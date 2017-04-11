@@ -885,22 +885,24 @@ def get_scratch_devices(remote):
     return retval
 
 
-def wait_until_healthy(ctx, remote, ceph_cluster='ceph'):
+def wait_until_healthy(ctx, remote, ceph_cluster='ceph', use_sudo=False):
     """
     Wait until a Ceph cluster is healthy. Give up after 15min.
     """
     testdir = get_testdir(ctx)
+    # when cluster is setup using ceph-deploy or ansible
+    # access to admin key is readonly for ceph user
+    cmd = ['ceph', '--cluster', ceph_cluster, 'health']
+    if use_sudo:
+        cmd.insert(0, 'sudo')
+    args = ['adjust-ulimits',
+            'ceph-coverage',
+            '{tdir}/archive/coverage'.format(tdir=testdir)]
+    args.extend(cmd)
     with safe_while(tries=(900 / 6), action="wait_until_healthy") as proceed:
         while proceed():
             r = remote.run(
-                args=[
-                    'adjust-ulimits',
-                    'ceph-coverage',
-                    '{tdir}/archive/coverage'.format(tdir=testdir),
-                    'ceph',
-                    '--cluster', ceph_cluster,
-                    'health',
-                ],
+                args=args,
                 stdout=StringIO(),
                 logger=log.getChild('health'),
             )
