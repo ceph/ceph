@@ -148,7 +148,7 @@ struct ElasticConfig {
   }
 
   string get_obj_path(const RGWBucketInfo& bucket_info, const rgw_obj_key& key) {
-    return index_path +  "/object/" + bucket_info.bucket.bucket_id + ":" + key.name + ":" + key.instance;
+    return index_path +  "/object/" + bucket_info.bucket.bucket_id + ":" + key.name + ":" + (key.instance.empty() ? "null" : key.instance);
   }
 
   bool should_handle_operation(RGWBucketInfo& bucket_info) {
