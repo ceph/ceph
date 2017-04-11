@@ -2802,12 +2802,12 @@ extern "C" int rbd_metadata_get(rbd_image_t image, const char *key, char *value,
     tracepoint(librbd, metadata_get_exit, r, key, NULL);
     return r;
   }
-  if (*vallen < val_s.size()) {
+  if (*vallen < val_s.size() + 1) {
     r = -ERANGE;
-    *vallen = val_s.size();
+    *vallen = val_s.size() + 1;
     tracepoint(librbd, metadata_get_exit, r, key, NULL);
   } else {
-    strncpy(value, val_s.c_str(), val_s.size());
+    strncpy(value, val_s.c_str(), val_s.size() + 1);
     tracepoint(librbd, metadata_get_exit, r, key, value);
   }
   return r;
@@ -2845,7 +2845,7 @@ extern "C" int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t 
     key_total_len += it->first.size() + 1;
     val_total_len += it->second.length() + 1;
   }
-  if (*key_len < key_total_len || *val_len < key_total_len)
+  if (*key_len < key_total_len || *val_len < val_total_len)
     too_short = true;
   *key_len = key_total_len;
   *val_len = val_total_len;
@@ -2858,10 +2858,12 @@ extern "C" int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t 
 
   for (map<string, bufferlist>::iterator it = pairs.begin();
        it != pairs.end(); ++it) {
-    strncpy(key_p, it->first.c_str(), it->first.size());
+    strncpy(key_p, it->first.c_str(), it->first.size() + 1);
     key_p += it->first.size() + 1;
     strncpy(value_p, it->second.c_str(), it->second.length());
-    value_p += it->second.length() + 1;
+    value_p += it->second.length();
+    *value_p = '\0';
+    value_p++;
     tracepoint(librbd, metadata_list_entry, it->first.c_str(), it->second.c_str());
   }
   tracepoint(librbd, metadata_list_exit, r);
