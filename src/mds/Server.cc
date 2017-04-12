@@ -6054,7 +6054,7 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
 {
   dout(10) << "dir_is_nonempty " << *in << dendl;
   assert(in->is_auth());
-  assert(in->filelock.can_read(-1));
+  assert(in->filelock.can_read(mdr->get_client()));
 
   frag_info_t dirstat;
   version_t dirstat_version = in->get_projected_inode()->dirstat.version;
