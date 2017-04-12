@@ -478,6 +478,13 @@ public:
   bool prepare_command_impl(MonOpRequestRef op, map<string,cmd_vartype>& cmdmap);
 
   int prepare_command_osd_destroy(int32_t id, stringstream& ss);
+  int prepare_command_osd_crush_remove(
+      CrushWrapper &newcrush,
+      int32_t id,
+      int32_t ancestor,
+      bool has_ancestor,
+      bool unlink_only);
+  int prepare_command_osd_remove(int32_t id);
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
 
