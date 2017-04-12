@@ -46,6 +46,7 @@ test_others() {
     rbd info --snap=snap1 testimg1 | grep 'size 256 MB'
 
     # export-diff
+    rm -rf /tmp/diff-testimg1-1 /tmp/diff-testimg1-2
     rbd export-diff testimg1 --snap=snap1 /tmp/diff-testimg1-1
     rbd export-diff testimg1 --from-snap=snap1 /tmp/diff-testimg1-2
 
@@ -90,7 +91,7 @@ test_others() {
     rbd info testimg1 | grep 'size 256 MB'
     rbd info testimg-diff1 | grep 'size 256 MB'
     rbd export testimg1 /tmp/img1.snap1
-    rbd export testimg-diif1 /tmp/img-diff1.snap1
+    rbd export testimg-diff1 /tmp/img-diff1.snap1
     cmp /tmp/img2 /tmp/img1.snap1
     cmp /tmp/img2 /tmp/img-diff1.snap1
 
