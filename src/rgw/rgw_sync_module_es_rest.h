@@ -6,9 +6,8 @@
 class RGWElasticSyncModuleInstance;
 
 class RGWRESTMgr_MDSearch_S3 : public RGWRESTMgr {
-  RGWElasticSyncModuleInstance *es_module;
 public:
-  explicit RGWRESTMgr_MDSearch_S3(RGWElasticSyncModuleInstance *_es_module) : es_module(_es_module) {}
+  explicit RGWRESTMgr_MDSearch_S3() {}
 
   RGWHandler_REST *get_handler(struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
