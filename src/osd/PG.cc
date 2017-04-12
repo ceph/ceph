@@ -4898,6 +4898,11 @@ void PG::update_history(const pg_history_t& new_history)
   if (info.history.merge(new_history)) {
     dout(20) << __func__ << " advanced history from " << new_history << dendl;
     dirty_info = true;
+    if (info.history.last_epoch_clean >= info.history.same_interval_since) {
+      dout(20) << __func__ << " clearing past_intervals" << dendl;
+      past_intervals.clear();
+      dirty_big_info = true;
+    }
   }
   reg_next_scrub();
 }
