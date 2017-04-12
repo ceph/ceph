@@ -1655,10 +1655,13 @@ public:
     void flush() override {
       std::unique_lock<std::mutex> l(qlock);
       while (true) {
+	// set flag before the check because the condition
+	// may become true outside qlock, and we need to make
+	// sure those threads see waiters and signal qcond.
+	++kv_submitted_waiters;
 	if (_is_all_kv_submitted()) {
 	  return;
 	}
-	++kv_submitted_waiters;
 	qcond.wait(l);
 	--kv_submitted_waiters;
       }
