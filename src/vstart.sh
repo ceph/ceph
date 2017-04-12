@@ -200,6 +200,11 @@ case $1 in
 	    valgrind_mon=$2
 	    shift
 	    ;;
+    --valgrind_mgr )
+	    [ -z "$2" ] && usage_exit
+	    valgrind_mgr=$2
+	    shift
+	    ;;
     --valgrind_rgw )
 	    [ -z "$2" ] && usage_exit
 	    valgrind_rgw=$2
