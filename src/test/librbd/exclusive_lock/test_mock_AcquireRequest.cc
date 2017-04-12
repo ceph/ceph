@@ -89,7 +89,7 @@ struct RefreshRequest<librbd::MockTestImageCtx> {
 
   static RefreshRequest *create(librbd::MockTestImageCtx &image_ctx,
                                 bool acquire_lock_refresh,
-                                Context *on_finish) {
+                                bool skip_open_parent, Context *on_finish) {
     EXPECT_TRUE(acquire_lock_refresh);
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;

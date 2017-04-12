@@ -190,7 +190,7 @@ Context *AcquireRequest<I>::send_refresh() {
   // ImageState is blocked waiting for lock to complete -- safe to directly
   // refresh
   image::RefreshRequest<I> *req = image::RefreshRequest<I>::create(
-    m_image_ctx, true, ctx);
+    m_image_ctx, true, false, ctx);
   req->send();
   return nullptr;
 }

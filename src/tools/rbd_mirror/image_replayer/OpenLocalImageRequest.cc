@@ -100,7 +100,7 @@ void OpenLocalImageRequest<I>::send_open_image() {
   Context *ctx = create_context_callback<
     OpenLocalImageRequest<I>, &OpenLocalImageRequest<I>::handle_open_image>(
       this);
-  (*m_local_image_ctx)->state->open(ctx);
+  (*m_local_image_ctx)->state->open(false, ctx);
 }
 
 template <typename I>
