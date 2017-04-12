@@ -1434,16 +1434,22 @@ def check_journal_reqs(args):
         'ceph-osd', '--check-allows-journal',
         '-i', '0',
         '--cluster', args.cluster,
+        '--setuser', get_ceph_user(),
+        '--setgroup', get_ceph_group(),
     ])
     _, _, wants_journal = command([
         'ceph-osd', '--check-wants-journal',
         '-i', '0',
         '--cluster', args.cluster,
+        '--setuser', get_ceph_user(),
+        '--setgroup', get_ceph_group(),
     ])
     _, _, needs_journal = command([
         'ceph-osd', '--check-needs-journal',
         '-i', '0',
         '--cluster', args.cluster,
+        '--setuser', get_ceph_user(),
+        '--setgroup', get_ceph_group(),
     ])
     return (not allows_journal, not wants_journal, not needs_journal)
 
