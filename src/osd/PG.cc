@@ -340,8 +340,7 @@ void PG::proc_master_log(
     info.last_interval_started = oinfo.last_interval_started;
     dirty_info = true;
   }
-  if (info.history.merge(oinfo.history))
-    dirty_info = true;
+  update_history(oinfo.history);
   assert(cct->_conf->osd_find_best_info_ignore_history_les ||
 	 info.last_epoch_started >= info.history.last_epoch_started);
 
@@ -392,11 +391,8 @@ bool PG::proc_replica_info(
   assert(is_primary());
   peer_info[from] = oinfo;
   might_have_unfound.insert(from);
-  
-  unreg_next_scrub();
-  if (info.history.merge(oinfo.history))
-    dirty_info = true;
-  reg_next_scrub();
+
+  update_history(oinfo.history);
   
   // stray?
   if (!is_up(from) && !is_acting(from)) {
@@ -4895,11 +4891,13 @@ void PG::merge_new_log_entries(
   }
 }
 
-void PG::update_history_from_master(pg_history_t new_history)
+void PG::update_history(const pg_history_t& new_history)
 {
   unreg_next_scrub();
-  if (info.history.merge(new_history))
+  if (info.history.merge(new_history)) {
+    dout(20) << __func__ << " advanced history from " << new_history << dendl;
     dirty_info = true;
+  }
   reg_next_scrub();
 }
 
@@ -5285,10 +5283,7 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 {
   assert(!is_primary());
 
-  unreg_next_scrub();
-  if (info.history.merge(oinfo.history))
-    dirty_info = true;
-  reg_next_scrub();
+  update_history(oinfo.history);
 
   if (last_complete_ondisk.epoch >= info.history.last_epoch_started) {
     // DEBUG: verify that the snaps are empty in snap_mapper
@@ -7234,7 +7229,7 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MQuery& 
 {
   PG *pg = context< RecoveryMachine >().pg;
   if (query.query.type == pg_query_t::MISSING) {
-    pg->update_history_from_master(query.query.history);
+    pg->update_history(query.query.history);
     pg->fulfill_log(query.from, query.query, query.query_epoch);
   } // else: from prior to activation, safe to ignore
   return discard_event();
@@ -7329,7 +7324,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
   PG *pg = context< RecoveryMachine >().pg;
   if (query.query.type == pg_query_t::INFO) {
     pair<pg_shard_t, pg_info_t> notify_info;
-    pg->update_history_from_master(query.query.history);
+    pg->update_history(query.query.history);
     pg->fulfill_info(query.from, query.query, notify_info);
     context< RecoveryMachine >().send_notify(
       notify_info.first,
