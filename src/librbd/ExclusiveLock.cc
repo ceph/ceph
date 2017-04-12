@@ -251,13 +251,6 @@ void ExclusiveLock<I>::handle_peer_notification(int r) {
 }
 
 template <typename I>
-void ExclusiveLock<I>::assert_header_locked(librados::ObjectWriteOperation *op) {
-  Mutex::Locker locker(m_lock);
-  rados::cls::lock::assert_locked(op, RBD_LOCK_NAME, LOCK_EXCLUSIVE,
-                                  m_cookie, WATCHER_LOCK_TAG);
-}
-
-template <typename I>
 std::string ExclusiveLock<I>::encode_lock_cookie() const {
   assert(m_lock.is_locked());
 
