@@ -1979,6 +1979,11 @@ private:
     return val1;
   }
 
+  void _apply_padding(uint64_t head_pad,
+		      uint64_t tail_pad,
+		      bufferlist& bl,
+		      bufferlist& padded);
+
   // -- ondisk version ---
 public:
   const int32_t latest_ondisk_format = 2;        ///< our version
