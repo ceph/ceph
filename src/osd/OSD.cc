@@ -3723,14 +3723,14 @@ void OSD::build_past_intervals_parallel()
       auto rpib = pg->get_required_past_interval_bounds(
 	pg->info,
 	superblock.oldest_map);
-      if (rpib.first == rpib.second && pg->past_intervals.empty()) {
+      if (rpib.first >= rpib.second && pg->past_intervals.empty()) {
         if (pg->info.history.same_interval_since == 0) {
           pg->info.history.same_interval_since = rpib.second;
 	}
 	continue;
       } else {
 	auto apib = pg->past_intervals.get_bounds();
-	if (rpib.second == apib.second &&
+	if (apib.second >= rpib.second &&
 	    apib.first <= rpib.first) {
 	  if (pg->info.history.same_interval_since == 0) {
 	    pg->info.history.same_interval_since = rpib.second;
