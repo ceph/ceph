@@ -20,7 +20,7 @@
 class MOSDPGScan : public MOSDFastDispatchOp {
 
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 2;
 
 public:
   enum {
@@ -63,15 +63,8 @@ public:
     if (!end.is_max() && end.pool == -1)
       end.pool = pgid.pool();
 
-    if (header.version >= 2) {
-      ::decode(from, p);
-      ::decode(pgid.shard, p);
-    } else {
-      from = pg_shard_t(
-	get_source().num(),
-	shard_id_t::NO_SHARD);
-      pgid.shard = shard_id_t::NO_SHARD;
-    }
+    ::decode(from, p);
+    ::decode(pgid.shard, p);
   }
 
   void encode_payload(uint64_t features) override {
