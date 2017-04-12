@@ -642,13 +642,33 @@ int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
 {
   // cannot run concurrently with run_sync(), so run in a separate manager
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
-  return crs.run(new RGWReadDataSyncStatusCoroutine(&sync_env, sync_status));
+  RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
+  int ret = http_manager.set_threaded();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    return ret;
+  }
+  RGWDataSyncEnv sync_env_local = sync_env;
+  sync_env_local.http_manager = &http_manager;
+  ret = crs.run(new RGWReadDataSyncStatusCoroutine(&sync_env_local, sync_status));
+  http_manager.stop();
+  return ret;
 }
 
 int RGWRemoteDataLog::init_sync_status(int num_shards)
 {
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
-  return crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env, num_shards));
+  RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
+  int ret = http_manager.set_threaded();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    return ret;
+  }
+  RGWDataSyncEnv sync_env_local = sync_env;
+  sync_env_local.http_manager = &http_manager;
+  ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env_local, num_shards));
+  http_manager.stop();
+  return ret;
 }
 
 static string full_data_sync_index_shard_oid(const string& source_zone, int shard_id)
