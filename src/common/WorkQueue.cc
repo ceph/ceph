@@ -31,7 +31,7 @@
 
 ThreadPool::ThreadPool(CephContext *cct_, string nm, string tn, int n, const char *option)
   : cct(cct_), name(std::move(nm)), thread_name(std::move(tn)),
-    lockname(nm + "::lock"),
+    lockname(name + "::lock"),
     _lock(lockname.c_str()),  // this should be safe due to declaration order
     _stop(false),
     _pause(0),
