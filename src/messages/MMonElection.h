@@ -23,7 +23,7 @@
 class MMonElection : public Message {
 
   static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 5;
 
 public:
   static const int OP_PROPOSE = 1;
@@ -103,24 +103,15 @@ public:
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    if (header.version >= 2)
-      ::decode(fsid, p);
-    else
-      memset(&fsid, 0, sizeof(fsid));
+    ::decode(fsid, p);
     ::decode(op, p);
     ::decode(epoch, p);
     ::decode(monmap_bl, p);
     ::decode(quorum, p);
-    if (header.version >= 3)
-      ::decode(quorum_features, p);
-    else
-      quorum_features = 0;
-    if (header.version >= 4) {
-      ::decode(defunct_one, p);
-      ::decode(defunct_two, p);
-    }
-    if (header.version >= 5)
-      ::decode(sharing_bl, p);
+    ::decode(quorum_features, p);
+    ::decode(defunct_one, p);
+    ::decode(defunct_two, p);
+    ::decode(sharing_bl, p);
     if (header.version >= 6)
       ::decode(mon_features, p);
   }
