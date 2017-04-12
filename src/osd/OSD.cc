@@ -5297,6 +5297,7 @@ void OSD::_send_boot()
 void OSD::_collect_metadata(map<string,string> *pm)
 {
   // config info
+  (*pm)["osd_id"] = std::to_string(whoami);
   (*pm)["osd_data"] = dev_path;
   (*pm)["osd_journal"] = journal_path;
   (*pm)["front_addr"] = stringify(client_messenger->get_myaddr());
