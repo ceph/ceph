@@ -606,10 +606,12 @@ TEST(CRUSH, straw2_reweight) {
     sum[out1[0]]++;
     //sum[rand()%n]++;
 
-    if (out1[0] == changed)
+    if (out1[0] == changed) {
       ASSERT_EQ(changed, out0[0]);
-    else if (out0[0] != changed)
+    }
+    else if (out0[0] != changed) {
       ASSERT_EQ(out0[0], out1[0]);
+    }
   }
 
   double expected = (double)total / (double)n;
