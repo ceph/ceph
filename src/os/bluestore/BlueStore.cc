@@ -5997,6 +5997,7 @@ int BlueStore::_do_read(
             return r;
           return 0;
 	});
+        assert(r == 0);
     } else {
       // read the pieces
       for (auto& reg : p.second) {
@@ -6034,8 +6035,7 @@ int BlueStore::_do_read(
               return r;
             return 0;
 	  });
-        if (r < 0)
-          return r;
+	assert(r == 0);
 	assert(reg.bl.length() == r_len);
       }
     }
@@ -9353,12 +9353,13 @@ int BlueStore::_do_alloc_write(
 		 << l->length() << std::dec << " write via deferred" << dendl;
 	bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
 	op->op = bluestore_deferred_op_t::OP_WRITE;
-	b->get_blob().map(
+	int r = b->get_blob().map(
 	  b_off, l->length(),
 	  [&](uint64_t offset, uint64_t length) {
 	    op->extents.emplace_back(bluestore_pextent_t(offset, length));
 	    return 0;
 	  });
+        assert(r == 0);
 	op->data = *l;
       } else {
 	b->get_blob().map_bl(
