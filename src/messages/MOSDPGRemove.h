@@ -23,7 +23,7 @@
 class MOSDPGRemove : public Message {
 
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 2;
 
   epoch_t epoch;
 
@@ -66,10 +66,8 @@ public:
     ::decode(_pg_list, p);
 
     vector<shard_id_t> _shard_list(_pg_list.size(), shard_id_t::NO_SHARD);
-    if (header.version >= 2) {
-      _shard_list.clear();
-      ::decode(_shard_list, p);
-    }
+    _shard_list.clear();
+    ::decode(_shard_list, p);
     assert(_shard_list.size() == _pg_list.size());
     pg_list.reserve(_shard_list.size());
     for (unsigned i = 0; i < _shard_list.size(); ++i) {
