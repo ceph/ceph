@@ -3234,14 +3234,10 @@ def start_daemon(
                 ],
             )
         elif os.path.exists(os.path.join(path, 'bsdrc')):
-            base_script = '/usr/local/etc/rc.d/ceph'
-            osd_script = '{base} start osd.{osd_id}'.format(
-                base=base_script,
-                osd_id=osd_id
-            )
             command_check_call(
                 [
-                    osd_script,
+                    '/usr/local/etc/rc.d/ceph start osd.{osd_id}'
+                    .format(osd_id=osd_id),
                 ],
             )
         else:
@@ -3315,7 +3311,6 @@ def stop_daemon(
                 [
                     '/usr/local/etc/rc.d/ceph stop osd.{osd_id}'
                     .format(osd_id=osd_id),
-                    'stop',
                 ],
             )
         else:
