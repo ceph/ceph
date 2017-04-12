@@ -2323,7 +2323,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(22, 8, bl);
+  ENCODE_START(22, 22, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
@@ -2370,7 +2370,7 @@ void pg_stat_t::encode(bufferlist &bl) const
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
   bool tmp;
-  DECODE_START_LEGACY_COMPAT_LEN(22, 8, 8, bl);
+  DECODE_START(22, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
   ::decode(reported_epoch, bl);
@@ -2378,145 +2378,45 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   ::decode(log_start, bl);
   ::decode(ondisk_log_start, bl);
   ::decode(created, bl);
-  if (struct_v >= 7)
-    ::decode(last_epoch_clean, bl);
-  else
-    last_epoch_clean = 0;
-  if (struct_v < 6) {
-    old_pg_t opgid;
-    ::decode(opgid, bl);
-    parent = opgid;
-  } else {
-    ::decode(parent, bl);
-  }
+  ::decode(last_epoch_clean, bl);
+  ::decode(parent, bl);
   ::decode(parent_split_bits, bl);
   ::decode(last_scrub, bl);
   ::decode(last_scrub_stamp, bl);
-  if (struct_v <= 4) {
-    ::decode(stats.sum.num_bytes, bl);
-    uint64_t num_kb;
-    ::decode(num_kb, bl);
-    ::decode(stats.sum.num_objects, bl);
-    ::decode(stats.sum.num_object_clones, bl);
-    ::decode(stats.sum.num_object_copies, bl);
-    ::decode(stats.sum.num_objects_missing_on_primary, bl);
-    ::decode(stats.sum.num_objects_degraded, bl);
-    ::decode(log_size, bl);
-    ::decode(ondisk_log_size, bl);
-    if (struct_v >= 2) {
-      ::decode(stats.sum.num_rd, bl);
-      ::decode(stats.sum.num_rd_kb, bl);
-      ::decode(stats.sum.num_wr, bl);
-      ::decode(stats.sum.num_wr_kb, bl);
-    }
-    if (struct_v >= 3) {
-      ::decode(up, bl);
-    }
-    if (struct_v == 4) {
-      ::decode(stats.sum.num_objects_unfound, bl);  // sigh.
-    }
-    ::decode(acting, bl);
-  } else {
-    ::decode(stats, bl);
-    ::decode(log_size, bl);
-    ::decode(ondisk_log_size, bl);
-    ::decode(up, bl);
-    ::decode(acting, bl);
-    if (struct_v >= 9) {
-      ::decode(last_fresh, bl);
-      ::decode(last_change, bl);
-      ::decode(last_active, bl);
-      ::decode(last_clean, bl);
-      ::decode(last_unstale, bl);
-      ::decode(mapping_epoch, bl);
-      if (struct_v >= 10) {
-        ::decode(last_deep_scrub, bl);
-        ::decode(last_deep_scrub_stamp, bl);
-      }
-    }
-  }
-  if (struct_v < 11) {
-    stats_invalid = false;
-  } else {    
-    ::decode(tmp, bl);
-    stats_invalid = tmp;
-  }
-  if (struct_v >= 12) {
-    ::decode(last_clean_scrub_stamp, bl);
-  } else {
-    last_clean_scrub_stamp = utime_t();
-  }
-  if (struct_v >= 13) {
-    ::decode(last_became_active, bl);
-  } else {
-    last_became_active = last_active;
-  }
-  if (struct_v >= 14) {
-    ::decode(tmp, bl);
-    dirty_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_dirty accounting.
-    dirty_stats_invalid = true;
-  }
-  if (struct_v >= 15) {
-    ::decode(up_primary, bl);
-    ::decode(acting_primary, bl);
-  } else {
-    up_primary = up.size() ? up[0] : -1;
-    acting_primary = acting.size() ? acting[0] : -1;
-  }
-  if (struct_v >= 16) {
-    ::decode(tmp, bl);
-    omap_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_omap accounting.
-    omap_stats_invalid = true;
-  }
-  if (struct_v >= 17) {
-    ::decode(tmp, bl);
-    hitset_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_hit_set_archive accounting.
-    hitset_stats_invalid = true;
-  }
-  if (struct_v >= 18) {
-    ::decode(blocked_by, bl);
-  } else {
-    blocked_by.clear();
-  }
-  if (struct_v >= 19) {
-    ::decode(last_undegraded, bl);
-    ::decode(last_fullsized, bl);
-  } else {
-    last_undegraded = utime_t();
-    last_fullsized = utime_t();
-  }
-  if (struct_v >= 20) {
-    ::decode(tmp, bl);
-    hitset_bytes_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_bytes_hit_set_archive accounting.
-    hitset_bytes_stats_invalid = true;
-  }
-  if (struct_v >= 21) {
-    ::decode(last_peered, bl);
-    ::decode(last_became_peered, bl);
-  } else {
-    last_peered = last_active;
-    last_became_peered = last_became_active;
-  }
-  if (struct_v >= 22) {
-    ::decode(tmp, bl);
-    pin_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_pinned accounting.
-    pin_stats_invalid = true;
-  }
+  ::decode(stats, bl);
+  ::decode(log_size, bl);
+  ::decode(ondisk_log_size, bl);
+  ::decode(up, bl);
+  ::decode(acting, bl);
+  ::decode(last_fresh, bl);
+  ::decode(last_change, bl);
+  ::decode(last_active, bl);
+  ::decode(last_clean, bl);
+  ::decode(last_unstale, bl);
+  ::decode(mapping_epoch, bl);
+  ::decode(last_deep_scrub, bl);
+  ::decode(last_deep_scrub_stamp, bl);
+  ::decode(tmp, bl);
+  stats_invalid = tmp;
+  ::decode(last_clean_scrub_stamp, bl);
+  ::decode(last_became_active, bl);
+  ::decode(tmp, bl);
+  dirty_stats_invalid = tmp;
+  ::decode(up_primary, bl);
+  ::decode(acting_primary, bl);
+  ::decode(tmp, bl);
+  omap_stats_invalid = tmp;
+  ::decode(tmp, bl);
+  hitset_stats_invalid = tmp;
+  ::decode(blocked_by, bl);
+  ::decode(last_undegraded, bl);
+  ::decode(last_fullsized, bl);
+  ::decode(tmp, bl);
+  hitset_bytes_stats_invalid = tmp;
+  ::decode(last_peered, bl);
+  ::decode(last_became_peered, bl);
+  ::decode(tmp, bl);
+  pin_stats_invalid = tmp;
   DECODE_FINISH(bl);
 }
 
