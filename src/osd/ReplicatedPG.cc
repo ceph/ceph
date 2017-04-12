@@ -11508,6 +11508,25 @@ void ReplicatedPG::hit_set_remove_all()
     hobject_t oid = get_hit_set_archive_object(p->begin, p->end, p->using_gmt);
     assert(!is_degraded_or_backfilling_object(oid));
     ObjectContextRef obc = get_object_context(oid, false);
+    if (!obc) {
+      dout(1) << __func__ << " " << oid << " not found" << dendl;
+      if (pool.info.use_gmt_hitset != p->using_gmt) {
+	dout(1) << __func__ << " trying with pool's setting: "
+		<< "use_gmt_hitset = " << pool.info.use_gmt_hitset << dendl;
+	// redo the check
+	for (const auto& hitset : info.hit_set.history) {
+	  auto oid = get_hit_set_archive_object(hitset.begin, hitset.end,
+						pool.info.use_gmt_hitset);
+	  if (is_degraded_or_backfilling_object(oid))
+	    return;
+	  if (scrubber.write_blocked_by_scrub(oid, get_sort_bitwise()))
+	    return;
+	}
+	auto oid = get_hit_set_archive_object(p->begin, p->end,
+					      pool.info.use_gmt_hitset);
+	obc = get_object_context(oid, false);
+      }
+    }
     assert(obc);
 
     OpContextUPtr ctx = simple_opc_create(obc);
@@ -11749,7 +11768,17 @@ void ReplicatedPG::hit_set_trim(OpContextUPtr &ctx, unsigned max)
     list<pg_hit_set_info_t>::iterator p = updated_hit_set_hist.history.begin();
     assert(p != updated_hit_set_hist.history.end());
     hobject_t oid = get_hit_set_archive_object(p->begin, p->end, p->using_gmt);
-
+    ObjectContextRef obc = get_object_context(oid, false);
+    if (!obc) {
+      dout(1) << __func__ << " " << oid << " not found" << dendl;
+      if (pool.info.use_gmt_hitset != p->using_gmt) {
+	dout(1) << __func__ << " trying with pool's setting: "
+		<< "use_gmt_hitset = " << pool.info.use_gmt_hitset << dendl;
+	oid = get_hit_set_archive_object(p->begin, p->end, pool.info.use_gmt_hitset);
+	obc = get_object_context(oid, false);
+      }
+    }
+    assert(obc);
     assert(!is_degraded_or_backfilling_object(oid));
 
     dout(20) << __func__ << " removing " << oid << dendl;
@@ -11775,8 +11804,6 @@ void ReplicatedPG::hit_set_trim(OpContextUPtr &ctx, unsigned max)
     }
     updated_hit_set_hist.history.pop_front();
 
-    ObjectContextRef obc = get_object_context(oid, false);
-    assert(obc);
     --ctx->delta_stats.num_objects;
     --ctx->delta_stats.num_objects_hit_set_archive;
     ctx->delta_stats.num_bytes -= obc->obs.oi.size;
