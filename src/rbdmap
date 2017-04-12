@@ -1,15 +1,6 @@
 #!/bin/bash
 
 do_map() {
-
-        # default to reasonable value if RBDMAPFILE not set in environment
-        printenv RBDMAPFILE >/dev/null || local RBDMAPFILE=/etc/ceph/rbdmap
-
-	if [ ! -f "$RBDMAPFILE" ]; then
-		logger -p "daemon.warning" -t rbdmap "No $RBDMAPFILE found."
-		exit 0
-	fi
-
 	# Read /etc/rbdtab to create non-existant mapping
 	RET=0
 	while read DEV PARAMS; do
@@ -65,7 +56,33 @@ do_map() {
 
 }
 
-do_unmap() {
+unmount_unmap() {
+	local rbd_dev=$1
+	local mnt=$(findmnt --mtab --source ${rbd_dev} --noheadings \
+							| awk '{print $1'})
+
+	logger -p "daemon.debug" -t rbdmap "Unmapping '${rbd_dev}'"
+	if [ -n "${mnt}" ]; then
+	    logger -p "daemon.debug" -t rbdmap "Unmounting '${mnt}'"
+	    umount "${mnt}" >>/dev/null 2>&1
+	fi
+	if mountpoint -q "${mnt}"; then
+	    ## Un-mounting failed.
+	    logger -p "daemon.warning" -t rbdmap "Failed to unmount '${mnt}'"
+	    return 1
+	fi
+	## Un-mapping.
+	rbd unmap $rbd_dev >>/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+	    logger -p "daemon.warning" -t rbdmap "Failed to unmap '${mnt}'"
+	    return 1
+	fi
+	logger -p "daemon.debug" -t rbdmap "Unmapped '${rbd_dev}'"
+
+	return 0
+}
+
+do_unmap_all() {
 	RET=0
 	## Unmount and unmap all rbd devices
 	if ls /dev/rbd[0-9]* >/dev/null 2>&1; then
@@ -81,30 +98,56 @@ do_unmap() {
 			    fi
 			done
 
-			logger -p "daemon.debug" -t rbdmap "Unmapping '${DEV}'"
-			MNT=$(findmnt --mtab --source ${DEV} --noheadings | awk '{print $1'})
-			if [ -n "${MNT}" ]; then
-			    logger -p "daemon.debug" -t rbdmap "Unmounting '${MNT}'"
-			    umount "${MNT}" >>/dev/null 2>&1
-			fi
-			if mountpoint -q "${MNT}"; then
-			    ## Un-mounting failed.
-			    logger -p "daemon.warning" -t rbdmap "Failed to unmount '${MNT}'"
-			    RET=$((${RET}+1))
-			    continue
-			fi
-			## Un-mapping.
-			rbd unmap $DEV >>/dev/null 2>&1
-			if [ $? -ne 0 ]; then
-			    logger -p "daemon.warning" -t rbdmap "Failed to unmap '${MNT}'"
-			    RET=$((${RET}+$?))
-			    continue
-			fi
-			logger -p "daemon.debug" -t rbdmap "Unmapped '${DEV}'"
+			unmount_unmap "$DEV" || RET=$((${RET}+$?))
+
 		done
 	fi
 	exit ${RET}
 }
+
+do_unmap() {
+	RET=0
+	## skip if nothing is mapped
+	ls /dev/rbd[0-9]* >/dev/null 2>&1 || exit ${RET}
+
+	# Read /etc/rbdtab to create non-existant mapping
+	while read DEV PARAMS; do
+		case "$DEV" in
+		  ""|\#*)
+			continue
+			;;
+		  */*)
+			;;
+		  *)
+			DEV=rbd/$DEV
+			;;
+		esac
+
+		MAP_RV="$(readlink -f /dev/rbd/$DEV)"
+		if [ ! -b $MAP_RV ]; then
+			logger -p "daemon.debug" -t rbdmap "$DEV not mapped, skipping unmap"
+			continue
+		fi
+
+		## pre-unmapping
+		if [ -x "/etc/ceph/rbd.d/${DEV}" ]; then
+			logger -p "daemon.debug" -t rbdmap "Running pre-unmap hook '/etc/ceph/rbd.d/${DEV}'"
+			/etc/ceph/rbd.d/${DEV} unmap "/dev/rbd/${DEV}"
+		fi
+
+		unmount_unmap "$MAP_RV" || RET=$((${RET}+$?))
+
+	done < $RBDMAPFILE
+	exit ${RET}
+}
+
+# default to reasonable value if RBDMAPFILE not set in environment
+RBDMAPFILE="${RBDMAPFILE:-/etc/ceph/rbdmap}"
+
+if [ ! -f "$RBDMAPFILE" ]; then
+	logger -p "daemon.warning" -t rbdmap "No $RBDMAPFILE found."
+	exit 0
+fi
 
 case "$1" in
   map)
@@ -114,6 +157,11 @@ case "$1" in
   unmap)
 	do_unmap
 	;;
+
+  unmap-all)
+	do_unmap_all
+	;;
+
   *)
-	echo "Usage: rbdmap map | unmap"
+	echo "Usage: rbdmap map | unmap | unmap-all"
 esac
