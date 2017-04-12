@@ -3141,11 +3141,15 @@ public:
   }
   void encode(bufferlist &bl) const override {
     ENCODE_START(1, 1, bl);
+    ::encode(first, bl);
+    ::encode(last, bl);
     ::encode(intervals, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) override {
     DECODE_START(1, bl);
+    ::decode(first, bl);
+    ::decode(last, bl);
     ::decode(intervals, bl);
     DECODE_FINISH(bl);
   }
