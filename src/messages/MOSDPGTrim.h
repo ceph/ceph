@@ -20,7 +20,7 @@
 class MOSDPGTrim : public Message {
 
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 2;
 
 public:
   epoch_t epoch;
@@ -53,10 +53,7 @@ public:
     ::decode(epoch, p);
     ::decode(pgid.pgid, p);
     ::decode(trim_to, p);
-    if (header.version >= 2)
-      ::decode(pgid.shard, p);
-    else
-      pgid.shard = shard_id_t::NO_SHARD;
+    ::decode(pgid.shard, p);
   }
 };
 
