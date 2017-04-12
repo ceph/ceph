@@ -26,8 +26,7 @@ TEST(RocksDBOption, simple) {
 			  "max_bytes_for_level_base = 104857600;"
 			  "target_file_size_base = 10485760;"
 			  "num_levels = 3;"
-			  "compression = kNoCompression;"
-			  "disable_data_sync = false;";
+			  "compression = kNoCompression;";
   int r = db->ParseOptionsFromString(options_string, options);
   ASSERT_EQ(0, r);
   ASSERT_EQ(536870912u, options.write_buffer_size);
@@ -39,8 +38,7 @@ TEST(RocksDBOption, simple) {
   ASSERT_EQ(104857600u, options.max_bytes_for_level_base);
   ASSERT_EQ(10485760u, options.target_file_size_base);
   ASSERT_EQ(3, options.num_levels);
-  ASSERT_FALSE(options.disableDataSync);
- // ASSERT_EQ("none", options.compression);
+  ASSERT_EQ(rocksdb::kNoCompression, options.compression);
 }
 TEST(RocksDBOption, interpret) {
   rocksdb::Options options;
