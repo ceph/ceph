@@ -2343,7 +2343,7 @@ public:
     return deleting || e < get_last_peering_reset();
   }
 
-  void update_history_from_master(pg_history_t new_history);
+  void update_history(const pg_history_t& history);
   void fulfill_info(pg_shard_t from, const pg_query_t &query,
 		    pair<pg_shard_t, pg_info_t> &notify_info);
   void fulfill_log(pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
