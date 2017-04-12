@@ -3282,7 +3282,7 @@ ostream& operator<<(ostream& out, const pg_interval_t& i)
 // -- pg_query_t --
 
 void pg_query_t::encode(bufferlist &bl, uint64_t features) const {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(type, bl);
   ::encode(since, bl);
   history.encode(bl);
@@ -3293,27 +3293,14 @@ void pg_query_t::encode(bufferlist &bl, uint64_t features) const {
 }
 
 void pg_query_t::decode(bufferlist::iterator &bl) {
-  bufferlist::iterator bl2 = bl;
-  try {
-    DECODE_START(3, bl);
-    ::decode(type, bl);
-    ::decode(since, bl);
-    history.decode(bl);
-    ::decode(epoch_sent, bl);
-    if (struct_v >= 3) {
-      ::decode(to, bl);
-      ::decode(from, bl);
-    } else {
-      to = shard_id_t::NO_SHARD;
-      from = shard_id_t::NO_SHARD;
-    }
-    DECODE_FINISH(bl);
-  } catch (...) {
-    bl = bl2;
-    ::decode(type, bl);
-    ::decode(since, bl);
-    history.decode(bl);
-  }
+  DECODE_START(3, bl);
+  ::decode(type, bl);
+  ::decode(since, bl);
+  history.decode(bl);
+  ::decode(epoch_sent, bl);
+  ::decode(to, bl);
+  ::decode(from, bl);
+  DECODE_FINISH(bl);
 }
 
 void pg_query_t::dump(Formatter *f) const
