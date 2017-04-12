@@ -25,7 +25,7 @@ rbd snap create foo --snap=three
 rbd snap create foo.copy --snap=two
 
 rbd export-diff foo@two --from-snap three foo.diff && exit 1 || true  # wrong snap order
-rm foo.diff
+rm -f foo.diff
 
 rbd export-diff foo@three --from-snap two foo.diff
 rbd import-diff foo.diff foo.copy
