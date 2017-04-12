@@ -185,6 +185,10 @@ case $1 in
 	    valgrind=$2
 	    shift
 	    ;;
+    --valgrind_args )
+	valgrind_args="$2"
+	shift
+	;;
     --valgrind_mds )
 	    [ -z "$2" ] && usage_exit
 	    valgrind_mds=$2
@@ -344,7 +348,7 @@ run() {
     [ -z "$valg" ] && valg="$valgrind"
 
     if [ -n "$valg" ]; then
-        prunb valgrind --tool="$valg" "$@" -f
+        prunb valgrind --tool="$valg" $valgrind_args "$@" -f
         sleep 1
     else
         if [ "$nodaemon" -eq 0 ]; then
