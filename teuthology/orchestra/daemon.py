@@ -147,7 +147,8 @@ class DaemonState(object):
         :raises:  CommandFailedError, if the process was run with
                   check_status=True
         """
-        return self.proc.poll()
+        if self.proc:
+            return self.proc.poll()
 
 
 class DaemonGroup(object):
