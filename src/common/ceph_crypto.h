@@ -177,6 +177,7 @@ namespace ceph {
 }
 
 #else
+// cppcheck-suppress preprocessorErrorDirective
 # error "No supported crypto implementation found."
 #endif
 

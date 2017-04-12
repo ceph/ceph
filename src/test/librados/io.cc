@@ -5,6 +5,7 @@
 
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
+#include "include/scope_guard.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
 
@@ -826,6 +827,12 @@ TEST_F(LibRadosIoEC, OverlappingWriteRoundTrip) {
   char *buf = (char *)new char[dbsize];
   char *buf2 = (char *)new char[bsize];
   char *buf3 = (char *)new char[dbsize];
+  auto cleanup = [&] {
+    delete[] buf;
+    delete[] buf2;
+    delete[] buf3;
+  };
+  scope_guard<decltype(cleanup)> sg(std::move(cleanup));
   memset(buf, 0xcc, dbsize);
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, dbsize, 0));
   memset(buf2, 0xdd, bsize);
@@ -834,10 +841,6 @@ TEST_F(LibRadosIoEC, OverlappingWriteRoundTrip) {
   ASSERT_EQ(dbsize, rados_read(ioctx, "foo", buf3, dbsize, 0));
   // Read the same as first write
   ASSERT_EQ(0, memcmp(buf3, buf, dbsize));
-
-  delete[] buf;
-  delete[] buf2;
-  delete[] buf3;
 }
 
 TEST_F(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
@@ -845,6 +848,11 @@ TEST_F(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
   int dbsize = bsize * 2;
   char *buf = (char *)new char[dbsize];
   char *buf2 = (char *)new char[bsize];
+  auto cleanup = [&] {
+    delete[] buf;
+    delete[] buf2;
+  };
+  scope_guard<decltype(cleanup)> sg(std::move(cleanup));
   memset(buf, 0xcc, dbsize);
   bufferlist bl1;
   bl1.append(buf, dbsize);
@@ -857,9 +865,6 @@ TEST_F(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
   ASSERT_EQ(dbsize, ioctx.read("foo", bl3, dbsize, 0));
   // Read the same as first write
   ASSERT_EQ(0, memcmp(bl3.c_str(), buf, dbsize));
-
-  delete[] buf;
-  delete[] buf2;
 }
 
 TEST_F(LibRadosIoEC, WriteFullRoundTrip) {
@@ -911,6 +916,15 @@ TEST_F(LibRadosIoEC, AppendRoundTrip) {
   char *buf = (char *)new char[alignment];
   char *buf2 = (char *)new char[alignment];
   char *buf3 = (char *)new char[alignment *2];
+  int uasize = alignment/2;
+  char *unalignedbuf = (char *)new char[uasize];
+  auto cleanup = [&] {
+    delete[] buf;
+    delete[] buf2;
+    delete[] buf3;
+    delete[] unalignedbuf;
+  };
+  scope_guard<decltype(cleanup)> sg(std::move(cleanup));
   memset(buf, 0xde, alignment);
   ASSERT_EQ(0, rados_append(ioctx, "foo", buf, alignment));
   memset(buf2, 0xad, alignment);
@@ -919,21 +933,19 @@ TEST_F(LibRadosIoEC, AppendRoundTrip) {
   ASSERT_EQ((int)alignment*2, rados_read(ioctx, "foo", buf3, alignment*2, 0));
   ASSERT_EQ(0, memcmp(buf3, buf, alignment));
   ASSERT_EQ(0, memcmp(buf3 + alignment, buf2, alignment));
-
-  int uasize = alignment/2;
-  char *unalignedbuf = (char *)new char[uasize];
+  memset(unalignedbuf, 0, uasize);
   ASSERT_EQ(0, rados_append(ioctx, "foo", unalignedbuf, uasize));
   ASSERT_EQ(-EOPNOTSUPP, rados_append(ioctx, "foo", unalignedbuf, uasize));
-
-  delete[] buf;
-  delete[] buf2;
-  delete[] buf3;
-  delete[] unalignedbuf;
 }
 
 TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
   char *buf = (char *)new char[alignment];
   char *buf2 = (char *)new char[alignment];
+  auto cleanup = [&] {
+    delete[] buf;
+    delete[] buf2;
+  };
+  scope_guard<decltype(cleanup)> sg(std::move(cleanup));
   memset(buf, 0xde, alignment);
   bufferlist bl1;
   bl1.append(buf, alignment);
@@ -948,9 +960,6 @@ TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
   const char *bl3_str = bl3.c_str();
   ASSERT_EQ(0, memcmp(bl3_str, buf, alignment));
   ASSERT_EQ(0, memcmp(bl3_str + alignment, buf2, alignment));
-
-  delete[] buf;
-  delete[] buf2;
 }
 
 TEST_F(LibRadosIoEC, TruncTest) {

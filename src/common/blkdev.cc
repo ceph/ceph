@@ -46,6 +46,7 @@ int get_block_device_size(int fd, int64_t *psize)
   int ret = ::ioctl(fd, BLKGETSIZE, &sectors);
   *psize = sectors * 512ULL;
 #else
+// cppcheck-suppress preprocessorErrorDirective
 # error "Linux configuration error (get_block_device_size)"
 #endif
   if (ret < 0)
