@@ -4834,7 +4834,7 @@ int FileStore::collection_bits(const coll_t& c)
   int32_t bits;
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
-    r = -errno;
+    bits = r = -errno;
     goto out;
   }
   get_attrname("bits", n, PATH_MAX);

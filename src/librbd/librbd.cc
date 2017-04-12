@@ -3601,10 +3601,10 @@ extern "C" int rbd_aio_readv(rbd_image_t image, const struct iovec *iov,
   if (r == 0) {
     librbd::io::ReadResult read_result;
     if (iovcnt == 1) {
-      read_result = std::move(librbd::io::ReadResult(
-        static_cast<char *>(iov[0].iov_base), iov[0].iov_len));
+      read_result = librbd::io::ReadResult(
+        static_cast<char *>(iov[0].iov_base), iov[0].iov_len);
     } else {
-      read_result = std::move(librbd::io::ReadResult(iov, iovcnt));
+      read_result = librbd::io::ReadResult(iov, iovcnt);
     }
     ictx->io_work_queue->aio_read(get_aio_completion(comp), off, len,
                                   std::move(read_result), 0);
