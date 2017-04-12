@@ -295,10 +295,10 @@ bool MonClient::ms_dispatch(Message *m)
   return true;
 }
 
-void MonClient::send_log()
+void MonClient::send_log(bool flush)
 {
   if (log_client) {
-    Message *lm = log_client->get_mon_log_message();
+    Message *lm = log_client->get_mon_log_message(flush);
     if (lm)
       _send_mon_message(lm);
     more_log_pending = log_client->are_pending();
@@ -521,13 +521,8 @@ void MonClient::handle_auth(MAuthReply *m)
       _send_mon_message(waiting_for_session.front());
       waiting_for_session.pop_front();
     }
-
     _resend_mon_commands();
-
-    if (log_client) {
-      log_client->reset_session();
-      send_log();
-    }
+    send_log(true);
     if (active_con) {
       std::swap(auth, active_con->get_auth());
       global_id = active_con->get_global_id();
