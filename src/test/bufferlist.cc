@@ -49,8 +49,10 @@ TEST(Buffer, constructors) {
   //
   // buffer::create
   //
-  if (ceph_buffer_track)
+  if (ceph_buffer_track) {
     EXPECT_EQ(0, buffer::get_total_alloc());
+  }
+  
   {
     bufferptr ptr(buffer::create(len));
     history_alloc_bytes += len;
@@ -65,8 +67,10 @@ TEST(Buffer, constructors) {
   //
   // buffer::claim_char
   //
-  if (ceph_buffer_track)
+  if (ceph_buffer_track) {
     EXPECT_EQ(0, buffer::get_total_alloc());
+  }
+  
   {
     char* str = new char[len];
     ::memset(str, 'X', len);
@@ -86,8 +90,10 @@ TEST(Buffer, constructors) {
   //
   // buffer::create_static
   //
-  if (ceph_buffer_track)
+  if (ceph_buffer_track) {
     EXPECT_EQ(0, buffer::get_total_alloc());
+  }
+  
   {
     char* str = new char[len];
     bufferptr ptr(buffer::create_static(len, str));
@@ -103,8 +109,10 @@ TEST(Buffer, constructors) {
   //
   // buffer::create_malloc
   //
-  if (ceph_buffer_track)
+  if (ceph_buffer_track) {
     EXPECT_EQ(0, buffer::get_total_alloc());
+  }
+  
   {
     bufferptr ptr(buffer::create_malloc(len));
     history_alloc_bytes += len;
@@ -121,8 +129,10 @@ TEST(Buffer, constructors) {
   //
   // buffer::claim_malloc
   //
-  if (ceph_buffer_track)
+  if (ceph_buffer_track) {
     EXPECT_EQ(0, buffer::get_total_alloc());
+  }
+  
   {
     char* str = (char*)malloc(len);
     ::memset(str, 'X', len);
@@ -142,8 +152,10 @@ TEST(Buffer, constructors) {
   //
   // buffer::copy
   //
-  if (ceph_buffer_track)
+  if (ceph_buffer_track) {
     EXPECT_EQ(0, buffer::get_total_alloc());
+  }
+  
   {
     const std::string expected(len, 'X');
     bufferptr ptr(buffer::copy(expected.c_str(), expected.size()));
@@ -160,8 +172,10 @@ TEST(Buffer, constructors) {
   //
   // buffer::create_page_aligned
   //
-  if (ceph_buffer_track)
+  if (ceph_buffer_track) {
     EXPECT_EQ(0, buffer::get_total_alloc());
+  }
+  
   {
     bufferptr ptr(buffer::create_page_aligned(len));
     history_alloc_bytes += len;
@@ -187,8 +201,10 @@ TEST(Buffer, constructors) {
     }
   }
 #ifdef CEPH_HAVE_SPLICE
-  if (ceph_buffer_track)
+  if (ceph_buffer_track) {
     EXPECT_EQ(0, buffer::get_total_alloc());
+  }
+  
   {
     // no fd
     EXPECT_THROW(buffer::create_zero_copy(len, -1, NULL), buffer::error_code);
@@ -213,8 +229,9 @@ TEST(Buffer, constructors) {
     ::unlink(FILENAME);
   }
 #endif
-  if (ceph_buffer_track)
+  if (ceph_buffer_track) {
     EXPECT_EQ(0, buffer::get_total_alloc());
+  }
 }
 
 void bench_buffer_alloc(int size, int num)
@@ -268,8 +285,9 @@ protected:
 TEST_F(TestRawPipe, create_zero_copy) {
   bufferptr ptr(buffer::create_zero_copy(len, fd, NULL));
   EXPECT_EQ(len, ptr.length());
-  if (get_env_bool("CEPH_BUFFER_TRACK"))
+  if (get_env_bool("CEPH_BUFFER_TRACK")) {
     EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+  }
 }
 
 TEST_F(TestRawPipe, c_str_no_fd) {
@@ -2402,8 +2420,9 @@ TEST(BufferList, read_file) {
   EXPECT_EQ(-ENOENT, bl.read_file("UNLIKELY", &error));
   snprintf(cmd, sizeof(cmd), "echo ABC > %s ; chmod 0 %s", FILENAME, FILENAME);
   EXPECT_EQ(0, ::system(cmd));
-  if (getuid() != 0)
+  if (getuid() != 0) {
     EXPECT_EQ(-EACCES, bl.read_file(FILENAME, &error));
+  }
   snprintf(cmd, sizeof(cmd), "chmod +r %s", FILENAME);
   EXPECT_EQ(0, ::system(cmd));
   EXPECT_EQ(0, bl.read_file(FILENAME, &error));
