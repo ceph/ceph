@@ -2767,7 +2767,7 @@ def mkfs(
                 '--osd-uuid', fsid,
                 '--keyring', os.path.join(path, 'keyring'),
                 '--setuser', get_ceph_user(),
-                '--setgroup', get_ceph_user(),
+                '--setgroup', get_ceph_group(),
             ],
         )
     else:
