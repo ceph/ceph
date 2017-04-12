@@ -30,14 +30,16 @@ static ostream& _prefix(std::ostream *_dout, const PGLog *pglog)
 
 //////////////////// PGLog::IndexedLog ////////////////////
 
-PGLog::IndexedLog PGLog::IndexedLog::split_out_child(
+void PGLog::IndexedLog::split_out_child(
   pg_t child_pgid,
-  unsigned split_bits)
+  unsigned split_bits,
+  PGLog::IndexedLog *target)
 {
-  IndexedLog ret(pg_log_t::split_out_child(child_pgid, split_bits));
+  unindex();
+  *target = pg_log_t::split_out_child(child_pgid, split_bits);
   index();
+  target->index();
   reset_rollback_info_trimmed_to_riter();
-  return ret;
 }
 
 void PGLog::IndexedLog::trim(

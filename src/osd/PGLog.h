@@ -213,9 +213,10 @@ public:
       index();
     }
 
-    IndexedLog split_out_child(
+    void split_out_child(
       pg_t child_pgid,
-      unsigned split_bits);
+      unsigned split_bits,
+      IndexedLog *target);
 
     void zero() {
       // we must have already trimmed the old entries
@@ -658,7 +659,7 @@ public:
       pg_t child_pgid,
       unsigned split_bits,
       PGLog *opg_log) { 
-    opg_log->log = log.split_out_child(child_pgid, split_bits);
+    log.split_out_child(child_pgid, split_bits, &opg_log->log);
     missing.split_into(child_pgid, split_bits, &(opg_log->missing));
     opg_log->mark_dirty_to(eversion_t::max());
     mark_dirty_to(eversion_t::max());
