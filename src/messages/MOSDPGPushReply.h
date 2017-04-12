@@ -19,7 +19,7 @@
 
 class MOSDPGPushReply : public MOSDFastDispatchOp {
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 2;
 
 public:
   pg_shard_t from;
@@ -59,14 +59,8 @@ public:
     ::decode(map_epoch, p);
     ::decode(replies, p);
     ::decode(cost, p);
-
-    if (header.version >= 2) {
-      ::decode(pgid.shard, p);
-      ::decode(from, p);
-    } else {
-      pgid.shard = shard_id_t::NO_SHARD;
-      from = pg_shard_t(get_source().num(), shard_id_t::NO_SHARD);
-    }
+    ::decode(pgid.shard, p);
+    ::decode(from, p);
   }
 
   void encode_payload(uint64_t features) override {
