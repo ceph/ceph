@@ -95,7 +95,8 @@ test_rename() {
     rbd create -p rbd2 -s 1 foo
     rbd rename rbd2/foo rbd2/bar
     rbd -p rbd2 ls | grep bar
-    ! rbd rename rbd2/bar foo
+    rbd rename rbd2/bar foo
+    rbd rename --pool rbd2 foo bar
     ! rbd rename rbd2/bar --dest-pool rbd foo
     rbd rename --pool rbd2 bar --dest-pool rbd2 foo
     rbd -p rbd2 ls | grep foo
