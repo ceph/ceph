@@ -19,8 +19,8 @@
 
 class MOSDMarkMeDown : public PaxosServiceMessage {
 
-  static const int COMPAT_VERSION = 1;
   static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 2;
 
  public:
   uuid_d fsid;
@@ -50,8 +50,6 @@ public:
     ::decode(target_osd, p);
     ::decode(epoch, p);
     ::decode(request_ack, p);
-    if (header.version < 2)
-      request_ack = true;    // assume true for older clients
   }
 
   void encode_payload(uint64_t features) override {
