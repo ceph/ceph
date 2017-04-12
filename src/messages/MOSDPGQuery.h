@@ -25,8 +25,9 @@
 
 class MOSDPGQuery : public Message {
   static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
-  version_t       epoch;
+  static const int COMPAT_VERSION = 3;
+
+  version_t epoch;
 
  public:
   version_t get_epoch() const { return epoch; }
@@ -82,23 +83,13 @@ public:
     vector<pair<pg_t, pg_query_t> > _pg_list;
     ::decode(_pg_list, p);
     vector<shard_id_t> _shard_list(_pg_list.size(), shard_id_t::NO_SHARD);
-    if (header.version >= 3) {
-      _shard_list.clear();
-      ::decode(_shard_list, p);
-    }
+    _shard_list.clear();
+    ::decode(_shard_list, p);
     assert(_pg_list.size() == _shard_list.size());
     for (unsigned i = 0; i < _pg_list.size(); ++i) {
       pg_list.insert(
 	make_pair(
 	  spg_t(_pg_list[i].first, _shard_list[i]), _pg_list[i].second));
-    }
-
-    if (header.version < 2) {
-      for (map<spg_t, pg_query_t>::iterator i = pg_list.begin();
-	   i != pg_list.end();
-	   ++i) {
-	i->second.epoch_sent = epoch;
-      }
     }
   }
 };
