@@ -592,14 +592,26 @@ if(WITH_SELINUX)
   add_subdirectory(selinux)
 endif(WITH_SELINUX)
 
+option(CTEST_FLAGS "Options to pass to the CTEST command" "")
 # enables testing and creates Make check command
 add_custom_target(tests
   COMMENT "Building tests")
 enable_testing()
 set(CMAKE_CTEST_COMMAND ctest)
 add_custom_target(check
-  COMMAND ${CMAKE_CTEST_COMMAND}
+  COMMAND ${CMAKE_CTEST_COMMAND} ${CTEST_FLAGS}
   DEPENDS tests)
+
+# enables retesting of failed tests and creates Make recheck command
+# And produce verbose output
+add_custom_target(retests
+  COMMENT "Retesting commands that failed in a previous run")
+enable_testing()
+set(CMAKE_CTEST_COMMAND ctest)
+add_custom_target(recheck
+  COMMAND ${CMAKE_CTEST_COMMAND} ${CTEST_FLAGS}
+    --rerun-failed -V
+  DEPENDS retests)
 
 add_subdirectory(src)
 
