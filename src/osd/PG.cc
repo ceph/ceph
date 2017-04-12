@@ -1979,6 +1979,7 @@ void PG::mark_clean()
   info.history.last_interval_clean = info.history.same_interval_since;
 
   past_intervals.clear();
+  dirty_big_info = true;
 
   if (is_active()) {
     /* The check is needed because if we are below min_size we're not
