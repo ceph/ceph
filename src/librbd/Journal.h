@@ -11,6 +11,7 @@
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/WorkQueue.h"
 #include "journal/Future.h"
 #include "journal/JournalMetadataListener.h"
 #include "journal/ReplayEntry.h"
@@ -23,7 +24,6 @@
 #include <string>
 #include <unordered_map>
 
-class ContextWQ;
 class SafeTimer;
 namespace journal {
 class Journaler;
