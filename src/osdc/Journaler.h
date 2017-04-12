@@ -298,6 +298,11 @@ private:
   uint64_t flush_pos; ///< where we will flush. if
 		      ///  write_pos>flush_pos, we're buffering writes.
   uint64_t safe_pos; ///< what has been committed safely to disk.
+
+  uint64_t next_safe_pos; /// start postion of the first entry that isn't
+			  /// being fully flushed. If we don't flush any
+			  // partial entry, it's equal to flush_pos.
+
   bufferlist write_buf; ///< write buffer.  flush_pos +
 			///  write_buf.length() == write_pos.
 
@@ -306,7 +311,7 @@ private:
 
   bool waiting_for_zero;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
-  std::set<uint64_t> pending_safe;
+  std::map<uint64_t, uint64_t> pending_safe; // flush_pos -> safe_pos
   // when safe through given offset
   std::map<uint64_t, std::list<Context*> > waitfor_safe;
 
@@ -398,7 +403,8 @@ public:
     objecter(obj), filer(objecter, f), logger(l), logger_key_lat(lkey),
     delay_flush_event(0),
     state(STATE_UNDEF), error(0),
-    prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0), safe_pos(0),
+    prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0),
+    safe_pos(0), next_safe_pos(0),
     write_buf_throttle(cct, "write_buf_throttle", UINT_MAX - (UINT_MAX >> 3)),
     waiting_for_zero(false),
     read_pos(0), requested_pos(0), received_pos(0),
@@ -428,6 +434,7 @@ public:
     write_pos = 0;
     flush_pos = 0;
     safe_pos = 0;
+    next_safe_pos = 0;
     read_pos = 0;
     requested_pos = 0;
     received_pos = 0;
@@ -459,7 +466,7 @@ public:
   void set_writeable();
   void set_write_pos(uint64_t p) {
     lock_guard l(lock);
-    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = p;
+    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = next_safe_pos = p;
   }
   void set_read_pos(uint64_t p) {
     lock_guard l(lock);
