@@ -6375,6 +6375,46 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   return 0;
 }
 
+int OSDMonitor::prepare_command_osd_crush_remove(
+    CrushWrapper &newcrush,
+    int32_t id,
+    int32_t ancestor,
+    bool has_ancestor,
+    bool unlink_only)
+{
+  int err = 0;
+
+  if (has_ancestor) {
+    err = newcrush.remove_item_under(g_ceph_context, id, ancestor,
+        unlink_only);
+  } else {
+    err = newcrush.remove_item(g_ceph_context, id, unlink_only);
+  }
+
+  if (err < 0)
+    return err;
+
+  assert(err == 0);
+  pending_inc.crush.clear();
+  newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+
+  return 0;
+}
+
+int OSDMonitor::prepare_command_osd_remove(int32_t id)
+{
+  if (osdmap.is_up(id)) {
+    return -EBUSY;
+  }
+
+  pending_inc.new_state[id] = osdmap.get_state(id);
+  pending_inc.new_uuid[id] = uuid_d();
+  pending_metadata_rm.insert(id);
+  pending_metadata.erase(id);
+
+  return 0;
+}
+
 bool OSDMonitor::prepare_command(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
@@ -7040,6 +7080,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	return true;
       }
       int id = newcrush.get_item_id(name);
+      int ancestor = 0;
+
       bool unlink_only = prefix == "osd crush unlink";
       string ancestor_str;
       if (cmd_getval(g_ceph_context, cmdmap, "ancestor", ancestor_str)) {
@@ -7049,20 +7091,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     << "' does not appear in the crush map";
 	  break;
 	}
-	int ancestor = newcrush.get_item_id(ancestor_str);
-	err = newcrush.remove_item_under(g_ceph_context, id, ancestor,
-					 unlink_only);
-      } else {
-	err = newcrush.remove_item(g_ceph_context, id, unlink_only);
+        ancestor = newcrush.get_item_id(ancestor_str);
       }
+
+      err = prepare_command_osd_crush_remove(
+          newcrush,
+          id, ancestor,
+          (ancestor < 0), unlink_only);
+
       if (err == -ENOENT) {
 	ss << "item " << id << " does not appear in that position";
 	err = 0;
 	break;
       }
       if (err == 0) {
-	pending_inc.crush.clear();
-	newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
 	ss << "removed item id " << id << " name '" << name << "' from crush map";
 	getline(ss, rs);
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
@@ -7808,16 +7850,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  any = true;
 	}
       } else if (prefix == "osd rm") {
-	if (osdmap.is_up(osd)) {
+        err = prepare_command_osd_remove(osd);
+
+        if (err == -EBUSY) {
 	  if (any)
 	    ss << ", ";
           ss << "osd." << osd << " is still up; must be down before removal. ";
-	  err = -EBUSY;
 	} else {
-	  pending_inc.new_state[osd] = osdmap.get_state(osd);
-          pending_inc.new_uuid[osd] = uuid_d();
-	  pending_metadata_rm.insert(osd);
-	  pending_metadata.erase(osd);
+          assert(err == 0);
 	  if (any) {
 	    ss << ", osd." << osd;
           } else {
