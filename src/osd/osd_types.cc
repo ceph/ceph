@@ -2933,7 +2933,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
 // -- pg_notify_t --
 void pg_notify_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(2, 2, bl);
   ::encode(query_epoch, bl);
   ::encode(epoch_sent, bl);
   ::encode(info, bl);
@@ -2948,13 +2948,8 @@ void pg_notify_t::decode(bufferlist::iterator &bl)
   ::decode(query_epoch, bl);
   ::decode(epoch_sent, bl);
   ::decode(info, bl);
-  if (struct_v >= 2) {
-    ::decode(to, bl);
-    ::decode(from, bl);
-  } else {
-    to = shard_id_t::NO_SHARD;
-    from = shard_id_t::NO_SHARD;
-  }
+  ::decode(to, bl);
+  ::decode(from, bl);
   DECODE_FINISH(bl);
 }
 
