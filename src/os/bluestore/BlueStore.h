@@ -1717,6 +1717,76 @@ public:
     void dump(Formatter *f);
   };
 
+  class ThrottleManager {
+    CephContext *cct;
+    BlueStore *store;
+
+    Throttle& managed_throttle;
+
+    PerfCounters *logger;
+
+    uint32_t power;
+
+    utime_t prev_time;
+    pair<uint64_t,uint64_t> prev_commit_avg;
+    pair<uint64_t,uint64_t> prev_throt_avg;
+
+    std::mutex mtx;
+
+    // config parameters for which live changes possible
+    double upper_lat_limit;
+    double lower_lat_limit;
+    utime_t latency_window;
+
+    uint32_t poll_count;
+    int thresh_count;
+    int zero_submit_count;
+
+    static constexpr uint32_t poll_cycles = 5;
+    static constexpr int thresh_limit = 3;
+    static constexpr uint32_t min_power = 24; // 2**12 or 4K
+    static constexpr uint32_t max_power = 76; // 2**38 or 256G
+    static constexpr int log_level = 30;
+    static constexpr int throt_lat_idx = l_bluestore_throttle_lat;
+    static constexpr int commit_lat_idx = l_bluestore_commit_lat;
+
+    // modification direction
+    enum class ModDir : int { decrease = -1, increase = 1 };
+
+  public:
+    ThrottleManager(CephContext* cct,
+		    BlueStore* store,
+		    Throttle& managed_throttle);
+    ~ThrottleManager();
+    void set_latency_window(uint32_t window_msec) {
+      std::unique_lock<std::mutex> l(mtx);
+      latency_window.set_from_double(window_msec / 1000.0);
+    }
+    void set_max_latency(uint32_t max) {
+      std::unique_lock<std::mutex> l(mtx);
+      upper_lat_limit = max;
+    }
+    void set_min_latency(uint32_t min) {
+      std::unique_lock<std::mutex> l(mtx);
+      lower_lat_limit = min;
+    }
+    void init(PerfCounters *logger);
+    void reset();
+    void manage_throttle();
+
+  private:
+    static int64_t sqrt_2_power(uint power);
+
+    void mod_throttle(ModDir dir);
+
+    // mtx must be held by caller
+    inline void reset_counters() {
+      poll_count = 0;
+      thresh_count = 0;
+      zero_submit_count = 0;
+    }
+  }; // class ThrottleManager
+
   // --------------------------------------------------------
   // members
 private:
@@ -1748,6 +1818,9 @@ private:
 
   Throttle throttle_bytes;          ///< submit to commit
   Throttle throttle_deferred_bytes;  ///< submit to deferred complete
+
+  std::atomic<bool> latency_managed_throttle;
+  ThrottleManager throttle_mgr;
 
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
