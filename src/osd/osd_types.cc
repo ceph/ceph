@@ -3063,9 +3063,8 @@ struct compact_interval_t {
 };
 ostream &operator<<(ostream &o, const compact_interval_t &rhs)
 {
-  return o << "(first: " << rhs.first
-	   << ", last: " << rhs.last
-	   << ", acting: " << rhs.acting << ")";
+  return o << "([" << rhs.first << "," << rhs.last
+	   << "] acting " << rhs.acting << ")";
 }
 WRITE_CLASS_ENCODER(compact_interval_t)
 
