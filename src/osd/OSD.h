@@ -861,6 +861,9 @@ public:
 	  ceph_clock_now(cct),
 	  entity_inst_t())));
   }
+
+  Mutex snap_sleep_lock;
+  SafeTimer snap_sleep_timer;
   AsyncReserver<spg_t> snap_reserver;
 
   void queue_for_scrub(PG *pg) {

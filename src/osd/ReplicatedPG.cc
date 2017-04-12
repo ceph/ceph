@@ -3617,14 +3617,6 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
 
 void ReplicatedPG::snap_trimmer(epoch_t queued)
 {
-  if (g_conf->osd_snap_trim_sleep > 0) {
-    unlock();
-    utime_t t;
-    t.set_from_double(g_conf->osd_snap_trim_sleep);
-    t.sleep();
-    lock();
-    dout(20) << __func__ << " slept for " << t << dendl;
-  }
   if (deleting || pg_has_reset_since(queued)) {
     return;
   }
@@ -13055,7 +13047,7 @@ boost::statechart::result ReplicatedPG::WaitReservation::react(const SnapTrimRes
 
   pending = nullptr;
   if (!pg->is_primary() || !pg->is_active() || !pg->is_clean() ||
-      pg->scrubber.active) {
+      pg->scrubber.active || pg->snap_trimq.empty()) {
     post_event(SnapTrim());
     return transit< NotTrimming >();
   }
@@ -13140,7 +13132,7 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
     in_flight.insert(pos);
     pg->simple_opc_submit(std::move(ctx));
   }
-  return discard_event();
+  return transit< WaitTrimTimer >();
 }
 
 /* WaitingOnReplicasObjects */

@@ -1565,6 +1565,10 @@ private:
   struct SnapTrimReserved : boost::statechart::event< SnapTrimReserved > {
     SnapTrimReserved() : boost::statechart::event< SnapTrimReserved >() {}
   };
+  struct SnapTrimTimerReady : boost::statechart::event< SnapTrimTimerReady > {
+    SnapTrimTimerReady() : boost::statechart::event< SnapTrimTimerReady >() {}
+  };
+
   struct SnapTrimmer : public boost::statechart::state_machine< SnapTrimmer, NotTrimming > {
     ReplicatedPG *pg;
     set<hobject_t, hobject_t::BitwiseComparator> in_flight;
@@ -1647,6 +1651,62 @@ private:
     }
     boost::statechart::result react(const SnapTrim&) {
       return discard_event();
+    }
+  };
+
+  struct WaitTrimTimer : boost::statechart::state< WaitTrimTimer, Trimming >, NamedState {
+    typedef boost::mpl::list <
+      boost::statechart::custom_reaction< SnapTrimTimerReady >
+      > reactions;
+    Context *wakeup = nullptr;
+    bool slept = false;
+    explicit WaitTrimTimer(my_context ctx)
+      : my_base(ctx),
+	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitTrimTimer") {
+      context< SnapTrimmer >().log_enter(state_name);
+      struct OnTimer : Context {
+	ReplicatedPGRef pg;
+	epoch_t epoch;
+	OnTimer(ReplicatedPGRef pg, epoch_t epoch) : pg(pg), epoch(epoch) {}
+	void finish(int) override {
+	  pg->lock();
+	  if (!pg->pg_has_reset_since(epoch))
+	    pg->snap_trimmer_machine.process_event(SnapTrimTimerReady());
+	  pg->unlock();
+	}
+      };
+      auto *pg = context< SnapTrimmer >().pg;
+      if (pg->cct->_conf->osd_snap_trim_sleep > 0) {
+	wakeup = new OnTimer{pg, pg->get_osdmap()->get_epoch()};
+	Mutex::Locker l(pg->osd->snap_sleep_lock);
+	pg->osd->snap_sleep_timer.add_event_after(
+	  pg->cct->_conf->osd_snap_trim_sleep, wakeup);
+	slept = true;
+      } else {
+	post_event(SnapTrimTimerReady());
+      }
+    }
+    void exit() {
+      context< SnapTrimmer >().log_exit(state_name, enter_time);
+      auto *pg = context< SnapTrimmer >().pg;
+      if (wakeup) {
+	Mutex::Locker l(pg->osd->snap_sleep_lock);
+	pg->osd->snap_sleep_timer.cancel_event(wakeup);
+	wakeup = nullptr;
+      }
+    }
+    boost::statechart::result react(const SnapTrimTimerReady &) {
+      wakeup = nullptr;
+      auto *pg = context< SnapTrimmer >().pg;
+      if (!pg->is_primary() || !pg->is_active() || !pg->is_clean() ||
+	  pg->scrubber.active) {
+	post_event(SnapTrim());
+	return transit< NotTrimming >();
+      } else {
+	if (slept)
+	  post_event(SnapTrim());
+	return transit< TrimmingObjects >();
+      }
     }
   };
 
