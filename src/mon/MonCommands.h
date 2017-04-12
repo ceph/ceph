@@ -699,6 +699,12 @@ COMMAND("osd destroy " \
         "but removes cephx keys, config-key data and lockbox keys, "\
         "rendering data permanently unreadable.", \
         "osd", "rw", "cli,rest")
+COMMAND("osd purge " \
+        "name=id,type=CephOsdName " \
+        "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+        "purge all osd data from the monitors. Combines `osd destroy`, " \
+        "`osd rm`, and `osd crush rm`.", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd lost " \
 	"name=id,type=CephOsdName " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
