@@ -261,7 +261,7 @@ void parse_syn_options(vector<const char*>& args)
 }
 
 
-SyntheticClient::SyntheticClient(Client *client, int w)
+SyntheticClient::SyntheticClient(StandaloneClient *client, int w)
 {
   this->client = client;
   whoami = w;
