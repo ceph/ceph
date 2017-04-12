@@ -32,7 +32,7 @@ static Tub<Infiniband> global_infiniband;
 RDMADispatcher::~RDMADispatcher()
 {
   done = true;
-  t.join();
+  polling_stop();
   ldout(cct, 20) << __func__ << " destructing rdma dispatcher" << dendl;
 
   assert(qp_conns.empty());
@@ -47,21 +47,14 @@ RDMADispatcher::~RDMADispatcher()
   delete tx_cc;
   delete rx_cc;
   delete async_handler;
+
+  global_infiniband->set_dispatcher(nullptr);
 }
 
 RDMADispatcher::RDMADispatcher(CephContext* c, RDMAStack* s)
   : cct(c), async_handler(new C_handle_cq_async(this)), lock("RDMADispatcher::lock"),
   w_lock("RDMADispatcher::for worker pending list"), stack(s)
 {
-  tx_cc = global_infiniband->create_comp_channel(c);
-  assert(tx_cc);
-  rx_cc = global_infiniband->create_comp_channel(c);
-  assert(rx_cc);
-  tx_cq = global_infiniband->create_comp_queue(c, tx_cc);
-  assert(tx_cq);
-  rx_cq = global_infiniband->create_comp_queue(c, rx_cc);
-  assert(rx_cq);
-
   PerfCountersBuilder plb(cct, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first, l_msgr_rdma_dispatcher_last);
 
   plb.add_u64_counter(l_msgr_rdma_polling, "polling", "Whether dispatcher thread is polling");
@@ -88,9 +81,26 @@ RDMADispatcher::RDMADispatcher(CephContext* c, RDMAStack* s)
 
   perf_logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perf_logger);
+}
+
+void RDMADispatcher::polling_start()
+{
+  tx_cc = global_infiniband->create_comp_channel(cct);
+  assert(tx_cc);
+  rx_cc = global_infiniband->create_comp_channel(cct);
+  assert(rx_cc);
+  tx_cq = global_infiniband->create_comp_queue(cct, tx_cc);
+  assert(tx_cq);
+  rx_cq = global_infiniband->create_comp_queue(cct, rx_cc);
+  assert(rx_cq);
 
   t = std::thread(&RDMADispatcher::polling, this);
-  cct->register_fork_watcher(this);
+}
+
+void RDMADispatcher::polling_stop()
+{
+  if (t.joinable())
+    t.join();
 }
 
 void RDMADispatcher::handle_async_event()
@@ -314,40 +324,6 @@ void RDMADispatcher::erase_qpn(uint32_t qpn)
   erase_qpn_lockless(qpn);
 }
 
-void RDMADispatcher::handle_pre_fork()
-{
-  done = true;
-  t.join();
-  done = false;
-
-  tx_cc->ack_events();
-  rx_cc->ack_events();
-  delete tx_cq;
-  delete rx_cq;
-  delete tx_cc;
-  delete rx_cc;
-
-  global_infiniband.destroy();
-}
-
-void RDMADispatcher::handle_post_fork()
-{
-  if (!global_infiniband)
-    global_infiniband.construct(
-      cct, cct->_conf->ms_async_rdma_device_name, cct->_conf->ms_async_rdma_port_num);
-
-  tx_cc = global_infiniband->create_comp_channel(cct);
-  assert(tx_cc);
-  rx_cc = global_infiniband->create_comp_channel(cct);
-  assert(rx_cc);
-  tx_cq = global_infiniband->create_comp_queue(cct, tx_cc);
-  assert(tx_cq);
-  rx_cq = global_infiniband->create_comp_queue(cct, rx_cc);
-  assert(rx_cq);
-
-  t = std::thread(&RDMADispatcher::polling, this);
-}
-
 void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
 {
   std::vector<Chunk*> tx_chunks;
@@ -455,6 +431,8 @@ void RDMAWorker::initialize()
 
 int RDMAWorker::listen(entity_addr_t &sa, const SocketOptions &opt,ServerSocket *sock)
 {
+  global_infiniband->init();
+
   auto p = new RDMAServerSocketImpl(cct, global_infiniband.get(), get_stack()->get_dispatcher(), this, sa);
   int r = p->listen(sa, opt);
   if (r < 0) {
@@ -468,6 +446,8 @@ int RDMAWorker::listen(entity_addr_t &sa, const SocketOptions &opt,ServerSocket 
 
 int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket)
 {
+  global_infiniband->init();
+
   RDMAConnectedSocketImpl* p = new RDMAConnectedSocketImpl(cct, global_infiniband.get(), get_stack()->get_dispatcher(), this);
   int r = p->try_connect(addr, opts);
 
@@ -550,6 +530,8 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t): NetworkStack(cct, t)
       cct, cct->_conf->ms_async_rdma_device_name, cct->_conf->ms_async_rdma_port_num);
   ldout(cct, 20) << __func__ << " constructing RDMAStack..." << dendl;
   dispatcher = new RDMADispatcher(cct, this);
+  global_infiniband->set_dispatcher(dispatcher);
+
   unsigned num = get_num_worker();
   for (unsigned i = 0; i < num; ++i) {
     RDMAWorker* w = dynamic_cast<RDMAWorker*>(get_worker(i));
