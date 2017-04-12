@@ -3281,12 +3281,13 @@ void PastIntervals::update_type(bool ec_pool, bool compact)
     if (!past_intervals) {
       past_intervals.reset(new pi_simple_rep);
     } else {
+      // we never convert from compact back to classic
       assert(is_classic());
     }
   } else {
     if (!past_intervals) {
       past_intervals.reset(new pi_compact_rep);
-    } else if (!is_classic()) {
+    } else if (is_classic()) {
       auto old = std::move(past_intervals);
       past_intervals.reset(new pi_compact_rep);
       assert(old->has_full_intervals());
