@@ -111,6 +111,7 @@ struct es_search_response {
 };
 
 class RGWMetadataSearchOp : public RGWOp {
+  RGWSyncModuleInstanceRef sync_module_ref;
   RGWElasticSyncModuleInstance *es_module;
 protected:
   string expression;
@@ -126,7 +127,9 @@ protected:
   es_search_response response;
 
 public:
-  RGWMetadataSearchOp(RGWElasticSyncModuleInstance *_es_module) : es_module(_es_module) {}
+  RGWMetadataSearchOp(const RGWSyncModuleInstanceRef& sync_module) : sync_module_ref(sync_module) {
+    es_module = static_cast<RGWElasticSyncModuleInstance *>(sync_module_ref.get());
+  }
 
   int verify_permission() {
     return 0;
@@ -254,7 +257,7 @@ void RGWMetadataSearchOp::execute()
 
 class RGWMetadataSearch_ObjStore_S3 : public RGWMetadataSearchOp {
 public:
-  RGWMetadataSearch_ObjStore_S3(RGWElasticSyncModuleInstance *_es_module) : RGWMetadataSearchOp(_es_module) {
+  RGWMetadataSearch_ObjStore_S3(const RGWSyncModuleInstanceRef& _sync_module) : RGWMetadataSearchOp(_sync_module) {
     custom_prefix = "x-amz-meta-";
   }
 
@@ -346,11 +349,10 @@ public:
 };
 
 class RGWHandler_REST_MDSearch_S3 : public RGWHandler_REST_S3 {
-  RGWElasticSyncModuleInstance *es_module;
 protected:
   RGWOp *op_get() {
     if (s->info.args.exists("query")) {
-      return new RGWMetadataSearch_ObjStore_S3(es_module);
+      return new RGWMetadataSearch_ObjStore_S3(store->get_sync_module());
     }
     if (!s->init_state.url_bucket.empty() &&
         s->info.args.exists("mdsearch")) {
@@ -365,8 +367,7 @@ protected:
     return nullptr;
   }
 public:
-  RGWHandler_REST_MDSearch_S3(const rgw::auth::StrategyRegistry& auth_registry,
-                              RGWElasticSyncModuleInstance *_es_module) : RGWHandler_REST_S3(auth_registry), es_module(_es_module) {}
+  RGWHandler_REST_MDSearch_S3(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
   virtual ~RGWHandler_REST_MDSearch_S3() {}
 };
 
@@ -386,7 +387,7 @@ RGWHandler_REST* RGWRESTMgr_MDSearch_S3::get_handler(struct req_state* const s,
     return nullptr;
   }
 
-  RGWHandler_REST *handler = new RGWHandler_REST_MDSearch_S3(auth_registry, es_module);
+  RGWHandler_REST *handler = new RGWHandler_REST_MDSearch_S3(auth_registry);
 
   ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name()
 		    << dendl;

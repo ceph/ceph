@@ -566,7 +566,7 @@ RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMg
   if (dialect != RGW_REST_S3) {
     return orig;
   }
-  return new RGWRESTMgr_MDSearch_S3(this);
+  return new RGWRESTMgr_MDSearch_S3();
 }
 
 int RGWElasticSyncModule::create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
