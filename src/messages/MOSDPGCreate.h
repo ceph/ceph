@@ -26,8 +26,7 @@
 struct MOSDPGCreate : public Message {
 
   const static int HEAD_VERSION = 3;
-  // At head_version 2 the unspecified compat_version was set to 2
-  const static int COMPAT_VERSION = 2;
+  const static int COMPAT_VERSION = 3;
 
   version_t          epoch;
   map<pg_t,pg_create_t> mkpg;
@@ -52,32 +51,8 @@ public:
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
-    if (header.version >= 2) {
-      ::decode(mkpg, p);
-    } else {
-      __u32 n;
-      ::decode(n, p);
-      while (n--) {
-	pg_t pgid;
-	epoch_t created;   // epoch pg created
-	pg_t parent;       // split from parent (if != pg_t())
-	__s32 split_bits;
-	::decode(pgid, p);
-	::decode(created, p);
-	::decode(parent, p);
-	::decode(split_bits, p);
-	mkpg[pgid] = pg_create_t(created, parent, split_bits);
-      }
-    }
-    if (header.version >= 3) {
-      ::decode(ctimes, p);
-    } else {
-      // To make other code simpler create map with time of 0,0 for each pg
-      for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
-	   i != mkpg.end(); ++i) {
-	ctimes[i->first] = utime_t();
-      }
-    }
+    ::decode(mkpg, p);
+    ::decode(ctimes, p);
   }
 
   void print(ostream& out) const override {
