@@ -6330,7 +6330,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   return 0;
 }
 
-int OSDMonitor::prepare_command_osd_crush_remove(
+int OSDMonitor::_prepare_command_osd_crush_remove(
     CrushWrapper &newcrush,
     int32_t id,
     int32_t ancestor,
@@ -6345,13 +6345,31 @@ int OSDMonitor::prepare_command_osd_crush_remove(
   } else {
     err = newcrush.remove_item(g_ceph_context, id, unlink_only);
   }
+  return err;
+}
+
+void OSDMonitor::do_osd_crush_remove(CrushWrapper& newcrush)
+{
+  pending_inc.crush.clear();
+  newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+}
+
+int OSDMonitor::prepare_command_osd_crush_remove(
+    CrushWrapper &newcrush,
+    int32_t id,
+    int32_t ancestor,
+    bool has_ancestor,
+    bool unlink_only)
+{
+  int err = _prepare_command_osd_crush_remove(
+      newcrush, id, ancestor,
+      has_ancestor, unlink_only);
 
   if (err < 0)
     return err;
 
   assert(err == 0);
-  pending_inc.crush.clear();
-  newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+  do_osd_crush_remove(newcrush);
 
   return 0;
 }
@@ -6458,6 +6476,66 @@ int OSDMonitor::prepare_command_osd_destroy(
 
   pending_inc.new_state[id] = CEPH_OSD_DESTROYED;
   pending_inc.new_uuid[id] = uuid_d();
+
+  // we can only propose_pending() once per service, otherwise we'll be
+  // defying PaxosService and all laws of nature. Therefore, as we may
+  // be used during 'osd purge', let's keep the caller responsible for
+  // proposing.
+
+  return 0;
+}
+
+int OSDMonitor::prepare_command_osd_purge(
+    int32_t id,
+    stringstream& ss)
+{
+  assert(paxos->is_plugged());
+  dout(10) << __func__ << " purging osd." << id << dendl;
+
+  assert(!osdmap.is_up(id));
+
+  /*
+   * This may look a bit weird, but this is what's going to happen:
+   *
+   *  1. we make sure that removing from crush works
+   *  2. we call `prepare_command_osd_destroy()`. If it returns an
+   *     error, then we abort the whole operation, as no updates
+   *     have been made. However, we this function will have
+   *     side-effects, thus we need to make sure that all operations
+   *     performed henceforth will *always* succeed.
+   *  3. we call `prepare_command_osd_remove()`. Although this
+   *     function can return an error, it currently only checks if the
+   *     osd is up - and we have made sure that it is not so, so there
+   *     is no conflict, and it is effectively an update.
+   *  4. finally, we call `do_osd_crush_remove()`, which will perform
+   *     the crush update we delayed from before.
+   */
+
+  CrushWrapper newcrush;
+  _get_pending_crush(newcrush);
+
+  int err = _prepare_command_osd_crush_remove(newcrush, id, 0, false, false);
+  if (err == -ENOENT) {
+    err = 0;
+  } else if (err < 0) {
+    ss << "error removing osd." << id << " from crush";
+    return err;
+  }
+
+  // no point destroying the osd again if it has already been marked destroyed
+  if (!osdmap.is_destroyed(id)) {
+    err = prepare_command_osd_destroy(id, ss);
+    if (err < 0) {
+      return err;
+    }
+    assert(0 == err);
+  }
+
+  err = prepare_command_osd_remove(id);
+  // we should not be busy, as we should have made sure this id is not up.
+  assert(0 == err);
+
+  do_osd_crush_remove(newcrush);
   return 0;
 }
 
@@ -8276,7 +8354,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return true;
     }
 
-  } else if (prefix == "osd destroy") {
+  } else if (prefix == "osd destroy" || prefix == "osd purge") {
     /* Destroying an OSD means that we don't expect to further make use of
      * the OSDs data (which may even become unreadable after this operation),
      * and that we are okay with scrubbing all its cephx keys and config-key
@@ -8305,6 +8383,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
+    bool is_destroy = (prefix == "osd destroy");
+    if (!is_destroy) {
+      assert("osd purge" == prefix);
+    }
+
     string sure;
     if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) ||
         sure != "--yes-i-really-mean-it") {
@@ -8321,21 +8404,29 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "osd." << id << " is not `down`.";
       err = -EBUSY;
       goto reply;
-    } else if (osdmap.is_destroyed(id)) {
+    } else if (is_destroy && osdmap.is_destroyed(id)) {
       ss << "destroyed osd." << id;
       err = 0;
       goto reply;
     }
 
     paxos->plug();
-    err = prepare_command_osd_destroy(id, ss);
+    if (is_destroy) {
+      err = prepare_command_osd_destroy(id, ss);
+    } else {
+      err = prepare_command_osd_purge(id, ss);
+    }
     paxos->unplug();
 
     if (err < 0) {
       goto reply;
     }
 
-    ss << "destroyed osd." << id;
+    if (is_destroy) {
+      ss << "destroyed osd." << id;
+    } else {
+      ss << "purged osd." << id;
+    }
     getline(ss, rs);
     wait_for_finished_proposal(op,
         new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
