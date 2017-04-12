@@ -3935,6 +3935,7 @@ int main(int argc, const char **argv)
         zone.system_key.id = access_key;
         zone.system_key.key = secret_key;
 	zone.realm_id = realm_id;
+        zone.tier_config = tier_config_add;
 
 	ret = zone.create();
 	if (ret < 0) {
