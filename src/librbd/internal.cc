@@ -1583,6 +1583,9 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
       delete ictx;
+      if (r != -ENOENT) {
+	return r;
+      }
     } else {
       string header_oid = ictx->header_oid;
       old_format = ictx->old_format;
