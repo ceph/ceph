@@ -100,7 +100,7 @@ void Client::dump(Formatter *f) const {
 
 void Client::generate_test_instances(std::list<Client *> &o) {
   bufferlist data;
-  data.append(std::string('1', 128));
+  data.append(std::string(128, '1'));
 
   o.push_back(new Client());
   o.push_back(new Client("id", data));
@@ -136,7 +136,7 @@ void Tag::generate_test_instances(std::list<Tag *> &o) {
   o.push_back(new Tag());
 
   bufferlist data;
-  data.append(std::string('1', 128));
+  data.append(std::string(128, '1'));
   o.push_back(new Tag(123, 234, data));
 }
 

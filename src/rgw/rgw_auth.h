@@ -228,7 +228,7 @@ public:
       return std::move(result_pair.first);
     }
 
-    Completer::cmplptr_t get_completer() {
+    Completer::cmplptr_t&& get_completer() {
       return std::move(result_pair.second);
     }
 

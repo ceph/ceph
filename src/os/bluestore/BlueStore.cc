@@ -698,7 +698,7 @@ int64_t BlueStore::GarbageCollector::estimate(
         dout(30) << __func__ << " affected_blob:" << *b
                  << " unref 0x" << std::hex << o << "~" << l
                  << std::dec << dendl;
-        affected_blobs.emplace(b, BlobInfo(ref_bytes)).first->second;
+	affected_blobs.emplace(b, BlobInfo(ref_bytes));
       }
     }
   }

@@ -1243,6 +1243,3 @@ TEST_F(LibRadosListPP, EnumerateObjectsFilterPP) {
   }
   ASSERT_TRUE(foundit);
 }
-
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic warning "-Wpragmas"
