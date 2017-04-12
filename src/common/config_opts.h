@@ -1673,7 +1673,7 @@ OPTION(rgw_shard_warning_threshold, OPT_DOUBLE, 90) // pct of safe max
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
 
 OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python modules from
-OPTION(mgr_modules, OPT_STR, "rest")  // Which modules to load
+OPTION(mgr_modules, OPT_STR, "restful")  // Which modules to load
 OPTION(mgr_data, OPT_STR, "/var/lib/ceph/mgr/$cluster-$id") // where to find keyring etc
 OPTION(mgr_beacon_period, OPT_INT, 5)  // How frequently to send beacon
 OPTION(mgr_stats_period, OPT_INT, 5) // How frequently to send stats
