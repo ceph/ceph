@@ -2814,55 +2814,24 @@ void pg_info_t::encode(bufferlist &bl) const
 
 void pg_info_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(31, 26, 26, bl);
-  if (struct_v < 23) {
-    old_pg_t opgid;
-    ::decode(opgid, bl);
-    pgid.pgid = opgid;
-  } else {
-    ::decode(pgid.pgid, bl);
-  }
+  DECODE_START(31, bl);
+  ::decode(pgid.pgid, bl);
   ::decode(last_update, bl);
   ::decode(last_complete, bl);
   ::decode(log_tail, bl);
-  if (struct_v < 25) {
-    bool log_backlog;
-    ::decode(log_backlog, bl);
-  }
-  hobject_t old_last_backfill;
-  if (struct_v >= 24) {
+  {
+    hobject_t old_last_backfill;
     ::decode(old_last_backfill, bl);
   }
   ::decode(stats, bl);
   history.decode(bl);
-  if (struct_v >= 22)
-    ::decode(purged_snaps, bl);
-  else {
-    set<snapid_t> snap_trimq;
-    ::decode(snap_trimq, bl);
-  }
-  if (struct_v < 27) {
-    last_epoch_started = history.last_epoch_started;
-  } else {
-    ::decode(last_epoch_started, bl);
-  }
-  if (struct_v >= 28)
-    ::decode(last_user_version, bl);
-  else
-    last_user_version = last_update.version;
-  if (struct_v >= 29)
-    ::decode(hit_set, bl);
-  if (struct_v >= 30)
-    ::decode(pgid.shard, bl);
-  else
-    pgid.shard = shard_id_t::NO_SHARD;
-  if (struct_v >= 31) {
-    ::decode(last_backfill, bl);
-    ::decode(last_backfill_bitwise, bl);
-  } else {
-    last_backfill = old_last_backfill;
-    last_backfill_bitwise = false;
-  }
+  ::decode(purged_snaps, bl);
+  ::decode(last_epoch_started, bl);
+  ::decode(last_user_version, bl);
+  ::decode(hit_set, bl);
+  ::decode(pgid.shard, bl);
+  ::decode(last_backfill, bl);
+  ::decode(last_backfill_bitwise, bl);
   DECODE_FINISH(bl);
 }
 
