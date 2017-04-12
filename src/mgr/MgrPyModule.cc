@@ -219,8 +219,8 @@ int MgrPyModule::load_commands()
 
 int MgrPyModule::handle_command(
   const cmdmap_t &cmdmap,
-  std::stringstream *ss,
-  std::stringstream *ds)
+  std::stringstream *ds,
+  std::stringstream *ss)
 {
   assert(ss != nullptr);
   assert(ds != nullptr);

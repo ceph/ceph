@@ -73,8 +73,8 @@ public:
 
   int handle_command(
     const cmdmap_t &cmdmap,
-    std::stringstream *ss,
-    std::stringstream *ds);
+    std::stringstream *ds,
+    std::stringstream *ss);
 };
 
 #endif
