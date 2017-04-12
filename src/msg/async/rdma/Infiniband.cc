@@ -17,6 +17,7 @@
 #include "Infiniband.h"
 #include "common/errno.h"
 #include "common/debug.h"
+#include "RDMAStack.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -708,9 +709,22 @@ int Infiniband::MemoryManager::get_channel_buffers(std::vector<Chunk*> &chunks, 
 }
 
 
-Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t port_num): device_list(cct)
+Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t port_num)
+  : cct(cct), lock("IB lock"), device_name(device_name), port_num(port_num)
 {
-  device = device_list.get_device(device_name.c_str());
+}
+
+void Infiniband::init()
+{
+  Mutex::Locker l(lock);
+
+  if (initialized)
+    return;
+
+  device_list = new DeviceList(cct);
+  initialized = true;
+
+  device = device_list->get_device(device_name.c_str());
   device->binding_port(cct, port_num);
   assert(device);
   ib_physical_port = device->active_port->get_port_num();
@@ -743,13 +757,28 @@ Infiniband::Infiniband(CephContext *cct, const std::string &device_name, uint8_t
 
   srq = create_shared_receive_queue(max_recv_wr, MAX_SHARED_RX_SGE_COUNT);
   post_channel_cluster();
+
+  dispatcher->polling_start();
 }
 
 Infiniband::~Infiniband()
 {
+  if (!initialized)
+    return;
+
+  if (dispatcher)
+    dispatcher->polling_stop();
+
   assert(ibv_destroy_srq(srq) == 0);
   delete memory_manager;
   delete pd;
+}
+
+void Infiniband::set_dispatcher(RDMADispatcher *d)
+{
+  assert(!d ^ !dispatcher);
+
+  dispatcher = d;
 }
 
 /**

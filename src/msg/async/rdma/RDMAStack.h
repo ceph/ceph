@@ -62,7 +62,7 @@ enum {
 };
 
 
-class RDMADispatcher : public CephContext::ForkWatcher {
+class RDMADispatcher {
   typedef Infiniband::MemoryManager::Chunk Chunk;
   typedef Infiniband::QueuePair QueuePair;
 
@@ -120,6 +120,9 @@ class RDMADispatcher : public CephContext::ForkWatcher {
   explicit RDMADispatcher(CephContext* c, RDMAStack* s);
   virtual ~RDMADispatcher();
   void handle_async_event();
+
+  void polling_start();
+  void polling_stop();
   void polling();
   int register_qp(QueuePair *qp, RDMAConnectedSocketImpl* csi);
   void make_pending_worker(RDMAWorker* w) {
@@ -136,8 +139,6 @@ class RDMADispatcher : public CephContext::ForkWatcher {
   Infiniband::CompletionQueue* get_tx_cq() const { return tx_cq; }
   Infiniband::CompletionQueue* get_rx_cq() const { return rx_cq; }
   void notify_pending_workers();
-  virtual void handle_pre_fork() override;
-  virtual void handle_post_fork() override;
   void handle_tx_event(ibv_wc *cqe, int n);
   void post_tx_buffer(std::vector<Chunk*> &chunks);
 

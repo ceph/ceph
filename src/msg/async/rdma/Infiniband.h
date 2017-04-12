@@ -122,6 +122,8 @@ class DeviceList {
 };
 
 
+class RDMADispatcher;
+
 class Infiniband {
  public:
   class ProtectionDomain {
@@ -223,13 +225,22 @@ class Infiniband {
   ibv_srq* srq;             // shared receive work queue
   Device *device;
   ProtectionDomain *pd;
-  DeviceList device_list;
+  DeviceList *device_list = nullptr;
+  RDMADispatcher *dispatcher = nullptr;
   void wire_gid_to_gid(const char *wgid, union ibv_gid *gid);
   void gid_to_wire_gid(const union ibv_gid *gid, char wgid[]);
+  CephContext *cct;
+  Mutex lock;
+  bool initialized = false;
+  const std::string &device_name;
+  uint8_t port_num;
 
  public:
   explicit Infiniband(CephContext *c, const std::string &device_name, uint8_t p);
   ~Infiniband();
+  void init();
+
+  void set_dispatcher(RDMADispatcher *d);
 
   class CompletionChannel {
     static const uint32_t MAX_ACK_EVENT = 5000;
