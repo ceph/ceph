@@ -114,8 +114,7 @@ public:
     ::decode(pn, p);   
     ::decode(uncommitted_pn, p);
     ::decode(lease_timestamp, p);
-    if (header.version >= 1)
-      ::decode(sent_timestamp, p);
+    ::decode(sent_timestamp, p);
     ::decode(latest_version, p);
     ::decode(latest_value, p);
     ::decode(values, p);
