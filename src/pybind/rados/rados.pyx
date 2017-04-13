@@ -295,59 +295,68 @@ LIBRADOS_CREATE_IDEMPOTENT = _LIBRADOS_CREATE_IDEMPOTENT
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
 
+
 class Error(Exception):
     """ `Error` class, derived from `Exception` """
+    pass
 
 
 class InvalidArgument(Error):
     pass
 
 
-class InterruptedOrTimeoutError(Error):
-    """ `InterruptedOrTimeoutError` class, derived from `Error` """
+class OSError(Error):
+    """ `OSError` class, derived from `Error` """
+    def __init__(self, errno, strerror):
+        self.errno = errno
+        self.strerror = strerror
+
+    def __str__(self):
+        return '[Errno {0}] {1}'.format(self.errno, self.strerror)
+
+
+class InterruptedOrTimeoutError(OSError):
+    """ `InterruptedOrTimeoutError` class, derived from `OSError` """
     pass
 
 
-class PermissionError(Error):
-    """ `PermissionError` class, derived from `Error` """
+class PermissionError(OSError):
+    """ `PermissionError` class, derived from `OSError` """
     pass
 
-class PermissionDeniedError(Error):
+
+class PermissionDeniedError(OSError):
     """ deal with EACCES related. """
     pass
 
-class ObjectNotFound(Error):
-    """ `ObjectNotFound` class, derived from `Error` """
+
+class ObjectNotFound(OSError):
+    """ `ObjectNotFound` class, derived from `OSError` """
     pass
 
 
-class NoData(Error):
-    """ `NoData` class, derived from `Error` """
+class NoData(OSError):
+    """ `NoData` class, derived from `OSError` """
     pass
 
 
-class ObjectExists(Error):
-    """ `ObjectExists` class, derived from `Error` """
+class ObjectExists(OSError):
+    """ `ObjectExists` class, derived from `OSError` """
     pass
 
 
-class ObjectBusy(Error):
-    """ `ObjectBusy` class, derived from `Error` """
+class ObjectBusy(OSError):
+    """ `ObjectBusy` class, derived from `IOError` """
     pass
 
 
-class IOError(Error):
-    """ `IOError` class, derived from `Error` """
+class IOError(OSError):
+    """ `ObjectBusy` class, derived from `OSError` """
     pass
 
 
-class NoSpace(Error):
-    """ `NoSpace` class, derived from `Error` """
-    pass
-
-
-class IncompleteWriteError(Error):
-    """ `IncompleteWriteError` class, derived from `Error` """
+class NoSpace(OSError):
+    """ `NoSpace` class, derived from `OSError` """
     pass
 
 
@@ -360,6 +369,7 @@ class IoctxStateError(Error):
     """ `IoctxStateError` class, derived from `Error` """
     pass
 
+
 class ObjectStateError(Error):
     """ `ObjectStateError` class, derived from `Error` """
     pass
@@ -370,8 +380,8 @@ class LogicError(Error):
     pass
 
 
-class TimedOut(Error):
-    """ `TimedOut` class, derived from `Error` """
+class TimedOut(OSError):
+    """ `TimedOut` class, derived from `OSError` """
     pass
 
 
@@ -415,9 +425,9 @@ cdef make_ex(ret, msg):
     """
     ret = abs(ret)
     if ret in errno_to_exception:
-        return errno_to_exception[ret](msg)
+        return errno_to_exception[ret](ret, msg)
     else:
-        return Error(msg + (": error code %d" % ret))
+        return Error(ret, msg + (": error code %d" % ret))
 
 
 # helper to specify an optional argument, where in addition to `cls`, `None`
