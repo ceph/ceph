@@ -4539,6 +4539,7 @@ def list_zfs():
     except subprocess.CalledProcessError as e:
         LOG.info('zfs list -o name,mountpoint '
                  'fails.\n (Error: %s)' % e)
+        raise
     lines = out.splitlines()
     for line in lines[2:]:
         vdevline = line.split()
