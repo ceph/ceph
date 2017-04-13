@@ -381,31 +381,41 @@ class Error(Exception):
     pass
 
 
-class PermissionError(Error):
+class OSError(Error):
+    """ `OSError` class, derived from `Error` """
+    def __init__(self, errno, strerror):
+        self.errno = errno
+        self.strerror = strerror
+
+    def __str__(self):
+        return '[Errno {0}] {1}'.format(self.errno, self.strerror)
+
+
+class PermissionError(OSError):
     pass
 
 
-class ImageNotFound(Error):
+class ImageNotFound(OSError):
     pass
 
 
-class ImageExists(Error):
+class ImageExists(OSError):
     pass
 
 
-class IOError(Error):
+class IOError(OSError):
     pass
 
 
-class NoSpace(Error):
+class NoSpace(OSError):
     pass
 
 
-class IncompleteWriteError(Error):
+class IncompleteWriteError(OSError):
     pass
 
 
-class InvalidArgument(Error):
+class InvalidArgument(OSError):
     pass
 
 
@@ -413,34 +423,34 @@ class LogicError(Error):
     pass
 
 
-class ReadOnlyImage(Error):
+class ReadOnlyImage(OSError):
     pass
 
 
-class ImageBusy(Error):
+class ImageBusy(OSError):
     pass
 
 
-class ImageHasSnapshots(Error):
+class ImageHasSnapshots(OSError):
     pass
 
 
-class FunctionNotSupported(Error):
+class FunctionNotSupported(OSError):
     pass
 
 
-class ArgumentOutOfRange(Error):
+class ArgumentOutOfRange(OSError):
     pass
 
 
-class ConnectionShutdown(Error):
+class ConnectionShutdown(OSError):
     pass
 
 
-class Timeout(Error):
+class Timeout(OSError):
     pass
 
-class DiskQuotaExceeded(Error):
+class DiskQuotaExceeded(OSError):
     pass
 
 
@@ -473,9 +483,9 @@ cdef make_ex(ret, msg):
     """
     ret = abs(ret)
     if ret in errno_to_exception:
-        return errno_to_exception[ret](msg)
+        return errno_to_exception[ret](ret, msg)
     else:
-        return Error(msg + (": error code %d" % ret))
+        return Error(ret, msg + (": error code %d" % ret))
 
 
 cdef rados_ioctx_t convert_ioctx(rados.Ioctx ioctx) except? NULL:

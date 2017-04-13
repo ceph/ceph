@@ -151,50 +151,58 @@ class Error(Exception):
     pass
 
 
-class PermissionError(Error):
+class OSError(Error):
+    def __init__(self, errno, strerror):
+        self.errno = errno
+        self.strerror = strerror
+
+    def __str__(self):
+        return '[Errno {0}] {1}'.format(self.errno, self.strerror)
+
+
+class PermissionError(OSError):
     pass
 
 
-class ObjectNotFound(Error):
+class ObjectNotFound(OSError):
     pass
 
 
-class NoData(Error):
+class NoData(OSError):
     pass
 
 
-class ObjectExists(Error):
+class ObjectExists(OSError):
     pass
 
 
-class IOError(Error):
+class IOError(OSError):
     pass
 
 
-class NoSpace(Error):
+class NoSpace(OSError):
     pass
 
 
-class InvalidValue(Error):
+class InvalidValue(OSError):
     pass
 
 
-class OperationNotSupported(Error):
-    pass
-
-
-class IncompleteWriteError(Error):
+class OperationNotSupported(OSError):
     pass
 
 
 class LibCephFSStateError(Error):
     pass
 
-class WouldBlock(Error):
+
+class WouldBlock(OSError):
     pass
 
-class OutOfRange(Error):
+
+class OutOfRange(OSError):
     pass
+
 
 IF UNAME_SYSNAME == "FreeBSD":
     cdef errno_to_exception =  {
@@ -236,9 +244,9 @@ cdef make_ex(ret, msg):
     """
     ret = abs(ret)
     if ret in errno_to_exception:
-        return errno_to_exception[ret](msg)
+        return errno_to_exception[ret](ret, msg)
     else:
-        return Error(msg + (": error code %d" % ret))
+        return Error(ret, msg + (": error code %d" % ret))
 
 
 class DirEntry(namedtuple('DirEntry',
