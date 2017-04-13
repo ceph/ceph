@@ -11,6 +11,13 @@ openstack:
   - volumes: # attached to each instance
       count: 3
       size: 10 # GB
+overrides:
+  ceph:
+    conf:
+      mgr:
+        mon reweight min pgs per osd: 4
+      mon:
+        mon reweight min pgs per osd: 4
 tasks:
 - install:
 - ceph:

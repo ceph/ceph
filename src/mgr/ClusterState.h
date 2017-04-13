@@ -35,7 +35,7 @@ protected:
   MonClient *monc;
   Objecter *objecter;
   FSMap fsmap;
-  Mutex lock;
+  mutable Mutex lock;
 
   PGMap pg_map;
 
@@ -57,29 +57,28 @@ public:
 
   void notify_osdmap(const OSDMap &osd_map);
 
-  bool have_fsmap() {
+  bool have_fsmap() const {
     Mutex::Locker l(lock);
     return fsmap.get_epoch() > 0;
   }
 
   template<typename Callback, typename...Args>
-  void with_fsmap(Callback&& cb, Args&&...args)
+  void with_fsmap(Callback&& cb, Args&&...args) const
   {
     Mutex::Locker l(lock);
-    std::forward<Callback>(cb)(const_cast<const FSMap&>(fsmap),
-        std::forward<Args>(args)...);
+    std::forward<Callback>(cb)(fsmap, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>
-  void with_pgmap(Callback&& cb, Args&&...args)
+  auto with_pgmap(Callback&& cb, Args&&...args) const ->
+    decltype(cb(pg_map, std::forward<Args>(args)...))
   {
     Mutex::Locker l(lock);
-    std::forward<Callback>(cb)(const_cast<const PGMap&>(pg_map),
-        std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(pg_map, std::forward<Args>(args)...);
   }
 
   template<typename... Args>
-  void with_monmap(Args &&... args)
+  void with_monmap(Args &&... args) const
   {
     Mutex::Locker l(lock);
     assert(monc != nullptr);
@@ -87,10 +86,11 @@ public:
   }
 
   template<typename... Args>
-  void with_osdmap(Args &&... args)
+  auto with_osdmap(Args &&... args) const ->
+    decltype(objecter->with_osdmap(std::forward<Args>(args)...))
   {
     assert(objecter != nullptr);
-    objecter->with_osdmap(std::forward<Args>(args)...);
+    return objecter->with_osdmap(std::forward<Args>(args)...);
   }
 
 };

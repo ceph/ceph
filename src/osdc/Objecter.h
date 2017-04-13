@@ -1952,28 +1952,10 @@ private:
   // here or you will have great woe and misery.
 
   template<typename Callback, typename...Args>
-  auto with_osdmap(Callback&& cb, Args&&...args) ->
-    typename std::enable_if<
-      std::is_void<
-    decltype(cb(const_cast<const OSDMap&>(*osdmap),
-		std::forward<Args>(args)...))>::value,
-      void>::type {
+  auto with_osdmap(Callback&& cb, Args&&... args) const ->
+    decltype(cb(*osdmap, std::forward<Args>(args)...)) {
     shared_lock l(rwlock);
-    std::forward<Callback>(cb)(const_cast<const OSDMap&>(*osdmap),
-			       std::forward<Args>(args)...);
-  }
-
-  template<typename Callback, typename...Args>
-  auto with_osdmap(Callback&& cb, Args&&... args) ->
-    typename std::enable_if<
-      !std::is_void<
-	decltype(cb(const_cast<const OSDMap&>(*osdmap),
-		    std::forward<Args>(args)...))>::value,
-      decltype(cb(const_cast<const OSDMap&>(*osdmap),
-		  std::forward<Args>(args)...))>::type {
-    shared_lock l(rwlock);
-    return std::forward<Callback>(cb)(const_cast<const OSDMap&>(*osdmap),
-				      std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
   }
 
 

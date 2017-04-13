@@ -73,6 +73,11 @@ protected:
     const map<string,string>& param_str_map,
     const MgrCommand *this_cmd);
 
+private:
+  friend class ReplyOnFinish;
+  bool _reply(MCommand* m,
+	      int ret, const std::string& s, const bufferlist& payload);
+
 public:
   int init(uint64_t gid, entity_addr_t client_addr);
   void shutdown();
