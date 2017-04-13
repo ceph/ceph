@@ -1878,6 +1878,17 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
     return 0;
   }
 
+  float fratio;
+  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) && osdmap.get_full_ratio() > 0) {
+    fratio = osdmap.get_full_ratio();
+  } else if (full_ratio > 0) {
+    fratio = full_ratio;
+  } else {
+    // this shouldn't really happen
+    fratio = g_conf->mon_osd_full_ratio;
+    if (fratio > 1.0) fratio /= 100;
+  }
+
   int64_t min = -1;
   for (map<int,float>::iterator p = wm.begin(); p != wm.end(); ++p) {
     ceph::unordered_map<int32_t,osd_stat_t>::const_iterator osd_info =
@@ -1892,7 +1903,7 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
 	continue;
       }
       double unusable = (double)osd_info->second.kb *
-	(1.0 - g_conf->mon_osd_full_ratio);
+	(1.0 - fratio);
       double avail = MAX(0.0, (double)osd_info->second.kb_avail - unusable);
       avail *= 1024.0;
       int64_t proj = (int64_t)(avail / (double)p->second);
