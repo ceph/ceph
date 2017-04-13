@@ -48,20 +48,8 @@ class DaemonState(object):
         self.use_init = use_init
         if self.use_init:
             _, role = role.split('.')
-            self.proc_name = 'ceph-{role}'.format(role=role)
             if (role == 'mon') or (role == 'mds') or (role == 'rgw'):
                 self.id = remote.shortname
-            self.proc_regex = '"' + self.proc_name + '.*--id ' + self.id + '"'
-            self.list_proc_id = ['ps', '-ef',
-                                 run.Raw('|'),
-                                 'grep',
-                                 run.Raw(self.proc_regex),
-                                 run.Raw('|'),
-                                 'grep', '-v',
-                                 'grep', run.Raw('|'),
-                                 'awk',
-                                 run.Raw("{'print $2'}")]
-            self.proc_id = None
             self._set_commands()
         self.log = command_kwargs.get('logger', log)
         self.proc = None
@@ -70,6 +58,30 @@ class DaemonState(object):
         self.start_cmd = get_systemd_cmd('start', self.type_, self.id_)
         self.stop_cmd = get_systemd_cmd('stop', self.type_, self.id_)
         self.restart_cmd = get_systemd_cmd('restart', self.type_, self.id_)
+
+    @property
+    def pid(self):
+        """
+        When use_init=True, this is the daemon's PID.
+        """
+        if not self.use_init:
+            raise NotImplementedError
+        proc_name = 'ceph-%s' % self.role
+        proc_regex = '"%s.*--id %s"' % (proc_name, self.id)
+        args = ['ps', '-ef',
+                run.Raw('|'),
+                'grep',
+                run.Raw(proc_regex),
+                run.Raw('|'),
+                'grep', '-v',
+                'grep', run.Raw('|'),
+                'awk',
+                run.Raw("{'print $2'}")]
+        proc = self.remote.run(args=args, stdout=StringIO())
+        pid_string = proc.stdout.getvalue().strip()
+        if not pid_string.isdigit():
+            return None
+        return int(pid_string)
 
     def stop(self, timeout=300):
         """
@@ -189,12 +201,10 @@ class DaemonState(object):
         if self.use_init:
             self.log.info("using init to send signal")
             self.log.info("WARNING init may restart after kill signal")
-            out = StringIO()
-            self.remote.run(args=self.list_proc_id, stdout=out)
-            proc_id = out.getvalue().strip()
-            self.log.info("Sending signal %s to process %s", sig, proc_id)
+            pid = self.pid
+            self.log.info("Sending signal %s to process %s", sig, pid)
             sig = '-' + str(sig)
-            self.remote.run(args=['sudo', 'kill', str(sig), proc_id])
+            self.remote.run(args=['sudo', 'kill', str(sig), pid])
             return
         self.proc.stdin.write(struct.pack('!b', sig))
         if not silent:
@@ -208,12 +218,9 @@ class DaemonState(object):
         if self.use_init:
             self.log.info("using init to send signal")
             self.log.info("WARNING init may restart after kill signal")
-            out = StringIO()
-            self.remote.run(args=self.list_proc_id, stdout=out)
-            proc_id = out.getvalue().strip()
-            self.proc_id = proc_id
-            if proc_id > 0:
-                return proc_id
+            pid = self.pid
+            if pid > 0:
+                return pid
             else:
                 return None
         return self.proc is not None
