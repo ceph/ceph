@@ -2884,3 +2884,210 @@ void PGMapUpdater::check_down_pgs(
     }
   }
 }
+
+int reweight::by_utilization(
+    const OSDMap &osdmap,
+    const PGMap &pgm,
+    int oload,
+    double max_changef,
+    int max_osds,
+    bool by_pg, const set<int64_t> *pools,
+    bool no_increasing,
+    map<int32_t, uint32_t>* new_weights,
+    std::stringstream *ss,
+    std::string *out_str,
+    Formatter *f)
+{
+  if (oload <= 100) {
+    *ss << "You must give a percentage higher than 100. "
+      "The reweighting threshold will be calculated as <average-utilization> "
+      "times <input-percentage>. For example, an argument of 200 would "
+      "reweight OSDs which are twice as utilized as the average OSD.\n";
+    return -EINVAL;
+  }
+
+  vector<int> pgs_by_osd(osdmap.get_max_osd());
+
+  // Avoid putting a small number (or 0) in the denominator when calculating
+  // average_util
+  double average_util;
+  if (by_pg) {
+    // by pg mapping
+    double weight_sum = 0.0;      // sum up the crush weights
+    unsigned num_pg_copies = 0;
+    int num_osds = 0;
+    for (const auto& pg : pgm.pg_stat) {
+      if (pools && pools->count(pg.first.pool()) == 0)
+	continue;
+      for (const auto acting : pg.second.acting) {
+	if (acting >= (int)pgs_by_osd.size())
+	  pgs_by_osd.resize(acting);
+	if (pgs_by_osd[acting] == 0) {
+          if (osdmap.crush->get_item_weightf(acting) <= 0) {
+            //skip if we currently can not identify item
+            continue;
+          }
+	  weight_sum += osdmap.crush->get_item_weightf(acting);
+	  ++num_osds;
+	}
+	++pgs_by_osd[acting];
+	++num_pg_copies;
+      }
+    }
+
+    if (!num_osds || (num_pg_copies / num_osds < g_conf->mon_reweight_min_pgs_per_osd)) {
+      *ss << "Refusing to reweight: we only have " << num_pg_copies
+	  << " PGs across " << num_osds << " osds!\n";
+      return -EDOM;
+    }
+
+    average_util = (double)num_pg_copies / weight_sum;
+  } else {
+    // by osd utilization
+    int num_osd = MAX(1, pgm.osd_stat.size());
+    if ((uint64_t)pgm.osd_sum.kb * 1024 / num_osd
+	< g_conf->mon_reweight_min_bytes_per_osd) {
+      *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
+	  << " kb across all osds!\n";
+      return -EDOM;
+    }
+    if ((uint64_t)pgm.osd_sum.kb_used * 1024 / num_osd
+	< g_conf->mon_reweight_min_bytes_per_osd) {
+      *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb_used
+	  << " kb used across all osds!\n";
+      return -EDOM;
+    }
+
+    average_util = (double)pgm.osd_sum.kb_used / (double)pgm.osd_sum.kb;
+  }
+
+  // adjust down only if we are above the threshold
+  const double overload_util = average_util * (double)oload / 100.0;
+
+  // but aggressively adjust weights up whenever possible.
+  const double underload_util = average_util;
+
+  const unsigned max_change = (unsigned)(max_changef * (double)0x10000);
+
+  ostringstream oss;
+  if (f) {
+    f->open_object_section("reweight_by_utilization");
+    f->dump_int("overload_min", oload);
+    f->dump_float("max_change", max_changef);
+    f->dump_int("max_change_osds", max_osds);
+    f->dump_float("average_utilization", average_util);
+    f->dump_float("overload_utilization", overload_util);
+  } else {
+    oss << "oload " << oload << "\n";
+    oss << "max_change " << max_changef << "\n";
+    oss << "max_change_osds " << max_osds << "\n";
+    oss.precision(4);
+    oss << "average_utilization " << std::fixed << average_util << "\n";
+    oss << "overload_utilization " << overload_util << "\n";
+  }
+  int num_changed = 0;
+
+  // precompute util for each OSD
+  std::vector<std::pair<int, float> > util_by_osd;
+  for (const auto& p : pgm.osd_stat) {
+    std::pair<int, float> osd_util;
+    osd_util.first = p.first;
+    if (by_pg) {
+      if (p.first >= (int)pgs_by_osd.size() ||
+        pgs_by_osd[p.first] == 0) {
+        // skip if this OSD does not contain any pg
+        // belonging to the specified pool(s).
+        continue;
+      }
+
+      if (osdmap.crush->get_item_weightf(p.first) <= 0) {
+        // skip if we are unable to locate item.
+        continue;
+      }
+
+      osd_util.second = pgs_by_osd[p.first] / osdmap.crush->get_item_weightf(p.first);
+    } else {
+      osd_util.second = (double)p.second.kb_used / (double)p.second.kb;
+    }
+    util_by_osd.push_back(osd_util);
+  }
+
+  // sort by absolute deviation from the mean utilization,
+  // in descending order.
+  std::sort(util_by_osd.begin(), util_by_osd.end(),
+    [average_util](std::pair<int, float> l, std::pair<int, float> r) {
+      return abs(l.second - average_util) > abs(r.second - average_util);
+    }
+  );
+
+  if (f)
+    f->open_array_section("reweights");
+
+  for (const auto& p : util_by_osd) {
+    unsigned weight = osdmap.get_weight(p.first);
+    if (weight == 0) {
+      // skip if OSD is currently out
+      continue;
+    }
+    float util = p.second;
+
+    if (util >= overload_util) {
+      // Assign a lower weight to overloaded OSDs. The current weight
+      // is a factor to take into account the original weights,
+      // to represent e.g. differing storage capacities
+      unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
+      if (weight > max_change)
+	new_weight = MAX(new_weight, weight - max_change);
+      new_weights->insert({p.first, new_weight});
+      if (f) {
+	f->open_object_section("osd");
+	f->dump_int("osd", p.first);
+	f->dump_float("weight", (float)weight / (float)0x10000);
+	f->dump_float("new_weight", (float)new_weight / (float)0x10000);
+	f->close_section();
+      } else {
+        oss << "osd." << p.first << " weight "
+            << (float)weight / (float)0x10000 << " -> "
+            << (float)new_weight / (float)0x10000 << "\n";
+      }
+      if (++num_changed >= max_osds)
+	break;
+    }
+    if (!no_increasing && util <= underload_util) {
+      // assign a higher weight.. if we can.
+      unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
+      new_weight = MIN(new_weight, weight + max_change);
+      if (new_weight > 0x10000)
+	new_weight = 0x10000;
+      if (new_weight > weight) {
+	new_weights->insert({p.first, new_weight});
+        oss << "osd." << p.first << " weight "
+            << (float)weight / (float)0x10000 << " -> "
+            << (float)new_weight / (float)0x10000 << "\n";
+	if (++num_changed >= max_osds)
+	  break;
+      }
+    }
+  }
+  if (f) {
+    f->close_section();
+  }
+
+  OSDMap newmap;
+  newmap.deepish_copy_from(osdmap);
+  OSDMap::Incremental newinc;
+  newinc.fsid = newmap.get_fsid();
+  newinc.epoch = newmap.get_epoch() + 1;
+  newinc.new_weight = *new_weights;
+  newmap.apply_incremental(newinc);
+
+  osdmap.summarize_mapping_stats(&newmap, pools, out_str, f);
+
+  if (f) {
+    f->close_section();
+  } else {
+    *out_str += "\n";
+    *out_str += oss.str();
+  }
+  return num_changed;
+}

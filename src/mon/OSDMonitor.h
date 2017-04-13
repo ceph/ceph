@@ -240,16 +240,6 @@ public:
 			MonOpRequestRef req = MonOpRequestRef());
 
 private:
-  int reweight_by_utilization(int oload,
-			      double max_change,
-			      int max_osds,
-			      bool by_pg,
-			      const set<int64_t> *pools,
-			      bool no_increasing,
-			      bool dry_run,
-			      std::stringstream *ss,
-			      std::string *out_str,
-			      Formatter *f);
   void print_utilization(ostream &out, Formatter *f, bool tree) const;
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
