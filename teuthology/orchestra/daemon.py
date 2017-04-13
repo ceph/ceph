@@ -28,7 +28,8 @@ class DaemonState(object):
     """
     Daemon State.  A daemon exists for each instance of each role.
     """
-    def __init__(self, remote, role, id_, use_init=False, *command_args, **command_kwargs):
+    def __init__(self, remote, role, id_, use_init=False, *command_args,
+                 **command_kwargs):
         """
         Pass remote command information as parameters to remote site
 
@@ -307,8 +308,8 @@ class DaemonGroup(object):
         if id_ in self.daemons[role]:
             self.daemons[role][id_].stop()
             self.daemons[role][id_] = None
-        self.daemons[role][id_] = DaemonState(remote, role, id_, self.use_init, *args,
-                                              **kwargs)
+        self.daemons[role][id_] = DaemonState(
+            remote, role, id_, self.use_init, *args, **kwargs)
 
     def get_daemon(self, type_, id_, cluster='ceph'):
         """
@@ -339,29 +340,38 @@ class DaemonGroup(object):
         is useful for tasks that take user input specifying a flexible subset
         of the available roles.
 
-        The task calling this must specify what kinds of roles it can can handle using the ``types`` argument, where
-        a role type is 'osd' or 'mds' for example.  When selecting roles this is used as a filter, or when
-        an explicit list of roles is passed, the an exception is raised if any are not of a suitable type.
+        The task calling this must specify what kinds of roles it can can
+        handle using the ``types`` argument, where a role type is 'osd' or
+        'mds' for example.  When selecting roles this is used as a filter, or
+        when an explicit list of roles is passed, the an exception is raised if
+        any are not of a suitable type.
 
         Examples:
 
         ::
 
-            # Passing None (i.e. user left config blank) defaults to all roles (filtered by ``types``)
-            None, types=['osd', 'mds', 'mon'] -> ['osd.0', 'osd.1', 'osd.2', 'mds.a', mds.b', 'mon.a']
+            # Passing None (i.e. user left config blank) defaults to all roles
+            # (filtered by ``types``)
+            None, types=['osd', 'mds', 'mon'] ->
+              ['osd.0', 'osd.1', 'osd.2', 'mds.a', mds.b', 'mon.a']
             # Wildcards are expanded
-            roles=['mds.*', 'osd.0'], types=['osd', 'mds', 'mon'] -> ['mds.a', 'mds.b', 'osd.0']
+            roles=['mds.*', 'osd.0'], types=['osd', 'mds', 'mon'] ->
+              ['mds.a', 'mds.b', 'osd.0']
             # Boring lists are unaltered
-            roles=['osd.0', 'mds.a'], types=['osd', 'mds', 'mon'] -> ['osd.0', 'mds.a']
-            # Entries in role list that don't match types result in an exception
+            roles=['osd.0', 'mds.a'], types=['osd', 'mds', 'mon'] ->
+              ['osd.0', 'mds.a']
+            # Entries in role list that don't match types result in an
+            # exception
             roles=['osd.0', 'mds.a'], types=['osd'] -> RuntimeError
 
-        :param roles: List (of roles or wildcards) or None (select all suitable roles)
-        :param types: List of acceptable role types, for example ['osd', 'mds'].
+        :param roles: List (of roles or wildcards) or None (select all suitable
+                      roles)
+        :param types: List of acceptable role types, for example
+                      ['osd', 'mds'].
         :param cluster_aware: bool to determine whether to consider include
                               cluster in the returned roles - just for
-                              backwards compatibility with pre-jewel versions of
-                              ceph-qa-suite
+                              backwards compatibility with pre-jewel versions
+                              of ceph-qa-suite
         :return: List of strings like ["mds.0", "osd.2"]
         """
         assert (isinstance(roles, list) or roles is None)
@@ -384,14 +394,19 @@ class DaemonGroup(object):
                 try:
                     cluster, role_type, role_id = misc.split_role(raw_role)
                 except ValueError:
-                    raise RuntimeError("Invalid role '{0}', roles must be of format [<cluster>.]<type>.<id>".format(raw_role))
+                    msg = ("Invalid role '{0}', roles must be of format "
+                           "[<cluster>.]<type>.<id>").format(raw_role)
+                    raise RuntimeError(msg)
 
                 if role_type not in types:
-                    raise RuntimeError("Invalid role type '{0}' in role '{1}'".format(role_type, raw_role))
+                    msg = "Invalid role type '{0}' in role '{1}'".format(
+                        role_type, raw_role)
+                    raise RuntimeError(msg)
 
                 if role_id == "*":
                     # Handle wildcard, all roles of the type
-                    for daemon in self.iter_daemons_of_role(role_type, cluster=cluster):
+                    for daemon in self.iter_daemons_of_role(role_type,
+                                                            cluster=cluster):
                         prefix = role_type
                         if cluster_aware:
                             prefix = daemon.role
