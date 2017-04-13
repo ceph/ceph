@@ -155,6 +155,8 @@ public:
   }
 
   void maybe_eval_stray(CInode *in, bool delay=false);
+  void clear_dirty_bits_for_stray(CInode* diri);
+
   bool is_readonly() { return readonly; }
   void force_readonly();
 

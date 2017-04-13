@@ -12373,3 +12373,14 @@ void MDCache::maybe_eval_stray(CInode *in, bool delay) {
   }
 }
 
+void MDCache::clear_dirty_bits_for_stray(CInode* diri) {
+  dout(10) << __func__ << " " << *diri << dendl;
+  assert(diri->get_projected_parent_dir()->inode->is_stray());
+  list<CDir*> ls;
+  diri->get_dirfrags(ls);
+  for (auto p : ls) {
+    if (p->is_auth() && !(p->is_frozen() || p->is_freezing()))
+      p->try_remove_dentries_for_stray();
+  }
+}
+
