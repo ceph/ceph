@@ -472,13 +472,14 @@ class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   map<int, RGWDataChangesLogInfo> shards_info;
 public:
   RGWInitDataSyncStatusCoroutine(RGWDataSyncEnv *_sync_env, uint32_t num_shards,
+                                 uint64_t instance_id,
                                  rgw_data_sync_status *status)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), store(sync_env->store),
       pool(store->get_zone_params().log_pool),
       num_shards(num_shards), status(status) {
     lock_name = "sync_lock";
 
-    get_random_bytes((char *)&status.instance_id, sizeof(status.instance_id));
+    status->sync_info.instance_id = instance_id;
 
 #define COOKIE_LEN 16
     char buf[COOKIE_LEN + 1];
@@ -684,7 +685,9 @@ int RGWRemoteDataLog::init_sync_status(int num_shards)
   }
   RGWDataSyncEnv sync_env_local = sync_env;
   sync_env_local.http_manager = &http_manager;
-  ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env_local, num_shards, &sync_status));
+  uint64_t instance_id;
+  get_random_bytes((char *)&instance_id, sizeof(instance_id));
+  ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env_local, num_shards, instance_id, &sync_status));
   http_manager.stop();
   return ret;
 }
@@ -1472,7 +1475,9 @@ public:
       /* state: init status */
       if ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateInit) {
         ldout(sync_env->cct, 20) << __func__ << "(): init" << dendl;
-        yield call(new RGWInitDataSyncStatusCoroutine(sync_env, num_shards, &sync_status));
+        uint64_t instance_id;
+        get_random_bytes((char *)&instance_id, sizeof(instance_id));
+        yield call(new RGWInitDataSyncStatusCoroutine(sync_env, num_shards, instance_id, &sync_status));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to init sync, retcode=" << retcode << dendl;
           return set_cr_error(retcode);
