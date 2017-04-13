@@ -8,21 +8,20 @@ from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
-start_mon_cmd = 'sudo systemctl start ceph-mon@'
-stop_mon_cmd = 'sudo systemctl stop ceph-mon@'
-restart_mon_cmd = 'sudo systemctl restart ceph-mon@'
+systemd_cmd_templ = 'sudo systemctl {action} {daemon}@{id_}'
 
-start_osd_cmd = 'sudo systemctl start ceph-osd@'
-stop_osd_cmd = 'sudo systemctl stop ceph-osd@'
-restart_osd_cmd = 'sudo systemctl restart ceph-osd@'
 
-start_mds_cmd = 'sudo systemctl start ceph-mds@'
-stop_mds_cmd = 'sudo systemctl stop ceph-mds@'
-restart_mds_cmd = 'sudo systemctl restart ceph-mds@'
-
-start_rgw_cmd = 'sudo systemctl start ceph-radosgw@rgw.'
-stop_rgw_cmd = 'sudo systemctl stop ceph-radosgw@rgw.'
-restart_rgw_cmd = 'sudo systemctl restart ceph-radosgw@rgw.'
+def get_systemd_cmd(action, daemon, id_):
+    if daemon == 'rgw':
+        daemon = 'radosgw'
+        id_ = 'rgw.%s' % id_
+    daemon = 'ceph-%s' % daemon
+    cmd = systemd_cmd_templ.format(
+        action=action,
+        daemon=daemon,
+        id_=id_,
+    )
+    return cmd
 
 
 class DaemonState(object):
@@ -43,6 +42,7 @@ class DaemonState(object):
         self.command_args = command_args
         self.command_kwargs = command_kwargs
         self.role = role
+        self.type_ = self.role.split('.')[-1]
         self.id_ = id_
         self.use_init = use_init
         if self.use_init:
@@ -63,24 +63,14 @@ class DaemonState(object):
                                  'awk',
                                  run.Raw("{'print $2'}")]
             self.proc_id = None
-            if (role == 'mon'):
-                self.start_cmd = start_mon_cmd + self.id
-                self.stop_cmd = stop_mon_cmd + self.id
-                self.restart_cmd = restart_mon_cmd + self.id
-            elif (role == 'osd'):
-                self.start_cmd = start_osd_cmd + self.id
-                self.stop_cmd = stop_osd_cmd + self.id
-                self.restart_cmd = restart_osd_cmd + self.id
-            elif (role == 'rgw'):
-                self.start_cmd = start_rgw_cmd + self.id
-                self.stop_cmd = stop_rgw_cmd + self.id
-                self. restart_cmd = restart_rgw_cmd + self.id
-            elif (role == 'mds'):
-                self.start_cmd = start_mds_cmd + self.id
-                self.stop_cmd = stop_mds_cmd + self.id
-                self.restart_cmd = restart_mds_cmd + self.id
+            self._set_commands()
         self.log = command_kwargs.get('logger', log)
         self.proc = None
+
+    def _set_commands(self):
+        self.start_cmd = get_systemd_cmd('start', self.type_, self.id_)
+        self.stop_cmd = get_systemd_cmd('stop', self.type_, self.id_)
+        self.restart_cmd = get_systemd_cmd('restart', self.type_, self.id_)
 
     def stop(self, timeout=300):
         """
