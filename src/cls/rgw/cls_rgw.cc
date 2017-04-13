@@ -3616,7 +3616,7 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
 
 const string resharding_attr = "resharding";
 
-static int cls_rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
+static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   cls_rgw_set_bucket_resharding_op op;
 
@@ -3645,7 +3645,7 @@ static int cls_rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *
   return 0;
 }
 
-static int cls_rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
+static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   cls_rgw_set_bucket_resharding_op op;
 
@@ -3673,7 +3673,6 @@ static int cls_rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist
 
   return 0;
 }
-
 
 CLS_INIT(rgw)
 {
@@ -3776,6 +3775,10 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, "reshard_get", CLS_METHOD_RD,rgw_reshard_get, &h_rgw_reshard_get);
   cls_register_cxx_method(h_class, "reshard_get_head", CLS_METHOD_RD, rgw_reshard_get_head, &h_rgw_reshard_get_head);
   cls_register_cxx_method(h_class, "reshard_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_remove, &h_rgw_reshard_remove);
+  cls_register_cxx_method(h_class, "set_bucket_resharding", CLS_METHOD_RD | CLS_METHOD_WR,
+			  rgw_set_bucket_resharding, &h_rgw_set_bucket_resharding);
+  cls_register_cxx_method(h_class, "clear_bucket_resharding", CLS_METHOD_RD | CLS_METHOD_WR,
+			  rgw_clear_bucket_resharding, &h_rgw_clear_bucket_resharding);
   return;
 }
 
