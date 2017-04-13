@@ -5937,7 +5937,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       int id = newcrush.get_item_id(name);
 
       if (!newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL)) {
-	err = newcrush.move_bucket(g_ceph_context, id, loc);
+	if (id >= 0) {
+	  err = newcrush.create_or_move_item(g_ceph_context, id, 0, name, loc);
+	} else {
+	  err = newcrush.move_bucket(g_ceph_context, id, loc);
+	}
 	if (err >= 0) {
 	  ss << "moved item id " << id << " name '" << name << "' to location " << loc << " in crush map";
 	  pending_inc.crush.clear();
