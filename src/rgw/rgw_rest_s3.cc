@@ -3420,22 +3420,50 @@ int RGW_Auth_S3::authorize_aws4_auth_complete(RGWRados *store, struct req_state 
 
 int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, const string& request_payload, bool unsigned_payload)
 {
-  size_t pos;
+  const char *expected_request_payload_hash = s->info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
+  if (!expected_request_payload_hash) {
+    /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
+     * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
+     * header lets get the information very early -- before seeing first byte
+     * of HTTP body. As a consequence, we can decouple Signature verification
+     * from payload's fingerprint check. Although RadosGW doesn't do that for
+     * now, the situation will definitely change in the future.
+     *
+     * An HTTP client MUST send x-amz-content-sha256. AFAIK the single exception
+     * to that is the case of using Query Parameters for doing the auth In such
+     * scenario, the "UNSIGNED-PAYLOAD" literals are used instead. */
+    expected_request_payload_hash = "UNSIGNED-PAYLOAD";
+  }
 
   /* craft canonical request */
-  string canonical_req_hash = \
-    rgw::auth::s3::get_v4_canonical_request_hash(s, s->aws4_auth->canonical_uri,
+  std::string canonical_req_hash = \
+    rgw::auth::s3::get_v4_canonical_request_hash(s->cct,
+                                                 s->info.method,
+                                                 s->aws4_auth->canonical_uri,
                                                  s->aws4_auth->canonical_qs,
                                                  s->aws4_auth->canonical_hdrs,
                                                  s->aws4_auth->signed_hdrs,
-                                                 request_payload, unsigned_payload);
+                                                 expected_request_payload_hash);
+
+  if (unsigned_payload) {
+    s->aws4_auth->payload_hash = "UNSIGNED-PAYLOAD";
+  } else {
+    if (s->aws4_auth_needs_complete) {
+      s->aws4_auth->payload_hash = AWS_AUTHv4_IO(s)->grab_aws4_sha256_hash();
+    } else {
+      if (s->aws4_auth_streaming_mode) {
+        s->aws4_auth->payload_hash = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
+      } else {
+        s->aws4_auth->payload_hash = \
+          rgw::auth::s3::hash_string_sha256(request_payload.c_str(),
+                                            request_payload.size());
+      }
+    }
+  }
 
   /* Validate x-amz-sha256 */
-
   if (s->aws4_auth_needs_complete) {
-    const char *expected_request_payload_hash = s->info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
-    if (expected_request_payload_hash &&
-        s->aws4_auth->payload_hash.compare(expected_request_payload_hash) != 0) {
+    if (s->aws4_auth->payload_hash.compare(expected_request_payload_hash) != 0) {
       ldout(s->cct, 10) << "ERROR: x-amz-content-sha256 does not match" << dendl;
       return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
     }
@@ -3462,7 +3490,7 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
   string cs_aux = s->aws4_auth->credential_scope;
 
   string date_cs = cs_aux;
-  pos = date_cs.find("/");
+  size_t pos = date_cs.find("/");
   date_cs = date_cs.substr(0, pos);
   cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
 

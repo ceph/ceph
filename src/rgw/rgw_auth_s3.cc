@@ -290,37 +290,18 @@ static std::string assemble_v4_canonical_request(
 /*
  * create canonical request for signature version 4
  */
-std::string get_v4_canonical_request_hash(struct req_state* const s,
+std::string get_v4_canonical_request_hash(CephContext* cct,
+                                          const std::string& http_verb,
                                           const std::string& canonical_uri,
                                           const std::string& canonical_qs,
                                           const std::string& canonical_hdrs,
                                           const std::string& signed_hdrs,
-                                          const std::string& request_payload,
-                                          const bool unsigned_payload)
+                                          const std::string& request_payload_hash)
 {
-  string request_payload_hash;
-
-  if (unsigned_payload) {
-    request_payload_hash = "UNSIGNED-PAYLOAD";
-  } else {
-    if (s->aws4_auth_needs_complete) {
-      request_payload_hash = AWS_AUTHv4_IO(s)->grab_aws4_sha256_hash();
-    } else {
-      if (s->aws4_auth_streaming_mode) {
-        request_payload_hash = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
-      } else {
-        request_payload_hash = \
-          hash_string_sha256(request_payload.c_str(), request_payload.size());
-      }
-    }
-  }
-
-  s->aws4_auth->payload_hash = request_payload_hash;
-
-  ldout(s->cct, 10) << "payload request hash = " << request_payload_hash << dendl;
+  ldout(cct, 10) << "payload request hash = " << request_payload_hash << dendl;
 
   std::string canonical_req = \
-    assemble_v4_canonical_request(s->info.method,
+    assemble_v4_canonical_request(http_verb.c_str(),
                                   canonical_uri.c_str(),
                                   canonical_qs.c_str(),
                                   canonical_hdrs.c_str(),
@@ -330,8 +311,8 @@ std::string get_v4_canonical_request_hash(struct req_state* const s,
   std::string canonical_req_hash = \
     hash_string_sha256(canonical_req.c_str(), canonical_req.size());
 
-  ldout(s->cct, 10) << "canonical request = " << canonical_req << dendl;
-  ldout(s->cct, 10) << "canonical request hash = " << canonical_req_hash << dendl;
+  ldout(cct, 10) << "canonical request = " << canonical_req << dendl;
+  ldout(cct, 10) << "canonical request hash = " << canonical_req_hash << dendl;
 
   return canonical_req_hash;
 }
