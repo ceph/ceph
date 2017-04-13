@@ -27,7 +27,9 @@ public:
              const rgw_user& id,
              const std::string& name,
              const std::string& read_list,
-             const std::string& write_list);
+             const std::string& write_list,
+             uint32_t& rw_mask);
+  void filter_merge(uint32_t mask, RGWAccessControlPolicy_SWIFT *policy);
   void to_str(std::string& read, std::string& write);
 };
 

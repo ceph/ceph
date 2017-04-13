@@ -502,6 +502,7 @@ static int get_swift_container_settings(req_state * const s,
                                         RGWRados * const store,
                                         RGWAccessControlPolicy * const policy,
                                         bool * const has_policy,
+                                        uint32_t * rw_mask,
                                         RGWCORSConfiguration * const cors_config,
                                         bool * const has_cors)
 {
@@ -524,7 +525,8 @@ static int get_swift_container_settings(req_state * const s,
                                        s->user->user_id,
                                        s->user->display_name,
                                        read_list,
-                                       write_list);
+                                       write_list,
+                                       *rw_mask);
     if (r < 0) {
       return r;
     }
@@ -622,8 +624,10 @@ static int get_swift_versioning_settings(
 int RGWCreateBucket_ObjStore_SWIFT::get_params()
 {
   bool has_policy;
+  uint32_t policy_rw_mask = 0;
 
-  int r = get_swift_container_settings(s, store, &policy, &has_policy, &cors_config, &has_cors);
+  int r = get_swift_container_settings(s, store, &policy, &has_policy,
+				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;
   }
@@ -891,7 +895,7 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
   }
 
   int r = get_swift_container_settings(s, store, &policy, &has_policy,
-				       &cors_config, &has_cors);
+				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;
   }
