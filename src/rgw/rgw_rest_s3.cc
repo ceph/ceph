@@ -3362,7 +3362,10 @@ int RGW_Auth_S3::authorize(RGWRados* const store,
     return 0;
   }
 
-  if (!s->http_auth || !(*s->http_auth)) {
+  /* TODO(rzarzynski): eradicate the double check on HTTP_AUTHORIZATION.
+   * See couple for next commits. */
+  const char* http_auth = s->info.env->get("HTTP_AUTHORIZATION");
+  if (!http_auth || !(*http_auth)) {
 
     /* AWS4 */
 
@@ -3398,13 +3401,13 @@ int RGW_Auth_S3::authorize(RGWRados* const store,
 
     /* AWS4 */
 
-    if (!strncmp(s->http_auth, "AWS4-HMAC-SHA256", 16)) {
+    if (!strncmp(http_auth, "AWS4-HMAC-SHA256", 16)) {
       return authorize_v4(store, s);
     }
 
     /* AWS2 */
 
-    if (!strncmp(s->http_auth, "AWS ", 4)) {
+    if (!strncmp(http_auth, "AWS ", 4)) {
       return authorize_v2(store, auth_registry, s);
     }
 
@@ -3558,7 +3561,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
     return -ENOMEM;
   }
 
-  if ((!s->http_auth) || !(*s->http_auth)) {
+  const char* http_auth = s->info.env->get("HTTP_AUTHORIZATION");
+  if ((!http_auth) || !(*http_auth)) {
 
     /* auth ships with req params ... */
 
@@ -3623,7 +3627,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
 
     using_qs = false;
 
-    string auth_str = s->http_auth;
+    string auth_str = http_auth;
 
 #define AWS4_HMAC_SHA256_STR "AWS4-HMAC-SHA256"
 #define CREDENTIALS_PREFIX_LEN (sizeof(AWS4_HMAC_SHA256_STR) - 1)
@@ -4253,7 +4257,8 @@ rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
   std::string signature;
   bool qsr = false;
 
-  if (! s->http_auth || s->http_auth[0] == '\0') {
+  const char* http_auth = s->info.env->get("HTTP_AUTHORIZATION");
+  if (! http_auth || http_auth[0] == '\0') {
     /* Credentials are provided in query string. We also need to verify
      * the "Expires" parameter now. */
     access_key_id = s->info.args.get("AWSAccessKeyId");
@@ -4272,7 +4277,7 @@ rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
     }
   } else {
     /* The "Authorization" HTTP header is being used. */
-    const std::string auth_str(s->http_auth + strlen("AWS "));
+    const std::string auth_str(http_auth + strlen("AWS "));
     const size_t pos = auth_str.rfind(':');
     if (pos != std::string::npos) {
       access_key_id = auth_str.substr(0, pos);
