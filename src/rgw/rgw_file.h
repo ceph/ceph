@@ -61,6 +61,20 @@ namespace rgw {
   class RGWFileHandle;
   class RGWWriteRequest;
 
+  static inline bool operator <(const struct timespec& lhs,
+				const struct timespec& rhs) {
+    if (lhs.tv_sec == rhs.tv_sec)
+      return lhs.tv_nsec < rhs.tv_nsec;
+    else
+      return lhs.tv_sec < rhs.tv_sec;
+  }
+
+  static inline bool operator ==(const struct timespec& lhs,
+				 const struct timespec& rhs) {
+    return ((lhs.tv_sec == rhs.tv_sec) &&
+	    (lhs.tv_nsec == rhs.tv_nsec));
+  }
+
   /*
    * XXX
    * The current 64-bit, non-cryptographic hash used here is intended
@@ -164,7 +178,12 @@ namespace rgw {
     using lock_guard = std::lock_guard<std::mutex>;
     using unique_lock = std::unique_lock<std::mutex>;
 
-    using marker_cache_t = flat_map<uint64_t, rgw_obj_key>;
+    /* TODO: keeping just the last marker is sufficient for
+     * nfs-ganesha 2.4.5; in the near future, nfs-ganesha will
+     * be able to hint the name of the next dirent required,
+     * from which we can directly synthesize a RADOS marker.
+     * using marker_cache_t = flat_map<uint64_t, rgw_obj_key>;
+     */
 
     struct State {
       uint64_t dev;
@@ -189,16 +208,15 @@ namespace rgw {
     struct directory {
 
       static constexpr uint32_t FLAG_NONE =     0x0000;
-      static constexpr uint32_t FLAG_CACHED =   0x0001;
-      static constexpr uint32_t FLAG_OVERFLOW = 0x0002;
 
       uint32_t flags;
-      marker_cache_t marker_cache;
+      rgw_obj_key last_marker;
+      struct timespec last_readdir;
 
-      directory() : flags(FLAG_NONE) {}
-
-      void clear_state();
+      directory() : flags(FLAG_NONE), last_readdir{0,0} {}
     };
+
+    void clear_state();
 
     boost::variant<file, directory> variant_type;
 
@@ -374,7 +392,7 @@ namespace rgw {
 
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
-	st->st_nlink = 3;
+	st->st_nlink = 2;
 	break;
       case RGW_FS_TYPE_FILE:
 	st->st_nlink = 1;
@@ -459,8 +477,7 @@ namespace rgw {
       directory* d = get<directory>(&variant_type);
       if (d) {
 	unique_lock guard(mtx);
-	d->marker_cache.insert(
-	  marker_cache_t::value_type(off, marker));
+	d->last_marker = marker;
       }
     }
 
@@ -468,9 +485,7 @@ namespace rgw {
       using std::get;
       const directory* d = get<directory>(&variant_type);
       if (d) {
-	const auto& iter = d->marker_cache.find(off);
-	if (iter != d->marker_cache.end())
-	  return &(iter->second);
+	return &d->last_marker;
       }
       return nullptr;
     }
@@ -523,6 +538,10 @@ namespace rgw {
     void clear_creating() {
       lock_guard guard(mtx);
       flags &= ~FLAG_CREATING;
+    }
+
+    void inc_nlink(const uint64_t n) {
+      state.nlink += n;
     }
 
     void set_nlink(const uint64_t n) {
@@ -684,6 +703,22 @@ namespace rgw {
 
   static inline RGWFileHandle* get_rgwfh(struct rgw_file_handle* fh) {
     return static_cast<RGWFileHandle*>(fh->fh_private);
+  }
+
+  static inline enum rgw_fh_type fh_type_of(uint32_t flags) {
+    enum rgw_fh_type fh_type;
+    switch(flags & RGW_LOOKUP_TYPE_FLAGS)
+    {
+    case RGW_LOOKUP_FLAG_DIR:
+      fh_type = RGW_FS_TYPE_DIRECTORY;
+      break;
+    case RGW_LOOKUP_FLAG_FILE:
+      fh_type = RGW_FS_TYPE_FILE;
+      break;
+    default:
+      fh_type = RGW_FS_TYPE_NIL;
+    };
+    return fh_type;
   }
 
   typedef std::tuple<RGWFileHandle*, uint32_t> LookupFHResult;
@@ -1015,7 +1050,8 @@ namespace rgw {
 			       const char *path, uint32_t flags);
 
     LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
-			     uint32_t flags);
+			     enum rgw_fh_type type = RGW_FS_TYPE_NIL,
+			     uint32_t flags = RGWFileHandle::FLAG_NONE);
 
     int read(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
 	     size_t* bytes_read, void* buffer, uint32_t flags);
@@ -1123,12 +1159,13 @@ public:
   void* cb_arg;
   rgw_readdir_cb rcb;
   size_t ix;
+  uint32_t d_count;
 
   RGWListBucketsRequest(CephContext* _cct, RGWUserInfo *_user,
 			RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 			void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
-      cb_arg(_cb_arg), rcb(_rcb), ix(0) {
+      cb_arg(_cb_arg), rcb(_rcb), ix(0), d_count(0) {
     const auto& mk = rgw_fh->find_marker(*offset);
     if (mk) {
       marker = mk->name;
@@ -1183,8 +1220,15 @@ public:
     for (const auto& iter : m) {
       boost::string_ref marker{iter.first};
       const RGWBucketEnt& ent = iter.second;
-      /* call me maybe */
-      this->operator()(ent.bucket.name, marker);
+      if (! this->operator()(ent.bucket.name, marker)) {
+	/* caller cannot accept more */
+	lsubdout(cct, rgw, 5) << "ListBuckets rcb failed"
+			      << " dirent=" << ent.bucket.name
+			      << " call count=" << ix
+			      << dendl;
+	return;
+      }
+      ++d_count;
       ++ix;
     }
   } /* send_response_data */
@@ -1200,8 +1244,7 @@ public:
     /* update traversal cache */
     rgw_fh->add_marker(off, rgw_obj_key{marker.data(), ""},
 		       RGW_FS_TYPE_DIRECTORY);
-    rcb(name.data(), cb_arg, off);
-    return 0;
+    return rcb(name.data(), cb_arg, off, RGW_LOOKUP_FLAG_DIR);
   }
 
   bool eof() {
@@ -1226,12 +1269,13 @@ public:
   void* cb_arg;
   rgw_readdir_cb rcb;
   size_t ix;
+  uint32_t d_count;
 
   RGWReaddirRequest(CephContext* _cct, RGWUserInfo *_user,
 		    RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 		    void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
-      cb_arg(_cb_arg), rcb(_rcb), ix(0) {
+      cb_arg(_cb_arg), rcb(_rcb), ix(0), d_count(0) {
     const auto& mk = rgw_fh->find_marker(*offset);
     if (mk) {
       marker = *mk;
@@ -1287,8 +1331,10 @@ public:
     *offset = off;
     /* update traversal cache */
     rgw_fh->add_marker(off, marker, type);
-    rcb(name.data(), cb_arg, off); // XXX has to be legit C-style string
-    return 0;
+    return rcb(name.data(), cb_arg, off,
+	       (type == RGW_FS_TYPE_DIRECTORY) ?
+	       RGW_LOOKUP_FLAG_DIR :
+	       RGW_LOOKUP_FLAG_FILE);
   }
 
   int get_params() override {
@@ -1321,8 +1367,15 @@ public:
 			     << " (" << sref << ")" << ""
 			     << dendl;
 
-      /* call me maybe */
-      this->operator()(sref, next_marker, RGW_FS_TYPE_FILE);
+      if(! this->operator()(sref, next_marker, RGW_FS_TYPE_FILE)) {
+	/* caller cannot accept more */
+	lsubdout(cct, rgw, 5) << "readdir rcb failed"
+			      << " dirent=" << sref.data()
+			      << " call count=" << ix
+			      << dendl;
+	return;
+      }
+      ++d_count;
       ++ix;
     }
     for (auto& iter : common_prefixes) {
