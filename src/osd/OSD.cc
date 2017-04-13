@@ -9177,6 +9177,8 @@ const char** OSD::get_tracked_conf_keys() const
     "host",
     "fsid",
     "osd_recovery_delay_start",
+    "osd_client_message_size_cap",
+    "osd_client_message_cap",
     NULL
   };
   return KEYS;
@@ -9238,6 +9240,21 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("osd_recovery_delay_start")) {
     service.defer_recovery(cct->_conf->osd_recovery_delay_start);
     service.kick_recovery_queue();
+  }
+
+  if (changed.count("osd_client_message_cap")) {
+    uint64_t newval = cct->_conf->osd_client_message_cap;
+    Messenger::Policy pol = client_messenger->get_policy(entity_name_t::TYPE_CLIENT);
+    if (pol.throttler_messages && newval > 0) {
+      pol.throttler_messages->reset_max(newval);
+    }
+  }
+  if (changed.count("osd_client_message_size_cap")) {
+    uint64_t newval = cct->_conf->osd_client_message_size_cap;
+    Messenger::Policy pol = client_messenger->get_policy(entity_name_t::TYPE_CLIENT);
+    if (pol.throttler_bytes && newval > 0) {
+      pol.throttler_bytes->reset_max(newval);
+    }
   }
 
   check_config();
