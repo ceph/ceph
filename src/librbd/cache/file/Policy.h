@@ -37,6 +37,8 @@ public:
                   uint64_t *replace_cache_block) = 0;
   virtual void tick() = 0;
 
+  virtual int get_entry_size() = 0;
+
   virtual void entry_to_bufferlist(uint64_t block, bufferlist *bl) = 0;
   virtual void bufferlist_to_entry(bufferlist &bl) = 0;
 

@@ -242,6 +242,11 @@ void StupidPolicy<I>::tick() {
 }
 
 template <typename I>
+int StupidPolicy<I>::get_entry_size() {
+  return sizeof(struct Entry);
+}
+
+template <typename I>
 void StupidPolicy<I>::entry_to_bufferlist(uint64_t block, bufferlist *bl){
   Mutex::Locker locker(m_lock);
   auto entry_it = m_block_to_entries.find(block);

@@ -11,7 +11,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::file::MetaStore: " << this \
                            << " " <<  __func__ << ": "
-#define META_BLOCK_SIZE sizeof(uint64_t) + sizeof(bool)
 
 namespace librbd {
 namespace cache {
@@ -60,14 +59,21 @@ void MetaStore<I>::reset(Context *on_finish) {
   ldout(cct, 20) << dendl;
 
   // TODO
-  m_meta_file.truncate( offset_to_block(m_image_ctx.size)*META_BLOCK_SIZE , false, on_finish);
+  m_meta_file.truncate(offset_to_block(m_image_ctx.size) * m_entry_size, false, on_finish);
 }
 
+template <typename I>
+void MetaStore<I>::set_entry_size(uint32_t entry_size) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
+
+  m_entry_size = entry_size;
+}
 template <typename I>
 void MetaStore<I>::write_block(uint64_t cache_block, bufferlist bl, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
-  uint64_t meta_block_offset = cache_block * META_BLOCK_SIZE;
+  uint64_t meta_block_offset = cache_block * m_entry_size;
   m_meta_file.write(meta_block_offset, std::move(bl), true, on_finish);
 }
 
@@ -75,8 +81,8 @@ template <typename I>
 void MetaStore<I>::read_block(uint64_t cache_block, bufferlist *bl, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
-  uint64_t meta_block_offset = cache_block * META_BLOCK_SIZE;
-  m_meta_file.read(meta_block_offset, META_BLOCK_SIZE, bl, on_finish);
+  uint64_t meta_block_offset = cache_block * m_entry_size;
+  m_meta_file.read(meta_block_offset, m_entry_size, bl, on_finish);
 }
 
 template <typename I>

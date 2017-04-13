@@ -24,6 +24,7 @@ public:
   MetaStore(ImageCtxT &image_ctx, uint32_t block_size);
 
   void init(bufferlist *bl, Context *on_finish);
+  void set_entry_size(uint32_t entry_size);
   void reset(Context *on_finish);
   void write_block(uint64_t cache_block, bufferlist bl, Context *on_finish);
   void read_block(uint64_t cache_block, bufferlist *bl, Context *on_finish);
@@ -41,6 +42,7 @@ public:
 private:
   ImageCtxT &m_image_ctx;
   uint32_t m_block_size;
+  uint32_t m_entry_size;
 
   AioFile<ImageCtx> m_meta_file;
 
