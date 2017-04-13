@@ -3531,37 +3531,6 @@ static inline bool is_base64_for_content_md5(unsigned char c) {
   return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
 }
 
-static bool char_needs_aws4_escaping(char c)
-{
-  if ((c >= 'a' && c <= 'z') ||
-      (c >= 'A' && c <= 'Z') ||
-      (c >= '0' && c <= '9')) {
-    return false;
-  }
-
-  switch (c) {
-    case '-':
-    case '_':
-    case '.':
-    case '~':
-      return false;
-  }
-  return true;
-}
-
-static void aws4_uri_encode(const string& src, string& dst)
-{
-  const char *p = src.c_str();
-  for (unsigned i = 0; i < src.size(); i++, p++) {
-    if (char_needs_aws4_escaping(*p)) {
-      rgw_uri_escape_char(*p, dst);
-      continue;
-    }
-
-    dst.append(p, 1);
-  }
-}
-
 static std::array<string, 3> aws4_presigned_required_keys = { "Credential", "SignedHeaders", "Signature" };
 
 /*
@@ -3749,62 +3718,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   s->aws4_auth->canonical_uri = rgw::auth::s3::get_v4_canonical_uri(s->info);
 
   /* craft canonical query string */
-  s->aws4_auth->canonical_qs = s->info.request_params;
-
-  if (!s->aws4_auth->canonical_qs.empty()) {
-
-    /* handle case when query string exists. Step 3 in
-     * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
-
-    map<string, string> canonical_qs_map;
-    istringstream cqs(s->aws4_auth->canonical_qs);
-    string keyval;
-
-    while (getline(cqs, keyval, '&')) {
-      string key, val;
-      istringstream kv(keyval);
-      getline(kv, key, '=');
-      getline(kv, val, '=');
-      if (!using_qs || key != "X-Amz-Signature") {
-        string encoded_key;
-        string encoded_val;
-        if (key != "X-Amz-Credential") {
-          string key_decoded;
-          url_decode(key, key_decoded);
-          if (key.length() != key_decoded.length()) {
-            encoded_key = key;
-          } else {
-            aws4_uri_encode(key, encoded_key);
-          }
-          string val_decoded;
-          url_decode(val, val_decoded);
-          if (val.length() != val_decoded.length()) {
-            encoded_val = val;
-          } else {
-            aws4_uri_encode(val, encoded_val);
-          }
-        } else {
-          encoded_key = key;
-          encoded_val = val;
-        }
-        canonical_qs_map[encoded_key] = encoded_val;
-      }
-    }
-
-    s->aws4_auth->canonical_qs = "";
-
-    map<string, string>::iterator last = canonical_qs_map.end();
-    --last;
-
-    for (map<string, string>::iterator it = canonical_qs_map.begin();
-        it != canonical_qs_map.end(); ++it) {
-      s->aws4_auth->canonical_qs.append(it->first + "=" + it->second);
-      if (it != last) {
-        s->aws4_auth->canonical_qs.append("&");
-      }
-    }
-
-  }
+  s->aws4_auth->canonical_qs = \
+    rgw::auth::s3::get_v4_canonical_qs(s->info, using_qs);
 
   /* craft canonical headers */
 

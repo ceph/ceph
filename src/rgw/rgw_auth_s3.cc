@@ -239,6 +239,97 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
+static inline bool char_needs_aws4_escaping(const char c)
+{
+  if ((c >= 'a' && c <= 'z') ||
+      (c >= 'A' && c <= 'Z') ||
+      (c >= '0' && c <= '9')) {
+    return false;
+  }
+
+  switch (c) {
+    case '-':
+    case '_':
+    case '.':
+    case '~':
+      return false;
+  }
+  return true;
+}
+
+static inline void aws4_uri_encode(const string& src, string& dst)
+{
+  const char *p = src.c_str();
+  for (unsigned i = 0; i < src.size(); i++, p++) {
+    if (char_needs_aws4_escaping(*p)) {
+      rgw_uri_escape_char(*p, dst);
+      continue;
+    }
+
+    dst.append(p, 1);
+  }
+}
+
+std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
+{
+  std::string canonical_qs = info.request_params;
+
+  if (!canonical_qs.empty()) {
+
+    /* Handle case when query string exists. Step 3 in
+     * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
+    map<string, string> canonical_qs_map;
+    istringstream cqs(canonical_qs);
+    string keyval;
+
+    while (getline(cqs, keyval, '&')) {
+      string key, val;
+      istringstream kv(keyval);
+      getline(kv, key, '=');
+      getline(kv, val, '=');
+      if (!using_qs || key != "X-Amz-Signature") {
+        string encoded_key;
+        string encoded_val;
+        if (key != "X-Amz-Credential") {
+          string key_decoded;
+          url_decode(key, key_decoded);
+          if (key.length() != key_decoded.length()) {
+            encoded_key = key;
+          } else {
+            aws4_uri_encode(key, encoded_key);
+          }
+          string val_decoded;
+          url_decode(val, val_decoded);
+          if (val.length() != val_decoded.length()) {
+            encoded_val = val;
+          } else {
+            aws4_uri_encode(val, encoded_val);
+          }
+        } else {
+          encoded_key = key;
+          encoded_val = val;
+        }
+        canonical_qs_map[encoded_key] = encoded_val;
+      }
+    }
+
+    canonical_qs = "";
+
+    map<string, string>::iterator last = canonical_qs_map.end();
+    --last;
+
+    for (map<string, string>::iterator it = canonical_qs_map.begin();
+        it != canonical_qs_map.end(); ++it) {
+      canonical_qs.append(it->first + "=" + it->second);
+      if (it != last) {
+        canonical_qs.append("&");
+      }
+    }
+  }
+
+  return canonical_qs;
+}
+
 std::string hash_string_sha256(const char* const data, const int len)
 {
   std::string dest;

@@ -176,6 +176,8 @@ static inline std::string get_v4_canonical_uri(const req_info& info) {
   return canonical_uri;
 }
 
+std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
+
 std::string hash_string_sha256(const char* data, int len);
 
 std::string get_v4_canonical_request_hash(CephContext* cct,
