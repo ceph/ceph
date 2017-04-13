@@ -64,7 +64,7 @@
 #include "Filer.h"
 
 #include "common/Timer.h"
-
+#include "common/Throttle.h"
 
 class CephContext;
 class Context;
@@ -113,6 +113,13 @@ class JournalStream
   bool readable(bufferlist &bl, uint64_t *need) const;
   size_t read(bufferlist &from, bufferlist *to, uint64_t *start_ptr);
   size_t write(bufferlist &entry, bufferlist *to, uint64_t const &start_ptr);
+  size_t get_envelope_size() const {
+     if (format >= JOURNAL_FORMAT_RESILIENT) {
+       return JOURNAL_ENVELOPE_RESILIENT;
+     } else {
+       return JOURNAL_ENVELOPE_LEGACY;
+     }
+  }
 
   // A magic number for the start of journal entries, so that we can
   // identify them in damaged journals.
@@ -305,6 +312,9 @@ private:
   bufferlist write_buf; ///< write buffer.  flush_pos +
 			///  write_buf.length() == write_pos.
 
+  // protect write_buf from bufferlist _len overflow 
+  Throttle write_buf_throttle;
+
   bool waiting_for_zero;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
   std::set<uint64_t> pending_safe;
@@ -400,6 +410,7 @@ public:
     timer(tim), delay_flush_event(0),
     state(STATE_UNDEF), error(0),
     prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0), safe_pos(0),
+    write_buf_throttle(cct, "write_buf_throttle", UINT_MAX - (UINT_MAX >> 3)),
     waiting_for_zero(false),
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0),

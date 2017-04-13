@@ -528,7 +528,7 @@ void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
 
 uint64_t Journaler::append_entry(bufferlist& bl)
 {
-  lock_guard l(lock);
+  unique_lock l(lock);
 
   assert(!readonly);
   uint32_t s = bl.length();
@@ -547,6 +547,15 @@ uint64_t Journaler::append_entry(bufferlist& bl)
       bufferptr bp(write_pos - owp);
       bp.zero();
       assert(bp.length() >= 4);
+      if (!write_buf_throttle.get_or_fail(bp.length())) {
+        l.unlock();
+        ldout(cct, 10) << "write_buf_throttle wait, bp len " 
+                       << bp.length() << dendl;
+        write_buf_throttle.get(bp.length());
+        l.lock();
+      }
+      ldout(cct, 20) << "write_buf_throttle get, bp len " 
+                     << bp.length() << dendl;
       write_buf.push_back(bp);
 
       // now flush.
@@ -560,6 +569,15 @@ uint64_t Journaler::append_entry(bufferlist& bl)
 
 
   // append
+  size_t delta = bl.length() + journal_stream.get_envelope_size();
+  // write_buf space is nearly full
+  if (!write_buf_throttle.get_or_fail(delta)) {
+    l.unlock();
+    ldout(cct, 10) << "write_buf_throttle wait, delta " << delta << dendl;
+    write_buf_throttle.get(delta);
+    l.lock();
+  }
+  ldout(cct, 20) << "write_buf_throttle get, delta " << delta << dendl;
   size_t wrote = journal_stream.write(bl, &write_buf, write_pos);
   ldout(cct, 10) << "append_entry len " << s << " to " << write_pos << "~"
 		 << wrote << dendl;
@@ -589,7 +607,7 @@ void Journaler::_do_flush(unsigned amount)
   assert(!readonly);
 
   // flush
-  unsigned len = write_pos - flush_pos;
+  uint64_t len = write_pos - flush_pos;
   assert(len == write_buf.length());
   if (amount && amount < len)
     len = amount;
@@ -645,7 +663,9 @@ void Journaler::_do_flush(unsigned amount)
 
   flush_pos += len;
   assert(write_buf.length() == write_pos - flush_pos);
-
+  write_buf_throttle.put(len);
+  ldout(cct, 20) << "write_buf_throttle put, len " << len << dendl;
+ 
   ldout(cct, 10)
     << "_do_flush (prezeroing/prezero)/write/flush/safe pointers now at "
     << "(" << prezeroing_pos << "/" << prezero_pos << ")/" << write_pos
