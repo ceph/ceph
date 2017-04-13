@@ -466,9 +466,7 @@ int BlueFS::_write_super()
   assert(bl.length() <= get_super_length());
   bl.append_zero(get_super_length() - bl.length());
 
-  bdev[BDEV_DB]->aio_write(get_super_offset(), bl, ioc[BDEV_DB], false);
-  bdev[BDEV_DB]->aio_submit(ioc[BDEV_DB]);
-  ioc[BDEV_DB]->aio_wait();
+  bdev[BDEV_DB]->write(get_super_offset(), bl, false);
   dout(20) << __func__ << " v " << super.version
            << " crc 0x" << std::hex << crc
            << " offset 0x" << get_super_offset() << std::dec
