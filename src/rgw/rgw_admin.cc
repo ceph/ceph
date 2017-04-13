@@ -2434,7 +2434,6 @@ int create_new_bucket_instance(RGWRados *store,
 			       RGWBucketInfo& new_bucket_info)
 {
 
-  new_bucket_info = bucket_info;
   store->create_bucket_id(&new_bucket_info.bucket.bucket_id);
   new_bucket_info.bucket.oid.clear();
 
@@ -2494,7 +2493,7 @@ int reshard_bucket(RGWRados *store,
     cout << "total entries:";
   }
 
-     int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+  int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
   string marker;
   for (int i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
@@ -5861,7 +5860,7 @@ next:
       return ret;
     }
 
-    RGWBucketInfo new_bucket_info;
+    RGWBucketInfo new_bucket_info(bucket_info);
     ret = create_new_bucket_instance(store, num_shards, bucket_info, attrs,
 				     new_bucket_info);
     if (ret < 0) {
@@ -5952,29 +5951,59 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    cls_rgw_reshard_entry entry;
-    //entry.tenant = tenant;
-    entry.bucket_name = bucket_name;
-    //entry.bucket_id = bucket_id;
-    int ret = reshard.get(entry);
-    if (ret < 0) {
-      cerr << "Error in getting bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
 
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
-    ret = init_bucket(tenant, entry.bucket_name, bucket_id, bucket_info, bucket, &attrs);
+    ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
-    RGWBucketInfo new_bucket_info;
-    ret = reshard_bucket(store, formatter, entry.new_num_shards, bucket, bucket_info,new_bucket_info,
+    cls_rgw_reshard_entry entry;
+    entry.tenant = tenant;
+    entry.bucket_name = bucket_name;
+    entry.bucket_id = bucket_info.bucket.bucket_id;
+
+    int ret = reshard.get(entry);
+    if (ret < 0) {
+      cerr << "Error in getting entry for bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    RGWBucketInfo new_bucket_info(bucket_info);
+    ret = create_new_bucket_instance(store, entry.new_num_shards, bucket_info, attrs,
+				     new_bucket_info);
+    if (ret < 0) {
+      return ret;
+    }
+
+    entry.new_instance_id = entry.bucket_name + ":" + new_bucket_info.bucket.bucket_id;
+    ret = reshard.add(entry);
+    if (ret < 0) {
+      cerr << "Error in updateing entry bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    ret = reshard.set_bucket_resharding(bucket_info.bucket.oid, entry);
+    if (ret < 0) {
+      cerr << "Error in setting resharding flag for bucket " << bucket_name << ": " << cpp_strerror(-ret)
+	   << std::endl;
+      return ret;
+    }
+
+    ret = reshard_bucket(store, formatter, entry.new_num_shards, bucket, bucket_info, new_bucket_info,
 			 max_entries, bucket_op, verbose);
     if (ret < 0) {
+      return ret;
+    }
+
+    ret = reshard.clear_bucket_resharding(new_bucket_info.bucket.oid,
+					entry);
+    if (ret < 0) {
+      cerr << "Error in clearing resharding flag for bucket " << bucket_name << ": " << cpp_strerror(-ret)
+	   << std::endl;
       return ret;
     }
 
