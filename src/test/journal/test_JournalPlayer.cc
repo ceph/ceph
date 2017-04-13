@@ -101,7 +101,6 @@ public:
       if (m_replay_hander.entries_available) {
         m_replay_hander.entries_available = false;
       } else if (m_replay_hander.cond.WaitInterval(
-          reinterpret_cast<CephContext*>(m_ioctx.cct()),
           m_replay_hander.lock, utime_t(10, 0)) != 0) {
         break;
       }
@@ -117,7 +116,6 @@ public:
       player->try_pop_front(&entry, &commit_tid);
 
       if (m_replay_hander.cond.WaitInterval(
-            reinterpret_cast<CephContext*>(m_ioctx.cct()),
             m_replay_hander.lock, utime_t(10, 0)) != 0) {
         return false;
       }

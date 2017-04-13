@@ -412,7 +412,6 @@ public:
       PGMap *pg_map,
       PGMap::Incremental *pending_inc);
 
-protected:
   static void register_pg(
       const OSDMap &osd_map,
       pg_t pgid, epoch_t epoch,

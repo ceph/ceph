@@ -193,7 +193,7 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
 
   system_request = false;
 
-  time = ceph_clock_now(cct);
+  time = ceph_clock_now();
   perm_mask = 0;
   bucket_instance_shard_id = -1;
   content_length = 0;

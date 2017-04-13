@@ -424,9 +424,10 @@ void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
   null_sessions.clear();
 
   mds->objecter->mutate(oid, oloc, op, snapc,
-			ceph::real_clock::now(g_ceph_context),
-      0, NULL, new C_OnFinisher(new C_IO_SM_Save(this, version),
-				mds->finisher));
+			ceph::real_clock::now(),
+			0, NULL,
+			new C_OnFinisher(new C_IO_SM_Save(this, version),
+					 mds->finisher));
 }
 
 void SessionMap::_save_finish(version_t v)
@@ -472,7 +473,7 @@ uint64_t SessionMap::set_state(Session *session, int s) {
 
 void SessionMapStore::decode_legacy(bufferlist::iterator& p)
 {
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   uint64_t pre;
   ::decode(pre, p);
   if (pre == (uint64_t)-1) {
@@ -615,7 +616,7 @@ void SessionMap::touch_session(Session *session)
 				      new xlist<Session*>).first;
   by_state_entry->second->push_back(&session->item_session_list);
 
-  session->last_cap_renew = ceph_clock_now(g_ceph_context);
+  session->last_cap_renew = ceph_clock_now();
 }
 
 void SessionMap::_mark_dirty(Session *s)
@@ -758,7 +759,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
       object_locator_t oloc(mds->mdsmap->get_metadata_pool());
       MDSInternalContextBase *on_safe = gather_bld->new_sub();
       mds->objecter->mutate(oid, oloc, op, snapc,
-			    ceph::real_clock::now(g_ceph_context),
+			    ceph::real_clock::now(),
 			    0, NULL, new C_OnFinisher(
 			      new C_IO_SM_Save_One(this, on_safe),
 			      mds->finisher));
@@ -819,12 +820,12 @@ void Session::notify_recall_sent(int const new_limit)
   if (recalled_at.is_zero()) {
     // Entering recall phase, set up counters so we can later
     // judge whether the client has respected the recall request
-    recalled_at = last_recall_sent = ceph_clock_now(g_ceph_context);
+    recalled_at = last_recall_sent = ceph_clock_now();
     assert (new_limit < caps.size());  // Behaviour of Server::recall_client_state
     recall_count = caps.size() - new_limit;
     recall_release_count = 0;
   } else {
-    last_recall_sent = ceph_clock_now(g_ceph_context);
+    last_recall_sent = ceph_clock_now();
   }
 }
 

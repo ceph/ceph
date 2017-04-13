@@ -95,9 +95,9 @@ int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
   return 0;
 }
 
-static void get_new_date_str(CephContext *cct, string& date_str)
+static void get_new_date_str(string& date_str)
 {
-  utime_t tm = ceph_clock_now(cct);
+  utime_t tm = ceph_clock_now();
   stringstream s;
   tm.asctime(s);
   date_str = s.str();
@@ -117,7 +117,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const c
   new_url.append(new_resource);
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
   headers.push_back(pair<string, string>("HTTP_DATE", date_str));
 
   string canonical_header;
@@ -248,7 +248,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
 {
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
 
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
@@ -433,7 +433,7 @@ int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uin
     new_url.append("/");
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
 
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
@@ -631,7 +631,7 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
     new_url.append("/");
 
   string date_str;
-  get_new_date_str(cct, date_str);
+  get_new_date_str(date_str);
 
   RGWEnv new_env;
   req_info new_info(cct, &new_env);

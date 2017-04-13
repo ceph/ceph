@@ -664,7 +664,7 @@ public:
     const char *get_state_name() { return state_name; }
     NamedState(CephContext *cct_, const char *state_name_)
       : state_name(state_name_),
-        enter_time(ceph_clock_now(cct_)) {}
+	enter_time(ceph_clock_now()) {}
     virtual ~NamedState() {}
   };
 

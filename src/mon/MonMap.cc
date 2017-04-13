@@ -462,7 +462,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
              << std::endl;
       return r;
     }
-    created = ceph_clock_now(cct);
+    created = ceph_clock_now();
     last_changed = created;
     return 0;
   }
@@ -548,7 +548,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
     errout << "no monitors specified to connect to." << std::endl;
     return -ENOENT;
   }
-  created = ceph_clock_now(cct);
+  created = ceph_clock_now();
   last_changed = created;
   return 0;
 }

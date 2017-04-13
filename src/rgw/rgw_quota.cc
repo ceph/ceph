@@ -172,7 +172,7 @@ template<class T>
 void RGWQuotaCache<T>::set_stats(const rgw_user& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs, RGWStorageStats& stats)
 {
   qs.stats = stats;
-  qs.expiration = ceph_clock_now(store->ctx());
+  qs.expiration = ceph_clock_now();
   qs.async_refresh_time = qs.expiration;
   qs.expiration += store->ctx()->_conf->rgw_bucket_quota_ttl;
   qs.async_refresh_time += store->ctx()->_conf->rgw_bucket_quota_ttl / 2;
@@ -183,7 +183,7 @@ void RGWQuotaCache<T>::set_stats(const rgw_user& user, rgw_bucket& bucket, RGWQu
 template<class T>
 int RGWQuotaCache<T>::get_stats(const rgw_user& user, rgw_bucket& bucket, RGWStorageStats& stats, RGWQuotaInfo& quota) {
   RGWQuotaCacheStats qs;
-  utime_t now = ceph_clock_now(store->ctx());
+  utime_t now = ceph_clock_now();
   if (map_find(user, bucket, qs)) {
     if (qs.async_refresh_time.sec() > 0 && now >= qs.async_refresh_time) {
       int r = async_refresh(user, bucket, qs);
@@ -194,7 +194,8 @@ int RGWQuotaCache<T>::get_stats(const rgw_user& user, rgw_bucket& bucket, RGWSto
       }
     }
 
-    if (can_use_cached_stats(quota, qs.stats) && qs.expiration > ceph_clock_now(store->ctx())) {
+    if (can_use_cached_stats(quota, qs.stats) && qs.expiration >
+	ceph_clock_now()) {
       stats = qs.stats;
       return 0;
     }
@@ -426,7 +427,7 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
           break;
 
         lock.Lock();
-        cond.WaitInterval(cct, lock, utime_t(cct->_conf->rgw_user_quota_bucket_sync_interval, 0));
+        cond.WaitInterval(lock, utime_t(cct->_conf->rgw_user_quota_bucket_sync_interval, 0));
         lock.Unlock();
       } while (!stats->going_down());
       ldout(cct, 20) << "BucketsSyncThread: done" << dendl;
@@ -466,7 +467,7 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
         }
 
         lock.Lock();
-        cond.WaitInterval(cct, lock, utime_t(cct->_conf->rgw_user_quota_sync_interval, 0));
+        cond.WaitInterval(lock, utime_t(cct->_conf->rgw_user_quota_sync_interval, 0));
         lock.Unlock();
       } while (!stats->going_down());
       ldout(cct, 20) << "UserSyncThread: done" << dendl;

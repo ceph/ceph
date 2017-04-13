@@ -52,7 +52,7 @@ public:
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    utime_t now(ceph_clock_now(NULL));
+    utime_t now(ceph_clock_now());
     ::decode(load, now, p);
     ::decode(beat, p);
     ::decode(import_map, p);

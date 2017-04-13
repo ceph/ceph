@@ -262,9 +262,9 @@ public:
     if (timeout > 0) {
       utime_t cond_timeout;
       cond_timeout.set_from_double(timeout);
-      utime_t s = ceph_clock_now(g_ceph_context);
-      err = cond.WaitInterval(g_ceph_context, lock, cond_timeout);
-      utime_t e = ceph_clock_now(g_ceph_context);
+      utime_t s = ceph_clock_now();
+      err = cond.WaitInterval(lock, cond_timeout);
+      utime_t e = ceph_clock_now();
       dout(20) << __func__ << " took " << (e-s) << " seconds" << dendl;
     } else {
       err = cond.Wait(lock);
