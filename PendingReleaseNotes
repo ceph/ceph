@@ -1,9 +1,17 @@
 11.1.1
 ------
 
- * Calculation of recovery priorities has been updated.
-   This could lead to unintuitive recovery prioritization
-   during cluster upgrade. In case of such recovery, OSDs
-   in old version would operate on different priority ranges
-   than new ones. Once upgraded, cluster will operate on
-   consistent values.
+
+* There was a bug introduced in Jewel (#19119) that broke the mapping behavior
+  when an "out" OSD that still existed in the CRUSH map was removed with 'osd rm'.
+  This could result in 'misdirected op' and other errors.  The bug is now fixed,
+  but the fix itself introduces the same risk because the behavior may vary between
+  clients and OSDs.  To avoid problems, please ensure that all OSDs are removed
+  from the CRUSH map before deleting them.  That is, be sure to do::
+
+     ceph osd crush rm osd.123
+
+  before::
+
+     ceph osd rm osd.123
+
