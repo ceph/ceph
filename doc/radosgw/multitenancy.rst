@@ -63,15 +63,18 @@ Thus a sample URL would be::
 
   https://ep.host.dom/tenant:bucket
 
-Here's a simple Python sample::
+Here's a simple Python sample:
 
-    from boto.s3.connection import S3Connection, OrdinaryCallingFormat
-    c = S3Connection(
-        aws_access_key_id="TESTER",
-        aws_secret_access_key="test123",
-        host="ep.host.dom",
-        calling_format = OrdinaryCallingFormat())
-    bucket = c.get_bucket("test5b:testbucket")
+.. code-block:: python
+   :linenos:
+
+	from boto.s3.connection import S3Connection, OrdinaryCallingFormat
+	c = S3Connection(
+		aws_access_key_id="TESTER",
+		aws_secret_access_key="test123",
+		host="ep.host.dom",
+		calling_format = OrdinaryCallingFormat())
+	bucket = c.get_bucket("test5b:testbucket")
 
 Note that it's not possible to supply an explicit tenant using
 a hostname. Hostnames cannot contain colons, or any other separators
