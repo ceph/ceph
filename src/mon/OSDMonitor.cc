@@ -3359,6 +3359,49 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
 
     if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      // An osd could configure failsafe ratio, to something different
+      // but for now assume it is the same here.
+      float fsr = g_conf->osd_failsafe_full_ratio;
+      if (fsr > 1.0) fsr /= 100;
+      float fr = osdmap.get_full_ratio();
+      float br = osdmap.get_backfillfull_ratio();
+      float nr = osdmap.get_nearfull_ratio();
+
+      bool out_of_order = false;
+      // These checks correspond to how OSDService::check_full_status() in an OSD
+      // handles the improper setting of these values.
+      if (br < nr) {
+        out_of_order = true;
+        if (detail) {
+	  ostringstream ss;
+	  ss << "backfill_ratio (" << br << ") < nearfull_ratio (" << nr << "), increased";
+	  detail->push_back(make_pair(HEALTH_ERR, ss.str()));
+        }
+        br = nr;
+      }
+      if (fr < br) {
+        out_of_order = true;
+        if (detail) {
+	  ostringstream ss;
+	  ss << "full_ratio (" << fr << ") < backfillfull_ratio (" << br << "), increased";
+	  detail->push_back(make_pair(HEALTH_ERR, ss.str()));
+        }
+        fr = br;
+      }
+      if (fsr < fr) {
+        out_of_order = true;
+        if (detail) {
+	  ostringstream ss;
+	  ss << "osd_failsafe_full_ratio (" << fsr << ") < full_ratio (" << fr << "), increased";
+	  detail->push_back(make_pair(HEALTH_ERR, ss.str()));
+        }
+      }
+      if (out_of_order) {
+	ostringstream ss;
+	ss << "Full ratio(s) out of order";
+	summary.push_back(make_pair(HEALTH_ERR, ss.str()));
+      }
+
       int full, backfill, nearfull;
       osdmap.count_full_nearfull_osds(&full, &backfill, &nearfull);
       if (full > 0) {
