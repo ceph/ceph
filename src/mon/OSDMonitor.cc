@@ -164,8 +164,11 @@ void OSDMonitor::create_initial()
   if (!g_conf->mon_debug_no_require_luminous) {
     newmap.set_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
     newmap.full_ratio = g_conf->mon_osd_full_ratio;
+    if (newmap.full_ratio > 1.0) newmap.full_ratio /= 100;
     newmap.backfillfull_ratio = g_conf->mon_osd_backfillfull_ratio;
+    if (newmap.backfillfull_ratio > 1.0) newmap.backfillfull_ratio /= 100;
     newmap.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
+    if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
   }
 
   // encode into pending incremental
@@ -788,9 +791,11 @@ void OSDMonitor::create_pending()
   // On upgrade OSDMap has new field set by mon_osd_backfillfull_ratio config
   // instead of osd_backfill_full_ratio config
   if (osdmap.backfillfull_ratio <= 0) {
-    dout(1) << __func__ << " setting backfillfull_ratio = "
-	    << g_conf->mon_osd_backfillfull_ratio << dendl;
     pending_inc.new_backfillfull_ratio = g_conf->mon_osd_backfillfull_ratio;
+    if (pending_inc.new_backfillfull_ratio > 1.0)
+      pending_inc.new_backfillfull_ratio /= 100;
+    dout(1) << __func__ << " setting backfillfull_ratio = "
+	    << pending_inc.new_backfillfull_ratio << dendl;
   }
   if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
     // transition full ratios from PGMap to OSDMap (on upgrade)
@@ -808,14 +813,18 @@ void OSDMonitor::create_pending()
   } else {
     // safety check (this shouldn't really happen)
     if (osdmap.full_ratio <= 0) {
-      dout(1) << __func__ << " setting full_ratio = "
-	      << g_conf->mon_osd_full_ratio << dendl;
       pending_inc.new_full_ratio = g_conf->mon_osd_full_ratio;
+      if (pending_inc.new_full_ratio > 1.0)
+        pending_inc.new_full_ratio /= 100;
+      dout(1) << __func__ << " setting full_ratio = "
+	      << pending_inc.new_full_ratio << dendl;
     }
     if (osdmap.nearfull_ratio <= 0) {
-      dout(1) << __func__ << " setting nearfull_ratio = "
-	      << g_conf->mon_osd_nearfull_ratio << dendl;
       pending_inc.new_nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
+      if (pending_inc.new_nearfull_ratio > 1.0)
+        pending_inc.new_nearfull_ratio /= 100;
+      dout(1) << __func__ << " setting nearfull_ratio = "
+	      << pending_inc.new_nearfull_ratio << dendl;
     }
   }
 }
