@@ -307,7 +307,45 @@ crush_make_straw_bucket(struct crush_map *map,
 extern int crush_addition_is_unsafe(__u32 a, __u32 b);
 extern int crush_multiplication_is_unsafe(__u32  a, __u32 b);
 
+/** @ingroup API
+ *
+ * Set the __map__ tunables to implement the most ancient behavior,
+ * for backward compatibility purposes only.
+ *
+ * - choose_local_tries == 2
+ * - choose_local_fallback_tries == 5
+ * - choose_total_tries == 19
+ * - chooseleaf_descend_once == 0
+ * - chooseleaf_vary_r == 0
+ * - straw_calc_version == 0
+ * - chooseleaf_stable = 0
+ *
+ * See the __crush_map__ documentation for more information about
+ * each tunable.
+ *
+ * @param map a crush_map
+ */
 extern void set_legacy_crush_map(struct crush_map *map);
+/** @ingroup API
+ *
+ * Set the __map__ tunables to implement the optimal behavior. These
+ * are the values set by crush_create(). It does not guarantee a
+ * stable mapping after an upgrade.
+ *
+ * For instance when a bug is fixed it may significantly change the
+ * mapping. In that case a new tunable (say tunable_new) is added so
+ * the caller can control when the bug fix is activated. The
+ * set_optimal_crush_map() function will always set all tunables,
+ * including tunable_new, to fix all bugs even if it means changing
+ * the mapping. If the caller needs fine grained control on the
+ * tunables to upgrade to a new version without changing the mapping,
+ * it needs to set the __crush_map__ tunables individually.
+ *
+ * See the __crush_map__ documentation for more information about
+ * each tunable.
+ *
+ * @param map a crush_map
+ */
 extern void set_optimal_crush_map(struct crush_map *map);
 
 #endif
