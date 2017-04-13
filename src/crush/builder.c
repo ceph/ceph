@@ -1497,6 +1497,7 @@ void set_legacy_crush_map(struct crush_map *map) {
   map->choose_total_tries = 19;
   map->chooseleaf_descend_once = 0;
   map->chooseleaf_vary_r = 0;
+  map->chooseleaf_stable = 0;
   map->straw_calc_version = 0;
 
   // by default, use legacy types, and also exclude tree,
