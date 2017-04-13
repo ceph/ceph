@@ -2427,29 +2427,19 @@ int check_reshard_bucket_params(RGWRados *store,
   return 0;
 }
 
-int reshard_bucket(RGWRados *store,
-		   Formatter *formatter,
-		   int num_shards,
-		   rgw_bucket& bucket,
-		   RGWBucketInfo& bucket_info,
-		   map<string, bufferlist>& attrs,
-		   int max_entries,
-		   RGWBucketAdminOpState& bucket_op,
-		   bool verbose)
+int create_new_bucket_instance(RGWRados *store,
+			       int new_num_shards,
+			       const RGWBucketInfo& bucket_info,
+			       map<string, bufferlist>& attrs,
+			       RGWBucketInfo& new_bucket_info)
 {
- int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
 
- RGWBucketInfo new_bucket_info(bucket_info);
+  new_bucket_info = bucket_info;
   store->create_bucket_id(&new_bucket_info.bucket.bucket_id);
   new_bucket_info.bucket.oid.clear();
 
-  new_bucket_info.num_shards = num_shards;
+  new_bucket_info.num_shards = new_num_shards;
   new_bucket_info.objv_tracker.clear();
-
-  cout << "*** NOTICE: operation will not remove old bucket index objects ***" << std::endl;
-  cout << "***         these will need to be removed manually             ***" << std::endl;
-  cout << "old bucket instance id: " << bucket_info.bucket.bucket_id << std::endl;
-  cout << "new bucket instance id: " << new_bucket_info.bucket.bucket_id << std::endl;
 
   int ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
   if (ret < 0) {
@@ -2462,6 +2452,28 @@ int reshard_bucket(RGWRados *store,
     cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
     return -ret;
   }
+
+  return 0;
+}
+
+int reshard_bucket(RGWRados *store,
+		   Formatter *formatter,
+		   int num_shards,
+		   rgw_bucket& bucket,
+		   RGWBucketInfo& bucket_info,
+		   RGWBucketInfo& new_bucket_info,
+		   int max_entries,
+		   RGWBucketAdminOpState& bucket_op,
+		   bool verbose)
+{
+
+  int ret = 0;
+
+  cout << "*** NOTICE: operation will not remove old bucket index objects ***" << std::endl;
+  cout << "***         these will need to be removed manually             ***" << std::endl;
+  cout << "old bucket instance id: " << bucket_info.bucket.bucket_id << std::endl;
+  cout << "new bucket instance id: " << new_bucket_info.bucket.bucket_id << std::endl;
+
   list<rgw_cls_bi_entry> entries;
 
   if (max_entries < 0) {
@@ -2482,6 +2494,7 @@ int reshard_bucket(RGWRados *store,
     cout << "total entries:";
   }
 
+     int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
   string marker;
   for (int i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
@@ -5848,12 +5861,19 @@ next:
       return ret;
     }
 
+    RGWBucketInfo new_bucket_info;
+    ret = create_new_bucket_instance(store, num_shards, bucket_info, attrs,
+				     new_bucket_info);
+    if (ret < 0) {
+      return ret;
+    }
+
     return reshard_bucket(store,
 			  formatter,
 			  num_shards,
 			  bucket,
 			  bucket_info,
-			  attrs,
+			  new_bucket_info,
 			  max_entries,
 			  bucket_op,
 			  verbose);
@@ -5951,7 +5971,8 @@ next:
       return -ret;
     }
 
-    ret = reshard_bucket(store, formatter, entry.new_num_shards, bucket, bucket_info, attrs,
+    RGWBucketInfo new_bucket_info;
+    ret = reshard_bucket(store, formatter, entry.new_num_shards, bucket, bucket_info,new_bucket_info,
 			 max_entries, bucket_op, verbose);
     if (ret < 0) {
       return ret;
