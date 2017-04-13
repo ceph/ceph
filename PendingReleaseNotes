@@ -111,3 +111,8 @@
   ability to be overridden by the erasure code profile setting
   "stripe_unit". For more details see "Erasure Code Profiles" in the
   documentation.
+
+* rbd and cephfs can use erasure coding with bluestore. This may be
+  enabled by setting 'allow_ec_overwrites' to 'true' for a pool. Since
+  this relies on bluestore's checksumming to do deep scrubbing,
+  enabling this on a pool stored on filestore is not allowed.
