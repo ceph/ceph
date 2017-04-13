@@ -248,7 +248,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     auto p = bl.begin();
     std::lock_guard<std::mutex> l(creating_pgs_lock);
     creating_pgs.decode(p);
-    dout(7) << __func__ << " loading creating_pgs e" << creating_pgs.last_scan_epoch << dendl;
+    dout(7) << __func__ << " loading creating_pgs last_scan_epoch "
+	    << creating_pgs.last_scan_epoch
+	    << " with " << creating_pgs.pgs.size() << " pgs" << dendl;
   }
 
   // walk through incrementals
