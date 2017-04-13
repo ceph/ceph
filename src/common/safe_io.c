@@ -102,18 +102,22 @@ ssize_t safe_pread_exact(int fd, void *buf, size_t count, off_t offset)
 
 ssize_t safe_pwrite(int fd, const void *buf, size_t count, off_t offset)
 {
+  ssize_t write_cnt = 0;
 	while (count > 0) {
 		ssize_t r = pwrite(fd, buf, count, offset);
 		if (r < 0) {
 			if (errno == EINTR)
 				continue;
+			if (errno == EAGAIN && write_cnt > 0)
+			    return write_cnt;
 			return -errno;
 		}
 		count -= r;
 		buf = (char *)buf + r;
 		offset += r;
+		write_cnt += r;
 	}
-	return 0;
+	return write_cnt;
 }
 
 #ifdef CEPH_HAVE_SPLICE

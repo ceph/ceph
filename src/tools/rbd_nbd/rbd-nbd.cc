@@ -103,6 +103,90 @@ static void handle_signal(int signum)
   }
 }
 
+#ifdef CEPH_HAVE_SPLICE
+static bool tcp_pipe(int *_source_fd, int *_sink_fd) {
+  if (_source_fd == nullptr || _sink_fd == nullptr) {
+    return false;
+  }
+  int source_fd = -1;
+  int sink_fd = -1;
+  int server_fd = -1;
+  struct sockaddr_in server_addr;
+  memset(&server_addr, 0, sizeof(struct sockaddr_in));
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_addr.s_addr = INADDR_ANY;
+  server_addr.sin_port = 0;
+  try {
+    server_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) {
+      throw (__LINE__);
+    }
+    int enable = 1;
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) != 0) {
+      throw __LINE__;
+    }
+    if (bind(server_fd, (const struct sockaddr*) &server_addr, sizeof(server_addr)) != 0) {
+      throw __LINE__;
+    }
+    socklen_t len;
+    if (getsockname(server_fd, (struct sockaddr*)&server_addr, &len) != 0) {
+      throw __LINE__;
+    }
+    if(server_addr.sin_port == 0) {
+      derr << "Port == 0" << dendl;
+    }
+    if (listen(server_fd, 1) != 0) {
+      throw __LINE__;
+    }
+    sink_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sink_fd < 0) {
+      throw __LINE__;
+    }
+    if (fcntl(sink_fd, F_SETFL, fcntl(sink_fd, F_GETFL,0) | O_NONBLOCK) !=0) {
+      throw __LINE__;
+    }
+    if (connect(sink_fd, (const struct sockaddr*) &server_addr, sizeof(server_addr)) != -1) {
+      throw __LINE__;
+    }
+    if (errno != EINPROGRESS) {
+      throw __LINE__;
+    }
+    source_fd = accept(server_fd, nullptr, nullptr);
+    if (source_fd < 0) {
+      throw __LINE__;
+    }
+    if (fcntl(sink_fd, F_SETFL, fcntl(sink_fd, F_GETFL,0) & ~O_NONBLOCK) != 0) {
+      throw __LINE__;
+    }
+    close(server_fd);
+    *_sink_fd = sink_fd;
+    *_source_fd = source_fd;
+    return true;
+  } catch (int line) {
+    derr << "Error tcp_pipe at" << line << dendl;
+    if (sink_fd>=0) {
+      close(sink_fd);
+    }
+    if (source_fd>=0) {
+      close(source_fd);
+    }
+    if (server_fd>=0) {
+      close(server_fd);
+    }
+    return false;
+  }
+}
+#endif
+
+bool socketpair(int (&fd)[2]) {
+#ifdef CEPH_HAVE_SPLICE
+  return tcp_pipe(&fd[0], &fd[1]);
+#else
+  return socketpair(AF_UNIX, SOCK_STREAM, 0, fd) != -1;
+#endif
+}
+
+
 class NBDServer
 {
 private:
@@ -270,6 +354,17 @@ private:
 	  dout(0) << "disconnect request received" << dendl;
           return;
         case NBD_CMD_WRITE:
+#ifdef CEPH_HAVE_SPLICE
+          try {
+            bufferptr ptr(buffer::create_zero_copy(ctx->request.len, fd));
+            ctx->data.push_back(ptr);
+          } catch ( ceph::buffer::error_code e ) {
+            derr << *ctx << ": failed to read nbd request data: "
+                << cpp_strerror(errno) << " e = " << e.code << dendl;
+            return;
+          }
+          break;
+#else
           bufferptr ptr(ctx->request.len);
 	  r = safe_read_exact(fd, ptr.c_str(), ctx->request.len);
           if (r < 0) {
@@ -279,6 +374,7 @@ private:
 	  }
           ctx->data.push_back(ptr);
           break;
+#endif
       }
 
       IOContext *pctx = ctx.release();
@@ -569,7 +665,8 @@ static int do_map(int argc, const char *argv[])
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
 
-  if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) == -1) {
+  if (!socketpair(fd))
+  {
     r = -errno;
     goto close_ret;
   }
