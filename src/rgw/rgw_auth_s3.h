@@ -155,18 +155,35 @@ int rgw_get_s3_header_digest(const string& auth_hdr, const string& key,
 			     string& dest);
 int rgw_get_s3_header_digest(const string& auth_hdr, const string& key, string& dest);
 
-void rgw_hash_s3_string_sha256(const char *data, int len, string& dest);
-void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canonical_uri,
-                                        const string& canonical_qs, const string& canonical_hdrs,
-                                        const string& signed_hdrs, const string& request_payload,
-                                        bool unsigned_payload,
-                                        string& canonical_req, string& canonical_req_hash);
-void rgw_create_s3_v4_string_to_sign(CephContext *cct, const string& algorithm,
-                                     const string& request_date, const string& credential_scope,
-                                     const string& hashed_qr, string& string_to_sign);
-int rgw_calculate_s3_v4_aws_signature(struct req_state *s, const string& access_key_id,
-                                      const string &date, const string& region,
-                                      const string& service, const string& string_to_sign,
-                                      string& signature, const std::string& access_key_secret="");
+namespace rgw {
+namespace auth {
+namespace s3 {
+
+std::string hash_string_sha256(const char* data, int len);
+
+std::string get_v4_canonical_request_hash(struct req_state* s,
+                                          const std::string& canonical_uri,
+                                          const std::string& canonical_qs,
+                                          const std::string& canonical_hdrs,
+                                          const std::string& signed_hdrs,
+                                          const std::string& request_payload,
+                                          bool unsigned_payload);
+
+std::string get_v4_string_to_sign(CephContext* cct,
+                                  const std::string& algorithm,
+                                  const std::string& request_date,
+                                  const std::string& credential_scope,
+                                  const std::string& hashed_qr);
+
+std::string get_v4_signature(struct req_state* s,
+                             const std::string& access_key_id,
+                             const std::string& date,
+                             const std::string& region,
+                             const std::string& service,
+                             const std::string& string_to_sign,
+                             const std::string& access_key_secret);
+} /* namespace s3 */
+} /* namespace auth */
+} /* namespace rgw */
 
 #endif

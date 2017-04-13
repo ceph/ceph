@@ -162,11 +162,6 @@ int rgw_get_s3_header_digest(const string& auth_hdr, const string& key, string& 
   return 0;
 }
 
-void rgw_hash_s3_string_sha256(const char *data, int len, string& dest)
-{
-  calc_hash_sha256(data, len, dest);
-}
-
 static inline bool is_base64_for_content_md5(unsigned char c) {
   return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
 }
@@ -239,14 +234,30 @@ bool rgw_create_s3_canonical_header(const req_info& info,
   return true;
 }
 
+
+namespace rgw {
+namespace auth {
+namespace s3 {
+
+std::string hash_string_sha256(const char* const data, const int len)
+{
+  std::string dest;
+  calc_hash_sha256(data, len, dest);
+  return dest;
+}
+
 /*
  * assemble canonical request for signature version 4
  */
-void rgw_assemble_s3_v4_canonical_request(const char *method, const char *canonical_uri, const char *canonical_qs,
-                                          const char *canonical_hdrs, const char *signed_hdrs, const char *request_payload_hash,
-                                          string& dest_str)
+static std::string assemble_v4_canonical_request(
+  const char* const method,
+  const char* const canonical_uri,
+  const char* const canonical_qs,
+  const char* const canonical_hdrs,
+  const char* const signed_hdrs,
+  const char* const request_payload_hash)
 {
-  string dest;
+  std::string dest;
 
   if (method)
     dest = method;
@@ -273,15 +284,19 @@ void rgw_assemble_s3_v4_canonical_request(const char *method, const char *canoni
   if (request_payload_hash)
     dest.append(request_payload_hash);
 
-  dest_str = dest;
+  return dest;
 }
 
 /*
  * create canonical request for signature version 4
  */
-void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canonical_uri, const string& canonical_qs,
-                                        const string& canonical_hdrs, const string& signed_hdrs, const string& request_payload,
-                                        bool unsigned_payload, string& canonical_req, string& canonical_req_hash)
+std::string get_v4_canonical_request_hash(struct req_state* const s,
+                                          const std::string& canonical_uri,
+                                          const std::string& canonical_qs,
+                                          const std::string& canonical_hdrs,
+                                          const std::string& signed_hdrs,
+                                          const std::string& request_payload,
+                                          const bool unsigned_payload)
 {
   string request_payload_hash;
 
@@ -294,7 +309,8 @@ void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canon
       if (s->aws4_auth_streaming_mode) {
         request_payload_hash = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
       } else {
-        rgw_hash_s3_string_sha256(request_payload.c_str(), request_payload.size(), request_payload_hash);
+        request_payload_hash = \
+          hash_string_sha256(request_payload.c_str(), request_payload.size());
       }
     }
   }
@@ -303,23 +319,33 @@ void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canon
 
   ldout(s->cct, 10) << "payload request hash = " << request_payload_hash << dendl;
 
-  rgw_assemble_s3_v4_canonical_request(s->info.method, canonical_uri.c_str(),
-      canonical_qs.c_str(), canonical_hdrs.c_str(), signed_hdrs.c_str(),
-      request_payload_hash.c_str(), canonical_req);
+  std::string canonical_req = \
+    assemble_v4_canonical_request(s->info.method,
+                                  canonical_uri.c_str(),
+                                  canonical_qs.c_str(),
+                                  canonical_hdrs.c_str(),
+                                  signed_hdrs.c_str(),
+                                  request_payload_hash.c_str());
 
-  rgw_hash_s3_string_sha256(canonical_req.c_str(), canonical_req.size(), canonical_req_hash);
+  std::string canonical_req_hash = \
+    hash_string_sha256(canonical_req.c_str(), canonical_req.size());
 
   ldout(s->cct, 10) << "canonical request = " << canonical_req << dendl;
   ldout(s->cct, 10) << "canonical request hash = " << canonical_req_hash << dendl;
+
+  return canonical_req_hash;
 }
 
 /*
  * assemble string to sign for signature version 4
  */
-void rgw_assemble_s3_v4_string_to_sign(const char *algorithm, const char *request_date,
-                                       const char *credential_scope, const char *hashed_qr, string& dest_str)
-{
-  string dest;
+static std::string rgw_assemble_s3_v4_string_to_sign(
+  const char* const algorithm,
+  const char* const request_date,
+  const char* const credential_scope,
+  const char* const hashed_qr
+) {
+  std::string dest;
 
   if (algorithm)
     dest = algorithm;
@@ -336,43 +362,45 @@ void rgw_assemble_s3_v4_string_to_sign(const char *algorithm, const char *reques
   if (hashed_qr)
     dest.append(hashed_qr);
 
-  dest_str = dest;
+  return dest;
 }
 
 /*
  * create string to sign for signature version 4
+ *
+ * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
  */
-void rgw_create_s3_v4_string_to_sign(CephContext *cct, const string& algorithm, const string& request_date,
-                                     const string& credential_scope, const string& hashed_qr,
-                                     string& string_to_sign) {
+std::string get_v4_string_to_sign(CephContext* const cct,
+                                  const std::string& algorithm,
+                                  const std::string& request_date,
+                                  const std::string& credential_scope,
+                                  const std::string& hashed_qr)
+{
+  const auto string_to_sign = \
+    rgw_assemble_s3_v4_string_to_sign(
+      algorithm.c_str(),
+      request_date.c_str(),
+      credential_scope.c_str(),
+      hashed_qr.c_str());
 
-  rgw_assemble_s3_v4_string_to_sign(algorithm.c_str(), request_date.c_str(),
-      credential_scope.c_str(), hashed_qr.c_str(), string_to_sign);
-
-  ldout(cct, 10) << "string to sign = " << rgw::crypt_sanitize::log_content{string_to_sign.c_str()} << dendl;
+  ldout(cct, 10) << "string to sign = "
+                 << rgw::crypt_sanitize::log_content{string_to_sign.c_str()}
+                 << dendl;
+  return string_to_sign;
 }
 
 /*
  * calculate the AWS signature version 4
  */
-int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
-    const string& access_key_id, const string &date, const string& region, const string& service,
-    const string& string_to_sign, string& signature, const string &access_key_secret) {
-
-  string secret_key = "AWS4";
-
-  if (access_key_secret.empty()) {
-    map<string, RGWAccessKey>::iterator iter = s->user->access_keys.find(access_key_id);
-    if (iter == s->user->access_keys.end()) {
-      ldout(s->cct, 10) << "ERROR: access key not encoded in user info" << dendl;
-      return -EPERM;
-    }
-    RGWAccessKey& k = iter->second;
-    secret_key.append(k.key);
-  } else {
-    secret_key.append(access_key_secret);
-  }
-
+std::string get_v4_signature(struct req_state* const s,
+                             const std::string& access_key_id,
+                             const std::string& date,
+                             const std::string& region,
+                             const std::string& service,
+                             const std::string& string_to_sign,
+                             const std::string& access_key_secret)
+{
+  std::string secret_key = "AWS4" + access_key_secret;
   char secret_k[secret_key.size() * MAX_UTF8_SZ];
 
   size_t n = 0;
@@ -422,6 +450,7 @@ int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
 
   ldout(s->cct, 10) << "signing_k     = " << string(aux) << dendl;
 
+  /* TODO(rzarzynski): remove any modification to req_state! */
   s->aws4_auth->signing_key = aux;
 
   /* new signature */
@@ -433,9 +462,13 @@ int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
 
   ldout(s->cct, 10) << "signature_k   = " << string(aux) << dendl;
 
-  signature = string(aux);
+  std::string signature = string(aux);
 
   ldout(s->cct, 10) << "new signature = " << signature << dendl;
 
-  return 0;
+  return signature;
 }
+
+} /* namespace s3 */
+} /* namespace auth */
+} /* namespace rgw */
