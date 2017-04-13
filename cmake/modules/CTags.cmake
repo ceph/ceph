@@ -12,13 +12,16 @@ function(add_tags name)
       COMMAND git config --file .gitmodules --get-regexp path
       COMMAND awk "/${TAGS_SRC_DIR}/ { print $2 }"
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+      RESULT_VARIABLE result_code
       OUTPUT_VARIABLE submodules
       OUTPUT_STRIP_TRAILING_WHITESPACE)
-    string(REPLACE "${TAGS_SRC_DIR}/" "" submodules ${submodules})
-    # cmake list uses ";" as the delimiter, so split the string manually
-    # before iterating in it.
-    string(REPLACE "\n" ";" submodules ${submodules})
-    list(APPEND excludes ${submodules})
+    if(${result_code} EQUAL 0)
+      string(REPLACE "${TAGS_SRC_DIR}/" "" submodules ${submodules})
+      # cmake list uses ";" as the delimiter, so split the string manually
+      # before iterating in it.
+      string(REPLACE "\n" ";" submodules ${submodules})
+      list(APPEND excludes ${submodules})
+    endif()
   endif()
   message(STATUS "exclude following files under ${TAGS_SRC_DIR}: ${excludes}")
   # add_custom_target() accepts a list after "COMMAND" keyword, so we should
