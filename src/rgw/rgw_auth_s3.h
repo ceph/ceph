@@ -159,6 +159,23 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
+
+static inline std::string get_v4_canonical_uri(const req_info& info) {
+  /* The code should normalize according to RFC 3986 but S3 does NOT do path
+   * normalization that SigV4 typically does. This code follows the same
+   * approach that boto library. See auth.py:canonical_uri(...). */
+
+  std::string canonical_uri = info.request_uri_aws4;
+
+  if (canonical_uri.empty()) {
+    canonical_uri = "/";
+  } else {
+    boost::replace_all(canonical_uri, "+", "%20");
+  }
+
+  return canonical_uri;
+}
+
 std::string hash_string_sha256(const char* data, int len);
 
 std::string get_v4_canonical_request_hash(CephContext* cct,

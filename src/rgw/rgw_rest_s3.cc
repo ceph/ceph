@@ -3746,21 +3746,9 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
    */
 
   /* craft canonical uri */
-
-  /* here code should normalize via rfc3986 but S3 does **NOT** do path normalization
-   * that SigV4 typically does. this code follows the same approach that boto library
-   * see auth.py:canonical_uri(...) */
-
-  s->aws4_auth->canonical_uri = s->info.request_uri_aws4;
-
-  if (s->aws4_auth->canonical_uri.empty()) {
-    s->aws4_auth->canonical_uri = "/";
-  } else {
-    boost::replace_all(s->aws4_auth->canonical_uri, "+", "%20");
-  }
+  s->aws4_auth->canonical_uri = rgw::auth::s3::get_v4_canonical_uri(s->info);
 
   /* craft canonical query string */
-
   s->aws4_auth->canonical_qs = s->info.request_params;
 
   if (!s->aws4_auth->canonical_qs.empty()) {
