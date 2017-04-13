@@ -339,7 +339,7 @@ namespace rgw {
     if (! rgw_fh) {
       ldout(get_context(), 0) << __func__
 		       << " BUG no such src renaming path="
-		       << rgw_fh->full_object_name()
+		       << src_name
 		       << dendl;
       goto out;
     }
