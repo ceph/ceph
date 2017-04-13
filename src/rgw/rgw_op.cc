@@ -42,6 +42,7 @@
 
 #include "compressor/Compressor.h"
 
+#include "rgw_acl_swift.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -3543,6 +3544,12 @@ void RGWPutMetadataBucket::execute()
    * the hood. This method will add the new items only if the map doesn't
    * contain such keys yet. */
   if (has_policy) {
+    if (s->dialect.compare("swift") == 0) {
+	auto old_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl);
+	auto new_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(&policy);
+	new_policy->filter_merge(policy_rw_mask, old_policy);
+	policy = *new_policy;
+    }
     buffer::list bl;
     policy.encode(bl);
     emplace_attr(RGW_ATTR_ACL, std::move(bl));

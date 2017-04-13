@@ -179,11 +179,13 @@ int RGWAccessControlPolicy_SWIFT::create(RGWRados* const store,
                                          const rgw_user& id,
                                          const std::string& name,
                                          const std::string& read_list,
-                                         const std::string& write_list)
+                                         const std::string& write_list,
+                                         uint32_t& rw_mask)
 {
   acl.create_default(id, name);
   owner.set_id(id);
   owner.set_name(name);
+  rw_mask = 0;
 
   if (read_list.size()) {
     std::vector<std::string> uids;
@@ -200,6 +202,7 @@ int RGWAccessControlPolicy_SWIFT::create(RGWRados* const store,
                     << r << dendl;
       return r;
     }
+    rw_mask |= SWIFT_PERM_READ;
   }
   if (write_list.size()) {
     std::vector<std::string> uids;
@@ -216,8 +219,43 @@ int RGWAccessControlPolicy_SWIFT::create(RGWRados* const store,
                     << r << dendl;
       return r;
     }
+    rw_mask |= SWIFT_PERM_WRITE;
   }
   return 0;
+}
+
+void RGWAccessControlPolicy_SWIFT::filter_merge(uint32_t rw_mask,
+                                                RGWAccessControlPolicy_SWIFT *old)
+{
+  /* rw_mask&SWIFT_PERM_READ => setting read acl,
+   * rw_mask&SWIFT_PERM_WRITE => setting write acl
+   * when bit is cleared, copy matching elements from old.
+   */
+  if (rw_mask == (SWIFT_PERM_READ|SWIFT_PERM_WRITE)) {
+    return;
+  }
+  rw_mask ^= (SWIFT_PERM_READ|SWIFT_PERM_WRITE);
+  for (auto &iter: old->acl.get_grant_map()) {
+    ACLGrant& grant = iter.second;
+    uint32_t perm = grant.get_permission().get_permissions();
+    rgw_user id;
+    string url_spec;
+    if (!grant.get_id(id)) {
+      if (grant.get_group() != ACL_GROUP_ALL_USERS) {
+        url_spec = grant.get_referer();
+        if (url_spec.empty()) {
+          continue;
+        }
+        if (perm == 0) {
+          /* We need to carry also negative, HTTP referrer-based ACLs. */
+          perm = SWIFT_PERM_READ;
+        }
+      }
+    }
+    if (perm & rw_mask) {
+      acl.add_grant(&grant);
+    }
+  }
 }
 
 void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)

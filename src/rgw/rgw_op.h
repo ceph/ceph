@@ -940,6 +940,7 @@ protected:
   map<string, buffer::list> attrs;
   set<string> rmattr_names;
   bool has_policy, has_cors;
+  uint32_t policy_rw_mask;
   RGWAccessControlPolicy policy;
   RGWCORSConfiguration cors_config;
   string placement_rule;
@@ -947,7 +948,7 @@ protected:
 
 public:
   RGWPutMetadataBucket()
-    : has_policy(false), has_cors(false)
+    : has_policy(false), has_cors(false), policy_rw_mask(0)
   {}
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
