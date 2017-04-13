@@ -2353,8 +2353,6 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
     }
   }
 
-  s->http_auth = info.env->get("HTTP_AUTHORIZATION");
-
   if (g_conf->rgw_print_continue) {
     const char *expect = info.env->get("HTTP_EXPECT");
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));

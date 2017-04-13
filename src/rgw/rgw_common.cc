@@ -280,7 +280,6 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   bucket_exists = false;
   has_bad_meta = false;
   length = NULL;
-  http_auth = NULL;
   local_source = false;
 
   obj_ctx = NULL;

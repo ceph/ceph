@@ -1821,7 +1821,6 @@ struct req_state {
 
   string canned_acl;
   bool has_acl_header;
-  const char *http_auth;
   bool local_source; /* source is local */
 
   int prot_flags;
