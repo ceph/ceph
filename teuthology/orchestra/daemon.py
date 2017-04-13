@@ -96,7 +96,7 @@ class DaemonState(object):
             self.log.error('tried to stop a non-running daemon')
             return
         if self.use_init:
-            self.log.info("using init to stop")
+            self.log.info("using systemd to stop")
             self.remote.run(args=[run.Raw(self.stop_cmd)])
         else:
             self.proc.stdin.close()
@@ -113,11 +113,11 @@ class DaemonState(object):
         Start this daemon instance.
         """
         if not self.running():
-            self.log.error('Restarting a running daemon')
+            self.log.warn('Restarting a running daemon')
             self.restart()
             return
         if self.use_init:
-            self.log.info("using init to start")
+            self.log.info("using systemd to start")
             self.remote.run(args=[run.Raw(self.start_cmd)])
 
     def wait(self, timeout=300):
@@ -149,9 +149,9 @@ class DaemonState(object):
         """
         self.log.info('Restarting daemon')
         if self.use_init:
-            self.log.info("using init to restart")
+            self.log.info("using systemd to restart")
             if not self.running():
-                self.log.error('starting a non-running daemon')
+                self.log.info('starting a non-running daemon')
                 self.remote.run(args=[run.Raw(self.start_cmd)])
             else:
                 self.remote.run(args=[run.Raw(self.restart_cmd)])
@@ -174,7 +174,7 @@ class DaemonState(object):
         """
         self.log.info('Restarting daemon with args')
         if self.use_init:
-            self.log.info("restart with args not supported in init")
+            self.log.warn("restart with args not supported with systemd")
             if not self.running():
                 self.log.error('starting a non-running daemon')
                 self.remote.run(args=[run.Raw(self.start_cmd)])
@@ -199,8 +199,8 @@ class DaemonState(object):
         :param sig: signal to send
         """
         if self.use_init:
-            self.log.info("using init to send signal")
-            self.log.info("WARNING init may restart after kill signal")
+            self.log.info("using systemd to send signal")
+            self.log.warn("systemd may restart daemon after kill signal")
             pid = self.pid
             self.log.info("Sending signal %s to process %s", sig, pid)
             sig = '-' + str(sig)
@@ -216,8 +216,6 @@ class DaemonState(object):
         :return: True if remote run command value is set, False otherwise.
         """
         if self.use_init:
-            self.log.info("using init to send signal")
-            self.log.info("WARNING init may restart after kill signal")
             pid = self.pid
             if pid > 0:
                 return pid
@@ -230,7 +228,6 @@ class DaemonState(object):
         clear remote run command value.
         """
         if self.use_init:
-            self.log.info("reset not supported with init")
             return
         self.proc = None
 
@@ -239,7 +236,8 @@ class DaemonState(object):
         clear remote run command value after waiting for exit.
         """
         if self.use_init:
-            self.log.info("wait_for_exit not supported with init")
+            # TODO: This ought to be possible, no?
+            self.log.error("wait_for_exit is not supported with systemd")
             return
         if self.proc:
             try:
