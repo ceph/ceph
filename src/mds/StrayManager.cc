@@ -468,13 +468,7 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
 	return false;  // not until some snaps are deleted.
       }
 
-      if (in->has_dirfrags()) {
-        list<CDir*> ls;
-        in->get_nested_dirfrags(ls);
-        for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-          (*p)->try_remove_dentries_for_stray();
-        }
-      }
+      in->mdcache->clear_dirty_bits_for_stray(in);
 
       if (!in->remote_parents.empty()) {
 	// unlink any stale remote snap dentry.
