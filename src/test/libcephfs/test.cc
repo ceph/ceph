@@ -1293,8 +1293,9 @@ TEST(LibCephFS, GetExtentOsds) {
   EXPECT_EQ(len, (int64_t)stripe_unit/2-1);
 
   /* only when more than 1 osd */
-  if (ret > 1)
+  if (ret > 1) {
     EXPECT_EQ(-ERANGE, ceph_get_file_extent_osds(cmount, fd, 0, NULL, osds, 1));
+  }
 
   ceph_close(cmount, fd);
 

@@ -104,8 +104,9 @@ protected:
       if (key == NULL)
 	break;
       EXPECT_EQ(std::string(keys[i]), std::string(key));
-      if (val != NULL)
+      if (val != NULL) {
         EXPECT_EQ(0, memcmp(vals[i], val, val_len));
+      }
       EXPECT_EQ(lens[i], val_len);
       ++i;
     }
