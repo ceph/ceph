@@ -638,6 +638,10 @@ COMMAND("osd reweight " \
 	"name=id,type=CephOsdName " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
 	"reweight osd to 0.0 < <weight> < 1.0", "osd", "rw", "cli,rest")
+COMMAND("osd reweightn " \
+	"name=weights,type=CephString",
+	"reweight osds with {<id>: <weight>,...})",
+	"osd", "rw", "cli,rest")
 COMMAND("osd pg-temp " \
 	"name=pgid,type=CephPgid " \
 	"name=id,type=CephOsdName,n=N,req=false", \
@@ -748,34 +752,6 @@ COMMAND("osd pool get-quota " \
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r", "cli,rest")
-COMMAND("osd reweight-by-utilization " \
-	"name=oload,type=CephInt,req=false " \
-	"name=max_change,type=CephFloat,req=false "			\
-	"name=max_osds,type=CephInt,req=false "			\
-	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false",\
-	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
-	"osd", "rw", "cli,rest")
-COMMAND("osd test-reweight-by-utilization " \
-	"name=oload,type=CephInt,req=false " \
-	"name=max_change,type=CephFloat,req=false "			\
-	"name=max_osds,type=CephInt,req=false "			\
-	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false",\
-	"dry run of reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
-	"osd", "rw", "cli,rest")
-COMMAND("osd reweight-by-pg " \
-	"name=oload,type=CephInt,req=false " \
-	"name=max_change,type=CephFloat,req=false "			\
-	"name=max_osds,type=CephInt,req=false "			\
-	"name=pools,type=CephPoolname,n=N,req=false",			\
-	"reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
-	"osd", "rw", "cli,rest")
-COMMAND("osd test-reweight-by-pg " \
-	"name=oload,type=CephInt,req=false " \
-	"name=max_change,type=CephFloat,req=false "			\
-	"name=max_osds,type=CephInt,req=false "			\
-	"name=pools,type=CephPoolname,n=N,req=false",			\
-	"dry run of reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
-	"osd", "rw", "cli,rest")
 COMMAND("osd df " \
 	"name=output_method,type=CephChoices,strings=plain|tree,req=false", \
 	"show OSD utilization", "osd", "r", "cli,rest")

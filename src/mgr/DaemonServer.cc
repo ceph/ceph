@@ -15,6 +15,8 @@
 
 #include "auth/RotatingKeyRing.h"
 
+#include "json_spirit/json_spirit_writer.h"
+
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MCommand.h"
@@ -369,6 +371,24 @@ bool DaemonServer::_allowed_command(
   return capable;
 }
 
+class ReplyOnFinish : public Context {
+  DaemonServer* mgr;
+  MCommand *m;
+  bufferlist odata;
+
+public:
+  bufferlist from_mon;
+  string outs;
+
+  ReplyOnFinish(DaemonServer* mgr, MCommand *m, bufferlist&& odata)
+    : mgr(mgr), m(m), odata(std::move(odata))
+  {}
+  void finish(int r) override {
+    odata.claim_append(from_mon);
+    mgr->_reply(m, r, outs, odata);
+  }
+};
+
 bool DaemonServer::handle_command(MCommand *m)
 {
   int r = 0;
@@ -398,8 +418,7 @@ bool DaemonServer::handle_command(MCommand *m)
   map<string,string> param_str_map;
 
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
-    r = -EINVAL;
-    goto out;
+    return _reply(m, -EINVAL, ss.str(), odata);
   }
 
   {
@@ -441,7 +460,8 @@ bool DaemonServer::handle_command(MCommand *m)
     }
 #endif
     f.close_section();	// command_descriptions
-    goto out;
+    f.flush(odata);
+    return _reply(m, r, ss.str(), odata);
   }
 
   // lookup command
@@ -449,9 +469,7 @@ bool DaemonServer::handle_command(MCommand *m)
                                               ARRAY_SIZE(mgr_commands));
   _generate_command_map(cmdmap, param_str_map);
   if (!mgr_cmd) {
-    ss << "command not supported";
-    r = -EINVAL;
-    goto out;
+    return _reply(m, -EINVAL, "command not supported", odata);
   }
 
   // validate user's permissions for requested command
@@ -461,9 +479,7 @@ bool DaemonServer::handle_command(MCommand *m)
     audit_clog->info() << "from='" << session->inst << "' "
 		       << "entity='" << session->entity_name << "' "
 		       << "cmd=" << m->cmd << ":  access denied";
-    ss << "access denied";
-    r = -EACCES;
-    goto out;
+    return _reply(m, -EACCES, "access denied", odata);
   }
 
   audit_clog->debug()
@@ -483,8 +499,7 @@ bool DaemonServer::handle_command(MCommand *m)
     cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
     if (!pgid.parse(pgidstr.c_str())) {
       ss << "invalid pgid '" << pgidstr << "'";
-      r = -EINVAL;
-      goto out;
+      return _reply(m, -EINVAL, ss.str(), odata);
     }
     bool pg_exists = false;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
@@ -492,8 +507,7 @@ bool DaemonServer::handle_command(MCommand *m)
       });
     if (!pg_exists) {
       ss << "pg " << pgid << " dne";
-      r = -ENOENT;
-      goto out;
+      return _reply(m, -ENOENT, ss.str(), odata);
     }
     int acting_primary = -1;
     entity_inst_t inst;
@@ -505,8 +519,7 @@ bool DaemonServer::handle_command(MCommand *m)
       });
     if (acting_primary == -1) {
       ss << "pg " << pgid << " has no primary osd";
-      r = -EAGAIN;
-      goto out;
+      return _reply(m, -EAGAIN, ss.str(), odata);
     }
     vector<pg_t> pgs = { pgid };
     msgr->send_message(new MOSDScrub(monc->get_fsid(),
@@ -516,21 +529,107 @@ bool DaemonServer::handle_command(MCommand *m)
 		       inst);
     ss << "instructing pg " << pgid << " on osd." << acting_primary
        << " (" << inst << ") to " << scrubop;
-    r = 0;
-  }
-
-  else {
-    cluster_state.with_pgmap(
-      [&](const PGMap& pg_map) {
-	cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	    r = process_pg_map_command(prefix, cmdmap, pg_map, osdmap,
-				       f.get(), &ss, &odata);
+    return _reply(m, 0, ss.str(), odata);
+  } else if (prefix == "osd reweight-by-pg" ||
+	     prefix == "osd reweight-by-utilization" ||
+	     prefix == "osd test-reweight-by-pg" ||
+	     prefix == "osd test-reweight-by-utilization") {
+    bool by_pg =
+      prefix == "osd reweight-by-pg" || prefix == "osd test-reweight-by-pg";
+    bool dry_run =
+      prefix == "osd test-reweight-by-pg" ||
+      prefix == "osd test-reweight-by-utilization";
+    int64_t oload;
+    cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
+    set<int64_t> pools;
+    vector<string> poolnames;
+    cmd_getval(g_ceph_context, cmdmap, "pools", poolnames);
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	for (const auto& poolname : poolnames) {
+	  int64_t pool = osdmap.lookup_pg_pool_name(poolname);
+	  if (pool < 0) {
+	    ss << "pool '" << poolname << "' does not exist";
+	    r = -ENOENT;
+	  }
+	  pools.insert(pool);
+	}
+      });
+    if (r) {
+      return _reply(m, r, ss.str(), odata);
+    }
+    double max_change = g_conf->mon_reweight_max_change;
+    cmd_getval(g_ceph_context, cmdmap, "max_change", max_change);
+    if (max_change <= 0.0) {
+      ss << "max_change " << max_change << " must be positive";
+      return _reply(m, -EINVAL, ss.str(), odata);
+    }
+    int64_t max_osds = g_conf->mon_reweight_max_osds;
+    cmd_getval(g_ceph_context, cmdmap, "max_osds", max_osds);
+    if (max_osds <= 0) {
+      ss << "max_osds " << max_osds << " must be positive";
+      return _reply(m, -EINVAL, ss.str(), odata);
+    }
+    string no_increasing;
+    cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
+    string out_str;
+    map<int32_t, uint32_t> new_weights;
+    r = cluster_state.with_pgmap([&](const PGMap& pgmap) {
+	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    return reweight::by_utilization(osdmap, pgmap,
+					    oload,
+					    max_change,
+					    max_osds,
+					    by_pg,
+					    pools.empty() ? NULL : &pools,
+					    no_increasing == "--no-increasing",
+					    &new_weights,
+					    &ss, &out_str, f.get());
+	  });
+      });
+    if (r >= 0) {
+      dout(10) << "reweight::by_utilization: finished with " << out_str << dendl;
+    }
+    if (f)
+      f->flush(odata);
+    else
+      odata.append(out_str);
+    if (r < 0) {
+      ss << "FAILED reweight-by-pg";
+      return _reply(m, r, ss.str(), odata);
+    } else if (r == 0 || dry_run) {
+      ss << "no change";
+      return _reply(m, r, ss.str(), odata);
+    } else {
+      json_spirit::Object json_object;
+      for (const auto& osd_weight : new_weights) {
+	json_spirit::Config::add(json_object,
+				 std::to_string(osd_weight.first),
+				 std::to_string(osd_weight.second));
+      }
+      string s = json_spirit::write(json_object);
+      std::replace(begin(s), end(s), '\"', '\'');
+      const string cmd =
+	"{"
+	"\"prefix\": \"osd reweightn\", "
+	"\"weights\": \"" + s + "\""
+	"}";
+      auto on_finish = new ReplyOnFinish(this, m, std::move(odata));
+      monc->start_mon_command({cmd}, {},
+			      &on_finish->from_mon, &on_finish->outs, on_finish);
+      return true;
+    }
+  } else {
+    r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
+	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	    return process_pg_map_command(prefix, cmdmap, pg_map, osdmap,
+					  f.get(), &ss, &odata);
 	  });
       });
   }
-
+  if (r != -EOPNOTSUPP)
+      return _reply(m, r, ss.str(), odata);
   // fall back to registered python handlers
-  if (r == -EOPNOTSUPP) {
+  else {
     // Let's find you a handler!
     MgrPyModule *handler = nullptr;
     auto py_commands = py_modules.get_commands();
@@ -546,8 +645,7 @@ bool DaemonServer::handle_command(MCommand *m)
     if (handler == nullptr) {
       ss << "No handler found for '" << prefix << "'";
       dout(4) << "No handler found for '" << prefix << "'" << dendl;
-      r = -EINVAL;
-      goto out;
+      return _reply(m, -EINVAL, ss.str(), odata);
     }
 
     // FIXME: go run this python part in another thread, not inline
@@ -557,27 +655,29 @@ bool DaemonServer::handle_command(MCommand *m)
     stringstream ds;
     r = handler->handle_command(cmdmap, &ds, &ss);
     odata.append(ds);
-    goto out;
+    return _reply(m, 0, ss.str(), odata);
   }
+}
 
- out:
-
+bool DaemonServer::_reply(MCommand* m,
+			  int ret,
+			  const std::string& s,
+			  const bufferlist& payload)
+{
+  dout(1) << __func__ << " r=" << ret << " " << s << dendl;
+  auto con = m->get_connection();
+  if (!con) {
+    dout(10) << __func__ << " connection dropped for command" << dendl;
+    m->put();
+    return true;
+  }
   // Let the connection drop as soon as we've sent our response
-  if (m->get_connection()) {
-    m->get_connection()->mark_disposable();
-  }
+  con->mark_disposable();
 
-  std::string rs;
-  rs = ss.str();
-  dout(1) << "do_command r=" << r << " " << rs << dendl;
-  if (con) {
-    MCommandReply *reply = new MCommandReply(r, rs);
-    reply->set_tid(m->get_tid());
-    reply->set_data(odata);
-    con->send_message(reply);
-  }
-
+  auto response = new MCommandReply(ret, s);
+  response->set_tid(m->get_tid());
+  response->set_data(payload);
+  con->send_message(response);
   m->put();
   return true;
 }
-

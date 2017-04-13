@@ -949,34 +949,39 @@ int snap_set(librbd::Image &image, const std::string &snap_name) {
   return 0;
 }
 
-bool calc_sparse_extent(const bufferptr &bp,
+void calc_sparse_extent(const bufferptr &bp,
                         size_t sparse_size,
-                        uint64_t length,
-                        size_t *write_offset,
+			size_t buffer_offset,
+                        uint64_t buffer_length,
                         size_t *write_length,
-                        size_t *offset) {
-  size_t extent_size;
-  if (*offset + sparse_size > length) {
-    extent_size = length - *offset;
-  } else {
-    extent_size = sparse_size;
+                        bool *zeroed) {
+  if (sparse_size == 0) {
+    // sparse writes are disabled -- write the full extent
+    assert(buffer_offset == 0);
+    *write_length = buffer_length;
+    *zeroed = false;
+    return;
   }
 
-  bufferptr extent(bp, *offset, extent_size);
-  *offset += extent_size;
+  *write_length = 0;
+  size_t original_offset = buffer_offset;
+  while (buffer_offset < buffer_length) {
+    size_t extent_size = std::min<size_t>(
+      sparse_size, buffer_length - buffer_offset);
 
-  bool extent_is_zero = extent.is_zero();
-  if (!extent_is_zero) {
+    bufferptr extent(bp, buffer_offset, extent_size);
+
+    bool extent_is_zero = extent.is_zero();
+    if (original_offset == buffer_offset) {
+      *zeroed = extent_is_zero;
+    } else if (*zeroed != extent_is_zero) {
+      assert(*write_length > 0);
+      return;
+    }
+
+    buffer_offset += extent_size;
     *write_length += extent_size;
   }
-  if (extent_is_zero &&  *write_length == 0) {
-    *write_offset += extent_size;
-  }
-
-  if ((extent_is_zero || *offset == length) && *write_length != 0) {
-    return true;
-  }
-  return false;
 }
 
 std::string image_id(librbd::Image& image) {

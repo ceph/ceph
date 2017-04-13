@@ -466,15 +466,10 @@ public:
    * to the MonMap
    */
   template<typename Callback, typename...Args>
-  auto with_monmap(Callback&& cb, Args&&...args) ->
-    typename std::enable_if<
-      std::is_void<
-    decltype(cb(const_cast<const MonMap&>(monmap),
-		std::forward<Args>(args)...))>::value,
-      void>::type {
+  auto with_monmap(Callback&& cb, Args&&...args) const ->
+    decltype(cb(monmap, std::forward<Args>(args)...)) {
     Mutex::Locker l(monc_lock);
-    std::forward<Callback>(cb)(const_cast<const MonMap&>(monmap),
-			       std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(monmap, std::forward<Args>(args)...);
   }
 
 private:
