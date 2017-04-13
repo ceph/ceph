@@ -11,7 +11,7 @@ import errno
 import sys
 
 # Are we running Python 2.x
-_python2 = sys.hexversion < 0x03000000
+_python2 = sys.version_info[0] < 3
 
 def test_rados_init_error():
     assert_raises(Error, Rados, conffile='', rados_id='admin',
