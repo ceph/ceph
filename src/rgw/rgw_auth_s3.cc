@@ -330,6 +330,63 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
   return canonical_qs;
 }
 
+boost::optional<std::string>
+get_v4_canonical_headers(const req_info& info,
+                         const std::string& signedheaders,
+                         const bool using_qs,
+                         const bool force_boto2_compat)
+{
+  map<string, string> canonical_hdrs_map;
+  istringstream sh(signedheaders);
+  string token;
+  string port = info.env->get("SERVER_PORT", "");
+  string secure_port = info.env->get("SERVER_PORT_SECURE", "");
+
+  while (getline(sh, token, ';')) {
+    string token_env = "HTTP_" + token;
+    transform(token_env.begin(), token_env.end(), token_env.begin(), ::toupper);
+    replace(token_env.begin(), token_env.end(), '-', '_');
+    if (token_env == "HTTP_CONTENT_LENGTH") {
+      token_env = "CONTENT_LENGTH";
+    }
+    if (token_env == "HTTP_CONTENT_TYPE") {
+      token_env = "CONTENT_TYPE";
+    }
+    const char *t = info.env->get(token_env.c_str());
+    if (!t) {
+      dout(10) << "warning env var not available" << dendl;
+      continue;
+    }
+    if (token_env == "HTTP_CONTENT_MD5") {
+      for (const char *p = t; *p; p++) {
+	if (!is_base64_for_content_md5(*p)) {
+	  dout(0) << "NOTICE: bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
+	  return boost::none;
+	}
+      }
+    }
+    string token_value = string(t);
+    if (force_boto2_compat && using_qs && (token == "host")) {
+      if (!secure_port.empty()) {
+	if (secure_port != "443")
+	  token_value = token_value + ":" + secure_port;
+      } else if (!port.empty()) {
+	if (port != "80")
+	  token_value = token_value + ":" + port;
+      }
+    }
+    canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
+  }
+
+  std::string canonical_hdrs;
+  for (map<string, string>::iterator it = canonical_hdrs_map.begin();
+      it != canonical_hdrs_map.end(); ++it) {
+    canonical_hdrs.append(it->first + ":" + it->second + "\n");
+  }
+
+  return canonical_hdrs;
+}
+
 std::string hash_string_sha256(const char* const data, const int len)
 {
   std::string dest;
