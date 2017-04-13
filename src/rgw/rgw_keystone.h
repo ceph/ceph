@@ -175,8 +175,16 @@ class RGWKeystoneTokenCache {
       cct(g_ceph_context),
       lock("RGWKeystoneTokenCache"),
       max(cct->_conf->rgw_keystone_token_cache_size) {
-    /* The thread name has been kept for backward compliance. */
-    revocator.create("rgw_swift_k_rev");
+    /* revocation logic needs to be smarter, but meanwhile,
+     *  make it optional.
+     * see http://tracker.ceph.com/issues/9493
+     *     http://tracker.ceph.com/issues/19499
+     */
+    if (cct->_conf->rgw_keystone_revocation_interval > 0
+        && cct->_conf->rgw_keystone_token_cache_size ) {
+      /* The thread name has been kept for backward compliance. */
+      revocator.create("rgw_swift_k_rev");
+    }
   }
   ~RGWKeystoneTokenCache() {
     down_flag.set(1);
