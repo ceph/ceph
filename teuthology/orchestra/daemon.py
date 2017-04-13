@@ -51,8 +51,6 @@ class DaemonState(object):
             self.proc_name = 'ceph-{role}'.format(role=role)
             if (role == 'mon') or (role == 'mds') or (role == 'rgw'):
                 self.id = remote.shortname
-            else:
-                self.id = id_
             self.proc_regex = '"' + self.proc_name + '.*--id ' + self.id + '"'
             self.list_proc_id = ['ps', '-ef',
                                  run.Raw('|'),
