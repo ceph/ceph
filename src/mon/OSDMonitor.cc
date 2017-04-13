@@ -1396,11 +1396,17 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 void OSDMonitor::trim_creating_pgs(creating_pgs_t* creating_pgs,
 				   const PGMap& pgm)
 {
-  for (auto& pg : pgm.pg_stat) {
-    auto created = creating_pgs->pgs.find(pg.first);
-    if (created != creating_pgs->pgs.end()) {
-      creating_pgs->pgs.erase(created);
-      creating_pgs->created_pools.insert(pg.first.pool());
+  auto p = creating_pgs->pgs.begin();
+  while (p != creating_pgs->pgs.end()) {
+    auto q = pgm.pg_stat.find(p->first);
+    if (q != pgm.pg_stat.end() &&
+	!(q->second.state & PG_STATE_CREATING)) {
+      dout(20) << __func__ << " pgmap shows " << p->first << " is created"
+	       << dendl;
+      p = creating_pgs->pgs.erase(p);
+      creating_pgs->created_pools.insert(q->first.pool());
+    } else {
+      ++p;
     }
   }
 }
