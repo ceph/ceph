@@ -178,6 +178,11 @@ static inline std::string get_v4_canonical_uri(const req_info& info) {
 
 std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
+boost::optional<std::string> get_v4_canonical_headers(const req_info& info,
+                                                      const std::string& signedheaders,
+                                                      bool using_qs,
+                                                      bool force_boto2_compat);
+
 std::string hash_string_sha256(const char* data, int len);
 
 std::string get_v4_canonical_request_hash(CephContext* cct,

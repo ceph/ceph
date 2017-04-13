@@ -3722,55 +3722,18 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
     rgw::auth::s3::get_v4_canonical_qs(s->info, using_qs);
 
   /* craft canonical headers */
-
-  map<string, string> canonical_hdrs_map;
-  istringstream sh(s->aws4_auth->signedheaders);
-  string token;
-  string port = s->info.env->get("SERVER_PORT", "");
-  string secure_port = s->info.env->get("SERVER_PORT_SECURE", "");
-
-  while (getline(sh, token, ';')) {
-    string token_env = "HTTP_" + token;
-    transform(token_env.begin(), token_env.end(), token_env.begin(), ::toupper);
-    replace(token_env.begin(), token_env.end(), '-', '_');
-    if (token_env == "HTTP_CONTENT_LENGTH") {
-      token_env = "CONTENT_LENGTH";
-    }
-    if (token_env == "HTTP_CONTENT_TYPE") {
-      token_env = "CONTENT_TYPE";
-    }
-    const char *t = s->info.env->get(token_env.c_str());
-    if (!t) {
-      dout(10) << "warning env var not available" << dendl;
-      continue;
-    }
-    if (token_env == "HTTP_CONTENT_MD5") {
-      for (const char *p = t; *p; p++) {
-	if (!is_base64_for_content_md5(*p)) {
-	  dout(0) << "NOTICE: bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
-	  return -EPERM;
-	}
-      }
-    }
-    string token_value = string(t);
-    if (force_boto2_compat && using_qs && (token == "host")) {
-      if (!secure_port.empty()) {
-	if (secure_port != "443")
-	  token_value = token_value + ":" + secure_port;
-      } else if (!port.empty()) {
-	if (port != "80")
-	  token_value = token_value + ":" + port;
-      }
-    }
-    canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
+  boost::optional<std::string> canonical_headers = \
+    rgw::auth::s3::get_v4_canonical_headers(s->info,
+                                            s->aws4_auth->signedheaders,
+                                            using_qs,
+                                            force_boto2_compat);
+  if (canonical_headers) {
+    ldout(s->cct, 10) << "canonical headers format = " << *canonical_headers
+                      << dendl;
+    s->aws4_auth->canonical_hdrs = std::move(*canonical_headers);
+  } else {
+    return -EPERM;
   }
-
-  for (map<string, string>::iterator it = canonical_hdrs_map.begin();
-      it != canonical_hdrs_map.end(); ++it) {
-    s->aws4_auth->canonical_hdrs.append(it->first + ":" + it->second + "\n");
-  }
-
-  dout(10) << "canonical headers format = " << s->aws4_auth->canonical_hdrs << dendl;
 
   /* craft signed headers */
 
