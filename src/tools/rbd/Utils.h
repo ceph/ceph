@@ -187,12 +187,12 @@ int init_and_open_image(const std::string &pool_name,
 
 int snap_set(librbd::Image &image, const std::string &snap_name);
 
-bool calc_sparse_extent(const bufferptr &bp,
+void calc_sparse_extent(const bufferptr &bp,
                         size_t sparse_size,
+			size_t buffer_offset,
                         uint64_t length,
-                        size_t *write_offset,
                         size_t *write_length,
-                        size_t *offset);
+			bool *zeroed);
 
 bool check_if_image_spec_present(const boost::program_options::variables_map &vm,
                                  argument_types::ArgumentModifier mod,
