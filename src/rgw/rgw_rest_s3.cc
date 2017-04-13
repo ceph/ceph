@@ -1202,11 +1202,10 @@ int RGWPutObj_ObjStore_S3::validate_aws4_single_chunk(char *chunk_str,
 
   /* string to sign */
 
-  string hash_empty_str;
-  rgw_hash_s3_string_sha256("", 0, hash_empty_str);
+  const std::string hash_empty_str = rgw::auth::s3::hash_string_sha256("", 0);
 
-  string hash_chunk_data;
-  rgw_hash_s3_string_sha256(chunk_data_str, chunk_data_size, hash_chunk_data);
+  const std::string hash_chunk_data = \
+    rgw::auth::s3::hash_string_sha256(chunk_data_str, chunk_data_size);
 
   string string_to_sign = "AWS4-HMAC-SHA256-PAYLOAD\n";
   string_to_sign.append(s->aws4_auth->date + "\n");
@@ -1750,15 +1749,11 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
         std::string encoded_policy_str(s->auth.s3_postobj_creds.encoded_policy.c_str(),
                                        s->auth.s3_postobj_creds.encoded_policy.length());
-        std::string new_signature_str;
-
-        int err = rgw_calculate_s3_v4_aws_signature(s, s3_access_key,
-                                                    date_cs, region_cs, service_cs,
-                                                    encoded_policy_str, new_signature_str,
-                                                    s3_secret_key);
-        if (err) {
-          return err;
-        }
+        std::string new_signature_str = \
+          rgw::auth::s3::get_v4_signature(s, s3_access_key, date_cs,
+                                          region_cs, service_cs,
+                                          encoded_policy_str,
+                                          s3_secret_key);
 
         ldout(s->cct, 10) << "----------------------------- Verifying signatures" << dendl;
         ldout(s->cct, 10) << "Signature     = " << received_signature_str << dendl;
@@ -3428,13 +3423,12 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
   size_t pos;
 
   /* craft canonical request */
-
-  string canonical_req;
-  string canonical_req_hash;
-
-  rgw_create_s3_v4_canonical_request(s, s->aws4_auth->canonical_uri, s->aws4_auth->canonical_qs,
-      s->aws4_auth->canonical_hdrs, s->aws4_auth->signed_hdrs, request_payload, unsigned_payload,
-      canonical_req, canonical_req_hash);
+  string canonical_req_hash = \
+    rgw::auth::s3::get_v4_canonical_request_hash(s, s->aws4_auth->canonical_uri,
+                                                 s->aws4_auth->canonical_qs,
+                                                 s->aws4_auth->canonical_hdrs,
+                                                 s->aws4_auth->signed_hdrs,
+                                                 request_payload, unsigned_payload);
 
   /* Validate x-amz-sha256 */
 
@@ -3453,10 +3447,11 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
    * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
    */
 
-  string string_to_sign;
-
-  rgw_create_s3_v4_string_to_sign(s->cct, "AWS4-HMAC-SHA256", s->aws4_auth->date, s->aws4_auth->credential_scope,
-      canonical_req_hash, string_to_sign);
+  std::string string_to_sign = \
+    rgw::auth::s3::get_v4_string_to_sign(s->cct, "AWS4-HMAC-SHA256",
+                                         s->aws4_auth->date,
+                                         s->aws4_auth->credential_scope,
+                                         canonical_req_hash);
 
   /*
    * calculate the AWS signature
@@ -3480,17 +3475,23 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
   pos = service_cs.find("/");
   service_cs = service_cs.substr(0, pos);
 
-  int err = rgw_calculate_s3_v4_aws_signature(s, s->aws4_auth->access_key_id, date_cs,
-      region_cs, service_cs, string_to_sign, s->aws4_auth->new_signature);
+  const auto iter = s->user->access_keys.find(s->aws4_auth->access_key_id);
+  if (iter == std::end(s->user->access_keys)) {
+    ldout(s->cct, 10) << "ERROR: access key not encoded in user info" << dendl;
+    return -EPERM;
+  }
+  const RGWAccessKey& k = iter->second;
+
+  s->aws4_auth->new_signature = \
+    rgw::auth::s3::get_v4_signature(s, s->aws4_auth->access_key_id, date_cs,
+                                    region_cs, service_cs, string_to_sign,
+                                    k.key);
+
 
   ldout(s->cct, 10) << "----------------------------- Verifying signatures" << dendl;
   ldout(s->cct, 10) << "Signature     = " << s->aws4_auth->signature << dendl;
   ldout(s->cct, 10) << "New Signature = " << s->aws4_auth->new_signature << dendl;
   ldout(s->cct, 10) << "-----------------------------" << dendl;
-
-  if (err) {
-    return err;
-  }
 
   s->aws4_auth->seed_signature = s->aws4_auth->new_signature;
 
