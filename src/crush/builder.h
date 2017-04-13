@@ -9,22 +9,10 @@
  * caller is responsible for deallocating the crush_map with
  * crush_destroy().
  *
- * The content of the allocated crush_map is undefined and
- * it is the responsibility of the caller to set meaningful values.
- *
- * The recommended values are:
- *
- *       struct crush_map *m = crush_create();
- *       m->choose_local_tries = 0;
- *       m->choose_local_fallback_tries = 0;
- *       m->choose_total_tries = 50;
- *       m->chooseleaf_descend_once = 1;
- *       m->chooseleaf_vary_r = 1;
- *       m->chooseleaf_stable = 1;
- *       m->allowed_bucket_algs =
- *               (1 << CRUSH_BUCKET_UNIFORM) |
- *               (1 << CRUSH_BUCKET_LIST) |
- *               (1 << CRUSH_BUCKET_STRAW2);
+ * The content of the allocated crush_map is set with
+ * set_optimal_crush_map(). The caller is responsible for setting each
+ * tunable in the __crush_map__ for backward compatibility or mapping
+ * stability.
  *
  * @returns a pointer to the newly created crush_map or NULL
  */
