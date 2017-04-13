@@ -3,6 +3,7 @@ overrides:
     log-whitelist:
       - force file system read-only
       - bad backtrace
+      - MDS in read-only mode
 
 
 tasks:
