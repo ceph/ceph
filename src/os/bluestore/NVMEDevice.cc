@@ -1024,6 +1024,15 @@ int NVMEDevice::aio_write(
   return 0;
 }
 
+int NVMEDevice::write(uint64_t off, bufferlist &bl, bool buffered)
+{
+  // FIXME: there is presumably a more efficient way to do this...
+  IOContext ioc(NULL);
+  aio_write(off, bl, &ioc, buffered);
+  ioc.aio_wait();
+  return 0;
+}
+
 int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
                      IOContext *ioc,
                      bool buffered)
