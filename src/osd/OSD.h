@@ -2160,6 +2160,10 @@ protected:
   void flush_pg_stats();
 
   ceph::coarse_mono_clock::time_point last_sent_beacon;
+  Mutex min_last_epoch_clean_lock{"OSD::min_last_epoch_clean_lock"};
+  epoch_t min_last_epoch_clean = 0;
+  // which pgs were scanned for min_lec
+  std::vector<pg_t> min_last_epoch_clean_pgs;
   void send_beacon(const ceph::coarse_mono_clock::time_point& now);
 
   void pg_stat_queue_enqueue(PG *pg) {

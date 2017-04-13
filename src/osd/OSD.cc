@@ -2388,6 +2388,9 @@ int OSD::init()
       MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
       m->osd_stat = cur_stat;
 
+      Mutex::Locker lec{min_last_epoch_clean_lock};
+      min_last_epoch_clean = osdmap->get_epoch();
+      min_last_epoch_clean_pgs.clear();
       RWLock::RLocker lpg(pg_map_lock);
       for (const auto &i : pg_map) {
         PG *pg = i.second;
@@ -2398,6 +2401,9 @@ int OSD::init()
         pg->pg_stats_publish_lock.Lock();
         if (pg->pg_stats_publish_valid) {
           m->pg_stat[pg->info.pgid.pgid] = pg->pg_stats_publish;
+	  const auto lec = pg->pg_stats_publish.get_effective_last_epoch_clean();
+	  min_last_epoch_clean = min(min_last_epoch_clean, lec);
+	  min_last_epoch_clean_pgs.push_back(pg->info.pgid.pgid);
         }
         pg->pg_stats_publish_lock.Unlock();
       }
@@ -5680,7 +5686,13 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
         ceph::features::mon::FEATURE_LUMINOUS)) {
     dout(20) << __func__ << " sending" << dendl;
     last_sent_beacon = now;
-    monc->send_mon_message(new MOSDBeacon());
+    MOSDBeacon* beacon = nullptr;
+    {
+      Mutex::Locker l{min_last_epoch_clean_lock};
+      beacon = new MOSDBeacon(osdmap->get_epoch(), min_last_epoch_clean);
+      std::swap(beacon->pgs, min_last_epoch_clean_pgs);
+    }
+    monc->send_mon_message(beacon);
   } else {
     dout(20) << __func__ << " not sending" << dendl;
   }
