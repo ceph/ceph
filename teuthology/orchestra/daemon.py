@@ -267,10 +267,7 @@ class DaemonGroup(object):
         dictionary of DaemonState values indexed by an id parameter.
         """
         self.daemons = {}
-        self.use_init = False
-        if use_init:
-            # will use the systemd init instead of old sytle daemons
-            self.use_init = True
+        self.use_init = use_init
 
     def add_daemon(self, remote, type_, id_, *args, **kwargs):
         """
