@@ -11265,7 +11265,7 @@ int RGWRados::get_bucket_instance_info(RGWObjectCtx& obj_ctx, const rgw_bucket& 
   return get_bucket_instance_from_oid(obj_ctx, oid, info, pmtime, pattrs);
 }
 
-int RGWRados::get_bucket_instance_from_oid(RGWObjectCtx& obj_ctx, string& oid, RGWBucketInfo& info,
+int RGWRados::get_bucket_instance_from_oid(RGWObjectCtx& obj_ctx, const string& oid, RGWBucketInfo& info,
                                            real_time *pmtime, map<string, bufferlist> *pattrs,
                                            rgw_cache_entry_info *cache_info)
 {
