@@ -142,9 +142,7 @@ public:
     stray_index = (stray_index+1)%NUM_STRAY;
   }
 
-  void activate_stray_manager() {
-    stray_manager.activate();
-  }
+  void activate_stray_manager();
 
   /**
    * Call this when you know that a CDentry is ready to be passed
