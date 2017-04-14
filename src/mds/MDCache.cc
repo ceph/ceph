@@ -12382,5 +12382,10 @@ void MDCache::clear_dirty_bits_for_stray(CInode* diri) {
     if (p->is_auth() && !(p->is_frozen() || p->is_freezing()))
       p->try_remove_dentries_for_stray();
   }
+  if (!diri->snaprealm) {
+    if (diri->is_auth())
+      diri->clear_dirty_rstat();
+    diri->clear_scatter_dirty();
+  }
 }
 
