@@ -7116,20 +7116,6 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
     }
   }
 
-  if (srcdn->get_dir()->inode->is_stray() &&
-      srcdn->get_dir()->inode->get_stray_owner() == mds->get_nodeid()) {
-    // A reintegration event or a migration away from me
-    dout(20) << __func__ << ": src dentry was a stray, updating stats" << dendl;
-    mdcache->notify_stray_removed();
-  }
-
-  if (destdn->get_dir()->inode->is_stray() &&
-      destdn->get_dir()->inode->get_stray_owner() == mds->get_nodeid()) {
-    // A stray migration (to me)
-    dout(20) << __func__ << ": dst dentry was a stray, updating stats" << dendl;
-    mdcache->notify_stray_created();
-  }
-
   // src
   if (srcdn->is_auth())
     srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);

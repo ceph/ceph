@@ -168,9 +168,7 @@ public:
     projected.push_back(linkage_t());
     return &projected.back();
   }
-  void push_projected_linkage() {
-    _project_linkage();
-  }
+  void push_projected_linkage();
   void push_projected_linkage(inodeno_t ino, char d_type) {
     linkage_t *p = _project_linkage();
     p->remote_ino = ino;

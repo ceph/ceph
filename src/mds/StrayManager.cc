@@ -226,7 +226,6 @@ void StrayManager::_purge_stray_purged(
     mds->mdlog->submit_entry(le, new C_PurgeStrayLogged(this, dn, pdv,
           mds->mdlog->get_current_segment()));
 
-    num_strays--;
     logger->set(l_mdc_num_strays, num_strays);
   }
 }
@@ -375,6 +374,13 @@ void StrayManager::advance_delayed()
     }
   }
   logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
+}
+
+void StrayManager::set_num_strays(uint64_t num)
+{
+  assert(!started);
+  num_strays = num;
+  logger->set(l_mdc_num_strays, num_strays);
 }
 
 void StrayManager::notify_stray_created()
