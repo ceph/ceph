@@ -1297,24 +1297,20 @@ class CephManager:
         """
         get replica for pool, pgnum (e.g. (data, 0)->0
         """
-        output = self.raw_cluster_cmd("pg", "dump", '--format=json')
-        j = json.loads('\n'.join(output.split('\n')[1:]))
         pg_str = self.get_pgid(pool, pgnum)
-        for pg in j['pg_stats']:
-            if pg['pgid'] == pg_str:
-                return int(pg['acting'][-1])
+        output = self.raw_cluster_cmd("pg", "map", pg_str, '--format=json')
+        j = json.loads('\n'.join(output.split('\n')[1:]))
+        return int(j['acting'][-1])
         assert False
 
     def get_pg_primary(self, pool, pgnum):
         """
         get primary for pool, pgnum (e.g. (data, 0)->0
         """
-        output = self.raw_cluster_cmd("pg", "dump", '--format=json')
-        j = json.loads('\n'.join(output.split('\n')[1:]))
         pg_str = self.get_pgid(pool, pgnum)
-        for pg in j['pg_stats']:
-            if pg['pgid'] == pg_str:
-                return int(pg['acting'][0])
+        output = self.raw_cluster_cmd("pg", "map", pg_str, '--format=json')
+        j = json.loads('\n'.join(output.split('\n')[1:]))
+        return int(j['acting'][0])
         assert False
 
     def get_pool_num(self, pool):
