@@ -80,6 +80,7 @@ namespace rgw {
 		      RGWFileHandle::FLAG_BUCKET);
       if (get<0>(fhr)) {
 	RGWFileHandle* rgw_fh = get<0>(fhr);
+	lock_guard guard(rgw_fh->mtx);
 	rgw_fh->set_times(req.get_ctime());
 	/* restore attributes */
 	auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
@@ -132,6 +133,7 @@ namespace rgw {
 	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_CREATE);
 	  if (get<0>(fhr)) {
 	    RGWFileHandle* rgw_fh = get<0>(fhr);
+	    lock_guard guard(rgw_fh->mtx);
 	    rgw_fh->set_size(req.get_size());
 	    rgw_fh->set_times(req.get_mtime());
 	    /* restore attributes */
@@ -162,6 +164,7 @@ namespace rgw {
 	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_DIRECTORY);
 	  if (get<0>(fhr)) {
 	    RGWFileHandle* rgw_fh = get<0>(fhr);
+	    lock_guard guard(rgw_fh->mtx);
 	    rgw_fh->set_size(req.get_size());
 	    rgw_fh->set_times(req.get_mtime());
 	    /* restore attributes */
@@ -205,6 +208,7 @@ namespace rgw {
 	    if (get<0>(fhr)) {
 	      /* for now use the parent object's mtime */
 	      RGWFileHandle* rgw_fh = get<0>(fhr);
+	      lock_guard guard(rgw_fh->mtx);
 	      rgw_fh->set_mtime(parent->get_mtime());
 	    }
 	  }
@@ -235,6 +239,7 @@ namespace rgw {
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
 	(req.get_ret() == 0)) {
+      lock_guard(rgw_fh->mtx);
       rgw_fh->set_atime(real_clock::to_timespec(real_clock::now()));
       *bytes_read = req.nread;
     }
@@ -597,7 +602,8 @@ namespace rgw {
     if ((rc == 0) &&
 	(rc2 == 0)) {
       /* XXX atomicity */
-      LookupFHResult fhr = lookup_fh(parent, name, RGWFileHandle::FLAG_CREATE);
+      LookupFHResult fhr = lookup_fh(parent, name, RGWFileHandle::FLAG_CREATE |
+                                                   RGWFileHandle::FLAG_LOCK);
       RGWFileHandle* rgw_fh = get<0>(fhr);
       if (rgw_fh) {
 	if (get<1>(fhr) & RGWFileHandle::FLAG_CREATE) {
@@ -605,7 +611,6 @@ namespace rgw {
 	  real_time t = real_clock::now();
 	  rgw_fh->create_stat(st, mask);
 	  rgw_fh->set_times(t);
-	  rgw_fh->open_for_create(); // XXX needed?
 
 	  parent->set_mtime(real_clock::to_timespec(t));
 	  parent->set_ctime(real_clock::to_timespec(t));
@@ -613,6 +618,7 @@ namespace rgw {
         if (st)
           (void) rgw_fh->stat(st);
 	get<0>(mkr) = rgw_fh;
+	rgw_fh->mtx.unlock();
       } else
 	rc = -EIO;
     }
@@ -643,6 +649,8 @@ namespace rgw {
   {
     int rc, rc2;
     buffer::list ux_key, ux_attrs;
+
+    lock_guard guard(rgw_fh->mtx);
 
     switch(rgw_fh->fh.fh_type) {
     case RGW_FS_TYPE_FILE:

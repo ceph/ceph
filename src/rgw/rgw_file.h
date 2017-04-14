@@ -553,7 +553,6 @@ namespace rgw {
     }
 
     void set_times(real_time t) {
-      lock_guard guard(mtx);
       state.ctime = real_clock::to_timespec(t);
       state.mtime = state.ctime;
       state.atime = state.ctime;
