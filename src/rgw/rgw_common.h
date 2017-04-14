@@ -1706,8 +1706,7 @@ struct rgw_aws4_auth {
   string new_signature;
   string payload_hash;
   string seed_signature;
-  string signing_key;
-  char signing_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  char signing_key[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
   bufferlist bl;
 };
 

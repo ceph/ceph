@@ -1217,7 +1217,7 @@ int RGWPutObj_ObjStore_S3::validate_aws4_single_chunk(char *chunk_str,
   /* new chunk signature */
 
   char signature_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  calc_hmac_sha256(s->aws4_auth->signing_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE,
+  calc_hmac_sha256(s->aws4_auth->signing_key, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE,
       string_to_sign.c_str(), string_to_sign.size(), signature_k);
 
   char aux[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1];
@@ -1225,11 +1225,18 @@ int RGWPutObj_ObjStore_S3::validate_aws4_single_chunk(char *chunk_str,
 
   string new_chunk_signature = string(aux);
 
+  /* FIXME(rzarzynski): clean this up! */
+  buf_to_hex((unsigned char *) s->aws4_auth->signing_key,
+             CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
+  std::string signing_key(aux);
+
   ldout(s->cct, 20) << "--------------- aws4 chunk validation" << dendl;
   ldout(s->cct, 20) << "chunk_signature     = " << chunk_signature << dendl;
   ldout(s->cct, 20) << "new_chunk_signature = " << new_chunk_signature << dendl;
-  ldout(s->cct, 20) << "aws4 chunk signing_key    = " << s->aws4_auth->signing_key << dendl;
-  ldout(s->cct, 20) << "aws4 chunk string_to_sign = " << rgw::crypt_sanitize::log_content{string_to_sign.c_str()} << dendl;
+  ldout(s->cct, 20) << "aws4 chunk signing_key    = " << signing_key << dendl;
+  ldout(s->cct, 20) << "aws4 chunk string_to_sign = "
+                    << rgw::crypt_sanitize::log_content{string_to_sign.c_str()}
+                    << dendl;
 
   /* chunk auth ok? */
 
@@ -1750,10 +1757,11 @@ int RGWPostObj_ObjStore_S3::get_policy()
         std::string encoded_policy_str(s->auth.s3_postobj_creds.encoded_policy.c_str(),
                                        s->auth.s3_postobj_creds.encoded_policy.length());
         std::string new_signature_str = \
-          rgw::auth::s3::get_v4_signature(s, s3_access_key, date_cs,
+          rgw::auth::s3::get_v4_signature(s->cct, s3_access_key, date_cs,
                                           region_cs, service_cs,
                                           encoded_policy_str,
-                                          s3_secret_key);
+                                          s3_secret_key,
+                                          s->aws4_auth->signing_key);
 
         ldout(s->cct, 10) << "----------------------------- Verifying signatures" << dendl;
         ldout(s->cct, 10) << "Signature     = " << received_signature_str << dendl;
@@ -3514,9 +3522,9 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
   const RGWAccessKey& k = iter->second;
 
   s->aws4_auth->new_signature = \
-    rgw::auth::s3::get_v4_signature(s, s->aws4_auth->access_key_id, date_cs,
+    rgw::auth::s3::get_v4_signature(s->cct, s->aws4_auth->access_key_id, date_cs,
                                     region_cs, service_cs, string_to_sign,
-                                    k.key);
+                                    k.key /* in */, s->aws4_auth->signing_key /* out */);
 
 
   ldout(s->cct, 10) << "----------------------------- Verifying signatures" << dendl;

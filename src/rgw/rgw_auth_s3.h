@@ -206,13 +206,16 @@ std::string get_v4_string_to_sign(CephContext* cct,
                                   const std::string& credential_scope,
                                   const std::string& hashed_qr);
 
-std::string get_v4_signature(struct req_state* s,
+/* TODO(rzarzynski): split the SigningKey calculation into a separated func. */
+std::string get_v4_signature(CephContext* cct,
                              const std::string& access_key_id,
                              const std::string& date,
                              const std::string& region,
                              const std::string& service,
                              const std::string& string_to_sign,
-                             const std::string& access_key_secret);
+                             const std::string& access_key_secret,
+                             /* This is a makeshift-only parameter. It'll be killed soon. */
+                             char (&signing_key)[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE]);
 } /* namespace s3 */
 } /* namespace auth */
 } /* namespace rgw */
