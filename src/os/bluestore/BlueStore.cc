@@ -7847,7 +7847,10 @@ void BlueStore::_kv_sync_thread()
       }
 
       PExtentVector bluefs_gift_extents;
-      if (bluefs) {
+      if (bluefs &&
+	  after_flush - bluefs_last_balance >
+	  cct->_conf->bluestore_bluefs_balance_interval) {
+	bluefs_last_balance = after_flush;
 	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
 	assert(r >= 0);
 	if (r > 0) {
