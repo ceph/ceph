@@ -386,7 +386,7 @@ namespace rgw {
 
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
-	st->st_nlink = 2;
+	st->st_nlink = state.nlink;
 	break;
       case RGW_FS_TYPE_FILE:
 	st->st_nlink = 1;
@@ -477,13 +477,15 @@ namespace rgw {
 
     const rgw_obj_key* find_marker(uint64_t off) const {
       using std::get;
-      const directory* d = get<directory>(&variant_type);
-      if (d) {
-	return &d->last_marker;
+      if (off > 0) {
+	const directory* d = get<directory>(&variant_type);
+	if (d ) {
+	  return &d->last_marker;
+	}
       }
       return nullptr;
     }
-    
+
     bool is_open() const { return flags & FLAG_OPEN; }
     bool is_root() const { return flags & FLAG_ROOT; }
     bool is_bucket() const { return flags & FLAG_BUCKET; }
@@ -1216,7 +1218,6 @@ public:
 			      << dendl;
 	return;
       }
-      ++d_count;
       ++ix;
     }
   } /* send_response_data */
@@ -1232,6 +1233,7 @@ public:
     /* update traversal cache */
     rgw_fh->add_marker(off, rgw_obj_key{marker.data(), ""},
 		       RGW_FS_TYPE_DIRECTORY);
+    ++d_count;
     return rcb(name.data(), cb_arg, off, RGW_LOOKUP_FLAG_DIR);
   }
 
@@ -1248,8 +1250,8 @@ public:
   read directory content (bucket objects)
 */
 
-  class RGWReaddirRequest : public RGWLibRequest,
-			    public RGWListBucket /* RGWOp */
+class RGWReaddirRequest : public RGWLibRequest,
+			  public RGWListBucket /* RGWOp */
 {
 public:
   RGWFileHandle* rgw_fh;
@@ -1319,6 +1321,7 @@ public:
     *offset = off;
     /* update traversal cache */
     rgw_fh->add_marker(off, marker, type);
+    ++d_count;
     return rcb(name.data(), cb_arg, off,
 	       (type == RGW_FS_TYPE_DIRECTORY) ?
 	       RGW_LOOKUP_FLAG_DIR :
@@ -1363,7 +1366,6 @@ public:
 			      << dendl;
 	return;
       }
-      ++d_count;
       ++ix;
     }
     for (auto& iter : common_prefixes) {
