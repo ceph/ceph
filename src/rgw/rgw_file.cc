@@ -777,10 +777,9 @@ namespace rgw {
 
     do {
       (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now);
-
       lsubdout(get_context(), rgw, 15)
 	<< "GC: top of expire loop"
-	<< " expire_ts=" << expire_ts
+	<< " now=" << now
 	<< " expire_s=" << expire_s
 	<< dendl;
       {
@@ -978,6 +977,8 @@ namespace rgw {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
 	state.atime = now;
+	if (*offset == 0)
+	  set_nlink(2);
 	inc_nlink(req.d_count);
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
@@ -990,6 +991,8 @@ namespace rgw {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
 	state.atime = now;
+	if (*offset == 0)
+	  set_nlink(2);
 	inc_nlink(req.d_count);
 	*eof = req.eof();
 	event ev(event::type::READDIR, get_key(), state.atime);
