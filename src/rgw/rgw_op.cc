@@ -5201,9 +5201,10 @@ void RGWListBucketMultiparts::execute()
 
 void RGWGetHealthCheck::execute()
 {
-  if (! g_conf->rgw_healthcheck_disabling_path.empty() &&
-      ::access(g_conf->rgw_healthcheck_disabling_path.c_str(), F_OK )) {
-    op_ret = -ERR_SERVICE_UNAVAILABLE;
+  if (!g_conf->rgw_healthcheck_disabling_path.empty() &&
+      (::access(g_conf->rgw_healthcheck_disabling_path.c_str(), F_OK) == 0)) {
+    /* Disabling path specified & existent in the filesystem. */
+    op_ret = -ERR_SERVICE_UNAVAILABLE; /* 503 */
   } else {
     op_ret = 0; /* 200 OK */
   }
