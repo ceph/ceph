@@ -10,6 +10,9 @@
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
 #include "rgw_crypt_sanitize.h"
+
+#include "include/str_list.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -238,6 +241,162 @@ bool rgw_create_s3_canonical_header(const req_info& info,
 namespace rgw {
 namespace auth {
 namespace s3 {
+
+/* FIXME(rzarzynski): duplicated from rgw_rest_s3.h. */
+#define RGW_AUTH_GRACE_MINS 15
+
+int parse_credentials(const req_info& info,             /* in */
+                      std::string& credential,          /* out */
+                      std::string& signedheaders,       /* out */
+                      std::string& signature,           /* out */
+                      std::string& date,                /* out */
+                      bool& using_qs)                   /* out */
+{
+  /* used for pre-signatured url, We shouldn't return -ERR_REQUEST_TIME_SKEWED when 
+     current time <= X-Amz-Expires */
+  bool qsr = false;
+
+  uint64_t now_req = 0;
+  uint64_t now = ceph_clock_now();
+
+  const char* http_auth = info.env->get("HTTP_AUTHORIZATION");
+  if ((!http_auth) || !(*http_auth)) {
+
+    /* auth ships with req params ... */
+
+    /* look for required params */
+
+    using_qs = true;
+    credential = info.args.get("X-Amz-Credential");
+    if (credential.size() == 0) {
+      return -EPERM;
+    }
+
+    date = info.args.get("X-Amz-Date");
+    struct tm date_t;
+    if (!parse_iso8601(date.c_str(), &date_t, NULL, false))
+      return -EPERM;
+
+    std::string expires = info.args.get("X-Amz-Expires");
+    if (!expires.empty()) {
+      /* X-Amz-Expires provides the time period, in seconds, for which
+         the generated presigned URL is valid. The minimum value
+         you can set is 1, and the maximum is 604800 (seven days) */
+      time_t exp = atoll(expires.c_str());
+      if ((exp < 1) || (exp > 7*24*60*60)) {
+        dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
+        return -EPERM;
+      }
+      /* handle expiration in epoch time */
+      now_req = (uint64_t)internal_timegm(&date_t);
+      if (now >= now_req + exp) {
+        dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
+        return -EPERM;
+      }
+      qsr = true;
+    }
+
+    if ((now_req < now - RGW_AUTH_GRACE_MINS * 60 ||
+       now_req > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
+      dout(10) << "NOTICE: request time skew too big." << dendl;
+      dout(10) << "now_req = " << now_req << " now = " << now
+               << "; now - RGW_AUTH_GRACE_MINS=" 
+               << now - RGW_AUTH_GRACE_MINS * 60
+               << "; now + RGW_AUTH_GRACE_MINS="
+               << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
+      return -ERR_REQUEST_TIME_SKEWED;
+    }
+
+    signedheaders = info.args.get("X-Amz-SignedHeaders");
+    if (signedheaders.size() == 0) {
+      return -EPERM;
+    }
+
+    signature = info.args.get("X-Amz-Signature");
+    if (signature.size() == 0) {
+      return -EPERM;
+    }
+
+  } else {
+
+    /* auth ships in headers ... */
+
+    /* ------------------------- handle Credential header */
+
+    using_qs = false;
+
+    string auth_str = http_auth;
+
+#define AWS4_HMAC_SHA256_STR "AWS4-HMAC-SHA256"
+#define CREDENTIALS_PREFIX_LEN (sizeof(AWS4_HMAC_SHA256_STR) - 1)
+    uint64_t min_len = CREDENTIALS_PREFIX_LEN + 1;
+    if (auth_str.length() < min_len) {
+      dout(10) << "credentials string is too short" << dendl;
+      return -EINVAL;
+    }
+
+    list<string> auth_list;
+    get_str_list(auth_str.substr(min_len), ",", auth_list);
+
+    map<string, string> kv;
+
+    for (string& s : auth_list) {
+      string key, val;
+      int ret = parse_key_value(s, key, val);
+      if (ret < 0) {
+        dout(10) << "NOTICE: failed to parse auth header (s=" << s << ")" << dendl;
+        return -EINVAL;
+      }
+      kv[key] = std::move(val);
+    }
+
+    static std::array<string, 3> aws4_presigned_required_keys = {
+      "Credential",
+      "SignedHeaders",
+      "Signature"
+    };
+
+    for (string& k : aws4_presigned_required_keys) {
+      if (kv.find(k) == kv.end()) {
+        dout(10) << "NOTICE: auth header missing key: " << k << dendl;
+        return -EINVAL;
+      }
+    }
+
+    credential = std::move(kv["Credential"]);
+    signedheaders = std::move(kv["SignedHeaders"]);
+    signature = std::move(kv["Signature"]);
+
+    /* sig hex str */
+    dout(10) << "v4 signature format = " << signature << dendl;
+
+    /* ------------------------- handle x-amz-date header */
+
+    /* grab date */
+
+    const char *d = info.env->get("HTTP_X_AMZ_DATE");
+    struct tm t;
+    if (!parse_iso8601(d, &t, NULL, false)) {
+      dout(10) << "error reading date via http_x_amz_date" << dendl;
+      return -EACCES;
+    }
+    date = d;
+  }
+
+  /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
+  dout(10) << "v4 credential format = " << credential << dendl;
+
+  if (std::count(credential.begin(), credential.end(), '/') != 4) {
+    return -EINVAL;
+  }
+
+  /* credential must end with 'aws4_request' */
+  if (credential.find("aws4_request") == std::string::npos) {
+    return -EINVAL;
+  }
+
+  return 0;
+}
 
 static inline bool char_needs_aws4_escaping(const char c)
 {
