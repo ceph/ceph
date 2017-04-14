@@ -1760,13 +1760,18 @@ bool MDSRankDispatcher::handle_asok_command(
   } else if (command == "session evict") {
     std::string client_id;
     const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
-    assert(got_arg == true);
+    if(!got_arg) {
+      ss << "Invalid client_id specified";
+      return true;
+    }
 
     mds_lock.Lock();
-    std::stringstream ss;
-    bool killed = kill_session(strtol(client_id.c_str(), 0, 10), true, ss);
-    if (!killed)
-      dout(15) << ss.str() << dendl;
+    stringstream dss;
+    bool killed = kill_session(strtol(client_id.c_str(), 0, 10), true, dss);
+    if (!killed) {
+      dout(15) << dss.str() << dendl;
+      ss << dss.str();
+    }
     mds_lock.Unlock();
   } else if (command == "scrub_path") {
     string path;
