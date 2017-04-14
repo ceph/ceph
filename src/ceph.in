@@ -600,23 +600,7 @@ def maybe_daemon_command(parsed_args, childargs):
             return True, errno.EINVAL
 
     if sockpath and daemon_perf:
-        interval = 1
-        count = None
-        if len(childargs) > 0:
-            try:
-                interval = float(childargs[0])
-                if interval < 0:
-                    raise ValueError
-            except ValueError:
-                print('daemonperf: interval should be a positive number', file=sys.stderr)
-                return True, errno.EINVAL
-        if len(childargs) > 1:
-            if not childargs[1].isdigit():
-                print('daemonperf: count should be a positive integer', file=sys.stderr)
-                return True, errno.EINVAL
-            count = int(childargs[1])
-        DaemonWatcher(sockpath).run(interval, count)
-        return True, 0
+        return True, daemonperf(childargs, sockpath)
     elif sockpath:
         try:
             raw_write(admin_socket(sockpath, childargs, parsed_args.output_format))
@@ -626,6 +610,27 @@ def maybe_daemon_command(parsed_args, childargs):
         return True, 0
 
     return False, 0
+
+
+def daemonperf(childargs, sockpath):
+    """ Handle daemonperf command; returns errno or 0 """
+    interval = 1
+    count = None
+    if len(childargs) > 0:
+        try:
+            interval = float(childargs[0])
+            if interval < 0:
+                raise ValueError
+        except ValueError:
+            print('daemonperf: interval should be a positive number', file=sys.stderr)
+            return errno.EINVAL
+    if len(childargs) > 1:
+        if not childargs[1].isdigit():
+            print('daemonperf: count should be a positive integer', file=sys.stderr)
+            return errno.EINVAL
+        count = int(childargs[1])
+    DaemonWatcher(sockpath).run(interval, count)
+    return 0
 
 ###
 # main
