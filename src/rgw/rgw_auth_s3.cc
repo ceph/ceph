@@ -677,14 +677,38 @@ std::string get_v4_string_to_sign(CephContext* const cct,
   return string_to_sign;
 }
 
+
+/* TODO(rzarzynski): switch to boost::string_ref. */
+static inline std::tuple<std::string, std::string, std::string>
+parse_cred_scope(std::string credential_scope)
+{
+  std::string cs_aux = credential_scope;
+
+  /* date cred */
+  string date_cs = cs_aux;
+  size_t pos = date_cs.find("/");
+  date_cs = date_cs.substr(0, pos);
+  cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
+
+  /* region cred */
+  string region_cs = cs_aux;
+  pos = region_cs.find("/");
+  region_cs = region_cs.substr(0, pos);
+  cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
+
+  /* service cred */
+  string service_cs = cs_aux;
+  pos = service_cs.find("/");
+  service_cs = service_cs.substr(0, pos);
+
+  return std::make_tuple(date_cs, region_cs, service_cs);
+}
+
 /*
  * calculate the AWS signature version 4
  */
 std::string get_v4_signature(CephContext* const cct,
-                             const std::string& access_key_id,
-                             const std::string& date,
-                             const std::string& region,
-                             const std::string& service,
+                             const std::string& credential_scope,
                              const std::string& string_to_sign,
                              const std::string& access_key_secret,
                              char (&signing_key)[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE])
@@ -699,6 +723,9 @@ std::string get_v4_signature(CephContext* const cct,
   }
 
   string secret_key_utf8_k(secret_k, n);
+
+  std::string date, region, service;
+  std::tie(date, region, service) = parse_cred_scope(credential_scope);
 
   /* date */
 
