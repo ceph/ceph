@@ -1014,12 +1014,13 @@ void MDSDaemon::suicide()
   }
   beacon.shutdown();
 
+  mgrc.shutdown();
+
   if (mds_rank) {
     mds_rank->shutdown();
   } else {
     timer.shutdown();
 
-    mgrc.shutdown();
     monc->shutdown();
     messenger->shutdown();
   }
@@ -1101,7 +1102,8 @@ bool MDSDaemon::ms_dispatch(Message *m)
 
 bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
-  dout(10) << "MDSDaemon::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
+  dout(10) << "MDSDaemon::ms_get_authorizer type="
+           << ceph_entity_type_name(dest_type) << dendl;
 
   /* monitor authorization is being handled on different layer */
   if (dest_type == CEPH_ENTITY_TYPE_MON)
