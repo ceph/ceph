@@ -1392,6 +1392,7 @@ struct RGWObjEnt {
   string tag;
   uint32_t flags;
   uint64_t versioned_epoch;
+  string user_data;
 
   RGWObjEnt() : flags(0), versioned_epoch(0) {}
 
