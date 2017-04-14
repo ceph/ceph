@@ -1423,7 +1423,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_get_old_format(self.image, &old)
         if ret != 0:
-            raise make_ex(ret, 'error getting old_format for image' % (self.name))
+            raise make_ex(ret, 'error getting old_format for image %s' % (self.name))
         return old != 0
 
     def size(self):
@@ -1437,7 +1437,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_get_size(self.image, &image_size)
         if ret != 0:
-            raise make_ex(ret, 'error getting size for image' % (self.name))
+            raise make_ex(ret, 'error getting size for image %s' % (self.name))
         return image_size
 
     def features(self):
@@ -1450,7 +1450,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_get_features(self.image, &features)
         if ret != 0:
-            raise make_ex(ret, 'error getting features for image' % (self.name))
+            raise make_ex(ret, 'error getting features for image %s' % (self.name))
         return features
 
     def update_features(self, features, enabled):
@@ -1487,7 +1487,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_get_overlap(self.image, &overlap)
         if ret != 0:
-            raise make_ex(ret, 'error getting overlap for image' % (self.name))
+            raise make_ex(ret, 'error getting overlap for image %s' % (self.name))
         return overlap
 
     def flags(self):
@@ -1500,7 +1500,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_get_flags(self.image, &flags)
         if ret != 0:
-            raise make_ex(ret, 'error getting flags for image' % (self.name))
+            raise make_ex(ret, 'error getting flags for image %s' % (self.name))
         return flags
 
     def is_exclusive_lock_owner(self):
@@ -1513,7 +1513,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_is_exclusive_lock_owner(self.image, &owner)
         if ret != 0:
-            raise make_ex(ret, 'error getting lock status for image' % (self.name))
+            raise make_ex(ret, 'error getting lock status for image %s' % (self.name))
         return owner == 1
 
     def copy(self, dest_ioctx, dest_name, features=None, order=None,
@@ -1947,7 +1947,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_get_stripe_unit(self.image, &stripe_unit)
         if ret != 0:
-            raise make_ex(ret, 'error getting stripe unit for image' % (self.name))
+            raise make_ex(ret, 'error getting stripe unit for image %s' % (self.name))
         return stripe_unit
 
     def stripe_count(self):
@@ -1958,7 +1958,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_get_stripe_count(self.image, &stripe_count)
         if ret != 0:
-            raise make_ex(ret, 'error getting stripe count for image' % (self.name))
+            raise make_ex(ret, 'error getting stripe count for image %s' % (self.name))
         return stripe_count
 
     def flatten(self):
