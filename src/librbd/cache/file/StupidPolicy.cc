@@ -11,6 +11,8 @@
 #define dout_prefix *_dout << "librbd::cache::file::StupidPolicy: " << this \
                            << " " <<  __func__ << ": "
 
+#define BLOCK_SIZE 4096
+
 namespace librbd {
 namespace cache {
 namespace file {
@@ -21,7 +23,7 @@ StupidPolicy<I>::StupidPolicy(I &image_ctx, BlockGuard &block_guard)
     m_lock("librbd::cache::file::StupidPolicy::m_lock") {
 
   // TODO support resizing of entries based on number of provisioned blocks
-  m_entries.resize(262144); // 1GB of storage
+  m_entries.resize(m_image_ctx.ssd_cache_size / BLOCK_SIZE); // 1GB of storage
   for (auto &entry : m_entries) {
     m_free_lru.insert_tail(&entry);
   }

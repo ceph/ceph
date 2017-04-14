@@ -49,6 +49,7 @@ private:
   int m_fd = -1;
 
   int write(uint64_t offset, const ceph::bufferlist &bl, bool fdatasync);
+  int read(uint64_t offset, uint64_t length, ceph::bufferlist *bl);
   int discard(uint64_t offset, uint64_t length, bool fdatasync);
   int truncate(uint64_t length, bool fdatasync);
   int fdatasync();

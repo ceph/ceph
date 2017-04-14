@@ -116,29 +116,7 @@ void AioFile<I>::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl,
                       Context *on_finish) {
   m_work_queue.queue(new FunctionContext(
     [this, offset, length, bl, on_finish](int r) {
-      bufferptr bp = buffer::create(length);
-      bl->push_back(bp);
-
-      char *buffer = reinterpret_cast<char *>(bp.c_str());
-      uint64_t count = 0;
-      while (count < length) {
-        ssize_t ret_val = pread64(m_fd, buffer, length - count, offset + count);
-        if (ret_val == 0) {
-          break;
-        } else if (ret_val < 0) {
-          r = -errno;
-          if (r == -EINTR) {
-            continue;
-          }
-
-          on_finish->complete(r);
-        }
-
-        count += ret_val;
-        buffer += ret_val;
-      }
-
-      on_finish->complete(0);
+      on_finish->complete(read(offset, length, bl));
     }));
 }
 
@@ -206,6 +184,35 @@ int AioFile<I>::write(uint64_t offset, const ceph::bufferlist &bl,
     r = fdatasync();
   }
   return r;
+}
+
+template <typename I>
+int AioFile<I>::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl) {
+
+  CephContext *cct = m_image_ctx.cct;
+  bufferptr bp = buffer::create(length);
+  bl->push_back(bp);
+
+  int r = 0;
+  char *buffer = reinterpret_cast<char *>(bp.c_str());
+  uint64_t count = 0;
+  while (count < length) {
+    ssize_t ret_val = pread64(m_fd, buffer, length - count, offset + count);
+    if (ret_val == 0) {
+      break;
+    } else if (ret_val < 0) {
+      r = -errno;
+      if (r == -EINTR) {
+        continue;
+      }
+
+      return r;
+    }
+
+    count += ret_val;
+    buffer += ret_val;
+  }
+  return count;
 }
 
 template <typename I>
