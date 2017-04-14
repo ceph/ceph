@@ -680,13 +680,14 @@ std::string get_v4_string_to_sign(CephContext* const cct,
 /*
  * calculate the AWS signature version 4
  */
-std::string get_v4_signature(struct req_state* const s,
+std::string get_v4_signature(CephContext* const cct,
                              const std::string& access_key_id,
                              const std::string& date,
                              const std::string& region,
                              const std::string& service,
                              const std::string& string_to_sign,
-                             const std::string& access_key_secret)
+                             const std::string& access_key_secret,
+                             char (&signing_key)[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE])
 {
   std::string secret_key = "AWS4" + access_key_secret;
   char secret_k[secret_key.size() * MAX_UTF8_SZ];
@@ -708,7 +709,7 @@ std::string get_v4_signature(struct req_state* const s,
   char aux[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1];
   buf_to_hex((unsigned char *) date_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
-  ldout(s->cct, 10) << "date_k        = " << string(aux) << dendl;
+  ldout(cct, 10) << "date_k        = " << string(aux) << dendl;
 
   /* region */
 
@@ -717,7 +718,7 @@ std::string get_v4_signature(struct req_state* const s,
 
   buf_to_hex((unsigned char *) region_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
-  ldout(s->cct, 10) << "region_k      = " << string(aux) << dendl;
+  ldout(cct, 10) << "region_k      = " << string(aux) << dendl;
 
   /* service */
 
@@ -726,33 +727,30 @@ std::string get_v4_signature(struct req_state* const s,
 
   buf_to_hex((unsigned char *) service_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
-  ldout(s->cct, 10) << "service_k     = " << string(aux) << dendl;
+  ldout(cct, 10) << "service_k     = " << string(aux) << dendl;
 
   /* aws4_request */
 
-  char *signing_k = s->aws4_auth->signing_k;
+  calc_hmac_sha256(service_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, "aws4_request", 12, signing_key);
 
-  calc_hmac_sha256(service_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, "aws4_request", 12, signing_k);
+  buf_to_hex((unsigned char *) signing_key, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
-  buf_to_hex((unsigned char *) signing_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
-
-  ldout(s->cct, 10) << "signing_k     = " << string(aux) << dendl;
-
-  /* TODO(rzarzynski): remove any modification to req_state! */
-  s->aws4_auth->signing_key = aux;
+  ldout(cct, 10) << "signing_k     = " << string(aux) << dendl;
 
   /* new signature */
 
   char signature_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  calc_hmac_sha256(signing_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, string_to_sign.c_str(), string_to_sign.size(), signature_k);
+  calc_hmac_sha256(signing_key, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE,
+                   string_to_sign.c_str(), string_to_sign.size(),
+                   signature_k);
 
   buf_to_hex((unsigned char *) signature_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
-  ldout(s->cct, 10) << "signature_k   = " << string(aux) << dendl;
+  ldout(cct, 10) << "signature_k   = " << string(aux) << dendl;
 
   std::string signature = string(aux);
 
-  ldout(s->cct, 10) << "new signature = " << signature << dendl;
+  ldout(cct, 10) << "new signature = " << signature << dendl;
 
   return signature;
 }
