@@ -631,43 +631,40 @@ string LFNIndex::lfn_generate_object_name_current(const ghobject_t &oid)
 
   char buf[PATH_MAX];
   char *t = buf;
-  char *end = t + sizeof(buf);
+  const char *end = t + sizeof(buf);
   if (oid.hobj.snap == CEPH_NOSNAP)
     t += snprintf(t, end - t, "head");
   else if (oid.hobj.snap == CEPH_SNAPDIR)
     t += snprintf(t, end - t, "snapdir");
   else
     t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.snap);
-  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
-  full_name += string(buf);
+  t += snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
+  full_name.append(buf, t);
   full_name.append("_");
 
   append_escaped(oid.hobj.nspace.begin(), oid.hobj.nspace.end(), &full_name);
   full_name.append("_");
 
   t = buf;
-  end = t + sizeof(buf);
   if (oid.hobj.pool == -1)
     t += snprintf(t, end - t, "none");
   else
     t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.pool);
-  full_name += string(buf);
+  full_name.append(buf, t);
 
   if (oid.generation != ghobject_t::NO_GEN ||
       oid.shard_id != shard_id_t::NO_SHARD) {
     full_name.append("_");
 
     t = buf;
-    end = t + sizeof(buf);
-    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.generation);
-    full_name += string(buf);
+    t += snprintf(t, end - buf, "%llx", (long long unsigned)oid.generation);
+    full_name.append(buf, t);
 
     full_name.append("_");
 
     t = buf;
-    end = t + sizeof(buf);
-    t += snprintf(t, end - t, "%x", (int)oid.shard_id);
-    full_name += string(buf);
+    t += snprintf(t, end - buf, "%x", (int)oid.shard_id);
+    full_name.append(buf, t);
   }
 
   return full_name;
