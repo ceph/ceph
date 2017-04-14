@@ -192,10 +192,17 @@ void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
     ACLGrant& grant = iter->second;
     const uint32_t perm = grant.get_permission().get_permissions();
     rgw_user id;
+    string url_spec;
     if (!grant.get_id(id)) {
-      if (grant.get_group() != ACL_GROUP_ALL_USERS)
-        continue;
-      id = SWIFT_GROUP_ALL_USERS;
+      if (grant.get_group() == ACL_GROUP_ALL_USERS) {
+        id = SWIFT_GROUP_ALL_USERS;
+      } else {
+        url_spec = grant.get_referer();
+        if (url_spec.empty()) {
+          continue;
+        }
+        id = (perm != 0) ? ".r:" + url_spec : ".r:-" + url_spec;
+      }
     }
     if (perm & SWIFT_PERM_READ) {
       if (!read.empty()) {
@@ -207,6 +214,12 @@ void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
         write.append(",");
       }
       write.append(id.to_str());
+    } else if (perm == 0 && !url_spec.empty()) {
+      /* only X-Container-Read headers support referers */
+      if (!read.empty()) {
+        read.append(",");
+      }
+      read.append(id.to_str());
     }
   }
 }
