@@ -538,6 +538,19 @@ void cls_rgw_clear_bucket_resharding_op::dump(Formatter *f) const
   ::encode_json("entry", entry, f);
 }
 
+void cls_rgw_get_bucket_resharding_op::generate_test_instances(
+  list<cls_rgw_get_bucket_resharding_op*>& ls)
+{
+  ls.push_back(new cls_rgw_get_bucket_resharding_op);
+  ls.push_back(new cls_rgw_get_bucket_resharding_op);
+}
+
+void cls_rgw_get_bucket_resharding_op::dump(Formatter *f) const
+{
+  ::encode_json("entry", entry, f);
+}
+
+
 
 
 

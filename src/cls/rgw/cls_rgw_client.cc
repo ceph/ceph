@@ -887,3 +887,26 @@ int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
   return io_ctx.exec(oid, "rgw", "clear_bucket_resharding", in, out);
 }
 
+int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
+				  const cls_rgw_bucket_instance_entry& entry, bool& resharding)
+{
+  bufferlist in, out;
+  struct cls_rgw_get_bucket_resharding_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  int r= io_ctx.exec(oid, "rgw", "get_bucket_resharding", in, out);
+  if (r < 0)
+    return r;
+
+  struct cls_rgw_get_bucket_resharding_ret op_ret;
+  bufferlist::iterator iter = out.begin();
+  try {
+    ::decode(op_ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  resharding = op_ret.resharding;
+
+  return 0;
+}
