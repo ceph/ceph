@@ -1723,6 +1723,8 @@ private:
   BlueFS *bluefs = nullptr;
   unsigned bluefs_shared_bdev = 0;  ///< which bluefs bdev we are sharing
   bool bluefs_single_shared_device = true;
+  utime_t bluefs_last_balance;
+
   KeyValueDB *db = nullptr;
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
