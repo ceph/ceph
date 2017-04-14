@@ -16,6 +16,7 @@ overrides:
       - corrupt sessionmap header
       - Corrupt dentry
       - Scrub error on inode
+      - Metadata damage detected
 
 tasks:
   - cephfs_test_runner:
