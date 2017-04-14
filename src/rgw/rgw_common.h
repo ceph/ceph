@@ -16,6 +16,8 @@
 #ifndef CEPH_RGW_COMMON_H
 #define CEPH_RGW_COMMON_H
 
+#include <array>
+
 #include "common/ceph_crypto.h"
 #include "common/perf_counters.h"
 #include "acconfig.h"
@@ -2068,6 +2070,14 @@ static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
   }
 }
 
+template<size_t N> static inline std::array<char, N * 2 + 1>
+buf_to_hex(const std::array<unsigned char, N>& buf)
+{
+  std::array<char, N * 2 + 1> hex_dest;
+  buf_to_hex(buf.data(), N, hex_dest.data());
+  return hex_dest;
+}
+
 static inline int hexdigit(char c)
 {
   if (c >= '0' && c <= '9')
@@ -2222,6 +2232,29 @@ extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
 /* destination should be CEPH_CRYPTO_HMACSHA256_DIGESTSIZE bytes long */
 extern void calc_hmac_sha256(const char *key, int key_len, const char *msg, int msg_len, char *dest);
+
+static inline std::array<unsigned char,
+                         CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>
+calc_hmac_sha256(const char *key, const int key_len,
+                 const char *msg, const int msg_len) {
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  calc_hmac_sha256(key, key_len, msg, msg_len,
+                   reinterpret_cast<char*>(dest.data()));
+  return dest;
+}
+
+template<size_t KeyLenN>
+static inline std::array<unsigned char,
+                         CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>
+calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
+                 const char *msg, const int msg_len) {
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  calc_hmac_sha256(reinterpret_cast<const char*>(key.data()), key.size(),
+                   msg, msg_len,
+                   reinterpret_cast<char*>(dest.data()));
+  return dest;
+}
+
 extern void calc_hash_sha256(const char *msg, int len, string& dest);
 extern void calc_hash_sha256(const string& msg, string& dest);
 
