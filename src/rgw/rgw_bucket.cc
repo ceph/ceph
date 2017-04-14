@@ -1836,11 +1836,11 @@ int RGWDataChangesLog::trim_entries(const real_time& start_time, const real_time
 
 bool RGWDataChangesLog::going_down()
 {
-  return (down_flag.read() != 0);
+  return (down_flag.load() != 0);
 }
 
 RGWDataChangesLog::~RGWDataChangesLog() {
-  down_flag.set(1);
+  down_flag = 1;
   renew_thread->stop();
   renew_thread->join();
   delete renew_thread;

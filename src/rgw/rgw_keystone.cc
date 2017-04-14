@@ -523,7 +523,7 @@ int TokenCache::RevokeThread::check_revoked()
 
 bool TokenCache::going_down() const
 {
-  return (down_flag.read() != 0);
+  return (down_flag.load() != 0);
 }
 
 void* TokenCache::RevokeThread::entry()

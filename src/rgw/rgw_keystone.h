@@ -214,7 +214,7 @@ class TokenCache {
     list<string>::iterator lru_iter;
   };
 
-  atomic_t down_flag;
+  std::atomic<unsigned> down_flag;
 
   class RevokeThread : public Thread {
     friend class TokenCache;
@@ -260,7 +260,7 @@ class TokenCache {
   }
 
   ~TokenCache() {
-    down_flag.set(1);
+    down_flag = 1;
 
     revocator.stop();
     revocator.join();

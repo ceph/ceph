@@ -89,11 +89,11 @@ public:
         description(other.description),
         nick(other.nick),
 	type(other.type),
-	u64(other.u64.read()) {
+	u64(other.u64.load()) {
       pair<uint64_t,uint64_t> a = other.read_avg();
-      u64.set(a.first);
-      avgcount.set(a.second);
-      avgcount2.set(a.second);
+      u64.store(a.first);
+      avgcount.store(a.second);
+      avgcount2.store(a.second);
       if (other.histogram) {
         histogram.reset(new PerfHistogram<>(*other.histogram));
       }
@@ -103,17 +103,17 @@ public:
     const char *description;
     const char *nick;
     enum perfcounter_type_d type;
-    atomic64_t u64;
-    atomic64_t avgcount;
-    atomic64_t avgcount2;
+    std::atomic<int64_t> u64;
+    std::atomic<int64_t> avgcount;
+    std::atomic<int64_t> avgcount2;
     std::unique_ptr<PerfHistogram<>> histogram;
 
     void reset()
     {
       if (type != PERFCOUNTER_U64) {
-	u64.set(0);
-	avgcount.set(0);
-	avgcount2.set(0);
+	u64.store(0);
+	avgcount.store(0);
+	avgcount2.store(0);
       }
       if (histogram) {
         histogram->reset();
@@ -124,11 +124,12 @@ public:
     // are identical; in other words the whole loop needs to be run
     // without any intervening calls to inc, set, or tinc.
     pair<uint64_t,uint64_t> read_avg() const {
-      uint64_t sum, count;
+      uint64_t sum;
+      int64_t  count;
       do {
-	count = avgcount2.read();
-	sum = u64.read();
-      } while (avgcount.read() != count);
+	count = avgcount.load();
+	sum = u64.load();
+      } while (avgcount2.load() != count);
       return make_pair(sum, count);
     }
   };

@@ -97,7 +97,7 @@ namespace Hypertable {
 
   private:
     struct ceph_mount_info *cmount;
-    static atomic_t ms_next_fd;
+    static std::atomic<unsigned> ms_next_fd;
 
     virtual void report_error(ResponseCallback *cb, int error);
 

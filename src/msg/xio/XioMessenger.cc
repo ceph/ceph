@@ -15,7 +15,9 @@
 
 #include <arpa/inet.h>
 #include <boost/lexical_cast.hpp>
+
 #include <set>
+#include <atomic>
 #include <stdlib.h>
 #include <memory>
 
@@ -30,9 +32,9 @@
 #define dout_prefix *_dout << "xio."
 
 Mutex mtx("XioMessenger Package Lock");
-atomic_t initialized;
+std::atomic<unsigned> initialized;
 
-atomic_t XioMessenger::nInstances;
+std::atomic<unsigned> XioMessenger::nInstances;
 
 struct xio_mempool *xio_msgr_noreg_mpool;
 

@@ -24,6 +24,8 @@
 #include "rgw_period_puller.h"
 #include "rgw_sync_module.h"
 
+#include <atomic>
+
 class RGWWatcher;
 class SafeTimer;
 class ACLOwner;
@@ -2191,7 +2193,7 @@ class RGWRados
 
   void get_bucket_instance_ids(const RGWBucketInfo& bucket_info, int shard_id, map<int, string> *result);
 
-  atomic64_t max_req_id;
+  std::atomic<int64_t> max_req_id;
   Mutex lock;
   Mutex watchers_lock;
   SafeTimer *timer;
@@ -2312,7 +2314,7 @@ public:
                meta_mgr(NULL), data_log(NULL) {}
 
   uint64_t get_new_req_id() {
-    return max_req_id.inc();
+    return ++max_req_id;
   }
 
   librados::IoCtx* get_lc_pool_ctx() {

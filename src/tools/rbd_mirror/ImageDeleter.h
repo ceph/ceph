@@ -17,7 +17,8 @@
 
 #include <deque>
 #include <vector>
-#include "include/atomic.h"
+#include <atomic>
+
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
@@ -103,7 +104,7 @@ private:
                       bool print_failure_info=false);
   };
 
-  atomic_t m_running;
+  std::atomic<unsigned> m_running;
 
   ContextWQ *m_work_queue;
 

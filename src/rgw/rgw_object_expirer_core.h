@@ -8,6 +8,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <atomic>
 
 #include "auth/Crypto.h"
 
@@ -65,7 +66,7 @@ protected:
   };
 
   OEWorker *worker;
-  atomic_t down_flag;
+  std::atomic<unsigned> down_flag;
 
 public:
   explicit RGWObjectExpirer(RGWRados *_store)

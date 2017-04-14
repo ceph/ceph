@@ -18,6 +18,7 @@
 #include "include/types.h"
 #include "include/xlist.h"
 
+#include <atomic>
 #include <list>
 #include <map>
 using namespace std;
@@ -25,7 +26,6 @@ using namespace std;
 #include "include/unordered_set.h"
 
 #include "common/Mutex.h"
-#include "include/atomic.h"
 #include "include/Spinlock.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
@@ -283,7 +283,7 @@ private:
   /// counter for the global seq our connection protocol uses
   __u32 global_seq;
   /// lock to protect the global_seq
-  ceph_spinlock_t global_seq_lock;
+  ceph::Spinlock global_seq_lock;
 
   /**
    * hash map of addresses to Pipes
@@ -322,7 +322,7 @@ private:
     if (p == rank_pipe.end())
       return NULL;
     // see lock cribbing in Pipe::fault()
-    if (p->second->state_closed.read())
+    if (p->second->state_closed.load())
       return NULL;
     return p->second;
   }

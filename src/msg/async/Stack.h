@@ -19,9 +19,10 @@
 
 #include "include/Spinlock.h"
 #include "common/perf_counters.h"
-#include "common/simple_spin.h"
 #include "msg/msg_types.h"
 #include "msg/async/Event.h"
+
+using namespace ceph;
 
 class Worker;
 class ConnectedSocketImpl {

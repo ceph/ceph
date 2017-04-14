@@ -20,6 +20,7 @@
 
 #include <map>
 #include <deque>
+#include <atomic>
 #include <boost/scoped_ptr.hpp>
 #include <fstream>
 using namespace std;
@@ -361,7 +362,7 @@ private:
   FDCache fdcache;
   WBThrottle wbthrottle;
 
-  atomic_t next_osr_id;
+  std::atomic<unsigned> next_osr_id;
   bool m_disable_wbthrottle;
   deque<OpSequencer*> op_queue;
   BackoffThrottle throttle_ops, throttle_bytes;
@@ -760,7 +761,7 @@ private:
   bool m_filestore_do_dump;
   std::ofstream m_filestore_dump;
   JSONFormatter m_filestore_dump_fmt;
-  atomic_t m_filestore_kill_at;
+  std::atomic<unsigned> m_filestore_kill_at;
   bool m_filestore_sloppy_crc;
   int m_filestore_sloppy_crc_block_size;
   uint64_t m_filestore_max_alloc_hint_size;

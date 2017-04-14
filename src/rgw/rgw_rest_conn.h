@@ -9,6 +9,7 @@
 #include "common/ceph_json.h"
 #include "common/RefCountedObj.h"
 
+#include <atomic>
 
 class CephContext;
 class RGWRados;
@@ -55,7 +56,7 @@ class RGWRESTConn
   RGWAccessKey key;
   string self_zone_group;
   string remote_id;
-  atomic_t counter;
+  std::atomic<unsigned> counter;
 
 public:
 

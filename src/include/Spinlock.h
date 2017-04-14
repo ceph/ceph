@@ -16,88 +16,49 @@
 #ifndef CEPH_SPINLOCK_H
 #define CEPH_SPINLOCK_H
 
-#include "acconfig.h"
+#include <atomic>
 
-#include <pthread.h>
+namespace ceph {
 
-typedef struct {
-#ifdef HAVE_PTHREAD_SPINLOCK
-  pthread_spinlock_t lock;
-#else
-  pthread_mutex_t lock;
-#endif
-} ceph_spinlock_t;
-
-#ifdef HAVE_PTHREAD_SPINLOCK
-
-static inline int ceph_spin_init(ceph_spinlock_t *l)
+inline void simple_spin_lock(std::atomic_flag& lock)
 {
-  return pthread_spin_init(&l->lock, PTHREAD_PROCESS_PRIVATE);
+ while(lock.test_and_set(std::memory_order_acquire))
+  ;
 }
 
-static inline int ceph_spin_destroy(ceph_spinlock_t *l)
+inline void simple_spin_unlock(std::atomic_flag& lock)
 {
-  return pthread_spin_destroy(&l->lock);
+ lock.clear(std::memory_order_release);
 }
 
-static inline int ceph_spin_lock(ceph_spinlock_t *l)
+inline void simple_spin_lock(std::atomic_flag *lock)
 {
-  return pthread_spin_lock(&l->lock);
+ simple_spin_lock(*lock);
 }
 
-static inline int ceph_spin_unlock(ceph_spinlock_t *l)
+inline void simple_spin_unlock(std::atomic_flag *lock)
 {
-  return pthread_spin_unlock(&l->lock);
+ simple_spin_unlock(*lock);
 }
 
-#else /* !HAVE_PTHREAD_SPINLOCK */
+} // namespace ceph
 
-static inline int ceph_spin_init(ceph_spinlock_t *l)
-{
-  return pthread_mutex_init(&l->lock, NULL);
-}
-
-static inline int ceph_spin_destroy(ceph_spinlock_t *l)
-{
-  return pthread_mutex_destroy(&l->lock);
-}
-
-static inline int ceph_spin_lock(ceph_spinlock_t *l)
-{
-  return pthread_mutex_lock(&l->lock);
-}
-
-static inline int ceph_spin_unlock(ceph_spinlock_t *l)
-{
-  return pthread_mutex_unlock(&l->lock);
-}
-
-#endif
+namespace ceph {
 
 class Spinlock {
-  mutable ceph_spinlock_t _lock;
+  mutable std::atomic_flag spin_lock = ATOMIC_FLAG_INIT;
 
 public:
-  Spinlock() {
-    ceph_spin_init(&_lock);
-  }
-  ~Spinlock() {
-    ceph_spin_destroy(&_lock);
-  }
-
-  // don't allow copying.
-  void operator=(Spinlock& s);
-  Spinlock(const Spinlock& s);
-
   /// acquire spinlock
   void lock() const {
-    ceph_spin_lock(&_lock);
+    simple_spin_lock(spin_lock);
   }
   /// release spinlock
   void unlock() const {
-    ceph_spin_unlock(&_lock);
+    simple_spin_unlock(spin_lock);
   }
 
+  // Scoped control of a Spinlock:
   class Locker {
     const Spinlock& spinlock;
   public:
@@ -109,5 +70,28 @@ public:
     }
   };
 };
+
+inline void ceph_spin_lock(ceph::Spinlock& l)
+{
+ l.lock();
+}
+
+inline void ceph_spin_unlock(ceph::Spinlock& l)
+{
+ l.unlock();
+}
+
+// Pointer parameters:
+inline void ceph_spin_lock(ceph::Spinlock *l)
+{
+ return ceph_spin_lock(*l);
+}
+
+inline void ceph_spin_unlock(ceph::Spinlock *l)
+{
+ return ceph_spin_unlock(*l);
+}
+
+} // namespace ceph
 
 #endif

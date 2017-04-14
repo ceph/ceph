@@ -26,6 +26,8 @@ extern "C" {
 #include "msg/msg_types.h"
 #include "XioPool.h"
 
+#include <atomic>
+
 namespace bi = boost::intrusive;
 
 class XioMessenger;
@@ -228,7 +230,7 @@ public:
 private:
   xio_msg_ex req_0;
   struct xio_reg_mem mp_this;
-  atomic_t nrefs;
+  std::atomic<unsigned> nrefs;
 };
 
 class XioCommand : public XioSend
@@ -316,7 +318,7 @@ private:
   XioConnection *xcon;
   XioInSeq msg_seq;
   XioPool rsp_pool;
-  atomic_t nrefs;
+  std::atomic<unsigned> nrefs;
   bool cl_flag;
   friend class XioConnection;
   friend class XioMessenger;

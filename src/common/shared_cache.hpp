@@ -23,6 +23,9 @@
 #include "common/Cond.h"
 #include "include/unordered_map.h"
 
+// reinclude our assert to clobber the system one
+#include "include/assert.h"
+
 template <class K, class V, class C = std::less<K>, class H = std::hash<K> >
 class SharedLRU {
   CephContext *cct;

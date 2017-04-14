@@ -20,16 +20,15 @@ extern "C" {
 #include <stdint.h>
 #include "libxio.h"
 }
-#include <vector>
-#include "include/atomic.h"
+
 #include "common/likely.h"
 
+#include <atomic>
+#include <vector>
 
 static inline int xpool_alloc(struct xio_mempool *pool, uint64_t size,
 			      struct xio_reg_mem* mp);
 static inline void xpool_free(uint64_t size, struct xio_reg_mem* mp);
-
-using ceph::atomic_t;
 
 class XioPool
 {
@@ -95,10 +94,10 @@ private:
     NUM_SLABS,
   };
 
-  atomic_t ctr_set[NUM_SLABS];
+  std::atomic<unsigned> ctr_set[NUM_SLABS];
 
-  atomic_t msg_cnt;  // send msgs
-  atomic_t hook_cnt; // recv msgs
+  std::atomic<unsigned> msg_cnt;  // send msgs
+  std::atomic<unsigned> hook_cnt; // recv msgs
 
 public:
   XioPoolStats() : msg_cnt(0), hook_cnt(0) {

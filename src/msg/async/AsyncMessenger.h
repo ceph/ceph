@@ -21,12 +21,12 @@
 #include "include/xlist.h"
 
 #include <map>
+#include <atomic>
 using namespace std;
 #include "include/unordered_map.h"
 #include "include/unordered_set.h"
 
 #include "common/Mutex.h"
-#include "include/atomic.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 
@@ -249,7 +249,7 @@ private:
   /// counter for the global seq our connection protocol uses
   __u32 global_seq;
   /// lock to protect the global_seq
-  ceph_spinlock_t global_seq_lock;
+  ceph::Spinlock global_seq_lock;
 
   /**
    * hash map of addresses to Asyncconnection

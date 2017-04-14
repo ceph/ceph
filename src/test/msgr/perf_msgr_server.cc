@@ -16,13 +16,13 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <atomic>
 #include <string>
 #include <unistd.h>
 #include <iostream>
 
 using namespace std;
 
-#include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "global/global_init.h"

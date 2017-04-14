@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <string>
+#include <atomic>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -41,11 +42,14 @@
 
 #include "include/compat.h"
 
+using std::ostringstream;
+
+// re-include our assert to clobber the system one
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
 #define dout_prefix *_dout << "asok(" << (void*)m_cct << ") "
-
-using std::ostringstream;
 
 /*
  * UNIX domain sockets created by an application persist even after that

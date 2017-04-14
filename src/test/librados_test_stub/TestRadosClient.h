@@ -6,15 +6,16 @@
 
 #include "include/rados/librados.hpp"
 #include "common/config.h"
-#include "include/atomic.h"
 #include "include/buffer_fwd.h"
 #include "test/librados_test_stub/TestWatchNotify.h"
 #include <boost/function.hpp>
 #include <boost/functional/hash.hpp>
+
 #include <list>
 #include <map>
 #include <string>
 #include <vector>
+#include <atomic>
 
 class Finisher;
 
@@ -113,7 +114,7 @@ protected:
 private:
 
   CephContext *m_cct;
-  atomic_t m_refcount;
+  std::atomic<unsigned> m_refcount;
 
   TestWatchNotify *m_watch_notify;
 

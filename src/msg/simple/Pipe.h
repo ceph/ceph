@@ -22,6 +22,7 @@
 #include "msg/Messenger.h"
 #include "PipeConnection.h"
 
+#include <atomic>
 
 class SimpleMessenger;
 class DispatchQueue;
@@ -129,7 +130,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     
     Mutex pipe_lock;
     int state;
-    atomic_t state_closed; // non-zero iff state = STATE_CLOSED
+    std::atomic<unsigned> state_closed; // non-zero iff state = STATE_CLOSED
 
     // session_security handles any signatures or encryptions required for this pipe's msgs. PLR
 

@@ -17,8 +17,9 @@
 
 
 #include "include/utime.h"
-#include "include/atomic.h"
 #include "common/lru_map.h"
+
+#include <atomic>
 
 static inline int64_t rgw_rounded_kb(int64_t bytes)
 {

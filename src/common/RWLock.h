@@ -18,10 +18,13 @@
 #define CEPH_RWLock_Posix__H
 
 #include <pthread.h>
+
+#include <atomic>
 #include <string>
+
 #include <include/assert.h>
+
 #include "lockdep.h"
-#include "include/atomic.h"
 #include "common/valgrind.h"
 
 class RWLock final
@@ -29,7 +32,7 @@ class RWLock final
   mutable pthread_rwlock_t L;
   std::string name;
   mutable int id;
-  mutable atomic_t nrlock, nwlock;
+  mutable std::atomic<unsigned> nrlock, nwlock;
   bool track, lockdep;
 
   std::string unique_name(const char* name) const;
@@ -65,12 +68,12 @@ public:
 
   bool is_locked() const {
     assert(track);
-    return (nrlock.read() > 0) || (nwlock.read() > 0);
+    return (nrlock.load() > 0) || (nwlock.load() > 0);
   }
 
   bool is_wlocked() const {
     assert(track);
-    return (nwlock.read() > 0);
+    return (nwlock.load() > 0);
   }
   ~RWLock() {
     // The following check is racy but we are about to destroy
@@ -85,11 +88,11 @@ public:
 
   void unlock(bool lockdep=true) const {
     if (track) {
-      if (nwlock.read() > 0) {
-        nwlock.dec();
+      if (nwlock.load() > 0) {
+        nwlock--;
       } else {
-        assert(nrlock.read() > 0);
-        nrlock.dec();
+        assert(nrlock.load() > 0);
+        nrlock--;
       }
     }
     if (lockdep && this->lockdep && g_lockdep)
@@ -105,12 +108,12 @@ public:
     assert(r == 0);
     if (lockdep && g_lockdep) id = lockdep_locked(name.c_str(), id);
     if (track)
-      nrlock.inc();
+      nrlock++;
   }
   bool try_get_read() const {
     if (pthread_rwlock_tryrdlock(&L) == 0) {
       if (track)
-         nrlock.inc();
+         nrlock++;
       if (lockdep && g_lockdep) id = lockdep_locked(name.c_str(), id);
       return true;
     }
@@ -129,7 +132,7 @@ public:
     if (lockdep && this->lockdep && g_lockdep)
       id = lockdep_locked(name.c_str(), id);
     if (track)
-      nwlock.inc();
+      nwlock++;
 
   }
   bool try_get_write(bool lockdep=true) {
@@ -137,7 +140,7 @@ public:
       if (lockdep && this->lockdep && g_lockdep)
 	id = lockdep_locked(name.c_str(), id);
       if (track)
-         nwlock.inc();
+         nwlock++;
       return true;
     }
     return false;
