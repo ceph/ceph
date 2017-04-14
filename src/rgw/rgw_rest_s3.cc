@@ -3534,8 +3534,6 @@ static inline bool is_base64_for_content_md5(unsigned char c) {
   return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
 }
 
-static std::array<string, 3> aws4_presigned_required_keys = { "Credential", "SignedHeaders", "Signature" };
-
 /*
  * handle v4 signatures (rados auth only)
  */
@@ -3543,12 +3541,6 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
 {
   string::size_type pos;
   bool using_qs;
-  /* used for pre-signatured url, We shouldn't return -ERR_REQUEST_TIME_SKEWED when 
-     current time <= X-Amz-Expires */
-  bool qsr = false;
-
-  uint64_t now_req = 0;
-  uint64_t now = ceph_clock_now();
 
   /* v4 requires rados auth */
   if (!store->ctx()->_conf->rgw_s3_auth_use_rados) {
@@ -3561,134 +3553,14 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
     return -ENOMEM;
   }
 
-  const char* http_auth = s->info.env->get("HTTP_AUTHORIZATION");
-  if ((!http_auth) || !(*http_auth)) {
-
-    /* auth ships with req params ... */
-
-    /* look for required params */
-
-    using_qs = true;
-    s->aws4_auth->credential = s->info.args.get("X-Amz-Credential");
-    if (s->aws4_auth->credential.size() == 0) {
-      return -EPERM;
-    }
-
-    s->aws4_auth->date = s->info.args.get("X-Amz-Date");
-    struct tm date_t;
-    if (!parse_iso8601(s->aws4_auth->date.c_str(), &date_t, NULL, false))
-      return -EPERM;
-
-    s->aws4_auth->expires = s->info.args.get("X-Amz-Expires");
-    if (!s->aws4_auth->expires.empty()) {
-      /* X-Amz-Expires provides the time period, in seconds, for which
-         the generated presigned URL is valid. The minimum value
-         you can set is 1, and the maximum is 604800 (seven days) */
-      time_t exp = atoll(s->aws4_auth->expires.c_str());
-      if ((exp < 1) || (exp > 7*24*60*60)) {
-        dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
-        return -EPERM;
-      }
-      /* handle expiration in epoch time */
-      now_req = (uint64_t)internal_timegm(&date_t);
-      if (now >= now_req + exp) {
-        dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
-        return -EPERM;
-      }
-      qsr = true;
-    }
-
-    if ((now_req < now - RGW_AUTH_GRACE_MINS * 60 ||
-       now_req > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-      dout(10) << "NOTICE: request time skew too big." << dendl;
-      dout(10) << "now_req = " << now_req << " now = " << now
-               << "; now - RGW_AUTH_GRACE_MINS=" 
-               << now - RGW_AUTH_GRACE_MINS * 60
-               << "; now + RGW_AUTH_GRACE_MINS="
-               << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
-      return -ERR_REQUEST_TIME_SKEWED;
-    }
-
-    s->aws4_auth->signedheaders = s->info.args.get("X-Amz-SignedHeaders");
-    if (s->aws4_auth->signedheaders.size() == 0) {
-      return -EPERM;
-    }
-
-    s->aws4_auth->signature = s->info.args.get("X-Amz-Signature");
-    if (s->aws4_auth->signature.size() == 0) {
-      return -EPERM;
-    }
-
-  } else {
-
-    /* auth ships in headers ... */
-
-    /* ------------------------- handle Credential header */
-
-    using_qs = false;
-
-    string auth_str = http_auth;
-
-#define AWS4_HMAC_SHA256_STR "AWS4-HMAC-SHA256"
-#define CREDENTIALS_PREFIX_LEN (sizeof(AWS4_HMAC_SHA256_STR) - 1)
-    uint64_t min_len = CREDENTIALS_PREFIX_LEN + 1;
-    if (auth_str.length() < min_len) {
-      ldout(store->ctx(), 10) << "credentials string is too short" << dendl;
-      return -EINVAL;
-    }
-
-    list<string> auth_list;
-    get_str_list(auth_str.substr(min_len), ",", auth_list);
-
-    map<string, string> kv;
-
-    for (string& s : auth_list) {
-      string key, val;
-      int ret = parse_key_value(s, key, val);
-      if (ret < 0) {
-        ldout(store->ctx(), 10) << "NOTICE: failed to parse auth header (s=" << s << ")" << dendl;
-        return -EINVAL;
-      }
-      kv[key] = std::move(val);
-    }
-
-    for (string& k : aws4_presigned_required_keys) {
-      if (kv.find(k) == kv.end()) {
-        ldout(store->ctx(), 10) << "NOTICE: auth header missing key: " << k << dendl;
-        return -EINVAL;
-      }
-    }
-
-    s->aws4_auth->credential = std::move(kv["Credential"]);
-    s->aws4_auth->signedheaders = std::move(kv["SignedHeaders"]);
-    s->aws4_auth->signature = std::move(kv["Signature"]);
-
-    /* sig hex str */
-    dout(10) << "v4 signature format = " << s->aws4_auth->signature << dendl;
-
-    /* ------------------------- handle x-amz-date header */
-
-    /* grab date */
-
-    const char *d = s->info.env->get("HTTP_X_AMZ_DATE");
-    struct tm t;
-    if (!parse_iso8601(d, &t, NULL, false)) {
-      dout(10) << "error reading date via http_x_amz_date" << dendl;
-      return -EACCES;
-    }
-    s->aws4_auth->date = d;
-  }
-
-  /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
-  dout(10) << "v4 credential format = " << s->aws4_auth->credential << dendl;
-
-  if (std::count(s->aws4_auth->credential.begin(), s->aws4_auth->credential.end(), '/') != 4) {
-    return -EINVAL;
-  }
-
-  /* credential must end with 'aws4_request' */
-  if (s->aws4_auth->credential.find("aws4_request") == std::string::npos) {
-    return -EINVAL;
+  int ret = rgw::auth::s3::parse_credentials(s->info,
+                                             s->aws4_auth->credential,
+                                             s->aws4_auth->signedheaders,
+                                             s->aws4_auth->signature,
+                                             s->aws4_auth->date,
+                                             using_qs);
+  if (ret < 0) {
+    return ret;
   }
 
   /* grab access key id */
