@@ -3337,7 +3337,7 @@ int RGWRados::replace_region_with_zonegroup()
 		  << dendl;
     return ret;
   } else if (ret != -ENOENT) {
-    ldout(cct, 0) << "System already converted " << dendl;
+    ldout(cct, 20) << "System already converted " << dendl;
     return 0;
   }
 
