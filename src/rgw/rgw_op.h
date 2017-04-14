@@ -926,6 +926,7 @@ protected:
   string version_id;
   bufferlist bl_aux;
   map<string, string> crypt_http_responses;
+  string user_data;
 
   boost::optional<ceph::real_time> delete_at;
 

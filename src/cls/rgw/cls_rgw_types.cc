@@ -61,6 +61,7 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   encode_json("owner_display_name", owner_display_name, f);
   encode_json("content_type", content_type, f);
   encode_json("accounted_size", accounted_size, f);
+  encode_json("user_data", user_data, f);
 }
 
 void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
@@ -75,6 +76,7 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("owner_display_name", owner_display_name, obj);
   JSONDecoder::decode_json("content_type", content_type, obj);
   JSONDecoder::decode_json("accounted_size", accounted_size, obj);
+  JSONDecoder::decode_json("user_data", user_data, obj);
 }
 
 void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& o)
