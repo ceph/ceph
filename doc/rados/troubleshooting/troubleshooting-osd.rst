@@ -222,16 +222,15 @@ lowering the ``mon osd full ratio``, ``mon osd backfillfull ratio``  and
 Full ``ceph-osds`` will be reported by ``ceph health``::
 
 	ceph health
-	HEALTH_WARN 1 nearfull osds
-	osd.2 is near full at 85%
+	HEALTH_WARN 1 nearfull osd(s)
 
 Or::
 
-	ceph health
-	HEALTH_ERR 1 nearfull osds, 1 backfillfull osds, 1 full osds
-	osd.2 is near full at 85%
+	ceph health detail
+	HEALTH_ERR 1 full osd(s); 1 backfillfull osd(s); 1 nearfull osd(s)
 	osd.3 is full at 97%
 	osd.4 is backfill full at 91%
+	osd.2 is near full at 87%
 
 The best way to deal with a full cluster is to add new ``ceph-osds``, allowing
 the cluster to redistribute data to the newly available storage.
