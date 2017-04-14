@@ -19,6 +19,7 @@ struct es_index_obj_response {
     uint64_t size{0};
     ceph::real_time mtime;
     string etag;
+    string content_type;
     map<string, string> custom_str;
     map<string, int64_t> custom_int;
     map<string, string> custom_date;
@@ -39,6 +40,7 @@ struct es_index_obj_response {
       JSONDecoder::decode_json("mtime", mtime_str, obj);
       parse_time(mtime_str.c_str(), &mtime);
       JSONDecoder::decode_json("etag", etag, obj);
+      JSONDecoder::decode_json("content_type", content_type, obj);
       list<_custom_entry<string> > str_entries;
       JSONDecoder::decode_json("custom-string", str_entries, obj);
       for (auto& e : str_entries) {
@@ -312,16 +314,21 @@ public:
     if (is_truncated) {
       s->formatter->dump_string("NextMarker", next_marker);
     }
+    if (s->format == RGW_FORMAT_JSON) {
+      s->formatter->open_array_section("Objects");
+    }
     for (auto& i : response.hits.hits) {
-      es_index_obj_response& e = i.source;
       s->formatter->open_object_section("Contents");
+      es_index_obj_response& e = i.source;
       s->formatter->dump_string("Bucket", e.bucket);
       s->formatter->dump_string("Key", e.key.name);
       string instance = (!e.key.instance.empty() ? e.key.instance : "null");
       s->formatter->dump_string("Instance", instance.c_str());
       s->formatter->dump_int("VersionedEpoch", e.versioned_epoch);
       dump_time(s, "LastModified", &e.meta.mtime);
+      s->formatter->dump_int("Size", e.meta.size);
       s->formatter->dump_format("ETag", "\"%s\"", e.meta.etag.c_str());
+      s->formatter->dump_string("ContentType", e.meta.content_type.c_str());
       dump_owner(s, e.owner.get_id(), e.owner.get_display_name());
       s->formatter->open_array_section("CustomMetadata");
       for (auto& m : e.meta.custom_str) {
@@ -343,9 +350,12 @@ public:
         s->formatter->close_section();
       }
       s->formatter->close_section();
-      s->formatter->close_section();
       rgw_flush_formatter(s, s->formatter);
+      s->formatter->close_section();
     };
+    if (s->format == RGW_FORMAT_JSON) {
+      s->formatter->close_section();
+    }
     s->formatter->close_section();
    rgw_flush_formatter_and_reset(s, s->formatter);
   }

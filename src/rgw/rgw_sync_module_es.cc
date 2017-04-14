@@ -162,13 +162,17 @@ using ElasticConfigRef = std::shared_ptr<ElasticConfig>;
 struct es_dump_type {
   const char *type;
   const char *format;
+  bool analyzed;
 
-  es_dump_type(const char *t, const char *f = nullptr) : type(t), format(f) {}
+  es_dump_type(const char *t, const char *f = nullptr, bool a = false) : type(t), format(f), analyzed(a) {}
 
   void dump(Formatter *f) const {
     encode_json("type", type, f);
     if (format) {
       encode_json("format", format, f);
+    }
+    if (!analyzed && strcmp(type, "string") == 0) {
+      encode_json("index", "not_analyzed", f);
     }
   }
 };
@@ -178,10 +182,7 @@ struct es_index_mappings {
     f->open_object_section(section);
     ::encode_json("type", "nested", f);
     f->open_object_section("properties");
-    f->open_object_section("name");
-    ::encode_json("type", "string", f);
-    ::encode_json("index", "not_analyzed", f);
-    f->close_section(); // name
+    encode_json("name", es_dump_type("string"), f);
     encode_json("value", es_dump_type(type, format), f);
     f->close_section(); // entry
     f->close_section(); // custom-string

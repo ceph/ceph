@@ -4,6 +4,7 @@ import string
 import sys
 import time
 import logging
+
 try:
     from itertools import izip_longest as zip_longest
 except ImportError:
@@ -18,6 +19,8 @@ from nose.plugins.attrib import attr
 from nose.plugins.skip import SkipTest
 
 from .multisite import Zone
+
+from rgw_multi_conn import get_gateway_connection
 
 class Config:
     """ test configuration """
@@ -72,6 +75,15 @@ def mdlog_list(zone, period = None):
     (mdlog_json, _) = zone.cluster.admin(cmd, read_only=True)
     mdlog_json = mdlog_json.decode('utf-8')
     return json.loads(mdlog_json)
+
+def meta_sync_status(zone):
+    while True:
+        cmd = ['metadata', 'sync', 'status'] + zone.zone_args()
+        meta_sync_status_json, retcode = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
+        if retcode == 0:
+            break
+        assert(retcode == 2) # ENOENT
+        time.sleep(5)
 
 def mdlog_autotrim(zone):
     zone.cluster.admin(['mdlog', 'autotrim'])
@@ -376,7 +388,10 @@ def gen_bucket_name():
     return run_prefix + '-' + str(num_buckets)
 
 def check_all_buckets_exist(zone, buckets):
-    conn = get_zone_connection(zone, user.credentials)
+    if not zone.has_buckets():
+        return True
+
+    conn = zone.get_connection(user.credentials)
     for b in buckets:
         try:
             conn.get_bucket(b)
@@ -387,7 +402,10 @@ def check_all_buckets_exist(zone, buckets):
     return True
 
 def check_all_buckets_dont_exist(zone, buckets):
-    conn = get_zone_connection(zone, user.credentials)
+    if not zone.has_buckets():
+        return True
+
+    conn = zone.get_connection(user.credentials)
     for b in buckets:
         try:
             conn.get_bucket(b)
@@ -402,8 +420,8 @@ def check_all_buckets_dont_exist(zone, buckets):
 def create_bucket_per_zone(zonegroup):
     buckets = []
     zone_bucket = {}
-    for zone in zonegroup.zones:
-        conn = get_zone_connection(zone, user.credentials)
+    for zone in zonegroup.rw_zones:
+        conn = zone.get_connection(user.credentials)
         bucket_name = gen_bucket_name()
         log.info('create bucket zone=%s name=%s', zone.name, bucket_name)
         bucket = conn.create_bucket(bucket_name)
@@ -438,9 +456,9 @@ def test_bucket_recreate():
         assert check_all_buckets_exist(zone, buckets)
 
     # recreate buckets on all zones, make sure they weren't removed
-    for zone in zonegroup.zones:
+    for zone in zonegroup.rw_zones:
         for bucket_name in buckets:
-            conn = get_zone_connection(zone, user.credentials)
+            conn = zone.get_connection(user.credentials)
             bucket = conn.create_bucket(bucket_name)
 
     for zone in zonegroup.zones:
@@ -460,7 +478,7 @@ def test_bucket_remove():
         assert check_all_buckets_exist(zone, buckets)
 
     for zone, bucket_name in zone_bucket.items():
-        conn = get_zone_connection(zone, user.credentials)
+        conn = zone.get_connection(user.credentials)
         conn.delete_bucket(bucket_name)
 
     zonegroup_meta_checkpoint(zonegroup)
@@ -469,7 +487,7 @@ def test_bucket_remove():
         assert check_all_buckets_dont_exist(zone, buckets)
 
 def get_bucket(zone, bucket_name):
-    conn = get_zone_connection(zone, user.credentials)
+    conn = zone.get_connection(user.credentials)
     return conn.get_bucket(bucket_name)
 
 def get_key(zone, bucket_name, obj_name):
@@ -480,58 +498,8 @@ def new_key(zone, bucket_name, obj_name):
     b = get_bucket(zone, bucket_name)
     return b.new_key(obj_name)
 
-def check_object_eq(k1, k2, check_extra = True):
-    assert k1
-    assert k2
-    log.debug('comparing key name=%s', k1.name)
-    eq(k1.name, k2.name)
-    eq(k1.get_contents_as_string(), k2.get_contents_as_string())
-    eq(k1.metadata, k2.metadata)
-    eq(k1.cache_control, k2.cache_control)
-    eq(k1.content_type, k2.content_type)
-    eq(k1.content_encoding, k2.content_encoding)
-    eq(k1.content_disposition, k2.content_disposition)
-    eq(k1.content_language, k2.content_language)
-    eq(k1.etag, k2.etag)
-    eq(k1.last_modified, k2.last_modified)
-    if check_extra:
-        eq(k1.owner.id, k2.owner.id)
-        eq(k1.owner.display_name, k2.owner.display_name)
-    eq(k1.storage_class, k2.storage_class)
-    eq(k1.size, k2.size)
-    eq(k1.version_id, k2.version_id)
-    eq(k1.encrypted, k2.encrypted)
-
-def check_bucket_eq(zone1, zone2, bucket_name):
-    log.info('comparing bucket=%s zones={%s, %s}', bucket_name, zone1.name, zone2.name)
-    b1 = get_bucket(zone1, bucket_name)
-    b2 = get_bucket(zone2, bucket_name)
-
-    log.debug('bucket1 objects:')
-    for o in b1.get_all_versions():
-        log.debug('o=%s', o.name)
-    log.debug('bucket2 objects:')
-    for o in b2.get_all_versions():
-        log.debug('o=%s', o.name)
-
-    for k1, k2 in zip_longest(b1.get_all_versions(), b2.get_all_versions()):
-        if k1 is None:
-            log.critical('key=%s is missing from zone=%s', k2.name, zone1.name)
-            assert False
-        if k2 is None:
-            log.critical('key=%s is missing from zone=%s', k1.name, zone2.name)
-            assert False
-
-        check_object_eq(k1, k2)
-
-        # now get the keys through a HEAD operation, verify that the available data is the same
-        k1_head = b1.get_key(k1.name)
-        k2_head = b2.get_key(k2.name)
-
-        check_object_eq(k1_head, k2_head, False)
-
-    log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, zone1.name, zone2.name)
-
+def check_bucket_eq(zone1, zone2, bucket):
+    return zone2.check_bucket_eq(zone1, bucket.name, user.credentials)
 
 def test_object_sync():
     zonegroup = realm.master_zonegroup()
@@ -617,7 +585,7 @@ def test_versioned_object_incremental_sync():
 
     for _, bucket in zone_bucket.items():
         # create and delete multiple versions of an object from each zone
-        for zone in zonegroup.zones:
+        for zone in zonegroup.rw_zones:
             obj = 'obj-' + zone.name
             k = new_key(zone, bucket, obj)
 
@@ -668,7 +636,7 @@ def test_bucket_delete_notempty():
 
     for zone, bucket_name in zone_bucket.items():
         # upload an object to each bucket on its own zone
-        conn = get_zone_connection(zone, user.credentials)
+        conn = zone.get_connection(user.credentials)
         bucket = conn.get_bucket(bucket_name)
         k = bucket.new_key('foo')
         k.set_contents_from_string('bar')
@@ -681,7 +649,7 @@ def test_bucket_delete_notempty():
         assert False # expected 409 BucketNotEmpty
 
     # assert that each bucket still exists on the master
-    c1 = get_zone_connection(zonegroup.master_zone, user.credentials)
+    c1 = zonegroup.master_zone.get_connection(user.credentials)
     for _, bucket_name in zone_bucket.items():
         assert c1.get_bucket(bucket_name)
 
