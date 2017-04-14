@@ -7054,6 +7054,7 @@ int BlueStore::_open_super_meta()
       bl.clear();
       {
 	r = db->get(PREFIX_SUPER, "min_compat_ondisk_format", &bl);
+	assert(!r);
 	auto p = bl.begin();
 	try {
 	  ::decode(compat_ondisk_format, p);
