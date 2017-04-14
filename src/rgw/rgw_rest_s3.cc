@@ -3456,16 +3456,17 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
                                                  s->aws4_auth->signed_hdrs,
                                                  expected_request_payload_hash);
 
+  std::string payload_hash;
   if (unsigned_payload) {
-    s->aws4_auth->payload_hash = "UNSIGNED-PAYLOAD";
+    payload_hash = "UNSIGNED-PAYLOAD";
   } else {
     if (s->aws4_auth_needs_complete) {
-      s->aws4_auth->payload_hash = AWS_AUTHv4_IO(s)->grab_aws4_sha256_hash();
+      payload_hash = AWS_AUTHv4_IO(s)->grab_aws4_sha256_hash();
     } else {
       if (s->aws4_auth_streaming_mode) {
-        s->aws4_auth->payload_hash = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
+        payload_hash = "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
       } else {
-        s->aws4_auth->payload_hash = \
+        payload_hash = \
           rgw::auth::s3::hash_string_sha256(request_payload.c_str(),
                                             request_payload.size());
       }
@@ -3474,7 +3475,7 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
 
   /* Validate x-amz-sha256 */
   if (s->aws4_auth_needs_complete) {
-    if (s->aws4_auth->payload_hash.compare(expected_request_payload_hash) != 0) {
+    if (payload_hash.compare(expected_request_payload_hash) != 0) {
       ldout(s->cct, 10) << "ERROR: x-amz-content-sha256 does not match" << dendl;
       return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
     }
@@ -3624,8 +3625,6 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   s->aws4_auth->signed_hdrs = s->aws4_auth->signedheaders;
 
   /* handle request payload */
-
-  s->aws4_auth->payload_hash = "";
 
   string request_payload;
 
