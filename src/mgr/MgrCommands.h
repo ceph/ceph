@@ -37,8 +37,6 @@ COMMAND("pg ls " \
         "name=pool,type=CephInt,req=false " \
 	"name=states,type=CephChoices,strings=active|clean|down|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
 	"list pg with specific pool, osd, state", "pg", "r", "cli,rest")
-COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
-	"pg", "r", "cli,rest")
 COMMAND("pg dump_stuck " \
 	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale|undersized|degraded,n=N,req=false " \
 	"name=threshold,type=CephInt,req=false",

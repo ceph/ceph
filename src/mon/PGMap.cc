@@ -2315,48 +2315,6 @@ int process_pg_map_command(
     return 0;
   }
 
-  if (prefix == "pg map") {
-    pg_t pgid;
-    string pgidstr;
-    cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
-    if (!pgid.parse(pgidstr.c_str())) {
-      *ss << "invalid pgid '" << pgidstr << "'";
-      return -EINVAL;
-    }
-    vector<int> up, acting;
-    if (!osdmap.have_pg_pool(pgid.pool())) {
-      *ss << "pg '" << pgidstr << "' does not exist";
-      return -ENOENT;
-    }
-    pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
-    osdmap.pg_to_up_acting_osds(pgid, up, acting);
-    if (f) {
-      f->open_object_section("pg_map");
-      f->dump_unsigned("epoch", osdmap.get_epoch());
-      f->dump_stream("raw_pgid") << pgid;
-      f->dump_stream("pgid") << mpgid;
-
-      f->open_array_section("up");
-      for (vector<int>::iterator it = up.begin(); it != up.end(); ++it)
-	f->dump_int("up_osd", *it);
-      f->close_section();
-
-      f->open_array_section("acting");
-      for (vector<int>::iterator it = acting.begin(); it != acting.end(); ++it)
-	f->dump_int("acting_osd", *it);
-      f->close_section();
-
-      f->close_section();
-      f->flush(*odata);
-    } else {
-      ds << "osdmap e" << osdmap.get_epoch()
-         << " pg " << pgid << " (" << mpgid << ")"
-         << " -> up " << up << " acting " << acting;
-      odata->append(ds);
-    }
-    return 0;
-  }
-
   if (prefix == "pg debug") {
     string debugop;
     cmd_getval(g_ceph_context, cmdmap, "debugop", debugop,

@@ -131,6 +131,9 @@ COMMAND("pg set_nearfull_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
 	"set ratio at which pgs are considered nearly full",		\
 	"pg", "rw", "cli,rest")
 
+COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
+	"pg", "r", "cli,rest")
+
 /*
  * auth commands AuthMonitor.cc
  */
