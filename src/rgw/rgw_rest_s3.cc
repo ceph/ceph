@@ -1703,20 +1703,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
       pos = s3_access_key.find("/");
       s3_access_key = s3_access_key.substr(0, pos);
       cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
-      /* date cred */
-      date_cs = cs_aux;
-      pos = date_cs.find("/");
-      date_cs = date_cs.substr(0, pos);
-      cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
-      /* region cred */
-      region_cs = cs_aux;
-      pos = region_cs.find("/");
-      region_cs = region_cs.substr(0, pos);
-      cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
-      /* service cred */
-      service_cs = cs_aux;
-      pos = service_cs.find("/");
-      service_cs = service_cs.substr(0, pos);
+
       /* x-amz-signature handling */
       if (!part_str(parts, "x-amz-signature", &received_signature_str)) {
         ldout(s->cct, 0) << "No aws4 signature found!" << dendl;
@@ -1757,8 +1744,8 @@ int RGWPostObj_ObjStore_S3::get_policy()
         std::string encoded_policy_str(s->auth.s3_postobj_creds.encoded_policy.c_str(),
                                        s->auth.s3_postobj_creds.encoded_policy.length());
         std::string new_signature_str = \
-          rgw::auth::s3::get_v4_signature(s->cct, s3_access_key, date_cs,
-                                          region_cs, service_cs,
+          rgw::auth::s3::get_v4_signature(s->cct,
+                                          cs_aux,
                                           encoded_policy_str,
                                           s3_secret_key,
                                           s->aws4_auth->signing_key);
@@ -3499,22 +3486,6 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
    * http://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
    */
 
-  string cs_aux = s->aws4_auth->credential_scope;
-
-  string date_cs = cs_aux;
-  size_t pos = date_cs.find("/");
-  date_cs = date_cs.substr(0, pos);
-  cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
-
-  string region_cs = cs_aux;
-  pos = region_cs.find("/");
-  region_cs = region_cs.substr(0, pos);
-  cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
-
-  string service_cs = cs_aux;
-  pos = service_cs.find("/");
-  service_cs = service_cs.substr(0, pos);
-
   const auto iter = s->user->access_keys.find(s->aws4_auth->access_key_id);
   if (iter == std::end(s->user->access_keys)) {
     ldout(s->cct, 10) << "ERROR: access key not encoded in user info" << dendl;
@@ -3523,8 +3494,9 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
   const RGWAccessKey& k = iter->second;
 
   s->aws4_auth->new_signature = \
-    rgw::auth::s3::get_v4_signature(s->cct, s->aws4_auth->access_key_id, date_cs,
-                                    region_cs, service_cs, string_to_sign,
+    rgw::auth::s3::get_v4_signature(s->cct,
+                                    s->aws4_auth->credential_scope,
+                                    string_to_sign,
                                     k.key /* in */, s->aws4_auth->signing_key /* out */);
 
 
