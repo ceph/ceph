@@ -3428,16 +3428,6 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
     expected_request_payload_hash = "UNSIGNED-PAYLOAD";
   }
 
-  /* craft canonical request */
-  std::string canonical_req_hash = \
-    rgw::auth::s3::get_v4_canonical_request_hash(s->cct,
-                                                 s->info.method,
-                                                 s->aws4_auth->canonical_uri,
-                                                 s->aws4_auth->canonical_qs,
-                                                 s->aws4_auth->canonical_hdrs,
-                                                 s->aws4_auth->signed_hdrs,
-                                                 expected_request_payload_hash);
-
   std::string payload_hash;
   if (unsigned_payload) {
     payload_hash = "UNSIGNED-PAYLOAD";
@@ -3462,46 +3452,6 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
       return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
     }
   }
-
-  /*
-   * create a string to sign
-   *
-   * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
-   */
-
-  std::string string_to_sign = \
-    rgw::auth::s3::get_v4_string_to_sign(s->cct, "AWS4-HMAC-SHA256",
-                                         s->aws4_auth->date,
-                                         s->aws4_auth->credential_scope,
-                                         canonical_req_hash);
-
-  /*
-   * calculate the AWS signature
-   *
-   * http://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
-   */
-
-  const auto iter = s->user->access_keys.find(s->aws4_auth->access_key_id);
-  if (iter == std::end(s->user->access_keys)) {
-    ldout(s->cct, 10) << "ERROR: access key not encoded in user info" << dendl;
-    return -EPERM;
-  }
-  const RGWAccessKey& k = iter->second;
-
-  s->aws4_auth->signing_key = \
-    rgw::auth::s3::get_v4_signing_key(s->cct,
-                                      s->aws4_auth->credential_scope, k.key);
-  s->aws4_auth->new_signature = \
-    rgw::auth::s3::get_v4_signature(s->cct, s->aws4_auth->signing_key,
-                                    string_to_sign);
-
-
-  ldout(s->cct, 10) << "----------------------------- Verifying signatures" << dendl;
-  ldout(s->cct, 10) << "Signature     = " << s->aws4_auth->signature << dendl;
-  ldout(s->cct, 10) << "New Signature = " << s->aws4_auth->new_signature << dendl;
-  ldout(s->cct, 10) << "-----------------------------" << dendl;
-
-  s->aws4_auth->seed_signature = s->aws4_auth->new_signature;
 
   return 0;
 
@@ -3610,6 +3560,71 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
     }
   }
 
+  const char *expected_request_payload_hash = s->info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
+  if (!expected_request_payload_hash) {
+    /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
+     * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
+     * header lets get the information very early -- before seeing first byte
+     * of HTTP body. As a consequence, we can decouple Signature verification
+     * from payload's fingerprint check. Although RadosGW doesn't do that for
+     * now, the situation will definitely change in the future.
+     *
+     * An HTTP client MUST send x-amz-content-sha256. AFAIK the single exception
+     * to that is the case of using Query Parameters for doing the auth In such
+     * scenario, the "UNSIGNED-PAYLOAD" literals are used instead. */
+    expected_request_payload_hash = "UNSIGNED-PAYLOAD";
+  }
+
+  /* craft canonical request */
+  std::string canonical_req_hash = \
+    rgw::auth::s3::get_v4_canonical_request_hash(s->cct,
+                                                 s->info.method,
+                                                 s->aws4_auth->canonical_uri,
+                                                 s->aws4_auth->canonical_qs,
+                                                 s->aws4_auth->canonical_hdrs,
+                                                 s->aws4_auth->signed_hdrs,
+                                                 expected_request_payload_hash);
+
+  /*
+   * create a string to sign
+   *
+   * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
+   */
+
+  std::string string_to_sign = \
+    rgw::auth::s3::get_v4_string_to_sign(s->cct, "AWS4-HMAC-SHA256",
+                                         s->aws4_auth->date,
+                                         s->aws4_auth->credential_scope,
+                                         canonical_req_hash);
+
+  /*
+   * calculate the AWS signature
+   *
+   * http://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
+   */
+
+  const auto iter = s->user->access_keys.find(s->aws4_auth->access_key_id);
+  if (iter == std::end(s->user->access_keys)) {
+    ldout(s->cct, 10) << "ERROR: access key not encoded in user info" << dendl;
+    return -EPERM;
+  }
+  const RGWAccessKey& k = iter->second;
+
+  s->aws4_auth->signing_key = \
+    rgw::auth::s3::get_v4_signing_key(s->cct,
+                                      s->aws4_auth->credential_scope, k.key);
+  s->aws4_auth->new_signature = \
+    rgw::auth::s3::get_v4_signature(s->cct, s->aws4_auth->signing_key,
+                                    string_to_sign);
+
+
+  ldout(s->cct, 10) << "----------------------------- Verifying signatures" << dendl;
+  ldout(s->cct, 10) << "Signature     = " << s->aws4_auth->signature << dendl;
+  ldout(s->cct, 10) << "New Signature = " << s->aws4_auth->new_signature << dendl;
+  ldout(s->cct, 10) << "-----------------------------" << dendl;
+
+  s->aws4_auth->seed_signature = s->aws4_auth->new_signature;
+
   /* from rfc2616 - 4.3 Message Body
    *
    * "The presence of a message-body in a request is signaled by the inclusion of a
@@ -3708,14 +3723,6 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
     }
 
   }
-
-  map<string, RGWAccessKey>::iterator iter = s->user->access_keys.find(s->aws4_auth->access_key_id);
-  if (iter == s->user->access_keys.end()) {
-    dout(0) << "ERROR: access key not encoded in user info" << dendl;
-    return -EPERM;
-  }
-
-  RGWAccessKey& k = iter->second;
 
   if (!k.subuser.empty()) {
     map<string, RGWSubUser>::iterator uiter = s->user->subusers.find(k.subuser);
