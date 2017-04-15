@@ -45,7 +45,7 @@ class MgrCluster(CephCluster):
 
 
 class MgrTestCase(CephTestCase):
-    REQUIRE_MGRS = 1
+    MGRS_REQUIRED = 1
 
     def setUp(self):
         super(MgrTestCase, self).setUp()
@@ -53,10 +53,10 @@ class MgrTestCase(CephTestCase):
         # The test runner should have populated this
         assert self.mgr_cluster is not None
 
-        if len(self.mgr_cluster.mgr_ids) < self.REQUIRE_MGRS:
+        if len(self.mgr_cluster.mgr_ids) < self.MGRS_REQUIRED:
             raise case.SkipTest("Only have {0} manager daemons, "
                                 "{1} are required".format(
-                len(self.mgr_cluster.mgr_ids), self.REQUIRE_MGRS))
+                len(self.mgr_cluster.mgr_ids), self.MGRS_REQUIRED))
 
         # Restart all the daemons
         for daemon in self.mgr_cluster.mgr_daemons.values():
