@@ -3390,8 +3390,7 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, con
      * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
      * header lets get the information very early -- before seeing first byte
      * of HTTP body. As a consequence, we can decouple Signature verification
-     * from payload's fingerprint check. Although RadosGW doesn't do that for
-     * now, the situation will definitely change in the future.
+     * from payload's fingerprint check.
      *
      * An HTTP client MUST send x-amz-content-sha256. AFAIK the single exception
      * to that is the case of using Query Parameters for doing the auth In such
@@ -3453,10 +3452,11 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
 
   std::string credential;
   std::string signed_hdrs;
+  std::string client_signature;
   int ret = rgw::auth::s3::parse_credentials(s->info,
                                              credential,
                                              signed_hdrs,
-                                             s->aws4_auth->signature,
+                                             client_signature,
                                              s->aws4_auth->date,
                                              using_qs);
   if (ret < 0) {
@@ -3537,8 +3537,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
      * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
      * header lets get the information very early -- before seeing first byte
      * of HTTP body. As a consequence, we can decouple Signature verification
-     * from payload's fingerprint check. Although RadosGW doesn't do that for
-     * now, the situation will definitely change in the future.
+     * from payload's fingerprint check.
      *
      * An HTTP client MUST send x-amz-content-sha256. AFAIK the single exception
      * to that is the case of using Query Parameters for doing the auth In such
@@ -3584,17 +3583,24 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   s->aws4_auth->signing_key = \
     rgw::auth::s3::get_v4_signing_key(s->cct,
                                       s->aws4_auth->credential_scope, k.key);
-  s->aws4_auth->new_signature = \
+  const std::string server_signature = \
     rgw::auth::s3::get_v4_signature(s->cct, s->aws4_auth->signing_key,
                                     string_to_sign);
 
 
   ldout(s->cct, 10) << "----------------------------- Verifying signatures" << dendl;
-  ldout(s->cct, 10) << "Signature     = " << s->aws4_auth->signature << dendl;
-  ldout(s->cct, 10) << "New Signature = " << s->aws4_auth->new_signature << dendl;
+  ldout(s->cct, 10) << "Signature     = " << client_signature << dendl;
+  ldout(s->cct, 10) << "New Signature = " << server_signature << dendl;
   ldout(s->cct, 10) << "-----------------------------" << dendl;
 
-  s->aws4_auth->seed_signature = s->aws4_auth->new_signature;
+  /* verify signature */
+  if (client_signature != server_signature) {
+    ret = -ERR_SIGNATURE_NO_MATCH;
+    ldout(s->cct, 20) << "delayed aws4 auth failed" << dendl;
+    return ret;
+  }
+
+  s->aws4_auth->seed_signature = server_signature;
 
   /* from rfc2616 - 4.3 Message Body
    *
@@ -3614,14 +3620,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
       return err;
     }
 
-    /* verify signature */
-
-    if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
-      return -ERR_SIGNATURE_NO_MATCH;
-    }
-
     /* authorization ok */
-
     dout(10) << "v4 auth ok" << dendl;
 
     /* aws4 auth completed */
@@ -3678,13 +3677,6 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
       int err = authorize_v4_complete(store, s, "", unsigned_payload);
       if (err) {
         return err;
-      }
-
-      /* verify seed signature */
-
-      if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
-        dout(10) << "ERROR: AWS4 seed signature does NOT match!" << dendl;
-        return -ERR_SIGNATURE_NO_MATCH;
       }
 
       dout(10) << "aws4 seed signature ok... delaying v4 auth" << dendl;

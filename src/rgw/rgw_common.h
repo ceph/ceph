@@ -1697,8 +1697,6 @@ inline ostream& operator<<(ostream& out, const rgw_obj_index_key &o) {
 struct rgw_aws4_auth {
   string date;
   string credential_scope;
-  string signature;
-  string new_signature;
   string seed_signature;
   std::array<unsigned char,
              CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> signing_key;
