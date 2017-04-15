@@ -1707,7 +1707,8 @@ struct rgw_aws4_auth {
   string signature;
   string new_signature;
   string seed_signature;
-  char signing_key[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  std::array<unsigned char,
+             CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> signing_key;
   bufferlist bl;
 };
 
