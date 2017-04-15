@@ -798,6 +798,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 
   // notify client of success with an OPEN
   m->get_connection()->send_message(new MClientSession(CEPH_SESSION_OPEN));
+  session->last_cap_renew = ceph_clock_now();
   mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
   
   // snaprealms
