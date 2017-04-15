@@ -4717,7 +4717,6 @@ int BlueStore::statfs(struct store_statfs_t *buf)
 
     // include dedicated db, too, if that isn't the shared device.
     if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
-      buf->available += bluefs->get_free(BlueFS::BDEV_DB);
       buf->total += bluefs->get_total(BlueFS::BDEV_DB);
     }
   }
