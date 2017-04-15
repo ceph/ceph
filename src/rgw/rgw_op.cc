@@ -690,19 +690,11 @@ int RGWOp::verify_op_mask()
 
 int RGWOp::do_aws4_auth_completion()
 {
-  int ret;
-
   if (s->aws4_auth_needs_complete) {
     /* complete */
-    ret = RGW_Auth_S3::authorize_aws4_auth_complete(store, s);
+    int ret = RGW_Auth_S3::authorize_aws4_auth_complete(store, s);
     s->aws4_auth_needs_complete = false;
     if (ret) {
-      return ret;
-    }
-    /* verify signature */
-    if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
-      ret = -ERR_SIGNATURE_NO_MATCH;
-      ldout(s->cct, 20) << "delayed aws4 auth failed" << dendl;
       return ret;
     }
     /* authorization ok */
