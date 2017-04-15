@@ -3532,7 +3532,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
 
   int ret = rgw::auth::s3::parse_credentials(s->info,
                                              s->aws4_auth->credential,
-                                             s->aws4_auth->signedheaders,
+                                             s->aws4_auth->signed_hdrs,
                                              s->aws4_auth->signature,
                                              s->aws4_auth->date,
                                              using_qs);
@@ -3577,7 +3577,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   /* craft canonical headers */
   boost::optional<std::string> canonical_headers = \
     rgw::auth::s3::get_v4_canonical_headers(s->info,
-                                            s->aws4_auth->signedheaders,
+                                            s->aws4_auth->signed_hdrs,
                                             using_qs,
                                             force_boto2_compat);
   if (canonical_headers) {
@@ -3587,10 +3587,6 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   } else {
     return -EPERM;
   }
-
-  /* craft signed headers */
-
-  s->aws4_auth->signed_hdrs = s->aws4_auth->signedheaders;
 
   /* handle request payload */
 

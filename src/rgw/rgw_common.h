@@ -1697,7 +1697,6 @@ inline ostream& operator<<(ostream& out, const rgw_obj_index_key &o) {
 struct rgw_aws4_auth {
   string date;
   string credential;
-  string signedheaders;
   string signed_hdrs;
   string access_key_id;
   string credential_scope;
