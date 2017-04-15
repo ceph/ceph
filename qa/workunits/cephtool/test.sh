@@ -1424,6 +1424,39 @@ function test_mon_pg()
   ceph osd set-nearfull-ratio .892
   ceph osd dump | grep '^nearfull_ratio 0.892'
 
+  # Check health status
+  ceph osd set-nearfull-ratio .913
+  ceph health | grep 'HEALTH_ERR Full ratio(s) out of order'
+  ceph health detail | grep 'backfill_ratio (0.912) < nearfull_ratio (0.913), increased'
+  ceph osd set-nearfull-ratio .892
+  ceph osd set-backfillfull-ratio .963
+  ceph health detail | grep 'full_ratio (0.962) < backfillfull_ratio (0.963), increased'
+  ceph osd set-backfillfull-ratio .912
+
+  # Check injected full results
+  WAITFORFULL=10
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull nearfull
+  sleep $WAITFORFULL
+  ceph health | grep "HEALTH_WARN.*1 nearfull osd(s)"
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.1.asok injectfull backfillfull
+  sleep $WAITFORFULL
+  ceph health | grep "HEALTH_WARN.*1 backfillfull osd(s)"
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.2.asok injectfull failsafe
+  sleep $WAITFORFULL
+  # failsafe and full are the same as far as the monitor is concerned
+  ceph health | grep "HEALTH_ERR.*1 full osd(s)"
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull full
+  sleep  $WAITFORFULL
+  ceph health | grep "HEALTH_ERR.*2 full osd(s)"
+  ceph health detail | grep "osd.0 is full at.*%"
+  ceph health detail | grep "osd.2 is full at.*%"
+  ceph health detail | grep "osd.1 is backfill full at.*%"
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull none
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.1.asok injectfull none
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.2.asok injectfull none
+  sleep $WAITFORFULL
+  ceph health | grep HEALTH_OK
+
   ceph pg stat | grep 'pgs:'
   ceph pg 0.0 query
   ceph tell 0.0 query
