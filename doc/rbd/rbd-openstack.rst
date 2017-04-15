@@ -297,6 +297,7 @@ specify the pool name for the block device. On your OpenStack node, edit
     volume_driver = cinder.volume.drivers.rbd.RBDDriver
     volume_backend_name = ceph
     rbd_pool = volumes
+    volume_backend_name = ceph
     rbd_ceph_conf = /etc/ceph/ceph.conf
     rbd_flatten_volume_from_snapshot = false
     rbd_max_clone_depth = 5
