@@ -813,7 +813,7 @@ def scan_tests(modules):
         max_required_clients = max(max_required_clients,
                                getattr(case, "CLIENTS_REQUIRED", 0))
         max_required_mgr = max(max_required_mgr,
-                               getattr(case, "REQUIRE_MGRS", 0))
+                               getattr(case, "MGRS_REQUIRED", 0))
 
     return max_required_mds, max_required_clients, max_required_mgr
 

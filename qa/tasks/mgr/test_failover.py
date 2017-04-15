@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 
 
 class TestFailover(MgrTestCase):
-    REQUIRE_MGRS = 2
+    MGRS_REQUIRED = 2
 
     def test_timeout(self):
         """
