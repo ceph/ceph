@@ -161,10 +161,11 @@ void OSDMonitor::create_initial()
   // new cluster should require latest by default
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_JEWEL);
   newmap.set_flag(CEPH_OSDMAP_REQUIRE_KRAKEN);
-  newmap.set_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
-
-  newmap.full_ratio = g_conf->mon_osd_full_ratio;
-  newmap.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
+  if (!g_conf->mon_debug_no_require_luminous) {
+    newmap.set_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
+    newmap.full_ratio = g_conf->mon_osd_full_ratio;
+    newmap.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
+  }
 
   // encode into pending incremental
   newmap.encode(pending_inc.fullmap,
@@ -249,7 +250,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     auto p = bl.begin();
     std::lock_guard<std::mutex> l(creating_pgs_lock);
     creating_pgs.decode(p);
-    dout(7) << __func__ << " loading creating_pgs e" << creating_pgs.last_scan_epoch << dendl;
+    dout(7) << __func__ << " loading creating_pgs last_scan_epoch "
+	    << creating_pgs.last_scan_epoch
+	    << " with " << creating_pgs.pgs.size() << " pgs" << dendl;
   }
 
   // walk through incrementals
@@ -1179,11 +1182,17 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 void OSDMonitor::trim_creating_pgs(creating_pgs_t* creating_pgs,
 				   const PGMap& pgm)
 {
-  for (auto& pg : pgm.pg_stat) {
-    auto created = creating_pgs->pgs.find(pg.first);
-    if (created != creating_pgs->pgs.end()) {
-      creating_pgs->pgs.erase(created);
-      creating_pgs->created_pools.insert(pg.first.pool());
+  auto p = creating_pgs->pgs.begin();
+  while (p != creating_pgs->pgs.end()) {
+    auto q = pgm.pg_stat.find(p->first);
+    if (q != pgm.pg_stat.end() &&
+	!(q->second.state & PG_STATE_CREATING)) {
+      dout(20) << __func__ << " pgmap shows " << p->first << " is created"
+	       << dendl;
+      p = creating_pgs->pgs.erase(p);
+      creating_pgs->created_pools.insert(q->first.pool());
+    } else {
+      ++p;
     }
   }
 }
@@ -3459,7 +3468,9 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
 
     // warn about upgrade flags that can be set but are not.
-    if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS) &&
+    if (g_conf->mon_debug_no_require_luminous) {
+      // ignore these checks
+    } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS) &&
 	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       string msg = "all OSDs are running luminous or later but the"
 	" 'require_luminous_osds' osdmap flag is not set";
@@ -7238,6 +7249,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must set the require_luminous_osds flag to use this feature";
+      err = -EPERM;
+      goto reply;
+    }
     err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
     if (err == -EAGAIN)
       goto wait;
@@ -7293,6 +7309,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must set the require_luminous_osds flag to use this feature";
+      err = -EPERM;
+      goto reply;
+    }
     err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
     if (err == -EAGAIN)
       goto wait;
@@ -7329,6 +7350,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pg-remap-items") {
     if (!g_conf->mon_osd_allow_pg_remap) {
       ss << "you must enable 'mon osd allow pg remap = true' on the mons before you can adjust pg_remap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+      err = -EPERM;
+      goto reply;
+    }
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must set the require_luminous_osds flag to use this feature";
       err = -EPERM;
       goto reply;
     }
@@ -7396,6 +7422,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd rm-pg-remap-items") {
     if (!g_conf->mon_osd_allow_pg_remap) {
       ss << "you must enable 'mon osd allow pg remap = true' on the mons before you can adjust pg_remap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+      err = -EPERM;
+      goto reply;
+    }
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must set the require_luminous_osds flag to use this feature";
       err = -EPERM;
       goto reply;
     }
