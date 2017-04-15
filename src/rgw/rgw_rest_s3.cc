@@ -3481,9 +3481,10 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   }
 
   std::string credential;
+  std::string signed_hdrs;
   int ret = rgw::auth::s3::parse_credentials(s->info,
                                              credential,
-                                             s->aws4_auth->signed_hdrs,
+                                             signed_hdrs,
                                              s->aws4_auth->signature,
                                              s->aws4_auth->date,
                                              using_qs);
@@ -3494,9 +3495,9 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   /* grab access key id */
 
   pos = credential.find("/");
-  s->aws4_auth->access_key_id = credential.substr(0, pos);
+  const std::string access_key_id = credential.substr(0, pos);
 
-  dout(10) << "access key id = " << s->aws4_auth->access_key_id << dendl;
+  dout(10) << "access key id = " << access_key_id << dendl;
 
   /* grab credential scope */
 
@@ -3506,8 +3507,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
 
   /* grab user information */
 
-  if (rgw_get_user_info_by_access_key(store, s->aws4_auth->access_key_id, *s->user) < 0) {
-    dout(10) << "error reading user info, uid=" << s->aws4_auth->access_key_id
+  if (rgw_get_user_info_by_access_key(store, access_key_id, *s->user) < 0) {
+    dout(10) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
     return -ERR_INVALID_ACCESS_KEY;
   }
@@ -3519,22 +3520,21 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
    */
 
   /* craft canonical uri */
-  s->aws4_auth->canonical_uri = rgw::auth::s3::get_v4_canonical_uri(s->info);
+  const auto canonical_uri = rgw::auth::s3::get_v4_canonical_uri(s->info);
 
   /* craft canonical query string */
-  s->aws4_auth->canonical_qs = \
-    rgw::auth::s3::get_v4_canonical_qs(s->info, using_qs);
+  const auto canonical_qs = rgw::auth::s3::get_v4_canonical_qs(s->info,
+                                                               using_qs);
 
   /* craft canonical headers */
   boost::optional<std::string> canonical_headers = \
     rgw::auth::s3::get_v4_canonical_headers(s->info,
-                                            s->aws4_auth->signed_hdrs,
+                                            signed_hdrs,
                                             using_qs,
                                             force_boto2_compat);
   if (canonical_headers) {
     ldout(s->cct, 10) << "canonical headers format = " << *canonical_headers
                       << dendl;
-    s->aws4_auth->canonical_hdrs = std::move(*canonical_headers);
   } else {
     return -EPERM;
   }
@@ -3579,10 +3579,10 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   std::string canonical_req_hash = \
     rgw::auth::s3::get_v4_canonical_request_hash(s->cct,
                                                  s->info.method,
-                                                 s->aws4_auth->canonical_uri,
-                                                 s->aws4_auth->canonical_qs,
-                                                 s->aws4_auth->canonical_hdrs,
-                                                 s->aws4_auth->signed_hdrs,
+                                                 canonical_uri,
+                                                 canonical_qs,
+                                                 *canonical_headers,
+                                                 signed_hdrs,
                                                  expected_request_payload_hash);
 
   /*
@@ -3603,7 +3603,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
    * http://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
    */
 
-  const auto iter = s->user->access_keys.find(s->aws4_auth->access_key_id);
+  const auto iter = s->user->access_keys.find(access_key_id);
   if (iter == std::end(s->user->access_keys)) {
     ldout(s->cct, 10) << "ERROR: access key not encoded in user info" << dendl;
     return -EPERM;

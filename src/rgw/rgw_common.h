@@ -1696,12 +1696,7 @@ inline ostream& operator<<(ostream& out, const rgw_obj_index_key &o) {
 
 struct rgw_aws4_auth {
   string date;
-  string signed_hdrs;
-  string access_key_id;
   string credential_scope;
-  string canonical_uri;
-  string canonical_qs;
-  string canonical_hdrs;
   string signature;
   string new_signature;
   string seed_signature;
