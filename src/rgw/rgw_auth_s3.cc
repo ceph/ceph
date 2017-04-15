@@ -705,13 +705,12 @@ parse_cred_scope(std::string credential_scope)
 }
 
 /*
- * calculate the AWS signature version 4
+ * calculate the SigningKey of AWS auth version 4
  */
-std::string get_v4_signature(CephContext* const cct,
-                             const std::string& credential_scope,
-                             const std::string& string_to_sign,
-                             const std::string& access_key_secret,
-                             char (&signing_key)[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE])
+std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>
+get_v4_signing_key(CephContext* const cct,
+                   const std::string& credential_scope,
+                   const std::string& access_key_secret)
 {
   std::string secret_key = "AWS4" + access_key_secret;
   char secret_k[secret_key.size() * MAX_UTF8_SZ];
@@ -757,20 +756,36 @@ std::string get_v4_signature(CephContext* const cct,
   ldout(cct, 10) << "service_k     = " << string(aux) << dendl;
 
   /* aws4_request */
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> signing_key = \
+    calc_hmac_sha256(service_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE,
+                     "aws4_request", 12);
 
-  calc_hmac_sha256(service_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, "aws4_request", 12, signing_key);
-
-  buf_to_hex((unsigned char *) signing_key, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
+  buf_to_hex(signing_key.data(), CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
   ldout(cct, 10) << "signing_k     = " << string(aux) << dendl;
+
+  return signing_key;
+}
+
+/*
+ * calculate the AWS signature version 4
+
+ * http://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
+ */
+std::string get_v4_signature(CephContext* const cct,
+                             const std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>& signing_key,
+                             const std::string& string_to_sign)
+{
 
   /* new signature */
 
   char signature_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  calc_hmac_sha256(signing_key, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE,
+  /* FIXME(rzarzynski): eradicate the reinterpret_cast. */
+  calc_hmac_sha256(reinterpret_cast<const char*>(signing_key.data()), CEPH_CRYPTO_HMACSHA256_DIGESTSIZE,
                    string_to_sign.c_str(), string_to_sign.size(),
                    signature_k);
 
+  char aux[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1];
   buf_to_hex((unsigned char *) signature_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
   ldout(cct, 10) << "signature_k   = " << string(aux) << dendl;

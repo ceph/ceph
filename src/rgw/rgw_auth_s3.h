@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_AUTH_S3_H
 #define CEPH_RGW_AUTH_S3_H
 
+#include <array>
 #include <string>
 #include <tuple>
 
@@ -206,13 +207,14 @@ std::string get_v4_string_to_sign(CephContext* cct,
                                   const std::string& credential_scope,
                                   const std::string& hashed_qr);
 
-/* TODO(rzarzynski): split the SigningKey calculation into a separated func. */
+std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>
+get_v4_signing_key(CephContext* const cct,
+                   const std::string& credential_scope,
+                   const std::string& access_key_secret);
+
 std::string get_v4_signature(CephContext* cct,
-                             const std::string& credential_scope,
-                             const std::string& string_to_sign,
-                             const std::string& access_key_secret,
-                             /* This is a makeshift-only parameter. It'll be killed soon. */
-                             char (&signing_key)[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE]);
+                             const std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>& signing_key,
+                             const std::string& string_to_sign);
 } /* namespace s3 */
 } /* namespace auth */
 } /* namespace rgw */
