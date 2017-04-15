@@ -18,6 +18,8 @@
 
 #include "MgrPyModule.h"
 
+// Implemented in PyModules.cc
+std::string handle_pyerror();
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -82,16 +84,18 @@ int MgrPyModule::serve()
   auto pValue = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("serve"), nullptr);
 
+  int r = 0;
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
-    return -EINVAL;
+    derr << "Failed to invoke serve() on " << module_name << dendl;
+    derr << handle_pyerror() << dendl;
+    r = -EINVAL;
   }
 
   PyGILState_Release(gstate);
 
-  return 0;
+  return r;
 }
 
 // FIXME: DRY wrt serve
@@ -108,8 +112,8 @@ void MgrPyModule::shutdown()
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
     derr << "Failed to invoke shutdown() on " << module_name << dendl;
+    derr << handle_pyerror() << dendl;
   }
 
   PyGILState_Release(gstate);
@@ -130,7 +134,8 @@ void MgrPyModule::notify(const std::string &notify_type, const std::string &noti
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
+    derr << "Failed to invoke notify() on " << module_name << dendl;
+    derr << handle_pyerror() << dendl;
     // FIXME: callers can't be expected to handle a python module
     // that has spontaneously broken, but Mgr() should provide
     // a hook to unload misbehaving modules when they have an
@@ -243,7 +248,8 @@ int MgrPyModule::handle_command(
 
     Py_DECREF(pResult);
   } else {
-    PyErr_Print();
+    derr << "Failed to invoke handle_command() on " << module_name << dendl;
+    derr << handle_pyerror() << dendl;
     r = -EINVAL;
   }
 
