@@ -2062,18 +2062,21 @@ inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.get_oid();
 }
 
-static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
+static inline void buf_to_hex(const unsigned char* const buf,
+                              const size_t len,
+                              char* const str)
 {
-  int i;
   str[0] = '\0';
-  for (i = 0; i < len; i++) {
-    sprintf(&str[i*2], "%02x", (int)buf[i]);
+  for (size_t i = 0; i < len; i++) {
+    ::sprintf(&str[i*2], "%02x", static_cast<int>(buf[i]));
   }
 }
 
 template<size_t N> static inline std::array<char, N * 2 + 1>
 buf_to_hex(const std::array<unsigned char, N>& buf)
 {
+  static_assert(N > 0, "The input array must be at least one element long");
+
   std::array<char, N * 2 + 1> hex_dest;
   buf_to_hex(buf.data(), N, hex_dest.data());
   return hex_dest;
