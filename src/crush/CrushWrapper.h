@@ -98,6 +98,7 @@ public:
     if (crush)
       crush_destroy(crush);
     crush = crush_create();
+    choose_args_clear();
     assert(crush);
     have_rmaps = false;
 
@@ -1101,7 +1102,6 @@ public:
   void finalize() {
     assert(crush);
     crush_finalize(crush);
-    choose_args_clear();
   }
 
   int update_device_class(CephContext *cct, int id, const string& class_name, const string& name);

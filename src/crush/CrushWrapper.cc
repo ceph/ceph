@@ -1440,6 +1440,38 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
     ::encode(class_map, bl);
     ::encode(class_name, bl);
     ::encode(class_bucket, bl);
+
+    ::encode(choose_args.size(), bl);
+    for (auto c : choose_args) {
+      ::encode(c.first, bl);
+      crush_choose_arg_map arg_map = c.second;
+      __u32 size = 0;
+      for (__u32 i = 0; i < arg_map.size; i++) {
+	crush_choose_arg *arg = &arg_map.args[i];
+	if (arg->weight_set_size == 0 &&
+	    arg->ids_size == 0)
+	  continue;
+	size++;
+      }
+      ::encode(size, bl);
+      for (__u32 i = 0; i < arg_map.size; i++) {
+	crush_choose_arg *arg = &arg_map.args[i];
+	if (arg->weight_set_size == 0 &&
+	    arg->ids_size == 0)
+	  continue;
+	::encode(i, bl);
+	::encode(arg->weight_set_size, bl);
+	for (__u32 j = 0; j < arg->weight_set_size; j++) {
+	  crush_weight_set *weight_set = &arg->weight_set[j];
+	  ::encode(weight_set->size, bl);
+	  for (__u32 k = 0; k < weight_set->size; k++)
+	    ::encode(weight_set->weights[k], bl);
+	}
+	::encode(arg->ids_size, bl);
+	for (__u32 j = 0; j < arg->ids_size; j++)
+	  ::encode(arg->ids[j], bl);
+      }
+    }
   }
 }
 
@@ -1540,6 +1572,39 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
 	class_rname[c.second] = c.first;
       ::decode(class_bucket, blp);
       cleanup_classes();
+    }
+    if (!blp.end()) {
+      size_t choose_args_size;
+      ::decode(choose_args_size, blp);
+      for (size_t i = 0; i < choose_args_size; i++) {
+	uint64_t choose_args_index;
+	::decode(choose_args_index, blp);
+	crush_choose_arg_map arg_map;
+	arg_map.size = crush->max_buckets;
+	arg_map.args = (crush_choose_arg*)calloc(arg_map.size, sizeof(crush_choose_arg));
+	__u32 size;
+	::decode(size, blp);
+	for (__u32 j = 0; j < size; j++) {
+	  __u32 bucket_index;
+	  ::decode(bucket_index, blp);
+	  assert(bucket_index < arg_map.size);
+	  crush_choose_arg *arg = &arg_map.args[bucket_index];
+	  ::decode(arg->weight_set_size, blp);
+	  arg->weight_set = (crush_weight_set*)calloc(arg->weight_set_size, sizeof(crush_weight_set));
+	  for (__u32 k = 0; k < arg->weight_set_size; k++) {
+	    crush_weight_set *weight_set = &arg->weight_set[k];
+	    ::decode(weight_set->size, blp);
+	    weight_set->weights = (__u32*)calloc(weight_set->size, sizeof(__u32));
+	    for (__u32 l = 0; l < weight_set->size; l++)
+	      ::decode(weight_set->weights[l], blp);
+	  }
+	  ::decode(arg->ids_size, blp);
+	  arg->ids = (int*)calloc(arg->ids_size, sizeof(int));
+	  for (__u32 k = 0; k < arg->ids_size; k++)
+	    ::decode(arg->ids[k], blp);
+	}
+	choose_args[choose_args_index] = arg_map;
+      }
     }
     finalize();
   }
