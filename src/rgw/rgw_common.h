@@ -2251,10 +2251,10 @@ template<size_t KeyLenN>
 static inline std::array<unsigned char,
                          CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>
 calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
-                 const char *msg, const int msg_len) {
+                 const boost::string_ref& msg) {
   std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
   calc_hmac_sha256(reinterpret_cast<const char*>(key.data()), key.size(),
-                   msg, msg_len,
+                   msg.data(), msg.size(),
                    reinterpret_cast<char*>(dest.data()));
   return dest;
 }

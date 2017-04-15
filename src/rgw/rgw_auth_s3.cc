@@ -678,28 +678,24 @@ std::string get_v4_string_to_sign(CephContext* const cct,
 }
 
 
-/* TODO(rzarzynski): switch to boost::string_ref. */
-static inline std::tuple<std::string, std::string, std::string>
-parse_cred_scope(std::string credential_scope)
+static inline std::tuple<boost::string_ref,             /* date */
+                         boost::string_ref,             /* region */
+                         boost::string_ref>             /* service */
+parse_cred_scope(boost::string_ref credential_scope)
 {
-  std::string cs_aux = credential_scope;
-
   /* date cred */
-  string date_cs = cs_aux;
-  size_t pos = date_cs.find("/");
-  date_cs = date_cs.substr(0, pos);
-  cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
+  size_t pos = credential_scope.find("/");
+  const auto date_cs = credential_scope.substr(0, pos);
+  credential_scope = credential_scope.substr(pos + 1);
 
   /* region cred */
-  string region_cs = cs_aux;
-  pos = region_cs.find("/");
-  region_cs = region_cs.substr(0, pos);
-  cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
+  pos = credential_scope.find("/");
+  const auto region_cs = credential_scope.substr(0, pos);
+  credential_scope = credential_scope.substr(pos + 1);
 
   /* service cred */
-  string service_cs = cs_aux;
-  pos = service_cs.find("/");
-  service_cs = service_cs.substr(0, pos);
+  pos = credential_scope.find("/");
+  const auto service_cs = credential_scope.substr(0, pos);
 
   return std::make_tuple(date_cs, region_cs, service_cs);
 }
@@ -723,46 +719,23 @@ get_v4_signing_key(CephContext* const cct,
 
   string secret_key_utf8_k(secret_k, n);
 
-  std::string date, region, service;
+  boost::string_ref date, region, service;
   std::tie(date, region, service) = parse_cred_scope(credential_scope);
 
-  /* date */
-
-  char date_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  calc_hmac_sha256(secret_key_utf8_k.c_str(), secret_key_utf8_k.size(),
-      date.c_str(), date.size(), date_k);
-
-  char aux[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1];
-  buf_to_hex((unsigned char *) date_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
-
-  ldout(cct, 10) << "date_k        = " << string(aux) << dendl;
-
-  /* region */
-
-  char region_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  calc_hmac_sha256(date_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, region.c_str(), region.size(), region_k);
-
-  buf_to_hex((unsigned char *) region_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
-
-  ldout(cct, 10) << "region_k      = " << string(aux) << dendl;
-
-  /* service */
-
-  char service_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  calc_hmac_sha256(region_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, service.c_str(), service.size(), service_k);
-
-  buf_to_hex((unsigned char *) service_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
-
-  ldout(cct, 10) << "service_k     = " << string(aux) << dendl;
+  const auto date_k = calc_hmac_sha256(secret_key_utf8_k.c_str(),
+                                       secret_key_utf8_k.size(),
+                                       date.data(), date.size());
+  const auto region_k = calc_hmac_sha256(date_k, region);
+  const auto service_k = calc_hmac_sha256(region_k, service);
 
   /* aws4_request */
-  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> signing_key = \
-    calc_hmac_sha256(service_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE,
-                     "aws4_request", 12);
+  const auto signing_key = calc_hmac_sha256(service_k,
+                                            boost::string_ref("aws4_request"));
 
-  buf_to_hex(signing_key.data(), CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
-
-  ldout(cct, 10) << "signing_k     = " << string(aux) << dendl;
+  ldout(cct, 10) << "date_k    = " << buf_to_hex(date_k).data() << dendl;
+  ldout(cct, 10) << "region_k  = " << buf_to_hex(region_k).data() << dendl;
+  ldout(cct, 10) << "service_k = " << buf_to_hex(service_k).data() << dendl;
+  ldout(cct, 10) << "signing_k = " << buf_to_hex(signing_key).data() << dendl;
 
   return signing_key;
 }
