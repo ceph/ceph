@@ -1216,8 +1216,7 @@ int RGWPutObj_ObjStore_S3::validate_aws4_single_chunk(char *chunk_str,
 
   /* new chunk signature */
   const auto sighex = buf_to_hex(calc_hmac_sha256(s->aws4_auth->signing_key,
-                                                  string_to_sign.c_str(),
-                                                  string_to_sign.size()));
+                                                  string_to_sign));
   /* FIXME(rzarzynski): std::string here is really unnecessary. */
   std::string new_chunk_signature = std::string(sighex.data(), sighex.size());
 
