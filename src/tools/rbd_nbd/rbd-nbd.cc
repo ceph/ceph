@@ -26,6 +26,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <atomic>
 
 #include <linux/nbd.h>
 #include <linux/fs.h>
@@ -121,11 +122,12 @@ public:
   {}
 
 private:
-  atomic_t terminated;
+  std::atomic<unsigned> terminated { 0 };
 
   void shutdown()
   {
-    if (terminated.compare_and_swap(false, true)) {
+    unsigned int expected = false;
+    if (terminated.compare_exchange_weak(expected, true)) {
       ::shutdown(fd, SHUT_RDWR);
 
       Mutex::Locker l(lock);
@@ -172,7 +174,7 @@ private:
   IOContext *wait_io_finish()
   {
     Mutex::Locker l(lock);
-    while(io_finished.empty() && !terminated.read())
+    while(io_finished.empty() && !terminated)
       cond.Wait(lock);
 
     if (io_finished.empty())
@@ -234,7 +236,7 @@ private:
 
   void reader_entry()
   {
-    while (!terminated.read()) {
+    while (!terminated) {
       ceph::unique_ptr<IOContext> ctx(new IOContext());
       ctx->server = this;
 
@@ -309,7 +311,7 @@ private:
 
   void writer_entry()
   {
-    while (!terminated.read()) {
+    while (!terminated) {
       dout(20) << __func__ << ": waiting for io request" << dendl;
       ceph::unique_ptr<IOContext> ctx(wait_io_finish());
       if (!ctx) {

@@ -8,7 +8,6 @@
 #include <string>
 #include <vector>
 
-#include "include/atomic.h"
 #include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
