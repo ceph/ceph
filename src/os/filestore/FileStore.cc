@@ -573,7 +573,7 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
   m_filestore_max_inline_xattrs(0),
   m_filestore_max_xattr_value_size(0)
 {
-  m_filestore_kill_at.set(cct->_conf->filestore_kill_at);
+  m_filestore_kill_at = cct->_conf->filestore_kill_at;
   for (int i = 0; i < m_ondisk_finisher_num; ++i) {
     ostringstream oss;
     oss << "filestore-ondisk-" << i;
@@ -2088,7 +2088,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
     osr = static_cast<OpSequencer *>(posr->p.get());
     dout(5) << "queue_transactions existing " << osr << " " << *osr << dendl;
   } else {
-    osr = new OpSequencer(cct, next_osr_id.inc());
+    osr = new OpSequencer(cct, ++next_osr_id);
     osr->set_cct(cct);
     osr->parent = posr;
     posr->p = osr;
@@ -5368,8 +5368,8 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
 
 void FileStore::_inject_failure()
 {
-  if (m_filestore_kill_at.read()) {
-    int final = m_filestore_kill_at.dec();
+  if (m_filestore_kill_at) {
+    int final = --m_filestore_kill_at;
     dout(5) << "_inject_failure " << (final+1) << " -> " << final << dendl;
     if (final == 0) {
       derr << "_inject_failure KILLING" << dendl;
@@ -5707,7 +5707,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
-    m_filestore_kill_at.set(conf->filestore_kill_at);
+    m_filestore_kill_at = conf->filestore_kill_at;
     m_filestore_fail_eio = conf->filestore_fail_eio;
     m_filestore_fadvise = conf->filestore_fadvise;
     m_filestore_sloppy_crc = conf->filestore_sloppy_crc;
