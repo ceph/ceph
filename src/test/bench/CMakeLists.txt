@@ -8,7 +8,7 @@ set(smalliobench_srcs
 add_executable(ceph_smalliobench
   ${smalliobench_srcs}
   )
-target_link_libraries(ceph_smalliobench librados ${Boost_PROGRAM_OPTIONS_LIBRARY} global
+target_link_libraries(ceph_smalliobench librados Boost::program_options global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}) 
 
 # ceph_smalliobenchrbd
@@ -27,7 +27,7 @@ if(WITH_RBD)
     librados
     os
     global
-    ${Boost_PROGRAM_OPTIONS_LIBRARY}
+    Boost::program_options
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
     )
@@ -50,7 +50,7 @@ set(ceph_smalliobenchfs_srcs
 add_executable(ceph_smalliobenchfs
   ${ceph_smalliobenchfs_srcs}
   )
-target_link_libraries(ceph_smalliobenchfs librados ${Boost_PROGRAM_OPTIONS_LIBRARY} os global
+target_link_libraries(ceph_smalliobenchfs librados Boost::program_options os global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}) 
 
 # ceph_smalliobenchdumb
@@ -63,7 +63,7 @@ set(smalliobenchdumb_srcs
 add_executable(ceph_smalliobenchdumb
   ${smalliobenchdumb_srcs}
   )
-target_link_libraries(ceph_smalliobenchdumb librados ${Boost_PROGRAM_OPTIONS_LIBRARY} os global
+target_link_libraries(ceph_smalliobenchdumb librados Boost::program_options os global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}) 
 
 # ceph_tpbench
@@ -73,7 +73,7 @@ set(tpbench_srcs
 add_executable(ceph_tpbench
   ${tpbench_srcs}
   )
-target_link_libraries(ceph_tpbench librados ${Boost_PROGRAM_OPTIONS_LIBRARY} global
+target_link_libraries(ceph_tpbench librados Boost::program_options global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 install(TARGETS
