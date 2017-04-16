@@ -5,13 +5,14 @@
 #define CEPH_LIBRBD_IO_COPYUP_REQUEST_H
 
 #include "librbd/AsyncOperation.h"
-#include "include/atomic.h"
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
 #include "librbd/io/Types.h"
+
 #include <string>
 #include <vector>
+#include <atomic>
 
 namespace librbd {
 
@@ -79,7 +80,7 @@ private:
   State m_state;
   ceph::bufferlist m_copyup_data;
   std::vector<ObjectRequest<ImageCtx> *> m_pending_requests;
-  atomic_t m_pending_copyups;
+  std::atomic<unsigned> m_pending_copyups { 0 };
 
   AsyncOperation m_async_op;
 
