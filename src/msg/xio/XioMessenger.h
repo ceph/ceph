@@ -23,10 +23,11 @@ extern "C" {
 #include "XioConnection.h"
 #include "XioPortal.h"
 #include "QueueStrategy.h"
-#include "include/atomic.h"
 #include "common/Thread.h"
 #include "common/Mutex.h"
 #include "include/spinlock.h"
+
+#include <atomic>
 
 class XioInit {
   /* safe to be called multiple times */
@@ -41,9 +42,9 @@ protected:
 class XioMessenger : public SimplePolicyMessenger, XioInit
 {
 private:
-  static atomic_t nInstances;
-  atomic_t nsessions;
-  atomic_t shutdown_called;
+  std::atomic<unsigned> nInstances = { 0 };
+  std::atomic<unsigned> nsessions = { 0 };
+  std::atomic<unsigned> shutdown_called = { 0 };
   Spinlock conns_sp;
   XioConnection::ConnList conns_list;
   XioConnection::EntitySet conns_entity_map;

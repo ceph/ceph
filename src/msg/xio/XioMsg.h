@@ -201,10 +201,10 @@ public:
     xcon->get();
   }
 
-  XioSend* get() { nrefs.inc(); return this; };
+  XioSend* get() { nrefs++; return this; };
 
   void put(int n) {
-    int refs = nrefs.sub(n);
+    int refs = nrefs -= n;
     if (refs == 0) {
       struct xio_reg_mem *mp = &this->mp_this;
       this->~XioSend();
@@ -228,7 +228,7 @@ public:
 private:
   xio_msg_ex req_0;
   struct xio_reg_mem mp_this;
-  atomic_t nrefs;
+  std::atomic<unsigned> nrefs = { 0 };
 };
 
 class XioCommand : public XioSend
@@ -316,7 +316,7 @@ private:
   XioConnection *xcon;
   XioInSeq msg_seq;
   XioPool rsp_pool;
-  atomic_t nrefs;
+  std::atomic<unsigned> nrefs { 0 };
   bool cl_flag;
   friend class XioConnection;
   friend class XioMessenger;

@@ -25,8 +25,9 @@ extern "C" {
 #include "XioSubmit.h"
 #include "msg/Connection.h"
 #include "msg/Messenger.h"
-#include "include/atomic.h"
 #include "auth/AuthSessionHandler.h"
+
+#include <atomic>
 
 #define XIO_ALL_FEATURES (CEPH_FEATURES_ALL)
 
@@ -65,13 +66,13 @@ public:
 private:
   XioConnection::type xio_conn_type;
   XioPortal *portal;
-  atomic_t connected;
+  std::atomic<unsigned> connected = { 0 };
   entity_inst_t peer;
   struct xio_session *session;
   struct xio_connection	*conn;
   pthread_spinlock_t sp;
-  atomic_t send;
-  atomic_t recv;
+  std::atomic<unsigned> send;
+  std::atomic<unsigned> recv;
   uint32_t n_reqs; // Accelio-initiated reqs in progress (!counting partials)
   uint32_t magic;
   uint32_t special_handling;
@@ -94,7 +95,7 @@ private:
     uint32_t reconnects;
     uint32_t connect_seq, peer_global_seq;
     uint64_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
-    atomic64_t out_seq; // atomic<uint32_t>
+    std::atomic<int64_t> out_seq; 
 
     lifecycle() : state(lifecycle::INIT), reconnects(0), connect_seq(0),
 		  peer_global_seq(0), in_seq(0), out_seq_acked(0), 
@@ -105,7 +106,7 @@ private:
     }
 
     uint64_t next_out_seq() {
-      return out_seq.inc();
+      return ++out_seq;
     }
 
   } state;
@@ -134,8 +135,8 @@ private:
     XioConnection *xcon;
     uint32_t protocol_version;
 
-    atomic_t session_state;
-    atomic_t startup_state;
+    std::atomic<unsigned> session_state = { INIT };
+    std::atomic<unsigned> startup_state = { IDLE };
 
     uint32_t reconnects;
     uint32_t connect_seq, global_seq, peer_global_seq;
@@ -149,8 +150,6 @@ private:
 	authorizer(NULL),
 	xcon(_xcon),
 	protocol_version(0),
-	session_state(INIT),
-	startup_state(IDLE),
 	reconnects(0),
 	connect_seq(0),
 	global_seq(0),
@@ -161,11 +160,11 @@ private:
 	flags(FLAG_NONE) {}
 
     uint64_t get_session_state() {
-      return session_state.read();
+      return session_state;
     }
 
     uint64_t get_startup_state() {
-      return startup_state.read();
+      return startup_state;
     }
 
     void set_in_seq(uint64_t seq) {
@@ -173,7 +172,7 @@ private:
     }
 
     uint64_t next_out_seq() {
-      return out_seq.inc();
+      return ++out_seq;
     };
 
     // state machine
@@ -274,7 +273,7 @@ public:
   }
   ostream& conn_prefix(std::ostream *_dout);
 
-  bool is_connected() override { return connected.read(); }
+  bool is_connected() override { return connected; }
 
   int send_message(Message *m) override;
   void send_keepalive() override {send_keepalive_or_ack();}
@@ -362,11 +361,11 @@ public:
   void mark_disposable() override {}
 
   uint64_t get_seq() {
-    return seq.read();
+    return seq;
   }
 
   uint64_t next_seq() {
-    return seq.inc();
+    return ++seq;
   }
 };
 

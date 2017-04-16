@@ -20,16 +20,14 @@ extern "C" {
 #include <stdint.h>
 #include "libxio.h"
 }
-#include <vector>
-#include "include/atomic.h"
 #include "common/likely.h"
 
+#include <atomic>
+#include <vector>
 
 static inline int xpool_alloc(struct xio_mempool *pool, uint64_t size,
 			      struct xio_reg_mem* mp);
 static inline void xpool_free(uint64_t size, struct xio_reg_mem* mp);
-
-using ceph::atomic_t;
 
 class XioPool
 {
@@ -95,15 +93,15 @@ private:
     NUM_SLABS,
   };
 
-  atomic_t ctr_set[NUM_SLABS];
+  std::atomic<unsigned> ctr_set[NUM_SLABS];
 
-  atomic_t msg_cnt;  // send msgs
-  atomic_t hook_cnt; // recv msgs
+  std::atomic<unsigned> msg_cnt = { 0 };  // send msgs
+  std::atomic<unsigned> hook_cnt = { 0 }; // recv msgs
 
 public:
-  XioPoolStats() : msg_cnt(0), hook_cnt(0) {
+  XioPoolStats() {
     for (int ix = 0; ix < NUM_SLABS; ++ix) {
-      ctr_set[ix].set(0);
+      ctr_set[ix] = 0;
     }
   }
 
@@ -111,68 +109,68 @@ public:
 
   void inc(uint64_t size) {
     if (size <= 64) {
-      (ctr_set[SLAB_64]).inc();
+      (ctr_set[SLAB_64])++;
       return;
     }
     if (size <= 256) {
-      (ctr_set[SLAB_256]).inc();
+      (ctr_set[SLAB_256])++;
       return;
     }
     if (size <= 1024) {
-      (ctr_set[SLAB_1024]).inc();
+      (ctr_set[SLAB_1024])++;
       return;
     }
     if (size <= 8192) {
-      (ctr_set[SLAB_PAGE]).inc();
+      (ctr_set[SLAB_PAGE])++;
       return;
     }
-    (ctr_set[SLAB_MAX]).inc();
+    (ctr_set[SLAB_MAX])++;
   }
 
   void dec(uint64_t size) {
     if (size <= 64) {
-      (ctr_set[SLAB_64]).dec();
+      (ctr_set[SLAB_64])--;
       return;
     }
     if (size <= 256) {
-      (ctr_set[SLAB_256]).dec();
+      (ctr_set[SLAB_256])--;
       return;
     }
     if (size <= 1024) {
-      (ctr_set[SLAB_1024]).dec();
+      (ctr_set[SLAB_1024])--;
       return;
     }
     if (size <= 8192) {
-      (ctr_set[SLAB_PAGE]).dec();
+      (ctr_set[SLAB_PAGE])--;
       return;
     }
-    (ctr_set[SLAB_MAX]).dec();
+    (ctr_set[SLAB_MAX])--;
   }
 
-  void inc_overflow() { ctr_set[SLAB_OVERFLOW].inc(); }
-  void dec_overflow() { ctr_set[SLAB_OVERFLOW].dec(); }
+  void inc_overflow() { ctr_set[SLAB_OVERFLOW]++; }
+  void dec_overflow() { ctr_set[SLAB_OVERFLOW]--; }
 
   void inc_msgcnt() {
     if (unlikely(XioPool::trace_msgcnt)) {
-      msg_cnt.inc();
+      msg_cnt++;
     }
   }
 
   void dec_msgcnt() {
     if (unlikely(XioPool::trace_msgcnt)) {
-      msg_cnt.dec();
+      msg_cnt--;
     }
   }
 
   void inc_hookcnt() {
     if (unlikely(XioPool::trace_msgcnt)) {
-      hook_cnt.inc();
+      hook_cnt++;
     }
   }
 
   void dec_hookcnt() {
     if (unlikely(XioPool::trace_msgcnt)) {
-      hook_cnt.dec();
+      hook_cnt--;
     }
   }
 };
@@ -202,7 +200,7 @@ static inline void xpool_free(uint64_t size, struct xio_reg_mem* mp)
 {
   if (mp->length) {
     if (unlikely(XioPool::trace_mempool))
-      xp_stats.dec(size);
+      xp_stats -= size;
     xio_mempool_free(mp);
   } else { // from malloc
     if (unlikely(XioPool::trace_mempool))

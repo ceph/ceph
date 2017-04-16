@@ -30,9 +30,9 @@
 #define dout_prefix *_dout << "xio."
 
 Mutex mtx("XioMessenger Package Lock");
-atomic_t initialized;
+std::atomic<unsigned> initialized = { 0 };
 
-atomic_t XioMessenger::nInstances;
+std::atomic<unsigned> XioMessenger::nInstances = { 0 };
 
 struct xio_mempool *xio_msgr_noreg_mpool;
 
@@ -235,10 +235,10 @@ static string xio_uri_from_entity(const string &type,
 } /* xio_uri_from_entity */
 
 void XioInit::package_init(CephContext *cct) {
-   if (! initialized.read()) {
+   if (! initialized) {
 
      mtx.Lock();
-     if (! initialized.read()) {
+     if (! initialized) {
 
        xio_init();
 
@@ -334,7 +334,7 @@ void XioInit::package_init(CephContext *cct) {
        xio_msgr_ops.on_cancel_request = on_cancel_request;
 
        /* mark initialized */
-       initialized.set(1);
+       initialized = 1;
      }
      mtx.Unlock();
    }
@@ -374,12 +374,12 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
   dispatch_strategy->set_messenger(this);
 
   /* update class instance count */
-  nInstances.inc();
+  nInstances++;
 
   loop_con->set_features(CEPH_FEATURES_ALL);
 
   ldout(cct,2) << "Create msgr: " << this << " instance: "
-    << nInstances.read() << " type: " << name.type_str()
+    << nInstances << " type: " << name.type_str()
     << " subtype: " << mname << " nportals: " << get_nportals(cflags)
     << " nconns_per_portal: " << get_nconns_per_portal(cflags)
     << dendl;
@@ -566,9 +566,9 @@ int XioMessenger::session_event(struct xio_session *session,
       xp_stats.dump("xio session dtor", reinterpret_cast<uint64_t>(session));
     }
     xio_session_destroy(session);
-    if (nsessions.dec() == 0) {
+    if (--nsessions == 0) {
       Mutex::Locker lck(sh_mtx);
-      if (nsessions.read() == 0)
+      if (nsessions == 0)
 	sh_cond.Signal();
     }
     break;
@@ -1132,5 +1132,5 @@ void XioMessenger::try_insert(XioConnection *xcon)
 XioMessenger::~XioMessenger()
 {
   delete dispatch_strategy;
-  nInstances.dec();
+  nInstances--;
 } /* dtor */
