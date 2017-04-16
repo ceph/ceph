@@ -543,10 +543,10 @@ else()
   include(BuildBoost)
   build_boost(1.61
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
+  include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 endif()
 set(Boost_USE_MULTITHREADED ON)
 
-include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 CHECK_INCLUDE_FILE_CXX("boost/asio/coroutine.hpp" HAVE_BOOST_ASIO_COROUTINE)
