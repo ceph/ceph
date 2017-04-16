@@ -144,7 +144,7 @@ add_executable(ceph_omapbench
   )
 target_link_libraries(ceph_omapbench
   librados
-  ${Boost_PROGRAM_OPTIONS_LIBRARY}
+  Boost::program_options
   global
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
@@ -198,7 +198,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client
     cls_user_client
     cls_lock_client
-    ${Boost_REGEX_LIBRARY}
+    Boost::regex
     ${BLKID_LIBRARIES}
     ${CURL_LIBRARIES}
     ${EXPAT_LIBRARIES}
@@ -228,7 +228,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client
     cls_user_client
     cls_lock_client
-    ${Boost_REGEX_LIBRARY}
+    Boost::regex
     ${BLKID_LIBRARIES}
     ${CURL_LIBRARIES}
     ${EXPAT_LIBRARIES}
