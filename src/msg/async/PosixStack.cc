@@ -31,7 +31,6 @@
 #include "common/strtol.h"
 #include "common/dout.h"
 #include "include/assert.h"
-#include "common/simple_spin.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix

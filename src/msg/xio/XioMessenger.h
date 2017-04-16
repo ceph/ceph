@@ -26,7 +26,7 @@ extern "C" {
 #include "include/atomic.h"
 #include "common/Thread.h"
 #include "common/Mutex.h"
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 
 class XioInit {
   /* safe to be called multiple times */

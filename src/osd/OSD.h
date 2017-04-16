@@ -53,7 +53,7 @@ using namespace std;
 #include "common/WeightedPriorityQueue.h"
 #include "common/PrioritizedQueue.h"
 #include "messages/MOSDOp.h"
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 #include "common/EventTrace.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */

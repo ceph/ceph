@@ -17,7 +17,7 @@
 
 #include "common/RefCountedObj.h"
 #include "common/Mutex.h"
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 #include "OSDCap.h"
 #include "Watch.h"
 #include "OSDMap.h"

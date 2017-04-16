@@ -24,7 +24,7 @@
 #include <boost/intrusive_ptr.hpp>
 
 #include "include/encoding.h"
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 
 
 struct Page {

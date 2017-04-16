@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <random>
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 #include "include/types.h"
 #include "Messenger.h"
 

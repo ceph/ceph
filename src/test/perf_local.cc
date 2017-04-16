@@ -45,7 +45,7 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/ceph_hash.h"
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 #include "common/ceph_argparse.h"
 #include "common/Cycles.h"
 #include "common/Cond.h"
