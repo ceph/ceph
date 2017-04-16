@@ -1275,6 +1275,7 @@ public:
   void dump_rules(Formatter *f) const;
   void dump_rule(int ruleset, Formatter *f) const;
   void dump_tunables(Formatter *f) const;
+  void dump_choose_args(Formatter *f) const;
   void list_rules(Formatter *f) const;
   void dump_tree(ostream *out, Formatter *f) const;
   void dump_tree(Formatter *f) const;
