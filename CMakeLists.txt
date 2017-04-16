@@ -23,9 +23,12 @@ if(POLICY CMP0065)
   cmake_policy(SET CMP0065 NEW)
 endif()
 if(POLICY CMP0051)
-  # cmake 3.1 and higher include generator expressions in SOURCES property,
-  # but i don't want to bother with stripping off the TARGET_OBJECTS elements
-  # from it. so let's stick with the old behavior now.
+  # cmake 3.1 and higher include generator expressions in SOURCES property.
+  # in BuildBoost.cmake, get_target_property(<var> <target> SOURCES) is used
+  # to retrieve the source files of a target. in that case, we are only
+  # interested in the *source* files. and i don't want to bother stripping off
+  # the TARGET_OBJECTS elements from the returned SOURCES. so let's stick with
+  # the old behavior now.
   cmake_policy(SET CMP0051 OLD)
 endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
@@ -555,10 +558,10 @@ else()
   include(BuildBoost)
   build_boost(1.63
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
+  include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 endif()
 set(Boost_USE_MULTITHREADED ON)
 
-include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
