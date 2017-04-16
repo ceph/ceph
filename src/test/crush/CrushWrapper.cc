@@ -712,6 +712,20 @@ TEST(CrushWrapper, insert_item) {
   delete c;
 }
 
+TEST(CrushWrapper, choose_args_disabled) {
+  auto *c = new CrushWrapper;
+  c->choose_args[0] = crush_choose_arg_map();
+
+  map<string,string> loc;
+  ASSERT_EQ(-EDOM, c->remove_item(g_ceph_context, 0, true));
+  ASSERT_EQ(-EDOM, c->insert_item(g_ceph_context, 0, 0.0, "", loc));
+  ASSERT_EQ(-EDOM, c->move_bucket(g_ceph_context, 0, loc));
+  ASSERT_EQ(-EDOM, c->link_bucket(g_ceph_context, 0, loc));
+  ASSERT_EQ(-EDOM, c->create_or_move_item(g_ceph_context, 0, 0.0, "", loc));
+
+  delete c;
+}
+
 TEST(CrushWrapper, remove_item) {
   auto *c = new CrushWrapper;
 

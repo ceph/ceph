@@ -288,6 +288,11 @@ int CrushWrapper::remove_root(int item, bool unused)
 
 int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
 {
+  if (choose_args.size() > 0) {
+    ldout(cct, 1) << "remove_item not implemented when choose_args is not empty" << dendl;
+    return -EDOM;
+  }
+
   ldout(cct, 5) << "remove_item " << item << (unlink_only ? " unlink_only":"") << dendl;
 
   int ret = -ENOENT;
@@ -641,6 +646,10 @@ int CrushWrapper::get_children(int id, list<int> *children)
 int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string name,
 			      const map<string,string>& loc)  // typename -> bucketname
 {
+  if (choose_args.size() > 0) {
+    ldout(cct, 1) << "insert_item not implemented when choose_args is not empty" << dendl;
+    return -EDOM;
+  }
 
   ldout(cct, 5) << "insert_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
@@ -745,6 +754,11 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
 
 int CrushWrapper::move_bucket(CephContext *cct, int id, const map<string,string>& loc)
 {
+  if (choose_args.size() > 0) {
+    ldout(cct, 1) << "move_bucket not implemented when choose_args is not empty" << dendl;
+    return -EDOM;
+  }
+
   // sorry this only works for buckets
   if (id >= 0)
     return -EINVAL;
@@ -764,6 +778,11 @@ int CrushWrapper::move_bucket(CephContext *cct, int id, const map<string,string>
 
 int CrushWrapper::link_bucket(CephContext *cct, int id, const map<string,string>& loc)
 {
+  if (choose_args.size() > 0) {
+    ldout(cct, 1) << "link_bucket not implemented when choose_args is not empty" << dendl;
+    return -EDOM;
+  }
+
   // sorry this only works for buckets
   if (id >= 0)
     return -EINVAL;
@@ -783,6 +802,11 @@ int CrushWrapper::link_bucket(CephContext *cct, int id, const map<string,string>
 int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, string name,
 				      const map<string,string>& loc)  // typename -> bucketname
 {
+  if (choose_args.size() > 0) {
+    ldout(cct, 1) << "create_or_move_item not implemented when choose_args is not empty" << dendl;
+    return -EDOM;
+  }
+
   int ret = 0;
   int old_iweight;
 
@@ -809,6 +833,11 @@ int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, 
 int CrushWrapper::update_item(CephContext *cct, int item, float weight, string name,
 			      const map<string,string>& loc)  // typename -> bucketname
 {
+  if (choose_args.size() > 0) {
+    ldout(cct, 1) << "update_item not implemented when choose_args is not empty" << dendl;
+    return -EDOM;
+  }
+
   ldout(cct, 5) << "update_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
   int ret = 0;
