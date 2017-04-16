@@ -65,7 +65,6 @@ private:
   // monitor local cluster for config changes in peers
   std::unique_ptr<ClusterWatcher> m_local_cluster_watcher;
   std::shared_ptr<ImageDeleter> m_image_deleter;
-  ImageSyncThrottlerRef<> m_image_sync_throttler;
   std::map<PoolPeer, std::unique_ptr<PoolReplayer> > m_pool_replayers;
   std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;

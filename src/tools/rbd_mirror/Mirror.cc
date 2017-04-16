@@ -242,8 +242,6 @@ int Mirror::init()
                                          m_threads->timer,
                                          &m_threads->timer_lock));
 
-  m_image_sync_throttler.reset(new ImageSyncThrottler<>());
-
   return r;
 }
 
@@ -294,19 +292,6 @@ void Mirror::print_status(Formatter *f, stringstream *ss)
   }
 
   m_image_deleter->print_status(f, ss);
-
-  if (f) {
-    f->close_section();
-    f->open_object_section("sync_throttler");
-  }
-
-  m_image_sync_throttler->print_status(f, ss);
-
-  if (f) {
-    f->close_section();
-    f->close_section();
-    f->flush(*ss);
-  }
 }
 
 void Mirror::start()
@@ -414,8 +399,7 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
       if (m_pool_replayers.find(pool_peer) == m_pool_replayers.end()) {
         dout(20) << "starting pool replayer for " << peer << dendl;
         unique_ptr<PoolReplayer> pool_replayer(new PoolReplayer(
-	  m_threads, m_image_deleter, m_image_sync_throttler, kv.first, peer,
-	  m_args));
+	  m_threads, m_image_deleter, kv.first, peer, m_args));
 
         // TODO: make async, and retry connecting within pool replayer
         int r = pool_replayer->init();

@@ -40,7 +40,6 @@ class PoolReplayer {
 public:
   PoolReplayer(Threads<librbd::ImageCtx> *threads,
 	       std::shared_ptr<ImageDeleter> image_deleter,
-	       ImageSyncThrottlerRef<> image_sync_throttler,
 	       int64_t local_pool_id, const peer_t &peer,
 	       const std::vector<const char*> &args);
   ~PoolReplayer();
