@@ -5,6 +5,7 @@
 #include "common/debug.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
+#include "include/stringify.h"
 
 #include "CrushWrapper.h"
 #include "CrushTreeDumper.h"
@@ -1822,6 +1823,8 @@ void CrushWrapper::dump(Formatter *f) const
   f->open_object_section("tunables");
   dump_tunables(f);
   f->close_section();
+
+  dump_choose_args(f);
 }
 
 namespace {
@@ -1912,6 +1915,46 @@ void CrushWrapper::dump_tunables(Formatter *f) const
   f->dump_int("has_v4_buckets", (int)has_v4_buckets());
   f->dump_int("require_feature_tunables5", (int)has_nondefault_tunables5());
   f->dump_int("has_v5_rules", (int)has_v5_rules());
+}
+
+void CrushWrapper::dump_choose_args(Formatter *f) const
+{
+  f->open_object_section("choose_args");
+  for (auto c : choose_args) {
+    crush_choose_arg_map arg_map = c.second;
+    f->open_array_section(stringify(c.first).c_str());
+    for (__u32 i = 0; i < arg_map.size; i++) {
+      crush_choose_arg *arg = &arg_map.args[i];
+      if (arg->weight_set_size == 0 &&
+	  arg->ids_size == 0)
+	continue;
+      f->open_object_section("choose_args");
+      int bucket_index = i;
+      f->dump_int("bucket_id", -1-bucket_index);
+      if (arg->weight_set_size > 0) {
+	f->open_array_section("weight_set");
+	for (__u32 j = 0; j < arg->weight_set_size; j++) {
+	  f->open_array_section("weights");
+	  __u32 *weights = arg->weight_set[j].weights;
+	  __u32 size = arg->weight_set[j].size;
+	  for (__u32 k = 0; k < size; k++) {
+	    f->dump_float("weight", (float)weights[k]/(float)0x10000);
+	  }
+	  f->close_section();
+	}
+	f->close_section();
+      }
+      if (arg->ids_size > 0) {
+	f->open_array_section("ids");
+	for (__u32 j = 0; j < arg->ids_size; j++)
+	  f->dump_int("id", arg->ids[j]);
+	f->close_section();
+      }
+      f->close_section();
+    }
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void CrushWrapper::dump_rules(Formatter *f) const
