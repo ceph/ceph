@@ -60,16 +60,13 @@ public:
                   ContextWQ *work_queue, Context *on_finish,
                   ProgressContext *progress_ctx = nullptr);
 
-  void cancel_sync(librados::IoCtx &local_io_ctx,
-                   const std::string local_image_id);
+  void cancel_sync(const std::string &local_image_id);
 
   void set_max_concurrent_syncs(uint32_t max);
 
   void print_status(Formatter *f, std::stringstream *ss);
 
 private:
-  typedef std::pair<int64_t, std::string> PoolImageId;
-
   struct C_SyncHolder;
 
   void handle_sync_finished(C_SyncHolder *sync_holder);
@@ -81,7 +78,7 @@ private:
   uint32_t m_max_concurrent_syncs;
   Mutex m_lock;
   std::list<C_SyncHolder *> m_sync_queue;
-  std::map<PoolImageId, C_SyncHolder *> m_inflight_syncs;
+  std::map<std::string, C_SyncHolder *> m_inflight_syncs;
 
 };
 

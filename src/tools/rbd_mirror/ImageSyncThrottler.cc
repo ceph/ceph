@@ -15,6 +15,7 @@
 #include "ImageSyncThrottler.h"
 #include "ImageSync.h"
 #include "common/ceph_context.h"
+#include "librbd/Utils.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -31,14 +32,14 @@ namespace mirror {
 template <typename ImageCtxT>
 struct ImageSyncThrottler<ImageCtxT>::C_SyncHolder : public Context {
   ImageSyncThrottler<ImageCtxT> *m_sync_throttler;
-  PoolImageId m_local_pool_image_id;
+  std::string m_local_image_id;
   ImageSync<ImageCtxT> *m_sync = nullptr;
   Context *m_on_finish;
 
   C_SyncHolder(ImageSyncThrottler<ImageCtxT> *sync_throttler,
-               const PoolImageId &local_pool_image_id, Context *on_finish)
+               const std::string &local_image_id, Context *on_finish)
     : m_sync_throttler(sync_throttler),
-      m_local_pool_image_id(local_pool_image_id), m_on_finish(on_finish) {
+      m_local_image_id(local_image_id), m_on_finish(on_finish) {
   }
 
   void finish(int r) override {
@@ -52,7 +53,7 @@ struct ImageSyncThrottler<ImageCtxT>::C_SyncHolder : public Context {
 template <typename I>
 ImageSyncThrottler<I>::ImageSyncThrottler()
   : m_max_concurrent_syncs(g_ceph_context->_conf->rbd_mirror_concurrent_image_syncs),
-    m_lock("rbd::mirror::ImageSyncThrottler")
+    m_lock(librbd::util::unique_lock_name("rbd::mirror::ImageSyncThrottler", this))
 {
   dout(20) << "Initialized max_concurrent_syncs=" << m_max_concurrent_syncs
            << dendl;
@@ -81,9 +82,7 @@ void ImageSyncThrottler<I>::start_sync(I *local_image_ctx, I *remote_image_ctx,
                                        ProgressContext *progress_ctx) {
   dout(20) << dendl;
 
-  PoolImageId pool_image_id(local_image_ctx->md_ctx.get_id(),
-                            local_image_ctx->id);
-  C_SyncHolder *sync_holder_ctx = new C_SyncHolder(this, pool_image_id,
+  C_SyncHolder *sync_holder_ctx = new C_SyncHolder(this, local_image_ctx->id,
                                                    on_finish);
   sync_holder_ctx->m_sync = ImageSync<I>::create(local_image_ctx,
                                                  remote_image_ctx, timer,
@@ -98,8 +97,8 @@ void ImageSyncThrottler<I>::start_sync(I *local_image_ctx, I *remote_image_ctx,
     Mutex::Locker l(m_lock);
 
     if (m_inflight_syncs.size() < m_max_concurrent_syncs) {
-      assert(m_inflight_syncs.count(pool_image_id) == 0);
-      m_inflight_syncs[pool_image_id] = sync_holder_ctx;
+      assert(m_inflight_syncs.count(local_image_ctx->id) == 0);
+      m_inflight_syncs[local_image_ctx->id] = sync_holder_ctx;
       start = true;
       dout(10) << "ready to start image sync for local_image_id "
                << local_image_ctx->id << " [" << m_inflight_syncs.size() << "/"
@@ -117,8 +116,7 @@ void ImageSyncThrottler<I>::start_sync(I *local_image_ctx, I *remote_image_ctx,
 }
 
 template <typename I>
-void ImageSyncThrottler<I>::cancel_sync(librados::IoCtx &local_io_ctx,
-                                        const std::string local_image_id) {
+void ImageSyncThrottler<I>::cancel_sync(const std::string &local_image_id) {
   dout(20) << dendl;
 
   C_SyncHolder *sync_holder = nullptr;
@@ -131,16 +129,14 @@ void ImageSyncThrottler<I>::cancel_sync(librados::IoCtx &local_io_ctx,
       return;
     }
 
-    PoolImageId local_pool_image_id(local_io_ctx.get_id(),
-                                    local_image_id);
-    auto it = m_inflight_syncs.find(local_pool_image_id);
+    auto it = m_inflight_syncs.find(local_image_id);
     if (it != m_inflight_syncs.end()) {
       sync_holder = it->second;
     }
 
     if (!sync_holder) {
       for (auto it = m_sync_queue.begin(); it != m_sync_queue.end(); ++it) {
-        if ((*it)->m_local_pool_image_id == local_pool_image_id) {
+        if ((*it)->m_local_image_id == local_image_id) {
           sync_holder = (*it);
           m_sync_queue.erase(it);
           running_sync = false;
@@ -153,11 +149,11 @@ void ImageSyncThrottler<I>::cancel_sync(librados::IoCtx &local_io_ctx,
   if (sync_holder) {
     if (running_sync) {
       dout(10) << "canceled running image sync for local_image_id "
-               << sync_holder->m_local_pool_image_id.second << dendl;
+               << sync_holder->m_local_image_id << dendl;
       sync_holder->m_sync->cancel();
     } else {
       dout(10) << "canceled waiting image sync for local_image_id "
-               << sync_holder->m_local_pool_image_id.second << dendl;
+               << sync_holder->m_local_image_id << dendl;
       sync_holder->m_on_finish->complete(-ECANCELED);
       sync_holder->m_sync->put();
       delete sync_holder;
@@ -173,7 +169,7 @@ void ImageSyncThrottler<I>::handle_sync_finished(C_SyncHolder *sync_holder) {
 
   {
     Mutex::Locker l(m_lock);
-    m_inflight_syncs.erase(sync_holder->m_local_pool_image_id);
+    m_inflight_syncs.erase(sync_holder->m_local_image_id);
 
     if (m_inflight_syncs.size() < m_max_concurrent_syncs &&
         !m_sync_queue.empty()) {
@@ -181,13 +177,13 @@ void ImageSyncThrottler<I>::handle_sync_finished(C_SyncHolder *sync_holder) {
       m_sync_queue.pop_back();
 
       assert(
-        m_inflight_syncs.count(next_sync_holder->m_local_pool_image_id) == 0);
-      m_inflight_syncs[next_sync_holder->m_local_pool_image_id] =
+        m_inflight_syncs.count(next_sync_holder->m_local_image_id) == 0);
+      m_inflight_syncs[next_sync_holder->m_local_image_id] =
         next_sync_holder;
       dout(10) << "ready to start image sync for local_image_id "
-               << next_sync_holder->m_local_pool_image_id.second
-               << " [" << m_inflight_syncs.size() << "/"
-               << m_max_concurrent_syncs << "]" << dendl;
+               << next_sync_holder->m_local_image_id << " ["
+               << m_inflight_syncs.size() << "/" << m_max_concurrent_syncs
+               << "]" << dendl;
     }
 
     dout(10) << "currently running image syncs [" << m_inflight_syncs.size()
@@ -218,14 +214,13 @@ void ImageSyncThrottler<I>::set_max_concurrent_syncs(uint32_t max) {
         m_sync_queue.pop_back();
 
         assert(
-          m_inflight_syncs.count(next_sync_holder->m_local_pool_image_id) == 0);
-        m_inflight_syncs[next_sync_holder->m_local_pool_image_id] =
-          next_sync_holder;
+          m_inflight_syncs.count(next_sync_holder->m_local_image_id) == 0);
+        m_inflight_syncs[next_sync_holder->m_local_image_id] = next_sync_holder;
 
         dout(10) << "ready to start image sync for local_image_id "
-                 << next_sync_holder->m_local_pool_image_id.second
-                 << " [" << m_inflight_syncs.size() << "/"
-                 << m_max_concurrent_syncs << "]" << dendl;
+                 << next_sync_holder->m_local_image_id << " ["
+                 << m_inflight_syncs.size() << "/" << m_max_concurrent_syncs
+                 << "]" << dendl;
     }
   }
 
