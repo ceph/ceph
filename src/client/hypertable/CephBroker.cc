@@ -38,10 +38,11 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include <atomic>
 
 using namespace Hypertable;
 
-atomic_t CephBroker::ms_next_fd = ATOMIC_INIT(0);
+std::atomic<unsigned> CephBroker::ms_next_fd = { 0 };
 
 /* A thread-safe version of strerror */
 static std::string cpp_strerror(int err)
@@ -111,7 +112,7 @@ void CephBroker::open(ResponseCallbackOpen *cb, const char *fname,
 
   make_abs_path(fname, abspath);
 
-  fd = atomic_inc_return(&ms_next_fd);
+  fd = ++ms_next_fd;
 
   if ((ceph_fd = ceph_open(cmount, abspath.c_str(), O_RDONLY, 0)) < 0) {
     report_error(cb, -ceph_fd);
@@ -141,7 +142,7 @@ void CephBroker::create(ResponseCallbackOpen *cb, const char *fname, uint32_t fl
   HT_DEBUGF("create file='%s' flags=%u bufsz=%d replication=%d blksz=%lld",
             fname, flags, bufsz, (int)replication, (Lld)blksz);
 
-  fd = atomic_inc_return(&ms_next_fd);
+  fd = ++ms_next_fd;
 
   if (flags & Filesystem::OPEN_FLAG_OVERWRITE)
     oflags = O_WRONLY | O_CREAT | O_TRUNC;
