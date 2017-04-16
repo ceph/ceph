@@ -41,6 +41,9 @@
 
 #include "include/compat.h"
 
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
 #define dout_prefix *_dout << "asok(" << (void*)m_cct << ") "

@@ -15,6 +15,7 @@
 #ifndef CEPH_CEPHCONTEXT_H
 #define CEPH_CEPHCONTEXT_H
 
+#include <atomic>
 #include <iosfwd>
 #include <stdint.h>
 #include <string>
@@ -22,7 +23,6 @@
 
 #include "include/assert.h"
 #include "include/buffer_fwd.h"
-#include "include/atomic.h"
 #include "common/cmdparse.h"
 #include "include/spinlock.h"
 #include "crush/CrushLocation.h"
@@ -62,10 +62,10 @@ public:
   // ref count!
 private:
   ~CephContext();
-  atomic_t nref;
+  std::atomic<unsigned> nref = { 0 };
 public:
   CephContext *get() {
-    nref.inc();
+    nref++;
     return this;
   }
   void put();

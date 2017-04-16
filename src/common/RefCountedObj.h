@@ -17,7 +17,6 @@
  
 #include "common/Mutex.h"
 #include "common/Cond.h"
-#include "include/atomic.h"
 #include "common/ceph_context.h"
 #include "common/valgrind.h"
 
@@ -28,16 +27,16 @@
 
 struct RefCountedObject {
 private:
-  mutable atomic_t nref;
+  mutable std::atomic<unsigned> nref;
   CephContext *cct;
 public:
   RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
   virtual ~RefCountedObject() {
-    assert(nref.read() == 0);
+    assert(nref == 0);
   }
   
   const RefCountedObject *get() const {
-    int v = nref.inc();
+    int v = ++nref;
     if (cct)
       lsubdout(cct, refs, 1) << "RefCountedObject::get " << this << " "
 			     << (v - 1) << " -> " << v
@@ -45,7 +44,7 @@ public:
     return this;
   }
   RefCountedObject *get() {
-    int v = nref.inc();
+    int v = ++nref;
     if (cct)
       lsubdout(cct, refs, 1) << "RefCountedObject::get " << this << " "
 			     << (v - 1) << " -> " << v
@@ -54,7 +53,7 @@ public:
   }
   void put() const {
     CephContext *local_cct = cct;
-    int v = nref.dec();
+    int v = --nref;
     if (v == 0) {
       ANNOTATE_HAPPENS_AFTER(&nref);
       ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&nref);
@@ -72,7 +71,7 @@ public:
   }
 
   uint64_t get_nref() const {
-    return nref.read();
+    return nref;
   }
 };
 
@@ -122,7 +121,7 @@ struct RefCountedCond : public RefCountedObject {
  *    
  */
 struct RefCountedWaitObject {
-  atomic_t nref;
+  std::atomic<unsigned> nref;
   RefCountedCond *c;
 
   RefCountedWaitObject() : nref(1) {
@@ -133,7 +132,7 @@ struct RefCountedWaitObject {
   }
 
   RefCountedWaitObject *get() {
-    nref.inc();
+    nref++;
     return this;
   }
 
@@ -141,7 +140,7 @@ struct RefCountedWaitObject {
     bool ret = false;
     RefCountedCond *cond = c;
     cond->get();
-    if (nref.dec() == 0) {
+    if (--nref == 0) {
       cond->done();
       delete this;
       ret = true;
@@ -154,7 +153,7 @@ struct RefCountedWaitObject {
     RefCountedCond *cond = c;
 
     cond->get();
-    if (nref.dec() == 0) {
+    if (--nref == 0) {
       cond->done();
       delete this;
     } else {
