@@ -22,7 +22,12 @@ endif()
 if(POLICY CMP0065)
   cmake_policy(SET CMP0065 NEW)
 endif()
-
+if(POLICY CMP0051)
+  # cmake 3.1 and higher include generator expressions in SOURCES property,
+  # but i don't want to bother with stripping off the TARGET_OBJECTS elements
+  # from it. so let's stick with the old behavior now.
+  cmake_policy(SET CMP0051 OLD)
+endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
@@ -534,77 +539,25 @@ if(WITH_RADOSGW_BEAST_FRONTEND)
 	list(APPEND BOOST_COMPONENTS coroutine context)
 endif()
 
-if (WITH_SYSTEM_BOOST)
+set(Boost_USE_MULTITHREADED ON)
+# require minimally the bundled version
+if(WITH_SYSTEM_BOOST)
   if(ENABLE_SHARED)
     set(Boost_USE_STATIC_LIBS OFF)
   else()
     set(Boost_USE_STATIC_LIBS ON)
   endif()
+  find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 else()
-  set(BOOST_CFLAGS "-fPIC -w") # check on arm, etc <---XXX
   set(BOOST_J 1 CACHE STRING
     "max jobs for Boost build") # override w/-DBOOST_J=<n>
-  message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
-  # 1. prep w/required components
-  set(BOOST_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
-  set(BOOST_PREFIX "${PROJECT_BINARY_DIR}/boost")
-  set(BOOST_BUILD "${PROJECT_BINARY_DIR}/boost-build")
-  list(APPEND BOOST_COMPONENTS ${BOOST_HEADER_COMPONENTS})
-  string(REPLACE ";" "," BOOST_WITH_LIBS "${BOOST_COMPONENTS}")
-  execute_process(COMMAND "./bootstrap.sh"
-    "--prefix=${BOOST_PREFIX}"
-    "--with-libraries=${BOOST_WITH_LIBS}"
-    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
-  set(BOOST_ROOT "${BOOST_PREFIX}")
-  set(b2 ./b2
-    --build-dir=${BOOST_BUILD} -j${BOOST_J})
-  if(CMAKE_VERBOSE_MAKEFILE)
-    list(APPEND b2 -d1)
-  else()
-    list(APPEND b2 -d0)
-  endif()
-  list(APPEND b2
-    variant=release link=static threading=multi cxxflags=${BOOST_CFLAGS})
-  if(NOT CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL CMAKE_SYSTEM_PROCESSOR)
-    # we are crosscompiling
-    if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-      set(b2_cc gcc)
-    elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-      set(b2_cc clang)
-    else()
-      message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
-    endif()
-    # edit the config.jam so, b2 will be able to use the specified toolset
-    execute_process(
-      COMMAND
-      sed -i
-      "s|using ${b2_cc} ;|using ${b2_cc} : ${CMAKE_SYSTEM_PROCESSOR} : ${CMAKE_CXX_COMPILER} ;|"
-      ${PROJECT_SOURCE_DIR}/src/boost/project-config.jam)
-    # use ${CMAKE_SYSTEM_PROCESSOR} as the version identifier of compiler
-    list(APPEND b2 toolset=${b2_cc}-${CMAKE_SYSTEM_PROCESSOR})
-  endif()
-  # 2. install headers
-  execute_process(COMMAND
-    ${b2}
-    headers
-    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
-  # 3. build and install libs
-  execute_process(COMMAND
-    ${b2}
-    install
-    WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
-  # 4. set hints for FindBoost.cmake
   set(Boost_USE_STATIC_LIBS ON)
-  set(Boost_NO_SYSTEM_PATHS ON)
-  include_directories(BEFORE ${BOOST_PREFIX}/include)
-  set(BOOST_ROOT ${BOOST_PREFIX})
-  set(Boost_NO_SYSTEM_PATHS ON)
+  include(BuildBoost)
+  build_boost(1.63
+    COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 endif()
-
 set(Boost_USE_MULTITHREADED ON)
 
-# require minimally the bundled version
-find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 include_directories(SYSTEM ${Boost_INCLUDE_DIRS})
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
