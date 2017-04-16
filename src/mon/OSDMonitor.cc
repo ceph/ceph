@@ -1049,7 +1049,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
     if (tmp.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       int full, nearfull;
-      tmp.count_full_nearfull_osds(&full, &nearfull);
+      tmp.count_full_nearfull_osds(full, nearfull);
       if (full > 0) {
 	if (!tmp.test_flag(CEPH_OSDMAP_FULL)) {
 	  dout(10) << __func__ << " setting full flag" << dendl;
@@ -3343,7 +3343,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 
     if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       int full, nearfull;
-      osdmap.count_full_nearfull_osds(&full, &nearfull);
+      osdmap.count_full_nearfull_osds(full, nearfull);
       if (full > 0) {
 	ostringstream ss;
 	ss << full << " full osd(s)";
