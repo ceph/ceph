@@ -14,6 +14,8 @@
 #endif
 #include "common/QueueRing.h"
 
+#include <atomic>
+
 struct RGWRequest
 {
   uint64_t id;
@@ -56,10 +58,10 @@ struct RGWLoadGenRequest : public RGWRequest {
 	string method;
 	string resource;
 	int content_length;
-	atomic_t* fail_flag;
+	std::atomic<unsigned>* fail_flag;
 
 RGWLoadGenRequest(uint64_t req_id, const string& _m, const  string& _r, int _cl,
-		atomic_t *ff)
+		std::atomic<unsigned> *ff)
 	: RGWRequest(req_id), method(_m), resource(_r), content_length(_cl),
 		fail_flag(ff) {}
 };

@@ -745,7 +745,7 @@ namespace rgw {
     RGWUserInfo user;
     RGWAccessKey key; // XXXX acc_key
 
-    static atomic<uint32_t> fs_inst_counter;
+    static std::atomic<uint32_t> fs_inst_counter;
 
     static uint32_t write_completion_interval_s;
     std::string fsid;

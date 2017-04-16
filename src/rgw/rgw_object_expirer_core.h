@@ -37,6 +37,8 @@
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
 
+#include <atomic>
+
 class RGWObjectExpirer {
 protected:
   RGWRados *store;
@@ -65,7 +67,7 @@ protected:
   };
 
   OEWorker *worker;
-  atomic_t down_flag;
+  std::atomic<unsigned> down_flag { 0 };
 
 public:
   explicit RGWObjectExpirer(RGWRados *_store)

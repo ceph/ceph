@@ -5,6 +5,8 @@
 #include "rgw_coroutine.h"
 #include "rgw_boost_asio_yield.h"
 
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -68,7 +70,7 @@ int RGWCompletionManager::get_next(void **user_info)
   Mutex::Locker l(lock);
   while (complete_reqs.empty()) {
     cond.Wait(lock);
-    if (going_down.read() != 0) {
+    if (going_down != 0) {
       return -ECANCELED;
     }
   }
@@ -94,7 +96,7 @@ void RGWCompletionManager::go_down()
   for (auto cn : cns) {
     cn->unregister();
   }
-  going_down.set(1);
+  going_down = 1;
   cond.Signal();
 }
 
@@ -460,7 +462,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   bool canceled = false; // set on going_down
   RGWCoroutinesEnv env;
 
-  uint64_t run_context = run_context_count.inc();
+  uint64_t run_context = ++run_context_count;
 
   lock.get_write();
   set<RGWCoroutinesStack *>& context_stacks = run_contexts[run_context];
@@ -475,7 +477,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   env.manager = this;
   env.scheduled_stacks = &scheduled_stacks;
 
-  for (list<RGWCoroutinesStack *>::iterator iter = scheduled_stacks.begin(); iter != scheduled_stacks.end() && !going_down.read();) {
+  for (list<RGWCoroutinesStack *>::iterator iter = scheduled_stacks.begin(); iter != scheduled_stacks.end() && !going_down;) {
     lock.get_write();
 
     RGWCoroutinesStack *stack = *iter;
@@ -566,7 +568,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       if (ret < 0) {
 	ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       }
-      if (going_down.read() > 0) {
+      if (going_down > 0) {
 	ldout(cct, 5) << __func__ << "(): was stopped, exiting" << dendl;
 	ret = -ECANCELED;
         canceled = true;
@@ -585,7 +587,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   }
 
   lock.get_write();
-  if (!context_stacks.empty() && !going_down.read()) {
+  if (!context_stacks.empty() && !going_down) {
     JSONFormatter formatter(true);
     formatter.open_array_section("context_stacks");
     for (auto& s : context_stacks) {
@@ -595,7 +597,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     lderr(cct) << __func__ << "(): ERROR: deadlock detected, dumping remaining coroutines:\n";
     formatter.flush(*_dout);
     *_dout << dendl;
-    assert(context_stacks.empty() || going_down.read()); // assert on deadlock
+    assert(context_stacks.empty() || going_down); // assert on deadlock
   }
 
   for (auto stack : context_stacks) {
