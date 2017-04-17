@@ -17,6 +17,7 @@
 
 #include "messages/MClientRequestForward.h"
 #include "messages/MMDSMap.h"
+#include "messages/MMDSTableRequest.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 
@@ -25,7 +26,6 @@
 #include "SnapClient.h"
 #include "SnapServer.h"
 #include "MDBalancer.h"
-#include "messages/MMDSTableRequest.h"
 #include "Locker.h"
 #include "Server.h"
 #include "InoTable.h"
