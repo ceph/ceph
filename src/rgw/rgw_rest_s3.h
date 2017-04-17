@@ -680,9 +680,24 @@ public:
     using signature_t = std::string;
     using string_to_sign_t = std::string;
 
+    /* Transformation for crafting the AWS signature at server side which is
+     * used later to compare with the user-provided one. The methodology for
+     * doing that depends on AWS auth version. */
+    using signature_factory_t = \
+      std::function<std::string(CephContext* cct,
+                                const std::string& secret_key,
+                                const std::string& string_to_sign)>;
+
+    /* Return an instance of Completer for verifying the payload's fingerprint
+     * if necessary. Otherwise caller gets nullptr. */
+    using completer_factory_t = \
+      std::function<rgw::auth::Completer::cmplptr_t(void)>;
+
     virtual std::tuple<access_key_id_t,
                        signature_t,
-                       string_to_sign_t>
+                       string_to_sign_t,
+                       signature_factory_t,
+                       completer_factory_t>
     get_auth_data(const req_state* s) const = 0;
   };
 
@@ -708,9 +723,15 @@ public:
     std::string signature;
     std::string string_to_sign;
 
+    Extractor::signature_factory_t signing_key_factory;
+    Extractor::completer_factory_t completer_factory;
+
     /* Small reminder: an extractor is allowed to throw! */
-    std::tie(access_key_id, signature, string_to_sign) = \
-      extractor.get_auth_data(s);
+    std::tie(access_key_id,
+             signature,
+             string_to_sign,
+             signing_key_factory,
+             completer_factory) = extractor.get_auth_data(s);
 
     if (access_key_id.empty() || signature.empty()) {
       return result_t::deny(-EINVAL);
@@ -733,7 +754,9 @@ public:
 
   std::tuple<access_key_id_t,
              signature_t,
-             string_to_sign_t>
+             string_to_sign_t,
+             signature_factory_t,
+             completer_factory_t>
   get_auth_data(const req_state* s) const override;
 };
 
@@ -750,12 +773,10 @@ public:
 
   std::tuple<access_key_id_t,
              signature_t,
-             string_to_sign_t>
-  get_auth_data(const req_state* s) const override {
-    return std::make_tuple(s->auth.s3_postobj_creds.access_key,
-                           s->auth.s3_postobj_creds.signature,
-                           to_string(s->auth.s3_postobj_creds.encoded_policy));
-  }
+             string_to_sign_t,
+             signature_factory_t,
+             completer_factory_t>
+  get_auth_data(const req_state* s) const override;
 };
 
 

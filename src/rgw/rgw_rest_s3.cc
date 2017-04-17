@@ -4062,9 +4062,17 @@ bool rgw::auth::s3::RGWS3V2Extractor::is_time_skew_ok(const utime_t& header_time
   }
 }
 
+
+static rgw::auth::Completer::cmplptr_t null_completer_factory()
+{
+  return nullptr;
+}
+
 std::tuple<Version2ndEngine::Extractor::access_key_id_t,
            Version2ndEngine::Extractor::signature_t,
-           Version2ndEngine::Extractor::string_to_sign_t>
+           Version2ndEngine::Extractor::string_to_sign_t,
+           Version2ndEngine::Extractor::signature_factory_t,
+           Version2ndEngine::Extractor::completer_factory_t>
 rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
 {
   std::string access_key_id;
@@ -4118,7 +4126,23 @@ rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
 
   return std::make_tuple(std::move(access_key_id),
                          std::move(signature),
-                         std::move(string_to_sign));
+                         std::move(string_to_sign),
+                         rgw::auth::s3::get_v2_signature,
+                         null_completer_factory);
+}
+
+std::tuple<Version2ndEngine::Extractor::access_key_id_t,
+           Version2ndEngine::Extractor::signature_t,
+           Version2ndEngine::Extractor::string_to_sign_t,
+           Version2ndEngine::Extractor::signature_factory_t,
+           Version2ndEngine::Extractor::completer_factory_t>
+RGWGetPolicyV2Extractor::get_auth_data(const req_state* const s) const
+{
+  return std::make_tuple(s->auth.s3_postobj_creds.access_key,
+                         s->auth.s3_postobj_creds.signature,
+                         to_string(s->auth.s3_postobj_creds.encoded_policy),
+                         rgw::auth::s3::get_v2_signature,
+                         null_completer_factory);
 }
 
 } /* namespace s3 */

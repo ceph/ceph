@@ -152,9 +152,9 @@ rgw_create_s3_canonical_header(const req_info& info, const bool qsr) {
   return std::make_tuple(ok, dest, header_time);
 }
 
-int rgw_get_s3_header_digest(const string& auth_hdr, const string& key,
-			     string& dest);
-int rgw_get_s3_header_digest(const string& auth_hdr, const string& key, string& dest);
+int rgw_get_s3_header_digest(const std::string& auth_hdr,
+                             const std::string& key,
+                             std::string& dest);
 
 namespace rgw {
 namespace auth {
@@ -215,6 +215,21 @@ get_v4_signing_key(CephContext* const cct,
 std::string get_v4_signature(CephContext* cct,
                              const std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>& signing_key,
                              const std::string& string_to_sign);
+
+static inline
+std::string get_v2_signature(CephContext*,
+                             const std::string& secret_key,
+                             const std::string& string_to_sign) {
+  std::string signature_dest;
+  const int ret = rgw_get_s3_header_digest(string_to_sign, secret_key,
+                                           signature_dest);
+  if (ret < 0) {
+    throw ret;
+  } else {
+    return signature_dest;
+  }
+}
+
 } /* namespace s3 */
 } /* namespace auth */
 } /* namespace rgw */
