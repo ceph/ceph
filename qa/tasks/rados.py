@@ -239,6 +239,7 @@ def task(ctx, config):
             run.wait(tests.itervalues())
 
             for pool in created_pools:
+                manager.wait_snap_trimming_complete(pool);
                 manager.remove_pool(pool)
 
     running = gevent.spawn(thread)
