@@ -16,6 +16,7 @@
 #define CEPH_MMDSLoadTargets_H
 
 #include "msg/Message.h"
+#include "mds/mdstypes.h"
 #include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
 
