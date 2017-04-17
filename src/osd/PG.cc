@@ -5164,7 +5164,15 @@ void PG::start_peering_interval(
     dout(10) << __func__ << ": check_new_interval output: "
 	     << debug.str() << dendl;
     if (new_interval) {
-      dout(10) << " noting past " << past_intervals.get_bounds().second << dendl;
+      if (osdmap->get_epoch() == osd->get_superblock().oldest_map &&
+	  info.history.last_epoch_clean < osdmap->get_epoch()) {
+	dout(10) << " map gap, clearing past_intervals and faking" << dendl;
+	// our information is incomplete and useless; someone else was clean
+	// after everything we know if osdmaps were trimmed.
+	past_intervals.clear();
+      } else {
+	dout(10) << " noting past " << past_intervals << dendl;
+      }
       dirty_info = true;
       dirty_big_info = true;
       info.history.same_interval_since = osdmap->get_epoch();
