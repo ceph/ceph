@@ -2404,6 +2404,13 @@ void OSD::final_init()
     test_ops_hook,
      "Delay osd recovery by specified seconds");
   assert(r == 0);
+  r = admin_socket->register_command(
+   "trigger_scrub",
+   "trigger_scrub " \
+   "name=pgid,type=CephString ",
+   test_ops_hook,
+   "Trigger a scheduled scrub ");
+  assert(r == 0);
 }
 
 void OSD::create_logger()
@@ -4071,13 +4078,13 @@ void OSD::heartbeat_check()
     if (p->second.is_unhealthy(cutoff)) {
       if (p->second.last_rx_back == utime_t() ||
 	  p->second.last_rx_front == utime_t()) {
-	derr << "heartbeat_check: no reply from " << p->second.con_front->get_peer_addr().get_sockaddr()
+	derr << "heartbeat_check: no reply from " << p->second.con_front->get_peer_addr().get_sockaddr_storage()
 	     << " osd." << p->first << " ever on either front or back, first ping sent "
 	     << p->second.first_tx << " (cutoff " << cutoff << ")" << dendl;
 	// fail
 	failure_queue[p->first] = p->second.last_tx;
       } else {
-	derr << "heartbeat_check: no reply from " << p->second.con_front->get_peer_addr().get_sockaddr()
+	derr << "heartbeat_check: no reply from " << p->second.con_front->get_peer_addr().get_sockaddr_storage()
 	     << " osd." << p->first << " since back " << p->second.last_rx_back
 	     << " front " << p->second.last_rx_front
 	     << " (cutoff " << cutoff << ")" << dendl;
@@ -4493,6 +4500,44 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     service->cct->_conf->apply_changes(NULL);
     ss << "set_recovery_delay: set osd_recovery_delay_start "
        << "to " << service->cct->_conf->osd_recovery_delay_start;
+    return;
+  }
+  if (command ==  "trigger_scrub") {
+    spg_t pgid;
+    OSDMapRef curmap = service->get_osdmap();
+
+    string pgidstr;
+
+    cmd_getval(service->cct, cmdmap, "pgid", pgidstr);
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "Invalid pgid specified";
+      return;
+    }
+
+    PG *pg = service->osd->_lookup_lock_pg(pgid);
+    if (pg == nullptr) {
+      ss << "Can't find pg " << pgid;
+      return;
+    }
+
+    if (pg->is_primary()) {
+      pg->unreg_next_scrub();
+      const pg_pool_t *p = curmap->get_pg_pool(pgid.pool());
+      double pool_scrub_max_interval = 0;
+      p->opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &pool_scrub_max_interval);
+      double scrub_max_interval = pool_scrub_max_interval > 0 ?
+        pool_scrub_max_interval : g_conf->osd_scrub_max_interval;
+      // Instead of marking must_scrub force a schedule scrub
+      utime_t stamp = ceph_clock_now(service->cct);
+      stamp -= scrub_max_interval;
+      stamp -=  100.0;  // push back last scrub more for good measure
+      pg->info.history.last_scrub_stamp = stamp;
+      pg->reg_next_scrub();
+      ss << "ok";
+    } else {
+      ss << "Not primary";
+    }
+    pg->unlock();
     return;
   }
   ss << "Internal error - command=" << command;
@@ -6625,7 +6670,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     session->put();
 
   // share with the objecter
-  service.objecter->handle_osd_map(m);
+  if (!is_preboot())
+    service.objecter->handle_osd_map(m);
 
   epoch_t first = m->get_first();
   epoch_t last = m->get_last();
@@ -8957,6 +9003,8 @@ const char** OSD::get_tracked_conf_keys() const
     "clog_to_graylog_port",
     "host",
     "fsid",
+    "osd_client_message_size_cap",
+    "osd_client_message_cap",
     NULL
   };
   return KEYS;
@@ -9016,6 +9064,22 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
     }
   }
 #endif
+
+  if (changed.count("osd_client_message_cap")) {
+    uint64_t newval = cct->_conf->osd_client_message_cap;
+    Messenger::Policy pol = client_messenger->get_policy(entity_name_t::TYPE_CLIENT);
+    if (pol.throttler_messages && newval > 0) {
+      pol.throttler_messages->reset_max(newval);
+    }
+  }
+  if (changed.count("osd_client_message_size_cap")) {
+    uint64_t newval = cct->_conf->osd_client_message_size_cap;
+    Messenger::Policy pol = client_messenger->get_policy(entity_name_t::TYPE_CLIENT);
+    if (pol.throttler_bytes && newval > 0) {
+      pol.throttler_bytes->reset_max(newval);
+    }
+  }
+
   check_config();
 }
 

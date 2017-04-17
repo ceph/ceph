@@ -4,7 +4,6 @@ openstack:
 - volumes: # attached to each instance
     count: 4
     size: 10 # GB
->>>>>>> 8af4c35f95... qa/suites/rgw: Add openstack volume configuration
 tasks:
 - install:
 - ceph:

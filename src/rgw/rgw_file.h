@@ -24,9 +24,9 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/variant.hpp>
 #include <boost/utility/string_ref.hpp>
+#include <boost/optional.hpp>
 #include "xxhash.h"
 #include "include/buffer.h"
-#include "common/sstring.hh"
 #include "common/cohort_lru.h"
 #include "common/ceph_timer.h"
 #include "rgw_common.h"
@@ -164,11 +164,7 @@ namespace rgw {
     using lock_guard = std::lock_guard<std::mutex>;
     using unique_lock = std::unique_lock<std::mutex>;
 
-    /* median file name length (HPC) has been found to be 16,
-     * w/90% of file names <= 31 (Yifan Wang, CMU) */
-    using dirent_string = basic_sstring<char, uint16_t, 32>;
-
-    using marker_cache_t = flat_map<uint64_t, dirent_string>;
+    using marker_cache_t = flat_map<uint64_t, rgw_obj_key>;
 
     struct State {
       uint64_t dev;
@@ -346,6 +342,13 @@ namespace rgw {
 	break;
 	}
       }
+
+      if (mask & RGW_SETATTR_ATIME)
+	state.atime = st->st_atim;
+      if (mask & RGW_SETATTR_MTIME)
+	state.mtime = st->st_mtim;
+      if (mask & RGW_SETATTR_CTIME)
+	state.ctime = st->st_ctim;
     }
 
     int stat(struct stat* st) {
@@ -444,27 +447,26 @@ namespace rgw {
       }
     }
 
-    void add_marker(uint64_t off, const boost::string_ref& marker,
+    void add_marker(uint64_t off, const rgw_obj_key& marker,
 		    uint8_t obj_type) {
       using std::get;
       directory* d = get<directory>(&variant_type);
       if (d) {
 	unique_lock guard(mtx);
-	// XXXX check for failure (dup key)
 	d->marker_cache.insert(
-	  marker_cache_t::value_type(off, marker.data()));
+	  marker_cache_t::value_type(off, marker));
       }
     }
 
-    std::string find_marker(uint64_t off) { // XXX copy
+    const rgw_obj_key* find_marker(uint64_t off) {
       using std::get;
       directory* d = get<directory>(&variant_type);
       if (d) {
 	const auto& iter = d->marker_cache.find(off);
 	if (iter != d->marker_cache.end())
-	  return iter->second;
+	  return &(iter->second);
       }
-      return "";
+      return nullptr;
     }
     
     bool is_open() const { return flags & FLAG_OPEN; }
@@ -477,7 +479,7 @@ namespace rgw {
     bool deleted() const { return flags & FLAG_DELETED; }
     bool stateless_open() const { return flags & FLAG_STATELESS_OPEN; }
 
-    uint32_t open(uint32_t gsh_flags) {
+    int open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
       if (! (flags & FLAG_OPEN)) {
 	if (gsh_flags & RGW_OPEN_FLAG_V3) {
@@ -486,7 +488,7 @@ namespace rgw {
 	flags |= FLAG_OPEN;
 	return 0;
       }
-      return EPERM;
+      return -EPERM;
     }
 
     int readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset, bool *eof,
@@ -634,7 +636,10 @@ namespace rgw {
     typedef cohort::lru::TreeX<RGWFileHandle, FhTree, FhLT, FhEQ, fh_key,
 			       std::mutex> FHCache;
 
-    virtual ~RGWFileHandle() {}
+    virtual ~RGWFileHandle();
+
+    friend std::ostream& operator<<(std::ostream &os,
+				    RGWFileHandle const &rgw_fh);
 
     class Factory : public cohort::lru::ObjectFactory
     {
@@ -805,7 +810,7 @@ namespace rgw {
     void release_evict(RGWFileHandle* fh) {
       /* remove from cache, releases sentinel ref */
       fh_cache.remove(fh->fh.fh_hk.object, fh,
-		      RGWFileHandle::FHCache::FLAG_NONE);
+		      RGWFileHandle::FHCache::FLAG_LOCK);
       /* release call-path ref */
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
@@ -883,6 +888,11 @@ namespace rgw {
       }
       lat.lock->unlock(); /* !LATCHED */
       get<0>(fhr) = fh;
+      if (fh) {
+	    lsubdout(get_context(), rgw, 17)
+	      << __func__ << " 1 " << *fh
+	      << dendl;
+      }
       return fhr;
     } /* lookup_fh(const fh_key&) */
 
@@ -949,6 +959,10 @@ namespace rgw {
 	  /* inserts, releasing latch */
 	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
 	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
+	  /* ref parent (non-initial ref cannot fail on valid object) */
+	  if (! parent->is_root()) {
+	    (void) fh_lru.ref(parent, cohort::lru::FLAG_NONE);
+	  }
 	  goto out; /* !LATCHED */
 	} else {
 	  lat.lock->unlock();
@@ -958,15 +972,24 @@ namespace rgw {
       lat.lock->unlock(); /* !LATCHED */
     out:
       get<0>(fhr) = fh;
+      if (fh) {
+	    lsubdout(get_context(), rgw, 17)
+	      << __func__ << " 2 " << *fh
+	      << dendl;
+      }
       return fhr;
     } /*  lookup_fh(RGWFileHandle*, const char *, const uint32_t) */
 
     inline void unref(RGWFileHandle* fh) {
-      (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+      if (likely(! fh->is_root())) {
+	(void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+      }
     }
 
     inline RGWFileHandle* ref(RGWFileHandle* fh) {
-      fh_lru.ref(fh, cohort::lru::FLAG_NONE);
+      if (likely(! fh->is_root())) {
+	fh_lru.ref(fh, cohort::lru::FLAG_NONE);
+      }
       return fh;
     }
 
@@ -1093,13 +1116,9 @@ public:
 			void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
       cb_arg(_cb_arg), rcb(_rcb), ix(0) {
-    const std::string& sm = rgw_fh->find_marker(*offset);
-    if (sm.size() > 0) {
-      RGWListBuckets::marker =
-	rgw_fh->relative_object_name();
-      if (marker.back() != '/')
-	marker += "/";
-      marker += sm;
+    const auto& mk = rgw_fh->find_marker(*offset);
+    if (mk) {
+      marker = mk->name;
     }
     op = this;
   }
@@ -1161,11 +1180,13 @@ public:
     // do nothing
   }
 
-  int operator()(const boost::string_ref& name, const boost::string_ref& marker) {
+  int operator()(const boost::string_ref& name,
+		 const boost::string_ref& marker) {
     uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
     *offset = off;
     /* update traversal cache */
-    rgw_fh->add_marker(off, marker, RGW_FS_TYPE_DIRECTORY);
+    rgw_fh->add_marker(off, rgw_obj_key{marker.data(), ""},
+		       RGW_FS_TYPE_DIRECTORY);
     rcb(name.data(), cb_arg, off);
     return 0;
   }
@@ -1198,12 +1219,9 @@ public:
 		    void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
       cb_arg(_cb_arg), rcb(_rcb), ix(0) {
-    const std::string& sm{rgw_fh->find_marker(*offset)};
-    if (sm.size() > 0) {
-      RGWListBucket::marker = {rgw_fh->relative_object_name(), ""};
-      if (marker.name.back() != '/')
-	marker.name += "/";
-      marker.name += sm;
+    const auto& mk = rgw_fh->find_marker(*offset);
+    if (mk) {
+      marker = *mk;
     }
     default_max = 1000; // XXX was being omitted
     op = this;
@@ -1246,7 +1264,7 @@ public:
     return 0;
   }
 
-  int operator()(const boost::string_ref name, const boost::string_ref marker,
+  int operator()(const boost::string_ref name, const rgw_obj_key& marker,
 		uint8_t type) {
 
     assert(name.length() > 0); // XXX
@@ -1291,7 +1309,7 @@ public:
 			     << dendl;
 
       /* call me maybe */
-      this->operator()(sref, sref, RGW_FS_TYPE_FILE);
+      this->operator()(sref, next_marker, RGW_FS_TYPE_FILE);
       ++ix;
     }
     for (auto& iter : common_prefixes) {
@@ -1324,7 +1342,7 @@ public:
 			     << " cpref=" << sref
 			     << dendl;
 
-      this->operator()(sref, sref, RGW_FS_TYPE_DIRECTORY);
+      this->operator()(sref, next_marker, RGW_FS_TYPE_DIRECTORY);
       ++ix;
     }
   }

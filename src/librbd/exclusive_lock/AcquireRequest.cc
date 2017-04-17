@@ -22,7 +22,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::exclusive_lock::AcquireRequest: "
+#define dout_prefix *_dout << "librbd::exclusive_lock::AcquireRequest: " \
+                           << this << " " << __func__ << ": "
 
 namespace librbd {
 namespace exclusive_lock {
@@ -64,7 +65,7 @@ void AcquireRequest<I>::send() {
 template <typename I>
 void AcquireRequest<I>::send_prepare_lock() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   // acquire the lock if the image is not busy performing other actions
   Context *ctx = create_context_callback<
@@ -75,7 +76,7 @@ void AcquireRequest<I>::send_prepare_lock() {
 template <typename I>
 Context *AcquireRequest<I>::handle_prepare_lock(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << "r=" << *ret_val << dendl;
 
   send_flush_notifies();
   return nullptr;
@@ -84,7 +85,7 @@ Context *AcquireRequest<I>::handle_prepare_lock(int *ret_val) {
 template <typename I>
 void AcquireRequest<I>::send_flush_notifies() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = AcquireRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_flush_notifies>(
@@ -95,7 +96,7 @@ void AcquireRequest<I>::send_flush_notifies() {
 template <typename I>
 Context *AcquireRequest<I>::handle_flush_notifies(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   assert(*ret_val == 0);
   send_get_locker();
@@ -105,7 +106,7 @@ Context *AcquireRequest<I>::handle_flush_notifies(int *ret_val) {
 template <typename I>
 void AcquireRequest<I>::send_get_locker() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   Context *ctx = create_context_callback<
     AcquireRequest<I>, &AcquireRequest<I>::handle_get_locker>(this);
@@ -116,7 +117,7 @@ void AcquireRequest<I>::send_get_locker() {
 template <typename I>
 Context *AcquireRequest<I>::handle_get_locker(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << "r=" << *ret_val << dendl;
 
   if (*ret_val == -ENOENT) {
     ldout(cct, 20) << "no lockers detected" << dendl;
@@ -138,7 +139,7 @@ Context *AcquireRequest<I>::handle_get_locker(int *ret_val) {
 template <typename I>
 void AcquireRequest<I>::send_lock() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << "cookie=" << m_cookie << dendl;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::lock(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, m_cookie,
@@ -156,7 +157,7 @@ void AcquireRequest<I>::send_lock() {
 template <typename I>
 Context *AcquireRequest<I>::handle_lock(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << "r=" << *ret_val << dendl;
 
   if (*ret_val == 0) {
     return send_refresh();
@@ -180,7 +181,7 @@ Context *AcquireRequest<I>::send_refresh() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = AcquireRequest<I>;
   Context *ctx = create_async_context_callback(
@@ -197,11 +198,11 @@ Context *AcquireRequest<I>::send_refresh() {
 template <typename I>
 Context *AcquireRequest<I>::handle_refresh(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << "r=" << *ret_val << dendl;
 
   if (*ret_val == -ERESTART) {
     // next issued IO or op will (re)-refresh the image and shut down lock
-    ldout(cct, 5) << ": exclusive lock dynamically disabled" << dendl;
+    ldout(cct, 5) << "exclusive lock dynamically disabled" << dendl;
     *ret_val = 0;
   } else if (*ret_val < 0) {
     lderr(cct) << "failed to refresh image: " << cpp_strerror(*ret_val)
@@ -233,7 +234,7 @@ Context *AcquireRequest<I>::send_open_journal() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = AcquireRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_open_journal>(
@@ -250,7 +251,7 @@ Context *AcquireRequest<I>::send_open_journal() {
 template <typename I>
 Context *AcquireRequest<I>::handle_open_journal(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << "r=" << *ret_val << dendl;
 
   if (*ret_val < 0) {
     lderr(cct) << "failed to open journal: " << cpp_strerror(*ret_val) << dendl;
@@ -266,7 +267,7 @@ Context *AcquireRequest<I>::handle_open_journal(int *ret_val) {
 template <typename I>
 void AcquireRequest<I>::send_allocate_journal_tag() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
   using klass = AcquireRequest<I>;
@@ -278,7 +279,7 @@ void AcquireRequest<I>::send_allocate_journal_tag() {
 template <typename I>
 Context *AcquireRequest<I>::handle_allocate_journal_tag(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << "r=" << *ret_val << dendl;
 
   if (*ret_val < 0) {
     lderr(cct) << "failed to allocate journal tag: " << cpp_strerror(*ret_val)
@@ -293,7 +294,7 @@ Context *AcquireRequest<I>::handle_allocate_journal_tag(int *ret_val) {
 template <typename I>
 void AcquireRequest<I>::send_close_journal() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = AcquireRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_close_journal>(
@@ -304,7 +305,7 @@ void AcquireRequest<I>::send_close_journal() {
 template <typename I>
 Context *AcquireRequest<I>::handle_close_journal(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << "r=" << *ret_val << dendl;
 
   if (*ret_val < 0) {
     lderr(cct) << "failed to close journal: " << cpp_strerror(*ret_val)
@@ -322,7 +323,7 @@ Context *AcquireRequest<I>::send_open_object_map() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = AcquireRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_open_object_map>(
@@ -336,7 +337,7 @@ Context *AcquireRequest<I>::send_open_object_map() {
 template <typename I>
 Context *AcquireRequest<I>::handle_open_object_map(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << "r=" << *ret_val << dendl;
 
   if (*ret_val < 0) {
     lderr(cct) << "failed to open object map: " << cpp_strerror(*ret_val)
@@ -358,7 +359,7 @@ void AcquireRequest<I>::send_close_object_map() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   using klass = AcquireRequest<I>;
   Context *ctx = create_context_callback<
@@ -369,7 +370,7 @@ void AcquireRequest<I>::send_close_object_map() {
 template <typename I>
 Context *AcquireRequest<I>::handle_close_object_map(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << "r=" << *ret_val << dendl;
 
   // object map should never result in an error
   assert(*ret_val == 0);
@@ -380,7 +381,7 @@ Context *AcquireRequest<I>::handle_close_object_map(int *ret_val) {
 template <typename I>
 void AcquireRequest<I>::send_unlock() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::unlock(&op, RBD_LOCK_NAME, m_cookie);
@@ -397,7 +398,7 @@ void AcquireRequest<I>::send_unlock() {
 template <typename I>
 Context *AcquireRequest<I>::handle_unlock(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << "r=" << *ret_val << dendl;
 
   if (*ret_val < 0) {
     lderr(cct) << "failed to unlock image: " << cpp_strerror(*ret_val) << dendl;
@@ -410,7 +411,7 @@ Context *AcquireRequest<I>::handle_unlock(int *ret_val) {
 template <typename I>
 void AcquireRequest<I>::send_break_lock() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << dendl;
 
   Context *ctx = create_context_callback<
     AcquireRequest<I>, &AcquireRequest<I>::handle_break_lock>(this);
@@ -422,7 +423,7 @@ void AcquireRequest<I>::send_break_lock() {
 template <typename I>
 Context *AcquireRequest<I>::handle_break_lock(int *ret_val) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << *ret_val << dendl;
+  ldout(cct, 10) << "r=" << *ret_val << dendl;
 
   if (*ret_val == -EAGAIN) {
     ldout(cct, 5) << "lock owner is still alive" << dendl;

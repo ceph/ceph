@@ -1176,6 +1176,10 @@ int RGWPeriod::update()
     return ret;
   }
 
+  // clear zone short ids of removed zones. period_map.update() will add the
+  // remaining zones back
+  period_map.short_zone_ids.clear();
+
   for (auto& iter : zonegroups) {
     RGWZoneGroup zg(string(), iter);
     ret = zg.init(cct, store);
@@ -3333,7 +3337,7 @@ int RGWRados::replace_region_with_zonegroup()
 		  << dendl;
     return ret;
   } else if (ret != -ENOENT) {
-    ldout(cct, 0) << "System already converted " << dendl;
+    ldout(cct, 20) << "System already converted " << dendl;
     return 0;
   }
 

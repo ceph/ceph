@@ -25,6 +25,19 @@ inline void decode(librados::object_id_t& obj, bufferlist::iterator& bp) {
   reinterpret_cast<object_id_wrapper&>(obj).decode(bp);
 }
 
+struct osd_shard_wrapper : public librados::osd_shard_t {
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bp);
+};
+
+WRITE_CLASS_ENCODER(osd_shard_wrapper)
+
+namespace librados {
+  inline void decode(librados::osd_shard_t& shard, bufferlist::iterator& bp) {
+    reinterpret_cast<osd_shard_wrapper&>(shard).decode(bp);
+  }
+}
+
 struct shard_info_wrapper : public librados::shard_info_t {
 public:
   shard_info_wrapper() = default;
@@ -35,29 +48,38 @@ public:
   void set_missing() {
     errors |= err_t::SHARD_MISSING;
   }
-  void set_omap_digest_mismatch() {
-    errors |= err_t::OMAP_DIGEST_MISMATCH;
-  }
   void set_omap_digest_mismatch_oi() {
     errors |= err_t::OMAP_DIGEST_MISMATCH_OI;
   }
-  void set_data_digest_mismatch() {
-    errors |= err_t::DATA_DIGEST_MISMATCH;
+  void set_size_mismatch_oi() {
+    errors |= err_t::SIZE_MISMATCH_OI;
   }
   void set_data_digest_mismatch_oi() {
     errors |= err_t::DATA_DIGEST_MISMATCH_OI;
   }
-  void set_size_mismatch() {
-    errors |= err_t::SIZE_MISMATCH;
+  void set_read_error() {
+    errors |= err_t::SHARD_READ_ERR;
   }
-  void set_attr_missing() {
-    errors |= err_t::ATTR_MISSING;
+  void set_stat_error() {
+    errors |= err_t::SHARD_STAT_ERR;
   }
-  void set_attr_mismatch() {
-    errors |= err_t::ATTR_MISMATCH;
+  void set_ec_hash_mismatch() {
+    errors |= err_t::SHARD_EC_HASH_MISMATCH;
   }
-  void set_attr_unexpected() {
-    errors |= err_t::ATTR_UNEXPECTED;
+  void set_ec_size_mismatch() {
+    errors |= err_t::SHARD_EC_SIZE_MISMATCH;
+  }
+  void set_oi_attr_missing() {
+    errors |= err_t::OI_ATTR_MISSING;
+  }
+  void set_oi_attr_corrupted() {
+    errors |= err_t::OI_ATTR_CORRUPTED;
+  }
+  void set_ss_attr_missing() {
+    errors |= err_t::SS_ATTR_MISSING;
+  }
+  void set_ss_attr_corrupted() {
+    errors |= err_t::SS_ATTR_CORRUPTED;
   }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bp);
@@ -75,9 +97,30 @@ namespace librados {
 struct inconsistent_obj_wrapper : librados::inconsistent_obj_t {
   inconsistent_obj_wrapper(const hobject_t& hoid);
 
+  void set_object_info_inconsistency() {
+    errors |= obj_err_t::OBJECT_INFO_INCONSISTENCY;
+  }
+  void set_omap_digest_mismatch() {
+    errors |= obj_err_t::OMAP_DIGEST_MISMATCH;
+  }
+  void set_data_digest_mismatch() {
+    errors |= obj_err_t::DATA_DIGEST_MISMATCH;
+  }
+  void set_size_mismatch() {
+    errors |= obj_err_t::SIZE_MISMATCH;
+  }
+  void set_attr_value_mismatch() {
+    errors |= obj_err_t::ATTR_VALUE_MISMATCH;
+  }
+  void set_attr_name_mismatch() {
+    errors |= obj_err_t::ATTR_NAME_MISMATCH;
+  }
   void add_shard(const pg_shard_t& pgs, const shard_info_wrapper& shard);
   void set_auth_missing(const hobject_t& hoid,
-                        const map<pg_shard_t, ScrubMap*>& map);
+                        const map<pg_shard_t, ScrubMap*>&,
+			map<pg_shard_t, shard_info_wrapper>&,
+			int &shallow_errors, int &deep_errors);
+  void set_version(uint64_t ver) { version = ver; }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bp);
 };

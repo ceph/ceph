@@ -991,7 +991,9 @@ PG::Scrubber::~Scrubber() {}
  *  3) Prefer current primary
  */
 map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
-  const map<pg_shard_t, pg_info_t> &infos, bool *history_les_bound) const
+  const map<pg_shard_t, pg_info_t> &infos,
+  bool restrict_to_up_acting,
+  bool *history_les_bound) const
 {
   assert(history_les_bound);
   /* See doc/dev/osd_internals/last_epoch_started.rst before attempting
@@ -1031,6 +1033,9 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
   for (map<pg_shard_t, pg_info_t>::const_iterator p = infos.begin();
        p != infos.end();
        ++p) {
+    if (restrict_to_up_acting && !is_up(p->first) &&
+	!is_acting(p->first))
+      continue;
     // Only consider peers with last_update >= min_last_update_acceptable
     if (p->second.last_update < min_last_update_acceptable)
       continue;
@@ -1089,17 +1094,19 @@ void PG::calc_ec_acting(
   pg_shard_t up_primary,
   const map<pg_shard_t, pg_info_t> &all_info,
   bool compat_mode,
+  bool restrict_to_up_acting,
   vector<int> *_want,
   set<pg_shard_t> *backfill,
   set<pg_shard_t> *acting_backfill,
   pg_shard_t *want_primary,
-  ostream &ss) {
+  ostream &ss)
+{
   vector<int> want(size, CRUSH_ITEM_NONE);
   map<shard_id_t, set<pg_shard_t> > all_info_by_shard;
   unsigned usable = 0;
-  for(map<pg_shard_t, pg_info_t>::const_iterator i = all_info.begin();
-      i != all_info.end();
-      ++i) {
+  for (map<pg_shard_t, pg_info_t>::const_iterator i = all_info.begin();
+       i != all_info.end();
+       ++i) {
     all_info_by_shard[i->first.shard].insert(i->first);
   }
   for (uint8_t i = 0; i < want.size(); ++i) {
@@ -1126,7 +1133,7 @@ void PG::calc_ec_acting(
       ss << " selecting acting[i]: " << pg_shard_t(acting[i], shard_id_t(i)) << std::endl;
       want[i] = acting[i];
       ++usable;
-    } else {
+    } else if (!restrict_to_up_acting) {
       for (set<pg_shard_t>::iterator j = all_info_by_shard[shard_id_t(i)].begin();
 	   j != all_info_by_shard[shard_id_t(i)].end();
 	   ++j) {
@@ -1175,6 +1182,7 @@ void PG::calc_replicated_acting(
   pg_shard_t up_primary,
   const map<pg_shard_t, pg_info_t> &all_info,
   bool compat_mode,
+  bool restrict_to_up_acting,
   vector<int> *want,
   set<pg_shard_t> *backfill,
   set<pg_shard_t> *acting_backfill,
@@ -1182,7 +1190,8 @@ void PG::calc_replicated_acting(
   ostream &ss)
 {
   ss << "calc_acting newest update on osd." << auth_log_shard->first
-     << " with " << auth_log_shard->second << std::endl;
+     << " with " << auth_log_shard->second
+     << (restrict_to_up_acting ? " restrict_to_up_acting" : "") << std::endl;
   pg_shard_t auth_log_shard_id = auth_log_shard->first;
   
   // select primary
@@ -1273,6 +1282,9 @@ void PG::calc_replicated_acting(
     }
   }
 
+  if (restrict_to_up_acting) {
+    return;
+  }
   for (map<pg_shard_t,pg_info_t>::const_iterator i = all_info.begin();
        i != all_info.end();
        ++i) {
@@ -1309,8 +1321,19 @@ void PG::calc_replicated_acting(
  *
  * calculate the desired acting, and request a change with the monitor
  * if it differs from the current acting.
+ *
+ * if restrict_to_up_acting=true, we filter out anything that's not in
+ * up/acting.  in order to lift this restriction, we need to
+ *  1) check whether it's worth switching the acting set any time we get
+ *     a new pg info (not just here, when recovery finishes)
+ *  2) check whether anything in want_acting went down on each new map
+ *     (and, if so, calculate a new want_acting)
+ *  3) remove the assertion in PG::RecoveryState::Active::react(const AdvMap)
+ * TODO!
  */
-bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
+bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
+		       bool restrict_to_up_acting,
+		       bool *history_les_bound)
 {
   map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
   all_info[pg_whoami] = info;
@@ -1322,7 +1345,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
   }
 
   map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard =
-    find_best_info(all_info, history_les_bound);
+    find_best_info(all_info, restrict_to_up_acting, history_les_bound);
 
   if (auth_log_shard == all_info.end()) {
     if (up != acting) {
@@ -1376,6 +1399,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
       up_primary,
       all_info,
       compat_mode,
+      restrict_to_up_acting,
       &want,
       &want_backfill,
       &want_acting_backfill,
@@ -1391,6 +1415,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id, bool *history_les_bound)
       up_primary,
       all_info,
       compat_mode,
+      restrict_to_up_acting,
       &want,
       &want_backfill,
       &want_acting_backfill,
@@ -2126,18 +2151,31 @@ unsigned PG::get_recovery_priority()
   int pool_recovery_priority = 0;
   pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
-  unsigned ret = OSD_RECOVERY_PRIORITY_BASE + pool_recovery_priority;
-  if (ret > OSD_RECOVERY_PRIORITY_MAX)
+  int ret = OSD_RECOVERY_PRIORITY_BASE + pool_recovery_priority;
+
+  // Clamp to valid range
+  if (ret > OSD_RECOVERY_PRIORITY_MAX) {
     ret = OSD_RECOVERY_PRIORITY_MAX;
-  return ret;
+  } else if (ret < OSD_RECOVERY_PRIORITY_MIN) {
+    ret = OSD_RECOVERY_PRIORITY_MIN;
+  }
+
+  static_assert(OSD_RECOVERY_PRIORITY_MIN < OSD_RECOVERY_PRIORITY_MAX, "Invalid priority range");
+  static_assert(OSD_RECOVERY_PRIORITY_MIN >= 0, "Priority range must match unsigned type");
+
+  return static_cast<unsigned>(ret);
 }
 
 unsigned PG::get_backfill_priority()
 {
   // a higher value -> a higher priority
 
-  unsigned ret = OSD_BACKFILL_PRIORITY_BASE;
-  if (is_undersized()) {
+  int ret = OSD_BACKFILL_PRIORITY_BASE;
+  if (acting.size() < pool.info.min_size) {
+    // inactive: no. of replicas < min_size, highest priority since it blocks IO
+    ret = OSD_BACKFILL_INACTIVE_PRIORITY_BASE + (pool.info.min_size - acting.size());
+
+  } else if (is_undersized()) {
     // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
     assert(pool.info.size > actingset.size());
     ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE + (pool.info.size - actingset.size());
@@ -2146,9 +2184,20 @@ unsigned PG::get_backfill_priority()
     // degraded: baseline degraded
     ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
   }
-  assert (ret < OSD_RECOVERY_PRIORITY_MAX);
 
-  return ret;
+  // Adjust with pool's recovery priority
+  int pool_recovery_priority = 0;
+  pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
+  ret += pool_recovery_priority;
+
+  // Clamp to valid range
+  if (ret > OSD_RECOVERY_PRIORITY_MAX) {
+    ret = OSD_RECOVERY_PRIORITY_MAX;
+  } else if (ret < OSD_RECOVERY_PRIORITY_MIN) {
+    ret = OSD_RECOVERY_PRIORITY_MIN;
+  }
+
+  return static_cast<unsigned>(ret);
 }
 
 void PG::finish_recovery(list<Context*>& tfin)
@@ -2488,28 +2537,36 @@ void PG::_update_calc_stats()
   info.stats.log_start = pg_log.get_tail();
   info.stats.ondisk_log_start = pg_log.get_tail();
 
-  // calc copies, degraded
+  // If actingset is larger then upset we will have misplaced,
+  // so we will report based on actingset size.
+
+  // If upset is larger then we will have degraded,
+  // so we will report based on upset size.
+
+  // If target is the largest of them all, it will contribute to
+  // the degraded count because num_object_copies is
+  // computed using target and eventual used to get degraded total.
+
   unsigned target = get_osdmap()->get_pg_size(info.pgid.pgid);
-  info.stats.stats.calc_copies(MAX(target, actingbackfill.size()));
+  unsigned nrep = MAX(actingset.size(), upset.size());
+  // calc num_object_copies
+  info.stats.stats.calc_copies(MAX(target, nrep));
   info.stats.stats.sum.num_objects_degraded = 0;
+  info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
   if ((is_degraded() || is_undersized() || !is_clean()) && is_peered()) {
-    // NOTE: we only generate copies, degraded, unfound values for
-    // the summation, not individual stat categories.
+    // NOTE: we only generate copies, degraded, misplaced and unfound
+    // values for the summation, not individual stat categories.
     uint64_t num_objects = info.stats.stats.sum.num_objects;
 
-    // a degraded objects has fewer replicas or EC shards than the
-    // pool specifies
-    int64_t degraded = 0;
-
-    // if acting is smaller than desired, add in those missing replicas
-    if (actingset.size() < target)
-      degraded += (target - actingset.size()) * num_objects;
-
-    // missing on primary
-    info.stats.stats.sum.num_objects_missing_on_primary =
-      pg_log.get_missing().num_missing();
-    degraded += pg_log.get_missing().num_missing();
+    // Total sum of all missing
+    int64_t missing = 0;
+    // Objects that have arrived backfilled to up OSDs (not in acting)
+    int64_t backfilled = 0;
+    // A misplaced object is not stored on the correct OSD
+    int64_t misplaced = 0;
+    // Total of object copies/shards found
+    int64_t object_copies = 0;
 
     // num_objects_missing on each peer
     for (map<pg_shard_t, pg_info_t>::iterator pi =
@@ -2524,53 +2581,57 @@ void PG::_update_calc_stats()
       }
     }
 
-    assert(!acting.empty());
-    for (set<pg_shard_t>::iterator i = actingset.begin();
-	 i != actingset.end();
+    assert(!actingbackfill.empty());
+    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+	 i != actingbackfill.end();
 	 ++i) {
-      if (*i == pg_whoami) continue;
-      assert(peer_missing.count(*i));
+      const pg_shard_t &p = *i;
 
-      // in missing set
-      degraded += peer_missing[*i].num_missing();
+      bool in_up = (upset.find(p) != upset.end());
+      bool in_acting = (actingset.find(p) != actingset.end());
+      assert(in_up || in_acting);
 
-      // not yet backfilled
-      int64_t diff = num_objects - peer_info[*i].stats.stats.sum.num_objects;
-      if (diff > 0)
-        degraded += diff;
-    }
-    info.stats.stats.sum.num_objects_degraded = degraded;
-    info.stats.stats.sum.num_objects_unfound = get_num_unfound();
-
-    // a misplaced object is not stored on the correct OSD
-    uint64_t misplaced = 0;
-    unsigned in_place = 0;
-    for (set<pg_shard_t>::const_iterator p = upset.begin();
-	 p != upset.end();
-	 ++p) {
-      const pg_shard_t &s = *p;
-      if (actingset.count(s)) {
-	++in_place;
+      // in acting                  Compute total objects excluding num_missing
+      // in acting and not in up    Compute misplaced objects excluding num_missing
+      // in up and not in acting    Compute total objects already backfilled
+      if (in_acting) {
+        int osd_missing;
+        // primary handling
+        if (p == pg_whoami) {
+          osd_missing = pg_log.get_missing().num_missing();
+          info.stats.stats.sum.num_objects_missing_on_primary =
+              osd_missing;
+          object_copies += num_objects; // My local (primary) count
+        } else {
+          assert(peer_missing.count(p));
+          osd_missing = peer_missing[p].num_missing();
+          object_copies += peer_info[p].stats.stats.sum.num_objects;
+        }
+        missing += osd_missing;
+        // Count non-missing objects not in up as misplaced
+        if (!in_up)
+	  misplaced += MAX(0, num_objects - osd_missing);
       } else {
-	// not where it should be
-	misplaced += num_objects;
-	if (actingbackfill.count(s)) {
-	  // ...but partially backfilled
-	  misplaced -= peer_info[s].stats.stats.sum.num_objects;
-	  dout(20) << __func__ << " osd." << *p << " misplaced "
-		   << num_objects << " but partially backfilled "
-		   << peer_info[s].stats.stats.sum.num_objects
-		   << dendl;
-	} else {
-	  dout(20) << __func__ << " osd." << *p << " misplaced "
-		   << num_objects << " but partially backfilled "
-		   << dendl;
-	}
+        assert(in_up && !in_acting);
+
+        // If this peer has more objects then it should, ignore them
+        backfilled += MIN(num_objects, peer_info[p].stats.stats.sum.num_objects);
       }
     }
-    // count extra replicas in acting but not in up as misplaced
-    if (in_place < actingset.size())
-      misplaced += (actingset.size() - in_place) * num_objects;
+
+    // Any objects that have been backfilled to up OSDs can deducted from misplaced
+    misplaced = MAX(0, misplaced - backfilled);
+
+    // Deduct computed total missing on acting nodes
+    object_copies -= missing;
+    // Include computed backfilled objects on up nodes
+    object_copies += backfilled;
+    // a degraded objects has fewer replicas or EC shards than the
+    // pool specifies.  num_object_copies will never be smaller than target * num_copies.
+    int64_t degraded = MAX(0, info.stats.stats.sum.num_object_copies - object_copies);
+
+    info.stats.stats.sum.num_objects_degraded = degraded;
+    info.stats.stats.sum.num_objects_unfound = get_num_unfound();
     info.stats.stats.sum.num_objects_misplaced = misplaced;
   }
 }
@@ -3328,6 +3389,7 @@ void PG::requeue_ops(list<OpRequestRef> &ls)
 // returns true if a scrub has been newly kicked off
 bool PG::sched_scrub()
 {
+  bool nodeep_scrub = false;
   assert(_lock.is_locked());
   if (!(is_primary() && is_active() && is_clean() && !is_scrubbing())) {
     return false;
@@ -3351,8 +3413,10 @@ bool PG::sched_scrub()
 
   //NODEEP_SCRUB so ignore time initiated deep-scrub
   if (osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
-      pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB))
+      pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB)) {
     time_for_deep = false;
+    nodeep_scrub = true;
+  }
 
   if (!scrubber.must_scrub) {
     assert(!scrubber.must_deep_scrub);
@@ -3410,6 +3474,24 @@ bool PG::sched_scrub()
       if (time_for_deep) {
 	dout(10) << "sched_scrub: scrub will be deep" << dendl;
 	state_set(PG_STATE_DEEP_SCRUB);
+      } else if (!scrubber.must_deep_scrub && info.stats.stats.sum.num_deep_scrub_errors) {
+	if (!nodeep_scrub) {
+	  osd->clog->info() << "osd." << osd->whoami
+			    << " pg " << info.pgid
+			    << " Deep scrub errors, upgrading scrub to deep-scrub";
+	  state_set(PG_STATE_DEEP_SCRUB);
+	} else if (!scrubber.must_scrub) {
+	  osd->clog->error() << "osd." << osd->whoami
+			     << " pg " << info.pgid
+			     << " Regular scrub skipped due to deep-scrub errors and nodeep-scrub set";
+	  clear_scrub_reserved();
+	  scrub_unreserve_replicas();
+	  return false;
+	} else {
+	  osd->clog->error() << "osd." << osd->whoami
+			     << " pg " << info.pgid
+			     << " Regular scrub request, losing deep-scrub details";
+	}
       }
       queue_scrub();
     } else {
@@ -3832,8 +3914,12 @@ void PG::repair_object(
   const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
   pg_shard_t bad_peer)
 {
+  list<pg_shard_t> op_shards;
+  for (auto i : *ok_peers) {
+    op_shards.push_back(i.second);
+  }
   dout(10) << "repair_object " << soid << " bad_peer osd."
-	   << bad_peer << " ok_peers osd.{" << ok_peers << "}" << dendl;
+	   << bad_peer << " ok_peers osd.{" << op_shards << "}" << dendl;
   ScrubMap::object &po = ok_peers->back().first;
   eversion_t v;
   bufferlist bv;
@@ -4523,7 +4609,7 @@ void PG::scrub_finish()
       oss << "ok";
     if (!deep_scrub && info.stats.stats.sum.num_deep_scrub_errors)
       oss << " ( " << info.stats.stats.sum.num_deep_scrub_errors
-          << " remaining deep scrub error(s) )";
+          << " remaining deep scrub error details lost)";
     if (repair)
       oss << ", " << scrubber.fixed << " fixed";
     oss << "\n";
@@ -6613,7 +6699,7 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   // adjust acting set?  (e.g. because backfill completed...)
   bool history_les_bound = false;
   if (pg->acting != pg->up && !pg->choose_acting(auth_log_shard,
-						 &history_les_bound))
+						 true, &history_les_bound))
     assert(pg->want_acting.size());
 
   if (context< Active >().all_replicas_activated)
@@ -7402,8 +7488,8 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
   PG *pg = context< RecoveryMachine >().pg;
 
   // adjust acting?
-  if (!pg->choose_acting(auth_log_shard,
-      &context< Peering >().history_les_bound)) {
+  if (!pg->choose_acting(auth_log_shard, false,
+			 &context< Peering >().history_les_bound)) {
     if (!pg->want_acting.empty()) {
       post_event(NeedActingChange());
     } else {

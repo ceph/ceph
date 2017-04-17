@@ -29,11 +29,22 @@ int RGWMongoose::write_data(const char *buf, int len)
   return r;
 }
 
-RGWMongoose::RGWMongoose(mg_connection *_conn, int _port)
-  : conn(_conn), port(_port), status_num(0), header_done(false),
+RGWMongoose::RGWMongoose(mg_connection *_conn)
+  : conn(_conn), status_num(0), header_done(false),
     sent_header(false), has_content_length(false),
     explicit_keepalive(false), explicit_conn_close(false)
 {
+    sockaddr *lsa = mg_get_local_addr(conn);
+    switch(lsa->sa_family) {
+    case AF_INET:
+	port = ntohs(((struct sockaddr_in*)lsa)->sin_port);
+	break;
+    case AF_INET6:
+	port = ntohs(((struct sockaddr_in6*)lsa)->sin6_port);
+	break;
+    default:
+	port = -1;
+    }
 }
 
 int RGWMongoose::read_data(char *buf, int len)
@@ -64,9 +75,11 @@ int RGWMongoose::complete_request()
        * 'given in the response.'
        *
        */
-      if (status_num == 204 || status_num == 304) {
+      if ((status_num == 204 || status_num == 304) &&
+	  ! g_conf->rgw_print_prohibited_content_length) {
         has_content_length = true;
       } else if (0 && data.length() == 0) {
+	/* XXX this never happens */
         has_content_length = true;
         print("Transfer-Enconding: %s\r\n", "chunked");
         data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
@@ -144,14 +157,12 @@ void RGWMongoose::init_env(CephContext *cct)
   env.set("REMOTE_USER", info->remote_user);
   env.set("SCRIPT_URI", info->uri); /* FIXME */
 
+  if (port <= 0)
+    lderr(cct) << "init_env: bug: invalid port number" << dendl;
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", port);
   env.set("SERVER_PORT", port_buf);
-
   if (info->is_ssl) {
-    if (port == 0) {
-      strcpy(port_buf,"443");
-    }
     env.set("SERVER_PORT_SECURE", port_buf);
   }
 }

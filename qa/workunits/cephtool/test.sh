@@ -1217,7 +1217,7 @@ function test_mon_osd()
   ceph osd pool delete data data --yes-i-really-really-mean-it
 
   ceph osd pause
-  ceph osd dump | grep 'flags pauserd,pausewr'
+  ceph osd dump | grep 'flags.*pauserd,pausewr'
   ceph osd unpause
 
   ceph osd tree

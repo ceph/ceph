@@ -136,8 +136,7 @@ libcivetweb_la_SOURCES =  \
 
 libcivetweb_la_CXXFLAGS = ${CIVETWEB_INCLUDE} -fPIC -Woverloaded-virtual \
 	${AM_CXXFLAGS}
-libcivetweb_la_CFLAGS = -I$(srcdir)/civetweb/include ${CIVETWEB_INCLUDE} -fPIC -DNO_SSL_DL
-LIBCIVETWEB_DEPS += -lssl -lcrypto
+libcivetweb_la_CFLAGS = -I$(srcdir)/civetweb/include ${CIVETWEB_INCLUDE} -fPIC $(SONAME_DEFINES)
 
 noinst_LTLIBRARIES += libcivetweb.la
 
@@ -150,7 +149,7 @@ radosgw_SOURCES = \
 	civetweb/src/civetweb.c \
 	rgw/rgw_main.cc
 
-radosgw_CFLAGS = -I$(srcdir)/civetweb/include -fPIC -I$(srcdir)/xxHash ${CIVETWEB_INCLUDE}
+radosgw_CFLAGS = -I$(srcdir)/civetweb/include -fPIC -I$(srcdir)/xxHash ${CIVETWEB_INCLUDE} $(SONAME_DEFINES)
 radosgw_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBCIVETWEB_DEPS) $(LIBRGW_DEPS) $(RESOLV_LIBS) \
 	$(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw

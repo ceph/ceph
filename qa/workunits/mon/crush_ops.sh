@@ -74,11 +74,16 @@ ceph osd crush rm foo
 ceph osd crush rm osd.$o2 host2
 ceph osd crush rm host2
 
+ceph osd crush add-bucket foo host
+ceph osd crush move foo root=default rack=localrack
+
+ceph osd crush create-or-move osd.$o1 1.0 root=default
+ceph osd crush move osd.$o1 host=foo
+ceph osd find $o1 | grep host | grep foo
+
 ceph osd crush rm osd.$o1
 ceph osd crush rm osd.$o2
 
-ceph osd crush add-bucket foo host
-ceph osd crush move foo root=default rack=localrack
 ceph osd crush rm foo
 
 # test reweight

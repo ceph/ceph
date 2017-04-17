@@ -239,6 +239,7 @@ void ExclusiveLock<I>::handle_peer_notification(int r) {
 
     ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
     assert(get_active_action() == ACTION_REQUEST_LOCK);
+    m_state = STATE_ACQUIRING;
 
     if (r >= 0) {
       execute_next_action();
@@ -247,13 +248,6 @@ void ExclusiveLock<I>::handle_peer_notification(int r) {
   }
 
   handle_acquire_lock(r);
-}
-
-template <typename I>
-void ExclusiveLock<I>::assert_header_locked(librados::ObjectWriteOperation *op) {
-  Mutex::Locker locker(m_lock);
-  rados::cls::lock::assert_locked(op, RBD_LOCK_NAME, LOCK_EXCLUSIVE,
-                                  m_cookie, WATCHER_LOCK_TAG);
 }
 
 template <typename I>

@@ -1429,7 +1429,7 @@ void ReplicatedBackend::prepare_pull(
 
   dout(7) << "pull " << soid
 	  << " v " << v
-	  << " on osds " << *p
+	  << " on osds " << q->second
 	  << " from osd." << fromshard
 	  << dendl;
 
@@ -2357,7 +2357,8 @@ void ReplicatedBackend::sub_op_push(OpRequestRef op)
 
 void ReplicatedBackend::_failed_push(pg_shard_t from, const hobject_t &soid)
 {
-  get_parent()->failed_push(from, soid);
+  list<pg_shard_t> fl = { from };
+  get_parent()->failed_push(fl, soid);
   pull_from_peer[from].erase(soid);
   if (pull_from_peer[from].empty())
     pull_from_peer.erase(from);

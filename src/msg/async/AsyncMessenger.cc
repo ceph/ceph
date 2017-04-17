@@ -87,7 +87,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     listen_sd = -1;
     return r;
   }
-
+  net.set_close_on_exec(listen_sd);
   net.set_socket_options(listen_sd);
 
   // use whatever user specified (if anything)
@@ -239,6 +239,7 @@ void Processor::accept()
     int sd = ::accept(listen_sd, (sockaddr*)&addr.ss_addr(), &slen);
     if (sd >= 0) {
       errors = 0;
+      net.set_close_on_exec(sd);
       ldout(msgr->cct, 10) << __func__ << " accepted incoming on sd " << sd << dendl;
 
       msgr->add_accept(sd);

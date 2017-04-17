@@ -67,6 +67,7 @@ void PGLog::IndexedLog::split_into(
   PGLog::IndexedLog *olog)
 {
   list<pg_log_entry_t> oldlog;
+  unindex();
   oldlog.swap(log);
 
   eversion_t old_tail;

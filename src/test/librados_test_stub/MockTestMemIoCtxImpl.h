@@ -79,6 +79,11 @@ public:
     return TestMemIoCtxImpl::notify(o, bl, timeout_ms, pbl);
   }
 
+  MOCK_METHOD1(set_snap_read, void(snap_t));
+  void do_set_snap_read(snap_t snap_id) {
+    return TestMemIoCtxImpl::set_snap_read(snap_id);
+  }
+
   MOCK_METHOD4(read, int(const std::string& oid,
                          size_t len,
                          uint64_t off,
@@ -142,6 +147,7 @@ public:
     ON_CALL(*this, list_watchers(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_list_watchers));
     ON_CALL(*this, notify(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_notify));
     ON_CALL(*this, read(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_read));
+    ON_CALL(*this, set_snap_read(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_set_snap_read));
     ON_CALL(*this, remove(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_remove));
     ON_CALL(*this, selfmanaged_snap_create(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_selfmanaged_snap_create));
     ON_CALL(*this, selfmanaged_snap_remove(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_selfmanaged_snap_remove));

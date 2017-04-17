@@ -205,7 +205,6 @@ function set_size() {
     else
       dd if=/dev/urandom bs=$bytes count=1 of=$dir/CORRUPT
     fi
-    objectstore_tool $dir $osd_id --op list $objname
     objectstore_tool $dir $osd_id $objname set-bytes $dir/CORRUPT || return 1
     rm -f $dir/CORRUPT
 }

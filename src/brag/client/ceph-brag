@@ -245,7 +245,10 @@ def get_nums():
   oj = json.loads(o)
   num_mons = len(oj['monmap']['mons'])
   num_osds = int(oj['osdmap']['osdmap']['num_in_osds'])
-  num_mdss = oj['mdsmap']['in']
+  try:
+    num_mdss = oj['fsmap']['in']
+  except KeyError:
+    num_mdss = 0
 
   pgmap = oj['pgmap']
   num_pgs = pgmap['num_pgs']

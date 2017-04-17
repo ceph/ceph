@@ -897,6 +897,8 @@ function test_get_not_primary() {
 # @param STDOUT the output of ceph-objectstore-tool
 # @return 0 on success, 1 on error
 #
+# The value of $ceph_osd_args will be passed to restarted osds
+#
 function objectstore_tool() {
     local dir=$1
     shift
@@ -909,7 +911,7 @@ function objectstore_tool() {
         --data-path $osd_data \
         --journal-path $osd_data/journal \
         "$@" || return 1
-    activate_osd $dir $id >&2 || return 1
+    activate_osd $dir $id $ceph_osd_args >&2 || return 1
     wait_for_clean >&2
 }
 
@@ -1031,8 +1033,9 @@ function test_get_num_pgs() {
 #
 function get_last_scrub_stamp() {
     local pgid=$1
+    local sname=${2:-last_scrub_stamp}
     ceph --format xml pg dump pgs 2>/dev/null | \
-        $XMLSTARLET sel -t -m "//pg_stat[pgid='$pgid']/last_scrub_stamp" -v .
+        $XMLSTARLET sel -t -m "//pg_stat[pgid='$pgid']/$sname" -v .
 }
 
 function test_get_last_scrub_stamp() {
@@ -1171,6 +1174,13 @@ function pg_scrub() {
     wait_for_scrub $pgid "$last_scrub"
 }
 
+function pg_deep_scrub() {
+    local pgid=$1
+    local last_scrub=$(get_last_scrub_stamp $pgid last_deep_scrub_stamp)
+    ceph pg deep-scrub $pgid
+    wait_for_scrub $pgid "$last_scrub" last_deep_scrub_stamp
+}
+
 function test_pg_scrub() {
     local dir=$1
 
@@ -1250,9 +1260,10 @@ function test_expect_failure() {
 function wait_for_scrub() {
     local pgid=$1
     local last_scrub="$2"
+    local sname=${3:-last_scrub_stamp}
 
     for ((i=0; i < $TIMEOUT; i++)); do
-        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid)" ; then
+        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid $sname)" ; then
             return 0
         fi
         sleep 1

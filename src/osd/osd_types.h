@@ -61,17 +61,24 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_PGMETA CompatSet::Feature(13, "pg meta object")
 
 
-/// max recovery priority for MBackfillReserve
-#define OSD_RECOVERY_PRIORITY_MAX 255u
-
-/// base recovery priority for MBackfillReserve
-#define OSD_RECOVERY_PRIORITY_BASE 230u
-
-/// base backfill priority for MBackfillReserve (degraded PG)
-#define OSD_BACKFILL_DEGRADED_PRIORITY_BASE 200u
+/// min recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_MIN 0
 
 /// base backfill priority for MBackfillReserve
-#define OSD_BACKFILL_PRIORITY_BASE 1u
+#define OSD_BACKFILL_PRIORITY_BASE 100
+
+/// base backfill priority for MBackfillReserve (degraded PG)
+#define OSD_BACKFILL_DEGRADED_PRIORITY_BASE 140
+
+/// base recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_BASE 180
+
+/// base backfill priority for MBackfillReserve (inactive PG)
+#define OSD_BACKFILL_INACTIVE_PRIORITY_BASE 220
+
+/// max recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_MAX 255
+
 
 typedef hobject_t collection_list_handle_t;
 
@@ -4044,12 +4051,14 @@ struct ScrubMap {
     bool omap_digest_present:1;
     bool read_error:1;
     bool stat_error:1;
+    bool ec_hash_mismatch:1;
+    bool ec_size_mismatch:1;
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
       size(-1), omap_digest(0), digest(0), nlinks(0), 
       negative(false), digest_present(false), omap_digest_present(false), 
-      read_error(false), stat_error(false) {}
+      read_error(false), stat_error(false), ec_hash_mismatch(false), ec_size_mismatch(false) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
@@ -4350,12 +4359,6 @@ struct obj_list_snap_response_t {
 };
 
 WRITE_CLASS_ENCODER(obj_list_snap_response_t)
-
-enum scrub_error_type {
-  CLEAN,
-  DEEP_ERROR,
-  SHALLOW_ERROR
-};
 
 // PromoteCounter
 

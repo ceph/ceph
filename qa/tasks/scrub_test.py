@@ -271,7 +271,7 @@ class InconsistentObjChecker:
         self._check_attrs(inc, 'data_digest')
 
     def missing(self, inc):
-        assert 'missing' in inc['errors']
+        assert 'missing' in inc['union_shard_errors']
         self._check_errors(inc, 'missing')
 
     def size_mismatch(self, inc):
@@ -291,6 +291,10 @@ def test_list_inconsistent_obj(ctx, manager, osd_remote, pg, acting, osd_id,
     omap_val = 'val'
     manager.do_rados(mon, ['-p', pool, 'setomapval', obj_name,
                            omap_key, omap_val])
+    # Update missing digests, requires "osd deep scrub update digest min age: 0"
+    pgnum = get_pgnum(pg)
+    manager.do_pg_scrub(pool, pgnum, 'deep-scrub')
+
     messup = MessUp(manager, osd_remote, pool, osd_id, obj_name, obj_path,
                     omap_key, omap_val)
     for test in [messup.rm_omap, messup.add_omap, messup.change_omap,
@@ -329,12 +333,22 @@ def task(ctx, config):
     - install:
     - ceph:
         log-whitelist:
-        - '!= known digest'
-        - '!= known omap_digest'
+        - '!= data_digest'
+        - '!= omap_digest'
+        - '!= size'
         - deep-scrub 0 missing, 1 inconsistent objects
-        - deep-scrub 1 errors
+        - deep-scrub [0-9]+ errors
         - repair 0 missing, 1 inconsistent objects
-        - repair 1 errors, 1 fixed
+        - repair [0-9]+ errors, [0-9]+ fixed
+        - shard [0-9]+ missing
+        - deep-scrub 1 missing, 1 inconsistent objects
+        - does not match object info size
+        - attr name mistmatch
+        - deep-scrub 1 missing, 0 inconsistent objects
+        - failed to pick suitable auth object
+      conf:
+        osd:
+          osd deep scrub update digest min age: 0
     - scrub_test:
     """
     if config is None:
@@ -374,6 +388,10 @@ def task(ctx, config):
     log.info('err is %d' % p.exitstatus)
     manager.do_rados(mon, ['-p', 'rbd', 'setomapheader', obj_name, 'hdr'])
     log.info('err is %d' % p.exitstatus)
+
+    # Update missing digests, requires "osd deep scrub update digest min age: 0"
+    pgnum = get_pgnum(pg)
+    manager.do_pg_scrub('rbd', pgnum, 'deep-scrub')
 
     log.info('messing with PG %s on osd %d' % (pg, osd))
     test_repair_corrupted_obj(ctx, manager, pg, osd_remote, obj_path, 'rbd')
