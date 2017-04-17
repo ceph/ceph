@@ -413,11 +413,14 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
   };
 }
 
-rgw::auth::Engine::result_t EC2Engine::authenticate(const std::string& access_key_id,
-                                                    const std::string& signature,
-                                                    const std::string& string_to_sign,
-                                                    /* Passthorugh only! */
-                                                    const req_state* s) const
+rgw::auth::Engine::result_t EC2Engine::authenticate(
+  const std::string& access_key_id,
+  const std::string& signature,
+  const std::string& string_to_sign,
+  const signature_factory_t& signature_factory,
+  const completer_factory_t& completer_factory,
+  /* Passthorugh only! */
+  const req_state* s) const
 {
   /* This will be initialized on the first call to this method. In C++11 it's
    * also thread-safe. */
@@ -472,7 +475,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(const std::string& access_ke
 
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                               get_creds_info(*t, accepted_roles.admin));
-    return result_t::grant(std::move(apl));
+    return result_t::grant(std::move(apl), completer_factory());
   }
 }
 
