@@ -7583,41 +7583,12 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   OpSequencerRef osr = txc->osr;
-  {
-    std::lock_guard<std::mutex> l(osr->qlock);
-    txc->state = TransContext::STATE_DONE;
-  }
-
-  bool empty = _osr_reap_done(osr.get());
-  if (empty && osr->zombie) {
-    dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
-    osr->_unregister();
-  }
-}
-
-void BlueStore::_txc_release_alloc(TransContext *txc)
-{
-  // update allocator with full released set
-  if (!cct->_conf->bluestore_debug_no_reuse_blocks) {
-    dout(10) << __func__ << " " << txc << " " << txc->released << dendl;
-    for (interval_set<uint64_t>::iterator p = txc->released.begin();
-	 p != txc->released.end();
-	 ++p) {
-      alloc->release(p.get_start(), p.get_len());
-    }
-  }
-
-  txc->allocated.clear();
-  txc->released.clear();
-}
-
-bool BlueStore::_osr_reap_done(OpSequencer *osr)
-{
   CollectionRef c;
   bool empty = false;
   {
     std::lock_guard<std::mutex> l(osr->qlock);
-    dout(20) << __func__ << " osr " << osr << dendl;
+    txc->state = TransContext::STATE_DONE;
+
     while (!osr->q.empty()) {
       TransContext *txc = &osr->q.front();
       dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
@@ -7650,12 +7621,31 @@ bool BlueStore::_osr_reap_done(OpSequencer *osr)
       empty = true;
     }
   }
-
   if (c) {
     c->trim_cache();
   }
 
-  return empty;
+
+  if (empty && osr->zombie) {
+    dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
+    osr->_unregister();
+  }
+}
+
+void BlueStore::_txc_release_alloc(TransContext *txc)
+{
+  // update allocator with full released set
+  if (!cct->_conf->bluestore_debug_no_reuse_blocks) {
+    dout(10) << __func__ << " " << txc << " " << txc->released << dendl;
+    for (interval_set<uint64_t>::iterator p = txc->released.begin();
+	 p != txc->released.end();
+	 ++p) {
+      alloc->release(p.get_start(), p.get_len());
+    }
+  }
+
+  txc->allocated.clear();
+  txc->released.clear();
 }
 
 void BlueStore::_osr_drain_preceding(TransContext *txc)
