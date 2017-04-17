@@ -166,7 +166,7 @@ static vector<string> split_opslog_obj_name(const string&obj_name){
   return elems;
 }
 
-static string generate_target_key(const string prefix, string obj_name)
+static string generate_target_key(CephContext *cct, const string prefix, string obj_name)
 {
   string target_key;
 
@@ -177,6 +177,9 @@ static string generate_target_key(const string prefix, string obj_name)
       return target_key;
   } else {
     vector<std::string> _result;
+
+    ldout(cct, 20) << "RGWBL::generate_target_key "<< "prefix=" << prefix 
+                   << " obj_name=" << obj_name << dendl;
     _result = split_opslog_obj_name(obj_name);
     string date = _result[0];
 
@@ -332,7 +335,7 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
     return 0;
   }
 
-  string target_key = generate_target_key(target_prefix, opslog_obj);
+  string target_key = generate_target_key(cct, target_prefix, opslog_obj);
   if (target_key.empty()) {
     ldout(cct, 0) << __func__ << "generate target object failed ret=" << dendl;
     return -1;
