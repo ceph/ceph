@@ -41,7 +41,6 @@
 #include <xmmintrin.h>
 #endif
 
-#include "include/atomic.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/ceph_hash.h"
@@ -56,6 +55,8 @@
 #include "global/global_init.h"
 
 #include "test/perf_helper.h"
+
+#include <atomic>
 
 using namespace ceph;
 
@@ -99,11 +100,13 @@ void discard(void* value) {
 double atomic_int_cmp()
 {
   int count = 1000000;
-  atomic_t value(11);
-  int test = 11;
+  std::atomic<unsigned> value(11);
+  unsigned int test = 11;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value.compare_and_swap(test, test+2);
+
+    auto expected = test;
+    value.compare_exchange_weak(expected, test+2);
     test += 2;
   }
   uint64_t stop = Cycles::rdtsc();
@@ -115,10 +118,10 @@ double atomic_int_cmp()
 double atomic_int_inc()
 {
   int count = 1000000;
-  atomic_t value(11);
+  std::atomic<unsigned> value(11);
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value.inc();
+    value++;
   }
   uint64_t stop = Cycles::rdtsc();
   // printf("Final value: %d\n", value.load());
@@ -129,11 +132,11 @@ double atomic_int_inc()
 double atomic_int_read()
 {
   int count = 1000000;
-  atomic_t value(11);
+  std::atomic<unsigned> value(11);
   int total = 0;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    total += value.read();
+    total += value;
   }
   uint64_t stop = Cycles::rdtsc();
   // printf("Total: %d\n", total);
@@ -144,10 +147,10 @@ double atomic_int_read()
 double atomic_int_set()
 {
   int count = 1000000;
-  atomic_t value(11);
+  std::atomic<unsigned> value(11);
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    value.set(88);
+    value = 88;
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -483,12 +486,12 @@ class CenterWorker : public Thread {
 };
 
 class CountEvent: public EventCallback {
-  atomic_t *count;
+  std::atomic<unsigned> *count;
 
  public:
-  explicit CountEvent(atomic_t *atomic): count(atomic) {}
+  explicit CountEvent(std::atomic<unsigned> *atomic) : count(atomic) {}
   void do_request(int id) override {
-    count->dec();
+    (*count)--;
   }
 };
 
@@ -497,20 +500,20 @@ double eventcenter_dispatch()
   int count = 100000;
 
   CenterWorker worker(g_ceph_context);
-  atomic_t flag(1);
+  std::atomic<unsigned> flag = { 1 };
   worker.create("evt_center_disp");
   EventCallbackRef count_event(new CountEvent(&flag));
 
   worker.center.dispatch_event_external(count_event);
   // Start a new thread and wait for it to ready.
-  while (flag.read())
+  while (flag)
     usleep(100);
 
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    flag.set(1);
+    flag = 1;
     worker.center.dispatch_event_external(count_event);
-    while (flag.read())
+    while (flag)
       ;
   }
   uint64_t stop = Cycles::rdtsc();
