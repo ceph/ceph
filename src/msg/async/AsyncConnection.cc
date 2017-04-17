@@ -269,12 +269,13 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
     if (left == 0) {
       return 0;
     }
+
     state_offset += to_read;
   }
 
   recv_end = recv_start = 0;
   /* nothing left in the prefetch buffer */
-  if (len > recv_max_prefetch) {
+  if (left >= recv_max_prefetch) {
     /* this was a large read, we don't prefetch for these */
     do {
       r = read_bulk(p+state_offset, left);
@@ -299,17 +300,18 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
         return -1;
       }
       recv_end += r;
-      if (r >= static_cast<int>(left)) {
-        recv_start = len - state_offset;
-        memcpy(p+state_offset, recv_buf, recv_start);
-        state_offset = 0;
-        return 0;
-      }
-      left -= r;
     } while (r > 0);
-    memcpy(p+state_offset, recv_buf, recv_end-recv_start);
-    state_offset += (recv_end - recv_start);
-    recv_end = recv_start = 0;
+
+    uint64_t to_read = MIN(recv_end - recv_start, left);
+    memcpy(p+state_offset, recv_buf+recv_start, to_read);
+    recv_start += to_read;
+    left -= to_read;
+
+    if (0 == left) {
+      return 0;
+    }
+
+    state_offset += to_read;
   }
   ldout(async_msgr->cct, 25) << __func__ << " need len " << len << " remaining "
                              << len - state_offset << " bytes" << dendl;
