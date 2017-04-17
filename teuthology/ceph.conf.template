@@ -62,6 +62,8 @@
 	debug mgr = 20
 	debug mon = 20
 	debug auth = 20
+	mon reweight min pgs per osd = 4
+	mon reweight min bytes per osd = 10
 
 [mon]
 	debug ms = 1
