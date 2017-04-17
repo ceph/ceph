@@ -3267,11 +3267,8 @@ void *BlueStore::MempoolThread::entry()
 static void aio_cb(void *priv, void *priv2)
 {
   BlueStore *store = static_cast<BlueStore*>(priv);
-  if ((unsigned long long)priv2 & 0x1ull) {
-    store->deferred_aio_finish((void*)((unsigned long long)priv2 & ~1ull));
-  } else {
-    store->txc_aio_finish(priv2);
-  }
+  BlueStore::AioContext *c = static_cast<BlueStore::AioContext*>(priv2);
+  c->aio_finish(store);
 }
 
 BlueStore::BlueStore(CephContext *cct, const string& path)
