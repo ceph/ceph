@@ -790,6 +790,7 @@
   modified \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
   flags 
   full_ratio 0
+  backfillfull_ratio 0
   nearfull_ratio 0
   
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 15296 pgp_num 15296 last_change 0 flags hashpspool stripe_width 0

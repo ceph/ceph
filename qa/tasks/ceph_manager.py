@@ -696,7 +696,7 @@ class Thrasher:
         """
         Test backfills stopping when the replica fills up.
 
-        First, use osd_backfill_full_ratio to simulate a now full
+        First, use injectfull admin command to simulate a now full
         osd by setting it to 0 on all of the OSDs.
 
         Second, on a random subset, set
@@ -705,13 +705,14 @@ class Thrasher:
 
         Then, verify that all backfills stop.
         """
-        self.log("injecting osd_backfill_full_ratio = 0")
+        self.log("injecting backfill full")
         for i in self.live_osds:
             self.ceph_manager.set_config(
                 i,
                 osd_debug_skip_full_check_in_backfill_reservation=
-                random.choice(['false', 'true']),
-                osd_backfill_full_ratio=0)
+                random.choice(['false', 'true']))
+            self.ceph_manager.osd_admin_socket(i, command=['injectfull', 'backfillfull'],
+                                     check_status=True, timeout=30, stdout=DEVNULL)
         for i in range(30):
             status = self.ceph_manager.compile_pg_status()
             if 'backfill' not in status.keys():
@@ -724,8 +725,9 @@ class Thrasher:
         for i in self.live_osds:
             self.ceph_manager.set_config(
                 i,
-                osd_debug_skip_full_check_in_backfill_reservation='false',
-                osd_backfill_full_ratio=0.85)
+                osd_debug_skip_full_check_in_backfill_reservation='false')
+            self.ceph_manager.osd_admin_socket(i, command=['injectfull', 'none'],
+                                     check_status=True, timeout=30, stdout=DEVNULL)
 
     def test_map_discontinuity(self):
         """
