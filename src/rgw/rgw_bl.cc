@@ -194,21 +194,27 @@ int RGWBL::bucket_bl_fetch(const string opslog_obj, bufferlist *buffer)
   RGWAccessHandle sh;
   int r = store->log_show_init(opslog_obj, &sh);
   if (r < 0) {
-    ldout(cct, 0) << "RGWBL::bucket_bl_fetch" << "log_show_init() failed ret="
-                 << cpp_strerror(-r) << dendl;
-  }
-
-  struct rgw_log_entry entry;
-  r = store->log_show_next(sh, &entry);
-  if (r < 0) {
-    ldout(cct, 0) << "RGWBL::bucket_bl_fetch" << "log_show_next() failed ret="
-		  << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "RGWBL::bucket_bl_fetch"
+                  << " log_show_init() failed, obj=" << opslog_obj
+                  << " ret=" << cpp_strerror(-r) << dendl;
     return r;
   }
 
+  struct rgw_log_entry entry;
   do {
-    format_opslog_entry(entry, buffer);
     r = store->log_show_next(sh, &entry);
+    if (r < 0) {
+      ldout(cct, 20) << "RGWBL::bucket_bl_fetch log_show_next obj=" << opslog_obj
+                     << " failed ret=" << cpp_strerror(-r) << dendl;
+     return r;
+    }
+
+    if (!entry.bucket.empty())
+      format_opslog_entry(entry, buffer);
+
+    if (r == 0) {
+      ldout(cct, 20) << "RGWBL::bucket_bl_fetch log_show_next reached end." << dendl;
+    }
   } while (r > 0);
 
   return 0;
@@ -318,9 +324,12 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
   bufferlist opslog_buffer;
   int r = bucket_bl_fetch(opslog_obj, &opslog_buffer);
   if (r < 0) {
-    ldout(cct, 0) << __func__ << "bucket_bl_fetch() failed ret="
-		  << cpp_strerror(-r) << dendl;
     return r;
+  }
+
+  if (opslog_buffer.length() == 0) {
+    ldout(cct, 0) << __func__ << "bucket_bl_fetch has no entries" << dendl;
+    return 0;
   }
 
   string target_key = generate_target_key(target_prefix, opslog_obj);
@@ -405,7 +414,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
   RGWAccessHandle lh;
   ret = store->log_list_init(filter, &lh);
   if (ret == -ENOENT) {
-    // no ops log
+    // no opslog object
     return 0;
   } else {
     if (ret < 0) {
@@ -445,7 +454,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
       opslog_obj.clear();
       int r = store->log_list_next(lh, &opslog_obj);
       if (r == -ENOENT) {
-	ret = 0; // no opslog
+	ret = 0; // no opslog object
 	break;
       }
       if (r < 0) {
