@@ -76,12 +76,9 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
                << " but DNE in pg_map; pool was probably deleted."
                << dendl;
       continue;
-    }
-
-    // In case we already heard about more recent stats from this PG
-    // from another OSD
-    if (pg_map.pg_stat.count(pgid) &&
-        pg_map.pg_stat[pgid].get_version_pair() > pg_stats.get_version_pair()) {
+     // In case we already heard about more recent stats from this PG
+     // from another OSD
+    } else if (pg_map.pg_stat[pgid].get_version_pair() > pg_stats.get_version_pair()) {
       dout(15) << " had " << pgid << " from " << pg_map.pg_stat[pgid].reported_epoch << ":"
                << pg_map.pg_stat[pgid].reported_seq << dendl;
       continue;
