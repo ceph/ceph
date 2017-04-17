@@ -1269,7 +1269,7 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
   // fill export message with cache data
   MExportDir *req = new MExportDir(dir->dirfrag(), it->second.tid);
   map<client_t,entity_inst_t> exported_client_map;
-  int num_exported_inodes = encode_export_dir(req->export_data,
+  uint64_t num_exported_inodes = encode_export_dir(req->export_data,
 					      dir,   // recur start point
 					      exported_client_map,
 					      now);
@@ -1430,12 +1430,12 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, mds_rank_t peer,
 
 }
 
-int Migrator::encode_export_dir(bufferlist& exportbl,
+uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
 				CDir *dir,
 				map<client_t,entity_inst_t>& exported_client_map,
 				utime_t now)
 {
-  int num_exported = 0;
+  uint64_t num_exported = 0;
 
   dout(7) << "encode_export_dir " << *dir << " " << dir->get_num_head_items() << " head items" << dendl;
   
