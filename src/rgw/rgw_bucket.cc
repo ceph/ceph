@@ -1388,6 +1388,7 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   formatter->dump_string("bucket", bucket.name);
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
+  formatter->dump_stream("index_type") << bucket_info.index_type;
   ::encode_json("owner", bucket_info.owner, formatter);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
