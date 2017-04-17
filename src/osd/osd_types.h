@@ -139,6 +139,12 @@ struct pg_shard_t {
   }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const {
+    f->dump_unsigned("osd", osd);
+    if (shard != shard_id_t::NO_SHARD) {
+      f->dump_unsigned("shard", shard);
+    }
+  }
 };
 WRITE_CLASS_ENCODER(pg_shard_t)
 WRITE_EQ_OPERATORS_2(pg_shard_t, osd, shard)
@@ -2898,6 +2904,7 @@ PastIntervals::PriorSet::PriorSet(
   }
 
   set<pg_shard_t> all_probe = past_intervals.get_all_probe(ec_pool);
+  ldpp_dout(dpp, 10) << "build_prior all_probe " << all_probe << dendl;
   for (auto &&i: all_probe) {
     switch (f(0, i.osd, nullptr)) {
     case UP: {
@@ -2963,8 +2970,8 @@ PastIntervals::PriorSet::PriorSet(
       // ensure that we haven't lost any information.
       if (!(*pcontdec)(up_now) && any_down_now) {
 	// fixme: how do we identify a "clean" shutdown anyway?
-	ldpp_dout(dpp, 10) << "build_prior  possibly went active+rw, insufficient up;"
-			   << " including down osds" << dendl;
+	ldpp_dout(dpp, 10) << "build_prior  possibly went active+rw,"
+			   << " insufficient up; including down osds" << dendl;
 	assert(!candidate_blocked_by.empty());
 	pg_down = true;
 	blocked_by.insert(
