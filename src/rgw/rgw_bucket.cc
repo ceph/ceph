@@ -1383,11 +1383,18 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   }
 
   utime_t ut(mtime);
+  string index_type;
+ 
+  if (bucket_info.index_type == RGWBIType_Normal) 
+    index_type = "Normal";
+  else if (bucket_info.index_type == RGWBIType_Indexless) 
+    index_type = "Indexless";
 
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
+  formatter->dump_string("index_type", index_type);
   ::encode_json("owner", bucket_info.owner, formatter);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
