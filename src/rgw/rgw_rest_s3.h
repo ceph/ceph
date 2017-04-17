@@ -670,11 +670,11 @@ namespace auth {
 namespace s3 {
 
 
-class Version2ndEngine : public rgw::auth::Engine {
+class AWSEngine : public rgw::auth::Engine {
 public:
-  class Extractor {
+  class VersionAbstractor {
   public:
-    virtual ~Extractor() {};
+    virtual ~VersionAbstractor() {};
 
     using access_key_id_t = std::string;
     using signature_t = std::string;
@@ -703,11 +703,11 @@ public:
 
 protected:
   CephContext* cct;
-  const Extractor& extractor;
+  const VersionAbstractor& ver_abstractor;
 
-  Version2ndEngine(CephContext* const cct, const Extractor& extractor)
+  AWSEngine(CephContext* const cct, const VersionAbstractor& ver_abstractor)
     : cct(cct),
-      extractor(extractor) {
+      ver_abstractor(ver_abstractor) {
   }
 
   using result_t = rgw::auth::Engine::result_t;
@@ -723,15 +723,15 @@ public:
     std::string signature;
     std::string string_to_sign;
 
-    Extractor::signature_factory_t signing_key_factory;
-    Extractor::completer_factory_t completer_factory;
+    VersionAbstractor::signature_factory_t signature_factory;
+    VersionAbstractor::completer_factory_t completer_factory;
 
-    /* Small reminder: an extractor is allowed to throw! */
+    /* Small reminder: an ver_abstractor is allowed to throw! */
     std::tie(access_key_id,
              signature,
              string_to_sign,
-             signing_key_factory,
-             completer_factory) = extractor.get_auth_data(s);
+             signature_factory,
+             completer_factory) = ver_abstractor.get_auth_data(s);
 
     if (access_key_id.empty() || signature.empty()) {
       return result_t::deny(-EINVAL);
@@ -741,14 +741,14 @@ public:
   }
 };
 
-class RGWS3V2Extractor : public Version2ndEngine::Extractor {
+class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
   CephContext* const cct;
 
   bool is_time_skew_ok(const utime_t& header_time,
                        const bool qsr) const;
 
 public:
-  RGWS3V2Extractor(CephContext* const cct)
+  AWSGeneralAbstractor(CephContext* const cct)
     : cct(cct) {
   }
 
@@ -761,14 +761,14 @@ public:
 };
 
 
-class RGWGetPolicyV2Extractor : public Version2ndEngine::Extractor {
+class AWSBrowserUploadAbstractor : public AWSEngine::VersionAbstractor {
   static std::string to_string(ceph::bufferlist bl) {
     return std::string(bl.c_str(),
                        static_cast<std::string::size_type>(bl.length()));
   }
 
 public:
-  RGWGetPolicyV2Extractor(CephContext*) {
+  AWSBrowserUploadAbstractor(CephContext*) {
   }
 
   std::tuple<access_key_id_t,
@@ -780,7 +780,7 @@ public:
 };
 
 
-class LDAPEngine : public Version2ndEngine {
+class LDAPEngine : public AWSEngine {
   static rgw::LDAPHelper* ldh;
   static std::mutex mtx;
 
@@ -804,15 +804,15 @@ protected:
 public:
   LDAPEngine(CephContext* const cct,
              RGWRados* const store,
-             const Extractor& extractor,
+             const VersionAbstractor& ver_abstractor,
              const rgw::auth::RemoteApplier::Factory* const apl_factory)
-    : Version2ndEngine(cct, extractor),
+    : AWSEngine(cct, ver_abstractor),
       store(store),
       apl_factory(apl_factory) {
     init(cct);
   }
 
-  using Version2ndEngine::authenticate;
+  using AWSEngine::authenticate;
 
   const char* get_name() const noexcept override {
     return "rgw::auth::s3::LDAPEngine";
@@ -820,7 +820,7 @@ public:
 };
 
 
-class LocalVersion2ndEngine : public Version2ndEngine {
+class LocalEngine : public AWSEngine {
   RGWRados* const store;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
@@ -829,19 +829,19 @@ class LocalVersion2ndEngine : public Version2ndEngine {
                         const std::string& string_to_sign,
                         const req_state* s) const override;
 public:
-  LocalVersion2ndEngine(CephContext* const cct,
-                        RGWRados* const store,
-                        const Extractor& extractor,
-                        const rgw::auth::LocalApplier::Factory* const apl_factory)
-    : Version2ndEngine(cct, extractor),
+  LocalEngine(CephContext* const cct,
+              RGWRados* const store,
+              const VersionAbstractor& ver_abstractor,
+              const rgw::auth::LocalApplier::Factory* const apl_factory)
+    : AWSEngine(cct, ver_abstractor),
       store(store),
       apl_factory(apl_factory) {
   }
 
-  using Version2ndEngine::authenticate;
+  using AWSEngine::authenticate;
 
   const char* get_name() const noexcept override {
-    return "rgw::auth::s3::LocalVersion2ndEngine";
+    return "rgw::auth::s3::LocalEngine";
   }
 };
 
