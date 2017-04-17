@@ -35,6 +35,8 @@ class DecayRate {
 
 public:
   DecayRate() : k(0) {}
+  DecayRate(const DecayRate &dr) : k(dr.k) {}
+
   // cppcheck-suppress noExplicitConstructor
   DecayRate(double hl) { set_halflife(hl); }
   void set_halflife(double hl) {
@@ -48,6 +50,7 @@ public:
   double delta;         // delta since last decay
   double vel;           // recent velocity
   utime_t last_decay;   // time of last decay
+  DecayRate rate;
 
   void encode(bufferlist& bl) const;
   void decode(const utime_t &t, bufferlist::iterator& p);
@@ -56,6 +59,11 @@ public:
 
   explicit DecayCounter(const utime_t &now)
     : val(0), delta(0), vel(0), last_decay(now)
+  {
+  }
+
+  explicit DecayCounter(const utime_t &now, const DecayRate &rate)
+    : val(0), delta(0), vel(0), last_decay(now), rate(rate)
   {
   }
 
@@ -72,6 +80,10 @@ public:
    */
 
   double get(utime_t now, const DecayRate& rate) {
+    decay(now, rate);
+    return val+delta;
+  }
+  double get(utime_t now) {
     decay(now, rate);
     return val+delta;
   }
@@ -93,6 +105,11 @@ public:
    */
 
   double hit(utime_t now, const DecayRate& rate, double v = 1.0) {
+    decay(now, rate);
+    delta += v;
+    return val+delta;
+  }
+  double hit(utime_t now, double v = 1.0) {
     decay(now, rate);
     delta += v;
     return val+delta;
