@@ -2766,13 +2766,6 @@ void PG::upgrade(ObjectStore *store)
 
   assert(info_struct_v >= 7);
 
-  // no special action needed for 9->10, just write out the biginfo
-
-  // 8 -> 9
-  if (info_struct_v <= 8) {
-    // no special action needed.
-  }
-
   // 7 -> 8
   if (info_struct_v <= 7) {
     pg_log.mark_log_for_rewrite();
@@ -2786,6 +2779,20 @@ void PG::upgrade(ObjectStore *store)
     __u8 ver = cur_struct_v;
     ::encode(ver, v[infover_key]);
     t.omap_setkeys(coll, pgmeta_oid, v);
+  }
+
+  // 8 -> 9
+  if (info_struct_v <= 8) {
+    // no special action needed.
+  }
+
+  // 9 -> 10
+  if (info_struct_v <= 9) {
+    // previous versions weren't (as) aggressively clearing past_intervals
+    if (info.history.last_epoch_clean >= info.history.same_interval_since) {
+      dout(20) << __func__ << " clearing past_intervals" << dendl;
+      past_intervals.clear();
+    }
   }
 
   dirty_info = true;
