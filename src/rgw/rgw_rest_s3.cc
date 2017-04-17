@@ -4201,10 +4201,13 @@ rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noex
 }
 
 rgw::auth::Engine::result_t
-rgw::auth::s3::LDAPEngine::authenticate(const std::string& access_key_id,
-                                        const std::string& signature,
-                                        const std::string& string_to_sign,
-                                        const req_state* const s) const
+rgw::auth::s3::LDAPEngine::authenticate(
+  const std::string& access_key_id,
+  const std::string& signature,
+  const std::string& string_to_sign,
+  const signature_factory_t& signature_factory,
+  const completer_factory_t& completer_factory,
+  const req_state* const s) const
 {
   /* boost filters and/or string_ref may throw on invalid input */
   rgw::RGWToken base64_token;
@@ -4236,16 +4239,19 @@ rgw::auth::s3::LDAPEngine::authenticate(const std::string& access_key_id,
 
   auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
                                             get_creds_info(base64_token));
-  return result_t::grant(std::move(apl));
+  return result_t::grant(std::move(apl), completer_factory());
 }
 
 
 /* LocalEndgine */
 rgw::auth::Engine::result_t
-rgw::auth::s3::LocalEngine::authenticate(const std::string& access_key_id,
-                                         const std::string& signature,
-                                         const std::string& string_to_sign,
-                                         const req_state* const s) const
+rgw::auth::s3::LocalEngine::authenticate(
+  const std::string& access_key_id,
+  const std::string& signature,
+  const std::string& string_to_sign,
+  const signature_factory_t& signature_factory,
+  const completer_factory_t& completer_factory,
+  const req_state* const s) const
 {
   /* get the user info */
   RGWUserInfo user_info;
@@ -4269,11 +4275,7 @@ rgw::auth::s3::LocalEngine::authenticate(const std::string& access_key_id,
   }
   const RGWAccessKey& k = iter->second;
 
-  std::string digest;
-  int ret = rgw_get_s3_header_digest(string_to_sign, k.key, digest);
-  if (ret < 0) {
-    return result_t::deny(-EPERM);
-  }
+  std::string digest = signature_factory(cct, k.key, string_to_sign);
 
   ldout(cct, 15) << "string_to_sign=" << rgw::crypt_sanitize::log_content{string_to_sign.c_str()} << dendl;
   ldout(cct, 15) << "calculated digest=" << digest << dendl;
@@ -4285,5 +4287,5 @@ rgw::auth::s3::LocalEngine::authenticate(const std::string& access_key_id,
   }
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser);
-  return result_t::grant(std::move(apl));
+  return result_t::grant(std::move(apl), completer_factory());
 }

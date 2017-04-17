@@ -143,7 +143,9 @@ void rgw_create_s3_canonical_header(
   dest_str = dest;
 }
 
-int rgw_get_s3_header_digest(const string& auth_hdr, const string& key, string& dest)
+int rgw_get_s3_header_digest(const std::string& auth_hdr,
+                             const std::string& key,
+                             std::string& dest)
 {
   if (key.empty())
     return -EINVAL;
