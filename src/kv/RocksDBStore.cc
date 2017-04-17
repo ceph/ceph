@@ -287,12 +287,16 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   }
 
   auto cache = rocksdb::NewLRUCache(g_conf->rocksdb_cache_size, g_conf->rocksdb_cache_shard_bits);
+  auto compressed_cache = rocksdb::NewLRUCache(g_conf->rocksdb_compressed_cache_size, g_conf->rocksdb_compressed_cache_shard_bits);
   bbt_opts.block_size = g_conf->rocksdb_block_size;
   bbt_opts.block_cache = cache;
+  bbt_opts.block_cache_compressed = compressed_cache;
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
   dout(10) << __func__ << " set block size to " << g_conf->rocksdb_block_size
            << " cache size to " << g_conf->rocksdb_cache_size
-           << " num of cache shards to " << (1 << g_conf->rocksdb_cache_shard_bits) << dendl;
+           << " num of cache shards to " << (1 << g_conf->rocksdb_cache_shard_bits)
+           << " compressed cache size to " << g_conf->rocksdb_compressed_cache_size
+           << " num of compressed cache shards to " << (1 << g_conf->rocksdb_compressed_cache_shard_bits) << dendl;
 
   opt.merge_operator.reset(new MergeOperatorRouter(*this));
   status = rocksdb::DB::Open(opt, path, &db);
