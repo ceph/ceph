@@ -138,16 +138,13 @@ TEST_F(LibRadosListPP, ListObjectsEndIter) {
   ASSERT_TRUE(iter2 == iter_end2);
 }
 
-static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx, std::string check_nspace)
+static void check_list(
+  std::set<std::string>& myset,
+  rados_list_ctx_t& ctx,
+  std::string check_nspace)
 {
   const char *entry, *nspace;
-  std::set<std::string> orig_set(myset);
-  /**
-   * During splitting, we might see duplicate items.
-   * We assert that every object returned is in myset and that
-   * we don't hit ENOENT until we have hit every item in myset
-   * at least once.
-   */
+  // we should see every item exactly once.
   int ret;
   while ((ret = rados_nobjects_list_next(ctx, &entry, NULL, &nspace)) == 0) {
     std::string test_name;
@@ -158,7 +155,7 @@ static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx, std:
       test_name = std::string(entry);
     }
 
-    ASSERT_TRUE(orig_set.end() != orig_set.find(test_name));
+    ASSERT_TRUE(myset.end() != myset.find(test_name));
     myset.erase(test_name);
   }
   ASSERT_EQ(-ENOENT, ret);
