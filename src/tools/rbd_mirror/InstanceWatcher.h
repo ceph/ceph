@@ -5,6 +5,7 @@
 #define CEPH_RBD_MIRROR_INSTANCE_WATCHER_H
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -24,6 +25,7 @@ template <typename> class ManagedLock;
 namespace rbd {
 namespace mirror {
 
+template <typename> class ImageSyncThrottler;
 template <typename> class InstanceReplayer;
 template <typename> struct Threads;
 
@@ -72,7 +74,17 @@ public:
                             const std::string &peer_image_id,
 			    bool schedule_delete, Context *on_notify_ack);
 
+  void notify_sync_request(const std::string &sync_id, Context *on_sync_start);
+  bool cancel_sync_request(const std::string &sync_id);
+  void notify_sync_complete(const std::string &sync_id);
+
+  void print_sync_status(Formatter *f, stringstream *ss);
+
   void cancel_notify_requests(const std::string &instance_id);
+
+  void handle_acquire_leader();
+  void handle_release_leader();
+  void handle_update_leader(const std::string &leader_instance_id);
 
 private:
   /**
@@ -105,6 +117,9 @@ private:
    */
 
   struct C_NotifyInstanceRequest;
+  struct C_SyncRequest;
+
+  typedef std::pair<std::string, std::string> Id;
 
   struct HandlePayloadVisitor : public boost::static_visitor<void> {
     InstanceWatcher *instance_watcher;
@@ -148,11 +163,15 @@ private:
   Context *m_on_finish = nullptr;
   int m_ret_val = 0;
   bool m_removing = false;
+  std::string m_leader_instance_id;
   librbd::managed_lock::Locker m_instance_locker;
   std::set<std::pair<std::string, C_NotifyInstanceRequest *>> m_notify_ops;
   AsyncOpTracker m_notify_op_tracker;
   uint64_t m_request_seq = 0;
   std::set<Request> m_requests;
+  std::set<C_NotifyInstanceRequest *> m_suspended_ops;
+  std::map<std::string, C_SyncRequest *> m_inflight_sync_reqs;
+  ImageSyncThrottler<ImageCtxT> *m_image_sync_throttler = nullptr;
 
   void register_instance();
   void handle_register_instance(int r);
@@ -187,8 +206,20 @@ private:
   void break_instance_lock();
   void handle_break_instance_lock(int r);
 
+  void suspend_notify_request(C_NotifyInstanceRequest *req);
+  bool unsuspend_notify_request(C_NotifyInstanceRequest *req);
+  void unsuspend_notify_requests();
+
+  void handle_notify_sync_request(C_SyncRequest *sync_ctx, int r);
+  void handle_notify_sync_complete(C_SyncRequest *sync_ctx, int r);
+
+  void notify_sync_start(const std::string &instance_id,
+                         const std::string &sync_id);
+
   Context *prepare_request(const std::string &instance_id, uint64_t request_id,
                            C_NotifyAck *on_notify_ack);
+  void complete_request(const std::string &instance_id, uint64_t request_id,
+                        int r);
 
   void handle_notify(uint64_t notify_id, uint64_t handle,
                      uint64_t notifier_id, bufferlist &bl) override;
@@ -202,11 +233,22 @@ private:
                             const std::string &peer_image_id,
                             bool schedule_delete, Context *on_finish);
 
+  void handle_sync_request(const std::string &instance_id,
+                           const std::string &sync_id, Context *on_finish);
+  void handle_sync_start(const std::string &instance_id,
+                         const std::string &sync_id, Context *on_finish);
+
   void handle_payload(const std::string &instance_id,
                       const instance_watcher::ImageAcquirePayload &payload,
                       C_NotifyAck *on_notify_ack);
   void handle_payload(const std::string &instance_id,
                       const instance_watcher::ImageReleasePayload &payload,
+                      C_NotifyAck *on_notify_ack);
+  void handle_payload(const std::string &instance_id,
+                      const instance_watcher::SyncRequestPayload &payload,
+                      C_NotifyAck *on_notify_ack);
+  void handle_payload(const std::string &instance_id,
+                      const instance_watcher::SyncStartPayload &payload,
                       C_NotifyAck *on_notify_ack);
   void handle_payload(const std::string &instance_id,
                       const instance_watcher::UnknownPayload &payload,
