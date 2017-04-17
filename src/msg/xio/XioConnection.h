@@ -95,11 +95,10 @@ private:
     uint32_t reconnects;
     uint32_t connect_seq, peer_global_seq;
     uint64_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
-    std::atomic<int64_t> out_seq; 
+    std::atomic<int64_t> out_seq = { 0 }; 
 
     lifecycle() : state(lifecycle::INIT), reconnects(0), connect_seq(0),
-		  peer_global_seq(0), in_seq(0), out_seq_acked(0), 
-		  out_seq(0) {}
+		  peer_global_seq(0), in_seq(0), out_seq_acked(0) {}
 
     void set_in_seq(uint64_t seq) {
       in_seq = seq;
@@ -141,7 +140,7 @@ private:
     uint32_t reconnects;
     uint32_t connect_seq, global_seq, peer_global_seq;
     uint64_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
-    atomic64_t out_seq; // atomic<uint64_t>
+    std::atomic<int64_t> out_seq; 
 
     uint32_t flags;
 
@@ -339,7 +338,7 @@ typedef boost::intrusive_ptr<XioConnection> XioConnectionRef;
 class XioLoopbackConnection : public Connection
 {
 private:
-  atomic64_t seq;
+  std::atomic<int64_t> seq = { 0 };
 public:
   explicit XioLoopbackConnection(Messenger *m) : Connection(m->cct, m), seq(0)
     {
