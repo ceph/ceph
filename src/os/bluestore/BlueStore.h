@@ -1655,10 +1655,13 @@ public:
     void flush() override {
       std::unique_lock<std::mutex> l(qlock);
       while (true) {
+	// set flag before the check because the condition
+	// may become true outside qlock, and we need to make
+	// sure those threads see waiters and signal qcond.
+	++kv_submitted_waiters;
 	if (_is_all_kv_submitted()) {
 	  return;
 	}
-	++kv_submitted_waiters;
 	qcond.wait(l);
 	--kv_submitted_waiters;
       }
@@ -1789,6 +1792,7 @@ private:
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
   size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
   uint64_t prefer_deferred_size = 0; ///< size threshold for forced deferred writes
+  int deferred_batch_ops = 0; ///< deferred batch size
 
   uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
 

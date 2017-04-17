@@ -370,6 +370,7 @@ OPTION(mon_debug_deprecated_as_obsolete, OPT_BOOL, false) // consider deprecated
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
 OPTION(mon_debug_dump_json, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
+OPTION(mon_debug_no_require_luminous, OPT_BOOL, false)
 OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE, 10.0)      // seconds
 OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 
@@ -422,6 +423,7 @@ OPTION(client_trace, OPT_STR, "")
 OPTION(client_readahead_min, OPT_LONGLONG, 128*1024)  // readahead at _least_ this much.
 OPTION(client_readahead_max_bytes, OPT_LONGLONG, 0)  // default unlimited
 OPTION(client_readahead_max_periods, OPT_LONGLONG, 4)  // as multiple of file layout period (object size * num stripes)
+OPTION(client_reconnect_stale, OPT_BOOL, false)  // automatically reconnect stale session
 OPTION(client_snapdir, OPT_STR, ".snap")
 OPTION(client_mountpoint, OPT_STR, "/")
 OPTION(client_mount_uid, OPT_INT, -1)
@@ -489,6 +491,8 @@ OPTION(journaler_prefetch_periods, OPT_INT, 10)   // * journal object size
 OPTION(journaler_prezero_periods, OPT_INT, 5)     // * journal object size
 OPTION(mds_data, OPT_STR, "/var/lib/ceph/mds/$cluster-$id")
 OPTION(mds_max_file_size, OPT_U64, 1ULL << 40) // Used when creating new CephFS. Change with 'ceph mds set max_file_size <size>' afterwards
+// max xattr kv pairs size for each dir/file
+OPTION(mds_max_xattr_pairs_size, OPT_U32, 64 << 10)
 OPTION(mds_cache_size, OPT_INT, 100000)
 OPTION(mds_cache_mid, OPT_FLOAT, .7)
 OPTION(mds_max_file_recover, OPT_U32, 32)
@@ -1111,7 +1115,9 @@ OPTION(bluestore_throttle_cost_per_io_ssd, OPT_U64, 4000)
 OPTION(bluestore_throttle_cost_per_io, OPT_U64, 0)
 OPTION(bluestore_deferred_max_ops, OPT_U64, 512)
 OPTION(bluestore_deferred_max_bytes, OPT_U64, 128*1024*1024)
-OPTION(bluestore_deferred_batch_ops, OPT_U64, 32)
+OPTION(bluestore_deferred_batch_ops, OPT_U64, 0)
+OPTION(bluestore_deferred_batch_ops_hdd, OPT_U64, 64)
+OPTION(bluestore_deferred_batch_ops_ssd, OPT_U64, 16)
 OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
 OPTION(bluestore_blobid_prealloc, OPT_U64, 10240)
 OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones
