@@ -34,7 +34,7 @@
 
 using namespace std;
 #define BL_HASH_PRIME 7877
-#define BL_UNIQUE_STRING_LEN 10
+#define BL_UNIQUE_STRING_LEN 16
 static string bl_oid_prefix = "bl";
 static string bl_index_lock_name = "bl_process";
 
