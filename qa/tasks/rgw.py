@@ -9,16 +9,13 @@ import os
 import errno
 import util.rgw as rgw_utils
 
-from requests.packages.urllib3 import PoolManager
-from requests.packages.urllib3.util import Retry
-
 from cStringIO import StringIO
 
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra.run import CommandFailedError
-from util.rgw import rgwadmin, get_config_master_client, extract_zone_info, extract_region_info
+from util.rgw import rgwadmin, get_config_master_client, extract_zone_info, extract_region_info, wait_for_radosgw
 from util.rados import (rados, create_ec_pool,
                                         create_replicated_pool,
                                         create_cache_pool)
@@ -345,15 +342,13 @@ def start_rgw(ctx, config, on_client = None, except_client = None):
             )
 
     # XXX: add_daemon() doesn't let us wait until radosgw finishes startup
-    # use a connection pool with retry/backoff to poll each gateway until it starts listening
-    http = PoolManager(retries=Retry(connect=8, backoff_factor=1))
     for client in clients_to_run:
         if client == except_client:
             continue
         host, port = ctx.rgw.role_endpoints[client]
         endpoint = 'http://{host}:{port}/'.format(host=host, port=port)
         log.info('Polling {client} until it starts accepting connections on {endpoint}'.format(client=client, endpoint=endpoint))
-        http.request('GET', endpoint)
+        wait_for_radosgw(endpoint)
 
     try:
         yield

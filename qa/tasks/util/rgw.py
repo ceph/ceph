@@ -2,6 +2,8 @@ from cStringIO import StringIO
 import logging
 import json
 import requests
+
+from requests.packages.urllib3 import PoolManager
 from requests.packages.urllib3.util import Retry
 from urlparse import urlparse
 
@@ -302,3 +304,12 @@ def get_config_master_client(ctx, config, regions):
 
     return None
 
+def wait_for_radosgw(url):
+    """ poll the given url until it starts accepting connections
+
+    add_daemon() doesn't wait until radosgw finishes startup, so this is used
+    to avoid racing with later tasks that expect radosgw to be up and listening
+    """
+    # use a connection pool with retry/backoff to poll until it starts listening
+    http = PoolManager(retries=Retry(connect=8, backoff_factor=1))
+    http.request('GET', url)
