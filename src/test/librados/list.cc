@@ -16,10 +16,10 @@
 
 using namespace librados;
 
-typedef RadosTestNS LibRadosList;
-typedef RadosTestPPNS LibRadosListPP;
-typedef RadosTestECNS LibRadosListEC;
-typedef RadosTestECPPNS LibRadosListECPP;
+typedef RadosTestNSCleanup LibRadosList;
+typedef RadosTestPPNSCleanup LibRadosListPP;
+typedef RadosTestECNSCleanup LibRadosListEC;
+typedef RadosTestECPPNSCleanup LibRadosListECPP;
 typedef RadosTestNP LibRadosListNP;
 
 
@@ -144,6 +144,7 @@ static void check_list(
   std::string check_nspace)
 {
   const char *entry, *nspace;
+  cout << "myset " << myset << std::endl;
   // we should see every item exactly once.
   int ret;
   while ((ret = rados_nobjects_list_next(ctx, &entry, NULL, &nspace)) == 0) {
@@ -154,6 +155,7 @@ static void check_list(
       ASSERT_TRUE(std::string(nspace) == check_nspace);
       test_name = std::string(entry);
     }
+    cout << test_name << std::endl;
 
     ASSERT_TRUE(myset.end() != myset.find(test_name));
     myset.erase(test_name);
