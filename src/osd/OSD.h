@@ -873,7 +873,7 @@ public:
 	PGQueueable(
 	  PGScrub(pg->get_osdmap()->get_epoch()),
 	  cct->_conf->osd_scrub_cost,
-	  pg->get_scrub_priority(),
+	  pg->scrubber.priority,
 	  ceph_clock_now(cct),
 	  entity_inst_t())));
   }
