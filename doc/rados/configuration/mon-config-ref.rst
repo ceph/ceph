@@ -400,6 +400,7 @@ a reasonable number for a near full ratio.
 	[global]
 		
 		mon osd full ratio = .80
+		mon osd backfillfull ratio = .75
 		mon osd nearfull ratio = .70
 
 
@@ -410,6 +411,15 @@ a reasonable number for a near full ratio.
 
 :Type: Float
 :Default: ``.95``
+
+
+``mon osd backfillfull ratio``
+
+:Description: The percentage of disk space used before an OSD is
+              considered too ``full`` to backfill.
+
+:Type: Float
+:Default: ``.90``
 
 
 ``mon osd nearfull ratio`` 

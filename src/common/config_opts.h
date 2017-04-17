@@ -308,6 +308,7 @@ OPTION(mon_pg_warn_min_pool_objects, OPT_INT, 1000)  // do not warn on pools bel
 OPTION(mon_pg_check_down_all_threshold, OPT_FLOAT, .5) // threshold of down osds after which we check all pgs
 OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT, .66) // position between pool cache_target_full and max where we start warning
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
+OPTION(mon_osd_backfillfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD backfill full (backfill halted)
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
 OPTION(mon_allow_pool_delete, OPT_BOOL, false) // allow pool deletion
 OPTION(mon_globalid_prealloc, OPT_U32, 10000)   // how many globalids to prealloc
@@ -626,11 +627,11 @@ OPTION(osd_max_backfills, OPT_U64, 1)
 // Minimum recovery priority (255 = max, smaller = lower)
 OPTION(osd_min_recovery_priority, OPT_INT, 0)
 
-// Refuse backfills when OSD full ratio is above this value
-OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
-
 // Seconds to wait before retrying refused backfills
-OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
+OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 30.0)
+
+// Seconds to wait before retrying refused recovery
+OPTION(osd_recovery_retry_interval, OPT_DOUBLE, 30.0)
 
 // max agent flush ops
 OPTION(osd_agent_max_ops, OPT_INT, 4)
@@ -742,7 +743,6 @@ OPTION(osd_op_pq_min_cost, OPT_U64, 65536)
 OPTION(osd_disk_threads, OPT_INT, 1)
 OPTION(osd_disk_thread_ioprio_class, OPT_STR, "") // rt realtime be best effort idle
 OPTION(osd_disk_thread_ioprio_priority, OPT_INT, -1) // 0-7
-OPTION(osd_recovery_threads, OPT_INT, 1)
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
 OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
 OPTION(osd_op_num_shards, OPT_INT, 5)
@@ -871,6 +871,7 @@ OPTION(osd_debug_skip_full_check_in_backfill_reservation, OPT_BOOL, false)
 OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_inject_copyfrom_error, OPT_BOOL, false)  // inject failure during copyfrom completion
 OPTION(osd_debug_misdirected_ops, OPT_BOOL, false)
+OPTION(osd_debug_skip_full_check_in_recovery, OPT_BOOL, false)
 OPTION(osd_enxio_on_misdirected_op, OPT_BOOL, false)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL, false)
 OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking

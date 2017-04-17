@@ -1340,6 +1340,7 @@ public:
 
   void reject_reservation();
   void schedule_backfill_full_retry();
+  void schedule_recovery_full_retry();
 
   // -- recovery state --
 
@@ -1505,6 +1506,7 @@ public:
   TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
   TrivialEvent(BackfillTooFull)
+  TrivialEvent(RecoveryTooFull)
 
   TrivialEvent(AllReplicasRecovered)
   TrivialEvent(DoRecovery)
@@ -1850,6 +1852,14 @@ public:
       boost::statechart::result react(const RemoteReservationRejected& evt);
     };
 
+    struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {
+      typedef boost::mpl::list<
+	boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >
+	> reactions;
+      explicit NotRecovering(my_context ctx);
+      void exit();
+    };
+
     struct RepNotRecovering;
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started, RepNotRecovering >, NamedState {
       explicit ReplicaActive(my_context ctx);
@@ -1938,10 +1948,12 @@ public:
 
     struct WaitLocalRecoveryReserved : boost::statechart::state< WaitLocalRecoveryReserved, Active >, NamedState {
       typedef boost::mpl::list <
-	boost::statechart::transition< LocalRecoveryReserved, WaitRemoteRecoveryReserved >
+	boost::statechart::transition< LocalRecoveryReserved, WaitRemoteRecoveryReserved >,
+	boost::statechart::custom_reaction< RecoveryTooFull >
 	> reactions;
       explicit WaitLocalRecoveryReserved(my_context ctx);
       void exit();
+      boost::statechart::result react(const RecoveryTooFull &evt);
     };
 
     struct Activating : boost::statechart::state< Activating, Active >, NamedState {

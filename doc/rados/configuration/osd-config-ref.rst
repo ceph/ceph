@@ -560,15 +560,6 @@ priority than requests to read or write data.
 :Default: ``512`` 
 
 
-``osd backfill full ratio``
-
-:Description: Refuse to accept backfill requests when the Ceph OSD Daemon's 
-              full ratio is above this value.
-
-:Type: Float
-:Default: ``0.85``
-
-
 ``osd backfill retry interval``
 
 :Description: The number of seconds to wait before retrying backfill requests.
@@ -671,13 +662,6 @@ perform well in a degraded state.
 :Description: The maximum size of a recovered chunk of data to push. 
 :Type: 64-bit Integer Unsigned
 :Default: ``8 << 20`` 
-
-
-``osd recovery threads`` 
-
-:Description: The number of threads for recovering data.
-:Type: 32-bit Integer
-:Default: ``1``
 
 
 ``osd recovery thread timeout`` 

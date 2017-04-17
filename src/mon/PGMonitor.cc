@@ -1316,6 +1316,8 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       note["backfilling"] += p->second;
     if (p->first & PG_STATE_BACKFILL_TOOFULL)
       note["backfill_toofull"] += p->second;
+    if (p->first & PG_STATE_RECOVERY_TOOFULL)
+      note["recovery_toofull"] += p->second;
   }
 
   ceph::unordered_map<pg_t, pg_stat_t> stuck_pgs;
@@ -1403,6 +1405,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	                        PG_STATE_REPAIR |
 	                        PG_STATE_RECOVERING |
 	                        PG_STATE_RECOVERY_WAIT |
+	                        PG_STATE_RECOVERY_TOOFULL |
 	                        PG_STATE_INCOMPLETE |
 	                        PG_STATE_BACKFILL_WAIT |
 	                        PG_STATE_BACKFILL |

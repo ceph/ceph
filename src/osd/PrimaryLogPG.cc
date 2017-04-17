@@ -1888,8 +1888,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 	     << *m << dendl;
     return;
   }
-  if (!(m->get_source().is_mds()) && osd->check_failsafe_full() && write_ordered) {
+  // mds should have stopped writing before this point.
+  // We can't allow OSD to become non-startable even if mds
+  // could be writing as part of file removals.
+  ostringstream ss;
+  if (write_ordered && osd->check_failsafe_full(ss)) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
+             << ss.str()
 	     << dendl;
     return;
   }
@@ -3328,10 +3333,9 @@ void PrimaryLogPG::do_scan(
   switch (m->op) {
   case MOSDPGScan::OP_SCAN_GET_DIGEST:
     {
-      double ratio, full_ratio;
-      if (osd->too_full_for_backfill(&ratio, &full_ratio)) {
-	dout(1) << __func__ << ": Canceling backfill, current usage is "
-		<< ratio << ", which exceeds " << full_ratio << dendl;
+      ostringstream ss;
+      if (osd->check_backfill_full(ss)) {
+	dout(1) << __func__ << ": Canceling backfill, " << ss.str() << dendl;
 	queue_peering_event(
 	  CephPeeringEvtRef(
 	    std::make_shared<CephPeeringEvt>(
@@ -13027,6 +13031,11 @@ void PrimaryLogPG::_scrub_finish()
   }
 }
 
+bool PrimaryLogPG::check_osdmap_full(const set<pg_shard_t> &missing_on)
+{
+    return osd->check_osdmap_full(missing_on);
+}
+
 /*---SnapTrimmer Logging---*/
 #undef dout_prefix
 #define dout_prefix *_dout << pg->gen_prefix() 
@@ -13266,6 +13275,10 @@ int PrimaryLogPG::getattrs_maybe_cache(
     tmp.swap(*out);
   }
   return r;
+}
+
+bool PrimaryLogPG::check_failsafe_full(ostream &ss) {
+    return osd->check_failsafe_full(ss);
 }
 
 void intrusive_ptr_add_ref(PrimaryLogPG *pg) { pg->get("intptr"); }

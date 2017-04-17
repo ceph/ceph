@@ -3952,7 +3952,7 @@ void FileStore::sync_entry()
 	    derr << "ioctl WAIT_SYNC got " << cpp_strerror(err) << dendl;
 	    assert(0 == "wait_sync got error");
 	  }
-	  dout(20) << " done waiting for checkpoint" << cid << " to complete" << dendl;
+	  dout(20) << " done waiting for checkpoint " << cid << " to complete" << dendl;
 	}
       } else
       {

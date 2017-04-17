@@ -971,6 +971,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_PEERED        (1<<25) // peered, cannot go active, can recover
 #define PG_STATE_SNAPTRIM      (1<<26) // trimming snaps
 #define PG_STATE_SNAPTRIM_WAIT (1<<27) // queued to trim snaps
+#define PG_STATE_RECOVERY_TOOFULL (1<<28) // recovery can't proceed: too full
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);

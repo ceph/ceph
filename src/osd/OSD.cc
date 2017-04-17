@@ -255,8 +255,8 @@ OSDService::OSDService(OSD *osd) :
   watch_lock("OSDService::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
-  backfill_request_lock("OSDService::backfill_request_lock"),
-  backfill_request_timer(cct, backfill_request_lock, false),
+  recovery_request_lock("OSDService::recovery_request_lock"),
+  recovery_request_timer(cct, recovery_request_lock, false),
   reserver_finisher(cct),
   local_reserver(&reserver_finisher, cct->_conf->osd_max_backfills,
 		 cct->_conf->osd_min_recovery_priority),
@@ -495,8 +495,8 @@ void OSDService::shutdown()
   objecter_finisher.stop();
 
   {
-    Mutex::Locker l(backfill_request_lock);
-    backfill_request_timer.shutdown();
+    Mutex::Locker l(recovery_request_lock);
+    recovery_request_timer.shutdown();
   }
 
   {
@@ -716,13 +716,7 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
 {
   Mutex::Locker l(full_status_lock);
 
-  // We base ratio on kb_avail rather than kb_used because they can
-  // differ significantly e.g. on btrfs volumes with a large number of
-  // chunks reserved for metadata, and for our purposes (avoiding
-  // completely filling the disk) it's far more important to know how
-  // much space is available to use than how much we've already used.
-  float ratio = ((float)(osd_stat.kb - osd_stat.kb_avail)) /
-    ((float)osd_stat.kb);
+  float ratio = ((float)osd_stat.kb_used) / ((float)osd_stat.kb);
   cur_ratio = ratio;
 
   // The OSDMap ratios take precendence.  So if the failsafe is .95 and
@@ -735,28 +729,38 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
     return;
   }
   float nearfull_ratio = osdmap->get_nearfull_ratio();
-  float full_ratio = std::max(osdmap->get_full_ratio(), nearfull_ratio);
+  float backfillfull_ratio = std::max(osdmap->get_backfillfull_ratio(), nearfull_ratio);
+  float full_ratio = std::max(osdmap->get_full_ratio(), backfillfull_ratio);
   float failsafe_ratio = std::max(get_failsafe_full_ratio(), full_ratio);
 
   if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
     // use the failsafe for nearfull and full; the mon isn't using the
     // flags anyway because we're mid-upgrade.
     full_ratio = failsafe_ratio;
+    backfillfull_ratio = failsafe_ratio;
     nearfull_ratio = failsafe_ratio;
   } else if (full_ratio <= 0 ||
+	     backfillfull_ratio <= 0 ||
 	     nearfull_ratio <= 0) {
-    derr << __func__ << " full_ratio or nearfull_ratio is <= 0" << dendl;
+    derr << __func__ << " full_ratio, backfillfull_ratio or nearfull_ratio is <= 0" << dendl;
     // use failsafe flag.  ick.  the monitor did something wrong or the user
     // did something stupid.
     full_ratio = failsafe_ratio;
+    backfillfull_ratio = failsafe_ratio;
     nearfull_ratio = failsafe_ratio;
   }
 
-  enum s_names new_state;
-  if (ratio > failsafe_ratio) {
+  string inject;
+  s_names new_state;
+  if (injectfull_state > NONE && injectfull) {
+    new_state = injectfull_state;
+    inject = "(Injected)";
+  } else if (ratio > failsafe_ratio) {
     new_state = FAILSAFE;
   } else if (ratio > full_ratio) {
     new_state = FULL;
+  } else if (ratio > backfillfull_ratio) {
+    new_state = BACKFILLFULL;
   } else if (ratio > nearfull_ratio) {
     new_state = NEARFULL;
   } else {
@@ -764,9 +768,11 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
   }
   dout(20) << __func__ << " cur ratio " << ratio
 	   << ". nearfull_ratio " << nearfull_ratio
+	   << ". backfillfull_ratio " << backfillfull_ratio
 	   << ", full_ratio " << full_ratio
 	   << ", failsafe_ratio " << failsafe_ratio
 	   << ", new state " << get_full_state_name(new_state)
+	   << " " << inject
 	   << dendl;
 
   // warn
@@ -791,6 +797,8 @@ bool OSDService::need_fullness_update()
   if (osdmap->exists(whoami)) {
     if (osdmap->get_state(whoami) & CEPH_OSD_FULL) {
       cur = FULL;
+    } else if (osdmap->get_state(whoami) & CEPH_OSD_BACKFILLFULL) {
+      cur = BACKFILLFULL;
     } else if (osdmap->get_state(whoami) & CEPH_OSD_NEARFULL) {
       cur = NEARFULL;
     }
@@ -798,41 +806,80 @@ bool OSDService::need_fullness_update()
   s_names want = NONE;
   if (is_full())
     want = FULL;
+  else if (is_backfillfull())
+    want = BACKFILLFULL;
   else if (is_nearfull())
     want = NEARFULL;
   return want != cur;
 }
 
-bool OSDService::check_failsafe_full()
+bool OSDService::_check_full(s_names type, ostream &ss) const
 {
   Mutex::Locker l(full_status_lock);
-  if (cur_state == FAILSAFE)
+
+  if (injectfull && injectfull_state >= type) {
+    // injectfull is either a count of the number of times to return failsafe full
+    // or if -1 then always return full
+    if (injectfull > 0)
+      --injectfull;
+    ss << "Injected " << get_full_state_name(type) << " OSD ("
+       << (injectfull < 0 ? "set" : std::to_string(injectfull)) << ")";
     return true;
-  return false;
+  }
+
+  ss << "current usage is " << cur_ratio;
+  return cur_state >= type;
 }
 
-bool OSDService::is_nearfull()
+bool OSDService::check_failsafe_full(ostream &ss) const
+{
+  return _check_full(FAILSAFE, ss);
+}
+
+bool OSDService::check_full(ostream &ss) const
+{
+  return _check_full(FULL, ss);
+}
+
+bool OSDService::check_backfill_full(ostream &ss) const
+{
+  return _check_full(BACKFILLFULL, ss);
+}
+
+bool OSDService::check_nearfull(ostream &ss) const
+{
+  return _check_full(NEARFULL, ss);
+}
+
+bool OSDService::is_failsafe_full() const
 {
   Mutex::Locker l(full_status_lock);
-  return cur_state == NEARFULL;
+  return cur_state == FAILSAFE;
 }
 
-bool OSDService::is_full()
+bool OSDService::is_full() const
 {
   Mutex::Locker l(full_status_lock);
   return cur_state >= FULL;
 }
 
-bool OSDService::too_full_for_backfill(double *_ratio, double *_max_ratio)
+bool OSDService::is_backfillfull() const
 {
   Mutex::Locker l(full_status_lock);
-  double max_ratio;
-  max_ratio = cct->_conf->osd_backfill_full_ratio;
-  if (_ratio)
-    *_ratio = cur_ratio;
-  if (_max_ratio)
-    *_max_ratio = max_ratio;
-  return cur_ratio >= max_ratio;
+  return cur_state >= BACKFILLFULL;
+}
+
+bool OSDService::is_nearfull() const
+{
+  Mutex::Locker l(full_status_lock);
+  return cur_state >= NEARFULL;
+}
+
+void OSDService::set_injectfull(s_names type, int64_t count)
+{
+  Mutex::Locker l(full_status_lock);
+  injectfull_state = type;
+  injectfull = count;
 }
 
 void OSDService::update_osd_stat(vector<int>& hb_peers)
@@ -866,6 +913,16 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
   dout(20) << "update_osd_stat " << osd_stat << dendl;
 
   check_full_status(osd_stat);
+}
+
+bool OSDService::check_osdmap_full(const set<pg_shard_t> &missing_on)
+{
+  OSDMapRef osdmap = get_osdmap();
+  for (auto shard : missing_on) {
+    if (osdmap->get_state(shard.osd) & CEPH_OSD_FULL)
+      return true;
+  }
+  return false;
 }
 
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
@@ -2147,7 +2204,7 @@ int OSD::init()
 
   tick_timer.init();
   tick_timer_without_osd_lock.init();
-  service.backfill_request_timer.init();
+  service.recovery_request_timer.init();
 
   // mount.
   dout(2) << "mounting " << dev_path << " "
@@ -2632,6 +2689,14 @@ void OSD::final_init()
    test_ops_hook,
    "Trigger a scheduled scrub ");
   assert(r == 0);
+  r = admin_socket->register_command(
+   "injectfull",
+   "injectfull " \
+   "name=type,type=CephString,req=false " \
+   "name=count,type=CephInt,req=false ",
+   test_ops_hook,
+   "Inject a full disk (optional count times)");
+  assert(r == 0);
 }
 
 void OSD::create_logger()
@@ -2839,6 +2904,7 @@ void OSD::create_recoverystate_perf()
   rs_perf.add_time_avg(rs_down_latency, "down_latency", "Down recovery state latency");
   rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency", "Getmissing recovery state latency");
   rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency", "Waitupthru recovery state latency");
+  rs_perf.add_time_avg(rs_notrecovering_latency, "notrecovering_latency", "Notrecovering recovery state latency");
 
   recoverystate_perf = rs_perf.create_perf_counters();
   cct->get_perfcounters_collection()->add(recoverystate_perf);
@@ -4854,6 +4920,24 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     pg->unlock();
     return;
   }
+  if (command == "injectfull") {
+    int64_t count;
+    string type;
+    OSDService::s_names state;
+    cmd_getval(service->cct, cmdmap, "type", type, string("full"));
+    cmd_getval(service->cct, cmdmap, "count", count, (int64_t)-1);
+    if (type == "none" || count == 0) {
+      type = "none";
+      count = 0;
+    }
+    state = service->get_full_state(type);
+    if (state == OSDService::s_names::INVALID) {
+      ss << "Invalid type use (none, nearfull, backfillfull, full, failsafe)";
+      return;
+    }
+    service->set_injectfull(state, count);
+    return;
+  }
   ss << "Internal error - command=" << command;
 }
 
@@ -5185,6 +5269,8 @@ void OSD::send_full_update()
   unsigned state = 0;
   if (service.is_full()) {
     state = CEPH_OSD_FULL;
+  } else if (service.is_backfillfull()) {
+    state = CEPH_OSD_BACKFILLFULL;
   } else if (service.is_nearfull()) {
     state = CEPH_OSD_NEARFULL;
   }
