@@ -309,7 +309,7 @@ public:
 			        map<client_t,Capability::Import>& peer_imported);
 
 
-  int encode_export_dir(bufferlist& exportbl,
+  uint64_t encode_export_dir(bufferlist& exportbl,
 			CDir *dir,
 			map<client_t,entity_inst_t>& exported_client_map,
 			utime_t now);
