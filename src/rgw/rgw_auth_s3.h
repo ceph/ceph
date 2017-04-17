@@ -47,13 +47,13 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
 public:
   ExternalAuthStrategy(CephContext* const cct,
                        RGWRados* const store,
-                       Version2ndEngine::Extractor* const extractor)
+                       AWSEngine::VersionAbstractor* const ver_abstractor)
     : store(store),
-      keystone_engine(cct, extractor,
+      keystone_engine(cct, ver_abstractor,
                       static_cast<rgw::auth::RemoteApplier::Factory*>(this),
                       keystone_config_t::get_instance(),
                       keystone_cache_t::get_instance<keystone_config_t>()),
-      ldap_engine(cct, store, *extractor,
+      ldap_engine(cct, store, *ver_abstractor,
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this)) {
 
     if (cct->_conf->rgw_s3_auth_use_keystone &&
@@ -73,20 +73,20 @@ public:
 };
 
 
-template <class ExtractorT>
+template <class AbstractorT>
 class AWSv2AuthStrategy : public rgw::auth::Strategy,
                           public rgw::auth::LocalApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
 
-  static_assert(std::is_base_of<rgw::auth::s3::Version2ndEngine::Extractor,
-                                ExtractorT>::value,
-                "ExtractorT must be a subclass of rgw::auth::s3::ExtractorT");
+  static_assert(std::is_base_of<rgw::auth::s3::AWSEngine::VersionAbstractor,
+                                AbstractorT>::value,
+                "AbstractorT must be a subclass of rgw::auth::s3::VersionAbstractor");
 
   RGWRados* const store;
-  ExtractorT extractor;
+  AbstractorT ver_abstractor;
 
   ExternalAuthStrategy external_engines;
-  LocalVersion2ndEngine local_engine;
+  LocalEngine local_engine;
 
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
@@ -102,9 +102,9 @@ public:
   AWSv2AuthStrategy(CephContext* const cct,
                     RGWRados* const store)
     : store(store),
-      extractor(cct),
-      external_engines(cct, store, &extractor),
-      local_engine(cct, store, extractor,
+      ver_abstractor(cct),
+      external_engines(cct, store, &ver_abstractor),
+      local_engine(cct, store, ver_abstractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
 
     Control local_engine_mode;

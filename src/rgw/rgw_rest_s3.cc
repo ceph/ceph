@@ -4035,8 +4035,8 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
-bool rgw::auth::s3::RGWS3V2Extractor::is_time_skew_ok(const utime_t& header_time,
-                                                      const bool qsr) const
+bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time,
+                                           const bool qsr) const
 {
   /* Check for time skew first. */
   const time_t req_sec = header_time.sec();
@@ -4068,12 +4068,14 @@ static rgw::auth::Completer::cmplptr_t null_completer_factory()
   return nullptr;
 }
 
-std::tuple<Version2ndEngine::Extractor::access_key_id_t,
-           Version2ndEngine::Extractor::signature_t,
-           Version2ndEngine::Extractor::string_to_sign_t,
-           Version2ndEngine::Extractor::signature_factory_t,
-           Version2ndEngine::Extractor::completer_factory_t>
-rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
+using AWSVerAbstractor = AWSEngine::VersionAbstractor;
+
+std::tuple<AWSVerAbstractor::access_key_id_t,
+           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::string_to_sign_t,
+           AWSVerAbstractor::signature_factory_t,
+           AWSVerAbstractor::completer_factory_t>
+AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
 {
   std::string access_key_id;
   std::string signature;
@@ -4131,12 +4133,12 @@ rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
                          null_completer_factory);
 }
 
-std::tuple<Version2ndEngine::Extractor::access_key_id_t,
-           Version2ndEngine::Extractor::signature_t,
-           Version2ndEngine::Extractor::string_to_sign_t,
-           Version2ndEngine::Extractor::signature_factory_t,
-           Version2ndEngine::Extractor::completer_factory_t>
-RGWGetPolicyV2Extractor::get_auth_data(const req_state* const s) const
+std::tuple<AWSVerAbstractor::access_key_id_t,
+           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::string_to_sign_t,
+           AWSVerAbstractor::signature_factory_t,
+           AWSVerAbstractor::completer_factory_t>
+AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
 {
   return std::make_tuple(s->auth.s3_postobj_creds.access_key,
                          s->auth.s3_postobj_creds.signature,
@@ -4238,12 +4240,12 @@ rgw::auth::s3::LDAPEngine::authenticate(const std::string& access_key_id,
 }
 
 
-/* LocalVersion2ndEngine */
+/* LocalEndgine */
 rgw::auth::Engine::result_t
-rgw::auth::s3::LocalVersion2ndEngine::authenticate(const std::string& access_key_id,
-                                                   const std::string& signature,
-                                                   const std::string& string_to_sign,
-                                                   const req_state* const s) const
+rgw::auth::s3::LocalEngine::authenticate(const std::string& access_key_id,
+                                         const std::string& signature,
+                                         const std::string& string_to_sign,
+                                         const req_state* const s) const
 {
   /* get the user info */
   RGWUserInfo user_info;

@@ -25,9 +25,9 @@ class StrategyRegistry {
   using s3_strategy_t = rgw::auth::s3::AWSv2AuthStrategy<ExtractorT>;
 
   using s3_main_strategy_t = \
-    s3_strategy_t<rgw::auth::s3::RGWS3V2Extractor>;
+    s3_strategy_t<rgw::auth::s3::AWSGeneralAbstractor>;
   using s3_post_strategy_t = \
-    s3_strategy_t<rgw::auth::s3::RGWGetPolicyV2Extractor>;
+    s3_strategy_t<rgw::auth::s3::AWSBrowserUploadAbstractor>;
 
   s3_main_strategy_t s3_main_strategy;
   s3_post_strategy_t s3_post_strategy;
