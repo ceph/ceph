@@ -25,12 +25,12 @@ using librbd::util::create_context_callback;
 template <typename I>
 InstanceReplayer<I>::InstanceReplayer(
     Threads<I> *threads, std::shared_ptr<ImageDeleter> image_deleter,
-    ImageSyncThrottlerRef<I> image_sync_throttler, RadosRef local_rados,
-    const std::string &local_mirror_uuid, int64_t local_pool_id)
-    : m_threads(threads), m_image_deleter(image_deleter),
-      m_image_sync_throttler(image_sync_throttler), m_local_rados(local_rados),
-      m_local_mirror_uuid(local_mirror_uuid), m_local_pool_id(local_pool_id),
-      m_lock("rbd::mirror::InstanceReplayer " + stringify(local_pool_id)) {
+    RadosRef local_rados, const std::string &local_mirror_uuid,
+    int64_t local_pool_id)
+  : m_threads(threads), m_image_deleter(image_deleter),
+    m_local_rados(local_rados), m_local_mirror_uuid(local_mirror_uuid),
+    m_local_pool_id(local_pool_id),
+    m_lock("rbd::mirror::InstanceReplayer " + stringify(local_pool_id)) {
 }
 
 template <typename I>
@@ -130,7 +130,8 @@ void InstanceReplayer<I>::release_all(Context *on_finish) {
 }
 
 template <typename I>
-void InstanceReplayer<I>::acquire_image(const std::string &global_image_id,
+void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
+                                        const std::string &global_image_id,
                                         const std::string &peer_mirror_uuid,
                                         const std::string &peer_image_id,
                                         Context *on_finish) {
@@ -145,8 +146,8 @@ void InstanceReplayer<I>::acquire_image(const std::string &global_image_id,
 
   if (it == m_image_replayers.end()) {
     auto image_replayer = ImageReplayer<I>::create(
-      m_threads, m_image_deleter, m_image_sync_throttler, m_local_rados,
-      m_local_mirror_uuid, m_local_pool_id, global_image_id);
+        m_threads, m_image_deleter, instance_watcher, m_local_rados,
+        m_local_mirror_uuid, m_local_pool_id, global_image_id);
 
     dout(20) << global_image_id << ": creating replayer " << image_replayer
              << dendl;

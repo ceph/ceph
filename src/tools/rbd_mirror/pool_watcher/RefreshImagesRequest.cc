@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "tools/rbd_mirror/pool_watcher/RefreshImagesRequest.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/Utils.h"
