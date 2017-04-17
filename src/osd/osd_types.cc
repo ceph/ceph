@@ -3099,7 +3099,6 @@ class pi_compact_rep : public PastIntervals::interval_rep {
   epoch_t first = 0;
   epoch_t last = 0; // inclusive
   set<pg_shard_t> all_participants;
-
   list<compact_interval_t> intervals;
   pi_compact_rep(
     bool ec_pool,
@@ -3169,6 +3168,7 @@ public:
     ENCODE_START(1, 1, bl);
     ::encode(first, bl);
     ::encode(last, bl);
+    ::encode(all_participants, bl);
     ::encode(intervals, bl);
     ENCODE_FINISH(bl);
   }
@@ -3176,6 +3176,7 @@ public:
     DECODE_START(1, bl);
     ::decode(first, bl);
     ::decode(last, bl);
+    ::decode(all_participants, bl);
     ::decode(intervals, bl);
     DECODE_FINISH(bl);
   }
@@ -3183,6 +3184,11 @@ public:
     f->open_object_section("PastIntervals::compact_rep");
     f->dump_stream("first") << first;
     f->dump_stream("last") << last;
+    f->open_array_section("all_participants");
+    for (auto& i : all_participants) {
+      f->dump_object("pg_shard", i);
+    }
+    f->close_section();
     f->open_array_section("intervals");
     for (auto &&i: intervals) {
       i.dump(f);
