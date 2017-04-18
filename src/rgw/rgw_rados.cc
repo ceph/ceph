@@ -69,6 +69,7 @@ using namespace librados;
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
 #include "rgw_realm_watcher.h"
+#include "rgw_reshard.h"
 
 #include "compressor/Compressor.h"
 
@@ -4265,6 +4266,8 @@ int RGWRados::init_complete()
     obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
   }
 
+  reshard = new RGWReshard(cct, this);
+
   return ret;
 }
 
@@ -8223,6 +8226,8 @@ int RGWRados::bucket_check_index(RGWBucketInfo& bucket_info,
 
 int RGWRados::bucket_rebuild_index(RGWBucketInfo& bucket_info)
 {
+  /* hande on going bucket resharding */
+
   librados::IoCtx index_ctx;
   map<int, string> bucket_objs;
   int r = open_bucket_index(bucket_info, index_ctx, bucket_objs);
