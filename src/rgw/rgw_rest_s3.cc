@@ -3293,6 +3293,51 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
   return RGWHandler_REST::init(store, s, cio);
 }
 
+enum class AwsVersion {
+  UNKOWN,
+  V2,
+  V4
+};
+
+enum class AwsRoute {
+  UNKOWN,
+  QUERY_STRING,
+  HEADERS
+};
+
+static inline std::pair<AwsVersion, AwsRoute>
+discover_aws_flavour(const req_info& info)
+{
+  AwsVersion version = AwsVersion::UNKOWN;
+  AwsRoute route = AwsRoute::UNKOWN;
+
+  const char* http_auth = info.env->get("HTTP_AUTHORIZATION");
+  if (http_auth && http_auth[0]) {
+    /* Authorization in Header */
+    route = AwsRoute::HEADERS;
+
+    if (!strncmp(http_auth, "AWS4-HMAC-SHA256", 16)) {
+      /* AWS v4 */
+      version = AwsVersion::V4;
+    } else if (!strncmp(http_auth, "AWS ", 4)) {
+      /* AWS v2 */
+      version = AwsVersion::V2;
+    }
+  } else {
+    route = AwsRoute::QUERY_STRING;
+
+    if (info.args.get("X-Amz-Algorithm") == "AWS4-HMAC-SHA256") {
+      /* AWS v4 */
+      version = AwsVersion::V4;
+    } else if (!info.args.get("AWSAccessKeyId").empty()) {
+      /* AWS v2 */
+      version = AwsVersion::V2;
+    }
+  }
+
+  return std::make_pair(version, route);
+}
+
 static void init_anon_user(struct req_state *s)
 {
   rgw_get_anon_user(*(s->user));
@@ -3323,58 +3368,17 @@ int RGW_Auth_S3::authorize(RGWRados* const store,
     return 0;
   }
 
-  /* TODO(rzarzynski): eradicate the double check on HTTP_AUTHORIZATION.
-   * See couple for next commits. */
-  const char* http_auth = s->info.env->get("HTTP_AUTHORIZATION");
-  if (!http_auth || !(*http_auth)) {
+  AwsVersion version;
+  AwsRoute route;
+  std::tie(version, route) = discover_aws_flavour(s->info);
 
-    /* AWS4 */
-
-    string algorithm = s->info.args.get("X-Amz-Algorithm");
-    if (algorithm.size()) {
-      if (algorithm != "AWS4-HMAC-SHA256") {
-        return -EPERM;
-      }
-      /* compute first aws4 signature (stick to the boto2 implementation) */
-      int err = authorize_v4(store, s);
-      if ((err==-ERR_SIGNATURE_NO_MATCH) && !store->ctx()->_conf->rgw_s3_auth_aws4_force_boto2_compat) {
-        /* compute second aws4 signature (no bugs supported) */
-        ldout(s->cct, 10) << "computing second aws4 signature..." << dendl;
-        return authorize_v4(store, s, false);
-      }
-      return err;
-    }
-
-    /* AWS2 */
-
-    string auth_id = s->info.args.get("AWSAccessKeyId");
-    if (auth_id.size()) {
-      return authorize_v2(store, auth_registry, s);
-    }
-
-    /* anonymous access */
-
-    init_anon_user(s);
+  if (route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKOWN) {
+    /* FIXME(rzarzynski): handle anon user. */
+    init_anon_user(const_cast<req_state*>(s));
     return 0;
-
-  } else {
-    /* Authorization in Header */
-
-    /* AWS4 */
-
-    if (!strncmp(http_auth, "AWS4-HMAC-SHA256", 16)) {
-      return authorize_v4(store, s);
-    }
-
-    /* AWS2 */
-
-    if (!strncmp(http_auth, "AWS ", 4)) {
-      return authorize_v2(store, auth_registry, s);
-    }
-
   }
 
-  return -EINVAL;
+  return authorize_v2(store, auth_registry, s);
 }
 
 int RGW_Auth_S3::authorize_aws4_auth_complete(RGWRados *store, struct req_state *s)
@@ -3715,7 +3719,9 @@ int RGW_Auth_S3::authorize_v2(RGWRados* const store,
       applier->load_acct_info(*s->user);
       s->perm_mask = applier->get_perm_mask();
       applier->modify_request_state(s);
+
       s->auth.identity = std::move(applier);
+      s->auth.completer = result.get_completer();
 
       /* Populate the owner info. */
       s->owner.set_id(s->user->user_id);
@@ -4034,9 +4040,68 @@ bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time,
 }
 
 
-static rgw::auth::Completer::cmplptr_t null_completer_factory()
+static rgw::auth::Completer::cmplptr_t
+null_completer_factory(const boost::optional<std::string>& secret_key)
 {
   return nullptr;
+}
+
+class AWSv4Completer : public rgw::auth::Completer {
+public:
+  /* TODO(rzarzynski): move to boost::string_ref. This should be just fine
+   * as (all?) parameters here are actually views over req_info. */
+  std::string date;
+  std::string credential_scope;
+  std::string seed_signature;
+  std::array<unsigned char,
+             CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> signing_key;
+  ceph::bufferlist bl;
+
+  const req_state* const s;
+
+public:
+  AWSv4Completer(const req_state* const s) : s(s) {
+  }
+
+  bool complete() override;
+};
+
+bool AWSv4Completer::complete()
+{
+  const char *expected_request_payload_hash = \
+    rgw::auth::s3::get_v4_exp_payload_hash(s->info);
+
+  /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
+   * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
+   * header lets get the information very early -- before seeing first byte
+   * of HTTP body. As a consequence, we can decouple Signature verification
+   * from payload's fingerprint check. */
+
+  /* The completer is only for the cases where signed payload has been
+   * requested. It won't be used, for instance, during the query string-based
+   * authentication. */
+  std::string payload_hash;
+  if (s->aws4_auth_needs_complete) {
+    payload_hash = AWS_AUTHv4_IO(s)->grab_aws4_sha256_hash();
+
+    /* Validate x-amz-sha256 */
+    if (payload_hash.compare(expected_request_payload_hash) != 0) {
+      ldout(s->cct, 10) << "ERROR: x-amz-content-sha256 does not match" << dendl;
+      //return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
+      return false;
+    }
+  }
+
+  return true;
+}
+
+static rgw::auth::Completer::cmplptr_t
+awsv4_completer_factory(const req_state* const s,
+                        const std::string& credential_scope,
+
+                        const boost::optional<std::string>& secret_key)
+{
+  return rgw::auth::Completer::cmplptr_t(new AWSv4Completer(s));
 }
 
 using AWSVerAbstractor = AWSEngine::VersionAbstractor;
@@ -4047,6 +4112,220 @@ std::tuple<AWSVerAbstractor::access_key_id_t,
            AWSVerAbstractor::signature_factory_t,
            AWSVerAbstractor::completer_factory_t>
 AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
+{
+  AwsVersion version;
+  AwsRoute route;
+  std::tie(version, route) = discover_aws_flavour(s->info);
+
+  if (version == AwsVersion::V2) {
+    return get_auth_data_v2(s);
+  } else if (version == AwsVersion::V4) {
+    return get_auth_data_v4(s, route == AwsRoute::QUERY_STRING);
+  } else {
+    /* FIXME(rzarzynski): handle anon user. */
+    throw -EINVAL;
+  }
+}
+
+static inline
+std::string v4_signature(const std::string& credential_scope,
+
+                         CephContext* const cct,
+                         const std::string& secret_key,
+                         const std::string& string_to_sign)
+{
+  auto signing_key = \
+    rgw::auth::s3::get_v4_signing_key(cct, credential_scope, secret_key);
+
+  auto server_signature = \
+    rgw::auth::s3::get_v4_signature(cct, std::move(signing_key),
+                                    string_to_sign);
+
+
+  ldout(cct, 10) << "-----------------------------" << dendl;
+  ldout(cct, 10) << "Server Signature = " << server_signature
+                 << dendl;
+  ldout(cct, 10) << "-----------------------------" << dendl;
+
+  return server_signature;
+}
+
+std::tuple<AWSVerAbstractor::access_key_id_t,
+           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::string_to_sign_t,
+           AWSVerAbstractor::signature_factory_t,
+           AWSVerAbstractor::completer_factory_t>
+AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
+                                       /* FIXME: const. */
+                                       bool using_qs) const
+{
+  std::string access_key_id;
+  std::string signed_hdrs;
+
+  std::string date;
+  std::string credential_scope;
+  std::string client_signature;
+
+  int ret = rgw::auth::s3::parse_credentials(s->info,
+                                             access_key_id,
+                                             credential_scope,
+                                             signed_hdrs,
+                                             client_signature,
+                                             date,
+                                             using_qs);
+  if (ret < 0) {
+    throw ret;
+  }
+
+  /* craft canonical headers */
+  boost::optional<std::string> canonical_headers = \
+    rgw::auth::s3::get_v4_canonical_headers(s->info, signed_hdrs, using_qs,
+                                            true /* FIXME: force_boto2_compat*/);
+  if (canonical_headers) {
+    ldout(s->cct, 10) << "canonical headers format = " << *canonical_headers
+                      << dendl;
+  } else {
+    throw -EPERM;
+  }
+
+  /* Get the expected hash. */
+  auto exp_payload_hash = rgw::auth::s3::get_v4_exp_payload_hash(s->info);
+
+  /* Craft canonical URI. Using std::move later so let it be non-const. */
+  auto canonical_uri = rgw::auth::s3::get_v4_canonical_uri(s->info);
+
+  /* Craft canonical query string. std::moving later so non-const here. */
+  auto canonical_qs = rgw::auth::s3::get_v4_canonical_qs(s->info, using_qs);
+
+  /* Craft canonical request. */
+  auto canonical_req_hash = \
+    rgw::auth::s3::get_v4_canon_req_hash(s->cct,
+                                         s->info.method,
+                                         std::move(canonical_uri),
+                                         std::move(canonical_qs),
+                                         std::move(*canonical_headers),
+                                         std::move(signed_hdrs),
+                                         exp_payload_hash);
+
+  auto string_to_sign = \
+    rgw::auth::s3::get_v4_string_to_sign(s->cct,
+                                         "AWS4-HMAC-SHA256",
+                                         date,
+                                         credential_scope,
+                                         std::move(canonical_req_hash));
+
+  const auto sig_factory = std::bind(v4_signature,
+                                     credential_scope,
+                                     std::placeholders::_1,
+                                     std::placeholders::_2,
+                                     std::placeholders::_3);
+
+  /* Requests authenticated with the Query Parameters are treated as unsigned.
+   * From "Authenticating Requests: Using Query Parameters (AWS Signature
+   * Version 4)":
+   *
+   *   You don't include a payload hash in the Canonical Request, because
+   *   when you create a presigned URL, you don't know the payload content
+   *   because the URL is used to upload an arbitrary payload. Instead, you
+   *   use a constant string UNSIGNED-PAYLOAD.
+   *
+   * This means we have absolutely no business in spawning completer. Both
+   * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
+   * by default. We don't need to change that. */
+  if (is_v4_payload_unsigned(exp_payload_hash) || is_v4_payload_empty(s)) {
+    return std::make_tuple(std::move(access_key_id),
+                           std::move(client_signature),
+                           std::move(string_to_sign),
+                           sig_factory,
+                           null_completer_factory);
+  } else {
+    /* We're going to handle a signed payload. Be aware that even empty HTTP
+     * body (no payload) requires verification:
+     *
+     *   The x-amz-content-sha256 header is required for all AWS Signature
+     *   Version 4 requests. It provides a hash of the request payload. If
+     *   there is no payload, you must provide the hash of an empty string. */
+    if (!is_v4_payload_streamed(exp_payload_hash)) {
+      ldout(s->cct, 10) << "delaying v4 auth" << dendl;
+
+      /* payload in a single chunk */
+      switch (s->op_type)
+      {
+        case RGW_OP_CREATE_BUCKET:
+        case RGW_OP_PUT_OBJ:
+        case RGW_OP_PUT_ACLS:
+        case RGW_OP_PUT_CORS:
+        case RGW_OP_COMPLETE_MULTIPART:
+        case RGW_OP_SET_BUCKET_VERSIONING:
+        case RGW_OP_DELETE_MULTI_OBJ:
+        case RGW_OP_ADMIN_SET_METADATA:
+        case RGW_OP_SET_BUCKET_WEBSITE:
+        case RGW_OP_PUT_BUCKET_POLICY:
+          break;
+        default:
+          dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
+          throw -ERR_NOT_IMPLEMENTED;
+      }
+
+      const auto cmpl_factory = std::bind(AWSv4Completer::create_for_single_chunk,
+                                          s,
+                                          std::placeholders::_1);
+      return std::make_tuple(std::move(access_key_id),
+                             std::move(client_signature),
+                             std::move(string_to_sign),
+                             sig_factory,
+                             cmpl_factory);
+    } else {
+      /* IMHO "streamed" doesn't fit too good here. I would prefer to call
+       * it "chunked" but let's be coherent with Amazon's terminology. */
+
+      dout(10) << "body content detected in multiple chunks" << dendl;
+
+      /* payload in multiple chunks */
+
+      switch(s->op_type)
+      {
+        case RGW_OP_PUT_OBJ:
+          break;
+        default:
+          dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED (streaming mode)" << dendl;
+          throw -ERR_NOT_IMPLEMENTED;
+      }
+
+      dout(10) << "aws4 seed signature ok... delaying v4 auth" << dendl;
+
+      /* In the case of streamed payload client sets the x-amz-content-sha256
+       * to "STREAMING-AWS4-HMAC-SHA256-PAYLOAD" but uses "UNSIGNED-PAYLOAD"
+       * when constructing the Canonical Request. */
+
+      /* In the case of single-chunk upload client set the header's value is
+       * coherent with the one used for Canonical Request crafting. */
+
+      /* In the case of query string-based authentication there should be no
+       * x-amz-content-sha256 header and the value "UNSIGNED-PAYLOAD" is used
+       * for CanonReq. */
+      const auto cmpl_factory = std::bind(AWSv4Completer::create_for_multi_chunk,
+                                          s,
+                                          std::move(date),
+                                          std::move(credential_scope),
+                                          client_signature,
+                                          std::placeholders::_1);
+      return std::make_tuple(std::move(access_key_id),
+                             std::move(client_signature),
+                             std::move(string_to_sign),
+                             sig_factory,
+                             cmpl_factory);
+    }
+  }
+}
+
+
+std::tuple<AWSVerAbstractor::access_key_id_t,
+           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::string_to_sign_t,
+           AWSVerAbstractor::signature_factory_t,
+           AWSVerAbstractor::completer_factory_t>
+AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
 {
   std::string access_key_id;
   std::string signature;

@@ -757,6 +757,20 @@ class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
   bool is_time_skew_ok(const utime_t& header_time,
                        const bool qsr) const;
 
+  std::tuple<access_key_id_t,
+             signature_t,
+             string_to_sign_t,
+             signature_factory_t,
+             completer_factory_t>
+  get_auth_data_v2(const req_state* s) const;
+
+  std::tuple<access_key_id_t,
+             signature_t,
+             string_to_sign_t,
+             signature_factory_t,
+             completer_factory_t>
+  get_auth_data_v4(const req_state* s, bool using_qs) const;
+
 public:
   AWSGeneralAbstractor(CephContext* const cct)
     : cct(cct) {
