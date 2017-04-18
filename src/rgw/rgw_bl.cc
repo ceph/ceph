@@ -38,6 +38,7 @@ const char* BL_STATUS[] = {
   "UNINITIAL",
   "PROCESSING",
   "FAILED",
+  "PERM_ERROR",
   "COMPLETE"
 };
 
