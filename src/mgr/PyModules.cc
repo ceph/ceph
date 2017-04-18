@@ -32,6 +32,15 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
+PyModules::PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
+		     Finisher &f)
+  : daemon_state(ds), cluster_state(cs), monc(mc), finisher(f)
+{}
+
+// we can not have the default destructor in header, because ServeThread is
+// still an "incomplete" type. so we need to define the destructor here.
+PyModules::~PyModules() = default;
+
 void PyModules::dump_server(const std::string &hostname,
                       const DaemonStateCollection &dmc,
                       Formatter *f)
@@ -372,19 +381,18 @@ int PyModules::init()
 
   // Load python code
   boost::tokenizer<> tok(g_conf->mgr_modules);
-  for(boost::tokenizer<>::iterator module_name=tok.begin();
-      module_name != tok.end();++module_name){
-    dout(1) << "Loading python module '" << *module_name << "'" << dendl;
-    auto mod = new MgrPyModule(*module_name);
+  for(const auto& module_name : tok) {
+    dout(1) << "Loading python module '" << module_name << "'" << dendl;
+    auto mod = std::unique_ptr<MgrPyModule>(new MgrPyModule(module_name));
     int r = mod->load();
     if (r != 0) {
-      derr << "Error loading module '" << *module_name << "': "
+      derr << "Error loading module '" << module_name << "': "
         << cpp_strerror(r) << dendl;
       derr << handle_pyerror() << dendl;
       // Don't drop out here, load the other modules
     } else {
       // Success!
-      modules[*module_name] = mod;
+      modules[module_name] = std::move(mod);
     }
   } 
 
@@ -421,9 +429,9 @@ void PyModules::start()
   Mutex::Locker l(lock);
 
   dout(1) << "Creating threads for " << modules.size() << " modules" << dendl;
-  for (auto &i : modules) {
-    auto thread = new ServeThread(i.second);
-    serve_threads[i.first] = thread;
+  for (auto& i : modules) {
+    auto thread = new ServeThread(i.second.get());
+    serve_threads[i.first].reset(thread);
   }
 
   for (auto &i : serve_threads) {
@@ -439,8 +447,8 @@ void PyModules::shutdown()
   Mutex::Locker locker(lock);
 
   // Signal modules to drop out of serve()
-  for (auto i : modules) {
-    auto module = i.second;
+  for (auto& i : modules) {
+    auto module = i.second.get();
     finisher.queue(new FunctionContext([module](int r){
       module->shutdown();
     }));
@@ -450,14 +458,8 @@ void PyModules::shutdown()
     lock.Unlock();
     i.second->join();
     lock.Lock();
-    delete i.second;
   }
   serve_threads.clear();
-
-  // Tear down modules
-  for (auto i : modules) {
-    delete i.second;
-  }
   modules.clear();
 
   PyGILState_Ensure();
@@ -470,8 +472,8 @@ void PyModules::notify_all(const std::string &notify_type,
   Mutex::Locker l(lock);
 
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
-  for (auto i : modules) {
-    auto module = i.second;
+  for (auto& i : modules) {
+    auto module = i.second.get();
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     finisher.queue(new FunctionContext([module, notify_type, notify_id](int r){
@@ -485,8 +487,8 @@ void PyModules::notify_all(const LogEntry &log_entry)
   Mutex::Locker l(lock);
 
   dout(10) << __func__ << ": notify_all (clog)" << dendl;
-  for (auto i : modules) {
-    auto module = i.second;
+  for (auto& i : modules) {
+    auto module = i.second.get();
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     //
@@ -551,8 +553,8 @@ std::vector<ModuleCommand> PyModules::get_commands()
   Mutex::Locker l(lock);
 
   std::vector<ModuleCommand> result;
-  for (auto i : modules) {
-    auto module = i.second;
+  for (auto& i : modules) {
+    auto module = i.second.get();
     auto mod_commands = module->get_commands();
     for (auto j : mod_commands) {
       result.push_back(j);
