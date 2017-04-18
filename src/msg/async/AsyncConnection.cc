@@ -292,14 +292,17 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
       left -= r;
     } while (r > 0);
   } else {
+    uint64_t recv_len = recv_max_prefetch;
+    //read data from socket into recv_buf
     do {
-      r = read_bulk(recv_buf+recv_end, recv_max_prefetch);
+      r = read_bulk(recv_buf+recv_end, recv_len);
       ldout(async_msgr->cct, 25) << __func__ << " read_bulk recv_end is " << recv_end
                                  << " left is " << left << " got " << r << dendl;
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " read failed" << dendl;
         return -1;
       }
+      recv_len -= r;
       recv_end += r;
     } while (r > 0);
 
