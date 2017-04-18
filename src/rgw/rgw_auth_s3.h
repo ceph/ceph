@@ -185,6 +185,31 @@ static inline std::string get_v4_canonical_uri(const req_info& info) {
   return canonical_uri;
 }
 
+static inline const char* get_v4_exp_payload_hash(const req_info& info)
+{
+  /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
+   * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
+   * header lets get the information very early -- before seeing first byte
+   * of HTTP body. As a consequence, we can decouple Signature verification
+   * from payload's fingerprint check. */
+  const char *expected_request_payload_hash = \
+    info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
+
+  if (!expected_request_payload_hash) {
+    /* An HTTP client MUST send x-amz-content-sha256. The single exception
+     * is the case of using the Query Parameters where "UNSIGNED-PAYLOAD"
+     * literals are used for crafting Canonical Request:
+     *
+     *  You don't include a payload hash in the Canonical Request, because
+     *  when you create a presigned URL, you don't know the payload content
+     *  because the URL is used to upload an arbitrary payload. Instead, you
+     *  use a constant string UNSIGNED-PAYLOAD. */
+    expected_request_payload_hash = "UNSIGNED-PAYLOAD";
+  }
+
+  return expected_request_payload_hash;
+}
+
 std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
 boost::optional<std::string> get_v4_canonical_headers(const req_info& info,

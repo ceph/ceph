@@ -3384,20 +3384,14 @@ int RGW_Auth_S3::authorize_aws4_auth_complete(RGWRados *store, struct req_state 
 
 int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, const string& request_payload, bool unsigned_payload)
 {
-  const char *expected_request_payload_hash = s->info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
-  if (!expected_request_payload_hash) {
-    /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
-     * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
-     * header lets get the information very early -- before seeing first byte
-     * of HTTP body. As a consequence, we can decouple Signature verification
-     * from payload's fingerprint check.
-     *
-     * An HTTP client MUST send x-amz-content-sha256. AFAIK the single exception
-     * to that is the case of using Query Parameters for doing the auth In such
-     * scenario, the "UNSIGNED-PAYLOAD" literals are used instead. */
-    expected_request_payload_hash = "UNSIGNED-PAYLOAD";
-  }
+  const char *expected_request_payload_hash = \
+    rgw::auth::s3::get_v4_exp_payload_hash(s->info);
 
+  /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
+   * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
+   * header lets get the information very early -- before seeing first byte
+   * of HTTP body. As a consequence, we can decouple Signature verification
+   * from payload's fingerprint check. */
   std::string payload_hash;
   if (unsigned_payload) {
     payload_hash = "UNSIGNED-PAYLOAD";
@@ -3519,19 +3513,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
     }
   }
 
-  const char *expected_request_payload_hash = s->info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
-  if (!expected_request_payload_hash) {
-    /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
-     * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
-     * header lets get the information very early -- before seeing first byte
-     * of HTTP body. As a consequence, we can decouple Signature verification
-     * from payload's fingerprint check.
-     *
-     * An HTTP client MUST send x-amz-content-sha256. AFAIK the single exception
-     * to that is the case of using Query Parameters for doing the auth In such
-     * scenario, the "UNSIGNED-PAYLOAD" literals are used instead. */
-    expected_request_payload_hash = "UNSIGNED-PAYLOAD";
-  }
+  /* Get the expected hash. */
+  auto exp_payload_hash = rgw::auth::s3::get_v4_exp_payload_hash(s->info);
 
   /* craft canonical request */
   std::string canonical_req_hash = \
@@ -3541,7 +3524,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
                                          canonical_qs,
                                          *canonical_headers,
                                          signed_hdrs,
-                                         expected_request_payload_hash);
+                                         exp_payload_hash);
 
   /*
    * create a string to sign
