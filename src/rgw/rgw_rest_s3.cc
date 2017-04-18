@@ -3535,13 +3535,13 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
 
   /* craft canonical request */
   std::string canonical_req_hash = \
-    rgw::auth::s3::get_v4_canonical_request_hash(s->cct,
-                                                 s->info.method,
-                                                 canonical_uri,
-                                                 canonical_qs,
-                                                 *canonical_headers,
-                                                 signed_hdrs,
-                                                 expected_request_payload_hash);
+    rgw::auth::s3::get_v4_canon_req_hash(s->cct,
+                                         s->info.method,
+                                         canonical_uri,
+                                         canonical_qs,
+                                         *canonical_headers,
+                                         signed_hdrs,
+                                         expected_request_payload_hash);
 
   /*
    * create a string to sign

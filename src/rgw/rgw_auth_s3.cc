@@ -634,14 +634,16 @@ static std::string assemble_v4_canonical_request(
 
 /*
  * create canonical request for signature version 4
+ *
+ * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
  */
-std::string get_v4_canonical_request_hash(CephContext* cct,
-                                          const std::string& http_verb,
-                                          const std::string& canonical_uri,
-                                          const std::string& canonical_qs,
-                                          const std::string& canonical_hdrs,
-                                          const std::string& signed_hdrs,
-                                          const std::string& request_payload_hash)
+std::string get_v4_canon_req_hash(CephContext* cct,
+                                  const std::string& http_verb,
+                                  const std::string& canonical_uri,
+                                  const std::string& canonical_qs,
+                                  const std::string& canonical_hdrs,
+                                  const std::string& signed_hdrs,
+                                  const std::string& request_payload_hash)
 {
   ldout(cct, 10) << "payload request hash = " << request_payload_hash << dendl;
 
