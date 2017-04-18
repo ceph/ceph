@@ -1280,6 +1280,11 @@ namespace rgw {
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
     struct req_state* s = get_state();
 
+    size_t osize = rgw_fh->get_size();
+    struct timespec octime = rgw_fh->get_ctime();
+    struct timespec omtime = rgw_fh->get_mtime();
+    real_time appx_t = real_clock::now();
+
     s->obj_size = ofs; // XXX check ofs
     perfcounter->inc(l_rgw_put_b, s->obj_size);
 
@@ -1300,7 +1305,12 @@ namespace rgw {
     policy.encode(aclbl);
     emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
+    /* unix attrs */
+    rgw_fh->set_mtime(real_clock::to_timespec(appx_t));
+    rgw_fh->set_ctime(real_clock::to_timespec(appx_t));
+    rgw_fh->set_size(bytes_written);
     rgw_fh->encode_attrs(ux_key, ux_attrs);
+
     emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
     emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
@@ -1324,12 +1334,13 @@ namespace rgw {
     }
 
     op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
-                                 (delete_at ? *delete_at : real_time()), if_match, if_nomatch);
-    if (! op_ret) {
-      /* update stats */
-      rgw_fh->set_mtime(real_clock::to_timespec(mtime));
-      rgw_fh->set_ctime(real_clock::to_timespec(mtime));
-      rgw_fh->set_size(bytes_written);
+                                 (delete_at ? *delete_at : real_time()),
+				 if_match, if_nomatch);
+    if (op_ret != 0) {
+      /* revert attr updates */
+      rgw_fh->set_mtime(omtime);
+      rgw_fh->set_ctime(octime);
+      rgw_fh->set_size(osize);
     }
 
   done:
