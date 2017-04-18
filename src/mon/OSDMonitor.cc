@@ -7219,9 +7219,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     pending_inc.new_primary_temp[pgid] = osd;
     ss << "set " << pgid << " primary_temp mapping to " << osd;
     goto update;
-  } else if (prefix == "osd pg-remap") {
-    if (!g_conf->mon_osd_allow_pg_remap) {
-      ss << "you must enable 'mon osd allow pg remap = true' on the mons before you can adjust pg_remap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+  } else if (prefix == "osd pg-upmap") {
+    if (!g_conf->mon_osd_allow_pg_upmap) {
+      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
       err = -EPERM;
       goto reply;
     }
@@ -7248,8 +7248,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply;
     }
-    if (pending_inc.new_pg_remap.count(pgid) ||
-	pending_inc.old_pg_remap.count(pgid)) {
+    if (pending_inc.new_pg_upmap.count(pgid) ||
+	pending_inc.old_pg_upmap.count(pgid)) {
       dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
@@ -7261,22 +7261,22 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    vector<int32_t> new_pg_remap;
+    vector<int32_t> new_pg_upmap;
     for (auto osd : id_vec) {
       if (osd != CRUSH_ITEM_NONE && !osdmap.exists(osd)) {
         ss << "osd." << osd << " does not exist";
         err = -ENOENT;
         goto reply;
       }
-      new_pg_remap.push_back(osd);
+      new_pg_upmap.push_back(osd);
     }
 
-    pending_inc.new_pg_remap[pgid] = new_pg_remap;
-    ss << "set " << pgid << " pg_remap mapping to " << new_pg_remap;
+    pending_inc.new_pg_upmap[pgid] = new_pg_upmap;
+    ss << "set " << pgid << " pg_upmap mapping to " << new_pg_upmap;
     goto update;
-  } else if (prefix == "osd rm-pg-remap") {
-    if (!g_conf->mon_osd_allow_pg_remap) {
-      ss << "you must enable 'mon osd allow pg remap = true' on the mons before you can adjust pg_remap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+  } else if (prefix == "osd rm-pg-upmap") {
+    if (!g_conf->mon_osd_allow_pg_upmap) {
+      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
       err = -EPERM;
       goto reply;
     }
@@ -7303,19 +7303,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply;
     }
-    if (pending_inc.new_pg_remap.count(pgid) ||
-	pending_inc.old_pg_remap.count(pgid)) {
+    if (pending_inc.new_pg_upmap.count(pgid) ||
+	pending_inc.old_pg_upmap.count(pgid)) {
       dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
     }
 
-    pending_inc.old_pg_remap.insert(pgid);
-    ss << "clear " << pgid << " pg_remap mapping";
+    pending_inc.old_pg_upmap.insert(pgid);
+    ss << "clear " << pgid << " pg_upmap mapping";
     goto update;
-  } else if (prefix == "osd pg-remap-items") {
-    if (!g_conf->mon_osd_allow_pg_remap) {
-      ss << "you must enable 'mon osd allow pg remap = true' on the mons before you can adjust pg_remap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+  } else if (prefix == "osd pg-upmap-items") {
+    if (!g_conf->mon_osd_allow_pg_upmap) {
+      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
       err = -EPERM;
       goto reply;
     }
@@ -7342,8 +7342,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply;
     }
-    if (pending_inc.new_pg_remap_items.count(pgid) ||
-	pending_inc.old_pg_remap_items.count(pgid)) {
+    if (pending_inc.new_pg_upmap_items.count(pgid) ||
+	pending_inc.old_pg_upmap_items.count(pgid)) {
       dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
@@ -7360,7 +7360,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    vector<pair<int32_t,int32_t>> new_pg_remap_items;
+    vector<pair<int32_t,int32_t>> new_pg_upmap_items;
     for (auto p = id_vec.begin(); p != id_vec.end(); ++p) {
       int from = *p++;
       int to = *p;
@@ -7374,15 +7374,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -ENOENT;
 	goto reply;
       }
-      new_pg_remap_items.push_back(make_pair(from, to));
+      new_pg_upmap_items.push_back(make_pair(from, to));
     }
 
-    pending_inc.new_pg_remap_items[pgid] = new_pg_remap_items;
-    ss << "set " << pgid << " pg_remap_items mapping to " << new_pg_remap_items;
+    pending_inc.new_pg_upmap_items[pgid] = new_pg_upmap_items;
+    ss << "set " << pgid << " pg_upmap_items mapping to " << new_pg_upmap_items;
     goto update;
-  } else if (prefix == "osd rm-pg-remap-items") {
-    if (!g_conf->mon_osd_allow_pg_remap) {
-      ss << "you must enable 'mon osd allow pg remap = true' on the mons before you can adjust pg_remap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+  } else if (prefix == "osd rm-pg-upmap-items") {
+    if (!g_conf->mon_osd_allow_pg_upmap) {
+      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
       err = -EPERM;
       goto reply;
     }
@@ -7409,15 +7409,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply;
     }
-    if (pending_inc.new_pg_remap_items.count(pgid) ||
-	pending_inc.old_pg_remap_items.count(pgid)) {
+    if (pending_inc.new_pg_upmap_items.count(pgid) ||
+	pending_inc.old_pg_upmap_items.count(pgid)) {
       dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
     }
 
-    pending_inc.old_pg_remap_items.insert(pgid);
-    ss << "clear " << pgid << " pg_remap_items mapping";
+    pending_inc.old_pg_upmap_items.insert(pgid);
+    ss << "clear " << pgid << " pg_upmap_items mapping";
     goto update;
   } else if (prefix == "osd primary-affinity") {
     int64_t id;
