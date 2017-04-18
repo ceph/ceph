@@ -331,7 +331,7 @@ class DaemonWatcher(object):
             signal(SIGWINCH, self._handle_sigwinch)
             while True:
                 dump = json.loads(admin_socket(self.asok_path, ["perf", "dump"]).decode('utf-8'))
-                if rows_since_header > self.termsize.rows - 2:
+                if rows_since_header >= self.termsize.rows - 2:
                     self._print_headers(ostr)
                     rows_since_header = 0
                 self._print_vals(ostr, dump, last_dump)
