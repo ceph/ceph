@@ -93,6 +93,7 @@ void BlueFS::_shutdown_logger()
 {
   cct->get_perfcounters_collection()->remove(logger);
   delete logger;
+  logger = nullptr;
 }
 
 void BlueFS::_update_logger_stats()
@@ -375,6 +376,8 @@ int BlueFS::mount()
 {
   dout(1) << __func__ << dendl;
 
+  _init_logger();
+
   int r = _open_super();
   if (r < 0) {
     derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
@@ -410,10 +413,10 @@ int BlueFS::mount()
            << std::hex << log_writer->pos << std::dec
            << dendl;
 
-  _init_logger();
   return 0;
 
  out:
+  _shutdown_logger();
   super = bluefs_super_t();
   return r;
 }
