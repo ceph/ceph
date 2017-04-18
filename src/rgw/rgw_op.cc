@@ -55,7 +55,9 @@ using ceph::crypto::MD5;
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
-static int forward_request_to_master(struct req_state *s, obj_version *objv, RGWRados *store, bufferlist& in_data, JSONParser *jp);
+static void forward_req_info(CephContext *cct, req_info& info, const std::string& bucket_name);
+static int forward_request_to_master(struct req_state *s, obj_version *objv, RGWRados *store,
+                                     bufferlist& in_data, JSONParser *jp, req_info *forward_info = nullptr);
 
 #define MULTIPART_UPLOAD_ID_PREFIX_LEGACY "2/"
 #define MULTIPART_UPLOAD_ID_PREFIX "2~" // must contain a unique char that may not come up in gen_rand_alpha()
@@ -2047,7 +2049,7 @@ int RGWCreateBucket::verify_permission()
 
 static int forward_request_to_master(struct req_state *s, obj_version *objv,
 				    RGWRados *store, bufferlist& in_data,
-				    JSONParser *jp)
+				    JSONParser *jp, req_info *forward_info)
 {
   if (!store->rest_master_conn) {
     ldout(s->cct, 0) << "rest connection is invalid" << dendl;
@@ -2057,9 +2059,8 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv,
   bufferlist response;
   string uid_str = s->user->user_id.to_str();
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = store->rest_master_conn->forward(uid_str, s->info, objv,
-					    MAX_REST_RESPONSE, &in_data,
-					    &response);
+  int ret = store->rest_master_conn->forward(uid_str, (forward_info ? *forward_info : s->info),
+                                             objv, MAX_REST_RESPONSE, &in_data, &response);
   if (ret < 0)
     return ret;
 
@@ -5580,6 +5581,20 @@ int RGWBulkUploadOp::handle_dir_verify_permission()
   return 0;
 }
 
+static void forward_req_info(CephContext *cct, req_info& info, const std::string& bucket_name)
+{
+  /* the request of container or object level will contain bucket name.
+   * only at account level need to append the bucket name */
+  if (info.script_uri.find(bucket_name) != std::string::npos) {
+    return;
+  }
+
+  ldout(cct, 20) << "append the bucket: "<< bucket_name << " to req_info" << dendl;
+  info.script_uri.append("/").append(bucket_name);
+  info.request_uri_aws4 = info.request_uri = info.script_uri;
+  info.effective_uri = "/" + bucket_name;
+}
+
 int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
 {
   ldout(s->cct, 20) << "bulk upload: got directory=" << path << dendl;
@@ -5595,14 +5610,6 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
 
   rgw_raw_obj obj(store->get_zone_params().domain_root,
                   rgw_make_bucket_entry_name(s->bucket_tenant, bucket_name));
-
-  /* Swift API doesn't support location constraint. We're just checking here
-   * whether creation is taking place in the master zone or not. */
-  if (! store->get_zonegroup().is_master) {
-    ldout(s->cct, 0) << "creating bucket in a non-master zone." << dendl;
-    op_ret = -EINVAL;
-    return op_ret;
-  }
 
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
@@ -5635,7 +5642,9 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
   if (! store->is_meta_master()) {
     JSONParser jp;
     ceph::bufferlist in_data;
-    op_ret = forward_request_to_master(s, nullptr, store, in_data, &jp);
+    req_info info = s->info;
+    forward_req_info(s->cct, info, bucket_name);
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, &jp, &info);
     if (op_ret < 0) {
       return op_ret;
     }
