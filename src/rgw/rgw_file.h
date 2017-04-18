@@ -20,8 +20,8 @@
 #include <algorithm>
 #include <functional>
 #include <boost/intrusive_ptr.hpp>
+#include <boost/intrusive/list.hpp>
 #include <boost/range/adaptor/reversed.hpp>
-#include <boost/container/flat_map.hpp>
 #include <boost/variant.hpp>
 #include <boost/utility/string_ref.hpp>
 #include <boost/optional.hpp>
@@ -59,7 +59,7 @@ namespace rgw {
 
   class RGWLibFS;
   class RGWFileHandle;
-  class RGWWriteRequest;
+  class RGWWriteRequest2;
 
   static inline bool operator <(const struct timespec& lhs,
 				const struct timespec& rhs) {
@@ -164,6 +164,157 @@ namespace rgw {
   using boost::variant;
   using boost::container::flat_map;
 
+  class WPage
+  {
+  public:
+    static constexpr uint64_t PAGE_LOG = 20;
+    static constexpr uint64_t PAGE_SIZE = 1 << PAGE_LOG; /* 1048576, 1M */
+
+    bi::list_member_hook<> pages_hook;
+    char base[PAGE_SIZE];
+    int32_t pno;
+    int32_t len;
+
+    typedef bi::list< WPage,
+		      bi::member_hook<WPage, bi::list_member_hook<>,
+				      &WPage::pages_hook > > PageList;
+
+    /* convert file offset into local page offset */
+    static inline int32_t page_off(uint64_t off) {
+      return off & (WPage::PAGE_SIZE - 1);
+    }
+
+    /* logical page number */
+    static inline int32_t page_no(uint64_t off) {
+      return off >> WPage::PAGE_LOG;
+    }
+
+    /* compute base offset */
+    static inline int64_t page_base(uint64_t off) {
+      return  page_no(off) * WPage::PAGE_SIZE;
+    }
+
+    WPage() : pno(-1), len(0)
+      {}
+
+    WPage(int32_t _pno, uint64_t _off, uint32_t _len, void* buf)
+      : pno(_pno), len(_len)
+      {}
+
+    uint64_t file_offset() { return pno * WPage::PAGE_SIZE; }
+
+    void init() {
+      len = 0;
+      memset(base, 0, WPage::PAGE_SIZE); // memset_s?
+    }
+
+    uint64_t size() const { return PAGE_SIZE; };
+
+    bool full() { return (len == WPage::PAGE_SIZE); }
+
+    void store(int32_t _off, int32_t _len, void* buf) {
+      int32_t nlen = _off + _len;
+      assert(uint32_t(nlen) <= PAGE_SIZE);
+
+      std::cout << "page::store"
+		<< " pno=" << pno
+		<< " off=" << _off
+		<< " len=" << _len
+		<< std::endl;
+
+      memcpy(base + _off, buf, _len);
+      if (nlen > len)
+	len = nlen;
+    }
+
+    friend std::ostream& operator<<(std::ostream &os, WPage const &page);
+
+  }; /* WPage */
+
+  inline bool operator<(const WPage& lhs, const WPage& rhs)
+  {
+    return (lhs.pno < rhs.pno);
+  }
+
+  inline bool operator==(const WPage& lhs, const WPage& rhs)
+  {
+    return (lhs.pno == rhs.pno);
+  }
+
+  class WPageList
+  {
+  public:
+    RGWFileHandle* fh;
+    std::mutex mtx;
+    WPage::PageList pages;
+    int64_t high_off;
+    int32_t high_retired;
+    int32_t high_pno;
+
+    using lock_guard = std::lock_guard<std::mutex>;
+
+    static constexpr uint32_t OOW_WINDOW = 5;
+
+    WPageList(RGWFileHandle* _fh)
+      : fh(_fh), high_off(-1), high_retired(-1), high_pno(-1)
+      {}
+
+    WPage* get_page(int32_t pno) {
+      WPage* page = nullptr;
+      WPage::PageList::reverse_iterator rit;
+      for (rit = pages.rbegin(); rit != pages.rend(); ++rit) {
+	if (rit->pno == pno) {
+	  page = &(*rit);
+	  break;
+	}
+      }
+      return page;
+    }
+
+    void put_page(WPage* page) {
+      pages.push_back(*page);
+      if (page->pno > high_pno)
+	high_pno = page->pno;
+    }
+
+    WPage* retire_page() {
+      if (pages.empty() ||
+	  (pages.size() <= OOW_WINDOW)) {
+	return nullptr;
+      }
+      WPage* page = &(pages.front());
+      if (high_retired == page->pno-1) {
+	high_retired = page->pno;
+	pages.pop_front();
+      }
+      return page;
+    }
+
+    void get_pages(std::vector<WPage*>& vec) {
+      vec.reserve(pages.size());
+      while(! pages.empty()) {
+	vec.push_back(&(pages.front()));
+	pages.pop_front();
+      }
+    }
+
+    void get_pages_lock(std::vector<WPage*>& vec) {
+      lock_guard guard(mtx);
+      return get_pages(vec);
+    }
+
+    WPage* retire_page_lock() {
+      lock_guard guard(mtx);
+      return retire_page();
+    }
+
+    int write_back(uint64_t off, uint64_t len, void* buf);
+
+    WPage* pop_front() {
+      return nullptr;
+    }
+  }; /* WPageList */
+
   class RGWFileHandle : public cohort::lru::Object
   {
     struct rgw_file_handle fh;
@@ -200,8 +351,10 @@ namespace rgw {
     } state;
 
     struct file {
-      RGWWriteRequest* write_req;
-      file() : write_req(nullptr) {}
+      RGWWriteRequest2* write_req2;
+      uint64_t last_off;
+      file()
+	: write_req2(nullptr), last_off(0) {}
       ~file();
     };
 
@@ -517,7 +670,9 @@ namespace rgw {
 
     int readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset, bool *eof,
 		uint32_t flags);
+
     int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
+    int write2(uint64_t off, size_t len, size_t *nbytes, void *buffer);
 
     int commit(uint64_t offset, uint64_t length, uint32_t flags) {
       /* NFS3 and NFSv4 COMMIT implementation
@@ -746,6 +901,53 @@ namespace rgw {
 
     static atomic<uint32_t> fs_inst_counter;
 
+    class Writeback {
+    public:
+      std::mutex mtx;
+      WPage::PageList free_pages;
+      uint32_t page_hiwat;
+      uint32_t page_max;
+      uint32_t npages;
+
+      Writeback() : page_hiwat(100), page_max(300), npages(0)
+	{}
+
+      void init(RGWLibFS* fs) {
+	lock_guard guard(mtx);
+	for (uint32_t ix = 0; ix < page_hiwat; ++ix) {
+	  free_pages.push_back(
+	    *(new WPage()));
+	  ++npages;
+	}
+      }
+
+      WPage* get_page() {
+	WPage* page = nullptr;
+	lock_guard guard(mtx);
+	if (free_pages.size()) {
+	  page = &(free_pages.front());
+	  free_pages.pop_front();
+	} else {
+	  if (npages < page_max) {
+	    page = new WPage();
+	    ++npages;
+	  }
+	}
+	page->init();
+	return page;
+      }
+
+      void put_page(WPage* page) {
+	lock_guard guard(mtx);
+	if (free_pages.size() < page_hiwat) {
+	  free_pages.push_back(*page);
+	} else {
+	  delete page;
+	  --npages;
+	}
+      }
+    } writeback;
+
     static uint32_t write_completion_interval_s;
     std::string fsid;
 
@@ -802,6 +1004,8 @@ namespace rgw {
 
     friend class RGWFileHandle;
     friend class RGWLibProcess;
+    friend class WPageList;
+    friend class RGWWriteRequest2;
 
   public:
 
@@ -2143,33 +2347,37 @@ public:
   put object
 */
 
-class RGWWriteRequest : public RGWLibContinuedReq,
-			public RGWPutObj /* RGWOp */
+class RGWWriteRequest2 : public RGWLibContinuedReq,
+			 public RGWPutObj /* RGWOp */
 {
 public:
   const std::string& bucket_name;
   const std::string& obj_name;
   RGWFileHandle* rgw_fh;
   RGWPutObjProcessor *processor;
+  WPageList page_list;
   buffer::list data;
   uint64_t timer_id;
   MD5 hash;
-  off_t real_ofs;
   size_t bytes_written;
   bool multipart;
-  bool eio;
 
-  RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
+  RGWWriteRequest2(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      rgw_fh(_fh), processor(nullptr), real_ofs(0), bytes_written(0),
-      multipart(false), eio(false) {
+      rgw_fh(_fh), processor(nullptr), page_list(_fh), bytes_written(0),
+      multipart(false) {
 
     int ret = header_init();
     if (ret == 0) {
       ret = init_from_header(get_state());
     }
     op = this;
+
+    std::cout << __func__
+	      << " bucket_name=" << bucket_name
+	      << " object_name=" << rgw_fh->full_object_name()
+	      << std::endl;
   }
 
   bool only_bucket() override { return true; }
@@ -2228,21 +2436,16 @@ public:
   }
 
   int get_data(buffer::list& _bl) override {
-    /* XXX for now, use sharing semantics */
     uint32_t len = data.length();
     _bl.claim(data);
     bytes_written += len;
     return len;
   }
 
-  void put_data(off_t off, buffer::list& _bl) {
-    if (off != real_ofs) {
-      eio = true;
-    }
-    data.claim(_bl);
-    real_ofs += data.length();
-    ofs = off; /* consumed in exec_continue() */
-  }
+  static constexpr uint32_t FLAG_NONE =       0x0000;
+  static constexpr uint32_t FLAG_FINISH =     0x0001;
+
+  int write_page(WPage* page, uint32_t flags = FLAG_NONE);
 
   int exec_start() override;
   int exec_continue() override;
@@ -2253,7 +2456,23 @@ public:
   int verify_params() override {
     return 0;
   }
-}; /* RGWWriteRequest */
+
+  virtual ~RGWWriteRequest2() {
+    vector<WPage*> page_vec;
+    page_list.get_pages_lock(page_vec);
+
+    std::cout << __func__
+	      << " sending " << page_vec.size() << " pages"
+	      << std::endl;
+
+    for (uint32_t ix = 0; ix < page_vec.size(); ++ix) {
+      WPage* page = page_vec[ix];
+      // release page
+      rgw_fh->get_fs()->writeback.put_page(page);
+    } /* outstanding pages */
+  }
+
+}; /* RGWWriteRequest2 */
 
 /*
   copy object
