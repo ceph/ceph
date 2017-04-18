@@ -139,9 +139,6 @@ fi
 # Install all requirements
 ./virtualenv/bin/pip install --upgrade -r requirements.txt
 
-# Invoke pip-sync
-./virtualenv/bin/pip-sync requirements.txt
-
 # Check to make sure requirements are met
 ./virtualenv/bin/pip check
 
