@@ -1650,7 +1650,10 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
 
   string ceph_version(CEPH_GIT_NICE_VER);
   formatter.dump_string("version", ceph_version);
-  formatter.dump_int("max_meta_name_length", 81);
+
+  const size_t meta_name_limit = g_conf->osd_max_attr_name_len
+    - strlen(RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX);
+  formatter.dump_int("max_meta_name_length", meta_name_limit);
 
   formatter.open_array_section("policies");
   RGWZoneGroup& zonegroup = store.get_zonegroup();

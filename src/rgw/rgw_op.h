@@ -1781,30 +1781,45 @@ static inline void format_xattr(std::string &xattr)
  * map(<attr_name, attr_contents>, where attr_name is RGW_ATTR_PREFIX.HTTP_NAME)
  * s: The request state
  * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
+ * On success returns 0.
+ * On failure returns a negative error code.
  *
  */
-static inline void rgw_get_request_metadata(CephContext *cct,
-					    struct req_info& info,
-					    map<string, bufferlist>& attrs,
-					    const bool allow_empty_attrs = true)
+static inline int rgw_get_request_metadata(CephContext* const cct,
+                                           struct req_info& info,
+                                           std::map<std::string, ceph::bufferlist>& attrs,
+                                           const bool allow_empty_attrs = true)
 {
-  map<string, string>::iterator iter;
-  for (iter = info.x_meta_map.begin(); iter != info.x_meta_map.end(); ++iter) {
-    const string &name(iter->first);
-    string &xattr(iter->second);
+  for (auto& kv : info.x_meta_map) {
+    const std::string& name = kv.first;
+    std::string& xattr = kv.second;
 
     if (allow_empty_attrs || !xattr.empty()) {
       lsubdout(cct, rgw, 10) << "x>> " << name << ":" << xattr << dendl;
       format_xattr(xattr);
-      string attr_name(RGW_ATTR_PREFIX);
+
+      std::string attr_name(RGW_ATTR_PREFIX);
       attr_name.append(name);
-      map<string, bufferlist>::value_type v(attr_name, bufferlist());
-      std::pair < map<string, bufferlist>::iterator, bool >
-	rval(attrs.insert(v));
-      bufferlist& bl(rval.first->second);
+
+      /* Check early whether we aren't going behind the limit on attribute
+       * name. Passing here doesn't guarantee that an OSD will accept that
+       * as ObjectStore::get_max_attr_name_length() can set the limit even
+       * lower. However, we're claiming "max_meta_name_length" in /info as
+       * being dependent on the "osd_max_attr_name_len".  */
+      if (attr_name.length() > cct->_conf->osd_max_attr_name_len) {
+        return -ENAMETOOLONG;
+      }
+
+      auto rval = attrs.emplace(std::move(attr_name), ceph::bufferlist());
+      /* At the moment the value of the freshly created attribute key-value
+       * pair is an empty bufferlist. */
+
+      ceph::bufferlist& bl = rval.first->second;
       bl.append(xattr.c_str(), xattr.size() + 1);
     }
   }
+
+  return 0;
 } /* rgw_get_request_metadata */
 
 static inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
