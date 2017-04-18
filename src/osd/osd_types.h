@@ -3405,7 +3405,30 @@ WRITE_CLASS_ENCODER(pg_log_entry_t)
 
 ostream& operator<<(ostream& out, const pg_log_entry_t& e);
 
+struct pg_log_dup_t {
+  osd_reqid_t reqid;  // caller+tid to uniquely identify request
+  eversion_t version;
+  version_t user_version; // the user version for this entry
+  int32_t return_code; // only stored for ERRORs for dup detection
 
+  pg_log_dup_t()
+   : user_version(0), return_code(0) {}
+  pg_log_dup_t(const pg_log_entry_t &entry) explicit
+    : reqid(entry.reqid), version(entry.version),
+      user_version(entry.user_version), return_code(entry.return_code)
+  {}
+  pg_log_dup_t(const eversion_t& v, version_t uv,
+	       const osd_reqid_t& rid, int return_code)
+    : reqid(rid), version(v), user_version(uv),
+      return_code(return_code)
+  {}
+  string get_key_name() const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_log_dup_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_log_dup_t)
 
 /**
  * pg_log_t - incremental log of recent pg changes.
@@ -3432,25 +3455,31 @@ protected:
 
 public:
   mempool::osd_pglog::list<pg_log_entry_t> log;  // the actual log.
+  mempool::osd_pglog::list<pg_log_dup_t> dups;  // entries just for dup op detection
   
   pg_log_t() = default;
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
 	   const eversion_t &can_rollback_to,
 	   const eversion_t &rollback_info_trimmed_to,
-	   mempool::osd_pglog::list<pg_log_entry_t> &&entries)
+	   mempool::osd_pglog::list<pg_log_entry_t> &&entries,
+	   mempool::osd_pglog::list<pg_log_dup_t> &&dup_entries)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
       rollback_info_trimmed_to(rollback_info_trimmed_to),
-      log(std::move(entries)) {}
+      log(std::move(entries)), dups(std::move(dup_entries)) {}
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
 	   const eversion_t &can_rollback_to,
 	   const eversion_t &rollback_info_trimmed_to,
-	   const std::list<pg_log_entry_t> &entries)
+	   const std::list<pg_log_entry_t> &entries,
+	   const std::list<pg_log_dup_t> &dup_entries)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
       rollback_info_trimmed_to(rollback_info_trimmed_to) {
     for (auto &&entry: entries) {
       log.push_back(entry);
+    }
+    for (auto &&entry: dup_entries) {
+      dups.push_back(entry);
     }
   }
 
@@ -3458,6 +3487,7 @@ public:
     eversion_t z;
     rollback_info_trimmed_to = can_rollback_to = head = tail = z;
     log.clear();
+    dups.clear();
   }
 
   eversion_t get_rollback_info_trimmed_to() const {
@@ -3485,12 +3515,18 @@ public:
       oldlog.erase(i++);
     }
 
+    // osd_reqid is unique, so it doesn't matter if there are extra
+    // dup entries in each pg. To avoid storing oid with the dup
+    // entries, just copy the whole list.
+    auto childdups(dups);
+
     return pg_log_t(
       head,
       tail,
       can_rollback_to,
       rollback_info_trimmed_to,
-      std::move(childlog));
+      std::move(childlog),
+      std::move(childdups));
   }
 
   mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {

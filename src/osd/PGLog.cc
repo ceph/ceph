@@ -46,7 +46,8 @@ void PGLog::IndexedLog::split_out_child(
 void PGLog::IndexedLog::trim(
   CephContext* cct,
   eversion_t s,
-  set<eversion_t> *trimmed)
+  set<eversion_t> *trimmed,
+  set<string> *trimmed_dups)
 {
   if (complete_to != log.end() &&
       complete_to->version <= s) {
@@ -67,6 +68,18 @@ void PGLog::IndexedLog::trim(
 
     unindex(e);         // remove from index,
 
+    // add to dup list
+    if (e.version.version + 1000 > s.version) {
+      dirty_dups = true;
+      dups.push_back(pg_log_dup_t(e));
+      dup_index[e.reqid] = &(dups.back());
+      for (const auto& extra : e.extra_reqids) {
+	dups.push_back(pg_log_dup_t(e.version, extra.second,
+				    extra.first, e.return_code));
+	dup_index[extra->first] = &(dups.back());
+      }
+    }
+
     if (rollback_info_trimmed_to_riter == log.rend() ||
 	e.version == rollback_info_trimmed_to_riter->version) {
       log.pop_front();
@@ -74,6 +87,17 @@ void PGLog::IndexedLog::trim(
     } else {
       log.pop_front();
     }
+  }
+
+  while (!dups.empty()) {
+    auto &e = *dups.begin();
+    if (e.version.version + 1000 > s.version)
+      break;
+    generic_dout(20) << "trim dup " << e << dendl;
+    if (trimmed_dups)
+      trimmed_dups->insert(e.get_key_name());
+    dup_index.erase(e.reqid);
+    dups.pop_front();
   }
 
   // raise tail?
@@ -124,7 +148,7 @@ void PGLog::trim(
     assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
-    log.trim(cct, trim_to, &trimmed);
+    log.trim(cct, trim_to, &trimmed, &trimmed_dups);
     info.log_tail = log.tail;
   }
 }
@@ -446,6 +470,7 @@ void PGLog::write_log_and_missing(
 	     << ", dirty_from: " << dirty_from
 	     << ", writeout_from: " << writeout_from
 	     << ", trimmed: " << trimmed
+	     << ", trimmed_dups: " << trimmed_dups
 	     << ", clear_divergent_priors: " << clear_divergent_priors
 	     << dendl;
     _write_log_and_missing(
@@ -454,6 +479,7 @@ void PGLog::write_log_and_missing(
       dirty_from,
       writeout_from,
       trimmed,
+      trimmed_dups,
       missing,
       !touched_log,
       require_rollback,
@@ -511,13 +537,14 @@ void PGLog::_write_log_and_missing_wo_missing(
   eversion_t dirty_from,
   eversion_t writeout_from,
   const set<eversion_t> &trimmed,
+  const set<string> &trimmed_dups,
   bool dirty_divergent_priors,
   bool touch_log,
   bool require_rollback,
   set<string> *log_keys_debug
   )
 {
-  set<string> to_remove;
+  set<string> to_remove(trimmed_dups);
   for (set<eversion_t>::const_iterator i = trimmed.begin();
        i != trimmed.end();
        ++i) {
@@ -563,6 +590,18 @@ void PGLog::_write_log_and_missing_wo_missing(
     (*km)[p->get_key_name()].claim(bl);
   }
 
+  if (dirty_dups) {
+    pg_log_dup_t min;
+    t.omap_rmkeyrange(
+      coll, log_oid,
+      min.get_key_name(), log.dups.begin()->get_key_name());
+    for (const auto& entry : log.dups) {
+      bufferlist bl;
+      ::encode(entry, bl);
+      (*km)[entry.get_key_name()].claim(bl);
+    }
+  }
+
   if (log_keys_debug) {
     for (map<string, bufferlist>::iterator i = (*km).begin();
 	 i != (*km).end();
@@ -600,6 +639,7 @@ void PGLog::_write_log_and_missing(
   eversion_t dirty_from,
   eversion_t writeout_from,
   const set<eversion_t> &trimmed,
+  const set<string> &trimmed_dups,
   const pg_missing_tracker_t &missing,
   bool touch_log,
   bool require_rollback,
@@ -607,7 +647,7 @@ void PGLog::_write_log_and_missing(
   bool *rebuilt_missing_with_deletes, // in/out param
   set<string> *log_keys_debug
   ) {
-  set<string> to_remove;
+  set<string> to_remove(trimmed_dups);
   for (set<eversion_t>::const_iterator i = trimmed.begin();
        i != trimmed.end();
        ++i) {
@@ -650,6 +690,18 @@ void PGLog::_write_log_and_missing(
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
     (*km)[p->get_key_name()].claim(bl);
+  }
+
+  if (dirty_dups) {
+    pg_log_dup_t min;
+    t.omap_rmkeyrange(
+      coll, log_oid,
+      min.get_key_name(), log.dups.begin()->get_key_name());
+    for (const auto& entry : log.dups) {
+      bufferlist bl;
+      ::encode(entry, bl);
+      (*km)[entry.get_key_name()].claim(bl);
+    }
   }
 
   if (log_keys_debug) {
