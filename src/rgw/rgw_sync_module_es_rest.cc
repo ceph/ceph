@@ -11,11 +11,12 @@
 struct es_index_obj_response {
   string bucket;
   rgw_obj_key key;
+  uint64_t versioned_epoch{0};
   ACLOwner owner;
   set<string> read_permissions;
 
   struct {
-    uint64_t size;
+    uint64_t size{0};
     ceph::real_time mtime;
     string etag;
     map<string, string> custom_str;
@@ -60,6 +61,7 @@ struct es_index_obj_response {
     JSONDecoder::decode_json("bucket", bucket, obj);
     JSONDecoder::decode_json("name", key.name, obj);
     JSONDecoder::decode_json("instance", key.instance, obj);
+    JSONDecoder::decode_json("versioned_epoch", versioned_epoch, obj);
     JSONDecoder::decode_json("permissions", read_permissions, obj);
     JSONDecoder::decode_json("owner", owner, obj);
     JSONDecoder::decode_json("meta", meta, obj);
@@ -317,6 +319,7 @@ public:
       s->formatter->dump_string("Key", e.key.name);
       string instance = (!e.key.instance.empty() ? e.key.instance : "null");
       s->formatter->dump_string("Instance", instance.c_str());
+      s->formatter->dump_int("VersionedEpoch", e.versioned_epoch);
       dump_time(s, "LastModified", &e.meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", e.meta.etag.c_str());
       dump_owner(s, e.owner.get_id(), e.owner.get_display_name());

@@ -192,6 +192,7 @@ struct es_index_mappings {
     encode_json("bucket", es_dump_type("string"), f);
     encode_json("name", es_dump_type("string"), f);
     encode_json("instance", es_dump_type("string"), f);
+    encode_json("versioned_epoch", es_dump_type("long"), f);
     f->open_object_section("meta");
     f->open_object_section("properties");
     encode_json("cache_control", es_dump_type("string"), f);
@@ -248,11 +249,12 @@ struct es_obj_metadata {
   ceph::real_time mtime;
   uint64_t size;
   map<string, bufferlist> attrs;
+  uint64_t versioned_epoch;
 
   es_obj_metadata(CephContext *_cct, ElasticConfigRef _es_conf, const RGWBucketInfo& _bucket_info,
                   const rgw_obj_key& _key, ceph::real_time& _mtime, uint64_t _size,
-                  map<string, bufferlist>& _attrs) : cct(_cct), es_conf(_es_conf), bucket_info(_bucket_info), key(_key),
-                                                     mtime(_mtime), size(_size), attrs(std::move(_attrs)) {}
+                  map<string, bufferlist>& _attrs, uint64_t _versioned_epoch) : cct(_cct), es_conf(_es_conf), bucket_info(_bucket_info), key(_key),
+                                                     mtime(_mtime), size(_size), attrs(std::move(_attrs)), versioned_epoch(_versioned_epoch) {}
 
   void dump(Formatter *f) const {
     map<string, string> out_attrs;
@@ -309,6 +311,7 @@ struct es_obj_metadata {
     ::encode_json("bucket", bucket_info.bucket.name, f);
     ::encode_json("name", key.name, f);
     ::encode_json("instance", key.instance, f);
+    ::encode_json("versioned_epoch", versioned_epoch, f);
     ::encode_json("owner", policy.get_owner(), f);
     ::encode_json("permissions", permissions, f);
     f->open_object_section("meta");
@@ -417,10 +420,12 @@ public:
 
 class RGWElasticHandleRemoteObjCBCR : public RGWStatRemoteObjCBCR {
   ElasticConfigRef conf;
+  uint64_t versioned_epoch;
 public:
   RGWElasticHandleRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
                           RGWBucketInfo& _bucket_info, rgw_obj_key& _key,
-                          ElasticConfigRef _conf) : RGWStatRemoteObjCBCR(_sync_env, _bucket_info, _key), conf(_conf) {}
+                          ElasticConfigRef _conf, uint64_t _versioned_epoch) : RGWStatRemoteObjCBCR(_sync_env, _bucket_info, _key), conf(_conf),
+                                                                               versioned_epoch(_versioned_epoch) {}
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 0) << ": stat of remote obj: z=" << sync_env->source_zone
@@ -428,7 +433,7 @@ public:
                               << " attrs=" << attrs << dendl;
       yield {
         string path = conf->get_obj_path(bucket_info, key);
-        es_obj_metadata doc(sync_env->cct, conf, bucket_info, key, mtime, size, attrs);
+        es_obj_metadata doc(sync_env->cct, conf, bucket_info, key, mtime, size, attrs, versioned_epoch);
 
         call(new RGWPutRESTResourceCR<es_obj_metadata, int>(sync_env->cct, conf->conn.get(),
                                                             sync_env->http_manager,
@@ -447,17 +452,18 @@ public:
 
 class RGWElasticHandleRemoteObjCR : public RGWCallStatRemoteObjCR {
   ElasticConfigRef conf;
+  uint64_t versioned_epoch;
 public:
   RGWElasticHandleRemoteObjCR(RGWDataSyncEnv *_sync_env,
                         RGWBucketInfo& _bucket_info, rgw_obj_key& _key,
-                        ElasticConfigRef _conf) : RGWCallStatRemoteObjCR(_sync_env, _bucket_info, _key),
-                                                           conf(_conf) {
+                        ElasticConfigRef _conf, uint64_t _versioned_epoch) : RGWCallStatRemoteObjCR(_sync_env, _bucket_info, _key),
+                                                           conf(_conf), versioned_epoch(_versioned_epoch) {
   }
 
   ~RGWElasticHandleRemoteObjCR() override {}
 
   RGWStatRemoteObjCBCR *allocate_callback() override {
-    return new RGWElasticHandleRemoteObjCBCR(sync_env, bucket_info, key, conf);
+    return new RGWElasticHandleRemoteObjCBCR(sync_env, bucket_info, key, conf, versioned_epoch);
   }
 };
 
@@ -516,7 +522,7 @@ public:
       ldout(sync_env->cct, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;
       return nullptr;
     }
-    return new RGWElasticHandleRemoteObjCR(sync_env, bucket_info, key, conf);
+    return new RGWElasticHandleRemoteObjCR(sync_env, bucket_info, key, conf, versioned_epoch);
   }
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
     /* versioned and versioned epoch params are useless in the elasticsearch backend case */
