@@ -38,6 +38,7 @@ class RGWSyncLogTrimThread;
 class RGWRESTConn;
 struct RGWZoneGroup;
 struct RGWZoneParams;
+class RGWReshard;
 
 /* flags for put_obj_meta() */
 #define PUT_OBJ_CREATE      0x01
@@ -2324,7 +2325,7 @@ public:
                cr_registry(NULL),
                zone_short_id(0),
                rest_master_conn(NULL),
-               meta_mgr(NULL), data_log(NULL) {}
+               meta_mgr(NULL), data_log(NULL), reshard(NULL) {}
 
   uint64_t get_new_req_id() {
     return ++max_req_id;
@@ -2444,6 +2445,8 @@ public:
   RGWMetadataManager *meta_mgr;
 
   RGWDataChangesLog *data_log;
+
+  RGWReshard *reshard;
 
   virtual ~RGWRados() = default;
 
