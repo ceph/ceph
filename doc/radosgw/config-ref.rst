@@ -1115,6 +1115,45 @@ Keystone Settings
 :Type: Boolean
 :Default: ``true``
 
+
+
+Object Lifecycle Management Settings
+====================================
+
+
+``rgw enable lc threads``
+
+:Description: Whether the Ceph Object Gateway lifecycle management is enabled.
+:Type: Boolean
+:Default: ``true``
+
+
+``rgw lc lock max time``
+
+:Description: The total run time in seconds for a single lifecycle processor.
+:Type: Integer
+:Default: 60
+
+
+``rgw lc max objs``
+
+:Description: The maximum number of objects that may be handled by
+              lifecycle management thread in one processing cycle.
+              Shoud not be larger than 7877(HASH_PRIME).
+:Type: Integer
+:Default: ``32``
+
+
+``rgw lifecycle work time``
+
+:Description: The period of time that the lifecycle management thread
+              is allowed to run each day. The format is
+              ``%d:%d-%d:%d``
+              (``start_hour:start_minute-end_hour:end_minute``)
+:Type: String
+:Default: ``00:00-06:00``
+
+
 .. _Architecture: ../../architecture#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Cluster Pools: ../../rados/operations/pools
