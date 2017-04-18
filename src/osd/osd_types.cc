@@ -2887,7 +2887,6 @@ public:
 	iter->second.first,
 	riter->second.last + 1);
     } else {
-      assert(0 == "get_bounds only valid if !empty()");
       return make_pair(0, 0);
     }
   }
