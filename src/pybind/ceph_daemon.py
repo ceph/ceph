@@ -341,6 +341,11 @@ class DaemonWatcher(object):
                         break
                 rows_since_header += 1
                 last_dump = dump
-                time.sleep(interval)
+
+                # time.sleep() is interrupted by SIGWINCH; avoid that
+                end = time.time() + interval
+                while time.time() < end:
+                    time.sleep(end - time.time())
+
         except KeyboardInterrupt:
             return
