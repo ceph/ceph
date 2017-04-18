@@ -35,6 +35,12 @@ enum {
   l_bluefs_files_written_sst,
   l_bluefs_bytes_written_wal,
   l_bluefs_bytes_written_sst,
+  l_bluefs_write_cache_files,
+  l_bluefs_write_cache_bytes,
+  l_bluefs_write_cache_hits,
+  l_bluefs_write_cache_hit_bytes,
+  l_bluefs_reads,
+  l_bluefs_read_bytes,
   l_bluefs_last,
 };
 
@@ -61,6 +67,9 @@ public:
     bool locked;
     bool deleted;
     boost::intrusive::list_member_hook<> dirty_item;
+    boost::intrusive::list_member_hook<> write_cache_item;
+
+    bufferlist contents;  ///< complete file content (write cache)
 
     std::atomic_int num_readers, num_writers;
     std::atomic_int num_reading;
@@ -97,6 +106,12 @@ public:
         File,
 	boost::intrusive::list_member_hook<>,
 	&File::dirty_item> > dirty_file_list_t;
+  typedef boost::intrusive::list<
+      File,
+      boost::intrusive::member_hook<
+        File,
+	boost::intrusive::list_member_hook<>,
+	&File::write_cache_item> > write_cache_list_t;
 
   struct Dir : public RefCountedObject {
     MEMPOOL_CLASS_HELPERS();
@@ -227,6 +242,9 @@ private:
   // map of dirty files, files of same dirty_seq are grouped into list.
   map<uint64_t, dirty_file_list_t> dirty_files;
 
+  write_cache_list_t write_cache; ///< recently written files
+  uint64_t write_cache_bytes = 0; ///< total bytes in write cache
+
   bluefs_super_t super;        ///< latest superblock (as last written)
   uint64_t ino_last = 0;       ///< last assigned ino (this one is in use)
   uint64_t log_seq = 0;        ///< last used log seq (by current pending log_t)
@@ -266,6 +284,9 @@ private:
 
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
+
+  void _write_cache_add(FileRef f);
+  void _write_cache_rm(FileRef f);
 
   int _allocate(uint8_t bdev, uint64_t len,
 		mempool::bluefs::vector<bluefs_extent_t> *ev);

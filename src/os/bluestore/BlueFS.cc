@@ -85,6 +85,17 @@ void BlueFS::_init_logger()
 		    "Bytes written to WAL", "wal");
   b.add_u64_counter(l_bluefs_bytes_written_sst, "bytes_written_sst",
 		    "Bytes written to SSTs", "sst");
+  b.add_u64(l_bluefs_write_cache_files, "bluefs_write_cache_files",
+	    "Files in the write cache");
+  b.add_u64(l_bluefs_write_cache_bytes, "bluefs_write_cache_bytes",
+	    "Bytes in the write cache");
+  b.add_u64_counter(l_bluefs_write_cache_hits, "bluefs_write_cache_hits",
+		    "Reads that hit the write cache");
+  b.add_u64_counter(l_bluefs_write_cache_hit_bytes,
+		    "bluefs_write_cache_hit_bytes",
+		    "Read bytes that hit the write cache");
+  b.add_u64_counter(l_bluefs_reads, "bluefs_reads", "Reads");
+  b.add_u64_counter(l_bluefs_read_bytes, "bluefs_read_bytes", "Bytes read");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -429,6 +440,9 @@ void BlueFS::umount()
 
   _close_writer(log_writer);
   log_writer = NULL;
+
+  write_cache.clear();
+  write_cache_bytes = 0;
 
   _stop_alloc();
   file_map.clear();
@@ -863,6 +877,9 @@ void BlueFS::_drop_link(FileRef file)
       dirty_files[file->dirty_seq].erase(it);
       file->dirty_seq = 0;
     }
+    if (file->contents.length()) {
+      _write_cache_rm(file);
+    }
   }
 }
 
@@ -878,6 +895,14 @@ int BlueFS::_read_random(
 
   logger->inc(l_bluefs_reads);
   logger->inc(l_bluefs_read_bytes, len);
+  if (h->file->contents.length()) {
+    // oh goodie, we have the whole file in memory.
+    h->file->contents.copy(off, len, out);
+    logger->inc(l_bluefs_write_cache_hits);
+    logger->inc(l_bluefs_write_cache_hit_bytes, len);
+    return len;
+  }
+
   ++h->file->num_reading;
 
   if (!h->ignore_eof &&
@@ -923,6 +948,19 @@ int BlueFS::_read(
   dout(10) << __func__ << " h " << h
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << h->file->fnode << dendl;
+
+  logger->inc(l_bluefs_reads);
+  logger->inc(l_bluefs_read_bytes, len);
+  if (h->file->contents.length()) {
+    // oh goodie, we have the whole file in memory.
+    if (outbl)
+      outbl->substr_of(h->file->contents, off, len);
+    if (out)
+      memcpy(out, h->file->contents.c_str() + off, len);
+    logger->inc(l_bluefs_write_cache_hits);
+    logger->inc(l_bluefs_write_cache_hit_bytes, len);
+    return len;
+  }
 
   ++h->file->num_reading;
 
@@ -1551,6 +1589,21 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   dout(20) << __func__ << " in " << *p << " x_off 0x"
            << std::hex << x_off << std::dec << dendl;
 
+  switch (h->writer_type) {
+  case WRITER_WAL:
+    logger->inc(l_bluefs_bytes_written_wal, length);
+    break;
+  case WRITER_SST:
+    if (offset == h->file->contents.length()) {
+      h->file->contents.append(h->buffer);
+      assert(h->file->contents.length() == offset + length);
+    } else {
+      assert(h->file->contents.length() == 0);
+    }
+    logger->inc(l_bluefs_bytes_written_sst, length);
+    break;
+  }
+
   unsigned partial = x_off & ~super.block_mask();
   bufferlist bl;
   if (partial) {
@@ -1580,15 +1633,6 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
              << " unflushed" << dendl;
   }
   assert(bl.length() == length);
-
-  switch (h->writer_type) {
-  case WRITER_WAL:
-    logger->inc(l_bluefs_bytes_written_wal, length);
-    break;
-  case WRITER_SST:
-    logger->inc(l_bluefs_bytes_written_sst, length);
-    break;
-  }
 
   dout(30) << "dump:\n";
   bl.hexdump(*_dout);
@@ -2011,7 +2055,54 @@ void BlueFS::_close_writer(FileWriter *h)
       bdev[i]->queue_reap_ioc(h->iocv[i]);
     }
   }
+
+  // only cache sst files; our purpose here is only to cache compacted
+  // files for a short period to warm the rocksdb caches.
+  if (h->writer_type == WRITER_SST &&
+      h->file->contents.length() > 0) {
+    _write_cache_add(h->file);
+  }
+
   delete h;
+}
+
+void BlueFS::_write_cache_add(FileRef file)
+{
+  // add to write cache
+  assert(file->contents.length());
+  write_cache_bytes += file->contents.length();
+  write_cache.push_back(*file);
+  dout(10) << __func__ << " 0x" << std::hex << file->contents.length()
+	   << " to 0x" << write_cache_bytes << " / 0x"
+	   << g_conf->bluefs_write_cache_bytes
+	   << std::dec << " " << file->fnode << dendl;
+
+  while (write_cache_bytes > g_conf->bluefs_write_cache_bytes) {
+    assert(!write_cache.empty());
+    FileRef v = &write_cache.front();
+    write_cache_bytes -= v->contents.length();
+    dout(20) << __func__ << " trim 0x" << std::hex << v->contents.length()
+	     << " now 0x" << write_cache_bytes << " / 0x"
+	     << g_conf->bluefs_write_cache_bytes << std::dec << dendl;
+    v->contents.clear();
+    write_cache.pop_front();
+  }
+  logger->set(l_bluefs_write_cache_files, write_cache.size());
+  logger->set(l_bluefs_write_cache_bytes, write_cache_bytes);
+}
+
+void BlueFS::_write_cache_rm(FileRef file)
+{
+  dout(10) << __func__ << " 0x" << std::hex << file->contents.length()
+	   << " from 0x" << write_cache_bytes << " / 0x"
+	   << g_conf->bluefs_write_cache_bytes
+	   << std::dec << " " << file->fnode << dendl;
+  auto i = write_cache.iterator_to(*file);
+  write_cache_bytes -= file->contents.length();
+  write_cache.erase(i);
+  file->contents.clear();
+  logger->set(l_bluefs_write_cache_files, write_cache.size());
+  logger->set(l_bluefs_write_cache_bytes, write_cache_bytes);
 }
 
 int BlueFS::open_for_read(
