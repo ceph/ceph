@@ -165,14 +165,14 @@ void AsyncCompletePayload::dump(Formatter *f) const {
 }
 
 void ResizePayload::encode(bufferlist &bl) const {
-  AsyncRequestPayloadBase::encode(bl);
   ::encode(size, bl);
+  AsyncRequestPayloadBase::encode(bl);
   ::encode(allow_shrink, bl);
 }
 
 void ResizePayload::decode(__u8 version, bufferlist::iterator &iter) {
-  AsyncRequestPayloadBase::decode(version, iter);
   ::decode(size, iter);
+  AsyncRequestPayloadBase::decode(version, iter);
 
   if (version >= 4) {
     ::decode(allow_shrink, iter);
