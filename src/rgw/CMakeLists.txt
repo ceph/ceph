@@ -101,7 +101,9 @@ set(rgw_a_srcs
   rgw_website.cc
   rgw_xml.cc
   rgw_xml_enc.cc
-  rgw_torrent.cc)
+  rgw_torrent.cc
+  rgw_crypt.cc
+  rgw_crypt_sanitize.cc)
 
 if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND rgw_a_srcs rgw_fcgi.cc)

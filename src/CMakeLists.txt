@@ -835,9 +835,13 @@ add_subdirectory(test)
 endif(WITH_TESTS)
 
 add_subdirectory(compressor)
+
 add_subdirectory(tools)
 
+add_subdirectory(crypto/isa-l)
+
 if(WITH_TESTS)
+
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
 
