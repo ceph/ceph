@@ -144,3 +144,6 @@ fi
 
 # Remove leftover .pyc files
 find teuthology -name '*.pyc' -exec rm {} \;
+
+# Install teuthology
+./virtualenv/bin/python setup.py develop
