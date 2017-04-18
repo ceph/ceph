@@ -194,13 +194,13 @@ boost::optional<std::string> get_v4_canonical_headers(const req_info& info,
 
 std::string hash_string_sha256(const char* data, int len);
 
-std::string get_v4_canonical_request_hash(CephContext* cct,
-                                          const std::string& http_verb,
-                                          const std::string& canonical_uri,
-                                          const std::string& canonical_qs,
-                                          const std::string& canonical_hdrs,
-                                          const std::string& signed_hdrs,
-                                          const std::string& request_payload_hash);
+std::string get_v4_canon_req_hash(CephContext* cct,
+                                  const std::string& http_verb,
+                                  const std::string& canonical_uri,
+                                  const std::string& canonical_qs,
+                                  const std::string& canonical_hdrs,
+                                  const std::string& signed_hdrs,
+                                  const std::string& request_payload_hash);
 
 std::string get_v4_string_to_sign(CephContext* cct,
                                   const std::string& algorithm,
