@@ -760,8 +760,8 @@ void Server::find_idle_sessions()
 
     if (g_conf->mds_session_blacklist_on_timeout) {
       std::stringstream ss;
-      mds->kill_session(session->info.inst.name.num(), false, true,
-          ss, nullptr);
+      mds->evict_client(session->info.inst.name.num(), false, true,
+                        ss, nullptr);
     } else {
       kill_session(session, NULL);
     }
@@ -1025,7 +1025,8 @@ void Server::reconnect_tick()
 
       if (g_conf->mds_session_blacklist_on_timeout) {
         std::stringstream ss;
-        mds->kill_session(session->info.inst.name.num(), false, true, ss, gather.new_sub());
+        mds->evict_client(session->info.inst.name.num(), false, true, ss,
+                          gather.new_sub());
       } else {
         kill_session(session, NULL);
       }

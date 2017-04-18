@@ -406,7 +406,7 @@ class MDSRank {
       return map_targets.count(rank);
     }
 
-    bool kill_session(int64_t session_id, bool wait, bool blacklist,
+    bool evict_client(int64_t session_id, bool wait, bool blacklist,
                       std::stringstream& ss, Context *on_killed=nullptr);
 
   protected:
@@ -549,7 +549,7 @@ public:
     bool *need_reply);
 
   void dump_sessions(const SessionFilter &filter, Formatter *f) const;
-  void evict_sessions(const SessionFilter &filter, MCommand *m);
+  void evict_clients(const SessionFilter &filter, MCommand *m);
 
   // Call into me from MDS::ms_dispatch
   bool ms_dispatch(Message *m);

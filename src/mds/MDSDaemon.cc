@@ -774,8 +774,9 @@ int MDSDaemon::_handle_command(
     int64_t session_id = 0;
     bool got = cmd_getval(cct, cmdmap, "session_id", session_id);
     assert(got);
-    bool killed = mds_rank->kill_session(session_id, false,
-        g_conf->mds_session_blacklist_on_evict, ss);
+    bool killed = mds_rank->evict_client(session_id, false,
+                                         g_conf->mds_session_blacklist_on_evict,
+                                         ss);
     if (!killed)
       r = -ENOENT;
   } else if (prefix == "heap") {
