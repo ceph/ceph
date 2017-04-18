@@ -410,6 +410,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
     // return ???
   }
 
+  int final_ret;
   string filter("");
   filter += sbucket_id;
   filter += "-";
@@ -453,28 +454,29 @@ int RGWBL::bucket_bl_process(string& shard_id)
     string tprefix = status.get_target_prefix(); // prefix is optional
 
     string opslog_obj;
-    while (true){
+    while (true) {
       opslog_obj.clear();
       int r = store->log_list_next(lh, &opslog_obj);
       if (r == -ENOENT) {
-	ret = 0; // no opslog object
+	final_ret = 0; // no opslog object
 	break;
       }
       if (r < 0) {
 	ldout(cct, 0) << __func__ << " log_list_next() failed ret="
 		      << cpp_strerror(-r) << dendl;
-	ret = r;
+	final_ret = r;
 	break;
       } else {
 	int r = bucket_bl_deliver(opslog_obj, tbucket, tprefix);
 	if (r < 0 ){
-	  ret = r;
+	  final_ret = r;
 	  break;
 	}
       }
     }
   }
-  return ret;
+
+  return final_ret;
 }
 
 int RGWBL::bucket_bl_post(int index, int max_lock_sec,
