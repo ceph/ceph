@@ -16,6 +16,9 @@ import socket
 import struct
 import time
 from collections import defaultdict, OrderedDict
+from fcntl import ioctl
+from signal import signal, SIGWINCH
+from termios import TIOCGWINSZ
 
 from ceph_argparse import parse_json_funcsigs, validate_command
 
@@ -82,6 +85,32 @@ def admin_socket(asok_path, cmd, format=''):
     return ret
 
 
+def _gettermsize():
+    return struct.unpack('hhhh', ioctl(0, TIOCGWINSZ, 8*'\x00'))[0:2]
+
+class Termsize(object):
+
+    def __init__(self):
+        self.rows, self.cols = _gettermsize()
+        self.changed = False
+
+    def update(self):
+        rows, cols = _gettermsize()
+        self.changed = self.changed or (
+            (self.rows != rows) or (self.cols != cols)
+        )
+        self.rows, self.cols = rows, cols
+
+    def reset_changed(self):
+        self.changed = False
+
+    def __str__(self):
+        return '%s(%dx%d, changed %s)' % (self.__class__, self.rows, self.cols, self.changed)
+
+    def __repr__(self):
+        return 'Termsize(%d,%d,%s)' % (self.__class__, self.rows, self.cols, self.changed)
+
+
 class DaemonWatcher(object):
     """
     Given a Ceph daemon's admin socket path, poll its performance counters
@@ -111,6 +140,8 @@ class DaemonWatcher(object):
 
         self._stats = None
         self._schema = None
+        self._stats_that_fit = dict()
+        self.termsize = Termsize()
 
     def supports_color(self, ostr):
         """
@@ -173,13 +204,36 @@ class DaemonWatcher(object):
         """
         return max(len(nick), 4)
 
+    def get_stats_that_fit(self):
+        '''
+        Truncated list of stats to display based on current terminal width
+        '''
+        current_fit = {}
+        if self.termsize.changed or not self._stats_that_fit:
+            width = 0
+            for section_name, names in self._stats.items():
+                section_width = \
+                    sum([self.col_width(x) + 1 for x in names.values()]) - 1
+                if width + section_width > self.termsize.cols:
+                    break
+                width += section_width
+                current_fit[section_name] = names
+
+        self.termsize.reset_changed()
+        changed = current_fit and (current_fit != self._stats_that_fit)
+        if changed:
+            self._stats_that_fit = current_fit
+        return self._stats_that_fit, changed
+
     def _print_headers(self, ostr):
         """
         Print a header row to `ostr`
         """
         header = ""
-        for section_name, names in self._stats.items():
-            section_width = sum([self.col_width(x)+1 for x in names.values()]) - 1
+        stats, _ = self.get_stats_that_fit()
+        for section_name, names in stats.items():
+            section_width = \
+                sum([self.col_width(x) + 1 for x in names.values()]) - 1
             pad = max(section_width - len(section_name), 0)
             pad_prefix = pad // 2
             header += (pad_prefix * '-')
@@ -190,7 +244,7 @@ class DaemonWatcher(object):
         ostr.write(self.colorize(header, self.BLUE, True))
 
         sub_header = ""
-        for section_name, names in self._stats.items():
+        for section_name, names in stats.items():
             for stat_name, stat_nick in names.items():
                 sub_header += self.UNDERLINE_SEQ \
                               + self.colorize(
@@ -207,7 +261,10 @@ class DaemonWatcher(object):
         `last_dump`.
         """
         val_row = ""
-        for section_name, names in self._stats.items():
+        fit, changed = self.get_stats_that_fit()
+        if changed:
+            self._print_headers(ostr)
+        for section_name, names in fit.items():
             for stat_name, stat_nick in names.items():
                 stat_type = self._schema[section_name][stat_name]['type']
                 if bool(stat_type & COUNTER):
@@ -252,6 +309,9 @@ class DaemonWatcher(object):
                         self._stats[section_name] = OrderedDict()
                     self._stats[section_name][name] = schema_data['nick']
 
+    def _handle_sigwinch(self, signo, frame):
+        self.termsize.update()
+
     def run(self, interval, count=None, ostr=sys.stdout):
         """
         Print output at regular intervals until interrupted.
@@ -266,12 +326,12 @@ class DaemonWatcher(object):
 
         last_dump = json.loads(admin_socket(self.asok_path, ["perf", "dump"]).decode('utf-8'))
         rows_since_header = 0
-        term_height = 25
 
         try:
+            signal(SIGWINCH, self._handle_sigwinch)
             while True:
                 dump = json.loads(admin_socket(self.asok_path, ["perf", "dump"]).decode('utf-8'))
-                if rows_since_header > term_height - 2:
+                if rows_since_header > self.termsize.rows - 2:
                     self._print_headers(ostr)
                     rows_since_header = 0
                 self._print_vals(ostr, dump, last_dump)
