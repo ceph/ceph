@@ -477,6 +477,8 @@ TEST(CrushWrapper, adjust_item_weight) {
   EXPECT_EQ(1, c->adjust_item_weightf_in_loc(g_ceph_context, item, modified_weight, loc_two));
   EXPECT_EQ(original_weight, c->get_item_weightf_in_loc(item, loc_one));
   EXPECT_EQ(modified_weight, c->get_item_weightf_in_loc(item, loc_two));
+
+  delete c;
 }
 
 TEST(CrushWrapper, adjust_subtree_weight) {
@@ -570,6 +572,8 @@ TEST(CrushWrapper, adjust_subtree_weight) {
   ASSERT_EQ(c->get_bucket_weight(host0), 262144);
   ASSERT_EQ(c->get_item_weight(host0), 262144);
   ASSERT_EQ(c->get_bucket_weight(rootno), 262144 + 131072);
+
+  delete c;
 }
 
 TEST(CrushWrapper, insert_item) {
@@ -748,6 +752,8 @@ TEST(CrushWrapper, remove_item) {
   ASSERT_EQ(0, c->remove_item(g_ceph_context, item_to_remove, true));
   float weight;
   EXPECT_FALSE(c->check_item_loc(g_ceph_context, item_to_remove, loc, &weight));
+
+  delete c;
 }
 
 TEST(CrushWrapper, item_bucket_names) {
@@ -1314,5 +1320,5 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 // Local Variables:
-// compile-command: "cd ../../../build ; make -j4 unittest_crush_wrapper && bin/unittest_crush_wrapper"
+// compile-command: "cd ../../../build ; make -j4 unittest_crush_wrapper && valgrind --tool=memcheck bin/unittest_crush_wrapper"
 // End:
