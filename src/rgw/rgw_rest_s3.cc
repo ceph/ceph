@@ -3450,11 +3450,12 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
     return -ENOMEM;
   }
 
-  std::string credential;
+  std::string access_key_id;
   std::string signed_hdrs;
   std::string client_signature;
   int ret = rgw::auth::s3::parse_credentials(s->info,
-                                             credential,
+                                             access_key_id,
+                                             s->aws4_auth->credential_scope,
                                              signed_hdrs,
                                              client_signature,
                                              s->aws4_auth->date,
@@ -3462,19 +3463,6 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   if (ret < 0) {
     return ret;
   }
-
-  /* grab access key id */
-
-  pos = credential.find("/");
-  const std::string access_key_id = credential.substr(0, pos);
-
-  dout(10) << "access key id = " << access_key_id << dendl;
-
-  /* grab credential scope */
-
-  s->aws4_auth->credential_scope = credential.substr(pos + 1);
-
-  dout(10) << "credential scope = " << s->aws4_auth->credential_scope << dendl;
 
   /* grab user information */
 
