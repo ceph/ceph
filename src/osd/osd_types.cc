@@ -3620,6 +3620,57 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
   return out;
 }
 
+// -- pg_log_dup_t --
+
+string pg_log_dup_t::get_key_name() const
+{
+  return "dup_" + version.get_key_name();
+}
+
+void pg_log_dup_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(reqid, bl);
+  ::encode(version, bl);
+  ::encode(user_version, bl);
+  ::encode(return_code, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_log_dup_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(reqid, bl);
+  ::decode(version, bl);
+  ::decode(user_version, bl);
+  ::decode(return_code, bl);
+  DECODE_FINISH(bl);
+}
+
+void pg_log_dup_t::dump(Formatter *f) const
+{
+  f->dump_stream("reqid") << reqid;
+  f->dump_stream("version") << version;
+  f->dump_stream("user_version") << user_version;
+  f->dump_stream("return_code") << return_code;
+}
+
+void pg_log_dup_t::generate_test_instances(list<pg_log_dup_t*>& o)
+{
+  o.push_back(new pg_log_dup_t());
+  o.push_back(new pg_log_dup_t(osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+			       eversion_t(1,2), 1, 0);
+  o.push_back(new pg_log_dup_t(osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+			       eversion_t(1,2), 2, -ENOENT);
+}
+
+ostream& operator<<(ostream& out, const pg_log_dup_t& e)
+{
+  out << e.reqid << " v" << e.version << " uv" << e.user_version
+      << " rc=" << e.return_code;
+  return out;
+}
+
 
 // -- pg_log_t --
 
@@ -3661,18 +3712,19 @@ void pg_log_t::filter_log(spg_t import_pgid, const OSDMap &curmap,
 
 void pg_log_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(6, 3, bl);
+  ENCODE_START(7, 3, bl);
   ::encode(head, bl);
   ::encode(tail, bl);
   ::encode(log, bl);
   ::encode(can_rollback_to, bl);
   ::encode(rollback_info_trimmed_to, bl);
+  ::encode(dups, bl);
   ENCODE_FINISH(bl);
 }
  
 void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
   ::decode(head, bl);
   ::decode(tail, bl);
   if (struct_v < 2) {
@@ -3687,6 +3739,10 @@ void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
     ::decode(rollback_info_trimmed_to, bl);
   else
     rollback_info_trimmed_to = tail;
+
+  if (struct_v >= 7)
+    ::decode(dups, bl);
+
   DECODE_FINISH(bl);
 
   // handle hobject_t format change
@@ -3708,6 +3764,13 @@ void pg_log_t::dump(Formatter *f) const
   for (list<pg_log_entry_t>::const_iterator p = log.begin(); p != log.end(); ++p) {
     f->open_object_section("entry");
     p->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("dups");
+  for (const auto& entry : dups) {
+    f->open_object_section("entry");
+    entry.dump(f);
     f->close_section();
   }
   f->close_section();
@@ -3782,13 +3845,16 @@ void pg_log_t::copy_up_to(const pg_log_t &other, int max)
   }
 }
 
-ostream& pg_log_t::print(ostream& out) const 
+ostream& pg_log_t::print(ostream& out) const
 {
   out << *this << std::endl;
   for (list<pg_log_entry_t>::const_iterator p = log.begin();
        p != log.end();
-       ++p) 
+       ++p)
     out << *p << std::endl;
+  for (const auto& entry : dups) {
+    out << " dup entry: " << entry << std::endl;
+  }
   return out;
 }
 

@@ -85,6 +85,10 @@ void PGLog::IndexedLog::split_into(
     oldlog.erase(i++);
   }
 
+  // osd_reqid is unique, so it doesn't matter if there are extra
+  // dup entries in each pg. To avoid storing oid with the dup
+  // entries, just copy the whole list.
+  olog->dups = dups;
 
   olog->can_rollback_to = can_rollback_to;
 
@@ -95,7 +99,8 @@ void PGLog::IndexedLog::split_into(
 void PGLog::IndexedLog::trim(
   LogEntryHandler *handler,
   eversion_t s,
-  set<eversion_t> *trimmed)
+  set<eversion_t> *trimmed,
+  set<string> *trimmed_dups)
 {
   if (complete_to != log.end() &&
       complete_to->version <= s) {
@@ -118,6 +123,18 @@ void PGLog::IndexedLog::trim(
 
     unindex(e);         // remove from index,
 
+    // add to dup list
+    if (e.version.version + 1000 > s.version) {
+      dirty_dups = true;
+      dups.push_back(pg_log_dup_t(e));
+      dup_index[e.reqid] = &(dups.back());
+      for (const auto& extra : e.extra_reqids) {
+	dups.push_back(pg_log_dup_t(e.version, extra.second,
+				    extra.first, e.return_code));
+	dup_index[extra->first] = &(dups.back());
+      }
+    }
+
     if (rollback_info_trimmed_to_riter == log.rend() ||
 	e.version == rollback_info_trimmed_to_riter->version) {
       log.pop_front();
@@ -125,6 +142,17 @@ void PGLog::IndexedLog::trim(
     } else {
       log.pop_front();
     }
+  }
+
+  while (!dups.empty()) {
+    auto &e = *dups.begin();
+    if (e.version.version + 1000 > s.version)
+      break;
+    generic_dout(20) << "trim dup " << e << dendl;
+    if (trimmed_dups)
+      trimmed_dups->insert(e.get_key_name());
+    dup_index.erase(e.reqid);
+    dups.pop_front();
   }
 
   // raise tail?
@@ -186,7 +214,7 @@ void PGLog::trim(
     assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
-    log.trim(handler, trim_to, &trimmed);
+    log.trim(handler, trim_to, &trimmed, &trimmed_dups);
     info.log_tail = log.tail;
   }
 }
@@ -816,6 +844,7 @@ void PGLog::write_log(
 	     << ", divergent_priors: " << divergent_priors.size()
 	     << ", writeout_from: " << writeout_from
 	     << ", trimmed: " << trimmed
+	     << ", trimmed_dups: " << trimmed_dups
 	     << dendl;
     _write_log(
       t, km, log, coll, log_oid, divergent_priors,
@@ -824,6 +853,7 @@ void PGLog::write_log(
       writeout_from,
       trimmed,
       dirty_divergent_priors,
+      trimmed_dups,
       !touched_log,
       require_rollback,
       (pg_log_debug ? &log_keys_debug : 0));
@@ -844,7 +874,7 @@ void PGLog::write_log(
   _write_log(
     t, km, log, coll, log_oid,
     divergent_priors, eversion_t::max(), eversion_t(), eversion_t(),
-    set<eversion_t>(),
+    set<eversion_t>(), set<string>(),
     true, true, require_rollback, 0);
 }
 
@@ -858,13 +888,14 @@ void PGLog::_write_log(
   eversion_t dirty_from,
   eversion_t writeout_from,
   const set<eversion_t> &trimmed,
+  const set<string> &trimmed_dups,
   bool dirty_divergent_priors,
   bool touch_log,
   bool require_rollback,
   set<string> *log_keys_debug
   )
 {
-  set<string> to_remove;
+  set<string> to_remove(trimmed_dups);
   for (set<eversion_t>::const_iterator i = trimmed.begin();
        i != trimmed.end();
        ++i) {
@@ -908,6 +939,18 @@ void PGLog::_write_log(
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
     (*km)[p->get_key_name()].claim(bl);
+  }
+
+  if (dirty_dups) {
+    pg_log_dup_t min;
+    t.omap_rmkeyrange(
+      coll, log_oid,
+      min.get_key_name(), log.dups.begin()->get_key_name());
+    for (const auto& entry : log.dups) {
+      bufferlist bl;
+      ::encode(entry, bl);
+      (*km)[entry.get_key_name()].claim(bl);
+    }
   }
 
   if (log_keys_debug) {
@@ -976,6 +1019,13 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
         ::decode(log.can_rollback_to, bp);
       } else if (p->key() == "rollback_info_trimmed_to") {
         ::decode(log.rollback_info_trimmed_to, bp);
+      } else if (p->key().substr(0, 4) == string("dup_")) {
+	pg_log_dup_t dup;
+	::decode(dup, bp);
+	if (!log.dups.empty()) {
+	  assert(log.dups.back().version < dup.version);
+	}
+	log.dups.push_back(dup);
       } else {
 	pg_log_entry_t e;
 	e.decode_with_checksum(bp);

@@ -78,6 +78,7 @@ struct PGLog : DoutPrefixProvider {
     mutable ceph::unordered_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
     mutable ceph::unordered_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
     mutable ceph::unordered_multimap<osd_reqid_t,pg_log_entry_t*> extra_caller_ops;
+    mutable ceph::unordered_map<osd_reqid_t, pg_log_dup_t*> dup_index;
 
     // recovery pointers
     list<pg_log_entry_t>::iterator complete_to;  // not inclusive of referenced item
@@ -339,6 +340,7 @@ struct PGLog : DoutPrefixProvider {
       objects.clear();
       caller_ops.clear();
       extra_caller_ops.clear();
+      dup_index.clear();
       indexed_data = 0;
     }
     void unindex(pg_log_entry_t& e) {
@@ -414,7 +416,8 @@ struct PGLog : DoutPrefixProvider {
     void trim(
       LogEntryHandler *handler,
       eversion_t s,
-      set<eversion_t> *trimmed);
+      set<eversion_t> *trimmed,
+      set<string> *trimmed_dups);
 
     ostream& print(ostream& out) const;
 
@@ -433,11 +436,13 @@ protected:
   eversion_t dirty_from;       ///< must clear/writeout all keys >= dirty_from
   eversion_t writeout_from;    ///< must writout keys >= writeout_from
   set<eversion_t> trimmed;     ///< must clear keys in trimmed
+  set<string> trimmed_dups; ///< must clear keys in trimmed_dups
   CephContext *cct;
   bool pg_log_debug;
   /// Log is clean on [dirty_to, dirty_from)
   bool touched_log;
   bool dirty_divergent_priors;
+  bool dirty_dups; /// log.dups is updated
 
   bool is_dirty() const {
     return !touched_log ||
@@ -445,6 +450,7 @@ protected:
       (dirty_from != eversion_t::max()) ||
       dirty_divergent_priors ||
       (writeout_from != eversion_t::max()) ||
+      !(trimmed_dups.empty()) ||
       !(trimmed.empty());
   }
   void mark_dirty_to(eversion_t to) {
@@ -495,8 +501,10 @@ protected:
     dirty_divergent_priors = false;
     touched_log = true;
     trimmed.clear();
+    trimmed_dups.clear();
     writeout_from = eversion_t::max();
     check();
+    dirty_dups = false;
   }
 public:
   // cppcheck-suppress noExplicitConstructor
@@ -846,6 +854,7 @@ public:
     eversion_t dirty_from,
     eversion_t writeout_from,
     const set<eversion_t> &trimmed,
+    const set<string> &trimmed_dups,
     bool dirty_divergent_priors,
     bool touch_log,
     bool require_rollback,
