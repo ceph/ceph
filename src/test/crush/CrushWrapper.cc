@@ -727,7 +727,7 @@ TEST(CrushWrapper, remove_item) {
 
   {
     int host;
-    c->add_bucket(0, CRUSH_BUCKET_TREE, CRUSH_HASH_RJENKINS1,
+    c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
 		  HOST_TYPE, 0, NULL, NULL, &host);
     c->set_item_name(host, "host0");
   }
