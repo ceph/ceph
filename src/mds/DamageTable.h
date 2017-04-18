@@ -37,6 +37,10 @@ class DamageEntry
   damage_entry_id_t id;
   utime_t reported_at;
 
+  // path is optional, advisory.  Used to give the admin an idea of what
+  // part of his tree the damage affects.
+  std::string path;
+
   DamageEntry()
   {
     id = get_random(0, 0xffffffff);
@@ -157,7 +161,7 @@ public:
    *
    * @return true if fatal
    */
-  bool notify_dirfrag(inodeno_t ino, frag_t frag);
+  bool notify_dirfrag(inodeno_t ino, frag_t frag, const std::string &path);
 
   /**
    * Indicate that a particular dentry cannot be loaded.
@@ -166,13 +170,13 @@ public:
    */
   bool notify_dentry(
     inodeno_t ino, frag_t frag,
-    snapid_t snap_id, const std::string &dname);
+    snapid_t snap_id, const std::string &dname, const std::string &path);
 
   /**
    * Indicate that a particular Inode could not be loaded by number
    */
   bool notify_remote_damaged(
-      inodeno_t ino);
+      inodeno_t ino, const std::string &path);
 
   bool is_dentry_damaged(
       const CDir *dir_frag,
