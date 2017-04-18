@@ -267,6 +267,7 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
                                << " left is " << left << " buffer still has "
                                << recv_end - recv_start << dendl;
     if (left == 0) {
+      state_offset = 0;
       return 0;
     }
 
@@ -308,6 +309,7 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
     left -= to_read;
 
     if (0 == left) {
+      state_offset = 0;
       return 0;
     }
 
