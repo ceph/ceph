@@ -306,7 +306,7 @@ void ImageState<I>::handle_update_notification() {
 template <typename I>
 bool ImageState<I>::is_refresh_required() const {
   Mutex::Locker locker(m_lock);
-  return (m_last_refresh != m_refresh_seq);
+  return (m_last_refresh != m_refresh_seq || find_pending_refresh() != nullptr);
 }
 
 template <typename I>
@@ -338,7 +338,14 @@ int ImageState<I>::refresh_if_required() {
   C_SaferCond ctx;
   {
     m_lock.Lock();
-    if (m_last_refresh == m_refresh_seq) {
+    Action action(ACTION_TYPE_REFRESH);
+    action.refresh_seq = m_refresh_seq;
+
+    auto refresh_action = find_pending_refresh();
+    if (refresh_action != nullptr) {
+      // if a refresh is in-flight, delay until it is finished
+      action = *refresh_action;
+    } else if (m_last_refresh == m_refresh_seq) {
       m_lock.Unlock();
       return 0;
     } else if (is_closed()) {
@@ -346,12 +353,26 @@ int ImageState<I>::refresh_if_required() {
       return -ESHUTDOWN;
     }
 
-    Action action(ACTION_TYPE_REFRESH);
-    action.refresh_seq = m_refresh_seq;
     execute_action_unlock(action, &ctx);
   }
 
   return ctx.wait();
+}
+
+template <typename I>
+const typename ImageState<I>::Action *
+ImageState<I>::find_pending_refresh() const {
+  assert(m_lock.is_locked());
+
+  auto it = std::find_if(m_actions_contexts.rbegin(),
+                         m_actions_contexts.rend(),
+                         [](const ActionContexts& action_contexts) {
+      return (action_contexts.first == ACTION_TYPE_REFRESH);
+    });
+  if (it != m_actions_contexts.rend()) {
+    return &it->first;
+  }
+  return nullptr;
 }
 
 template <typename I>
