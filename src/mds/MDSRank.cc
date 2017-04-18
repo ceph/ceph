@@ -16,6 +16,7 @@
 #include "common/errno.h"
 
 #include "messages/MClientRequestForward.h"
+#include "messages/MMDSLoadTargets.h"
 #include "messages/MMDSMap.h"
 #include "messages/MMDSTableRequest.h"
 #include "messages/MCommand.h"
@@ -180,6 +181,62 @@ void MDSRankDispatcher::init()
   finisher->start();
 }
 
+void MDSRank::update_targets(utime_t now)
+{
+  // get MonMap's idea of my export_targets
+  const set<mds_rank_t>& map_targets = mdsmap->get_mds_info(get_nodeid()).export_targets;
+
+  dout(20) << "updating export targets, currently " << map_targets.size() << " ranks are targets" << dendl;
+
+  bool send = false;
+  set<mds_rank_t> new_map_targets;
+
+  auto it = export_targets.begin();
+  while (it != export_targets.end()) {
+    mds_rank_t rank = it->first;
+    double val = it->second.get(now);
+    dout(20) << "export target mds." << rank << " value is " << val << " @ " << now << dendl;
+
+    if (val <= 0.01) {
+      dout(15) << "export target mds." << rank << " is no longer an export target" << dendl;
+      export_targets.erase(it++);
+      send = true;
+      continue;
+    }
+    if (!map_targets.count(rank)) {
+      dout(15) << "export target mds." << rank << " not in map's export_targets" << dendl;
+      send = true;
+    }
+    new_map_targets.insert(rank);
+    it++;
+  }
+  if (new_map_targets.size() < map_targets.size()) {
+    dout(15) << "export target map holds stale targets, sending update" << dendl;
+    send = true;
+  }
+
+  if (send) {
+    dout(15) << "updating export_targets, now " << new_map_targets.size() << " ranks are targets" << dendl;
+    MMDSLoadTargets* m = new MMDSLoadTargets(mds_gid_t(monc->get_global_id()), new_map_targets);
+    monc->send_mon_message(m);
+  }
+}
+
+void MDSRank::hit_export_target(utime_t now, mds_rank_t rank, double amount)
+{
+  double rate = g_conf->mds_bal_target_decay;
+  if (amount < 0.0) {
+    amount = 100.0/g_conf->mds_bal_target_decay; /* a good default for "i am trying to keep this export_target active" */
+  }
+  auto em = export_targets.emplace(std::piecewise_construct, std::forward_as_tuple(rank), std::forward_as_tuple(now, DecayRate(rate)));
+  if (em.second) {
+    dout(15) << "hit export target (new) " << amount << " @ " << now << dendl;
+  } else {
+    dout(15) << "hit export target " << amount << " @ " << now << dendl;
+  }
+  em.first->second.hit(now, amount);
+}
+
 void MDSRankDispatcher::tick()
 {
   heartbeat_reset();
@@ -206,8 +263,7 @@ void MDSRankDispatcher::tick()
   }
 
   // log
-  utime_t now = ceph_clock_now();
-  mds_load_t load = balancer->get_load(now);
+  mds_load_t load = balancer->get_load(ceph_clock_now());
 
   if (logger) {
     logger->set(l_mds_load_cent, 100 * load.mds_load());
@@ -228,6 +284,7 @@ void MDSRankDispatcher::tick()
 
   if (is_active()) {
     balancer->tick();
+    update_targets(ceph_clock_now());
     mdcache->find_stale_fragment_freeze();
     mdcache->migrator->find_stale_export_freeze();
     if (snapserver)
@@ -1634,9 +1691,6 @@ void MDSRankDispatcher::handle_mds_map(
       if (oldstopped.count(*p) == 0)      // newly so?
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
   }
-
-  if (!is_any_replay())
-    balancer->try_rebalance();
 
   {
     map<epoch_t,list<MDSInternalContextBase*> >::iterator p = waiting_for_mdsmap.begin();
