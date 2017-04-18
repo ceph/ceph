@@ -388,16 +388,18 @@ static inline int parse_v4_credentials_hdrs(const req_info& info,           /* i
 }
 
 int parse_credentials(const req_info& info,             /* in */
-                      std::string& credential,          /* out */
+                      std::string& access_key_id,       /* out */
+                      std::string& credential_scope,    /* out */
                       std::string& signedheaders,       /* out */
                       std::string& signature,           /* out */
                       std::string& date,                /* out */
                       bool& using_qs)                   /* out */
 {
-  int ret;
   const char* const http_auth = info.env->get("HTTP_AUTHORIZATION");
-
   using_qs = http_auth == nullptr || http_auth[0] == '\0';
+
+  int ret;
+  std::string credential;
   if (using_qs) {
     ret = parse_v4_credentials_qs(info, credential, signedheaders,
                                   signature, date);
@@ -421,6 +423,15 @@ int parse_credentials(const req_info& info,             /* in */
   if (credential.find("aws4_request") == std::string::npos) {
     return -EINVAL;
   }
+
+  /* grab access key id */
+  const size_t pos = credential.find("/");
+  access_key_id = credential.substr(0, pos);
+  dout(10) << "access key id = " << access_key_id << dendl;
+
+  /* grab credential scope */
+  credential_scope = credential.substr(pos + 1);
+  dout(10) << "credential scope = " << credential_scope << dendl;
 
   return 0;
 }

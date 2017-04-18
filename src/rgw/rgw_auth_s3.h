@@ -162,7 +162,8 @@ namespace s3 {
 
 
 int parse_credentials(const req_info& info,             /* in */
-                      std::string& credential,          /* out */
+                      std::string& access_key_id,       /* out */
+                      std::string& credential_scope,    /* out */
                       std::string& signedheaders,       /* out */
                       std::string& signature,           /* out */
                       std::string& date,                /* out */
