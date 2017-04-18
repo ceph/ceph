@@ -73,7 +73,7 @@ public:
 
   double get(utime_t now, const DecayRate& rate) {
     decay(now, rate);
-    return val;
+    return val+delta;
   }
 
   double get_last() {
