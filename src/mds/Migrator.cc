@@ -757,6 +757,18 @@ void Migrator::get_export_lock_set(CDir *dir, set<SimpleLock*>& locks)
 }
 
 
+class C_M_ExportTargetWait : public MigratorContext {
+  MDRequestRef mdr;
+  int count;
+public:
+  C_M_ExportTargetWait(Migrator *m, MDRequestRef mdr, int count)
+   : MigratorContext(m), mdr(mdr), count(count) {}
+  void finish(int r) override {
+    mig->dispatch_export_dir(mdr, count);
+  }
+};
+
+
 /** export_dir(dir, dest)
  * public method to initiate an export.
  * will fail if the directory is freezing, frozen, unpinnable, or root. 
@@ -797,6 +809,8 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
     return;
   }
 
+  mds->hit_export_target(ceph_clock_now(), dest, -1);
+
   dir->auth_pin(this);
   dir->state_set(CDir::STATE_EXPORTING);
 
@@ -813,11 +827,11 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   return mds->mdcache->dispatch_request(mdr);
 }
 
-void Migrator::dispatch_export_dir(MDRequestRef& mdr)
+void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
 {
   dout(7) << "dispatch_export_dir " << *mdr << dendl;
-  CDir *dir = mdr->more()->export_dir;
 
+  CDir *dir = mdr->more()->export_dir;
   map<CDir*,export_state_t>::iterator it = export_state.find(dir);
   if (it == export_state.end() || it->second.tid != mdr->reqid.tid) {
     // export must have aborted.
@@ -826,6 +840,19 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr)
     return;
   }
   assert(it->second.state == EXPORT_LOCKING);
+
+  mds_rank_t dest = it->second.peer;
+
+  if (!mds->is_export_target(dest)) {
+    dout(7) << "dest is not yet an export target" << dendl;
+    if (count > 3) {
+      dout(5) << "dest has not been added as export target after three MDSMap epochs, canceling export" << dendl;
+      mds->mdcache->request_finish(mdr);
+      return;
+    }
+    mds->wait_for_mdsmap(mds->mdsmap->get_epoch(), new C_M_ExportTargetWait(this, mdr, count+1));
+    return;
+  }
 
   if (mdr->aborted || dir->is_frozen() || dir->is_freezing()) {
     dout(7) << "wouldblock|freezing|frozen, canceling export" << dendl;
@@ -867,7 +894,7 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr)
   MExportDirDiscover *discover = new MExportDirDiscover(dir->dirfrag(), path,
 							mds->get_nodeid(),
 							it->second.tid);
-  mds->send_message_mds(discover, it->second.peer);
+  mds->send_message_mds(discover, dest);
   assert(g_conf->mds_kill_export_at != 2);
 
   it->second.last_cum_auth_pins_change = ceph_clock_now();
@@ -887,15 +914,19 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr)
 void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
+  mds_rank_t dest(m->get_source().num());
+  utime_t now = ceph_clock_now();
   assert(dir);
   
   dout(7) << "export_discover_ack from " << m->get_source()
 	  << " on " << *dir << dendl;
 
+  mds->hit_export_target(now, dest, -1);
+
   map<CDir*,export_state_t>::iterator it = export_state.find(dir);
   if (it == export_state.end() ||
       it->second.tid != m->get_tid() ||
-      it->second.peer != mds_rank_t(m->get_source().num())) {
+      it->second.peer != dest) {
     dout(7) << "must have aborted" << dendl;
   } else {
     assert(it->second.state == EXPORT_DISCOVERING);
@@ -1150,9 +1181,13 @@ void Migrator::get_export_client_set(CInode *in, set<client_t>& client_set)
 void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
+  mds_rank_t dest(m->get_source().num());
+  utime_t now = ceph_clock_now();
   assert(dir);
 
   dout(7) << "export_prep_ack " << *dir << dendl;
+
+  mds->hit_export_target(now, dest, -1);
 
   map<CDir*,export_state_t>::iterator it = export_state.find(dir);
   if (it == export_state.end() ||
@@ -1238,7 +1273,6 @@ void Migrator::export_go(CDir *dir)
 
 void Migrator::export_go_synced(CDir *dir, uint64_t tid)
 {
-
   map<CDir*,export_state_t>::iterator it = export_state.find(dir);
   if (it == export_state.end() ||
       it->second.state == EXPORT_CANCELLING ||
@@ -1248,8 +1282,9 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
     return;
   }
   assert(it->second.state == EXPORT_WARNING);
+  mds_rank_t dest = it->second.peer;
 
-  dout(7) << "export_go_synced " << *dir << " to " << it->second.peer << dendl;
+  dout(7) << "export_go_synced " << *dir << " to " << dest << dendl;
 
   cache->show_subtrees();
   
@@ -1260,7 +1295,7 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
   assert(dir->get_cum_auth_pins() == 0);
 
   // set ambiguous auth
-  cache->adjust_subtree_auth(dir, mds->get_nodeid(), it->second.peer);
+  cache->adjust_subtree_auth(dir, mds->get_nodeid(), dest);
 
   // take away the popularity we're sending.
   utime_t now = ceph_clock_now();
@@ -1285,8 +1320,10 @@ void Migrator::export_go_synced(CDir *dir, uint64_t tid)
     req->add_export((*p)->dirfrag());
 
   // send
-  mds->send_message_mds(req, it->second.peer);
+  mds->send_message_mds(req, dest);
   assert(g_conf->mds_kill_export_at != 8);
+
+  mds->hit_export_target(now, dest, num_exported_inodes+1);
 
   // stats
   if (mds->logger) mds->logger->inc(l_mds_exported);
@@ -1590,11 +1627,15 @@ public:
 void Migrator::handle_export_ack(MExportDirAck *m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
+  mds_rank_t dest(m->get_source().num());
+  utime_t now = ceph_clock_now();
   assert(dir);
   assert(dir->is_frozen_tree_root());  // i'm exporting!
 
   // yay!
   dout(7) << "handle_export_ack " << *dir << dendl;
+
+  mds->hit_export_target(now, dest, -1);
 
   map<CDir*,export_state_t>::iterator it = export_state.find(dir);
   assert(it != export_state.end());
@@ -1797,8 +1838,12 @@ void Migrator::export_logged_finish(CDir *dir)
 void Migrator::handle_export_notify_ack(MExportDirNotifyAck *m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
+  mds_rank_t dest(m->get_source().num());
+  utime_t now = ceph_clock_now();
   assert(dir);
   mds_rank_t from = mds_rank_t(m->get_source().num());
+
+  mds->hit_export_target(now, dest, -1);
 
   auto export_state_entry = export_state.find(dir);
   if (export_state_entry != export_state.end()) {

@@ -8998,7 +8998,7 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
       dispatch_fragment_dir(mdr);
       break;
     case CEPH_MDS_OP_EXPORTDIR:
-      migrator->dispatch_export_dir(mdr);
+      migrator->dispatch_export_dir(mdr, 0);
       break;
     case CEPH_MDS_OP_ENQUEUE_SCRUB:
       enqueue_scrub_work(mdr);

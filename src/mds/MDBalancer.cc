@@ -27,7 +27,6 @@
 #include "include/Context.h"
 #include "msg/Messenger.h"
 #include "messages/MHeartbeat.h"
-#include "messages/MMDSLoadTargets.h"
 
 #include <fstream>
 #include <iostream>
@@ -352,7 +351,7 @@ void MDBalancer::export_empties()
 
 
 
-double MDBalancer::try_match(mds_rank_t ex, double& maxex,
+double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxex,
                              mds_rank_t im, double& maxim)
 {
   if (maxex <= 0 || maxim <= 0) return 0.0;
@@ -363,10 +362,10 @@ double MDBalancer::try_match(mds_rank_t ex, double& maxex,
   dout(5) << "   - mds." << ex << " exports " << howmuch << " to mds." << im << dendl;
 
   if (ex == mds->get_nodeid())
-    my_targets[im] += howmuch;
+    state.targets[im] += howmuch;
 
-  exported[ex] += howmuch;
-  imported[im] += howmuch;
+  state.exported[ex] += howmuch;
+  state.imported[im] += howmuch;
 
   maxex -= howmuch;
   maxim -= howmuch;
@@ -495,24 +494,19 @@ void MDBalancer::queue_merge(CDir *dir)
 
 void MDBalancer::prep_rebalance(int beat)
 {
+  balance_state_t state;
+
   if (g_conf->mds_thrash_exports) {
     //we're going to randomly export to all the mds in the cluster
-    my_targets.clear();
     set<mds_rank_t> up_mds;
     mds->get_mds_map()->get_up_mds_set(up_mds);
-    for (set<mds_rank_t>::iterator i = up_mds.begin();
-	 i != up_mds.end();
-	 ++i)
-      my_targets[*i] = 0.0;
+    for (const auto &rank : up_mds) {
+      state.targets[rank] = 0.0;
+    }
   } else {
     int cluster_size = mds->get_mds_map()->get_num_in_mds();
     mds_rank_t whoami = mds->get_nodeid();
     rebalance_time = ceph_clock_now();
-
-    // reset
-    my_targets.clear();
-    imported.clear();
-    exported.clear();
 
     dout(5) << " prep_rebalance: cluster loads are" << dendl;
 
@@ -611,17 +605,16 @@ void MDBalancer::prep_rebalance(int beat)
       for (multimap<double,mds_rank_t>::reverse_iterator ex = exporters.rbegin();
 	   ex != exporters.rend();
 	   ++ex) {
-	double maxex = get_maxex(ex->second);
+	double maxex = get_maxex(state, ex->second);
 	if (maxex <= .001) continue;
 
 	// check importers. for now, just in arbitrary order (no intelligent matching).
 	for (map<mds_rank_t, float>::iterator im = mds_import_map[ex->second].begin();
 	     im != mds_import_map[ex->second].end();
 	     ++im) {
-	  double maxim = get_maxim(im->first);
+	  double maxim = get_maxim(state, im->first);
 	  if (maxim <= .001) continue;
-	  try_match(ex->second, maxex,
-		    im->first, maxim);
+	  try_match(state, ex->second, maxex, im->first, maxim);
 	  if (maxex <= .001) break;
 	}
       }
@@ -635,11 +628,10 @@ void MDBalancer::prep_rebalance(int beat)
       multimap<double,mds_rank_t>::iterator im = importers.begin();
       while (ex != exporters.rend() &&
 	     im != importers.end()) {
-        double maxex = get_maxex(ex->second);
-	double maxim = get_maxim(im->second);
+        double maxex = get_maxex(state, ex->second);
+	double maxim = get_maxim(state, im->second);
 	if (maxex < .001 || maxim < .001) break;
-	try_match(ex->second, maxex,
-		  im->second, maxim);
+	try_match(state, ex->second, maxex, im->second, maxim);
 	if (maxex <= .001) ++ex;
 	if (maxim <= .001) ++im;
       }
@@ -650,23 +642,31 @@ void MDBalancer::prep_rebalance(int beat)
       multimap<double,mds_rank_t>::iterator im = importers.begin();
       while (ex != exporters.end() &&
 	     im != importers.end()) {
-        double maxex = get_maxex(ex->second);
-	double maxim = get_maxim(im->second);
+        double maxex = get_maxex(state, ex->second);
+	double maxim = get_maxim(state, im->second);
 	if (maxex < .001 || maxim < .001) break;
-	try_match(ex->second, maxex,
-		  im->second, maxim);
+	try_match(state, ex->second, maxex, im->second, maxim);
 	if (maxex <= .001) ++ex;
 	if (maxim <= .001) ++im;
       }
     }
   }
-  try_rebalance();
+  try_rebalance(state);
 }
 
-
+void MDBalancer::hit_targets(const balance_state_t& state)
+{
+  utime_t now = ceph_clock_now();
+  for (auto &it : state.targets) {
+    mds_rank_t target = it.first;
+    mds->hit_export_target(now, target, g_conf->mds_bal_target_decay);
+  }
+}
 
 int MDBalancer::mantle_prep_rebalance()
 {
+  balance_state_t state;
+
   /* refresh balancer if it has changed */
   if (bal_version != mds->mdsmap->get_balancer()) {
     bal_version.assign("");
@@ -681,9 +681,6 @@ int MDBalancer::mantle_prep_rebalance()
   /* prepare for balancing */
   int cluster_size = mds->get_mds_map()->get_num_in_mds();
   rebalance_time = ceph_clock_now();
-  my_targets.clear();
-  imported.clear();
-  exported.clear();
   mds->mdcache->migrator->clear_export_queue();
 
   /* fill in the metrics for each mds by grabbing load struct */
@@ -704,24 +701,24 @@ int MDBalancer::mantle_prep_rebalance()
 
   /* execute the balancer */
   Mantle mantle;
-  int ret = mantle.balance(bal_code, mds->get_nodeid(), metrics, my_targets);
-  dout(2) << " mantle decided that new targets=" << my_targets << dendl;
+  int ret = mantle.balance(bal_code, mds->get_nodeid(), metrics, state.targets);
+  dout(2) << " mantle decided that new targets=" << state.targets << dendl;
 
   /* mantle doesn't know about cluster size, so check target len here */
-  if ((int) my_targets.size() != cluster_size)
+  if ((int) state.targets.size() != cluster_size)
     return -EINVAL;
   else if (ret)
     return ret;
 
-  try_rebalance();
+  try_rebalance(state);
   return 0;
 }
 
 
 
-void MDBalancer::try_rebalance()
+void MDBalancer::try_rebalance(balance_state_t& state)
 {
-  if (!check_targets())
+  if (!check_targets(state))
     return;
 
   if (g_conf->mds_thrash_exports) {
@@ -765,11 +762,9 @@ void MDBalancer::try_rebalance()
   // do my exports!
   set<CDir*> already_exporting;
 
-  for (map<mds_rank_t,double>::iterator it = my_targets.begin();
-       it != my_targets.end();
-       ++it) {
-    mds_rank_t target = (*it).first;
-    double amount = (*it).second;
+  for (auto &it : state.targets) {
+    mds_rank_t target = it.first;
+    double amount = it.second;
 
     if (amount < MIN_OFFLOAD) continue;
     if (amount / target_load < .2) continue;
@@ -877,62 +872,15 @@ void MDBalancer::try_rebalance()
 }
 
 
-/* returns true if all my_target MDS are in the MDSMap.
- */
-bool MDBalancer::check_targets()
+/* Check that all targets are in the MDSMap export_targets for my rank. */
+bool MDBalancer::check_targets(const balance_state_t& state)
 {
-  // get MonMap's idea of my_targets
-  const set<mds_rank_t>& map_targets = mds->mdsmap->get_mds_info(mds->get_nodeid()).export_targets;
-
-  bool send = false;
-  bool ok = true;
-
-  // make sure map targets are in the old_prev_targets map
-  for (set<mds_rank_t>::iterator p = map_targets.begin(); p != map_targets.end(); ++p) {
-    if (old_prev_targets.count(*p) == 0)
-      old_prev_targets[*p] = 0;
-    if (my_targets.count(*p) == 0)
-      old_prev_targets[*p]++;
-  }
-
-  // check if the current MonMap has all our targets
-  set<mds_rank_t> need_targets;
-  for (map<mds_rank_t,double>::iterator i = my_targets.begin();
-       i != my_targets.end();
-       ++i) {
-    need_targets.insert(i->first);
-    old_prev_targets[i->first] = 0;
-
-    if (!map_targets.count(i->first)) {
-      dout(20) << " target mds." << i->first << " not in map's export_targets" << dendl;
-      send = true;
-      ok = false;
+  for (const auto &it : state.targets) {
+    if (!mds->is_export_target(it.first)) {
+      return false;
     }
   }
-
-  set<mds_rank_t> want_targets = need_targets;
-  map<mds_rank_t, int>::iterator p = old_prev_targets.begin();
-  while (p != old_prev_targets.end()) {
-    if (map_targets.count(p->first) == 0 &&
-	need_targets.count(p->first) == 0) {
-      old_prev_targets.erase(p++);
-      continue;
-    }
-    dout(20) << " target mds." << p->first << " has been non-target for " << p->second << dendl;
-    if (p->second < g_conf->mds_bal_target_removal_min)
-      want_targets.insert(p->first);
-    if (p->second >= g_conf->mds_bal_target_removal_max)
-      send = true;
-    ++p;
-  }
-
-  dout(10) << "check_targets have " << map_targets << " need " << need_targets << " want " << want_targets << dendl;
-
-  if (send) {
-    MMDSLoadTargets* m = new MMDSLoadTargets(mds_gid_t(mon_client->get_global_id()), want_targets);
-    mon_client->send_mon_message(m);
-  }
-  return ok;
+  return true;
 }
 
 void MDBalancer::find_exports(CDir *dir,

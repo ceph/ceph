@@ -546,8 +546,7 @@ OPTION(mds_bal_need_min, OPT_FLOAT, .8)       // take within this range of what 
 OPTION(mds_bal_need_max, OPT_FLOAT, 1.2)
 OPTION(mds_bal_midchunk, OPT_FLOAT, .3)       // any sub bigger than this taken in full
 OPTION(mds_bal_minchunk, OPT_FLOAT, .001)     // never take anything smaller than this
-OPTION(mds_bal_target_removal_min, OPT_INT, 5) // min balance iterations before old target is removed
-OPTION(mds_bal_target_removal_max, OPT_INT, 10) // max balance iterations before old target is removed
+OPTION(mds_bal_target_decay, OPT_DOUBLE, 10.0) // target decay half-life in MDSMap (2x larger is approx. 2x slower)
 OPTION(mds_replay_interval, OPT_FLOAT, 1.0) // time to wait before starting replay again
 OPTION(mds_shutdown_check, OPT_INT, 0)
 OPTION(mds_thrash_exports, OPT_INT, 0)
