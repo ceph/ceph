@@ -1796,21 +1796,26 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
   }
 
-  if (g_conf->mon_warn_osd_usage_percent) {
-    float max_osd_perc_avail = 0.0, min_osd_perc_avail = 1.0;
+  if (g_conf->mon_warn_osd_usage_min_max_delta) {
+    float max_osd_usage = 0.0, min_osd_usage = 1.0;
     for (auto p = pg_map.osd_stat.begin(); p != pg_map.osd_stat.end(); ++p) {
       // kb should never be 0, but avoid divide by zero in case of corruption
       if (p->second.kb <= 0)
         continue;
-      float perc_avail = ((float)(p->second.kb - p->second.kb_avail)) / ((float)p->second.kb);
-      if (perc_avail > max_osd_perc_avail)
-        max_osd_perc_avail = perc_avail;
-      if (perc_avail < min_osd_perc_avail)
-        min_osd_perc_avail = perc_avail;
+      float usage = ((float)p->second.kb_used) / ((float)p->second.kb);
+      if (usage > max_osd_usage)
+        max_osd_usage = usage;
+      if (usage < min_osd_usage)
+        min_osd_usage = usage;
     }
-    if ((max_osd_perc_avail - min_osd_perc_avail) > g_conf->mon_warn_osd_usage_percent) {
+    float diff = max_osd_usage - min_osd_usage;
+    if (diff > g_conf->mon_warn_osd_usage_min_max_delta) {
       ostringstream ss;
-      ss << "Difference in osd space utilization " << ((max_osd_perc_avail - min_osd_perc_avail) *100) << "% greater than " << (g_conf->mon_warn_osd_usage_percent * 100) << "%";
+      ss << "difference between min (" << roundf(min_osd_usage*1000.0)/100.0
+	 << "%) and max (" << roundf(max_osd_usage*1000.0)/100.0
+	 << "%) osd usage " << roundf(diff*1000.0)/100.0 << "% > "
+	 << roundf(g_conf->mon_warn_osd_usage_min_max_delta*1000.0)/100.0
+	 << " (mon_warn_osd_usage_min_max_delta)";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
       if (detail)
         detail->push_back(make_pair(HEALTH_WARN, ss.str()));
