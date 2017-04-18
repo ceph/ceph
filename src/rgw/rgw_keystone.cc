@@ -259,6 +259,81 @@ int Service::issue_admin_token_request(CephContext* const cct,
   return 0;
 }
 
+int Service::get_keystone_barbican_token(CephContext * const cct,
+                                         std::string& token)
+{
+  using keystone_config_t = rgw::keystone::CephCtxConfig;
+  using keystone_cache_t = rgw::keystone::TokenCache;
+
+  auto& config = keystone_config_t::get_instance();
+  auto& token_cache = keystone_cache_t::get_instance<keystone_config_t>();
+
+  std::string token_url = config.get_endpoint_url();
+  if (token_url.empty()) {
+    return -EINVAL;
+  }
+
+  rgw::keystone::TokenEnvelope t;
+
+  /* Try cache first. */
+  if (token_cache.find_barbican(t)) {
+    ldout(cct, 20) << "found cached barbican token" << dendl;
+    token = t.token.id;
+    return 0;
+  }
+
+  bufferlist token_bl;
+  RGWKeystoneHTTPTransceiver token_req(cct, &token_bl);
+  token_req.append_header("Content-Type", "application/json");
+  JSONFormatter jf;
+
+  const auto keystone_version = config.get_api_version();
+  if (keystone_version == ApiVersion::VER_2) {
+    rgw::keystone::BarbicanTokenRequestVer2 req_serializer(cct);
+    req_serializer.dump(&jf);
+
+    std::stringstream ss;
+    jf.flush(ss);
+    token_req.set_post_data(ss.str());
+    token_req.set_send_length(ss.str().length());
+    token_url.append("v2.0/tokens");
+
+  } else if (keystone_version == ApiVersion::VER_3) {
+    BarbicanTokenRequestVer3 req_serializer(cct);
+    req_serializer.dump(&jf);
+
+    std::stringstream ss;
+    jf.flush(ss);
+    token_req.set_post_data(ss.str());
+    token_req.set_send_length(ss.str().length());
+    token_url.append("v3/auth/tokens");
+  } else {
+    return -ENOTSUP;
+  }
+
+  ldout(cct, 20) << "Requesting secret from barbican url=" << token_url << dendl;
+  const int ret = token_req.process("POST", token_url.c_str());
+  if (ret < 0) {
+    ldout(cct, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
+    return ret;
+  }
+
+  /* Detect rejection earlier than during the token parsing step. */
+  if (token_req.get_http_status() ==
+      RGWKeystoneHTTPTransceiver::HTTP_STATUS_UNAUTHORIZED) {
+    return -EACCES;
+  }
+
+  if (t.parse(cct, token_req.get_subject_token(), token_bl,
+              keystone_version) != 0) {
+    return -EINVAL;
+  }
+
+  token_cache.add_barbican(t);
+  token = t.token.id;
+  return 0;
+}
+
 
 bool TokenEnvelope::has_role(const std::string& r) const
 {
@@ -368,6 +443,13 @@ bool TokenCache::find_admin(rgw::keystone::TokenEnvelope& token)
   return find_locked(admin_token_id, token);
 }
 
+bool TokenCache::find_barbican(rgw::keystone::TokenEnvelope& token)
+{
+  Mutex::Locker l(lock);
+
+  return find_locked(barbican_token_id, token);
+}
+
 void TokenCache::add(const std::string& token_id,
                      const rgw::keystone::TokenEnvelope& token)
 {
@@ -405,6 +487,14 @@ void TokenCache::add_admin(const rgw::keystone::TokenEnvelope& token)
 
   rgw_get_token_id(token.token.id, admin_token_id);
   add_locked(admin_token_id, token);
+}
+
+void TokenCache::add_barbican(const rgw::keystone::TokenEnvelope& token)
+{
+  Mutex::Locker l(lock);
+
+  rgw_get_token_id(token.token.id, barbican_token_id);
+  add_locked(barbican_token_id, token);
 }
 
 void TokenCache::invalidate(const std::string& token_id)
