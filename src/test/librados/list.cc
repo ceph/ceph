@@ -964,7 +964,17 @@ TEST_F(LibRadosListNP, ListObjectsError) {
   memset(buf, 0xcc, sizeof(buf));
   rados_ioctx_set_namespace(ioctx, "");
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
-  ASSERT_EQ(0, rados_pool_delete(cluster, pool_name.c_str()));
+
+  //ASSERT_EQ(0, rados_pool_delete(cluster, pool_name.c_str()));
+  {
+    char *buf, *st;
+    size_t buflen, stlen;
+    string c = "{\"prefix\":\"osd pool rm\",\"pool\": \"" + pool_name +
+      "\",\"pool2\":\"" + pool_name +
+      "\",\"sure\": \"--yes-i-really-really-mean-it-not-faking\"}";
+    const char *cmd[2] = { c.c_str(), 0 };
+    ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  }
 
   rados_list_ctx_t ctx;
   ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &ctx));
