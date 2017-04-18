@@ -350,7 +350,7 @@ static inline rgw::io::Accounter* ACCOUNTING_IO(struct req_state* s) {
   return ptr;
 }
 
-static inline RGWRestfulIO* AWS_AUTHv4_IO(struct req_state* s) {
+static inline RGWRestfulIO* AWS_AUTHv4_IO(const req_state* const s) {
   assert(dynamic_cast<RGWRestfulIO*>(s->cio) != nullptr);
 
   return static_cast<RGWRestfulIO*>(s->cio);
