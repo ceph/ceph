@@ -6115,18 +6115,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    if (!_get_stable_crush().item_exists(osdid)) {
-      err = -ENOENT;
-      ss << "unable to set-device-class for item id " << osdid << " name '" << name
-         << "' device_class " << device_class << ": does not exist";
-      goto reply;
-    }
-
-    dout(5) << "updating crush item id " << osdid << " name '"
-	    << name << "' device_class " << device_class << dendl;
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
 
+    string action;
+    if (newcrush.item_exists(osdid)) {
+      action = "updating";
+    } else {
+      action = "creating";
+      newcrush.set_item_name(osdid, name);
+    }
+
+    dout(5) << action << " crush item id " << osdid << " name '"
+	    << name << "' device_class " << device_class << dendl;
     err = newcrush.update_device_class(g_ceph_context, osdid, device_class, name);
 
     if (err < 0)
