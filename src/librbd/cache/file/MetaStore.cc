@@ -67,6 +67,7 @@ void MetaStore<I>::set_entry_size(uint32_t entry_size) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
+  //TODO persistent to metastore header
   m_entry_size = entry_size;
 }
 template <typename I>
@@ -74,7 +75,7 @@ void MetaStore<I>::write_block(uint64_t cache_block, bufferlist bl, Context *on_
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
   uint64_t meta_block_offset = cache_block * m_entry_size;
-  m_meta_file.write(meta_block_offset, std::move(bl), true, on_finish);
+  m_meta_file.write(meta_block_offset, std::move(bl), false, on_finish);
 }
 
 template <typename I>

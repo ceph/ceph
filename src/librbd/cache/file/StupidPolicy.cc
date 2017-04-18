@@ -30,6 +30,27 @@ StupidPolicy<I>::StupidPolicy(I &image_ctx, BlockGuard &block_guard)
 }
 
 template <typename I>
+void StupidPolicy<I>::set_write_mode(uint8_t write_mode) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "write_mode=" << write_mode << dendl;
+
+  // TODO change mode on-the-fly
+  Mutex::Locker locker(m_lock);
+  m_write_mode = write_mode;
+
+}
+
+template <typename I>
+uint8_t StupidPolicy<I>::get_write_mode() {
+  CephContext *cct = m_image_ctx.cct;
+
+  // TODO change mode on-the-fly
+  Mutex::Locker locker(m_lock);
+  return m_write_mode;
+
+}
+
+template <typename I>
 void StupidPolicy<I>::set_block_count(uint64_t block_count) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "block_count=" << block_count << dendl;

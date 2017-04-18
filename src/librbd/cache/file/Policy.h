@@ -21,6 +21,8 @@ public:
   virtual ~Policy() {
   }
 
+  virtual void set_write_mode(uint8_t write_mode) = 0;
+  virtual uint8_t get_write_mode() = 0;
   virtual void set_block_count(uint64_t block_count) = 0;
 
   virtual int invalidate(uint64_t block) = 0;

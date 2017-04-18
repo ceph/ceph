@@ -5249,6 +5249,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default(true)
     .set_description(""),
 
+    Option("rbd_persistent_cache_writeback", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
     Option("rbd_persistent_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1073741824)
     .set_description(""),

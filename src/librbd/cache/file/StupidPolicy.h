@@ -31,6 +31,8 @@ class StupidPolicy : public Policy {
 public:
   StupidPolicy(ImageCtxT &image_ctx, BlockGuard &block_guard);
 
+  virtual void set_write_mode(uint8_t write_mode);
+  virtual uint8_t get_write_mode();
   virtual void set_block_count(uint64_t block_count);
 
   virtual int invalidate(uint64_t block);
@@ -65,6 +67,7 @@ private:
 
   mutable Mutex m_lock;
   uint64_t m_block_count = 0;
+  uint8_t m_write_mode = 0; // 0:w-t, 1:w-b
 
   Entries m_entries;
   BlockToEntries m_block_to_entries;

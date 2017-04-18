@@ -587,8 +587,14 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
       req = new C_WriteToImageRequest<I>(cct, image_writeback,
                                          std::move(block_io), bl, req);
     } else {
-      // block is now dirty -- can't be replaced until flushed
-      policy.set_dirty(block_io.block);
+      if (0 == policy.get_write_mode()) {
+        //write-thru
+        req = new C_WriteToImageRequest<I>(cct, image_writeback,
+                                           std::move(block_io), bl, req);
+      } else {
+        // block is now dirty -- can't be replaced until flushed
+        policy.set_dirty(block_io.block);
+      }
       req = new C_WriteToMetaRequest<I>(cct, meta_store, block_io.block, &policy, req);
 
       IOType io_type = static_cast<IOType>(block_io.io_type);
@@ -610,7 +616,7 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
         // TODO optimize by only reading missing extents
         promote_buffers.emplace_back();
 
-        if (block_io.tid > 0) {
+        if (block_io.tid > 0 && (1 == policy.get_write_mode())) {
           req = new C_AppendEventToJournal<I>(cct, journal_store, block_io.tid,
                                               block_io.block, IO_TYPE_WRITE,
                                               req);
@@ -638,7 +644,7 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
         }
       } else {
         // full block overwrite
-        if (block_io.tid > 0) {
+        if (block_io.tid > 0 && (1 == policy.get_write_mode())) {
           req = new C_AppendEventToJournal<I>(cct, journal_store, block_io.tid,
                                               block_io.block, IO_TYPE_WRITE,
                                               req);
@@ -806,6 +812,9 @@ FileImageCache<I>::FileImageCache(ImageCtx &image_ctx)
     m_release_block(std::bind(&FileImageCache<I>::release_block, this,
                               std::placeholders::_1)),
     m_lock("librbd::cache::FileImageCache::m_lock") {
+  CephContext *cct = m_image_ctx.cct;
+  uint8_t write_mode = cct->_conf->get_val<bool>("rbd_persistent_cache_writeback")?1:0;
+  m_policy->set_write_mode(write_mode);
 }
 
 template <typename I>
@@ -922,8 +931,8 @@ void FileImageCache<I>::aio_compare_and_write(Extents &&image_extents,
                                                      int fadvise_flags,
                                                      Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "image_extents=" << image_extents << ", "
-                 << "on_finish=" << on_finish << dendl;
+//  ldout(cct, 20) << "image_extents=" << image_extents << ", "
+//                 << "on_finish=" << on_finish << dendl;
 
   m_image_writeback.aio_compare_and_write(
     std::move(image_extents), std::move(cmp_bl), std::move(bl), mismatch_offset,
