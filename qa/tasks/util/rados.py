@@ -24,26 +24,26 @@ def rados(ctx, remote, cmd, wait=True, check_status=False):
     else:
         return proc
 
-def create_ec_pool(remote, name, profile_name, pgnum, profile={}):
+def create_ec_pool(remote, name, profile_name, pgnum, profile={}, cluster_name="ceph"):
     remote.run(args=['sudo', 'ceph'] +
-               cmd_erasure_code_profile(profile_name, profile))
+               cmd_erasure_code_profile(profile_name, profile) + ['--cluster', cluster_name])
     remote.run(args=[
         'sudo', 'ceph', 'osd', 'pool', 'create', name,
-        str(pgnum), str(pgnum), 'erasure', profile_name,
+        str(pgnum), str(pgnum), 'erasure', profile_name, '--cluster', cluster_name
         ])
 
-def create_replicated_pool(remote, name, pgnum):
+def create_replicated_pool(remote, name, pgnum, cluster_name="ceph"):
     remote.run(args=[
-        'sudo', 'ceph', 'osd', 'pool', 'create', name, str(pgnum), str(pgnum),
+        'sudo', 'ceph', 'osd', 'pool', 'create', name, str(pgnum), str(pgnum), '--cluster', cluster_name
         ])
 
-def create_cache_pool(remote, base_name, cache_name, pgnum, size):
+def create_cache_pool(remote, base_name, cache_name, pgnum, size, cluster_name="ceph"):
     remote.run(args=[
-        'sudo', 'ceph', 'osd', 'pool', 'create', cache_name, str(pgnum)
+        'sudo', 'ceph', 'osd', 'pool', 'create', cache_name, str(pgnum), '--cluster', cluster_name
     ])
     remote.run(args=[
         'sudo', 'ceph', 'osd', 'tier', 'add-cache', base_name, cache_name,
-        str(size),
+        str(size), '--cluster', cluster_name
     ])
 
 def cmd_erasure_code_profile(profile_name, profile):
