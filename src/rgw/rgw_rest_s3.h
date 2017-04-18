@@ -689,9 +689,11 @@ public:
                                 const std::string& string_to_sign)>;
 
     /* Return an instance of Completer for verifying the payload's fingerprint
-     * if necessary. Otherwise caller gets nullptr. */
+     * if necessary. Otherwise caller gets nullptr. Caller may provide secret
+     * key */
     using completer_factory_t = \
-      std::function<rgw::auth::Completer::cmplptr_t(void)>;
+      std::function<rgw::auth::Completer::cmplptr_t(
+        const boost::optional<std::string>& secret_key)>;
 
     virtual std::tuple<access_key_id_t,
                        signature_t,

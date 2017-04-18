@@ -4210,7 +4210,7 @@ rgw::auth::s3::LDAPEngine::authenticate(
 
   auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
                                             get_creds_info(base64_token));
-  return result_t::grant(std::move(apl), completer_factory());
+  return result_t::grant(std::move(apl), completer_factory(boost::none));
 }
 
 
@@ -4258,5 +4258,5 @@ rgw::auth::s3::LocalEngine::authenticate(
   }
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser);
-  return result_t::grant(std::move(apl), completer_factory());
+  return result_t::grant(std::move(apl), completer_factory(k.key));
 }
