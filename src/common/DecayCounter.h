@@ -43,14 +43,11 @@ public:
 };
 
 class DecayCounter {
- protected:
 public:
   double val;           // value
   double delta;         // delta since last decay
   double vel;           // recent velocity
   utime_t last_decay;   // time of last decay
-
- public:
 
   void encode(bufferlist& bl) const;
   void decode(const utime_t &t, bufferlist::iterator& p);
