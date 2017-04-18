@@ -707,20 +707,9 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   int r = 0;
   unsigned long long core_value;
   uint32_t core_num = 0;
-  int m_core = -1;
-
-  string master_core = "--master-lcore=";
-  string prefix = "--file-prefix=";
-  string sock_mem = "--socket-mem=";
-  string coremask = "-c ";
-  stringstream master_core_ss;
-  prefix += sn_tag;
-  sock_mem += g_conf->bluestore_spdk_socket_mem;
-  coremask += g_conf->bluestore_spdk_coremask;
-  char *prefix_arg = (char *)prefix.c_str();
-  char *sock_mem_arg = (char *)sock_mem.c_str();
-  char *coremask_arg = (char *)coremask.c_str();
-  char *master_core_arg;
+  int m_core_arg = -1;
+  uint32_t mem_size_arg = g_conf->bluestore_spdk_mem;
+  char *coremask_arg = (char *)g_conf->bluestore_spdk_coremask.c_str();
 
   if (sn_tag.empty()) {
     r = -ENOENT;
@@ -728,14 +717,14 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
     return r;
   }
 
-  core_value = strtoll(g_conf->bluestore_spdk_coremask.c_str(), NULL, 16);
+  core_value = strtoll(coremask_arg, NULL, 16);
   for (uint32_t i = 0; i < sizeof(long long) * 8; i++) {
     bool tmp = (core_value >> i) & 0x1;
     if (tmp) {
       core_num += 1;
       // select the least signficant bit as the master core
-      if(m_core < 0) {
-        m_core = i;
+      if(m_core_arg < 0) {
+        m_core_arg = i;
       }
     }
   }
@@ -747,9 +736,6 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
          << cpp_strerror(r) << dendl;
     return r;
   }
-  master_core_ss << m_core;
-  master_core += master_core_ss.str();
-  master_core_arg = (char *)master_core.c_str();
 
   for (auto &&it : shared_driver_datas) {
     if (it->is_equal(sn_tag)) {
@@ -761,21 +747,16 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   if (!init) {
     init = true;
     dpdk_thread = std::thread(
-      [this, prefix_arg, sock_mem_arg, coremask_arg, master_core_arg]() {
-        static const char *ealargs[] = {
-            "ceph-osd",
-            coremask_arg, /* This must be the second parameter. It is overwritten by index in main(). */
-            "-n 4",
-	    sock_mem_arg,
-	    prefix_arg,
-	    master_core_arg
-        };
+      [this, coremask_arg, m_core_arg, mem_size_arg]() {
+        static struct spdk_env_opts opts;
+        int r;
 
-        int r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
-        if (r < 0) {
-          derr << __func__ << " failed to do rte_eal_init" << dendl;
-          ceph_abort();
-        }
+        spdk_env_opts_init(&opts);
+        opts.name = "ceph-osd";
+        opts.core_mask = coremask_arg;
+        opts.dpdk_master_core = m_core_arg;
+        opts.dpdk_mem_size = mem_size_arg;
+        spdk_env_init(&opts);
 
         spdk_nvme_retry_count = g_ceph_context->_conf->bdev_nvme_retry_count;
         if (spdk_nvme_retry_count < 0)

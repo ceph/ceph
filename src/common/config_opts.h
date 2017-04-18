@@ -1032,8 +1032,9 @@ OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at
 // Example:
 // bluestore_block_path = spdk:55cd2e404bd73932
 // If you want to run multiple SPDK instances per node, you must specify the
-// amount of memory per socket each instance will use.
-OPTION(bluestore_spdk_socket_mem, OPT_STR, "512,512")
+// amount of dpdk memory size in MB each instance will use, to make sure each
+// instance uses its own dpdk memory
+OPTION(bluestore_spdk_mem, OPT_U32, 512)
 // A hexadecimal bit mask of the cores to run on. Note the core numbering can change between platforms and should be determined beforehand.
 OPTION(bluestore_spdk_coremask, OPT_STR, "0x3")
 // Specify the maximal I/Os to be batched completed while checking queue pair completions.
