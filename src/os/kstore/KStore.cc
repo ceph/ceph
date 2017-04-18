@@ -1280,6 +1280,21 @@ int KStore::fiemap(
   bufferlist& bl)
 {
   map<uint64_t, uint64_t> m;
+  int r = fiemap(cid, oid, offset, len, m);
+  if (r >= 0) {
+    ::encode(m, bl);
+  }
+
+  return r;
+}
+
+int KStore::fiemap(
+  const coll_t& cid,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t len,
+  map<uint64_t, uint64_t>& destmap)
+{
   CollectionRef c = _get_collection(cid);
   if (!c)
     return -ENOENT;
@@ -1301,12 +1316,11 @@ int KStore::fiemap(
 	   << o->onode.size << dendl;
 
   // FIXME: do something smarter here
-  m[0] = o->onode.size;
+  destmap[0] = o->onode.size;
 
  out:
-  ::encode(m, bl);
   dout(20) << __func__ << " " << offset << "~" << len
-	   << " size = 0 (" << m << ")" << dendl;
+	   << " size = 0 (" << destmap << ")" << dendl;
   return 0;
 }
 

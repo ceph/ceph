@@ -356,6 +356,16 @@ int MemStore::read(
 int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
 		     uint64_t offset, size_t len, bufferlist& bl)
 {
+  map<uint64_t, uint64_t> destmap;
+  int r = fiemap(cid, oid, offset, len, destmap);
+  if (r >= 0)
+    ::encode(destmap, bl);
+  return r;
+}
+
+int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
+		     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap)
+{
   dout(10) << __func__ << " " << cid << " " << oid << " " << offset << "~"
 	   << len << dendl;
   CollectionRef c = get_collection(cid);
@@ -365,15 +375,13 @@ int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  map<uint64_t, uint64_t> m;
   size_t l = len;
   if (offset + l > o->get_size())
     l = o->get_size() - offset;
   if (offset >= o->get_size())
     goto out;
-  m[offset] = l;
+  destmap[offset] = l;
  out:
-  ::encode(m, bl);
   return 0;
 }
 

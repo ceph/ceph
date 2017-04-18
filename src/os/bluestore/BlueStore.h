@@ -2100,10 +2100,19 @@ public:
     bufferlist& bl,
     uint32_t op_flags = 0);
 
+private:
+  int _fiemap(CollectionHandle &c_, const ghobject_t& oid,
+ 	     uint64_t offset, size_t len, interval_set<uint64_t>& destset);
+public:
   int fiemap(const coll_t& cid, const ghobject_t& oid,
 	     uint64_t offset, size_t len, bufferlist& bl) override;
   int fiemap(CollectionHandle &c, const ghobject_t& oid,
 	     uint64_t offset, size_t len, bufferlist& bl) override;
+  int fiemap(const coll_t& cid, const ghobject_t& oid,
+	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+  int fiemap(CollectionHandle &c, const ghobject_t& oid,
+	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+
 
   int getattr(const coll_t& cid, const ghobject_t& oid, const char *name,
 	      bufferptr& value) override;
