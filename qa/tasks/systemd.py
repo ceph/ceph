@@ -138,5 +138,5 @@ def task(ctx, config):
     # wait for HEALTH_OK
     mon = get_first_mon(ctx, config)
     (mon_remote,) = ctx.cluster.only(mon).remotes.iterkeys()
-    wait_until_healthy(ctx, mon_remote)
+    wait_until_healthy(ctx, mon_remote, use_sudo=True)
     yield
