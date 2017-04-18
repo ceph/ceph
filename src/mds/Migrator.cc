@@ -810,7 +810,7 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   stat.tid = mdr->reqid.tid;
   stat.mut = mdr;
 
-  dispatch_export_dir(mdr);
+  return mds->mdcache->dispatch_request(mdr);
 }
 
 void Migrator::dispatch_export_dir(MDRequestRef& mdr)
