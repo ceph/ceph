@@ -475,7 +475,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
 
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                               get_creds_info(*t, accepted_roles.admin));
-    return result_t::grant(std::move(apl), completer_factory());
+    return result_t::grant(std::move(apl), completer_factory(boost::none));
   }
 }
 
