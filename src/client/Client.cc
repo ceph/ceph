@@ -2391,7 +2391,7 @@ void Client::_handle_full_flag(int64_t pool)
       ldout(cct, 4) << __func__ << ": FULL: inode 0x" << std::hex << i->first << std::dec
         << " has dirty objects, purging and setting ENOSPC" << dendl;
       objectcacher->purge_set(&inode->oset);
-      inode->async_err = -ENOSPC;
+      inode->set_async_err(-ENOSPC);
     }
   }
 
@@ -3002,7 +3002,7 @@ public:
       ldout(client->cct, 1) << "I/O error from flush on inode " << inode
         << " 0x" << std::hex << inode->ino << std::dec
         << ": " << r << "(" << cpp_strerror(r) << ")" << dendl;
-      inode->async_err = r;
+      inode->set_async_err(r);
     }
   }
 };
@@ -8089,14 +8089,12 @@ int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 
  Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
 {
-  // yay
-  Fh *f = new Fh;
+  assert(in);
+  Fh *f = new Fh(in);
   f->mode = cmode;
   f->flags = flags;
 
   // inode
-  assert(in);
-  f->inode = in;
   f->actor_perms = perms;
 
   ldout(cct, 10) << "_create_fh " << in->ino << " mode " << cmode << dendl;
@@ -8145,8 +8143,8 @@ int Client::_release_fh(Fh *f)
 
   _release_filelocks(f);
 
-  // Finally, read any async err (i.e. from flushes) from the inode
-  int err = in->async_err;
+  // Finally, read any async err (i.e. from flushes)
+  int err = f->take_async_err();
   if (err != 0) {
     ldout(cct, 1) << "_release_fh " << f << " on inode " << *in << " caught async_err = "
                   << cpp_strerror(err) << dendl;
@@ -8162,8 +8160,9 @@ int Client::_release_fh(Fh *f)
 void Client::_put_fh(Fh *f)
 {
   int left = f->put();
-  if (!left)
+  if (!left) {
     delete f;
+  }
 }
 
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
@@ -9047,7 +9046,7 @@ done:
 int Client::_flush(Fh *f)
 {
   Inode *in = f->inode.get();
-  int err = in->async_err;
+  int err = f->take_async_err();
   if (err != 0) {
     ldout(cct, 1) << __func__ << ": " << f << " on inode " << *in << " caught async_err = "
                   << cpp_strerror(err) << dendl;
@@ -9099,7 +9098,21 @@ int Client::fsync(int fd, bool syncdataonly)
     return -EBADF;
 #endif
   int r = _fsync(f, syncdataonly);
-  ldout(cct, 3) << "fsync(" << fd << ", " << syncdataonly << ") = " << r << dendl;
+  if (r == 0) {
+    // The IOs in this fsync were okay, but maybe something happened
+    // in the background that we shoudl be reporting?
+    r = f->take_async_err();
+    ldout(cct, 3) << "fsync(" << fd << ", " << syncdataonly
+                  << ") = 0, async_err = " << r << dendl;
+  } else {
+    // Assume that an error we encountered during fsync, even reported
+    // synchronously, would also have applied the error to the Fh, and we
+    // should clear it here to avoid returning the same error again on next
+    // call.
+    ldout(cct, 3) << "fsync(" << fd << ", " << syncdataonly << ") = "
+                  << r << dendl;
+    f->take_async_err();
+  }
   return r;
 }
 
@@ -9163,12 +9176,6 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   } else {
     ldout(cct, 1) << "ino " << in->ino << " failed to commit to disk! "
 		  << cpp_strerror(-r) << dendl;
-  }
-
-  if (in->async_err) {
-    ldout(cct, 1) << "ino " << in->ino << " marked with error from background flush! "
-		  << cpp_strerror(in->async_err) << dendl;
-    r = in->async_err;
   }
 
   return r;
@@ -12249,7 +12256,12 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
   tout(cct) << "ll_fsync" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
-  return _fsync(fh, syncdataonly);
+  int r = _fsync(fh, syncdataonly);
+  if (r) {
+    // If we're returning an error, clear it from the FH
+    fh->take_async_err();
+  }
+  return r;
 }
 
 #ifdef FALLOC_FL_PUNCH_HOLE
