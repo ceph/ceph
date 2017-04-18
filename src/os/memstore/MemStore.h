@@ -310,6 +310,7 @@ public:
     bool allow_eio = false) override;
   using ObjectStore::fiemap;
   int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) override;
+  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
   int getattr(const coll_t& cid, const ghobject_t& oid, const char *name,
 	      bufferptr& value) override;
   int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,

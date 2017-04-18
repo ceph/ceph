@@ -6192,30 +6192,18 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   return r;
 }
 
-int BlueStore::fiemap(
-  const coll_t& cid,
-  const ghobject_t& oid,
-  uint64_t offset,
-  size_t len,
-  bufferlist& bl)
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return fiemap(c, oid, offset, len, bl);
-}
-
-int BlueStore::fiemap(
+// this stores fiemap into interval_set, other variations
+// use it internally
+int BlueStore::_fiemap(
   CollectionHandle &c_,
   const ghobject_t& oid,
   uint64_t offset,
   size_t length,
-  bufferlist& bl)
+  interval_set<uint64_t>& destset)
 {
   Collection *c = static_cast<Collection *>(c_.get());
   if (!c->exists)
     return -ENOENT;
-  interval_set<uint64_t> m;
   {
     RWLock::RLocker l(c->lock);
 
@@ -6252,7 +6240,7 @@ int BlueStore::fiemap(
         x_len = MIN(x_len, ep->length - x_off);
         dout(30) << __func__ << " lextent 0x" << std::hex << offset << "~"
 	         << x_len << std::dec << " blob " << ep->blob << dendl;
-        m.insert(offset, x_len);
+        destset.insert(offset, x_len);
         length -= x_len;
         offset += x_len;
         if (x_off + x_len == ep->length)
@@ -6271,10 +6259,65 @@ int BlueStore::fiemap(
 
  out:
   c->trim_cache();
-  ::encode(m, bl);
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << " size = 0x(" << m << ")" << std::dec << dendl;
+	   << " size = 0x(" << destset << ")" << std::dec << dendl;
   return 0;
+}
+
+int BlueStore::fiemap(
+  const coll_t& cid,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t len,
+  bufferlist& bl)
+{
+  CollectionHandle c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+  return fiemap(c, oid, offset, len, bl);
+}
+
+int BlueStore::fiemap(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t length,
+  bufferlist& bl)
+{
+  interval_set<uint64_t> m;
+  int r = _fiemap(c_, oid, offset, length, m);
+  if (r >= 0) {
+    ::encode(m, bl);
+  }
+  return r;
+}
+
+int BlueStore::fiemap(
+  const coll_t& cid,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t len,
+  map<uint64_t, uint64_t>& destmap)
+{
+  CollectionHandle c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+  return fiemap(c, oid, offset, len, destmap);
+}
+
+int BlueStore::fiemap(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t length,
+  map<uint64_t, uint64_t>& destmap)
+{
+  interval_set<uint64_t> m;
+  int r = _fiemap(c_, oid, offset, length, m);
+  if (r >= 0) {
+    m.move_into(destmap);
+  }
+  return r;
 }
 
 int BlueStore::getattr(
