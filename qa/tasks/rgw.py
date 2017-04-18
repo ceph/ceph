@@ -263,8 +263,6 @@ def start_rgw(ctx, config, on_client = None, except_client = None):
         if client_config is None:
             client_config = {}
         log.info("rgw %s config is %s", client, client_config)
-        id_ = client.split('.', 1)[1]
-        log.info('client {client} is id {id}'.format(client=client, id=id_))
         cmd_prefix = [
             'sudo',
             'adjust-ulimits',
@@ -327,7 +325,7 @@ def start_rgw(ctx, config, on_client = None, except_client = None):
         if client_config.get('valgrind'):
             cmd_prefix = teuthology.get_valgrind_args(
                 testdir,
-                client,
+                client_with_cluster,
                 cmd_prefix,
                 client_config.get('valgrind')
                 )
@@ -336,7 +334,7 @@ def start_rgw(ctx, config, on_client = None, except_client = None):
         run_cmd.extend(rgw_cmd)
 
         ctx.daemons.add_daemon(
-            remote, 'rgw', client,
+            remote, 'rgw', client_with_id,
             cluster=cluster_name,
             args=run_cmd,
             logger=log.getChild(client),
@@ -727,26 +725,21 @@ def configure_multisite_regions_and_zones(ctx, config, regions, role_endpoints, 
     yield
 
 def configure_compression_in_default_zone(ctx, config):
-    ceph_config = ctx.ceph['ceph'].conf.get('global', {})
-    ceph_config.update(ctx.ceph['ceph'].conf.get('client', {}))
-    for client, c_config in config.iteritems():
-        ceph_config.update(ctx.ceph['ceph'].conf.get(client, {}))
-        key = 'rgw compression type'
-        if not key in ceph_config:
-            log.debug('No compression setting to enable')
-            break
-        compression = ceph_config[key]
-        log.debug('Configuring compression type = %s', compression)
+    compression = ctx.rgw.compression_type
+    if not compression:
+        return
 
+    log.debug('Configuring compression type = %s', compression)
+    for client, c_config in config.iteritems():
         # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
         # issue a 'radosgw-admin user list' command to trigger this
         rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
 
         rgwadmin(ctx, client,
                 cmd=['zone', 'placement', 'modify', '--rgw-zone', 'default',
-                     '--placement-id', 'default-placement', '--compression', compression],
+                     '--placement-id', 'default-placement',
+                     '--compression', compression],
                 check_status=True)
-        break # only the first client
 
 @contextlib.contextmanager
 def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
@@ -1121,53 +1114,26 @@ def task(ctx, config):
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('rgw', {}))
 
-    regions = {}
-    if 'regions' in config:
-        # separate region info so only clients are keys in config
-        regions = config['regions']
-        del config['regions']
+    regions = config.pop('regions', {})
+    realm = config.pop('realm', None)
 
     role_endpoints = assign_ports(ctx, config)
     ctx.rgw = argparse.Namespace()
     ctx.rgw.role_endpoints = role_endpoints
-    # stash the region info for later, since it was deleted from the config
-    # structure
     ctx.rgw.regions = regions
-
-    realm = None
-    if 'realm' in config:
-        # separate region info so only clients are keys in config
-        realm = config['realm']
-        del config['realm']
     ctx.rgw.realm = realm
 
-    ctx.rgw.ec_data_pool = False
-    if 'ec-data-pool' in config:
-        ctx.rgw.ec_data_pool = bool(config['ec-data-pool'])
-        del config['ec-data-pool']
-    ctx.rgw.erasure_code_profile = {}
-    if 'erasure_code_profile' in config:
-        ctx.rgw.erasure_code_profile = config['erasure_code_profile']
-        del config['erasure_code_profile']
-    ctx.rgw.default_idle_timeout = 30
-    if 'default_idle_timeout' in config:
-        ctx.rgw.default_idle_timeout = int(config['default_idle_timeout'])
-        del config['default_idle_timeout']
-    ctx.rgw.cache_pools = False
-    if 'cache-pools' in config:
-        ctx.rgw.cache_pools = bool(config['cache-pools'])
-        del config['cache-pools']
+    ctx.rgw.ec_data_pool = bool(config.pop('ec-data-pool', False))
+    ctx.rgw.erasure_code_profile = config.pop('erasure_code_profile', {})
+    ctx.rgw.default_idle_timeout = int(config.pop('default_idle_timeout', 30))
+    ctx.rgw.cache_pools = bool(config.pop('cache-pools', False))
+    ctx.rgw.frontend = config.pop('frontend', 'civetweb')
 
-    ctx.rgw.frontend = 'civetweb'
-    if 'frontend' in config:
-        ctx.rgw.frontend = config['frontend']
-        del config['frontend']
-
-    ctx.rgw.use_fastcgi = True
-    if "use_fcgi" in config:
-        ctx.rgw.use_fastcgi = False
+    ctx.rgw.use_fastcgi = not config.pop('use_fcgi', True)
+    if not ctx.rgw.use_fastcgi:
         log.info("Using mod_proxy_fcgi instead of mod_fastcgi...")
-        del config['use_fcgi']
+
+    ctx.rgw.compression_type = config.pop('compression type', None)
 
     subtasks = [
         lambda: create_nonregion_pools(
