@@ -60,7 +60,7 @@ Build instructions:
 	make
 
 This assumes you make your build dir a subdirectory of the ceph.git
-checkout. If you put it elsewhere, just replace .. above with a
+checkout. If you put it elsewhere, just replace .. in do_cmake.sh with a
 correct path to the checkout.
 
 To build only certain targets use:
