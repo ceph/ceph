@@ -49,7 +49,7 @@ class DaemonState(object):
         if self.use_init:
             _, role = role.split('.')
             if (role == 'mon') or (role == 'mds') or (role == 'rgw'):
-                self.id = remote.shortname
+                self.id_ = remote.shortname
             self._set_commands()
         self.log = command_kwargs.get('logger', log)
         self.proc = None
@@ -66,8 +66,8 @@ class DaemonState(object):
         """
         if not self.use_init:
             raise NotImplementedError
-        proc_name = 'ceph-%s' % self.role
-        proc_regex = '"%s.*--id %s"' % (proc_name, self.id)
+        proc_name = 'ceph-%s' % self.type_
+        proc_regex = '"%s.*--id %s"' % (proc_name, self.id_)
         args = ['ps', '-ef',
                 run.Raw('|'),
                 'grep',
