@@ -328,13 +328,13 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
   }
 
   if (opslog_buffer.length() == 0) {
-    ldout(cct, 0) << __func__ << "bucket_bl_fetch has no entries" << dendl;
+    ldout(cct, 0) << __func__ << " bucket_bl_fetch has no entries" << dendl;
     return 0;
   }
 
   string target_key = render_target_key(cct, target_prefix, opslog_obj);
   if (target_key.empty()) {
-    ldout(cct, 0) << __func__ << "render target object failed ret=" << dendl;
+    ldout(cct, 0) << __func__ << " render target object failed ret=" << dendl;
     return -1;
   }
 
@@ -343,7 +343,7 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
   r = bucket_bl_upload(&opslog_buffer, tobject);
   opslog_buffer.clear();
   if (r < 0) {
-    ldout(cct, 0) << __func__ << "bucket_bl_upload() failed ret="
+    ldout(cct, 0) << __func__ << " bucket_bl_upload() failed ret="
 		  << cpp_strerror(-r) << dendl;
     return r;
   } else {
@@ -419,7 +419,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
     return 0;
   } else {
     if (ret < 0) {
-      ldout(cct, 0) << __func__ << "list_log_init() failed ret="
+      ldout(cct, 0) << __func__ << " list_log_init() failed ret="
 		    << cpp_strerror(-ret) << dendl;
       return ret;
     }
