@@ -1877,9 +1877,9 @@ bool MDSRankDispatcher::handle_asok_command(
 
     mds_lock.Lock();
     std::stringstream dss;
-    bool killed = kill_session(strtol(client_id.c_str(), 0, 10), true,
+    bool evicted = evict_client(strtol(client_id.c_str(), 0, 10), true,
         g_conf->mds_session_blacklist_on_evict, dss);
-    if (!killed) {
+    if (!evicted) {
       dout(15) << dss.str() << dendl;
       ss << dss.str();
     }
@@ -1972,7 +1972,7 @@ public:
  * MDSRank after calling it (we could have gone into shutdown): just
  * send your result back to the calling client and finish.
  */
-void MDSRankDispatcher::evict_sessions(const SessionFilter &filter, MCommand *m)
+void MDSRankDispatcher::evict_clients(const SessionFilter &filter, MCommand *m)
 {
   C_MDS_Send_Command_Reply *reply = new C_MDS_Send_Command_Reply(this, m);
 
@@ -2007,8 +2007,8 @@ void MDSRankDispatcher::evict_sessions(const SessionFilter &filter, MCommand *m)
   C_GatherBuilder gather(g_ceph_context, reply);
   for (const auto s : victims) {
     std::stringstream ss;
-    kill_session(s->info.inst.name.num(), false,
-        g_conf->mds_session_blacklist_on_evict, ss, gather.new_sub());
+    evict_client(s->info.inst.name.num(), false,
+                 g_conf->mds_session_blacklist_on_evict, ss, gather.new_sub());
   }
   gather.activate();
 }
@@ -2636,7 +2636,7 @@ void MDSRankDispatcher::handle_osd_map()
   objecter->maybe_request_map();
 }
 
-bool MDSRank::kill_session(int64_t session_id,
+bool MDSRank::evict_client(int64_t session_id,
     bool wait, bool blacklist, std::stringstream& err_ss,
     Context *on_killed)
 {
@@ -2820,7 +2820,7 @@ bool MDSRankDispatcher::handle_command(
       return true;
     }
 
-    evict_sessions(filter, m);
+    evict_clients(filter, m);
 
     *need_reply = false;
     return true;
