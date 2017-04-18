@@ -27,16 +27,15 @@ class ServeThread;
 
 class PyModules
 {
-  protected:
-  std::map<std::string, MgrPyModule*> modules;
-  std::map<std::string, ServeThread*> serve_threads;
+  std::map<std::string, std::unique_ptr<MgrPyModule>> modules;
+  std::map<std::string, std::unique_ptr<ServeThread>> serve_threads;
 
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
   Finisher &finisher;
 
-  mutable Mutex lock;
+  mutable Mutex lock{"PyModules"};
 
   std::string get_site_packages();
 
@@ -44,11 +43,9 @@ public:
   static constexpr auto config_prefix = "mgr.";
 
   PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-            Finisher &f)
-    : daemon_state(ds), cluster_state(cs), monc(mc), finisher(f),
-      lock("PyModules")
-  {
-  }
+            Finisher &f);
+
+  ~PyModules();
 
   // FIXME: wrap for send_command?
   MonClient &get_monc() {return monc;}
