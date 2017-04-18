@@ -833,10 +833,11 @@ public:
 
   void read_log(ObjectStore *store, coll_t pg_coll,
 		coll_t log_coll, ghobject_t log_oid,
-		const pg_info_t &info, ostringstream &oss) {
+		const pg_info_t &info, ostringstream &oss,
+		bool tolerate_divergent_missing_log) {
     return read_log(
       store, pg_coll, log_coll, log_oid, info, divergent_priors,
-      log, missing, oss,
+      log, missing, oss, tolerate_divergent_missing_log,
       this,
       (pg_log_debug ? &log_keys_debug : 0));
   }
@@ -846,6 +847,7 @@ public:
     const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
     IndexedLog &log,
     pg_missing_t &missing, ostringstream &oss,
+    bool tolerate_divergent_missing_log,
     const DoutPrefixProvider *dpp = NULL,
     set<string> *log_keys_debug = 0
     );
