@@ -690,15 +690,18 @@ int RGWOp::verify_op_mask()
 
 int RGWOp::do_aws4_auth_completion()
 {
-  if (s->aws4_auth_needs_complete) {
-    /* complete */
-    int ret = RGW_Auth_S3::authorize_aws4_auth_complete(store, s);
-    s->aws4_auth_needs_complete = false;
-    if (ret) {
-      return ret;
+  ldout(s->cct, 5) << "NOTICE: call to do_aws4_auth_completion"  << dendl;
+  if (s->auth.completer) {
+    if (!s->auth.completer->complete()) {
+      return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
+    } else {
+      dout(10) << "v4 auth ok -- do_aws4_auth_completion" << dendl;
     }
-    /* authorization ok */
-    dout(10) << "v4 auth ok" << dendl;
+
+    /* TODO(rzarzynski): yes, we're really called twice on PUTs. Only first
+     * call passes, so we disable second one. This is old behaviour, sorry!
+     * Plan for tomorrow: seek and destroy. */
+    s->auth.completer = nullptr;
   }
 
   return 0;
