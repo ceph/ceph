@@ -210,6 +210,16 @@ static inline const char* get_v4_exp_payload_hash(const req_info& info)
   return expected_request_payload_hash;
 }
 
+static inline bool is_v4_payload_unsigned(const char* const exp_payload_hash)
+{
+  return boost::string_ref("UNSIGNED-PAYLOAD").compare(exp_payload_hash) == 0;
+}
+
+static inline bool is_v4_payload_streamed(const char* const exp_payload_hash)
+{
+  return boost::string_ref("STREAMING-AWS4-HMAC-SHA256-PAYLOAD").compare(exp_payload_hash) == 0;
+}
+
 std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
 boost::optional<std::string> get_v4_canonical_headers(const req_info& info,
