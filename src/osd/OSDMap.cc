@@ -441,10 +441,10 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ::encode(new_erasure_code_profiles, bl);
     ::encode(old_erasure_code_profiles, bl);
     if (v >= 4) {
-      ::encode(new_pg_remap, bl);
-      ::encode(old_pg_remap, bl);
-      ::encode(new_pg_remap_items, bl);
-      ::encode(old_pg_remap_items, bl);
+      ::encode(new_pg_upmap, bl);
+      ::encode(old_pg_upmap, bl);
+      ::encode(new_pg_upmap_items, bl);
+      ::encode(old_pg_upmap_items, bl);
     }
     ENCODE_FINISH(bl); // client-usable data
   }
@@ -645,10 +645,10 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
       old_erasure_code_profiles.clear();
     }
     if (struct_v >= 4) {
-      ::decode(new_pg_remap, bl);
-      ::decode(old_pg_remap, bl);
-      ::decode(new_pg_remap_items, bl);
-      ::decode(old_pg_remap_items, bl);
+      ::decode(new_pg_upmap, bl);
+      ::decode(old_pg_upmap, bl);
+      ::decode(new_pg_upmap_items, bl);
+      ::decode(old_pg_upmap_items, bl);
     }
     DECODE_FINISH(bl); // client-usable data
   }
@@ -822,8 +822,8 @@ void OSDMap::Incremental::dump(Formatter *f) const
   }
   f->close_section(); // primary_temp
 
-  f->open_array_section("new_pg_remap");
-  for (auto& i : new_pg_remap) {
+  f->open_array_section("new_pg_upmap");
+  for (auto& i : new_pg_upmap) {
     f->open_object_section("mapping");
     f->dump_stream("pgid") << i.first;
     f->open_array_section("osds");
@@ -834,14 +834,14 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
-  f->open_array_section("old_pg_remap");
-  for (auto& i : old_pg_remap) {
+  f->open_array_section("old_pg_upmap");
+  for (auto& i : old_pg_upmap) {
     f->dump_stream("pgid") << i;
   }
   f->close_section();
 
-  f->open_array_section("new_pg_remap_items");
-  for (auto& i : new_pg_remap_items) {
+  f->open_array_section("new_pg_upmap_items");
+  for (auto& i : new_pg_upmap_items) {
     f->open_object_section("mapping");
     f->dump_stream("pgid") << i.first;
     f->open_array_section("mappings");
@@ -855,8 +855,8 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
-  f->open_array_section("old_pg_remap_items");
-  for (auto& i : old_pg_remap_items) {
+  f->open_array_section("old_pg_upmap_items");
+  for (auto& i : old_pg_upmap_items) {
     f->dump_stream("pgid") << i;
   }
   f->close_section();
@@ -1128,7 +1128,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_TUNABLES5;
   mask |= CEPH_FEATURES_CRUSH;
 
-  if (!pg_remap.empty() || !pg_remap_items.empty())
+  if (!pg_upmap.empty() || !pg_upmap_items.empty())
     features |= CEPH_FEATUREMASK_OSDMAP_REMAP;
   mask |= CEPH_FEATUREMASK_OSDMAP_REMAP;
 
@@ -1540,17 +1540,17 @@ int OSDMap::apply_incremental(const Incremental &inc)
       (*primary_temp)[p->first] = p->second;
   }
 
-  for (auto& p : inc.new_pg_remap) {
-    pg_remap[p.first] = p.second;
+  for (auto& p : inc.new_pg_upmap) {
+    pg_upmap[p.first] = p.second;
   }
-  for (auto& pg : inc.old_pg_remap) {
-    pg_remap.erase(pg);
+  for (auto& pg : inc.old_pg_upmap) {
+    pg_upmap.erase(pg);
   }
-  for (auto& p : inc.new_pg_remap_items) {
-    pg_remap_items[p.first] = p.second;
+  for (auto& p : inc.new_pg_upmap_items) {
+    pg_upmap_items[p.first] = p.second;
   }
-  for (auto& pg : inc.old_pg_remap_items) {
-    pg_remap_items.erase(pg);
+  for (auto& pg : inc.old_pg_upmap_items) {
+    pg_upmap_items.erase(pg);
   }
 
   // blacklist
@@ -1697,8 +1697,8 @@ int OSDMap::_pick_primary(const vector<int>& osds) const
 void OSDMap::_apply_remap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) const
 {
   pg_t pg = pi.raw_pg_to_pg(raw_pg);
-  auto p = pg_remap.find(pg);
-  if (p != pg_remap.end()) {
+  auto p = pg_upmap.find(pg);
+  if (p != pg_upmap.end()) {
     // make sure targets aren't marked out
     for (auto osd : p->second) {
       if (osd != CRUSH_ITEM_NONE && osd < max_osd && osd_weight[osd] == 0) {
@@ -1710,8 +1710,8 @@ void OSDMap::_apply_remap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
     return;
   }
 
-  auto q = pg_remap_items.find(pg);
-  if (q != pg_remap_items.end()) {
+  auto q = pg_upmap_items.find(pg);
+  if (q != pg_upmap_items.end()) {
     // NOTE: this approach does not allow a bidirectional swap,
     // e.g., [[1,2],[2,1]] applied to [0,1,2] -> [0,2,1].
     for (auto& r : q->second) {
@@ -2138,11 +2138,11 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(erasure_code_profiles, bl);
 
     if (v >= 4) {
-      ::encode(pg_remap, bl);
-      ::encode(pg_remap_items, bl);
+      ::encode(pg_upmap, bl);
+      ::encode(pg_upmap_items, bl);
     } else {
-      assert(pg_remap.empty());
-      assert(pg_remap_items.empty());
+      assert(pg_upmap.empty());
+      assert(pg_upmap_items.empty());
     }
     ENCODE_FINISH(bl); // client-usable data
   }
@@ -2380,11 +2380,11 @@ void OSDMap::decode(bufferlist::iterator& bl)
       erasure_code_profiles.clear();
     }
     if (struct_v >= 4) {
-      ::decode(pg_remap, bl);
-      ::decode(pg_remap_items, bl);
+      ::decode(pg_upmap, bl);
+      ::decode(pg_upmap_items, bl);
     } else {
-      pg_remap.clear();
-      pg_remap_items.clear();
+      pg_upmap.clear();
+      pg_upmap_items.clear();
     }
     DECODE_FINISH(bl); // client-usable data
   }
@@ -2537,8 +2537,8 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section();
 
-  f->open_array_section("pg_remap");
-  for (auto& p : pg_remap) {
+  f->open_array_section("pg_upmap");
+  for (auto& p : pg_upmap) {
     f->open_object_section("mapping");
     f->dump_stream("pgid") << p.first;
     f->open_array_section("osds");
@@ -2549,8 +2549,8 @@ void OSDMap::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
-  f->open_array_section("pg_remap_items");
-  for (auto& p : pg_remap_items) {
+  f->open_array_section("pg_upmap_items");
+  for (auto& p : pg_upmap_items) {
     f->open_object_section("mapping");
     f->dump_stream("pgid") << p.first;
     f->open_array_section("mappings");
@@ -2731,11 +2731,11 @@ void OSDMap::print(ostream& out) const
   }
   out << std::endl;
 
-  for (auto& p : pg_remap) {
-    out << "pg_remap " << p.first << " " << p.second << "\n";
+  for (auto& p : pg_upmap) {
+    out << "pg_upmap " << p.first << " " << p.second << "\n";
   }
-  for (auto& p : pg_remap_items) {
-    out << "pg_remap_items " << p.first << " " << p.second << "\n";
+  for (auto& p : pg_upmap_items) {
+    out << "pg_upmap_items " << p.first << " " << p.second << "\n";
   }
 
   for (map<pg_t,vector<int32_t> >::const_iterator p = pg_temp->begin();
@@ -3316,24 +3316,24 @@ int OSDMap::summarize_mapping_stats(
 }
 
 
-int OSDMap::clean_remaps(
+int OSDMap::clean_pg_upmaps(
   CephContext *cct,
   Incremental *pending_inc)
 {
   ldout(cct, 10) << __func__ << dendl;
   int changed = 0;
-  for (auto& p : pg_remap) {
+  for (auto& p : pg_upmap) {
     vector<int> raw;
     int primary;
     pg_to_raw_osds(p.first, &raw, &primary);
     if (raw == p.second) {
-      ldout(cct, 10) << " removing redundant pg_remap " << p.first << " "
+      ldout(cct, 10) << " removing redundant pg_upmap " << p.first << " "
 		     << p.second << dendl;
-      pending_inc->old_pg_remap.insert(p.first);
+      pending_inc->old_pg_upmap.insert(p.first);
       ++changed;
     }
   }
-  for (auto& p : pg_remap_items) {
+  for (auto& p : pg_upmap_items) {
     vector<int> raw;
     int primary;
     pg_to_raw_osds(p.first, &raw, &primary);
@@ -3344,21 +3344,21 @@ int OSDMap::clean_remaps(
       }
     }
     if (newmap.empty()) {
-      ldout(cct, 10) << " removing no-op pg_remap_items " << p.first << " "
+      ldout(cct, 10) << " removing no-op pg_upmap_items " << p.first << " "
 		     << p.second << dendl;
-      pending_inc->old_pg_remap_items.insert(p.first);
+      pending_inc->old_pg_upmap_items.insert(p.first);
       ++changed;
     } else if (newmap != p.second) {
-      ldout(cct, 10) << " simplifying partially no-op pg_remap_items "
+      ldout(cct, 10) << " simplifying partially no-op pg_upmap_items "
 		     << p.first << " " << p.second << " -> " << newmap << dendl;
-      pending_inc->new_pg_remap_items[p.first] = newmap;
+      pending_inc->new_pg_upmap_items[p.first] = newmap;
       ++changed;
     }
   }
   return changed;
 }
 
-bool OSDMap::try_pg_remap(
+bool OSDMap::try_pg_upmap(
   CephContext *cct,
   pg_t pg,                       ///< pg to potentially remap
   const set<int>& overfull,      ///< osds we'd want to evacuate
@@ -3403,7 +3403,7 @@ bool OSDMap::try_pg_remap(
   return true;
 }
 
-int OSDMap::remap_pgs(
+int OSDMap::calc_pg_upmaps(
   CephContext *cct,
   float max_deviation,
   int max,
@@ -3500,14 +3500,14 @@ int OSDMap::remap_pgs(
 
       // look for remaps we can un-remap
       for (auto pg : pgs) {
-	auto p = tmp.pg_remap_items.find(pg);
-	if (p != tmp.pg_remap_items.end()) {
+	auto p = tmp.pg_upmap_items.find(pg);
+	if (p != tmp.pg_upmap_items.end()) {
 	  for (auto q : p->second) {
 	    if (q.second == osd) {
-	      ldout(cct, 10) << "  dropping pg_remap_items " << pg
+	      ldout(cct, 10) << "  dropping pg_upmap_items " << pg
 			     << " " << p->second << dendl;
-	      tmp.pg_remap_items.erase(p);
-	      pending_inc->old_pg_remap_items.insert(pg);
+	      tmp.pg_upmap_items.erase(p);
+	      pending_inc->old_pg_upmap_items.insert(pg);
 	      ++num_changed;
 	      restart = true;
 	    }
@@ -3520,14 +3520,14 @@ int OSDMap::remap_pgs(
 	break;
 
       for (auto pg : pgs) {
-	if (tmp.pg_remap.count(pg) ||
-	    tmp.pg_remap_items.count(pg)) {
+	if (tmp.pg_upmap.count(pg) ||
+	    tmp.pg_upmap_items.count(pg)) {
 	  ldout(cct, 20) << "  already remapped " << pg << dendl;
 	  continue;
 	}
 	ldout(cct, 10) << "  trying " << pg << dendl;
 	vector<int> orig, out;
-	if (!try_pg_remap(cct, pg, overfull, underfull, &orig, &out)) {
+	if (!try_pg_upmap(cct, pg, overfull, underfull, &orig, &out)) {
 	  continue;
 	}
 	ldout(cct, 10) << "  " << pg << " " << orig << " -> " << out << dendl;
@@ -3535,14 +3535,14 @@ int OSDMap::remap_pgs(
 	  continue;
 	}
 	assert(orig != out);
-	vector<pair<int,int>>& rmi = tmp.pg_remap_items[pg];
+	vector<pair<int,int>>& rmi = tmp.pg_upmap_items[pg];
 	for (unsigned i = 0; i < out.size(); ++i) {
 	  if (orig[i] != out[i]) {
 	    rmi.push_back(make_pair(orig[i], out[i]));
 	  }
 	}
-	pending_inc->new_pg_remap_items[pg] = rmi;
-	ldout(cct, 10) << "  " << pg << " pg_remap_items " << rmi << dendl;
+	pending_inc->new_pg_upmap_items[pg] = rmi;
+	ldout(cct, 10) << "  " << pg << " pg_upmap_items " << rmi << dendl;
 	restart = true;
 	++num_changed;
 	break;

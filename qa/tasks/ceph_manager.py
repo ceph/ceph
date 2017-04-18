@@ -123,8 +123,8 @@ class Thrasher:
         self.dump_ops_enable = self.config.get('dump_ops_enable')
         self.noscrub_toggle_delay = self.config.get('noscrub_toggle_delay')
         self.chance_thrash_cluster_full = self.config.get('chance_thrash_cluster_full', .05)
-        self.chance_thrash_pg_remap = self.config.get('chance_thrash_pg_remap', 1.0)
-        self.chance_thrash_pg_remap_items = self.config.get('chance_thrash_pg_remap', 1.0)
+        self.chance_thrash_pg_upmap = self.config.get('chance_thrash_pg_upmap', 1.0)
+        self.chance_thrash_pg_upmap_items = self.config.get('chance_thrash_pg_upmap', 1.0)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -507,9 +507,9 @@ class Thrasher:
         self.log('Setting full ratio back to .95')
         self.ceph_manager.raw_cluster_cmd('osd', 'set-full-ratio', '.95')
 
-    def thrash_pg_remap(self):
+    def thrash_pg_upmap(self):
         """
-        Install or remove random pg_remap entries in OSDMap
+        Install or remove random pg_upmap entries in OSDMap
         """
         from random import shuffle
         out = self.ceph_manager.raw_cluster_cmd('osd', 'dump', '-f', 'json-pretty')
@@ -529,27 +529,27 @@ class Thrasher:
                 shuffle(osds)
                 osds = osds[0:n]
                 self.log('Setting %s to %s' % (pgid, osds))
-                cmd = ['osd', 'pg-remap', pgid] + [str(x) for x in osds]
+                cmd = ['osd', 'pg-upmap', pgid] + [str(x) for x in osds]
                 self.log('cmd %s' % cmd)
                 self.ceph_manager.raw_cluster_cmd(*cmd)
             else:
-                m = j['pg_remap']
+                m = j['pg_upmap']
                 if len(m) > 0:
                     shuffle(m)
                     pg = m[0]['pgid']
-                    self.log('Clearing pg_remap on %s' % pg)
+                    self.log('Clearing pg_upmap on %s' % pg)
                     self.ceph_manager.raw_cluster_cmd(
                         'osd',
-                        'rm-pg-remap',
+                        'rm-pg-upmap',
                         pg)
                 else:
-                    self.log('No pg_remap entries; doing nothing')
+                    self.log('No pg_upmap entries; doing nothing')
         except CommandFailedError:
-            self.log('Failed to rm-pg-remap, ignoring')
+            self.log('Failed to rm-pg-upmap, ignoring')
 
-    def thrash_pg_remap_items(self):
+    def thrash_pg_upmap_items(self):
         """
-        Install or remove random pg_remap_items entries in OSDMap
+        Install or remove random pg_upmap_items entries in OSDMap
         """
         from random import shuffle
         out = self.ceph_manager.raw_cluster_cmd('osd', 'dump', '-f', 'json-pretty')
@@ -569,23 +569,23 @@ class Thrasher:
                 shuffle(osds)
                 osds = osds[0:n*2]
                 self.log('Setting %s to %s' % (pgid, osds))
-                cmd = ['osd', 'pg-remap-items', pgid] + [str(x) for x in osds]
+                cmd = ['osd', 'pg-upmap-items', pgid] + [str(x) for x in osds]
                 self.log('cmd %s' % cmd)
                 self.ceph_manager.raw_cluster_cmd(*cmd)
             else:
-                m = j['pg_remap_items']
+                m = j['pg_upmap_items']
                 if len(m) > 0:
                     shuffle(m)
                     pg = m[0]['pgid']
-                    self.log('Clearing pg_remap on %s' % pg)
+                    self.log('Clearing pg_upmap on %s' % pg)
                     self.ceph_manager.raw_cluster_cmd(
                         'osd',
-                        'rm-pg-remap-items',
+                        'rm-pg-upmap-items',
                         pg)
                 else:
-                    self.log('No pg_remap entries; doing nothing')
+                    self.log('No pg_upmap entries; doing nothing')
         except CommandFailedError:
-            self.log('Failed to rm-pg-remap-items, ignoring')
+            self.log('Failed to rm-pg-upmap-items, ignoring')
 
     def all_up(self):
         """
@@ -805,10 +805,10 @@ class Thrasher:
                         chance_test_backfill_full,))
         if self.chance_thrash_cluster_full > 0:
             actions.append((self.thrash_cluster_full, self.chance_thrash_cluster_full,))
-        if self.chance_thrash_pg_remap > 0:
-            actions.append((self.thrash_pg_remap, self.chance_thrash_pg_remap,))
-        if self.chance_thrash_pg_remap_items > 0:
-            actions.append((self.thrash_pg_remap_items, self.chance_thrash_pg_remap_items,))
+        if self.chance_thrash_pg_upmap > 0:
+            actions.append((self.thrash_pg_upmap, self.chance_thrash_pg_upmap,))
+        if self.chance_thrash_pg_upmap_items > 0:
+            actions.append((self.thrash_pg_upmap_items, self.chance_thrash_pg_upmap_items,))
 
         for key in ['heartbeat_inject_failure', 'filestore_inject_stall']:
             for scenario in [
