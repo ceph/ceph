@@ -28,7 +28,6 @@ override_dh_auto_configure:
 override_dh_auto_build:
 	dh_auto_build --buildsystem=cmake
 	cp src/init-radosgw debian/radosgw.init
-	cp src/logrotate.conf debian/ceph.logrotate
 
 override_dh_auto_clean:
 	dh_auto_clean --buildsystem=cmake
@@ -49,7 +48,8 @@ override_dh_installdocs:
 	dh_installdocs -a --all ChangeLog
 
 override_dh_installlogrotate:
-	dh_installlogrotate -pceph-base --name ceph
+	cp src/logrotate.conf debian/ceph-base.ceph.logrotate
+	dh_installlogrotate -pceph-base --name=ceph
 
 override_dh_installinit:
 	# dh_installinit is only set up to handle one upstart script
