@@ -10,7 +10,6 @@ from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
-# simple test to indicate if multi-region testing should occur
 def multi_region_enabled(ctx):
     # this is populated by the radosgw-agent task, seems reasonable to
     # use that as an indicator that we're testing multi-region sync
@@ -20,6 +19,8 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
              format='json'):
     log.info('rgwadmin: {client} : {cmd}'.format(client=client,cmd=cmd))
     testdir = teuthology.get_testdir(ctx)
+    cluster_name, daemon_type, client_id = teuthology.split_role(client)
+    client_with_id = daemon_type + '.' + client_id
     pre = [
         'adjust-ulimits',
         'ceph-coverage'.format(tdir=testdir),
@@ -27,7 +28,8 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
         'radosgw-admin'.format(tdir=testdir),
         '--log-to-stderr',
         '--format', format,
-        '-n',  client,
+        '-n',  client_with_id,
+        '--cluster', cluster_name,
         ]
     pre.extend(cmd)
     log.info('rgwadmin: cmd=%s' % pre)
@@ -70,8 +72,10 @@ def get_user_successful_ops(out, user):
     return get_user_summary(out, user)['total']['successful_ops']
 
 def get_zone_host_and_port(ctx, client, zone):
+    cluster_name, daemon_type, client_id = teuthology.split_role(client)
+    client_with_id = daemon_type + '.' + client_id
     _, period = rgwadmin(ctx, client, check_status=True,
-                         cmd=['-n', client, 'period', 'get'])
+                         cmd=['period', 'get'])
     period_map = period['period_map']
     zonegroups = period_map['zonegroups']
     for zonegroup in zonegroups:
@@ -85,8 +89,10 @@ def get_zone_host_and_port(ctx, client, zone):
     assert False, 'no endpoint for zone {zone} found'.format(zone=zone)
 
 def get_master_zone(ctx, client):
+    cluster_name, daemon_type, client_id = teuthology.split_role(client)
+    client_with_id = daemon_type + '.' + client_id
     _, period = rgwadmin(ctx, client, check_status=True,
-                         cmd=['-n', client, 'period', 'get'])
+                         cmd=['period', 'get'])
     period_map = period['period_map']
     zonegroups = period_map['zonegroups']
     for zonegroup in zonegroups:
@@ -116,27 +122,29 @@ def get_master_client(ctx, clients):
 
 def get_zone_system_keys(ctx, client, zone):
     _, zone_info = rgwadmin(ctx, client, check_status=True,
-                            cmd=['-n', client,
-                                 'zone', 'get', '--rgw-zone', zone])
+                            cmd=['zone', 'get', '--rgw-zone', zone])
     system_key = zone_info['system_key']
     return system_key['access_key'], system_key['secret_key']
 
 def zone_for_client(ctx, client):
-    ceph_config = ctx.ceph['ceph'].conf.get('global', {})
-    ceph_config.update(ctx.ceph['ceph'].conf.get('client', {}))
-    ceph_config.update(ctx.ceph['ceph'].conf.get(client, {}))
+    cluster_name, daemon_type, client_id = teuthology.split_role(client)
+    ceph_config = ctx.ceph[cluster_name].conf.get('global', {})
+    ceph_config.update(ctx.ceph[cluster_name].conf.get('client', {}))
+    ceph_config.update(ctx.ceph[cluster_name].conf.get(client, {}))
     return ceph_config.get('rgw zone')
 
 def region_for_client(ctx, client):
-    ceph_config = ctx.ceph['ceph'].conf.get('global', {})
-    ceph_config.update(ctx.ceph['ceph'].conf.get('client', {}))
-    ceph_config.update(ctx.ceph['ceph'].conf.get(client, {}))
+    cluster_name, daemon_type, client_id = teuthology.split_role(client)
+    ceph_config = ctx.ceph[cluster_name].conf.get('global', {})
+    ceph_config.update(ctx.ceph[cluster_name].conf.get('client', {}))
+    ceph_config.update(ctx.ceph[cluster_name].conf.get(client, {}))
     return ceph_config.get('rgw region')
 
 def radosgw_data_log_window(ctx, client):
-    ceph_config = ctx.ceph['ceph'].conf.get('global', {})
-    ceph_config.update(ctx.ceph['ceph'].conf.get('client', {}))
-    ceph_config.update(ctx.ceph['ceph'].conf.get(client, {}))
+    cluster_name, daemon_type, client_id = teuthology.split_role(client)
+    ceph_config = ctx.ceph[cluster_name].conf.get('global', {})
+    ceph_config.update(ctx.ceph[cluster_name].conf.get('client', {}))
+    ceph_config.update(ctx.ceph[cluster_name].conf.get(client, {}))
     return ceph_config.get('rgw data log window', 30)
 
 def radosgw_agent_sync_data(ctx, agent_host, agent_port, full=False):
@@ -181,3 +189,116 @@ def get_sync_agent(ctx, source):
             if conf['src'] == source:
                 return host_for_role(ctx, source), conf.get('port', 8000)
     return None, None
+
+def extract_zone_info(ctx, client, client_config):
+    """
+    Get zone information.
+    :param client: dictionary of client information
+    :param client_config: dictionary of client configuration information
+    :returns: zone extracted from client and client_config information
+    """
+    cluster_name, daemon_type, client_id = teuthology.split_role(client)
+    client_with_id = daemon_type + '.' + client_id
+    ceph_config = ctx.ceph[cluster_name].conf.get('global', {})
+    ceph_config.update(ctx.ceph[cluster_name].conf.get('client', {}))
+    ceph_config.update(ctx.ceph[cluster_name].conf.get(client_with_id, {}))
+    for key in ['rgw zone', 'rgw region', 'rgw zone root pool']:
+        assert key in ceph_config, \
+            'ceph conf must contain {key} for {client}'.format(key=key,
+                                                               client=client)
+    region = ceph_config['rgw region']
+    zone = ceph_config['rgw zone']
+    zone_info = dict()
+    for key in ['rgw control pool', 'rgw gc pool', 'rgw log pool',
+                'rgw intent log pool', 'rgw usage log pool',
+                'rgw user keys pool', 'rgw user email pool',
+                'rgw user swift pool', 'rgw user uid pool',
+                'rgw domain root']:
+        new_key = key.split(' ', 1)[1]
+        new_key = new_key.replace(' ', '_')
+
+        if key in ceph_config:
+            value = ceph_config[key]
+            log.debug('{key} specified in ceph_config ({val})'.format(
+                key=key, val=value))
+            zone_info[new_key] = value
+        else:
+            zone_info[new_key] = '.' + region + '.' + zone + '.' + new_key
+
+    index_pool = '.' + region + '.' + zone + '.' + 'index_pool'
+    data_pool = '.' + region + '.' + zone + '.' + 'data_pool'
+    data_extra_pool = '.' + region + '.' + zone + '.' + 'data_extra_pool'
+    compression_type = ceph_config.get('rgw compression type', '')
+
+    zone_info['placement_pools'] = [{'key': 'default_placement',
+                                     'val': {'index_pool': index_pool,
+                                             'data_pool': data_pool,
+                                             'data_extra_pool': data_extra_pool,
+                                             'compression': compression_type}
+                                     }]
+
+    # these keys are meant for the zones argument in the region info.  We
+    # insert them into zone_info with a different format and then remove them
+    # in the fill_in_endpoints() method
+    for key in ['rgw log meta', 'rgw log data']:
+        if key in ceph_config:
+            zone_info[key] = ceph_config[key]
+
+    # these keys are meant for the zones argument in the region info.  We
+    # insert them into zone_info with a different format and then remove them
+    # in the fill_in_endpoints() method
+    for key in ['rgw log meta', 'rgw log data']:
+        if key in ceph_config:
+            zone_info[key] = ceph_config[key]
+
+    return region, zone, zone_info
+
+def extract_region_info(region, region_info):
+    """
+    Extract region information from the region_info parameter, using get
+    to set default values.
+
+    :param region: name of the region
+    :param region_info: region information (in dictionary form).
+    :returns: dictionary of region information set from region_info, using
+            default values for missing fields.
+    """
+    assert isinstance(region_info['zones'], list) and region_info['zones'], \
+        'zones must be a non-empty list'
+    return dict(
+        name=region,
+        api_name=region_info.get('api name', region),
+        is_master=region_info.get('is master', False),
+        log_meta=region_info.get('log meta', False),
+        log_data=region_info.get('log data', False),
+        master_zone=region_info.get('master zone', region_info['zones'][0]),
+        placement_targets=region_info.get('placement targets',
+                                          [{'name': 'default_placement',
+                                            'tags': []}]),
+        default_placement=region_info.get('default placement',
+                                          'default_placement'),
+        )
+
+def get_config_master_client(ctx, config, regions):
+
+    role_zones = dict([(client, extract_zone_info(ctx, client, c_config))
+                       for client, c_config in config.iteritems()])
+    log.debug('roles_zones = %r', role_zones)
+    region_info = dict([
+        (region_name, extract_region_info(region_name, r_config))
+        for region_name, r_config in regions.iteritems()])
+
+     # read master zonegroup and master_zone
+    for zonegroup, zg_info in region_info.iteritems():
+        if zg_info['is_master']:
+            master_zonegroup = zonegroup
+            master_zone = zg_info['master_zone']
+            break
+
+    for client in config.iterkeys():
+        (zonegroup, zone, zone_info) = role_zones[client]
+        if zonegroup == master_zonegroup and zone == master_zone:
+            return client
+
+    return None
+
