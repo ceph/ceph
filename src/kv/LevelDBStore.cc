@@ -11,6 +11,9 @@ using std::string;
 #include "common/debug.h"
 #include "common/perf_counters.h"
 
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_leveldb
 #undef dout_prefix

@@ -19,11 +19,14 @@
 
 #include "PurgeQueue.h"
 
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, rank) << __func__ << ": "
+
 static ostream& _prefix(std::ostream *_dout, mds_rank_t rank) {
   return *_dout << "mds." << rank << ".purge_queue ";
 }
