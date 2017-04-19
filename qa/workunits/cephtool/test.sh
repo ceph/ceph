@@ -1459,28 +1459,22 @@ function test_mon_pg()
   ceph osd set-backfillfull-ratio .912
 
   # Check injected full results
-  WAITFORFULL=10
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull nearfull
-  sleep $WAITFORFULL
-  ceph health | grep "HEALTH_WARN.*1 nearfull osd(s)"
+  wait_for_health "HEALTH_WARN.*1 nearfull osd(s)"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull backfillfull
-  sleep $WAITFORFULL
-  ceph health | grep "HEALTH_WARN.*1 backfillfull osd(s)"
+  wait_for_health "HEALTH_WARN.*1 backfillfull osd(s)"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull failsafe
-  sleep $WAITFORFULL
   # failsafe and full are the same as far as the monitor is concerned
-  ceph health | grep "HEALTH_ERR.*1 full osd(s)"
+  wait_for_health "HEALTH_ERR.*1 full osd(s)"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull full
-  sleep  $WAITFORFULL
-  ceph health | grep "HEALTH_ERR.*2 full osd(s)"
+  wait_for_health "HEALTH_ERR.*2 full osd(s)"
   ceph health detail | grep "osd.0 is full at.*%"
   ceph health detail | grep "osd.2 is full at.*%"
   ceph health detail | grep "osd.1 is backfill full at.*%"
   $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
   $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull none
   $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull none
-  sleep $WAITFORFULL
-  ceph health | grep HEALTH_OK
+  wait_for_health_ok
 
   ceph pg stat | grep 'pgs:'
   ceph pg 0.0 query
