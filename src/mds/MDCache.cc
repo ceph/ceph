@@ -8202,9 +8202,12 @@ struct C_MDC_OpenRemoteDentry : public MDCacheContext {
   MDSInternalContextBase *onfinish;
   bool want_xlocked;
   C_MDC_OpenRemoteDentry(MDCache *m, CDentry *d, inodeno_t i, MDSInternalContextBase *f, bool wx) :
-    MDCacheContext(m), dn(d), ino(i), onfinish(f), want_xlocked(wx) {}
+    MDCacheContext(m), dn(d), ino(i), onfinish(f), want_xlocked(wx) {
+    dn->get(MDSCacheObject::PIN_PTRWAITER);
+  }
   void finish(int r) override {
     mdcache->_open_remote_dentry_finish(dn, ino, onfinish, want_xlocked, r);
+    dn->put(MDSCacheObject::PIN_PTRWAITER);
   }
 };
 
@@ -8222,22 +8225,26 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSInternal
 					 bool want_xlocked, int r)
 {
   if (r < 0) {
+    CDentry::linkage_t *dnl = dn->get_projected_linkage();
+    if (dnl->is_remote() && dnl->get_remote_ino() == ino) {
       dout(0) << "open_remote_dentry_finish bad remote dentry " << *dn << dendl;
       dn->state_set(CDentry::STATE_BADREMOTEINO);
 
       std::string path;
       CDir *dir = dn->get_dir();
       if (dir) {
-        dir->get_inode()->make_path_string(path);
-        path =  path + "/" + dn->get_name();
+	dir->get_inode()->make_path_string(path);
+	path =  path + "/" + dn->get_name();
       }
 
-      bool fatal = mds->damage_table.notify_remote_damaged(
-          dn->get_projected_linkage()->get_remote_ino(), path);
+      bool fatal = mds->damage_table.notify_remote_damaged(ino, path);
       if (fatal) {
-        mds->damaged();
-        ceph_abort();  // unreachable, damaged() respawns us
+	mds->damaged();
+	ceph_abort();  // unreachable, damaged() respawns us
       }
+    } else {
+      r = 0;
+    }
   }
   fin->complete(r < 0 ? r : 0);
 }
