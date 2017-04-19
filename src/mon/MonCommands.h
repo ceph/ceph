@@ -651,24 +651,24 @@ COMMAND("osd pg-temp " \
 	"name=id,type=CephOsdName,n=N,req=false", \
 	"set pg_temp mapping pgid:[<id> [<id>...]] (developers only)", \
         "osd", "rw", "cli,rest")
-COMMAND("osd pg-remap " \
+COMMAND("osd pg-upmap " \
 	"name=pgid,type=CephPgid " \
 	"name=id,type=CephOsdName,n=N", \
-	"set pg_remap mapping <pgid>:[<id> [<id>...]] primary <primary> (developers only)", \
+	"set pg_upmap mapping <pgid>:[<id> [<id>...]] primary <primary> (developers only)", \
         "osd", "rw", "cli,rest")
-COMMAND("osd rm-pg-remap " \
+COMMAND("osd rm-pg-upmap " \
 	"name=pgid,type=CephPgid",					\
-	"clear pg_remap mapping for <pgid> (developers only)", \
+	"clear pg_upmap mapping for <pgid> (developers only)", \
         "osd", "rw", "cli,rest")
 
-COMMAND("osd pg-remap-items " \
+COMMAND("osd pg-upmap-items " \
 	"name=pgid,type=CephPgid " \
 	"name=id,type=CephOsdName,n=N", \
-	"set pg_remap_items mapping <pgid>:{<id> to <id>, [...]} (developers only)", \
+	"set pg_upmap_items mapping <pgid>:{<id> to <id>, [...]} (developers only)", \
         "osd", "rw", "cli,rest")
-COMMAND("osd rm-pg-remap-items " \
+COMMAND("osd rm-pg-upmap-items " \
 	"name=pgid,type=CephPgid",		  \
-	"clear pg_remap_items mapping for <pgid> (developers only)", \
+	"clear pg_upmap_items mapping for <pgid> (developers only)", \
         "osd", "rw", "cli,rest")
 COMMAND("osd primary-temp " \
 	"name=pgid,type=CephPgid " \
