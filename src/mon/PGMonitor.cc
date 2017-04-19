@@ -1588,7 +1588,9 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (!pi)
 	continue;   // in case osdmap changes haven't propagated to PGMap yet
       const string& name = mon->osdmon()->osdmap.get_pool_name(p->first);
-      if (pi->get_pg_num() > pi->get_pgp_num()) {
+      if (pi->get_pg_num() > pi->get_pgp_num() &&
+	  !(name.find(".DELETED") != string::npos &&
+	    g_conf->mon_fake_pool_delete)) {
 	ostringstream ss;
 	ss << "pool " << name << " pg_num "
 	   << pi->get_pg_num() << " > pgp_num " << pi->get_pgp_num();
