@@ -68,7 +68,7 @@ private:
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<> m_image_sync_throttler;
   std::map<PoolPeer, std::unique_ptr<Replayer> > m_replayers;
-  std::atomic<unsigned> m_stopping { false };
+  std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;
   MirrorAdminSocketHook *m_asok_hook;
 };
