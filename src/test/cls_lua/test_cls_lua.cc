@@ -529,7 +529,7 @@ objclass.register(current_subop_version)
 class ClsLua : public ::testing::Test {
   protected:
     static void SetUpTestCase() {
-      pool_name = get_temp_pool_name();
+      pool_name = get_temp_pool_name("test_cls_lua");
       ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
       ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
     }

@@ -67,7 +67,7 @@ class TestClsRbd : public ::testing::Test {
 public:
 
   static void SetUpTestCase() {
-    _pool_name = get_temp_pool_name();
+    _pool_name = get_temp_pool_name("test_cls_rbd");
     ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados));
   }
 

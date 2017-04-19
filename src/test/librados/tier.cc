@@ -2745,7 +2745,7 @@ public:
   ~LibRadosTwoPoolsECPP() override {};
 protected:
   static void SetUpTestCase() {
-    pool_name = get_temp_pool_name();
+    pool_name = get_temp_pool_name("LibRadosTwoPoolsECPP");
     ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
   }
   static void TearDownTestCase() {

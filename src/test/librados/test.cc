@@ -21,6 +21,16 @@
 
 using namespace librados;
 
+std::string get_temp_pool_name()
+{
+  const auto test_info =
+    ::testing::UnitTest::GetInstance()->current_test_info();
+  assert(test_info);
+  std::ostringstream oss;
+  oss << test_info->test_case_name() << "." << test_info->name();
+  return get_temp_pool_name(oss.str());
+}
+
 std::string get_temp_pool_name(const std::string &prefix)
 {
   char hostname[80];
