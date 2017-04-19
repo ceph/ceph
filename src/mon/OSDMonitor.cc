@@ -3846,17 +3846,16 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       f->dump_unsigned("epoch", osdmap.get_epoch());
       f->dump_stream("raw_pgid") << pgid;
       f->dump_stream("pgid") << mpgid;
-
       f->open_array_section("up");
-      for (vector<int>::iterator it = up.begin(); it != up.end(); ++it)
-	f->dump_int("up_osd", *it);
+      for (auto osd : up) {
+	f->dump_int("up_osd", osd);
+      }
       f->close_section();
-
       f->open_array_section("acting");
-      for (vector<int>::iterator it = acting.begin(); it != acting.end(); ++it)
-	f->dump_int("acting_osd", *it);
+      for (auto osd : acting) {
+	f->dump_int("acting_osd", osd);
+      }
       f->close_section();
-
       f->close_section();
       f->flush(rdata);
     } else {
