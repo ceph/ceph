@@ -11,7 +11,6 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
-    CEPH_ARGS+="--enable-experimental-unrecoverable-data-corrupting-features bluestore "
     # avoid running out of fds in rados bench
     CEPH_ARGS+="--filestore_wbthrottle_xfs_ios_hard_limit=900 "
     CEPH_ARGS+="--filestore_wbthrottle_btrfs_ios_hard_limit=900 "
@@ -61,7 +60,7 @@ function TEST_filestore_to_bluestore() {
 			  --op dup || return 1
     CEPH_ARGS=$O
 
-    run_osd $dir 0 || return 1
+    run_osd_bluestore $dir 0 || return 1
 
     while ! ceph osd stat | grep '3 up' ; do sleep 1 ; done
     ceph osd metadata 0 | grep bluestore || return 1
