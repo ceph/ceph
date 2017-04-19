@@ -15,10 +15,19 @@ using namespace std;
 
 bool LCExpiration_S3::xml_end(const char * el) {
   LCDays_S3 *lc_days = static_cast<LCDays_S3 *>(find_first("Days"));
+  LCDeleteMarker_S3 *lc_dm = static_cast<LCDeleteMarker_S3 *>(find_first("ExpiredObjectDeleteMarker"));
 
-  if (!lc_days)
+  if ((!lc_days && !lc_dm) || (lc_days && lc_dm)) {
     return false;
-  days = lc_days->get_data();
+  }
+  if (lc_days) {
+    days = lc_days->get_data();
+  } else if (lc_dm) {
+    dm_expiration = lc_dm->get_data().compare("true") == 0;
+    if (!dm_expiration) {
+      return false;
+    }
+  }
   return true;
 }
 
@@ -61,6 +70,7 @@ bool LCRule_S3::xml_end(const char *el) {
   id.clear();
   prefix.clear();
   status.clear();
+  dm_expiration = false;
 
   lc_id = static_cast<LCID_S3 *>(find_first("ID"));
   if (!lc_id)
@@ -86,7 +96,11 @@ bool LCRule_S3::xml_end(const char *el) {
     return false;
   } else {
     if (lc_expiration) {
-      expiration = *lc_expiration;
+      if (!lc_expiration->empty()) {
+        expiration.set_days(lc_expiration->get_days_str());
+      } else {
+        dm_expiration = lc_expiration->get_dm_expiration();
+      }
     }
     if (lc_noncur_expiration) {
       noncur_expiration = *lc_noncur_expiration;
@@ -104,8 +118,8 @@ void LCRule_S3::to_xml(CephContext *cct, ostream& out) {
   out << "<ID>" << id << "</ID>";
   out << "<Prefix>" << prefix << "</Prefix>";
   out << "<Status>" << status << "</Status>";
-  if (!expiration.empty()) {
-    LCExpiration_S3& expir = static_cast<LCExpiration_S3&>(expiration);
+  if (!expiration.empty() || dm_expiration) {
+    LCExpiration_S3 expir(expiration.get_days_str(), dm_expiration);
     expir.to_xml(out);
   }
   if (!noncur_expiration.empty()) {
@@ -164,6 +178,8 @@ XMLObj *RGWLCXMLParser_S3::alloc_obj(const char *el)
     obj = new LCExpiration_S3();
   } else if (strcmp(el, "Days") == 0) {
     obj = new LCDays_S3();
+  } else if (strcmp(el, "ExpiredObjectDeleteMarker") == 0) {
+    obj = new LCDeleteMarker_S3();
   } else if (strcmp(el, "NoncurrentVersionExpiration") == 0) {
     obj = new LCNoncurExpiration_S3();
   } else if (strcmp(el, "NoncurrentDays") == 0) {
