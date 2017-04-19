@@ -9854,13 +9854,13 @@ void MDCache::handle_discover(MDiscover *dis)
       curdir = cur->get_or_open_dirfrag(this, fg);
     } else if (curdir->is_frozen_tree() ||
 	       (curdir->is_frozen_dir() && fragment_are_all_frozen(curdir))) {
+      if (!reply->is_empty()) {
+	dout(7) << *curdir << " is frozen, non-empty reply, stopping" << dendl;
+	break;
+      }
       if (dis->wants_base_dir() && dis->get_base_dir_frag() != curdir->get_frag()) {
 	dout(7) << *curdir << " is frozen, dirfrag mismatch, stopping" << dendl;
 	reply->set_flag_error_dir();
-	break;
-      }
-      if (!reply->is_empty()) {
-	dout(7) << *curdir << " is frozen, non-empty reply, stopping" << dendl;
 	break;
       }
       dout(7) << *curdir << " is frozen, empty reply, waiting" << dendl;
@@ -9921,6 +9921,13 @@ void MDCache::handle_discover(MDiscover *dis)
       dn = curdir->add_null_dentry(dis->get_dentry(i));
     }
     assert(dn);
+
+    // don't add replica to purging dentry/inode
+    if (dn->state_test(CDentry::STATE_PURGING)) {
+      if (reply->is_empty())
+	reply->set_flag_error_dn(dis->get_dentry(i));
+      break;
+    }
 
     CDentry::linkage_t *dnl = dn->get_linkage();
 
@@ -10116,6 +10123,17 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       } else
 	dout(7) << " doing nothing, have dir but nobody is waiting on dentry "
 		<< m->get_error_dentry() << dendl;
+    }
+  } else if (m->is_flag_error_dn()) {
+    frag_t fg = cur->pick_dirfrag(m->get_error_dentry());
+    CDir *dir = cur->get_dirfrag(fg);
+    if (dir) {
+      if (dir->is_auth()) {
+	dir->take_sub_waiting(finished);
+      } else {
+	dir->take_dentry_waiting(m->get_error_dentry(), m->get_wanted_snapid(),
+				 m->get_wanted_snapid(), error);
+      }
     }
   }
 
