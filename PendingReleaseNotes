@@ -30,6 +30,7 @@
   to zero will effectively disable the health check.
 * The "ceph mds tell ..." command has been removed.  It is superceded
   by "ceph tell mds.<id> ..."
+* The "journaler allow split entries" config setting has been removed.
 
 12.0.0
 ------
