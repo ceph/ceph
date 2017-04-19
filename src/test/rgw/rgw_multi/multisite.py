@@ -1,4 +1,5 @@
 from abc import ABCMeta, abstractmethod
+from cStringIO import StringIO
 import json
 
 class Cluster:
@@ -65,14 +66,14 @@ class SystemObject:
     def json_command(self, cluster, cmd, args = None, **kwargs):
         """ run the given command, parse the output and return the resulting
         data and retcode """
-        (s, r) = self.command(cluster, cmd, args or [], **kwargs)
+        s, r = self.command(cluster, cmd, args or [], **kwargs)
         if r == 0:
             output = s.decode('utf-8')
             output = output[output.find('{'):] # trim extra output before json
             data = json.loads(output)
             self.load_from_json(data)
             self.data = data
-        return (self.data, r)
+        return self.data, r
 
     # mixins for supported commands
     class Create(object):
@@ -84,7 +85,7 @@ class SystemObject:
         def delete(self, cluster, args = None, **kwargs):
             """ delete the object """
             # not json_command() because delete has no output
-            (_, r) = self.command(cluster, 'delete', args, **kwargs)
+            _, r = self.command(cluster, 'delete', args, **kwargs)
             if r == 0:
                 self.data = None
             return r
@@ -195,20 +196,20 @@ class ZoneGroup(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, Sy
     def add(self, cluster, zone, args = None, **kwargs):
         """ add an existing zone to the zonegroup """
         args = zone.zone_arg() + (args or [])
-        (data, r) = self.json_command(cluster, 'add', args, **kwargs)
+        data, r = self.json_command(cluster, 'add', args, **kwargs)
         if r == 0:
             zone.zonegroup = self
             self.zones.append(zone)
-        return (data, r)
+        return data, r
 
     def remove(self, cluster, zone, args = None, **kwargs):
         """ remove an existing zone from the zonegroup """
         args = zone.zone_arg() + (args or [])
-        (data, r) = self.json_command(cluster, 'remove', args, **kwargs)
+        data, r = self.json_command(cluster, 'remove', args, **kwargs)
         if r == 0:
             zone.zonegroup = None
             self.zones.remove(zone)
-        return (data, r)
+        return data, r
 
     def realm(self):
         return self.period.realm if self.period else None
