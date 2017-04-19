@@ -239,6 +239,7 @@ OPTION(mon_osd_allow_primary_affinity, OPT_BOOL, false)  // allow primary_affini
 OPTION(mon_osd_prime_pg_temp, OPT_BOOL, true)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT, .5)  // max time to spend priming
 OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL, false) // whether turn on fast read on the pool or not
+OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL, false) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 OPTION(mon_stat_smooth_intervals, OPT_INT, 2)  // smooth stats over last N PGMap maps
 OPTION(mon_election_timeout, OPT_FLOAT, 5)  // on election proposer, max waiting time for all ACKs
 OPTION(mon_lease, OPT_FLOAT, 5)       // lease interval
