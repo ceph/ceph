@@ -215,6 +215,89 @@ int CrushCompiler::decompile_bucket(int cur,
   return 0;
 }
 
+int CrushCompiler::decompile_weight_set_weights(crush_weight_set weight_set,
+                                                ostream &out)
+{
+  out << "      [ ";
+  for (__u32 i = 0; i < weight_set.size; i++) {
+    print_fixedpoint(out, weight_set.weights[i]);
+    out << " ";
+  }
+  out << "]\n";
+  return 0;
+}
+
+int CrushCompiler::decompile_weight_set(crush_weight_set *weight_set,
+                                        __u32 size,
+                                        ostream &out)
+{
+  out << "    weight_set [\n";
+  for (__u32 i = 0; i < size; i++) {
+    int r = decompile_weight_set_weights(weight_set[i], out);
+    if (r < 0)
+      return r;
+  }
+  out << "    ]\n";
+  return 0;
+}
+
+int CrushCompiler::decompile_ids(int *ids,
+                                 __u32 size,
+                                 ostream &out)
+{
+  out << "    ids [ ";
+  for (__u32 i = 0; i < size; i++)
+    out << ids[i] << " ";
+  out << "]\n";
+  return 0;
+}
+
+int CrushCompiler::decompile_choose_arg(crush_choose_arg *arg,
+                                        int bucket_id,
+                                        ostream &out)
+{
+  int r;
+  out << "  {\n";
+  out << "    bucket_id " << bucket_id << "\n";
+  if (arg->weight_set_size > 0) {
+    r = decompile_weight_set(arg->weight_set, arg->weight_set_size, out);
+    if (r < 0)
+      return r;
+  }
+  if (arg->ids_size > 0) {
+    r = decompile_ids(arg->ids, arg->ids_size, out);
+    if (r < 0)
+      return r;
+  }
+  out << "  }\n";
+  return 0;
+}
+
+int CrushCompiler::decompile_choose_arg_map(crush_choose_arg_map arg_map,
+                                            ostream &out)
+{
+  for (__u32 i = 0; i < arg_map.size; i++) {
+    if ((arg_map.args[i].ids_size == 0) &&
+        (arg_map.args[i].weight_set_size == 0))
+      continue;
+    int r = decompile_choose_arg(&arg_map.args[i], -1-i, out);
+    if (r < 0)
+      return r;
+  }
+  return 0;
+}
+
+int CrushCompiler::decompile_choose_args(std::pair<const long unsigned int, crush_choose_arg_map> &i,
+                                         ostream &out)
+{
+  out << "choose_args " << i.first << " {\n";
+  int r = decompile_choose_arg_map(i.second, out);
+  if (r < 0)
+    return r;
+  out << "}\n";
+  return 0;
+}
+
 int CrushCompiler::decompile(ostream &out)
 {
   crush.cleanup_classes();
@@ -372,6 +455,14 @@ int CrushCompiler::decompile(ostream &out)
       }
     }
     out << "}\n";
+  }
+  if (crush.choose_args.size() > 0) {
+    out << "\n# choose_args\n";
+    for (auto i : crush.choose_args) {
+      int ret = decompile_choose_args(i, out);
+      if (ret)
+        return ret;
+    }
   }
   out << "\n# end crush map" << std::endl;
   return 0;
@@ -836,6 +927,121 @@ int CrushCompiler::parse_rule(iter_t const& i)
   return 0;
 }
 
+int CrushCompiler::parse_weight_set_weights(iter_t const& i, int bucket_id, crush_weight_set *weight_set)
+{
+  // -2 for the enclosing [ ]
+  __u32 size = i->children.size() - 2;
+  __u32 bucket_size = crush.get_bucket_size(bucket_id);
+  if (size != bucket_size) {
+    err << bucket_id << " needs exactly " << bucket_size
+        << " weights but got " << size << std::endl;
+    return -1;
+  }
+  weight_set->size = size;
+  weight_set->weights = (__u32 *)calloc(weight_set->size, sizeof(__u32));
+  __u32 pos = 0;
+  for (iter_t p = i->children.begin() + 1; p != i->children.end(); p++, pos++)
+    if (pos < size)
+      weight_set->weights[pos] = float_node(*p) * (float)0x10000;
+  return 0;
+}
+
+int CrushCompiler::parse_weight_set(iter_t const& i, int bucket_id, crush_choose_arg *arg)
+{
+  // -3 stands for the leading "weight_set" keyword and the enclosing [ ]
+  arg->weight_set_size = i->children.size() - 3;
+  arg->weight_set = (crush_weight_set *)calloc(arg->weight_set_size, sizeof(crush_weight_set));
+  __u32 pos = 0;
+  for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
+    int r = 0;
+    switch((int)p->value.id().to_long()) {
+    case crush_grammar::_weight_set_weights:
+      if (pos < arg->weight_set_size) {
+        r = parse_weight_set_weights(p, bucket_id, &arg->weight_set[pos]);
+        pos++;
+      } else {
+        err << "invalid weight_set syntax" << std::endl;
+        r = -1;
+      }
+    }
+    if (r < 0)
+      return r;
+  }
+  return 0;
+}
+
+int CrushCompiler::parse_choose_arg_ids(iter_t const& i, int bucket_id, crush_choose_arg *arg)
+{
+  // -3 for the leading "ids" keyword and the enclosing [ ]
+  __u32 size = i->children.size() - 3;
+  __u32 bucket_size = crush.get_bucket_size(bucket_id);
+  if (size != bucket_size) {
+    err << bucket_id << " needs exactly " << bucket_size
+        << " ids but got " << size << std::endl;
+    return -1;
+  }
+  arg->ids_size = size;
+  arg->ids = (int *)calloc(arg->ids_size, sizeof(int));
+  __u32 pos = 0;
+  for (iter_t p = i->children.begin() + 2; pos < size; p++, pos++)
+    arg->ids[pos] = int_node(*p);
+  return 0;
+}
+
+int CrushCompiler::parse_choose_arg(iter_t const& i, crush_choose_arg *args)
+{
+  int bucket_id = int_node(i->children[2]);
+  if (-1-bucket_id < 0 || -1-bucket_id >= crush.get_max_buckets()) {
+    err << bucket_id << " is out of range" << std::endl;
+    return -1;
+  }
+  if (!crush.bucket_exists(bucket_id)) {
+    err << bucket_id << " does not exist" << std::endl;
+    return -1;
+  }
+  crush_choose_arg *arg = &args[-1-bucket_id];
+  for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
+    int r = 0;
+    switch((int)p->value.id().to_long()) {
+    case crush_grammar::_weight_set:
+      r = parse_weight_set(p, bucket_id, arg);
+      break;
+    case crush_grammar::_choose_arg_ids:
+      r = parse_choose_arg_ids(p, bucket_id, arg);
+      break;
+    }
+    if (r < 0)
+      return r;
+  }
+  return 0;
+}
+
+int CrushCompiler::parse_choose_args(iter_t const& i)
+{
+  int choose_arg_index = int_node(i->children[1]);
+  if (crush.choose_args.find(choose_arg_index) != crush.choose_args.end()) {
+    err << choose_arg_index << " duplicated" << std::endl;
+    return -1;
+  }
+  crush_choose_arg_map arg_map;
+  arg_map.size = crush.get_max_buckets();
+  arg_map.args = (crush_choose_arg *)calloc(arg_map.size, sizeof(crush_choose_arg));
+  for (iter_t p = i->children.begin() + 2; p != i->children.end(); p++) {
+    int r = 0;
+    switch((int)p->value.id().to_long()) {
+    case crush_grammar::_choose_arg:
+      r = parse_choose_arg(p, arg_map.args);
+      break;
+    }
+    if (r < 0) {
+      crush.destroy_choose_args(arg_map);
+      return r;
+    }
+  }
+  crush.choose_args[choose_arg_index] = arg_map;
+  return 0;
+}
+
 void CrushCompiler::find_used_bucket_ids(iter_t const& i)
 {
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
@@ -873,6 +1079,9 @@ int CrushCompiler::parse_crush(iter_t const& i)
     case crush_grammar::_crushrule: 
       r = parse_rule(p);
       break;
+    case crush_grammar::_choose_args:
+      r = parse_choose_args(p);
+      break;
     default:
       ceph_abort();
     }
@@ -884,7 +1093,7 @@ int CrushCompiler::parse_crush(iter_t const& i)
   //err << "max_devices " << crush.get_max_devices() << std::endl;
   crush.cleanup_classes();
   crush.finalize();
-  
+
   return 0;
 } 
 

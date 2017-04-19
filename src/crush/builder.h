@@ -208,6 +208,8 @@ extern int crush_add_bucket(struct crush_map *map,
  * @returns a pointer to the newly created bucket or NULL
  */
 struct crush_bucket *crush_make_bucket(struct crush_map *map, int alg, int hash, int type, int size, int *items, int *weights);
+extern struct crush_choose_arg *crush_make_choose_args(struct crush_map *map, int num_positions);
+extern void crush_destroy_choose_args(struct crush_choose_arg *args);
 /** @ingroup API
  *
  * Add __item__ to __bucket__ with __weight__. The weight of the new

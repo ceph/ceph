@@ -6,5 +6,5 @@
   osdmaptool: exported crush map to oc
   $ osdmaptool --import-crush oc myosdmap
   osdmaptool: osdmap file 'myosdmap'
-  osdmaptool: imported 504 byte crush map from oc
+  osdmaptool: imported 512 byte crush map from oc
   osdmaptool: writing epoch 3 to myosdmap
