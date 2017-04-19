@@ -14,8 +14,8 @@ set(rbd_mirror_internal
   LeaderWatcher.cc
   Mirror.cc
   MirrorStatusWatcher.cc
+  PoolReplayer.cc
   PoolWatcher.cc
-  Replayer.cc
   Threads.cc
   types.cc
   image_replayer/BootstrapRequest.cc
