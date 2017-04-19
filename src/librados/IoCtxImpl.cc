@@ -1426,6 +1426,27 @@ int librados::IoCtxImpl::sparse_read(const object_t& oid,
   return m.size();
 }
 
+int librados::IoCtxImpl::checksum(const object_t& oid, uint8_t type,
+				  const bufferlist &init_value, size_t len,
+				  uint64_t off, size_t chunk_size,
+				  bufferlist *pbl)
+{
+  if (len > (size_t) INT_MAX) {
+    return -EDOM;
+  }
+
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.checksum(type, init_value, off, len, chunk_size, pbl, nullptr, nullptr);
+
+  int r = operate_read(oid, &rd, nullptr);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 int librados::IoCtxImpl::stat(const object_t& oid, uint64_t *psize, time_t *pmtime)
 {
   uint64_t size;

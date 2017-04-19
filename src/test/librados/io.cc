@@ -5,6 +5,7 @@
 
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
+#include "include/encoding.h"
 #include "include/scope_guard.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
@@ -297,6 +298,44 @@ TEST_F(LibRadosIoPP, RoundTripPP2)
   read.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_NOCACHE|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
+}
+
+TEST_F(LibRadosIo, Checksum) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+
+  uint32_t expected_crc = ceph_crc32c(-1, reinterpret_cast<const uint8_t*>(buf),
+                                      sizeof(buf));
+  uint32_t init_value = -1;
+  uint32_t crc[2];
+  ASSERT_EQ(0, rados_checksum(ioctx, "foo", LIBRADOS_CHECKSUM_TYPE_CRC32C,
+			      reinterpret_cast<char*>(&init_value),
+			      sizeof(init_value), sizeof(buf), 0, 0,
+			      reinterpret_cast<char*>(&crc), sizeof(crc)));
+  ASSERT_EQ(1U, crc[0]);
+  ASSERT_EQ(expected_crc, crc[1]);
+}
+
+TEST_F(LibRadosIoPP, Checksum) {
+  char buf[128];
+  Rados cluster;
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+  bufferlist init_value_bl;
+  ::encode(static_cast<uint32_t>(-1), init_value_bl);
+  bufferlist csum_bl;
+  ASSERT_EQ(0, ioctx.checksum("foo", LIBRADOS_CHECKSUM_TYPE_CRC32C,
+			      init_value_bl, sizeof(buf), 0, 0, &csum_bl));
+  auto csum_bl_it = csum_bl.begin();
+  uint32_t csum_count;
+  ::decode(csum_count, csum_bl_it);
+  ASSERT_EQ(1U, csum_count);
+  uint32_t csum;
+  ::decode(csum, csum_bl_it);
+  ASSERT_EQ(bl.crc32c(-1), csum);
 }
 
 TEST_F(LibRadosIo, OverlappingWriteRoundTrip) {
