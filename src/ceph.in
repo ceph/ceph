@@ -266,8 +266,9 @@ ping <mon.id>           Send simple presence/life test to a mon
                         <mon.id> may be 'mon.*' for all mons
 daemon {type.id|path} <cmd>
                         Same as --admin-daemon, but auto-find admin socket
-daemonperf {type.id | path} [<interval>] [<count>]
+daemonperf {type.id | path} [stat-pats] [<interval>] [<count>]
                         Get selected perf stats from daemon/admin socket
+                        Optional shell-glob comma-delim match string stat-pats
                         Run <count> times (default forever),
                         once per <interval> seconds (default 1)
     """, file=sys.stdout)
@@ -612,10 +613,24 @@ def maybe_daemon_command(parsed_args, childargs):
     return False, 0
 
 
+def isnum(object):
+    try:
+        float(object)
+        return True
+    except ValueError:
+        return False
+
 def daemonperf(childargs, sockpath):
     """ Handle daemonperf command; returns errno or 0 """
     interval = 1
     count = None
+    statpats = None
+
+    if len(childargs) > 0:
+        # optional leading comma-separated list arg
+        if not isnum(childargs[0]):
+            statpats = childargs.pop(0).split(',')
+
     if len(childargs) > 0:
         try:
             interval = float(childargs[0])
@@ -629,7 +644,7 @@ def daemonperf(childargs, sockpath):
             print('daemonperf: count should be a positive integer', file=sys.stderr)
             return errno.EINVAL
         count = int(childargs[1])
-    DaemonWatcher(sockpath).run(interval, count)
+    DaemonWatcher(sockpath, statpats).run(interval, count)
     return 0
 
 ###
