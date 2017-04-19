@@ -67,7 +67,7 @@ protected:
   };
 
   OEWorker *worker;
-  std::atomic<unsigned> down_flag { 0 };
+  std::atomic<bool> down_flag = { false };
 
 public:
   explicit RGWObjectExpirer(RGWRados *_store)

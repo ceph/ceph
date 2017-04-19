@@ -2929,7 +2929,7 @@ protected:
   CephContext *cct;
   RGWRados *store;
 
-  std::atomic<unsigned> down_flag { 0 };
+  std::atomic<bool> down_flag = { false };
 
   string thread_name;
 
@@ -2945,7 +2945,7 @@ public:
   virtual int init() { return 0; }
   virtual int process() = 0;
 
-  bool going_down() { return down_flag != 0; }
+  bool going_down() { return down_flag; }
   void start();
   void stop();
 };
@@ -2958,7 +2958,7 @@ void RGWRadosThread::start()
 
 void RGWRadosThread::stop()
 {
-  down_flag = 1;
+  down_flag = true;
   stop_process();
   if (worker) {
     worker->stop();

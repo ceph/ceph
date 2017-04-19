@@ -21,7 +21,7 @@ class RGWGC {
   RGWRados *store;
   int max_objs;
   string *obj_names;
-  std::atomic<unsigned> down_flag { 0 };
+  std::atomic<bool> down_flag = { false };
 
   int tag_index(const string& tag);
 

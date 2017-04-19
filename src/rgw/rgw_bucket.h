@@ -397,7 +397,7 @@ class RGWDataChangesLog {
   RWLock modified_lock;
   map<int, set<string> > modified_shards;
 
-  std::atomic<unsigned> down_flag { 0 };
+  std::atomic<bool> down_flag = { false };
 
   struct ChangeStatus {
     real_time cur_expiration;
