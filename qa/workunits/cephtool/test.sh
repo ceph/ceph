@@ -7,6 +7,19 @@ set -o functrace
 PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 SUDO=${SUDO:-sudo}
 
+function get_admin_socket()
+{
+  local client=$1
+
+  if test -n "$CEPH_OUT_DIR";
+  then
+    echo $CEPH_OUT_DIR/$client.asok
+  else
+    local cluster=$(echo $CEPH_ARGS | sed  -r 's/.*--cluster[[:blank:]]*([[:alnum:]]*).*/\1/')
+    echo "/var/run/ceph/$cluster-$client.asok"
+  fi
+}
+
 function check_no_osd_down()
 {
     ! ceph osd dump | grep ' down '
@@ -1447,25 +1460,25 @@ function test_mon_pg()
 
   # Check injected full results
   WAITFORFULL=10
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull nearfull
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull nearfull
   sleep $WAITFORFULL
   ceph health | grep "HEALTH_WARN.*1 nearfull osd(s)"
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.1.asok injectfull backfillfull
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull backfillfull
   sleep $WAITFORFULL
   ceph health | grep "HEALTH_WARN.*1 backfillfull osd(s)"
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.2.asok injectfull failsafe
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull failsafe
   sleep $WAITFORFULL
   # failsafe and full are the same as far as the monitor is concerned
   ceph health | grep "HEALTH_ERR.*1 full osd(s)"
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull full
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull full
   sleep  $WAITFORFULL
   ceph health | grep "HEALTH_ERR.*2 full osd(s)"
   ceph health detail | grep "osd.0 is full at.*%"
   ceph health detail | grep "osd.2 is full at.*%"
   ceph health detail | grep "osd.1 is backfill full at.*%"
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull none
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.1.asok injectfull none
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.2.asok injectfull none
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull none
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull none
   sleep $WAITFORFULL
   ceph health | grep HEALTH_OK
 
