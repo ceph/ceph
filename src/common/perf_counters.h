@@ -102,9 +102,9 @@ public:
     const char *description;
     const char *nick;
     enum perfcounter_type_d type;
-    std::atomic<int64_t> u64 = { 0 };
-    std::atomic<int64_t> avgcount = { 0 };
-    std::atomic<int64_t> avgcount2 = { 0 };
+    std::atomic<uint64_t> u64 = { 0 };
+    std::atomic<uint64_t> avgcount = { 0 };
+    std::atomic<uint64_t> avgcount2 = { 0 };
     std::unique_ptr<PerfHistogram<>> histogram;
 
     void reset()
