@@ -156,6 +156,7 @@ private:
   void create_pending() override;  // prepare a new pending
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   void on_active() override;
+  void on_restart() override;
   void on_shutdown() override;
   /**
    * we haven't delegated full version stashing to paxosservice for some time
