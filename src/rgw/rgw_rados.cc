@@ -5307,6 +5307,13 @@ int RGWRados::create_pool(const rgw_pool& pool)
   ret = rad->pool_create(pool.name.c_str(), 0);
   if (ret == -EEXIST)
     ret = 0;
+  else if (ret == -ERANGE) {
+    ldout(cct, 0)
+      << __func__
+      << " ERROR: librados::Rados::pool_create returned " << cpp_strerror(-ret)
+      << " (this can be due to a pool or placement group misconfiguration, e.g., pg_num < pgp_num)"
+      << dendl;
+  }
   if (ret < 0)
     return ret;
 
