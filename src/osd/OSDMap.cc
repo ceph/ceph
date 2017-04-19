@@ -3087,15 +3087,15 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
       continue;
 
     string host, rack, row, room, dc, pool;
-    vector<string> section;
-    section.push_back("osd");
-    section.push_back(*i);
-    conf->get_val_from_conf_file(section, "host", host, false);
-    conf->get_val_from_conf_file(section, "rack", rack, false);
-    conf->get_val_from_conf_file(section, "row", row, false);
-    conf->get_val_from_conf_file(section, "room", room, false);
-    conf->get_val_from_conf_file(section, "datacenter", dc, false);
-    conf->get_val_from_conf_file(section, "root", pool, false);
+    vector<string> sectiontmp;
+    sectiontmp.push_back("osd");
+    sectiontmp.push_back(section);
+    conf->get_val_from_conf_file(sectiontmp, "host", host, false);
+    conf->get_val_from_conf_file(sectiontmp, "rack", rack, false);
+    conf->get_val_from_conf_file(sectiontmp, "row", row, false);
+    conf->get_val_from_conf_file(sectiontmp, "room", room, false);
+    conf->get_val_from_conf_file(sectiontmp, "datacenter", dc, false);
+    conf->get_val_from_conf_file(sectiontmp, "root", pool, false);
 
     if (host.length() == 0)
       host = "unknownhost";
