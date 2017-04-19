@@ -137,8 +137,10 @@ def slave(ioctx):
         assert(list(image.list_snaps()) == [])
 
         print("rebuild object map")
-        image.update_features(RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF,
-                              False)
+        features = image.features() & (
+                RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF)
+        if features:
+            image.update_features(features, False)
         image.update_features(RBD_FEATURE_OBJECT_MAP, True)
         assert((image.flags() & RBD_FLAG_OBJECT_MAP_INVALID) != 0)
         image.rebuild_object_map()
