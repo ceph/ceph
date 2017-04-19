@@ -323,6 +323,7 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
 			     const string target_prefix)
 {
   bufferlist opslog_buffer;
+  ldout(cct, 20) << __func__ << " fetch phrase:" << dendl;
   int r = bucket_bl_fetch(opslog_obj, &opslog_buffer);
   if (r < 0) {
     return r;
@@ -333,6 +334,7 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
     return 0;
   }
 
+  ldout(cct, 20) << __func__ << " render key phrase:" << dendl;
   string target_key = render_target_key(cct, target_prefix, opslog_obj);
   if (target_key.empty()) {
     ldout(cct, 0) << __func__ << " render target object failed ret=" << dendl;
@@ -341,6 +343,7 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
 
   rgw_obj tobject(target_bucket, target_key);
 
+  ldout(cct, 20) << __func__ << " upload phrase:" << dendl;
   r = bucket_bl_upload(&opslog_buffer, tobject);
   opslog_buffer.clear();
   if (r < 0) {
@@ -348,6 +351,7 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
 		  << cpp_strerror(-r) << dendl;
     return r;
   } else {
+    ldout(cct, 20) << __func__ << " cleanup phrase:" << dendl;
     r = bucket_bl_remove(opslog_obj);
     if (r < 0){
       return r;
