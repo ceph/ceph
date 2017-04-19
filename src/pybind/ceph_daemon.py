@@ -17,6 +17,7 @@ import struct
 import time
 from collections import defaultdict, OrderedDict
 from fcntl import ioctl
+from fnmatch import fnmatch
 from signal import signal, SIGWINCH
 from termios import TIOCGWINSZ
 
@@ -134,12 +135,13 @@ class DaemonWatcher(object):
     BOLD_SEQ = "\033[1m"
     UNDERLINE_SEQ = "\033[4m"
 
-    def __init__(self, asok):
+    def __init__(self, asok, statpats=None):
         self.asok_path = asok
         self._colored = False
 
         self._stats = None
         self._schema = None
+        self._statpats = statpats
         self._stats_that_fit = dict()
         self.termsize = Termsize()
 
@@ -290,6 +292,28 @@ class DaemonWatcher(object):
         val_row = val_row[0:-len(self.colorize("|", self.BLUE))]
         ostr.write("{0}\n".format(val_row))
 
+    def _should_include(self, sect, name, prio):
+        MIN_PRIO = 5
+        '''
+        boolean: should we output this stat?
+
+        1) If self._statpats exists and the name filename-glob matches anything in the list,
+           and prio is high enough, or
+        2) If self._statpats doesn't exist and prio is high enough
+
+        then yes.
+        '''
+        print sect, name, self._statpats,
+        if self._statpats:
+            sectname = '.'.join((sect, name))
+            if not any([
+                p for p in self._statpats
+                if fnmatch(name, p) or fnmatch(sectname, p)
+            ]):
+                return False
+
+        return (prio >= MIN_PRIO)
+
     def _load_schema(self):
         """
         Populate our instance-local copy of the daemon's performance counter
@@ -299,12 +323,12 @@ class DaemonWatcher(object):
             admin_socket(self.asok_path, ["perf", "schema"]).decode('utf-8'),
             object_pairs_hook=OrderedDict)
 
-        # Build list of which stats we will display, based on which
-        # stats have a nickname
+        # Build list of which stats we will display
         self._stats = OrderedDict()
         for section_name, section_stats in self._schema.items():
             for name, schema_data in section_stats.items():
-                if schema_data.get('nick'):
+                prio = schema_data.get('priority')
+                if self._should_include(section_name, name, prio):
                     if section_name not in self._stats:
                         self._stats[section_name] = OrderedDict()
                     self._stats[section_name][name] = schema_data['nick']
