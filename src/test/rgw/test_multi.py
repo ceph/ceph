@@ -6,6 +6,8 @@ import string
 import argparse
 import sys
 import time
+import logging
+
 try:
     from itertools import izip_longest as zip_longest
 except ImportError:
@@ -20,6 +22,7 @@ import boto.s3.connection
 
 import inspect
 
+from datetime import datetime
 from nose.tools import eq_ as eq
 from nose.plugins.attrib import attr
 
@@ -27,7 +30,13 @@ from nose.plugins.attrib import attr
 # so in order to use this as a dev cluster, do
 # $nosetests -a '!destructive' /path/to/test_multi.py
 
-log_level = 20
+logdict = {
+        0: logging.CRITICAL,
+        1: logging.ERROR,
+        5: logging.WARN,
+        10: logging.INFO,
+        20: logging.DEBUG,
+    }
 
 num_buckets = 0
 run_prefix=''.join(random.SystemRandom().choice(string.ascii_lowercase) for _ in range(6))
@@ -41,17 +50,31 @@ test_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__))) + '/'
 def lineno():
     return inspect.currentframe().f_back.f_lineno
 
+def init_logger(log_file,log_level_file=logging.DEBUG,log_level_console=logging.ERROR):
+    logger = logging.getLogger()
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    fh = logging.FileHandler(log_file)
+    fh.setFormatter(formatter)
+    fh.setLevel(log_level_file)
+    print("file logging set to: %s", log_level_file)
+
+    ch  = logging.StreamHandler()
+    ch.setLevel(log_level_console)
+    ch.setFormatter(formatter)
+    print("console logging set to: %s", log_level_console)
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
 def log(level, *params):
-    if level > log_level:
-        return
+    try:
+        loglevel = logdict[level]
+    except KeyError:
+        logger.log(logging.ERROR,"logdict cannot find loglevel %d",loglevel)
+        loglevel = logging.DEBUG
 
-    s = '>>> '
-    for p in params:
-        if p:
-            s += str(p)
-
-    print(s)
-    sys.stdout.flush()
+    s=''.join(str(p) for p in params if p)
+    logger = logging.getLogger()
+    logger.log(loglevel,s)
 
 def build_cmd(*params):
     s = ''
@@ -78,9 +101,11 @@ def tpath(bin, *params):
 
 def bash(cmd, check_retcode = True):
     log(5, 'running cmd: ', cmd)
-    process = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
-    s = process.communicate()[0]
-    log(20, 'command returned status=', process.returncode, ' stdout=', s.decode('utf-8'))
+    process = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    s,err = process.communicate()
+    log(20, 'stderr: ',err)
+    log(5, 'command returned status=', process.returncode,)
+    log(20, 'stdout: ', s)
     if check_retcode:
         assert(process.returncode == 0)
     return (s, process.returncode)
@@ -993,6 +1018,7 @@ def test_zonegroup_remove():
     master_zg.remove_zone('zg1-2')
 
 def init(parse_args):
+    log_file = "/tmp/rgw-test-multi" + datetime.now().isoformat() + ".log"
     cfg = configparser.RawConfigParser({
                                          'num_zonegroups': 1,
                                          'num_zones': 3,
@@ -1000,6 +1026,8 @@ def init(parse_args):
                                          'no_bootstrap': 'false',
                                          'log_level': 20,
                                          'tenant': None,
+                                         'log_level_console': 10,
+                                         'log_file': log_file,
                                          })
     try:
         path = os.environ['RGW_MULTI_TEST_CONF']
@@ -1024,6 +1052,8 @@ def init(parse_args):
     parser.add_argument('--no-bootstrap', action='store_true', default=cfg.getboolean(section, 'no_bootstrap'))
     parser.add_argument('--log-level', type=int, default=cfg.getint(section, 'log_level'))
     parser.add_argument('--tenant', type=str, default=cfg.get(section, 'tenant'))
+    parser.add_argument('--console-log-level',type=int, default = cfg.getint(section, 'log_level_console'))
+    parser.add_argument('--log-file',type=str, default= cfg.get(section,'log_file'))
 
     argv = []
 
@@ -1032,8 +1062,7 @@ def init(parse_args):
 
     args = parser.parse_args(argv)
 
-    global log_level
-    log_level = args.log_level
+    init_logger(args.log_file,logdict[args.log_level],logdict[args.console_log_level])
 
     master_zg_base_port = 8000
 
