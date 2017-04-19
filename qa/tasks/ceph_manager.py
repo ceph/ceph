@@ -1716,30 +1716,6 @@ class CephManager:
                 ret[status] += 1
         return ret
 
-    def pg_scrubbing(self, pool, pgnum):
-        """
-        pg scrubbing wrapper
-        """
-        pgstr = self.get_pgid(pool, pgnum)
-        stats = self.get_single_pg_stats(pgstr)
-        return 'scrub' in stats['state']
-
-    def pg_repairing(self, pool, pgnum):
-        """
-        pg repairing wrapper
-        """
-        pgstr = self.get_pgid(pool, pgnum)
-        stats = self.get_single_pg_stats(pgstr)
-        return 'repair' in stats['state']
-
-    def pg_inconsistent(self, pool, pgnum):
-        """
-        pg inconsistent wrapper
-        """
-        pgstr = self.get_pgid(pool, pgnum)
-        stats = self.get_single_pg_stats(pgstr)
-        return 'inconsistent' in stats['state']
-
     @wait_for_pg_stats
     def with_pg_state(self, pool, pgnum, check):
         pgstr = self.get_pgid(pool, pgnum)
