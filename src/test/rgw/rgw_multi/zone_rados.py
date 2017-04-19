@@ -41,38 +41,49 @@ class RadosZone(Zone):
     def  tier_type(self):
         return "rados"
 
-    def get_bucket(self, name, credentials):
-        conn = self.get_connection(credentials)
-        return conn.get_bucket(name, credentials)
 
-    def check_bucket_eq(self, zone, bucket_name, credentials):
-        log.info('comparing bucket=%s zones={%s, %s}', bucket_name, self.name, zone.name)
-        b1 = self.get_bucket(bucket_name, credentials)
-        b2 = zone.get_bucket(bucket_name, credentials)
+    class Conn(ZoneConn):
+        def __init__(self, zone, credentials):
+            super(RadosZone.Conn, self).__init__(zone, credentials)
 
-        log.debug('bucket1 objects:')
-        for o in b1.get_all_versions():
-            log.debug('o=%s', o.name)
-        log.debug('bucket2 objects:')
-        for o in b2.get_all_versions():
-            log.debug('o=%s', o.name)
+        def get_bucket(self, name):
+            return self.conn.get_bucket(name)
 
-        for k1, k2 in zip_longest(b1.get_all_versions(), b2.get_all_versions()):
-            if k1 is None:
-                log.critical('key=%s is missing from zone=%s', k2.name, self.name)
-                assert False
-            if k2 is None:
-                log.critical('key=%s is missing from zone=%s', k1.name, zone.name)
-                assert False
+        def create_bucket(self, name):
+            return self.conn.create_bucket(name)
 
-            check_object_eq(k1, k2)
+        def check_bucket_eq(self, zone_conn, bucket_name):
+            log.info('comparing bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
+            b1 = self.get_bucket(bucket_name)
+            b2 = zone_conn.get_bucket(bucket_name)
 
-            # now get the keys through a HEAD operation, verify that the available data is the same
-            k1_head = b1.get_key(k1.name)
-            k2_head = b2.get_key(k2.name)
+            log.debug('bucket1 objects:')
+            for o in b1.get_all_versions():
+                log.debug('o=%s', o.name)
+            log.debug('bucket2 objects:')
+            for o in b2.get_all_versions():
+                log.debug('o=%s', o.name)
 
-            check_object_eq(k1_head, k2_head, False)
+            for k1, k2 in zip_longest(b1.get_all_versions(), b2.get_all_versions()):
+                if k1 is None:
+                    log.critical('key=%s is missing from zone=%s', k2.name, self.name)
+                    assert False
+                if k2 is None:
+                    log.critical('key=%s is missing from zone=%s', k1.name, zone_conn.name)
+                    assert False
 
-        log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, self.name, zone.name)
+                check_object_eq(k1, k2)
 
+                # now get the keys through a HEAD operation, verify that the available data is the same
+                k1_head = b1.get_key(k1.name)
+                k2_head = b2.get_key(k2.name)
+
+                check_object_eq(k1_head, k2_head, False)
+
+            log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
+
+            return True
+
+    def get_conn(self, credentials):
+        return self.Conn(self, credentials)
 

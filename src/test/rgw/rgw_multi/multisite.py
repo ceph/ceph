@@ -165,11 +165,24 @@ class Zone(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, SystemO
     def has_buckets(self):
         return True
 
-    def get_connection(self, credentials):
+    def get_conn(self, credentials):
+        return ZoneConn(self, credentials) # not implemented, but can be used
+
+class ZoneConn(object):
+    def __init__(self, zone, credentials):
+        self.zone = zone
+        self.name = zone.name
         """ connect to the zone's first gateway """
         if isinstance(credentials, list):
-            credentials = credentials[0]
-        return get_gateway_connection(self.gateways[0], credentials)
+            self.credentials = credentials[0]
+        else:
+            self.credentials = credentials
+
+        if self.zone.gateways is not None:
+            self.conn = get_gateway_connection(self.zone.gateways[0], self.credentials)
+
+    def get_connection(self):
+        return self.conn
 
     def get_bucket(self, bucket_name, credentials):
         raise NotImplementedError
@@ -186,6 +199,7 @@ class ZoneGroup(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, Sy
         super(ZoneGroup, self).__init__(data, zonegroup_id)
         self.rw_zones = []
         self.ro_zones = []
+        self.zones_by_type = {}
         for z in self.zones:
             if z.is_read_only():
                 self.ro_zones.append(z)

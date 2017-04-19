@@ -79,10 +79,10 @@ class MDSearch:
 
 
 class ESZoneBucket:
-    def __init__(self, zone, name, credentials):
-        self.zone = zone
+    def __init__(self, zone_conn, name, conn):
+        self.zone_conn = zone_conn
         self.name = name
-        self.conn = zone.get_connection(credentials)
+        self.conn = conn
 
         self.bucket = boto.s3.bucket.Bucket(name=name)
 
@@ -152,35 +152,48 @@ class ESZone(Zone):
     def has_buckets(self):
         return False
 
-    def get_bucket(self, bucket_name, credentials):
-        return ESZoneBucket(self, bucket_name, credentials)
+    class Conn(ZoneConn):
+        def __init__(self, zone, credentials):
+            super(ESZone.Conn, self).__init__(zone, credentials)
 
-    def check_bucket_eq(self, zone, bucket_name, credentials):
-        assert(zone.tier_type() == "rados")
+        def get_bucket(self, bucket_name):
+            return ESZoneBucket(self, bucket_name, self.conn)
 
-        log.info('comparing bucket=%s zones={%s, %s}', bucket_name, self.name, zone.name)
-        b1 = self.get_bucket(bucket_name, credentials)
-        b2 = zone.get_bucket(bucket_name, credentials)
+        def create_bucket(self, name):
+            # should not be here, a bug in the test suite
+            log.critical('Conn.create_bucket() should not be called in ES zone')
+            assert False
 
-        log.debug('bucket1 objects:')
-        for o in b1.get_all_versions():
-            log.debug('o=%s', o.name)
-        log.debug('bucket2 objects:')
-        for o in b2.get_all_versions():
-            log.debug('o=%s', o.name)
+        def check_bucket_eq(self, zone_conn, bucket_name):
+            assert(zone_conn.zone.tier_type() == "rados")
 
-        for k1, k2 in zip_longest(b1.get_all_versions(), b2.get_all_versions()):
-            if k1 is None:
-                log.critical('key=%s is missing from zone=%s', k2.name, self.name)
-                assert False
-            if k2 is None:
-                log.critical('key=%s is missing from zone=%s', k1.name, zone.name)
-                assert False
+            log.info('comparing bucket=%s zones={%s, %s}', bucket_name, self.name, self.name)
+            b1 = self.get_bucket(bucket_name)
+            b2 = zone_conn.get_bucket(bucket_name)
 
-            check_object_eq(k1, k2)
+            log.debug('bucket1 objects:')
+            for o in b1.get_all_versions():
+                log.debug('o=%s', o.name)
+            log.debug('bucket2 objects:')
+            for o in b2.get_all_versions():
+                log.debug('o=%s', o.name)
+
+            for k1, k2 in zip_longest(b1.get_all_versions(), b2.get_all_versions()):
+                if k1 is None:
+                    log.critical('key=%s is missing from zone=%s', k2.name, self.self.name)
+                    assert False
+                if k2 is None:
+                    log.critical('key=%s is missing from zone=%s', k1.name, zone_conn.name)
+                    assert False
+
+                check_object_eq(k1, k2)
 
 
-        log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, self.name, zone.name)
+            log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
+
+            return True
+
+    def get_conn(self, credentials):
+        return self.Conn(self, credentials)
 
 
-        return True
