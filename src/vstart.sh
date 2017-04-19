@@ -473,7 +473,7 @@ $extra_conf
 [mon]
         mon pg warn min per osd = 3
         mon osd allow primary affinity = true
-        mon osd allow pg remap = true
+        mon osd allow pg upmap = true
         mon reweight min pgs per osd = 4
         mon osd prime pg temp = true
         crushtool = $CEPH_BIN/crushtool

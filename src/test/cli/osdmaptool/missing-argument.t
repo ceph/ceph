@@ -11,12 +11,12 @@
      --test-random           do random placements
      --test-map-pg <pgid>    map a pgid to osds
      --test-map-object <objectname> [--pool <poolid>] map an object to osds
-     --remap-cleanup <file>  clean up pg_remap[_items] entries, writing
+     --upmap-cleanup <file>  clean up pg_upmap[_items] entries, writing
                              commands to <file> [default: - for stdout]
-     --remap <file>          calculate pg remap entries to balance pg layout
+     --upmap <file>          calculate pg upmap entries to balance pg layout
                              writing commands to <file> [default: - for stdout]
-     --remap-max <max-count> set max remap entries to calculate [default: 100]
-     --remap-deviation <max-deviation>
+     --upmap-max <max-count> set max upmap entries to calculate [default: 100]
+     --upmap-deviation <max-deviation>
                              max deviation from target [default: .01]
-     --remap-pool <poolname> restrict remap balancing to 1 or more pools
+     --upmap-pool <poolname> restrict upmap balancing to 1 or more pools
   [1]
