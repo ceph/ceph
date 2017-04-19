@@ -1175,6 +1175,11 @@ public:
   void repair_dirfrag_stats(CDir *dir);
 
 public:
+  void split_export_pins(CDir *dir) {
+    return split_export_pins(dir->inode);
+  }
+  void split_export_pins(CInode *dir);
+
   /* Because exports may fail, this set lets us keep track of inodes that need exporting. */
   std::set<CInode *> export_pin_queue;
 };
