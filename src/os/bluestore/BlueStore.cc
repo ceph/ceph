@@ -8290,13 +8290,13 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   DeferredBatch *b = osr->deferred_running;
   {
     std::lock_guard<std::mutex> l2(osr->qlock);
-    std::lock_guard<std::mutex> l(kv_lock);
     for (auto& i : b->txcs) {
       TransContext *txc = &i;
       txc->state = TransContext::STATE_DEFERRED_CLEANUP;
       txc->osr->qcond.notify_all();
       throttle_deferred_bytes.put(txc->cost);
     }
+    std::lock_guard<std::mutex> l(kv_lock);
     deferred_done_queue.emplace_back(b);
   }
 
