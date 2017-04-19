@@ -851,9 +851,11 @@ OSDMonitor::update_pending_creatings(const OSDMap::Incremental& inc)
   }
   scan_for_creating_pgs(osdmap.get_pools(),
 			inc.old_pools,
+			inc.modified,
 			&pending_creatings);
   scan_for_creating_pgs(inc.new_pools,
 			inc.old_pools,
+			inc.modified,
 			&pending_creatings);
   pending_creatings.last_scan_epoch = osdmap.get_epoch();
   return pending_creatings;
@@ -2982,6 +2984,7 @@ void OSDMonitor::check_pg_creates_sub(Subscription *sub)
 
 void OSDMonitor::scan_for_creating_pgs(const map<int64_t,pg_pool_t>& pools,
 				       const set<int64_t>& removed_pools,
+				       utime_t modified,
 				       creating_pgs_t* creating_pgs) const
 {
   for (auto& p : pools) {
@@ -3017,7 +3020,7 @@ void OSDMonitor::scan_for_creating_pgs(const map<int64_t,pg_pool_t>& pools,
 	dout(20) << __func__ << " already have " << pgid << dendl;
 	continue;
       }
-      creating_pgs->pgs.emplace(pgid, make_pair(created, ceph_clock_now()));
+      creating_pgs->pgs.emplace(pgid, make_pair(created, modified));
       dout(10) << __func__ << " adding " << pgid
 	       << " at " << osdmap.get_epoch() << dendl;
     }
