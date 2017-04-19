@@ -1816,12 +1816,12 @@ function test_admin_heap_profiler()
 
   [[ $do_test -eq 0 ]] && return 0
 
-  admin_socket = "--admin-daemon out/osd.0.asok"
+  local admin_socket=$(get_admin_socket osd.0)
 
-  ceph --admin $admin_socket heap start_profiler
-  ceph --admin $admin_socket heap dump
-  ceph --admin $admin_socket heap stop_profiler
-  ceph --admin $admin_socket heap release
+  $SUDO ceph --admin-daemon $admin_socket heap start_profiler
+  $SUDO ceph --admin-daemon $admin_socket heap dump
+  $SUDO ceph --admin-daemon $admin_socket heap stop_profiler
+  $SUDO ceph --admin-daemon $admin_socket heap release
 }
 
 function test_osd_bench()
@@ -2049,6 +2049,7 @@ MON_TESTS+=" mon_cephdf_commands"
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" osd_negative_filestore_merge_threshold"
 OSD_TESTS+=" tiering_agent"
+OSD_TESTS+=" admin_heap_profiler"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
