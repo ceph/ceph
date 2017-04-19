@@ -2773,12 +2773,7 @@ void PG::upgrade(ObjectStore *store)
     ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
     t.remove(coll_t::meta(), log_oid);
     t.remove(coll_t::meta(), biginfo_oid);
-
     t.touch(coll, pgmeta_oid);
-    map<string,bufferlist> v;
-    __u8 ver = cur_struct_v;
-    ::encode(ver, v[infover_key]);
-    t.omap_setkeys(coll, pgmeta_oid, v);
   }
 
   // 8 -> 9
@@ -2793,6 +2788,14 @@ void PG::upgrade(ObjectStore *store)
       dout(20) << __func__ << " clearing past_intervals" << dendl;
       past_intervals.clear();
     }
+  }
+
+  // update infover_key
+  if (info_struct_v < cur_struct_v) {
+    map<string,bufferlist> v;
+    __u8 ver = cur_struct_v;
+    ::encode(ver, v[infover_key]);
+    t.omap_setkeys(coll, pgmeta_oid, v);
   }
 
   dirty_info = true;
