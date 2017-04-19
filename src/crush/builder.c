@@ -1400,6 +1400,67 @@ int crush_reweight_bucket(struct crush_map *map, struct crush_bucket *b)
 	}
 }
 
+struct crush_choose_arg *crush_make_choose_args(struct crush_map *map, int num_positions)
+{
+  int b;
+  int sum_bucket_size = 0;
+  int bucket_count = 0;
+  for (b = 0; b < map->max_buckets; b++) {
+    if (map->buckets[b] == 0)
+      continue;
+    sum_bucket_size += map->buckets[b]->size;
+    bucket_count++;
+  }
+  dprintk("sum_bucket_size %d max_buckets %d bucket_count %d\n",
+          sum_bucket_size, map->max_buckets, bucket_count);
+  int size = (sizeof(struct crush_choose_arg) * map->max_buckets +
+              sizeof(struct crush_weight_set) * bucket_count * num_positions +
+              sizeof(__u32) * sum_bucket_size * num_positions + // weights
+              sizeof(__u32) * sum_bucket_size); // ids
+  char *space = malloc(size);
+  struct crush_choose_arg *arg = (struct crush_choose_arg *)space;
+  struct crush_weight_set *weight_set = (struct crush_weight_set *)(arg + map->max_buckets);
+  __u32 *weights = (__u32 *)(weight_set + bucket_count * num_positions);
+  char *weight_set_ends = (char*)weights;
+  int *ids = (int *)(weights + sum_bucket_size * num_positions);
+  char *weights_end = (char *)ids;
+  char *ids_end = (char *)(ids + sum_bucket_size);
+  BUG_ON(space + size != ids_end);
+  for (b = 0; b < map->max_buckets; b++) {
+    if (map->buckets[b] == 0) {
+      memset(&arg[b], '\0', sizeof(struct crush_choose_arg));
+      continue;
+    }
+    struct crush_bucket_straw2 *bucket = (struct crush_bucket_straw2 *)map->buckets[b];
+
+    int position;
+    for (position = 0; position < num_positions; position++) {
+      memcpy(weights, bucket->item_weights, sizeof(__u32) * bucket->h.size);
+      weight_set[position].weights = weights;
+      weight_set[position].size = bucket->h.size;
+      dprintk("moving weight %d bytes forward\n", (int)((weights + bucket->h.size) - weights));
+      weights += bucket->h.size;
+    }
+    arg[b].weight_set = weight_set;
+    arg[b].weight_set_size = num_positions;
+    weight_set += position;
+
+    memcpy(ids, bucket->h.items, sizeof(int) * bucket->h.size);
+    arg[b].ids = ids;
+    arg[b].ids_size = bucket->h.size;
+    ids += bucket->h.size;
+  }
+  BUG_ON((char*)weight_set_ends != (char*)weight_set);
+  BUG_ON((char*)weights_end != (char*)weights);
+  BUG_ON((char*)ids != (char*)ids_end);
+  return arg;
+}
+
+void crush_destroy_choose_args(struct crush_choose_arg *args)
+{
+  free(args);
+}
+
 /***************************/
 
 /* methods to check for safe arithmetic operations */

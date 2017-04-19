@@ -1682,7 +1682,7 @@ int OSDMap::_pg_to_raw_osds(
   // what crush rule?
   int ruleno = crush->find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
   if (ruleno >= 0)
-    crush->do_rule(ruleno, pps, *osds, size, osd_weight);
+    crush->do_rule(ruleno, pps, *osds, size, osd_weight, pg.pool());
 
   _remove_nonexistent_osds(pool, *osds);
 

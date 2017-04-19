@@ -67,7 +67,8 @@ extern int crush_find_rule(const struct crush_map *map, int ruleset, int type, i
  * @param result_max the size of the __result__ array
  * @param weights an array of weights of size __weight_max__
  * @param weight_max the size of the __weights__ array
- * @param cwin must be the value of crush_work_size(__map__, __result_max__)
+ * @param cwin must be an char array initialized by crush_init_workspace
+ * @param choose_args weights and ids for each known bucket
  *
  * @return 0 on error or the size of __result__ on success
  */
@@ -75,7 +76,7 @@ extern int crush_do_rule(const struct crush_map *map,
 			 int ruleno,
 			 int x, int *result, int result_max,
 			 const __u32 *weights, int weight_max,
-			 void *cwin);
+			 void *cwin, const struct crush_choose_arg *choose_args);
 
 /* Returns the exact amount of workspace that will need to be used
    for a given combination of crush_map and result_max. The caller can

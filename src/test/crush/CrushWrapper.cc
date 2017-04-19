@@ -477,6 +477,8 @@ TEST(CrushWrapper, adjust_item_weight) {
   EXPECT_EQ(1, c->adjust_item_weightf_in_loc(g_ceph_context, item, modified_weight, loc_two));
   EXPECT_EQ(original_weight, c->get_item_weightf_in_loc(item, loc_one));
   EXPECT_EQ(modified_weight, c->get_item_weightf_in_loc(item, loc_two));
+
+  delete c;
 }
 
 TEST(CrushWrapper, adjust_subtree_weight) {
@@ -570,6 +572,8 @@ TEST(CrushWrapper, adjust_subtree_weight) {
   ASSERT_EQ(c->get_bucket_weight(host0), 262144);
   ASSERT_EQ(c->get_item_weight(host0), 262144);
   ASSERT_EQ(c->get_bucket_weight(rootno), 262144 + 131072);
+
+  delete c;
 }
 
 TEST(CrushWrapper, insert_item) {
@@ -708,6 +712,20 @@ TEST(CrushWrapper, insert_item) {
   delete c;
 }
 
+TEST(CrushWrapper, choose_args_disabled) {
+  auto *c = new CrushWrapper;
+  c->choose_args[0] = crush_choose_arg_map();
+
+  map<string,string> loc;
+  ASSERT_EQ(-EDOM, c->remove_item(g_ceph_context, 0, true));
+  ASSERT_EQ(-EDOM, c->insert_item(g_ceph_context, 0, 0.0, "", loc));
+  ASSERT_EQ(-EDOM, c->move_bucket(g_ceph_context, 0, loc));
+  ASSERT_EQ(-EDOM, c->link_bucket(g_ceph_context, 0, loc));
+  ASSERT_EQ(-EDOM, c->create_or_move_item(g_ceph_context, 0, 0.0, "", loc));
+
+  delete c;
+}
+
 TEST(CrushWrapper, remove_item) {
   auto *c = new CrushWrapper;
 
@@ -727,7 +745,7 @@ TEST(CrushWrapper, remove_item) {
 
   {
     int host;
-    c->add_bucket(0, CRUSH_BUCKET_TREE, CRUSH_HASH_RJENKINS1,
+    c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
 		  HOST_TYPE, 0, NULL, NULL, &host);
     c->set_item_name(host, "host0");
   }
@@ -748,6 +766,8 @@ TEST(CrushWrapper, remove_item) {
   ASSERT_EQ(0, c->remove_item(g_ceph_context, item_to_remove, true));
   float weight;
   EXPECT_FALSE(c->check_item_loc(g_ceph_context, item_to_remove, loc, &weight));
+
+  delete c;
 }
 
 TEST(CrushWrapper, item_bucket_names) {
@@ -1314,5 +1334,5 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 // Local Variables:
-// compile-command: "cd ../../../build ; make -j4 unittest_crush_wrapper && bin/unittest_crush_wrapper"
+// compile-command: "cd ../../../build ; make -j4 unittest_crush_wrapper && valgrind --tool=memcheck bin/unittest_crush_wrapper"
 // End:
