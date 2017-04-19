@@ -195,6 +195,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
             if use_tags:
                 title = split_component(title, gh, number)
 
+            title = title.strip(' \t\n\r\f\v\.\,\;\:\-\=')
             pr2info[number] = (author, title, message)
 
             for issue in set(issues):
