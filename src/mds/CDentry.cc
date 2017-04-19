@@ -249,6 +249,18 @@ void CDentry::unlink_remote(CDentry::linkage_t *dnl)
   dnl->inode = 0;
 }
 
+void CDentry::push_projected_linkage()
+{
+  _project_linkage();
+
+  if (is_auth()) {
+    CInode *diri = dir->inode;
+    if (diri->is_stray())
+      diri->mdcache->notify_stray_removed();
+  }
+}
+
+
 void CDentry::push_projected_linkage(CInode *inode)
 {
   // dirty rstat tracking is in the projected plane
@@ -261,6 +273,12 @@ void CDentry::push_projected_linkage(CInode *inode)
 
   if (dirty_rstat)
     inode->mark_dirty_rstat();
+
+  if (is_auth()) {
+    CInode *diri = dir->inode;
+    if (diri->is_stray())
+      diri->mdcache->notify_stray_created();
+  }
 }
 
 CDentry::linkage_t *CDentry::pop_projected_linkage()
