@@ -105,7 +105,7 @@ private:
   ImageSyncThrottlerRef<> m_image_sync_throttler;
   mutable Mutex m_lock;
   Cond m_cond;
-  atomic_t m_stopping;
+  std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;
   bool m_blacklisted = false;
 
