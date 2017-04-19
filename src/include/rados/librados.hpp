@@ -481,6 +481,10 @@ namespace librados
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
+    void checksum(rados_checksum_type_t type, const bufferlist &init_value_bl,
+		  uint64_t off, size_t len, size_t chunk_size, bufferlist *pbl,
+		  int *prval);
+
     /**
      * see aio_sparse_read()
      */
@@ -744,6 +748,9 @@ namespace librados
     int writesame(const std::string& oid, bufferlist& bl,
 		  size_t write_len, uint64_t off);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
+    int checksum(const std::string& o, rados_checksum_type_t type,
+		 const bufferlist &init_value_bl, size_t len, uint64_t off,
+		 size_t chunk_size, bufferlist *pbl);
     int remove(const std::string& oid);
     int remove(const std::string& oid, int flags);
     int trunc(const std::string& oid, uint64_t size);

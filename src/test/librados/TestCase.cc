@@ -11,6 +11,20 @@ using namespace librados;
 std::string RadosTestNS::pool_name;
 rados_t RadosTestNS::s_cluster = NULL;
 
+namespace {
+
+void init_rand() {
+  static bool seeded = false;
+  if (!seeded) {
+    seeded = true;
+    int seed = getpid();
+    std::cout << "seed " << seed << std::endl;
+    srand(seed);
+  }
+}
+
+} // anonymous namespace
+
 void RadosTestNS::SetUpTestCase()
 {
   pool_name = get_temp_pool_name();
@@ -306,6 +320,8 @@ Rados RadosTestPP::s_cluster;
 
 void RadosTestPP::SetUpTestCase()
 {
+  init_rand();
+
   pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
 }

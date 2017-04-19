@@ -23,6 +23,7 @@
 #include "Watch.h"
 #include "TierAgentState.h"
 #include "messages/MOSDOpReply.h"
+#include "common/Checksummer.h"
 #include "common/sharedptr_registry.hpp"
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
@@ -1300,6 +1301,15 @@ protected:
   void calc_trim_to() override;
   int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
+
+  // -- checksum --
+  int do_checksum(OpContext *ctx, OSDOp& osd_op, bufferlist::iterator *bl_it,
+		  bool *async_read);
+  int finish_checksum(OSDOp& osd_op, Checksummer::CSumType csum_type,
+                      bufferlist::iterator *init_value_bl_it,
+                      const bufferlist &read_bl);
+
+  friend class C_ChecksumRead;
 
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 
