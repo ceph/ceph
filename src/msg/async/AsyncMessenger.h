@@ -237,6 +237,17 @@ private:
   bool need_addr;
 
   /**
+   * set to bind address if bind was called before NetworkStack was ready to
+   * bind
+   */
+  entity_addr_t pending_bind_addr;
+
+  /**
+   * false; set to true if a pending bind exists
+   */
+  bool pending_bind = false;
+
+  /**
    *  The following aren't lock-protected since you shouldn't be able to race
    *  the only writers.
    */
