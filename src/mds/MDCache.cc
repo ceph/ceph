@@ -9889,6 +9889,7 @@ void MDCache::handle_discover(MDiscover *dis)
     CDentry *dn = 0;
     if (curdir->get_version() == 0) {
       // fetch newly opened dir
+      assert(!curdir->has_bloom());
     } else if (dis->get_want().depth() > 0) {
       // lookup dentry
       dn = curdir->lookup(dis->get_dentry(i), snapid);
@@ -9897,7 +9898,8 @@ void MDCache::handle_discover(MDiscover *dis)
           
     // incomplete dir?
     if (!dn) {
-      if (!curdir->is_complete()) {
+      if (!curdir->is_complete() &&
+	  (!curdir->has_bloom() || curdir->is_in_bloom(dis->get_dentry(i)))) {
 	// readdir
 	dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << dendl;
 	if (reply->is_empty()) {
