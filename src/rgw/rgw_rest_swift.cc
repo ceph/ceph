@@ -2489,6 +2489,7 @@ int RGWHandler_REST_SWIFT::authorize()
 
     try {
       rgw::auth::IdentityApplier::aplptr_t applier = result.get_applier();
+      rgw::auth::Completer::cmplptr_t completer = result.get_completer();
 
       /* Account used by a given RGWOp is decoupled from identity employed
        * in the authorization phase (RGWOp::verify_permissions). */
@@ -2499,9 +2500,12 @@ int RGWHandler_REST_SWIFT::authorize()
        * to non-const and thus its modification is allowed. In the time
        * of writing only RGWTempURLEngine needed that feature. */
       applier->modify_request_state(s);
+      if (completer) {
+        completer->modify_request_state(s);
+      }
 
       s->auth.identity = std::move(applier);
-      s->auth.completer = std::move(result.get_completer());
+      s->auth.completer = std::move(completer);
 
       return 0;
     } catch (int err) {

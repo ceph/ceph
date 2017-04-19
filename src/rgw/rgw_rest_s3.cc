@@ -1780,11 +1780,21 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
         try {
           auto applier = result.get_applier();
+          auto completer = result.get_completer();
 
           applier->load_acct_info(*s->user);
           s->perm_mask = applier->get_perm_mask();
+
+          /* This is the signle place where we pass req_state as a pointer
+           * to non-const and thus its modification is allowed. In the time
+           * of writing only RGWTempURLEngine needed that feature. */
           applier->modify_request_state(s);
+          if (completer) {
+            completer->modify_request_state(s);
+          }
+
           s->auth.identity = std::move(applier);
+          s->auth.completer = std::move(completer);
 
           s->owner.set_id(s->user->user_id);
           s->owner.set_name(s->user->display_name);
@@ -3715,13 +3725,21 @@ int RGW_Auth_S3::authorize_v2(RGWRados* const store,
     }
     try {
       auto applier = result.get_applier();
+      auto completer = result.get_completer();
 
       applier->load_acct_info(*s->user);
       s->perm_mask = applier->get_perm_mask();
+
+      /* This is the signle place where we pass req_state as a pointer
+       * to non-const and thus its modification is allowed. In the time
+       * of writing only RGWTempURLEngine needed that feature. */
       applier->modify_request_state(s);
+      if (completer) {
+        completer->modify_request_state(s);
+      }
 
       s->auth.identity = std::move(applier);
-      s->auth.completer = result.get_completer();
+      s->auth.completer = std::move(completer);
 
       /* Populate the owner info. */
       s->owner.set_id(s->user->user_id);

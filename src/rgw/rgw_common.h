@@ -1776,7 +1776,7 @@ struct req_state {
      * through a well-defined interface. For more details, see rgw_auth.h. */
     std::unique_ptr<rgw::auth::Identity> identity;
 
-    std::unique_ptr<rgw::auth::Completer> completer;
+    std::shared_ptr<rgw::auth::Completer> completer;
 
     /* A container for credentials of the S3's browser upload. It's necessary
      * because: 1) the ::authenticate() method of auth engines and strategies
