@@ -173,7 +173,7 @@ function test_mark_init() {
     $mkdir -p $osd_data
 
     ${CEPH_DISK} $CEPH_DISK_ARGS \
-        prepare --osd-uuid $osd_uuid $osd_data || return 1
+        prepare --filestore --osd-uuid $osd_uuid $osd_data || return 1
 
     ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
@@ -221,7 +221,7 @@ function test_activate_dir_magic() {
 
     mkdir -p $osd_data/fsid
     CEPH_ARGS="--fsid $uuid" \
-     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data > $dir/out 2>&1
+     ${CEPH_DISK} $CEPH_DISK_ARGS prepare --filestore $osd_data > $dir/out 2>&1
     grep --quiet 'Is a directory' $dir/out || return 1
     ! [ -f $osd_data/magic ] || return 1
     rmdir $osd_data/fsid
@@ -229,7 +229,7 @@ function test_activate_dir_magic() {
     echo successfully prepare the OSD
 
     CEPH_ARGS="--fsid $uuid" \
-     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $dir/out
+     ${CEPH_DISK} $CEPH_DISK_ARGS prepare --filestore $osd_data 2>&1 | tee $dir/out
     grep --quiet 'Preparing osd data dir' $dir/out || return 1
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
     [ -f $osd_data/magic ] || return 1
@@ -237,7 +237,7 @@ function test_activate_dir_magic() {
     echo will not override an existing OSD
 
     CEPH_ARGS="--fsid $($uuidgen)" \
-     ${CEPH_DISK} $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $dir/out
+     ${CEPH_DISK} $CEPH_DISK_ARGS prepare --filestore $osd_data 2>&1 | tee $dir/out
     grep --quiet 'Data dir .* already exists' $dir/out || return 1
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
 }
@@ -272,7 +272,7 @@ function test_activate() {
     fi
 
     ${CEPH_DISK} $CEPH_DISK_ARGS \
-        prepare --osd-uuid $osd_uuid $to_prepare || return 1
+        prepare --filestore --osd-uuid $osd_uuid $to_prepare || return 1
 
     $timeoutcmd ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
@@ -308,7 +308,7 @@ function test_activate_dir_bluestore() {
       ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --bluestore --block-file --osd-uuid $osd_uuid $to_prepare || return 1
 
-    CEPH_ARGS=" --osd-objectstore=bluestore --bluestore-fsck-on-mount=true --enable_experimental_unrecoverable_data_corrupting_features=* --bluestore-block-db-size=67108864 --bluestore-block-wal-size=134217728 --bluestore-block-size=10737418240 $CEPH_ARGS" \
+    CEPH_ARGS=" --osd-objectstore=bluestore --bluestore-fsck-on-mount=true --bluestore-block-db-size=67108864 --bluestore-block-wal-size=134217728 --bluestore-block-size=10737418240 $CEPH_ARGS" \
       $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
@@ -376,7 +376,7 @@ function test_crush_device_class() {
     $mkdir -p $osd_data
 
     ${CEPH_DISK} $CEPH_DISK_ARGS \
-        prepare --osd-uuid $osd_uuid \
+        prepare --filestore --osd-uuid $osd_uuid \
                 --crush-device-class CRUSH_CLASS \
                 $osd_data || return 1
     test -f $osd_data/crush_device_class || return 1
