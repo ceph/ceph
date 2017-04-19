@@ -208,18 +208,22 @@ class DaemonWatcher(object):
 
     def get_stats_that_fit(self):
         '''
-        Truncated list of stats to display based on current terminal width
+        Get a possibly-truncated list of stats to display based on
+        current terminal width.  Allow breaking mid-section.
         '''
         current_fit = {}
         if self.termsize.changed or not self._stats_that_fit:
             width = 0
             for section_name, names in self._stats.items():
-                section_width = \
-                    sum([self.col_width(x) + 1 for x in names.values()]) - 1
-                if width + section_width > self.termsize.cols:
+                for name, stat_data in names.items():
+                    width += self.col_width(stat_data) + 1
+                    if width > self.termsize.cols:
+                        break
+                    if section_name not in current_fit:
+                        current_fit[section_name] = {}
+                    current_fit[section_name][name] = stat_data
+                if width > self.termsize.cols:
                     break
-                width += section_width
-                current_fit[section_name] = names
 
         self.termsize.reset_changed()
         changed = current_fit and (current_fit != self._stats_that_fit)
@@ -297,8 +301,8 @@ class DaemonWatcher(object):
         '''
         boolean: should we output this stat?
 
-        1) If self._statpats exists and the name filename-glob matches anything in the list,
-           and prio is high enough, or
+        1) If self._statpats exists and the name filename-glob-matches
+           anything in the list, and prio is high enough, or
         2) If self._statpats doesn't exist and prio is high enough
 
         then yes.
