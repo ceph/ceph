@@ -132,13 +132,15 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
             message_lines = commit.message.split('\n')
             if not strict and len(message_lines) > 1:
                 lines = []
+                duplicates_pr_title = False
                 for line in message_lines[1:]:
                     if 'Reviewed-by' in line:
                         continue
                     line = line.strip()
                     if line:
                         lines.append(line)
-                duplicates_pr_title = lines[0] == pr['title'].strip()
+                        duplicates_pr_title = lines[0] == pr['title'].strip()
+
                 if duplicates_pr_title:
                     lines.pop(0)
                 if len(lines) == 0:
