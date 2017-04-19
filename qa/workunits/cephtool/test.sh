@@ -1371,6 +1371,9 @@ function test_mon_osd_pool_quota()
 
 function test_mon_pg()
 {
+  # Make sure we start healthy.
+  wait_for_health_ok
+
   ceph pg debug unfound_objects_exist
   ceph pg debug degraded_pgs_exist
   ceph pg deep-scrub 0.0
@@ -1434,7 +1437,6 @@ function test_mon_pg()
   ceph osd set-backfillfull-ratio .912
 
   # Check injected full results
-  WAITFORFULL=10
   ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull nearfull
   wait_for_health "HEALTH_WARN.*1 nearfull osd(s)"
   ceph --admin-daemon $CEPH_OUT_DIR/osd.1.asok injectfull backfillfull
