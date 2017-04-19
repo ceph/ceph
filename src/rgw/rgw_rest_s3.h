@@ -623,6 +623,10 @@ static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
   // (The requirements, not the recommendations.)
   int len = name.size();
   if (len < 3) {
+    if (len == 0) {
+      // This request doesn't specify a bucket at all
+      return 0;
+    }
     // Name too short
     return -ERR_INVALID_BUCKET_NAME;
   } else if (len > 255) {
