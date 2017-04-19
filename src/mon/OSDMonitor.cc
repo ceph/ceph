@@ -327,6 +327,12 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     if (mon->monmap->get_required_features().contains_all(
           ceph::features::mon::FEATURE_LUMINOUS)) {
       creating_pgs = update_pending_creatings(inc);
+      for (const auto &osd_state : inc.new_state) {
+	if (osd_state.second & CEPH_OSD_UP) {
+	  // could be marked up *or* down, but we're too lazy to check which
+	  last_osd_report.erase(osd_state.first);
+	}
+      }
     }
   }
 
@@ -430,6 +436,11 @@ void OSDMonitor::on_active()
     }
   }
   start_mapping();
+}
+
+void OSDMonitor::on_restart()
+{
+  last_osd_report.clear();
 }
 
 void OSDMonitor::on_shutdown()
