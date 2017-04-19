@@ -18,6 +18,7 @@ from rgw_multi.zone_es  import ESZone as ESZone
 
 # make tests from rgw_multi.tests available to nose
 from rgw_multi.tests import *
+from rgw_multi.tests_es import *
 
 mstart_path = os.getenv('MSTART_PATH')
 if mstart_path is None:
@@ -286,6 +287,8 @@ def init(parse_args):
             zonegroup.zones.append(zone)
             if is_master:
                 zonegroup.master_zone = zone
+
+            zonegroup.zones_by_type.setdefault(zone.tier_type(), []).append(zone)
 
             if zone.is_read_only():
                 zonegroup.ro_zones.append(zone)
