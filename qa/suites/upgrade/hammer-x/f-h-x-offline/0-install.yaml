@@ -11,3 +11,4 @@ tasks:
     fs: xfs
     log-whitelist:
     - reached quota
+    - failed to encode
