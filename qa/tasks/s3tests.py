@@ -379,6 +379,8 @@ def scan_for_leaked_encryption_keys(ctx, config):
         log.debug('Scanning radosgw logs for leaked encryption keys...')
         procs = list()
         for client, client_config in config.iteritems():
+            if not client_config.get('scan_for_encryption_keys', True):
+                continue
             (remote,) = ctx.cluster.only(client).remotes.keys()
             proc = remote.run(
                 args=[
