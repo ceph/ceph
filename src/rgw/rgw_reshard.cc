@@ -311,7 +311,7 @@ int RGWReshard::block_while_resharding(const string& bucket_instance_oid)
 
     ret = cls_rgw_get_bucket_resharding(io_ctx, bucket_instance_oid,
 					entry, resharding);
-    if (ret < 0) {
+    if (ret < 0 && ret != -ENOENT && ret != -ENODATA) {
       ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: failed to get bucket resharding :"  <<
 	cpp_strerror(-ret)<< dendl;
       return ret;
