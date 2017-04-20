@@ -1210,7 +1210,7 @@ static bool object_is_expired(map<string, bufferlist>& attrs) {
       return false;
     }
 
-    if (delete_at <= ceph_clock_now(g_ceph_context)) {
+    if (delete_at <= ceph_clock_now(g_ceph_context) && !delete_at.is_zero()) {
       return true;
     }
   }
@@ -2763,8 +2763,8 @@ void RGWPutObj::execute()
     emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
   }
 
-  op_ret = processor->complete(etag, &mtime, real_time(), attrs, delete_at,
-			      if_match, if_nomatch);
+  op_ret = processor->complete(etag, &mtime, real_time(), attrs,
+                               (delete_at ? *delete_at : real_time()), if_match, if_nomatch);
 
 done:
   dispose_processor(processor);
@@ -2885,7 +2885,8 @@ void RGWPostObj::execute()
     emplace_attr(RGW_ATTR_CONTENT_TYPE, std::move(ct_bl));
   }
 
-  op_ret = processor->complete(etag, NULL, real_time(), attrs, delete_at);
+  op_ret = processor->complete(etag, NULL, real_time(), attrs,
+                              (delete_at ? *delete_at : real_time()));
 
 done:
   dispose_processor(processor);
@@ -3529,7 +3530,7 @@ void RGWCopyObj::execute()
                            copy_if_newer,
 			   attrs, RGW_OBJ_CATEGORY_MAIN,
 			   olh_epoch,
-			   delete_at,
+			   (delete_at ? *delete_at : real_time()),
 			   (version_id.empty() ? NULL : &version_id),
 			   &s->req_id, /* use req_id as tag */
 			   &etag,
