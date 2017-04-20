@@ -16,6 +16,9 @@
 #include <iostream>
 #include <map>
 
+#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string.hpp>
+
 #include <common/errno.h>
 #include "auth/Crypto.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -150,23 +153,6 @@ int RGWBL::bucket_bl_prepare(int index)
   } while (!entries.empty());
 
   return 0;
-}
-
-static vector<string> &split_shard_id(const string &s, char delim,
-				      vector<string> &elems) 
-{
-  stringstream ss(s);
-  string item;
-  while (getline(ss, item, delim)) {
-    elems.push_back(item);
-  }
-  return elems;
-}
-
-static vector<string> split_shard_id(const string &s, char delim) {
-  vector<std::string> elems;
-  split_shard_id(s, delim, elems);
-  return elems;
 }
 
 static string render_target_key(CephContext *cct, const string prefix, string obj_name)
@@ -376,7 +362,8 @@ int RGWBL::bucket_bl_process(string& shard_id)
   RGWObjectCtx obj_ctx(store);
 
   vector<std::string> result;
-  result = split_shard_id(shard_id, ':');
+  boost::split(result, shard_id, boost::is_any_of(":"));
+  assert(result.size() == 3);
   string sbucket_tenant = result[0]; // sbucket stands for source bucket
   string sbucket_name = result[1];
   string sbucket_id = result[2];
