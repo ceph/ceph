@@ -112,6 +112,9 @@ protected:
   // Has drain() ever been called on this instance?
   bool draining;
 
+  // recover the journal write_pos (drop any partial written entry)
+  void _recover(Context *completion);
+
   /**
    * @return true if we were in a position to try and consume something:
    *         does not mean we necessarily did.
