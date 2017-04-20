@@ -223,6 +223,9 @@ int AioFile<I>::discard(uint64_t offset, uint64_t length, bool sync) {
 
   int r;
   while (true) {
+#if !defined(DARWIN) && !defined(__FreeBSD__)
+# ifdef CEPH_HAVE_FALLOCATE
+#  ifdef FALLOC_FL_KEEP_SIZE
     r = fallocate(m_fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
                   offset, length);
     if (r == -1) {
@@ -232,12 +235,28 @@ int AioFile<I>::discard(uint64_t offset, uint64_t length, bool sync) {
       }
       return r;
     }
-    break;
+    goto out;
+#  endif
+# endif
+#endif
+  {
+    // fall back to writing zeros
+    bufferlist bl;
+    bl.append_zero(length);
+    r = ::lseek64(m_fd, offset, SEEK_SET);
+    if (r < 0) {
+      r = -errno;
+      goto out;
+    }
+    r = bl.write_fd(m_fd);
+  }
+
   }
 
   if (sync) {
     r = fdatasync();
   }
+out:
   return r;
 }
 
