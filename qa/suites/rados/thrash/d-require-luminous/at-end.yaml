@@ -2,9 +2,10 @@
 # the end of the test run, then do a final scrub (to convert any
 # legacy snapsets), and verify we are healthy.
 tasks:
-- exec_on_cleanup:
-    mon.a:
-      - ceph osd set require_luminous_osds
+- full_sequential_finally:
+  - exec:
+      mon.a:
+        - ceph osd set require_luminous_osds
 overrides:
   ceph:
     conf:
