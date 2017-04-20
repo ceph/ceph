@@ -153,7 +153,20 @@ int execute_peer_add(const po::variables_map &vm) {
     return r;
   }
 
+  // TODO: temporary restriction to prevent adding multiple peers
+  // until rbd-mirror daemon can properly handle the scenario
   librbd::RBD rbd;
+  std::vector<librbd::mirror_peer_t> mirror_peers;
+  r = rbd.mirror_peer_list(io_ctx, &mirror_peers);
+  if (r < 0) {
+    std::cerr << "rbd: failed to list mirror peers" << std::endl;
+    return r;
+  }
+  if (!mirror_peers.empty()) {
+    std::cerr << "rbd: multiple peers are not currently supported" << std::endl;
+    return -EINVAL;
+  }
+
   std::string uuid;
   r = rbd.mirror_peer_add(io_ctx, &uuid, remote_cluster, remote_client_name);
   if (r < 0) {
