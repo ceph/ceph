@@ -437,6 +437,8 @@ void Mgr::handle_log(MLog *m)
   for (const auto &e : m->entries) {
     py_modules.notify_all(e);
   }
+
+  m->put();
 }
 
 bool Mgr::ms_dispatch(Message *m)
@@ -460,11 +462,12 @@ bool Mgr::ms_dispatch(Message *m)
       ceph_abort();
 
       py_modules.notify_all("mon_map", "");
+      m->put();
       break;
     case CEPH_MSG_FS_MAP:
       py_modules.notify_all("fs_map", "");
       handle_fs_map((MFSMap*)m);
-      m->put();
+      return false; // I shall let this pass through for Client
       break;
     case CEPH_MSG_OSD_MAP:
       handle_osd_map();
@@ -478,7 +481,6 @@ bool Mgr::ms_dispatch(Message *m)
       break;
     case MSG_LOG:
       handle_log(static_cast<MLog *>(m));
-      m->put();
       break;
 
     default:
@@ -560,6 +562,7 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
   // the pgmap might have changed since last time we were here.
   py_modules.notify_all("pg_summary", "");
   dout(10) << "done." << dendl;
+
   m->put();
 }
 
