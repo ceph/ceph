@@ -1396,6 +1396,9 @@ function test_mon_osd_pool_quota()
 
 function test_mon_pg()
 {
+  # Make sure we start healthy.
+  wait_for_health_ok
+
   ceph pg debug unfound_objects_exist
   ceph pg debug degraded_pgs_exist
   ceph pg deep-scrub 0.0
