@@ -1383,6 +1383,9 @@ function test_mon_osd_pool_quota()
 
 function test_mon_pg()
 {
+  # Make sure we start healthy.
+  wait_for_health_ok
+
   ceph pg debug unfound_objects_exist
   ceph pg debug degraded_pgs_exist
   ceph pg deep-scrub 0.0
@@ -1438,7 +1441,7 @@ function test_mon_pg()
 
   # Check health status
   ceph osd set-nearfull-ratio .913
-  ceph health | grep 'ratio(s) out of order'
+  ceph health | grep 'HEALTH_ERR Full ratio(s) out of order'
   ceph health detail | grep 'backfill_ratio (0.912) < nearfull_ratio (0.913), increased'
   ceph osd set-nearfull-ratio .892
   ceph osd set-backfillfull-ratio .963
@@ -1446,28 +1449,22 @@ function test_mon_pg()
   ceph osd set-backfillfull-ratio .912
 
   # Check injected full results
-  WAITFORFULL=10
   ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull nearfull
-  sleep $WAITFORFULL
-  ceph health | grep "HEALTH_WARN.*1 nearfull osd(s)"
+  wait_for_health "HEALTH_WARN.*1 nearfull osd(s)"
   ceph --admin-daemon $CEPH_OUT_DIR/osd.1.asok injectfull backfillfull
-  sleep $WAITFORFULL
-  ceph health | grep "HEALTH_WARN.*1 backfillfull osd(s)"
+  wait_for_health "HEALTH_WARN.*1 backfillfull osd(s)"
   ceph --admin-daemon $CEPH_OUT_DIR/osd.2.asok injectfull failsafe
-  sleep $WAITFORFULL
   # failsafe and full are the same as far as the monitor is concerned
-  ceph health | grep "HEALTH_ERR.*1 full osd(s)"
+  wait_for_health "HEALTH_ERR.*1 full osd(s)"
   ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull full
-  sleep  $WAITFORFULL
-  ceph health | grep "HEALTH_ERR.*2 full osd(s)"
+  wait_for_health "HEALTH_ERR.*2 full osd(s)"
   ceph health detail | grep "osd.0 is full at.*%"
   ceph health detail | grep "osd.2 is full at.*%"
   ceph health detail | grep "osd.1 is backfill full at.*%"
   ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull none
   ceph --admin-daemon $CEPH_OUT_DIR/osd.1.asok injectfull none
   ceph --admin-daemon $CEPH_OUT_DIR/osd.2.asok injectfull none
-  sleep $WAITFORFULL
-  ceph health | grep HEALTH_OK
+  wait_for_health_ok
 
   ceph pg stat | grep 'pgs:'
   ceph pg 0.0 query

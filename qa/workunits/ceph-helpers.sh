@@ -1297,6 +1297,48 @@ function test_wait_for_clean() {
 #######################################################################
 
 ##
+# Wait until the cluster becomes HEALTH_OK again or if it does not make progress
+# for $TIMEOUT seconds.
+#
+# @return 0 if the cluster is HEALTHY, 1 otherwise
+#
+function wait_for_health() {
+    local grepstr=$1
+    local -a delays=($(get_timeout_delays $TIMEOUT .1))
+    local -i loop=0
+
+    while ! ceph health detail | grep "$grepstr" ; do
+        ceph health detail
+	if (( $loop >= ${#delays[*]} )) ; then
+            return 1
+        fi
+        sleep ${delays[$loop]}
+        loop+=1
+    done    
+    return 0
+}
+
+function wait_for_health_ok() {
+     wait_for_health "HEALTH_OK" || return 1
+     return 0
+} 
+
+function test_wait_for_health_ok() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mgr $dir x || return 1
+    ! TIMEOUT=1 wait_for_health_ok || return 1
+    run_osd $dir 0 || return 1
+    wait_for_health_ok || return 1
+    teardown $dir || return 1
+}
+
+
+#######################################################################
+
+##
 # Run repair on **pgid** and wait until it completes. The repair
 # function will fail if repair does not complete within $TIMEOUT
 # seconds.
