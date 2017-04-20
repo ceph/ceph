@@ -196,6 +196,11 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     return -EINVAL;
   }
 
+  if (io_size > std::numeric_limits<uint32_t>::max()) {
+    std::cerr << "rbd: io-size should be less than 4G" << std::endl;
+    return -EINVAL;
+  }
+
   rbd_bencher b(&image, io_type, io_size);
 
   std::cout << "bench "
