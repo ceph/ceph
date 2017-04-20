@@ -3959,6 +3959,48 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 	     << " " << n.timeout << "s)";
 }
 
+struct object_info_t;
+struct object_manifest_t {
+  enum {
+    TYPE_NONE = 0,
+    TYPE_REDIRECT = 1,  // start with this
+    TYPE_CHUNKED = 2,   // do this later
+  };
+  uint8_t type;  // redirect, chunked, ...
+  hobject_t redirect_target;
+
+  object_manifest_t() : type(0) { }
+  object_manifest_t(uint8_t type, const hobject_t& redirect_target) 
+    : type(type), redirect_target(redirect_target) { }
+
+  bool is_empty() const {
+    return type == TYPE_NONE;
+  }
+  bool is_redirect() const {
+    return type == TYPE_REDIRECT;
+  }
+  bool is_chunked() const {
+    return type == TYPE_CHUNKED;
+  }
+  static const char *get_type_name(uint8_t m) {
+    switch (m) {
+    case TYPE_NONE: return "none";
+    case TYPE_REDIRECT: return "redirect";
+    case TYPE_CHUNKED: return "chunked";
+    default: return "unknown";
+    }
+  }
+  const char *get_type_name() const {
+    return get_type_name(type);
+  }
+  static void generate_test_instances(list<object_manifest_t*>& o);
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  friend ostream& operator<<(ostream& out, const object_info_t& oi);
+};
+WRITE_CLASS_ENCODER(object_manifest_t)
+ostream& operator<<(ostream& out, const object_manifest_t& oi);
 
 struct object_info_t {
   hobject_t soid;
@@ -3980,6 +4022,7 @@ struct object_info_t {
     FLAG_DATA_DIGEST = 1 << 4,  // has data crc
     FLAG_OMAP_DIGEST = 1 << 5,  // has omap crc
     FLAG_CACHE_PIN = 1 << 6,    // pin the object in cache tier
+    FLAG_MANIFEST = 1 << 7,	// has manifest
     // ...
     FLAG_USES_TMAP = 1<<8,  // deprecated; no longer used.
   } flag_t;
@@ -4026,6 +4069,8 @@ struct object_info_t {
   uint64_t expected_object_size, expected_write_size;
   uint32_t alloc_hint_flags;
 
+  struct object_manifest_t manifest;
+
   void copy_user_bits(const object_info_t& other);
 
   static ps_t legacy_object_locator_to_ps(const object_t &oid, 
@@ -4060,6 +4105,9 @@ struct object_info_t {
   }
   bool is_cache_pinned() const {
     return test_flag(FLAG_CACHE_PIN);
+  }
+  bool has_manifest() const {
+    return !manifest.is_empty();
   }
 
   void set_data_digest(__u32 d) {
