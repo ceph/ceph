@@ -1549,9 +1549,10 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
-TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
+TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
   if(string(GetParam()) != "bluestore")
     return;
+  StartDeferred(0x10000);
 
   ObjectStore::Sequencer osr("test");
   int r;
@@ -5665,9 +5666,12 @@ void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
   test_obj.shutdown();
 }
 
-TEST_P(StoreTest, Many4KWritesTest) {
+TEST_P(StoreTestSpecificAUSize, Many4KWritesTest) {
   if (string(GetParam()) != "bluestore")
     return;
+
+  StartDeferred(0x10000);
+
   store_statfs_t res_stat;
   unsigned max_object = 4*1024*1024;
 
@@ -5677,9 +5681,10 @@ TEST_P(StoreTest, Many4KWritesTest) {
   ASSERT_EQ(res_stat.allocated, max_object);
 }
 
-TEST_P(StoreTest, Many4KWritesNoCSumTest) {
+TEST_P(StoreTestSpecificAUSize, Many4KWritesNoCSumTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  StartDeferred(0x10000);
   g_conf->set_val("bluestore_csum_type", "none");
   g_ceph_context->_conf->apply_changes(NULL);
   store_statfs_t res_stat;
@@ -5692,9 +5697,10 @@ TEST_P(StoreTest, Many4KWritesNoCSumTest) {
   g_conf->set_val("bluestore_csum_type", "crc32c");
 }
 
-TEST_P(StoreTest, TooManyBlobsTest) {
+TEST_P(StoreTestSpecificAUSize, TooManyBlobsTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  StartDeferred(0x10000);
   store_statfs_t res_stat;
   unsigned max_object = 4*1024*1024;
   doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0, &res_stat);
@@ -5991,7 +5997,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  g_conf->set_val("bluestore_max_blob_size", "524288");
+  g_conf->set_val("bluestore_max_blob_size", "0");
 
 }
 
@@ -6174,7 +6180,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  g_conf->set_val("bluestore_max_blob_size", "524288");
+  g_conf->set_val("bluestore_max_blob_size", "0");
 }
 
 TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
@@ -6248,7 +6254,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  g_conf->set_val("bluestore_max_blob_size", "524288");
+  g_conf->set_val("bluestore_max_blob_size", "0");
 }
 
 // The test case to reproduce an issue when write happens
@@ -6452,6 +6458,7 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
 
   StartDeferred(65536);
 
+  g_conf->set_val("bluestore_compression_max_blob_size", "524288");
   g_conf->set_val("bluestore_compression_min_blob_size", "262144");
   g_conf->set_val("bluestore_compression_mode", "force");
   g_conf->apply_changes(NULL);
@@ -6585,7 +6592,8 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
     }
   }
   g_conf->set_val("bluestore_gc_enable_total_threshold", "0");
-  g_conf->set_val("bluestore_compression_min_blob_size", "131072");
+  g_conf->set_val("bluestore_compression_min_blob_size", "0");
+  g_conf->set_val("bluestore_compression_max_blob_size", "0");
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->apply_changes(NULL);
 }

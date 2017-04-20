@@ -3249,7 +3249,11 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_compression_mode",
     "bluestore_compression_algorithm",
     "bluestore_compression_min_blob_size",
+    "bluestore_compression_min_blob_size_ssd",
+    "bluestore_compression_min_blob_size_hdd",
     "bluestore_compression_max_blob_size",
+    "bluestore_compression_max_blob_size_ssd",
+    "bluestore_compression_max_blob_size_hdd",
     "bluestore_max_alloc_size",
     "bluestore_prefer_deferred_size",
     "bleustore_deferred_batch_ops",
@@ -3259,6 +3263,9 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_max_bytes",
     "bluestore_deferred_max_ops",
     "bluestore_deferred_max_bytes",
+    "bluestore_max_blob_size",
+    "bluestore_max_blob_size_ssd",
+    "bluestore_max_blob_size_hdd",
     NULL
   };
   return KEYS;
@@ -3274,7 +3281,17 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("bluestore_compression_algorithm") ||
       changed.count("bluestore_compression_min_blob_size") ||
       changed.count("bluestore_compression_max_blob_size")) {
-    _set_compression();
+    if (bdev) {
+      _set_compression();
+    }
+  }
+  if (changed.count("bluestore_max_blob_size") ||
+      changed.count("bluestore_max_blob_size_ssd") ||
+      changed.count("bluestore_max_blob_size_hdd")) {
+    if (bdev) {
+      // only after startup
+      _set_blob_size();
+    }
   }
   if (changed.count("bluestore_prefer_deferred_size") ||
       changed.count("bluestore_max_alloc_size") ||
@@ -3306,8 +3323,27 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
 
 void BlueStore::_set_compression()
 {
-  comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size;
-  comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+  if (cct->_conf->bluestore_compression_max_blob_size) {
+    comp_min_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size_hdd;
+    } else {
+      comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size_ssd;
+    }
+  }
+
+  if (cct->_conf->bluestore_compression_max_blob_size) {
+    comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_hdd;
+    } else {
+      comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_ssd;
+    }
+  }
 
   auto m = Compressor::get_comp_mode_type(cct->_conf->bluestore_compression_mode);
   if (m) {
@@ -3363,6 +3399,21 @@ void BlueStore::_set_throttle_params()
 
   dout(10) << __func__ << " throttle_cost_per_io " << throttle_cost_per_io
 	   << dendl;
+}
+void BlueStore::_set_blob_size()
+{
+  if (cct->_conf->bluestore_max_blob_size) {
+    max_blob_size = cct->_conf->bluestore_max_blob_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      max_blob_size = cct->_conf->bluestore_max_blob_size_hdd;
+    } else {
+      max_blob_size = cct->_conf->bluestore_max_blob_size_ssd;
+    }
+  }
+  dout(10) << __func__ << " max_blob_size 0x" << std::hex << max_blob_size
+           << std::dec << dendl;
 }
 
 void BlueStore::_init_logger()
@@ -4848,8 +4899,6 @@ int BlueStore::mount()
 
   mempool_thread.init();
 
-  _set_csum();
-  _set_compression();
 
   mounted = true;
   return 0;
@@ -7120,6 +7169,10 @@ int BlueStore::_open_super_meta()
   _set_alloc_sizes();
   _set_throttle_params();
 
+  _set_csum();
+  _set_compression();
+  _set_blob_size();
+
   return 0;
 }
 
@@ -7208,9 +7261,10 @@ void BlueStore::_txc_calc_cost(TransContext *txc)
   for (auto& p : txc->ioc.pending_aios) {
     ios += p.iov.size();
   }
-  txc->cost = ios * throttle_cost_per_io + txc->bytes;
+  auto cost = throttle_cost_per_io.load();
+  txc->cost = ios * cost + txc->bytes;
   dout(10) << __func__ << " " << txc << " cost " << txc->cost << " ("
-	   << ios << " ios * " << throttle_cost_per_io << " + " << txc->bytes
+	   << ios << " ios * " << cost << " + " << txc->bytes
 	   << " bytes)" << dendl;
 }
 
@@ -9305,8 +9359,9 @@ int BlueStore::_do_alloc_write(
 
     AllocExtentVector extents;
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
-    int64_t got = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
-                            hint, &extents);
+    int64_t got = alloc->allocate(final_length, min_alloc_size, 
+				  max_alloc_size.load(),
+                    		  hint, &extents);
     assert(got == (int64_t)final_length);
     need -= got;
     txc->statfs_delta.allocated() += got;
@@ -9352,7 +9407,7 @@ int BlueStore::_do_alloc_write(
 
     // queue io
     if (!g_conf->bluestore_debug_omit_block_device_write) {
-      if (l->length() <= prefer_deferred_size) {
+      if (l->length() <= prefer_deferred_size.load()) {
 	dout(20) << __func__ << " deferring small 0x" << std::hex
 		 << l->length() << std::dec << " write via deferred" << dendl;
 	bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
@@ -9557,11 +9612,12 @@ int BlueStore::_do_write(
 			CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0) {
     dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
+    auto order = min_alloc_size_order.load();
     if (o->onode.expected_write_size) {
-      wctx.csum_order = std::max(min_alloc_size_order,
+      wctx.csum_order = std::max(order,
 			         (size_t)ctzl(o->onode.expected_write_size));
     } else {
-      wctx.csum_order = min_alloc_size_order;
+      wctx.csum_order = order;
     }
 
     if (wctx.compress) {
@@ -9592,9 +9648,9 @@ int BlueStore::_do_write(
       );
     }
   }
-  if (wctx.target_blob_size == 0 ||
-      wctx.target_blob_size > cct->_conf->bluestore_max_blob_size) {
-    wctx.target_blob_size = cct->_conf->bluestore_max_blob_size;
+  uint64_t max_bsize = max_blob_size.load();
+  if (wctx.target_blob_size == 0 || wctx.target_blob_size > max_bsize) {
+    wctx.target_blob_size = max_bsize;
   }
   // set the min blob size floor at 2x the min_alloc_size, or else we
   // won't be able to allocate a smaller extent for the compressed
