@@ -164,15 +164,6 @@
 :Default: ``2`` (i.e., rjenkins)
 
 
-``mds log``
-
-:Description: Set to ``true`` if the MDS should journal metadata updates 
-              (disabled for benchmarking only).
-              
-:Type:  Boolean
-:Default: ``true``
-
-
 ``mds log skip corrupt events``
 
 :Description: Determines whether the MDS should try to skip corrupt journal 

@@ -522,7 +522,6 @@ OPTION(mds_scatter_nudge_interval, OPT_FLOAT, 5)  // how quickly dirstat changes
 OPTION(mds_client_prealloc_inos, OPT_INT, 1000)
 OPTION(mds_early_reply, OPT_BOOL, true)
 OPTION(mds_default_dir_hash, OPT_INT, CEPH_STR_HASH_RJENKINS)
-OPTION(mds_log, OPT_BOOL, true)
 OPTION(mds_log_pause, OPT_BOOL, false)
 OPTION(mds_log_skip_corrupt_events, OPT_BOOL, false)
 OPTION(mds_log_max_events, OPT_INT, -1)
