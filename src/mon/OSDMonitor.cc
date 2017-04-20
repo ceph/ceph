@@ -3419,7 +3419,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
         out_of_order = true;
         if (detail) {
 	  ostringstream ss;
-	  ss << "backfill_ratio (" << br << ") < nearfull_ratio (" << nr << "), increased";
+	  ss << "backfillfull_ratio (" << br << ") < nearfull_ratio (" << nr << "), increased";
 	  detail->push_back(make_pair(HEALTH_ERR, ss.str()));
         }
         br = nr;
