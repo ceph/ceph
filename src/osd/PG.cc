@@ -5240,8 +5240,8 @@ void PG::start_peering_interval(
 	   << ", acting_primary " << old_acting_primary << " -> " << new_acting_primary
 	   << ", up_primary " << old_up_primary << " -> " << new_up_primary
 	   << ", role " << oldrole << " -> " << role
-	   << ", features acting " << acting_features
-	   << " upacting " << upacting_features
+	   << ", features acting " << hex << acting_features
+	   << " upacting " << hex << upacting_features
 	   << dendl;
 
   // deactivate.
