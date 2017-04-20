@@ -30,10 +30,6 @@
 
 #include <spdk/nvme.h>
 
-#include <rte_config.h>
-#include <rte_cycles.h>
-#include <rte_mempool.h>
-#include <rte_malloc.h>
 #include <rte_lcore.h>
 
 #include "include/stringify.h"
