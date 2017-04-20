@@ -1068,8 +1068,12 @@ OPTION(bluestore_prefer_deferred_size_hdd, OPT_U32, 32768)
 OPTION(bluestore_prefer_deferred_size_ssd, OPT_U32, 0)
 OPTION(bluestore_compression_mode, OPT_STR, "none")  // force|aggressive|passive|none
 OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
-OPTION(bluestore_compression_min_blob_size, OPT_U32, 128*1024)
-OPTION(bluestore_compression_max_blob_size, OPT_U32, 512*1024)
+OPTION(bluestore_compression_min_blob_size, OPT_U32, 0)
+OPTION(bluestore_compression_min_blob_size_hdd, OPT_U32, 128*1024)
+OPTION(bluestore_compression_min_blob_size_ssd, OPT_U32, 8*1024)
+OPTION(bluestore_compression_max_blob_size, OPT_U32, 0)
+OPTION(bluestore_compression_max_blob_size_hdd, OPT_U32, 512*1024)
+OPTION(bluestore_compression_max_blob_size_ssd, OPT_U32, 64*1024)
 /*
  * Specifies minimum expected amount of saved allocation units
  * per single blob to enable compressed blobs garbage collection
@@ -1083,7 +1087,9 @@ OPTION(bluestore_gc_enable_blob_threshold, OPT_INT, 0)
  */
 OPTION(bluestore_gc_enable_total_threshold, OPT_INT, 0)  
 
-OPTION(bluestore_max_blob_size, OPT_U32, 512*1024)
+OPTION(bluestore_max_blob_size, OPT_U32, 0)
+OPTION(bluestore_max_blob_size_hdd, OPT_U32, 512*1024)
+OPTION(bluestore_max_blob_size_ssd, OPT_U32, 64*1024)
 /*
  * Require the net gain of compression at least to be at this ratio,
  * otherwise we don't compress.
