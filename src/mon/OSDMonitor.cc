@@ -1232,6 +1232,48 @@ int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
   return 0;
 }
 
+int OSDMonitor::get_osd_objectstore_type(int osd, string *type)
+{
+  map<string, string> metadata;
+  int r = load_metadata(osd, metadata, nullptr);
+  if (r < 0)
+    return r;
+
+  auto it = metadata.find("osd_objectstore");
+  if (it == metadata.end())
+    return -ENOENT;
+  *type = it->second;
+  return 0;
+}
+
+bool OSDMonitor::is_pool_currently_all_bluestore(int64_t pool_id,
+						 const pg_pool_t &pool,
+						 ostream *err)
+{
+  // just check a few pgs for efficiency - this can't give a guarantee anyway,
+  // since filestore osds could always join the pool later
+  set<int> checked_osds;
+  for (unsigned ps = 0; ps < MIN(8, pool.get_pg_num()); ++ps) {
+    vector<int> up, acting;
+    pg_t pgid(ps, pool_id, -1);
+    osdmap.pg_to_up_acting_osds(pgid, up, acting);
+    for (int osd : up) {
+      if (checked_osds.find(osd) != checked_osds.end())
+	continue;
+      string objectstore_type;
+      int r = get_osd_objectstore_type(osd, &objectstore_type);
+      // allow with missing metadata, e.g. due to an osd never booting yet
+      if (r < 0 || objectstore_type == "bluestore") {
+	checked_osds.insert(osd);
+	continue;
+      }
+      *err << "osd." << osd << " uses " << objectstore_type;
+      return false;
+    }
+  }
+  return true;
+}
+
 int OSDMonitor::dump_osd_metadata(int osd, Formatter *f, ostream *err)
 {
   map<string,string> m;
@@ -4893,8 +4935,9 @@ void OSDMonitor::check_legacy_ec_plugin(const string& plugin, const string& prof
   }
 }
 
-int OSDMonitor::normalize_profile(const string& profilename, 
-				  ErasureCodeProfile &profile, 
+int OSDMonitor::normalize_profile(const string& profilename,
+				  ErasureCodeProfile &profile,
+				  bool force,
 				  ostream *ss)
 {
   ErasureCodeInterfaceRef erasure_code;
@@ -4904,10 +4947,39 @@ int OSDMonitor::normalize_profile(const string& profilename,
   int err = instance.factory(plugin->second,
 			     g_conf->get_val<std::string>("erasure_code_dir"),
 			     profile, &erasure_code, ss);
-  if (err)
+  if (err) {
     return err;
+  }
 
-  return erasure_code->init(profile, ss);
+  err = erasure_code->init(profile, ss);
+  if (err) {
+    return err;
+  }
+
+  auto it = profile.find("stripe_unit");
+  if (it != profile.end()) {
+    string err_str;
+    uint32_t stripe_unit = strict_si_cast<uint32_t>(it->second.c_str(), &err_str);
+    if (!err_str.empty()) {
+      *ss << "could not parse stripe_unit '" << it->second
+	  << "': " << err_str << std::endl;
+      return -EINVAL;
+    }
+    uint32_t data_chunks = erasure_code->get_data_chunk_count();
+    uint32_t chunk_size = erasure_code->get_chunk_size(stripe_unit * data_chunks);
+    if (chunk_size != stripe_unit) {
+      *ss << "stripe_unit " << stripe_unit << " does not match ec profile "
+	  << "alignment. Would be padded to " << chunk_size
+	  << std::endl;
+      return -EINVAL;
+    }
+    if ((stripe_unit % 4096) != 0 && !force) {
+      *ss << "stripe_unit should be a multiple of 4096 bytes for best performance."
+	  << "use --force to override this check" << std::endl;
+      return -EINVAL;
+    }
+  }
+  return 0;
 }
 
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
@@ -5130,12 +5202,22 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
+      ErasureCodeProfile profile =
+	osdmap.get_erasure_code_profile(erasure_code_profile);
       ErasureCodeInterfaceRef erasure_code;
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
-      uint32_t desired_stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
-      if (err == 0)
-	*stripe_width = erasure_code->get_data_chunk_count() *
-	  erasure_code->get_chunk_size(desired_stripe_width);
+      if (err)
+	break;
+      uint32_t data_chunks = erasure_code->get_data_chunk_count();
+      uint32_t stripe_unit = g_conf->osd_pool_erasure_code_stripe_unit;
+      auto it = profile.find("stripe_unit");
+      if (it != profile.end()) {
+	string err_str;
+	stripe_unit = strict_si_cast<uint32_t>(it->second.c_str(), &err_str);
+	assert(err_str.empty());
+      }
+      *stripe_width = data_chunks *
+	erasure_code->get_chunk_size(stripe_unit * data_chunks);
     }
     break;
   default:
@@ -5728,23 +5810,23 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "expecting value 'true' or '1'";
       return -EINVAL;
     }
-  } else if (var == "debug_white_box_testing_ec_overwrites") {
+  } else if (var == "allow_ec_overwrites") {
+    if (!p.is_erasure()) {
+      ss << "ec overwrites can only be enabled for an erasure coded pool";
+      return -EINVAL;
+    }
     if (val == "true" || (interr.empty() && n == 1)) {
-      if (cct->check_experimental_feature_enabled(
-	    "debug_white_box_testing_ec_overwrites")) {
 	p.flags |= pg_pool_t::FLAG_EC_OVERWRITES;
-      } else {
-	ss << "debug_white_box_testing_ec_overwrites is an experimental feature "
-	   << "and must be enabled.  Note, this feature does not yet actually "
-	   << "work.  This flag merely enables some of the preliminary support "
-	   << "for testing purposes.";
-	return -ENOTSUP;
-      }
     } else if (val == "false" || (interr.empty() && n == 0)) {
       ss << "ec overwrites cannot be disabled once enabled";
       return -EINVAL;
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
+      return -EINVAL;
+    }
+    stringstream err;
+    if (!is_pool_currently_all_bluestore(pool, p, &err)) {
+      ss << "pool must only be stored on bluestore for scrubbing to work: " << err.str();
       return -EINVAL;
     }
   } else if (var == "target_max_objects") {
@@ -6831,14 +6913,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	if (err)
 	  goto reply;
       }
-      err = normalize_profile(name, profile_map, &ss);
+      err = normalize_profile(name, profile_map, force, &ss);
       if (err)
 	goto reply;
 
       if (osdmap.has_erasure_code_profile(name)) {
 	ErasureCodeProfile existing_profile_map =
 	  osdmap.get_erasure_code_profile(name);
-	err = normalize_profile(name, existing_profile_map, &ss);
+	err = normalize_profile(name, existing_profile_map, force, &ss);
 	if (err)
 	  goto reply;
 
@@ -6892,7 +6974,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 						      &ss);
 	if (err)
 	  goto reply;
-	err = normalize_profile(name, profile_map, &ss);
+	err = normalize_profile(name, profile_map, true, &ss);
 	if (err)
 	  goto reply;
 	dout(20) << "erasure code profile set " << profile << "="

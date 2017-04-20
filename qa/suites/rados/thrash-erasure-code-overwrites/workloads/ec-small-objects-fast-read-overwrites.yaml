@@ -8,16 +8,22 @@ overrides:
 tasks:
 - rados:
     clients: [client.0]
-    ops: 4000
-    objects: 50
-    pool_snaps: true
+    ops: 400000
+    max_seconds: 600
+    max_in_flight: 64
+    objects: 1024
+    size: 16384
     ec_pool: true
-    erasure_code_use_hacky_overwrites: true
+    erasure_code_use_overwrites: true
+    fast_read: true
     op_weights:
       read: 100
       write: 100
+      append: 100
       delete: 50
       snap_create: 50
       snap_remove: 50
       rollback: 50
       copy_from: 50
+      setattr: 25
+      rmattr: 25

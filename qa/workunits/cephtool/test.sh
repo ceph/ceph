@@ -989,7 +989,7 @@ function test_mon_mds()
 
   # We should be permitted to use an EC pool with overwrites enabled
   # as the data pool...
-  ceph osd pool set mds-ec-pool debug_white_box_testing_ec_overwrites true --yes-i-really-mean-it
+  ceph osd pool set mds-ec-pool allow_ec_overwrites true
   ceph fs new $FS_NAME fs_metadata mds-ec-pool --force 2>$TMPFILE
   fail_all_mds $FS_NAME
   ceph fs rm $FS_NAME --yes-i-really-mean-it
@@ -1320,7 +1320,19 @@ function test_mon_osd_pool()
   # should fail because the type is not the same
   expect_false ceph osd pool create replicated 12 12 erasure
   ceph osd lspools | grep replicated
+  ceph osd pool create ec_test 1 1 erasure
+  set +e
+  ceph osd metadata | grep osd_objectstore_type | grep -qc bluestore
+  if [ $? -eq 0 ]; then
+      ceph osd pool set ec_test allow_ec_overwrites true >& $TMPFILE
+      check_response $? 22 "pool must only be stored on bluestore for scrubbing to work"
+  else
+      ceph osd pool set ec_test allow_ec_overwrites true || return 1
+      expect_false ceph osd pool set ec_test allow_ec_overwrites false
+  fi
+  set -e
   ceph osd pool delete replicated replicated --yes-i-really-really-mean-it
+  ceph osd pool delete ec_test ec_test --yes-i-really-really-mean-it
 }
 
 function test_mon_osd_pool_quota()
