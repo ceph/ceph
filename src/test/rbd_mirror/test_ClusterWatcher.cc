@@ -65,7 +65,6 @@ public:
 					           peer.cluster_name,
 					           peer.client_name));
       m_pool_peers[pool_id].insert(peer);
-      m_mirrored_pools.insert(pool_name);
     }
     if (name != nullptr) {
       *name = pool_name;
@@ -77,7 +76,6 @@ public:
     ASSERT_GE(pool_id, 0);
     if (m_pool_peers.find(pool_id) != m_pool_peers.end()) {
       m_pool_peers[pool_id].erase(peer);
-      m_mirrored_pools.erase(name);
       if (m_pool_peers[pool_id].empty()) {
 	m_pool_peers.erase(pool_id);
       }
@@ -126,7 +124,6 @@ public:
     m_cluster_watcher->refresh_pools();
     Mutex::Locker l(m_lock);
     ASSERT_EQ(m_pool_peers, m_cluster_watcher->get_pool_peers());
-    ASSERT_EQ(m_mirrored_pools, m_cluster_watcher->get_pool_names());
   }
 
   Mutex m_lock;
@@ -134,7 +131,6 @@ public:
   unique_ptr<ClusterWatcher> m_cluster_watcher;
 
   set<string> m_pools;
-  set<string> m_mirrored_pools;
   ClusterWatcher::PoolPeers m_pool_peers;
 };
 
