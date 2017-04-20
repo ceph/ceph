@@ -14,7 +14,7 @@
 #
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 # 
-%bcond_with ocf
+%bcond_without ocf
 %bcond_without cephfs_java
 %bcond_with tests
 %bcond_with xio
@@ -668,11 +668,13 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--without-lttng \
 		--without-babeltrace \
 %endif
-		$CEPH_EXTRA_CONFIGURE_ARGS \
-		%{?_with_ocf} \
+%if 0%{with ocf}
+		--with-ocf \
+%endif
 %if %{without tcmalloc}
 		--without-tcmalloc \
 %endif
+		$CEPH_EXTRA_CONFIGURE_ARGS \
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 %if %{with lowmem_builder}
