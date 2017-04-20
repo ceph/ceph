@@ -908,7 +908,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     int r = opts.set(RBD_IMAGE_OPTION_ORDER, order_);
     assert(r == 0);
 
-    r = create(io_ctx, imgname, size, opts, "", "");
+    r = create(io_ctx, imgname, size, opts, "", "", false);
 
     int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
     assert(r1 == 0);
@@ -940,7 +940,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     r = opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
     assert(r == 0);
 
-    r = create(io_ctx, imgname, size, opts, "", "");
+    r = create(io_ctx, imgname, size, opts, "", "", false);
 
     int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
     assert(r1 == 0);
@@ -952,7 +952,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     ImageOptions& opts,
              const std::string &non_primary_global_image_id,
-             const std::string &primary_mirror_uuid)
+             const std::string &primary_mirror_uuid,
+             bool skip_mirror_enable)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 10) << __func__ << " name=" << imgname << ", "
@@ -995,7 +996,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       std::string id = util::generate_image_id(io_ctx);
       image::CreateRequest<> *req = image::CreateRequest<>::create(
         io_ctx, imgname, id, size, opts, non_primary_global_image_id,
-        primary_mirror_uuid, &op_work_queue, &cond);
+        primary_mirror_uuid, skip_mirror_enable, &op_work_queue, &cond);
       req->send();
 
       r = cond.wait();
@@ -1176,7 +1177,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     c_opts.set(RBD_IMAGE_OPTION_FEATURES, features);
     r = create(c_ioctx, c_name, size, c_opts, non_primary_global_image_id,
-               primary_mirror_uuid);
+               primary_mirror_uuid, true);
     if (r < 0) {
       lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
       return r;
@@ -1224,6 +1225,35 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       if (r < 0) {
         lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
         goto err_remove_child;
+      }
+    }
+
+    if (c_imctx->test_features(RBD_FEATURE_JOURNALING)) {
+      cls::rbd::MirrorMode mirror_mode_internal =
+        cls::rbd::MIRROR_MODE_DISABLED;
+      r = cls_client::mirror_mode_get(&c_imctx->md_ctx, &mirror_mode_internal);
+      if (r < 0 && r != -ENOENT) {
+        lderr(cct) << "failed to retrieve mirror mode: " << cpp_strerror(r)
+                   << dendl;
+        goto err_remove_child;
+      }
+
+      // enable mirroring now that clone has been fully created
+      if (mirror_mode_internal == cls::rbd::MIRROR_MODE_POOL ||
+          !non_primary_global_image_id.empty()) {
+        C_SaferCond ctx;
+        mirror::EnableRequest<ImageCtx> *req =
+          mirror::EnableRequest<ImageCtx>::create(c_imctx->md_ctx, c_imctx->id,
+                                                  non_primary_global_image_id,
+                                                  c_imctx->op_work_queue, &ctx);
+        req->send();
+
+        r = ctx.wait();
+        if (r < 0) {
+          lderr(cct) << "failed to enable mirroring: " << cpp_strerror(r)
+                     << dendl;
+          goto err_remove_child;
+        }
       }
     }
 
@@ -1939,7 +1969,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       return -ENOSYS;
     }
 
-    int r = create(dest_md_ctx, destname, src_size, opts, "", "");
+    int r = create(dest_md_ctx, destname, src_size, opts, "", "", false);
     if (r < 0) {
       lderr(cct) << "header creation failed" << dendl;
       return r;

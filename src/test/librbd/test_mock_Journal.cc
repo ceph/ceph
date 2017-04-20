@@ -186,7 +186,6 @@ OpenRequest<MockJournalImageCtx> *OpenRequest<MockJournalImageCtx>::s_instance =
 
 // template definitions
 #include "librbd/Journal.cc"
-template class librbd::Journal<librbd::MockJournalImageCtx>;
 
 using ::testing::_;
 using ::testing::DoAll;
