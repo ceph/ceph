@@ -22,6 +22,8 @@
 #include "common/config_obs.h"
 #include "common/HeartbeatMap.h"
 
+#include <atomic>
+
 class CephContext;
 
 /// Pool of threads that share work submitted to multiple work queues.
@@ -623,9 +625,9 @@ class ShardedThreadPool {
   Cond shardedpool_cond;
   Cond wait_cond;
   uint32_t num_threads;
-  atomic_t stop_threads;
-  atomic_t pause_threads;
-  atomic_t drain_threads;
+  std::atomic<unsigned> stop_threads = { 0 };
+  std::atomic<unsigned> pause_threads = { 0 };
+  std::atomic<unsigned> drain_threads = { 0 };
   uint32_t num_paused;
   uint32_t num_drained;
 

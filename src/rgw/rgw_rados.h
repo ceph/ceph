@@ -2198,7 +2198,7 @@ class RGWRados
 
   void get_bucket_instance_ids(const RGWBucketInfo& bucket_info, int shard_id, map<int, string> *result);
 
-  atomic64_t max_req_id;
+  std::atomic<int64_t> max_req_id = { 0 };
   Mutex lock;
   Mutex watchers_lock;
   SafeTimer *timer;
@@ -2297,7 +2297,7 @@ protected:
 
   RGWPeriod current_period;
 public:
-  RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
+  RGWRados() : lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), lc(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), quota_threads(false),
                run_sync_thread(false), async_rados(nullptr), meta_notifier(NULL),
                data_notifier(NULL), meta_sync_processor_thread(NULL),
@@ -2319,7 +2319,7 @@ public:
                meta_mgr(NULL), data_log(NULL) {}
 
   uint64_t get_new_req_id() {
-    return max_req_id.inc();
+    return ++max_req_id;
   }
 
   librados::IoCtx* get_lc_pool_ctx() {

@@ -86,16 +86,16 @@ public:
       m_axes_config[i++] = ac;
     }
 
-    m_rawData.reset(new std::atomic<int64_t>[get_raw_size()]);
+    m_rawData.reset(new std::atomic<uint64_t>[get_raw_size()]);
   }
 
   /// Copy from other histogram object
   PerfHistogram(const PerfHistogram &other)
       : m_axes_config(other.m_axes_config) {
     int64_t size = get_raw_size();
-    m_rawData.reset(new std::atomic<int64_t>[size]);
+    m_rawData.reset(new std::atomic<uint64_t>[size]);
     for (int64_t i = 0; i < size; i++) {
-      m_rawData[i] = other.m_rawData[i].load();
+      m_rawData[i] = other.m_rawData[i];
     }
   }
 
@@ -111,14 +111,14 @@ public:
   template <typename... T>
   void inc(T... axis) {
     auto index = get_raw_index_for_value(axis...);
-    m_rawData[index]++;
+    m_rawData[index] += 1;
   }
 
   /// Increase counter for given axis buckets by one
   template <typename... T>
   void inc_bucket(T... bucket) {
     auto index = get_raw_index_for_bucket(bucket...);
-    m_rawData[index]++;
+    m_rawData[index] += 1;
   }
 
   /// Read value from given bucket
@@ -144,7 +144,7 @@ public:
 protected:
   /// Raw data stored as linear space, internal indexes are calculated on
   /// demand.
-  std::unique_ptr<std::atomic<int64_t>[]> m_rawData;
+  std::unique_ptr<std::atomic<uint64_t>[]> m_rawData;
 
   /// Configuration of axes
   std::array<axis_config_d, DIM> m_axes_config;

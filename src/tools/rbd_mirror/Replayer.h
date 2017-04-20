@@ -13,7 +13,6 @@
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
-#include "include/atomic.h"
 #include "include/rados/librados.hpp"
 
 #include "ClusterWatcher.h"
@@ -21,6 +20,8 @@
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
 #include "types.h"
+
+#include <atomic>
 
 class AdminSocketHook;
 
@@ -103,7 +104,7 @@ private:
   ImageSyncThrottlerRef<> m_image_sync_throttler;
   mutable Mutex m_lock;
   Cond m_cond;
-  atomic_t m_stopping;
+  std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;
   bool m_blacklisted = false;
 

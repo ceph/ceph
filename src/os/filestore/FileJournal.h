@@ -26,10 +26,12 @@ using std::deque;
 #include "common/Throttle.h"
 #include "JournalThrottle.h"
 
-
 #ifdef HAVE_LIBAIO
 # include <libaio.h>
 #endif
+
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 /**
  * Implements journaling on top of block device or file.

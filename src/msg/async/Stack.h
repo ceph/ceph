@@ -17,9 +17,8 @@
 #ifndef CEPH_MSG_ASYNC_STACK_H
 #define CEPH_MSG_ASYNC_STACK_H
 
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 #include "common/perf_counters.h"
-#include "common/simple_spin.h"
 #include "msg/msg_types.h"
 #include "msg/async/Event.h"
 

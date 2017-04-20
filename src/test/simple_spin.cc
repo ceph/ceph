@@ -1,25 +1,31 @@
 #include "gtest/gtest.h"
 
-#include "common/simple_spin.h"
+#include "include/spinlock.h"
+
+using ceph::spin_lock;
+using ceph::spin_unlock;
 
 #include <future>
 
 TEST(SimpleSpin, Test0)
 {
-  std::atomic_flag lock0 = ATOMIC_FLAG_INIT;
-  simple_spin_lock(&lock0);
-  simple_spin_unlock(&lock0);
+  std::atomic_flag lock0 = { false };
+  spin_lock(&lock0);
+  spin_unlock(&lock0);
+
+  spin_lock(lock0);
+  spin_unlock(lock0);
 }
 
-static std::atomic_flag lock = ATOMIC_FLAG_INIT;
+static std::atomic_flag lock = { false };
 static uint32_t counter = 0;
 
 static void* mythread(void *v)
 {
   for (int j = 0; j < 1000000; ++j) {
-    simple_spin_lock(&lock);
+    spin_lock(&lock);
     counter++;
-    simple_spin_unlock(&lock);
+    spin_unlock(&lock);
   }
   return NULL;
 }

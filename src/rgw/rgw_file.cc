@@ -27,6 +27,8 @@
 #include "rgw_file.h"
 #include "rgw_lib_frontend.h"
 
+#include <atomic>
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace rgw;
@@ -37,7 +39,7 @@ namespace rgw {
 
   const string RGWFileHandle::root_name = "/";
 
-  atomic<uint32_t> RGWLibFS::fs_inst_counter;
+  std::atomic<uint32_t> RGWLibFS::fs_inst_counter;
 
   uint32_t RGWLibFS::write_completion_interval_s = 10;
 

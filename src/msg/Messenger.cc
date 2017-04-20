@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <random>
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 #include "include/types.h"
 #include "Messenger.h"
 
@@ -11,6 +11,9 @@
 #ifdef HAVE_XIO
 #include "msg/xio/XioMessenger.h"
 #endif
+
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
 {

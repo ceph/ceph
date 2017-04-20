@@ -57,7 +57,7 @@ class WorkloadGenerator : public TestObjectStoreState {
   int m_max_in_flight;
   int m_num_ops;
   int m_destroy_coll_every_nr_runs;
-  atomic_t m_nr_runs;
+  std::atomic<unsigned> m_nr_runs = { 0 };
 
   int m_num_colls;
 
@@ -110,7 +110,7 @@ class WorkloadGenerator : public TestObjectStoreState {
 
   bool should_destroy_collection() {
     return ((m_destroy_coll_every_nr_runs > 0) &&
-        ((int)m_nr_runs.read() >= m_destroy_coll_every_nr_runs));
+        (static_cast<int>(m_nr_runs) >= m_destroy_coll_every_nr_runs));
   }
   void do_destroy_collection(ObjectStore::Transaction *t, coll_entry_t *entry,
       C_StatState *stat);
@@ -135,7 +135,7 @@ public:
     void finish(int r) override
     {
       TestObjectStoreState::C_OnFinished::finish(r);
-      wrkldgen_state->m_nr_runs.inc();
+      wrkldgen_state->m_nr_runs++;
     }
   };
 

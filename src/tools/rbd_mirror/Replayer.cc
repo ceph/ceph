@@ -245,7 +245,7 @@ Replayer::~Replayer()
 {
   delete m_asok_hook;
 
-  m_stopping.set(1);
+  m_stopping = 1;
   {
     Mutex::Locker l(m_lock);
     m_cond.Signal();
@@ -422,7 +422,7 @@ void Replayer::run()
 {
   dout(20) << "enter" << dendl;
 
-  while (!m_stopping.read()) {
+  while (!m_stopping) {
     std::string asok_hook_name = m_local_io_ctx.get_pool_name() + " " +
                                  m_peer.cluster_name;
     if (m_asok_hook_name != asok_hook_name || m_asok_hook == nullptr) {
@@ -436,7 +436,7 @@ void Replayer::run()
     Mutex::Locker locker(m_lock);
     if (m_pool_watcher && m_pool_watcher->is_blacklisted()) {
       m_blacklisted = true;
-      m_stopping.set(1);
+      m_stopping = 1;
       break;
     }
 
@@ -482,7 +482,7 @@ void Replayer::start()
 
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping) {
     return;
   }
 
@@ -495,10 +495,10 @@ void Replayer::stop(bool manual)
 
   Mutex::Locker l(m_lock);
   if (!manual) {
-    m_stopping.set(1);
+    m_stopping = 1;
     m_cond.Signal();
     return;
-  } else if (m_stopping.read()) {
+  } else if (m_stopping) {
     return;
   }
 
@@ -511,7 +511,7 @@ void Replayer::restart()
 
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping) {
     return;
   }
 
@@ -524,7 +524,7 @@ void Replayer::flush()
 
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read() || m_manual_stop) {
+  if (m_stopping || m_manual_stop) {
     return;
   }
 
@@ -537,7 +537,7 @@ void Replayer::release_leader()
 
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read() || !m_leader_watcher) {
+  if (m_stopping || !m_leader_watcher) {
     return;
   }
 
@@ -548,7 +548,7 @@ void Replayer::handle_update(const std::string &mirror_uuid,
                              const ImageIds &added_image_ids,
                              const ImageIds &removed_image_ids) {
   assert(!mirror_uuid.empty());
-  if (m_stopping.read()) {
+  if (m_stopping) {
     return;
   }
 
@@ -600,8 +600,89 @@ void Replayer::handle_update(const std::string &mirror_uuid,
                                        {{mirror_uuid, image_id.id}},
                                        gather_ctx->new_sub());
   }
+}
 
-  gather_ctx->activate();
+void Replayer::start_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
+{
+  assert(m_lock.is_locked());
+  if (!image_replayer->is_stopped() || image_replayer->remote_images_empty()) {
+    return;
+  } else if (image_replayer->is_blacklisted()) {
+    derr << "blacklisted detected during image replay" << dendl;
+    m_blacklisted = true;
+    m_stopping = 1;
+    return;
+  }
+
+  std::string global_image_id = image_replayer->get_global_image_id();
+  dout(20) << "global_image_id=" << global_image_id << dendl;
+
+  FunctionContext *ctx = new FunctionContext(
+      [this, global_image_id] (int r) {
+        dout(20) << "image deleter result: r=" << r << ", "
+                 << "global_image_id=" << global_image_id << dendl;
+        if (r == -ESTALE || r == -ECANCELED) {
+          return;
+        }
+
+        Mutex::Locker locker(m_lock);
+        auto it = m_image_replayers.find(global_image_id);
+        if (it == m_image_replayers.end()) {
+          return;
+        }
+
+        auto &image_replayer = it->second;
+        if (r >= 0) {
+          image_replayer->start();
+        } else {
+          start_image_replayer(image_replayer);
+        }
+     }
+  );
+
+  m_image_deleter->wait_for_scheduled_deletion(
+    m_local_pool_id, image_replayer->get_global_image_id(), ctx, false);
+}
+
+bool Replayer::stop_image_replayer(unique_ptr<ImageReplayer<> > &image_replayer)
+{
+  assert(m_lock.is_locked());
+  dout(20) << "global_image_id=" << image_replayer->get_global_image_id()
+           << dendl;
+
+  // TODO: check how long it is stopping and alert if it is too long.
+  if (image_replayer->is_stopped()) {
+    m_image_deleter->cancel_waiter(m_local_pool_id,
+                                   image_replayer->get_global_image_id());
+
+    if (!m_stopping && m_leader_watcher->is_leader()) {
+      dout(20) << "scheduling delete" << dendl;
+      m_image_deleter->schedule_image_delete(
+        m_local_rados,
+        image_replayer->get_local_pool_id(),
+        image_replayer->get_local_image_id(),
+        image_replayer->get_global_image_id());
+    }
+    return true;
+  } else {
+    if (!m_stopping) {
+      dout(20) << "scheduling delete after image replayer stopped" << dendl;
+    }
+    FunctionContext *ctx = new FunctionContext(
+        [&image_replayer, this] (int r) {
+          if (!m_stopping && m_leader_watcher->is_leader() && r >= 0) {
+            m_image_deleter->schedule_image_delete(
+              m_local_rados,
+              image_replayer->get_local_pool_id(),
+              image_replayer->get_local_image_id(),
+              image_replayer->get_global_image_id());
+          }
+        }
+    );
+    image_replayer->stop(ctx);
+  }
+
+  return false;
 }
 
 void Replayer::handle_post_acquire_leader(Context *on_finish) {

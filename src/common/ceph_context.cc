@@ -41,7 +41,7 @@
 #include <iostream>
 #include <pthread.h>
 
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 
 using ceph::HeartbeatMap;
 
@@ -529,12 +529,6 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
     crush_location(this),
     _cct_perf(NULL)
 {
-  ceph_spin_init(&_service_thread_lock);
-  ceph_spin_init(&_associated_objs_lock);
-  ceph_spin_init(&_fork_watchers_lock);
-  ceph_spin_init(&_feature_lock);
-  ceph_spin_init(&_cct_perf_lock);
-
   _log = new ceph::logging::Log(&_conf->subsys);
   _log->start();
 
@@ -639,11 +633,6 @@ CephContext::~CephContext()
   _log = NULL;
 
   delete _conf;
-  ceph_spin_destroy(&_service_thread_lock);
-  ceph_spin_destroy(&_fork_watchers_lock);
-  ceph_spin_destroy(&_associated_objs_lock);
-  ceph_spin_destroy(&_feature_lock);
-  ceph_spin_destroy(&_cct_perf_lock);
 
   delete _crypto_none;
   delete _crypto_aes;
@@ -652,7 +641,7 @@ CephContext::~CephContext()
 }
 
 void CephContext::put() {
-  if (nref.dec() == 0) {
+  if (--nref == 0) {
     ANNOTATE_HAPPENS_AFTER(&nref);
     ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&nref);
     delete this;

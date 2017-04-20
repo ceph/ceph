@@ -29,12 +29,13 @@ extern "C" {
 }
 
 #include "Common/String.h"
-#include "Common/atomic.h"
 #include "Common/Properties.h"
 
 #include "DfsBroker/Lib/Broker.h"
 
 #include <cephfs/libcephfs.h>
+
+#include <atomic>
 
 namespace Hypertable {
   using namespace DfsBroker;
@@ -97,7 +98,7 @@ namespace Hypertable {
 
   private:
     struct ceph_mount_info *cmount;
-    static atomic_t ms_next_fd;
+    static std::atomic<unsigned> ms_next_fd { 0 };
 
     virtual void report_error(ResponseCallback *cb, int error);
 

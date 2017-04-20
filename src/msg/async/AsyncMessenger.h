@@ -26,7 +26,6 @@ using namespace std;
 #include "include/unordered_set.h"
 
 #include "common/Mutex.h"
-#include "include/atomic.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 
@@ -260,7 +259,7 @@ private:
   /// counter for the global seq our connection protocol uses
   __u32 global_seq;
   /// lock to protect the global_seq
-  ceph_spinlock_t global_seq_lock;
+  ceph::Spinlock global_seq_lock;
 
   /**
    * hash map of addresses to Asyncconnection
@@ -392,11 +391,11 @@ public:
    * @return a global sequence ID that nobody else has seen.
    */
   __u32 get_global_seq(__u32 old=0) {
-    ceph_spin_lock(&global_seq_lock);
+    ceph::spin_lock(&global_seq_lock);
     if (old > global_seq)
       global_seq = old;
     __u32 ret = ++global_seq;
-    ceph_spin_unlock(&global_seq_lock);
+    ceph::spin_unlock(&global_seq_lock);
     return ret;
   }
   /**
