@@ -438,6 +438,8 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
       dout(0) << "unrecognized message " << *m << dendl;
       return false;
     }
+
+    heartbeat_reset();
   }
 
   if (dispatch_depth > 1)
