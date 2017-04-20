@@ -64,7 +64,7 @@ class StoreTool
         break;
 
       if (out)
-        *out << rk.first << ":" << rk.second;
+        *out << rk.first << "\t" << rk.second;
       if (do_crc) {
         bufferlist bl;
         bl.append(rk.first);
@@ -73,7 +73,7 @@ class StoreTool
 
         crc = bl.crc32c(crc);
         if (out) {
-          *out << " (" << bl.crc32c(0) << ")";
+          *out << "\t" << bl.crc32c(0);
         }
       }
       if (out)
