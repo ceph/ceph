@@ -76,6 +76,7 @@ void _usage()
   cout << "  bi put                     store bucket index object entries\n";
   cout << "  bi list                    list raw bucket index entries\n";
   cout << "  object rm                  remove object\n";
+  cout << "  object stat                stat an object for its metadata\n";
   cout << "  object unlink              unlink object from bucket index\n";
   cout << "  objects expire             run expired objects cleanup\n";
   cout << "  period delete              delete a period\n";
