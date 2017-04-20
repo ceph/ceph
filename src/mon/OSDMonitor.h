@@ -432,6 +432,7 @@ private:
   void trim_creating_pgs(creating_pgs_t *creating_pgs, const PGMap& pgm);
   void scan_for_creating_pgs(const std::map<int64_t,pg_pool_t>& pools,
 			     const std::set<int64_t>& removed_pools,
+			     utime_t modified,
 			     creating_pgs_t* creating_pgs) const;
   pair<int32_t, pg_t> get_parent_pg(pg_t pgid) const;
   void update_creating_pgs();

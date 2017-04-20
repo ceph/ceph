@@ -1317,6 +1317,23 @@ class CephManager:
                 return int(pg['acting'][-1])
         assert False
 
+    def wait_for_pg_stats(func):
+        # both osd_mon_report_interval_min and mgr_stats_period are 5 seconds
+        # by default, and take the faulty injection in ms into consideration,
+        # 12 seconds are more than enough
+        delays = [1, 1, 2, 3, 5, 8, 13]
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            exc = None
+            for delay in delays:
+                try:
+                    return func(self, *args, **kwargs)
+                except AssertionError as e:
+                    time.sleep(delay)
+                    exc = e
+            raise exc
+        return wrapper
+
     def get_pg_primary(self, pool, pgnum):
         """
         get primary for pool, pgnum (e.g. (data, 0)->0
@@ -1710,29 +1727,17 @@ class CephManager:
                 ret[status] += 1
         return ret
 
-    def pg_scrubbing(self, pool, pgnum):
-        """
-        pg scrubbing wrapper
-        """
+    @wait_for_pg_stats
+    def with_pg_state(self, pool, pgnum, check):
         pgstr = self.get_pgid(pool, pgnum)
         stats = self.get_single_pg_stats(pgstr)
-        return 'scrub' in stats['state']
+        assert(check(stats['state']))
 
-    def pg_repairing(self, pool, pgnum):
-        """
-        pg repairing wrapper
-        """
+    @wait_for_pg_stats
+    def with_pg(self, pool, pgnum, check):
         pgstr = self.get_pgid(pool, pgnum)
         stats = self.get_single_pg_stats(pgstr)
-        return 'repair' in stats['state']
-
-    def pg_inconsistent(self, pool, pgnum):
-        """
-        pg inconsistent wrapper
-        """
-        pgstr = self.get_pgid(pool, pgnum)
-        stats = self.get_single_pg_stats(pgstr)
-        return 'inconsistent' in stats['state']
+        return check(stats)
 
     def get_last_scrub_stamp(self, pool, pgnum):
         """
