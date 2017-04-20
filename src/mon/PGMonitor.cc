@@ -1479,6 +1479,33 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
         detail->push_back(make_pair(HEALTH_WARN, ss.str()));
     }
   }
+  if (g_conf->mon_warn_osd_pg_percent) {
+    int max_osd_pgs = 0, min_osd_pgs = INT_MAX;
+    for (auto p = pg_map.osd_stat.begin(); p != pg_map.osd_stat.end(); ++p) {
+      int pgs = pg_map.get_num_pg_by_osd(p->first);
+	  // PGS of OSD should never be 0, if the OSD up and in, otherwise this WARN should ignore it.
+	  if (0 == pgs)
+        continue;
+      if (pgs > max_osd_pgs)
+        max_osd_pgs = pgs;
+      if (pgs < min_osd_pgs)
+        min_osd_pgs = pgs;
+    }
+
+    if (max_osd_pgs) {
+      float diff_perc = (float)(max_osd_pgs - min_osd_pgs)/max_osd_pgs;
+      if (diff_perc > g_conf->mon_warn_osd_pg_percent) {
+        ostringstream ss;
+        ss.precision(1);
+        //avoid scientific
+        ss.setf(std::ios::fixed);
+        ss << "Difference in max osd pgs and min osd pgs " << (diff_perc *100) << "% greater than " << (g_conf->mon_warn_osd_pg_percent * 100) << "%";
+        summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+        if (detail)
+          detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+  }
 
   // recovery
   list<string> sl;
