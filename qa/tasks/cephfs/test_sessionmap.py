@@ -215,6 +215,7 @@ class TestSessionMap(CephFSTestCase):
 
         self.mount_a.run_shell(["mkdir", "foo"])
         self.mount_a.run_shell(["mkdir", "foo/bar"])
+        self.mount_a.run_shell(["mkdir", "baz"])
         self.mount_a.umount_wait()
 
         # Mount B will be my rejected client
@@ -228,9 +229,7 @@ class TestSessionMap(CephFSTestCase):
         self.mount_b.create_destroy()
         self.mount_b.umount_wait()
 
-        # Configure the client to claim that its mount point metadata is /baz
-        self.set_conf("client.badguy", "client_metadata", "root=/baz")
         # Try to mount the client, see that it fails
         with self.assert_cluster_log("client session with invalid root '/baz' denied"):
             with self.assertRaises(CommandFailedError):
-                self.mount_b.mount(mount_path="/foo/bar")
+                self.mount_b.mount(mount_path="/baz")
