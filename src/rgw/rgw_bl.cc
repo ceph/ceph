@@ -105,6 +105,14 @@ bool RGWBL::if_already_run_today(time_t& start_date)
   bdt.tm_min = 0;
   bdt.tm_sec = 0;
   begin_of_day = mktime(&bdt);
+
+  if (cct->_conf->rgw_bl_debug_interval > 0) {
+    if ((now - begin_of_day) < cct->_conf->rgw_bl_debug_interval)
+      return true;
+    else
+      return false;
+  }
+
   if (now - begin_of_day < 24*60*60)
     return true;
   else
@@ -706,18 +714,27 @@ bool RGWBL::BLWorker::should_work(utime_t& now)
   struct tm bdt;
   time_t tt = now.sec();
   localtime_r(&tt, &bdt);
-
-  if ((bdt.tm_hour*60 + bdt.tm_min >= start_hour*60 + start_minute) &&
-      (bdt.tm_hour*60 + bdt.tm_min <= end_hour*60 + end_minute)) {
+  if (cct->_conf->rgw_bl_debug_interval > 0) {
+    /* we're debugging, so say we can run */
     return true;
   } else {
-    return false;
+    if ((bdt.tm_hour*60 + bdt.tm_min >= start_hour*60 + start_minute) &&
+        (bdt.tm_hour*60 + bdt.tm_min <= end_hour*60 + end_minute)) {
+      return true;
+    } else {
+      return false;
+    }
   }
 
 }
 
 int RGWBL::BLWorker::schedule_next_start_time(utime_t& now)
 {
+  if (cct->_conf->rgw_bl_debug_interval > 0) {
+       int secs = cct->_conf->rgw_bl_debug_interval;
+       return (secs);
+  }
+
   int start_hour;
   int start_minute;
   int end_hour;
