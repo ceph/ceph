@@ -18,6 +18,4 @@ overrides:
       osd:
         osd deep scrub update digest min age: 0
 tasks:
-- install:
-- ceph:
 - scrub_test:

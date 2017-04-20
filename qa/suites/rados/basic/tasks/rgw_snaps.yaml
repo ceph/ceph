@@ -7,8 +7,6 @@ overrides:
       osd:
         osd_max_omap_entries_per_request: 10
 tasks:
-- install:
-- ceph:
 - rgw:
     default_idle_timeout: 3600
     client.0: null

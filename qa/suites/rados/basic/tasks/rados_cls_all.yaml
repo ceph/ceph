@@ -7,8 +7,6 @@ overrides:
         osd_class_default_list: "cephfs hello journal lock log numops rbd refcount 
                                  replica_log rgw sdk statelog timeindex user version"
 tasks:
-- install:
-- ceph:
 - workunit:
     clients:
       client.0:

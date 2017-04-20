@@ -21,7 +21,5 @@ overrides:
         filestore debug inject read err: true
         bluestore debug inject read err: true
 tasks:
-- install:
-- ceph:
 - repair_test:
 
