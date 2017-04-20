@@ -7557,7 +7557,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 	for (map<epoch_t,pg_interval_t>::reverse_iterator p = pg->past_intervals.rbegin();
 	     p != pg->past_intervals.rend();
 	     ++p) {
-	  if (p->first < pg->info.history.last_epoch_started)
+	  if (p->second.last < pg->info.history.last_epoch_started)
 	    break;
 	  if (!p->second.maybe_went_rw)
 	    continue;
