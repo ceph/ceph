@@ -69,6 +69,9 @@
       nbd list (nbd ls)           List the nbd devices already used.
       nbd map                     Map image to a nbd device.
       nbd unmap                   Unmap a nbd device.
+      ns create                   Create a namespace of a pool.
+      ns list (ns ls)             List all namespaces of a pool.
+      ns remove (ns rm)           Create a namespace of a pool.
       object-map check            Verify the object map is correct.
       object-map rebuild          Rebuild an invalid object map.
       remove (rm)                 Delete an image.
@@ -1249,6 +1252,44 @@
   
   Positional arguments
     <device-spec>        specify nbd device
+  
+  rbd help ns create
+  usage: rbd ns create [--pool <pool>] 
+                       <namespace> 
+  
+  Create a namespace of a pool.
+  
+  Positional arguments
+    <namespace>          namespace name.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
+  rbd help ns list
+  usage: rbd ns list [--pool <pool>] [--format <format>] [--pretty-format] 
+                     <namespace> 
+  
+  List all namespaces of a pool.
+  
+  Positional arguments
+    <namespace>          namespace name.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help ns remove
+  usage: rbd ns remove [--pool <pool>] 
+                       <namespace> 
+  
+  Create a namespace of a pool.
+  
+  Positional arguments
+    <namespace>          namespace name.
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
   
   rbd help object-map check
   usage: rbd object-map check [--pool <pool>] [--image <image>] [--snap <snap>] 
