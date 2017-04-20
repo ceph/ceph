@@ -520,6 +520,27 @@ function run_osd() {
     activate_osd $dir $id "$@"
 }
 
+function run_osd_bluestore() {
+    local dir=$1
+    shift
+    local id=$1
+    shift
+    local osd_data=$dir/$id
+
+    local ceph_disk_args
+    ceph_disk_args+=" --statedir=$dir"
+    ceph_disk_args+=" --sysconfdir=$dir"
+    ceph_disk_args+=" --prepend-to-path="
+
+    mkdir -p $osd_data
+    ceph-disk $ceph_disk_args \
+        prepare --bluestore $osd_data || return 1
+
+    local ceph_osd_args
+    ceph_osd_args+=" --enable-experimental-unrecoverable-data-corrupting-features=bluestore"
+    activate_osd $dir $id $ceph_osd_args "$@"
+}
+
 function test_run_osd() {
     local dir=$1
 
@@ -635,6 +656,7 @@ function activate_osd() {
     ceph_disk_args+=" --prepend-to-path="
 
     local ceph_args="$CEPH_ARGS"
+    ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=bluestore"
     ceph_args+=" --osd-failsafe-full-ratio=.99"
     ceph_args+=" --osd-journal-size=100"
     ceph_args+=" --osd-scrub-load-threshold=2000"
@@ -993,10 +1015,18 @@ function objectstore_tool() {
     shift
     local osd_data=$dir/$id
 
+    local osd_type=$(cat $osd_data/type)
+
     kill_daemons $dir TERM osd.$id >&2 < /dev/null || return 1
+
+    local journal_args
+    if [ "$objectstore_type" == "filestore" ]; then
+	journal_args=" --journal-path $osd_data/journal"
+    fi
     ceph-objectstore-tool \
+	--enable-experimental-unrecoverable-data-corrupting-features=bluestore \
         --data-path $osd_data \
-        --journal-path $osd_data/journal \
+        $journal_args \
         "$@" || return 1
     activate_osd $dir $id $ceph_osd_args >&2 || return 1
     wait_for_clean >&2

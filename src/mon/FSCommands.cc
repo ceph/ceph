@@ -849,7 +849,7 @@ int FileSystemCommandHandler::_check_pool(
          << " is an erasure-coded pool.  Use of erasure-coded pools"
          << " for CephFS metadata is not permitted";
     return -EINVAL;
-  } else if (pool->is_erasure() && !pool->is_hacky_ecoverwrites()) {
+  } else if (pool->is_erasure() && !pool->allows_ecoverwrites()) {
     // non-overwriteable EC pools are only acceptable with a cache tier overlay
     if (!pool->has_tiers() || !pool->has_read_tier() || !pool->has_write_tier()) {
       *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"

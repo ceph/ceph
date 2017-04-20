@@ -85,14 +85,18 @@ Ceph configuration file.
           make pool creation work in the absence of ruleset 0.
 
 
-``osd pool erasure code stripe width`` 
+``osd pool erasure code stripe unit``
 
-:Description: Sets the desired size, in bytes, of an object stripe on every
-              erasure coded pools. Every object if size S will be stored as 
-              N stripes and each stripe will be encoded/decoded individually.
+:Description: Sets the default size, in bytes, of a chunk of an object
+              stripe for erasure coded pools. Every object of size S
+              will be stored as N stripes, with each data chunk
+              receiving ``stripe unit`` bytes. Each stripe of ``N *
+              stripe unit`` bytes will be encoded/decoded
+              individually. This option can is overridden by the
+              ``stripe_unit`` setting in an erasure code profile.
 
 :Type: Unsigned 32-bit Integer
-:Default: ``4096`` 
+:Default: ``4096``
 
 
 ``osd pool default size``

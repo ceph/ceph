@@ -55,9 +55,7 @@ def task(ctx, config):
               rollback: 2
               snap_remove: 0
             ec_pool: create an ec pool, defaults to False
-            erasure_code_use_hacky_overwrites: use the whitebox
-                                               testing experimental
-                                               overwrites mode
+            erasure_code_use_overwrites: test overwrites, default false
             erasure_code_profile:
               name: teuthologyprofile
               k: 2
@@ -139,9 +137,7 @@ def task(ctx, config):
         'ceph_test_rados']
     if config.get('ec_pool', False):
         args.extend(['--no-omap'])
-        if config.get('erasure_code_use_hacky_overwrites', False):
-            args.extend(['--no-sparse'])
-        else:
+        if not config.get('erasure_code_use_overwrites', False):
             args.extend(['--ec-pool'])
     if config.get('write_fadvise_dontneed', False):
         args.extend(['--write-fadvise-dontneed'])
@@ -230,8 +226,8 @@ def task(ctx, config):
                 else:
                     pool = manager.create_pool_with_unique_name(
                         erasure_code_profile_name=profile_name,
-                        erasure_code_use_hacky_overwrites=
-                          config.get('erasure_code_use_hacky_overwrites', False)
+                        erasure_code_use_overwrites=
+                          config.get('erasure_code_use_overwrites', False)
                     )
                     created_pools.append(pool)
                     if config.get('fast_read', False):
