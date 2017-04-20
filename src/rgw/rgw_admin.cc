@@ -2950,7 +2950,7 @@ int main(int argc, char **argv)
 	list<string> realms;
 	ret = store->list_realms(realms);
 	if (ret < 0) {
-	  cerr << "failed to list realmss: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to list realms: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 	formatter->open_object_section("realms_list");
