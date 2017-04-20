@@ -1451,7 +1451,7 @@ function test_mon_pg()
 
   # Check health status
   ceph osd set-nearfull-ratio .913
-  ceph health | grep 'ratio(s) out of order'
+  ceph health | grep 'HEALTH_ERR.*Full ratio(s) out of order'
   ceph health detail | grep 'backfill_ratio (0.912) < nearfull_ratio (0.913), increased'
   ceph osd set-nearfull-ratio .892
   ceph osd set-backfillfull-ratio .963
