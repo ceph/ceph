@@ -140,17 +140,18 @@ void NetworkStack::start()
 
 Worker* NetworkStack::get_worker()
 {
-  ldout(cct, 10) << __func__ << dendl;
-
-   // start with some reasonably large number
-  unsigned min_load = std::numeric_limits<int>::max();
-  Worker* current_best = nullptr;
+  ldout(cct, 10) << __func__ << " the number of worker is " << workers.size() << dendl;
 
   pool_spin.lock();
+   // select the first as one of best
+  assert(workers.size());
+  Worker* current_best = workers[0];
+  unsigned min_load = current_best->references.load();
+
   // find worker with least references
   // tempting case is returning on references == 0, but in reality
   // this will happen so rarely that there's no need for special case.
-  for (unsigned i = 0; i < num_workers; ++i) {
+  for (unsigned i = 1; i < num_workers; ++i) {
     unsigned worker_load = workers[i]->references.load();
     if (worker_load < min_load) {
       current_best = workers[i];
@@ -159,7 +160,6 @@ Worker* NetworkStack::get_worker()
   }
 
   pool_spin.unlock();
-  assert(current_best);
   ++current_best->references;
   return current_best;
 }
