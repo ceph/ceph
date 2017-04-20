@@ -217,14 +217,6 @@ def get_initial_tasks(lock, config, machine_type):
         ])
     init_tasks.append({'internal.timer': None})
 
-    if 'redhat' in config:
-        init_tasks.extend([
-            {'internal.setup_cdn_repo': None},
-            {'internal.setup_base_repo': None},
-            {'internal.setup_additional_repo': None},
-            {'kernel.install_latest_rh_kernel': None}
-        ])
-
     if 'roles' in config:
         init_tasks.extend([
             {'pcp': None},
@@ -233,6 +225,14 @@ def get_initial_tasks(lock, config, machine_type):
             {'clock': None}
         ])
 
+    if 'redhat' in config:
+        init_tasks.extend([
+            {'internal.setup_cdn_repo': None},
+            {'internal.setup_base_repo': None},
+            {'internal.setup_additional_repo': None},
+            {'kernel.install_latest_rh_kernel': None}
+        ])
+ 
     return init_tasks
 
 
