@@ -1433,8 +1433,10 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
   while (sp.last_committed < paxos->get_version() && left > 0) {
     bufferlist bl;
     sp.last_committed++;
-    store->get(paxos->get_name(), sp.last_committed, bl);
-    // TODO: what if store->get returns error or empty bl?
+
+    int err = store->get(paxos->get_name(), sp.last_committed, bl);
+    assert(err == 0);
+
     tx->put(paxos->get_name(), sp.last_committed, bl);
     left -= bl.length();
     dout(20) << __func__ << " including paxos state " << sp.last_committed
@@ -4844,14 +4846,16 @@ bool Monitor::_scrub(ScrubResult *r,
     }
 
     bufferlist bl;
-    //TODO: what when store->get returns error or empty bl?
-    store->get(k.first, k.second, bl);
+    int err = store->get(k.first, k.second, bl);
+    assert(err == 0);
+    
     uint32_t key_crc = bl.crc32c(0);
     dout(30) << __func__ << " " << k << " bl " << bl.length() << " bytes"
                                      << " crc " << key_crc << dendl;
     r->prefix_keys[k.first]++;
-    if (r->prefix_crc.count(k.first) == 0)
+    if (r->prefix_crc.count(k.first) == 0) {
       r->prefix_crc[k.first] = 0;
+    }
     r->prefix_crc[k.first] = bl.crc32c(r->prefix_crc[k.first]);
 
     if (cct->_conf->mon_scrub_inject_crc_mismatch > 0.0 &&
