@@ -139,7 +139,8 @@ void NetHandler::set_priority(int sd, int prio, int domain)
       }
     } else if (domain == AF_INET6) {
       r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
-      r = -errno;
+      if (r)
+	r = -errno;
       if (r < 0) {
         ldout(cct,0) << "couldn't set IPV6_TCLASS to " << iptos
                            << ": " << cpp_strerror(r) << dendl;

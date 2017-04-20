@@ -3092,7 +3092,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
     t.create_collection(cid, 0);
     cerr << "Creating collection " << cid << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
-    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0, r);
   }
   for (unsigned i = 0; i < 320; ++i) {
     ObjectStore::Transaction t;
@@ -3100,6 +3100,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
     t.touch(cid, hoid);
     cerr << "Creating object " << hoid << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(0, r);
   }
 
   ghobject_t test_obj = generate_long_name(319);
@@ -3112,6 +3113,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
       cid, test_obj,
       cid, test_obj_2);
     r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(0, r);
   }
 
   for (unsigned i = 0; i < 319; ++i) {
@@ -3120,6 +3122,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
     t.remove(cid, hoid);
     cerr << "Removing object " << hoid << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(0, r);
   }
   {
     ObjectStore::Transaction t;
@@ -3127,7 +3130,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
-    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0, r);
   }
 
 }
