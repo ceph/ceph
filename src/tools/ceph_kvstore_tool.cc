@@ -37,7 +37,12 @@ class StoreTool
   public:
   StoreTool(string type, const string &path) : store_path(path) {
     KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context, type, path);
-    assert(!db_ptr->open(std::cerr));
+    int r = db_ptr->open(std::cerr);
+    if (r < 0) {
+      cerr << "failed to open type " << type << " path " << path << ": "
+	   << cpp_strerror(r) << std::endl;
+      exit(1);
+    }
     db.reset(db_ptr);
   }
 
