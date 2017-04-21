@@ -44,7 +44,7 @@ BootstrapRequest<I>::BootstrapRequest(
         librados::IoCtx &remote_io_ctx,
         std::shared_ptr<ImageSyncThrottler<I>> image_sync_throttler,
         I **local_image_ctx,
-        const std::string &local_image_name,
+        const std::string &local_image_id,
         const std::string &remote_image_id,
         const std::string &global_image_id,
         ContextWQ *work_queue, SafeTimer *timer,
@@ -60,7 +60,7 @@ BootstrapRequest<I>::BootstrapRequest(
 		reinterpret_cast<CephContext*>(local_io_ctx.cct()), on_finish),
     m_local_io_ctx(local_io_ctx), m_remote_io_ctx(remote_io_ctx),
     m_image_sync_throttler(image_sync_throttler),
-    m_local_image_ctx(local_image_ctx), m_local_image_name(local_image_name),
+    m_local_image_ctx(local_image_ctx), m_local_image_id(local_image_id),
     m_remote_image_id(remote_image_id), m_global_image_id(global_image_id),
     m_work_queue(work_queue), m_timer(timer), m_timer_lock(timer_lock),
     m_local_mirror_uuid(local_mirror_uuid),
@@ -305,11 +305,6 @@ void BootstrapRequest<I>::handle_is_primary(int r) {
     return;
   }
 
-  // default local image name to the remote image name if not provided
-  if (m_local_image_name.empty()) {
-    m_local_image_name = m_remote_image_ctx->name;
-  }
-
   if (m_local_image_id.empty()) {
     create_local_image();
     return;
@@ -364,9 +359,8 @@ void BootstrapRequest<I>::open_local_image() {
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_open_local_image>(
       this);
   OpenLocalImageRequest<I> *request = OpenLocalImageRequest<I>::create(
-    m_local_io_ctx, m_local_image_ctx,
-    (!m_local_image_id.empty() ? std::string() : m_local_image_name),
-    m_local_image_id, m_work_queue, ctx);
+    m_local_io_ctx, m_local_image_ctx, m_local_image_id, m_work_queue,
+    ctx);
   request->send();
 }
 
@@ -435,12 +429,16 @@ void BootstrapRequest<I>::create_local_image() {
   m_local_image_id = "";
   update_progress("CREATE_LOCAL_IMAGE");
 
+  m_remote_image_ctx->snap_lock.get_read();
+  std::string image_name = m_remote_image_ctx->name;
+  m_remote_image_ctx->snap_lock.put_read();
+
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_create_local_image>(
       this);
   CreateImageRequest<I> *request = CreateImageRequest<I>::create(
     m_local_io_ctx, m_work_queue, m_global_image_id, m_remote_mirror_uuid,
-    m_local_image_name, m_remote_image_ctx, &m_local_image_id, ctx);
+    image_name, m_remote_image_ctx, &m_local_image_id, ctx);
   request->send();
 }
 

@@ -122,10 +122,6 @@ public:
     Mutex::Locker locker(m_lock);
     return m_local_image_id;
   }
-  inline std::string get_local_image_name() {
-    Mutex::Locker locker(m_lock);
-    return m_local_image_name;
-  }
 
   void start(Context *on_finish = nullptr, bool manual = false);
   void stop(Context *on_finish = nullptr, bool manual = false,
@@ -296,7 +292,6 @@ private:
   int64_t m_local_pool_id;
   std::string m_local_image_id;
   std::string m_global_image_id;
-  std::string m_local_image_name;
   std::string m_name;
   mutable Mutex m_lock;
   State m_state = STATE_STOPPED;
