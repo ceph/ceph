@@ -10966,31 +10966,29 @@ void BlueStore::ThrottleManager::manage_throttle()
   pair<uint64_t,uint64_t> this_commit_avg = logger->get_tavg_ms(commit_lat_idx);
 
   assert(this_throt_avg.first >= prev_throt_avg.first);
+  double window_throt_avg = 0;
   if (this_throt_avg.first > prev_throt_avg.first) {
-    double window_throt_avg =
+    window_throt_avg =
       (this_throt_avg.second - prev_throt_avg.second) /
       double(this_throt_avg.first - prev_throt_avg.first);
-    dout(log_level) << __func__ << " window_throttle_latency:" <<
-      window_throt_avg << dendl;
-    if (window_throt_avg < 0.5) {
-      ++zero_submit_count;
-      if (zero_submit_count >= thresh_limit) {
-	mod_throttle(ModDir::decrease);
-	reset_counters();
-	prev_commit_avg = this_commit_avg;
-	prev_throt_avg = this_throt_avg;
-	return;
-      }
-    } else {
-      zero_submit_count = 0;
-    }
-
+    dout(log_level) << __func__ << " window_throttle_latency:"
+		    << window_throt_avg << dendl;
+    zero_submit_count = 0;
     prev_throt_avg = this_throt_avg;
+  } else {
+    prev_throt_avg = this_throt_avg;
+    if (++zero_submit_count >= thresh_limit) {
+      dout(log_level) << __func__ << " no activity for " << zero_submit_count
+		      << ", resetting" << dendl;
+      reset_counters();
+      return;
+    }
   }
 
   assert(this_commit_avg.first >= prev_commit_avg.first);
   if (this_commit_avg.first == prev_commit_avg.first) { // no new data
     if (poll_count >= poll_cycles) {
+      dout(log_level) << __func__ << " no activity, resetting" << dendl;
       reset_counters();
     }
     return;
@@ -11001,16 +10999,18 @@ void BlueStore::ThrottleManager::manage_throttle()
     double(this_commit_avg.first - prev_commit_avg.first);
   prev_commit_avg = this_commit_avg;
 
-  dout(log_level) << __func__ << " window_commit_latency:" <<
-    window_avg << dendl;
+  dout(log_level) << __func__ << " window_commit_latency:"
+		  << window_avg
+		  << " (" << lower_lat_limit << "," << upper_lat_limit << ")"
+		  << dendl;
 
   if (window_avg > upper_lat_limit) {
     ++thresh_count;
-  } else if (window_avg < lower_lat_limit) {
+  } else if (window_avg < lower_lat_limit &&
+	     window_throt_avg >= 1 /* ms */) {
     --thresh_count;
   }
   dout(log_level) << __func__ << " thresh_count " << thresh_count << dendl;
-
   if (thresh_count >= thresh_limit) {
     mod_throttle(ModDir::decrease);  // decrease throttle setting (and latency)
     reset_counters();
@@ -11033,8 +11033,8 @@ void BlueStore::ThrottleManager::mod_throttle(ModDir dir)
     power = next_power;
     auto throt = sqrt_2_power(power);
     managed_throttle.reset_max(throt);
-    dout(log_level) << __func__ << " power:" << power <<
-      " throttle:" << throt << dendl;
+    dout(log_level) << __func__ << " dir: " << (int)dir << " power:" << power
+		    << " throttle:" << throt << dendl;
   }
 }
 
