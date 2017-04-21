@@ -882,6 +882,8 @@ OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
 OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
+OPTION(osd_op_history_slow_op_size, OPT_U32, 20)           // Max number of slow ops to track
+OPTION(osd_op_history_slow_op_threshold, OPT_DOUBLE, 10.0) // track the op if over this threshold
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_fast_fail_on_connection_refused, OPT_BOOL, true) // immediately mark OSDs as down once they refuse to accept connections

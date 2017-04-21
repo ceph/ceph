@@ -34,6 +34,7 @@ void OpHistory::on_shutdown()
   Mutex::Locker history_lock(ops_history_lock);
   arrived.clear();
   duration.clear();
+  slow_op.clear();
   shutdown = true;
 }
 
@@ -44,6 +45,8 @@ void OpHistory::insert(utime_t now, TrackedOpRef op)
     return;
   duration.insert(make_pair(op->get_duration(), op));
   arrived.insert(make_pair(op->get_initiated(), op));
+  if (op->get_duration() >= history_slow_op_threshold)
+    slow_op.insert(make_pair(op->get_initiated(), op));
   cleanup(now);
 }
 
@@ -63,6 +66,12 @@ void OpHistory::cleanup(utime_t now)
 	duration.begin()->second->get_initiated(),
 	duration.begin()->second));
     duration.erase(duration.begin());
+  }
+
+  while (slow_op.size() > history_slow_op_size) {
+    slow_op.erase(make_pair(
+	slow_op.begin()->second->get_initiated(),
+	slow_op.begin()->second));
   }
 }
 
@@ -162,6 +171,39 @@ bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration)
   } else {
     history.dump_ops(now, f);
   }
+  return true;
+}
+
+void OpHistory::dump_slow_ops(utime_t now, Formatter *f)
+{
+  Mutex::Locker history_lock(ops_history_lock);
+  cleanup(now);
+  f->open_object_section("OpHistory slow ops");
+  f->dump_int("num to keep", history_slow_op_size);
+  f->dump_int("threshold to keep", history_slow_op_threshold);
+  {
+    f->open_array_section("Ops");
+    for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
+	   slow_op.begin();
+	 i != slow_op.end();
+	 ++i) {
+      f->open_object_section("Op");
+      i->second->dump(now, f);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+
+bool OpTracker::dump_historic_slow_ops(Formatter *f)
+{
+  RWLock::RLocker l(lock);
+  if (!tracking_enabled)
+    return false;
+
+  utime_t now = ceph_clock_now();
+  history.dump_slow_ops(now, f);
   return true;
 }
 
