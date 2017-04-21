@@ -510,8 +510,8 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    if (changed) {
-      tick();
+    if (changed && pending_map.active_gid == 0) {
+      promote_standby();
     }
   } else {
     r = -ENOSYS;
