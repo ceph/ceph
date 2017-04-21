@@ -4064,63 +4064,152 @@ null_completer_factory(const boost::optional<std::string>& secret_key)
   return nullptr;
 }
 
+/* TODO(rzarzynski): make the completer to be additionally a decorator over
+ * rgw::io::RestfulClient (see rgw::io::DecoratedRestfulClient). This would
+ * allow to eradicate req_state::aws4 and friends. */
 class AWSv4Completer : public rgw::auth::Completer {
-public:
+private:
+  const bool aws4_auth_needs_complete = true;
+  const bool aws4_auth_streaming_mode = false;
+
   /* TODO(rzarzynski): move to boost::string_ref. This should be just fine
    * as (all?) parameters here are actually views over req_info. */
   std::string date;
   std::string credential_scope;
   std::string seed_signature;
-  std::array<unsigned char,
-             CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> signing_key;
+  boost::optional<std::array<unsigned char,
+                  CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>> signing_key;
   ceph::bufferlist bl;
 
+  /* TODO(rzarzynski): this won't be necessary after moving to filter-over-
+   * rgw::io::RestfulClient. */
   const req_state* const s;
 
-public:
-  AWSv4Completer(const req_state* const s) : s(s) {
+  using signing_key_t = boost::optional<std::array<unsigned char,
+                                        CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>>;
+  AWSv4Completer(const req_state* const s,
+                 std::string date,
+                 std::string credential_scope,
+                 std::string seed_signature,
+                 const signing_key_t& signing_key)
+    : aws4_auth_needs_complete(false),
+      aws4_auth_streaming_mode(true),
+      date(std::move(date)),
+      credential_scope(std::move(credential_scope)),
+      seed_signature(std::move(seed_signature)),
+      signing_key(signing_key),
+      s(s) {
   }
 
+  AWSv4Completer(const req_state* const s)
+    : s(s) {
+  }
+
+public:
+  void modify_request_state(req_state* s) const override;
   bool complete() override;
+
+  /* Factories. */
+  static cmplptr_t
+  create_for_single_chunk(const req_state* s,
+                          const boost::optional<std::string>&);
+
+  static cmplptr_t
+  create_for_multi_chunk(const req_state* s,
+                         std::string date,
+                         std::string credential_scope,
+                         std::string seed_signature,
+                         const boost::optional<std::string>& secret_key);
+
 };
+
+void AWSv4Completer::modify_request_state(req_state* const s_rw) const
+{
+  /* TODO(rzarzynski): switch to the dedicated filter over RestfulClient. */
+  s_rw->aws4_auth_needs_complete = aws4_auth_needs_complete;
+  s_rw->aws4_auth_streaming_mode = aws4_auth_streaming_mode;
+
+  s_rw->aws4_auth = std::unique_ptr<rgw_aws4_auth>(new rgw_aws4_auth);
+
+  s_rw->aws4_auth->date = std::move(date);
+  s_rw->aws4_auth->credential_scope = std::move(date);
+
+  /* If we're here, the provided signature has been successfully validated
+   * earlier. */
+  s_rw->aws4_auth->seed_signature = std::move(seed_signature);
+
+  if (signing_key) {
+    s_rw->aws4_auth->signing_key = std::move(*signing_key);
+  } else if (aws4_auth_streaming_mode) {
+    /* Some external authorizers (like Keystone) aren't fully compliant with
+     * AWSv4. They do not provide the secret_key which is necessary to handle
+     * the streamed upload. */
+    throw -ERR_NOT_IMPLEMENTED;
+  }
+}
 
 bool AWSv4Completer::complete()
 {
-  const char *expected_request_payload_hash = \
-    rgw::auth::s3::get_v4_exp_payload_hash(s->info);
+  if (!aws4_auth_needs_complete) {
+    return true;
+  }
 
   /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
    * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
    * header lets get the information very early -- before seeing first byte
    * of HTTP body. As a consequence, we can decouple Signature verification
    * from payload's fingerprint check. */
+  const char *expected_request_payload_hash = \
+    rgw::auth::s3::get_v4_exp_payload_hash(s->info);
 
   /* The completer is only for the cases where signed payload has been
    * requested. It won't be used, for instance, during the query string-based
    * authentication. */
-  std::string payload_hash;
-  if (s->aws4_auth_needs_complete) {
-    payload_hash = AWS_AUTHv4_IO(s)->grab_aws4_sha256_hash();
+  const auto payload_hash = AWS_AUTHv4_IO(s)->grab_aws4_sha256_hash();
 
-    /* Validate x-amz-sha256 */
-    if (payload_hash.compare(expected_request_payload_hash) != 0) {
-      ldout(s->cct, 10) << "ERROR: x-amz-content-sha256 does not match" << dendl;
-      //return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
-      return false;
-    }
+  /* Validate x-amz-sha256 */
+  if (payload_hash.compare(expected_request_payload_hash) == 0) {
+    return true;
+  } else {
+    ldout(s->cct, 10) << "ERROR: x-amz-content-sha256 does not match"
+                      << dendl;
+    ldout(s->cct, 10) << "ERROR:   grab_aws4_sha256_hash()="
+                      << payload_hash << dendl;
+    ldout(s->cct, 10) << "ERROR:   expected_request_payload_hash="
+                      << expected_request_payload_hash << dendl;
+    return false;
   }
-
-  return true;
 }
 
-static rgw::auth::Completer::cmplptr_t
-awsv4_completer_factory(const req_state* const s,
-                        const std::string& credential_scope,
-
-                        const boost::optional<std::string>& secret_key)
+rgw::auth::Completer::cmplptr_t
+AWSv4Completer::create_for_single_chunk(const req_state* const s,
+                                        const boost::optional<std::string>&)
 {
   return rgw::auth::Completer::cmplptr_t(new AWSv4Completer(s));
 }
+
+rgw::auth::Completer::cmplptr_t
+AWSv4Completer::create_for_multi_chunk(const req_state* const s,
+                                       std::string date,
+                                       std::string credential_scope,
+                                       std::string seed_signature,
+                                       const boost::optional<std::string>& secret_key)
+{
+  boost::optional<std::array<unsigned char,
+                  CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>> signing_key;
+  if (secret_key) {
+    signing_key = rgw::auth::s3::get_v4_signing_key(s->cct, credential_scope,
+                                                    *secret_key);
+  }
+
+  return rgw::auth::Completer::cmplptr_t(
+    new AWSv4Completer(s,
+                       std::move(date),
+                       std::move(credential_scope),
+                       std::move(seed_signature),
+                       signing_key));
+}
+
 
 using AWSVerAbstractor = AWSEngine::VersionAbstractor;
 
