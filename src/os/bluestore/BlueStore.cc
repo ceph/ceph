@@ -11009,12 +11009,13 @@ void BlueStore::ThrottleManager::manage_throttle()
   } else if (window_avg < lower_lat_limit) {
     --thresh_count;
   }
+  dout(log_level) << __func__ << " thresh_count " << thresh_count << dendl;
 
   if (thresh_count >= thresh_limit) {
-    mod_throttle(ModDir::increase);
+    mod_throttle(ModDir::decrease);  // decrease throttle setting (and latency)
     reset_counters();
   } else if (thresh_count <= -thresh_limit) {
-    mod_throttle(ModDir::decrease);
+    mod_throttle(ModDir::increase);  // increase throttle setting (and latency)
     reset_counters();
   } else if (poll_count >= poll_cycles) {
     reset_counters();
