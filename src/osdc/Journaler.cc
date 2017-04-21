@@ -621,7 +621,7 @@ void Journaler::_do_flush(unsigned amount)
   assert(!readonly);
 
   // flush
-  uint64_t len = write_pos - flush_pos;
+  int64_t len = write_pos - flush_pos;
   assert(len == write_buf.length());
   if (amount && amount < len)
     len = amount;
