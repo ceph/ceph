@@ -472,6 +472,7 @@ public:
 
   using ObjectStore::fiemap;
   int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) override;
+  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
   using ObjectStore::getattr;
   int getattr(const coll_t& cid, const ghobject_t& oid, const char *name, bufferptr& value) override;
   using ObjectStore::getattrs;
