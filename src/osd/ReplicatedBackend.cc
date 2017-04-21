@@ -1981,21 +1981,17 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
   if (available > 0) {
     if (!recovery_info.copy_subset.empty()) {
       interval_set<uint64_t> copy_subset = recovery_info.copy_subset;
-      bufferlist bl;
+      map<uint64_t, uint64_t> m;
       int r = store->fiemap(ch, ghobject_t(recovery_info.soid), 0,
-                            copy_subset.range_end(), bl);
+                            copy_subset.range_end(), m);
       if (r >= 0)  {
-        interval_set<uint64_t> fiemap_included;
-        map<uint64_t, uint64_t> m;
-        bufferlist::iterator iter = bl.begin();
-        ::decode(m, iter);
-        map<uint64_t, uint64_t>::iterator miter;
-        for (miter = m.begin(); miter != m.end(); ++miter) {
-          fiemap_included.insert(miter->first, miter->second);
-        }
-
+        interval_set<uint64_t> fiemap_included(m);
         copy_subset.intersection_of(fiemap_included);
+      } else {
+        // intersection of copy_subset and empty interval_set would be empty anyway
+        copy_subset.clear();
       }
+
       out_op->data_included.span_of(copy_subset, progress.data_recovered_to,
                                     available);
       if (out_op->data_included.empty()) // zero filled section, skip to end!
