@@ -3170,10 +3170,11 @@ static void aio_cb(void *priv, void *priv2)
 
 BlueStore::BlueStore(CephContext *cct, const string& path)
   : ObjectStore(cct, path),
-    throttle_bytes(cct, "bluestore_max_bytes", cct->_conf->bluestore_max_bytes),
-    throttle_deferred_bytes(cct, "bluestore_deferred_max_bytes",
-		       cct->_conf->bluestore_max_bytes +
-		       cct->_conf->bluestore_deferred_max_bytes),
+    throttle_bytes(cct, "bluestore_throttle_bytes",
+		   cct->_conf->bluestore_throttle_bytes),
+    throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
+		       cct->_conf->bluestore_throttle_bytes +
+		       cct->_conf->bluestore_throttle_deferred_bytes),
     kv_sync_thread(this),
     mempool_thread(this)
 {
@@ -3197,10 +3198,11 @@ BlueStore::BlueStore(CephContext *cct,
   const string& path,
   uint64_t _min_alloc_size)
   : ObjectStore(cct, path),
-    throttle_bytes(cct, "bluestore_max_bytes", cct->_conf->bluestore_max_bytes),
-    throttle_deferred_bytes(cct, "bluestore_deferred_max_bytes",
-		       cct->_conf->bluestore_max_bytes +
-		       cct->_conf->bluestore_deferred_max_bytes),
+    throttle_bytes(cct, "bluestore_throttle_bytes",
+		   cct->_conf->bluestore_throttle_bytes),
+    throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
+		       cct->_conf->bluestore_throttle_bytes +
+		       cct->_conf->bluestore_throttle_deferred_bytes),
     kv_sync_thread(this),
     min_alloc_size(_min_alloc_size),
     min_alloc_size_order(ctz(_min_alloc_size)),
@@ -3259,9 +3261,8 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bleustore_deferred_batch_ops",
     "bleustore_deferred_batch_ops_hdd",
     "bleustore_deferred_batch_ops_ssd",
-    "bluestore_max_bytes",
-    "bluestore_deferred_max_ops",
-    "bluestore_deferred_max_bytes",
+    "bluestore_throttle_bytes",
+    "bluestore_throttle_deferred_bytes",
     "bluestore_max_blob_size",
     "bluestore_max_blob_size_ssd",
     "bluestore_max_blob_size_hdd",
@@ -3309,14 +3310,14 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
       _set_throttle_params();
     }
   }
-  if (changed.count("bluestore_max_bytes")) {
-    throttle_bytes.reset_max(conf->bluestore_max_bytes);
+  if (changed.count("bluestore_throttle_bytes")) {
+    throttle_bytes.reset_max(conf->bluestore_throttle_bytes);
     throttle_deferred_bytes.reset_max(
-      conf->bluestore_max_bytes + conf->bluestore_deferred_max_bytes);
+      conf->bluestore_throttle_bytes + conf->bluestore_throttle_deferred_bytes);
   }
-  if (changed.count("bluestore_deferred_max_bytes")) {
+  if (changed.count("bluestore_throttle_deferred_bytes")) {
     throttle_deferred_bytes.reset_max(
-      conf->bluestore_max_bytes + conf->bluestore_deferred_max_bytes);
+      conf->bluestore_throttle_bytes + conf->bluestore_throttle_deferred_bytes);
   }
 }
 
