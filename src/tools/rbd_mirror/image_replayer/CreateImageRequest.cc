@@ -289,11 +289,13 @@ void CreateImageRequest<I>::clone_image() {
   opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, m_remote_image_ctx->stripe_unit);
   opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, m_remote_image_ctx->stripe_count);
 
+  std::string id = librbd::util::generate_image_id(m_local_io_ctx);
+
   using klass = CreateImageRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_clone_image>(this);
 
   librbd::image::CloneRequest<I> *req = librbd::image::CloneRequest<I>::create(
-    m_local_parent_image_ctx, m_local_io_ctx, m_local_image_name, opts,
+    m_local_parent_image_ctx, m_local_io_ctx, m_local_image_name, id, opts,
     m_global_image_id, m_remote_mirror_uuid,
     m_remote_image_ctx->op_work_queue, ctx);
   req->send();

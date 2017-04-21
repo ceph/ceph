@@ -74,7 +74,7 @@ struct CloneRequest<librbd::MockTestImageCtx> {
 
   static CloneRequest *create(librbd::MockTestImageCtx *p_imctx,
 			      IoCtx &c_ioctx, const std::string &c_name,
-			      ImageOptions c_options,
+			      const std::string &c_id, ImageOptions c_options,
 			      const std::string &non_primary_global_image_id,
 			      const std::string &primary_mirror_uuid,
 			      MockContextWQ *op_work_queue, Context *on_finish) {
