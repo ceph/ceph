@@ -211,6 +211,16 @@ class StoreTool
 
     return 0;
   }
+
+  void compact() {
+    db->compact();
+  }
+  void compact_prefix(string prefix) {
+    db->compact_prefix(prefix);
+  }
+  void compact_range(string prefix, string start, string end) {
+    db->compact_range(prefix, start, end);
+  }
 };
 
 void usage(const char *pname)
@@ -227,6 +237,9 @@ void usage(const char *pname)
     << "  set <prefix> <key> [ver <N>|in <file>]\n"
     << "  store-copy <path> [num-keys-per-tx]\n"
     << "  store-crc <path>\n"
+    << "  compact\n"
+    << "  compact-prefix <prefix>\n"
+    << "  compact-range <prefix> <start> <end>\n"
     << std::endl;
 }
 
@@ -426,6 +439,24 @@ int main(int argc, const char *argv[])
     uint32_t crc = st.traverse(string(), true, NULL);
     std::cout << "store at '" << path << "' crc " << crc << std::endl;
 
+  } else if (cmd == "compact") {
+    st.compact();
+  } else if (cmd == "compact-prefix") {
+    if (argc < 5) {
+      usage(argv[0]);
+      return 1;
+    }
+    string prefix(url_unescape(argv[4]));
+    st.compact_prefix(prefix);
+  } else if (cmd == "compact-range") {
+    if (argc < 7) {
+      usage(argv[0]);
+      return 1;
+    }
+    string prefix(url_unescape(argv[4]));
+    string start(url_unescape(argv[5]));
+    string end(url_unescape(argv[6]));
+    st.compact_range(prefix, start, end);
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     return 1;
