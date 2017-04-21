@@ -4050,6 +4050,49 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
         << pg_vector_string(acting) << ", p" << acting_p << ")";
       rdata.append(ds);
     }
+
+  } else if (prefix == "pg map") {
+    pg_t pgid;
+    string pgidstr;
+    cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      r = -EINVAL;
+      goto reply;
+    }
+    vector<int> up, acting;
+    if (!osdmap.have_pg_pool(pgid.pool())) {
+      ss << "pg '" << pgidstr << "' does not exist";
+      r = -ENOENT;
+      goto reply;
+    }
+    pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
+    osdmap.pg_to_up_acting_osds(pgid, up, acting);
+    if (f) {
+      f->open_object_section("pg_map");
+      f->dump_unsigned("epoch", osdmap.get_epoch());
+      f->dump_stream("raw_pgid") << pgid;
+      f->dump_stream("pgid") << mpgid;
+      f->open_array_section("up");
+      for (auto osd : up) {
+	f->dump_int("up_osd", osd);
+      }
+      f->close_section();
+      f->open_array_section("acting");
+      for (auto osd : acting) {
+	f->dump_int("acting_osd", osd);
+      }
+      f->close_section();
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      ds << "osdmap e" << osdmap.get_epoch()
+         << " pg " << pgid << " (" << mpgid << ")"
+         << " -> up " << up << " acting " << acting;
+      rdata.append(ds);
+    }
+    goto reply;
+
   } else if ((prefix == "osd scrub" ||
 	      prefix == "osd deep-scrub" ||
 	      prefix == "osd repair")) {
