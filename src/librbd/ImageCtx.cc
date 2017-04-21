@@ -527,6 +527,11 @@ struct C_InvalidateCache : public Context {
     return stripe_count * (1ull << order);
   }
 
+  utime_t ImageCtx::get_create_timestamp() const
+  {
+    return create_timestamp;
+  }
+
   int ImageCtx::is_snap_protected(snap_t in_snap_id,
 				  bool *is_protected) const
   {

@@ -364,6 +364,10 @@ CEPH_RBD_API int rbd_update_features(rbd_image_t image, uint64_t features,
 CEPH_RBD_API int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit);
 CEPH_RBD_API int rbd_get_stripe_count(rbd_image_t image,
                                       uint64_t *stripe_count);
+
+CEPH_RBD_API int rbd_get_create_timestamp(rbd_image_t image,
+                                          struct timespec *timestamp);
+
 CEPH_RBD_API int rbd_get_overlap(rbd_image_t image, uint64_t *overlap);
 CEPH_RBD_API int rbd_get_id(rbd_image_t image, char *id, size_t id_len);
 CEPH_RBD_API int rbd_get_block_name_prefix(rbd_image_t image,
