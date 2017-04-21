@@ -26,5 +26,7 @@ tasks:
 - print: "upgraded mon.a and friends"
 - ceph.restart:
     daemons: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2]
+- sleep:
+    duration: 20 # http://tracker.ceph.com/issues/16239
 - ec_lost_unfound:
     parallel_bench: false
