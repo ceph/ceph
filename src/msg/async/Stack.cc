@@ -140,7 +140,7 @@ void NetworkStack::start()
 
 Worker* NetworkStack::get_worker()
 {
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 30) << __func__ << dendl;
 
    // start with some reasonably large number
   unsigned min_load = std::numeric_limits<int>::max();
@@ -198,7 +198,7 @@ class C_drain : public EventCallback {
 
 void NetworkStack::drain()
 {
-  ldout(cct, 10) << __func__ << " started." << dendl;
+  ldout(cct, 30) << __func__ << " started." << dendl;
   pthread_t cur = pthread_self();
   pool_spin.lock();
   C_drain drain(num_workers);
@@ -208,5 +208,5 @@ void NetworkStack::drain()
   }
   pool_spin.unlock();
   drain.wait();
-  ldout(cct, 10) << __func__ << " end." << dendl;
+  ldout(cct, 30) << __func__ << " end." << dendl;
 }
