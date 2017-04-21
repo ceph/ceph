@@ -241,7 +241,7 @@ class interval_set {
     return _size == other._size && m == other.m;
   }
 
-  int size() const {
+  int64_t size() const {
     return _size;
   }
 
