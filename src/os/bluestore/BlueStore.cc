@@ -3259,7 +3259,6 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bleustore_deferred_batch_ops",
     "bleustore_deferred_batch_ops_hdd",
     "bleustore_deferred_batch_ops_ssd",
-    "bluestore_max_ops",
     "bluestore_max_bytes",
     "bluestore_deferred_max_ops",
     "bluestore_deferred_max_bytes",
