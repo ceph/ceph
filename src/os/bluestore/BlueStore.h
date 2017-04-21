@@ -1870,7 +1870,7 @@ private:
 
   int _open_bdev(bool create);
   void _close_bdev();
-  int _open_db(bool create);
+  int _open_db(bool create, bool kv_no_open=false);
   void _close_db();
   int _open_fm(bool create);
   void _close_fm();
@@ -2031,8 +2031,21 @@ public:
 
   bool test_mount_in_use() override;
 
-  int mount() override;
+private:
+  int _mount(bool kv_only);
+public:
+  int mount() override {
+    return _mount(false);
+  }
   int umount() override;
+
+  int start_kv_only(KeyValueDB **pdb) {
+    int r = _mount(true);
+    if (r < 0)
+      return r;
+    *pdb = db;
+    return 0;
+  }
 
   int fsck(bool deep) override;
 
