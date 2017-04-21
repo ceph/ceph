@@ -1009,6 +1009,8 @@ void OSDService::_sent_pg_temp()
 void OSDService::requeue_pg_temp()
 {
   Mutex::Locker l(pg_temp_lock);
+  if (pg_temp_pending.empty())
+    return;
   // wanted overrides pending.  note that remove_want_pg_temp
   // clears the item out of both.
   unsigned old_wanted = pg_temp_wanted.size();
@@ -1680,7 +1682,6 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
       ret = -EINVAL;
       goto umount_store;
     }
-
     sb.cluster_fsid = fsid;
     sb.osd_fsid = store->get_fsid();
     sb.whoami = whoami;
