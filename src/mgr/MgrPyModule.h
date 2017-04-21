@@ -77,5 +77,7 @@ public:
     std::stringstream *ss);
 };
 
+std::string handle_pyerror();
+
 #endif
 

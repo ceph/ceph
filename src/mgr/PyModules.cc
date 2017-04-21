@@ -286,31 +286,6 @@ PyObject *PyModules::get_python(const std::string &what)
   }
 }
 
-//XXX courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
-#include <boost/python.hpp>
-// decode a Python exception into a string
-std::string handle_pyerror()
-{
-    using namespace boost::python;
-    using namespace boost;
-
-    PyObject *exc,*val,*tb;
-    object formatted_list, formatted;
-    PyErr_Fetch(&exc,&val,&tb);
-    handle<> hexc(exc),hval(allow_null(val)),htb(allow_null(tb)); 
-    object traceback(import("traceback"));
-    if (!tb) {
-        object format_exception_only(traceback.attr("format_exception_only"));
-        formatted_list = format_exception_only(hexc,hval);
-    } else {
-        object format_exception(traceback.attr("format_exception"));
-        formatted_list = format_exception(hexc,hval,htb);
-    }
-    formatted = str("").join(formatted_list);
-    return extract<std::string>(formatted);
-}
-
-
 std::string PyModules::get_site_packages()
 {
   std::stringstream site_packages;
