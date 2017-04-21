@@ -236,7 +236,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     dout(10) << "no change" << dendl;
   }
 
-  return true;
+  return updated;
 }
 
 void MgrMonitor::check_subs()
