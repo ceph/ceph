@@ -38,6 +38,15 @@ FLAG_NOFORWARD  = (1 << 0)
 FLAG_OBSOLETE   = (1 << 1)
 FLAG_DEPRECATED = (1 << 2)
 
+# priorities from src/common/perf_counters.h
+PRIO_CRITICAL = 10
+PRIO_INTERESTING = 8
+PRIO_USEFUL = 5
+PRIO_UNINTERESTING = 2
+PRIO_DEBUGONLY = 0
+
+PRIO_DEFAULT = PRIO_USEFUL
+
 # Make life easier on developers:
 # If in src/, and .libs and pybind exist here, assume we're running
 # from a Ceph source dir and tweak PYTHONPATH and LD_LIBRARY_PATH
@@ -266,11 +275,13 @@ ping <mon.id>           Send simple presence/life test to a mon
                         <mon.id> may be 'mon.*' for all mons
 daemon {type.id|path} <cmd>
                         Same as --admin-daemon, but auto-find admin socket
-daemonperf {type.id | path} [stat-pats] [<interval>] [<count>]
+daemonperf {type.id | path} [stat-pats] [priority] [<interval>] [<count>]
                         Get selected perf stats from daemon/admin socket
                         Optional shell-glob comma-delim match string stat-pats
+                        Optional selection priority (can abbreviate name):
+                         critical, interesting, useful, noninteresting, debug
                         Run <count> times (default forever),
-                        once per <interval> seconds (default 1)
+                         once per <interval> seconds (default 1)
     """, file=sys.stdout)
 
 
@@ -613,38 +624,74 @@ def maybe_daemon_command(parsed_args, childargs):
     return False, 0
 
 
-def isnum(object):
+def isnum(s):
     try:
-        float(object)
+        float(s)
         return True
     except ValueError:
         return False
 
 def daemonperf(childargs, sockpath):
-    """ Handle daemonperf command; returns errno or 0 """
+    """
+    Handle daemonperf command; returns errno or 0
+
+    daemonperf <daemon> [priority string] [statpats] [interval] [count]
+    """
+
     interval = 1
     count = None
     statpats = None
+    priority = None
 
-    if len(childargs) > 0:
-        # optional leading comma-separated list arg
-        if not isnum(childargs[0]):
-            statpats = childargs.pop(0).split(',')
+    def prio_from_name(arg):
+
+        PRIOMAP = {
+            'critical': PRIO_CRITICAL,
+            'interesting': PRIO_INTERESTING,
+            'useful': PRIO_USEFUL,
+            'uninteresting': PRIO_UNINTERESTING,
+            'debugonly': PRIO_DEBUGONLY,
+        }
+
+        if arg in PRIOMAP:
+            return PRIOMAP[arg]
+        # allow abbreviation
+        for name, val in PRIOMAP.items():
+            if name.startswith(arg):
+                return val
+        return None
+
+    # consume and analyze non-numeric args
+    while len(childargs) and not isnum(childargs[0]):
+        arg = childargs.pop(0)
+        # prio?
+        priority = prio_from_name(arg)
+        if priority is not None:
+            continue;
+        # statpats
+        statpats = arg.split(',')
+
+    if priority is None:
+        priority = PRIO_DEFAULT
 
     if len(childargs) > 0:
         try:
-            interval = float(childargs[0])
+            interval = float(childargs.pop(0))
             if interval < 0:
                 raise ValueError
         except ValueError:
             print('daemonperf: interval should be a positive number', file=sys.stderr)
             return errno.EINVAL
-    if len(childargs) > 1:
-        if not childargs[1].isdigit():
+
+    if len(childargs) > 0:
+        arg = childargs.pop(0)
+        if (not isnum(arg)) or (int(arg) < 0):
             print('daemonperf: count should be a positive integer', file=sys.stderr)
             return errno.EINVAL
-        count = int(childargs[1])
-    DaemonWatcher(sockpath, statpats).run(interval, count)
+        count = int(arg)
+
+    DaemonWatcher(sockpath, statpats, priority).run(interval, count)
+
     return 0
 
 ###
