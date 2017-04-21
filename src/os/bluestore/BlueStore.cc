@@ -10919,18 +10919,21 @@ BlueStore::ThrottleManager::ThrottleManager(CephContext* cct,
 }
 
 
-BlueStore::ThrottleManager::~ThrottleManager() {
+BlueStore::ThrottleManager::~ThrottleManager()
+{
   // empty
 }
 
 
-void BlueStore::ThrottleManager::init(PerfCounters *logger) {
+void BlueStore::ThrottleManager::init(PerfCounters *logger)
+{
   this->logger = logger;
   reset();
 }
 
 
-void BlueStore::ThrottleManager::reset() {
+void BlueStore::ThrottleManager::reset()
+{
   uint32_t next_power =
       uint32_t(0.5 + 2 * log2(double(managed_throttle.get_max())));
   // insure next_power w/i bounds
@@ -10947,20 +10950,20 @@ void BlueStore::ThrottleManager::reset() {
 }
 
 
-void BlueStore::ThrottleManager::manage_throttle() {
-  utime_t now = ceph_clock_now();
-
+void BlueStore::ThrottleManager::manage_throttle()
+{
   std::unique_lock<std::mutex> l(mtx);
 
-  if (now - prev_time < latency_window) return;
+  utime_t now = ceph_clock_now();
+  if (now - prev_time < latency_window) {
+    return;
+  }
   prev_time = now;
 
   ++poll_count;
 
-  pair<uint64_t,uint64_t> this_throt_avg =
-    logger->get_tavg_ms(throt_lat_idx);
-  pair<uint64_t,uint64_t> this_commit_avg =
-    logger->get_tavg_ms(commit_lat_idx);
+  pair<uint64_t,uint64_t> this_throt_avg = logger->get_tavg_ms(throt_lat_idx);
+  pair<uint64_t,uint64_t> this_commit_avg = logger->get_tavg_ms(commit_lat_idx);
 
   assert(this_throt_avg.first >= prev_throt_avg.first);
   if (this_throt_avg.first > prev_throt_avg.first) {
@@ -11020,7 +11023,8 @@ void BlueStore::ThrottleManager::manage_throttle() {
 
 
 // mtx must be held by caller
-void BlueStore::ThrottleManager::mod_throttle(ModDir dir) {
+void BlueStore::ThrottleManager::mod_throttle(ModDir dir)
+{
   int dir_val = static_cast<int>(dir);
   uint32_t next_power =
     std::min(std::max(power + dir_val, min_power), max_power);
