@@ -915,6 +915,39 @@ namespace librbd {
       return ioctx->operate(oid, &op);
     }
 
+    void get_create_timestamp_start(librados::ObjectReadOperation *op) {
+      bufferlist empty_bl;
+      op->exec("rbd", "get_create_timestamp", empty_bl);
+    }
+
+    int get_create_timestamp_finish(bufferlist::iterator *it,
+                                    utime_t *timestamp) {
+      assert(timestamp);
+
+      try {
+        ::decode(*timestamp, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int get_create_timestamp(librados::IoCtx *ioctx, const std::string &oid,
+                             utime_t *timestamp)
+    {
+      librados::ObjectReadOperation op;
+      get_create_timestamp_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      return get_create_timestamp_finish(&it, timestamp);
+    }
+
     /************************ rbd_id object methods ************************/
 
     void get_id_start(librados::ObjectReadOperation *op) {

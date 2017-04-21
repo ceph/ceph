@@ -179,6 +179,11 @@ namespace librbd {
 			       uint64_t stripe_unit, uint64_t stripe_count);
     int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 			      uint64_t stripe_unit, uint64_t stripe_count);
+    void get_create_timestamp_start(librados::ObjectReadOperation *op);
+    int get_create_timestamp_finish(bufferlist::iterator *it,
+                                    utime_t *timestamp);
+    int get_create_timestamp(librados::IoCtx *ioctx, const std::string &oid,
+                             utime_t *timestamp);
     int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
                       const std::string &start, uint64_t max_return,
                       map<string, bufferlist> *pairs);
