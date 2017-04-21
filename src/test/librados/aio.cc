@@ -1,4 +1,5 @@
 #include "common/errno.h"
+#include "include/err.h"
 #include "include/rados/librados.h"
 #include "test/librados/test.h"
 #include "include/types.h"
@@ -4065,4 +4066,153 @@ TEST(LibRadosAio, RacingRemovePP) {
   ASSERT_EQ(0, test_data.m_ioctx.stat("foo", nullptr, nullptr));
   delete my_completion;
   delete my_completion2;
+}
+
+TEST(LibRadosAio, RoundTripCmpExtPP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  char full[128];
+  memset(full, 0xcc, sizeof(full));
+  bufferlist bl1;
+  bl1.append(full, sizeof(full));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion,
+					   bl1, sizeof(full), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+
+  /* compare with match */
+  bufferlist cbl;
+  cbl.append(full, sizeof(full));
+  AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_cmpext("foo", my_completion2, 0, cbl));
+
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion2->get_return_value());
+
+  /* compare with mismatch */
+  memset(full, 0xdd, sizeof(full));
+  cbl.clear();
+  cbl.append(full, sizeof(full));
+  AioCompletion *my_completion3 = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_cmpext("foo", my_completion3, 0, cbl));
+
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion3->wait_for_complete());
+  }
+  ASSERT_EQ(-MAX_ERRNO, my_completion3->get_return_value());
+
+  delete my_completion;
+  delete my_completion2;
+  delete my_completion3;
+}
+
+TEST(LibRadosAio, RoundTripCmpExtPP2)
+{
+  int ret;
+  char buf[128];
+  char miscmp_buf[128];
+  bufferlist cbl;
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  boost::scoped_ptr<AioCompletion>
+			wr_cmpl(cluster.aio_create_completion(0, 0, 0));
+  ObjectWriteOperation wr_op;
+  memset(buf, 0xcc, sizeof(buf));
+  memset(miscmp_buf, 0xdd, sizeof(miscmp_buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  wr_op.write_full(bl);
+  wr_op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+  ioctx.aio_operate("test_obj", wr_cmpl.get(), &wr_op);
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, wr_cmpl->wait_for_complete());
+  }
+  EXPECT_EQ(0, wr_cmpl->get_return_value());
+
+  /* cmpext as write op. first match then mismatch */
+  boost::scoped_ptr<AioCompletion>
+			wr_cmpext_cmpl(cluster.aio_create_completion(0, 0, 0));
+  cbl.append(buf, sizeof(buf));
+  ret = 0;
+
+  wr_op.cmpext(0, cbl, &ret);
+  wr_op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+  ioctx.aio_operate("test_obj", wr_cmpext_cmpl.get(), &wr_op);
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, wr_cmpext_cmpl->wait_for_complete());
+  }
+  EXPECT_EQ(0, wr_cmpext_cmpl->get_return_value());
+  EXPECT_EQ(0, ret);
+
+  boost::scoped_ptr<AioCompletion>
+			wr_cmpext_cmpl2(cluster.aio_create_completion(0, 0, 0));
+  cbl.clear();
+  cbl.append(miscmp_buf, sizeof(miscmp_buf));
+  ret = 0;
+
+  wr_op.cmpext(0, cbl, &ret);
+  wr_op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+  ioctx.aio_operate("test_obj", wr_cmpext_cmpl2.get(), &wr_op);
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, wr_cmpext_cmpl2->wait_for_complete());
+  }
+  EXPECT_EQ(-MAX_ERRNO, wr_cmpext_cmpl2->get_return_value());
+  EXPECT_EQ(-MAX_ERRNO, ret);
+
+  /* cmpext as read op */
+  boost::scoped_ptr<AioCompletion>
+			rd_cmpext_cmpl(cluster.aio_create_completion(0, 0, 0));
+  ObjectReadOperation rd_op;
+  cbl.clear();
+  cbl.append(buf, sizeof(buf));
+  ret = 0;
+  rd_op.cmpext(0, cbl, &ret);
+  rd_op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+  ioctx.aio_operate("test_obj", rd_cmpext_cmpl.get(), &rd_op, 0);
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rd_cmpext_cmpl->wait_for_complete());
+  }
+  EXPECT_EQ(0, rd_cmpext_cmpl->get_return_value());
+  EXPECT_EQ(0, ret);
+
+  boost::scoped_ptr<AioCompletion>
+			rd_cmpext_cmpl2(cluster.aio_create_completion(0, 0, 0));
+  cbl.clear();
+  cbl.append(miscmp_buf, sizeof(miscmp_buf));
+  ret = 0;
+
+  rd_op.cmpext(0, cbl, &ret);
+  rd_op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+  ioctx.aio_operate("test_obj", rd_cmpext_cmpl2.get(), &rd_op, 0);
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rd_cmpext_cmpl2->wait_for_complete());
+  }
+  EXPECT_EQ(-MAX_ERRNO, rd_cmpext_cmpl2->get_return_value());
+  EXPECT_EQ(-MAX_ERRNO, ret);
+
+  ioctx.remove("test_obj");
+  destroy_one_pool_pp(pool_name, cluster);
 }
