@@ -1883,6 +1883,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
                                          cct->_conf->osd_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                            cct->_conf->osd_op_history_duration);
+  op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->osd_op_history_slow_op_size,
+                                                    cct->_conf->osd_op_history_slow_op_threshold);
 }
 
 OSD::~OSD()
@@ -1974,6 +1976,11 @@ bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
     }
   } else if (admin_command == "dump_historic_ops_by_duration") {
     if (!op_tracker.dump_historic_ops(f, true)) {
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    }
+  } else if (admin_command == "dump_historic_slow_ops") {
+    if (!op_tracker.dump_historic_slow_ops(f)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
@@ -2541,6 +2548,10 @@ void OSD::final_init()
   assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
+				     "show recent ops");
+  assert(r == 0);
+  r = admin_socket->register_command("dump_historic_slow_ops", "dump_historic_slow_ops",
+				     asok_hook,
 				     "show slowest recent ops");
   assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops_by_duration", "dump_historic_ops_by_duration",
@@ -2979,6 +2990,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("dump_blocked_ops");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
   cct->get_admin_socket()->unregister_command("dump_historic_ops_by_duration");
+  cct->get_admin_socket()->unregister_command("dump_historic_slow_ops");
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
   cct->get_admin_socket()->unregister_command("dump_blacklist");
   cct->get_admin_socket()->unregister_command("dump_watchers");
@@ -8998,6 +9010,11 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
       changed.count("osd_op_history_duration")) {
     op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                              cct->_conf->osd_op_history_duration);
+  }
+  if (changed.count("osd_op_history_slow_op_size") ||
+      changed.count("osd_op_history_slow_op_threshold")) {
+    op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->osd_op_history_slow_op_size,
+                                                      cct->_conf->osd_op_history_slow_op_threshold);
   }
   if (changed.count("osd_enable_op_tracker")) {
       op_tracker.set_tracking(cct->_conf->osd_enable_op_tracker);
