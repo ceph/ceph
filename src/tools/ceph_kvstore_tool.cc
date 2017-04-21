@@ -26,6 +26,7 @@
 #include "include/utime.h"
 #include "common/Clock.h"
 #include "kv/KeyValueDB.h"
+#include "common/url_escape.h"
 
 using namespace std;
 
@@ -64,7 +65,7 @@ class StoreTool
         break;
 
       if (out)
-        *out << rk.first << "\t" << rk.second;
+        *out << url_escape(rk.first) << "\t" << url_escape(rk.second);
       if (do_crc) {
         bufferlist bl;
         bl.append(rk.first);
@@ -255,7 +256,7 @@ int main(int argc, const char *argv[])
   if (cmd == "list" || cmd == "list-crc") {
     string prefix;
     if (argc > 4)
-      prefix = argv[4];
+      prefix = url_unescape(argv[4]);
 
     bool do_crc = (cmd == "list-crc");
 
@@ -267,12 +268,12 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(argv[4]);
+    string prefix(url_unescape(argv[4]));
     if (argc > 5)
-      key = argv[5];
+      key = url_unescape(argv[5]);
 
     bool ret = st.exists(prefix, key);
-    std::cout << "(" << prefix << ", " << key << ") "
+    std::cout << "(" << url_escape(prefix) << ", " << url_escape(key) << ") "
       << (ret ? "exists" : "does not exist")
       << std::endl;
     return (ret ? 0 : 1);
@@ -282,12 +283,12 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(argv[4]);
-    string key(argv[5]);
+    string prefix(url_unescape(argv[4]));
+    string key(url_unescape(argv[5]));
 
     bool exists = false;
     bufferlist bl = st.get(prefix, key, exists);
-    std::cout << "(" << prefix << ", " << key << ")";
+    std::cout << "(" << url_escape(prefix) << ", " << url_escape(key) << ")";
     if (!exists) {
       std::cout << " does not exist" << std::endl;
       return 1;
@@ -329,12 +330,12 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(argv[4]);
-    string key(argv[5]);
+    string prefix(url_unescape(argv[4]));
+    string key(url_unescape(argv[5]));
 
     bool exists = false;
     bufferlist bl = st.get(prefix, key, exists);
-    std::cout << "(" << prefix << ", " << key << ") ";
+    std::cout << "(" << url_escape(prefix) << ", " << url_escape(key) << ") ";
     if (!exists) {
       std::cout << " does not exist" << std::endl;
       return 1;
@@ -351,17 +352,17 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(argv[4]);
-    string key(argv[5]);
+    string prefix(url_unescape(argv[4]));
+    string key(url_unescape(argv[5]));
 
     bool exists = false;
     bufferlist bl = st.get(prefix, key, exists);
     if (!exists) {
-      std::cerr << "(" << prefix << "," << key
+      std::cerr << "(" << url_escape(prefix) << "," << url_escape(key)
                 << ") does not exist" << std::endl;
       return 1;
     }
-    std::cout << "(" << prefix << "," << key
+    std::cout << "(" << url_escape(prefix) << "," << url_escape(key)
               << ") size " << si_t(bl.length()) << std::endl;
 
   } else if (cmd == "set") {
@@ -369,8 +370,8 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(argv[4]);
-    string key(argv[5]);
+    string prefix(url_unescape(argv[4]));
+    string key(url_unescape(argv[5]));
     string subcmd(argv[6]);
 
     bufferlist val;
@@ -397,7 +398,7 @@ int main(int argc, const char *argv[])
     bool ret = st.set(prefix, key, val);
     if (!ret) {
       std::cerr << "error setting ("
-                << prefix << "," << key << ")" << std::endl;
+                << url_escape(prefix) << "," << url_escape(key) << ")" << std::endl;
       return 1;
     }
   } else if (cmd == "store-copy") {
