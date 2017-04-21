@@ -15,7 +15,7 @@ import json
 import socket
 import struct
 import time
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict
 from fcntl import ioctl
 from fnmatch import fnmatch
 from signal import signal, SIGWINCH
@@ -135,7 +135,7 @@ class DaemonWatcher(object):
     BOLD_SEQ = "\033[1m"
     UNDERLINE_SEQ = "\033[4m"
 
-    def __init__(self, asok, statpats=None):
+    def __init__(self, asok, statpats=None, min_prio=0):
         self.asok_path = asok
         self._colored = False
 
@@ -143,6 +143,7 @@ class DaemonWatcher(object):
         self._schema = None
         self._statpats = statpats
         self._stats_that_fit = dict()
+        self._min_prio = min_prio
         self.termsize = Termsize()
 
     def supports_color(self, ostr):
@@ -297,7 +298,6 @@ class DaemonWatcher(object):
         ostr.write("{0}\n".format(val_row))
 
     def _should_include(self, sect, name, prio):
-        MIN_PRIO = 5
         '''
         boolean: should we output this stat?
 
@@ -307,7 +307,6 @@ class DaemonWatcher(object):
 
         then yes.
         '''
-        print sect, name, self._statpats,
         if self._statpats:
             sectname = '.'.join((sect, name))
             if not any([
@@ -316,7 +315,10 @@ class DaemonWatcher(object):
             ]):
                 return False
 
-        return (prio >= MIN_PRIO)
+        if self._min_prio is not None and prio is not None:
+            return (prio >= self._min_prio)
+
+        return True
 
     def _load_schema(self):
         """
@@ -336,6 +338,8 @@ class DaemonWatcher(object):
                     if section_name not in self._stats:
                         self._stats[section_name] = OrderedDict()
                     self._stats[section_name][name] = schema_data['nick']
+        if not len(self._stats):
+            raise RuntimeError("no stats selected by filters")
 
     def _handle_sigwinch(self, signo, frame):
         self.termsize.update()
