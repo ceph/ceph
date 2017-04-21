@@ -139,6 +139,13 @@ add_executable(unittest_safe_io
 add_ceph_unittest(unittest_safe_io ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_safe_io)
 target_link_libraries(unittest_safe_io global)
 
+# unittest_url_escape
+add_executable(unittest_url_escape
+  test_url_escape.cc
+  )
+add_ceph_unittest(unittest_url_escape ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_url_escape)
+target_link_libraries(unittest_url_escape ceph-common)
+
 # unittest_readahead
 add_executable(unittest_readahead
   Readahead.cc
