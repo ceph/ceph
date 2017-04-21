@@ -440,7 +440,7 @@ void BootstrapRequest<I>::create_local_image() {
       this);
   CreateImageRequest<I> *request = CreateImageRequest<I>::create(
     m_local_io_ctx, m_work_queue, m_global_image_id, m_remote_mirror_uuid,
-    m_local_image_name, m_remote_image_ctx, ctx);
+    m_local_image_name, m_remote_image_ctx, &m_local_image_id, ctx);
   request->send();
 }
 

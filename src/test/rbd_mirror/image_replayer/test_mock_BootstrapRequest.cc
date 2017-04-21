@@ -132,8 +132,10 @@ struct CreateImageRequest<librbd::MockTestImageCtx> {
                                     const std::string &remote_mirror_uuid,
                                     const std::string &local_image_name,
                                     librbd::MockTestImageCtx *remote_image_ctx,
+				    std::string *local_image_id,
                                     Context *on_finish) {
     assert(s_instance != nullptr);
+    *local_image_id = "local image id";
     s_instance->on_finish = on_finish;
     return s_instance;
   }
