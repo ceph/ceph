@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <string>
 
+#include "include/err.h"
 #include "include/rados/librados.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
@@ -662,6 +663,44 @@ TEST_F(CReadOpsTest, GetXattrs) {
   EXPECT_EQ(0, rval);
   rados_release_read_op(op);
   compare_xattrs(keys, vals, lens, 4, it);
+
+  remove_object();
+}
+
+TEST_F(CReadOpsTest, CmpExt) {
+  char buf[len];
+  size_t bytes_read = 0;
+  int cmpext_val = 0;
+  int read_val = 0;
+
+  write_object();
+
+  // cmpext with match should ensure that the following read is successful
+  rados_read_op_t op = rados_create_read_op();
+  ASSERT_TRUE(op);
+  // @obj, @data and @len correspond to object initialised by write_object()
+  rados_read_op_cmpext(op, data, len, 0, &cmpext_val);
+  rados_read_op_read(op, 0, len, buf, &bytes_read, &read_val);
+  ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  ASSERT_EQ(len, bytes_read);
+  ASSERT_EQ(0, memcmp(data, buf, len));
+  ASSERT_EQ(cmpext_val, 0);
+  rados_release_read_op(op);
+
+  // cmpext with mismatch should fail and fill mismatch_buf accordingly
+  memset(buf, 0, sizeof(buf));
+  bytes_read = 0;
+  cmpext_val = 0;
+  read_val = 0;
+  op = rados_create_read_op();
+  ASSERT_TRUE(op);
+  // @obj, @data and @len correspond to object initialised by write_object()
+  rados_read_op_cmpext(op, "mismatch", strlen("mismatch"), 0, &cmpext_val);
+  rados_read_op_read(op, 0, len, buf, &bytes_read, &read_val);
+  ASSERT_EQ(-MAX_ERRNO, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
+
+  ASSERT_EQ(-MAX_ERRNO, cmpext_val);
 
   remove_object();
 }
