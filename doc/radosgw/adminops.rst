@@ -1696,7 +1696,7 @@ Request Parameters
 
 :Description: The administrative capability to add to the user.
 :Type: String
-:Example: ``usage=read, write``
+:Example: ``usage=read,write;user=write``
 :Required: Yes
 
 Response Entities
@@ -1736,12 +1736,11 @@ Example Request
 
 ::
 
-	PUT /{admin}/user?caps&format=json HTTP/1.1
+	PUT /{admin}/user?caps&user-caps=usage=read,write;user=write&format=json HTTP/1.1
 	Host: {fqdn}
 	Content-Type: text/plain
 	Authorization: {your-authorization-token}
 
-	usage=read
 
 
 Remove A User Capability
