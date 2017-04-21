@@ -325,20 +325,22 @@ int Replayer::init()
                                m_image_sync_throttler, m_local_rados,
                                local_mirror_uuid, m_local_pool_id));
   m_instance_replayer->init();
+  m_instance_replayer->add_peer(m_peer.uuid, m_remote_io_ctx);
+
+  m_instance_watcher.reset(InstanceWatcher<>::create(m_local_io_ctx,
+                                                     m_threads->work_queue,
+                                                     m_instance_replayer.get()));
+  r = m_instance_watcher->init();
+  if (r < 0) {
+    derr << "error initializing instance watcher: " << cpp_strerror(r) << dendl;
+    return r;
+  }
 
   m_leader_watcher.reset(new LeaderWatcher<>(m_threads, m_local_io_ctx,
                                              &m_leader_listener));
   r = m_leader_watcher->init();
   if (r < 0) {
     derr << "error initializing leader watcher: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  m_instance_watcher.reset(InstanceWatcher<>::create(m_local_io_ctx,
-                                                     m_threads->work_queue));
-  r = m_instance_watcher->init();
-  if (r < 0) {
-    derr << "error initializing instance watcher: " << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -457,6 +459,11 @@ void Replayer::print_status(Formatter *f, stringstream *ss)
   f->open_object_section("replayer_status");
   f->dump_string("pool", m_local_io_ctx.get_pool_name());
   f->dump_stream("peer") << m_peer;
+  f->dump_string("instance_id", m_instance_watcher->get_instance_id());
+
+  std::string leader_instance_id;
+  m_leader_watcher->get_leader_instance_id(&leader_instance_id);
+  f->dump_string("leader_instance_id", leader_instance_id);
 
   bool leader = m_leader_watcher->is_leader();
   f->dump_bool("leader", leader);
@@ -558,7 +565,11 @@ void Replayer::handle_update(const std::string &mirror_uuid,
     return;
   }
 
-  m_instance_replayer->set_peers({{mirror_uuid, m_remote_io_ctx}});
+  if (m_peer.uuid != mirror_uuid) {
+    m_instance_replayer->remove_peer(m_peer.uuid);
+    m_instance_replayer->add_peer(mirror_uuid, m_remote_io_ctx);
+    m_peer.uuid = mirror_uuid;
+  }
 
   // first callback will be a full directory -- so see if we need to remove
   // any local images that no longer exist on the remote side
@@ -590,15 +601,19 @@ void Replayer::handle_update(const std::string &mirror_uuid,
   C_Gather *gather_ctx = new C_Gather(g_ceph_context, ctx);
 
   for (auto &image_id : removed_image_ids) {
-    m_instance_replayer->release_image(image_id.global_id,
-                                       {{mirror_uuid, image_id.id}}, true,
-                                       gather_ctx->new_sub());
+    // for now always send to myself (the leader)
+    std::string &instance_id = m_instance_watcher->get_instance_id();
+    m_instance_watcher->notify_image_release(instance_id, image_id.global_id,
+                                             mirror_uuid, image_id.id, true,
+                                             gather_ctx->new_sub());
   }
 
   for (auto &image_id : added_image_ids) {
-    m_instance_replayer->acquire_image(image_id.global_id,
-                                       {{mirror_uuid, image_id.id}},
-                                       gather_ctx->new_sub());
+    // for now always send to myself (the leader)
+    std::string &instance_id = m_instance_watcher->get_instance_id();
+    m_instance_watcher->notify_image_acquire(instance_id, image_id.global_id,
+                                             mirror_uuid, image_id.id,
+                                             gather_ctx->new_sub());
   }
 
   gather_ctx->activate();
