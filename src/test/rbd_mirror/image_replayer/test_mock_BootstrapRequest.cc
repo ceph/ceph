@@ -214,7 +214,6 @@ struct OpenLocalImageRequest<librbd::MockTestImageCtx> {
 
   static OpenLocalImageRequest* create(librados::IoCtx &local_io_ctx,
                                        librbd::MockTestImageCtx **local_image_ctx,
-                                       const std::string &local_image_name,
                                        const std::string &local_image_id,
                                        ContextWQ *work_queue,
                                        Context *on_finish) {
@@ -429,8 +428,7 @@ public:
     return new MockBootstrapRequest(m_local_io_ctx,
                                     m_remote_io_ctx,
                                     mock_image_sync_throttler,
-                                    &m_local_test_image_ctx,
-                                    "local image name",
+                                    &m_local_test_image_ctx, "",
                                     remote_image_id,
                                     global_image_id,
                                     m_threads->work_queue,

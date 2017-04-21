@@ -70,13 +70,12 @@ struct MirrorJournalPolicy : public librbd::journal::Policy {
 template <typename I>
 OpenLocalImageRequest<I>::OpenLocalImageRequest(librados::IoCtx &local_io_ctx,
                                                 I **local_image_ctx,
-                                                const std::string &local_image_name,
                                                 const std::string &local_image_id,
                                                 ContextWQ *work_queue,
                                                 Context *on_finish)
   : m_local_io_ctx(local_io_ctx), m_local_image_ctx(local_image_ctx),
-    m_local_image_name(local_image_name), m_local_image_id(local_image_id),
-    m_work_queue(work_queue), m_on_finish(on_finish) {
+    m_local_image_id(local_image_id), m_work_queue(work_queue),
+    m_on_finish(on_finish) {
 }
 
 template <typename I>
@@ -88,7 +87,7 @@ template <typename I>
 void OpenLocalImageRequest<I>::send_open_image() {
   dout(20) << dendl;
 
-  *m_local_image_ctx = I::create(m_local_image_name, m_local_image_id, nullptr,
+  *m_local_image_ctx = I::create("", m_local_image_id, nullptr,
                                  m_local_io_ctx, false);
   {
     RWLock::WLocker owner_locker((*m_local_image_ctx)->owner_lock);
