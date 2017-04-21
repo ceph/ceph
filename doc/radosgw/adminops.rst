@@ -54,7 +54,7 @@ Request Parameters
 
 :Description: Specifies whether data entries should be returned.
 :Type: Boolean
-:Example: True [False]
+:Example: True [True]
 :Required: No
 
 
@@ -62,7 +62,7 @@ Request Parameters
 
 :Description: Specifies whether data summary should be returned.
 :Type: Boolean
-:Example: True [False]
+:Example: True [True]
 :Required: No
 
 
