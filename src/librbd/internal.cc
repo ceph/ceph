@@ -785,7 +785,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     int r = opts.set(RBD_IMAGE_OPTION_ORDER, order_);
     assert(r == 0);
 
-    r = create(io_ctx, imgname, size, opts, "", "", false);
+    r = create(io_ctx, imgname, "", size, opts, "", "", false);
 
     int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
     assert(r1 == 0);
@@ -817,7 +817,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     r = opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
     assert(r == 0);
 
-    r = create(io_ctx, imgname, size, opts, "", "", false);
+    r = create(io_ctx, imgname, "", size, opts, "", "", false);
 
     int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
     assert(r1 == 0);
@@ -826,30 +826,37 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return r;
   }
 
-  int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
+  int create(IoCtx& io_ctx, const std::string &image_name,
+	     const std::string &image_id, uint64_t size,
 	     ImageOptions& opts,
              const std::string &non_primary_global_image_id,
              const std::string &primary_mirror_uuid,
              bool skip_mirror_enable)
   {
+    std::string id(image_id);
+    if (id.empty()) {
+      id = util::generate_image_id(io_ctx);
+    }
+
     CephContext *cct = (CephContext *)io_ctx.cct();
-    ldout(cct, 10) << __func__ << " name=" << imgname << ", "
-                   << "size=" << size << ", opts=" << opts << dendl;
+    ldout(cct, 10) << __func__ << " name=" << image_name << ", "
+		   << "id= " << id << ", "
+		   << "size=" << size << ", opts=" << opts << dendl;
 
     uint64_t format;
     if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0)
       format = cct->_conf->rbd_default_format;
     bool old_format = format == 1;
 
-
     // make sure it doesn't already exist, in either format
-    int r = detect_format(io_ctx, imgname, NULL, NULL);
+    int r = detect_format(io_ctx, image_name, NULL, NULL);
     if (r != -ENOENT) {
       if (r) {
-	lderr(cct) << "Could not tell if " << imgname << " already exists" << dendl;
+	lderr(cct) << "Could not tell if " << image_name << " already exists"
+		   << dendl;
 	return r;
       }
-      lderr(cct) << "rbd image " << imgname << " already exists" << dendl;
+      lderr(cct) << "rbd image " << image_name << " already exists" << dendl;
       return -EEXIST;
     }
 
@@ -863,16 +870,15 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     if (old_format) {
-      r = create_v1(io_ctx, imgname, size, order);
+      r = create_v1(io_ctx, image_name.c_str(), size, order);
     } else {
       ThreadPool *thread_pool;
       ContextWQ *op_work_queue;
       ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
 
       C_SaferCond cond;
-      std::string id = util::generate_image_id(io_ctx);
       image::CreateRequest<> *req = image::CreateRequest<>::create(
-        io_ctx, imgname, id, size, opts, non_primary_global_image_id,
+        io_ctx, image_name, id, size, opts, non_primary_global_image_id,
         primary_mirror_uuid, skip_mirror_enable, op_work_queue, &cond);
       req->send();
 
@@ -925,7 +931,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
     }
 
-    r = clone(p_imctx, c_ioctx, c_name, c_opts, "", "");
+    r = clone(p_imctx, c_ioctx, c_name, "", c_opts, "", "");
 
     int close_r = p_imctx->state->close();
     if (r == 0 && close_r < 0) {
@@ -938,12 +944,21 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
-  int clone(ImageCtx *p_imctx, IoCtx& c_ioctx, const char *c_name,
-            ImageOptions& c_opts,
+  int clone(ImageCtx *p_imctx, IoCtx& c_ioctx, const std::string &c_name,
+            const std::string &c_id, ImageOptions& c_opts,
             const std::string &non_primary_global_image_id,
             const std::string &primary_mirror_uuid)
   {
+    std::string id(c_id);
+    if (id.empty()) {
+      id = util::generate_image_id(c_ioctx);
+    }
+
     CephContext *cct = (CephContext *)c_ioctx.cct();
+    ldout(cct, 10) << __func__ << " "
+		   << "c_name=" << c_name << ", "
+		   << "c_id= " << c_id << ", "
+		   << "c_opts=" << c_opts << dendl;
 
     ThreadPool *thread_pool;
     ContextWQ *op_work_queue;
@@ -951,8 +966,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond cond;
     auto *req = image::CloneRequest<>::create(
-      p_imctx, c_ioctx, std::string(c_name), c_opts, non_primary_global_image_id,
-      primary_mirror_uuid, op_work_queue, &cond);
+      p_imctx, c_ioctx, c_name, id, c_opts,
+      non_primary_global_image_id, primary_mirror_uuid, op_work_queue, &cond);
     req->send();
 
     return cond.wait();
@@ -1703,7 +1718,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -ENOSYS;
     }
 
-    int r = create(dest_md_ctx, destname, src_size, opts, "", "", false);
+    int r = create(dest_md_ctx, destname, "", src_size, opts, "", "", false);
     if (r < 0) {
       lderr(cct) << "header creation failed" << dendl;
       return r;

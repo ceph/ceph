@@ -481,7 +481,7 @@ namespace librbd {
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, create4_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name, size, opts.opts);
-    int r = librbd::create(io_ctx, name, size, opts, "", "", false);
+    int r = librbd::create(io_ctx, name, "", size, opts, "", "", false);
     tracepoint(librbd, create4_exit, r);
     return r;
   }
@@ -2195,7 +2195,7 @@ extern "C" int rbd_create4(rados_ioctx_t p, const char *name,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, create4_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name, size, opts);
   librbd::ImageOptions opts_(opts);
-  int r = librbd::create(io_ctx, name, size, opts_, "", "", false);
+  int r = librbd::create(io_ctx, name, "", size, opts_, "", "", false);
   tracepoint(librbd, create4_exit, r);
   return r;
 }

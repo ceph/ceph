@@ -26,12 +26,15 @@ using util::create_context_callback;
 using util::create_async_context_callback;
 
 template <typename I>
-CloneRequest<I>::CloneRequest(I *p_imctx, IoCtx &c_ioctx, const std::string &c_name,
+CloneRequest<I>::CloneRequest(I *p_imctx, IoCtx &c_ioctx,
+			      const std::string &c_name,
+			      const std::string &c_id,
 			      ImageOptions c_options,
 			      const std::string &non_primary_global_image_id,
 			      const std::string &primary_mirror_uuid,
 			      ContextWQ *op_work_queue, Context *on_finish)
-  : m_p_imctx(p_imctx), m_ioctx(c_ioctx), m_name(c_name), m_opts(c_options),
+  : m_p_imctx(p_imctx), m_ioctx(c_ioctx), m_name(c_name), m_id(c_id),
+    m_opts(c_options),
     m_pspec(m_p_imctx->md_ctx.get_id(), m_p_imctx->id, m_p_imctx->snap_id),
     m_non_primary_global_image_id(non_primary_global_image_id),
     m_primary_mirror_uuid(primary_mirror_uuid),
@@ -199,7 +202,6 @@ void CloneRequest<I>::send_create() {
   Context *ctx = create_context_callback<klass, &klass::handle_create>(this);
 
   RWLock::RLocker snap_locker(m_p_imctx->snap_lock);
-  m_id = librbd::util::generate_image_id(m_ioctx);
   CreateRequest<I> *req = CreateRequest<I>::create(
     m_ioctx, m_name, m_id, m_size, m_opts, m_non_primary_global_image_id,
     m_primary_mirror_uuid, true, m_op_work_queue, ctx);
