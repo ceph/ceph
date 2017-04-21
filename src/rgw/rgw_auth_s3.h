@@ -215,6 +215,17 @@ static inline bool is_v4_payload_unsigned(const char* const exp_payload_hash)
   return boost::string_ref("UNSIGNED-PAYLOAD").compare(exp_payload_hash) == 0;
 }
 
+static inline bool is_v4_payload_empty(const req_state* const s)
+{
+  /* from rfc2616 - 4.3 Message Body
+   *
+   * "The presence of a message-body in a request is signaled by the inclusion
+   * of a Content-Length or Transfer-Encoding header field in the request's
+   * message-headers." */
+  return s->content_length == 0 &&
+         s->info.env->get("HTTP_TRANSFER_ENCODING") == nullptr;
+}
+
 static inline bool is_v4_payload_streamed(const char* const exp_payload_hash)
 {
   return boost::string_ref("STREAMING-AWS4-HMAC-SHA256-PAYLOAD").compare(exp_payload_hash) == 0;
