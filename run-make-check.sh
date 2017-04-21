@@ -27,10 +27,6 @@ function get_processors() {
     fi
 }
 
-DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
-BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-
 function run() {
     local install_cmd
     if test -f /etc/redhat-release ; then
@@ -63,6 +59,12 @@ function run() {
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
     fi
+
+    # Init defaults after deps are installed. get_processors() depends on coreutils nproc.
+    DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
+    BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+    CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+
     $DRY_RUN ./do_cmake.sh $@ || return 1
     $DRY_RUN cd build
     $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
