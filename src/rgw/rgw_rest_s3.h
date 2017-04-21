@@ -448,15 +448,10 @@ private:
   static int authorize_v2(RGWRados *store,
                           const rgw::auth::StrategyRegistry& auth_registry,
                           struct req_state *s);
-  static int authorize_v4(RGWRados *store, struct req_state *s, bool force_boto2_compat = true);
-  static int authorize_v4_complete(RGWRados *store, struct req_state *s,
-				  const string& request_payload,
-				  bool unsigned_payload);
 public:
   static int authorize(RGWRados *store,
                        const rgw::auth::StrategyRegistry& auth_registry,
                        struct req_state *s);
-  static int authorize_aws4_auth_complete(RGWRados *store, struct req_state *s);
 };
 
 class RGWHandler_Auth_S3 : public RGWHandler_REST {
