@@ -45,7 +45,9 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
-  bool is_leader();
+  bool is_leader() const;
+  bool is_releasing_leader() const;
+  bool get_leader_instance_id(std::string *instance_id) const;
   void release_leader();
   void list_instances(std::vector<std::string> *instance_ids);
 
@@ -110,6 +112,11 @@ private:
     bool is_leader() const {
       Mutex::Locker locker(Parent::m_lock);
       return Parent::is_state_post_acquiring() || Parent::is_state_locked();
+    }
+
+    bool is_releasing_leader() const {
+      Mutex::Locker locker(Parent::m_lock);
+      return Parent::is_state_pre_releasing();
     }
 
   protected:
@@ -181,7 +188,7 @@ private:
   Threads<ImageCtxT> *m_threads;
   Listener *m_listener;
 
-  Mutex m_lock;
+  mutable Mutex m_lock;
   uint64_t m_notifier_id;
   LeaderLock *m_leader_lock;
   Context *m_on_finish = nullptr;
@@ -198,7 +205,8 @@ private:
 
   librbd::watcher::NotifyResponse m_heartbeat_response;
 
-  bool is_leader(Mutex &m_lock);
+  bool is_leader(Mutex &m_lock) const;
+  bool is_releasing_leader(Mutex &m_lock) const;
 
   void cancel_timer_task();
   void schedule_timer_task(const std::string &name,
