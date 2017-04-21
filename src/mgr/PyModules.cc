@@ -544,8 +544,14 @@ void PyModules::set_config(const std::string &handle,
   }
   set_cmd.wait();
 
-  // FIXME: is config-key put ever allowed to fail?
-  assert(set_cmd.r == 0);
+  if (set_cmd.r != 0) {
+    // config-key put will fail if mgr's auth key has insufficient
+    // permission to set config keys
+    // FIXME: should this somehow raise an exception back into Python land?
+    dout(0) << "`config-key put " << global_key << " " << val << "` failed: "
+      << cpp_strerror(set_cmd.r) << dendl;
+    dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
+  }
 }
 
 std::vector<ModuleCommand> PyModules::get_commands()
