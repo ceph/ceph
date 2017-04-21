@@ -1156,24 +1156,12 @@ void ReplicatedBackend::repop_applied(RepModifyRef rm)
   Message *ack = NULL;
   eversion_t version;
 
-  if (m->get_type() == MSG_OSD_SUBOP) {
-    // doesn't have CLIENT SUBOP feature ,use Subop
-    const MOSDSubOp *req = static_cast<const MOSDSubOp*>(m);
-    version = req->version;
-    if (!rm->committed)
-      ack = new MOSDSubOpReply(
-	req, parent->whoami_shard(),
-	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
-  } else if (m->get_type() == MSG_OSD_REPOP) {
-    const MOSDRepOp *req = static_cast<const MOSDRepOp*>(m);
-    version = req->version;
-    if (!rm->committed)
-      ack = new MOSDRepOpReply(
+  const MOSDRepOp *req = static_cast<const MOSDRepOp*>(m);
+  version = req->version;
+  if (!rm->committed)
+    ack = new MOSDRepOpReply(
 	static_cast<const MOSDRepOp*>(m), parent->whoami_shard(),
 	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
-  } else {
-    ceph_abort();
-  }
 
   // send ack to acker only if we haven't sent a commit already
   if (ack) {
