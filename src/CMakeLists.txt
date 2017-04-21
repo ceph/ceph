@@ -841,7 +841,9 @@ add_subdirectory(compressor)
 
 add_subdirectory(tools)
 
-add_subdirectory(crypto/isa-l)
+if(HAVE_INTEL)
+  add_subdirectory(crypto/isa-l)
+endif(HAVE_INTEL)
 
 if(WITH_TESTS)
 
