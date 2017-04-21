@@ -21,7 +21,7 @@ struct MgrSession : public RefCountedObject {
   // mon caps are suitably generic for mgr
   MonCap caps;
 
-  MgrSession() : RefCountedObject(0) {}
+  MgrSession(CephContext *cct) : RefCountedObject(cct, 0) {}
   ~MgrSession() override {}
 };
 
