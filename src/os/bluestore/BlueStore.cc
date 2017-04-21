@@ -7578,10 +7578,11 @@ void BlueStore::_txc_finish(TransContext *txc)
   OpSequencerRef osr = txc->osr;
   CollectionRef c;
   bool empty = false;
+  OpSequencer::q_list_t releasing_txc;
   {
     std::lock_guard<std::mutex> l(osr->qlock);
     txc->state = TransContext::STATE_DONE;
-
+    bool notify = false;
     while (!osr->q.empty()) {
       TransContext *txc = &osr->q.front();
       dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
@@ -7590,23 +7591,19 @@ void BlueStore::_txc_finish(TransContext *txc)
 	if (txc->state == TransContext::STATE_PREPARE &&
 	  deferred_aggressive) {
 	  // for _osr_drain_preceding()
-	  osr->qcond.notify_all();
+          notify = true;
 	}
         break;
       }
 
-      // release to allocator only after all preceding txc's have also
-      // finished any deferred writes that potentially land in these
-      // blocks
-      _txc_release_alloc(txc);
-
       if (!c && txc->first_collection) {
         c = txc->first_collection;
       }
-
       osr->q.pop_front();
-      txc->log_state_latency(logger, l_bluestore_state_done_lat);
-      delete txc;
+      releasing_txc.push_back(*txc);
+      notify = true;
+    }
+    if (notify) {
       osr->qcond.notify_all();
     }
     if (osr->q.empty()) {
@@ -7614,6 +7611,17 @@ void BlueStore::_txc_finish(TransContext *txc)
       empty = true;
     }
   }
+  while (!releasing_txc.empty()) {
+    // release to allocator only after all preceding txc's have also
+    // finished any deferred writes that potentially land in these
+    // blocks
+    auto txc = &releasing_txc.front();
+    _txc_release_alloc(txc);
+    releasing_txc.pop_front();
+    txc->log_state_latency(logger, l_bluestore_state_done_lat);
+    delete txc;
+  }
+
   if (c) {
     c->trim_cache();
   }
