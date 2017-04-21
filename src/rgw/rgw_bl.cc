@@ -534,8 +534,12 @@ int RGWBL::list_bl_progress(const string& marker, uint32_t max_entries,
     int ret = cls_rgw_bl_list(store->bl_pool_ctx, obj_names[index],
                               marker, max_entries, entries);
     if (ret < 0) {
-      dout(0) << __func__ << " can't list on bl object=" << obj_names[index]
-              << " ret=" << ret << dendl;
+      if (ret == -ENOENT) {
+        dout(0) << __func__ << " ignoring unfound bl object=" << obj_names[index] << dendl;
+        continue;
+      } else {
+        return ret;
+      }
     }
     map<string, int>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
