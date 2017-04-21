@@ -8,8 +8,7 @@ namespace mirror {
 
 std::ostream &operator<<(std::ostream &os, const ImageId &image_id) {
   return os << "global id=" << image_id.global_id << ", "
-            << "id=" << image_id.id << ", "
-            << "name=" << image_id.name;
+            << "id=" << image_id.id;
 }
 
 std::ostream& operator<<(std::ostream& lhs, const peer_t &peer) {

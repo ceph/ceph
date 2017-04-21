@@ -148,7 +148,7 @@ public:
       image.close();
 
       m_mirrored_images.insert(ImageId(
-        mirror_image_info.global_id, get_image_id(&ioctx, name), name));
+        mirror_image_info.global_id, get_image_id(&ioctx, name)));
     }
     if (image_name != nullptr)
       *image_name = name;
@@ -195,7 +195,7 @@ public:
       image.close();
 
       m_mirrored_images.insert(ImageId(
-        mirror_image_info.global_id, get_image_id(&cioctx, name), name));
+        mirror_image_info.global_id, get_image_id(&cioctx, name)));
     }
     if (image_name != nullptr)
       *image_name = name;
