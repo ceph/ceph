@@ -66,13 +66,14 @@ int MgrPyModule::load()
   auto pyHandle = PyString_FromString(module_name.c_str());
   auto pArgs = PyTuple_Pack(1, pyHandle);
   pClassInstance = PyObject_CallObject(pClass, pArgs);
+  Py_DECREF(pyHandle);
+  Py_DECREF(pArgs);
   if (pClassInstance == nullptr) {
     derr << "Failed to construct class in '" << module_name << "'" << dendl;
     return -EINVAL;
   } else {
     dout(1) << "Constructed class from module: " << module_name << dendl;
   }
-  Py_DECREF(pArgs);
 
   return load_commands();
 }
