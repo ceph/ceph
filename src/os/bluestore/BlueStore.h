@@ -1747,7 +1747,7 @@ public:
 
     static constexpr uint32_t poll_cycles = 5;
     static constexpr int thresh_limit = 3;
-    static constexpr uint32_t min_power = 24; // 2**12 or 4K
+    static constexpr uint32_t min_power = 32; // 2**16 or 64K
     static constexpr uint32_t max_power = 76; // 2**38 or 256G
     static constexpr int log_level = 30;
     static constexpr int throt_lat_idx = l_bluestore_throttle_lat;
