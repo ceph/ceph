@@ -3286,6 +3286,9 @@ int main(int argc, const char **argv)
 	  cerr << "realm.rename failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+        cout << "Realm name updated. Note that this change only applies to "
+            "the current cluster, so this command must be run separately "
+            "on each of the realm's other clusters." << std::endl;
       }
       break;
     case OPT_REALM_SET:
