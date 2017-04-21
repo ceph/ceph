@@ -399,6 +399,7 @@ set(libcommon_files
   ${crush_srcs}
   common/cmdparse.cc
   common/escape.c
+  common/url_escape.cc
   common/io_priority.cc
   common/Clock.cc
   common/ceph_time.cc
