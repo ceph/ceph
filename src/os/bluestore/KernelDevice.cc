@@ -659,6 +659,14 @@ int KernelDevice::aio_write(
   return 0;
 }
 
+int KernelDevice::discard(uint64_t offset, uint64_t len)
+{
+  int r = 0;
+  if (!rotational)
+    r = block_device_discard(fd_direct, (int64_t)offset, (int64_t)len);
+  return r;
+}
+
 int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)
