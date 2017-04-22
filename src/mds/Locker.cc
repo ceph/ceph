@@ -1905,10 +1905,12 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 	     << " wanted " << ccap_string(wanted)
 	     << dendl;
 
-    // skip if suppress, and not revocation
-    if (cap->is_suppress() && !(pending & ~allowed)) {
-      dout(20) << "  suppressed and !revoke, skipping client." << it->first << dendl;
-      continue;
+    if (!(pending & ~allowed)) {
+      // skip if suppress or new, and not revocation
+      if (cap->is_new() || cap->is_suppress()) {
+	dout(20) << "  !revoke and new|suppressed, skipping client." << it->first << dendl;
+	continue;
+      }
     }
 
     // notify clients about deleted inode, to make sure they release caps ASAP.
