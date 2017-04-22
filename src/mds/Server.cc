@@ -4414,6 +4414,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     return;
   }
 
+  pi->change_attr++;
+  pi->ctime = mdr->get_op_stamp();
   pi->version = cur->pre_dirty();
   if (cur->is_file())
     pi->update_backtrace();
