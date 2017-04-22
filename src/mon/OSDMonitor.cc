@@ -3184,9 +3184,6 @@ void OSDMonitor::update_creating_pgs()
     auto pgid = pg.first;
     auto& created = pg.second.first;
     mapping.get(pgid, nullptr, nullptr, nullptr, &acting_primary);
-    if (acting_primary < 0) {
-      continue;
-    }
     // check the previous creating_pgs, look for the target to whom the pg was
     // previously mapped
     for (const auto& pgs_by_epoch : creating_pgs_by_osd_epoch) {
