@@ -61,22 +61,7 @@ namespace rbd {
 namespace mirror {
 
 template<>
-class ImageSync<librbd::MockTestImageCtx> {
-public:
-  static ImageSync* create(librbd::MockTestImageCtx *local_image_ctx,
-                           librbd::MockTestImageCtx *remote_image_ctx,
-                           SafeTimer *timer, Mutex *timer_lock,
-                           const std::string &mirror_uuid,
-                           journal::MockJournaler *journaler,
-                           librbd::journal::MirrorPeerClientMeta *client_meta,
-                           ContextWQ *work_queue, Context *on_finish,
-                           ProgressContext *progress_ctx = nullptr) {
-    assert(0 == "unexpected call");
-    return nullptr;
-  }
-
-  void send() {
-  }
+class ImageSyncThrottler<librbd::MockTestImageCtx> {
 };
 
 namespace image_replayer {
@@ -263,7 +248,6 @@ ReplayStatusFormatter<librbd::MockTestImageCtx>* ReplayStatusFormatter<librbd::M
 
 // template definitions
 #include "tools/rbd_mirror/ImageReplayer.cc"
-#include "tools/rbd_mirror/ImageSyncThrottler.cc"
 
 namespace rbd {
 namespace mirror {
