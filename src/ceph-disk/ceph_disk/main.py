@@ -1913,6 +1913,9 @@ class DevicePartitionCryptLuks(DevicePartitionCrypt):
 
 class Prepare(object):
 
+    def __init__(self, args):
+        self.args = args
+
     @staticmethod
     def parser():
         parser = argparse.ArgumentParser(add_help=False)
@@ -2032,6 +2035,7 @@ class Prepare(object):
 class PrepareFilestore(Prepare):
 
     def __init__(self, args):
+        super(PrepareFilestore, self).__init__(args)
         if args.dmcrypt:
             self.lockbox = Lockbox(args)
         self.data = PrepareFilestoreData(args)
@@ -2052,6 +2056,7 @@ class PrepareFilestore(Prepare):
 class PrepareBluestore(Prepare):
 
     def __init__(self, args):
+        super(PrepareBluestore, self).__init__(args)
         if args.dmcrypt:
             self.lockbox = Lockbox(args)
         self.data = PrepareBluestoreData(args)
