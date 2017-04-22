@@ -115,7 +115,6 @@ add_ceph_unittest(unittest_erasure_code_plugin_isa ${CMAKE_RUNTIME_OUTPUT_DIRECT
 target_link_libraries(unittest_erasure_code_plugin_isa
   global
   ceph-common
-  crush
   ${CMAKE_DL_LIBS}
   erasure_code
   )
