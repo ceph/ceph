@@ -221,6 +221,8 @@ exec radosgw -f -n {client_with_id} --cluster {cluster_name} -k /etc/ceph/{clien
     finally:
         log.info('Removing apache config...')
         for client in clients_to_create_as:
+            cluster_name, daemon_type, client_id = teuthology.split_role(client)
+            client_with_cluster = '.'.join((cluster_name, daemon_type, client_id))
             ctx.cluster.only(client).run(
                 args=[
                     'rm',
@@ -356,14 +358,17 @@ def start_rgw(ctx, config, on_client = None, except_client = None):
     try:
         yield
     finally:
-        teuthology.stop_daemons_of_type(ctx, 'rgw')
         for client in config.iterkeys():
+            cluster_name, daemon_type, client_id = teuthology.split_role(client)
+            client_with_id = daemon_type + '.' + client_id
+            client_with_cluster = cluster_name + '.' + client_with_id
+            ctx.daemons.get_daemon('rgw', client_with_id, cluster_name).stop()
             ctx.cluster.only(client).run(
                 args=[
                     'rm',
                     '-f',
-                    '{tdir}/rgw.opslog.{client_with_cluster}.sock'.format(tdir=testdir,
-                                                             client_with_cluster=client_with_cluster),
+                    '{tdir}/rgw.opslog.{client}.sock'.format(tdir=testdir,
+                                                             client=client_with_cluster),
                     ],
                 )
 
