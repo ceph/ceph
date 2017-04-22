@@ -1954,6 +1954,11 @@ class Prepare(object):
             default='{statedir}/bootstrap-osd/{cluster}.keyring',
             dest='prepare_key_template',
         )
+        parser.add_argument(
+            '--no-locking',
+            action='store_true', default=None,
+            help='let many prepare\'s run in parallel',
+        )
         return parser
 
     @staticmethod
@@ -2013,9 +2018,12 @@ class Prepare(object):
         )
         return parser
 
-    def prepare(self):
-        with prepare_lock:
+    def prepare(self, args):
+        if args.no_locking:
             self.prepare_locked()
+        else:
+            with prepare_lock:
+                self.prepare_locked()
 
     @staticmethod
     def factory(args):
@@ -2026,7 +2034,7 @@ class Prepare(object):
 
     @staticmethod
     def main(args):
-        Prepare.factory(args).prepare()
+        Prepare.factory(args).prepare(args)
 
 
 class PrepareFilestore(Prepare):

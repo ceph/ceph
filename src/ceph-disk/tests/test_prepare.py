@@ -66,7 +66,7 @@ class TestPrepare(Base):
         assert prepare.data.is_file()
         assert isinstance(prepare.journal, main.PrepareJournal)
         assert prepare.journal.is_none()
-        prepare.prepare()
+        prepare.prepare(args)
         assert os.path.exists(os.path.join(data, 'fsid'))
         shutil.rmtree(data)
 
