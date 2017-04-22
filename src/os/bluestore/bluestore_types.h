@@ -519,7 +519,7 @@ public:
     denc(csum_chunk_order, p);
     denc_varint(csum_data.length(), p);
     p += csum_data.length();
-    p += sizeof(unsigned long long);
+    p += sizeof(unused_t);
   }
 
   void encode(bufferlist::contiguous_appender& p, uint64_t struct_v) const {
