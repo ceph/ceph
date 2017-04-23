@@ -2132,6 +2132,9 @@ public:
      const PGPool &pool, spg_t p);
   ~PG() override;
 
+  static void _repair_meta(ObjectStore *store, const coll_t& coll,
+      const ghobject_t& oid, ObjectStore::Sequencer* osr);
+
  private:
   // Prevent copying
   explicit PG(const PG& rhs);
@@ -2309,6 +2312,8 @@ public:
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
   static int peek_map_epoch(ObjectStore *store, spg_t pgid,
 			    epoch_t *pepoch, bufferlist *bl);
+  static void repair_meta(ObjectStore *store, spg_t pgid);
+
   void update_snap_map(
     const vector<pg_log_entry_t> &log_entries,
     ObjectStore::Transaction& t);

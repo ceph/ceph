@@ -2976,6 +2976,37 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
   t.omap_setkeys(coll, pgmeta_oid, values);
 }
 
+void PG::_repair_meta(ObjectStore *store, const coll_t& coll,
+    const ghobject_t& pgmeta_oid, ObjectStore::Sequencer* osr)
+{
+  ObjectStore::Transaction t;
+
+  if (store->exists(coll, pgmeta_oid))
+    return;
+
+  t.remove(coll, pgmeta_oid); // Removes oid from fdcache
+  t.touch(coll, pgmeta_oid);
+
+  map<string,bufferlist> v;
+  __u8 ver = cur_struct_v;
+  ::encode(ver, v[infover_key]);
+  t.omap_setkeys(coll, pgmeta_oid, v);
+
+  int r = store->apply_transaction(osr, t);
+  assert(r == 0);
+}
+
+void PG::repair_meta(ObjectStore *store, spg_t pgid)
+{
+  coll_t coll(pgid);
+  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
+
+  ceph::shared_ptr<ObjectStore::Sequencer> osr(
+    new ObjectStore::Sequencer("repair_meta"));
+
+  _repair_meta(store, coll, pgmeta_oid, osr.get());
+}
+
 void PG::prepare_write_info(map<string,bufferlist> *km)
 {
   info.stats.stats.add(unstable_stats);
@@ -4768,6 +4799,9 @@ void PG::scrub_finish()
 
   // type-specific finish (can tally more errors)
   _scrub_finish();
+
+  if (repair)
+    _repair_meta(osd->store, coll, pgmeta_oid, osr.get());
 
   bool has_error = scrub_process_inconsistent();
 

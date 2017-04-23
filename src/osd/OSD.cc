@@ -3588,9 +3588,15 @@ void OSD::load_pgs()
     epoch_t map_epoch = 0;
     int r = PG::peek_map_epoch(store, pgid, &map_epoch, &bl);
     if (r < 0) {
-      derr << __func__ << " unable to peek at " << pgid << " metadata, skipping"
-	   << dendl;
-      continue;
+	derr << __func__ << " unable to peek at " << pgid <<
+	  " metadata, repairing" << dendl;
+      PG::repair_meta(store, pgid);
+      r = PG::peek_map_epoch(store, pgid, &map_epoch, &bl);
+      if (r < 0) {
+	derr << __func__ << " unable to peek at " << pgid <<
+	  " metadata, skipping" << dendl;
+	continue;
+      }
     }
 
     PG *pg = NULL;
