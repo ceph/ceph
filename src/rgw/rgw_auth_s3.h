@@ -126,6 +126,66 @@ public:
   }
 };
 
+
+/* TODO(rzarzynski): make the completer to be additionally a decorator over
+ * rgw::io::RestfulClient (see rgw::io::DecoratedRestfulClient). This would
+ * allow to eradicate req_state::aws4 and friends. */
+class AWSv4Completer : public rgw::auth::Completer {
+private:
+  const bool aws4_auth_needs_complete = true;
+  const bool aws4_auth_streaming_mode = false;
+
+  /* TODO(rzarzynski): move to boost::string_ref. This should be just fine
+   * as (all?) parameters here are actually views over req_info. */
+  std::string date;
+  std::string credential_scope;
+  std::string seed_signature;
+  boost::optional<std::array<unsigned char,
+                  CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>> signing_key;
+  ceph::bufferlist bl;
+
+  /* TODO(rzarzynski): this won't be necessary after moving to filter-over-
+   * rgw::io::RestfulClient. */
+  const req_state* const s;
+
+  using signing_key_t = boost::optional<std::array<unsigned char,
+                                        CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>>;
+  AWSv4Completer(const req_state* const s,
+                 std::string date,
+                 std::string credential_scope,
+                 std::string seed_signature,
+                 const signing_key_t& signing_key)
+    : aws4_auth_needs_complete(false),
+      aws4_auth_streaming_mode(true),
+      date(std::move(date)),
+      credential_scope(std::move(credential_scope)),
+      seed_signature(std::move(seed_signature)),
+      signing_key(signing_key),
+      s(s) {
+  }
+
+  AWSv4Completer(const req_state* const s)
+    : s(s) {
+  }
+
+public:
+  void modify_request_state(req_state* s) const override;
+  bool complete() override;
+
+  /* Factories. */
+  static cmplptr_t
+  create_for_single_chunk(const req_state* s,
+                          const boost::optional<std::string>&);
+
+  static cmplptr_t
+  create_for_multi_chunk(const req_state* s,
+                         std::string date,
+                         std::string credential_scope,
+                         std::string seed_signature,
+                         const boost::optional<std::string>& secret_key);
+
+};
+
 } /* namespace s3 */
 } /* namespace auth */
 } /* namespace rgw */
