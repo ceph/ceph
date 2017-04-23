@@ -9,7 +9,6 @@
 #include <set>
 #include <string>
 #include <vector>
-#include <boost/optional.hpp>
 
 #include "include/rbd/librbd.hpp"
 #include "ImageSyncThrottler.h"
@@ -27,20 +26,15 @@ using ImageSyncThrottlerRef = std::shared_ptr<ImageSyncThrottler<I>>;
 struct ImageId {
   std::string global_id;
   std::string id;
-  boost::optional<std::string> name;
 
   explicit ImageId(const std::string &global_id) : global_id(global_id) {
   }
   ImageId(const std::string &global_id, const std::string &id)
     : global_id(global_id), id(id) {
   }
-  ImageId(const std::string &global_id, const std::string &id,
-          const std::string &name)
-    : global_id(global_id), id(id), name(name) {
-  }
 
   inline bool operator==(const ImageId &rhs) const {
-    return (global_id == rhs.global_id && id == rhs.id && name == rhs.name);
+    return (global_id == rhs.global_id && id == rhs.id);
   }
   inline bool operator<(const ImageId &rhs) const {
     return global_id < rhs.global_id;

@@ -38,12 +38,6 @@ const ClusterWatcher::PoolPeers& ClusterWatcher::get_pool_peers() const
   return m_pool_peers;
 }
 
-const ClusterWatcher::PoolNames& ClusterWatcher::get_pool_names() const
-{
-  assert(m_lock.is_locked());
-  return m_pool_names;
-}
-
 void ClusterWatcher::refresh_pools()
 {
   dout(20) << "enter" << dendl;
@@ -54,7 +48,6 @@ void ClusterWatcher::refresh_pools()
 
   Mutex::Locker l(m_lock);
   m_pool_peers = pool_peers;
-  m_pool_names = pool_names;
   // TODO: perhaps use a workqueue instead, once we get notifications
   // about config changes for existing pools
 }

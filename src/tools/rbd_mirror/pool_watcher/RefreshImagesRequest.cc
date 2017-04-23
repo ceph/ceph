@@ -24,6 +24,7 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void RefreshImagesRequest<I>::send() {
+  m_image_ids->clear();
   mirror_image_list();
 }
 
@@ -58,67 +59,15 @@ void RefreshImagesRequest<I>::handle_mirror_image_list(int r) {
     return;
   }
 
-  if (!ids.empty()) {
-    m_local_to_global_ids.insert(ids.begin(), ids.end());
-    if (ids.size() == MAX_RETURN) {
-      m_start_after = ids.rbegin()->first;
-      mirror_image_list();
-      return;
-    }
+  // store as global -> local image ids
+  for (auto &id : ids) {
+    m_image_ids->emplace(id.second, id.first);
   }
 
-  dir_list();
-}
-
-template <typename I>
-void RefreshImagesRequest<I>::dir_list() {
-  dout(10) << dendl;
-
-  m_out_bl.clear();
-  m_start_after = "";
-
-  librados::ObjectReadOperation op;
-  librbd::cls_client::dir_list_start(&op, m_start_after, MAX_RETURN);
-
-  librados::AioCompletion *aio_comp = create_rados_callback<
-    RefreshImagesRequest<I>,
-    &RefreshImagesRequest<I>::handle_dir_list>(this);
-  int r = m_remote_io_ctx.aio_operate(RBD_DIRECTORY, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
-  aio_comp->release();
-}
-
-template <typename I>
-void RefreshImagesRequest<I>::handle_dir_list(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  std::map<std::string, std::string> name_to_ids;
-  if (r == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
-    r = librbd::cls_client::dir_list_finish(&it, &name_to_ids);
-  }
-
-  if (r < 0 && r != -ENOENT) {
-    derr << "failed to list images: " << cpp_strerror(r) << dendl;
-    finish(r);
+  if (ids.size() == MAX_RETURN) {
+    m_start_after = ids.rbegin()->first;
+    mirror_image_list();
     return;
-  }
-
-  if (!name_to_ids.empty()) {
-    for (auto &pair : name_to_ids) {
-      auto it = m_local_to_global_ids.find(pair.second);
-      if (it != m_local_to_global_ids.end()) {
-        // mirrored image must exist within directory to be treated as
-        // a valid image
-        m_image_ids->insert(ImageId(it->second, it->first, pair.first));
-      }
-    }
-
-    if (name_to_ids.size() == MAX_RETURN) {
-      m_start_after = name_to_ids.rbegin()->first;
-      dir_list();
-      return;
-    }
   }
 
   finish(0);

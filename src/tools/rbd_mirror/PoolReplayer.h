@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_RBD_MIRROR_REPLAYER_H
-#define CEPH_RBD_MIRROR_REPLAYER_H
+#ifndef CEPH_RBD_MIRROR_POOL_REPLAYER_H
+#define CEPH_RBD_MIRROR_POOL_REPLAYER_H
 
 #include <map>
 #include <memory>
@@ -36,16 +36,16 @@ template <typename> class InstanceWatcher;
 /**
  * Controls mirroring for a single remote cluster.
  */
-class Replayer {
+class PoolReplayer {
 public:
-  Replayer(Threads<librbd::ImageCtx> *threads,
-           std::shared_ptr<ImageDeleter> image_deleter,
-           ImageSyncThrottlerRef<> image_sync_throttler,
-           int64_t local_pool_id, const peer_t &peer,
-           const std::vector<const char*> &args);
-  ~Replayer();
-  Replayer(const Replayer&) = delete;
-  Replayer& operator=(const Replayer&) = delete;
+  PoolReplayer(Threads<librbd::ImageCtx> *threads,
+	       std::shared_ptr<ImageDeleter> image_deleter,
+	       ImageSyncThrottlerRef<> image_sync_throttler,
+	       int64_t local_pool_id, const peer_t &peer,
+	       const std::vector<const char*> &args);
+  ~PoolReplayer();
+  PoolReplayer(const PoolReplayer&) = delete;
+  PoolReplayer& operator=(const PoolReplayer&) = delete;
 
   bool is_blacklisted() const;
   bool is_leader() const;
@@ -62,15 +62,17 @@ public:
 
 private:
   struct PoolWatcherListener : public PoolWatcher<>::Listener {
-    Replayer *replayer;
+    PoolReplayer *pool_replayer;
 
-    PoolWatcherListener(Replayer *replayer) : replayer(replayer) {
+    PoolWatcherListener(PoolReplayer *pool_replayer)
+      : pool_replayer(pool_replayer) {
     }
 
     void handle_update(const std::string &mirror_uuid,
                        const ImageIds &added_image_ids,
                        const ImageIds &removed_image_ids) override {
-      replayer->handle_update(mirror_uuid, added_image_ids, removed_image_ids);
+      pool_replayer->handle_update(mirror_uuid, added_image_ids,
+				   removed_image_ids);
     }
   };
 
@@ -127,32 +129,35 @@ private:
 
   std::set<ImageId> m_init_image_ids;
 
-  class ReplayerThread : public Thread {
-    Replayer *m_replayer;
+  class PoolReplayerThread : public Thread {
+    PoolReplayer *m_pool_replayer;
   public:
-    ReplayerThread(Replayer *replayer) : m_replayer(replayer) {}
+    PoolReplayerThread(PoolReplayer *pool_replayer)
+      : m_pool_replayer(pool_replayer) {
+    }
     void *entry() override {
-      m_replayer->run();
+      m_pool_replayer->run();
       return 0;
     }
-  } m_replayer_thread;
+  } m_pool_replayer_thread;
 
   class LeaderListener : public LeaderWatcher<>::Listener {
   public:
-    LeaderListener(Replayer *replayer) : m_replayer(replayer) {
+    LeaderListener(PoolReplayer *pool_replayer)
+      : m_pool_replayer(pool_replayer) {
     }
 
   protected:
     void post_acquire_handler(Context *on_finish) override {
-      m_replayer->handle_post_acquire_leader(on_finish);
+      m_pool_replayer->handle_post_acquire_leader(on_finish);
     }
 
     void pre_release_handler(Context *on_finish) override {
-      m_replayer->handle_pre_release_leader(on_finish);
+      m_pool_replayer->handle_pre_release_leader(on_finish);
     }
 
   private:
-    Replayer *m_replayer;
+    PoolReplayer *m_pool_replayer;
   } m_leader_listener;
 
   std::unique_ptr<LeaderWatcher<> > m_leader_watcher;
@@ -163,4 +168,4 @@ private:
 } // namespace mirror
 } // namespace rbd
 
-#endif // CEPH_RBD_MIRROR_REPLAYER_H
+#endif // CEPH_RBD_MIRROR_POOL_REPLAYER_H

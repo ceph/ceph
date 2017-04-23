@@ -13,7 +13,7 @@
 #include "include/atomic.h"
 #include "include/rados/librados.hpp"
 #include "ClusterWatcher.h"
-#include "Replayer.h"
+#include "PoolReplayer.h"
 #include "ImageDeleter.h"
 #include "types.h"
 
@@ -53,7 +53,7 @@ private:
   typedef ClusterWatcher::PoolPeers PoolPeers;
   typedef std::pair<int64_t, peer_t> PoolPeer;
 
-  void update_replayers(const PoolPeers &pool_peers);
+  void update_pool_replayers(const PoolPeers &pool_peers);
 
   CephContext *m_cct;
   std::vector<const char*> m_args;
@@ -66,7 +66,7 @@ private:
   std::unique_ptr<ClusterWatcher> m_local_cluster_watcher;
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<> m_image_sync_throttler;
-  std::map<PoolPeer, std::unique_ptr<Replayer> > m_replayers;
+  std::map<PoolPeer, std::unique_ptr<PoolReplayer> > m_pool_replayers;
   atomic_t m_stopping;
   bool m_manual_stop = false;
   MirrorAdminSocketHook *m_asok_hook;
