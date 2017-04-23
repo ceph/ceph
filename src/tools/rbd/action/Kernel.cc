@@ -133,6 +133,8 @@ static int parse_map_options(char *options)
         return -EINVAL;
     } else if (!strcmp(this_char, "lock_on_read")) {
       put_map_option("lock_on_read", this_char);
+    } else if (!strcmp(this_char, "exclusive")) {
+      put_map_option("exclusive", this_char);
     } else {
       std::cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
       return -EINVAL;
@@ -385,7 +387,8 @@ void get_map_arguments(po::options_description *positional,
                                      at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
     ("options,o", po::value<std::string>(), "map options")
-    ("read-only", po::bool_switch(), "map read-only");
+    ("read-only", po::bool_switch(), "map read-only")
+    ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions");
 }
 
 int execute_map(const po::variables_map &vm) {
@@ -403,6 +406,9 @@ int execute_map(const po::variables_map &vm) {
 
   if (vm["read-only"].as<bool>()) {
     put_map_option("rw", "ro");
+  }
+  if (vm["exclusive"].as<bool>()) {
+    put_map_option("exclusive", "exclusive");
   }
 
   // parse default options first so they can be overwritten by cli options
@@ -503,7 +509,7 @@ int execute_unmap(const po::variables_map &vm) {
   return 0;
 }
 
-Shell::SwitchArguments switched_arguments({"read-only"});
+Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
 Shell::Action action_show(
   {"showmapped"}, {}, "Show the rbd images mapped by the kernel.", "",
   &get_show_arguments, &execute_show);
