@@ -325,18 +325,14 @@ public:
   }
 
   void expect_get_locker(MockManagedLock &mock_managed_lock,
-                         const librbd::managed_lock::Locker &locker, int r,
-                         Context *on_finish = nullptr) {
+                         const librbd::managed_lock::Locker &locker, int r) {
     EXPECT_CALL(mock_managed_lock, get_locker(_, _))
-      .WillOnce(Invoke([on_finish, r, locker](librbd::managed_lock::Locker *out,
-                                              Context *ctx) {
+      .WillOnce(Invoke([r, locker](librbd::managed_lock::Locker *out,
+                                   Context *ctx) {
                          if (r == 0) {
                            *out = locker;
                          }
                          ctx->complete(r);
-                         if (on_finish != nullptr) {
-                           on_finish->complete(0);
-                         }
                        }));
   }
 
@@ -543,16 +539,26 @@ TEST_F(TestMockLeaderWatcher, AcquireError) {
   MockLeaderWatcher leader_watcher(m_mock_threads, m_local_io_ctx, &listener);
 
   // Inint
-  C_SaferCond on_get_locker_finish;
+  C_SaferCond on_heartbeat_finish;
   expect_is_leader(mock_managed_lock, false, false);
   expect_try_acquire_lock(mock_managed_lock, -EAGAIN);
-  expect_get_locker(mock_managed_lock, librbd::managed_lock::Locker(), 0,
-                    &on_get_locker_finish);
+  expect_get_locker(mock_managed_lock, librbd::managed_lock::Locker(), -ENOENT);
+  expect_try_acquire_lock(mock_managed_lock, 0);
+  expect_init(mock_mirror_status_watcher, 0);
+  expect_init(mock_instances, 0);
+  expect_acquire_notify(mock_managed_lock, listener, 0);
+  expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
+
   ASSERT_EQ(0, leader_watcher.init());
-  ASSERT_EQ(0, on_get_locker_finish.wait());
+  ASSERT_EQ(0, on_heartbeat_finish.wait());
 
   // Shutdown
-  expect_shut_down(mock_managed_lock, false, 0);
+  expect_release_notify(mock_managed_lock, listener, 0);
+  expect_shut_down(mock_instances, 0);
+  expect_shut_down(mock_mirror_status_watcher, 0);
+  expect_is_leader(mock_managed_lock, false, false);
+  expect_release_lock(mock_managed_lock, 0);
+  expect_shut_down(mock_managed_lock, true, 0);
   expect_is_leader(mock_managed_lock, false, false);
 
   leader_watcher.shut_down();
