@@ -908,7 +908,12 @@ function TEST_corrupt_scrub_replicated() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    if [ `uname` != FreeBSD ]; then
+        diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    else
+        # FreeBSD does not have side-by-side diff
+        diff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    fi
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save1.json

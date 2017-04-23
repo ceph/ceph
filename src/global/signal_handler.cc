@@ -96,7 +96,7 @@ static void handle_fatal_signal(int signum)
   char buf[1024];
   char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
   int r = ceph_pthread_getname(pthread_self(), pthread_name, sizeof(pthread_name));
-  (void)r;
+  IGNORE_UNUSED(r);
 #if defined(__sun)
   char message[SIG2STR_MAX];
   sig2str(signum,message);

@@ -21,6 +21,7 @@
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
 
+#include "include/compat.h"
 #include "net_handler.h"
 #include "common/errno.h"
 #include "common/debug.h"
@@ -34,6 +35,7 @@ namespace ceph{
 int NetHandler::create_socket(int domain, bool reuse_addr)
 {
   int s, on = 1;
+  IGNORE_UNUSED(on);
 
   if ((s = ::socket(domain, SOCK_STREAM, 0)) == -1) {
     lderr(cct) << __func__ << " couldn't create socket " << cpp_strerror(errno) << dendl;
@@ -127,6 +129,7 @@ void NetHandler::set_priority(int sd, int prio, int domain)
 {
   if (prio >= 0) {
     int r = -1;
+    IGNORE_UNUSED(r);
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
