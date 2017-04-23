@@ -911,16 +911,31 @@ void FileImageCache<I>::aio_flush(Context *on_finish) {
 
 template <typename I>
 void FileImageCache<I>::aio_writesame(uint64_t offset, uint64_t length,
-                                             bufferlist&& bl, int fadvise_flags,
-                                             Context *on_finish) {
+                                      bufferlist&& bl, int fadvise_flags,
+                                      Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "offset=" << offset << ", "
                  << "length=" << length << ", "
                  << "data_len=" << bl.length() << ", "
                  << "on_finish=" << on_finish << dendl;
+  {
 
-  m_image_writeback.aio_writesame(offset, length, std::move(bl), fadvise_flags,
-                                  on_finish);
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only) {
+      on_finish->complete(-EROFS);
+      return;
+    }
+  }
+
+  bufferlist total_bl;
+
+  uint64_t left = length;
+  while(left) {
+    total_bl.append(bl);
+    left -= bl.length();
+  }
+  assert(length == total_bl.length());
+  aio_write({{offset, length}}, std::move(total_bl), fadvise_flags, on_finish);
 }
 
 template <typename I>
