@@ -58,6 +58,11 @@ class Cluster(multisite.Cluster):
             cmd += ['--rgw-cache-enabled', 'false']
         return bash(cmd, **kwargs)
 
+    def rados(self, args = [], **kwargs):
+        """ rados command """
+        cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_rados', self.cluster_id] + args
+        return bash(cmd, **kwargs)
+
     def start(self):
         cmd = [mstart_path + 'mstart.sh', self.cluster_id]
         env = None

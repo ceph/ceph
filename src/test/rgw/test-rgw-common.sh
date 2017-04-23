@@ -67,6 +67,12 @@ function start_ceph_cluster {
   echo "$mstart $1"
 }
 
+function rgw_rados {
+  [ $# -lt 1 ] && echo "rgw_rados() needs 1 param" && exit
+
+  echo "$mrun $1 rados"
+}
+
 function rgw_admin {
   [ $# -lt 1 ] && echo "rgw_admin() needs 1 param" && exit 1
 
@@ -147,6 +153,12 @@ function init_first_zone_in_slave_zg {
   x $(rgw_admin $cid) user create --uid=zone.user --display-name="Zone User" --access-key=${access_key} --secret=${secret} --system
   x $(rgw_admin $cid) period update --commit --url=localhost:$master_zg_zone1_port --access-key=${access_key} --secret=${secret}
 
+}
+
+function call_rgw_rados {
+  cid=$1
+  shift 1
+  x $(rgw_rados $cid) "$@"
 }
 
 function call_rgw_admin {

@@ -13,6 +13,11 @@ class Cluster:
         """ execute a radosgw-admin command """
         pass
 
+    @abstractmethod
+    def rados(self, args = [], **kwargs):
+        """ execute a rados command """
+        pass
+
 class Gateway:
     """ interface to control a single radosgw instance """
     __metaclass__ = ABCMeta

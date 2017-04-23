@@ -16,6 +16,7 @@ import boto
 import boto.s3.connection
 from boto.s3.website import WebsiteConfiguration
 from boto.s3.cors import CORSConfiguration
+from boto.s3.deletemarker import DeleteMarker
 
 from nose.tools import eq_ as eq
 from nose.plugins.attrib import attr
@@ -563,6 +564,80 @@ def new_key(zone, bucket_name, obj_name):
 def check_bucket_eq(zone_conn1, zone_conn2, bucket):
     return zone_conn2.check_bucket_eq(zone_conn1, bucket.name)
 
+def check_object_eq(k1, k2, check_extra = True):
+    assert k1
+    assert k2
+    log.debug('comparing key name=%s', k1.name)
+    eq(k1.name, k2.name)
+    eq(k1.get_contents_as_string(), k2.get_contents_as_string())
+    eq(k1.metadata, k2.metadata)
+    eq(k1.cache_control, k2.cache_control)
+    eq(k1.content_type, k2.content_type)
+    eq(k1.content_encoding, k2.content_encoding)
+    eq(k1.content_disposition, k2.content_disposition)
+    eq(k1.content_language, k2.content_language)
+    eq(k1.etag, k2.etag)
+    eq(k1.last_modified, k2.last_modified)
+    if check_extra:
+        eq(k1.owner.id, k2.owner.id)
+        eq(k1.owner.display_name, k2.owner.display_name)
+    eq(k1.storage_class, k2.storage_class)
+    eq(k1.size, k2.size)
+    eq(k1.version_id, k2.version_id)
+    eq(k1.encrypted, k2.encrypted)
+
+def check_deletemarker_eq(k1, k2, check_extra = True):
+    assert k1
+    assert k2
+    log.info('comparing deletemarker 1 name=%s, deletemarker 2 name=%s', k1.name, k2.name)
+    eq(k1.name, k2.name)
+    eq(k1.version_id, k2.version_id)
+    eq(k1.is_latest, k2.is_latest)
+    eq(k1.last_modified, k2.last_modified)
+
+def check_bucket_eq(zone1, zone2, bucket_name):
+    if zone1 == zone2:
+        return
+    log.info('comparing bucket=%s zones={%s, %s}', bucket_name, zone1.name, zone2.name)
+    b1 = get_bucket(zone1, bucket_name)
+    b2 = get_bucket(zone2, bucket_name)
+    dm = set()
+
+    log.debug('bucket1 objects:')
+    for o in b1.get_all_versions():
+        log.debug('o=%s', o.name)
+    log.debug('bucket2 objects:')
+    for o in b2.get_all_versions():
+        log.debug('o=%s', o.name)
+
+    for k1, k2 in zip_longest(b1.get_all_versions(), b2.get_all_versions()):
+        if k1 is None and k2 is None:
+            return
+        if k1 is None:
+            log.critical('key=%s is missing from zone=%s', k2.name, zone1.name)
+            assert False
+        if k2 is None:
+            log.critical('key=%s is missing from zone=%s', k1.name, zone2.name)
+            assert False
+
+        if isinstance(k1, DeleteMarker):
+            dm.add(k1.name)
+            assert isinstance(k2, DeleteMarker):
+            check_deletemarker_eq(k1, k2)
+        else:
+            assert not isinstance(k2, DeleteMarker):
+            check_object_eq(k1, k2)
+            if k1.name in dm:
+                continue
+
+            # now get the keys through a HEAD operation, verify that the available data is the same
+            k1_head = b1.get_key(k1.name, version_id=k1.version_id)
+            k2_head = b2.get_key(k2.name, version_id=k2.version_id)
+
+            check_object_eq(k1_head, k2_head, False)
+
+    log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, zone1.name, zone2.name)
+
 def test_object_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1057,3 +1132,68 @@ def test_bucket_index_log_trim():
     # verify cold bucket has empty bilog
     cold_bilog = bilog_list(zone.zone, cold_bucket.name)
     assert(len(cold_bilog) == 0)
+
+def test_null_version():
+    master_zg = realm.master_zonegroup()
+    zone_m = master_zg.master_zone
+    conn = get_zone_connection(zone_m, user.credentials)
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+
+    objnames = ['myobj1', 'myobj2', 'myobj3', 'myobj4']
+    content = 'abcdefg'
+
+    k = new_key(zone_m, bucket, objnames[0])
+    k.set_contents_from_string(content)
+    for zone in master_zg.zones:
+        zone_bucket_checkpoint(zone, zone_m, bucket.name)
+
+    bucket.configure_versioning(True)
+    zonegroup_meta_checkpoint(master_zg)
+
+    for i in range(0, 3):
+        k = new_key(zone_m, bucket, objnames[i])
+        k.set_contents_from_string(content)
+    for zone in master_zg.zones:
+        zone_bucket_checkpoint(zone, zone_m, bucket.name)
+
+    bucket.configure_versioning(False)
+    zonegroup_meta_checkpoint(master_zg)
+
+    for i in range(0, 4):
+        k = new_key(zone_m, bucket, objnames[i])
+        k.set_contents_from_string(content)
+    for zone in master_zg.zones:
+        zone_bucket_checkpoint(zone, zone_m, bucket.name)
+        check_bucket_eq(zone, zone_m, bucket.name)
+
+    for o in bucket.get_all_versions():
+        if o.name == objnames[0] and o.version_id != 'null':
+            bucket.delete_key(objnames[0], version_id=o.version_id)
+            break
+    bucket.delete_key(objnames[1], version_id='null')
+    bucket.delete_key(objnames[2])
+    bucket.delete_key(objnames[3])
+    for zone in master_zg.zones:
+        zone_bucket_checkpoint(zone, zone_m, bucket.name)
+        check_bucket_eq(zone, zone_m, bucket.name)
+
+    bucket.delete_key(objnames[2], version_id='null')
+    for zone in master_zg.zones:
+        zone_bucket_checkpoint(zone, zone_m, bucket.name)
+
+    for o in bucket.get_all_versions():
+        bucket.delete_key(o.name, version_id=o.version_id)
+    for zone in master_zg.zones:
+        zone_bucket_checkpoint(zone, zone_m, bucket.name)
+        check_bucket_eq(zone, zone_m, bucket.name)
+
+    for zone in master_zg.zones:
+        cmd = ['ls', '-p', str(zone.name) + '.rgw.buckets.data']
+        olist_json, retcode = zone.cluster.rados(cmd, check_retcode=False)
+        if retcode != 0:
+            log.debug('list pool %s.rgw.buckets.data error', zone.name)
+            continue
+        olist_str = olist_json.decode('utf-8')
+        assert(len(olist_str) == 0)
+    assert(len(bucket.get_all_versions()) == 0)
