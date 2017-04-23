@@ -1675,12 +1675,6 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     }
   } else {
     // create superblock
-    if (fsid.is_zero()) {
-      derr << "must specify cluster fsid" << dendl;
-      ret = -EINVAL;
-      goto umount_store;
-    }
-
     sb.cluster_fsid = fsid;
     sb.osd_fsid = store->get_fsid();
     sb.whoami = whoami;
