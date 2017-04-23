@@ -28,25 +28,3 @@ void BasicClient::init(CephContext *cct) {
 
 } /* namespace io */
 } /* namespace rgw */
-
-int RGWRestfulIO::recv_body(char *buf, size_t max, bool calculate_hash)
-{
-  try {
-    const auto sent = recv_body(buf, max);
-
-    if (calculate_hash) {
-      if (! sha256_hash) {
-        sha256_hash = calc_hash_sha256_open_stream();
-      }
-      calc_hash_sha256_update_stream(sha256_hash, buf, sent);
-    }
-    return sent;
-  } catch (rgw::io::Exception& e) {
-    return -e.code().value();
-  }
-}
-
-string RGWRestfulIO::grab_aws4_sha256_hash()
-{
-  return calc_hash_sha256_close_stream(&sha256_hash);
-}

@@ -862,7 +862,7 @@ int recv_body(struct req_state* const s,
               const size_t max)
 {
   try {
-    return AWS_AUTHv4_IO(s)->recv_body(buf, max, s->aws4_auth_needs_complete);
+    return RESTFUL_IO(s)->recv_body(buf, max);
   } catch (rgw::io::Exception& e) {
     return -e.code().value();
   }
