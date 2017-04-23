@@ -304,12 +304,17 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	ceph::features::mon::FEATURE_LUMINOUS)) {
     bufferlist bl;
     mon->store->get(OSD_PG_CREATING_PREFIX, "creating", bl);
-    auto p = bl.begin();
-    std::lock_guard<std::mutex> l(creating_pgs_lock);
-    creating_pgs.decode(p);
-    dout(7) << __func__ << " loading creating_pgs last_scan_epoch "
-	    << creating_pgs.last_scan_epoch
-	    << " with " << creating_pgs.pgs.size() << " pgs" << dendl;
+    if (bl.length()) {
+      auto p = bl.begin();
+      std::lock_guard<std::mutex> l(creating_pgs_lock);
+      creating_pgs.decode(p);
+      dout(7) << __func__ << " loading creating_pgs last_scan_epoch "
+	      << creating_pgs.last_scan_epoch
+	      << " with " << creating_pgs.pgs.size() << " pgs" << dendl;
+    } else {
+      dout(1) << __func__ << " missing creating pgs; upgrade from post-kraken?"
+	      << dendl;
+    }
   }
 
   // walk through incrementals
@@ -321,7 +326,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     assert(err == 0);
     assert(inc_bl.length());
 
-    dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1 << dendl;
+    dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1
+	    << dendl;
     OSDMap::Incremental inc(inc_bl);
     err = osdmap.apply_incremental(inc);
     assert(err == 0);
