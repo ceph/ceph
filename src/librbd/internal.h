@@ -106,8 +106,8 @@ namespace librbd {
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     bool old_format, uint64_t features, int *order,
 	     uint64_t stripe_unit, uint64_t stripe_count);
-  int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
-	     ImageOptions& opts,
+  int create(IoCtx& io_ctx, const std::string &image_name,
+	     const std::string &image_id, uint64_t size, ImageOptions& opts,
              const std::string &non_primary_global_image_id,
              const std::string &primary_mirror_uuid,
              bool skip_mirror_enable);
@@ -117,8 +117,8 @@ namespace librbd {
 	    uint64_t stripe_unit, int stripe_count);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts);
-  int clone(ImageCtx *p_imctx, IoCtx& c_ioctx, const char *c_name,
-            ImageOptions& c_opts,
+  int clone(ImageCtx *p_imctx, IoCtx& c_ioctx, const std::string &c_name,
+            const std::string &c_id, ImageOptions& c_opts,
             const std::string &non_primary_global_image_id,
             const std::string &primary_mirror_uuid);
   int rename(librados::IoCtx& io_ctx, const char *srcname, const char *dstname);

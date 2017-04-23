@@ -421,15 +421,14 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
 
 template <typename I>
 void ImageReplayer<I>::bootstrap() {
-  dout(20) << "bootstrap params: "
-	   << "local_image_name=" << m_local_image_name << dendl;
+  dout(20) << dendl;
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
 
   BootstrapRequest<I> *request = BootstrapRequest<I>::create(
     m_local_ioctx, m_remote_image.io_ctx, m_image_sync_throttler,
-    &m_local_image_ctx, m_local_image_name, m_remote_image.image_id,
+    &m_local_image_ctx, m_local_image_id, m_remote_image.image_id,
     m_global_image_id, m_threads->work_queue, m_threads->timer,
     &m_threads->timer_lock, m_local_mirror_uuid, m_remote_image.mirror_uuid,
     m_remote_journaler, &m_client_meta, ctx, &m_do_resync, &m_progress_cxt);
@@ -455,7 +454,6 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     m_bootstrap_request = nullptr;
     if (m_local_image_ctx) {
       m_local_image_id = m_local_image_ctx->id;
-      m_local_image_name = m_local_image_ctx->name;
     }
   }
 
