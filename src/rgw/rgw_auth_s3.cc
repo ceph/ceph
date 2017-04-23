@@ -812,7 +812,15 @@ std::string get_v4_signature(CephContext* const cct,
 }
 
 
-void AWSv4Completer::modify_request_state(req_state* const s_rw) const
+size_t AWSv4Completer::recv_body(char* const buf, const size_t max)
+{
+  const auto received = io_base_t::recv_body(buf, max);
+  calc_hash_sha256_update_stream(sha256_hash, buf, received);
+
+  return received;
+}
+
+void AWSv4Completer::modify_request_state(req_state* const s_rw)
 {
   /* TODO(rzarzynski): switch to the dedicated filter over RestfulClient. */
   s_rw->aws4_auth_needs_complete = aws4_auth_needs_complete;
@@ -835,6 +843,10 @@ void AWSv4Completer::modify_request_state(req_state* const s_rw) const
      * the streamed upload. */
     throw -ERR_NOT_IMPLEMENTED;
   }
+
+  /* Install the filter over rgw::io::RestfulClient. */
+  AWS_AUTHv4_IO(s_rw)->add_filter(
+    std::static_pointer_cast<io_base_t>(shared_from_this()));
 }
 
 bool AWSv4Completer::complete()
@@ -854,7 +866,7 @@ bool AWSv4Completer::complete()
   /* The completer is only for the cases where signed payload has been
    * requested. It won't be used, for instance, during the query string-based
    * authentication. */
-  const auto payload_hash = AWS_AUTHv4_IO(s)->grab_aws4_sha256_hash();
+  const auto payload_hash = calc_hash_sha256_close_stream(&sha256_hash);
 
   /* Validate x-amz-sha256 */
   if (payload_hash.compare(expected_request_payload_hash) == 0) {

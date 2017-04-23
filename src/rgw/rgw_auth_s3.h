@@ -5,6 +5,7 @@
 #define CEPH_RGW_AUTH_S3_H
 
 #include <array>
+#include <memory>
 #include <string>
 #include <tuple>
 
@@ -127,11 +128,14 @@ public:
 };
 
 
-/* TODO(rzarzynski): make the completer to be additionally a decorator over
- * rgw::io::RestfulClient (see rgw::io::DecoratedRestfulClient). This would
- * allow to eradicate req_state::aws4 and friends. */
-class AWSv4Completer : public rgw::auth::Completer {
+class AWSv4Completer : public rgw::auth::Completer,
+                       public rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>,
+                       public std::enable_shared_from_this<AWSv4Completer> {
 private:
+  using io_base_t = rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>;
+
+  SHA256* sha256_hash = nullptr;
+
   const bool aws4_auth_needs_complete = true;
   const bool aws4_auth_streaming_mode = false;
 
@@ -155,7 +159,8 @@ private:
                  std::string credential_scope,
                  std::string seed_signature,
                  const signing_key_t& signing_key)
-    : aws4_auth_needs_complete(false),
+    : io_base_t(nullptr),
+      aws4_auth_needs_complete(false),
       aws4_auth_streaming_mode(true),
       date(std::move(date)),
       credential_scope(std::move(credential_scope)),
@@ -165,11 +170,17 @@ private:
   }
 
   AWSv4Completer(const req_state* const s)
-    : s(s) {
+    : io_base_t(nullptr),
+      sha256_hash(calc_hash_sha256_open_stream()),
+      s(s) {
   }
 
 public:
-  void modify_request_state(req_state* s) const override;
+  /* rgw::io::DecoratedRestfulClient. */
+  size_t recv_body(char* buf, size_t max) override;
+
+  /* rgw::auth::Completer. */
+  void modify_request_state(req_state* s) override;
   bool complete() override;
 
   /* Factories. */

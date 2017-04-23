@@ -334,20 +334,14 @@ public:
  *
  * rgw::io::Accounter came in as a part of rgw::io::AccountingFilter. */
 class RGWRestfulIO : public rgw::io::AccountingFilter<rgw::io::RestfulClient*> {
-  SHA256 *sha256_hash;
   std::vector<std::shared_ptr<DecoratedRestfulClient>> filters;
 
 public:
-  ~RGWRestfulIO() override {}
+  ~RGWRestfulIO() override = default;
 
   RGWRestfulIO(rgw::io::RestfulClient* engine)
-    : AccountingFilter<rgw::io::RestfulClient*>(std::move(engine)),
-      sha256_hash(nullptr) {
+    : AccountingFilter<rgw::io::RestfulClient*>(std::move(engine)) {
   }
-
-  using DecoratedRestfulClient<RestfulClient*>::recv_body;
-  virtual int recv_body(char* buf, size_t max, bool calculate_hash);
-  std::string grab_aws4_sha256_hash();
 
   void add_filter(std::shared_ptr<DecoratedRestfulClient> new_filter) {
     new_filter->set_decoratee(this->get_decoratee());
@@ -414,8 +408,13 @@ public:
       start = base;
     }
 
-    const int read_len = rio.recv_body(base, window_size, false);
-    if (read_len < 0 || 0 == read_len) {
+    size_t read_len = 0;
+    try {
+      read_len = rio.recv_body(base, window_size);
+    } catch (rgw::io::Exception&) {
+      return traits_type::eof();
+    }
+    if (0 == read_len) {
       return traits_type::eof();
     }
 
