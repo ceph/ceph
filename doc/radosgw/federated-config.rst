@@ -822,4 +822,4 @@ there is a unified namespace between the two regions.
 .. _Configuration Reference - Regions: ../config-ref#regions
 .. _Configuration Reference - Zones: ../config-ref#zones
 .. _Pools: ../../rados/operations/pools
-.. _Simple Configuration: ../config
+.. _Simple Configuration: ../config-fcgi
