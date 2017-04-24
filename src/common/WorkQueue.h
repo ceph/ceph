@@ -435,6 +435,7 @@ public:
 private:
   vector<WorkQueue_*> work_queues;
   int last_work_queue;
+  map<WorkQueue_*, int> _wq_processing; ///Store processing count for each wq
  
 
   // threads
@@ -470,6 +471,7 @@ public:
   void add_work_queue(WorkQueue_* wq) {
     Mutex::Locker l(_lock);
     work_queues.push_back(wq);
+    _wq_processing[wq] = 0;
   }
   /// remove a work queue from this thread pool
   void remove_work_queue(WorkQueue_* wq) {
@@ -481,6 +483,9 @@ public:
       work_queues[i-1] = work_queues[i];
     assert(i == work_queues.size());
     work_queues.resize(i-1);
+    auto ret = _wq_processing.find(wq);
+    if (ret != _wq_processing.end())
+      _wq_processing.erase(ret);
   }
 
   /// take thread pool lock
