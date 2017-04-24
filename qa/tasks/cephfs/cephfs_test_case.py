@@ -88,27 +88,16 @@ class CephFSTestCase(CephTestCase):
                 # here for hours waiting for the test to fill up a 1TB drive!
                 raise case.SkipTest("Require `memstore` OSD backend to simulate full drives")
 
-        # Unmount all surplus clients
-        for i in range(self.CLIENTS_REQUIRED, len(self.mounts)):
-            mount = self.mounts[i]
-            log.info("Unmounting unneeded client {0}".format(mount.client_id))
-            mount.umount_wait()
-
         # Create friendly mount_a, mount_b attrs
         for i in range(0, self.CLIENTS_REQUIRED):
             setattr(self, "mount_{0}".format(chr(ord('a') + i)), self.mounts[i])
 
         self.mds_cluster.clear_firewall()
 
-        # Unmount in order to start each test on a fresh mount, such
-        # that test_barrier can have a firm expectation of what OSD
-        # epoch the clients start with.
-        if self.mount_a.is_mounted():
-            self.mount_a.umount_wait()
-
-        if self.mount_b:
-            if self.mount_b.is_mounted():
-                self.mount_b.umount_wait()
+        # Unmount all clients, we are about to blow away the filesystem
+        for mount in self.mounts:
+            if mount.is_mounted():
+                mount.umount_wait(force=True)
 
         # To avoid any issues with e.g. unlink bugs, we destroy and recreate
         # the filesystem rather than just doing a rm -rf of files
@@ -161,14 +150,11 @@ class CephFSTestCase(CephTestCase):
 
             # wait for mds restart to complete...
             self.fs.wait_for_daemons()
-            if not self.mount_a.is_mounted():
-                self.mount_a.mount()
-                self.mount_a.wait_until_mounted()
 
-            if self.mount_b:
-                if not self.mount_b.is_mounted():
-                    self.mount_b.mount()
-                    self.mount_b.wait_until_mounted()
+            # Mount the requested number of clients
+            for i in range(0, self.CLIENTS_REQUIRED):
+                self.mounts[i].mount()
+                self.mounts[i].wait_until_mounted()
 
         # Load an config settings of interest
         for setting in self.LOAD_SETTINGS:
