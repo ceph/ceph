@@ -4437,7 +4437,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
   // reclaim from bluefs?
   if (reclaim) {
     // round up to alloc size
-    reclaim = P2ROUNDUP(reclaim, min_alloc_size);
+    reclaim = P2ROUNDUP(reclaim, cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
     reclaim = MIN(reclaim, 1ull<<31);
