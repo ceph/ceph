@@ -98,6 +98,8 @@
 
 #include "common/Timer.h"
 
+#include "perfglue/heap_profiler.h"
+
 using namespace std;
 
 #include "common/config.h"
@@ -7375,11 +7377,11 @@ void MDCache::check_memory_usage()
         g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
     // Only do this once we are back in bounds: otherwise the releases would
     // slow down whatever process caused us to exceed bounds to begin with
-    dout(2) << "check_memory_usage: releasing unused space from pool allocators"
-            << dendl;
-    CInode::pool.release_memory();
-    CDir::pool.release_memory();
-    CDentry::pool.release_memory();
+    if (ceph_using_tcmalloc()) {
+      dout(2) << "check_memory_usage: releasing unused space from tcmalloc" 
+	      << dendl;
+      ceph_heap_release_free_memory();
+    }
     exceeded_size_limit = false;
   }
 }
