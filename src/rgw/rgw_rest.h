@@ -220,7 +220,7 @@ class RGWPostObj_ObjStore : public RGWPostObj
 {
   std::string boundary;
 
-protected:
+public:
   struct post_part_field {
     std::string val;
     std::map<std::string, std::string> params;
@@ -233,6 +233,7 @@ protected:
     ceph::bufferlist data;
   };
 
+protected:
   ceph::bufferlist in_data;
   std::map<std::string, post_form_part, const ltstr_nocase> parts;
 
