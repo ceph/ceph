@@ -101,22 +101,27 @@ struct C_ReleaseBlockGuard : public C_BlockIORequest {
 template <typename I>
 struct C_PromoteToCache : public C_BlockIORequest {
   ImageStore<I> &image_store;
-  uint64_t block;
+  BlockGuard::BlockIO block_io;
   const bufferlist &bl;
 
-  C_PromoteToCache(CephContext *cct, ImageStore<I> &image_store, uint64_t block,
-                   const bufferlist &bl, C_BlockIORequest *next_block_request)
+  C_PromoteToCache(CephContext *cct, ImageStore<I> &image_store,
+                   BlockGuard::BlockIO &block_io, const bufferlist &bl,
+                   C_BlockIORequest *next_block_request)
     : C_BlockIORequest(cct, next_block_request),
-      image_store(image_store), block(block), bl(bl) {
+      image_store(image_store), block_io(block_io), bl(bl) {
   }
 
   virtual void send() override {
     ldout(cct, 20) << "(" << get_name() << "): "
-                   << "block=" << block << dendl;
+                   << "block=" << block_io.block << dendl;
     // promote the clean block to the cache
     bufferlist sub_bl;
-    sub_bl.append(bl);
-    image_store.write_block(block, {{0, BLOCK_SIZE}}, std::move(sub_bl),
+    if(bl.length() > BLOCK_SIZE) {
+      sub_bl.substr_of(bl, block_io.extents[0].buffer_offset, block_io.extents[0].block_length);
+    } else {
+      sub_bl.append(bl);
+    }
+    image_store.write_block(block_io.block, {{0, BLOCK_SIZE}}, std::move(sub_bl),
                             this);
   }
   virtual const char *get_name() const override {
@@ -509,7 +514,7 @@ struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
       promote_buffers.emplace_back();
       req = new C_CopyFromBlockBuffer(cct, block_io, promote_buffers.back(),
                                       &extent_buffers, req);
-      req = new C_PromoteToCache<I>(cct, image_store, block_io.block,
+      req = new C_PromoteToCache<I>(cct, image_store, block_io,
                                     promote_buffers.back(), req);
       req = new C_ReadBlockFromImageRequest<I>(cct, image_writeback,
                                                block_io.block,
@@ -621,7 +626,7 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
                                               block_io.block, IO_TYPE_WRITE,
                                               req);
         }
-        req = new C_PromoteToCache<I>(cct, image_store, block_io.block,
+        req = new C_PromoteToCache<I>(cct, image_store, block_io,
                                       promote_buffers.back(), req);
         req = new C_ModifyBlockBuffer(cct, block_io, bl,
                                       &promote_buffers.back(), req);
@@ -650,7 +655,7 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
                                               req);
         }
 
-        req = new C_PromoteToCache<I>(cct, image_store, block_io.block,
+        req = new C_PromoteToCache<I>(cct, image_store, block_io,
                                       bl, req);
       }
 
