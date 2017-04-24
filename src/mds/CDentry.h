@@ -121,16 +121,6 @@ public:
     linkage.remote_d_type = dt;
   }
 
-  static void *operator new(size_t num_bytes) {
-    void *n = pool.malloc();
-    if (!n)
-      throw std::bad_alloc();
-    return n;
-  }
-  void operator delete(void *p) {
-    pool.free(p);
-  }
-
   const char *pin_name(int p) const override {
     switch (p) {
     case PIN_INODEPIN: return "inodepin";
@@ -381,16 +371,6 @@ protected:
 
   version_t version;  // dir version when last touched.
   version_t projected_version;  // what it will be when i unlock/commit.
-
-
-private:
-  /*
-   * This class uses a boost::pool to handle allocation. This is *not*
-   * thread-safe, so don't do allocations from multiple threads!
-   *
-   * Alternatively, switch the pool to use a boost::singleton_pool.
-   */
-  static boost::pool<> pool;
 };
 
 ostream& operator<<(ostream& out, const CDentry& dn);
