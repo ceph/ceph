@@ -1832,13 +1832,12 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
     return;
   }
 
-  ret = sync.read_sync_status();
-  if (ret < 0) {
+  rgw_data_sync_status sync_status;
+  ret = sync.read_sync_status(&sync_status);
+  if (ret < 0 && ret != -ENOENT) {
     push_ss(ss, status, tab) << string("failed read sync status: ") + cpp_strerror(-ret);
     return;
   }
-
-  const rgw_data_sync_status& sync_status = sync.get_sync_status();
 
   string status_str;
   switch (sync_status.sync_info.state) {
@@ -5736,13 +5735,12 @@ next:
       return -ret;
     }
 
-    ret = sync.read_sync_status();
-    if (ret < 0) {
+    rgw_data_sync_status sync_status;
+    ret = sync.read_sync_status(&sync_status);
+    if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
-
-    rgw_data_sync_status& sync_status = sync.get_sync_status();
 
     formatter->open_object_section("summary");
     encode_json("sync_status", sync_status, formatter);

@@ -593,16 +593,35 @@ int RGWRemoteDataLog::get_shard_info(int shard_id)
 
 int RGWRemoteDataLog::read_sync_status(rgw_data_sync_status *sync_status)
 {
-  int r = run(new RGWReadDataSyncStatusCoroutine(&sync_env, sync_status));
-  if (r == -ENOENT) {
-    r = 0;
+  // cannot run concurrently with run_sync(), so run in a separate manager
+  RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+  RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
+  int ret = http_manager.set_threaded();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    return ret;
   }
-  return r;
+  RGWDataSyncEnv sync_env_local = sync_env;
+  sync_env_local.http_manager = &http_manager;
+  ret = crs.run(new RGWReadDataSyncStatusCoroutine(&sync_env_local, sync_status));
+  http_manager.stop();
+  return ret;
 }
 
 int RGWRemoteDataLog::init_sync_status(int num_shards)
 {
-  return run(new RGWInitDataSyncStatusCoroutine(&sync_env, num_shards));
+  RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+  RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
+  int ret = http_manager.set_threaded();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    return ret;
+  }
+  RGWDataSyncEnv sync_env_local = sync_env;
+  sync_env_local.http_manager = &http_manager;
+  ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env_local, num_shards));
+  http_manager.stop();
+  return ret;
 }
 
 static string full_data_sync_index_shard_oid(const string& source_zone, int shard_id)
@@ -1483,20 +1502,14 @@ void RGWRemoteDataLog::wakeup(int shard_id, set<string>& keys) {
   data_sync_cr->wakeup(shard_id, keys);
 }
 
-int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status)
+int RGWRemoteDataLog::run_sync(int num_shards)
 {
-  int r = run(new RGWReadDataSyncStatusCoroutine(&sync_env, &sync_status));
-  if (r < 0 && r != -ENOENT) {
-    ldout(store->ctx(), 0) << "ERROR: failed to read sync status from source_zone=" << sync_env.source_zone << " r=" << r << dendl;
-    return r;
-  }
-  
   lock.get_write();
   data_sync_cr = new RGWDataSyncControlCR(&sync_env, num_shards);
   data_sync_cr->get(); // run() will drop a ref, so take another
   lock.unlock();
 
-  r = run(data_sync_cr);
+  int r = run(data_sync_cr);
 
   lock.get_write();
   data_sync_cr->put();
