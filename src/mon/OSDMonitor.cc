@@ -2651,7 +2651,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     goto ignore;
   }
 
-  for (map<pg_t,vector<int32_t> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
+  for (auto p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
     dout(20) << " " << p->first
 	     << (osdmap.pg_temp->count(p->first) ? (*osdmap.pg_temp)[p->first] : empty)
              << " -> " << p->second << dendl;
@@ -4796,13 +4796,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     f->close_section();
     f->flush(rdata);
   } else if (prefix == "osd erasure-code-profile ls") {
-    const map<string,map<string,string> > &profiles =
-      osdmap.get_erasure_code_profiles();
+    const auto &profiles = osdmap.get_erasure_code_profiles();
     if (f)
       f->open_array_section("erasure-code-profiles");
-    for(map<string,map<string,string> >::const_iterator i = profiles.begin();
-	i != profiles.end();
-	++i) {
+    for (auto i = profiles.begin(); i != profiles.end(); ++i) {
       if (f)
         f->dump_string("profile", i->first.c_str());
       else
@@ -4866,10 +4863,8 @@ bool OSDMonitor::update_pools_status()
 
   bool ret = false;
 
-  const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
-  for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
-       it != pools.end();
-       ++it) {
+  auto& pools = osdmap.get_pools();
+  for (auto it = pools.begin(); it != pools.end(); ++it) {
     if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
       continue;
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
@@ -4917,9 +4912,8 @@ void OSDMonitor::get_pools_health(
     list<pair<health_status_t,string> >& summary,
     list<pair<health_status_t,string> > *detail) const
 {
-  const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
-  for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
-       it != pools.end(); ++it) {
+  auto& pools = osdmap.get_pools();
+  for (auto it = pools.begin(); it != pools.end(); ++it) {
     if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
       continue;
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
@@ -6288,9 +6282,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     
-    const map<int64_t,pg_pool_t> &osdmap_pools = osdmap.get_pools();
-    map<int64_t,pg_pool_t>::const_iterator pit;
-    for (pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
+    const auto& osdmap_pools = osdmap.get_pools();
+    for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
       const pg_pool_t &pool = pit->second;
       int ruleno = pool.get_crush_ruleset();
@@ -9396,7 +9389,7 @@ int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
   pending_inc.old_pools.insert(pool);
 
   // remove any pg_temp mappings for this pool too
-  for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
+  for (auto p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
        ++p) {
     if (p->first.pool() == (uint64_t)pool) {
@@ -9405,7 +9398,7 @@ int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
       pending_inc.new_pg_temp[p->first].clear();
     }
   }
-  for (map<pg_t,int32_t>::iterator p = osdmap.primary_temp->begin();
+  for (auto p = osdmap.primary_temp->begin();
       p != osdmap.primary_temp->end();
       ++p) {
     if (p->first.pool() == (uint64_t)pool) {
