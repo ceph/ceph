@@ -1301,12 +1301,15 @@ static bool is_crlf(const char *s)
  * find the index of the boundary, if exists, or optionally the next end of line
  * also returns how many bytes to skip
  */
-static int index_of(bufferlist& bl, int max_len, const string& str,
-		    bool check_crlf,
-		    bool *reached_boundary, int *skip)
+static int index_of(ceph::bufferlist& bl,
+                    uint64_t max_len,
+                    const std::string& str,
+                    const bool check_crlf,
+                    bool& reached_boundary,
+                    int& skip)
 {
-  *reached_boundary = false;
-  *skip = 0;
+  reached_boundary = false;
+  skip = 0;
 
   if (str.size() < 2) // we assume boundary is at least 2 chars (makes it easier with crlf checks)
     return -EINVAL;
@@ -1317,21 +1320,20 @@ static int index_of(bufferlist& bl, int max_len, const string& str,
   const char *buf = bl.c_str();
   const char *s = str.c_str();
 
-  if (max_len > (int)bl.length())
+  if (max_len > bl.length())
     max_len = bl.length();
 
-  int i;
-  for (i = 0; i < max_len; i++, buf++) {
+  for (uint64_t i = 0; i < max_len; i++, buf++) {
     if (check_crlf &&
 	i >= 1 &&
 	is_crlf(buf - 1)) {
       return i + 1; // skip the crlf
     }
-    if ((i < max_len - (int)str.size() + 1) &&
+    if ((i < max_len - str.size() + 1) &&
 	(buf[0] == s[0] && buf[1] == s[1]) &&
 	(strncmp(buf, s, str.size()) == 0)) {
-      *reached_boundary = true;
-      *skip = str.size();
+      reached_boundary = true;
+      skip = str.size();
 
       /* oh, great, now we need to swallow the preceding crlf
        * if exists
@@ -1339,7 +1341,7 @@ static int index_of(bufferlist& bl, int max_len, const string& str,
       if ((i >= 2) &&
 	  is_crlf(buf - 2)) {
 	i -= 2;
-	*skip += 2;
+	skip += 2;
       }
       return i;
     }
@@ -1351,8 +1353,8 @@ static int index_of(bufferlist& bl, int max_len, const string& str,
 int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
                                             uint64_t max,
                                             const bool check_crlf,
-                                            bool* const reached_boundary,
-                                            bool* const done)
+                                            bool& reached_boundary,
+                                            bool& done)
 {
   uint64_t cl = max + 2 + boundary.size();
 
@@ -1368,10 +1370,10 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
     in_data.append(bp, 0, read_len);
   }
 
-  *done = false;
+  done = false;
   int skip;
-  int index = index_of(in_data, cl, boundary, check_crlf, reached_boundary,
-		       &skip);
+  const int index = index_of(in_data, cl, boundary, check_crlf,
+                             reached_boundary, skip);
   if (index >= 0) {
     max = index;
   }
@@ -1388,7 +1390,7 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
    * now we need to skip boundary for next time, also skip any crlf, or
    * check to see if it's the last final boundary (marked with "--" at the end
    */
-  if (*reached_boundary) {
+  if (reached_boundary) {
     int left = in_data.length() - max;
     if (left < skip + 2) {
       int need = skip + 2 - left;
@@ -1407,7 +1409,7 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
       } else {
 	if (*(data + max) == '-' &&
 	    *(data + max + 1) == '-') {
-	  *done = true;
+	  done = true;
 	  max += 2;
 	}
       }
@@ -1422,41 +1424,41 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
 
 int RGWPostObj_ObjStore::read_line(ceph::bufferlist& bl,
                                    const uint64_t max,
-                                   bool* const reached_boundary,
-                                   bool* const done)
+                                   bool& reached_boundary,
+                                   bool& done)
 {
   return read_with_boundary(bl, max, true, reached_boundary, done);
 }
 
 int RGWPostObj_ObjStore::read_data(ceph::bufferlist& bl,
                                    const uint64_t max,
-                                   bool* const reached_boundary,
-                                   bool* const done)
+                                   bool& reached_boundary,
+                                   bool& done)
 {
   return read_with_boundary(bl, max, false, reached_boundary, done);
 }
 
 
 int RGWPostObj_ObjStore::read_form_part_header(struct post_form_part* const part,
-                                               bool* const done)
+                                               bool& done)
 {
   bufferlist bl;
   bool reached_boundary;
   uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-  int r = read_line(bl, chunk_size, &reached_boundary, done);
+  int r = read_line(bl, chunk_size, reached_boundary, done);
   if (r < 0) {
     return r;
   }
 
-  if (*done) {
+  if (done) {
     return 0;
   }
 
   if (reached_boundary) { // skip the first boundary
-    r = read_line(bl, chunk_size, &reached_boundary, done);
+    r = read_line(bl, chunk_size, reached_boundary, done);
     if (r < 0) {
       return r;
-    } else if (*done) {
+    } else if (done) {
       return 0;
     }
   }
@@ -1489,7 +1491,7 @@ int RGWPostObj_ObjStore::read_form_part_header(struct post_form_part* const part
       break;
     }
 
-    r = read_line(bl, chunk_size, &reached_boundary, done);
+    r = read_line(bl, chunk_size, reached_boundary, done);
   }
 
   return 0;
