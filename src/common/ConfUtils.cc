@@ -112,14 +112,14 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
   if (fstat(fileno(fp), &st_buf)) {
     ret = -errno;
     ostringstream oss;
-    oss << "read_conf: failed to fstat '" << fname << "': " << cpp_strerror(ret);
+    oss << "parse_file: failed to fstat '" << fname << "': " << cpp_strerror(ret);
     errors->push_back(oss.str());
     goto done;
   }
 
   if (st_buf.st_size > MAX_CONFIG_FILE_SZ) {
     ostringstream oss;
-    oss << "read_conf: config file '" << fname << "' is " << st_buf.st_size
+    oss << "parse_file: config file '" << fname << "' is " << st_buf.st_size
 	<< " bytes, but the maximum is " << MAX_CONFIG_FILE_SZ;
     errors->push_back(oss.str());
     ret = -EINVAL;
@@ -137,14 +137,14 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
     if (ferror(fp)) {
       ret = -errno;
       ostringstream oss;
-      oss << "read_conf: fread error while reading '" << fname << "': "
+      oss << "parse_file: fread error while reading '" << fname << "': "
 	  << cpp_strerror(ret);
       errors->push_back(oss.str());
       goto done;
     }
     else {
       ostringstream oss;
-      oss << "read_conf: unexpected EOF while reading '" << fname << "': "
+      oss << "parse_file: unexpected EOF while reading '" << fname << "': "
 	  << "possible concurrent modification?";
       errors->push_back(oss.str());
       ret = -EIO;
