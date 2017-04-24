@@ -264,7 +264,6 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   bucket_acl = NULL;
   object_acl = NULL;
   expect_cont = false;
-  aws4_auth_needs_complete = false;
   aws4_auth_streaming_mode = false;
 
   header_ended = false;

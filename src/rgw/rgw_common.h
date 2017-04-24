@@ -1806,7 +1806,6 @@ struct req_state {
   bool system_request;
 
   /* aws4 auth support */
-  bool aws4_auth_needs_complete;
   bool aws4_auth_streaming_mode;
   unique_ptr<rgw_aws4_auth> aws4_auth;
 
