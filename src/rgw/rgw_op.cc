@@ -3098,6 +3098,11 @@ void RGWDeleteBucket::execute()
 
 int RGWPutObj::verify_permission()
 {
+  if (s->user->bl_deliver) {
+    ldout(s->cct, 20) << "overriding permissions due to bl_deliver operation" << dendl;     
+    return 0;
+  }
+
   if (copy_source) {
 
     RGWAccessControlPolicy cs_acl(s->cct);
