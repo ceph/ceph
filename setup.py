@@ -63,6 +63,7 @@ setup(
                       'httplib2',
                       'paramiko',
                       'pexpect',
+                      'nose', # for qa/tasks/rgw_multisite_tests.py',
                       'requests != 2.13.0',
                       'raven',
                       'web.py',
