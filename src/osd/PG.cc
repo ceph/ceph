@@ -254,7 +254,9 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   acting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   upacting_features(CEPH_FEATURES_SUPPORTED_DEFAULT),
   do_sort_bitwise(false),
-  last_epoch(0)
+  last_epoch(0),
+  scrub_sleep_lock("PG::scrub_sleep_lock"),
+  scrub_sleep_timer(o->cct, scrub_sleep_lock, false /* relax locking */)
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
@@ -264,6 +266,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
 
 PG::~PG()
 {
+  Mutex::Locker l(scrub_sleep_lock);
+  scrub_sleep_timer.shutdown();
 #ifdef PG_DEBUG_REFS
   osd->remove_pgid(info.pgid, this);
 #endif
@@ -2816,6 +2820,8 @@ void PG::init(
   dirty_info = true;
   dirty_big_info = true;
   write_if_dirty(*t);
+
+  scrub_sleep_timer.init();
 }
 
 #pragma GCC diagnostic ignored "-Wpragmas"
@@ -4065,22 +4071,34 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
 {
   if (g_conf->osd_scrub_sleep > 0 &&
       (scrubber.state == PG::Scrubber::NEW_CHUNK ||
-       scrubber.state == PG::Scrubber::INACTIVE)) {
+       scrubber.state == PG::Scrubber::INACTIVE) && scrubber.needs_sleep) {
+    ceph_assert(!scrubber.sleeping);
     dout(20) << __func__ << " state is INACTIVE|NEW_CHUNK, sleeping" << dendl;
-    unlock();
-    utime_t t;
-    t.set_from_double(g_conf->osd_scrub_sleep);
-    handle.suspend_tp_timeout();
-    t.sleep();
-    handle.reset_tp_timeout();
-    lock();
-    dout(20) << __func__ << " slept for " << t << dendl;
+    // Do an async sleep so we don't block the op queue
+    auto scrub_requeue_callback = new FunctionContext([this](int r) {
+      lock();
+      scrubber.sleeping = false;
+      scrubber.needs_sleep = false;
+      dout(20) << __func__ << " slept for "
+               << ceph_clock_now() - scrubber.sleep_start
+               << ", re-queuing scrub" << dendl;
+      scrub_queued = false;
+      requeue_scrub();
+      scrubber.sleep_start = utime_t();
+      unlock();
+    });
+    Mutex::Locker l(scrub_sleep_lock);
+    scrub_sleep_timer.add_event_after(cct->_conf->osd_scrub_sleep, scrub_requeue_callback);
+    scrubber.sleeping = true;
+    scrubber.sleep_start = ceph_clock_now();
+    return;
   }
   if (pg_has_reset_since(queued)) {
     return;
   }
   assert(scrub_queued);
   scrub_queued = false;
+  scrubber.needs_sleep = true;
 
   if (!is_primary() || !is_active() || !is_clean() || !is_scrubbing()) {
     dout(10) << "scrub -- not primary or active or not clean" << dendl;
