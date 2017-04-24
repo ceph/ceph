@@ -1602,6 +1602,7 @@ void ReplicatedBackend::prep_push(
 			&new_progress,
 			pop,
 			&(pi.stat), cache_dont_need);
+  // XXX: What can we do here?
   assert(r == 0);
   pi.recovery_progress = new_progress;
 }
@@ -2036,9 +2037,11 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
        p != out_op->data_included.end();
        ++p) {
     bufferlist bit;
-    store->read(ch, ghobject_t(recovery_info.soid),
+    int r = store->read(ch, ghobject_t(recovery_info.soid),
 		p.get_start(), p.get_len(), bit,
                 cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED: 0);
+    if (r < 0)
+      return r;
     if (p.get_len() != bit.length()) {
       dout(10) << " extent " << p.get_start() << "~" << p.get_len()
 	       << " is actually " << p.get_start() << "~" << bit.length()
@@ -2159,6 +2162,7 @@ bool ReplicatedBackend::handle_push_reply(pg_shard_t peer, PushReplyOp &op, Push
 	pi->recovery_info,
 	pi->recovery_progress, &new_progress, reply,
 	&(pi->stat));
+      // XXX: What can we do here?
       assert(r == 0);
       pi->recovery_progress = new_progress;
       return true;

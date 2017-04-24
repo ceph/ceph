@@ -202,6 +202,7 @@ protected:
   CephContext *cct;
   OSDriver osdriver;
   SnapMapper snap_mapper;
+  bool eio_errors_to_process = false;
 
   virtual PGBackend *get_pgbackend() = 0;
 public:
@@ -825,6 +826,7 @@ protected:
 
   list<OpRequestRef>            waiting_for_cache_not_full;
   list<OpRequestRef>            waiting_for_all_missing;
+  list<OpRequestRef>            waiting_for_clean_to_primary_repair;
   map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator> waiting_for_unreadable_object,
 			     waiting_for_degraded_object,
 			     waiting_for_blocked_object;
@@ -1828,6 +1830,7 @@ public:
     struct Recovered : boost::statechart::state< Recovered, Active >, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::transition< GoClean, Clean >,
+	boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
 	boost::statechart::custom_reaction< AllReplicasActivated >
       > reactions;
       explicit Recovered(my_context ctx);

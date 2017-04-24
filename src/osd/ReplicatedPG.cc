@@ -476,6 +476,15 @@ void ReplicatedPG::block_write_on_full_cache(
   waiting_for_cache_not_full.push_back(op);
 }
 
+void ReplicatedPG::block_for_clean(
+  const hobject_t& oid, OpRequestRef op)
+{
+  dout(20) << __func__ << ": blocking object " << oid
+	   << " on primary repair" << dendl;
+  waiting_for_clean_to_primary_repair.push_back(op);
+  op->mark_delayed("waiting for clean to repair");
+}
+
 void ReplicatedPG::block_write_on_snap_rollback(
   const hobject_t& oid, ObjectContextRef obc, OpRequestRef op)
 {
@@ -4240,6 +4249,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else {
 	  int r = pgbackend->objects_read_sync(
 	    soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+	  if (r == -EIO) {
+	    r = rep_repair_primary_object(soid, ctx->op);
+	  }
 	  if (r >= 0)
 	    op.extent.length = r;
 	  else {
@@ -4343,7 +4355,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    bufferlist t;
 	    uint64_t len = miter->first - last;
 	    r = pgbackend->objects_read_sync(soid, last, len, op.flags, &t);
-	    if (!t.is_zero()) {
+	    if (r == -EIO) {
+	      r = rep_repair_primary_object(soid, ctx->op);
+	    }
+	    if (r < 0) {
+	      osd->clog->error() << coll << " " << soid
+				 << " sparse-read failed to read: "
+				 << r;
+	    } else if (!t.is_zero()) {
 	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
 				<< last << "~" << len << "\n";
 	    }
@@ -10069,6 +10088,7 @@ void ReplicatedPG::on_activate()
 	  RequestBackfill())));
   } else {
     dout(10) << "activate all replicas clean, no recovery" << dendl;
+    eio_errors_to_process = false;
     queue_peering_event(
       CephPeeringEvtRef(
 	std::make_shared<CephPeeringEvt>(
@@ -10485,6 +10505,7 @@ bool ReplicatedPG::start_recovery_ops(
             RequestBackfill())));
     } else {
       dout(10) << "recovery done, no backfill" << dendl;
+      eio_errors_to_process = false;
       queue_peering_event(
         CephPeeringEvtRef(
           std::make_shared<CephPeeringEvt>(
@@ -10495,6 +10516,7 @@ bool ReplicatedPG::start_recovery_ops(
   } else { // backfilling
     state_clear(PG_STATE_BACKFILL);
     dout(10) << "recovery done, backfill done" << dendl;
+    eio_errors_to_process = false;
     queue_peering_event(
       CephPeeringEvtRef(
         std::make_shared<CephPeeringEvt>(
@@ -13033,6 +13055,77 @@ void ReplicatedPG::_scrub_finish()
       share_pg_info();
     }
   }
+}
+
+int ReplicatedPG::rep_repair_primary_object(const hobject_t& soid, OpRequestRef op)
+{
+  // Only supports replicated pools
+  assert(!pool.info.require_rollback());
+  assert(is_primary());
+
+  // Get non-primary shards
+  list<pg_shard_t> op_shards;
+  for (auto&& i : actingset) {
+    if (i == pg_whoami) continue; // Exclude self (primary)
+    op_shards.push_back(i);
+  }
+  if (op_shards.empty()) {
+    dout(0) << __func__ << " No other replicas available for " << soid << dendl;
+    return -EIO;
+  }
+
+  dout(10) << __func__ << " " << soid
+	   << " peers osd.{" << op_shards << "}" << dendl;
+
+  if (!is_clean()) {
+    block_for_clean(soid, op);
+    return -EAGAIN;
+  }
+
+  assert(!pg_log.get_missing().is_missing(soid));
+  bufferlist bv;
+  int r = get_pgbackend()->objects_get_attr(soid, OI_ATTR, &bv);
+  if (r < 0)
+    return r;
+  object_info_t oi;
+  try {
+    bufferlist::iterator bliter = bv.begin();
+    ::decode(oi, bliter);
+  } catch (...) {
+    dout(0) << __func__ << ":  bad object_info_t: " << soid << dendl;
+    // XXX: Too bad I can't get the version to recover, so can't repair
+    return -EIO;
+  }
+
+  pg_log.missing_add(soid, oi.version, eversion_t());
+
+  pg_log.set_last_requested(0);
+
+  missing_loc.add_missing(soid, oi.version, eversion_t());
+  for (auto &&i : op_shards)
+    missing_loc.add_location(soid, i);
+
+  // Restart the op after object becomes readable again
+  waiting_for_unreadable_object[soid].push_back(op);
+  op->mark_delayed("waiting for missing object");
+
+  if (!eio_errors_to_process) {
+    eio_errors_to_process = true;
+    assert(is_clean());
+    queue_peering_event(
+        CephPeeringEvtRef(
+	  std::make_shared<CephPeeringEvt>(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  DoRecovery())));
+  } else {
+    // A prior error must have already cleared clean state and queued recovery
+    // or a map change has triggered re-peering.
+    // Not inlining the recovery by calling maybe_kick_recovery(soid);
+    dout(5) << __func__<< ": Read error on " << soid << ", but already seen errors" << dendl;
+  }
+
+  return -EAGAIN;
 }
 
 /*---SnapTrimmer Logging---*/
