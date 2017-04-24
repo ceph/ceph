@@ -1053,7 +1053,9 @@ static const crypt_option_names crypt_options[] = {
 
 static boost::string_ref get_crypt_attribute(
     RGWEnv* env,
-    map<string, post_form_part, const ltstr_nocase>* parts,
+    std::map<std::string,
+             RGWPostObj_ObjStore::post_form_part,
+             const ltstr_nocase>* parts,
     crypt_option_e option)
 {
   static_assert(
@@ -1079,10 +1081,12 @@ static boost::string_ref get_crypt_attribute(
 
 
 int rgw_s3_prepare_encrypt(struct req_state* s,
-                       map<string, bufferlist>& attrs,
-                       map<string, post_form_part, const ltstr_nocase>* parts,
-                       std::unique_ptr<BlockCrypt>* block_crypt,
-                       std::map<std::string, std::string>& crypt_http_responses)
+                           std::map<std::string, ceph::bufferlist>& attrs,
+                           std::map<std::string,
+                                    RGWPostObj_ObjStore::post_form_part,
+                                    const ltstr_nocase>* parts,
+                           std::unique_ptr<BlockCrypt>* block_crypt,
+                           std::map<std::string, std::string>& crypt_http_responses)
 {
   int res = 0;
   crypt_http_responses.clear();
