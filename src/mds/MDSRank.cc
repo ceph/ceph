@@ -2795,7 +2795,7 @@ bool MDSRankDispatcher::handle_command(
   std::string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  if (prefix == "session ls") {
+  if (prefix == "session ls" || prefix == "client ls") {
     std::vector<std::string> filter_args;
     cmd_getval(g_ceph_context, cmdmap, "filters", filter_args);
 
@@ -2810,7 +2810,7 @@ bool MDSRankDispatcher::handle_command(
     f->flush(*ds);
     delete f;
     return true;
-  } else if (prefix == "session evict") {
+  } else if (prefix == "session evict" || prefix == "client evict") {
     std::vector<std::string> filter_args;
     cmd_getval(g_ceph_context, cmdmap, "filters", filter_args);
 

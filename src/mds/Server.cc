@@ -753,8 +753,8 @@ void Server::find_idle_sessions()
   for (const auto &session: to_evict) {
     utime_t age = now;
     age -= session->last_cap_renew;
-    mds->clog->info() << "closing stale session " << session->info.inst
-	<< " after " << age;
+    mds->clog->warn() << "evicting unresponsive client " << *session
+                      << ", after " << age << " seconds";
     dout(10) << "autoclosing stale session " << session->info.inst << " last "
              << session->last_cap_renew << dendl;
 
@@ -1022,6 +1022,10 @@ void Server::reconnect_tick()
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
       assert(session);
       dout(1) << "reconnect gave up on " << session->info.inst << dendl;
+
+      mds->clog->warn() << "evicting unresponsive client " << *session
+                        << ", after waiting " << g_conf->mds_reconnect_timeout
+                        << " seconds during MDS startup";
 
       if (g_conf->mds_session_blacklist_on_timeout) {
         std::stringstream ss;

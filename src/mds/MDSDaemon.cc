@@ -661,7 +661,13 @@ COMMAND("cpu_profiler " \
 COMMAND("session ls " \
 	"name=filters,type=CephString,n=N,req=false",
 	"List client sessions", "mds", "r", "cli,rest")
+COMMAND("client ls " \
+	"name=filters,type=CephString,n=N,req=false",
+	"List client sessions", "mds", "r", "cli,rest")
 COMMAND("session evict " \
+	"name=filters,type=CephString,n=N,req=false",
+	"Evict client session(s)", "mds", "rw", "cli,rest")
+COMMAND("client evict " \
 	"name=filters,type=CephString,n=N,req=false",
 	"Evict client session(s)", "mds", "rw", "cli,rest")
 COMMAND("damage ls",
