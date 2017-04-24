@@ -19,17 +19,20 @@ source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
 
 if [ `uname` = FreeBSD ]; then
     use_bluestore=false
-    termwidth=$(stty -a | head -1 | sed -e 's/.* \([0-9]*\) columns.*/\1/')
+    DIFFCOLOPTS=""
 else
     use_bluestore=true
     termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
+    if [ -n "$termwidth" -a "$termwidth" != "0" ]; then 
+        termwidth="-W ${termwidth}" 
+    fi
+    DIFFCOLOPTS="-y $termwidth"
 fi
 
 # Test development and debugging
 # Set to "yes" in order to ignore diff errors and save results to update test
 getjson="no"
 
-if test -n "$termwidth" -a "$termwidth" != "0"; then termwidth="-W ${termwidth}"; fi
 
 # Ignore the epoch and filter out the attr '_' value because it has date information and won't match
 jqfilter='.inconsistents | (.[].shards[].attrs[]? | select(.name == "_") | .value) |= "----Stripped-by-test----"'
@@ -925,7 +928,7 @@ function TEST_corrupt_scrub_replicated() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save1.json
@@ -1566,7 +1569,7 @@ EOF
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save2.json
@@ -1902,7 +1905,7 @@ function corrupt_scrub_erasure() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save3.json
@@ -2228,7 +2231,7 @@ EOF
         grep -v data_digest $dir/csjson | grep -v ec_size_error > $dir/csjson
         grep -v data_digest $dir/checkcsjson | grep -v ec_size_error > $dir/checkcsjson
     fi
-    diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
         jq '.' $dir/json > save4.json
