@@ -194,8 +194,7 @@ public:
       return &new_pools[pool];
     }
     bool has_erasure_code_profile(const string &name) const {
-      map<string,map<string,string> >::const_iterator i =
-	new_erasure_code_profiles.find(name);
+      auto i = new_erasure_code_profiles.find(name);
       return i != new_erasure_code_profiles.end();
     }
     void set_erasure_code_profile(const string &name,
@@ -424,8 +423,7 @@ public:
   }
 
   bool has_erasure_code_profile(const string &name) const {
-    map<string,map<string,string> >::const_iterator i =
-      erasure_code_profiles.find(name);
+    auto i = erasure_code_profiles.find(name);
     return i != erasure_code_profiles.end();
   }
   int get_erasure_code_profile_default(CephContext *cct,
@@ -436,9 +434,8 @@ public:
     erasure_code_profiles[name] = profile;
   }
   const map<string,string> &get_erasure_code_profile(const string &name) const {
-    map<string,map<string,string> >::const_iterator i =
-      erasure_code_profiles.find(name);
     static map<string,string> empty;
+    auto i = erasure_code_profiles.find(name);
     if (i == erasure_code_profiles.end())
       return empty;
     else
@@ -731,12 +728,12 @@ public:
     pg_to_up_acting_osds(pg, &up, &up_primary, &acting, &acting_primary);
   }
   bool pg_is_ec(pg_t pg) const {
-    map<int64_t, pg_pool_t>::const_iterator i = pools.find(pg.pool());
+    auto i = pools.find(pg.pool());
     assert(i != pools.end());
     return i->second.ec_pool();
   }
   bool get_primary_shard(const pg_t& pgid, spg_t *out) const {
-    map<int64_t, pg_pool_t>::const_iterator i = get_pools().find(pgid.pool());
+    auto i = get_pools().find(pgid.pool());
     if (i == get_pools().end()) {
       return false;
     }
@@ -757,7 +754,7 @@ public:
   }
 
   int64_t lookup_pg_pool_name(const string& name) const {
-    map<string,int64_t>::const_iterator p = name_pool.find(name);
+    auto p = name_pool.find(name);
     if (p == name_pool.end())
       return -ENOENT;
     return p->second;
@@ -773,7 +770,7 @@ public:
     return pools;
   }
   const string& get_pool_name(int64_t p) const {
-    map<int64_t, string>::const_iterator i = pool_name.find(p);
+    auto i = pool_name.find(p);
     assert(i != pool_name.end());
     return i->second;
   }
@@ -781,25 +778,25 @@ public:
     return pools.count(p);
   }
   const pg_pool_t* get_pg_pool(int64_t p) const {
-    map<int64_t, pg_pool_t>::const_iterator i = pools.find(p);
+    auto i = pools.find(p);
     if (i != pools.end())
       return &i->second;
     return NULL;
   }
   unsigned get_pg_size(pg_t pg) const {
-    map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    auto p = pools.find(pg.pool());
     assert(p != pools.end());
     return p->second.get_size();
   }
   int get_pg_type(pg_t pg) const {
-    map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    auto p = pools.find(pg.pool());
     assert(p != pools.end());
     return p->second.get_type();
   }
 
 
   pg_t raw_pg_to_pg(pg_t pg) const {
-    map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    auto p = pools.find(pg.pool());
     assert(p != pools.end());
     return p->second.raw_pg_to_pg(pg);
   }

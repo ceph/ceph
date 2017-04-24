@@ -1983,10 +1983,10 @@ void PGMap::dump_pool_stats(const OSDMap &osd_map, stringstream *ss,
       break;
     case pg_pool_t::TYPE_ERASURE:
     {
-      const map<string,string>& ecp =
+      auto& ecp =
         osd_map.get_erasure_code_profile(pool->erasure_code_profile);
-      map<string,string>::const_iterator pm = ecp.find("m");
-      map<string,string>::const_iterator pk = ecp.find("k");
+      auto pm = ecp.find("m");
+      auto pk = ecp.find("k");
       if (pm != ecp.end() && pk != ecp.end()) {
 	int k = atoi(pk->second.c_str());
 	int m = atoi(pm->second.c_str());

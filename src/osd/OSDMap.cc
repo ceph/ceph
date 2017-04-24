@@ -1190,8 +1190,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   }
   if (entity_type == CEPH_ENTITY_TYPE_OSD) {
     for (auto &erasure_code_profile : erasure_code_profiles) {
-      const map<string,string> &profile = erasure_code_profile.second;
-      const auto &plugin = profile.find("plugin");
+      auto& profile = erasure_code_profile.second;
+      const auto& plugin = profile.find("plugin");
       if (plugin != profile.end()) {
 	if (plugin->second == "isa" || plugin->second == "lrc")
 	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
