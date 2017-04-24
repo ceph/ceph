@@ -1731,6 +1731,8 @@ public:
 
   void block_write_on_full_cache(
     const hobject_t& oid, OpRequestRef op);
+  void block_for_clean(
+    const hobject_t& oid, OpRequestRef op);
   void block_write_on_snap_rollback(
     const hobject_t& oid, ObjectContextRef obc, OpRequestRef op);
   void block_write_on_degraded_snap(const hobject_t& oid, OpRequestRef op);
@@ -1763,6 +1765,7 @@ public:
   void on_shutdown() override;
   bool check_failsafe_full(ostream &ss) override;
   bool check_osdmap_full(const set<pg_shard_t> &missing_on) override;
+  int rep_repair_primary_object(const hobject_t& soid, OpRequestRef op);
 
   // attr cache handling
   void setattr_maybe_cache(
