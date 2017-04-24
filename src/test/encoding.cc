@@ -292,18 +292,15 @@ TEST(EncodingRoundTrip, Integers) {
 }
 
 const char* expected_what[] = {
-  "buffer::malformed_input: void lame_decoder(int) unknown encoding version > 100",
-  "buffer::malformed_input: void lame_decoder(int) no longer understand old encoding version < 100",
+  "buffer::malformed_input: void lame_decoder(int) no longer understand old encoding version 100 < 200",
   "buffer::malformed_input: void lame_decoder(int) decode past end of struct encoding",
 };
 
 void lame_decoder(int which) {
   switch (which) {
   case 0:
-    throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, 100));
+    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, 100, 200));
   case 1:
-    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, 100));
-  case 2:
     throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__));
   }
 }
