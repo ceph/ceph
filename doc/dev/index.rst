@@ -1154,8 +1154,8 @@ proceed to the next step.
 To start with a clean slate, login to your tenant via the Horizon dashboard and:
 
 * terminate the ``teuthology`` and ``packages-repository`` instances, if any
-* delete the ``teuthology`` security group
-* delete the ``teuthology`` and ``teuthology-myself`` key pairs
+* delete the ``teuthology`` and ``teuthology-worker`` security groups, if any
+* delete the ``teuthology`` and ``teuthology-myself`` key pairs, if any
 
 Also do the above if you ever get key-related errors ("invalid key", etc.) when
 trying to schedule suites.
