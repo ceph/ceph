@@ -128,16 +128,6 @@ public:
   }
   Capability(const Capability& other);  // no copying
 
-
-  static void *operator new(size_t num_bytes) {
-    void *n = pool.malloc();
-    if (!n)
-      throw std::bad_alloc();
-    return n;
-  }
-  void operator delete(void *p) {
-    pool.free(p);
-  }
   const Capability& operator=(const Capability& other);  // no copying
 
   int pending() { return _pending; }
@@ -336,7 +326,6 @@ public:
   xlist<Capability*>::item item_client_revoking_caps;
 
 private:
-  static boost::pool<> pool;
   CInode *inode;
   client_t client;
 

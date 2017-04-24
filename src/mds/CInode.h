@@ -129,27 +129,6 @@ WRITE_CLASS_ENCODER_FEATURES(InodeStore)
 
 // cached inode wrapper
 class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CInode> {
-  /*
-   * This class uses a boost::pool to handle allocation. This is *not*
-   * thread-safe, so don't do allocations from multiple threads!
-   *
-   * Alternatively, switch the pool to use a boost::singleton_pool.
-   */
-
-private:
-  static boost::pool<> pool;
-public:
-  static void *operator new(size_t num_bytes) { 
-    void *n = pool.malloc();
-    if (!n)
-      throw std::bad_alloc();
-    return n;
-  }
-  void operator delete(void *p) {
-    pool.free(p);
-  }
-
-
  public:
   // -- pins --
   static const int PIN_DIRFRAG =         -1; 
