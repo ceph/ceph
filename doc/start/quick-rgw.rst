@@ -97,5 +97,5 @@ Configuring the Ceph Object Gateway Instance
 See the `Configuring Ceph Object Gateway`_ guide for additional administration
 and API details.
 
-.. _Configuring Ceph Object Gateway: ../../radosgw/config
+.. _Configuring Ceph Object Gateway: ../../radosgw/config-fcgi
 .. _Preflight Checklist: ../quick-start-preflight
