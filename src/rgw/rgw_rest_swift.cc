@@ -1827,7 +1827,7 @@ int RGWFormPost::get_params()
    * by-step till encountering the first part with file data. */
   do {
     struct post_form_part part;
-    ret = read_form_part_header(&part, &stream_done);
+    ret = read_form_part_header(&part, stream_done);
     if (ret < 0) {
       return ret;
     }
@@ -1868,7 +1868,7 @@ int RGWFormPost::get_params()
       /* Control part ahead. Receive, parse and store for later usage. */
       bool boundary;
       ret = read_data(part.data, s->cct->_conf->rgw_max_chunk_size,
-                      &boundary, &stream_done);
+                      boundary, stream_done);
       if (ret < 0) {
         return ret;
       } else if (! boundary) {
@@ -1934,7 +1934,7 @@ bool RGWFormPost::is_next_file_to_upload()
   if (! stream_done) {
     /* We have at least one additional part in the body. */
     struct post_form_part part;
-    int r = read_form_part_header(&part, &stream_done);
+    int r = read_form_part_header(&part, stream_done);
     if (r < 0) {
       return false;
     }
@@ -1958,7 +1958,7 @@ int RGWFormPost::get_data(ceph::bufferlist& bl, bool& again)
   bool boundary;
 
   int r = read_data(bl, s->cct->_conf->rgw_max_chunk_size,
-                    &boundary, &stream_done);
+                    boundary, stream_done);
   if (r < 0) {
     return r;
   }

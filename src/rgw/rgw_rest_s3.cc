@@ -1533,7 +1533,7 @@ int RGWPostObj_ObjStore_S3::get_params()
   bool done;
   do {
     struct post_form_part part;
-    int r = read_form_part_header(&part, &done);
+    int r = read_form_part_header(&part, done);
     if (r < 0)
       return r;
 
@@ -1570,7 +1570,7 @@ int RGWPostObj_ObjStore_S3::get_params()
 
     bool boundary;
     uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-    r = read_data(part.data, chunk_size, &boundary, &done);
+    r = read_data(part.data, chunk_size, boundary, done);
     if (!boundary) {
       err_msg = "Couldn't find boundary";
       return -EINVAL;
@@ -1752,7 +1752,7 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
   bool done;
   do {
     struct post_form_part part;
-    int r = read_form_part_header(&part, &done);
+    int r = read_form_part_header(&part, done);
     if (r < 0) {
       return r;
     }
@@ -1760,7 +1760,7 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
     ceph::bufferlist part_data;
     bool boundary;
     uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-    r = read_data(part.data, chunk_size, &boundary, &done);
+    r = read_data(part.data, chunk_size, boundary, done);
     if (!boundary) {
       return -EINVAL;
     }
@@ -1777,7 +1777,7 @@ int RGWPostObj_ObjStore_S3::get_data(ceph::bufferlist& bl, bool& again)
   bool done;
 
   const uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
-  int r = read_data(bl, chunk_size, &boundary, &done);
+  int r = read_data(bl, chunk_size, boundary, done);
   if (r < 0) {
     return r;
   }
