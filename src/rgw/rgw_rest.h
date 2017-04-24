@@ -242,21 +242,20 @@ protected:
   int read_with_boundary(ceph::bufferlist& bl,
                          uint64_t max,
                          bool check_eol,
-                         bool* reached_boundary,
-                         bool* done);
+                         bool& reached_boundary,
+                         bool& done);
 
   int read_line(ceph::bufferlist& bl,
                 uint64_t max,
-                bool* reached_boundary,
-                bool* done);
+                bool& reached_boundary,
+                bool& done);
 
   int read_data(ceph::bufferlist& bl,
                 uint64_t max,
-                bool* reached_boundary,
-                bool* done);
+                bool& reached_boundary,
+                bool& done);
 
-  int read_form_part_header(struct post_form_part *part,
-                            bool *done);
+  int read_form_part_header(struct post_form_part *part, bool& done);
 
   int get_params() override;
 
