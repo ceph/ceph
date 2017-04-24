@@ -80,14 +80,10 @@ public:
       out << "<LoggingEnabled>";
 
       string _bucket = this->get_target_bucket();
-      if (!_bucket.empty()) {
-        out << "<TargetBucket>" << _bucket << "</TargetBucket>";
-      }
+      out << "<TargetBucket>" << _bucket << "</TargetBucket>";
 
       string _prefix = this->get_target_prefix();
-      if (!_prefix.empty()) {
-        out << "<TargetPrefix>" << _prefix << "</TargetPrefix>";
-      }
+      out << "<TargetPrefix>" << _prefix << "</TargetPrefix>";
 
       out << "</LoggingEnabled>";
     }
@@ -103,13 +99,10 @@ public:
       f->open_object_section("LoggingEnabled");
 
       string _bucket = this->get_target_bucket();
-      if (!_bucket.empty()) {
-        encode_xml("TargetBucket", _bucket, f);
-      }
+      encode_xml("TargetBucket", _bucket, f);
+
       string _prefix = this->get_target_prefix();
-      if (!_prefix.empty()) {
-        encode_xml("TargetPrefix", _prefix, f);
-      }
+      encode_xml("TargetPrefix", _prefix, f);
 
       f->close_section(); // LoggingEnabled
     }
