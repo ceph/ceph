@@ -411,7 +411,8 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
     }
     s->object_acl = new RGWAccessControlPolicy(s->cct);
 
-    rgw_obj obj(s->bucket, s->object);
+    rgw_obj obj(s->bucket, s->object.name);
+    obj.set_instance(s->object.instance);
       
     store->set_atomic(s->obj_ctx, obj);
     if (prefetch_data) {
@@ -4815,7 +4816,8 @@ void RGWSetAttrs::execute()
   if (op_ret < 0)
     return;
 
-  rgw_obj obj(s->bucket, s->object);
+  rgw_obj obj(s->bucket, s->object.name);
+  obj.set_instance(s->object.instance);
 
   store->set_atomic(s->obj_ctx, obj);
 
