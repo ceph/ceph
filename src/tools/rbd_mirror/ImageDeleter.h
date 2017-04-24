@@ -15,14 +15,15 @@
 #ifndef CEPH_RBD_MIRROR_IMAGEDELETER_H
 #define CEPH_RBD_MIRROR_IMAGEDELETER_H
 
-#include <deque>
-#include <vector>
-#include "include/atomic.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 #include "common/Timer.h"
 #include "types.h"
+
+#include <deque>
+#include <vector>
+#include <atomic>
 
 class ContextWQ;
 
@@ -98,7 +99,7 @@ private:
                       bool print_failure_info=false);
   };
 
-  atomic_t m_running;
+  std::atomic<unsigned> m_running { 0 };
 
   ContextWQ *m_work_queue;
 

@@ -4,16 +4,10 @@
 #ifndef CEPH_RBD_MIRROR_POOL_REPLAYER_H
 #define CEPH_RBD_MIRROR_POOL_REPLAYER_H
 
-#include <map>
-#include <memory>
-#include <set>
-#include <string>
-
 #include "common/AsyncOpTracker.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
-#include "include/atomic.h"
 #include "include/rados/librados.hpp"
 
 #include "ClusterWatcher.h"
@@ -21,6 +15,12 @@
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
 #include "types.h"
+
+#include <set>
+#include <map>
+#include <memory>
+#include <atomic>
+#include <string>
 
 class AdminSocketHook;
 
