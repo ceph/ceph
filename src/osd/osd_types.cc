@@ -1850,6 +1850,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
 void object_stat_sum_t::dump(Formatter *f) const
 {
   f->dump_int("num_bytes", num_bytes);
+  f->dump_int("num_bytes_overlap", num_bytes_overlap);
   f->dump_int("num_objects", num_objects);
   f->dump_int("num_object_clones", num_object_clones);
   f->dump_int("num_object_copies", num_object_copies);
@@ -1888,11 +1889,12 @@ void object_stat_sum_t::dump(Formatter *f) const
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(16, 14, bl);
+  ENCODE_START(17, 14, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
 #else
   ::encode(num_bytes, bl);
+  ::encode(num_bytes_overlap, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
   ::encode(num_object_copies, bl);
@@ -1943,6 +1945,8 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
 #endif
   if (!decode_finish) {
     ::decode(num_bytes, bl);
+    if (struct_v >= 17)
+      ::decode(num_bytes_overlap, bl);
     ::decode(num_objects, bl);
     ::decode(num_object_clones, bl);
     ::decode(num_object_copies, bl);
@@ -2026,6 +2030,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
 void object_stat_sum_t::add(const object_stat_sum_t& o)
 {
   num_bytes += o.num_bytes;
+  num_bytes_overlap += o.num_bytes_overlap;
   num_objects += o.num_objects;
   num_object_clones += o.num_object_clones;
   num_object_copies += o.num_object_copies;
@@ -2065,6 +2070,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
 {
   num_bytes -= o.num_bytes;
+  num_bytes_overlap -= o.num_bytes_overlap;
   num_objects -= o.num_objects;
   num_object_clones -= o.num_object_clones;
   num_object_copies -= o.num_object_copies;
@@ -2105,6 +2111,7 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
 {
   return
     l.num_bytes == r.num_bytes &&
+    l.num_bytes_overlap == r.num_bytes_overlap &&
     l.num_objects == r.num_objects &&
     l.num_object_clones == r.num_object_clones &&
     l.num_object_copies == r.num_object_copies &&

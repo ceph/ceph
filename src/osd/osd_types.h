@@ -1584,6 +1584,7 @@ struct object_stat_sum_t {
    * adding/removing fields!
    **************************************************************************/
   int64_t num_bytes;    // in bytes
+  int64_t num_bytes_overlap;  // date in clone objects overlaps
   int64_t num_objects;
   int64_t num_object_clones;
   int64_t num_object_copies;  // num_objects * num_replicas
@@ -1620,7 +1621,7 @@ struct object_stat_sum_t {
   int64_t num_legacy_snapsets; ///< upper bound on pre-luminous-style SnapSets
 
   object_stat_sum_t()
-    : num_bytes(0),
+    : num_bytes(0), num_bytes_overlap(0),
       num_objects(0), num_object_clones(0), num_object_copies(0),
       num_objects_missing_on_primary(0), num_objects_degraded(0),
       num_objects_unfound(0),
@@ -1652,6 +1653,7 @@ struct object_stat_sum_t {
   void floor(int64_t f) {
 #define FLOOR(x) if (x < f) x = f
     FLOOR(num_bytes);
+    FLOOR(num_bytes_overlap);
     FLOOR(num_objects);
     FLOOR(num_object_clones);
     FLOOR(num_object_copies);
@@ -1706,6 +1708,7 @@ struct object_stat_sum_t {
     }
 
     SPLIT(num_bytes);
+    SPLIT(num_bytes_overlap);
     SPLIT(num_objects);
     SPLIT(num_object_clones);
     SPLIT(num_object_copies);
@@ -1764,6 +1767,7 @@ struct object_stat_sum_t {
     static_assert(
       sizeof(object_stat_sum_t) ==
         sizeof(num_bytes) +
+        sizeof(num_bytes_overlap) +
         sizeof(num_objects) +
         sizeof(num_object_clones) +
         sizeof(num_object_copies) +

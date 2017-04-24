@@ -1101,6 +1101,7 @@ protected:
 				   interval_set<uint64_t>& modified, uint64_t offset,
 				   uint64_t length, bool write_full=false);
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
+  void sub_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
 
 
   enum class cache_result_t {

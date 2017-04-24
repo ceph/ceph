@@ -6823,6 +6823,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
       ctx->delta_stats.num_objects_omap++;
     if (snap_oi->is_cache_pinned())
       ctx->delta_stats.num_objects_pinned++;
+    ctx->delta_stats.num_bytes_overlap += ctx->obs->oi.size;
     ctx->delta_stats.num_object_clones++;
     ctx->new_snapset.clones.push_back(coid.snap);
     ctx->new_snapset.clone_size[coid.snap] = ctx->obs->oi.size;
@@ -6859,8 +6860,10 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     if (is_present_clone(last_clone_oid)) {
       interval_set<uint64_t> &newest_overlap = ctx->new_snapset.clone_overlap.rbegin()->second;
       ctx->modified_ranges.intersection_of(newest_overlap);
-      // modified_ranges is still in use by the clone
+      // modified_ranges is still in use by the clone (but not in accounted overlap)
       add_interval_usage(ctx->modified_ranges, ctx->delta_stats);
+      sub_interval_usage(ctx->modified_ranges, ctx->delta_stats);
+
       newest_overlap.subtract(ctx->modified_ranges);
     }
   }
@@ -6905,6 +6908,13 @@ void PrimaryLogPG::add_interval_usage(interval_set<uint64_t>& s, object_stat_sum
 {
   for (interval_set<uint64_t>::const_iterator p = s.begin(); p != s.end(); ++p) {
     delta_stats.num_bytes += p.get_len();
+  }
+}
+
+void PrimaryLogPG::sub_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& delta_stats)
+{
+  for (interval_set<uint64_t>::const_iterator p = s.begin(); p != s.end(); ++p) {
+    delta_stats.num_bytes_overlap -= p.get_len();
   }
 }
 
@@ -12739,6 +12749,9 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
     num_user_objects = 0;
 
   uint64_t num_user_bytes = info.stats.stats.sum.num_bytes;
+  // TODO should go depend on osd->store
+  uint64_t overlap_bytes = info.stats.stats.sum.num_bytes_overlap;
+  num_user_bytes += overlap_bytes;
   uint64_t unflushable_bytes = info.stats.stats.sum.num_bytes_hit_set_archive;
   num_user_bytes -= unflushable_bytes;
   uint64_t num_overhead_bytes = osd->store->estimate_objects_overhead(num_user_objects);
