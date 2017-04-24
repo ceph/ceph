@@ -2479,6 +2479,11 @@ int RGWGetBucketLocation::verify_permission()
 
 int RGWCreateBucket::verify_permission()
 {
+  if (s->user->bl_deliver) {
+    ldout(s->cct, 0) << "bl_deliver user cannot create bucket" << dendl;
+    return -EACCES;
+  }
+
   /* This check is mostly needed for S3 that doesn't support account ACL.
    * Swift doesn't allow to delegate any permission to an anonymous user,
    * so it will become an early exit in such case. */
