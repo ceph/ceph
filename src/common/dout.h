@@ -77,9 +77,11 @@ public:
 
 // NOTE: depend on magic value in _ASSERT_H so that we detect when
 // /usr/include/assert.h clobbers our fancier version.
-#define dendl std::flush;				\
+#define dendl_impl std::flush;				\
   _ASSERT_H->_log->submit_entry(_dout_e);		\
     }						\
   } while (0)
+
+#define dendl dendl_impl
 
 #endif
