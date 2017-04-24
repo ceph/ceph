@@ -911,7 +911,24 @@ void FileImageCache<I>::aio_flush(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "on_finish=" << on_finish << dendl;
 
-  m_image_writeback.aio_flush(on_finish);
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only) {
+      on_finish->complete(-EROFS);
+      return;
+    }
+  }
+
+  Context *ctx = new FunctionContext(
+    [this, on_finish](int r) {
+      if (r < 0) {
+        on_finish->complete(r);
+      }
+      m_image_writeback.aio_flush(on_finish);
+    });
+
+  flush(ctx);
+
 }
 
 template <typename I>
@@ -1178,7 +1195,8 @@ void FileImageCache<I>::process_work() {
     }
     if (!post_work_contexts.empty()) {
       for (auto ctx : post_work_contexts) {
-        ctx->complete(0);
+        //TODO: fix flush post work
+        //ctx->complete(0);
       }
       continue;
     }
