@@ -302,8 +302,9 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     else if (ret != -ENOENT)
       return ret;
   }
+  // it must have been all ENOENTs, that's the only way we got here
   if (c == conf_files.end())
-    return -EINVAL;
+    return -ENOENT;
 
   if (cluster.size() == 0) {
     /*
