@@ -46,7 +46,8 @@ TEST(SimpleSpin, Test1)
   // Should also work with pass-by-reference:
   // (Note that we don't care about cross-threading here as-such.)
   counter = 0;
-  ASSERT_EQ(counter, 0);
+  uint32_t urhs = 0;
+  ASSERT_EQ(counter, urhs);
   async(std::launch::async, []() {
         for(int i = 0; n != i; ++i) {
             simple_spin_lock(lock);
