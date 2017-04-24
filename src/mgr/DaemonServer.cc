@@ -572,7 +572,7 @@ bool DaemonServer::handle_command(MCommand *m)
     string no_increasing;
     cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
     string out_str;
-    map<int32_t, uint32_t> new_weights;
+    mempool::osdmap::map<int32_t, uint32_t> new_weights;
     r = cluster_state.with_pgmap([&](const PGMap& pgmap) {
 	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	    return reweight::by_utilization(osdmap, pgmap,
