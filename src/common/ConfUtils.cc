@@ -101,6 +101,9 @@ parse_file(const std::string &fname, std::deque<std::string> *errors,
   char *buf = NULL;
   FILE *fp = fopen(fname.c_str(), "r");
   if (!fp) {
+    ostringstream oss;
+    oss << "parse_file: cannot open " << fname << ": " << cpp_strerror(errno);
+    errors->push_back(oss.str());
     ret = -errno;
     return ret;
   }
