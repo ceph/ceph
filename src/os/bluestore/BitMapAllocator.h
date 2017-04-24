@@ -12,7 +12,6 @@
 
 class BitMapAllocator : public Allocator {
   CephContext* cct;
-  std::mutex m_lock;
 
   int64_t m_block_size;
 
