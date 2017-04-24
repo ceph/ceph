@@ -235,7 +235,8 @@ TEST_F(OSDMapTest, PGTempRespected) {
 
   // apply pg_temp to osdmap
   OSDMap::Incremental pgtemp_map(osdmap.get_epoch() + 1);
-  pgtemp_map.new_pg_temp[pgid] = new_acting_osds;
+  pgtemp_map.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
+    new_acting_osds.begin(), new_acting_osds.end());
   osdmap.apply_incremental(pgtemp_map);
 
   osdmap.pg_to_up_acting_osds(pgid, &up_osds, &up_primary,
@@ -276,7 +277,8 @@ TEST_F(OSDMapTest, CleanTemps) {
     int up_primary, acting_primary;
     osdmap.pg_to_up_acting_osds(pga, &up_osds, &up_primary,
 				&acting_osds, &acting_primary);
-    pgtemp_map.new_pg_temp[pga] = up_osds;
+    pgtemp_map.new_pg_temp[pga] = mempool::osdmap::vector<int>(
+      up_osds.begin(), up_osds.end());
     pgtemp_map.new_primary_temp[pga] = up_primary;
   }
   pg_t pgb = osdmap.raw_pg_to_pg(pg_t(1, 0));
@@ -285,7 +287,8 @@ TEST_F(OSDMapTest, CleanTemps) {
     int up_primary, acting_primary;
     osdmap.pg_to_up_acting_osds(pgb, &up_osds, &up_primary,
 				&acting_osds, &acting_primary);
-    pending_inc.new_pg_temp[pgb] = up_osds;
+    pending_inc.new_pg_temp[pgb] = mempool::osdmap::vector<int>(
+      up_osds.begin(), up_osds.end());
     pending_inc.new_primary_temp[pgb] = up_primary;
   }
 
@@ -334,7 +337,8 @@ TEST_F(OSDMapTest, KeepsNecessaryTemps) {
   if (i == (int)get_num_osds())
     FAIL() << "did not find unused OSD for temp mapping";
 
-  pgtemp_map.new_pg_temp[pgid] = up_osds;
+  pgtemp_map.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
+    up_osds.begin(), up_osds.end());
   pgtemp_map.new_primary_temp[pgid] = up_osds[1];
   osdmap.apply_incremental(pgtemp_map);
 
