@@ -490,9 +490,9 @@ TEST_F(TestMockImageReplayer, StartStop) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
+  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
 
   EXPECT_CALL(mock_local_journal, add_listener(_));
@@ -534,19 +534,14 @@ TEST_F(TestMockImageReplayer, LocalImagePrimary) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockPrepareLocalImageRequest mock_prepare_local_image_request;
   MockReplayStatusFormatter mock_replay_status_formatter;
 
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "", 0);
-
-  EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -565,8 +560,8 @@ TEST_F(TestMockImageReplayer, LocalImageDNE) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_prepare_local_image_request, "", "", -ENOENT);
+  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_bootstrap_request, mock_local_image_ctx, false, -EREMOTEIO);
 
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
@@ -581,19 +576,14 @@ TEST_F(TestMockImageReplayer, PrepareLocalImageError) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
-  journal::MockJournaler mock_remote_journaler;
   MockPrepareLocalImageRequest mock_prepare_local_image_request;
   MockReplayStatusFormatter mock_replay_status_formatter;
 
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", -EINVAL);
-
-  EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -613,9 +603,9 @@ TEST_F(TestMockImageReplayer, BootstrapError) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
+  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_bootstrap_request, mock_local_image_ctx, false, -EINVAL);
 
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
@@ -645,9 +635,9 @@ TEST_F(TestMockImageReplayer, StartExternalReplayError) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
+  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
 
   EXPECT_CALL(mock_local_journal, add_listener(_));
@@ -692,9 +682,9 @@ TEST_F(TestMockImageReplayer, StopError) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
+  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
 
   EXPECT_CALL(mock_local_journal, add_listener(_));
@@ -754,9 +744,9 @@ TEST_F(TestMockImageReplayer, Replay) {
   expect_committed(mock_remote_journaler, 2);
 
   InSequence seq;
-  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
+  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
 
   EXPECT_CALL(mock_local_journal, add_listener(_));
@@ -854,9 +844,9 @@ TEST_F(TestMockImageReplayer, DecodeError) {
   expect_get_commit_tid_in_debug(mock_replay_entry);
 
   InSequence seq;
-  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
+  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
 
   EXPECT_CALL(mock_local_journal, add_listener(_));
@@ -946,9 +936,9 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   expect_committed(mock_remote_journaler, 1);
 
   InSequence seq;
-  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
+  EXPECT_CALL(mock_remote_journaler, construct());
   expect_send(mock_bootstrap_request, mock_local_image_ctx, false, 0);
 
   EXPECT_CALL(mock_local_journal, add_listener(_));

@@ -372,17 +372,11 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
       dout(5) << "stopped manually, ignoring start without manual flag"
 	      << dendl;
       r = -EPERM;
-    } else if (m_remote_images.empty()) {
-      derr << "no remote images associated with replayer" << dendl;
-      r = -EINVAL;
     } else {
       m_state = STATE_STARTING;
       m_last_r = 0;
       m_state_desc.clear();
       m_manual_stop = false;
-
-      // TODO bootstrap will need to support multiple remote images
-      m_remote_image = *m_remote_images.begin();
 
       if (on_finish != nullptr) {
         assert(m_on_start_finish == nullptr);
@@ -407,17 +401,6 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
     return;
   }
 
-  CephContext *cct = static_cast<CephContext *>(m_local->cct());
-  journal::Settings settings;
-  settings.commit_interval = cct->_conf->rbd_mirror_journal_commit_age;
-  settings.max_fetch_bytes = cct->_conf->rbd_mirror_journal_max_fetch_bytes;
-
-  m_remote_journaler = new Journaler(m_threads->work_queue,
-                                     m_threads->timer,
-				     &m_threads->timer_lock,
-                                     m_remote_image.io_ctx,
-                                     m_remote_image.image_id,
-                                     m_local_mirror_uuid, settings);
   prepare_local_image();
 }
 
@@ -455,6 +438,26 @@ void ImageReplayer<I>::handle_prepare_local_image(int r) {
 template <typename I>
 void ImageReplayer<I>::bootstrap() {
   dout(20) << dendl;
+
+  if (m_remote_images.empty()) {
+    on_start_fail(0, "waiting for primary remote image");
+    return;
+  }
+
+  // TODO bootstrap will need to support multiple remote images
+  m_remote_image = *m_remote_images.begin();
+
+  CephContext *cct = static_cast<CephContext *>(m_local->cct());
+  journal::Settings settings;
+  settings.commit_interval = cct->_conf->rbd_mirror_journal_commit_age;
+  settings.max_fetch_bytes = cct->_conf->rbd_mirror_journal_max_fetch_bytes;
+
+  m_remote_journaler = new Journaler(m_threads->work_queue,
+                                     m_threads->timer,
+                                     &m_threads->timer_lock,
+                                     m_remote_image.io_ctx,
+                                     m_remote_image.image_id,
+                                     m_local_mirror_uuid, settings);
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
