@@ -116,3 +116,7 @@
   enabled by setting 'allow_ec_overwrites' to 'true' for a pool. Since
   this relies on bluestore's checksumming to do deep scrubbing,
   enabling this on a pool stored on filestore is not allowed.
+
+* The 'rados df' JSON output now prints numeric values as numbers instead of
+  strings.
+

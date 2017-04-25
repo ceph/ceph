@@ -3802,7 +3802,7 @@ int PrimaryLogPG::do_writesame(OpContext *ctx, OSDOp& osd_op)
   }
 
   while (write_length) {
-    write_op.indata.append(osd_op.indata.c_str(), op.writesame.data_length);
+    write_op.indata.append(osd_op.indata);
     write_length -= op.writesame.data_length;
   }
 
@@ -4654,18 +4654,15 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
       } else {
 	// read into a buffer
-	bufferlist bl;
+        map<uint64_t, uint64_t> m;
         uint32_t total_read = 0;
 	int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
 						  info.pgid.shard),
-				   op.extent.offset, op.extent.length, bl);
+				   op.extent.offset, op.extent.length, m);
 	if (r < 0)  {
 	  result = r;
           break;
 	}
-        map<uint64_t, uint64_t> m;
-        bufferlist::iterator iter = bl.begin();
-        ::decode(m, iter);
         map<uint64_t, uint64_t>::iterator miter;
         bufferlist data_bl;
 	uint64_t last = op.extent.offset;

@@ -75,6 +75,59 @@
 #define dout_subsys ceph_subsys_mon
 #define OSD_PG_CREATING_PREFIX "osd_pg_creating"
 
+void LastEpochClean::Lec::report(ps_t ps, epoch_t last_epoch_clean)
+{
+  if (epoch_by_pg.size() <= ps) {
+    epoch_by_pg.resize(ps + 1, 0);
+  }
+  if (epoch_by_pg[ps] >= last_epoch_clean) {
+    // stale lec
+    return;
+  }
+  epoch_by_pg[ps] = last_epoch_clean;
+  if (last_epoch_clean < floor) {
+    floor = last_epoch_clean;
+  }
+  if (ps != next_missing) {
+    return;
+  }
+  for (; next_missing < epoch_by_pg.size(); next_missing++) {
+    if (epoch_by_pg[next_missing] == 0) {
+      break;
+    }
+  }
+}
+
+void LastEpochClean::remove_pool(uint64_t pool)
+{
+  report_by_pool.erase(pool);
+}
+
+void LastEpochClean::report(const pg_t& pg, epoch_t last_epoch_clean)
+{
+  auto& lec = report_by_pool[pg.pool()];
+  return lec.report(pg.ps(), last_epoch_clean);
+}
+
+epoch_t LastEpochClean::get_lower_bound(const OSDMap& latest) const
+{
+  auto floor = latest.get_epoch();
+  for (auto& pool : latest.get_pools()) {
+    auto reported = report_by_pool.find(pool.first);
+    if (reported == report_by_pool.end()) {
+      return 0;
+    }
+    if (reported->second.next_missing < pool.second.get_pg_num()) {
+      return 0;
+    }
+    if (reported->second.floor < floor) {
+      floor = reported->second.floor;
+    }
+  }
+  return floor;
+}
+
+
 struct C_UpdateCreatingPGs : public Context {
   OSDMonitor *osdmon;
   utime_t start;
@@ -251,12 +304,17 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	ceph::features::mon::FEATURE_LUMINOUS)) {
     bufferlist bl;
     mon->store->get(OSD_PG_CREATING_PREFIX, "creating", bl);
-    auto p = bl.begin();
-    std::lock_guard<std::mutex> l(creating_pgs_lock);
-    creating_pgs.decode(p);
-    dout(7) << __func__ << " loading creating_pgs last_scan_epoch "
-	    << creating_pgs.last_scan_epoch
-	    << " with " << creating_pgs.pgs.size() << " pgs" << dendl;
+    if (bl.length()) {
+      auto p = bl.begin();
+      std::lock_guard<std::mutex> l(creating_pgs_lock);
+      creating_pgs.decode(p);
+      dout(7) << __func__ << " loading creating_pgs last_scan_epoch "
+	      << creating_pgs.last_scan_epoch
+	      << " with " << creating_pgs.pgs.size() << " pgs" << dendl;
+    } else {
+      dout(1) << __func__ << " missing creating pgs; upgrade from post-kraken?"
+	      << dendl;
+    }
   }
 
   // walk through incrementals
@@ -268,7 +326,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     assert(err == 0);
     assert(inc_bl.length());
 
-    dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1 << dendl;
+    dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1
+	    << dendl;
     OSDMap::Incremental inc(inc_bl);
     err = osdmap.apply_incremental(inc);
     assert(err == 0);
@@ -326,7 +385,17 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     }
     if (mon->monmap->get_required_features().contains_all(
           ceph::features::mon::FEATURE_LUMINOUS)) {
-      creating_pgs = update_pending_creatings(inc);
+      creating_pgs = update_pending_pgs(inc);
+      for (const auto &osd_state : inc.new_state) {
+	if (osd_state.second & CEPH_OSD_UP) {
+	  // could be marked up *or* down, but we're too lazy to check which
+	  last_osd_report.erase(osd_state.first);
+	}
+	if (osd_state.second & CEPH_OSD_EXISTS) {
+	  // could be created *or* destroyed, but we can safely drop it
+	  osd_epochs.erase(osd_state.first);
+	}
+      }
     }
   }
 
@@ -430,6 +499,11 @@ void OSDMonitor::on_active()
     }
   }
   start_mapping();
+}
+
+void OSDMonitor::on_restart()
+{
+  last_osd_report.clear();
 }
 
 void OSDMonitor::on_shutdown()
@@ -830,7 +904,7 @@ void OSDMonitor::create_pending()
 }
 
 creating_pgs_t
-OSDMonitor::update_pending_creatings(const OSDMap::Incremental& inc)
+OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
 {
   creating_pgs_t pending_creatings;
   {
@@ -865,6 +939,7 @@ OSDMonitor::update_pending_creatings(const OSDMap::Incremental& inc)
     auto last =
       pending_creatings.pgs.lower_bound(pg_t{0, removed_pool + 1});
     pending_creatings.pgs.erase(first, last);
+    last_epoch_clean.remove_pool(removed_pool);
   }
   scan_for_creating_pgs(osdmap.get_pools(),
 			inc.old_pools,
@@ -1186,7 +1261,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // and pg creating, also!
   if (mon->monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {
-    auto pending_creatings = update_pending_creatings(pending_inc);
+    auto pending_creatings = update_pending_pgs(pending_inc);
     if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       dout(7) << __func__ << " in the middle of upgrading, "
 	      << " trimming pending creating_pgs using pgmap" << dendl;
@@ -1329,24 +1404,26 @@ void OSDMonitor::share_map_with_random_osd()
 
 version_t OSDMonitor::get_trim_to()
 {
+  epoch_t floor;
+
   if (mon->monmap->get_required_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
-    std::lock_guard<std::mutex> l(creating_pgs_lock);
-    if (!creating_pgs.pgs.empty()) {
-      return 0;
+    {
+      std::lock_guard<std::mutex> l(creating_pgs_lock);
+      if (!creating_pgs.pgs.empty()) {
+	return 0;
+      }
     }
-    if (!mon->pgmon()->is_readable()) {
-      return 0;
-    }
+    floor = get_min_last_epoch_clean();
   } else {
     if (!mon->pgmon()->is_readable())
       return 0;
     if (mon->pgmon()->pg_map.creating_pgs.empty()) {
       return 0;
     }
+    floor = mon->pgmon()->pg_map.get_min_last_epoch_clean();
   }
   {
-    epoch_t floor = mon->pgmon()->pg_map.get_min_last_epoch_clean();
     dout(10) << " min_last_epoch_clean " << floor << dendl;
     if (g_conf->mon_osd_force_trim_to > 0 &&
 	g_conf->mon_osd_force_trim_to < (int)get_last_committed()) {
@@ -1364,6 +1441,19 @@ version_t OSDMonitor::get_trim_to()
       return floor;
   }
   return 0;
+}
+
+epoch_t OSDMonitor::get_min_last_epoch_clean() const
+{
+  auto floor = last_epoch_clean.get_lower_bound(osdmap);
+  // also scan osd epochs
+  // don't trim past the oldest reported osd epoch
+  for (auto& osd_epoch : osd_epochs) {
+    if (osd_epoch.second < floor) {
+      floor = osd_epoch.second;
+    }
+  }
+  return floor;
 }
 
 void OSDMonitor::encode_trim_extra(MonitorDBStore::TransactionRef tx,
@@ -2791,6 +2881,11 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
   }
 
   last_osd_report[from] = ceph_clock_now();
+  osd_epochs[from] = beacon->version;
+
+  for (const auto& pg : beacon->pgs) {
+    last_epoch_clean.report(pg, beacon->min_last_epoch_clean);
+  }
   return false;
 }
 
@@ -3419,7 +3514,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
         out_of_order = true;
         if (detail) {
 	  ostringstream ss;
-	  ss << "backfill_ratio (" << br << ") < nearfull_ratio (" << nr << "), increased";
+	  ss << "backfillfull_ratio (" << br << ") < nearfull_ratio (" << nr << "), increased";
 	  detail->push_back(make_pair(HEALTH_ERR, ss.str()));
         }
         br = nr;
@@ -3961,6 +4056,49 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
         << pg_vector_string(acting) << ", p" << acting_p << ")";
       rdata.append(ds);
     }
+
+  } else if (prefix == "pg map") {
+    pg_t pgid;
+    string pgidstr;
+    cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
+    if (!pgid.parse(pgidstr.c_str())) {
+      ss << "invalid pgid '" << pgidstr << "'";
+      r = -EINVAL;
+      goto reply;
+    }
+    vector<int> up, acting;
+    if (!osdmap.have_pg_pool(pgid.pool())) {
+      ss << "pg '" << pgidstr << "' does not exist";
+      r = -ENOENT;
+      goto reply;
+    }
+    pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
+    osdmap.pg_to_up_acting_osds(pgid, up, acting);
+    if (f) {
+      f->open_object_section("pg_map");
+      f->dump_unsigned("epoch", osdmap.get_epoch());
+      f->dump_stream("raw_pgid") << pgid;
+      f->dump_stream("pgid") << mpgid;
+      f->open_array_section("up");
+      for (auto osd : up) {
+	f->dump_int("up_osd", osd);
+      }
+      f->close_section();
+      f->open_array_section("acting");
+      for (auto osd : acting) {
+	f->dump_int("acting_osd", osd);
+      }
+      f->close_section();
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      ds << "osdmap e" << osdmap.get_epoch()
+         << " pg " << pgid << " (" << mpgid << ")"
+         << " -> up " << up << " acting " << acting;
+      rdata.append(ds);
+    }
+    goto reply;
+
   } else if ((prefix == "osd scrub" ||
 	      prefix == "osd deep-scrub" ||
 	      prefix == "osd repair")) {

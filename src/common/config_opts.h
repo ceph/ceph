@@ -27,6 +27,7 @@ OPTION(lockdep, OPT_BOOL, false)
 OPTION(lockdep_force_backtrace, OPT_BOOL, false) // always gather current backtrace at every lock
 OPTION(run_dir, OPT_STR, "/var/run/ceph")       // the "/var/run/ceph" dir, created on daemon startup
 OPTION(admin_socket, OPT_STR, "$run_dir/$cluster-$name.asok") // default changed by common_preinit()
+OPTION(admin_socket_mode, OPT_STR, "") // permission bits to set for admin socket file, e.g., "0775", "0755"
 OPTION(crushtool, OPT_STR, "crushtool") // crushtool utility path
 
 OPTION(daemonize, OPT_BOOL, false) // default changed by common_preinit()
@@ -751,6 +752,8 @@ OPTION(osd_op_num_shards, OPT_INT, 5)
 OPTION(osd_op_queue, OPT_STR, "wpq") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), or debug_random
 OPTION(osd_op_queue_cut_off, OPT_STR, "low") // Min priority to go to strict queue. (low, high, debug_random)
 
+OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL, false) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
+
 // Set to true for testing.  Users should NOT set this.
 // If set to true even after reading enough shards to
 // decode the object, any error will be reported.
@@ -880,6 +883,8 @@ OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
 OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
+OPTION(osd_op_history_slow_op_size, OPT_U32, 20)           // Max number of slow ops to track
+OPTION(osd_op_history_slow_op_threshold, OPT_DOUBLE, 10.0) // track the op if over this threshold
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_fast_fail_on_connection_refused, OPT_BOOL, true) // immediately mark OSDs as down once they refuse to accept connections
@@ -1030,6 +1035,7 @@ OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .02)  // min fs free / total free
 OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT, .90)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT, .02) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at a time
+OPTION(bluestore_bluefs_balance_interval, OPT_FLOAT, 1) // how often (sec) to balance free space between bluefs and bluestore
 // If you want to use spdk driver, you need to specify NVMe serial number here
 // with "spdk:" prefix.
 // Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
@@ -1067,8 +1073,12 @@ OPTION(bluestore_prefer_deferred_size_hdd, OPT_U32, 32768)
 OPTION(bluestore_prefer_deferred_size_ssd, OPT_U32, 0)
 OPTION(bluestore_compression_mode, OPT_STR, "none")  // force|aggressive|passive|none
 OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
-OPTION(bluestore_compression_min_blob_size, OPT_U32, 128*1024)
-OPTION(bluestore_compression_max_blob_size, OPT_U32, 512*1024)
+OPTION(bluestore_compression_min_blob_size, OPT_U32, 0)
+OPTION(bluestore_compression_min_blob_size_hdd, OPT_U32, 128*1024)
+OPTION(bluestore_compression_min_blob_size_ssd, OPT_U32, 8*1024)
+OPTION(bluestore_compression_max_blob_size, OPT_U32, 0)
+OPTION(bluestore_compression_max_blob_size_hdd, OPT_U32, 512*1024)
+OPTION(bluestore_compression_max_blob_size_ssd, OPT_U32, 64*1024)
 /*
  * Specifies minimum expected amount of saved allocation units
  * per single blob to enable compressed blobs garbage collection
@@ -1082,7 +1092,9 @@ OPTION(bluestore_gc_enable_blob_threshold, OPT_INT, 0)
  */
 OPTION(bluestore_gc_enable_total_threshold, OPT_INT, 0)  
 
-OPTION(bluestore_max_blob_size, OPT_U32, 512*1024)
+OPTION(bluestore_max_blob_size, OPT_U32, 0)
+OPTION(bluestore_max_blob_size_hdd, OPT_U32, 512*1024)
+OPTION(bluestore_max_blob_size_ssd, OPT_U32, 64*1024)
 /*
  * Require the net gain of compression at least to be at this ratio,
  * otherwise we don't compress.
@@ -1650,6 +1662,10 @@ OPTION(rgw_sync_meta_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(rgw_realm_reconfigure_delay, OPT_DOUBLE, 2) // seconds to wait before reloading realm configuration
 OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
+
+OPTION(rgw_safe_max_objects_per_shard, OPT_INT, 100*1024) // safe max loading
+OPTION(rgw_shard_warning_threshold, OPT_DOUBLE, 90) // pct of safe max
+						    // at which to warn
 
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
 

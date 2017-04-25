@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "PoolReplayer.h"
 #include <boost/bind.hpp>
-
 #include "common/Formatter.h"
 #include "common/admin_socket.h"
 #include "common/ceph_argparse.h"
@@ -20,14 +20,13 @@
 #include "InstanceReplayer.h"
 #include "InstanceWatcher.h"
 #include "LeaderWatcher.h"
-#include "Replayer.h"
 #include "Threads.h"
 #include "pool_watcher/RefreshImagesRequest.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd::mirror::Replayer: " \
+#define dout_prefix *_dout << "rbd::mirror::PoolReplayer: " \
                            << this << " " << __func__ << ": "
 
 using std::chrono::seconds;
@@ -44,95 +43,94 @@ namespace mirror {
 
 namespace {
 
-class ReplayerAdminSocketCommand {
+class PoolReplayerAdminSocketCommand {
 public:
-  virtual ~ReplayerAdminSocketCommand() {}
+  PoolReplayerAdminSocketCommand(PoolReplayer *pool_replayer)
+    : pool_replayer(pool_replayer) {
+  }
+  virtual ~PoolReplayerAdminSocketCommand() {}
   virtual bool call(Formatter *f, stringstream *ss) = 0;
+protected:
+  PoolReplayer *pool_replayer;
 };
 
-class StatusCommand : public ReplayerAdminSocketCommand {
+class StatusCommand : public PoolReplayerAdminSocketCommand {
 public:
-  explicit StatusCommand(Replayer *replayer) : replayer(replayer) {}
-
-  bool call(Formatter *f, stringstream *ss) override {
-    replayer->print_status(f, ss);
-    return true;
+  explicit StatusCommand(PoolReplayer *pool_replayer)
+    : PoolReplayerAdminSocketCommand(pool_replayer) {
   }
 
-private:
-  Replayer *replayer;
-};
-
-class StartCommand : public ReplayerAdminSocketCommand {
-public:
-  explicit StartCommand(Replayer *replayer) : replayer(replayer) {}
-
   bool call(Formatter *f, stringstream *ss) override {
-    replayer->start();
+    pool_replayer->print_status(f, ss);
     return true;
   }
-
-private:
-  Replayer *replayer;
 };
 
-class StopCommand : public ReplayerAdminSocketCommand {
+class StartCommand : public PoolReplayerAdminSocketCommand {
 public:
-  explicit StopCommand(Replayer *replayer) : replayer(replayer) {}
-
-  bool call(Formatter *f, stringstream *ss) override {
-    replayer->stop(true);
-    return true;
+  explicit StartCommand(PoolReplayer *pool_replayer)
+    : PoolReplayerAdminSocketCommand(pool_replayer) {
   }
 
-private:
-  Replayer *replayer;
-};
-
-class RestartCommand : public ReplayerAdminSocketCommand {
-public:
-  explicit RestartCommand(Replayer *replayer) : replayer(replayer) {}
-
   bool call(Formatter *f, stringstream *ss) override {
-    replayer->restart();
+    pool_replayer->start();
     return true;
   }
-
-private:
-  Replayer *replayer;
 };
 
-class FlushCommand : public ReplayerAdminSocketCommand {
+class StopCommand : public PoolReplayerAdminSocketCommand {
 public:
-  explicit FlushCommand(Replayer *replayer) : replayer(replayer) {}
-
-  bool call(Formatter *f, stringstream *ss) override {
-    replayer->flush();
-    return true;
+  explicit StopCommand(PoolReplayer *pool_replayer)
+    : PoolReplayerAdminSocketCommand(pool_replayer) {
   }
 
-private:
-  Replayer *replayer;
-};
-
-class LeaderReleaseCommand : public ReplayerAdminSocketCommand {
-public:
-  explicit LeaderReleaseCommand(Replayer *replayer) : replayer(replayer) {}
-
   bool call(Formatter *f, stringstream *ss) override {
-    replayer->release_leader();
+    pool_replayer->stop(true);
     return true;
   }
-
-private:
-  Replayer *replayer;
 };
 
-class ReplayerAdminSocketHook : public AdminSocketHook {
+class RestartCommand : public PoolReplayerAdminSocketCommand {
 public:
-  ReplayerAdminSocketHook(CephContext *cct, const std::string &name,
-			  Replayer *replayer) :
-    admin_socket(cct->get_admin_socket()) {
+  explicit RestartCommand(PoolReplayer *pool_replayer)
+    : PoolReplayerAdminSocketCommand(pool_replayer) {
+  }
+
+  bool call(Formatter *f, stringstream *ss) override {
+    pool_replayer->restart();
+    return true;
+  }
+};
+
+class FlushCommand : public PoolReplayerAdminSocketCommand {
+public:
+  explicit FlushCommand(PoolReplayer *pool_replayer)
+    : PoolReplayerAdminSocketCommand(pool_replayer) {
+  }
+
+  bool call(Formatter *f, stringstream *ss) override {
+    pool_replayer->flush();
+    return true;
+  }
+};
+
+class LeaderReleaseCommand : public PoolReplayerAdminSocketCommand {
+public:
+  explicit LeaderReleaseCommand(PoolReplayer *pool_replayer)
+    : PoolReplayerAdminSocketCommand(pool_replayer) {
+  }
+
+  bool call(Formatter *f, stringstream *ss) override {
+    pool_replayer->release_leader();
+    return true;
+  }
+};
+
+class PoolReplayerAdminSocketHook : public AdminSocketHook {
+public:
+  PoolReplayerAdminSocketHook(CephContext *cct, const std::string &name,
+				PoolReplayer *pool_replayer)
+    : admin_socket(cct->get_admin_socket()) {
     std::string command;
     int r;
 
@@ -140,46 +138,46 @@ public:
     r = admin_socket->register_command(command, command, this,
 				       "get status for rbd mirror " + name);
     if (r == 0) {
-      commands[command] = new StatusCommand(replayer);
+      commands[command] = new StatusCommand(pool_replayer);
     }
 
     command = "rbd mirror start " + name;
     r = admin_socket->register_command(command, command, this,
 				       "start rbd mirror " + name);
     if (r == 0) {
-      commands[command] = new StartCommand(replayer);
+      commands[command] = new StartCommand(pool_replayer);
     }
 
     command = "rbd mirror stop " + name;
     r = admin_socket->register_command(command, command, this,
 				       "stop rbd mirror " + name);
     if (r == 0) {
-      commands[command] = new StopCommand(replayer);
+      commands[command] = new StopCommand(pool_replayer);
     }
 
     command = "rbd mirror restart " + name;
     r = admin_socket->register_command(command, command, this,
 				       "restart rbd mirror " + name);
     if (r == 0) {
-      commands[command] = new RestartCommand(replayer);
+      commands[command] = new RestartCommand(pool_replayer);
     }
 
     command = "rbd mirror flush " + name;
     r = admin_socket->register_command(command, command, this,
 				       "flush rbd mirror " + name);
     if (r == 0) {
-      commands[command] = new FlushCommand(replayer);
+      commands[command] = new FlushCommand(pool_replayer);
     }
 
     command = "rbd mirror leader release " + name;
     r = admin_socket->register_command(command, command, this,
                                        "release rbd mirror leader " + name);
     if (r == 0) {
-      commands[command] = new LeaderReleaseCommand(replayer);
+      commands[command] = new LeaderReleaseCommand(pool_replayer);
     }
   }
 
-  ~ReplayerAdminSocketHook() override {
+  ~PoolReplayerAdminSocketHook() override {
     for (Commands::const_iterator i = commands.begin(); i != commands.end();
 	 ++i) {
       (void)admin_socket->unregister_command(i->first);
@@ -200,7 +198,7 @@ public:
   }
 
 private:
-  typedef std::map<std::string, ReplayerAdminSocketCommand*> Commands;
+  typedef std::map<std::string, PoolReplayerAdminSocketCommand*> Commands;
 
   AdminSocket *admin_socket;
   Commands commands;
@@ -208,40 +206,40 @@ private:
 
 } // anonymous namespace
 
-struct Replayer::C_RefreshLocalImages : public Context {
-  Replayer *replayer;
+struct PoolReplayer::C_RefreshLocalImages : public Context {
+  PoolReplayer *pool_replayer;
   Context *on_finish;
   ImageIds image_ids;
 
-  C_RefreshLocalImages(Replayer *replayer, Context *on_finish)
-    : replayer(replayer), on_finish(on_finish) {
+  C_RefreshLocalImages(PoolReplayer *pool_replayer, Context *on_finish)
+    : pool_replayer(pool_replayer), on_finish(on_finish) {
   }
 
   void finish(int r) override {
-    replayer->handle_refresh_local_images(r, std::move(image_ids), on_finish);
+    pool_replayer->handle_refresh_local_images(r, std::move(image_ids), on_finish);
   }
 };
 
-Replayer::Replayer(Threads<librbd::ImageCtx> *threads,
-                   std::shared_ptr<ImageDeleter> image_deleter,
-                   ImageSyncThrottlerRef<> image_sync_throttler,
-                   int64_t local_pool_id, const peer_t &peer,
-                   const std::vector<const char*> &args) :
+PoolReplayer::PoolReplayer(Threads<librbd::ImageCtx> *threads,
+			   std::shared_ptr<ImageDeleter> image_deleter,
+			   ImageSyncThrottlerRef<> image_sync_throttler,
+			   int64_t local_pool_id, const peer_t &peer,
+			   const std::vector<const char*> &args) :
   m_threads(threads),
   m_image_deleter(image_deleter),
   m_image_sync_throttler(image_sync_throttler),
-  m_lock(stringify("rbd::mirror::Replayer ") + stringify(peer)),
+  m_lock(stringify("rbd::mirror::PoolReplayer ") + stringify(peer)),
   m_peer(peer),
   m_args(args),
   m_local_pool_id(local_pool_id),
   m_pool_watcher_listener(this),
   m_asok_hook(nullptr),
-  m_replayer_thread(this),
+  m_pool_replayer_thread(this),
   m_leader_listener(this)
 {
 }
 
-Replayer::~Replayer()
+PoolReplayer::~PoolReplayer()
 {
   delete m_asok_hook;
 
@@ -250,8 +248,8 @@ Replayer::~Replayer()
     Mutex::Locker l(m_lock);
     m_cond.Signal();
   }
-  if (m_replayer_thread.is_started()) {
-    m_replayer_thread.join();
+  if (m_pool_replayer_thread.is_started()) {
+    m_pool_replayer_thread.join();
   }
   if (m_leader_watcher) {
     m_leader_watcher->shut_down();
@@ -266,17 +264,17 @@ Replayer::~Replayer()
   assert(!m_pool_watcher);
 }
 
-bool Replayer::is_blacklisted() const {
+bool PoolReplayer::is_blacklisted() const {
   Mutex::Locker locker(m_lock);
   return m_blacklisted;
 }
 
-bool Replayer::is_leader() const {
+bool PoolReplayer::is_leader() const {
   Mutex::Locker locker(m_lock);
   return m_leader_watcher && m_leader_watcher->is_leader();
 }
 
-int Replayer::init()
+int PoolReplayer::init()
 {
   dout(20) << "replaying for " << m_peer << dendl;
 
@@ -325,6 +323,16 @@ int Replayer::init()
                                m_image_sync_throttler, m_local_rados,
                                local_mirror_uuid, m_local_pool_id));
   m_instance_replayer->init();
+  m_instance_replayer->add_peer(m_peer.uuid, m_remote_io_ctx);
+
+  m_instance_watcher.reset(InstanceWatcher<>::create(m_local_io_ctx,
+                                                     m_threads->work_queue,
+                                                     m_instance_replayer.get()));
+  r = m_instance_watcher->init();
+  if (r < 0) {
+    derr << "error initializing instance watcher: " << cpp_strerror(r) << dendl;
+    return r;
+  }
 
   m_leader_watcher.reset(new LeaderWatcher<>(m_threads, m_local_io_ctx,
                                              &m_leader_listener));
@@ -334,22 +342,15 @@ int Replayer::init()
     return r;
   }
 
-  m_instance_watcher.reset(InstanceWatcher<>::create(m_local_io_ctx,
-                                                     m_threads->work_queue));
-  r = m_instance_watcher->init();
-  if (r < 0) {
-    derr << "error initializing instance watcher: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  m_replayer_thread.create("replayer");
+  m_pool_replayer_thread.create("pool replayer");
 
   return 0;
 }
 
-int Replayer::init_rados(const std::string &cluster_name,
-                         const std::string &client_name,
-                         const std::string &description, RadosRef *rados_ref) {
+int PoolReplayer::init_rados(const std::string &cluster_name,
+			     const std::string &client_name,
+			     const std::string &description,
+			     RadosRef *rados_ref) {
   rados_ref->reset(new librados::Rados());
 
   // NOTE: manually bootstrap a CephContext here instead of via
@@ -418,7 +419,7 @@ int Replayer::init_rados(const std::string &cluster_name,
   return 0;
 }
 
-void Replayer::run()
+void PoolReplayer::run()
 {
   dout(20) << "enter" << dendl;
 
@@ -429,8 +430,8 @@ void Replayer::run()
       m_asok_hook_name = asok_hook_name;
       delete m_asok_hook;
 
-      m_asok_hook = new ReplayerAdminSocketHook(g_ceph_context,
-                                                m_asok_hook_name, this);
+      m_asok_hook = new PoolReplayerAdminSocketHook(g_ceph_context,
+						    m_asok_hook_name, this);
     }
 
     Mutex::Locker locker(m_lock);
@@ -444,7 +445,7 @@ void Replayer::run()
   }
 }
 
-void Replayer::print_status(Formatter *f, stringstream *ss)
+void PoolReplayer::print_status(Formatter *f, stringstream *ss)
 {
   dout(20) << "enter" << dendl;
 
@@ -454,9 +455,14 @@ void Replayer::print_status(Formatter *f, stringstream *ss)
 
   Mutex::Locker l(m_lock);
 
-  f->open_object_section("replayer_status");
+  f->open_object_section("pool_replayer_status");
   f->dump_string("pool", m_local_io_ctx.get_pool_name());
   f->dump_stream("peer") << m_peer;
+  f->dump_string("instance_id", m_instance_watcher->get_instance_id());
+
+  std::string leader_instance_id;
+  m_leader_watcher->get_leader_instance_id(&leader_instance_id);
+  f->dump_string("leader_instance_id", leader_instance_id);
 
   bool leader = m_leader_watcher->is_leader();
   f->dump_bool("leader", leader);
@@ -476,7 +482,7 @@ void Replayer::print_status(Formatter *f, stringstream *ss)
   f->flush(*ss);
 }
 
-void Replayer::start()
+void PoolReplayer::start()
 {
   dout(20) << "enter" << dendl;
 
@@ -489,7 +495,7 @@ void Replayer::start()
   m_instance_replayer->start();
 }
 
-void Replayer::stop(bool manual)
+void PoolReplayer::stop(bool manual)
 {
   dout(20) << "enter: manual=" << manual << dendl;
 
@@ -505,7 +511,7 @@ void Replayer::stop(bool manual)
   m_instance_replayer->stop();
 }
 
-void Replayer::restart()
+void PoolReplayer::restart()
 {
   dout(20) << "enter" << dendl;
 
@@ -518,7 +524,7 @@ void Replayer::restart()
   m_instance_replayer->restart();
 }
 
-void Replayer::flush()
+void PoolReplayer::flush()
 {
   dout(20) << "enter" << dendl;
 
@@ -531,7 +537,7 @@ void Replayer::flush()
   m_instance_replayer->flush();
 }
 
-void Replayer::release_leader()
+void PoolReplayer::release_leader()
 {
   dout(20) << "enter" << dendl;
 
@@ -544,9 +550,9 @@ void Replayer::release_leader()
   m_leader_watcher->release_leader();
 }
 
-void Replayer::handle_update(const std::string &mirror_uuid,
-                             const ImageIds &added_image_ids,
-                             const ImageIds &removed_image_ids) {
+void PoolReplayer::handle_update(const std::string &mirror_uuid,
+				 const ImageIds &added_image_ids,
+				 const ImageIds &removed_image_ids) {
   assert(!mirror_uuid.empty());
   if (m_stopping.read()) {
     return;
@@ -558,7 +564,11 @@ void Replayer::handle_update(const std::string &mirror_uuid,
     return;
   }
 
-  m_instance_replayer->set_peers({{mirror_uuid, m_remote_io_ctx}});
+  if (m_peer.uuid != mirror_uuid) {
+    m_instance_replayer->remove_peer(m_peer.uuid);
+    m_instance_replayer->add_peer(mirror_uuid, m_remote_io_ctx);
+    m_peer.uuid = mirror_uuid;
+  }
 
   // first callback will be a full directory -- so see if we need to remove
   // any local images that no longer exist on the remote side
@@ -590,31 +600,35 @@ void Replayer::handle_update(const std::string &mirror_uuid,
   C_Gather *gather_ctx = new C_Gather(g_ceph_context, ctx);
 
   for (auto &image_id : removed_image_ids) {
-    m_instance_replayer->release_image(image_id.global_id,
-                                       {{mirror_uuid, image_id.id}}, true,
-                                       gather_ctx->new_sub());
+    // for now always send to myself (the leader)
+    std::string &instance_id = m_instance_watcher->get_instance_id();
+    m_instance_watcher->notify_image_release(instance_id, image_id.global_id,
+                                             mirror_uuid, image_id.id, true,
+                                             gather_ctx->new_sub());
   }
 
   for (auto &image_id : added_image_ids) {
-    m_instance_replayer->acquire_image(image_id.global_id,
-                                       {{mirror_uuid, image_id.id}},
-                                       gather_ctx->new_sub());
+    // for now always send to myself (the leader)
+    std::string &instance_id = m_instance_watcher->get_instance_id();
+    m_instance_watcher->notify_image_acquire(instance_id, image_id.global_id,
+                                             mirror_uuid, image_id.id,
+                                             gather_ctx->new_sub());
   }
 
   gather_ctx->activate();
 }
 
-void Replayer::handle_post_acquire_leader(Context *on_finish) {
+void PoolReplayer::handle_post_acquire_leader(Context *on_finish) {
   dout(20) << dendl;
   refresh_local_images(on_finish);
 }
 
-void Replayer::handle_pre_release_leader(Context *on_finish) {
+void PoolReplayer::handle_pre_release_leader(Context *on_finish) {
   dout(20) << dendl;
   shut_down_pool_watcher(on_finish);
 }
 
-void Replayer::refresh_local_images(Context *on_finish) {
+void PoolReplayer::refresh_local_images(Context *on_finish) {
   dout(20) << dendl;
 
   // ensure the initial set of local images is up-to-date
@@ -625,8 +639,8 @@ void Replayer::refresh_local_images(Context *on_finish) {
   req->send();
 }
 
-void Replayer::handle_refresh_local_images(int r, ImageIds &&image_ids,
-                                           Context *on_finish) {
+void PoolReplayer::handle_refresh_local_images(int r, ImageIds &&image_ids,
+					       Context *on_finish) {
   dout(20) << "r=" << r << dendl;
 
   {
@@ -643,7 +657,7 @@ void Replayer::handle_refresh_local_images(int r, ImageIds &&image_ids,
   init_pool_watcher(on_finish);
 }
 
-void Replayer::init_pool_watcher(Context *on_finish) {
+void PoolReplayer::init_pool_watcher(Context *on_finish) {
   dout(20) << dendl;
 
   Mutex::Locker locker(m_lock);
@@ -656,7 +670,7 @@ void Replayer::init_pool_watcher(Context *on_finish) {
   m_cond.Signal();
 }
 
-void Replayer::shut_down_pool_watcher(Context *on_finish) {
+void PoolReplayer::shut_down_pool_watcher(Context *on_finish) {
   dout(20) << dendl;
 
   {
@@ -675,7 +689,7 @@ void Replayer::shut_down_pool_watcher(Context *on_finish) {
   on_finish->complete(0);
 }
 
-void Replayer::handle_shut_down_pool_watcher(int r, Context *on_finish) {
+void PoolReplayer::handle_shut_down_pool_watcher(int r, Context *on_finish) {
   dout(20) << "r=" << r << dendl;
 
   {
@@ -686,7 +700,7 @@ void Replayer::handle_shut_down_pool_watcher(int r, Context *on_finish) {
   wait_for_update_ops(on_finish);
 }
 
-void Replayer::wait_for_update_ops(Context *on_finish) {
+void PoolReplayer::wait_for_update_ops(Context *on_finish) {
   dout(20) << dendl;
 
   Mutex::Locker locker(m_lock);
@@ -699,7 +713,7 @@ void Replayer::wait_for_update_ops(Context *on_finish) {
   m_update_op_tracker.wait_for_ops(ctx);
 }
 
-void Replayer::handle_wait_for_update_ops(int r, Context *on_finish) {
+void PoolReplayer::handle_wait_for_update_ops(int r, Context *on_finish) {
   dout(20) << "r=" << r << dendl;
 
   assert(r == 0);

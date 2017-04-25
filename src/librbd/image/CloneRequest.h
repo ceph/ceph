@@ -19,11 +19,11 @@ template <typename ImageCtxT = ImageCtx>
 class CloneRequest {
 public:
   static CloneRequest *create(ImageCtxT *p_imctx, IoCtx &c_ioctx, const std::string &c_name,
-			      ImageOptions c_options,
+			      const std::string &c_id, ImageOptions c_options,
 			      const std::string &non_primary_global_image_id,
 			      const std::string &primary_mirror_uuid,
 			      ContextWQ *op_work_queue, Context *on_finish) {
-    return new CloneRequest(p_imctx, c_ioctx, c_name, c_options,
+    return new CloneRequest(p_imctx, c_ioctx, c_name, c_id, c_options,
                              non_primary_global_image_id, primary_mirror_uuid,
                              op_work_queue, on_finish);
   }
@@ -78,6 +78,7 @@ private:
    */
 
   CloneRequest(ImageCtxT *p_imctx, IoCtx &c_ioctx, const std::string &c_name,
+			      const std::string &c_id,
 			      ImageOptions c_options,
 			      const std::string &non_primary_global_image_id,
 			      const std::string &primary_mirror_uuid,

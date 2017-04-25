@@ -2920,7 +2920,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     mdsmon()->dispatch(op);
     return;
   }
-  if (module == "osd") {
+  if (module == "osd" || prefix == "pg map") {
     osdmon()->dispatch(op);
     return;
   }
@@ -3049,7 +3049,6 @@ void Monitor::handle_command(MonOpRequestRef op)
       if (detail == "detail")
 	comb.append(rdata);
       rdata = comb;
-      r = 0;
     } else if (prefix == "df") {
       bool verbose = (detail == "detail");
       if (f)

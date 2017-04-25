@@ -133,7 +133,7 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
     return true;
   }
 
-  MgrSessionRef s(new MgrSession);
+  MgrSessionRef s(new MgrSession(cct));
   s->inst.addr = con->get_peer_addr();
   AuthCapsInfo caps_info;
 

@@ -1717,12 +1717,19 @@ public:
    * @param bl output bufferlist for extent map information.
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
-		     uint64_t offset, size_t len, bufferlist& bl) = 0;
-  virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
-		     uint64_t offset, size_t len, bufferlist& bl) {
-    return fiemap(c->get_cid(), oid, offset, len, bl);
-  }
+   virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
+ 		     uint64_t offset, size_t len, bufferlist& bl) = 0;
+   virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
+ 		     uint64_t offset, size_t len,
+ 		     map<uint64_t, uint64_t>& destmap) = 0;
+   virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
+ 		     uint64_t offset, size_t len, bufferlist& bl) {
+     return fiemap(c->get_cid(), oid, offset, len, bl);
+   }
+   virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
+ 		     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) {
+     return fiemap(c->get_cid(), oid, offset, len, destmap);
+   }
 
   /**
    * getattr -- get an xattr of an object

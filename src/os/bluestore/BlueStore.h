@@ -1726,6 +1726,8 @@ private:
   BlueFS *bluefs = nullptr;
   unsigned bluefs_shared_bdev = 0;  ///< which bluefs bdev we are sharing
   bool bluefs_single_shared_device = true;
+  utime_t bluefs_last_balance;
+
   KeyValueDB *db = nullptr;
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
@@ -1790,18 +1792,26 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
-  uint64_t prefer_deferred_size = 0; ///< size threshold for forced deferred writes
   int deferred_batch_ops = 0; ///< deferred batch size
 
-  uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
+  ///< bits for min_alloc_size
+  std::atomic<size_t> min_alloc_size_order = {0};
+  
+  ///< size threshold for forced deferred writes
+  std::atomic<uint64_t> prefer_deferred_size = {0};
 
-  uint64_t throttle_cost_per_io = 0;   ///< approx cost per io, in bytes
+  ///< maximum allocation unit (power of 2)
+  std::atomic<uint64_t> max_alloc_size = {0};
+
+  ///< approx cost per io, in bytes
+  std::atomic<uint64_t> throttle_cost_per_io = {0};
 
   std::atomic<Compressor::CompressionMode> comp_mode = {Compressor::COMP_NONE}; ///< compression mode
   CompressorRef compressor;
   std::atomic<uint64_t> comp_min_blob_size = {0};
   std::atomic<uint64_t> comp_max_blob_size = {0};
+
+  std::atomic<uint64_t> max_blob_size = {0};  ///< maximum blob size
 
   // cache trim control
 
@@ -1856,6 +1866,8 @@ private:
   int _write_fsid();
   void _close_fsid();
   void _set_alloc_sizes();
+  void _set_blob_size();
+
   int _open_bdev(bool create);
   void _close_bdev();
   int _open_db(bool create);
@@ -2100,10 +2112,19 @@ public:
     bufferlist& bl,
     uint32_t op_flags = 0);
 
+private:
+  int _fiemap(CollectionHandle &c_, const ghobject_t& oid,
+ 	     uint64_t offset, size_t len, interval_set<uint64_t>& destset);
+public:
   int fiemap(const coll_t& cid, const ghobject_t& oid,
 	     uint64_t offset, size_t len, bufferlist& bl) override;
   int fiemap(CollectionHandle &c, const ghobject_t& oid,
 	     uint64_t offset, size_t len, bufferlist& bl) override;
+  int fiemap(const coll_t& cid, const ghobject_t& oid,
+	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+  int fiemap(CollectionHandle &c, const ghobject_t& oid,
+	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+
 
   int getattr(const coll_t& cid, const ghobject_t& oid, const char *name,
 	      bufferptr& value) override;

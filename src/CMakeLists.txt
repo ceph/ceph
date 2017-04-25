@@ -372,12 +372,6 @@ if(HAVE_DPDK)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${DPDK_INCLUDE_DIR}")
 endif(HAVE_DPDK)
 
-if(HAVE_GOOD_YASM_ELF64)
-  set(yasm_srcs
-    common/crc32c_intel_fast_asm.S
-    common/crc32c_intel_fast_zero_asm.S)
-endif(HAVE_GOOD_YASM_ELF64)
-
 add_library(common_buffer_obj OBJECT
   common/buffer.cc)
 
@@ -416,9 +410,6 @@ set(libcommon_files
   common/sctp_crc32.c
   common/crc32c.cc
   common/crc32c_intel_baseline.c
-  common/crc32c_intel_fast.c
-  common/crc32c_ppc.c
-  ${yasm_srcs}
   xxHash/xxhash.c
   common/assert.cc
   common/run_cmd.cc
@@ -514,6 +505,7 @@ set(libcommon_files
   arch/probe.cc
   ${auth_files}
   ${mds_files})
+
 if(HAVE_ARM)
   list(APPEND libcommon_files arch/arm.c)
 elseif(HAVE_INTEL)
@@ -521,6 +513,21 @@ elseif(HAVE_INTEL)
 elseif(HAVE_POWER8)
   list(APPEND libcommon_files arch/ppc.c)
 endif()
+
+if(HAVE_INTEL)
+  list(APPEND libcommon_files
+    common/crc32c_intel_fast.c)
+  if(HAVE_GOOD_YASM_ELF64)
+    list(APPEND libcommon_files
+      common/crc32c_intel_fast_asm.S
+      common/crc32c_intel_fast_zero_asm.S)
+  endif(HAVE_GOOD_YASM_ELF64)
+elseif(HAVE_POWER8)
+  list(APPEND libcommon_files
+    common/crc32c_ppc.c
+    common/crc32c_ppc_asm.S)
+endif(HAVE_INTEL)
+
 if(LINUX)
   list(APPEND libcommon_files msg/async/EventEpoll.cc)
   message(STATUS " Using EventEpoll for events.")
@@ -528,10 +535,6 @@ elseif(FREEBSD OR APPLE)
   list(APPEND libcommon_files msg/async/EventKqueue.cc)
   message(STATUS " Using EventKqueue for events.")
 endif(LINUX)
-
-if(HAVE_POWER8)
-  list(APPEND libcommon_files common/crc32c_ppc_asm.S)
-endif(HAVE_POWER8)
 
 if(WITH_LTTNG AND WITH_EVENTTRACE)
   message(STATUS " Using EventTrace class.")
@@ -846,7 +849,9 @@ add_subdirectory(compressor)
 
 add_subdirectory(tools)
 
-add_subdirectory(crypto/isa-l)
+if(HAVE_INTEL)
+  add_subdirectory(crypto/isa-l)
+endif(HAVE_INTEL)
 
 if(WITH_TESTS)
 

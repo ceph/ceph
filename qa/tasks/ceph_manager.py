@@ -141,13 +141,17 @@ class Thrasher:
             self.config = dict()
         # prevent monitor from auto-marking things out while thrasher runs
         # try both old and new tell syntax, in case we are testing old code
-        self.saved_options = {}
+        self.saved_options = []
+        # assuming that the default settings do not vary from one daemon to
+        # another
         first_mon = teuthology.get_first_mon(manager.ctx, self.config).split('.')
-        opt_name = 'mon_osd_down_out_interval'
-        self.saved_options[opt_name] = manager.get_config(first_mon[0],
-                                                          first_mon[1],
-                                                          opt_name)
-        self._set_config('mon', '*', opt_name, 0)
+        opts = [('mon', 'mon_osd_down_out_interval', 0)]
+        for service, opt, new_value in opts:
+            old_value = manager.get_config(first_mon[0],
+                                           first_mon[1],
+                                           opt)
+            self.saved_options.append((service, opt, old_value))
+            self._set_config(service, '*', opt, new_value)
         # initialize ceph_objectstore_tool property - must be done before
         # do_thrash is spawned - http://tracker.ceph.com/issues/18799
         if (self.config.get('powercycle') or
@@ -973,9 +977,9 @@ class Thrasher:
             if self.ceph_manager.get_pool_pg_num(pool) > 0:
                 self.fix_pgp_num(pool)
         self.pools_to_fix_pgp_num.clear()
-        for opt, value in self.saved_options.iteritems():
-            self._set_config('mon', '*', opt, value)
-        self.saved_options.clear()
+        for service, opt, saved_value in self.saved_options:
+            self._set_config(service, '*', opt, saved_value)
+        self.saved_options = []
         self.all_up()
 
 
@@ -1309,12 +1313,10 @@ class CephManager:
         """
         get replica for pool, pgnum (e.g. (data, 0)->0
         """
-        output = self.raw_cluster_cmd("pg", "dump", '--format=json')
-        j = json.loads('\n'.join(output.split('\n')[1:]))
         pg_str = self.get_pgid(pool, pgnum)
-        for pg in j['pg_stats']:
-            if pg['pgid'] == pg_str:
-                return int(pg['acting'][-1])
+        output = self.raw_cluster_cmd("pg", "map", pg_str, '--format=json')
+        j = json.loads('\n'.join(output.split('\n')[1:]))
+        return int(j['acting'][-1])
         assert False
 
     def wait_for_pg_stats(func):
@@ -1338,12 +1340,10 @@ class CephManager:
         """
         get primary for pool, pgnum (e.g. (data, 0)->0
         """
-        output = self.raw_cluster_cmd("pg", "dump", '--format=json')
-        j = json.loads('\n'.join(output.split('\n')[1:]))
         pg_str = self.get_pgid(pool, pgnum)
-        for pg in j['pg_stats']:
-            if pg['pgid'] == pg_str:
-                return int(pg['acting'][0])
+        output = self.raw_cluster_cmd("pg", "map", pg_str, '--format=json')
+        j = json.loads('\n'.join(output.split('\n')[1:]))
+        return int(j['acting'][0])
         assert False
 
     def get_pool_num(self, pool):
