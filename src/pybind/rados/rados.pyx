@@ -301,7 +301,7 @@ class Error(Exception):
     """ `Error` class, derived from `Exception` """
 
 
-class InvalidArgument(Error):
+class InvalidArgumentError(Error):
     pass
 
 
@@ -388,7 +388,8 @@ IF UNAME_SYSNAME == "FreeBSD":
         errno.ENOATTR   : NoData,
         errno.EINTR     : InterruptedOrTimeoutError,
         errno.ETIMEDOUT : TimedOut,
-        errno.EACCES    : PermissionDeniedError
+        errno.EACCES    : PermissionDeniedError,
+        errno.EINVAL    : InvalidArgumentError,
     }
 ELSE:
     cdef errno_to_exception = {
@@ -401,7 +402,8 @@ ELSE:
         errno.ENODATA   : NoData,
         errno.EINTR     : InterruptedOrTimeoutError,
         errno.ETIMEDOUT : TimedOut,
-        errno.EACCES    : PermissionDeniedError
+        errno.EACCES    : PermissionDeniedError,
+        errno.EINVAL    : InvalidArgumentError,
     }
 
 

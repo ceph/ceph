@@ -704,7 +704,7 @@ def main():
                                        conffile=conffile)
         retargs = run_in_thread(cluster_handle.conf_parse_argv, childargs)
     except rados.Error as e:
-        print('Error initializing cluster client: {0}'.format(e), file=sys.stderr)
+        print('Error initializing cluster client: {0!r}'.format(e), file=sys.stderr)
         return 1
 
     childargs = retargs

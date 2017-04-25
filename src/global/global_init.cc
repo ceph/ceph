@@ -105,7 +105,7 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
     dout_emergency("global_init: error parsing config file.\n");
     _exit(1);
   }
-  else if (ret == -EINVAL) {
+  else if (ret == -ENOENT) {
     if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
       if (conf_file_list.length()) {
 	ostringstream oss;

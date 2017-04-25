@@ -2820,8 +2820,12 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path_list)
   tracepoint(librados, rados_conf_read_file_enter, cluster, path_list);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   md_config_t *conf = client->cct->_conf;
-  int ret = conf->parse_config_files(path_list, NULL, 0);
+  ostringstream warnings;
+  int ret = conf->parse_config_files(path_list, &warnings, 0);
   if (ret) {
+    if (warnings.tellp() > 0)
+      lderr(client->cct) << warnings.str() << dendl;
+    client->cct->_conf->complain_about_parse_errors(client->cct);
     tracepoint(librados, rados_conf_read_file_exit, ret);
     return ret;
   }
