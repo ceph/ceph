@@ -33,7 +33,7 @@ namespace ceph{
 
 int NetHandler::create_socket(int domain, bool reuse_addr)
 {
-  int s, on = 1;
+  int s;
 
   if ((s = ::socket(domain, SOCK_STREAM, 0)) == -1) {
     lderr(cct) << __func__ << " couldn't create socket " << cpp_strerror(errno) << dendl;
@@ -44,6 +44,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
   /* Make sure connection-intensive things like the benchmark
    * will be able to close/open sockets a zillion of times */
   if (reuse_addr) {
+    int on = 1;
     if (::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
       lderr(cct) << __func__ << " setsockopt SO_REUSEADDR failed: "
                  << strerror(errno) << dendl;
