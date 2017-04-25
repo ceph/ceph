@@ -23,6 +23,8 @@ enum {
   l_throttle_get_sum,
   l_throttle_get_or_fail_fail,
   l_throttle_get_or_fail_success,
+  l_throttle_get_or_reserve_queue,
+  l_throttle_get_or_reserve_success,
   l_throttle_take,
   l_throttle_take_sum,
   l_throttle_put,
@@ -51,6 +53,8 @@ Throttle::Throttle(CephContext *cct, const std::string& n, int64_t m, bool _use_
     b.add_u64_counter(l_throttle_get_sum, "get_sum", "Got data");
     b.add_u64_counter(l_throttle_get_or_fail_fail, "get_or_fail_fail", "Get blocked during get_or_fail");
     b.add_u64_counter(l_throttle_get_or_fail_success, "get_or_fail_success", "Successful get during get_or_fail");
+    b.add_u64_counter(l_throttle_get_or_reserve_queue, "get_or_reserve_queue", "Get queued during get_or_reserve");
+    b.add_u64_counter(l_throttle_get_or_reserve_success, "get_or_reserve_success", "Successful get during get_or_reserve");
     b.add_u64_counter(l_throttle_take, "take", "Takes");
     b.add_u64_counter(l_throttle_take_sum, "take_sum", "Taken data");
     b.add_u64_counter(l_throttle_put, "put", "Puts");
@@ -71,6 +75,12 @@ Throttle::~Throttle()
     cond.pop_front();
   }
 
+  while (!callbacks.empty()) {
+    Cond *cv = callbacks.front();
+    delete cv;
+    callbacks.pop_front();
+  }
+
   if (!use_perf)
     return;
 
@@ -87,6 +97,10 @@ void Throttle::_reset_max(int64_t m)
     return;
   if (!cond.empty())
     cond.front()->SignalOne();
+  while (!callbacks.empty()) {
+    callbacks.front()->complete(0);
+    callbacks.pop_front();
+  }
   if (logger)
     logger->set(l_throttle_max, m);
   max.set((size_t)m);
@@ -96,7 +110,7 @@ bool Throttle::_wait(int64_t c)
 {
   utime_t start;
   bool waited = false;
-  if (_should_wait(c) || !cond.empty()) { // always wait behind other waiters.
+  if (_should_wait(c) || !cond.empty() || !callbacks.empty()) { // always wait behind other waiters.
     Cond *cv = new Cond;
     cond.push_back(cv);
     waited = true;
@@ -106,7 +120,7 @@ bool Throttle::_wait(int64_t c)
 
     do {
       cv->Wait(lock);
-    } while (_should_wait(c) || cv != cond.front());
+    } while (_should_wait(c) || cv != cond.front() || !callbacks.empty());
 
     ldout(cct, 2) << "_wait finished waiting" << dendl;
     if (logger) {
@@ -198,7 +212,7 @@ bool Throttle::get_or_fail(int64_t c)
 
   assert (c >= 0);
   Mutex::Locker l(lock);
-  if (_should_wait(c) || !cond.empty()) {
+  if (_should_wait(c) || !cond.empty() || !callbacks.empty()) {
     ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
     if (logger) {
       logger->inc(l_throttle_get_or_fail_fail);
@@ -217,6 +231,37 @@ bool Throttle::get_or_fail(int64_t c)
   }
 }
 
+/* Returns true if it successfully got the requested amount,
+ * or false if it would block.
+ */
+bool Throttle::get_or_reserve(int64_t c, Context *ctxt)
+{
+  if (0 == max.read()) {
+    return true;
+  }
+
+  assert (c >= 0);
+  Mutex::Locker l(lock);
+  if (_should_wait(c) || !cond.empty() !callbacks.empty()) {
+    ldout(cct, 10) << __func__ << " " << c << " queueing" << dendl;
+    if (logger) {
+      logger->inc(l_throttle_get_or_reserve_queue);
+    }
+    callbacks.push_back(ctxt);
+    return false;
+  } else {
+    ldout(cct, 10) << __func__ << " " << c << " success (" << count.read() << " -> " << (count.read() + c) << ")" << dendl;
+    count.add(c);
+    if (logger) {
+      logger->inc(l_throttle_get_or_reserve_success);
+      logger->inc(l_throttle_get);
+      logger->inc(l_throttle_get_sum, c);
+      logger->set(l_throttle_val, count.read());
+    }
+    return true;
+  }
+}
+
 int64_t Throttle::put(int64_t c)
 {
   if (0 == max.read()) {
@@ -227,8 +272,12 @@ int64_t Throttle::put(int64_t c)
   ldout(cct, 10) << "put " << c << " (" << count.read() << " -> " << (count.read()-c) << ")" << dendl;
   Mutex::Locker l(lock);
   if (c) {
-    if (!cond.empty())
+    if (!cond.empty()) {
       cond.front()->SignalOne();
+    } else if (!callbacks.empty()) {
+      callbacks.front()->complete(0);
+      callbacks.pop_front();
+    }
     assert(((int64_t)count.read()) >= c); //if count goes negative, we failed somewhere!
     count.sub(c);
     if (logger) {
@@ -245,6 +294,11 @@ void Throttle::reset()
   Mutex::Locker l(lock);
   if (!cond.empty())
     cond.front()->SignalOne();
+  if (!callbacks.empty()) {
+    callbacks.front()->complete(0);
+    callbacks.pop_front();
+  }
+
   count.set(0);
   if (logger) {
     logger->set(l_throttle_val, 0);
