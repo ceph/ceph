@@ -1821,23 +1821,23 @@ bool OSDMonitor::can_mark_up(int i)
 bool OSDMonitor::can_mark_out(int i)
 {
   if (osdmap.test_flag(CEPH_OSDMAP_NOOUT)) {
-    dout(5) << "can_mark_out NOOUT flag set, will not mark osds out" << dendl;
+    dout(5) << __func__ << " NOOUT flag set, will not mark osds out" << dendl;
     return false;
   }
   int num_osds = osdmap.get_num_osds();
   if (num_osds == 0) {
-    dout(5) << "can_mark_out no osds" << dendl;
+    dout(5) << __func__ << " no osds" << dendl;
     return false;
   }
   int in = osdmap.get_num_in_osds() - pending_inc.get_net_marked_out(&osdmap);
   float in_ratio = (float)in / (float)num_osds;
   if (in_ratio < g_conf->mon_osd_min_in_ratio) {
     if (i >= 0)
-      dout(5) << "can_mark_down current in_ratio " << in_ratio << " < min "
+      dout(5) << __func__ << " current in_ratio " << in_ratio << " < min "
 	      << g_conf->mon_osd_min_in_ratio
 	      << ", will not mark osd." << i << " out" << dendl;
     else
-      dout(5) << "can_mark_down current in_ratio " << in_ratio << " < min "
+      dout(5) << __func__ << " current in_ratio " << in_ratio << " < min "
 	      << g_conf->mon_osd_min_in_ratio
 	      << ", will not mark osds out" << dendl;
     return false;
