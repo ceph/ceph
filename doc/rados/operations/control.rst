@@ -222,7 +222,7 @@ threshold it will use that percentage instead. ::
 
 Describes what reweight-by-utilization would do. ::
 
-    ceph osd test-reweight-by-utilization
+	ceph osd test-reweight-by-utilization
 
 Adds/removes the address to/from the blacklist. When adding an address,
 you can specify how long it should be blacklisted in seconds; otherwise,
