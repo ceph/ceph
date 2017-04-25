@@ -3,6 +3,7 @@ A RESTful API for Ceph
 """
 
 import json
+import errno
 import inspect
 import StringIO
 import threading
@@ -179,7 +180,25 @@ class CommandsRequest(object):
 
 
 class Module(MgrModule):
-    COMMANDS = []
+    COMMANDS = [
+            {
+                "cmd": "create_key "
+                       "name=key_name,type=CephString",
+                "desc": "Create an API key with this name",
+                "perm": "rw"
+            },
+            {
+                "cmd": "delete_key "
+                       "name=key_name,type=CephString",
+                "desc": "Delete an API key with this name",
+                "perm": "rw"
+            },
+            {
+                "cmd": "list_keys",
+                "desc": "List all API keys",
+                "perm": "rw"
+            },
+    ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -189,7 +208,7 @@ class Module(MgrModule):
         self.requests = []
         self.requests_lock = threading.RLock()
 
-        self.tokens = {}
+        self.keys = {}
         self.disable_auth = False
 
         self.shutdown_key = str(uuid4())
@@ -205,8 +224,8 @@ class Module(MgrModule):
 
 
     def _serve(self):
-        # Load stored authentication tokens
-        self.tokens = self.get_config_json("tokens") or {}
+        # Load stored authentication keys
+        self.keys = self.get_config_json("keys") or {}
 
         jsonify._instance = jsonify.GenericJSON(
             sort_keys=True,
@@ -277,6 +296,48 @@ class Module(MgrModule):
                 request.next()
         else:
             self.log.debug("Unhandled notification type '%s'" % notify_type)
+
+
+    def handle_command(self, command):
+        self.log.warn("Handling command: '%s'" % str(command))
+        if command['prefix'] == "create_key":
+            if command['key_name'] in self.keys:
+                return 0, self.keys[command['key_name']], ""
+
+            else:
+                self.keys[command['key_name']] = str(uuid4())
+                self.set_config_json('keys', self.keys)
+
+            return (
+                0,
+                self.keys[command['key_name']],
+                "",
+            )
+
+        elif command['prefix'] == "delete_key":
+            if command['key_name'] in self.keys:
+                del self.keys[command['key_name']]
+                self.set_config_json('keys', self.keys)
+
+            return (
+                0,
+                "",
+                "",
+            )
+
+        elif command['prefix'] == "list_keys":
+            return (
+                0,
+                json.dumps(self.get_config_json('keys'), indent=2),
+                "",
+            )
+
+        else:
+            return (
+                -errno.EINVAL,
+                "",
+                "Command not found '{0}'".format(prefix)
+            )
 
 
     def create_cert(self):
@@ -445,56 +506,3 @@ class Module(MgrModule):
 
         self.send_command(result, json.dumps(command), 'seq')
         return result.wait()
-
-
-    def verify_user(self, username, password):
-        r, outb, outs = self.run_command({
-            'prefix': 'auth get',
-            'entity': username,
-        })
-
-        if r != 0:
-            return 'No such user/key (%s, %s)' % (outb, outs)
-
-        ## check the capabilities, we are looking for mon allow *
-        conf = ConfigParser.ConfigParser()
-
-        # ConfigParser can't handle tabs, remove them
-        conf.readfp(StringIO.StringIO(outb.replace('\t', '')))
-
-        if not conf.has_section(username):
-            return 'Failed to parse the auth details'
-
-        key = conf.get(username, 'key')
-
-        if password != key:
-            return 'Invalid key'
-
-        if not conf.has_option(username, 'caps mon'):
-            return 'No mon caps set'
-
-        caps = conf.get(username, 'caps mon')
-
-        if caps not in ['"allow *"', '"allow profile mgr"']:
-            return 'Insufficient mon caps set'
-
-        # Returning '' means 'no objections'
-        return ''
-
-
-    def set_token(self, user):
-        self.tokens[user] = str(uuid4())
-
-        self.set_config_json('tokens', self.tokens)
-
-        return self.tokens[user]
-
-
-    def unset_token(self, user):
-        if user not in self.tokens:
-            return False
-
-        del self.tokens[user]
-        self.set_config_json('tokens', self.tokens)
-
-        return True
