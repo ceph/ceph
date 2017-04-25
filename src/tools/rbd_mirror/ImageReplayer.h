@@ -109,7 +109,8 @@ public:
                         const std::string &remote_image_id,
                         librados::IoCtx &remote_io_ctx);
   void remove_remote_image(const std::string &remote_mirror_uuid,
-                           const std::string &remote_image_id);
+                           const std::string &remote_image_id,
+			   bool schedule_delete);
   bool remote_images_empty() const;
 
   inline int64_t get_local_pool_id() const {

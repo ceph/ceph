@@ -335,7 +335,8 @@ void ImageReplayer<I>::add_remote_image(const std::string &mirror_uuid,
 
 template <typename I>
 void ImageReplayer<I>::remove_remote_image(const std::string &mirror_uuid,
-                                           const std::string &image_id) {
+                                           const std::string &image_id,
+					   bool schedule_delete) {
   Mutex::Locker locker(m_lock);
   m_remote_images.erase({mirror_uuid, image_id});
 }
