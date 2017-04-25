@@ -1305,6 +1305,13 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
                             AES_256_KEYSIZE,
                             reinterpret_cast<const uint8_t*>(attr_key_selector.c_str()),
                             actual_key, AES_256_KEYSIZE) != true) {
+      /* FIXME
+         Unfortunately, the code may leave the buffer uncleared.
+         That's why when building the Release version of the application,
+         the compiler will most likely delete the call of the memset() function.
+         To clear buffers containing private information you should use a special functions.
+         For example: memset_s() http://en.cppreference.com/w/c/string/byte/memset
+      */
       memset(actual_key, 0, sizeof(actual_key));
       return -EIO;
     }
