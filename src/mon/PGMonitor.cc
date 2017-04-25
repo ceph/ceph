@@ -866,6 +866,8 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   set<int> need_check_down_pg_osds;
 
   // apply latest map(s)
+  const OSDMap& osdmap = mon->osdmon()->osdmap;
+  epoch = std::max(epoch, osdmap.get_epoch());
   for (epoch_t e = pg_map.last_osdmap_epoch+1;
        e <= epoch;
        e++) {
@@ -881,7 +883,6 @@ void PGMonitor::check_osd_map(epoch_t epoch)
                                 &last_osd_report, &pg_map, &pending_inc);
   }
 
-  const OSDMap& osdmap = mon->osdmon()->osdmap;
   assert(pg_map.last_osdmap_epoch < epoch);
   pending_inc.osdmap_epoch = epoch;
   PGMapUpdater::update_creating_pgs(osdmap, pg_map, &pending_inc);
