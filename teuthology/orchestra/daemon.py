@@ -58,6 +58,7 @@ class DaemonState(object):
         self.start_cmd = get_systemd_cmd('start', self.type_, self.id_)
         self.stop_cmd = get_systemd_cmd('stop', self.type_, self.id_)
         self.restart_cmd = get_systemd_cmd('restart', self.type_, self.id_)
+        self.show_cmd = get_systemd_cmd('show', self.type_, self.id_)
 
     @property
     def pid(self):
@@ -255,6 +256,24 @@ class DaemonState(object):
         """
         if self.proc:
             return self.proc.poll()
+        elif self.use_init:
+            proc = self.remote.run(
+                args=self.show_cmd + ' | grep -i state',
+                stdout=StringIO(),
+            )
+
+            def parse_line(line):
+                key, value = line.strip().split('=', 1)
+                return {key.strip(): value.strip()}
+            show_dict = dict()
+            for line in proc.stdout.readlines():
+                show_dict.update(parse_line(line))
+            active_state = show_dict['ActiveState']
+            sub_state = show_dict['SubState']
+            if active_state != 'active':
+                self.log.info("State is: %s/%s", active_state, sub_state)
+
+
 
 
 class DaemonGroup(object):
