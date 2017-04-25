@@ -148,6 +148,28 @@ int extract_group_spec(const std::string &spec,
   return 0;
 }
 
+int extract_image_id_spec(const std::string &spec, std::string *pool_name,
+                          std::string *image_id) {
+  boost::regex pattern;
+  pattern = "^(?:([^/]+)/)?(.+)?$";
+
+  boost::smatch match;
+  if (!boost::regex_match(spec, match, pattern)) {
+    std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
+    return -EINVAL;
+  }
+
+  if (pool_name != nullptr && match[1].matched) {
+    *pool_name = match[1];
+  }
+  if (image_id != nullptr) {
+    *image_id = match[2];
+  }
+
+  return 0;
+ 
+}
+
 std::string get_positional_argument(const po::variables_map &vm, size_t index) {
   if (vm.count(at::POSITIONAL_ARGUMENTS) == 0) {
     return "";
@@ -275,6 +297,41 @@ int get_special_pool_image_names(const po::variables_map &vm,
   return 0;
 }
 
+int get_pool_image_id(const po::variables_map &vm,
+		      size_t *spec_arg_index,
+		      std::string *pool_name,
+		      std::string *image_id) {
+
+  if (vm.count(at::POOL_NAME) && pool_name != nullptr) {
+    *pool_name = vm[at::POOL_NAME].as<std::string>();
+  }
+  if (vm.count(at::IMAGE_ID) && image_id != nullptr) {
+    *image_id = vm[at::IMAGE_ID].as<std::string>();
+  }
+
+  int r;
+  if (image_id != nullptr && spec_arg_index != nullptr && image_id->empty()) {
+    std::string spec = get_positional_argument(vm, (*spec_arg_index)++);
+    if (!spec.empty()) {
+      r = extract_image_id_spec(spec, pool_name, image_id);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  if (pool_name->empty()) {
+    *pool_name = at::DEFAULT_POOL_NAME;
+  }
+
+  if (image_id != nullptr && image_id->empty()) {
+    std::cerr << "rbd: image id was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 int get_pool_group_names(const po::variables_map &vm,
 			 at::ArgumentModifier mod,
 			 size_t *spec_arg_index,
@@ -343,7 +400,7 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
   }
   if (vm.count(snap_key) && snap_name != nullptr) {
      *snap_name = vm[snap_key].as<std::string>();
-   }
+  }
 
   int r;
   if (image_name != nullptr && !image_name->empty()) {
@@ -392,6 +449,39 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
   if (snap_name != nullptr) {
     r = validate_snapshot_name(mod, *snap_name, snapshot_presence,
 	                       spec_validation);
+    if (r < 0) {
+      return r;
+    }
+  }
+  return 0;
+}
+
+int get_pool_snapshot_names(const po::variables_map &vm,
+                            at::ArgumentModifier mod,
+                            size_t *spec_arg_index,
+                            std::string *pool_name,
+                            std::string *snap_name,
+                            SnapshotPresence snapshot_presence,
+                            SpecValidation spec_validation) {
+  std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_POOL_NAME : at::POOL_NAME);
+  std::string snap_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+	at::DEST_SNAPSHOT_NAME : at::SNAPSHOT_NAME);
+
+  if (vm.count(pool_key) && pool_name != nullptr) {
+    *pool_name = vm[pool_key].as<std::string>();
+  }
+  if (vm.count(snap_key) && snap_name != nullptr) {
+     *snap_name = vm[snap_key].as<std::string>();
+  }
+
+  if (pool_name != nullptr && pool_name->empty()) {
+    *pool_name = at::DEFAULT_POOL_NAME;
+  }
+
+  if (snap_name != nullptr) {
+    int r = validate_snapshot_name(mod, *snap_name, snapshot_presence,
+                                   spec_validation);
     if (r < 0) {
       return r;
     }
@@ -468,7 +558,7 @@ int get_pool_journal_names(const po::variables_map &vm,
     librados::Rados rados;
     librados::IoCtx io_ctx;
     librbd::Image image;
-    int r = init_and_open_image(*pool_name, image_name, "", true, &rados,
+    int r = init_and_open_image(*pool_name, image_name, "", "", true, &rados,
                                 &io_ctx, &image);
     if (r < 0) {
       std::cerr << "rbd: failed to open image " << image_name
@@ -802,8 +892,27 @@ int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
   return 0;
 }
 
+int open_image_by_id(librados::IoCtx &io_ctx, const std::string &image_id,
+                     bool read_only, librbd::Image *image) {
+  int r;
+  librbd::RBD rbd;
+  if (read_only) {
+    r = rbd.open_by_id_read_only(io_ctx, *image, image_id.c_str(), NULL);
+  } else {
+    r = rbd.open_by_id(io_ctx, *image, image_id.c_str());
+  }
+
+  if (r < 0) {
+    std::cerr << "rbd: error opening image with id " << image_id << ": "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  return 0;
+}
+
 int init_and_open_image(const std::string &pool_name,
                         const std::string &image_name,
+                        const std::string &image_id,
                         const std::string &snap_name, bool read_only,
                         librados::Rados *rados, librados::IoCtx *io_ctx,
                         librbd::Image *image) {
@@ -812,7 +921,11 @@ int init_and_open_image(const std::string &pool_name,
     return r;
   }
 
-  r = open_image(*io_ctx, image_name, read_only, image);
+  if (image_id.empty()) {
+    r = open_image(*io_ctx, image_name, read_only, image);
+  } else {
+    r = open_image_by_id(*io_ctx, image_id, read_only, image);
+  }
   if (r < 0) {
     return r;
   }
@@ -836,34 +949,39 @@ int snap_set(librbd::Image &image, const std::string &snap_name) {
   return 0;
 }
 
-bool calc_sparse_extent(const bufferptr &bp,
+void calc_sparse_extent(const bufferptr &bp,
                         size_t sparse_size,
-                        uint64_t length,
-                        size_t *write_offset,
+			size_t buffer_offset,
+                        uint64_t buffer_length,
                         size_t *write_length,
-                        size_t *offset) {
-  size_t extent_size;
-  if (*offset + sparse_size > length) {
-    extent_size = length - *offset;
-  } else {
-    extent_size = sparse_size;
+                        bool *zeroed) {
+  if (sparse_size == 0) {
+    // sparse writes are disabled -- write the full extent
+    assert(buffer_offset == 0);
+    *write_length = buffer_length;
+    *zeroed = false;
+    return;
   }
 
-  bufferptr extent(bp, *offset, extent_size);
-  *offset += extent_size;
+  *write_length = 0;
+  size_t original_offset = buffer_offset;
+  while (buffer_offset < buffer_length) {
+    size_t extent_size = std::min<size_t>(
+      sparse_size, buffer_length - buffer_offset);
 
-  bool extent_is_zero = extent.is_zero();
-  if (!extent_is_zero) {
+    bufferptr extent(bp, buffer_offset, extent_size);
+
+    bool extent_is_zero = extent.is_zero();
+    if (original_offset == buffer_offset) {
+      *zeroed = extent_is_zero;
+    } else if (*zeroed != extent_is_zero) {
+      assert(*write_length > 0);
+      return;
+    }
+
+    buffer_offset += extent_size;
     *write_length += extent_size;
   }
-  if (extent_is_zero &&  *write_length == 0) {
-    *write_offset += extent_size;
-  }
-
-  if ((extent_is_zero || *offset == length) && *write_length != 0) {
-    return true;
-  }
-  return false;
 }
 
 std::string image_id(librbd::Image& image) {
@@ -928,6 +1046,24 @@ std::string timestr(time_t t) {
 uint64_t get_rbd_default_features(CephContext* cct) {
   auto features = cct->_conf->get_val<std::string>("rbd_default_features");
   return boost::lexical_cast<uint64_t>(features);
+}
+
+bool check_if_image_spec_present(const po::variables_map &vm,
+                                 at::ArgumentModifier mod,
+                                 size_t spec_arg_index) {
+  std::string image_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_IMAGE_NAME : at::IMAGE_NAME);
+
+  if (vm.count(image_key)) {
+    return true;
+  }
+
+  std::string spec = get_positional_argument(vm, spec_arg_index);
+  if (!spec.empty()) {
+    return true;
+  }
+
+  return false;
 }
 
 } // namespace utils

@@ -15,7 +15,7 @@ from rados import (Rados,
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
                  FunctionNotSupported, ArgumentOutOfRange,
-                 DiskQuotaExceeded, ConnectionShutdown,
+                 DiskQuotaExceeded, ConnectionShutdown, PermissionError,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
                  RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_JOURNALING,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
@@ -819,7 +819,34 @@ class TestImage(object):
         eq(retval[0], 0)
         eq(sys.getrefcount(comp), 2)
 
+    def test_metadata(self):
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 0)
+        self.image.metadata_set("key1", "value1")
+        self.image.metadata_set("key2", "value2")
+        value = self.image.metadata_get("key1")
+        eq(value, "value1")
+        value = self.image.metadata_get("key2")
+        eq(value, "value2")
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 2)
+        self.image.metadata_remove("key1")
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 1)
+        eq(metadata[0], ("key2", "value2"))
+        self.image.metadata_remove("key2")
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), 0)
 
+        N = 65
+        for i in xrange(N):
+            self.image.metadata_set("key" + str(i), "X" * 1025)
+        metadata = list(self.image.metadata_list())
+        eq(len(metadata), N)
+        for i in xrange(N):
+            self.image.metadata_remove("key" + str(i))
+            metadata = list(self.image.metadata_list())
+            eq(len(metadata), N - i - 1)
 
 def check_diff(image, offset, length, from_snapshot, expected):
     extents = []
@@ -1428,3 +1455,78 @@ class TestMirroring(object):
         eq(N + 1, len(images))
         for i in range(N):
             self.rbd.remove(ioctx, image_name + str(i))
+
+
+class TestTrash(object):
+
+    def setUp(self):
+        global rados2
+        rados2 = Rados(conffile='')
+        rados2.connect()
+        global ioctx2
+        ioctx2 = rados2.open_ioctx(pool_name)
+
+    def tearDown(self):
+        global ioctx2
+        ioctx2.close()
+        global rados2
+        rados2.shutdown()
+
+    def test_move(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        RBD().trash_move(ioctx, image_name, 1000)
+        RBD().trash_remove(ioctx, image_id, True)
+
+    def test_remove_denied(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        RBD().trash_move(ioctx, image_name, 1000)
+        assert_raises(PermissionError, RBD().trash_remove, ioctx, image_id)
+
+    def test_remove(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        RBD().trash_move(ioctx, image_name, 0)
+        RBD().trash_remove(ioctx, image_id)
+
+    def test_list(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id1 = image.id()
+            image_name1 = image_name
+        RBD().trash_move(ioctx, image_name, 1000)
+
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id2 = image.id()
+            image_name2 = image_name
+        RBD().trash_move(ioctx, image_name, 1000)
+
+        entries = list(RBD().trash_list(ioctx))
+        for e in entries:
+            if e['id'] == image_id1:
+                eq(e['name'], image_name1)
+            elif e['id'] == image_id2:
+                eq(e['name'], image_name2)
+            else:
+                assert False
+            eq(e['source'], 'USER')
+            assert e['deferment_end_time'] > e['deletion_time']
+
+        RBD().trash_remove(ioctx, image_id1, True)
+        RBD().trash_remove(ioctx, image_id2, True)
+
+    def test_restore(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+        RBD().trash_move(ioctx, image_name, 1000)
+        RBD().trash_restore(ioctx, image_id, image_name)
+        remove_image()

@@ -23,6 +23,13 @@
 * CephFS directory fragmentation (large directory support) is enabled
   by default on new filesystems.  To enable it on existing filesystems
   use "ceph fs set <fs_name> allow_dirfrags".
+* CephFS will generate a health warning if you have fewer standby daemons
+  than it thinks you wanted.  By default this will be 1 if you ever had
+  a standby, and 0 if you did not.  You can customize this using
+  ``ceph fs set <fs> standby_count_wanted <number>``.  Setting it
+  to zero will effectively disable the health check.
+* The "ceph mds tell ..." command has been removed.  It is superceded
+  by "ceph tell mds.<id> ..."
 
 12.0.0
 ------
@@ -71,7 +78,6 @@
    still works.  See the documentation page "Mount CephFS in your
    file systems table" for details.
 
-
 12.0.1
 ------
 
@@ -99,3 +105,14 @@
 * The RGW api for getting object torrent has changed its params from 'get_torrent'
   to 'torrent' so that it can be compatible with Amazon S3. Now the request for 
   object torrent is like 'GET /ObjectName?torrent'.
+
+* The configuration option "osd pool erasure code stripe width" has
+  been replaced by "osd pool erasure code stripe unit", and given the
+  ability to be overridden by the erasure code profile setting
+  "stripe_unit". For more details see "Erasure Code Profiles" in the
+  documentation.
+
+* rbd and cephfs can use erasure coding with bluestore. This may be
+  enabled by setting 'allow_ec_overwrites' to 'true' for a pool. Since
+  this relies on bluestore's checksumming to do deep scrubbing,
+  enabling this on a pool stored on filestore is not allowed.

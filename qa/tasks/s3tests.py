@@ -29,7 +29,8 @@ def extract_sync_client_data(ctx, client_name):
     """
     return_region_name = None
     return_dict = None
-    client = ctx.ceph['ceph'].conf.get(client_name, None)
+    cluster_name, daemon_type, client_id = teuthology.split_role(client_name)
+    client = ctx.ceph[cluster_name].conf.get(client_name, None)
     if client:
         current_client_zone = client.get('rgw zone', None)
         if current_client_zone:
@@ -199,19 +200,22 @@ def create_users(ctx, config):
         for section, user in users.iteritems():
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
             log.debug('Creating user {user} on {host}'.format(user=s3tests_conf[section]['user_id'], host=client))
+            cluster_name, daemon_type, client_id = teuthology.split_role(client)
+            client_with_id = daemon_type + '.' + client_id
             ctx.cluster.only(client).run(
                 args=[
                     'adjust-ulimits',
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'radosgw-admin',
-                    '-n', client,
+                    '-n', client_with_id,
                     'user', 'create',
                     '--uid', s3tests_conf[section]['user_id'],
                     '--display-name', s3tests_conf[section]['display_name'],
                     '--access-key', s3tests_conf[section]['access_key'],
                     '--secret', s3tests_conf[section]['secret_key'],
                     '--email', s3tests_conf[section]['email'],
+                    '--cluster', cluster_name,
                 ],
             )
     try:
@@ -220,16 +224,19 @@ def create_users(ctx, config):
         for client in config['clients']:
             for user in users.itervalues():
                 uid = '{user}.{client}'.format(user=user, client=client)
+                cluster_name, daemon_type, client_id = teuthology.split_role(client)
+                client_with_id = daemon_type + '.' + client_id
                 ctx.cluster.only(client).run(
                     args=[
                         'adjust-ulimits',
                         'ceph-coverage',
                         '{tdir}/archive/coverage'.format(tdir=testdir),
                         'radosgw-admin',
-                        '-n', client,
+                        '-n', client_with_id,
                         'user', 'rm',
                         '--uid', uid,
                         '--purge-data',
+                        '--cluster', cluster_name,
                         ],
                     )
 
@@ -353,6 +360,46 @@ def run_tests(ctx, config):
     yield
 
 @contextlib.contextmanager
+def scan_for_leaked_encryption_keys(ctx, config):
+    """
+    Scan radosgw logs for the encryption keys used by s3tests to
+    verify that we're not leaking secrets.
+
+    :param ctx: Context passed to task
+    :param config: specific configuration information
+    """
+    assert isinstance(config, dict)
+
+    try:
+        yield
+    finally:
+        # x-amz-server-side-encryption-customer-key
+        s3test_customer_key = 'pO3upElrwuEXSoFwCfnZPdSsmt/xWeFa0N9KgDijwVs='
+
+        log.debug('Scanning radosgw logs for leaked encryption keys...')
+        procs = list()
+        for client, client_config in config.iteritems():
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            proc = remote.run(
+                args=[
+                    'grep',
+                    '--binary-files=text',
+                    s3test_customer_key,
+                    '/var/log/ceph/rgw.{client}.log'.format(client=client),
+                ],
+                wait=False,
+                check_status=False,
+            )
+            procs.append(proc)
+
+        for proc in procs:
+            proc.wait()
+            if proc.returncode == 1: # 1 means no matches
+                continue
+            log.error('radosgw log is leaking encryption keys!')
+            raise Exception('radosgw log is leaking encryption keys')
+
+@contextlib.contextmanager
 def task(ctx, config):
     """
     Run the s3-tests suite against rgw.
@@ -444,6 +491,7 @@ def task(ctx, config):
                 s3tests_conf=s3tests_conf,
                 )),
         lambda: run_tests(ctx=ctx, config=config),
+        lambda: scan_for_leaked_encryption_keys(ctx=ctx, config=config),
         ):
         pass
     yield

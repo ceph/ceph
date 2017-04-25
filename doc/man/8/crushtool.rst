@@ -17,15 +17,15 @@ Description
 ===========
 
 **crushtool** is a utility that lets you create, compile, decompile
- and test CRUSH map files.
+and test CRUSH map files.
 
 CRUSH is a pseudo-random data distribution algorithm that efficiently
-maps input values (typically data objects) across a heterogeneous,
-hierarchically structured device map. The algorithm was originally
-described in detail in the following paper (although it has evolved
-some since then):
+maps input values (which, in the context of Ceph, correspond to Placement
+Groups) across a heterogeneous, hierarchically structured device map.
+The algorithm was originally described in detail in the following paper
+(although it has evolved some since then)::
 
-       http://www.ssrc.ucsc.edu/Papers/weil-sc06.pdf
+   http://www.ssrc.ucsc.edu/Papers/weil-sc06.pdf
 
 The tool has four modes of operation.
 
@@ -46,7 +46,9 @@ The tool has four modes of operation.
 .. option:: --test
 
    will perform a dry run of a CRUSH mapping for a range of input
-   object names. See below for a detailed explanation.
+   values ``[--min-x,--max-x]`` (default ``[0,1023]``) which can be
+   thought of as simulated Placement Groups. See below for a more
+   detailed explanation.
 
 Unlike other Ceph tools, **crushtool** does not accept generic options
 such as **--debug-crush** from the command line. They can, however, be
@@ -60,28 +62,30 @@ Running tests with --test
 =========================
 
 The test mode will use the input crush map ( as specified with **-i
-map** ) and perform a dry run of CRUSH mapping or random placement (
-if **--simulate** is set ). On completion, two kinds of reports can be
+map** ) and perform a dry run of CRUSH mapping or random placement
+(if **--simulate** is set ). On completion, two kinds of reports can be
 created. 
 1) The **--show-...** option outputs human readable information
 on stderr. 
 2) The **--output-csv** option creates CSV files that are
 documented by the **--help-output** option.
 
+Note: Each Placement Group (PG) has an integer ID which can be obtained
+from ``ceph pg dump`` (for example PG 2.2f means pool id 2, PG id 32).
+The pool and PG IDs are combined by a function to get a value which is
+given to CRUSH to map it to OSDs. crushtool does not know about PGs or
+pools; it only runs simulations by mapping values in the range
+``[--min-x,--max-x]``.
+
+
 .. option:: --show-statistics
 
-   For each rule, displays the mapping of each object. For instance::
-
-       CRUSH rule 1 x 24 [11,6]
-
-   shows that object **24** is mapped to devices **[11,6]** by rule
-   **1**. At the end of the mapping details, a summary of the
-   distribution is displayed. For instance::
+   Displays a summary of the distribution. For instance::
 
        rule 1 (metadata) num_rep 5 result size == 5:	1024/1024
 
    shows that rule **1** which is named **metadata** successfully
-   mapped **1024** objects to **result size == 5** devices when trying
+   mapped **1024** values to **result size == 5** devices when trying
    to map them to **num_rep 5** replicas. When it fails to provide the
    required mapping, presumably because the number of **tries** must
    be increased, a breakdown of the failures is displayed. For instance::
@@ -91,12 +95,22 @@ documented by the **--help-output** option.
        rule 1 (metadata) num_rep 10 result size == 10:	927/1024
 
    shows that although **num_rep 10** replicas were required, **4**
-   out of **1024** objects ( **4/1024** ) were mapped to **result size
+   out of **1024** values ( **4/1024** ) were mapped to **result size
    == 8** devices only.
+
+.. option:: --show-mappings
+
+   Displays the mapping of each value in the range ``[--min-x,--max-x]``.
+   For instance::
+
+       CRUSH rule 1 x 24 [11,6]
+
+   shows that value **24** is mapped to devices **[11,6]** by rule
+   **1**.
 
 .. option:: --show-bad-mappings
 
-   Displays which object failed to be mapped to the required number of
+   Displays which value failed to be mapped to the required number of
    devices. For instance::
 
      bad mapping rule 1 x 781 num_rep 7 result [8,10,2,11,6,9]
@@ -113,7 +127,7 @@ documented by the **--help-output** option.
      device 1: stored : 963      expected : 853.333
      ...
 
-   shows that device **0** stored **951** objects and was expected to store **853**.
+   shows that device **0** stored **951** values and was expected to store **853**.
    Implies **--show-statistics**.
 
 .. option:: --show-utilization-all
@@ -244,6 +258,11 @@ creating a new Ceph cluster. They can be further edited with::
        # recompile
        crushtool -c map.txt -o crushmap
 
+Example output from --test
+==========================
+
+See https://github.com/ceph/ceph/blob/master/src/test/cli/crushtool/set-choose.t
+for sample ``crushtool --test`` commands and output produced thereby.
 
 Availability
 ============

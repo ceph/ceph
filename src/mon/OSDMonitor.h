@@ -240,16 +240,6 @@ public:
 			MonOpRequestRef req = MonOpRequestRef());
 
 private:
-  int reweight_by_utilization(int oload,
-			      double max_change,
-			      int max_osds,
-			      bool by_pg,
-			      const set<int64_t> *pools,
-			      bool no_increasing,
-			      bool dry_run,
-			      std::stringstream *ss,
-			      std::string *out_str,
-			      Formatter *f);
   void print_utilization(ostream &out, Formatter *f, bool tree) const;
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
@@ -307,6 +297,7 @@ private:
 			      const string& profile) const;
   int normalize_profile(const string& profilename, 
 			ErasureCodeProfile &profile,
+			bool force,
 			ostream *ss);
   int crush_ruleset_create_erasure(const string &name,
 				   const string &profile,
@@ -420,6 +411,9 @@ private:
   OpTracker op_tracker;
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
+  int get_osd_objectstore_type(int osd, std::string *type);
+  bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
+				       ostream *err);
 
   // when we last received PG stats from each osd
   map<int,utime_t> last_osd_report;
@@ -438,6 +432,7 @@ private:
   void trim_creating_pgs(creating_pgs_t *creating_pgs, const PGMap& pgm);
   void scan_for_creating_pgs(const std::map<int64_t,pg_pool_t>& pools,
 			     const std::set<int64_t>& removed_pools,
+			     utime_t modified,
 			     creating_pgs_t* creating_pgs) const;
   pair<int32_t, pg_t> get_parent_pg(pg_t pgid) const;
   void update_creating_pgs();

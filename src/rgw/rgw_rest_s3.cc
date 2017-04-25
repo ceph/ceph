@@ -34,6 +34,9 @@
 #include "rgw_ldap.h"
 #include "rgw_token.h"
 #include "rgw_rest_role.h"
+#include "rgw_crypt.h"
+#include "rgw_crypt_sanitize.h"
+
 #include "include/assert.h"
 
 #define dout_context g_ceph_context
@@ -227,6 +230,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     }
   }
 
+  for (auto &it : crypt_http_responses)
+    dump_header(s, it.first, it.second);
+
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
 
@@ -308,6 +314,29 @@ send_data:
 
   return 0;
 }
+
+int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetDataCB> *filter, RGWGetDataCB* cb, bufferlist* manifest_bl)
+{
+  int res = 0;
+  std::unique_ptr<BlockCrypt> block_crypt;
+  res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
+  if (res == 0) {
+    if (block_crypt != nullptr) {
+      auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt)));
+      //RGWGetObj_BlockDecrypt* f = new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt));
+      if (f != nullptr) {
+        if (manifest_bl != nullptr) {
+          res = f->read_manifest(*manifest_bl);
+          if (res == 0) {
+            *filter = std::move(f);
+          }
+        }
+      }
+    }
+  }
+  return res;
+}
+
 
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {
@@ -1193,7 +1222,7 @@ int RGWPutObj_ObjStore_S3::validate_aws4_single_chunk(char *chunk_str,
   ldout(s->cct, 20) << "chunk_signature     = " << chunk_signature << dendl;
   ldout(s->cct, 20) << "new_chunk_signature = " << new_chunk_signature << dendl;
   ldout(s->cct, 20) << "aws4 chunk signing_key    = " << s->aws4_auth->signing_key << dendl;
-  ldout(s->cct, 20) << "aws4 chunk string_to_sign = " << string_to_sign << dendl;
+  ldout(s->cct, 20) << "aws4 chunk string_to_sign = " << rgw::crypt_sanitize::log_content{string_to_sign.c_str()} << dendl;
 
   /* chunk auth ok? */
 
@@ -1234,7 +1263,7 @@ int RGWPutObj_ObjStore_S3::validate_and_unwrap_available_aws4_chunked_data(buffe
 
     /* grab chunk size */
 
-    while ((*(chunk_str+chunk_offset) != ';') && (chunk_offset < chunk_str_min_len))
+    while ((chunk_offset < chunk_str_min_len) && (chunk_str[chunk_offset] != ';'))
       chunk_offset++;
     string str = string(chunk_str, chunk_offset);
     unsigned int chunk_data_size;
@@ -1343,6 +1372,8 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_errno(s);
       dump_etag(s, etag);
       dump_content_length(s, 0);
+      for (auto &it : crypt_http_responses)
+        dump_header(s, it.first, it.second);
     } else {
       dump_errno(s);
       end_header(s, this, "application/xml");
@@ -1369,6 +1400,100 @@ void RGWPutObj_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
+static inline int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs)
+{
+  RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  read_op.params.attrs = &attrs;
+  read_op.params.perr = &s->err;
+
+  return read_op.prepare();
+}
+
+static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const std::string& value)
+{
+  bufferlist bl;
+  ::encode(value,bl);
+  attrs.emplace(key, std::move(bl));
+}
+
+static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const char* value)
+{
+  bufferlist bl;
+  ::encode(value,bl);
+  attrs.emplace(key, std::move(bl));
+}
+
+int RGWPutObj_ObjStore_S3::get_decrypt_filter(
+    std::unique_ptr<RGWGetDataCB>* filter,
+    RGWGetDataCB* cb,
+    map<string, bufferlist>& attrs,
+    bufferlist* manifest_bl)
+{
+  std::map<std::string, std::string> crypt_http_responses_unused;
+
+  int res = 0;
+  std::unique_ptr<BlockCrypt> block_crypt;
+  res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses_unused);
+  if (res == 0) {
+    if (block_crypt != nullptr) {
+      auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt)));
+      //RGWGetObj_BlockDecrypt* f = new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt));
+      if (f != nullptr) {
+        if (manifest_bl != nullptr) {
+          res = f->read_manifest(*manifest_bl);
+          if (res == 0) {
+            *filter = std::move(f);
+          }
+        }
+      }
+    }
+  }
+  return res;
+}
+
+int RGWPutObj_ObjStore_S3::get_encrypt_filter(
+    std::unique_ptr<RGWPutObjDataProcessor>* filter,
+    RGWPutObjDataProcessor* cb)
+{
+  int res = 0;
+  RGWPutObjProcessor_Multipart* multi_processor=dynamic_cast<RGWPutObjProcessor_Multipart*>(cb);
+  if (multi_processor != nullptr) {
+    RGWMPObj* mp = nullptr;
+    multi_processor->get_mp(&mp);
+    if (mp != nullptr) {
+      map<string, bufferlist> xattrs;
+      string meta_oid;
+      meta_oid = mp->get_meta();
+
+      rgw_obj obj;
+      obj.init_ns(s->bucket, meta_oid, RGW_OBJ_NS_MULTIPART);
+      obj.set_in_extra_data(true);
+      res = get_obj_attrs(store, s, obj, xattrs);
+      if (res == 0) {
+        std::unique_ptr<BlockCrypt> block_crypt;
+        /* We are adding to existing object.
+         * We use crypto mode that configured as if we were decrypting. */
+        res = rgw_s3_prepare_decrypt(s, xattrs, &block_crypt, crypt_http_responses);
+        if (res == 0 && block_crypt != nullptr)
+          *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
+              new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+      }
+    }
+    /* it is ok, to not have encryption at all */
+  }
+  else
+  {
+    std::unique_ptr<BlockCrypt> block_crypt;
+    res = rgw_s3_prepare_encrypt(s, attrs, nullptr, &block_crypt, crypt_http_responses);
+    if (res == 0 && block_crypt != nullptr) {
+      *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
+          new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+    }
+  }
+  return res;
+}
 /*
  * parses params in the format: 'first; param1=foo; param2=bar'
  */
@@ -2034,6 +2159,8 @@ void RGWPostObj_ObjStore_S3::send_response()
 
 done:
   if (op_ret == STATUS_CREATED) {
+    for (auto &it : crypt_http_responses)
+      dump_header(s, it.first, it.second);
     s->formatter->open_object_section("PostResponse");
     if (g_conf->rgw_dns_name.length())
       s->formatter->dump_format("Location", "%s/%s",
@@ -2056,6 +2183,21 @@ done:
     return;
 
   rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+int RGWPostObj_ObjStore_S3::get_encrypt_filter(
+    std::unique_ptr<RGWPutObjDataProcessor>* filter, RGWPutObjDataProcessor* cb)
+{
+  int res = 0;
+  std::unique_ptr<BlockCrypt> block_crypt;
+  res = rgw_s3_prepare_encrypt(s, attrs, &parts, &block_crypt, crypt_http_responses);
+  if (res == 0 && block_crypt != nullptr) {
+    *filter = std::unique_ptr<RGWPutObj_BlockEncrypt>(
+        new RGWPutObj_BlockEncrypt(s->cct, cb, std::move(block_crypt)));
+  }
+  else
+    *filter = nullptr;
+  return res;
 }
 
 int RGWDeleteObj_ObjStore_S3::get_params()
@@ -2546,6 +2688,8 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
+  for (auto &it : crypt_http_responses)
+     dump_header(s, it.first, it.second);
   end_header(s, this, "application/xml");
   if (op_ret == 0) {
     dump_start(s);
@@ -2558,6 +2702,13 @@ void RGWInitMultipart_ObjStore_S3::send_response()
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
+}
+
+int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs)
+{
+  int res = 0;
+  res = rgw_s3_prepare_encrypt(s, attrs, nullptr, nullptr, crypt_http_responses);
+  return res;
 }
 
 int RGWCompleteMultipart_ObjStore_S3::get_params()
@@ -4032,7 +4183,7 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
   int ret = 0;
   s->formatter->reset(); /* Try to throw it all away */
 
-  std::shared_ptr<RGWGetObj_ObjStore_S3Website> getop( (RGWGetObj_ObjStore_S3Website*) op_get() );
+  std::shared_ptr<RGWGetObj_ObjStore_S3Website> getop( static_cast<RGWGetObj_ObjStore_S3Website*>(op_get()));
   if (getop.get() == NULL) {
     return -1; // Trigger double error handler
   }
@@ -4255,11 +4406,12 @@ rgw::auth::s3::RGWS3V2Extractor::get_auth_data(const req_state* const s) const
   if (! rgw_create_s3_canonical_header(s->info, &header_time, string_to_sign,
         qsr)) {
     ldout(cct, 10) << "failed to create the canonized auth header\n"
-                   << string_to_sign << dendl;
+                   << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
     throw -EPERM;
   }
 
-  ldout(cct, 10) << "string_to_sign:\n" << string_to_sign << dendl;
+  ldout(cct, 10) << "string_to_sign:\n"
+                 << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
 
   if (! is_time_skew_ok(header_time, qsr)) {
     throw -ERR_REQUEST_TIME_SKEWED;
@@ -4385,7 +4537,6 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(const std::string& access_key
     }
   }*/
 
-
   const auto iter = user_info.access_keys.find(access_key_id);
   if (iter == std::end(user_info.access_keys)) {
     ldout(cct, 0) << "ERROR: access key not encoded in user info" << dendl;
@@ -4399,7 +4550,7 @@ rgw::auth::s3::LocalVersion2ndEngine::authenticate(const std::string& access_key
     return result_t::deny(-EPERM);
   }
 
-  ldout(cct, 15) << "string_to_sign=" << string_to_sign << dendl;
+  ldout(cct, 15) << "string_to_sign=" << rgw::crypt_sanitize::log_content{string_to_sign.c_str()} << dendl;
   ldout(cct, 15) << "calculated digest=" << digest << dendl;
   ldout(cct, 15) << "auth signature=" << signature << dendl;
   ldout(cct, 15) << "compare=" << signature.compare(digest) << dendl;

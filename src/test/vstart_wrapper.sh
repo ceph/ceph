@@ -30,8 +30,13 @@ function vstart_setup()
     trap "teardown $CEPH_DIR" EXIT
     export LC_ALL=C # some tests are vulnerable to i18n
     export PATH="$(pwd):${PATH}"
+    OBJSTORE_ARGS=""
+    if [ "bluestore" = "${CEPH_OBJECTSTORE}" ]; then
+        OBJSTORE_ARGS="-b"
+    fi
     $CEPH_ROOT/src/vstart.sh \
         --short \
+        $OBJSTORE_ARGS \
         -o 'paxos propose interval = 0.01' \
         -n -l || return 1
     export CEPH_CONF=$CEPH_DIR/ceph.conf

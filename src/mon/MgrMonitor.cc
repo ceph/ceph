@@ -156,24 +156,11 @@ bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
   dout(4) << "beacon from " << m->get_gid() << dendl;
 
   if (!check_caps(op, m->get_fsid())) {
+    // drop it on the floor
     return true;
   }
 
-  last_beacon[m->get_gid()] = ceph_clock_now();
-
-  if (pending_map.active_gid == m->get_gid()
-      && pending_map.active_addr == m->get_server_addr()
-      && pending_map.get_available() == m->get_available()) {
-    dout(4) << "Daemon already active in map" << dendl;
-    return true;
-  }
-
-  if (pending_map.standbys.count(m->get_gid()) > 0
-      && pending_map.active_gid != 0) {
-    dout(4) << "Daemon already standby in map" << dendl;
-    return true;
-  }
-
+  // always send this to the leader's prepare_beacon()
   return false;
 }
 

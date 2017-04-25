@@ -145,24 +145,19 @@ if ceph osd dump | grep ^pool | grep "'rbd'" | grep tier; then
 fi
 
 # create specifically sparse files
-# 1 1M block of sparse, 1 1M block of random, 1 1M block of zero, 1 1M block of random
+# 1 1M block of sparse, 1 1M block of random
 dd if=/dev/urandom bs=1M seek=1 count=1 of=${TMPDIR}/sparse1
-dd if=/dev/zero bs=1M seek=2 count=1 of=${TMPDIR}/sparse1
-dd if=/dev/urandom bs=1M seek=3 count=1 of=${TMPDIR}/sparse1
 
-# 1 1M block of random, 1 1M block of sparse, 1 1M block of zero, 1 1M block of sparse
-dd if=/dev/urandom bs=1M count=1 of=${TMPDIR}/sparse2;
-dd if=/dev/zero bs=1M seek=2 count=1 of=${TMPDIR}/sparse2; truncate ${TMPDIR}/sparse2 -s 4M
+# 1 1M block of random, 1 1M block of sparse
+dd if=/dev/urandom bs=1M count=1 of=${TMPDIR}/sparse2; truncate ${TMPDIR}/sparse2 -s 2M
 
 # 1M-block images; validate resulting blocks
 
-# 1M sparse, 1M data, 1M zero, 1M data, with 4K sparse-size
-rbd import $RBD_CREATE_ARGS --order 21 --sparse-size 4K ${TMPDIR}/sparse1
-rbd ls -l | grep sparse1 | grep -i '4096k'
-rbd du sparse1 | grep '4096k 4096k'
-rbd diff sparse1 | grep '1048576 1048576 data'
-rbd diff sparse1 | grep '3145728 1048576 data'
-[ $tiered -eq 1 -o "$(objects sparse1)" = '1 3' ]
+# 1M sparse, 1M data
+rbd rm sparse1 || true
+rbd import $RBD_CREATE_ARGS --order 20 ${TMPDIR}/sparse1
+rbd ls -l | grep sparse1 | grep -i '2048k'
+[ $tiered -eq 1 -o "$(objects sparse1)" = '1' ]
 
 # export, compare contents and on-disk size
 rbd export sparse1 ${TMPDIR}/sparse1.out
@@ -170,36 +165,10 @@ compare_files_and_ondisk_sizes ${TMPDIR}/sparse1 ${TMPDIR}/sparse1.out
 rm ${TMPDIR}/sparse1.out
 rbd rm sparse1
 
-# 1M sparse, 1M data, 1M zero, 1M data, with 2M sparse-size
-rbd import $RBD_CREATE_ARGS --order 21 --sparse-size 2M ${TMPDIR}/sparse1
-rbd ls -l | grep sparse1 | grep -i '4096k'
-rbd du sparse1 | grep '4096k 4096k'
-rbd diff sparse1 | grep '0       2097152 data'
-rbd diff sparse1 | grep '2097152 2097152 data'
-[ $tiered -eq 1 -o "$(objects sparse1)" = '1 3' ]
-
-# export, compare contents and on-disk size
-rbd export sparse1 ${TMPDIR}/sparse1.out
-compare_files_and_ondisk_sizes ${TMPDIR}/sparse1 ${TMPDIR}/sparse1.out
-rm ${TMPDIR}/sparse1.out
-rbd rm sparse1
-
-# 1M data, 1M sparse, 1M zero, 1M sparse, with 4K sparse-size
-rbd import $RBD_CREATE_ARGS --order 21 --sparse-size 4K ${TMPDIR}/sparse2
-rbd ls -l | grep sparse2 | grep -i '4096k'
-rbd du sparse2 | grep '4096k 2048k'
-rbd diff sparse2 | grep '0       1048576 data'
-[ $tiered -eq 1 -o "$(objects sparse2)" = '0' ]
-rbd export sparse2 ${TMPDIR}/sparse2.out
-compare_files_and_ondisk_sizes ${TMPDIR}/sparse2 ${TMPDIR}/sparse2.out
-rm ${TMPDIR}/sparse2.out
-rbd rm sparse2
-
-# 1M data, 1M sparse, 1M zero, 1M sparse, with 2M sparse-size
-rbd import $RBD_CREATE_ARGS --order 21 --sparse-size 2M ${TMPDIR}/sparse2
-rbd ls -l | grep sparse2 | grep -i '4096k'
-rbd du sparse2 | grep '4096k 2048k'
-rbd diff sparse2 | grep '0       2097152 data'
+# 1M data, 1M sparse
+rbd rm sparse2 || true
+rbd import $RBD_CREATE_ARGS --order 20 ${TMPDIR}/sparse2
+rbd ls -l | grep sparse2 | grep -i '2048k'
 [ $tiered -eq 1 -o "$(objects sparse2)" = '0' ]
 rbd export sparse2 ${TMPDIR}/sparse2.out
 compare_files_and_ondisk_sizes ${TMPDIR}/sparse2 ${TMPDIR}/sparse2.out
@@ -209,48 +178,20 @@ rbd rm sparse2
 # extend sparse1 to 10 1M blocks, sparse at the end
 truncate ${TMPDIR}/sparse1 -s 10M
 # import from stdin just for fun, verify still sparse
-rbd import $RBD_CREATE_ARGS --order 21 - sparse1 < ${TMPDIR}/sparse1
+rbd import $RBD_CREATE_ARGS --order 20 - sparse1 < ${TMPDIR}/sparse1
 rbd ls -l | grep sparse1 | grep -i '10240k'
-rbd du sparse1 | grep '10240k 4096k'
-rbd diff sparse1 | grep '1048576 1048576 data'
-rbd diff sparse1 | grep '3145728 1048576 data'
-[ $tiered -eq 1 -o "$(objects sparse1)" = '1 3' ]
-rbd export sparse1 ${TMPDIR}/sparse1.out
-compare_files_and_ondisk_sizes ${TMPDIR}/sparse1 ${TMPDIR}/sparse1.out
-rm ${TMPDIR}/sparse1.out
-rbd rm sparse1
-# import from stdin just for fun, verify still sparse
-rbd import $RBD_CREATE_ARGS --order 21 --sparse-size 2M - sparse1 < ${TMPDIR}/sparse1
-rbd ls -l | grep sparse1 | grep -i '10240k'
-rbd du sparse1 | grep '10240k 4096k'
-rbd diff sparse1 | grep '0       2097152 data'
-rbd diff sparse1 | grep '2097152 2097152 data'
-[ $tiered -eq 1 -o "$(objects sparse1)" = '1 3' ]
+[ $tiered -eq 1 -o "$(objects sparse1)" = '1' ]
 rbd export sparse1 ${TMPDIR}/sparse1.out
 compare_files_and_ondisk_sizes ${TMPDIR}/sparse1 ${TMPDIR}/sparse1.out
 rm ${TMPDIR}/sparse1.out
 rbd rm sparse1
 
-# extend sparse2 to 6M total with two more nonsparse megs
+# extend sparse2 to 4M total with two more nonsparse megs
 dd if=/dev/urandom bs=2M count=1 of=${TMPDIR}/sparse2 oflag=append conv=notrunc
 # again from stding
-rbd import $RBD_CREATE_ARGS --order 21 - sparse2 < ${TMPDIR}/sparse2
-rbd ls -l | grep sparse2 | grep -i '6144k'
-rbd du sparse2 | grep '6144k 4096k'
-rbd diff sparse2 | grep '0       1048576 data'
-rbd diff sparse2 | grep '4194304 2097152 data'
-[ $tiered -eq 1 -o "$(objects sparse2)" = '0 4 5' ]
-rbd export sparse2 ${TMPDIR}/sparse2.out
-compare_files_and_ondisk_sizes ${TMPDIR}/sparse2 ${TMPDIR}/sparse2.out
-rm ${TMPDIR}/sparse2.out
-rbd rm sparse2
-# again from stding
-rbd import $RBD_CREATE_ARGS --order 21 --sparse-size 2M - sparse2 < ${TMPDIR}/sparse2
-rbd ls -l | grep sparse2 | grep -i '6144k'
-rbd du sparse2 | grep '6144k 4096k'
-rbd diff sparse2 | grep '0       2097152 data'
-rbd diff sparse2 | grep '4194304 2097152 data'
-[ $tiered -eq 1 -o "$(objects sparse2)" = '0 4 5' ]
+rbd import $RBD_CREATE_ARGS --order 20 - sparse2 < ${TMPDIR}/sparse2
+rbd ls -l | grep sparse2 | grep -i '4096k'
+[ $tiered -eq 1 -o "$(objects sparse2)" = '0 2 3' ]
 rbd export sparse2 ${TMPDIR}/sparse2.out
 compare_files_and_ondisk_sizes ${TMPDIR}/sparse2 ${TMPDIR}/sparse2.out
 rm ${TMPDIR}/sparse2.out
@@ -262,7 +203,7 @@ rbd rm sparse2
 
 echo "partially-sparse file imports to partially-sparse image"
 rbd import $RBD_CREATE_ARGS --order 20 ${TMPDIR}/sparse1 sparse
-[ $tiered -eq 1 -o "$(objects sparse)" = '1 3' ]
+[ $tiered -eq 1 -o "$(objects sparse)" = '1' ]
 rbd rm sparse
 
 echo "zeros import through stdin to sparse image"

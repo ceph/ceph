@@ -147,12 +147,16 @@ class Infiniband {
   };
 
  private:
-  DeviceList *device_list;
+  CephContext *cct;
+  Mutex lock;
+  bool initialized = false;
+  DeviceList *device_list = nullptr;
   RDMADispatcher *dispatcher = nullptr;
 
  public:
   explicit Infiniband(CephContext *c);
   ~Infiniband();
+  void init();
 
   void set_dispatcher(RDMADispatcher *d);
 
@@ -277,6 +281,7 @@ class Infiniband {
   void handle_pre_fork();
 
   Device* get_device(const char* device_name);
+  Device* get_device(const struct ibv_context *ctxt);
 
   int poll_tx(int n, Device **d, ibv_wc *wc);
   int poll_rx(int n, Device **d, ibv_wc *wc);

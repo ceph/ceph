@@ -116,6 +116,7 @@ struct ceph_eversion {
 #define CEPH_OSD_NEW     (1<<3)  /* osd is new, never marked in */
 #define CEPH_OSD_FULL    (1<<4)  /* osd is at or above full threshold */
 #define CEPH_OSD_NEARFULL (1<<5) /* osd is at or above nearfull threshold */
+#define CEPH_OSD_BACKFILLFULL (1<<6) /* osd is at or above backfillfull threshold */
 
 extern const char *ceph_osd_state_name(int s);
 
@@ -149,6 +150,12 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_REQUIRE_JEWEL (1<<16) /* require jewel for booting osds */
 #define CEPH_OSDMAP_REQUIRE_KRAKEN (1<<17) /* require kraken for booting osds */
 #define CEPH_OSDMAP_REQUIRE_LUMINOUS (1<<18) /* require l for booting osds */
+
+/* these are hidden in 'ceph status' view */
+#define CEPH_OSDMAP_SEMIHIDDEN_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL|	\
+				      CEPH_OSDMAP_REQUIRE_KRAKEN |	\
+				      CEPH_OSDMAP_REQUIRE_LUMINOUS |	\
+				      CEPH_OSDMAP_SORTBITWISE)
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -189,6 +196,7 @@ extern const char *ceph_osd_state_name(int s);
 	f(READ,		__CEPH_OSD_OP(RD, DATA, 1),	"read")		    \
 	f(STAT,		__CEPH_OSD_OP(RD, DATA, 2),	"stat")		    \
 	f(MAPEXT,	__CEPH_OSD_OP(RD, DATA, 3),	"mapext")	    \
+	f(CHECKSUM,	__CEPH_OSD_OP(RD, DATA, 31),	"checksum")	    \
 									    \
 	/* fancy read */						    \
 	f(MASKTRUNC,	__CEPH_OSD_OP(RD, DATA, 4),	"masktrunc")	    \
@@ -457,6 +465,12 @@ enum {
 	CEPH_OSD_WATCH_OP_PING = 7,
 };
 
+enum {
+	CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH32 = 0,
+	CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH64 = 1,
+	CEPH_OSD_CHECKSUM_OP_TYPE_CRC32C   = 2
+};
+
 const char *ceph_osd_watch_op_name(int o);
 
 enum {
@@ -561,6 +575,12 @@ struct ceph_osd_op {
 			__le64 length;
 			__le64 data_length;
 		} __attribute__ ((packed)) writesame;
+		struct {
+			__le64 offset;
+			__le64 length;
+			__le32 chunk_size;
+			__u8 type;              /* CEPH_OSD_CHECKSUM_OP_TYPE_* */
+		} __attribute__ ((packed)) checksum;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));

@@ -84,7 +84,7 @@ function count_data_objects() {
 ceph osd pool create repdata 24 24
 ceph osd erasure-code-profile set teuthologyprofile ruleset-failure-domain=osd m=1 k=2
 ceph osd pool create ecdata 24 24 erasure teuthologyprofile
-ceph osd pool set ecdata debug_white_box_testing_ec_overwrites true
+ceph osd pool set ecdata allow_ec_overwrites true
 ceph osd pool create rbdnonzero 24 24
 ceph osd pool create clonesonly 24 24
 
@@ -122,12 +122,14 @@ for pool in rbd rbdnonzero; do
     done
 done
 
-NUM_META_RBDS=$((2 + 1 + 3 * (1*2 + 3*2)))
-NUM_META_CLONESONLY=$((2 + 2 * 3 * (3*2)))
+# rbd_directory, rbd_children, rbd_info + img0 header + ...
+NUM_META_RBDS=$((3 + 1 + 3 * (1*2 + 3*2)))
+# rbd_directory, rbd_children, rbd_info + ...
+NUM_META_CLONESONLY=$((3 + 2 * 3 * (3*2)))
 
 [[ $(rados -p rbd ls | wc -l) -eq $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
-[[ $(rados -p repdata ls | wc -l) -eq $((14 * NUM_OBJECTS)) ]]
-[[ $(rados -p ecdata ls | wc -l) -eq $((14 * NUM_OBJECTS)) ]]
+[[ $(rados -p repdata ls | wc -l) -eq $((1 + 14 * NUM_OBJECTS)) ]]
+[[ $(rados -p ecdata ls | wc -l) -eq $((1 + 14 * NUM_OBJECTS)) ]]
 [[ $(rados -p rbdnonzero ls | wc -l) -eq $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
 [[ $(rados -p clonesonly ls | wc -l) -eq $((NUM_META_CLONESONLY + 6 * NUM_OBJECTS)) ]]
 
@@ -160,8 +162,8 @@ done
 
 # mkfs should discard some objects everywhere but in clonesonly
 [[ $(rados -p rbd ls | wc -l) -lt $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
-[[ $(rados -p repdata ls | wc -l) -lt $((14 * NUM_OBJECTS)) ]]
-[[ $(rados -p ecdata ls | wc -l) -lt $((14 * NUM_OBJECTS)) ]]
+[[ $(rados -p repdata ls | wc -l) -lt $((1 + 14 * NUM_OBJECTS)) ]]
+[[ $(rados -p ecdata ls | wc -l) -lt $((1 + 14 * NUM_OBJECTS)) ]]
 [[ $(rados -p rbdnonzero ls | wc -l) -lt $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
 [[ $(rados -p clonesonly ls | wc -l) -eq $((NUM_META_CLONESONLY + 6 * NUM_OBJECTS)) ]]
 

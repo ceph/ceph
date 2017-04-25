@@ -90,7 +90,7 @@ else
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ -n "$backports" ] ; then rm $control; fi
         ;;
-    centos|fedora|rhel|ol)
+    centos|fedora|rhel|ol|virtuozzo)
         yumdnf="yum"
         builddepcmd="yum-builddep -y"
         if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
@@ -105,7 +105,7 @@ else
                     $SUDO $yumdnf install -y yum-utils
                 fi
                 ;;
-            CentOS|RedHatEnterpriseServer)
+            CentOS|RedHatEnterpriseServer|VirtuozzoLinux)
                 $SUDO yum install -y yum-utils
                 MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
                 if test $(lsb_release -si) = RedHatEnterpriseServer ; then
@@ -117,6 +117,9 @@ else
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $(lsb_release -si) = CentOS -a $MAJOR_VERSION = 7 ; then
+                    $SUDO yum-config-manager --enable cr
+                fi
+                if test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
                 ;;

@@ -184,9 +184,60 @@ Context *OpenRequest<I>::handle_v2_get_name(int *result) {
     bufferlist::iterator it = m_out_bl.begin();
     *result = cls_client::dir_get_name_finish(&it, &m_image_ctx->name);
   }
-  if (*result < 0) {
+  if (*result < 0 && *result != -ENOENT) {
     lderr(cct) << "failed to retreive name: "
                << cpp_strerror(*result) << dendl;
+    send_close_image(*result);
+  } else if (*result == -ENOENT) {
+    // image does not exist in directory, look in the trash bin
+    ldout(cct, 10) << "image id " << m_image_ctx->id << " does not exist in "
+                   << "rbd directory, searching in rbd trash..." << dendl;
+    send_v2_get_name_from_trash();
+  } else {
+    send_v2_get_immutable_metadata();
+  }
+
+  return nullptr;
+}
+
+template <typename I>
+void OpenRequest<I>::send_v2_get_name_from_trash() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::trash_get_start(&op, m_image_ctx->id);
+
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp = create_rados_callback<
+    klass, &klass::handle_v2_get_name_from_trash>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(RBD_TRASH, comp, &op, &m_out_bl);
+  comp->release();
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_v2_get_name_from_trash(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  cls::rbd::TrashImageSpec trash_spec;
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::trash_get_finish(&it, &trash_spec);
+    m_image_ctx->name = trash_spec.name;
+  }
+  if (*result < 0) {
+    if (*result == -EOPNOTSUPP) {
+      *result = -ENOENT;
+    } else if (*result == -ENOENT) {
+      lderr(cct) << "image id " << m_image_ctx->id << " does not exist in rbd "
+                 << "trash, failed to retrieve image name: "
+                 << cpp_strerror(*result) << dendl;
+    } else {
+      lderr(cct) << "failed to retreive name from trash: "
+                 << cpp_strerror(*result) << dendl;
+    }
     send_close_image(*result);
   } else {
     send_v2_get_immutable_metadata();

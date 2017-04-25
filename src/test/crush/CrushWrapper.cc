@@ -477,6 +477,8 @@ TEST(CrushWrapper, adjust_item_weight) {
   EXPECT_EQ(1, c->adjust_item_weightf_in_loc(g_ceph_context, item, modified_weight, loc_two));
   EXPECT_EQ(original_weight, c->get_item_weightf_in_loc(item, loc_one));
   EXPECT_EQ(modified_weight, c->get_item_weightf_in_loc(item, loc_two));
+
+  delete c;
 }
 
 TEST(CrushWrapper, adjust_subtree_weight) {
@@ -570,6 +572,8 @@ TEST(CrushWrapper, adjust_subtree_weight) {
   ASSERT_EQ(c->get_bucket_weight(host0), 262144);
   ASSERT_EQ(c->get_item_weight(host0), 262144);
   ASSERT_EQ(c->get_bucket_weight(rootno), 262144 + 131072);
+
+  delete c;
 }
 
 TEST(CrushWrapper, insert_item) {
@@ -708,6 +712,20 @@ TEST(CrushWrapper, insert_item) {
   delete c;
 }
 
+TEST(CrushWrapper, choose_args_disabled) {
+  auto *c = new CrushWrapper;
+  c->choose_args[0] = crush_choose_arg_map();
+
+  map<string,string> loc;
+  ASSERT_EQ(-EDOM, c->remove_item(g_ceph_context, 0, true));
+  ASSERT_EQ(-EDOM, c->insert_item(g_ceph_context, 0, 0.0, "", loc));
+  ASSERT_EQ(-EDOM, c->move_bucket(g_ceph_context, 0, loc));
+  ASSERT_EQ(-EDOM, c->link_bucket(g_ceph_context, 0, loc));
+  ASSERT_EQ(-EDOM, c->create_or_move_item(g_ceph_context, 0, 0.0, "", loc));
+
+  delete c;
+}
+
 TEST(CrushWrapper, remove_item) {
   auto *c = new CrushWrapper;
 
@@ -727,7 +745,7 @@ TEST(CrushWrapper, remove_item) {
 
   {
     int host;
-    c->add_bucket(0, CRUSH_BUCKET_TREE, CRUSH_HASH_RJENKINS1,
+    c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
 		  HOST_TYPE, 0, NULL, NULL, &host);
     c->set_item_name(host, "host0");
   }
@@ -748,6 +766,8 @@ TEST(CrushWrapper, remove_item) {
   ASSERT_EQ(0, c->remove_item(g_ceph_context, item_to_remove, true));
   float weight;
   EXPECT_FALSE(c->check_item_loc(g_ceph_context, item_to_remove, loc, &weight));
+
+  delete c;
 }
 
 TEST(CrushWrapper, item_bucket_names) {
@@ -966,7 +986,7 @@ TEST(CrushWrapper, remove_unused_root) {
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));
   ASSERT_TRUE(c.name_exists("r12"));
-  ASSERT_EQ(c.remove_unused_root(c.get_item_id("default")), 0);
+  ASSERT_EQ(c.remove_root(c.get_item_id("default"), true), 0);
   ASSERT_FALSE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));
   ASSERT_FALSE(c.name_exists("r12"));
@@ -993,11 +1013,11 @@ TEST(CrushWrapper, trim_roots_with_class) {
 
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("default~ssd"));
-  c.trim_roots_with_class(); // do nothing because still in use
+  c.trim_roots_with_class(true); // do nothing because still in use
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("default~ssd"));
   c.class_bucket.clear();
-  c.trim_roots_with_class(); // do nothing because still in use
+  c.trim_roots_with_class(true); // do nothing because still in use
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_FALSE(c.name_exists("default~ssd"));
 }
@@ -1091,6 +1111,37 @@ TEST(CrushWrapper, populate_and_cleanup_classes) {
   c.class_bucket.clear();
   ASSERT_EQ(c.cleanup_classes(), 0);
   ASSERT_FALSE(c.name_exists("default~ssd"));
+}
+
+TEST(CrushWrapper, class_is_in_use) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "root");
+
+  int weight = 1;
+  map<string,string> loc;
+  loc["root"] = "default";
+
+  ASSERT_FALSE(c.class_is_in_use(0));
+
+  int item = 1;
+  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
+  int class_id = c.get_or_create_class_id("ssd");
+  c.class_map[item] = class_id;
+
+  ASSERT_TRUE(c.class_is_in_use(c.get_class_id("ssd")));
+  ASSERT_EQ(0, c.remove_class_name("ssd"));
+  ASSERT_FALSE(c.class_is_in_use(c.get_class_id("ssd")));
+}
+
+TEST(CrushWrapper, remove_class_name) {
+  CrushWrapper c;
+  c.create();
+
+  ASSERT_EQ(-ENOENT, c.remove_class_name("ssd"));
+  ASSERT_GE(0, c.get_or_create_class_id("ssd"));
+  ASSERT_EQ(0, c.remove_class_name("ssd"));
+  ASSERT_EQ(-ENOENT, c.remove_class_name("ssd"));
 }
 
 TEST(CrushWrapper, try_remap_rule) {
@@ -1282,3 +1333,6 @@ int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+// Local Variables:
+// compile-command: "cd ../../../build ; make -j4 unittest_crush_wrapper && valgrind --tool=memcheck bin/unittest_crush_wrapper"
+// End:

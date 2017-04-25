@@ -106,6 +106,8 @@ OPTION(async_compressor_threads, OPT_INT, 2)
 OPTION(async_compressor_thread_timeout, OPT_INT, 5)
 OPTION(async_compressor_thread_suicide_timeout, OPT_INT, 30)
 
+OPTION(plugin_crypto_accelerator, OPT_STR, "crypto_isal")
+
 OPTION(mempool_debug, OPT_BOOL, false)
 
 DEFAULT_SUBSYS(0, 5)
@@ -282,7 +284,7 @@ OPTION(mon_osd_max_op_age, OPT_DOUBLE, 32)     // max op age before we get conce
 OPTION(mon_osd_max_split_count, OPT_INT, 32) // largest number of PGs per "involved" OSD to let split create
 OPTION(mon_osd_allow_primary_temp, OPT_BOOL, false)  // allow primary_temp to be set in the osdmap
 OPTION(mon_osd_allow_primary_affinity, OPT_BOOL, false)  // allow primary_affinity to be set in the osdmap
-OPTION(mon_osd_allow_pg_remap, OPT_BOOL, false) // allow pg remap to be set in the osdmap
+OPTION(mon_osd_allow_pg_upmap, OPT_BOOL, false) // allow pg upmap to be set in the osdmap
 OPTION(mon_osd_prime_pg_temp, OPT_BOOL, true)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT, .5)  // max time to spend priming
 OPTION(mon_osd_prime_pg_temp_max_estimate, OPT_FLOAT, .25) // max estimate of pg total before we do all pgs in parallel
@@ -308,6 +310,7 @@ OPTION(mon_pg_warn_min_pool_objects, OPT_INT, 1000)  // do not warn on pools bel
 OPTION(mon_pg_check_down_all_threshold, OPT_FLOAT, .5) // threshold of down osds after which we check all pgs
 OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT, .66) // position between pool cache_target_full and max where we start warning
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
+OPTION(mon_osd_backfillfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD backfill full (backfill halted)
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
 OPTION(mon_allow_pool_delete, OPT_BOOL, false) // allow pool deletion
 OPTION(mon_globalid_prealloc, OPT_U32, 10000)   // how many globalids to prealloc
@@ -370,6 +373,7 @@ OPTION(mon_debug_deprecated_as_obsolete, OPT_BOOL, false) // consider deprecated
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
 OPTION(mon_debug_dump_json, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
+OPTION(mon_debug_no_require_luminous, OPT_BOOL, false)
 OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE, 10.0)      // seconds
 OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 
@@ -422,6 +426,7 @@ OPTION(client_trace, OPT_STR, "")
 OPTION(client_readahead_min, OPT_LONGLONG, 128*1024)  // readahead at _least_ this much.
 OPTION(client_readahead_max_bytes, OPT_LONGLONG, 0)  // default unlimited
 OPTION(client_readahead_max_periods, OPT_LONGLONG, 4)  // as multiple of file layout period (object size * num stripes)
+OPTION(client_reconnect_stale, OPT_BOOL, false)  // automatically reconnect stale session
 OPTION(client_snapdir, OPT_STR, ".snap")
 OPTION(client_mountpoint, OPT_STR, "/")
 OPTION(client_mount_uid, OPT_INT, -1)
@@ -489,6 +494,8 @@ OPTION(journaler_prefetch_periods, OPT_INT, 10)   // * journal object size
 OPTION(journaler_prezero_periods, OPT_INT, 5)     // * journal object size
 OPTION(mds_data, OPT_STR, "/var/lib/ceph/mds/$cluster-$id")
 OPTION(mds_max_file_size, OPT_U64, 1ULL << 40) // Used when creating new CephFS. Change with 'ceph mds set max_file_size <size>' afterwards
+// max xattr kv pairs size for each dir/file
+OPTION(mds_max_xattr_pairs_size, OPT_U32, 64 << 10)
 OPTION(mds_cache_size, OPT_INT, 100000)
 OPTION(mds_cache_mid, OPT_FLOAT, .7)
 OPTION(mds_max_file_recover, OPT_U32, 32)
@@ -622,11 +629,11 @@ OPTION(osd_max_backfills, OPT_U64, 1)
 // Minimum recovery priority (255 = max, smaller = lower)
 OPTION(osd_min_recovery_priority, OPT_INT, 0)
 
-// Refuse backfills when OSD full ratio is above this value
-OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
-
 // Seconds to wait before retrying refused backfills
-OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
+OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 30.0)
+
+// Seconds to wait before retrying refused recovery
+OPTION(osd_recovery_retry_interval, OPT_DOUBLE, 30.0)
 
 // max agent flush ops
 OPTION(osd_agent_max_ops, OPT_INT, 4)
@@ -668,7 +675,7 @@ OPTION(osd_crush_update_on_start, OPT_BOOL, true)
 OPTION(osd_crush_initial_weight, OPT_DOUBLE, -1) // if >=0, the initial weight is for newly added osds.
 OPTION(osd_pool_default_crush_rule, OPT_INT, -1) // deprecated for osd_pool_default_crush_replicated_ruleset
 OPTION(osd_pool_default_crush_replicated_ruleset, OPT_INT, CEPH_DEFAULT_CRUSH_REPLICATED_RULESET)
-OPTION(osd_pool_erasure_code_stripe_width, OPT_U32, OSD_POOL_ERASURE_CODE_STRIPE_WIDTH) // in bytes
+OPTION(osd_pool_erasure_code_stripe_unit, OPT_U32, 4096) // in bytes
 OPTION(osd_pool_default_size, OPT_INT, 3)
 OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; ceph will use size-size/2
 OPTION(osd_pool_default_pg_num, OPT_INT, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
@@ -738,7 +745,6 @@ OPTION(osd_op_pq_min_cost, OPT_U64, 65536)
 OPTION(osd_disk_threads, OPT_INT, 1)
 OPTION(osd_disk_thread_ioprio_class, OPT_STR, "") // rt realtime be best effort idle
 OPTION(osd_disk_thread_ioprio_priority, OPT_INT, -1) // 0-7
-OPTION(osd_recovery_threads, OPT_INT, 1)
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
 OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
 OPTION(osd_op_num_shards, OPT_INT, 5)
@@ -867,6 +873,7 @@ OPTION(osd_debug_skip_full_check_in_backfill_reservation, OPT_BOOL, false)
 OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_inject_copyfrom_error, OPT_BOOL, false)  // inject failure during copyfrom completion
 OPTION(osd_debug_misdirected_ops, OPT_BOOL, false)
+OPTION(osd_debug_skip_full_check_in_recovery, OPT_BOOL, false)
 OPTION(osd_enxio_on_misdirected_op, OPT_BOOL, false)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL, false)
 OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
@@ -942,6 +949,9 @@ OPTION(osd_snap_trim_cost, OPT_U32, 1<<20) // set default cost equal to 1MB io
 OPTION(osd_scrub_priority, OPT_U32, 5)
 // set default cost equal to 50MB io
 OPTION(osd_scrub_cost, OPT_U32, 50<<20) 
+// set requested scrub priority higher than scrub priority to make the
+// requested scrubs jump the queue of scheduled scrubs
+OPTION(osd_requested_scrub_priority, OPT_U32, 120)
 
 OPTION(osd_recovery_priority, OPT_U32, 5)
 // set default cost equal to 20MB io
@@ -1027,8 +1037,9 @@ OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at
 // Example:
 // bluestore_block_path = spdk:55cd2e404bd73932
 // If you want to run multiple SPDK instances per node, you must specify the
-// amount of memory per socket each instance will use.
-OPTION(bluestore_spdk_socket_mem, OPT_STR, "512,512")
+// amount of dpdk memory size in MB each instance will use, to make sure each
+// instance uses its own dpdk memory
+OPTION(bluestore_spdk_mem, OPT_U32, 512)
 // A hexadecimal bit mask of the cores to run on. Note the core numbering can change between platforms and should be determined beforehand.
 OPTION(bluestore_spdk_coremask, OPT_STR, "0x3")
 // Specify the maximal I/Os to be batched completed while checking queue pair completions.
@@ -1106,9 +1117,14 @@ OPTION(bluestore_fsck_on_mkfs_deep, OPT_BOOL, false)
 OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false) // submit kv txn in queueing thread (not kv_sync_thread)
 OPTION(bluestore_max_ops, OPT_U64, 512)
 OPTION(bluestore_max_bytes, OPT_U64, 64*1024*1024)
+OPTION(bluestore_throttle_cost_per_io_hdd, OPT_U64, 200000)
+OPTION(bluestore_throttle_cost_per_io_ssd, OPT_U64, 4000)
+OPTION(bluestore_throttle_cost_per_io, OPT_U64, 0)
 OPTION(bluestore_deferred_max_ops, OPT_U64, 512)
 OPTION(bluestore_deferred_max_bytes, OPT_U64, 128*1024*1024)
-OPTION(bluestore_deferred_batch_ops, OPT_U64, 8)
+OPTION(bluestore_deferred_batch_ops, OPT_U64, 0)
+OPTION(bluestore_deferred_batch_ops_hdd, OPT_U64, 64)
+OPTION(bluestore_deferred_batch_ops_ssd, OPT_U64, 16)
 OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
 OPTION(bluestore_blobid_prealloc, OPT_U64, 10240)
 OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones
@@ -1461,6 +1477,11 @@ OPTION(rgw_keystone_admin_password, OPT_STR, "")  // keystone admin user passwor
 OPTION(rgw_keystone_admin_tenant, OPT_STR, "")  // keystone admin user tenant (for keystone v2.0)
 OPTION(rgw_keystone_admin_project, OPT_STR, "")  // keystone admin user project (for keystone v3)
 OPTION(rgw_keystone_admin_domain, OPT_STR, "")  // keystone admin user domain
+OPTION(rgw_keystone_barbican_user, OPT_STR, "")  // keystone user to access barbican secrets
+OPTION(rgw_keystone_barbican_password, OPT_STR, "")  // keystone password for barbican user
+OPTION(rgw_keystone_barbican_tenant, OPT_STR, "")  // keystone barbican user tenant (for keystone v2.0)
+OPTION(rgw_keystone_barbican_project, OPT_STR, "")  // keystone barbican user project (for keystone v3)
+OPTION(rgw_keystone_barbican_domain, OPT_STR, "")  // keystone barbican user domain
 OPTION(rgw_keystone_api_version, OPT_INT, 2) // Version of Keystone API to use (2 or 3)
 OPTION(rgw_keystone_accepted_roles, OPT_STR, "Member, admin")  // roles required to serve requests
 OPTION(rgw_keystone_accepted_admin_roles, OPT_STR, "") // list of roles allowing an user to gain admin privileges
@@ -1473,6 +1494,7 @@ OPTION(rgw_healthcheck_disabling_path, OPT_STR, "") // path that existence cause
 OPTION(rgw_s3_auth_use_rados, OPT_BOOL, true)  // should we try to use the internal credentials for s3?
 OPTION(rgw_s3_auth_use_keystone, OPT_BOOL, false)  // should we try to use keystone for s3?
 OPTION(rgw_s3_auth_aws4_force_boto2_compat, OPT_BOOL, true) // force aws4 auth boto2 compatibility
+OPTION(rgw_barbican_url, OPT_STR, "")  // url for barbican server
 
 /* OpenLDAP-style LDAP parameter strings */
 /* rgw_ldap_uri  space-separated list of LDAP servers in URI format */
@@ -1650,7 +1672,11 @@ OPTION(mgr_connect_retry_interval, OPT_DOUBLE, 1.0)
 OPTION(mon_mgr_digest_period, OPT_INT, 5)  // How frequently to send digests
 OPTION(mon_mgr_beacon_grace, OPT_INT, 30)  // How long to wait to failover
 OPTION(mon_mgr_inactive_grace, OPT_INT, 60) // How long before health WARN -> ERR
-
+OPTION(rgw_crypt_require_ssl, OPT_BOOL, true) // requests including encryption key headers must be sent over ssl
+OPTION(rgw_crypt_default_encryption_key, OPT_STR, "") // base64 encoded key for encryption of rgw objects
+OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR, "") // extra keys that may be used for aws:kms
+                                                      // defined as map "key1=YmluCmJvb3N0CmJvb3N0LQ== key2=b3V0CnNyYwpUZXN0aW5nCg=="
+OPTION(rgw_crypt_suppress_logs, OPT_BOOL, true)   // suppress logs that might print customer key
 OPTION(rgw_list_bucket_min_readahead, OPT_INT, 1000) // minimum number of entries to read from rados for bucket listing
 
 OPTION(rgw_rest_getusage_op_compat, OPT_BOOL, false) // dump description of total stats for s3 GetUsage API

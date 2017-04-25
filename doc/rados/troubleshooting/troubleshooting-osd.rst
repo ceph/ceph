@@ -206,7 +206,9 @@ Ceph prevents you from writing to a full OSD so that you don't lose data.
 In an operational cluster, you should receive a warning when your cluster
 is getting near its full ratio. The ``mon osd full ratio`` defaults to
 ``0.95``, or 95% of capacity before it stops clients from writing data.
-The ``mon osd nearfull ratio`` defaults to ``0.85``, or 85% of capacity
+The ``mon osd backfillfull ratio`` defaults to ``0.90``, or 90 % of
+capacity when it blocks backfills from starting. The
+``mon osd nearfull ratio`` defaults to ``0.85``, or 85% of capacity
 when it generates a health warning.
 
 Full cluster issues usually arise when testing how Ceph handles an OSD
@@ -214,20 +216,21 @@ failure on a small cluster. When one node has a high percentage of the
 cluster's data, the cluster can easily eclipse its nearfull and full ratio
 immediately. If you are testing how Ceph reacts to OSD failures on a small
 cluster, you should leave ample free disk space and consider temporarily
-lowering the ``mon osd full ratio`` and ``mon osd nearfull ratio``.
+lowering the ``mon osd full ratio``, ``mon osd backfillfull ratio``  and
+``mon osd nearfull ratio``.
 
 Full ``ceph-osds`` will be reported by ``ceph health``::
 
 	ceph health
-	HEALTH_WARN 1 nearfull osds
-	osd.2 is near full at 85%
+	HEALTH_WARN 1 nearfull osd(s)
 
 Or::
 
-	ceph health
-	HEALTH_ERR 1 nearfull osds, 1 full osds
-	osd.2 is near full at 85%
+	ceph health detail
+	HEALTH_ERR 1 full osd(s); 1 backfillfull osd(s); 1 nearfull osd(s)
 	osd.3 is full at 97%
+	osd.4 is backfill full at 91%
+	osd.2 is near full at 87%
 
 The best way to deal with a full cluster is to add new ``ceph-osds``, allowing
 the cluster to redistribute data to the newly available storage.

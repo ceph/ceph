@@ -1,4 +1,5 @@
 add_library(rbd_mirror_types STATIC
+  instance_watcher/Types.cc
   leader_watcher/Types.cc)
 
 set(rbd_mirror_internal
@@ -7,6 +8,7 @@ set(rbd_mirror_internal
   ImageReplayer.cc
   ImageSync.cc
   ImageSyncThrottler.cc
+  InstanceReplayer.cc
   InstanceWatcher.cc
   Instances.cc
   LeaderWatcher.cc

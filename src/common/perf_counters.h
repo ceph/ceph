@@ -120,13 +120,15 @@ public:
       }
     }
 
-    /// read <sum, count> safely
+    // read <sum, count> safely by making sure the post- and pre-count
+    // are identical; in other words the whole loop needs to be run
+    // without any intervening calls to inc, set, or tinc.
     pair<uint64_t,uint64_t> read_avg() const {
       uint64_t sum, count;
       do {
-	count = avgcount.read();
+	count = avgcount2.read();
 	sum = u64.read();
-      } while (avgcount2.read() != count);
+      } while (avgcount.read() != count);
       return make_pair(sum, count);
     }
   };

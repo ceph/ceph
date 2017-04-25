@@ -532,7 +532,7 @@ void CloneRequest<I>::send_remove() {
   Context *ctx = create_context_callback<klass, &klass::handle_remove>(this);
 
   librbd::image::RemoveRequest<> *req = librbd::image::RemoveRequest<>::create(
-   m_ioctx, m_name, m_id, false, m_no_op, m_op_work_queue, ctx);
+   m_ioctx, m_name, m_id, false, false, m_no_op, m_op_work_queue, ctx);
   req->send();
 }
 

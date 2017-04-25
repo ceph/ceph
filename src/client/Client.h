@@ -371,7 +371,7 @@ protected:
 			   int unless,int force=0);
   void encode_dentry_release(Dentry *dn, MetaRequest *req,
 			     mds_rank_t mds, int drop, int unless);
-  mds_rank_t choose_target_mds(MetaRequest *req);
+  mds_rank_t choose_target_mds(MetaRequest *req, Inode** phash_diri=NULL);
   void connect_mds_targets(mds_rank_t mds);
   void send_request(MetaRequest *request, MetaSession *session,
 		    bool drop_cap_releases=false);
@@ -443,8 +443,7 @@ protected:
   SnapRealm *get_snap_realm_maybe(inodeno_t r);
   void put_snap_realm(SnapRealm *realm);
   bool adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
-  inodeno_t update_snap_trace(bufferlist& bl, bool must_flush=true);
-  inodeno_t _update_snap_trace(vector<SnapRealmInfo>& trace);
+  void update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool must_flush=true);
   void invalidate_snaprealm_and_children(SnapRealm *realm);
 
   Inode *open_snapdir(Inode *diri);
@@ -737,6 +736,7 @@ private:
 
   // other helpers
   void _fragmap_remove_non_leaves(Inode *in);
+  void _fragmap_remove_stopped_mds(Inode *in, mds_rank_t mds);
 
   void _ll_get(Inode *in);
   int _ll_put(Inode *in, int num);

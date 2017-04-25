@@ -1880,7 +1880,7 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
 
   const MOSDOp *req = static_cast<const MOSDOp*>(op->get_req());
 
-  Session *session = (Session *)req->get_connection()->get_priv();
+  Session *session = static_cast<Session*>(req->get_connection()->get_priv());
   if (!session) {
     dout(0) << "op_has_sufficient_caps: no session for op " << *req << dendl;
     return false;
@@ -2009,6 +2009,8 @@ bool PG::queue_scrub()
   if (is_scrubbing()) {
     return false;
   }
+  scrubber.priority = scrubber.must_scrub ?
+         cct->_conf->osd_requested_scrub_priority : get_scrub_priority();
   scrubber.must_scrub = false;
   state_set(PG_STATE_SCRUBBING);
   if (scrubber.must_deep_scrub) {
@@ -3809,12 +3811,22 @@ void PG::reject_reservation()
 
 void PG::schedule_backfill_full_retry()
 {
-  Mutex::Locker lock(osd->backfill_request_lock);
-  osd->backfill_request_timer.add_event_after(
+  Mutex::Locker lock(osd->recovery_request_lock);
+  osd->recovery_request_timer.add_event_after(
     cct->_conf->osd_backfill_retry_interval,
     new QueuePeeringEvt<RequestBackfill>(
       this, get_osdmap()->get_epoch(),
       RequestBackfill()));
+}
+
+void PG::schedule_recovery_full_retry()
+{
+  Mutex::Locker lock(osd->recovery_request_lock);
+  osd->recovery_request_timer.add_event_after(
+    cct->_conf->osd_recovery_retry_interval,
+    new QueuePeeringEvt<DoRecovery>(
+      this, get_osdmap()->get_epoch(),
+      DoRecovery()));
 }
 
 void PG::clear_scrub_reserved()
@@ -5237,6 +5249,7 @@ void PG::start_peering_interval(
   state_clear(PG_STATE_PEERED);
   state_clear(PG_STATE_DOWN);
   state_clear(PG_STATE_RECOVERY_WAIT);
+  state_clear(PG_STATE_RECOVERY_TOOFULL);
   state_clear(PG_STATE_RECOVERING);
 
   peer_purged.clear();
@@ -5850,7 +5863,10 @@ void PG::update_store_with_options()
   if(r < 0 && r != -EOPNOTSUPP) {
     derr << __func__ << "set_collection_opts returns error:" << r << dendl;
   }
+}
 
+void PG::update_store_on_load()
+{
   if (osd->store->get_type() == "filestore") {
     // legacy filestore didn't store collection bit width; fix.
     int bits = osd->store->collection_bits(coll);
@@ -5906,6 +5922,8 @@ boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
   // do we tell someone we're here?
   pg->send_notify = (!pg->is_primary());
   pg->update_store_with_options();
+
+  pg->update_store_on_load();
 
   return transit< Reset >();
 }
@@ -6483,6 +6501,24 @@ void PG::RecoveryState::NotBackfilling::exit()
   pg->osd->recoverystate_perf->tinc(rs_notbackfilling_latency, dur);
 }
 
+/*----NotRecovering------*/
+PG::RecoveryState::NotRecovering::NotRecovering(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active/NotRecovering")
+{
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->publish_stats_to_osd();
+}
+
+void PG::RecoveryState::NotRecovering::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now() - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_notrecovering_latency, dur);
+}
+
 /*---RepNotRecovering----*/
 PG::RecoveryState::RepNotRecovering::RepNotRecovering(my_context ctx)
   : my_base(ctx),
@@ -6549,18 +6585,17 @@ boost::statechart::result
 PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  double ratio, max_ratio;
+  ostringstream ss;
 
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected: failure injection"
 		       << dendl;
     post_event(RemoteReservationRejected());
-  } else if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
-      !pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
-    ldout(pg->cct, 10) << "backfill reservation rejected: full ratio is "
-		       << ratio << ", which is greater than max allowed ratio "
-		       << max_ratio << dendl;
+  } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
+      pg->osd->check_backfill_full(ss)) {
+    ldout(pg->cct, 10) << "backfill reservation rejected: "
+		       << ss.str() << dendl;
     post_event(RemoteReservationRejected());
   } else {
     pg->osd->remote_reserver.request_reservation(
@@ -6585,7 +6620,7 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
 {
   PG *pg = context< RecoveryMachine >().pg;
 
-  double ratio, max_ratio;
+  ostringstream ss;
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
@@ -6593,11 +6628,10 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
     pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
     post_event(RemoteReservationRejected());
     return discard_event();
-  } else if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
-	     !pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
-    ldout(pg->cct, 10) << "backfill reservation rejected after reservation: full ratio is "
-		       << ratio << ", which is greater than max allowed ratio "
-		       << max_ratio << dendl;
+  } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
+	     pg->osd->check_backfill_full(ss)) {
+    ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
+		       << ss.str() << dendl;
     pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
     post_event(RemoteReservationRejected());
     return discard_event();
@@ -6668,6 +6702,15 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
 {
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
+
+  // Make sure all nodes that part of the recovery aren't full
+  if (!pg->cct->_conf->osd_debug_skip_full_check_in_recovery &&
+      pg->osd->check_osdmap_full(pg->actingbackfill)) {
+    post_event(RecoveryTooFull());
+    return;
+  }
+
+  pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   pg->state_set(PG_STATE_RECOVERY_WAIT);
   pg->osd->local_reserver.request_reservation(
     pg->info.pgid,
@@ -6676,6 +6719,15 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
       LocalRecoveryReserved()),
     pg->get_recovery_priority());
   pg->publish_stats_to_osd();
+}
+
+boost::statechart::result
+PG::RecoveryState::WaitLocalRecoveryReserved::react(const RecoveryTooFull &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->state_set(PG_STATE_RECOVERY_TOOFULL);
+  pg->schedule_recovery_full_retry();
+  return transit<NotRecovering>();
 }
 
 void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
@@ -6734,6 +6786,7 @@ PG::RecoveryState::Recovering::Recovering(my_context ctx)
 
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
+  pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   pg->state_set(PG_STATE_RECOVERING);
   pg->publish_stats_to_osd();
   pg->queue_recovery();
@@ -7182,6 +7235,7 @@ void PG::RecoveryState::Active::exit()
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
+  pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_active_latency, dur);
   pg->agent_stop();

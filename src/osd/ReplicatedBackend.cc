@@ -807,6 +807,11 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
 
   vector<PushReplyOp> replies;
   ObjectStore::Transaction t;
+  ostringstream ss;
+  if (get_parent()->check_failsafe_full(ss)) {
+    dout(10) << __func__ << " Out of space (failsafe) processing push request: " << ss.str() << dendl;
+    ceph_abort();
+  }
   for (vector<PushOp>::const_iterator i = m->pushes.begin();
        i != m->pushes.end();
        ++i) {
@@ -862,6 +867,13 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
   op->mark_started();
 
   vector<PullOp> replies(1);
+
+  ostringstream ss;
+  if (get_parent()->check_failsafe_full(ss)) {
+    dout(10) << __func__ << " Out of space (failsafe) processing pull response (push): " << ss.str() << dendl;
+    ceph_abort();
+  }
+
   ObjectStore::Transaction t;
   list<pull_complete_info> to_continue;
   for (vector<PushOp>::const_iterator i = m->pushes.begin();

@@ -5,6 +5,7 @@
 #include "Inode.h"
 #include "Dentry.h"
 #include "Dir.h"
+#include "Fh.h"
 #include "MetaSession.h"
 #include "ClientSnapRealm.h"
 
@@ -546,3 +547,11 @@ void CapSnap::dump(Formatter *f) const
   f->dump_int("dirty_data", (int)dirty_data);
   f->dump_unsigned("flush_tid", flush_tid);
 }
+
+void Inode::set_async_err(int r)
+{
+  for (const auto &fh : fhs) {
+    fh->async_err = r;
+  }
+}
+

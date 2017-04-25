@@ -986,6 +986,20 @@ function test_mon_mds()
 
   fail_all_mds $FS_NAME
   ceph fs rm $FS_NAME --yes-i-really-mean-it
+
+  # We should be permitted to use an EC pool with overwrites enabled
+  # as the data pool...
+  ceph osd pool set mds-ec-pool allow_ec_overwrites true
+  ceph fs new $FS_NAME fs_metadata mds-ec-pool --force 2>$TMPFILE
+  fail_all_mds $FS_NAME
+  ceph fs rm $FS_NAME --yes-i-really-mean-it
+
+  # ...but not as the metadata pool
+  set +e
+  ceph fs new $FS_NAME mds-ec-pool fs_data 2>$TMPFILE
+  check_response 'erasure-code' $? 22
+  set -e
+
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
 
   # Create a FS and check that we can subsequently add a cache tier to it
@@ -1006,6 +1020,8 @@ function test_mon_mds()
   # Clean up FS
   fail_all_mds $FS_NAME
   ceph fs rm $FS_NAME --yes-i-really-mean-it
+
+
 
   ceph mds stat
   # ceph mds tell mds.a getmap
@@ -1061,11 +1077,9 @@ function test_mon_osd()
   # osd blacklist
   #
   bl=192.168.0.1:0/1000
-  # Escaped form which may appear in JSON output
-  bl_json=192.168.0.1:0\\\\/1000
   ceph osd blacklist add $bl
   ceph osd blacklist ls | grep $bl
-  ceph osd blacklist ls --format=json-pretty | grep $bl_json
+  ceph osd blacklist ls --format=json-pretty  | sed 's/\\\//\//' | grep $bl
   ceph osd dump --format=json-pretty | grep $bl
   ceph osd dump | grep "^blacklist $bl"
   ceph osd blacklist rm $bl
@@ -1306,7 +1320,19 @@ function test_mon_osd_pool()
   # should fail because the type is not the same
   expect_false ceph osd pool create replicated 12 12 erasure
   ceph osd lspools | grep replicated
+  ceph osd pool create ec_test 1 1 erasure
+  set +e
+  ceph osd metadata | grep osd_objectstore_type | grep -qc bluestore
+  if [ $? -eq 0 ]; then
+      ceph osd pool set ec_test allow_ec_overwrites true >& $TMPFILE
+      check_response $? 22 "pool must only be stored on bluestore for scrubbing to work"
+  else
+      ceph osd pool set ec_test allow_ec_overwrites true || return 1
+      expect_false ceph osd pool set ec_test allow_ec_overwrites false
+  fi
+  set -e
   ceph osd pool delete replicated replicated --yes-i-really-really-mean-it
+  ceph osd pool delete ec_test ec_test --yes-i-really-really-mean-it
 }
 
 function test_mon_osd_pool_quota()
@@ -1405,8 +1431,43 @@ function test_mon_pg()
 
   ceph osd set-full-ratio .962
   ceph osd dump | grep '^full_ratio 0.962'
+  ceph osd set-backfillfull-ratio .912
+  ceph osd dump | grep '^backfillfull_ratio 0.912'
   ceph osd set-nearfull-ratio .892
   ceph osd dump | grep '^nearfull_ratio 0.892'
+
+  # Check health status
+  ceph osd set-nearfull-ratio .913
+  ceph health | grep 'ratio(s) out of order'
+  ceph health detail | grep 'backfill_ratio (0.912) < nearfull_ratio (0.913), increased'
+  ceph osd set-nearfull-ratio .892
+  ceph osd set-backfillfull-ratio .963
+  ceph health detail | grep 'full_ratio (0.962) < backfillfull_ratio (0.963), increased'
+  ceph osd set-backfillfull-ratio .912
+
+  # Check injected full results
+  WAITFORFULL=10
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull nearfull
+  sleep $WAITFORFULL
+  ceph health | grep "HEALTH_WARN.*1 nearfull osd(s)"
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.1.asok injectfull backfillfull
+  sleep $WAITFORFULL
+  ceph health | grep "HEALTH_WARN.*1 backfillfull osd(s)"
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.2.asok injectfull failsafe
+  sleep $WAITFORFULL
+  # failsafe and full are the same as far as the monitor is concerned
+  ceph health | grep "HEALTH_ERR.*1 full osd(s)"
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull full
+  sleep  $WAITFORFULL
+  ceph health | grep "HEALTH_ERR.*2 full osd(s)"
+  ceph health detail | grep "osd.0 is full at.*%"
+  ceph health detail | grep "osd.2 is full at.*%"
+  ceph health detail | grep "osd.1 is backfill full at.*%"
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull none
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.1.asok injectfull none
+  ceph --admin-daemon $CEPH_OUT_DIR/osd.2.asok injectfull none
+  sleep $WAITFORFULL
+  ceph health | grep HEALTH_OK
 
   ceph pg stat | grep 'pgs:'
   ceph pg 0.0 query
@@ -1726,6 +1787,28 @@ function test_mon_heap_profiler()
   ceph heap dump
   ceph heap stop_profiler
   ceph heap release
+}
+
+function test_admin_heap_profiler()
+{
+  do_test=1
+  set +e
+  # expect 'heap' commands to be correctly parsed
+  ceph heap stats 2>$TMPFILE
+  if [[ $? -eq 22 && `grep 'tcmalloc not enabled' $TMPFILE` ]]; then
+    echo "tcmalloc not enabled; skip heap profiler test"
+    do_test=0
+  fi
+  set -e
+
+  [[ $do_test -eq 0 ]] && return 0
+
+  admin_socket = "--admin-daemon out/osd.0.asok"
+
+  ceph --admin $admin_socket heap start_profiler
+  ceph --admin $admin_socket heap dump
+  ceph --admin $admin_socket heap stop_profiler
+  ceph --admin $admin_socket heap release
 }
 
 function test_osd_bench()

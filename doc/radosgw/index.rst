@@ -47,8 +47,10 @@ you may write data with one API and retrieve it with the other.
    Admin Ops API <adminops>
    Python binding <api>
    OpenStack Keystone Integration <keystone>
+   OpenStack Barbican Integration <barbican>
    Multi-tenancy <multitenancy>
    Compression <compression>
+   Server-Side Encryption <encryption>
    Data Layout in RADOS <layout>
    Upgrade to Older Versions of Jewel <upgrade_to_jewel>
    troubleshooting

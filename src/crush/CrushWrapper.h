@@ -58,6 +58,7 @@ public:
   std::map<int32_t, string> class_name; /* class id -> class name */
   std::map<string, int32_t> class_rname; /* class name -> class id */
   std::map<int32_t, map<int32_t, int32_t> > class_bucket; /* bucket[id][class] == id */
+  std::map<uint64_t, crush_choose_arg_map> choose_args;
 
 private:
   struct crush_map *crush;
@@ -87,6 +88,7 @@ public:
   ~CrushWrapper() {
     if (crush)
       crush_destroy(crush);
+    choose_args_clear();
   }
 
   crush_map *get_crush_map() { return crush; }
@@ -96,6 +98,7 @@ public:
     if (crush)
       crush_destroy(crush);
     crush = crush_create();
+    choose_args_clear();
     assert(crush);
     have_rmaps = false;
 
@@ -422,6 +425,18 @@ public:
     else
       return -EINVAL;
   }
+  int remove_class_name(const string& name) {
+    std::map<string,int>::const_iterator p = class_rname.find(name);
+    if (p == class_rname.end())
+      return -ENOENT;
+    int class_id = p->second;
+    std::map<int,string>::const_iterator q = class_name.find(class_id);
+    if (q == class_name.end())
+      return -ENOENT;
+    class_rname.erase(name);
+    class_name.erase(class_id);
+    return 0;
+  }
   int get_or_create_class_id(const string& name) {
     int c = get_class_id(name);
     if (c < 0) {
@@ -691,9 +706,10 @@ public:
    * when a bucket is in use.
    *
    * @param item id to remove
+   * @param unused true if only unused items should be removed
    * @return 0 on success, negative on error
    */
-  int remove_unused_root(int item);
+  int remove_root(int item, bool unused);
 
   /**
    * remove all instances of an item nested beneath a certain point from the map
@@ -1088,10 +1104,13 @@ public:
     crush_finalize(crush);
   }
 
+  int update_device_class(CephContext *cct, int id, const string& class_name, const string& name);
   int device_class_clone(int original, int device_class, int *clone);
+  bool class_is_in_use(int class_id);
   int populate_classes();
+  int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
-  int trim_roots_with_class();
+  int trim_roots_with_class(bool unused);
   int cleanup_classes();
 
   void start_choose_profile() {
@@ -1156,13 +1175,48 @@ public:
     return result;
   }
 
+  crush_choose_arg_map choose_args_get(uint64_t choose_args_index) const {
+    auto i = choose_args.find(choose_args_index);
+    if (i == choose_args.end()) {
+      crush_choose_arg_map arg_map;
+      arg_map.args = NULL;
+      arg_map.size = 0;
+      return arg_map;
+    } else {
+      return i->second;
+    }
+  }
+
+  void destroy_choose_args(crush_choose_arg_map arg_map) {
+    for (__u32 i = 0; i < arg_map.size; i++) {
+      crush_choose_arg *arg = &arg_map.args[i];
+      for (__u32 j = 0; j < arg->weight_set_size; j++) {
+	crush_weight_set *weight_set = &arg->weight_set[j];
+	free(weight_set->weights);
+      }
+      if (arg->weight_set)
+	free(arg->weight_set);
+      if (arg->ids)
+	free(arg->ids);
+    }
+    free(arg_map.args);
+  }
+  
+  void choose_args_clear() {
+    for (auto w : choose_args)
+      destroy_choose_args(w.second);
+    choose_args.clear();
+  }
+
   void do_rule(int rule, int x, vector<int>& out, int maxout,
-	       const vector<__u32>& weight) const {
+	       const vector<__u32>& weight,
+	       uint64_t choose_args_index) const {
     int rawout[maxout];
     char work[crush_work_size(crush, maxout)];
     crush_init_workspace(crush, work);
+    crush_choose_arg_map arg_map = choose_args_get(choose_args_index);
     int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0],
-			       weight.size(), work);
+			       weight.size(), work, arg_map.args);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
@@ -1221,6 +1275,7 @@ public:
   void dump_rules(Formatter *f) const;
   void dump_rule(int ruleset, Formatter *f) const;
   void dump_tunables(Formatter *f) const;
+  void dump_choose_args(Formatter *f) const;
   void list_rules(Formatter *f) const;
   void dump_tree(ostream *out, Formatter *f) const;
   void dump_tree(Formatter *f) const;

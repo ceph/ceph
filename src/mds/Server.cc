@@ -173,6 +173,7 @@ void Server::dispatch(Message *m)
 	req->releases.clear();
       }
       if (queue_replay) {
+	req->mark_queued_for_replay();
 	mds->enqueue_replay(new C_MDS_RetryMessage(mds, m));
 	return;
       }
@@ -190,12 +191,8 @@ void Server::dispatch(Message *m)
 	wait_for_active = false;
       } else if (m->get_type() == CEPH_MSG_CLIENT_REQUEST) {
 	MClientRequest *req = static_cast<MClientRequest*>(m);
-	if (req->is_replay()) {
+	if (req->is_queued_for_replay()) {
 	  wait_for_active = false;
-	} else {
-	  Session *session = get_session(req);
-	  if (session && session->have_completed_request(req->get_reqid().tid, NULL))
-	    wait_for_active = false;
 	}
       }
     }
@@ -801,6 +798,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
 
   // notify client of success with an OPEN
   m->get_connection()->send_message(new MClientSession(CEPH_SESSION_OPEN));
+  session->last_cap_renew = ceph_clock_now();
   mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
   
   // snaprealms
@@ -1003,7 +1001,7 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
   mdr->committing = true;
   submit_mdlog_entry(le, fin, mdr, __func__);
   
-  if (mdr->client_request && mdr->client_request->is_replay()) {
+  if (mdr->client_request && mdr->client_request->is_queued_for_replay()) {
     if (mds->queue_one_replay()) {
       dout(10) << " queued next replay op" << dendl;
     } else {
@@ -1195,7 +1193,16 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
     req->get_connection()->send_message(reply);
   }
 
-  const bool completed = mdr->has_completed;
+  if (req->is_queued_for_replay() &&
+      (mdr->has_completed || reply->get_result() < 0)) {
+    if (reply->get_result() < 0) {
+      int r = reply->get_result();
+      derr << "reply_client_request: failed to replay " << *req
+	   << " error " << r << " (" << cpp_strerror(r)  << ")" << dendl;
+      mds->clog->warn() << "failed to replay " << req->get_reqid() << " error " << r;
+    }
+    mds->queue_one_replay();
+  }
 
   // clean up request
   mdcache->request_finish(mdr);
@@ -1205,11 +1212,6 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
       tracedn &&
       tracedn->get_projected_linkage()->is_remote()) {
     mdcache->eval_remote(tracedn);
-  }
-
-  // Advance clientreplay process if we're in it
-  if (completed && mds->is_clientreplay()) {
-    mds->queue_one_replay();
   }
 }
 
@@ -1345,13 +1347,15 @@ void Server::handle_client_request(MClientRequest *req)
     session = get_session(req);
     if (!session) {
       dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
-      req->put();
-      return;
-    }
-    if (session->is_closed() ||
-	session->is_closing() ||
-	session->is_killing()) {
+    } else if (session->is_closed() ||
+	       session->is_closing() ||
+	       session->is_killing()) {
       dout(5) << "session closed|closing|killing, dropping" << dendl;
+      session = NULL;
+    }
+    if (!session) {
+      if (req->is_queued_for_replay())
+	mds->queue_one_replay();
       req->put();
       return;
     }
@@ -1385,7 +1389,7 @@ void Server::handle_client_request(MClientRequest *req)
 	}
 	req->get_connection()->send_message(reply);
 
-	if (mds->is_clientreplay())
+	if (req->is_queued_for_replay())
 	  mds->queue_one_replay();
 
 	req->put();
@@ -2634,10 +2638,10 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
       respond_to_request(mdr, -EROFS);
       return 0;
     }
-    if (!diri->is_base() && diri->get_projected_parent_dir()->inode->is_stray()) {
-      respond_to_request(mdr, -ENOENT);
-      return 0;
-    }
+  }
+  if (!diri->is_base() && diri->get_projected_parent_dir()->inode->is_stray()) {
+    respond_to_request(mdr, -ENOENT);
+    return 0;
   }
 
   // make a null dentry?
@@ -3424,7 +3428,8 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
     max = dir->get_num_any();  // whatever, something big.
   unsigned max_bytes = req->head.args.readdir.max_bytes;
   if (!max_bytes)
-    max_bytes = 512 << 10;  // 512 KB?
+    // make sure at least one item can be encoded
+    max_bytes = (512 << 10) + g_conf->mds_max_xattr_pairs_size;
 
   // start final blob
   bufferlist dirbl;
@@ -4539,6 +4544,25 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
     return;
 
   map<string, bufferptr> *pxattrs = cur->get_projected_xattrs();
+  size_t len = req->get_data().length();
+  size_t inc = len + name.length();
+
+  // check xattrs kv pairs size
+  size_t cur_xattrs_size = 0;
+  for (const auto& p : *pxattrs) {
+    if ((flags & CEPH_XATTR_REPLACE) && (name.compare(p.first) == 0)) {
+      continue;
+    }
+    cur_xattrs_size += p.first.length() + p.second.length();
+  }
+
+  if (((cur_xattrs_size + inc) > g_conf->mds_max_xattr_pairs_size)) {
+    dout(10) << "xattr kv pairs size too big. cur_xattrs_size " 
+             << cur_xattrs_size << ", inc " << inc << dendl;
+    respond_to_request(mdr, -ENOSPC);
+    return;
+  }
+
   if ((flags & CEPH_XATTR_CREATE) && pxattrs->count(name)) {
     dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
     respond_to_request(mdr, -EEXIST);
@@ -4550,7 +4574,6 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
     return;
   }
 
-  int len = req->get_data().length();
   dout(10) << "setxattr '" << name << "' len " << len << " on " << *cur << dendl;
 
   // project update
@@ -5083,7 +5106,8 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
   // 1. send LinkPrepare to dest (journal nlink++ prepare)
   mds_rank_t linkauth = targeti->authority().first;
   if (mdr->more()->witnessed.count(linkauth) == 0) {
-    if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(linkauth)) {
+    if (mds->is_cluster_degraded() &&
+	!mds->mdsmap->is_clientreplay_or_active_or_stopping(linkauth)) {
       dout(10) << " targeti auth mds." << linkauth << " is not active" << dendl;
       if (mdr->more()->waiting_on_slave.empty())
 	mds->wait_for_active_peer(linkauth, new C_MDS_RetryRequest(mdcache, mdr));
@@ -5765,7 +5789,8 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
 
 bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CDentry*>& trace, CDentry *straydn)
 {
-  if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(who)) {
+  if (mds->is_cluster_degraded() &&
+      !mds->mdsmap->is_clientreplay_or_active_or_stopping(who)) {
     dout(10) << "_rmdir_prepare_witness mds." << who << " is not active" << dendl;
     if (mdr->more()->waiting_on_slave.empty())
       mds->wait_for_active_peer(who, new C_MDS_RetryRequest(mdcache, mdr));
@@ -6115,7 +6140,7 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
     CDir *dir = *p;
     const fnode_t *pf = dir->get_projected_fnode();
     if (pf->fragstat.size()) {
-      dout(10) << "dir_is_nonempty_unlocked dirstat has "
+      dout(10) << "dir_is_nonempty dirstat has "
 	       << pf->fragstat.size() << " items " << *dir << dendl;
       return true;
     }
@@ -6606,7 +6631,8 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
 bool Server::_rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_rank_t> &witnesse,
 				     vector<CDentry*>& srctrace, vector<CDentry*>& dsttrace, CDentry *straydn)
 {
-  if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(who)) {
+  if (mds->is_cluster_degraded() &&
+      !mds->mdsmap->is_clientreplay_or_active_or_stopping(who)) {
     dout(10) << "_rename_prepare_witness mds." << who << " is not active" << dendl;
     if (mdr->more()->waiting_on_slave.empty())
       mds->wait_for_active_peer(who, new C_MDS_RetryRequest(mdcache, mdr));
@@ -7110,20 +7136,6 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
     }
   }
 
-  if (srcdn->get_dir()->inode->is_stray() &&
-      srcdn->get_dir()->inode->get_stray_owner() == mds->get_nodeid()) {
-    // A reintegration event or a migration away from me
-    dout(20) << __func__ << ": src dentry was a stray, updating stats" << dendl;
-    mdcache->notify_stray_removed();
-  }
-
-  if (destdn->get_dir()->inode->is_stray() &&
-      destdn->get_dir()->inode->get_stray_owner() == mds->get_nodeid()) {
-    // A stray migration (to me)
-    dout(20) << __func__ << ": dst dentry was a stray, updating stats" << dendl;
-    mdcache->notify_stray_created();
-  }
-
   // src
   if (srcdn->is_auth())
     srcdn->mark_dirty(mdr->more()->pvmap[srcdn], mdr->ls);
@@ -7283,7 +7295,8 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
       // make sure bystanders have received all lock related messages
       for (set<mds_rank_t>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
 	if (*p == mdr->slave_to_mds ||
-	    !mds->mdsmap->is_clientreplay_or_active_or_stopping(*p))
+	    (mds->is_cluster_degraded() &&
+	     !mds->mdsmap->is_clientreplay_or_active_or_stopping(*p)))
 	  continue;
 	MMDSSlaveRequest *notify = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 	    MMDSSlaveRequest::OP_RENAMENOTIFY);
@@ -8048,7 +8061,8 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
     max_entries = infomap.size();
   int max_bytes = req->head.args.readdir.max_bytes;
   if (!max_bytes)
-    max_bytes = 512 << 10;
+    // make sure at least one item can be encoded
+    max_bytes = (512 << 10) + g_conf->mds_max_xattr_pairs_size;
 
   __u64 last_snapid = 0;
   string offset_str = req->get_path2();

@@ -332,7 +332,8 @@ COMMAND("fs new " \
 	"name=fs_name,type=CephString " \
 	"name=metadata,type=CephString " \
 	"name=data,type=CephString " \
-	"name=force,type=CephChoices,strings=--force,req=false", \
+	"name=force,type=CephChoices,strings=--force,req=false " \
+	"name=sure,type=CephChoices,strings=--allow-dangerous-metadata-overlay,req=false", \
 	"make new filesystem using named pools <metadata> and <data>", \
 	"fs", "rw", "cli,rest")
 COMMAND("fs rm " \
@@ -492,6 +493,11 @@ COMMAND("osd crush add " \
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
 	"add or update crushmap position and weight for <name> with <weight> and location <args>", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush set-device-class " \
+	"name=id,type=CephOsdName " \
+	"name=class,type=CephString ", \
+	"set the <class> of the device <name>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush create-or-move " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
@@ -568,12 +574,27 @@ COMMAND("osd crush rule rm " \
 COMMAND("osd crush tree",
 	"dump crush buckets and items in a tree view",
 	"osd", "r", "cli,rest")
+COMMAND("osd crush class create " \
+	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
+	"create crush device class <class>", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush class rm " \
+	"name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
+	"remove crush device class <class>", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush class ls", \
+	"list all crush device classes", \
+	"osd", "r", "cli,rest")
 COMMAND("osd setmaxosd " \
 	"name=newmax,type=CephInt,range=0", \
 	"set new maximum osd value", "osd", "rw", "cli,rest")
 COMMAND("osd set-full-ratio " \
 	"name=ratio,type=CephFloat,range=0.0|1.0", \
 	"set usage ratio at which OSDs are marked full",
+	"osd", "rw", "cli,rest")
+COMMAND("osd set-backfillfull-ratio " \
+	"name=ratio,type=CephFloat,range=0.0|1.0", \
+	"set usage ratio at which OSDs are marked too full to backfill",
 	"osd", "rw", "cli,rest")
 COMMAND("osd set-nearfull-ratio " \
 	"name=ratio,type=CephFloat,range=0.0|1.0", \
@@ -621,29 +642,33 @@ COMMAND("osd reweight " \
 	"name=id,type=CephOsdName " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
 	"reweight osd to 0.0 < <weight> < 1.0", "osd", "rw", "cli,rest")
+COMMAND("osd reweightn " \
+	"name=weights,type=CephString",
+	"reweight osds with {<id>: <weight>,...})",
+	"osd", "rw", "cli,rest")
 COMMAND("osd pg-temp " \
 	"name=pgid,type=CephPgid " \
 	"name=id,type=CephOsdName,n=N,req=false", \
 	"set pg_temp mapping pgid:[<id> [<id>...]] (developers only)", \
         "osd", "rw", "cli,rest")
-COMMAND("osd pg-remap " \
+COMMAND("osd pg-upmap " \
 	"name=pgid,type=CephPgid " \
 	"name=id,type=CephOsdName,n=N", \
-	"set pg_remap mapping <pgid>:[<id> [<id>...]] primary <primary> (developers only)", \
+	"set pg_upmap mapping <pgid>:[<id> [<id>...]] primary <primary> (developers only)", \
         "osd", "rw", "cli,rest")
-COMMAND("osd rm-pg-remap " \
+COMMAND("osd rm-pg-upmap " \
 	"name=pgid,type=CephPgid",					\
-	"clear pg_remap mapping for <pgid> (developers only)", \
+	"clear pg_upmap mapping for <pgid> (developers only)", \
         "osd", "rw", "cli,rest")
 
-COMMAND("osd pg-remap-items " \
+COMMAND("osd pg-upmap-items " \
 	"name=pgid,type=CephPgid " \
 	"name=id,type=CephOsdName,n=N", \
-	"set pg_remap_items mapping <pgid>:{<id> to <id>, [...]} (developers only)", \
+	"set pg_upmap_items mapping <pgid>:{<id> to <id>, [...]} (developers only)", \
         "osd", "rw", "cli,rest")
-COMMAND("osd rm-pg-remap-items " \
+COMMAND("osd rm-pg-upmap-items " \
 	"name=pgid,type=CephPgid",		  \
-	"clear pg_remap_items mapping for <pgid> (developers only)", \
+	"clear pg_upmap_items mapping for <pgid> (developers only)", \
         "osd", "rw", "cli,rest")
 COMMAND("osd primary-temp " \
 	"name=pgid,type=CephPgid " \
@@ -712,7 +737,7 @@ COMMAND("osd pool get " \
 	"get pool parameter <var>", "osd", "r", "cli,rest")
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_rule|crush_ruleset|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|debug_fake_ec_pool|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|debug_white_box_testing_ec_overwrites " \
+	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_rule|crush_ruleset|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|debug_fake_ec_pool|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites " \
 	"name=val,type=CephString " \
 	"name=force,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"set pool parameter <var> to <val>", "osd", "rw", "cli,rest")
@@ -728,41 +753,9 @@ COMMAND("osd pool get-quota " \
         "name=pool,type=CephPoolname ",
         "obtain object or byte limits for pool",
         "osd", "r", "cli,rest")
-COMMAND("osd pool stats " \
-        "name=name,type=CephString,req=false",
-        "obtain stats from all pools, or from specified pool",
-        "osd", "r", "cli,rest")
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r", "cli,rest")
-COMMAND("osd reweight-by-utilization " \
-	"name=oload,type=CephInt,req=false " \
-	"name=max_change,type=CephFloat,req=false "			\
-	"name=max_osds,type=CephInt,req=false "			\
-	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false",\
-	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
-	"osd", "rw", "cli,rest")
-COMMAND("osd test-reweight-by-utilization " \
-	"name=oload,type=CephInt,req=false " \
-	"name=max_change,type=CephFloat,req=false "			\
-	"name=max_osds,type=CephInt,req=false "			\
-	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false",\
-	"dry run of reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
-	"osd", "rw", "cli,rest")
-COMMAND("osd reweight-by-pg " \
-	"name=oload,type=CephInt,req=false " \
-	"name=max_change,type=CephFloat,req=false "			\
-	"name=max_osds,type=CephInt,req=false "			\
-	"name=pools,type=CephPoolname,n=N,req=false",			\
-	"reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
-	"osd", "rw", "cli,rest")
-COMMAND("osd test-reweight-by-pg " \
-	"name=oload,type=CephInt,req=false " \
-	"name=max_change,type=CephFloat,req=false "			\
-	"name=max_osds,type=CephInt,req=false "			\
-	"name=pools,type=CephPoolname,n=N,req=false",			\
-	"dry run of reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
-	"osd", "rw", "cli,rest")
 COMMAND("osd df " \
 	"name=output_method,type=CephChoices,strings=plain|tree,req=false", \
 	"show OSD utilization", "osd", "r", "cli,rest")

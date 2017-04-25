@@ -811,6 +811,15 @@ void Client::_fragmap_remove_non_leaves(Inode *in)
       ++p;
 }
 
+void Client::_fragmap_remove_stopped_mds(Inode *in, mds_rank_t mds)
+{
+  for (auto p = in->fragmap.begin(); p != in->fragmap.end(); )
+    if (p->second == mds)
+      in->fragmap.erase(p++);
+    else
+      ++p;
+}
+
 Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 				 MetaSession *session,
 				 const UserPerm& request_perms)
@@ -1267,8 +1276,9 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   ldout(cct, 10) << " features 0x" << hex << features << dec << dendl;
 
   // snap trace
+  SnapRealm *realm = NULL;
   if (reply->snapbl.length())
-    update_snap_trace(reply->snapbl);
+    update_snap_trace(reply->snapbl, &realm);
 
   ldout(cct, 10) << " hrm " 
 	   << " is_target=" << (int)reply->head.is_target
@@ -1376,13 +1386,16 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     }
   }
 
+  if (realm)
+    put_snap_realm(realm);
+
   request->target = in;
   return in;
 }
 
 // -------
 
-mds_rank_t Client::choose_target_mds(MetaRequest *req) 
+mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
 {
   mds_rank_t mds = MDS_RANK_NONE;
   __u32 hash = 0;
@@ -1451,9 +1464,11 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req)
     if (is_hash && S_ISDIR(in->mode) && !in->fragmap.empty()) {
       frag_t fg = in->dirfragtree[hash];
       if (in->fragmap.count(fg)) {
-        mds = in->fragmap[fg];
-        ldout(cct, 10) << "choose_target_mds from dirfragtree hash" << dendl;
-        goto out;
+	mds = in->fragmap[fg];
+	if (phash_diri)
+	  *phash_diri = in;
+	ldout(cct, 10) << "choose_target_mds from dirfragtree hash" << dendl;
+	goto out;
       }
     }
   
@@ -1656,27 +1671,28 @@ int Client::make_request(MetaRequest *request,
     request->caller_cond = &caller_cond;
 
     // choose mds
-    mds_rank_t mds = choose_target_mds(request);
-    if (mds == MDS_RANK_NONE || !mdsmap->is_active_or_stopping(mds)) {
-      ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
-      wait_on_list(waiting_for_mdsmap);
+    Inode *hash_diri = NULL;
+    mds_rank_t mds = choose_target_mds(request, &hash_diri);
+    int mds_state = (mds == MDS_RANK_NONE) ? MDSMap::STATE_NULL : mdsmap->get_state(mds);
+    if (mds_state != MDSMap::STATE_ACTIVE && mds_state != MDSMap::STATE_STOPPING) {
+      if (mds_state == MDSMap::STATE_NULL && mds >= mdsmap->get_max_mds()) {
+	if (hash_diri) {
+	  ldout(cct, 10) << " target mds." << mds << " has stopped, remove it from fragmap" << dendl;
+	  _fragmap_remove_stopped_mds(hash_diri, mds);
+	} else {
+	  ldout(cct, 10) << " target mds." << mds << " has stopped, trying a random mds" << dendl;
+	  request->resend_mds = _get_random_up_mds();
+	}
+      } else {
+	ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
+	wait_on_list(waiting_for_mdsmap);
+      }
       continue;
     }
 
     // open a session?
     MetaSession *session = NULL;
     if (!have_open_session(mds)) {
-      if (!mdsmap->is_active_or_stopping(mds)) {
-	ldout(cct, 10) << "no address for mds." << mds << ", waiting for new mdsmap" << dendl;
-	wait_on_list(waiting_for_mdsmap);
-
-	if (!mdsmap->is_active_or_stopping(mds)) {
-	  ldout(cct, 10) << "hmm, still have no address for mds." << mds << ", trying a random mds" << dendl;
-	  request->resend_mds = _get_random_up_mds();
-	  continue;
-	}
-      }
-      
       session = _get_or_open_mds_session(mds);
 
       // wait
@@ -2375,7 +2391,7 @@ void Client::_handle_full_flag(int64_t pool)
       ldout(cct, 4) << __func__ << ": FULL: inode 0x" << std::hex << i->first << std::dec
         << " has dirty objects, purging and setting ENOSPC" << dendl;
       objectcacher->purge_set(&inode->oset);
-      inode->async_err = -ENOSPC;
+      inode->set_async_err(-ENOSPC);
     }
   }
 
@@ -2565,32 +2581,30 @@ void Client::handle_mds_map(MMDSMap* m)
 
   // reset session
   for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
-       p != mds_sessions.end();
-       ++p) {
-    int oldstate = oldmap->get_state(p->first);
-    int newstate = mdsmap->get_state(p->first);
-    if (!mdsmap->is_up(p->first) ||
-	mdsmap->get_inst(p->first) != p->second->inst) {
-      p->second->con->mark_down();
-      if (mdsmap->is_up(p->first)) {
-	p->second->inst = mdsmap->get_inst(p->first);
-	// When new MDS starts to take over, notify kernel to trim unused entries
-	// in its dcache/icache. Hopefully, the kernel will release some unused
-	// inodes before the new MDS enters reconnect state.
-	trim_cache_for_reconnect(p->second);
-      }
+       p != mds_sessions.end(); ) {
+    mds_rank_t mds = p->first;
+    MetaSession *session = p->second;
+    ++p;
+
+    int oldstate = oldmap->get_state(mds);
+    int newstate = mdsmap->get_state(mds);
+    if (!mdsmap->is_up(mds)) {
+      session->con->mark_down();
+    } else if (mdsmap->get_inst(mds) != session->inst) {
+      session->con->mark_down();
+      session->inst = mdsmap->get_inst(mds);
+      // When new MDS starts to take over, notify kernel to trim unused entries
+      // in its dcache/icache. Hopefully, the kernel will release some unused
+      // inodes before the new MDS enters reconnect state.
+      trim_cache_for_reconnect(session);
     } else if (oldstate == newstate)
       continue;  // no change
     
-    MetaSession *session = p->second;
     session->mds_state = newstate;
     if (newstate == MDSMap::STATE_RECONNECT) {
-      session->inst = mdsmap->get_inst(p->first);
       session->con = messenger->get_connection(session->inst);
       send_reconnect(session);
-    }
-
-    if (newstate >= MDSMap::STATE_ACTIVE) {
+    } else if (newstate >= MDSMap::STATE_ACTIVE) {
       if (oldstate < MDSMap::STATE_ACTIVE) {
 	// kick new requests
 	kick_requests(session);
@@ -2599,7 +2613,10 @@ void Client::handle_mds_map(MMDSMap* m)
 	kick_maxsize_requests(session);
 	wake_inode_waiters(session);
       }
-      connect_mds_targets(p->first);
+      connect_mds_targets(mds);
+    } else if (newstate == MDSMap::STATE_NULL &&
+	       mds >= mdsmap->get_max_mds()) {
+      _closed_mds_session(session);
     }
   }
 
@@ -2985,7 +3002,7 @@ public:
       ldout(client->cct, 1) << "I/O error from flush on inode " << inode
         << " 0x" << std::hex << inode->ino << std::dec
         << ": " << r << "(" << cpp_strerror(r) << ")" << dendl;
-      inode->async_err = r;
+      inode->set_async_err(r);
     }
   }
 };
@@ -3111,7 +3128,7 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 	  return 0;
 	}
       }
-      ldout(cct, 10) << "waiting for caps need " << ccap_string(need) << " want " << ccap_string(want) << dendl;
+      ldout(cct, 10) << "waiting for caps " << *in << " need " << ccap_string(need) << " want " << ccap_string(want) << dendl;
       waitfor_caps = true;
     }
 
@@ -3904,8 +3921,9 @@ void Client::remove_session_caps(MetaSession *s)
   while (s->caps.size()) {
     Cap *cap = *s->caps.begin();
     Inode *in = cap->inode;
-    int dirty_caps = 0;
+    bool dirty_caps = false, cap_snaps = false;
     if (in->auth_cap == cap) {
+      cap_snaps = !in->cap_snaps.empty();
       dirty_caps = in->dirty_caps | in->flushing_caps;
       in->wanted_max_size = 0;
       in->requested_max_size = 0;
@@ -3913,6 +3931,10 @@ void Client::remove_session_caps(MetaSession *s)
     }
     remove_cap(cap, false);
     signal_cond_list(in->waitfor_caps);
+    if (cap_snaps) {
+      InodeRef tmp_ref(in);
+      in->cap_snaps.clear();
+    }
     if (dirty_caps) {
       lderr(cct) << "remove_session_caps still has dirty|flushing caps on " << *in << dendl;
       if (in->flushing_caps) {
@@ -4345,9 +4367,9 @@ static bool has_new_snaps(const SnapContext& old_snapc,
 }
 
 
-inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
+void Client::update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool flush)
 {
-  inodeno_t first_realm = 0;
+  SnapRealm *first_realm = NULL;
   ldout(cct, 10) << "update_snap_trace len " << bl.length() << dendl;
 
   map<SnapRealm*, SnapContext> dirty_realms;
@@ -4356,8 +4378,6 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
   while (!p.end()) {
     SnapRealmInfo info;
     ::decode(info, p);
-    if (first_realm == 0)
-      first_realm = info.ino();
     SnapRealm *realm = get_snap_realm(info.ino());
 
     bool invalidate = false;
@@ -4409,7 +4429,10 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 	       << " <= " << realm->seq << " and same parent, SKIPPING" << dendl;
     }
         
-    put_snap_realm(realm);
+    if (!first_realm)
+      first_realm = realm;
+    else
+      put_snap_realm(realm);
   }
 
   for (map<SnapRealm*, SnapContext>::iterator q = dirty_realms.begin();
@@ -4431,7 +4454,10 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
     put_snap_realm(realm);
   }
 
-  return first_realm;
+  if (realm_ret)
+    *realm_ret = first_realm;
+  else
+    put_snap_realm(first_realm);
 }
 
 void Client::handle_snap(MClientSnap *m)
@@ -4494,7 +4520,7 @@ void Client::handle_snap(MClientSnap *m)
     }
   }
 
-  update_snap_trace(m->bl, m->head.op != CEPH_SNAP_OP_DESTROY);
+  update_snap_trace(m->bl, NULL, m->head.op != CEPH_SNAP_OP_DESTROY);
 
   if (realm) {
     for (auto p = to_move.begin(); p != to_move.end(); ++p) {
@@ -4631,7 +4657,9 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
   }
 
   // add/update it
-  update_snap_trace(m->snapbl);
+  SnapRealm *realm = NULL;
+  update_snap_trace(m->snapbl, &realm);
+
   add_update_cap(in, session, m->get_cap_id(),
 		 m->get_caps(), m->get_seq(), m->get_mseq(), m->get_realm(),
 		 CEPH_CAP_FLAG_AUTH, cap_perms);
@@ -4639,6 +4667,9 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
   if (cap && cap->cap_id == m->peer.cap_id) {
       remove_cap(cap, (m->peer.flags & CEPH_CAP_FLAG_RELEASE));
   }
+
+  if (realm)
+    put_snap_realm(realm);
   
   if (in->auth_cap && in->auth_cap->session->mds_num == mds) {
     // reflush any/all caps (if we are now the auth_cap)
@@ -8058,14 +8089,12 @@ int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 
  Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
 {
-  // yay
-  Fh *f = new Fh;
+  assert(in);
+  Fh *f = new Fh(in);
   f->mode = cmode;
   f->flags = flags;
 
   // inode
-  assert(in);
-  f->inode = in;
   f->actor_perms = perms;
 
   ldout(cct, 10) << "_create_fh " << in->ino << " mode " << cmode << dendl;
@@ -8114,8 +8143,8 @@ int Client::_release_fh(Fh *f)
 
   _release_filelocks(f);
 
-  // Finally, read any async err (i.e. from flushes) from the inode
-  int err = in->async_err;
+  // Finally, read any async err (i.e. from flushes)
+  int err = f->take_async_err();
   if (err != 0) {
     ldout(cct, 1) << "_release_fh " << f << " on inode " << *in << " caught async_err = "
                   << cpp_strerror(err) << dendl;
@@ -8131,8 +8160,9 @@ int Client::_release_fh(Fh *f)
 void Client::_put_fh(Fh *f)
 {
   int left = f->put();
-  if (!left)
+  if (!left) {
     delete f;
+  }
 }
 
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
@@ -9016,7 +9046,7 @@ done:
 int Client::_flush(Fh *f)
 {
   Inode *in = f->inode.get();
-  int err = in->async_err;
+  int err = f->take_async_err();
   if (err != 0) {
     ldout(cct, 1) << __func__ << ": " << f << " on inode " << *in << " caught async_err = "
                   << cpp_strerror(err) << dendl;
@@ -9068,7 +9098,21 @@ int Client::fsync(int fd, bool syncdataonly)
     return -EBADF;
 #endif
   int r = _fsync(f, syncdataonly);
-  ldout(cct, 3) << "fsync(" << fd << ", " << syncdataonly << ") = " << r << dendl;
+  if (r == 0) {
+    // The IOs in this fsync were okay, but maybe something happened
+    // in the background that we shoudl be reporting?
+    r = f->take_async_err();
+    ldout(cct, 3) << "fsync(" << fd << ", " << syncdataonly
+                  << ") = 0, async_err = " << r << dendl;
+  } else {
+    // Assume that an error we encountered during fsync, even reported
+    // synchronously, would also have applied the error to the Fh, and we
+    // should clear it here to avoid returning the same error again on next
+    // call.
+    ldout(cct, 3) << "fsync(" << fd << ", " << syncdataonly << ") = "
+                  << r << dendl;
+    f->take_async_err();
+  }
   return r;
 }
 
@@ -9132,12 +9176,6 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   } else {
     ldout(cct, 1) << "ino " << in->ino << " failed to commit to disk! "
 		  << cpp_strerror(-r) << dendl;
-  }
-
-  if (in->async_err) {
-    ldout(cct, 1) << "ino " << in->ino << " marked with error from background flush! "
-		  << cpp_strerror(in->async_err) << dendl;
-    r = in->async_err;
   }
 
   return r;
@@ -12218,7 +12256,12 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
   tout(cct) << "ll_fsync" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
-  return _fsync(fh, syncdataonly);
+  int r = _fsync(fh, syncdataonly);
+  if (r) {
+    // If we're returning an error, clear it from the FH
+    fh->take_async_err();
+  }
+  return r;
 }
 
 #ifdef FALLOC_FL_PUNCH_HOLE
@@ -12708,8 +12751,16 @@ void Client::ms_handle_remote_reset(Connection *con)
 	  break;
 
 	case MetaSession::STATE_OPEN:
-	  ldout(cct, 1) << "reset from mds we were open; mark session as stale" << dendl;
-	  s->state = MetaSession::STATE_STALE;
+	  {
+	    const md_config_t *conf = cct->_conf;
+	    if (conf->client_reconnect_stale) {
+	      ldout(cct, 1) << "reset from mds we were open; close mds session for reconnect" << dendl;
+	      _closed_mds_session(s);
+	    } else {
+	      ldout(cct, 1) << "reset from mds we were open; mark session as stale" << dendl;
+	      s->state = MetaSession::STATE_STALE;
+	    }
+	  }
 	  break;
 
 	case MetaSession::STATE_NEW:

@@ -137,6 +137,17 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_LOCK_MODE_EXCLUSIVE "RBD_LOCK_MODE_EXCLUSIVE"
         _RBD_LOCK_MODE_SHARED "RBD_LOCK_MODE_SHARED"
 
+    ctypedef enum rbd_trash_image_source_t:
+        _RBD_TRASH_IMAGE_SOURCE_USER "RBD_TRASH_IMAGE_SOURCE_USER",
+        _RBD_TRASH_IMAGE_SOURCE_MIRRORING "RBD_TRASH_IMAGE_SOURCE_MIRRORING"
+
+    ctypedef struct rbd_trash_image_info_t:
+        char *id
+        char *name
+        rbd_trash_image_source_t source
+        time_t deletion_time
+        time_t deferment_end_time
+
     ctypedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg)
     ctypedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void* ptr)
 
@@ -167,6 +178,14 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_remove(rados_ioctx_t io, const char *name)
     int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname,
                    const char *destname)
+
+    int rbd_trash_move(rados_ioctx_t io, const char *name, uint64_t delay)
+    int rbd_trash_list(rados_ioctx_t io, rbd_trash_image_info_t *trash_entries,
+                       size_t *num_entries)
+    void rbd_trash_list_cleanup(rbd_trash_image_info_t *trash_entries,
+                                size_t num_entries)
+    int rbd_trash_remove(rados_ioctx_t io, const char *id, int force)
+    int rbd_trash_restore(rados_ioctx_t io, const char *id, const char *name)
 
     int rbd_mirror_mode_get(rados_ioctx_t io, rbd_mirror_mode_t *mirror_mode)
     int rbd_mirror_mode_set(rados_ioctx_t io, rbd_mirror_mode_t mirror_mode)
@@ -306,6 +325,14 @@ cdef extern from "rbd/librbd.h" nogil:
     ssize_t rbd_aio_get_return_value(rbd_completion_t c)
     void rbd_aio_release(rbd_completion_t c)
     int rbd_aio_flush(rbd_image_t image, rbd_completion_t c)
+
+    int rbd_metadata_get(rbd_image_t image, const char *key, char *value,
+                         size_t *val_len)
+    int rbd_metadata_set(rbd_image_t image, const char *key, const char *value)
+    int rbd_metadata_remove(rbd_image_t image, const char *key)
+    int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
+                          char *keys, size_t *key_len, char *values,
+                          size_t *vals_len)
 
 RBD_FEATURE_LAYERING = _RBD_FEATURE_LAYERING
 RBD_FEATURE_STRIPINGV2 = _RBD_FEATURE_STRIPINGV2
@@ -847,6 +874,81 @@ class RBD(object):
             ret = rbd_rename(_ioctx, _src, _dest)
         if ret != 0:
             raise make_ex(ret, 'error renaming image')
+
+    def trash_move(self, ioctx, name, delay=0):
+        """
+        Moves an RBD image to the trash.
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: the name of the image to remove
+        :type name: str
+        :param delay: time delay in seconds before the image can be deleted
+                      from trash
+        :type delay: int
+        :raises: :class:`ImageNotFound`
+        """
+        name = cstr(name, 'name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_name = name
+            uint64_t _delay = delay
+        with nogil:
+            ret = rbd_trash_move(_ioctx, _name, _delay)
+        if ret != 0:
+            raise make_ex(ret, 'error moving image to trash')
+
+    def trash_remove(self, ioctx, image_id, force=False):
+        """
+        Deletes an RBD image from trash. If image deferment time has not
+        expired :class:`PermissionError` is raised.
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_id: the id of the image to remove
+        :type image_id: str
+        :param force: force remove even if deferment time has not expired
+        :type force: bool
+        :raises: :class:`ImageNotFound`, :class:`PermissionError`
+        """
+        image_id = cstr(image_id, 'image_id')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_id = image_id
+            int _force = force
+        with nogil:
+            ret = rbd_trash_remove(_ioctx, _image_id, _force)
+        if ret != 0:
+            raise make_ex(ret, 'error deleting image from trash')
+
+    def trash_list(self, ioctx):
+        """
+        Lists all entries from trash.
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: :class:`TrashIterator`
+        """
+        return TrashIterator(ioctx)
+
+    def trash_restore(self, ioctx, image_id, name):
+        """
+        Restores an RBD image from trash.
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_id: the id of the image to restore
+        :type image_id: str
+        :param name: the new name of the restored image
+        :type name: str
+        :raises: :class:`ImageNotFound`
+        """
+        image_id = cstr(image_id, 'image_id')
+        name = cstr(name, 'name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_id = image_id
+            char *_name = name
+        with nogil:
+            ret = rbd_trash_restore(_ioctx, _image_id, _name)
+        if ret != 0:
+            raise make_ex(ret, 'error restoring image from trash')
 
     def mirror_mode_get(self, ioctx):
         """
@@ -2458,6 +2560,81 @@ written." % (self.name, ret, length))
 
         return completion
 
+    def metadata_get(self, key):
+        """
+        Get image metadata for the given key.
+
+        :param key: metadata key
+        :type key: str
+        :returns: str - image id
+        """
+        key = cstr(key, 'key')
+        cdef:
+            char *_key = key
+            size_t size = 4096
+            char *value = NULL
+            int ret
+        try:
+            while True:
+                value = <char *>realloc_chk(value, size)
+                with nogil:
+                    ret = rbd_metadata_get(self.image, _key, value, &size)
+                if ret != -errno.ERANGE:
+                    break
+            if ret != 0:
+                raise make_ex(ret, 'error getting metadata %s for image %s' %
+                              (self.key, self.name,))
+            return decode_cstr(value)
+        finally:
+            free(value)
+
+    def metadata_set(self, key, value):
+        """
+        Set image metadata for the given key.
+
+        :param key: metadata key
+        :type key: str
+        :param value: metadata value
+        :type value: str
+        """
+        key = cstr(key, 'key')
+        value = cstr(value, 'value')
+        cdef:
+            char *_key = key
+            char *_value = value
+        with nogil:
+            ret = rbd_metadata_set(self.image, _key, _value)
+
+        if ret != 0:
+            raise make_ex(ret, 'error setting metadata %s for image %s' %
+                          (self.key, self.name,))
+
+
+    def metadata_remove(self, key):
+        """
+        Remove image metadata for the given key.
+
+        :param key: metadata key
+        :type key: str
+        """
+        key = cstr(key, 'key')
+        cdef:
+            char *_key = key
+        with nogil:
+            ret = rbd_metadata_remove(self.image, _key)
+
+        if ret != 0:
+            raise make_ex(ret, 'error removing metadata %s for image %s' %
+                          (self.key, self.name,))
+
+    def metadata_list(self):
+        """
+        List image metadata.
+
+        :returns: :class:`MetadataIterator`
+        """
+        return MetadataIterator(self)
+
 cdef class LockOwnerIterator(object):
     """
     Iterator over managed lock owners for an image
@@ -2506,6 +2683,69 @@ cdef class LockOwnerIterator(object):
             rbd_lock_get_owners_cleanup(self.lock_owners, self.num_lock_owners)
             free(self.lock_owners)
 
+cdef class MetadataIterator(object):
+    """
+    Iterator over metadata list for an image.
+
+    Yields ``(key, value)`` tuple.
+
+    * ``key`` (str) - metadata key
+    * ``value`` (str) - metadata value
+    """
+
+    cdef:
+        object image_name
+        rbd_image_t image
+        char *last_read
+        uint64_t max_read
+        object next_chunk
+
+    def __init__(self, Image image):
+        self.image_name = image.name
+        self.image = image.image
+        self.last_read = strdup("")
+        self.max_read = 32
+        self.get_next_chunk()
+
+    def __iter__(self):
+        while len(self.next_chunk) > 0:
+            for pair in self.next_chunk:
+                yield pair
+            if len(self.next_chunk) < self.max_read:
+                break
+            self.get_next_chunk()
+
+    def get_next_chunk(self):
+        cdef:
+            char *c_keys = NULL
+            size_t keys_size = 4096
+            char *c_vals = NULL
+            size_t vals_size = 4096
+        try:
+            while True:
+                c_keys = <char *>realloc_chk(c_keys, keys_size)
+                c_vals = <char *>realloc_chk(c_vals, vals_size)
+                with nogil:
+                    ret = rbd_metadata_list(self.image, self.last_read,
+                                            self.max_read, c_keys, &keys_size,
+                                            c_vals, &vals_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error listing metadata for image %s' %
+                                  (self.image_name,))
+            keys = [decode_cstr(key) for key in
+                        c_keys[:keys_size].split(b'\0') if key]
+            vals = [decode_cstr(val) for val in
+                        c_vals[:vals_size].split(b'\0') if val]
+            if len(keys) > 0:
+                free(self.last_read)
+                self.last_read = strdup(keys[-1])
+            self.next_chunk = zip(keys, vals)
+        finally:
+            free(c_keys)
+            free(c_vals)
+
 cdef class SnapIterator(object):
     """
     Iterator over snapshot info for an image.
@@ -2553,3 +2793,56 @@ cdef class SnapIterator(object):
         if self.snaps:
             rbd_snap_list_end(self.snaps)
             free(self.snaps)
+
+cdef class TrashIterator(object):
+    """
+    Iterator over trash entries.
+
+    Yields a dictionary containing trash info of an image.
+
+    Keys are:
+
+        * `id` (str) - image id
+
+        * `name` (str) - image name
+
+        * `source` (str) - source of deletion
+
+        * `deletion_time` (datetime) - time of deletion
+
+        * `deferment_end_time` (datetime) - time that an image is allowed to be
+                                            removed from trash
+    """
+
+    cdef:
+        rados_ioctx_t ioctx
+        size_t num_entries
+        rbd_trash_image_info_t *entries
+
+    def __init__(self, ioctx):
+        self.ioctx = convert_ioctx(ioctx)
+        self.num_entries = 1024
+        self.entries = <rbd_trash_image_info_t *>realloc_chk(NULL,
+            sizeof(rbd_trash_image_info_t) * self.num_entries)
+        with nogil:
+            ret = rbd_trash_list(self.ioctx, self.entries, &self.num_entries)
+        if ret < 0:
+            raise make_ex(ret, 'error listing trash entries')
+
+    __source_string = ['USER', 'MIRRORING']
+
+    def __iter__(self):
+        for i in range(self.num_entries):
+            yield {
+                'id'          : decode_cstr(self.entries[i].id),
+                'name'        : decode_cstr(self.entries[i].name),
+                'source'      : TrashIterator.__source_string[self.entries[i].source],
+                'deletion_time' : datetime.fromtimestamp(self.entries[i].deletion_time),
+                'deferment_end_time' : datetime.fromtimestamp(self.entries[i].deferment_end_time)
+                }
+
+    def __dealloc__(self):
+        rbd_trash_list_cleanup(self.entries, self.num_entries)
+        if self.entries:
+            free(self.entries)
+

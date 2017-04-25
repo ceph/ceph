@@ -34,9 +34,10 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wstrict-null-sentinel -Woverloaded-virtual")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pie")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
@@ -474,7 +475,6 @@ set(libcommon_files
   common/code_environment.cc
   common/dout.cc
   common/signal.cc
-  common/simple_spin.cc
   common/Thread.cc
   common/Formatter.cc
   common/HTMLFormatter.cc
@@ -843,9 +843,13 @@ add_subdirectory(test)
 endif(WITH_TESTS)
 
 add_subdirectory(compressor)
+
 add_subdirectory(tools)
 
+add_subdirectory(crypto/isa-l)
+
 if(WITH_TESTS)
+
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-coverage @ONLY)
 

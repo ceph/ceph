@@ -2906,7 +2906,7 @@ int main(int argc, char **argv)
 	    throw std::runtime_error(ss.str());
 	  }
 	  vector<json_spirit::Value>::iterator i = array.begin();
-	  //if (i == array.end() || i->type() != json_spirit::str_type) {
+	  assert(i != array.end());
 	  if (i->type() != json_spirit::str_type) {
 	    ss << "Object '" << object
 	       << "' must be a JSON array with the first element a string";

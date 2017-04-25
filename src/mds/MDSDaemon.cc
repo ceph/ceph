@@ -14,6 +14,7 @@
 
 #include <unistd.h>
 
+#include "include/compat.h"
 #include "global/signal_handler.h"
 
 #include "include/types.h"
@@ -1013,12 +1014,13 @@ void MDSDaemon::suicide()
   }
   beacon.shutdown();
 
+  mgrc.shutdown();
+
   if (mds_rank) {
     mds_rank->shutdown();
   } else {
     timer.shutdown();
 
-    mgrc.shutdown();
     monc->shutdown();
     messenger->shutdown();
   }
@@ -1041,7 +1043,7 @@ void MDSDaemon::respawn()
    * unlinked.
    */
   char exe_path[PATH_MAX] = "";
-  if (readlink("/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
+  if (readlink(PROCPREFIX "/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
@@ -1052,7 +1054,7 @@ void MDSDaemon::respawn()
     strncpy(exe_path, orig_argv[0], PATH_MAX-1);
   } else {
     dout(1) << "respawning with exe " << exe_path << dendl;
-    strcpy(exe_path, "/proc/self/exe");
+    strcpy(exe_path, PROCPREFIX "/proc/self/exe");
   }
 
   dout(1) << " exe_path " << exe_path << dendl;
@@ -1100,7 +1102,8 @@ bool MDSDaemon::ms_dispatch(Message *m)
 
 bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
-  dout(10) << "MDSDaemon::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
+  dout(10) << "MDSDaemon::ms_get_authorizer type="
+           << ceph_entity_type_name(dest_type) << dendl;
 
   /* monitor authorization is being handled on different layer */
   if (dest_type == CEPH_ENTITY_TYPE_MON)

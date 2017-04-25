@@ -28,7 +28,7 @@ public:
   ~RGWGetObj_Decompress() override {}
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
-  void fixup_range(off_t& ofs, off_t& end) override;
+  int fixup_range(off_t& ofs, off_t& end) override;
 
 };
 

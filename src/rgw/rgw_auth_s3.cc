@@ -9,7 +9,7 @@
 #include "rgw_common.h"
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
-
+#include "rgw_crypt_sanitize.h"
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -57,7 +57,7 @@ get_canon_amz_hdr(const std::map<std::string, std::string>& meta_map)
     dest.append("\n");
   }
 
-  return std::move(dest);
+  return dest;
 }
 
 /*
@@ -95,7 +95,7 @@ get_canon_resource(const char* const request_uri,
   }
 
   dout(10) << "get_canon_resource(): dest=" << dest << dendl;
-  return std::move(dest);
+  return dest;
 }
 
 /*
@@ -349,7 +349,7 @@ void rgw_create_s3_v4_string_to_sign(CephContext *cct, const string& algorithm, 
   rgw_assemble_s3_v4_string_to_sign(algorithm.c_str(), request_date.c_str(),
       credential_scope.c_str(), hashed_qr.c_str(), string_to_sign);
 
-  ldout(cct, 10) << "string to sign = " << string_to_sign << dendl;
+  ldout(cct, 10) << "string to sign = " << rgw::crypt_sanitize::log_content{string_to_sign.c_str()} << dendl;
 }
 
 /*

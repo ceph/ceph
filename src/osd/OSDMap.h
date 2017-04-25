@@ -148,13 +148,14 @@ public:
     map<int32_t, entity_addr_t> new_hb_back_up;
     map<int32_t, entity_addr_t> new_hb_front_up;
 
-    map<pg_t,vector<int32_t>> new_pg_remap;
-    map<pg_t,vector<pair<int32_t,int32_t>>> new_pg_remap_items;
-    set<pg_t> old_pg_remap, old_pg_remap_items;
+    map<pg_t,vector<int32_t>> new_pg_upmap;
+    map<pg_t,vector<pair<int32_t,int32_t>>> new_pg_upmap_items;
+    set<pg_t> old_pg_upmap, old_pg_upmap_items;
 
     string cluster_snapshot;
 
     float new_nearfull_ratio = -1;
+    float new_backfillfull_ratio = -1;
     float new_full_ratio = -1;
 
     mutable bool have_crc;      ///< crc values are defined
@@ -237,8 +238,8 @@ private:
   ceph::shared_ptr< vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
 
   // remap (post-CRUSH, pre-up)
-  map<pg_t,vector<int32_t>> pg_remap; ///< remap pg
-  map<pg_t,vector<pair<int32_t,int32_t>>> pg_remap_items; ///< remap osds in up set
+  map<pg_t,vector<int32_t>> pg_upmap; ///< remap pg
+  map<pg_t,vector<pair<int32_t,int32_t>>> pg_upmap_items; ///< remap osds in up set
 
   map<int64_t,pg_pool_t> pools;
   map<int64_t,string> pool_name;
@@ -254,7 +255,7 @@ private:
   string cluster_snapshot;
   bool new_blacklist_entries;
 
-  float full_ratio = 0, nearfull_ratio = 0;
+  float full_ratio = 0, backfillfull_ratio = 0, nearfull_ratio = 0;
 
   mutable uint64_t cached_up_osd_features;
 
@@ -336,10 +337,15 @@ public:
   float get_full_ratio() const {
     return full_ratio;
   }
+  float get_backfillfull_ratio() const {
+    return backfillfull_ratio;
+  }
   float get_nearfull_ratio() const {
     return nearfull_ratio;
   }
-  void count_full_nearfull_osds(int *full, int *nearfull) const;
+  void count_full_nearfull_osds(int *full, int *backfill, int *nearfull) const;
+  void get_full_osd_util(const ceph::unordered_map<int32_t,osd_stat_t> &osd_stat,
+                         map<int, float> *full, map<int, float> *backfill, map<int, float> *nearfull) const;
 
   /***** cluster state *****/
   /* osds */
@@ -663,7 +669,7 @@ private:
   void _apply_primary_affinity(ps_t seed, const pg_pool_t& pool,
 			       vector<int> *osds, int *primary) const;
 
-  /// apply pg_remap[_items] mappings
+  /// apply pg_upmap[_items] mappings
   void _apply_remap(const pg_pool_t& pi, pg_t pg, vector<int> *raw) const;
 
   /// pg -> (up osd list)
@@ -859,11 +865,11 @@ public:
     return calc_pg_role(osd, group, nrep) >= 0;
   }
 
-  int clean_remaps(
+  int clean_pg_upmaps(
     CephContext *cct,
     Incremental *pending_inc);
 
-  bool try_pg_remap(
+  bool try_pg_upmap(
     CephContext *cct,
     pg_t pg,                       ///< pg to potentially remap
     const set<int>& overfull,      ///< osds we'd want to evacuate
@@ -871,12 +877,12 @@ public:
     vector<int> *orig,
     vector<int> *out);             ///< resulting alternative mapping
 
-  int remap_pgs(
+  int calc_pg_upmaps(
     CephContext *cct,
     float max_deviation, ///< max deviation from target (value < 1.0)
     int max_iterations,  ///< max iterations to run
     const set<int64_t>& pools,        ///< [optional] restrict to pool
-    OSDMap::Incremental *pending_inc
+    Incremental *pending_inc
     );
 
   /*

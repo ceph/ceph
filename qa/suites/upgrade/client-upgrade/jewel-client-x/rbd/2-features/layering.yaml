@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd default features: 1
+

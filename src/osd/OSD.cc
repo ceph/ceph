@@ -40,6 +40,7 @@
 #include "Watch.h"
 #include "osdc/Objecter.h"
 
+#include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include "common/version.h"
 #include "common/io_priority.h"
@@ -254,8 +255,8 @@ OSDService::OSDService(OSD *osd) :
   watch_lock("OSDService::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
-  backfill_request_lock("OSDService::backfill_request_lock"),
-  backfill_request_timer(cct, backfill_request_lock, false),
+  recovery_request_lock("OSDService::recovery_request_lock"),
+  recovery_request_timer(cct, recovery_request_lock, false),
   reserver_finisher(cct),
   local_reserver(&reserver_finisher, cct->_conf->osd_max_backfills,
 		 cct->_conf->osd_min_recovery_priority),
@@ -494,8 +495,8 @@ void OSDService::shutdown()
   objecter_finisher.stop();
 
   {
-    Mutex::Locker l(backfill_request_lock);
-    backfill_request_timer.shutdown();
+    Mutex::Locker l(recovery_request_lock);
+    recovery_request_timer.shutdown();
   }
 
   {
@@ -715,13 +716,7 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
 {
   Mutex::Locker l(full_status_lock);
 
-  // We base ratio on kb_avail rather than kb_used because they can
-  // differ significantly e.g. on btrfs volumes with a large number of
-  // chunks reserved for metadata, and for our purposes (avoiding
-  // completely filling the disk) it's far more important to know how
-  // much space is available to use than how much we've already used.
-  float ratio = ((float)(osd_stat.kb - osd_stat.kb_avail)) /
-    ((float)osd_stat.kb);
+  float ratio = ((float)osd_stat.kb_used) / ((float)osd_stat.kb);
   cur_ratio = ratio;
 
   // The OSDMap ratios take precendence.  So if the failsafe is .95 and
@@ -734,28 +729,38 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
     return;
   }
   float nearfull_ratio = osdmap->get_nearfull_ratio();
-  float full_ratio = std::max(osdmap->get_full_ratio(), nearfull_ratio);
+  float backfillfull_ratio = std::max(osdmap->get_backfillfull_ratio(), nearfull_ratio);
+  float full_ratio = std::max(osdmap->get_full_ratio(), backfillfull_ratio);
   float failsafe_ratio = std::max(get_failsafe_full_ratio(), full_ratio);
 
   if (!osdmap->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
     // use the failsafe for nearfull and full; the mon isn't using the
     // flags anyway because we're mid-upgrade.
     full_ratio = failsafe_ratio;
+    backfillfull_ratio = failsafe_ratio;
     nearfull_ratio = failsafe_ratio;
   } else if (full_ratio <= 0 ||
+	     backfillfull_ratio <= 0 ||
 	     nearfull_ratio <= 0) {
-    derr << __func__ << " full_ratio or nearfull_ratio is <= 0" << dendl;
+    derr << __func__ << " full_ratio, backfillfull_ratio or nearfull_ratio is <= 0" << dendl;
     // use failsafe flag.  ick.  the monitor did something wrong or the user
     // did something stupid.
     full_ratio = failsafe_ratio;
+    backfillfull_ratio = failsafe_ratio;
     nearfull_ratio = failsafe_ratio;
   }
 
-  enum s_names new_state;
-  if (ratio > failsafe_ratio) {
+  string inject;
+  s_names new_state;
+  if (injectfull_state > NONE && injectfull) {
+    new_state = injectfull_state;
+    inject = "(Injected)";
+  } else if (ratio > failsafe_ratio) {
     new_state = FAILSAFE;
   } else if (ratio > full_ratio) {
     new_state = FULL;
+  } else if (ratio > backfillfull_ratio) {
+    new_state = BACKFILLFULL;
   } else if (ratio > nearfull_ratio) {
     new_state = NEARFULL;
   } else {
@@ -763,9 +768,11 @@ void OSDService::check_full_status(const osd_stat_t &osd_stat)
   }
   dout(20) << __func__ << " cur ratio " << ratio
 	   << ". nearfull_ratio " << nearfull_ratio
+	   << ". backfillfull_ratio " << backfillfull_ratio
 	   << ", full_ratio " << full_ratio
 	   << ", failsafe_ratio " << failsafe_ratio
 	   << ", new state " << get_full_state_name(new_state)
+	   << " " << inject
 	   << dendl;
 
   // warn
@@ -790,6 +797,8 @@ bool OSDService::need_fullness_update()
   if (osdmap->exists(whoami)) {
     if (osdmap->get_state(whoami) & CEPH_OSD_FULL) {
       cur = FULL;
+    } else if (osdmap->get_state(whoami) & CEPH_OSD_BACKFILLFULL) {
+      cur = BACKFILLFULL;
     } else if (osdmap->get_state(whoami) & CEPH_OSD_NEARFULL) {
       cur = NEARFULL;
     }
@@ -797,41 +806,80 @@ bool OSDService::need_fullness_update()
   s_names want = NONE;
   if (is_full())
     want = FULL;
+  else if (is_backfillfull())
+    want = BACKFILLFULL;
   else if (is_nearfull())
     want = NEARFULL;
   return want != cur;
 }
 
-bool OSDService::check_failsafe_full()
+bool OSDService::_check_full(s_names type, ostream &ss) const
 {
   Mutex::Locker l(full_status_lock);
-  if (cur_state == FAILSAFE)
+
+  if (injectfull && injectfull_state >= type) {
+    // injectfull is either a count of the number of times to return failsafe full
+    // or if -1 then always return full
+    if (injectfull > 0)
+      --injectfull;
+    ss << "Injected " << get_full_state_name(type) << " OSD ("
+       << (injectfull < 0 ? "set" : std::to_string(injectfull)) << ")";
     return true;
-  return false;
+  }
+
+  ss << "current usage is " << cur_ratio;
+  return cur_state >= type;
 }
 
-bool OSDService::is_nearfull()
+bool OSDService::check_failsafe_full(ostream &ss) const
+{
+  return _check_full(FAILSAFE, ss);
+}
+
+bool OSDService::check_full(ostream &ss) const
+{
+  return _check_full(FULL, ss);
+}
+
+bool OSDService::check_backfill_full(ostream &ss) const
+{
+  return _check_full(BACKFILLFULL, ss);
+}
+
+bool OSDService::check_nearfull(ostream &ss) const
+{
+  return _check_full(NEARFULL, ss);
+}
+
+bool OSDService::is_failsafe_full() const
 {
   Mutex::Locker l(full_status_lock);
-  return cur_state == NEARFULL;
+  return cur_state == FAILSAFE;
 }
 
-bool OSDService::is_full()
+bool OSDService::is_full() const
 {
   Mutex::Locker l(full_status_lock);
   return cur_state >= FULL;
 }
 
-bool OSDService::too_full_for_backfill(double *_ratio, double *_max_ratio)
+bool OSDService::is_backfillfull() const
 {
   Mutex::Locker l(full_status_lock);
-  double max_ratio;
-  max_ratio = cct->_conf->osd_backfill_full_ratio;
-  if (_ratio)
-    *_ratio = cur_ratio;
-  if (_max_ratio)
-    *_max_ratio = max_ratio;
-  return cur_ratio >= max_ratio;
+  return cur_state >= BACKFILLFULL;
+}
+
+bool OSDService::is_nearfull() const
+{
+  Mutex::Locker l(full_status_lock);
+  return cur_state >= NEARFULL;
+}
+
+void OSDService::set_injectfull(s_names type, int64_t count)
+{
+  Mutex::Locker l(full_status_lock);
+  injectfull_state = type;
+  injectfull = count;
 }
 
 void OSDService::update_osd_stat(vector<int>& hb_peers)
@@ -865,6 +913,16 @@ void OSDService::update_osd_stat(vector<int>& hb_peers)
   dout(20) << "update_osd_stat " << osd_stat << dendl;
 
   check_full_status(osd_stat);
+}
+
+bool OSDService::check_osdmap_full(const set<pg_shard_t> &missing_on)
+{
+  OSDMapRef osdmap = get_osdmap();
+  for (auto shard : missing_on) {
+    if (osdmap->get_state(shard.osd) & CEPH_OSD_FULL)
+      return true;
+  }
+  return false;
 }
 
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
@@ -1560,6 +1618,14 @@ void OSDService::queue_for_snap_trim(PG *pg)
 #undef dout_prefix
 #define dout_prefix *_dout
 
+// Commands shared between OSD's console and admin console:
+namespace ceph { 
+namespace osd_cmds { 
+
+int heap(CephContext& cct, cmdmap_t& cmdmap, Formatter& f, std::ostream& os);
+ 
+}} // namespace ceph::osd_cmds
+
 int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 	      uuid_d fsid, int whoami)
 {
@@ -1862,20 +1928,20 @@ class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
   explicit OSDSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+  bool call(std::string admin_command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) override {
     stringstream ss;
-    bool r = osd->asok_command(command, cmdmap, format, ss);
+    bool r = osd->asok_command(admin_command, cmdmap, format, ss);
     out.append(ss);
     return r;
   }
 };
 
-bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
+bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
 		       ostream& ss)
 {
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
-  if (command == "status") {
+  if (admin_command == "status") {
     f->open_object_section("status");
     f->dump_stream("cluster_fsid") << superblock.cluster_fsid;
     f->dump_stream("osd_fsid") << superblock.osd_fsid;
@@ -1888,34 +1954,34 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
       f->dump_unsigned("num_pgs", pg_map.size());
     }
     f->close_section();
-  } else if (command == "flush_journal") {
+  } else if (admin_command == "flush_journal") {
     store->flush_journal();
-  } else if (command == "dump_ops_in_flight" ||
-	     command == "ops") {
+  } else if (admin_command == "dump_ops_in_flight" ||
+	     admin_command == "ops") {
     if (!op_tracker.dump_ops_in_flight(f)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
-  } else if (command == "dump_blocked_ops") {
+  } else if (admin_command == "dump_blocked_ops") {
     if (!op_tracker.dump_ops_in_flight(f, true)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
-  } else if (command == "dump_historic_ops") {
+  } else if (admin_command == "dump_historic_ops") {
     if (!op_tracker.dump_historic_ops(f, false)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
-  } else if (command == "dump_historic_ops_by_duration") {
+  } else if (admin_command == "dump_historic_ops_by_duration") {
     if (!op_tracker.dump_historic_ops(f, true)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
-  } else if (command == "dump_op_pq_state") {
+  } else if (admin_command == "dump_op_pq_state") {
     f->open_object_section("pq");
     op_shardedwq.dump(f);
     f->close_section();
-  } else if (command == "dump_blacklist") {
+  } else if (admin_command == "dump_blacklist") {
     list<pair<entity_addr_t,utime_t> > bl;
     OSDMapRef curmap = service.get_osdmap();
 
@@ -1931,7 +1997,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
       f->close_section(); //entry
     }
     f->close_section(); //blacklist
-  } else if (command == "dump_watchers") {
+  } else if (admin_command == "dump_watchers") {
     list<obj_watch_item_t> watchers;
     // scan pg's
     {
@@ -1974,7 +2040,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     }
 
     f->close_section(); //watchers
-  } else if (command == "dump_reservations") {
+  } else if (admin_command == "dump_reservations") {
     f->open_object_section("reservations");
     f->open_object_section("local_reservations");
     service.local_reserver.dump(f);
@@ -1983,9 +2049,17 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     service.remote_reserver.dump(f);
     f->close_section();
     f->close_section();
-  } else if (command == "get_latest_osdmap") {
+  } else if (admin_command == "get_latest_osdmap") {
     get_latest_osdmap();
-  } else if (command == "set_heap_property") {
+  } else if (admin_command == "heap") {
+    auto result = ceph::osd_cmds::heap(*cct, cmdmap, *f, ss);
+
+    // Note: Failed heap profile commands won't necessarily trigger an error:
+    f->open_object_section("result");
+    f->dump_string("error", cpp_strerror(result));
+    f->dump_bool("success", result >= 0);
+    f->close_section();
+  } else if (admin_command == "set_heap_property") {
     string property;
     int64_t value = 0;
     string error;
@@ -2009,7 +2083,7 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->dump_string("error", error);
     f->dump_bool("success", success);
     f->close_section();
-  } else if (command == "get_heap_property") {
+  } else if (admin_command == "get_heap_property") {
     string property;
     size_t value = 0;
     string error;
@@ -2028,13 +2102,13 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->dump_bool("success", success);
     f->dump_int("value", value);
     f->close_section();
-  } else if (command == "dump_objectstore_kv_stats") {
+  } else if (admin_command == "dump_objectstore_kv_stats") {
     store->get_db_statistics(f);
-  } else if (command == "dump_scrubs") {
+  } else if (admin_command == "dump_scrubs") {
     service.dumps_scrub(f);
-  } else if (command == "calc_objectstore_db_histogram") {
+  } else if (admin_command == "calc_objectstore_db_histogram") {
     store->generate_db_histogram(f);
-  } else if (command == "flush_store_cache") {
+  } else if (admin_command == "flush_store_cache") {
     store->flush_cache();
   } else {
     assert(0 == "broken asok registration");
@@ -2130,7 +2204,7 @@ int OSD::init()
 
   tick_timer.init();
   tick_timer_without_osd_lock.init();
-  service.backfill_request_timer.init();
+  service.recovery_request_timer.init();
 
   // mount.
   dout(2) << "mounting " << dev_path << " "
@@ -2382,6 +2456,12 @@ int OSD::init()
     }
   }
 
+  r = update_crush_device_class();
+  if (r < 0) {
+    osd_lock.Lock();
+    goto monout;
+  }
+
   r = update_crush_location();
   if (r < 0) {
     osd_lock.Lock();
@@ -2482,6 +2562,14 @@ void OSD::final_init()
 				     asok_hook,
 				     "force osd to update the latest map from "
 				     "the mon");
+  assert(r == 0);
+
+  r = admin_socket->register_command( "heap",
+                                      "heap " \
+                                      "name=heapcmd,type=CephString",
+                                      asok_hook,
+                                      "show heap usage info (available only if "
+                                      "compiled with tcmalloc)");
   assert(r == 0);
 
   r = admin_socket->register_command("set_heap_property",
@@ -2606,6 +2694,14 @@ void OSD::final_init()
    "name=pgid,type=CephString ",
    test_ops_hook,
    "Trigger a scheduled scrub ");
+  assert(r == 0);
+  r = admin_socket->register_command(
+   "injectfull",
+   "injectfull " \
+   "name=type,type=CephString,req=false " \
+   "name=count,type=CephInt,req=false ",
+   test_ops_hook,
+   "Inject a full disk (optional count times)");
   assert(r == 0);
 }
 
@@ -2814,6 +2910,7 @@ void OSD::create_recoverystate_perf()
   rs_perf.add_time_avg(rs_down_latency, "down_latency", "Down recovery state latency");
   rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency", "Getmissing recovery state latency");
   rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency", "Waitupthru recovery state latency");
+  rs_perf.add_time_avg(rs_notrecovering_latency, "notrecovering_latency", "Notrecovering recovery state latency");
 
   recoverystate_perf = rs_perf.create_perf_counters();
   cct->get_perfcounters_collection()->add(recoverystate_perf);
@@ -3021,6 +3118,44 @@ int OSD::shutdown()
   return r;
 }
 
+int OSD::mon_cmd_maybe_osd_create(string &cmd)
+{
+  bool created = false;
+  while (true) {
+    dout(10) << __func__ << " cmd: " << cmd << dendl;
+    vector<string> vcmd{cmd};
+    bufferlist inbl;
+    C_SaferCond w;
+    string outs;
+    monc->start_mon_command(vcmd, inbl, NULL, &outs, &w);
+    int r = w.wait();
+    if (r < 0) {
+      if (r == -ENOENT && !created) {
+	string newcmd = "{\"prefix\": \"osd create\", \"id\": " + stringify(whoami)
+	  + ", \"uuid\": \"" + stringify(superblock.osd_fsid) + "\"}";
+	vector<string> vnewcmd{newcmd};
+	bufferlist inbl;
+	C_SaferCond w;
+	string outs;
+	monc->start_mon_command(vnewcmd, inbl, NULL, &outs, &w);
+	int r = w.wait();
+	if (r < 0) {
+	  derr << __func__ << " fail: osd does not exist and created failed: "
+	       << cpp_strerror(r) << dendl;
+	  return r;
+	}
+	created = true;
+	continue;
+      }
+      derr << __func__ << " fail: '" << outs << "': " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    break;
+  }
+
+  return 0;
+}
+
 int OSD::update_crush_location()
 {
   if (!cct->_conf->osd_crush_update_on_start) {
@@ -3059,42 +3194,23 @@ int OSD::update_crush_location()
   }
   cmd += "]}";
 
-  bool created = false;
-  while (true) {
-    dout(10) << __func__ << " cmd: " << cmd << dendl;
-    vector<string> vcmd{cmd};
-    bufferlist inbl;
-    C_SaferCond w;
-    string outs;
-    monc->start_mon_command(vcmd, inbl, NULL, &outs, &w);
-    int r = w.wait();
-    if (r < 0) {
-      if (r == -ENOENT && !created) {
-	string newcmd = "{\"prefix\": \"osd create\", \"id\": " + stringify(whoami)
-	  + ", \"uuid\": \"" + stringify(superblock.osd_fsid) + "\"}";
-	vector<string> vnewcmd{newcmd};
-	bufferlist inbl;
-	C_SaferCond w;
-	string outs;
-	monc->start_mon_command(vnewcmd, inbl, NULL, &outs, &w);
-	int r = w.wait();
-	if (r < 0) {
-	  derr << __func__ << " fail: osd does not exist and created failed: "
-	       << cpp_strerror(r) << dendl;
-	  return r;
-	}
-	created = true;
-	continue;
-      }
-      derr << __func__ << " fail: '" << outs << "': " << cpp_strerror(r) << dendl;
-      return r;
-    }
-    break;
-  }
-
-  return 0;
+  return mon_cmd_maybe_osd_create(cmd);
 }
 
+int OSD::update_crush_device_class()
+{
+  string device_class;
+  int r = store->read_meta("crush_device_class", &device_class);
+  if (r < 0)
+    return 0;
+
+  string cmd =
+    string("{\"prefix\": \"osd crush set-device-class\", ") +
+    string("\"id\": ") + stringify(whoami) + string(", ") +
+    string("\"class\": \"") + device_class + string("\"}");
+
+  return mon_cmd_maybe_osd_create(cmd);
+}
 
 void OSD::write_superblock(ObjectStore::Transaction& t)
 {
@@ -3778,6 +3894,13 @@ int OSD::handle_pg_peering_evt(
     switch (result) {
     case RES_NONE: {
       const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
+      if (pp->has_flag(pg_pool_t::FLAG_EC_OVERWRITES) &&
+	  store->get_type() != "bluestore") {
+	clog->warn() << "pg " << pgid
+		     << " is at risk of silent data corruption: "
+		     << "the pool allows ec overwrites but is not stored in "
+		     << "bluestore, so deep scrubbing will not detect bitrot";
+      }
       PG::_create(*rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
       PG::_init(*rctx.transaction, pgid, pp);
 
@@ -4829,6 +4952,24 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     pg->unlock();
     return;
   }
+  if (command == "injectfull") {
+    int64_t count;
+    string type;
+    OSDService::s_names state;
+    cmd_getval(service->cct, cmdmap, "type", type, string("full"));
+    cmd_getval(service->cct, cmdmap, "count", count, (int64_t)-1);
+    if (type == "none" || count == 0) {
+      type = "none";
+      count = 0;
+    }
+    state = service->get_full_state(type);
+    if (state == OSDService::s_names::INVALID) {
+      ss << "Invalid type use (none, nearfull, backfillfull, full, failsafe)";
+      return;
+    }
+    service->set_injectfull(state, count);
+    return;
+  }
   ss << "Internal error - command=" << command;
 }
 
@@ -5033,7 +5174,7 @@ void OSD::ms_handle_fast_accept(Connection *con)
 
 bool OSD::ms_handle_reset(Connection *con)
 {
-  Session *session = (Session *)con->get_priv();
+  Session *session = static_cast<Session*>(con->get_priv());
   dout(2) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
@@ -5052,7 +5193,7 @@ bool OSD::ms_handle_refused(Connection *con)
   if (!cct->_conf->osd_fast_fail_on_connection_refused)
     return false;
 
-  Session *session = (Session *)con->get_priv();
+  Session *session = static_cast<Session*>(con->get_priv());
   dout(2) << "ms_handle_refused con " << con << " session " << session << dendl;
   if (!session)
     return false;
@@ -5160,6 +5301,8 @@ void OSD::send_full_update()
   unsigned state = 0;
   if (service.is_full()) {
     state = CEPH_OSD_FULL;
+  } else if (service.is_backfillfull()) {
+    state = CEPH_OSD_BACKFILLFULL;
   } else if (service.is_nearfull()) {
     state = CEPH_OSD_NEARFULL;
   }
@@ -6010,17 +6153,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   }
 
   else if (prefix == "heap") {
-    if (!ceph_using_tcmalloc()) {
-      r = -EOPNOTSUPP;
-      ss << "could not issue heap profiler command -- not using tcmalloc!";
-    } else {
-      string heapcmd;
-      cmd_getval(cct, cmdmap, "heapcmd", heapcmd);
-      // XXX 1-element vector, change at callee or make vector here?
-      vector<string> heapcmd_vec;
-      get_str_vec(heapcmd, heapcmd_vec);
-      ceph_heap_profiler_handle_command(heapcmd_vec, ds);
-    }
+    r = ceph::osd_cmds::heap(*cct, cmdmap, *f, ds);
   }
 
   else if (prefix == "debug dump_missing") {
@@ -9030,6 +9163,7 @@ int OSD::init_op_flags(OpRequestRef& op)
       const pg_pool_t *base_pool = osdmap->get_pg_pool(pool->tier_of);
       if (base_pool && base_pool->require_rollback()) {
         if ((iter->op.op != CEPH_OSD_OP_READ) &&
+            (iter->op.op != CEPH_OSD_OP_CHECKSUM) &&
             (iter->op.op != CEPH_OSD_OP_STAT) &&
             (iter->op.op != CEPH_OSD_OP_ISDIRTY) &&
             (iter->op.op != CEPH_OSD_OP_UNDIRTY) &&
@@ -9139,6 +9273,7 @@ int OSD::init_op_flags(OpRequestRef& op)
     case CEPH_OSD_OP_READ:
     case CEPH_OSD_OP_SYNC_READ:
     case CEPH_OSD_OP_SPARSE_READ:
+    case CEPH_OSD_OP_CHECKSUM:
     case CEPH_OSD_OP_WRITEFULL:
       if (m->ops.size() == 1 &&
           (iter->op.flags & CEPH_OSD_OP_FLAG_FADVISE_NOCACHE ||
@@ -9177,8 +9312,6 @@ void OSD::PeeringWQ::_dequeue(list<PG*> *out) {
   }
   in_use.insert(out->begin(), out->end());
 }
-
-
 
 // =============================================================
 
@@ -9545,3 +9678,30 @@ void OSD::ShardedOpWQ::_enqueue_front(pair<spg_t, PGQueueable> item)
   sdata->sdata_cond.SignalOne();
   sdata->sdata_lock.Unlock();
 }
+
+namespace ceph { 
+namespace osd_cmds { 
+
+int heap(CephContext& cct, cmdmap_t& cmdmap, Formatter& f, std::ostream& os)
+{
+  if (!ceph_using_tcmalloc()) {
+        os << "could not issue heap profiler command -- not using tcmalloc!";
+        return -EOPNOTSUPP;
+  }
+  
+  string cmd;
+  if (!cmd_getval(&cct, cmdmap, "heapcmd", cmd)) {
+        os << "unable to get value for command \"" << cmd << "\"";
+       return -EINVAL;
+   }
+  
+  std::vector<std::string> cmd_vec;
+  get_str_vec(cmd, cmd_vec);
+  
+  ceph_heap_profiler_handle_command(cmd_vec, os);
+  
+  return 0;
+}
+ 
+}} // namespace ceph::osd_cmds
+

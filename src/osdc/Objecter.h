@@ -367,6 +367,22 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
   }
 
+  void checksum(uint8_t type, const bufferlist &init_value_bl,
+		uint64_t off, uint64_t len, size_t chunk_size,
+		bufferlist *pbl, int *prval, Context *ctx) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_CHECKSUM);
+    osd_op.op.checksum.offset = off;
+    osd_op.op.checksum.length = len;
+    osd_op.op.checksum.type = type;
+    osd_op.op.checksum.chunk_size = chunk_size;
+    osd_op.indata.append(init_value_bl);
+
+    unsigned p = ops.size() - 1;
+    out_bl[p] = pbl;
+    out_rval[p] = prval;
+    out_handler[p] = ctx;
+  }
+
   // object attrs
   void getxattr(const char *name, bufferlist *pbl, int *prval) {
     bufferlist bl;
@@ -1952,28 +1968,10 @@ private:
   // here or you will have great woe and misery.
 
   template<typename Callback, typename...Args>
-  auto with_osdmap(Callback&& cb, Args&&...args) ->
-    typename std::enable_if<
-      std::is_void<
-    decltype(cb(const_cast<const OSDMap&>(*osdmap),
-		std::forward<Args>(args)...))>::value,
-      void>::type {
+  auto with_osdmap(Callback&& cb, Args&&... args) const ->
+    decltype(cb(*osdmap, std::forward<Args>(args)...)) {
     shared_lock l(rwlock);
-    std::forward<Callback>(cb)(const_cast<const OSDMap&>(*osdmap),
-			       std::forward<Args>(args)...);
-  }
-
-  template<typename Callback, typename...Args>
-  auto with_osdmap(Callback&& cb, Args&&... args) ->
-    typename std::enable_if<
-      !std::is_void<
-	decltype(cb(const_cast<const OSDMap&>(*osdmap),
-		    std::forward<Args>(args)...))>::value,
-      decltype(cb(const_cast<const OSDMap&>(*osdmap),
-		  std::forward<Args>(args)...))>::type {
-    shared_lock l(rwlock);
-    return std::forward<Callback>(cb)(const_cast<const OSDMap&>(*osdmap),
-				      std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
   }
 
 

@@ -4,6 +4,9 @@ overrides:
     log-whitelist:
       - bad backtrace on dir ino
       - error reading table object
+      - Metadata damage detected
+      - slow requests are blocked
+      - Behind on trimming
 
 tasks:
   - cephfs_test_runner:

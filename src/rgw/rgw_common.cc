@@ -25,6 +25,7 @@
 #include "common/strtol.h"
 #include "include/str_list.h"
 #include "auth/Crypto.h"
+#include "rgw_crypt_sanitize.h"
 
 #include <sstream>
 
@@ -288,7 +289,7 @@ void req_info::init_meta_info(bool *found_bad_meta)
     }
   }
   for (iter = x_meta_map.begin(); iter != x_meta_map.end(); ++iter) {
-    dout(10) << "x>> " << iter->first << ":" << iter->second << dendl;
+    dout(10) << "x>> " << iter->first << ":" << rgw::crypt_sanitize::x_meta_map{iter->first, iter->second} << dendl;
   }
 }
 
@@ -1186,6 +1187,19 @@ string rgw_trim_whitespace(const string& src)
   }
 
   return src.substr(start, end - start + 1);
+}
+
+boost::string_ref rgw_trim_whitespace(const boost::string_ref& src)
+{
+  boost::string_ref res = src;
+
+  while (res.size() > 0 && std::isspace(res.front())) {
+    res.remove_prefix(1);
+  }
+  while (res.size() > 0 && std::isspace(res.back())) {
+    res.remove_suffix(1);
+  }
+  return res;
 }
 
 string rgw_trim_quotes(const string& val)

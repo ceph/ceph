@@ -977,6 +977,8 @@ rm -rf %{buildroot}
 %{_libdir}/ceph/erasure-code/libec_*.so*
 %dir %{_libdir}/ceph/compressor
 %{_libdir}/ceph/compressor/libceph_*.so*
+%dir %{_libdir}/ceph/crypto
+%{_libdir}/ceph/crypto/libceph_*.so*
 %if %{with lttng}
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*

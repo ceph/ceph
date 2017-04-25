@@ -140,6 +140,10 @@ int rgw_read_user_buckets(RGWRados * store,
 
   } while (truncated && total < max);
 
+  if (is_truncated != nullptr) {
+    *is_truncated = truncated;
+  }
+
   if (need_stats) {
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
     ret = store->update_containers_stats(m);
@@ -440,8 +444,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
 				   bool fix)
 {
   RGWUserBuckets user_buckets;
-  bool done;
-  bool is_truncated;
+  bool is_truncated = false;
   string marker;
 
   CephContext *cct = store->ctx();
@@ -492,8 +495,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
         }
       }
     }
-    done = (buckets.size() < max_entries);
-  } while (!done);
+  } while (is_truncated);
 }
 
 static bool bucket_object_check_filter(const string& oid)
@@ -1386,6 +1388,7 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   formatter->dump_string("bucket", bucket.name);
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
+  formatter->dump_stream("index_type") << bucket_info.index_type;
   ::encode_json("owner", bucket_info.owner, formatter);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
@@ -1427,8 +1430,7 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
 
     RGWUserBuckets buckets;
     string marker;
-    bool done;
-    bool is_truncated;
+    bool is_truncated = false;
 
     do {
       ret = rgw_read_user_buckets(store, op_state.get_user_id(), buckets,
@@ -1451,8 +1453,7 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
       }
 
       flusher.flush();
-      done = (m.size() < max_entries);
-    } while (!done);
+    } while (is_truncated);
 
     formatter->close_section();
   } else if (!bucket_name.empty()) {

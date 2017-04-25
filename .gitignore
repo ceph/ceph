@@ -15,6 +15,7 @@
 *.tmp
 *.orig
 *.patch
+*.rej
 *.pyc
 ceph.spec
 cscope.*

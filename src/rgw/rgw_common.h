@@ -103,6 +103,12 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
 #define RGW_ATTR_UNIX1          RGW_ATTR_PREFIX "unix1"
 
+#define RGW_ATTR_CRYPT_PREFIX   RGW_ATTR_PREFIX "crypt."
+#define RGW_ATTR_CRYPT_MODE     RGW_ATTR_CRYPT_PREFIX "mode"
+#define RGW_ATTR_CRYPT_KEYMD5   RGW_ATTR_CRYPT_PREFIX "keymd5"
+#define RGW_ATTR_CRYPT_KEYID    RGW_ATTR_CRYPT_PREFIX "keyid"
+#define RGW_ATTR_CRYPT_KEYSEL   RGW_ATTR_CRYPT_PREFIX "keysel"
+
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
 #define RGW_FORMAT_PLAIN        0
@@ -1101,6 +1107,18 @@ enum RGWBucketIndexType {
   RGWBIType_Normal = 0,
   RGWBIType_Indexless = 1,
 };
+
+inline ostream& operator<<(ostream& out, const RGWBucketIndexType &index_type) 
+{
+  switch (index_type) {
+    case RGWBIType_Normal:
+      return out << "Normal";
+    case RGWBIType_Indexless:
+      return out << "Indexless";
+    default:
+      return out << "Unknown";
+  }
+}
 
 struct RGWBucketInfo
 {
@@ -2101,6 +2119,7 @@ extern int parse_time(const char *time_str, real_time *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
 extern bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns = NULL, bool extended_format = true);
 extern string rgw_trim_whitespace(const string& src);
+extern boost::string_ref rgw_trim_whitespace(const boost::string_ref& src);
 extern string rgw_trim_quotes(const string& val);
 
 extern void rgw_to_iso8601(const real_time& t, char *dest, int buf_size);

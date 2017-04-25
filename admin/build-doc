@@ -20,7 +20,7 @@ if command -v dpkg >/dev/null; then
         exit 1
     fi
 elif command -v yum >/dev/null; then
-    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml-devel libxslt-devel Cython graphviz; do
+    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml2-devel libxslt-devel Cython graphviz; do
 	if ! rpm -q $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
@@ -57,7 +57,7 @@ cd build-doc
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
 if [ ! -e $vdir ]; then
-    virtualenv --system-site-packages $vdir
+    virtualenv --system-site-packages $vdir -p python2
 fi
 $vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt
 

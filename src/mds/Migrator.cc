@@ -280,7 +280,9 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     it->second.state = EXPORT_CANCELLED;
     dir->unfreeze_tree();  // cancel the freeze
     dir->auth_unpin(this);
-    if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
+    if (notify_peer &&
+	(!mds->is_cluster_degraded() ||
+	 mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer))) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     break;
 
@@ -288,7 +290,9 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     dout(10) << "export state=freezing : canceling freeze" << dendl;
     it->second.state = EXPORT_CANCELLED;
     dir->unfreeze_tree();  // cancel the freeze
-    if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
+    if (notify_peer &&
+	(!mds->is_cluster_degraded() ||
+	 mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer))) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     break;
 
@@ -325,7 +329,9 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     dir->unfreeze_tree();
     cache->adjust_subtree_auth(dir, mds->get_nodeid());
     cache->try_subtree_merge(dir);
-    if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
+    if (notify_peer &&
+	(!mds->is_cluster_degraded() ||
+	 mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer))) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     break;
 
@@ -765,7 +771,7 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
     dout(7) << "read-only FS, no exports for now" << dendl;
     return;
   }
-  if (mds->mdsmap->is_degraded()) {
+  if (mds->is_cluster_degraded()) {
     dout(7) << "cluster degraded, no exports for now" << dendl;
     return;
   }
@@ -1180,7 +1186,8 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
        p != dir->replicas_end();
        ++p) {
     if (p->first == it->second.peer) continue;
-    if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(p->first))
+    if (mds->is_cluster_degraded() &&
+	!mds->mdsmap->is_clientreplay_or_active_or_stopping(p->first))
       continue;  // only if active
     it->second.warning_ack_waiting.insert(p->first);
     it->second.notify_ack_waiting.insert(p->first);  // we'll eventually get a notifyack, too!
@@ -1771,7 +1778,8 @@ void Migrator::export_logged_finish(CDir *dir)
     export_finish(dir);  // skip notify/notify_ack stage.
   } else {
     // notify peer to send cap import messages to clients
-    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(stat.peer)) {
+    if (!mds->is_cluster_degraded() ||
+	mds->mdsmap->is_clientreplay_or_active_or_stopping(stat.peer)) {
       mds->send_message_mds(new MExportDirFinish(dir->dirfrag(), false, stat.tid), stat.peer);
     } else {
       dout(7) << "not sending MExportDirFinish, dest has failed" << dendl;
@@ -1854,7 +1862,8 @@ void Migrator::export_finish(CDir *dir)
   }
 
   // send finish/commit to new auth
-  if (mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) {
+  if (!mds->is_cluster_degraded() ||
+      mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) {
     mds->send_message_mds(new MExportDirFinish(dir->dirfrag(), true, it->second.tid), it->second.peer);
   } else {
     dout(7) << "not sending MExportDirFinish last, dest has failed" << dendl;
@@ -2387,12 +2396,17 @@ void Migrator::import_remove_pins(CDir *dir, set<CDir*>& bounds)
     in->put_stickydirs();
   }
 
-  if (stat.state >= IMPORT_PREPPED) {
+  if (stat.state == IMPORT_PREPPING) {
+    for (auto bd : bounds) {
+      if (bd->state_test(CDir::STATE_IMPORTBOUND)) {
+	bd->put(CDir::PIN_IMPORTBOUND);
+	bd->state_clear(CDir::STATE_IMPORTBOUND);
+      }
+    }
+  } else if (stat.state >= IMPORT_PREPPED) {
     // bounding dirfrags
-    for (set<CDir*>::iterator it = bounds.begin();
-	 it != bounds.end();
-	 ++it) {
-      CDir *bd = *it;
+    for (auto bd : bounds) {
+      assert(bd->state_test(CDir::STATE_IMPORTBOUND));
       bd->put(CDir::PIN_IMPORTBOUND);
       bd->state_clear(CDir::STATE_IMPORTBOUND);
     }
@@ -2561,7 +2575,8 @@ void Migrator::import_notify_abort(CDir *dir, set<CDir*>& bounds)
   import_state_t& stat = import_state[dir->dirfrag()];
   for (set<mds_rank_t>::iterator p = stat.bystanders.begin();
        p != stat.bystanders.end(); ) {
-    if (!mds->mdsmap->is_clientreplay_or_active_or_stopping(*p)) {
+    if (mds->is_cluster_degraded() &&
+	!mds->mdsmap->is_clientreplay_or_active_or_stopping(*p)) {
       // this can happen if both exporter and bystander fail in the same mdsmap epoch
       stat.bystanders.erase(p++);
       continue;

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 #
 # Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
@@ -154,11 +154,6 @@ function corrupt_and_repair_one() {
 function corrupt_and_repair_erasure_coded() {
     local dir=$1
     local poolname=$2
-    local profile=$3
-
-    ceph osd pool create $poolname 1 1 erasure $profile \
-        || return 1
-    wait_for_clean || return 1
 
     add_something $dir $poolname || return 1
 
@@ -176,8 +171,25 @@ function corrupt_and_repair_erasure_coded() {
 
 }
 
-function TEST_auto_repair_erasure_coded() {
+function create_ec_pool() {
+    local pool_name=$1
+    local allow_overwrites=$2
+
+    ceph osd erasure-code-profile set myprofile ruleset-failure-domain=osd $3 $4 $5 $6 $7 || return 1
+
+    ceph osd pool create "$poolname" 1 1 erasure myprofile || return 1
+
+    if [ "$allow_overwrites" = "true" ]; then
+        ceph osd pool set "$poolname" allow_ec_overwrites true || return 1
+    fi
+
+    wait_for_clean || return 1
+    return 0
+}
+
+function auto_repair_erasure_coded() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
 
     # Launch a cluster with 5 seconds scrub interval
@@ -190,15 +202,16 @@ function TEST_auto_repair_erasure_coded() {
             --osd-scrub-min-interval=5 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
-        run_osd $dir $id $ceph_osd_args
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id $ceph_osd_args || return 1
+	else
+            run_osd $dir $id $ceph_osd_args || return 1
+	fi
     done
     wait_for_clean || return 1
 
     # Create an EC pool
-    ceph osd erasure-code-profile set myprofile \
-        k=2 m=1 ruleset-failure-domain=osd || return 1
-    ceph osd pool create $poolname 8 8 erasure myprofile || return 1
-    wait_for_clean || return 1
+    create_ec_pool $poolname $allow_overwrites k=2 m=1 || return 1
 
     # Put an object
     local payload=ABCDEF
@@ -222,69 +235,95 @@ function TEST_auto_repair_erasure_coded() {
     teardown $dir || return 1
 }
 
-function TEST_corrupt_and_repair_jerasure() {
+function TEST_auto_repair_erasure_coded_appends() {
+    auto_repair_erasure_coded $1 false
+}
+
+function TEST_auto_repair_erasure_coded_overwrites() {
+    auto_repair_erasure_coded $1 true
+}
+
+function corrupt_and_repair_jerasure() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
-    local profile=myprofile
 
     setup $dir || return 1
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     for id in $(seq 0 3) ; do
-        run_osd $dir $id || return 1
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id || return 1
+	else
+            run_osd $dir $id || return 1
+	fi
     done
     wait_for_clean || return 1
 
-    ceph osd erasure-code-profile set $profile \
-        k=2 m=2 ruleset-failure-domain=osd || return 1
-
-    corrupt_and_repair_erasure_coded $dir $poolname $profile || return 1
+    create_ec_pool $poolname $allow_overwrites k=2 m=2 || return 1
+    corrupt_and_repair_erasure_coded $dir $poolname || return 1
 
     teardown $dir || return 1
 }
 
-function TEST_corrupt_and_repair_lrc() {
+function TEST_corrupt_and_repair_jerasure_appends() {
+    corrupt_and_repair_jerasure $1
+}
+
+function TEST_corrupt_and_repair_jerasure_overwrites() {
+    corrupt_and_repair_jerasure $1 true
+}
+
+function corrupt_and_repair_lrc() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
-    local profile=myprofile
 
     setup $dir || return 1
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     for id in $(seq 0 9) ; do
-        run_osd $dir $id || return 1
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id || return 1
+	else
+            run_osd $dir $id || return 1
+	fi
     done
     wait_for_clean || return 1
 
-    ceph osd erasure-code-profile set $profile \
-        pluing=lrc \
-        k=4 m=2 l=3 \
-        ruleset-failure-domain=osd || return 1
-
-    corrupt_and_repair_erasure_coded $dir $poolname $profile || return 1
+    create_ec_pool $poolname $allow_overwrites k=4 m=2 l=3 plugin=lrc || return 1
+    corrupt_and_repair_erasure_coded $dir $poolname || return 1
 
     teardown $dir || return 1
 }
 
-function TEST_unfound_erasure_coded() {
+function TEST_corrupt_and_repair_lrc_appends() {
+    corrupt_and_repair_jerasure $1
+}
+
+function TEST_corrupt_and_repair_lrc_overwrites() {
+    corrupt_and_repair_jerasure $1 true
+}
+
+function unfound_erasure_coded() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
     local payload=ABCDEF
 
     setup $dir || return 1
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
-    run_osd $dir 0 || return 1
-    run_osd $dir 1 || return 1
-    run_osd $dir 2 || return 1
-    run_osd $dir 3 || return 1
+    for id in $(seq 0 3) ; do
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id || return 1
+	else
+            run_osd $dir $id || return 1
+	fi
+    done
     wait_for_clean || return 1
 
-    ceph osd erasure-code-profile set myprofile \
-      k=2 m=2 ruleset-failure-domain=osd || return 1
-    ceph osd pool create $poolname 1 1 erasure myprofile \
-      || return 1
-    wait_for_clean || return 1
+    create_ec_pool $poolname $allow_overwrites k=2 m=2 || return 1
 
     add_something $dir $poolname || return 1
 
@@ -324,27 +363,35 @@ function TEST_unfound_erasure_coded() {
     teardown $dir || return 1
 }
 
+function TEST_unfound_erasure_coded_appends() {
+    unfound_erasure_coded $1
+}
+
+function TEST_unfound_erasure_coded_overwrites() {
+    unfound_erasure_coded $1 true
+}
+
 #
 # list_missing for EC pool
 #
-function TEST_list_missing_erasure_coded() {
+function list_missing_erasure_coded() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
-    local profile=myprofile
 
     setup $dir || return 1
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     for id in $(seq 0 2) ; do
-        run_osd $dir $id || return 1
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id || return 1
+	else
+            run_osd $dir $id || return 1
+	fi
     done
     wait_for_clean || return 1
 
-    ceph osd erasure-code-profile set $profile \
-        k=2 m=1 ruleset-failure-domain=osd || return 1
-    ceph osd pool create $poolname 1 1 erasure $profile \
-        || return 1
-    wait_for_clean || return 1
+    create_ec_pool $poolname $allow_overwrites k=2 m=1 || return 1
 
     # Put an object and remove the two shards (including primary)
     add_something $dir $poolname MOBJ0 || return 1
@@ -360,17 +407,17 @@ function TEST_list_missing_erasure_coded() {
     done
 
     id=${osds0[0]}
-    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
         MOBJ0 remove || return 1
     id=${osds0[1]}
-    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
         MOBJ0 remove || return 1
 
     id=${osds1[1]}
-    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
         MOBJ1 remove || return 1
     id=${osds1[2]}
-    ceph-objectstore-tool --data-path $dir/$id --journal-path $dir/$id/journal \
+    ceph-objectstore-tool --data-path $dir/$id --enable-experimental-unrecoverable-data-corrupting-features=bluestore \
         MOBJ1 remove || return 1
 
     for id in $(seq 0 2) ; do
@@ -392,6 +439,14 @@ function TEST_list_missing_erasure_coded() {
     done
 
     teardown $dir || return 1
+}
+
+function TEST_list_missing_erasure_coded_appends() {
+    list_missing_erasure_coded $1 false
+}
+
+function TEST_list_missing_erasure_coded_overwrites() {
+    list_missing_erasure_coded $1 true
 }
 
 #
@@ -1513,25 +1568,25 @@ EOF
 #
 # Test scrub errors for an erasure coded pool
 #
-function TEST_corrupt_scrub_erasure() {
+function corrupt_scrub_erasure() {
     local dir=$1
+    local allow_overwrites=$2
     local poolname=ecpool
-    local profile=myprofile
     local total_objs=5
 
     setup $dir || return 1
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     for id in $(seq 0 2) ; do
-        run_osd $dir $id || return 1
+	if [ "$allow_overwrites" = "true" ]; then
+            run_osd_bluestore $dir $id || return 1
+	else
+            run_osd $dir $id || return 1
+	fi
     done
     wait_for_clean || return 1
 
-    ceph osd erasure-code-profile set $profile \
-        k=2 m=1 ruleset-failure-domain=osd || return 1
-    ceph osd pool create $poolname 1 1 erasure $profile \
-        || return 1
-    wait_for_clean || return 1
+    create_ec_pool $poolname $allow_overwrites k=2 m=1 stripe_unit=2K --force || return 1
 
     for i in $(seq 1 $total_objs) ; do
         objname=EOBJ${i}
@@ -2151,6 +2206,11 @@ EOF
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
+    if [ "$allow_overwrites" = "true" ]
+    then
+        grep -v data_digest $dir/csjson | grep -v ec_size_error > $dir/csjson
+        grep -v data_digest $dir/checkcsjson | grep -v ec_size_error > $dir/checkcsjson
+    fi
     diff -y $termwidth $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -2164,6 +2224,14 @@ EOF
 
     rados rmpool $poolname $poolname --yes-i-really-really-mean-it
     teardown $dir || return 1
+}
+
+function TEST_corrupt_scrub_erasure_appends() {
+    corrupt_scrub_erasure $1 false
+}
+
+function TEST_corrupt_scrub_erasure_overwrites() {
+    corrupt_scrub_erasure $1 true
 }
 
 #
