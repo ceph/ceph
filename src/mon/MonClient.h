@@ -138,7 +138,7 @@ private:
   LogClient *log_client;
   bool more_log_pending;
 
-  void send_log();
+  void send_log(bool flush = false);
 
   AuthMethodList *auth_supported;
 
