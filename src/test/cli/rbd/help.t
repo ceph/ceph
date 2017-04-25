@@ -121,9 +121,9 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --image arg          image name
-    --io-size arg        IO size (in B/K/M/G/T)
-    --io-threads arg     ios in flight
-    --io-total arg       total size for IO (in B/K/M/G/T)
+    --io-size arg        IO size (in B/K/M/G/T) [default: 4096B]
+    --io-threads arg     ios in flight [default: 16]
+    --io-total arg       total size for IO (in B/K/M/G/T) [default: 1G]
     --io-pattern arg     IO pattern (rand or seq)
     --io-type arg        IO type (read or write)
   
