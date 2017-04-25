@@ -1,7 +1,9 @@
 import logging
 import struct
+import re
 
 from cStringIO import StringIO
+
 from . import run
 from .. import misc
 from teuthology.exceptions import CommandFailedError
@@ -56,6 +58,11 @@ class DaemonState(object):
         self.stop_cmd = get_systemd_cmd('stop', self.type_, self.id_)
         self.restart_cmd = get_systemd_cmd('restart', self.type_, self.id_)
         self.show_cmd = get_systemd_cmd('show', self.type_, self.id_)
+        self.status_cmd = get_systemd_cmd('status', self.type_, self.id_)
+        self.output_cmd = 'sudo journalctl -u ' \
+            '{role}@{id_} -t {role} -n 10'.format(
+                role=self.role.replace('.', '-'), id_=self.id_,
+            )
 
     @property
     def pid(self):
@@ -267,8 +274,31 @@ class DaemonState(object):
                 show_dict.update(parse_line(line))
             active_state = show_dict['ActiveState']
             sub_state = show_dict['SubState']
-            if active_state != 'active':
-                self.log.info("State is: %s/%s", active_state, sub_state)
+            if active_state == 'active':
+                return None
+            self.log.info("State is: %s/%s", active_state, sub_state)
+            proc = self.remote.run(
+                # This will match a line like:
+                #    Main PID: 13394 (code=exited, status=1/FAILURE)
+                # Or (this is wrapped):
+                #    Apr 26 21:29:33 ovh083 systemd[1]: ceph-osd@1.service:
+                #    Main process exited, code=exited, status=1/FAILURE
+                args=self.status_cmd + " | grep 'Main.*code=exited'",
+                stdout=StringIO(),
+            )
+            line = proc.stdout.readlines()[-1]
+            exit_code = int(re.match('.*status=(\d+).*', line).groups()[0])
+            if exit_code:
+                self.remote.run(
+                    args=self.output_cmd
+                )
+                raise CommandFailedError(
+                    self.start_cmd,
+                    exit_code,
+                    self.remote,
+                )
+            return exit_code
+
 
 
 
