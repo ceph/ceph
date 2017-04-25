@@ -192,7 +192,7 @@ class Filer {
     return 0;
   }
 
-  int truncate(inodeno_t ino,
+  void truncate(inodeno_t ino,
 	       file_layout_t *layout,
 	       const SnapContext& snapc,
 	       uint64_t offset,
@@ -200,36 +200,8 @@ class Filer {
 	       __u32 truncate_seq,
 	       ceph::real_time mtime,
 	       int flags,
-	       Context *onack,
-	       Context *oncommit) {
-    vector<ObjectExtent> extents;
-    Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
-    if (extents.size() == 1) {
-      vector<OSDOp> ops(1);
-      ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
-      ops[0].op.extent.truncate_seq = truncate_seq;
-      ops[0].op.extent.truncate_size = extents[0].offset;
-      objecter->_modify(extents[0].oid, extents[0].oloc, ops, mtime, snapc,
-			flags, onack, oncommit);
-    } else {
-      C_GatherBuilder gack(cct, onack);
-      C_GatherBuilder gcom(cct, oncommit);
-      for (vector<ObjectExtent>::iterator p = extents.begin();
-	   p != extents.end();
-	   ++p) {
-	vector<OSDOp> ops(1);
-	ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
-	ops[0].op.extent.truncate_size = p->offset;
-	ops[0].op.extent.truncate_seq = truncate_seq;
-	objecter->_modify(p->oid, p->oloc, ops, mtime, snapc, flags,
-			  onack ? gack.new_sub():0,
-			  oncommit ? gcom.new_sub():0);
-      }
-      gack.activate();
-      gcom.activate();
-    }
-    return 0;
-  }
+	       Context *oncommit);
+  void _do_truncate_range(struct TruncRange *pr, int fin);
 
   int zero(inodeno_t ino,
 	   file_layout_t *layout,
