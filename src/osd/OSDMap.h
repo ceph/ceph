@@ -457,6 +457,31 @@ public:
 
     /// propage update pools' snap metadata to any of their tiers
     int propagate_snaps_to_tiers(CephContext *cct, const OSDMap &base);
+
+    /// filter out osds with any pending state changing
+    size_t get_pending_state_osds(vector<int> *osds) {
+      assert(osds);
+      osds->clear();
+
+      for (auto &p : new_state) {
+        osds->push_back(p.first);
+      }
+
+      return osds->size();
+    }
+
+    bool pending_osd_has_state(int osd, unsigned state) {
+      return new_state.count(osd) && (new_state[osd] & state) != 0;
+    }
+
+    void pending_osd_state_set(int osd, unsigned state) {
+      new_state[osd] |= state;
+    }
+
+    void pending_osd_state_clear(int osd, unsigned state) {
+      new_state[osd] &= ~state;
+    }
+
   };
   
 private:
@@ -743,6 +768,36 @@ public:
 
   bool is_in(int osd) const {
     return !is_out(osd);
+  }
+
+  bool is_nodown(int osd) const {
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_NODOWN);
+  }
+
+  bool is_noout(int osd) const {
+    return exists(osd) && (osd_state[osd] & CEPH_OSD_NOOUT);
+  }
+
+  void get_nodown_osds(vector<int> *osds) const {
+    assert(osds);
+    osds->clear();
+
+    for (int i = 0; i < max_osd; i++) {
+      if (is_nodown(i)) {
+        osds->push_back(i);
+      }
+    }
+  }
+
+  void get_noout_osds(vector<int> *osds) const {
+    assert(osds);
+    osds->clear();
+
+    for (int i = 0; i < max_osd; i++) {
+      if (is_noout(i)) {
+        osds->push_back(i);
+      }
+    }
   }
 
   /**

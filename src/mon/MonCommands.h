@@ -650,6 +650,28 @@ COMMAND("osd in " \
 COMMAND("osd rm " \
 	"name=ids,type=CephString,n=N", \
 	"remove osd(s) <id> [<id>...] in", "osd", "rw", "cli,rest")
+COMMAND("osd add-noout " \
+        "name=ids,type=CephString,n=N", \
+        "mark osd(s) <id> [<id>...] as noout, " \
+        "or use <all|any|*> to mark all osds as noout", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd add-nodown " \
+        "name=ids,type=CephString,n=N", \
+        "mark osd(s) <id> [<id>...] as nodown, " \
+        "or use <all|any|*> to mark all osds as nodown", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd rm-noout " \
+        "name=ids,type=CephString,n=N", \
+        "allow osd(s) <id> [<id>...] to be marked out " \
+        "(if they are currently marked as noout), " \
+        "can use <all|any|*> to automatically filter out all noout osds", \
+        "osd", "rw", "cli,rest")
+COMMAND("osd rm-nodown " \
+        "name=ids,type=CephString,n=N", \
+        "allow osd(s) <id> [<id>...] to be marked down " \
+        "(if they are currently marked as nodown), " \
+        "can use <all|any|*> to automatically filter out all nodown osds", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd reweight " \
 	"name=id,type=CephOsdName " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
