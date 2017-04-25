@@ -143,6 +143,9 @@ protected:
    * <starting>                                             *
    *    |                                                   *
    *    v                                           (error) *
+   * PREPARE_LOCAL_IMAGE  * * * * * * * * * * * * * * * * * *
+   *    |                                                   *
+   *    v                                           (error) *
    * BOOTSTRAP_IMAGE  * * * * * * * * * * * * * * * * * * * *
    *    |                                                   *
    *    v                                           (error) *
@@ -301,6 +304,7 @@ private:
     nullptr;
   librados::IoCtx m_local_ioctx;
   ImageCtxT *m_local_image_ctx = nullptr;
+  std::string m_local_image_tag_owner;
 
   decltype(ImageCtxT::journal) m_local_journal = nullptr;
   librbd::journal::Replay<ImageCtxT> *m_local_replay = nullptr;
@@ -384,6 +388,9 @@ private:
   void shut_down(int r);
   void handle_shut_down(int r);
   void handle_remote_journal_metadata_updated();
+
+  void prepare_local_image();
+  void handle_prepare_local_image(int r);
 
   void bootstrap();
   void handle_bootstrap(int r);

@@ -87,9 +87,6 @@ private:
    * <start>
    *    |
    *    v
-   * GET_LOCAL_IMAGE_ID * * * * * * * * * * * * * * * * *
-   *    |                                               *
-   *    v                                               *
    * GET_REMOTE_TAG_CLASS * * * * * * * * * * * * * * * *
    *    |                                               *
    *    v                                               *
@@ -174,9 +171,6 @@ private:
   int m_ret_val = 0;
 
   bufferlist m_out_bl;
-
-  void get_local_image_id();
-  void handle_get_local_image_id(int r);
 
   void get_remote_tag_class();
   void handle_get_remote_tag_class(int r);
