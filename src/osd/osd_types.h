@@ -2821,27 +2821,27 @@ struct pg_log_entry_t {
   static const char *get_op_name(int op) {
     switch (op) {
     case MODIFY:
-      return "modify  ";
+      return "modify";
     case PROMOTE:
-      return "promote ";
+      return "promote";
     case CLONE:
-      return "clone   ";
+      return "clone";
     case DELETE:
-      return "delete  ";
+      return "delete";
     case BACKLOG:
-      return "backlog ";
+      return "backlog";
     case LOST_REVERT:
       return "l_revert";
     case LOST_DELETE:
       return "l_delete";
     case LOST_MARK:
-      return "l_mark  ";
+      return "l_mark";
     case CLEAN:
-      return "clean   ";
+      return "clean";
     case ERROR:
-      return "error   ";
+      return "error";
     default:
-      return "unknown ";
+      return "unknown";
     }
   }
   const char *get_op_name() const {

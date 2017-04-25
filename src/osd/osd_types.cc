@@ -3687,7 +3687,8 @@ void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
 ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 {
   out << e.version << " (" << e.prior_version << ") "
-      << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime
+      << std::left << std::setw(8) << e.get_op_name() << ' '
+      << e.soid << " by " << e.reqid << " " << e.mtime
       << " " << e.return_code;
   if (e.snaps.length()) {
     vector<snapid_t> snaps;
