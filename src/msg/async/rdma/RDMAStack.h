@@ -40,6 +40,7 @@ enum {
 
   l_msgr_rdma_polling,
   l_msgr_rdma_inflight_tx_chunks,
+  l_msgr_rdma_inqueue_rx_chunks,
 
   l_msgr_rdma_tx_total_wc,
   l_msgr_rdma_tx_total_wc_errors,
