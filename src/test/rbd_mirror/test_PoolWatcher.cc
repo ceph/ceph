@@ -76,8 +76,8 @@ public:
     }
 
     void handle_update(const std::string &mirror_uuid,
-                       const ImageIds &added_image_ids,
-                       const ImageIds &removed_image_ids) override {
+                       ImageIds &&added_image_ids,
+                       ImageIds &&removed_image_ids) override {
       Mutex::Locker locker(test->m_lock);
       for (auto &image_id : removed_image_ids) {
         image_ids.erase(image_id);

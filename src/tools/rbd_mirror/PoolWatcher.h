@@ -37,8 +37,8 @@ public:
     }
 
     virtual void handle_update(const std::string &mirror_uuid,
-                               const ImageIds &added_image_ids,
-                               const ImageIds &removed_image_ids) = 0;
+                               ImageIds &&added_image_ids,
+                               ImageIds &&removed_image_ids) = 0;
   };
 
   PoolWatcher(Threads<ImageCtxT> *threads, librados::IoCtx &remote_io_ctx,

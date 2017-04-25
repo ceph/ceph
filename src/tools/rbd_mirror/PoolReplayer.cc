@@ -551,8 +551,8 @@ void PoolReplayer::release_leader()
 }
 
 void PoolReplayer::handle_update(const std::string &mirror_uuid,
-				 const ImageIds &added_image_ids,
-				 const ImageIds &removed_image_ids) {
+				 ImageIds &&added_image_ids,
+				 ImageIds &&removed_image_ids) {
   assert(!mirror_uuid.empty());
   if (m_stopping.read()) {
     return;

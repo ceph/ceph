@@ -69,18 +69,18 @@ private:
     }
 
     void handle_update(const std::string &mirror_uuid,
-                       const ImageIds &added_image_ids,
-                       const ImageIds &removed_image_ids) override {
-      pool_replayer->handle_update(mirror_uuid, added_image_ids,
-				   removed_image_ids);
+                       ImageIds &&added_image_ids,
+                       ImageIds &&removed_image_ids) override {
+      pool_replayer->handle_update(mirror_uuid, std::move(added_image_ids),
+				   std::move(removed_image_ids));
     }
   };
 
   struct C_RefreshLocalImages;
 
   void handle_update(const std::string &mirror_uuid,
-                     const ImageIds &added_image_ids,
-                     const ImageIds &removed_image_ids);
+                     ImageIds &&added_image_ids,
+                     ImageIds &&removed_image_ids);
 
   int init_rados(const std::string &cluster_name,
                  const std::string &client_name,
