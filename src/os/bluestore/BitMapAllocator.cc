@@ -147,7 +147,6 @@ int64_t BitMapAllocator::allocate_dis(
 void BitMapAllocator::release(
   uint64_t offset, uint64_t length)
 {
-  std::lock_guard<std::mutex> l(m_lock);
   dout(10) << __func__ << " 0x"
            << std::hex << offset << "~" << length << std::dec
            << dendl;
@@ -164,7 +163,6 @@ uint64_t BitMapAllocator::get_free()
 
 void BitMapAllocator::dump()
 {
-  std::lock_guard<std::mutex> l(m_lock);
   dout(0) << __func__ << " instance " << this << dendl;
   m_bit_alloc->dump();
 }
