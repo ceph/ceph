@@ -18,6 +18,7 @@ import time
 from collections import OrderedDict
 from fcntl import ioctl
 from fnmatch import fnmatch
+from prettytable import PrettyTable, HEADER
 from signal import signal, SIGWINCH
 from termios import TIOCGWINSZ
 
@@ -88,6 +89,7 @@ def admin_socket(asok_path, cmd, format=''):
 
 def _gettermsize():
     return struct.unpack('hhhh', ioctl(0, TIOCGWINSZ, 8*'\x00'))[0:2]
+
 
 class Termsize(object):
 
@@ -381,3 +383,19 @@ class DaemonWatcher(object):
 
         except KeyboardInterrupt:
             return
+
+    def list(self, ostr=sys.stdout):
+        """
+        Show all selected stats with section, full name, nick, and prio
+        """
+        table = PrettyTable(('section', 'name', 'nick', 'prio'))
+        table.align['section'] = 'l'
+        table.align['name'] = 'l'
+        table.align['nick'] = 'l'
+        table.align['prio'] = 'r'
+        self._load_schema()
+        for section_name, section_stats in self._stats.items():
+            for name, nick in section_stats.items():
+                prio = self._schema[section_name][name].get('priority') or 0
+                table.add_row((section_name, name, nick, prio))
+        ostr.write(table.get_string(hrules=HEADER) + '\n')

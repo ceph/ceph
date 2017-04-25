@@ -276,10 +276,12 @@ ping <mon.id>           Send simple presence/life test to a mon
 daemon {type.id|path} <cmd>
                         Same as --admin-daemon, but auto-find admin socket
 daemonperf {type.id | path} [stat-pats] [priority] [<interval>] [<count>]
+daemonperf {type.id | path} list [stat-pats] [priority]
                         Get selected perf stats from daemon/admin socket
                         Optional shell-glob comma-delim match string stat-pats
                         Optional selection priority (can abbreviate name):
                          critical, interesting, useful, noninteresting, debug
+                        List shows a table of all available stats
                         Run <count> times (default forever),
                          once per <interval> seconds (default 1)
     """, file=sys.stdout)
@@ -636,12 +638,14 @@ def daemonperf(childargs, sockpath):
     Handle daemonperf command; returns errno or 0
 
     daemonperf <daemon> [priority string] [statpats] [interval] [count]
+    daemonperf <daemon> list [statpats]
     """
 
     interval = 1
     count = None
     statpats = None
     priority = None
+    do_list = False
 
     def prio_from_name(arg):
 
@@ -664,6 +668,10 @@ def daemonperf(childargs, sockpath):
     # consume and analyze non-numeric args
     while len(childargs) and not isnum(childargs[0]):
         arg = childargs.pop(0)
+        # 'list'?
+        if arg == 'list':
+            do_list = True;
+            continue;
         # prio?
         priority = prio_from_name(arg)
         if priority is not None:
@@ -690,7 +698,11 @@ def daemonperf(childargs, sockpath):
             return errno.EINVAL
         count = int(arg)
 
-    DaemonWatcher(sockpath, statpats, priority).run(interval, count)
+    watcher = DaemonWatcher(sockpath, statpats, priority)
+    if do_list:
+        watcher.list()
+    else:
+        watcher.run(interval, count)
 
     return 0
 
