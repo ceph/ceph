@@ -13488,13 +13488,14 @@ void PrimaryLogPG::scrub_snapshot_metadata(
       // this happens if we encounter other errors above, like a missing
       // or extra clone.
       dout(10) << __func__ << " not writing snapset to " << p.first
-	       << " " << p.second << "; didn't convert fully" << dendl;
+	       << " snapset " << p.second << " clones " << p.second.clones
+	       << "; didn't convert fully" << dendl;
       scrub_cstat.sum.num_legacy_snapsets++;
       continue;
     }
     dout(10) << __func__ << " writing snapset to " << p.first
 	     << " " << p.second << dendl;
-    ObjectContextRef obc = get_object_context(p.first, false);
+    ObjectContextRef obc = get_object_context(p.first, true);
     if (!obc) {
       osd->clog->error() << info.pgid << " " << mode
 			 << " cannot get object context for "
