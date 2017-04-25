@@ -586,7 +586,7 @@ void PoolReplayer::handle_update(const std::string &mirror_uuid,
       dout(20) << "scheduling the deletion of init image: "
                << image_id.global_id << " (" << image_id.id << ")" << dendl;
       m_image_deleter->schedule_image_delete(m_local_rados, m_local_pool_id,
-                                             image_id.id, image_id.global_id);
+                                             image_id.global_id);
     }
     m_init_image_ids.clear();
   }
