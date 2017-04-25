@@ -434,7 +434,7 @@ public:
   };
 private:
   vector<WorkQueue_*> work_queues;
-  int last_work_queue;
+  int next_work_queue = 0;
  
 
   // threads
