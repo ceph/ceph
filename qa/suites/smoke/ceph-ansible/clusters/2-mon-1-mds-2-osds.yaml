@@ -1,7 +1,7 @@
 meta:
 - desc: "2 mon, 1 mds  3 osd cluster"
 overrides:
- ceph-ansible:
+ ceph_ansible:
    group_vars:
       all:
         ceph_conf_overrides:
