@@ -4414,9 +4414,8 @@ void CInode::maybe_export_pin()
           if (pin != mdcache->mds->get_nodeid()) {
             dout(20) << "adding ancestor to export_pin_queue " << *auth_last << dendl;
             mdcache->export_pin_queue.insert(auth_last);
-          } else {
-            break; /* it is correctly pinned here! */
           }
+          break;
         }
       }
     } else {
