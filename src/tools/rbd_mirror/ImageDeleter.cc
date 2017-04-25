@@ -295,8 +295,10 @@ bool ImageDeleter::process_image_delete() {
   }
 
   bool is_primary = false;
-  r = Journal<>::is_tag_owner(ioctx, local_image_id, &is_primary,
-                              m_work_queue);
+  C_SaferCond tag_owner_ctx;
+  Journal<>::is_tag_owner(ioctx, local_image_id, &is_primary,
+                          m_work_queue, &tag_owner_ctx);
+  r = tag_owner_ctx.wait();
   if (r < 0 && r != -ENOENT) {
     derr << "error retrieving image primary info for image " << global_image_id
          << ": " << cpp_strerror(r) << dendl;
