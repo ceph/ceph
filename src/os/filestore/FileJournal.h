@@ -137,8 +137,8 @@ public:
      * not known.
      *
      * If the first read on open fails, we can assume corruption
-     * if start_seq > committed_up_thru because the entry would have
-     * a sequence >= start_seq and therefore > committed_up_thru.
+     * if start_seq > committed_up_to because the entry would have
+     * a sequence >= start_seq and therefore > committed_up_to.
      */
     uint64_t start_seq;
 
