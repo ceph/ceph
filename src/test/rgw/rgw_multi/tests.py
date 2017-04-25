@@ -323,6 +323,8 @@ def set_master_zone(zone):
     zonegroup = zone.zonegroup
     zonegroup.period.update(zone, commit=True)
     zonegroup.master_zone = zone
+    # wait for reconfiguration, so that later metadata requests go to the new master
+    time.sleep(5)
 
 def gen_bucket_name():
     global num_buckets
