@@ -4649,7 +4649,7 @@ int BlueStore::mkfs()
     }
   }
 
-  freelist_type = cct->_conf->bluestore_freelist_type;
+  freelist_type = "bitmap";
 
   r = _open_path();
   if (r < 0)
@@ -7121,9 +7121,7 @@ int BlueStore::_open_super_meta()
       freelist_type = std::string(bl.c_str(), bl.length());
       dout(10) << __func__ << " freelist_type " << freelist_type << dendl;
     } else {
-      freelist_type = "extent";
-      dout(10) << __func__ << " freelist_type " << freelist_type
-	       << " (legacy bluestore instance)" << dendl;
+      assert("Not Support extent freelist manager" == 0);
     }
   }
 
@@ -7357,8 +7355,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       }
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
-      if (cct->_conf->bluestore_sync_submit_transaction &&
-	  fm->supports_parallel_transactions()) {
+      if (cct->_conf->bluestore_sync_submit_transaction) {
 	if (txc->last_nid >= nid_max ||
 	    txc->last_blobid >= blobid_max) {
 	  dout(20) << __func__
