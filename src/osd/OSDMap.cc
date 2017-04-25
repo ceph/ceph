@@ -30,6 +30,10 @@
  
 #define dout_subsys ceph_subsys_osd
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMap, osdmap, osdmap);
+MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMap::Incremental, osdmap_inc, osdmap);
+
+
 // ----------------------------------
 // osd_info_t
 

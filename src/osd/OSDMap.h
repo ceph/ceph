@@ -117,10 +117,13 @@ ostream& operator<<(ostream& out, const osd_xinfo_t& xi);
 /** OSDMap
  */
 class OSDMap {
-
 public:
+  MEMPOOL_CLASS_HELPERS();
+
   class Incremental {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     /// feature bits we were encoded with.  the subsequent OSDMap
     /// encoding should match.
     uint64_t encode_features;
