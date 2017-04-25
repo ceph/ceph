@@ -8,6 +8,7 @@ try:
     from itertools import izip_longest as zip_longest
 except ImportError:
     from itertools import zip_longest
+from itertools import combinations
 
 import boto
 import boto.s3.connection
@@ -644,12 +645,15 @@ def test_multi_period_incremental_sync():
     if len(zonegroup.zones) < 3:
         raise SkipTest("test_multi_period_incremental_sync skipped. Requires 3 or more zones in master zonegroup.")
 
-    buckets, zone_bucket = create_bucket_per_zone(zonegroup)
+    # create a bucket in each zone
+    buckets = []
+    for zone in zonegroup.zones:
+        conn = get_zone_connection(zone, user.credentials)
+        bucket_name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone.name, bucket_name)
+        bucket = conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
 
-    for zone, bucket_name in zone_bucket.items():
-        for objname in [ 'p1', '_p1' ]:
-            k = new_key(zone, bucket_name, objname)
-            k.set_contents_from_string('asdasd')
     zonegroup_meta_checkpoint(zonegroup)
 
     z1, z2, z3 = zonegroup.zones[0:3]
@@ -661,12 +665,15 @@ def test_multi_period_incremental_sync():
     # change master to zone 2 -> period 2
     set_master_zone(z2)
 
-    for zone, bucket_name in zone_bucket.items():
+    # create another bucket in each zone, except for z3
+    for zone in zonegroup.zones:
         if zone == z3:
             continue
-        for objname in [ 'p2', '_p2' ]:
-            k = new_key(zone, bucket_name, objname)
-            k.set_contents_from_string('qweqwe')
+        conn = get_zone_connection(zone, user.credentials)
+        bucket_name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone.name, bucket_name)
+        bucket = conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
 
     # wait for zone 1 to sync
     zone_meta_checkpoint(z1)
@@ -674,25 +681,24 @@ def test_multi_period_incremental_sync():
     # change master back to zone 1 -> period 3
     set_master_zone(z1)
 
-    for zone, bucket_name in zone_bucket.items():
+    # create another bucket in each zone, except for z3
+    for zone in zonegroup.zones:
         if zone == z3:
             continue
-        for objname in [ 'p3', '_p3' ]:
-            k = new_key(zone, bucket_name, objname)
-            k.set_contents_from_string('zxczxc')
+        conn = get_zone_connection(zone, user.credentials)
+        bucket_name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', zone.name, bucket_name)
+        bucket = conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
 
     # restart zone 3 gateway and wait for sync
     z3.start()
     zonegroup_meta_checkpoint(zonegroup)
 
-    # verify that we end up with the same objects
-    for source_zone, bucket in zone_bucket.items():
-        for target_zone in zonegroup.zones:
-            if source_zone == target_zone:
-                continue
-
-            zone_bucket_checkpoint(target_zone, source_zone, bucket.name)
-            check_bucket_eq(source_zone, target_zone, bucket)
+    # verify that we end up with the same buckets
+    for bucket_name in buckets:
+        for source_zone, target_zone in combinations(zonegroup.zones, 2):
+            check_bucket_eq(source_zone, target_zone, bucket_name)
 
 def test_zonegroup_remove():
     zonegroup = realm.master_zonegroup()
