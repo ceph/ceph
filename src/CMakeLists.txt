@@ -326,7 +326,7 @@ set(crush_srcs
   crush/CrushTester.cc
   crush/CrushLocation.cc)
 
-add_library(crush STATIC ${crush_srcs})
+add_library(crush_objs OBJECT ${crush_srcs})
 
 add_subdirectory(json_spirit)
 
@@ -396,7 +396,6 @@ set(libcommon_files
   common/admin_socket_client.cc
   common/bloom_filter.cc
   common/Readahead.cc
-  ${crush_srcs}
   common/cmdparse.cc
   common/escape.c
   common/io_priority.cc
@@ -570,7 +569,8 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
-  $<TARGET_OBJECTS:global_common_objs>)
+  $<TARGET_OBJECTS:global_common_objs>
+  $<TARGET_OBJECTS:crush_objs>)
 set(ceph_common_deps
   json_spirit erasure_code rt ${LIB_RESOLV}
   ${Boost_THREAD_LIBRARY}
