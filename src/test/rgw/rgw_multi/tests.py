@@ -65,15 +65,18 @@ def meta_sync_status(zone):
     log.debug('current meta sync status=%s', meta_sync_status_json)
     sync_status = json.loads(meta_sync_status_json)
 
-    global_sync_status=sync_status['sync_status']['info']['status']
-    num_shards=sync_status['sync_status']['info']['num_shards']
+    sync_info = sync_status['sync_status']['info']
+    global_sync_status = sync_info['status']
+    num_shards = sync_info['num_shards']
+    period = sync_info['period']
+    realm_epoch = sync_info['realm_epoch']
 
     sync_markers=sync_status['sync_status']['markers']
     log.debug('sync_markers=%s', sync_markers)
     assert(num_shards == len(sync_markers))
 
     markers = {i: m['val']['marker'] for i, m in enumerate(sync_markers)}
-    return (num_shards, markers)
+    return period, realm_epoch, num_shards, markers
 
 def meta_master_log_status(master_zone):
     cmd = ['mdlog', 'status'] + master_zone.zone_args()
@@ -108,14 +111,21 @@ def zone_meta_checkpoint(zone, meta_master_zone = None, master_status = None):
     if not master_status:
         master_status = meta_master_log_status(meta_master_zone)
 
+    current_realm_epoch = realm.current_period.data['realm_epoch']
+
     log.info('starting meta checkpoint for zone=%s', zone.name)
 
     while True:
-        num_shards, sync_status = meta_sync_status(zone)
-        log.debug('log_status=%s', master_status)
-        log.debug('sync_status=%s', sync_status)
-        if compare_meta_status(zone, master_status, sync_status):
-            break
+        period, realm_epoch, num_shards, sync_status = meta_sync_status(zone)
+        if realm_epoch < current_realm_epoch:
+            log.warning('zone %s is syncing realm epoch=%d, behind current realm epoch=%d',
+                        zone.name, realm_epoch, current_realm_epoch)
+        else:
+            log.debug('log_status=%s', master_status)
+            log.debug('sync_status=%s', sync_status)
+            if compare_meta_status(zone, master_status, sync_status):
+                break
+
         time.sleep(5)
 
     log.info('finish meta checkpoint for zone=%s', zone.name)
