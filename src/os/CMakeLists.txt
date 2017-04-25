@@ -36,7 +36,6 @@ if(HAVE_LIBAIO)
     bluestore/BlueRocksEnv.cc
     bluestore/BlueStore.cc
     bluestore/bluestore_types.cc
-    bluestore/ExtentFreelistManager.cc
     bluestore/FreelistManager.cc
     bluestore/KernelDevice.cc
     bluestore/StupidAllocator.cc
