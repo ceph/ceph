@@ -26,6 +26,7 @@
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/EventPreprocessor.h"
+#include "tools/rbd_mirror/image_replayer/PrepareLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/ReplayStatusFormatter.h"
 
 #define dout_context g_ceph_context
@@ -417,6 +418,37 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
                                      m_remote_image.io_ctx,
                                      m_remote_image.image_id,
                                      m_local_mirror_uuid, settings);
+  prepare_local_image();
+}
+
+template <typename I>
+void ImageReplayer<I>::prepare_local_image() {
+  dout(20) << dendl;
+
+  Context *ctx = create_context_callback<
+    ImageReplayer, &ImageReplayer<I>::handle_prepare_local_image>(this);
+  auto req = PrepareLocalImageRequest<I>::create(
+    m_local_ioctx, m_global_image_id, &m_local_image_id,
+    &m_local_image_tag_owner, m_threads->work_queue, ctx);
+  req->send();
+}
+
+template <typename I>
+void ImageReplayer<I>::handle_prepare_local_image(int r) {
+  dout(20) << "r=" << r << dendl;
+
+  if (r == -ENOENT) {
+    dout(20) << "local image does not exist" << dendl;
+  } else if (r < 0) {
+    on_start_fail(r, "error preparing local image for replay");
+    return;
+  } else if (m_local_image_tag_owner == librbd::Journal<>::LOCAL_MIRROR_UUID) {
+    dout(5) << "local image is primary" << dendl;
+    on_start_fail(0, "local image is primary");
+    return;
+  }
+
+  // local image doesn't exist or is non-primary
   bootstrap();
 }
 
@@ -459,10 +491,12 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
   }
 
   if (r == -EREMOTEIO) {
+    m_local_image_tag_owner = "";
     dout(5) << "remote image is non-primary or local image is primary" << dendl;
     on_start_fail(0, "remote image is non-primary or local image is primary");
     return;
   } else if (r == -EEXIST) {
+    m_local_image_tag_owner = "";
     on_start_fail(r, "split-brain detected");
     return;
   } else if (r < 0) {
