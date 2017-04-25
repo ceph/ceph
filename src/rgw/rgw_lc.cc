@@ -4,6 +4,7 @@
 
 #include "common/Formatter.h"
 #include <common/errno.h>
+#include "include/str_list.h"
 #include "auth/Crypto.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/refcount/cls_refcount_client.h"
@@ -198,21 +199,6 @@ bool RGWLC::if_already_run_today(time_t& start_date)
     return false;
 }
 
-static std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
-  std::stringstream ss(s);
-  std::string item;
-  while (std::getline(ss, item, delim)) {
-      elems.push_back(item);
-  }
-  return elems;
-}
-
-static std::vector<std::string> split(const std::string &s, char delim) {
-  std::vector<std::string> elems;
-  split(s, delim, elems);
-  return elems;
-}
-
 int RGWLC::bucket_lc_prepare(int index)
 {
   map<string, int > entries;
@@ -324,7 +310,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
   vector<rgw_bucket_dir_entry> objs;
   RGWObjectCtx obj_ctx(store);
   vector<std::string> result;
-  result = split(shard_id, ':');
+  get_str_vec(shard_id, ":", result);
   string bucket_tenant = result[0];
   string bucket_name = result[1];
   string bucket_id = result[2];
