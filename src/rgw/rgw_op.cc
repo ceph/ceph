@@ -2991,7 +2991,7 @@ void RGWPutObj::execute()
     }
 
     bufferlist &data = data_in;
-    if (s->aws4_auth_streaming_mode) {
+    if (len && s->aws4_auth_streaming_mode) {
       /* use unwrapped data */
       data = s->aws4_auth->bl;
       len = data.length();
