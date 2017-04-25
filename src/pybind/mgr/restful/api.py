@@ -39,14 +39,17 @@ def auth(f):
 
         username, password = b64decode(request.authorization[1]).split(':')
 
-        # Lookup the password-less tokens first
-        if username not in module.instance.tokens.values():
-            # Check the ceph auth db
-            msg = module.instance.verify_user(username, password)
-            if msg:
-                response.status = 401
-                response.headers['WWW-Authenticate'] = 'Basic realm="Login Required"'
-                return {'message': 'auth: No HTTP username/password'}
+        # Check that the username exists
+        if username not in module.instance.keys:
+            response.status = 401
+            response.headers['WWW-Authenticate'] = 'Basic realm="Login Required"'
+            return {'message': 'auth: No such user'}
+
+        # Check the password
+        if module.instance.keys[username] != password:
+            response.status = 401
+            response.headers['WWW-Authenticate'] = 'Basic realm="Login Required"'
+            return {'message': 'auth: Incorrect password'}
 
         return f(*args, **kwargs)
     return decorated
@@ -637,64 +640,7 @@ class Config(RestController):
 
 
 
-class Auth(RestController):
-    @expose('json')
-    @catch
-    def get(self):
-        """
-        Generate a brand new password-less login token for the user
-        Uses HTTP Basic Auth for authentication
-        """
-        if not request.authorization:
-            return (
-                {'message': 'auth: No HTTP username/password'},
-                401,
-                {'WWW-Authenticate': 'Basic realm="Login Required"'}
-            )
-
-        username, password = b64decode(request.authorization[1]).split(':')
-        # Do not create a new token for a username that is already a token
-        if username in module.instance.tokens.values():
-            return {
-                'token': username
-            }
-
-        # Check the ceph auth db
-        msg = module.instance.verify_user(username, password)
-        if msg:
-            return (
-                {'message': 'auth: ' + msg},
-                401,
-                {'WWW-Authenticate': 'Basic realm="Login Required"'}
-            )
-
-        # Create a password-less login token for the user
-        # This overwrites any old user tokens
-        return {
-            'token': module.instance.set_token(username)
-        }
-
-
-    @expose('json')
-    @catch
-    @auth
-    def delete(self):
-        """
-        Delete the password-less login token for the user
-        """
-
-        username, password = b64decode(request.authorization[1]).split(':')
-
-        if module.instance.unset_token(username):
-            return {'success': 'auth: Token removed'}
-
-        response.status = 500
-        return {'message': 'auth: No token for the user'}
-
-
-
 class Root(RestController):
-    auth = Auth()
     config = Config()
     crush = Crush()
     doc = Doc()
