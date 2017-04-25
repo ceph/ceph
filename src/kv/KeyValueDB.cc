@@ -12,6 +12,9 @@
 #ifdef HAVE_KINETIC
 #include "KineticStore.h"
 #endif
+#ifdef HAVE_LIBAIO
+#include "os/bluestore/BlueStore.h"
+#endif
 
 KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
 			       const string& dir,
@@ -34,6 +37,18 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
   }
 #endif
 
+#ifdef HAVE_LIBAIO
+  if (type == "bluestore-kv") {
+    // note: we'll leak this!  the only user is ceph-kvstore-tool and
+    // we don't care.
+    BlueStore *bluestore = new BlueStore(cct, dir);
+    KeyValueDB *db = nullptr;
+    int r = bluestore->start_kv_only(&db);
+    if (r < 0)
+      return nullptr;  // yes, we leak.
+    return db;
+  }
+#endif
   if ((type == "memdb") && 
     cct->check_experimental_feature_enabled("memdb")) {
     return new MemDB(cct, dir, p);

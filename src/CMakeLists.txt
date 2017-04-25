@@ -398,6 +398,7 @@ set(libcommon_files
   common/Readahead.cc
   common/cmdparse.cc
   common/escape.c
+  common/url_escape.cc
   common/io_priority.cc
   common/Clock.cc
   common/ceph_time.cc
