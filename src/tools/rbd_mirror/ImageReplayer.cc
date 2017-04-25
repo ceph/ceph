@@ -1511,7 +1511,6 @@ void ImageReplayer<I>::handle_shut_down(int r) {
     if (m_stopping_for_resync) {
       m_image_deleter->schedule_image_delete(m_local,
                                              m_local_pool_id,
-                                             m_local_image_id,
                                              m_global_image_id);
       m_stopping_for_resync = false;
     }

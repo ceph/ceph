@@ -211,15 +211,8 @@ void InstanceReplayer<I>::release_image(const std::string &global_image_id,
     on_finish = new FunctionContext(
       [this, image_replayer, on_finish] (int r) {
         auto global_image_id = image_replayer->get_global_image_id();
-        auto local_image_id = image_replayer->get_local_image_id();
-        if (local_image_id.empty()) {
-          dout(20) << global_image_id << ": unknown local_image_id"
-                   << " (image does not exist or primary), skipping delete"
-                   << dendl;
-        } else {
-          m_image_deleter->schedule_image_delete(
-            m_local_rados, m_local_pool_id, local_image_id, global_image_id);
-        }
+        m_image_deleter->schedule_image_delete(
+          m_local_rados, m_local_pool_id, global_image_id);
         on_finish->complete(0);
       });
   }

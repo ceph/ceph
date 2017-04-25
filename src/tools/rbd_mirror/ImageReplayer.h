@@ -118,10 +118,6 @@ public:
   inline const std::string& get_global_image_id() const {
     return m_global_image_id;
   }
-  inline std::string get_local_image_id() {
-    Mutex::Locker locker(m_lock);
-    return m_local_image_id;
-  }
 
   void start(Context *on_finish = nullptr, bool manual = false);
   void stop(Context *on_finish = nullptr, bool manual = false,
