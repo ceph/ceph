@@ -47,9 +47,6 @@ class DaemonState(object):
         self.id_ = id_
         self.use_init = use_init
         if self.use_init:
-            _, role = role.split('.')
-            if (role == 'mon') or (role == 'mds') or (role == 'rgw'):
-                self.id_ = remote.shortname
             self._set_commands()
         self.log = command_kwargs.get('logger', log)
         self.proc = None
