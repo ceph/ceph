@@ -92,7 +92,8 @@ class MDSearch:
         result_dict = json.loads(result.read())
 
         for entry in result_dict['Objects']:
-            k = boto.s3.key.Key(self.bucket, entry['Key'])
+            bucket = self.conn.get_bucket(entry['Bucket'], validate = False)
+            k = boto.s3.key.Key(bucket, entry['Key'])
 
             k.version_id = entry['Instance']
             k.etag = entry['ETag']
