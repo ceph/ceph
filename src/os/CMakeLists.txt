@@ -83,6 +83,8 @@ endif()
 target_link_libraries(os kv)
 
 add_dependencies(os compressor_plugins)
+add_dependencies(os ceph_crypto_isal)
+
 
 if(HAVE_LIBAIO)
   add_executable(ceph-bluestore-tool

@@ -328,7 +328,8 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
     PGLog::read_log_and_missing(fs, coll,
 		    struct_ver >= 8 ? coll : coll_t::meta(),
 		    struct_ver >= 8 ? pgid.make_pgmeta_oid() : log_oid,
-		    info, log, missing, oss);
+		    info, log, missing, oss,
+		    g_ceph_context->_conf->osd_ignore_stale_divergent_priors);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }
@@ -2906,7 +2907,7 @@ int main(int argc, char **argv)
 	    throw std::runtime_error(ss.str());
 	  }
 	  vector<json_spirit::Value>::iterator i = array.begin();
-	  //if (i == array.end() || i->type() != json_spirit::str_type) {
+	  assert(i != array.end());
 	  if (i->type() != json_spirit::str_type) {
 	    ss << "Object '" << object
 	       << "' must be a JSON array with the first element a string";

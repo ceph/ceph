@@ -278,12 +278,14 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
     ::close(sd);
     return -errno;
   }
+
+  assert(NULL != out); //out should not be NULL in accept connection
+
+  out->set_sockaddr((sockaddr*)&ss);
   handler.set_priority(sd, opt.priority, out->get_family());
 
   std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, *out, sd, true));
   *sock = ConnectedSocket(std::move(csi));
-  if (out)
-    out->set_sockaddr((sockaddr*)&ss);
   return 0;
 }
 

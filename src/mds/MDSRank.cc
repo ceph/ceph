@@ -66,7 +66,7 @@ MDSRank::MDSRank(
                g_conf->osd_num_op_tracker_shard),
     last_state(MDSMap::STATE_BOOT),
     state(MDSMap::STATE_BOOT),
-    stopping(false),
+    cluster_degraded(false), stopping(false),
     purge_queue(g_ceph_context, whoami_,
       mdsmap_->get_metadata_pool(), objecter,
       new FunctionContext(
@@ -287,6 +287,10 @@ void MDSRankDispatcher::shutdown()
 
   purge_queue.shutdown();
 
+  mds_lock.Unlock();
+  finisher->stop(); // no flushing
+  mds_lock.Lock();
+
   if (objecter->initialized.read())
     objecter->shutdown();
 
@@ -299,8 +303,6 @@ void MDSRankDispatcher::shutdown()
   // release mds_lock for finisher/messenger threads (e.g.
   // MDSDaemon::ms_handle_reset called from Messenger).
   mds_lock.Unlock();
-
-  finisher->stop(); // no flushing
 
   // shut down messenger
   messenger->shutdown();
@@ -1036,8 +1038,42 @@ void MDSRank::boot_start(BootStep step, int r)
       break;
     case MDS_BOOT_REPLAY_DONE:
       assert(is_any_replay());
+
+      // Sessiontable and inotable should be in sync after replay, validate
+      // that they are consistent.
+      validate_sessions();
+
       replay_done();
       break;
+  }
+}
+
+void MDSRank::validate_sessions()
+{
+  assert(mds_lock.is_locked_by_me());
+  std::vector<Session*> victims;
+
+  // Identify any sessions which have state inconsistent with other,
+  // after they have been loaded from rados during startup.
+  // Mitigate bugs like: http://tracker.ceph.com/issues/16842
+  const auto &sessions = sessionmap.get_sessions();
+  for (const auto &i : sessions) {
+    Session *session = i.second;
+    interval_set<inodeno_t> badones;
+    if (inotable->intersects_free(session->info.prealloc_inos, &badones)) {
+      clog->error() << "Client session loaded with invalid preallocated "
+                          "inodes, evicting session " << *session;
+
+      // Make the session consistent with inotable so that it can
+      // be cleanly torn down
+      session->info.prealloc_inos.subtract(badones);
+
+      victims.push_back(session);
+    }
+  }
+
+  for (const auto &session: victims) {
+    server->kill_session(session, nullptr);
   }
 }
 
@@ -1573,8 +1609,15 @@ void MDSRankDispatcher::handle_mds_map(
     }
   }
 
-  if (oldmap->is_degraded() && !mdsmap->is_degraded() && state >= MDSMap::STATE_ACTIVE)
+  cluster_degraded = mdsmap->is_degraded();
+  if (oldmap->is_degraded() && !cluster_degraded && state >= MDSMap::STATE_ACTIVE) {
     dout(1) << "cluster recovered." << dendl;
+    auto it = waiting_for_active_peer.find(MDS_RANK_NONE);
+    if (it != waiting_for_active_peer.end()) {
+      queue_waiters(it->second);
+      waiting_for_active_peer.erase(it);
+    }
+  }
 
   // did someone go active?
   if (oldstate >= MDSMap::STATE_CLIENTREPLAY &&
@@ -1753,13 +1796,18 @@ bool MDSRankDispatcher::handle_asok_command(
   } else if (command == "session evict") {
     std::string client_id;
     const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
-    assert(got_arg == true);
+    if(!got_arg) {
+      ss << "Invalid client_id specified";
+      return true;
+    }
 
     mds_lock.Lock();
-    std::stringstream ss;
-    bool killed = kill_session(strtol(client_id.c_str(), 0, 10), true, ss);
-    if (!killed)
-      dout(15) << ss.str() << dendl;
+    stringstream dss;
+    bool killed = kill_session(strtol(client_id.c_str(), 0, 10), true, dss);
+    if (!killed) {
+      dout(15) << dss.str() << dendl;
+      ss << dss.str();
+    }
     mds_lock.Unlock();
   } else if (command == "scrub_path") {
     string path;
@@ -2564,7 +2612,7 @@ bool MDSRankDispatcher::handle_command(
       return true;
     }
 
-    Formatter *f = new JSONFormatter();
+    Formatter *f = new JSONFormatter(true);
     dump_sessions(filter, f);
     f->flush(*ds);
     delete f;
@@ -2584,7 +2632,7 @@ bool MDSRankDispatcher::handle_command(
     *need_reply = false;
     return true;
   } else if (prefix == "damage ls") {
-    Formatter *f = new JSONFormatter();
+    Formatter *f = new JSONFormatter(true);
     damage_table.dump(f);
     f->flush(*ds);
     delete f;

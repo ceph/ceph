@@ -188,10 +188,27 @@ int execute_remove_image(const po::variables_map &vm) {
 
   std::string image_name;
   std::string image_pool_name;
+  std::string image_id;
 
-  r = utils::get_special_pool_image_names(vm, &arg_index,
-					  &image_pool_name,
-					  &image_name);
+  if (vm.count(at::IMAGE_ID)) {
+    image_id = vm[at::IMAGE_ID].as<std::string>();
+  }
+
+  bool has_image_spec = utils::check_if_image_spec_present(
+      vm, at::ARGUMENT_MODIFIER_NONE, arg_index);
+
+  if (!image_id.empty() && has_image_spec) {
+    std::cerr << "rbd: trying to access image using both name and id. "
+              << std::endl;
+    return -EINVAL;
+  }
+
+  if (image_id.empty()) {
+    r = utils::get_special_pool_image_names(vm, &arg_index, &image_pool_name,
+                                            &image_name);
+  } else {
+    image_pool_name = utils::get_pool_name(vm, &arg_index);
+  }
 
   if (r < 0) {
     std::cerr << "rbd: image remove error: " << cpp_strerror(r) << std::endl;
@@ -213,8 +230,13 @@ int execute_remove_image(const po::variables_map &vm) {
   }
 
   librbd::RBD rbd;
-  r = rbd.group_image_remove(cg_io_ctx, group_name.c_str(),
-			     image_io_ctx, image_name.c_str());
+  if (image_id.empty()) {
+    r = rbd.group_image_remove(cg_io_ctx, group_name.c_str(),
+                               image_io_ctx, image_name.c_str());
+  } else {
+    r = rbd.group_image_remove_by_id(cg_io_ctx, group_name.c_str(),
+                                     image_io_ctx, image_id.c_str());
+  }
   if (r < 0) {
     std::cerr << "rbd: remove image error: " << cpp_strerror(r) << std::endl;
     return r;
@@ -350,6 +372,7 @@ void get_remove_image_arguments(po::options_description *positional,
 
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE,
 	       " unless overridden");
+  at::add_image_id_option(options);
 }
 
 void get_list_images_arguments(po::options_description *positional,

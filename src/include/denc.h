@@ -290,7 +290,7 @@ inline void denc_signed_varint(int64_t v, bufferlist::contiguous_appender& p) {
 template<typename T>
 inline void denc_signed_varint(T& v, bufferptr::iterator& p)
 {
-  int64_t i;
+  int64_t i = 0;
   denc_varint(i, p);
   if (i & 1) {
     v = -(i >> 1);
@@ -320,7 +320,7 @@ inline void denc_varint_lowz(uint64_t v, bufferlist::contiguous_appender& p) {
 template<typename T>
 inline void denc_varint_lowz(T& v, bufferptr::iterator& p)
 {
-  uint64_t i;
+  uint64_t i = 0;
   denc_varint(i, p);
   int lowznib = (i & 3);
   i >>= 2;
@@ -357,7 +357,7 @@ inline void denc_signed_varint_lowz(int64_t v,
 template<typename T>
 inline void denc_signed_varint_lowz(T& v, bufferptr::iterator& p)
 {
-  int64_t i;
+  int64_t i = 0;
   denc_varint(i, p);
   int lowznib = (i & 6) >> 1;
   if (i & 1) {

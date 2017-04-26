@@ -151,7 +151,7 @@ TEST(ErasureCodeTest, create_ruleset)
   int rule = c->get_rule_id(rule_name);
   vector<int> out;
   unsigned int n = racks * hosts;
-  c->do_rule(rule, 1, out, n, weight);
+  c->do_rule(rule, 1, out, n, weight, 0);
   EXPECT_EQ(n, out.size());
   //
   // check that the first five are in the same rack and the next five
@@ -615,8 +615,8 @@ TEST(ErasureCodeLrc, encode_decode)
   profile["layers"] = description_string;
   EXPECT_EQ(0, lrc.init(profile, &cerr));
   EXPECT_EQ(4U, lrc.get_data_chunk_count());
-  unsigned int stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
-  unsigned int chunk_size = stripe_width / lrc.get_data_chunk_count();
+  unsigned int chunk_size = g_conf->osd_pool_erasure_code_stripe_unit;
+  unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
   EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
   set<int> want_to_encode;
   map<int, bufferlist> encoded;
@@ -745,8 +745,8 @@ TEST(ErasureCodeLrc, encode_decode_2)
   profile["layers"] = description_string;
   EXPECT_EQ(0, lrc.init(profile, &cerr));
   EXPECT_EQ(4U, lrc.get_data_chunk_count());
-  unsigned int stripe_width = g_conf->osd_pool_erasure_code_stripe_width;
-  unsigned int chunk_size = stripe_width / lrc.get_data_chunk_count();
+  unsigned int chunk_size = g_conf->osd_pool_erasure_code_stripe_unit;
+  unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
   EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
   set<int> want_to_encode;
   map<int, bufferlist> encoded;

@@ -69,6 +69,20 @@ public:
     STATE_STOPPED,
   };
 
+  static ImageReplayer *create(
+    Threads<librbd::ImageCtx> *threads,
+    std::shared_ptr<ImageDeleter> image_deleter,
+    ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
+    RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
+    const std::string &global_image_id) {
+    return new ImageReplayer(threads, image_deleter, image_sync_throttler,
+                             local, local_mirror_uuid, local_pool_id,
+                             global_image_id);
+  }
+  void destroy() {
+    delete this;
+  }
+
   ImageReplayer(Threads<librbd::ImageCtx> *threads,
                 std::shared_ptr<ImageDeleter> image_deleter,
                 ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
@@ -107,10 +121,6 @@ public:
   inline std::string get_local_image_id() {
     Mutex::Locker locker(m_lock);
     return m_local_image_id;
-  }
-  inline std::string get_local_image_name() {
-    Mutex::Locker locker(m_lock);
-    return m_local_image_name;
   }
 
   void start(Context *on_finish = nullptr, bool manual = false);
@@ -282,7 +292,6 @@ private:
   int64_t m_local_pool_id;
   std::string m_local_image_id;
   std::string m_global_image_id;
-  std::string m_local_image_name;
   std::string m_name;
   mutable Mutex m_lock;
   State m_state = STATE_STOPPED;

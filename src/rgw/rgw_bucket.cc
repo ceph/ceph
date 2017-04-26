@@ -5,8 +5,10 @@
 
 #include <string>
 #include <map>
+#include <sstream>
 
 #include <boost/utility/string_ref.hpp>
+#include <boost/format.hpp>
 
 #include "common/errno.h"
 #include "common/ceph_json.h"
@@ -139,6 +141,10 @@ int rgw_read_user_buckets(RGWRados * store,
     }
 
   } while (truncated && total < max);
+
+  if (is_truncated != nullptr) {
+    *is_truncated = truncated;
+  }
 
   if (need_stats) {
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
@@ -440,8 +446,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
 				   bool fix)
 {
   RGWUserBuckets user_buckets;
-  bool done;
-  bool is_truncated;
+  bool is_truncated = false;
   string marker;
 
   CephContext *cct = store->ctx();
@@ -492,8 +497,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
         }
       }
     }
-    done = (buckets.size() < max_entries);
-  } while (!done);
+  } while (is_truncated);
 }
 
 static bool bucket_object_check_filter(const string& oid)
@@ -1386,6 +1390,7 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   formatter->dump_string("bucket", bucket.name);
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
+  formatter->dump_stream("index_type") << bucket_info.index_type;
   ::encode_json("owner", bucket_info.owner, formatter);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
@@ -1398,6 +1403,126 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   return 0;
 }
 
+int RGWBucketAdminOp::limit_check(RGWRados *store,
+				  RGWBucketAdminOpState& op_state,
+				  const std::list<std::string>& user_ids,
+				  RGWFormatterFlusher& flusher,
+				  bool warnings_only)
+{
+  int ret = 0;
+  const size_t max_entries =
+    store->ctx()->_conf->rgw_list_buckets_max_chunk;
+
+  const size_t safe_max_objs_per_shard =
+    store->ctx()->_conf->rgw_safe_max_objects_per_shard;
+
+  uint16_t shard_warn_pct =
+    store->ctx()->_conf->rgw_shard_warning_threshold;
+  if (shard_warn_pct > 100)
+    shard_warn_pct = 90;
+
+  Formatter *formatter = flusher.get_formatter();
+  flusher.start(0);
+
+  formatter->open_array_section("users");
+
+  for (const auto& user_id : user_ids) {
+    formatter->open_object_section("user");
+    formatter->dump_string("user_id", user_id);
+    bool done;
+    formatter->open_array_section("buckets");
+    do {
+      RGWUserBuckets buckets;
+      string marker;
+      bool is_truncated;
+
+      ret = rgw_read_user_buckets(store, user_id, buckets,
+				  marker, string(), max_entries, false,
+				  &is_truncated);
+      if (ret < 0)
+        return ret;
+
+      map<string, RGWBucketEnt>& m_buckets = buckets.get_buckets();
+
+      for (const auto& iter : m_buckets) {
+	auto& bucket = iter.second.bucket;
+	uint32_t num_shards = 1;
+	uint64_t num_objects = 0;
+
+	/* need info for num_shards */
+	RGWBucketInfo info;
+	RGWObjectCtx obj_ctx(store);
+
+	marker = bucket.name; /* Casey's location for marker update,
+			       * as we may now not reach the end of
+			       * the loop body */
+
+	ret = store->get_bucket_info(obj_ctx, bucket.tenant, bucket.name,
+				     info, nullptr);
+	if (ret < 0)
+	  continue;
+
+	/* need stats for num_entries */
+	string bucket_ver, master_ver;
+	std::map<RGWObjCategory, RGWStorageStats> stats;
+	ret = store->get_bucket_stats(info, RGW_NO_SHARD, &bucket_ver,
+				      &master_ver, stats, nullptr);
+
+	if (ret < 0)
+	  continue;
+
+	for (const auto& s : stats) {
+	    num_objects += s.second.num_objects;
+	}
+
+	num_shards = info.num_shards;
+	uint64_t objs_per_shard = num_objects / num_shards;
+	{
+	  bool warn = false;
+	  stringstream ss;
+	  if (objs_per_shard > safe_max_objs_per_shard) {
+	    double over =
+	      100 - (safe_max_objs_per_shard/objs_per_shard * 100);
+	      ss << boost::format("OVER %4f%%") % over;
+	      warn = true;
+	  } else {
+	    double fill_pct =
+	      objs_per_shard / safe_max_objs_per_shard * 100;
+	    if (fill_pct >= shard_warn_pct) {
+	      ss << boost::format("WARN %4f%%") % fill_pct;
+	      warn = true;
+	    } else {
+	      ss << "OK";
+	    }
+	  }
+
+	  if (warn || (! warnings_only)) {
+	    formatter->open_object_section("bucket");
+	    formatter->dump_string("bucket", bucket.name);
+	    formatter->dump_string("tenant", bucket.tenant);
+	    formatter->dump_int("num_objects", num_objects);
+	    formatter->dump_int("num_shards", num_shards);
+	    formatter->dump_int("objects_per_shard", objs_per_shard);
+	    formatter->dump_string("fill_status", ss.str());
+	    formatter->close_section();
+	  }
+	}
+      }
+
+      done = (m_buckets.size() < max_entries);
+    } while (!done); /* foreach: bucket */
+
+    formatter->close_section();
+    formatter->close_section();
+    formatter->flush(cout);
+
+  } /* foreach: user_id */
+
+  formatter->close_section();
+  formatter->flush(cout);
+
+  return ret;
+} /* RGWBucketAdminOp::limit_check */
 
 int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
@@ -1418,7 +1543,7 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
 
   CephContext *cct = store->ctx();
 
-  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
+  const size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
 
   bool show_stats = op_state.will_fetch_stats();
   rgw_user user_id = op_state.get_user_id();
@@ -1427,8 +1552,7 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
 
     RGWUserBuckets buckets;
     string marker;
-    bool done;
-    bool is_truncated;
+    bool is_truncated = false;
 
     do {
       ret = rgw_read_user_buckets(store, op_state.get_user_id(), buckets,
@@ -1451,8 +1575,7 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
       }
 
       flusher.flush();
-      done = (m.size() < max_entries);
-    } while (!done);
+    } while (is_truncated);
 
     formatter->close_section();
   } else if (!bucket_name.empty()) {

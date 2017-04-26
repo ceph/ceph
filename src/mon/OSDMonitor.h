@@ -111,6 +111,22 @@ struct failure_info_t {
   }
 };
 
+
+class LastEpochClean {
+  struct Lec {
+    vector<epoch_t> epoch_by_pg;
+    ps_t next_missing = 0;
+    epoch_t floor = std::numeric_limits<epoch_t>::max();
+    void report(ps_t pg, epoch_t last_epoch_clean);
+  };
+  std::map<uint64_t, Lec> report_by_pool;
+public:
+  void report(const pg_t& pg, epoch_t last_epoch_clean);
+  void remove_pool(uint64_t pool);
+  epoch_t get_lower_bound(const OSDMap& latest) const;
+};
+
+
 class OSDMonitor : public PaxosService {
   CephContext *cct;
 
@@ -156,6 +172,7 @@ private:
   void create_pending() override;  // prepare a new pending
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   void on_active() override;
+  void on_restart() override;
   void on_shutdown() override;
   /**
    * we haven't delegated full version stashing to paxosservice for some time
@@ -240,16 +257,6 @@ public:
 			MonOpRequestRef req = MonOpRequestRef());
 
 private:
-  int reweight_by_utilization(int oload,
-			      double max_change,
-			      int max_osds,
-			      bool by_pg,
-			      const set<int64_t> *pools,
-			      bool no_increasing,
-			      bool dry_run,
-			      std::stringstream *ss,
-			      std::string *out_str,
-			      Formatter *f);
   void print_utilization(ostream &out, Formatter *f, bool tree) const;
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
@@ -307,6 +314,7 @@ private:
 			      const string& profile) const;
   int normalize_profile(const string& profilename, 
 			ErasureCodeProfile &profile,
+			bool force,
 			ostream *ss);
   int crush_ruleset_create_erasure(const string &name,
 				   const string &profile,
@@ -420,11 +428,19 @@ private:
   OpTracker op_tracker;
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
+  int get_osd_objectstore_type(int osd, std::string *type);
+  bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
+				       ostream *err);
 
   // when we last received PG stats from each osd
   map<int,utime_t> last_osd_report;
+  // TODO: use last_osd_report to store the osd report epochs, once we don't
+  //       need to upgrade from pre-luminous releases.
+  map<int,epoch_t> osd_epochs;
+  LastEpochClean last_epoch_clean;
   bool preprocess_beacon(MonOpRequestRef op);
   bool prepare_beacon(MonOpRequestRef op);
+  epoch_t get_min_last_epoch_clean() const;
 
   friend class C_UpdateCreatingPGs;
   std::map<int, std::map<epoch_t, std::set<pg_t>>> creating_pgs_by_osd_epoch;
@@ -434,10 +450,11 @@ private:
   creating_pgs_t creating_pgs;
   std::mutex creating_pgs_lock;
 
-  creating_pgs_t update_pending_creatings(const OSDMap::Incremental& inc);
+  creating_pgs_t update_pending_pgs(const OSDMap::Incremental& inc);
   void trim_creating_pgs(creating_pgs_t *creating_pgs, const PGMap& pgm);
   void scan_for_creating_pgs(const std::map<int64_t,pg_pool_t>& pools,
 			     const std::set<int64_t>& removed_pools,
+			     utime_t modified,
 			     creating_pgs_t* creating_pgs) const;
   pair<int32_t, pg_t> get_parent_pg(pg_t pgid) const;
   void update_creating_pgs();

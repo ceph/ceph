@@ -217,6 +217,7 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual(suse, g('suse'))
         self.assertEqual(rhel, g('redhat', use_rhceph=True))
         self.assertEqual(gentoo, g('gentoo'))
+        self.assertEqual(centos, g('virtuozzo'))
 
     def test_normalized_distro_name(self):
         n = ceph_detect_init._normalized_distro_name
@@ -246,6 +247,7 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual('gentoo', n('funtoo'))
         self.assertEqual('gentoo', n('Exherbo'))
         self.assertEqual('gentoo', n('exherbo'))
+        self.assertEqual('virtuozzo', n('Virtuozzo Linux'))
 
     @mock.patch('platform.system', lambda: 'Linux')
     def test_platform_information_linux(self):
@@ -282,6 +284,11 @@ class TestCephDetectInit(testtools.TestCase):
         with mock.patch('platform.linux_distribution',
                         lambda **kwargs: (('Oracle VM server', '3.4.2', ''))):
             self.assertEqual(('Oracle VM server', '3.4.2', 'OVS3.4.2'),
+                             ceph_detect_init.platform_information())
+
+        with mock.patch('platform.linux_distribution',
+                        lambda **kwargs: (('Virtuozzo Linux', '7.3', ''))):
+            self.assertEqual(('Virtuozzo Linux', '7.3', 'virtuozzo'),
                              ceph_detect_init.platform_information())
 
     @mock.patch('platform.linux_distribution')

@@ -31,6 +31,7 @@
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/rgw/cls_rgw_client.h"
+#include "cls/rgw/cls_rgw_const.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/version/cls_version_client.h"
 #include "cls/log/cls_log_client.h"
@@ -2724,7 +2725,6 @@ int RGWPutObjProcessor_Atomic::do_complete(size_t accounted_size, const string& 
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.olh_epoch = olh_epoch;
   obj_op.meta.delete_at = delete_at;
-
   r = obj_op.write_meta(obj_len, accounted_size, attrs);
   if (r < 0) {
     return r;
@@ -5307,6 +5307,13 @@ int RGWRados::create_pool(const rgw_pool& pool)
   ret = rad->pool_create(pool.name.c_str(), 0);
   if (ret == -EEXIST)
     ret = 0;
+  else if (ret == -ERANGE) {
+    ldout(cct, 0)
+      << __func__
+      << " ERROR: librados::Rados::pool_create returned " << cpp_strerror(-ret)
+      << " (this can be due to a pool or placement group misconfiguration, e.g., pg_num < pgp_num)"
+      << dendl;
+  }
   if (ret < 0)
     return ret;
 
@@ -6750,6 +6757,8 @@ class RGWRadosPutObj : public RGWGetDataCB
   CephContext* cct;
   rgw_obj obj;
   RGWPutObjDataProcessor *filter;
+  boost::optional<RGWPutObj_Compress>& compressor;
+  CompressorRef& plugin;
   RGWPutObjProcessor_Atomic *processor;
   RGWOpStateSingleOp *opstate;
   void (*progress_cb)(off_t, void *);
@@ -6757,21 +6766,48 @@ class RGWRadosPutObj : public RGWGetDataCB
   bufferlist extra_data_bl;
   uint64_t extra_data_len;
   uint64_t data_len;
+  map<string, bufferlist> src_attrs;
 public:
   RGWRadosPutObj(CephContext* cct,
-                 RGWPutObjDataProcessor *filter,
+                 CompressorRef& plugin,
+                 boost::optional<RGWPutObj_Compress>& compressor,
                  RGWPutObjProcessor_Atomic *p,
                  RGWOpStateSingleOp *_ops,
                  void (*_progress_cb)(off_t, void *),
                  void *_progress_data) :
                        cct(cct),
-                       filter(filter),
+                       filter(p),
+                       compressor(compressor),
+                       plugin(plugin),
                        processor(p),
                        opstate(_ops),
                        progress_cb(_progress_cb),
                        progress_data(_progress_data),
                        extra_data_len(0),
                        data_len(0) {}
+
+  int process_attrs(void) {
+    if (extra_data_bl.length()) {
+      JSONParser jp;
+      if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
+        ldout(cct, 0) << "failed to parse response extra data. len=" << extra_data_bl.length() << " data=" << extra_data_bl.c_str() << dendl;
+        return -EIO;
+      }
+
+      JSONDecoder::decode_json("attrs", src_attrs, &jp);
+
+      src_attrs.erase(RGW_ATTR_COMPRESSION);
+      src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
+    }
+
+    if (plugin && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
+      //do not compress if object is encrypted
+      compressor = boost::in_place(cct, plugin, filter);
+      filter = &*compressor;
+    }
+    return 0;
+  }
+
   int handle_data(bufferlist& bl, off_t ofs, off_t len) override {
     if (progress_cb) {
       progress_cb(ofs, progress_data);
@@ -6786,6 +6822,11 @@ public:
       extra_data_bl.append(extra);
 
       extra_data_len -= extra_len;
+      if (extra_data_len == 0) {
+        int res = process_attrs();
+        if (res < 0)
+          return res;
+      }
       if (bl.length() == 0) {
         return 0;
       }
@@ -6817,7 +6858,6 @@ public:
           /* could not renew state! might have been marked as cancelled */
           return ret;
         }
-
         need_opstate = false;
       }
 
@@ -6830,6 +6870,8 @@ public:
   }
 
   bufferlist& get_extra_data() { return extra_data_bl; }
+
+  map<string, bufferlist>& get_attrs() { return src_attrs; }
 
   void set_extra_data_len(uint64_t len) override {
     extra_data_len = len;
@@ -7132,7 +7174,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   RGWRESTStreamRWRequest *in_stream_req;
   string tag;
-  map<string, bufferlist> src_attrs;
   int i;
   append_rand_alpha(cct, tag, tag, 32);
   obj_time_weight set_mtime_weight;
@@ -7141,7 +7182,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.key.name,
                                       cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
-  if (version_id) {
+  if (version_id && *version_id != "null") {
     processor.set_version_id(*version_id);
   }
   processor.set_olh_epoch(olh_epoch);
@@ -7190,8 +7231,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
 
-  RGWPutObjDataProcessor *filter = &processor;
-
   const auto& compression_type = zone_params.get_compression_type(
       dest_bucket_info.placement_rule);
   if (compression_type != "none") {
@@ -7199,13 +7238,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     if (!plugin) {
       ldout(cct, 1) << "Cannot load plugin for compression type "
           << compression_type << dendl;
-    } else {
-      compressor = boost::in_place(cct, plugin, filter);
-      filter = &*compressor;
     }
   }
 
-  RGWRadosPutObj cb(cct, filter, &processor, opstate, progress_cb, progress_data);
+  RGWRadosPutObj cb(cct, plugin, compressor, &processor, opstate, progress_cb, progress_data);
 
   string etag;
   map<string, string> req_headers;
@@ -7229,7 +7265,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
- 
   ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                       true /* prepend_meta */, true /* GET */, false /* rgwx-stat */,
@@ -7242,41 +7277,26 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   if (ret < 0) {
     goto set_err_state;
   }
+  if (compressor && compressor->is_compressed()) {
+    bufferlist tmp;
+    RGWCompressionInfo cs_info;
+    cs_info.compression_type = plugin->get_type_name();
+    cs_info.orig_size = cb.get_data_len();
+    cs_info.blocks = move(compressor->get_compression_blocks());
+    ::encode(cs_info, tmp);
+    cb.get_attrs()[RGW_ATTR_COMPRESSION] = tmp;
+  }
 
-  { /* opening scope so that we can do goto, sorry */
-    bufferlist& extra_data_bl = cb.get_extra_data();
-    if (extra_data_bl.length()) {
-      JSONParser jp;
-      if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
-        ldout(cct, 0) << "failed to parse response extra data. len=" << extra_data_bl.length() << " data=" << extra_data_bl.c_str() << dendl;
-        goto set_err_state;
+  if (source_zone.empty()) { /* need to preserve expiration if copy in the same zonegroup */
+    cb.get_attrs().erase(RGW_ATTR_DELETE_AT);
+  } else {
+    map<string, bufferlist>::iterator iter = cb.get_attrs().find(RGW_ATTR_DELETE_AT);
+    if (iter != cb.get_attrs().end()) {
+      try {
+        ::decode(delete_at, iter->second);
+      } catch (buffer::error& err) {
+        ldout(cct, 0) << "ERROR: failed to decode delete_at field in intra zone copy" << dendl;
       }
-
-      JSONDecoder::decode_json("attrs", src_attrs, &jp);
-
-      src_attrs.erase(RGW_ATTR_COMPRESSION);
-      src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
-      if (source_zone.empty()) { /* need to preserve expiration if copy in the same zonegroup */
-        src_attrs.erase(RGW_ATTR_DELETE_AT);
-      } else {
-	map<string, bufferlist>::iterator iter = src_attrs.find(RGW_ATTR_DELETE_AT);
-	if (iter != src_attrs.end()) {
-	  try {
-	    ::decode(delete_at, iter->second);
-	  } catch (buffer::error& err) {
-	    ldout(cct, 0) << "ERROR: failed to decode delete_at field in intra zone copy" << dendl;
-	  }
-	}
-      }
-    }
-    if (compressor && compressor->is_compressed()) {
-      bufferlist tmp;
-      RGWCompressionInfo cs_info;
-      cs_info.compression_type = plugin->get_type_name();
-      cs_info.orig_size = cb.get_data_len();
-      cs_info.blocks = move(compressor->get_compression_blocks());
-      ::encode(cs_info, tmp);
-      src_attrs[RGW_ATTR_COMPRESSION] = tmp;
     }
   }
 
@@ -7285,16 +7305,16 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   if (petag) {
-    const auto iter = src_attrs.find(RGW_ATTR_ETAG);
-    if (iter != src_attrs.end()) {
+    const auto iter = cb.get_attrs().find(RGW_ATTR_ETAG);
+    if (iter != cb.get_attrs().end()) {
       *petag = iter->second;
     }
   }
 
   if (source_zone.empty()) {
-    set_copy_attrs(src_attrs, attrs, attrs_mod);
+    set_copy_attrs(cb.get_attrs(), attrs, attrs_mod);
   } else {
-    attrs = src_attrs;
+    attrs = cb.get_attrs();
   }
 
   if (copy_if_newer) {
@@ -9264,7 +9284,6 @@ int RGWRados::Object::Read::prepare()
   if (r < 0) {
     return r;
   }
-
   if (params.attrs) {
     *params.attrs = astate->attrset;
     if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
@@ -12209,7 +12228,7 @@ int RGWRados::remove_objs_from_index(RGWBucketInfo& bucket_info, list<rgw_obj_in
 
   bufferlist out;
 
-  r = index_ctx.exec(dir_oid, "rgw", "dir_suggest_changes", updates, out);
+  r = index_ctx.exec(dir_oid, RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates, out);
 
   return r;
 }

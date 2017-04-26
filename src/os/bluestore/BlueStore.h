@@ -124,6 +124,7 @@ public:
 
   void _set_csum();
   void _set_compression();
+  void _set_throttle_params();
 
   class TransContext;
 
@@ -1439,7 +1440,7 @@ public:
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
-    uint64_t ops = 0, bytes = 0;
+    uint64_t bytes = 0, cost = 0;
 
     set<OnodeRef> onodes;     ///< these need to be updated/written
     set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
@@ -1654,10 +1655,13 @@ public:
     void flush() override {
       std::unique_lock<std::mutex> l(qlock);
       while (true) {
+	// set flag before the check because the condition
+	// may become true outside qlock, and we need to make
+	// sure those threads see waiters and signal qcond.
+	++kv_submitted_waiters;
 	if (_is_all_kv_submitted()) {
 	  return;
 	}
-	++kv_submitted_waiters;
 	qcond.wait(l);
 	--kv_submitted_waiters;
       }
@@ -1722,6 +1726,8 @@ private:
   BlueFS *bluefs = nullptr;
   unsigned bluefs_shared_bdev = 0;  ///< which bluefs bdev we are sharing
   bool bluefs_single_shared_device = true;
+  utime_t bluefs_last_balance;
+
   KeyValueDB *db = nullptr;
   BlockDevice *bdev = nullptr;
   std::string freelist_type;
@@ -1745,8 +1751,8 @@ private:
   std::atomic<uint64_t> blobid_last = {0};
   std::atomic<uint64_t> blobid_max = {0};
 
-  Throttle throttle_ops, throttle_bytes;          ///< submit to commit
-  Throttle throttle_deferred_ops, throttle_deferred_bytes;  ///< submit to deferred complete
+  Throttle throttle_bytes;          ///< submit to commit
+  Throttle throttle_deferred_bytes;  ///< submit to deferred complete
 
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
@@ -1755,7 +1761,7 @@ private:
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
-  atomic_bool deferred_aggressive = {false}; ///< aggressive wakeup of kv thread
+  atomic_int deferred_aggressive = {0}; ///< aggressive wakeup of kv thread
 
   int m_finisher_num = 1;
   vector<Finisher*> finishers;
@@ -1786,15 +1792,26 @@ private:
   size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)
-  size_t min_alloc_size_order = 0; ///< bits for min_alloc_size
-  uint64_t prefer_deferred_size = 0; ///< size threshold for forced deferred writes
+  int deferred_batch_ops = 0; ///< deferred batch size
 
-  uint64_t max_alloc_size = 0; ///< maximum allocation unit (power of 2)
+  ///< bits for min_alloc_size
+  std::atomic<size_t> min_alloc_size_order = {0};
+  
+  ///< size threshold for forced deferred writes
+  std::atomic<uint64_t> prefer_deferred_size = {0};
+
+  ///< maximum allocation unit (power of 2)
+  std::atomic<uint64_t> max_alloc_size = {0};
+
+  ///< approx cost per io, in bytes
+  std::atomic<uint64_t> throttle_cost_per_io = {0};
 
   std::atomic<Compressor::CompressionMode> comp_mode = {Compressor::COMP_NONE}; ///< compression mode
   CompressorRef compressor;
   std::atomic<uint64_t> comp_min_blob_size = {0};
   std::atomic<uint64_t> comp_max_blob_size = {0};
+
+  std::atomic<uint64_t> max_blob_size = {0};  ///< maximum blob size
 
   // cache trim control
 
@@ -1849,6 +1866,8 @@ private:
   int _write_fsid();
   void _close_fsid();
   void _set_alloc_sizes();
+  void _set_blob_size();
+
   int _open_bdev(bool create);
   void _close_bdev();
   int _open_db(bool create);
@@ -1892,6 +1911,7 @@ private:
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
+  void _txc_calc_cost(TransContext *txc);
   void _txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
@@ -1974,6 +1994,11 @@ private:
     }
     return val1;
   }
+
+  void _apply_padding(uint64_t head_pad,
+		      uint64_t tail_pad,
+		      bufferlist& bl,
+		      bufferlist& padded);
 
   // -- ondisk version ---
 public:
@@ -2087,10 +2112,19 @@ public:
     bufferlist& bl,
     uint32_t op_flags = 0);
 
+private:
+  int _fiemap(CollectionHandle &c_, const ghobject_t& oid,
+ 	     uint64_t offset, size_t len, interval_set<uint64_t>& destset);
+public:
   int fiemap(const coll_t& cid, const ghobject_t& oid,
 	     uint64_t offset, size_t len, bufferlist& bl) override;
   int fiemap(CollectionHandle &c, const ghobject_t& oid,
 	     uint64_t offset, size_t len, bufferlist& bl) override;
+  int fiemap(const coll_t& cid, const ghobject_t& oid,
+	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+  int fiemap(CollectionHandle &c, const ghobject_t& oid,
+	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+
 
   int getattr(const coll_t& cid, const ghobject_t& oid, const char *name,
 	      bufferptr& value) override;

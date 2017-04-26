@@ -90,7 +90,7 @@ else
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	if [ -n "$backports" ] ; then rm $control; fi
         ;;
-    centos|fedora|rhel|ol)
+    centos|fedora|rhel|ol|virtuozzo)
         yumdnf="yum"
         builddepcmd="yum-builddep -y"
         if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
@@ -105,7 +105,7 @@ else
                     $SUDO $yumdnf install -y yum-utils
                 fi
                 ;;
-            CentOS|RedHatEnterpriseServer)
+            CentOS|RedHatEnterpriseServer|VirtuozzoLinux)
                 $SUDO yum install -y yum-utils
                 MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
                 if test $(lsb_release -si) = RedHatEnterpriseServer ; then
@@ -119,6 +119,9 @@ else
                 if test $(lsb_release -si) = CentOS -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
+                if test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
+                    $SUDO yum-config-manager --enable cr
+                fi
                 ;;
         esac
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
@@ -130,6 +133,18 @@ else
         $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
+        ;;
+    alpine)
+        # for now we need the testing repo for leveldb
+        TESTREPO="http://nl.alpinelinux.org/alpine/edge/testing"
+        if ! grep -qF "$TESTREPO" /etc/apk/repositories ; then
+            $SUDO echo "$TESTREPO" | sudo tee -a /etc/apk/repositories > /dev/null
+        fi
+        source alpine/APKBUILD.in
+        $SUDO apk --update add abuild build-base ccache $makedepends
+        if id -u build >/dev/null 2>&1 ; then
+           $SUDO addgroup build abuild
+        fi
         ;;
     *)
         echo "$ID is unknown, dependencies will have to be installed manually."

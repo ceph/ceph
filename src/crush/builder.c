@@ -23,17 +23,7 @@ struct crush_map *crush_create()
                 return NULL;
 	memset(m, 0, sizeof(*m));
 
-	/* initialize legacy tunable values */
-	m->choose_local_tries = 2;
-	m->choose_local_fallback_tries = 5;
-	m->choose_total_tries = 19;
-	m->chooseleaf_descend_once = 0;
-	m->chooseleaf_vary_r = 0;
-	m->straw_calc_version = 0;
-
-	// by default, use legacy types, and also exclude tree,
-	// since it was buggy.
-	m->allowed_bucket_algs = CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+	set_optimal_crush_map(m);
 	return m;
 }
 
@@ -685,7 +675,16 @@ int crush_add_uniform_bucket_item(struct crush_bucket_uniform *bucket, int item,
 {
         int newsize = bucket->h.size + 1;
 	void *_realloc = NULL;
-	
+
+	/* In such situation 'CRUSH_BUCKET_UNIFORM', the weight
+	   provided for the item should be the same as
+	   bucket->item_weight defined with 'crush_make_bucket'. This
+	   assumption is enforced by the return value which is always
+	   0. */
+	if (bucket->item_weight != weight) {
+	  return -EINVAL;
+	}
+
 	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
 		return -ENOMEM;
 	} else {
@@ -1401,6 +1400,67 @@ int crush_reweight_bucket(struct crush_map *map, struct crush_bucket *b)
 	}
 }
 
+struct crush_choose_arg *crush_make_choose_args(struct crush_map *map, int num_positions)
+{
+  int b;
+  int sum_bucket_size = 0;
+  int bucket_count = 0;
+  for (b = 0; b < map->max_buckets; b++) {
+    if (map->buckets[b] == 0)
+      continue;
+    sum_bucket_size += map->buckets[b]->size;
+    bucket_count++;
+  }
+  dprintk("sum_bucket_size %d max_buckets %d bucket_count %d\n",
+          sum_bucket_size, map->max_buckets, bucket_count);
+  int size = (sizeof(struct crush_choose_arg) * map->max_buckets +
+              sizeof(struct crush_weight_set) * bucket_count * num_positions +
+              sizeof(__u32) * sum_bucket_size * num_positions + // weights
+              sizeof(__u32) * sum_bucket_size); // ids
+  char *space = malloc(size);
+  struct crush_choose_arg *arg = (struct crush_choose_arg *)space;
+  struct crush_weight_set *weight_set = (struct crush_weight_set *)(arg + map->max_buckets);
+  __u32 *weights = (__u32 *)(weight_set + bucket_count * num_positions);
+  char *weight_set_ends = (char*)weights;
+  int *ids = (int *)(weights + sum_bucket_size * num_positions);
+  char *weights_end = (char *)ids;
+  char *ids_end = (char *)(ids + sum_bucket_size);
+  BUG_ON(space + size != ids_end);
+  for (b = 0; b < map->max_buckets; b++) {
+    if (map->buckets[b] == 0) {
+      memset(&arg[b], '\0', sizeof(struct crush_choose_arg));
+      continue;
+    }
+    struct crush_bucket_straw2 *bucket = (struct crush_bucket_straw2 *)map->buckets[b];
+
+    int position;
+    for (position = 0; position < num_positions; position++) {
+      memcpy(weights, bucket->item_weights, sizeof(__u32) * bucket->h.size);
+      weight_set[position].weights = weights;
+      weight_set[position].size = bucket->h.size;
+      dprintk("moving weight %d bytes forward\n", (int)((weights + bucket->h.size) - weights));
+      weights += bucket->h.size;
+    }
+    arg[b].weight_set = weight_set;
+    arg[b].weight_set_size = num_positions;
+    weight_set += position;
+
+    memcpy(ids, bucket->h.items, sizeof(int) * bucket->h.size);
+    arg[b].ids = ids;
+    arg[b].ids_size = bucket->h.size;
+    ids += bucket->h.size;
+  }
+  BUG_ON((char*)weight_set_ends != (char*)weight_set);
+  BUG_ON((char*)weights_end != (char*)weights);
+  BUG_ON((char*)ids != (char*)ids_end);
+  return arg;
+}
+
+void crush_destroy_choose_args(struct crush_choose_arg *args)
+{
+  free(args);
+}
+
 /***************************/
 
 /* methods to check for safe arithmetic operations */
@@ -1424,4 +1484,36 @@ int crush_multiplication_is_unsafe(__u32  a, __u32 b)
 		return 1;
 	else
 		return 0;
+}
+
+/***************************/
+
+/* methods to configure crush_map */
+
+void set_legacy_crush_map(struct crush_map *map) {
+  /* initialize legacy tunable values */
+  map->choose_local_tries = 2;
+  map->choose_local_fallback_tries = 5;
+  map->choose_total_tries = 19;
+  map->chooseleaf_descend_once = 0;
+  map->chooseleaf_vary_r = 0;
+  map->straw_calc_version = 0;
+
+  // by default, use legacy types, and also exclude tree,
+  // since it was buggy.
+  map->allowed_bucket_algs = CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+}
+
+void set_optimal_crush_map(struct crush_map *map) {
+  map->choose_local_tries = 0;
+  map->choose_local_fallback_tries = 0;
+  map->choose_total_tries = 50;
+  map->chooseleaf_descend_once = 1;
+  map->chooseleaf_vary_r = 1;
+  map->chooseleaf_stable = 1;
+  map->allowed_bucket_algs = (
+    (1 << CRUSH_BUCKET_UNIFORM) |
+    (1 << CRUSH_BUCKET_LIST) |
+    (1 << CRUSH_BUCKET_STRAW) |
+    (1 << CRUSH_BUCKET_STRAW2));
 }

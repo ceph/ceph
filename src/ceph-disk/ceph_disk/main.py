@@ -577,6 +577,9 @@ def platform_information():
                     codename = minor
                 else:
                     codename = major
+        # this could be an empty string in Virtuozzo linux
+        if not codename and 'virtuozzo linux' in distro.lower():
+            codename = 'virtuozzo'
 
     return (
         str(distro).strip(),
@@ -759,13 +762,21 @@ def list_all_partitions():
     """
     Return a list of devices and partitions
     """
-    names = os.listdir('/sys/block')
-    dev_part_list = {}
-    for name in names:
-        # /dev/fd0 may hang http://tracker.ceph.com/issues/6827
-        if re.match(r'^fd\d$', name):
-            continue
-        dev_part_list[name] = list_partitions(get_dev_path(name))
+    if not FREEBSD:
+        names = os.listdir('/sys/block')
+        dev_part_list = {}
+        for name in names:
+            # /dev/fd0 may hang http://tracker.ceph.com/issues/6827
+            if re.match(r'^fd\d$', name):
+                continue
+            dev_part_list[name] = list_partitions(get_dev_path(name))
+    else:
+        with open(os.path.join(PROCDIR, "partitions")) as partitions:
+            for line in partitions:
+                columns = line.split()
+                if len(columns) >= 4:
+                    name = columns[3]
+                    dev_part_list[name] = list_partitions(get_dev_path(name))
     return dev_part_list
 
 
@@ -1922,6 +1933,10 @@ class Prepare(object):
             help='unique OSD uuid to assign this disk to',
         )
         parser.add_argument(
+            '--crush-device-class',
+            help='crush device class to assign this disk to',
+        )
+        parser.add_argument(
             '--dmcrypt',
             action='store_true', default=None,
             help='encrypt DATA and/or JOURNAL devices with dm-crypt',
@@ -2788,6 +2803,9 @@ class PrepareData(object):
 
         write_one_line(path, 'ceph_fsid', self.args.cluster_uuid)
         write_one_line(path, 'fsid', self.args.osd_uuid)
+        if self.args.crush_device_class:
+            write_one_line(path, 'crush_device_class',
+                           self.args.crush_device_class)
         write_one_line(path, 'magic', CEPH_OSD_ONDISK_MAGIC)
 
         for to_prepare in to_prepare_list:
@@ -3150,6 +3168,67 @@ def move_mount(
     )
 
 
+#
+# For upgrade purposes, to make sure there are no competing units,
+# both --runtime unit and the default should be disabled. There can be
+# two units at the same time: one with --runtime and another without
+# it. If, for any reason (manual or ceph-disk) the two units co-exist
+# they will compete with each other.
+#
+def systemd_disable(
+    path,
+    osd_id,
+):
+    # ensure there is no duplicate ceph-osd@.service
+    for style in ([], ['--runtime']):
+        command_check_call(
+            [
+                'systemctl',
+                'disable',
+                'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+            ] + style,
+        )
+
+
+def systemd_start(
+    path,
+    osd_id,
+):
+    systemd_disable(path, osd_id)
+    if is_mounted(path):
+        style = ['--runtime']
+    else:
+        style = []
+    command_check_call(
+        [
+            'systemctl',
+            'enable',
+            'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+        ] + style,
+    )
+    command_check_call(
+        [
+            'systemctl',
+            'start',
+            'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+        ],
+    )
+
+
+def systemd_stop(
+    path,
+    osd_id,
+):
+    systemd_disable(path, osd_id)
+    command_check_call(
+        [
+            'systemctl',
+            'stop',
+            'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+        ],
+    )
+
+
 def start_daemon(
     cluster,
     osd_id,
@@ -3193,29 +3272,7 @@ def start_daemon(
                 ],
             )
         elif os.path.exists(os.path.join(path, 'systemd')):
-            # ensure there is no duplicate ceph-osd@.service
-            command_check_call(
-                [
-                    'systemctl',
-                    'disable',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
-            command_check_call(
-                [
-                    'systemctl',
-                    'enable',
-                    '--runtime',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
-            command_check_call(
-                [
-                    'systemctl',
-                    'start',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
+            systemd_start(path, osd_id)
         elif os.path.exists(os.path.join(path, 'openrc')):
             base_script = '/etc/init.d/ceph-osd'
             osd_script = '{base}.{osd_id}'.format(
@@ -3231,14 +3288,10 @@ def start_daemon(
                 ],
             )
         elif os.path.exists(os.path.join(path, 'bsdrc')):
-            base_script = '/usr/local/etc/rc.d/ceph'
-            osd_script = '{base} start osd.{osd_id}'.format(
-                base=base_script,
-                osd_id=osd_id
-            )
             command_check_call(
                 [
-                    osd_script,
+                    '/usr/local/etc/rc.d/ceph start osd.{osd_id}'
+                    .format(osd_id=osd_id),
                 ],
             )
         else:
@@ -3285,21 +3338,7 @@ def stop_daemon(
                 ],
             )
         elif os.path.exists(os.path.join(path, 'systemd')):
-            command_check_call(
-                [
-                    'systemctl',
-                    'disable',
-                    '--runtime',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
-            command_check_call(
-                [
-                    'systemctl',
-                    'stop',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
-                ],
-            )
+            systemd_stop(path, osd_id)
         elif os.path.exists(os.path.join(path, 'openrc')):
             command_check_call(
                 [
@@ -3312,7 +3351,6 @@ def stop_daemon(
                 [
                     '/usr/local/etc/rc.d/ceph stop osd.{osd_id}'
                     .format(osd_id=osd_id),
-                    'stop',
                 ],
             )
         else:
@@ -4521,9 +4559,36 @@ def list_devices():
     return devices
 
 
+def list_zfs():
+    try:
+        out, err, ret = command(
+            [
+                'zfs',
+                'list',
+                '-o', 'name,mountpoint'
+            ]
+        )
+    except subprocess.CalledProcessError as e:
+        LOG.info('zfs list -o name,mountpoint '
+                 'fails.\n (Error: %s)' % e)
+        raise
+    lines = out.splitlines()
+    for line in lines[2:]:
+        vdevline = line.split()
+        if os.path.exists(os.path.join(vdevline[1], 'active')):
+            elems = os.path.split(vdevline[1])
+            print(vdevline[0], "ceph data, active, cluster ceph,", elems[5],
+                  "mounted on:", vdevline[1])
+        else:
+            print(vdevline[0] + " other, zfs, mounted on: " + vdevline[1])
+
+
 def main_list(args):
     with activate_lock:
-        main_list_protected(args)
+        if FREEBSD:
+            main_list_freebsd(args)
+        else:
+            main_list_protected(args)
 
 
 def main_list_protected(args):
@@ -4548,6 +4613,16 @@ def main_list_protected(args):
         output = list_format_plain(selected_devices)
         if output:
             print(output)
+
+
+def main_list_freebsd(args):
+    # Currently accomodate only ZFS Filestore partitions
+    #   return a list of VDEVs and mountpoints
+    # > zfs list
+    # NAME   USED  AVAIL  REFER  MOUNTPOINT
+    # osd0  1.01G  1.32T  1.01G  /var/lib/ceph/osd/osd.0
+    # osd1  1.01G  1.32T  1.01G  /var/lib/ceph/osd/osd.1
+    list_zfs()
 
 
 ###########################

@@ -122,30 +122,32 @@ function TEST_erasure_code_profile_default() {
     ceph osd erasure-code-profile ls | grep default || return 1
 }
 
-function TEST_erasure_crush_stripe_width() {
+function TEST_erasure_crush_stripe_unit() {
     local dir=$1
-    # the default stripe width is used to initialize the pool
+    # the default stripe unit is used to initialize the pool
     run_mon $dir a --public-addr $CEPH_MON
-    stripe_width=$(ceph-conf --show-config-value osd_pool_erasure_code_stripe_width)
+    stripe_unit=$(ceph-conf --show-config-value osd_pool_erasure_code_stripe_unit)
+    eval local $(ceph osd erasure-code-profile get myprofile | grep k=)
+    stripe_width = $((stripe_unit * k))
     ceph osd pool create pool_erasure 12 12 erasure
     ceph --format json osd dump | tee $dir/osd.json
     grep '"stripe_width":'$stripe_width $dir/osd.json > /dev/null || return 1
 }
 
-function TEST_erasure_crush_stripe_width_padded() {
+function TEST_erasure_crush_stripe_unit_padded() {
     local dir=$1
-    # setting osd_pool_erasure_code_stripe_width modifies the stripe_width
+    # setting osd_pool_erasure_code_stripe_unit modifies the stripe_width
     # and it is padded as required by the default plugin
     profile+=" plugin=jerasure"
     profile+=" technique=reed_sol_van"
     k=4
     profile+=" k=$k"
     profile+=" m=2"
-    expected_chunk_size=2048
-    actual_stripe_width=$(($expected_chunk_size * $k))
-    desired_stripe_width=$(($actual_stripe_width - 1))
+    actual_stripe_unit=2048
+    desired_stripe_unit=$((actual_stripe_unit - 1))
+    actual_stripe_width=$((actual_stripe_unit * k))
     run_mon $dir a \
-        --osd_pool_erasure_code_stripe_width $desired_stripe_width \
+        --osd_pool_erasure_code_stripe_unit $desired_stripe_unit \
         --osd_pool_default_erasure_code_profile "$profile" || return 1
     ceph osd pool create pool_erasure 12 12 erasure
     ceph osd dump | tee $dir/osd.json

@@ -54,7 +54,7 @@ Request Parameters
 
 :Description: Specifies whether data entries should be returned.
 :Type: Boolean
-:Example: True [False]
+:Example: True [True]
 :Required: No
 
 
@@ -62,7 +62,7 @@ Request Parameters
 
 :Description: Specifies whether data summary should be returned.
 :Type: Boolean
-:Example: True [False]
+:Example: True [True]
 :Required: No
 
 
@@ -738,9 +738,8 @@ Create Subuser
 ==============
 
 Create a new subuser (primarily useful for clients using the Swift API).
-Note that either ``gen-subuser`` or ``subuser`` is required for a valid
-request. Note that in general for a subuser to be useful, it must be
-granted permissions by specifying ``access``. As with user creation if
+Note that in general for a subuser to be useful, it must be granted 
+permissions by specifying ``access``. As with user creation if
 ``subuser`` is specified without ``secret``, then a secret key will
 be automatically generated.
 
@@ -771,7 +770,7 @@ Request Parameters
 :Description: Specify the subuser ID to be created.
 :Type: String
 :Example: ``sub_foo``
-:Required: No
+:Required: Yes
 
 ``secret-key``
 
@@ -1696,7 +1695,7 @@ Request Parameters
 
 :Description: The administrative capability to add to the user.
 :Type: String
-:Example: ``usage=read, write``
+:Example: ``usage=read,write;user=write``
 :Required: Yes
 
 Response Entities
@@ -1736,12 +1735,11 @@ Example Request
 
 ::
 
-	PUT /{admin}/user?caps&format=json HTTP/1.1
+	PUT /{admin}/user?caps&user-caps=usage=read,write;user=write&format=json HTTP/1.1
 	Host: {fqdn}
 	Content-Type: text/plain
 	Authorization: {your-authorization-token}
 
-	usage=read
 
 
 Remove A User Capability

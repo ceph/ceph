@@ -8,6 +8,7 @@
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
+#include "common/Checksummer.h"
 #include "global/global_context.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
@@ -66,8 +67,18 @@ TEST(LibRadosMiscConnectFailure, ConnectFailure) {
   ASSERT_EQ(-ENOTCONN, rados_monitor_log(cluster, "error",
                                          test_rados_log_cb, NULL));
 
-  ASSERT_NE(0, rados_connect(cluster));
-  ASSERT_NE(0, rados_connect(cluster));
+  // try this a few times; sometimes we don't schedule fast enough for the
+  // cond to time out
+  int r;
+  for (unsigned i=0; i<16; ++i) {
+    cout << i << std::endl;
+    r = rados_connect(cluster);
+    if (r < 0)
+      break;  // yay, we timed out
+    // try again
+    rados_shutdown(cluster);
+  }
+  ASSERT_NE(0, r);
 
   rados_shutdown(cluster);
 }
@@ -1059,4 +1070,131 @@ TEST_F(LibRadosMisc, WriteSame) {
 	    rados_writesame(ioctx, "ws", buf, 0, sizeof(buf), 0));
   /* write_len = data_len, i.e. same as rados_write() */
   ASSERT_EQ(0, rados_writesame(ioctx, "ws", buf, sizeof(buf), sizeof(buf), 0));
+}
+
+template <typename T>
+class LibRadosChecksum : public LibRadosMiscPP {
+public:
+  typedef typename T::alg_t alg_t;
+  typedef typename T::value_t value_t;
+  typedef typename alg_t::init_value_t init_value_t;
+
+  static const rados_checksum_type_t type = T::type;
+
+  bufferlist content_bl;
+
+  using LibRadosMiscPP::SetUpTestCase;
+  using LibRadosMiscPP::TearDownTestCase;
+
+  void SetUp() override {
+    LibRadosMiscPP::SetUp();
+
+    std::string content(4096, '\0');
+    for (size_t i = 0; i < content.length(); ++i) {
+      content[i] = static_cast<char>(rand() % (126 - 33) + 33);
+    }
+    content_bl.append(content);
+    ASSERT_EQ(0, ioctx.write("foo", content_bl, content_bl.length(), 0));
+  }
+};
+
+template <rados_checksum_type_t _type, typename AlgT, typename ValueT>
+class LibRadosChecksumParams {
+public:
+  typedef AlgT alg_t;
+  typedef ValueT value_t;
+  static const rados_checksum_type_t type = _type;
+};
+
+typedef ::testing::Types<
+    LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_XXHASH32,
+			   Checksummer::xxhash32, uint32_t>,
+    LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_XXHASH64,
+			   Checksummer::xxhash64, uint64_t>,
+    LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_CRC32C,
+			   Checksummer::crc32c, uint32_t>
+  > LibRadosChecksumTypes;
+
+TYPED_TEST_CASE(LibRadosChecksum, LibRadosChecksumTypes);
+
+TYPED_TEST(LibRadosChecksum, Subset) {
+  uint32_t chunk_size = 1024;
+  uint32_t csum_count = this->content_bl.length() / chunk_size;
+
+  typename TestFixture::init_value_t init_value = -1;
+  bufferlist init_value_bl;
+  ::encode(init_value, init_value_bl);
+
+  std::vector<bufferlist> checksum_bls(csum_count);
+  std::vector<int> checksum_rvals(csum_count);
+
+  // individual checksum ops for each chunk
+  ObjectReadOperation op;
+  for (uint32_t i = 0; i < csum_count; ++i) {
+    op.checksum(TestFixture::type, init_value_bl, i * chunk_size, chunk_size,
+		0, &checksum_bls[i], &checksum_rvals[i]);
+  }
+  ASSERT_EQ(0, this->ioctx.operate("foo", &op, NULL));
+
+  for (uint32_t i = 0; i < csum_count; ++i) {
+    ASSERT_EQ(0, checksum_rvals[i]);
+
+    auto bl_it = checksum_bls[i].begin();
+    uint32_t count;
+    ::decode(count, bl_it);
+    ASSERT_EQ(1U, count);
+
+    typename TestFixture::value_t value;
+    ::decode(value, bl_it);
+
+    bufferlist content_sub_bl;
+    content_sub_bl.substr_of(this->content_bl, i * chunk_size, chunk_size);
+
+    typename TestFixture::value_t expected_value;
+    bufferptr expected_value_bp = buffer::create_static(
+      sizeof(expected_value), reinterpret_cast<char*>(&expected_value));
+    Checksummer::template calculate<typename TestFixture::alg_t>(
+      init_value, chunk_size, 0, chunk_size, content_sub_bl,
+      &expected_value_bp);
+    ASSERT_EQ(expected_value, value);
+  }
+}
+
+TYPED_TEST(LibRadosChecksum, Chunked) {
+  uint32_t chunk_size = 1024;
+  uint32_t csum_count = this->content_bl.length() / chunk_size;
+
+  typename TestFixture::init_value_t init_value = -1;
+  bufferlist init_value_bl;
+  ::encode(init_value, init_value_bl);
+
+  bufferlist checksum_bl;
+  int checksum_rval;
+
+  // single op with chunked checksum results
+  ObjectReadOperation op;
+  op.checksum(TestFixture::type, init_value_bl, 0, this->content_bl.length(),
+	      chunk_size, &checksum_bl, &checksum_rval);
+  ASSERT_EQ(0, this->ioctx.operate("foo", &op, NULL));
+  ASSERT_EQ(0, checksum_rval);
+
+  auto bl_it = checksum_bl.begin();
+  uint32_t count;
+  ::decode(count, bl_it);
+  ASSERT_EQ(csum_count, count);
+
+  std::vector<typename TestFixture::value_t> expected_values(csum_count);
+  bufferptr expected_values_bp = buffer::create_static(
+    csum_count * sizeof(typename TestFixture::value_t),
+    reinterpret_cast<char*>(&expected_values[0]));
+
+  Checksummer::template calculate<typename TestFixture::alg_t>(
+    init_value, chunk_size, 0, this->content_bl.length(), this->content_bl,
+    &expected_values_bp);
+
+  for (uint32_t i = 0; i < csum_count; ++i) {
+    typename TestFixture::value_t value;
+    ::decode(value, bl_it);
+    ASSERT_EQ(expected_values[i], value);
+  }
 }

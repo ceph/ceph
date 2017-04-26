@@ -301,6 +301,16 @@ You may set values for the following keys:
 :Description: The ruleset to use for mapping object placement in the cluster.
 :Type: Integer
 
+.. _allow_ec_overwrites:
+
+``allow_ec_overwrites``
+
+:Description: Whether writes to an erasure coded pool can update part
+              of an object, so cephfs and rbd can use it. See
+              `Erasure Coding with Overwrites`_ for more details.
+:Type: Boolean
+:Version: ``12.2.0`` and above
+
 .. _hashpspool:
 
 ``hashpspool``
@@ -731,3 +741,4 @@ a size of 3).
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
 .. _Bloom Filter: http://en.wikipedia.org/wiki/Bloom_filter
 .. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups
+.. _Erasure Coding with Overwrites: ../erasure-code#erasure-coding-with-overwrites

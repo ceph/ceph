@@ -3326,20 +3326,30 @@ int FileStore::fiemap(const coll_t& _cid, const ghobject_t& oid,
                     uint64_t offset, size_t len,
                     bufferlist& bl)
 {
+  map<uint64_t, uint64_t> exomap;
+  int r = fiemap(_cid, oid, offset, len, exomap);
+  if (r >= 0) {
+    ::encode(exomap, bl);
+  }
+  return r;
+}
+
+int FileStore::fiemap(const coll_t& _cid, const ghobject_t& oid,
+                    uint64_t offset, size_t len,
+                    map<uint64_t, uint64_t>& destmap)
+{
   tracepoint(objectstore, fiemap_enter, _cid.c_str(), offset, len);
   const coll_t& cid = !_need_temp_object_collection(_cid, oid) ? _cid : _cid.get_temp();
+  destmap.clear();
 
   if ((!backend->has_seek_data_hole() && !backend->has_fiemap()) ||
       len <= (size_t)m_filestore_fiemap_threshold) {
-    map<uint64_t, uint64_t> m;
-    m[offset] = len;
-    ::encode(m, bl);
+    destmap[offset] = len;
     return 0;
   }
 
   dout(15) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
-  map<uint64_t, uint64_t> exomap;
   FDRef fd;
 
   int r = lfn_open(cid, oid, false, &fd);
@@ -3350,26 +3360,21 @@ int FileStore::fiemap(const coll_t& _cid, const ghobject_t& oid,
 
   if (backend->has_seek_data_hole()) {
     dout(15) << "seek_data/seek_hole " << cid << "/" << oid << " " << offset << "~" << len << dendl;
-    r = _do_seek_hole_data(**fd, offset, len, &exomap);
+    r = _do_seek_hole_data(**fd, offset, len, &destmap);
   } else if (backend->has_fiemap()) {
     dout(15) << "fiemap ioctl" << cid << "/" << oid << " " << offset << "~" << len << dendl;
-    r = _do_fiemap(**fd, offset, len, &exomap);
+    r = _do_fiemap(**fd, offset, len, &destmap);
   }
 
   lfn_close(fd);
 
-  if (r >= 0) {
-    ::encode(exomap, bl);
-  }
-
 done:
 
-  dout(10) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num_extents=" << exomap.size() << " " << exomap << dendl;
+  dout(10) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num_extents=" << destmap.size() << " " << destmap << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
   tracepoint(objectstore, fiemap_exit, r);
   return r;
 }
-
 
 int FileStore::_remove(const coll_t& cid, const ghobject_t& oid,
 		       const SequencerPosition &spos)
@@ -3952,7 +3957,7 @@ void FileStore::sync_entry()
 	    derr << "ioctl WAIT_SYNC got " << cpp_strerror(err) << dendl;
 	    assert(0 == "wait_sync got error");
 	  }
-	  dout(20) << " done waiting for checkpoint" << cid << " to complete" << dendl;
+	  dout(20) << " done waiting for checkpoint " << cid << " to complete" << dendl;
 	}
       } else
       {
@@ -4834,7 +4839,7 @@ int FileStore::collection_bits(const coll_t& c)
   int32_t bits;
   int fd = ::open(fn, O_RDONLY);
   if (fd < 0) {
-    r = -errno;
+    bits = r = -errno;
     goto out;
   }
   get_attrname("bits", n, PATH_MAX);

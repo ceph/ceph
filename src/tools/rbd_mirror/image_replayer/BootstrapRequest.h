@@ -42,7 +42,7 @@ public:
         librados::IoCtx &remote_io_ctx,
         ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
         ImageCtxT **local_image_ctx,
-        const std::string &local_image_name,
+        const std::string &local_image_id,
         const std::string &remote_image_id,
         const std::string &global_image_id,
         ContextWQ *work_queue, SafeTimer *timer,
@@ -56,7 +56,7 @@ public:
         ProgressContext *progress_ctx = nullptr) {
     return new BootstrapRequest(local_io_ctx, remote_io_ctx,
                                 image_sync_throttler, local_image_ctx,
-                                local_image_name, remote_image_id,
+                                local_image_id, remote_image_id,
                                 global_image_id, work_queue, timer, timer_lock,
                                 local_mirror_uuid, remote_mirror_uuid,
                                 journaler, client_meta, on_finish, do_resync,
@@ -67,7 +67,7 @@ public:
                    librados::IoCtx &remote_io_ctx,
                    ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
                    ImageCtxT **local_image_ctx,
-                   const std::string &local_image_name,
+                   const std::string &local_image_id,
                    const std::string &remote_image_id,
                    const std::string &global_image_id, ContextWQ *work_queue,
                    SafeTimer *timer, Mutex *timer_lock,
@@ -150,7 +150,6 @@ private:
   librados::IoCtx &m_remote_io_ctx;
   ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
   ImageCtxT **m_local_image_ctx;
-  std::string m_local_image_name;
   std::string m_local_image_id;
   std::string m_remote_image_id;
   std::string m_global_image_id;

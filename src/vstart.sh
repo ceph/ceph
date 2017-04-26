@@ -185,6 +185,10 @@ case $1 in
 	    valgrind=$2
 	    shift
 	    ;;
+    --valgrind_args )
+	valgrind_args="$2"
+	shift
+	;;
     --valgrind_mds )
 	    [ -z "$2" ] && usage_exit
 	    valgrind_mds=$2
@@ -198,6 +202,11 @@ case $1 in
     --valgrind_mon )
 	    [ -z "$2" ] && usage_exit
 	    valgrind_mon=$2
+	    shift
+	    ;;
+    --valgrind_mgr )
+	    [ -z "$2" ] && usage_exit
+	    valgrind_mgr=$2
 	    shift
 	    ;;
     --valgrind_rgw )
@@ -339,7 +348,7 @@ run() {
     [ -z "$valg" ] && valg="$valgrind"
 
     if [ -n "$valg" ]; then
-        prunb valgrind --tool="$valg" "$@" -f
+        prunb valgrind --tool="$valg" $valgrind_args "$@" -f
         sleep 1
     else
         if [ "$nodaemon" -eq 0 ]; then
@@ -436,6 +445,7 @@ $extra_conf
         mgr modules = rest fsstatus
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
+        mon reweight min pgs per osd = 4
 $DAEMONOPTS
 $CMGRDEBUG
 $extra_conf
@@ -472,7 +482,7 @@ $extra_conf
 [mon]
         mon pg warn min per osd = 3
         mon osd allow primary affinity = true
-        mon osd allow pg remap = true
+        mon osd allow pg upmap = true
         mon reweight min pgs per osd = 4
         mon osd prime pg temp = true
         crushtool = $CEPH_BIN/crushtool

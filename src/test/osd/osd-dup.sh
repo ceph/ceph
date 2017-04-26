@@ -23,6 +23,11 @@ function run() {
 function TEST_filestore_to_bluestore() {
     local dir=$1
 
+    local flimit=$(ulimit -n)
+    if [ $flimit -lt 1536 ]; then
+        echo "Low open file limit ($flimit), test may fail. Increase to 1536 or higher and retry if that happens."
+    fi
+
     run_mon $dir a || return 1
     run_osd $dir 0 || return 1
     osd_pid=$(cat $dir/osd.0.pid)

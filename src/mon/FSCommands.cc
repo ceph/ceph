@@ -151,6 +151,19 @@ class FsNewHandler : public FileSystemCommandHandler
       return -EINVAL;
     }
 
+    for (auto fs : fsmap.get_filesystems()) {
+      const set<int64_t>& data_pools = fs->mds_map.get_data_pools();
+      string sure;
+      if ((data_pools.find(data) != data_pools.end()
+	   || fs->mds_map.get_metadata_pool() == metadata)
+	  && ((!cmd_getval(g_ceph_context, cmdmap, "sure", sure)
+	       || sure != "--allow-dangerous-metadata-overlay"))) {
+	ss << "Filesystem '" << fs_name
+	   << "' is already using one of the specified RADOS pools. This should ONLY be done in emergencies and after careful reading of the documentation. Pass --allow-dangerous-metadata-overlay to permit this.";
+	return -EEXIST;
+      }
+    }
+
     pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
     assert(data_pool != NULL);  // Checked it existed above
     pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(metadata);
@@ -836,7 +849,7 @@ int FileSystemCommandHandler::_check_pool(
          << " is an erasure-coded pool.  Use of erasure-coded pools"
          << " for CephFS metadata is not permitted";
     return -EINVAL;
-  } else if (pool->is_erasure() && !pool->is_hacky_ecoverwrites()) {
+  } else if (pool->is_erasure() && !pool->allows_ecoverwrites()) {
     // non-overwriteable EC pools are only acceptable with a cache tier overlay
     if (!pool->has_tiers() || !pool->has_read_tier() || !pool->has_write_tier()) {
       *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"

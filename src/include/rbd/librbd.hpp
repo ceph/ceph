@@ -93,6 +93,14 @@ namespace librbd {
     virtual int update_progress(uint64_t offset, uint64_t total) = 0;
   };
 
+  typedef struct {
+    std::string id;
+    std::string name;
+    rbd_trash_image_source_t source;
+    time_t deletion_time;
+    time_t deferment_end_time;
+  } trash_image_info_t;
+
 class CEPH_RBD_API RBD
 {
 public:
@@ -116,13 +124,21 @@ public:
 
   int open(IoCtx& io_ctx, Image& image, const char *name);
   int open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname);
+  int open_by_id(IoCtx& io_ctx, Image& image, const char *id);
+  int open_by_id(IoCtx& io_ctx, Image& image, const char *id, const char *snapname);
   int aio_open(IoCtx& io_ctx, Image& image, const char *name,
 	       const char *snapname, RBD::AioCompletion *c);
+  int aio_open_by_id(IoCtx& io_ctx, Image& image, const char *id,
+	             const char *snapname, RBD::AioCompletion *c);
   // see librbd.h
   int open_read_only(IoCtx& io_ctx, Image& image, const char *name,
 		     const char *snapname);
+  int open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
+                           const char *snapname);
   int aio_open_read_only(IoCtx& io_ctx, Image& image, const char *name,
 			 const char *snapname, RBD::AioCompletion *c);
+  int aio_open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
+                               const char *snapname, RBD::AioCompletion *c);
   int list(IoCtx& io_ctx, std::vector<std::string>& names);
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
@@ -142,6 +158,13 @@ public:
 	     IoCtx& c_ioctx, const char *c_name, ImageOptions& opts);
   int remove(IoCtx& io_ctx, const char *name);
   int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
+  int trash_move(IoCtx &io_ctx, const char *name, uint64_t delay);
+  int trash_list(IoCtx &io_ctx, std::vector<trash_image_info_t> &entries);
+  int trash_remove(IoCtx &io_ctx, const char *image_id, bool force);
+  int trash_remove_with_progress(IoCtx &io_ctx, const char *image_id, bool force,
+                                 ProgressContext &pctx);
+  int trash_restore(IoCtx &io_ctx, const char *id, const char *name);
+
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
 
   // RBD pool mirroring support functions
@@ -170,6 +193,8 @@ public:
 		      IoCtx& image_io_ctx, const char *image_name);
   int group_image_remove(IoCtx& io_ctx, const char *group_name,
 			 IoCtx& image_io_ctx, const char *image_name);
+  int group_image_remove_by_id(IoCtx& io_ctx, const char *group_name,
+                               IoCtx& image_io_ctx, const char *image_id);
   int group_image_list(IoCtx& io_ctx, const char *group_name,
 		       std::vector<group_image_status_t> *images);
 

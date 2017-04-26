@@ -34,6 +34,8 @@ TEST(CommonIPAddr, TestNotFound)
   struct sockaddr_in net;
   const struct sockaddr *result;
 
+  memset(&net, '0', sizeof(net));
+
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = eth0;
@@ -57,6 +59,8 @@ TEST(CommonIPAddr, TestV4_Simple)
   struct sockaddr_in6 a_two;
   struct sockaddr_in net;
   const struct sockaddr *result;
+
+  memset(&net, '0', sizeof(net));
 
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -82,6 +86,8 @@ TEST(CommonIPAddr, TestV4_Prefix25)
   struct sockaddr_in net;
   const struct sockaddr *result;
 
+  memset(&net, '0', sizeof(net));
+
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = eth0;
@@ -106,6 +112,8 @@ TEST(CommonIPAddr, TestV4_Prefix16)
   struct sockaddr_in net;
   const struct sockaddr *result;
 
+  memset(&net, '0', sizeof(net));
+
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = eth0;
@@ -129,6 +137,8 @@ TEST(CommonIPAddr, TestV4_PrefixTooLong)
   struct sockaddr_in net;
   const struct sockaddr *result;
 
+  memset(&net, '0', sizeof(net));
+
   one.ifa_next = NULL;
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = eth0;
@@ -147,6 +157,8 @@ TEST(CommonIPAddr, TestV4_PrefixZero)
   struct sockaddr_in a_two;
   struct sockaddr_in net;
   const struct sockaddr *result;
+
+  memset(&net, '0', sizeof(net));
 
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
@@ -172,6 +184,8 @@ TEST(CommonIPAddr, TestV6_Simple)
   struct sockaddr_in6 net;
   const struct sockaddr *result;
 
+  memset(&net, '0', sizeof(net));
+  
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = eth0;
@@ -196,6 +210,8 @@ TEST(CommonIPAddr, TestV6_Prefix57)
   struct sockaddr_in6 net;
   const struct sockaddr *result;
 
+  memset(&net, '0', sizeof(net));
+
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = eth0;
@@ -218,6 +234,8 @@ TEST(CommonIPAddr, TestV6_PrefixTooLong)
   struct sockaddr_in6 a_one;
   struct sockaddr_in6 net;
   const struct sockaddr *result;
+
+  memset(&net, '0', sizeof(net));
 
   one.ifa_next = NULL;
   one.ifa_addr = (struct sockaddr*)&a_one;

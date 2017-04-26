@@ -443,11 +443,9 @@ Infiniband::MemoryManager::Cluster::Cluster(MemoryManager& m, uint32_t s)
 
 Infiniband::MemoryManager::Cluster::~Cluster()
 {
-  char *p = chunk_base;
-  for (uint32_t i = 0; i < num_chunk; i++){
-    Chunk *chunk = reinterpret_cast<Chunk*>(p);
+  const auto chunk_end = chunk_base + num_chunk;
+  for (auto chunk = chunk_base; chunk != chunk_end; chunk++) {
     chunk->~Chunk();
-    p += sizeof(Chunk);
   }
 
   ::free(chunk_base);
@@ -469,17 +467,16 @@ int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
   }
   end = base + bytes;
   assert(base);
-  chunk_base = (char*)::malloc(sizeof(Chunk) * num);
+  chunk_base = static_cast<Chunk*>(::malloc(sizeof(Chunk) * num));
   memset(chunk_base, 0, sizeof(Chunk) * num);
   free_chunks.reserve(num);
-  char *ptr = chunk_base;
+  Chunk* chunk = chunk_base;
   for (uint32_t offset = 0; offset < bytes; offset += buffer_size){
-    Chunk *chunk = reinterpret_cast<Chunk*>(ptr);
     ibv_mr* m = ibv_reg_mr(manager.pd->pd, base+offset, buffer_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
     assert(m);
     new(chunk) Chunk(m, buffer_size, base+offset);
     free_chunks.push_back(chunk);
-    ptr += sizeof(Chunk);
+    chunk++;
   }
   return 0;
 }
@@ -588,7 +585,7 @@ int Infiniband::MemoryManager::get_channel_buffers(std::vector<Chunk*> &chunks, 
 
 
 Infiniband::Infiniband(CephContext *cct)
-  : device_list(new DeviceList(cct, this))
+  : cct(cct), lock("IB lock")
 {
 }
 
@@ -598,6 +595,19 @@ Infiniband::~Infiniband()
     dispatcher->polling_stop();
 
   delete device_list;
+}
+
+void Infiniband::init()
+{
+  Mutex::Locker l(lock);
+
+  if (initialized)
+    return;
+
+  device_list = new DeviceList(cct, this);
+  initialized = true;
+
+  dispatcher->polling_start();
 }
 
 void Infiniband::set_dispatcher(RDMADispatcher *d)
@@ -610,6 +620,11 @@ void Infiniband::set_dispatcher(RDMADispatcher *d)
 Device* Infiniband::get_device(const char* device_name)
 {
   return device_list->get_device(device_name);
+}
+
+Device *Infiniband::get_device(const struct ibv_context *ctxt)
+{
+  return device_list->get_device(ctxt);
 }
 
 Infiniband::QueuePair::~QueuePair()

@@ -39,6 +39,7 @@ To create a new erasure code profile::
 	ceph osd erasure-code-profile set {name} \
              [{directory=directory}] \
              [{plugin=plugin}] \
+             [{stripe_unit=stripe_unit}] \
              [{key=value} ...] \
              [--force]
 
@@ -60,8 +61,24 @@ Where:
               plugins`_ for more information.
 
 :Type: String
-:Required: No. 
+:Required: No.
 :Default: jerasure
+
+``{stripe_unit=stripe_unit}``
+
+:Description: The amount of data in a data chunk, per stripe. For
+              example, a profile with 2 data chunks and stripe_unit=4K
+              would put the range 0-4K in chunk 0, 4K-8K in chunk 1,
+              then 8K-12K in chunk 0 again. This should be a multiple
+              of 4K for best performance. The default value is taken
+              from the monitor config option
+              ``osd_pool_erasure_code_stripe_unit`` when a pool is
+              created.  The stripe_width of a pool using this profile
+              will be the number of data chunks multiplied by this
+              stripe_unit.
+
+:Type: String
+:Required: No.
 
 ``{key=value}``
 
@@ -69,14 +86,15 @@ Where:
               by the erasure code plugin.
 
 :Type: String
-:Required: No. 
+:Required: No.
 
 ``--force``
 
-:Description: Override an existing profile by the same name.
+:Description: Override an existing profile by the same name, and allow
+              setting a non-4K-aligned stripe_unit.
 
 :Type: String
-:Required: No. 
+:Required: No.
 
 osd erasure-code-profile rm
 ============================

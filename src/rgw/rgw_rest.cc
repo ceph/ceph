@@ -644,6 +644,7 @@ void dump_trans_id(req_state *s)
 {
   if (s->prot_flags & RGW_REST_SWIFT) {
     dump_header(s, "X-Trans-Id", s->trans_id);
+    dump_header(s, "X-Openstack-Request-Id", s->trans_id);
   } else if (s->trans_id.length()) {
     dump_header(s, "x-amz-request-id", s->trans_id);
   }
@@ -775,7 +776,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
       if (!s->redirect.empty()) {
         dest_uri = s->redirect;
       } else if (!s->zonegroup_endpoint.empty()) {
-        string dest_uri = s->zonegroup_endpoint;
+        dest_uri = s->zonegroup_endpoint;
         /*
          * reqest_uri is always start with slash, so we need to remove
          * the unnecessary slash at the end of dest_uri.

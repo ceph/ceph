@@ -131,12 +131,12 @@ public:
 /**
  * No-op for callers expecting MDSInternalContextBase
  */
-class C_MDSInternalNoop : public MDSInternalContextBase
+class C_MDSInternalNoop final : public MDSInternalContextBase
 {
   MDSRank* get_mds() override {ceph_abort();}
 public:
   void finish(int r) override {}
-  void complete(int r) override {}
+  void complete(int r) override { delete this; }
 };
 
 

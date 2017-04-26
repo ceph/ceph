@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "mdstypes.h"
 
 #include "MDBalancer.h"
@@ -154,11 +155,11 @@ mds_load_t MDBalancer::get_load(utime_t now)
   load.req_rate = mds->get_req_rate();
   load.queue_len = messenger->get_dispatch_queue_len();
 
-  ifstream cpu("/proc/loadavg");
+  ifstream cpu(PROCPREFIX "/proc/loadavg");
   if (cpu.is_open())
     cpu >> load.cpu_load_avg;
   else
-    derr << "input file '/proc/loadavg' not found" << dendl;
+    derr << "input file " PROCPREFIX "'/proc/loadavg' not found" << dendl;
   
   dout(15) << "get_load " << load << dendl;
   return load;
@@ -211,7 +212,7 @@ void MDBalancer::send_heartbeat()
 {
   utime_t now = ceph_clock_now();
   
-  if (mds->mdsmap->is_degraded()) {
+  if (mds->is_cluster_degraded()) {
     dout(10) << "send_heartbeat degraded" << dendl;
     return;
   }
@@ -284,7 +285,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     return;
   }
 
-  if (mds->mdsmap->is_degraded()) {
+  if (mds->is_cluster_degraded()) {
     dout(10) << " degraded, ignoring" << dendl;
     goto out;
   }

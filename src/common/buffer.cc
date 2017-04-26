@@ -12,6 +12,7 @@
  * 
  */
 
+#include "include/compat.h"
 #include "include/mempool.h"
 #include "armor.h"
 #include "common/environment.h"
@@ -38,13 +39,14 @@
 #include <sys/uio.h>
 #include <limits.h>
 
+#include <atomic>
 #include <ostream>
 
 #define CEPH_BUFFER_ALLOC_UNIT  (MIN(CEPH_PAGE_SIZE, 4096))
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
 
 #ifdef BUFFER_DEBUG
-static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
+static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 # define bdout { simple_spin_lock(&buffer_debug_lock); std::cout
 # define bendl std::endl; simple_spin_unlock(&buffer_debug_lock); }
 #else
@@ -118,9 +120,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     int r;
     std::string err;
     struct stat stat_result;
-    if (::stat("/proc/sys/fs/pipe-max-size", &stat_result) == -1)
+    if (::stat(PROCPREFIX "/proc/sys/fs/pipe-max-size", &stat_result) == -1)
       return -errno;
-    r = safe_read_file("/proc/sys/fs/", "pipe-max-size",
+    r = safe_read_file(PROCPREFIX "/proc/sys/fs/", "pipe-max-size",
 		       buf, sizeof(buf) - 1);
     if (r < 0)
       return r;
@@ -166,16 +168,14 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     unsigned len;
     atomic_t nref;
 
-    mutable simple_spinlock_t crc_spinlock;
+    mutable std::atomic_flag crc_spinlock = ATOMIC_FLAG_INIT;
     map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
     explicit raw(unsigned l)
-      : data(NULL), len(l), nref(0),
-	crc_spinlock(SIMPLE_SPINLOCK_INITIALIZER)
+      : data(NULL), len(l), nref(0)
     { }
     raw(char *c, unsigned l)
-      : data(c), len(l), nref(0),
-	crc_spinlock(SIMPLE_SPINLOCK_INITIALIZER)
+      : data(c), len(l), nref(0)
     { }
     virtual ~raw() {}
 

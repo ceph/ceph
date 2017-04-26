@@ -784,45 +784,6 @@ int Monitor::preinit()
                                      "show the ops currently in flight");
   assert(r == 0);
 
-  // debugging api
-  r = admin_socket->register_command("debug mon features list",
-                                     "debug mon features list",
-                                     admin_hook,
-                                     "list monmap features");
-  assert(r == 0);
-  r = admin_socket->register_command("debug mon features set",
-                                     "debug mon features set "
-                                     "name=feature,type=CephString "
-                                     "name=feature_type,type=CephChoices,req=false,"
-                                     "strings=--persistent|--optional",
-                                     admin_hook,
-                                     "set a given feature, by name, in the monmap");
-  assert(r == 0);
-  r = admin_socket->register_command("debug mon features set_val",
-                                     "debug mon features set_val "
-                                     "name=feature,type=CephString "
-                                     "name=feature_type,type=CephChoices,req=false,"
-                                     "strings=--persistent|--optional",
-                                     admin_hook,
-                                     "set a given feature, by value, in the monmap");
-  assert(r == 0);
-  r = admin_socket->register_command("debug mon features unset",
-                                     "debug mon features unset "
-                                     "name=feature,type=CephString "
-                                     "name=feature_type,type=CephChoices,req=false,"
-                                     "strings=--persistent|--optional",
-                                     admin_hook,
-                                     "unset a given feature, by name, in the monmap");
-  assert(r == 0);
-  r = admin_socket->register_command("debug mon features unset_val",
-                                     "debug mon features unset_val "
-                                     "name=feature,type=CephString "
-                                     "name=feature_type,type=CephChoices,req=false,"
-                                     "strings=--persistent|--optional",
-                                     admin_hook,
-                                     "unset a given feature, by value, in the monmap");
-  assert(r == 0);
-
   lock.Lock();
 
   // add ourselves as a conf observer
@@ -951,12 +912,6 @@ void Monitor::shutdown()
     admin_socket->unregister_command("quorum enter");
     admin_socket->unregister_command("quorum exit");
     admin_socket->unregister_command("ops");
-    // debugging api
-    admin_socket->unregister_command("debug mon features list");
-    admin_socket->unregister_command("debug mon features set");
-    admin_socket->unregister_command("debug mon features set_val");
-    admin_socket->unregister_command("debug mon features unset");
-    admin_socket->unregister_command("debug mon features unset_val");
     delete admin_hook;
     admin_hook = NULL;
   }
@@ -2965,7 +2920,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     mdsmon()->dispatch(op);
     return;
   }
-  if (module == "osd") {
+  if (module == "osd" || prefix == "pg map") {
     osdmon()->dispatch(op);
     return;
   }
@@ -3094,7 +3049,6 @@ void Monitor::handle_command(MonOpRequestRef op)
       if (detail == "detail")
 	comb.append(rdata);
       rdata = comb;
-      r = 0;
     } else if (prefix == "df") {
       bool verbose = (detail == "detail");
       if (f)

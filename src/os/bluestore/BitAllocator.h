@@ -348,7 +348,7 @@ public:
   static void incr_count() { count++;}
   static int64_t get_total_blocks() {return total_blocks;}
   bool is_allocated(int64_t start_block, int64_t num_blocks) override;
-  bool is_exhausted() override;
+  bool is_exhausted() override final;
   void reset_marker();
 
   int64_t sub_used_blocks(int64_t num_blocks) override;
@@ -356,8 +356,8 @@ public:
   bool reserve_blocks(int64_t num_blocks) override;
   void unreserve(int64_t num_blocks, int64_t allocated) override;
   int64_t get_reserved_blocks() override;
-  int64_t get_used_blocks() override;
-  int64_t size() override {
+  int64_t get_used_blocks() override final;
+  int64_t size() override final {
     return get_total_blocks();
   }
 

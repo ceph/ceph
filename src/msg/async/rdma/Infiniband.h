@@ -102,7 +102,7 @@ class Infiniband {
       int get_buffers(std::vector<Chunk*> &chunks, size_t bytes);
       Chunk *get_chunk_by_buffer(const char *c) {
         uint32_t idx = (c - base) / buffer_size;
-        Chunk *chunk = reinterpret_cast<Chunk*>(chunk_base + sizeof(Chunk) * idx);
+        Chunk *chunk = chunk_base + idx;
         return chunk;
       }
       bool is_my_buffer(const char *c) const {
@@ -116,7 +116,7 @@ class Infiniband {
       std::vector<Chunk*> free_chunks;
       char *base = nullptr;
       char *end = nullptr;
-      char* chunk_base;
+      Chunk* chunk_base = nullptr;
     };
 
     MemoryManager(Device *d, ProtectionDomain *p, bool hugepage);
@@ -147,12 +147,16 @@ class Infiniband {
   };
 
  private:
-  DeviceList *device_list;
+  CephContext *cct;
+  Mutex lock;
+  bool initialized = false;
+  DeviceList *device_list = nullptr;
   RDMADispatcher *dispatcher = nullptr;
 
  public:
   explicit Infiniband(CephContext *c);
   ~Infiniband();
+  void init();
 
   void set_dispatcher(RDMADispatcher *d);
 
@@ -277,6 +281,7 @@ class Infiniband {
   void handle_pre_fork();
 
   Device* get_device(const char* device_name);
+  Device* get_device(const struct ibv_context *ctxt);
 
   int poll_tx(int n, Device **d, ibv_wc *wc);
   int poll_rx(int n, Device **d, ibv_wc *wc);

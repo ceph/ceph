@@ -127,6 +127,7 @@ class StrayManager
 
   bool eval_stray(CDentry *dn, bool delay=false);
 
+  void set_num_strays(uint64_t num);
   uint64_t get_num_strays() const { return num_strays; }
 
   /**

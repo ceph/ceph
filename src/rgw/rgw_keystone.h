@@ -133,6 +133,8 @@ public:
   static int issue_admin_token_request(CephContext* const cct,
                                        const Config& config,
                                        TokenEnvelope& token);
+  static int get_keystone_barbican_token(CephContext * const cct,
+                                         std::string& token);
 };
 
 
@@ -243,6 +245,7 @@ class TokenCache {
   CephContext * const cct;
 
   std::string admin_token_id;
+  std::string barbican_token_id;
   std::map<std::string, token_entry> tokens;
   std::list<std::string> tokens_lru;
 
@@ -255,8 +258,16 @@ class TokenCache {
       cct(g_ceph_context),
       lock("rgw::keystone::TokenCache"),
       max(cct->_conf->rgw_keystone_token_cache_size) {
-    /* The thread name has been kept for backward compliance. */
-    revocator.create("rgw_swift_k_rev");
+    /* revocation logic needs to be smarter, but meanwhile,
+     *  make it optional.
+     * see http://tracker.ceph.com/issues/9493
+     *     http://tracker.ceph.com/issues/19499
+     */
+    if (cct->_conf->rgw_keystone_revocation_interval > 0
+        && cct->_conf->rgw_keystone_token_cache_size ) {
+      /* The thread name has been kept for backward compliance. */
+      revocator.create("rgw_swift_k_rev");
+    }
   }
 
   ~TokenCache() {
@@ -289,8 +300,10 @@ public:
     return boost::none;
   }
   bool find_admin(TokenEnvelope& token);
+  bool find_barbican(TokenEnvelope& token);
   void add(const std::string& token_id, const TokenEnvelope& token);
   void add_admin(const TokenEnvelope& token);
+  void add_barbican(const TokenEnvelope& token);
   void invalidate(const std::string& token_id);
   bool going_down() const;
 private:
@@ -325,6 +338,27 @@ public:
   }
   void dump(Formatter *f) const override;
 };
+
+class BarbicanTokenRequestVer2 : public AdminTokenRequest {
+  CephContext *cct;
+
+public:
+  BarbicanTokenRequestVer2(CephContext * const _cct)
+    : cct(_cct) {
+  }
+  void dump(Formatter *f) const;
+};
+
+class BarbicanTokenRequestVer3 : public AdminTokenRequest {
+  CephContext *cct;
+
+public:
+  BarbicanTokenRequestVer3(CephContext * const _cct)
+    : cct(_cct) {
+  }
+  void dump(Formatter *f) const;
+};
+
 
 }; /* namespace keystone */
 }; /* namespace rgw */

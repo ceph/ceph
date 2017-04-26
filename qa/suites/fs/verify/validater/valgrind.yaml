@@ -1,3 +1,10 @@
+
+# Valgrind makes everything slow, so ignore slow requests
+overrides:
+  ceph:
+    log-whitelist:
+      - slow requests are blocked
+
 os_type: centos   # xenial valgrind buggy, see http://tracker.ceph.com/issues/18126
 overrides:
   install:

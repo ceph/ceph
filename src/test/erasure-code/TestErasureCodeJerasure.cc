@@ -327,7 +327,7 @@ TEST(ErasureCodeTest, create_ruleset)
     vector<__u32> weight(c->get_max_devices(), 0x10000);
     vector<int> out;
     int x = 0;
-    c->do_rule(ruleset, x, out, jerasure.get_chunk_count(), weight);
+    c->do_rule(ruleset, x, out, jerasure.get_chunk_count(), weight, 0);
     ASSERT_EQ(out.size(), jerasure.get_chunk_count());
     for (unsigned i=0; i<out.size(); ++i)
       ASSERT_NE(CRUSH_ITEM_NONE, out[i]);

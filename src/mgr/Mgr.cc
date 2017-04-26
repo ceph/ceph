@@ -223,9 +223,11 @@ void Mgr::load_all_metadata()
   JSONCommand mon_cmd;
   mon_cmd.run(monc, "{\"prefix\": \"mon metadata\"}");
 
+  lock.Unlock();
   mds_cmd.wait();
   osd_cmd.wait();
   mon_cmd.wait();
+  lock.Lock();
 
   assert(mds_cmd.r == 0);
   assert(mon_cmd.r == 0);

@@ -6,6 +6,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "include/stringify.h"
 #include "librbd/Utils.h"
 #include "librbd/watcher/Types.h"
 #include "Threads.h"
@@ -240,19 +241,54 @@ void LeaderWatcher<I>::handle_wait_for_tasks() {
 }
 
 template <typename I>
-bool LeaderWatcher<I>::is_leader() {
+bool LeaderWatcher<I>::is_leader() const {
   Mutex::Locker locker(m_lock);
 
   return is_leader(m_lock);
 }
 
 template <typename I>
-bool LeaderWatcher<I>::is_leader(Mutex &lock) {
+bool LeaderWatcher<I>::is_leader(Mutex &lock) const {
   assert(m_lock.is_locked());
 
   bool leader = m_leader_lock->is_leader();
   dout(20) << leader << dendl;
   return leader;
+}
+
+template <typename I>
+bool LeaderWatcher<I>::is_releasing_leader() const {
+  Mutex::Locker locker(m_lock);
+
+  return is_releasing_leader(m_lock);
+}
+
+template <typename I>
+bool LeaderWatcher<I>::is_releasing_leader(Mutex &lock) const {
+  assert(m_lock.is_locked());
+
+  bool releasing = m_leader_lock->is_releasing_leader();
+  dout(20) << releasing << dendl;
+  return releasing;
+}
+
+template <typename I>
+bool LeaderWatcher<I>::get_leader_instance_id(std::string *instance_id) const {
+  dout(20) << dendl;
+
+  Mutex::Locker locker(m_lock);
+
+  if (is_leader(m_lock) || is_releasing_leader(m_lock)) {
+    *instance_id = stringify(m_notifier_id);
+    return true;
+  }
+
+  if (!m_locker.cookie.empty()) {
+    *instance_id = stringify(m_locker.entity.num());
+    return true;
+  }
+
+  return false;
 }
 
 template <typename I>
@@ -278,7 +314,6 @@ void LeaderWatcher<I>::list_instances(std::vector<std::string> *instance_ids) {
     m_instances->list(instance_ids);
   }
 }
-
 
 template <typename I>
 void LeaderWatcher<I>::cancel_timer_task() {

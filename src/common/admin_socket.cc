@@ -299,6 +299,18 @@ void AdminSocket::chown(uid_t uid, gid_t gid)
   }
 }
 
+void AdminSocket::chmod(mode_t mode)
+{
+  if (m_sock_fd >= 0) {
+    int r = ::chmod(m_path.c_str(), mode);
+    if (r < 0) {
+      r = -errno;
+      lderr(m_cct) << "AdminSocket: failed to chmod socket: "
+                   << cpp_strerror(r) << dendl;
+    }
+  }
+}
+
 bool AdminSocket::do_accept()
 {
   struct sockaddr_un address;
@@ -320,8 +332,10 @@ bool AdminSocket::do_accept()
   while (1) {
     int ret = safe_read(connection_fd, &cmd[pos], 1);
     if (ret <= 0) {
-      lderr(m_cct) << "AdminSocket: error reading request code: "
-		   << cpp_strerror(ret) << dendl;
+      if (ret < 0) {
+        lderr(m_cct) << "AdminSocket: error reading request code: "
+		     << cpp_strerror(ret) << dendl;
+      }
       VOID_TEMP_FAILURE_RETRY(close(connection_fd));
       return false;
     }

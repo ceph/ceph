@@ -52,7 +52,7 @@ while [ $# -ge 1 ]; do
             stop_all=0
             ;;
         mgr | ceph-mgr )
-            stop_mon=1
+            stop_mgr=1
             stop_all=0
             ;;
         mds | ceph-mds )

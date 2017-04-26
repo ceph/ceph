@@ -789,6 +789,8 @@ std::string pg_state_string(int state)
     oss << "clean+";
   if (state & PG_STATE_RECOVERY_WAIT)
     oss << "recovery_wait+";
+  if (state & PG_STATE_RECOVERY_TOOFULL)
+    oss << "recovery_toofull+";
   if (state & PG_STATE_RECOVERING)
     oss << "recovering+";
   if (state & PG_STATE_DOWN)
@@ -869,6 +871,8 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_BACKFILL_TOOFULL;
   else if (state == "recovery_wait")
     type = PG_STATE_RECOVERY_WAIT;
+  else if (state == "recovery_toofull")
+    type = PG_STATE_RECOVERY_TOOFULL;
   else if (state == "undersized")
     type = PG_STATE_UNDERSIZED;
   else if (state == "activating")

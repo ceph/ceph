@@ -37,8 +37,6 @@ COMMAND("pg ls " \
         "name=pool,type=CephInt,req=false " \
 	"name=states,type=CephChoices,strings=active|clean|down|scrubbing|degraded|inconsistent|peering|repair|recovering|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized|activating|peered,n=N,req=false ", \
 	"list pg with specific pool, osd, state", "pg", "r", "cli,rest")
-COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
-	"pg", "r", "cli,rest")
 COMMAND("pg dump_stuck " \
 	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale|undersized|degraded,n=N,req=false " \
 	"name=threshold,type=CephInt,req=false",
@@ -64,3 +62,35 @@ COMMAND("osd perf", \
 COMMAND("osd blocked-by", \
 	"print histogram of which OSDs are blocking their peers", \
 	"osd", "r", "cli,rest")
+COMMAND("osd pool stats " \
+        "name=name,type=CephString,req=false",
+        "obtain stats from all pools, or from specified pool",
+        "osd", "r", "cli,rest")
+COMMAND("osd reweight-by-utilization " \
+	"name=oload,type=CephInt,req=false " \
+	"name=max_change,type=CephFloat,req=false "			\
+	"name=max_osds,type=CephInt,req=false "			\
+	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false",\
+	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd test-reweight-by-utilization " \
+	"name=oload,type=CephInt,req=false " \
+	"name=max_change,type=CephFloat,req=false "			\
+	"name=max_osds,type=CephInt,req=false "			\
+	"name=no_increasing,type=CephChoices,strings=--no-increasing,req=false",\
+	"dry run of reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd reweight-by-pg " \
+	"name=oload,type=CephInt,req=false " \
+	"name=max_change,type=CephFloat,req=false "			\
+	"name=max_osds,type=CephInt,req=false "			\
+	"name=pools,type=CephPoolname,n=N,req=false",			\
+	"reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd test-reweight-by-pg " \
+	"name=oload,type=CephInt,req=false " \
+	"name=max_change,type=CephFloat,req=false "			\
+	"name=max_osds,type=CephInt,req=false "			\
+	"name=pools,type=CephPoolname,n=N,req=false",			\
+	"dry run of reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
+	"osd", "rw", "cli,rest")
