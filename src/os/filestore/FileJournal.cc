@@ -824,6 +824,7 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
     list<write_item>::iterator it = items.begin();
     while (it != items.end()) {
       uint64_t bytes = it->bl.length();
+      IGNORE_UNUSED(bytes);
       int r = prepare_single_write(*it, bl, queue_pos, orig_ops, orig_bytes);
       if (r == 0) { // prepare ok, delete it
 	items.erase(it++);

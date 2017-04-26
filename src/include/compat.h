@@ -165,4 +165,6 @@
     0; })
 #endif
 
+#define IGNORE_UNUSED(v) ((void)(v))
+
 #endif /* !CEPH_COMPAT_H */
