@@ -1570,10 +1570,6 @@ void ReplicatedBackend::prep_push(
   pi.recovery_info.soid = soid;
   pi.recovery_info.oi = obc->obs.oi;
   pi.recovery_info.version = version;
-  pi.recovery_progress.first = true;
-  pi.recovery_progress.data_recovered_to = 0;
-  pi.recovery_progress.data_complete = 0;
-  pi.recovery_progress.omap_complete = 0;
   pi.lock_manager = std::move(lock_manager);
 
   ObjectRecoveryProgress new_progress;
