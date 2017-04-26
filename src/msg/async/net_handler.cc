@@ -125,44 +125,45 @@ int NetHandler::set_socket_options(int sd, bool nodelay, int size)
 
 void NetHandler::set_priority(int sd, int prio, int domain)
 {
-  if (prio >= 0) {
-    int r = -1;
-#ifdef IPTOS_CLASS_CS6
-    int iptos = IPTOS_CLASS_CS6;
-    r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-    if (domain == AF_INET) {
-      r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-      r = -errno;
-      if (r < 0) {
-        ldout(cct,0) << "couldn't set IP_TOS to " << iptos
-                           << ": " << cpp_strerror(r) << dendl;
-      }
-    } else if (domain == AF_INET6) {
-      r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
-      if (r)
-	r = -errno;
-      if (r < 0) {
-        ldout(cct,0) << "couldn't set IPV6_TCLASS to " << iptos
-                           << ": " << cpp_strerror(r) << dendl;
-      }
-    } else {
-      ldout(cct,0) << "couldn't set ToS of unknown family to " << iptos
-                         << dendl;
-    }
-#endif
-#if defined(SO_PRIORITY) 
-    // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
-    // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
-    // We need to call setsockopt(SO_PRIORITY) after it.
-#if defined(__linux__)
-    r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
-#endif
-    if (r < 0) {
-      ldout(cct, 0) << __func__ << " couldn't set SO_PRIORITY to " << prio
-                    << ": " << cpp_strerror(errno) << dendl;
-    }
-#endif
+#ifdef SO_PRIORITY
+  if (prio < 0) {
+    return;
   }
+#ifdef IPTOS_CLASS_CS6
+  int iptos = IPTOS_CLASS_CS6;
+  int r = -1;
+  if (domain == AF_INET) {
+    r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
+    if (r < 0) {
+      r = errno;
+      ldout(cct,0) << "couldn't set IP_TOS to " << iptos
+		   << ": " << cpp_strerror(r) << dendl;
+    }
+  } else if (domain == AF_INET6) {
+    r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
+    if (r < 0) {
+      r = errno;
+      ldout(cct,0) << "couldn't set IPV6_TCLASS to " << iptos
+		   << ": " << cpp_strerror(r) << dendl;
+    }
+  } else {
+    lderr(cct) << "couldn't set ToS of unknown family (" << domain << ")"
+	       << " to " << iptos << dendl;
+    return;
+  }
+#endif	// IPTOS_CLASS_CS6
+  // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
+  // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
+  // We need to call setsockopt(SO_PRIORITY) after it.
+  r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
+  if (r < 0) {
+    r = errno;
+    ldout(cct, 0) << __func__ << " couldn't set SO_PRIORITY to " << prio
+		  << ": " << cpp_strerror(r) << dendl;
+  }
+#else
+  return;
+#endif	// SO_PRIORITY
 }
 
 int NetHandler::generic_connect(const entity_addr_t& addr, const entity_addr_t &bind_addr, bool nonblock)
