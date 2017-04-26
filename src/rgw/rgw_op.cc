@@ -2406,8 +2406,8 @@ void RGWPutBL::execute()
        return;
      }
 
-     string tbucket = status->get_target_bucket();
-     if (tbucket.empty()) {
+     string tbucket_name = status->get_target_bucket();
+     if (tbucket_name.empty()) {
        ldout(s->cct, 0) << "PutBL TargetBucket should be empty." << dendl;
        op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
        s->err.message = "The target bucket for logging does not exist";
@@ -2419,6 +2419,26 @@ void RGWPutBL::execute()
        op_ret = -ERR_MALFORMED_XML;
        s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
        return;
+     }
+
+     if (tbucket_name != s->bucket_name) { // if target bucket isn't same as source bucket,
+                                           // we need to check target bucket ownership.
+       RGWBucketInfo tbucket_info;
+       map<string, bufferlist> tbucket_attrs;
+       RGWObjectCtx tobj_ctx(store);
+       int ret = store->get_bucket_info(tobj_ctx, s->bucket_tenant, tbucket_name,
+                                        tbucket_info, NULL, &tbucket_attrs);
+       if (ret < 0) {
+         ldout(s->cct, 0) << "RGWBL:get_bucket_info failed, target_bucket_name="
+                          << tbucket_name << dendl;
+         op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
+         s->err.message = "The target bucket for logging does not exist";
+         return;
+       } else if (s->auth.identity->is_owner_of(tbucket_info.owner) == false) {
+         op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
+         s->err.message = "The owner for the bucket to be logged and the target bucket must be the same.";
+         return;
+       }
      }
   }
 
