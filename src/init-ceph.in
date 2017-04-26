@@ -266,7 +266,7 @@ get_name_list "$@"
 
 # Reverse the order if we are stopping
 
-if [ "$command" = "stop" -o "$command" = "onestop"]; then
+if [ "$command" = "stop" -o "$command" = "onestop" ]; then
     for f in $what; do
        new_order="$f $new_order"
     done
