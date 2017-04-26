@@ -283,6 +283,34 @@ struct ObjectOperation {
     out_rval[p] = prval;
   }
   // object data
+  struct C_ObjectOperation_cmpext : public Context {
+    int *prval;
+    C_ObjectOperation_cmpext(int *prval)
+      : prval(prval) {}
+    void finish(int r) {
+      if (prval)
+	*prval = r;
+    }
+  };
+  void cmpext(uint64_t off, bufferlist& cmp_bl, int *prval) {
+    add_data(CEPH_OSD_OP_CMPEXT, off, cmp_bl.length(), cmp_bl);
+    unsigned p = ops.size() - 1;
+    C_ObjectOperation_cmpext *h = new C_ObjectOperation_cmpext(prval);
+    out_handler[p] = h;
+    out_rval[p] = prval;
+  }
+  // Used by C API
+  void cmpext(uint64_t off, uint64_t cmp_len, const char *cmp_buf,
+	      int *prval) {
+    bufferlist cmp_bl;
+    cmp_bl.append(cmp_buf, cmp_len);
+    add_data(CEPH_OSD_OP_CMPEXT, off, cmp_len, cmp_bl);
+    unsigned p = ops.size() - 1;
+    C_ObjectOperation_cmpext *h = new C_ObjectOperation_cmpext(prval);
+    out_handler[p] = h;
+    out_rval[p] = prval;
+  }
+
   void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval,
 	    Context* ctx) {
     bufferlist bl;
@@ -1409,6 +1437,15 @@ public:
     }
   };
 
+  struct C_CmpExt : public Context {
+    bufferlist bl;
+    Context *fin;
+    C_CmpExt(Context *c) : fin(c) {}
+    void finish(int r) {
+      fin->complete(r);
+    }
+  };
+
   struct C_GetAttrs : public Context {
     bufferlist bl;
     map<string,bufferlist>& attrset;
@@ -2337,6 +2374,41 @@ public:
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
     Op *o = prepare_read_op(oid, oloc, off, len, snap, pbl, flags,
 			    onfinish, objver, extra_ops, op_flags);
+    ceph_tid_t tid;
+    op_submit(o, &tid);
+    return tid;
+  }
+
+  Op *prepare_cmpext_op(
+    const object_t& oid, const object_locator_t& oloc,
+    uint64_t off, bufferlist &cmp_bl,
+    snapid_t snap,
+    int flags, Context *onfinish, version_t *objver = NULL,
+    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
+    vector<OSDOp> ops;
+    int i = init_ops(ops, 1, extra_ops);
+    ops[i].op.op = CEPH_OSD_OP_CMPEXT;
+    ops[i].op.extent.offset = off;
+    ops[i].op.extent.length = cmp_bl.length();
+    ops[i].op.extent.truncate_size = 0;
+    ops[i].op.extent.truncate_seq = 0;
+    ops[i].indata = cmp_bl;
+    ops[i].op.flags = op_flags;
+    C_CmpExt *fin = new C_CmpExt(onfinish);
+    Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() |
+		   CEPH_OSD_FLAG_READ, fin, objver);
+    o->snapid = snap;
+    o->outbl = &fin->bl;
+    return o;
+  }
+  ceph_tid_t cmpext(
+    const object_t& oid, const object_locator_t& oloc,
+    uint64_t off, bufferlist &cmp_bl,
+    snapid_t snap,
+    int flags, Context *onfinish, version_t *objver = NULL,
+    ObjectOperation *extra_ops = NULL, int op_flags = 0) {
+    Op *o = prepare_cmpext_op(oid, oloc, off, cmp_bl, snap, flags, onfinish,
+			      objver, extra_ops, op_flags);
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
