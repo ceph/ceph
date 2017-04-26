@@ -9226,7 +9226,7 @@ int OSD::init_op_flags(OpRequestRef& op)
 	  derr << "class " << cname << " open got " << cpp_strerror(r) << dendl;
 	  if (r == -ENOENT)
 	    r = -EOPNOTSUPP;
-	  else if (r != -EPERM) // propgate permission errors
+	  else if (r != -EPERM) // propagate permission errors
 	    r = -EIO;
 	  return r;
 	}
