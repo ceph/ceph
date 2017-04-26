@@ -259,6 +259,7 @@ namespace librbd {
     // operations on rbd_namespace objects
     int namespace_add(librados::IoCtx *ioctx, const std::string &nspace);
     void namespace_add(librados::ObjectWriteOperation *op, std::string &nspace);
+    int namespace_remove(librados::IoCtx *ioctx, const std::string &nspace);
     void namespace_list_start(librados::ObjectReadOperation *op,
                               const std::string &start, uint64_t max_return);
     int namespace_list_finish(bufferlist::iterator *it,

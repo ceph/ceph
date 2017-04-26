@@ -1349,6 +1349,15 @@ namespace librbd {
       op->exec("rbd", "namespace_add", bl);
     }
 
+    int namespace_remove(librados::IoCtx *ioctx, const std::string &nspace)
+    {
+      bufferlist in_bl;
+      bufferlist out_bl;
+      ::encode(nspace, in_bl);
+
+      return ioctx->exec(RBD_NAMESPACE, "rbd", "namespace_remove", in_bl, out_bl);
+    }
+
     void namespace_list_start(librados::ObjectReadOperation *op,
                               const std::string &start, uint64_t max_return)
     {
