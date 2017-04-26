@@ -214,7 +214,7 @@ class DaemonWatcher(object):
         Get a possibly-truncated list of stats to display based on
         current terminal width.  Allow breaking mid-section.
         '''
-        current_fit = {}
+        current_fit = OrderedDict()
         if self.termsize.changed or not self._stats_that_fit:
             width = 0
             for section_name, names in self._stats.items():
@@ -223,7 +223,7 @@ class DaemonWatcher(object):
                     if width > self.termsize.cols:
                         break
                     if section_name not in current_fit:
-                        current_fit[section_name] = {}
+                        current_fit[section_name] = OrderedDict()
                     current_fit[section_name][name] = stat_data
                 if width > self.termsize.cols:
                     break
