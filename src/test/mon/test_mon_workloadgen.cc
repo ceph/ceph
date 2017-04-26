@@ -495,9 +495,8 @@ class OSDStub : public TestStub
       return;
     }
 
-    const map<int64_t,pg_pool_t> &osdmap_pools = osdmap.get_pools();
-    map<int64_t,pg_pool_t>::const_iterator pit;
-    for (pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
+    auto& osdmap_pools = osdmap.get_pools();
+    for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
       const pg_pool_t &pool = pit->second;
       int ruleno = pool.get_crush_ruleset();
@@ -674,9 +673,8 @@ class OSDStub : public TestStub
 
     JSONFormatter f(true);
     f.open_array_section("pools");
-    const map<int64_t,pg_pool_t> &osdmap_pools = osdmap.get_pools();
-    map<int64_t,pg_pool_t>::const_iterator pit;
-    for (pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
+    auto& osdmap_pools = osdmap.get_pools();
+    for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
       const pg_pool_t &pool = pit->second;
       f.open_object_section("pool");
