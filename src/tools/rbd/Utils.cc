@@ -236,6 +236,39 @@ int get_special_namespace(const po::variables_map &vm,
   return 0;
 }
 
+int get_special_pool_ns_names(const po::variables_map &vm,
+			      size_t *arg_index,
+			      std::string *pool_name,
+			      std::string *ns_name) {
+  if (nullptr == pool_name) return -EINVAL;
+  if (nullptr == ns_name) return -EINVAL;
+  std::string pool_key = at::POOL_NAME;
+  std::string ns_key = at::NAMESPACE_NAME;
+
+  if (vm.count(pool_key)) {
+    *pool_name = vm[pool_key].as<std::string>();
+  }
+
+  if (vm.count(ns_key)) {
+    *ns_name = vm[ns_key].as<std::string>();
+  }
+
+  if (ns_name->empty()) {
+    *ns_name = utils::get_positional_argument(vm, (*arg_index)++);
+  }
+
+  if (pool_name->empty()) {
+    *pool_name = at::DEFAULT_POOL_NAME;
+  }
+
+  if (ns_name->empty()) {
+    std::cerr << "rbd: namespace name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 int get_special_pool_group_names(const po::variables_map &vm,
 				 size_t *arg_index,
 				 std::string *group_pool_name,
