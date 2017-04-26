@@ -337,6 +337,7 @@ void PGMap::calc_stats()
 {
   num_pg_by_state.clear();
   num_pg = 0;
+  num_pg_active = 0;
   num_osd = 0;
   pg_pool_sum.clear();
   pg_sum = pool_stat_t();
@@ -457,6 +458,10 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
     }
   }
 
+  if (s.state & PG_STATE_ACTIVE) {
+    ++num_pg_active;
+  }
+
   if (sameosds)
     return;
 
@@ -498,6 +503,10 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
       if (r.empty())
 	creating_pgs_by_osd_epoch.erase(s.acting_primary);
     }
+  }
+
+  if (s.state & PG_STATE_ACTIVE) {
+    --num_pg_active;
   }
 
   if (sameosds)
