@@ -686,7 +686,8 @@ def cluster(ctx, config):
 
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
             _, _, id_ = teuthology.split_role(role)
-            mnt_point = '/var/lib/ceph/osd/{cluster}-{id}'.format(cluster=cluster_name, id=id_)
+            mnt_point = '/var/lib/ceph/osd/{cluster}-{id}'.format(
+                cluster=cluster_name, id=id_)
             remote.run(
                 args=[
                     'sudo',
@@ -790,6 +791,11 @@ def cluster(ctx, config):
                     '--monmap', monmap_path,
                 ],
             )
+            mnt_point = '/var/lib/ceph/osd/{cluster}-{id}'.format(
+                cluster=cluster_name, id=id_)
+            remote.run(args=[
+                'sudo', 'chown', '-R', 'ceph:ceph', mnt_point
+            ])
 
     log.info('Reading keys from all nodes...')
     keys_fp = StringIO()
