@@ -360,7 +360,8 @@ int PyModules::init()
   global_handle = this;
 
   // Set up global python interpreter
-  Py_Initialize();
+  Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
+  Py_InitializeEx(0);
 
   // Some python modules do not cope with an unpopulated argv, so lets
   // fake one.  This step also picks up site-packages into sys.path.
