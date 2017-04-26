@@ -1912,7 +1912,8 @@ static void get_md_sync_status(list<string>& status)
         continue;
       }
       auto master_marker = iter->second.marker;
-      if (master_marker > local_iter.second.marker) {
+      if (local_iter.second.state == rgw_meta_sync_marker::SyncState::IncrementalSync &&
+          master_marker > local_iter.second.marker) {
         shards_behind[shard_id] = local_iter.second.marker;
       }
     }
@@ -2059,7 +2060,8 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
       continue;
     }
     auto master_marker = iter->second.marker;
-    if (master_marker > local_iter.second.marker) {
+    if (local_iter.second.state == rgw_data_sync_marker::SyncState::IncrementalSync &&
+        master_marker > local_iter.second.marker) {
       shards_behind[shard_id] = local_iter.second.marker;
     }
   }
