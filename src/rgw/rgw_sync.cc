@@ -52,7 +52,7 @@ RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const string& source_zone, const 
   ::encode(info, bl);
   store->time_log_prepare_entry(entry, real_clock::now(), section, name, bl);
 
-  uint32_t shard_id = counter.inc() % num_shards;
+  uint32_t shard_id = ++counter % num_shards;
 
 
   return new RGWRadosTimelogAddCR(store, oids[shard_id], entry);
@@ -290,7 +290,7 @@ int RGWRemoteMetaLog::init()
 
 void RGWRemoteMetaLog::finish()
 {
-  going_down.set(1);
+  going_down = true;
   stop();
 }
 
@@ -1992,7 +1992,7 @@ int RGWRemoteMetaLog::run_sync()
   // get shard count and oldest log period from master
   rgw_mdlog_info mdlog_info;
   for (;;) {
-    if (going_down.read()) {
+    if (going_down) {
       ldout(store->ctx(), 1) << __func__ << "(): going down" << dendl;
       return 0;
     }
@@ -2013,7 +2013,7 @@ int RGWRemoteMetaLog::run_sync()
 
   rgw_meta_sync_status sync_status;
   do {
-    if (going_down.read()) {
+    if (going_down) {
       ldout(store->ctx(), 1) << __func__ << "(): going down" << dendl;
       return 0;
     }
@@ -2112,7 +2112,7 @@ int RGWRemoteMetaLog::run_sync()
         ldout(store->ctx(), 0) << "ERROR: bad sync state!" << dendl;
         return -EIO;
     }
-  } while (!going_down.read());
+  } while (!going_down);
 
   return 0;
 }

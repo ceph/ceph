@@ -65,7 +65,7 @@ void RGWAsyncRadosProcessor::start() {
 }
 
 void RGWAsyncRadosProcessor::stop() {
-  going_down.set(1);
+  going_down = true;
   m_tp.drain(&req_wq);
   m_tp.stop();
   for (auto iter = m_req_queue.begin(); iter != m_req_queue.end(); ++iter) {
@@ -627,7 +627,7 @@ int RGWContinuousLeaseCR::operate()
     return set_cr_done();
   }
   reenter(this) {
-    while (!going_down.read()) {
+    while (!going_down) {
       yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock_name, cookie, interval));
 
       caller->set_sleeping(false); /* will only be relevant when we return, that's why we can do it early */

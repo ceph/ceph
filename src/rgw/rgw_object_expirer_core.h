@@ -8,6 +8,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <atomic>
 
 #include "auth/Crypto.h"
 
@@ -37,6 +38,8 @@
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
 
+#include <atomic>
+
 class RGWObjectExpirer {
 protected:
   RGWRados *store;
@@ -65,7 +68,7 @@ protected:
   };
 
   OEWorker *worker;
-  atomic_t down_flag;
+  std::atomic<bool> down_flag = { false };
 
 public:
   explicit RGWObjectExpirer(RGWRados *_store)
