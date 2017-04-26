@@ -4358,7 +4358,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
   int ret;
 
   while (!done) {
-    dout(20) << "scrub state " << Scrubber::state_string(scrubber.state) << dendl;
+    dout(20) << "scrub state " << Scrubber::state_string(scrubber.state)
+	     << " [" << scrubber.start << "," << scrubber.end << ")" << dendl;
 
     switch (scrubber.state) {
       case PG::Scrubber::INACTIVE:
@@ -4604,6 +4605,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         ceph_abort();
     }
   }
+  dout(20) << "scrub final state " << Scrubber::state_string(scrubber.state)
+	   << " [" << scrubber.start << "," << scrubber.end << ")" << dendl;
 }
 
 void PG::scrub_clear_state()
