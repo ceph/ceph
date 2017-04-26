@@ -652,11 +652,49 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
+  int namespace_exists(IoCtx& io_ctx, const string &nspace, bool *exists)
+  {
+    string nspace_backup = io_ctx.get_namespace();
+    io_ctx.set_namespace(RBD_DEFAULT_NS);
+    set<string> namespaces;
+
+    int r = namespace_list(io_ctx, namespaces);
+    if (r < 0) {
+      io_ctx.set_namespace(nspace_backup);
+      return r;
+    }
+
+    *exists = false;
+    for (string ns : namespaces) {
+      if (ns == nspace) {
+	*exists = true;
+	break;
+      }
+    }
+    io_ctx.set_namespace(nspace_backup);
+    return 0;
+  }
+
   int namespace_add(IoCtx& io_ctx, const string &nspace)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 20) << "add namespace: " << nspace << &io_ctx << dendl;
     
+    bool exists = false;
+    r = namespace_exists(io_ctx, nspace, &exists);
+    if (r == -ENOENT) {
+      exists = false;
+      r = 0;
+    }
+
+    if (r < 0) {
+      return r;
+    }
+
+    if (exists) {
+      lderr(cct) << "namespace: " << nspace << " already exists." << &io_ctx << dendl;
+      return -EINVAL;
+    }
     return cls_client::namespace_add(&io_ctx, nspace);
   }
 

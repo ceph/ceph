@@ -617,6 +617,10 @@ namespace librbd {
     return r;
   }
 
+  int RBD::namespace_exists(IoCtx& io_ctx, const string &nspace, bool *exists) {
+    return librbd::namespace_exists(io_ctx, nspace, exists);
+  }
+
   int RBD::namespace_add(IoCtx& io_ctx, const string &nspace) {
     return librbd::namespace_add(io_ctx, nspace);
   }
