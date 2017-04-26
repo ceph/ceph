@@ -2701,6 +2701,12 @@ void PG::publish_stats_to_osd()
   utime_t now = ceph_clock_now();
   if (info.stats.state != state) {
     info.stats.last_change = now;
+    // Optimistic estimation, if we just find out an inactive PG,
+    // assumt it is active till now.
+    if (!(state & PG_STATE_ACTIVE) &&
+	(info.stats.state & PG_STATE_ACTIVE))
+      info.stats.last_active = now;
+
     if ((state & PG_STATE_ACTIVE) &&
 	!(info.stats.state & PG_STATE_ACTIVE))
       info.stats.last_became_active = now;
