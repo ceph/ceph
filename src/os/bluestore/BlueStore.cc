@@ -7383,7 +7383,6 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  dout(20) << __func__ << " DEBUG randomly forcing submit via kv thread"
 		   << dendl;
 	} else {
-	  _txc_finalize_kv(txc, txc->t);
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
@@ -7939,7 +7938,6 @@ void BlueStore::_kv_sync_thread()
       }
       for (auto txc : kv_submitting) {
 	assert(txc->state == TransContext::STATE_KV_QUEUED);
-	_txc_finalize_kv(txc, txc->t);
 	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	int r = db->submit_transaction(txc->t);
 	assert(r == 0);
@@ -8308,6 +8306,7 @@ int BlueStore::queue_transactions(
     txc->t->set(PREFIX_DEFERRED, key, bl);
   }
 
+  _txc_finalize_kv(txc, txc->t);
   if (handle)
     handle->suspend_tp_timeout();
 
