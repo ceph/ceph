@@ -874,7 +874,7 @@
   
   rbd help map
   usage: rbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
-                 [--options <options>] [--read-only] 
+                 [--options <options>] [--read-only] [--exclusive] 
                  <image-or-snap-spec> 
   
   Map image to a block device using the kernel.
@@ -889,6 +889,7 @@
     --snap arg            snapshot name
     -o [ --options ] arg  map options
     --read-only           map read-only
+    --exclusive           disable automatic exclusive lock transitions
   
   rbd help merge-diff
   usage: rbd merge-diff [--path <path>] [--no-progress] 
