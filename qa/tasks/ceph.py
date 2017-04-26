@@ -26,6 +26,7 @@ import ceph_client as cclient
 from teuthology.orchestra.daemon import DaemonGroup
 
 CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw']
+DATA_PATH = '/var/lib/ceph/{type_}/{cluster}-{id_}'
 
 log = logging.getLogger(__name__)
 
@@ -610,10 +611,8 @@ def cluster(ctx, config):
             for role in teuthology.cluster_roles_of_type(roles_for_host, 'mgr',
                                                          cluster_name):
                 _, _, id_ = teuthology.split_role(role)
-                mgr_dir = '/var/lib/ceph/mgr/{cluster}-{id}'.format(
-                    cluster=cluster_name,
-                    id=id_,
-                )
+                mgr_dir = DATA_PATH.format(
+                    type_='mgr', cluster=cluster_name, id_=id_)
                 remote.run(
                     args=[
                         'sudo',
@@ -639,10 +638,8 @@ def cluster(ctx, config):
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'mds',
                                                      cluster_name):
             _, _, id_ = teuthology.split_role(role)
-            mds_dir = '/var/lib/ceph/mds/{cluster}-{id}'.format(
-                cluster=cluster_name,
-                id=id_,
-            )
+            mds_dir = DATA_PATH.format(
+                type_='mds', cluster=cluster_name, id_=id_)
             remote.run(
                 args=[
                     'sudo',
@@ -686,8 +683,8 @@ def cluster(ctx, config):
 
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
             _, _, id_ = teuthology.split_role(role)
-            mnt_point = '/var/lib/ceph/osd/{cluster}-{id}'.format(
-                cluster=cluster_name, id=id_)
+            mnt_point = DATA_PATH.format(
+                type_='osd', cluster=cluster_name, id_=id_)
             remote.run(
                 args=[
                     'sudo',
@@ -791,8 +788,8 @@ def cluster(ctx, config):
                     '--monmap', monmap_path,
                 ],
             )
-            mnt_point = '/var/lib/ceph/osd/{cluster}-{id}'.format(
-                cluster=cluster_name, id=id_)
+            mnt_point = DATA_PATH.format(
+                type_='osd', cluster=cluster_name, id_=id_)
             remote.run(args=[
                 'sudo', 'chown', '-R', 'ceph:ceph', mnt_point
             ])
@@ -808,10 +805,10 @@ def cluster(ctx, config):
                 _, _, id_ = teuthology.split_role(role)
                 data = teuthology.get_file(
                     remote=remote,
-                    path='/var/lib/ceph/{type}/{cluster}-{id}/keyring'.format(
-                        type=type_,
-                        id=id_,
-                        cluster=cluster_name,
+                    path=os.path.join(
+                        DATA_PATH.format(
+                            type_=type_, id_=id_, cluster=cluster_name),
+                        'keyring',
                     ),
                     sudo=True,
                 )
@@ -863,8 +860,8 @@ def cluster(ctx, config):
     for remote, roles_for_host in mons.remotes.iteritems():
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'mon', cluster_name):
             _, _, id_ = teuthology.split_role(role)
-            mnt_point = '/var/lib/ceph/mon/{cluster}-{id}'.format(
-                id=id_, cluster=cluster_name)
+            mnt_point = DATA_PATH.format(
+                type_='mon', id_=id_, cluster=cluster_name)
             remote.run(
                 args=[
                     'sudo',
@@ -1006,8 +1003,8 @@ def cluster(ctx, config):
                     is_mon = teuthology.is_type('mon', cluster_name)
                     if is_mon(role):
                         _, _, id_ = teuthology.split_role(role)
-                        mon_dir = '/var/lib/ceph/mon/' + \
-                                  '{0}-{1}'.format(cluster_name, id_)
+                        mon_dir = DATA_PATH.format(
+                            type_='mon', id_=id_, cluster=cluster_name)
                         teuthology.pull_directory_tarball(
                             remote,
                             mon_dir,
