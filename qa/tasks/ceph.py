@@ -857,12 +857,14 @@ def cluster(ctx, config):
     for remote, roles_for_host in mons.remotes.iteritems():
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'mon', cluster_name):
             _, _, id_ = teuthology.split_role(role)
+            mnt_point = '/var/lib/ceph/mon/{cluster}-{id}'.format(
+                id=id_, cluster=cluster_name)
             remote.run(
                 args=[
                     'sudo',
                     'mkdir',
                     '-p',
-                    '/var/lib/ceph/mon/{cluster}-{id}'.format(id=id_, cluster=cluster_name),
+                    mnt_point,
                 ],
             )
             remote.run(
@@ -879,6 +881,9 @@ def cluster(ctx, config):
                     '--keyring', keyring_path,
                 ],
             )
+            remote.run(args=[
+                'sudo', 'chown', '-R', 'ceph:ceph', mnt_point
+            ])
 
     run.wait(
         mons.run(
