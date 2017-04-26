@@ -268,7 +268,7 @@ Options
 
 .. option:: --key-type=<type>
 
-	key type, options are: swift, S3.
+	key type, options are: swift, s3.
 
 .. option:: --temp-url-key[-2]=<key>
 
@@ -457,7 +457,15 @@ Remove a user and all associated buckets with their contents::
 
 Remove a bucket::
 
-        $ radosgw-admin bucket unlink --bucket=foo
+	$ radosgw-admin bucket rm --bucket=foo
+
+Link bucket to specified user::
+	
+	$ radosgw-admin bucket link --bucket=foo --bucket_id=<bucket id> --uid=johnny
+
+Unlink bucket from specified user::
+
+        $ radosgw-admin bucket unlink --bucket=foo --uid=johnny
 
 Show the logs of a bucket from April 1st, 2012::
 

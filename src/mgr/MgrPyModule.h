@@ -20,6 +20,7 @@
 #include "Python.h"
 
 #include "common/cmdparse.h"
+#include "common/LogEntry.h"
 
 #include <vector>
 #include <string>
@@ -58,6 +59,7 @@ public:
   int serve();
   void shutdown();
   void notify(const std::string &notify_type, const std::string &notify_id);
+  void notify_clog(const LogEntry &le);
 
   const std::vector<ModuleCommand> &get_commands() const
   {
@@ -71,9 +73,11 @@ public:
 
   int handle_command(
     const cmdmap_t &cmdmap,
-    std::stringstream *ss,
-    std::stringstream *ds);
+    std::stringstream *ds,
+    std::stringstream *ss);
 };
+
+std::string handle_pyerror();
 
 #endif
 

@@ -11,21 +11,21 @@ protected:
   string path_prefix;
 
 public:
-  virtual void send_response() override;
+  void send_response() override;
 };
 
 class RGWRoleRead : public RGWRestRole {
 public:
   RGWRoleRead() = default;
-  virtual int verify_permission() override;
-  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  int verify_permission() override;
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
 class RGWRoleWrite : public RGWRestRole {
 public:
   RGWRoleWrite() = default;
-  virtual int verify_permission() override;
-  virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  int verify_permission() override;
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWCreateRole : public RGWRoleWrite {

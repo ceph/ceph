@@ -30,7 +30,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   BlueFS::FileReader *h;
  public:
   BlueRocksSequentialFile(BlueFS *fs, BlueFS::FileReader *h) : fs(fs), h(h) {}
-  ~BlueRocksSequentialFile() {
+  ~BlueRocksSequentialFile() override {
     delete h;
   }
 
@@ -76,7 +76,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   BlueFS::FileReader *h;
  public:
   BlueRocksRandomAccessFile(BlueFS *fs, BlueFS::FileReader *h) : fs(fs), h(h) {}
-  ~BlueRocksRandomAccessFile() {
+  ~BlueRocksRandomAccessFile() override {
     delete h;
   }
 
@@ -154,7 +154,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   BlueFS::FileWriter *h;
  public:
   BlueRocksWritableFile(BlueFS *fs, BlueFS::FileWriter *h) : fs(fs), h(h) {}
-  ~BlueRocksWritableFile() {
+  ~BlueRocksWritableFile() override {
     fs->close_writer(h);
   }
 
@@ -306,7 +306,7 @@ class BlueRocksFileLock : public rocksdb::FileLock {
   BlueFS *fs;
   BlueFS::FileLock *lock;
   BlueRocksFileLock(BlueFS *fs, BlueFS::FileLock *l) : fs(fs), lock(l) { }
-  ~BlueRocksFileLock() {
+  ~BlueRocksFileLock() override {
   }
 };
 

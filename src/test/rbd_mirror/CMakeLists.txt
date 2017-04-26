@@ -4,11 +4,13 @@ set(rbd_mirror_test_srcs
   test_ImageReplayer.cc
   test_ImageDeleter.cc
   test_ImageSync.cc
+  test_InstanceWatcher.cc
+  test_Instances.cc
   test_LeaderWatcher.cc
   test_fixture.cc
   )
-add_library(rbd_mirror STATIC ${rbd_mirror_test_srcs})
-set_target_properties(rbd_mirror PROPERTIES COMPILE_FLAGS
+add_library(rbd_mirror_test STATIC ${rbd_mirror_test_srcs})
+set_target_properties(rbd_mirror_test PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 add_executable(unittest_rbd_mirror
@@ -17,7 +19,10 @@ add_executable(unittest_rbd_mirror
   test_mock_ImageReplayer.cc
   test_mock_ImageSync.cc
   test_mock_ImageSyncThrottler.cc
+  test_mock_InstanceReplayer.cc
+  test_mock_InstanceWatcher.cc
   test_mock_LeaderWatcher.cc
+  test_mock_PoolWatcher.cc
   image_replayer/test_mock_BootstrapRequest.cc
   image_replayer/test_mock_CreateImageRequest.cc
   image_replayer/test_mock_EventPreprocessor.cc
@@ -37,7 +42,7 @@ add_dependencies(unittest_rbd_mirror
   cls_lock
   cls_rbd)
 target_link_libraries(unittest_rbd_mirror
-  rbd_mirror
+  rbd_mirror_test
   rados_test_stub
   rbd_mirror_internal
   rbd_mirror_types
@@ -62,7 +67,7 @@ add_executable(ceph_test_rbd_mirror
 set_target_properties(ceph_test_rbd_mirror PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_rbd_mirror
-  rbd_mirror
+  rbd_mirror_test
   rbd_mirror_internal
   rbd_mirror_types
   rbd_api

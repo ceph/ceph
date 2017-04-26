@@ -153,10 +153,10 @@ public:
     reqid(ri), attempt(att), op(o), flags(0), lock_type(0),
     inode_export_v(0) { }
 private:
-  ~MMDSSlaveRequest() {}
+  ~MMDSSlaveRequest() override {}
 
 public:
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(reqid, payload);
     ::encode(attempt, payload);
     ::encode(op, payload);
@@ -173,7 +173,7 @@ public:
     ::encode(srci_replica, payload);
     ::encode(stray, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(reqid, p);
     ::decode(attempt, p);
@@ -192,8 +192,8 @@ public:
     ::decode(stray, p);
   }
 
-  const char *get_type_name() const { return "slave_request"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "slave_request"; }
+  void print(ostream& out) const override {
     out << "slave_request(" << reqid
 	<< "." << attempt
 	<< " " << get_opname(op) 

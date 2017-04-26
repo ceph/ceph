@@ -78,7 +78,9 @@ struct MonCapGrant {
   // needed by expand_profile() (via is_match()) and cached here.
   mutable list<MonCapGrant> profile_grants;
 
-  void expand_profile(EntityName name) const;
+  void expand_profile(int daemon_type, const EntityName& name) const;
+  void expand_profile_mon(const EntityName& name) const;
+  void expand_profile_mgr(const EntityName& name) const;
 
   MonCapGrant() : allow(0) {}
   // cppcheck-suppress noExplicitConstructor
@@ -101,6 +103,7 @@ struct MonCapGrant {
    * @return bits we allow
    */
   mon_rwxa_t get_allowed(CephContext *cct,
+			 int daemon_type, ///< CEPH_ENTITY_TYPE_*
 			 EntityName name,
 			 const std::string& service,
 			 const std::string& command,
@@ -138,6 +141,7 @@ struct MonCap {
    * This method actually checks a description of a particular operation against
    * what the capability has specified.
    *
+   * @param daemon_type CEPH_ENTITY_TYPE_* for the service (MON or MGR)
    * @param service service name
    * @param command command id
    * @param command_args
@@ -147,6 +151,7 @@ struct MonCap {
    * @return true if the operation is allowed, false otherwise
    */
   bool is_capable(CephContext *cct,
+		  int daemon_type,
 		  EntityName name,
 		  const string& service,
 		  const string& command, const map<string,string>& command_args,

@@ -104,7 +104,7 @@ protected:
   public:
     C_RetryMessage(PaxosService *s, MonOpRequestRef op_) :
       C_MonOp(op_), svc(s) { }
-    void _finish(int r) {
+    void _finish(int r) override {
       if (r == -EAGAIN || r >= 0)
 	svc->dispatch(op);
       else if (r == -ECANCELED)
@@ -515,10 +515,7 @@ public:
    * @returns true if writeable; false otherwise
    */
   bool is_writeable() {
-    return
-      !is_proposing() &&
-      is_write_ready() &&
-      (paxos->is_active() || paxos->is_updating() || paxos->is_writing());
+    return is_write_ready(); 
   }
 
   /**

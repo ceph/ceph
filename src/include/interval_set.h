@@ -153,6 +153,13 @@ class interval_set {
   };
 
   interval_set() : _size(0) {}
+  interval_set(std::map<T,T>& other) {
+    m.swap(other);
+    _size = 0;
+    for (auto& i : m) {
+      _size += i.second;
+    }
+  }
 
   int num_intervals() const
   {
@@ -234,7 +241,7 @@ class interval_set {
     return _size == other._size && m == other.m;
   }
 
-  int size() const {
+  int64_t size() const {
     return _size;
   }
 
@@ -546,6 +553,14 @@ class interval_set {
 	return;
       }
     }
+  }
+
+  /*
+   * Move contents of m into another std::map<T,T>. Use that instead of
+   * encoding interval_set into bufferlist then decoding it back into std::map.
+   */
+  void move_into(std::map<T,T>& other) {
+    other = std::move(m);
   }
 
 private:

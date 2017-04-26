@@ -41,7 +41,7 @@ public:
     LogEvent(EVENT_FRAGMENT), metablob(mdlog), 
     op(o), ino(df.ino), basefrag(df.frag), bits(b) { }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "EFragment " << op_name(op) << " " << ino << " " << basefrag << " by " << bits << " " << metablob;
   }
 
@@ -67,13 +67,13 @@ public:
       ::encode(*drb, rollback);
   }
 
-  EMetaBlob *get_metablob() { return &metablob; }
+  EMetaBlob *get_metablob() override { return &metablob; }
 
-  void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator &bl);
-  void dump(Formatter *f) const;
+  void encode(bufferlist &bl, uint64_t features) const override;
+  void decode(bufferlist::iterator &bl) override;
+  void dump(Formatter *f) const override;
   static void generate_test_instances(list<EFragment*>& ls);
-  void replay(MDSRank *mds);
+  void replay(MDSRank *mds) override;
 };
 WRITE_CLASS_ENCODER_FEATURES(EFragment)
 

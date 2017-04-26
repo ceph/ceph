@@ -101,7 +101,6 @@ struct CloseImageRequest<librbd::MockTestImageCtx> {
   Context *on_finish = nullptr;
 
   static CloseImageRequest* create(librbd::MockTestImageCtx **image_ctx,
-                                   ContextWQ *work_queue, bool destroy_only,
                                    Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->image_ctx = image_ctx;
@@ -133,8 +132,10 @@ struct CreateImageRequest<librbd::MockTestImageCtx> {
                                     const std::string &remote_mirror_uuid,
                                     const std::string &local_image_name,
                                     librbd::MockTestImageCtx *remote_image_ctx,
+				    std::string *local_image_id,
                                     Context *on_finish) {
     assert(s_instance != nullptr);
+    *local_image_id = "local image id";
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -184,8 +185,7 @@ struct OpenImageRequest<librbd::MockTestImageCtx> {
   static OpenImageRequest* create(librados::IoCtx &io_ctx,
                                   librbd::MockTestImageCtx **image_ctx,
                                   const std::string &image_id,
-                                  bool read_only, ContextWQ *work_queue,
-                                  Context *on_finish) {
+                                  bool read_only, Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->image_ctx = image_ctx;
     s_instance->on_finish = on_finish;
@@ -214,7 +214,6 @@ struct OpenLocalImageRequest<librbd::MockTestImageCtx> {
 
   static OpenLocalImageRequest* create(librados::IoCtx &local_io_ctx,
                                        librbd::MockTestImageCtx **local_image_ctx,
-                                       const std::string &local_image_name,
                                        const std::string &local_image_id,
                                        ContextWQ *work_queue,
                                        Context *on_finish) {
@@ -429,8 +428,7 @@ public:
     return new MockBootstrapRequest(m_local_io_ctx,
                                     m_remote_io_ctx,
                                     mock_image_sync_throttler,
-                                    &m_local_test_image_ctx,
-                                    "local image name",
+                                    &m_local_test_image_ctx, "",
                                     remote_image_id,
                                     global_image_id,
                                     m_threads->work_queue,

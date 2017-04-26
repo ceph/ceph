@@ -661,7 +661,7 @@ public:
 	proposal_time(ceph_clock_now())
       { }
 
-    void finish(int r) {
+    void finish(int r) override {
       if (proposer_context) {
 	proposer_context->complete(r);
 	proposer_context = NULL;

@@ -33,7 +33,7 @@ public:
   ObjectMap(ImageCtxT &image_ctx, uint64_t snap_id);
   ~ObjectMap();
 
-  static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
+  static int aio_remove(librados::IoCtx &io_ctx, const std::string &image_id, librados::AioCompletion *c);
   static std::string object_map_name(const std::string &image_id,
 				     uint64_t snap_id);
 

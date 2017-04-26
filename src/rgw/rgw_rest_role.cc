@@ -28,7 +28,7 @@ void RGWRestRole::send_response()
 
 int RGWRoleRead::verify_permission()
 {
-  if (s->auth_identity->is_anonymous()) {
+  if (s->auth.identity->is_anonymous()) {
     return -EACCES;
   }
 
@@ -41,7 +41,7 @@ int RGWRoleRead::verify_permission()
 
 int RGWRoleWrite::verify_permission()
 {
-  if (s->auth_identity->is_anonymous()) {
+  if (s->auth.identity->is_anonymous()) {
     return -EACCES;
   }
 

@@ -27,7 +27,7 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
-    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    local funcs=${@:-$(set | ${SED} -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
         setup $dir || return 1
         $func $dir || return 1
@@ -146,9 +146,9 @@ function generate_manipulated_rules() {
     ceph osd getcrushmap -o $dir/original_map
     crushtool -d $dir/original_map -o $dir/decoded_original_map
     #manipulate the rulesets , to make the rule_id != ruleset_id
-    sed -i 's/ruleset 0/ruleset 3/' $dir/decoded_original_map
-    sed -i 's/ruleset 2/ruleset 0/' $dir/decoded_original_map
-    sed -i 's/ruleset 1/ruleset 2/' $dir/decoded_original_map
+    ${SED} -i 's/ruleset 0/ruleset 3/' $dir/decoded_original_map
+    ${SED} -i 's/ruleset 2/ruleset 0/' $dir/decoded_original_map
+    ${SED} -i 's/ruleset 1/ruleset 2/' $dir/decoded_original_map
 
     crushtool -c $dir/decoded_original_map -o $dir/new_map
     ceph osd setcrushmap -i $dir/new_map

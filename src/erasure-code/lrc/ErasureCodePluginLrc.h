@@ -22,10 +22,10 @@
 
 class ErasureCodePluginLrc : public ErasureCodePlugin {
 public:
-  virtual int factory(const std::string &directory,
+  int factory(const std::string &directory,
 		      ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
-		      ostream *ss);
+		      ostream *ss) override;
 };
 
 #endif

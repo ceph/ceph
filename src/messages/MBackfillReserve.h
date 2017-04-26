@@ -41,11 +41,11 @@ public:
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio) {}
 
-  const char *get_type_name() const {
+  const char *get_type_name() const override {
     return "MBackfillReserve";
   }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "MBackfillReserve ";
     switch (type) {
     case REQUEST:
@@ -63,7 +63,7 @@ public:
     return;
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid.pgid, p);
     ::decode(query_epoch, p);
@@ -79,7 +79,7 @@ public:
 
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(pgid.pgid, payload);
     ::encode(query_epoch, payload);
     ::encode(type, payload);

@@ -41,22 +41,22 @@ public:
     mm->encode(encoded, -1);  // we will reencode with fewer features as necessary
   }
 private:
-  ~MMDSMap() {}
+  ~MMDSMap() override {}
 
 public:
-  const char *get_type_name() const { return "mdsmap"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "mdsmap"; }
+  void print(ostream& out) const override {
     out << "mdsmap(e " << epoch << ")";
   }
 
   // marshalling
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(fsid, p);
     ::decode(epoch, p);
     ::decode(encoded, p);
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(fsid, payload);
     ::encode(epoch, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||

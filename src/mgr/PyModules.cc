@@ -29,8 +29,45 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
+
+#undef dout_prefix
+#define dout_prefix *_dout << "mgr[py] "
+
+namespace {
+  PyObject* log_write(PyObject*, PyObject* args) {
+    char* m = nullptr;
+    if (PyArg_ParseTuple(args, "s", &m)) {
+      auto len = strlen(m);
+      if (len && m[len-1] == '\n') {
+	m[len-1] = '\0';
+      }
+      dout(4) << m << dendl;
+    }
+    Py_RETURN_NONE;
+  }
+
+  PyObject* log_flush(PyObject*, PyObject*){
+    Py_RETURN_NONE;
+  }
+
+  static PyMethodDef log_methods[] = {
+    {"write", log_write, METH_VARARGS, "write stdout and stderr"},
+    {"flush", log_flush, METH_VARARGS, "flush"},
+    {nullptr, nullptr, 0, nullptr}
+  };
+}
+
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
+
+PyModules::PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
+		     Finisher &f)
+  : daemon_state(ds), cluster_state(cs), monc(mc), finisher(f)
+{}
+
+// we can not have the default destructor in header, because ServeThread is
+// still an "incomplete" type. so we need to define the destructor here.
+PyModules::~PyModules() = default;
 
 void PyModules::dump_server(const std::string &hostname,
                       const DaemonStateCollection &dmc,
@@ -48,7 +85,10 @@ void PyModules::dump_server(const std::string &hostname,
     // TODO: pick the highest version, and make sure that
     // somewhere else (during health reporting?) we are
     // indicating to the user if we see mixed versions
-    ceph_version = i.second->metadata.at("ceph_version");
+    auto ver_iter = i.second->metadata.find("ceph_version");
+    if (ver_iter != i.second->metadata.end()) {
+      ceph_version = i.second->metadata.at("ceph_version");
+    }
 
     f->open_object_section("service");
     f->dump_string("type", str_type);
@@ -246,31 +286,6 @@ PyObject *PyModules::get_python(const std::string &what)
   }
 }
 
-//XXX courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
-#include <boost/python.hpp>
-// decode a Python exception into a string
-std::string handle_pyerror()
-{
-    using namespace boost::python;
-    using namespace boost;
-
-    PyObject *exc,*val,*tb;
-    object formatted_list, formatted;
-    PyErr_Fetch(&exc,&val,&tb);
-    handle<> hexc(exc),hval(allow_null(val)),htb(allow_null(tb)); 
-    object traceback(import("traceback"));
-    if (!tb) {
-        object format_exception_only(traceback.attr("format_exception_only"));
-        formatted_list = format_exception_only(hexc,hval);
-    } else {
-        object format_exception(traceback.attr("format_exception"));
-        formatted_list = format_exception(hexc,hval,htb);
-    }
-    formatted = str("\n").join(formatted_list);
-    return extract<std::string>(formatted);
-}
-
-
 std::string PyModules::get_site_packages()
 {
   std::stringstream site_packages;
@@ -351,7 +366,17 @@ int PyModules::init()
   // fake one.  This step also picks up site-packages into sys.path.
   const char *argv[] = {"ceph-mgr"};
   PySys_SetArgv(1, (char**)argv);
-  
+
+  if (g_conf->daemonize) {
+    auto py_logger = Py_InitModule("ceph_logger", log_methods);
+#if PY_MAJOR_VERSION >= 3
+    PySys_SetObject("stderr", py_logger);
+    PySys_SetObject("stdout", py_logger);
+#else
+    PySys_SetObject(const_cast<char*>("stderr"), py_logger);
+    PySys_SetObject(const_cast<char*>("stdout"), py_logger);
+#endif
+  }
   // Populate python namespace with callable hooks
   Py_InitModule("ceph_state", CephStateMethods);
 
@@ -369,19 +394,18 @@ int PyModules::init()
 
   // Load python code
   boost::tokenizer<> tok(g_conf->mgr_modules);
-  for(boost::tokenizer<>::iterator module_name=tok.begin();
-      module_name != tok.end();++module_name){
-    dout(1) << "Loading python module '" << *module_name << "'" << dendl;
-    auto mod = new MgrPyModule(*module_name);
+  for(const auto& module_name : tok) {
+    dout(1) << "Loading python module '" << module_name << "'" << dendl;
+    auto mod = std::unique_ptr<MgrPyModule>(new MgrPyModule(module_name));
     int r = mod->load();
     if (r != 0) {
-      derr << "Error loading module '" << *module_name << "': "
+      derr << "Error loading module '" << module_name << "': "
         << cpp_strerror(r) << dendl;
       derr << handle_pyerror() << dendl;
       // Don't drop out here, load the other modules
     } else {
       // Success!
-      modules[*module_name] = mod;
+      modules[module_name] = std::move(mod);
     }
   } 
 
@@ -418,9 +442,9 @@ void PyModules::start()
   Mutex::Locker l(lock);
 
   dout(1) << "Creating threads for " << modules.size() << " modules" << dendl;
-  for (auto &i : modules) {
-    auto thread = new ServeThread(i.second);
-    serve_threads[i.first] = thread;
+  for (auto& i : modules) {
+    auto thread = new ServeThread(i.second.get());
+    serve_threads[i.first].reset(thread);
   }
 
   for (auto &i : serve_threads) {
@@ -435,28 +459,42 @@ void PyModules::shutdown()
 {
   Mutex::Locker locker(lock);
 
-  // Signal modules to drop out of serve()
-  for (auto i : modules) {
-    auto module = i.second;
-    finisher.queue(new FunctionContext([module](int r){
+  // Signal modules to drop out of serve() and/or tear down resources
+  C_SaferCond shutdown_called;
+  C_GatherBuilder gather(g_ceph_context);
+  for (auto &i : modules) {
+    auto module = i.second.get();
+    auto shutdown_cb = gather.new_sub();
+    finisher.queue(new FunctionContext([module, shutdown_cb](int r){
       module->shutdown();
+      shutdown_cb->complete(0);
     }));
   }
 
+  if (gather.has_subs()) {
+    gather.set_finisher(&shutdown_called);
+    gather.activate();
+  }
+
+  // For modules implementing serve(), finish the threads where we
+  // were running that.
   for (auto &i : serve_threads) {
     lock.Unlock();
     i.second->join();
     lock.Lock();
-    delete i.second;
   }
   serve_threads.clear();
 
-  // Tear down modules
-  for (auto i : modules) {
-    delete i.second;
+  // Wait for the module's shutdown() to complete before
+  // we proceed to destroy the module.
+  if (!modules.empty()) {
+    dout(4) << "waiting for module shutdown calls" << dendl;
+    shutdown_called.wait();
   }
+
   modules.clear();
 
+  PyGILState_Ensure();
   Py_Finalize();
 }
 
@@ -466,12 +504,31 @@ void PyModules::notify_all(const std::string &notify_type,
   Mutex::Locker l(lock);
 
   dout(10) << __func__ << ": notify_all " << notify_type << dendl;
-  for (auto i : modules) {
-    auto module = i.second;
+  for (auto& i : modules) {
+    auto module = i.second.get();
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     finisher.queue(new FunctionContext([module, notify_type, notify_id](int r){
       module->notify(notify_type, notify_id);
+    }));
+  }
+}
+
+void PyModules::notify_all(const LogEntry &log_entry)
+{
+  Mutex::Locker l(lock);
+
+  dout(10) << __func__ << ": notify_all (clog)" << dendl;
+  for (auto& i : modules) {
+    auto module = i.second.get();
+    // Send all python calls down a Finisher to avoid blocking
+    // C++ code, and avoid any potential lock cycles.
+    //
+    // Note intentional use of non-reference lambda binding on
+    // log_entry: we take a copy because caller's instance is
+    // probably ephemeral.
+    finisher.queue(new FunctionContext([module, log_entry](int r){
+      module->notify_clog(log_entry);
     }));
   }
 }
@@ -528,8 +585,8 @@ std::vector<ModuleCommand> PyModules::get_commands()
   Mutex::Locker l(lock);
 
   std::vector<ModuleCommand> result;
-  for (auto i : modules) {
-    auto module = i.second;
+  for (auto& i : modules) {
+    auto module = i.second.get();
     auto mod_commands = module->get_commands();
     for (auto j : mod_commands) {
       result.push_back(j);

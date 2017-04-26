@@ -28,12 +28,12 @@ public:
                         uint64_t journal_op_tid, uint64_t features);
 
 protected:
-  virtual void send_op();
-  virtual bool should_complete(int r);
-  virtual bool can_affect_io() const override {
+  void send_op() override;
+  bool should_complete(int r) override;
+  bool can_affect_io() const override {
     return true;
   }
-  virtual journal::Event create_event(uint64_t op_tid) const {
+  journal::Event create_event(uint64_t op_tid) const override {
     return journal::UpdateFeaturesEvent(op_tid, m_features, true);
   }
 

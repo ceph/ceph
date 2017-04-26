@@ -123,16 +123,31 @@ int NetHandler::set_socket_options(int sd, bool nodelay, int size)
   return r;
 }
 
-void NetHandler::set_priority(int sd, int prio)
+void NetHandler::set_priority(int sd, int prio, int domain)
 {
   if (prio >= 0) {
     int r = -1;
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-    if (r < 0) {
-      ldout(cct, 0) << __func__ << " couldn't set IP_TOS to " << iptos
-                    << ": " << cpp_strerror(errno) << dendl;
+    if (domain == AF_INET) {
+      r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
+      r = -errno;
+      if (r < 0) {
+        ldout(cct,0) << "couldn't set IP_TOS to " << iptos
+                           << ": " << cpp_strerror(r) << dendl;
+      }
+    } else if (domain == AF_INET6) {
+      r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
+      if (r)
+	r = -errno;
+      if (r < 0) {
+        ldout(cct,0) << "couldn't set IPV6_TCLASS to " << iptos
+                           << ": " << cpp_strerror(r) << dendl;
+      }
+    } else {
+      ldout(cct,0) << "couldn't set ToS of unknown family to " << iptos
+                         << dendl;
     }
 #endif
 #if defined(SO_PRIORITY) 

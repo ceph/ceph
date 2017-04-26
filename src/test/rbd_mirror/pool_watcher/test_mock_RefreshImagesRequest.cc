@@ -54,24 +54,11 @@ public:
                       Return(r)));
   }
 
-  void expect_dir_list(librados::IoCtx &io_ctx,
-                       const std::map<std::string, std::string> &ids, int r) {
-    bufferlist bl;
-    ::encode(ids, bl);
-
-    EXPECT_CALL(get_mock_io_ctx(io_ctx),
-                exec(RBD_DIRECTORY, _, StrEq("rbd"), StrEq("dir_list"), _, _, _))
-      .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
-                                          *out_bl = bl;
-                                        })),
-                      Return(r)));
-  }
 };
 
 TEST_F(TestMockPoolWatcherRefreshImagesRequest, Success) {
   InSequence seq;
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
-  expect_dir_list(m_remote_io_ctx, {{"image name", "local id"}}, 0);
 
   C_SaferCond ctx;
   ImageIds image_ids;
@@ -81,30 +68,23 @@ TEST_F(TestMockPoolWatcherRefreshImagesRequest, Success) {
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
-  ImageIds expected_image_ids = {{"global id", "local id",
-                                  boost::optional<std::string>{"image name"}}};
+  ImageIds expected_image_ids = {{"global id", "local id"}};
   ASSERT_EQ(expected_image_ids, image_ids);
 }
 
 TEST_F(TestMockPoolWatcherRefreshImagesRequest, LargeDirectory) {
   InSequence seq;
   std::map<std::string, std::string> mirror_list;
-  std::map<std::string, std::string> dir_list;
   ImageIds expected_image_ids;
   for (uint32_t idx = 1; idx <= 1024; ++idx) {
     mirror_list.insert(std::make_pair("local id " + stringify(idx),
                                       "global id " + stringify(idx)));
-    dir_list.insert(std::make_pair("image " + stringify(idx),
-                                   "local id " + stringify(idx)));
     expected_image_ids.insert({{"global id " + stringify(idx),
-                                "local id " + stringify(idx),
-                                "image " + stringify(idx)}});
+                                "local id " + stringify(idx)}});
   }
 
   expect_mirror_image_list(m_remote_io_ctx, mirror_list, 0);
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
-  expect_dir_list(m_remote_io_ctx, dir_list, 0);
-  expect_dir_list(m_remote_io_ctx, {{"image name", "local id"}}, 0);
 
   C_SaferCond ctx;
   ImageIds image_ids;
@@ -114,28 +94,13 @@ TEST_F(TestMockPoolWatcherRefreshImagesRequest, LargeDirectory) {
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
-  expected_image_ids.insert({"global id", "local id",
-                             boost::optional<std::string>{"image name"}});
+  expected_image_ids.insert({"global id", "local id"});
   ASSERT_EQ(expected_image_ids, image_ids);
 }
 
 TEST_F(TestMockPoolWatcherRefreshImagesRequest, MirrorImageListError) {
   InSequence seq;
   expect_mirror_image_list(m_remote_io_ctx, {}, -EINVAL);
-
-  C_SaferCond ctx;
-  ImageIds image_ids;
-  MockRefreshImagesRequest *req = new MockRefreshImagesRequest(
-    m_remote_io_ctx, &image_ids, &ctx);
-
-  req->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
-}
-
-TEST_F(TestMockPoolWatcherRefreshImagesRequest, DirListError) {
-  InSequence seq;
-  expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
-  expect_dir_list(m_remote_io_ctx, {{"image name", "local id"}}, -EINVAL);
 
   C_SaferCond ctx;
   ImageIds image_ids;

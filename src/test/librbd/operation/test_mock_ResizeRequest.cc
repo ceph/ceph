@@ -62,12 +62,12 @@ public:
   typedef TrimRequest<MockImageCtx> MockTrimRequest;
 
   void expect_block_writes(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(*mock_image_ctx.aio_work_queue, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
                   .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_unblock_writes(MockImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.aio_work_queue, unblock_writes())
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes())
                   .Times(1);
   }
 

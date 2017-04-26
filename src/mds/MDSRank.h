@@ -28,6 +28,7 @@
 #include "MDCache.h"
 #include "Migrator.h"
 #include "MDLog.h"
+#include "PurgeQueue.h"
 #include "osdc/Journaler.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
@@ -87,7 +88,6 @@ enum {
   l_mdm_caps,
   l_mdm_rss,
   l_mdm_heap,
-  l_mdm_malloc,
   l_mdm_buf,
   l_mdm_last,
 };
@@ -159,6 +159,7 @@ class MDSRank {
     ScrubStack   *scrubstack;
     DamageTable  damage_table;
 
+
     InoTable     *inotable;
 
     SnapServer   *snapserver;
@@ -180,6 +181,8 @@ class MDSRank {
     // The state assigned to me by the MDSMap
     MDSMap::DaemonState state;
 
+    bool cluster_degraded;
+
     MDSMap::DaemonState get_state() const { return state; } 
     MDSMap::DaemonState get_want_state() const { return beacon.get_want_state(); } 
 
@@ -196,13 +199,24 @@ class MDSRank {
     bool is_stopping() const { return state == MDSMap::STATE_STOPPING; }
     bool is_any_replay() const { return (is_replay() || is_standby_replay()); }
     bool is_stopped() const { return mdsmap->is_stopped(whoami); }
+    bool is_cluster_degraded() const { return cluster_degraded; }
 
     void handle_write_error(int err);
+
+    void handle_conf_change(const struct md_config_t *conf,
+                            const std::set <std::string> &changed)
+    {
+      purge_queue.handle_conf_change(conf, changed, *mdsmap);
+    }
 
   protected:
     // Flag to indicate we entered shutdown: anyone seeing this to be true
     // after taking mds_lock must drop out.
     bool stopping;
+
+    // PurgeQueue is only used by StrayManager, but it is owned by MDSRank
+    // because its init/shutdown happens at the top level.
+    PurgeQueue   purge_queue;
 
     class ProgressThread : public Thread {
       MDSRank *mds;
@@ -226,7 +240,6 @@ class MDSRank {
     bool _dispatch(Message *m, bool new_msg);
 
     ceph::heartbeat_handle_d *hb;  // Heartbeat for threads using mds_lock
-    void heartbeat_reset();
 
     bool is_stale_message(Message *m) const;
 
@@ -298,6 +311,12 @@ class MDSRank {
     // <<<
 
     /**
+     * Call this periodically if inside a potentially long running piece
+     * of code while holding the mds_lock
+     */
+    void heartbeat_reset();
+
+    /**
      * Report state DAMAGED to the mon, and then pass on to respawn().  Call
      * this when an unrecoverable error is encountered while attempting
      * to load an MDS rank's data structures.  This is *not* for use with
@@ -333,11 +352,16 @@ class MDSRank {
       send_message(m, c.get());
     }
 
-    void wait_for_active(MDSInternalContextBase *c) { 
-      waiting_for_active.push_back(c); 
-    }
     void wait_for_active_peer(mds_rank_t who, MDSInternalContextBase *c) { 
       waiting_for_active_peer[who].push_back(c);
+    }
+    void wait_for_cluster_recovered(MDSInternalContextBase *c) {
+      assert(cluster_degraded);
+      waiting_for_active_peer[MDS_RANK_NONE].push_back(c);
+    }
+
+    void wait_for_active(MDSInternalContextBase *c) {
+      waiting_for_active.push_back(c);
     }
     void wait_for_replay(MDSInternalContextBase *c) { 
       waiting_for_replay.push_back(c); 
@@ -456,6 +480,8 @@ class MDSRank {
     void active_start();
     void stopping_start();
     void stopping_done();
+
+    void validate_sessions();
     // <<<
     
     // >>>
@@ -477,7 +503,7 @@ public:
     assert(m);
     this->m = m;
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     mds->retry_dispatch(m);
   }
 };
@@ -499,7 +525,6 @@ public:
   void handle_osd_map();
   bool kill_session(int64_t session_id, bool wait, std::stringstream& ss);
   void update_log_config();
-  bool handle_command_legacy(std::vector<std::string> args);
 
   bool handle_command(
     const cmdmap_t &cmdmap,

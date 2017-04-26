@@ -24,7 +24,7 @@ public:
                            prog_ctx);
   }
 
-  virtual void send();
+  void send() override;
 
 protected:
   /**
@@ -77,7 +77,7 @@ protected:
     STATE_FINISHED
   };
 
-  virtual bool should_complete(int r);
+  bool should_complete(int r) override;
 
   State m_state;
 

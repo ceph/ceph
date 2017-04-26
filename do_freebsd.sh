@@ -12,20 +12,6 @@ fi
 if [ x"$1"x = x"--deps"x ]; then
     sudo ./install-deps.sh
 fi
-if ! grep -q ENODATA /usr/include/errno.h; then
-    echo Need ENODATA in /usr/include/errno.h for cython compilations
-    echo Please add it manually after ENOATTR with value 87
-    echo '#define ENOATTR         87'
-    exit 1
-fi
-if [ -x /usr/bin/getopt ] && [ x"`/usr/bin/getopt -v`"x == x" --"x ]; then
-    echo fix getopt path
-    echo Native FreeBSD getopt is not compatible with the Linux getopt that is
-    echo expected with Ceph.
-    echo Easiest is to rename/remove /usr/bin/getopt.
-    echo     mv /usr/bin/getopt /usr/bin/getopt.freebsd
-    exit 1
-fi
 
 if [ x"$CEPH_DEV"x != xx ]; then
     BUILDOPTS="$BUILDOPTS V=1 VERBOSE=1"
@@ -45,17 +31,24 @@ rm -rf build && ./do_cmake.sh "$*" \
 	-D WITH_SYSTEM_BOOST=ON \
 	-D WITH_LTTNG=OFF \
 	-D WITH_BLKID=OFF \
-	-D WITH_FUSE=OFF \
+	-D WITH_FUSE=ON \
 	-D WITH_KRBD=OFF \
 	-D WITH_XFS=OFF \
 	-D WITH_KVS=OFF \
-	-D WITH_MANPAGE=ON \
 	-D CEPH_MAN_DIR=man \
 	-D WITH_LIBCEPHFS=OFF \
 	-D WITH_CEPHFS=OFF \
+	-D WITH_EMBEDDED=OFF \
+	-D WITH_MGR=YES \
 	2>&1 | tee cmake.log
 
-cd build
-gmake -j$NPROC $BUILDOPTS
-gmake check 
+echo start building 
+date
+(cd build; gmake -j$NPROC $BUILDOPTS )
+(cd build; gmake -j$NPROC $BUILDOPTS ceph-disk)
+(cd build; gmake -j$NPROC $BUILDOPTS ceph-detect-init)
+
+echo start testing 
+date
+(cd build; ctest -j$NPROC || ctest --rerun-failed --output-on-failure)
 

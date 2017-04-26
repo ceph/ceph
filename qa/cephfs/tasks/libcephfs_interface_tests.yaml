@@ -4,6 +4,10 @@ overrides:
   kclient:
     disabled: true
 tasks:
+- check-counter:
+    counters:
+      mds:
+        - "mds.dir_split"
 - workunit:
     clients:
       client.0:

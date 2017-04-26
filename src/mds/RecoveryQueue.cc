@@ -90,7 +90,7 @@ void RecoveryQueue::_start(CInode *in)
   // blech
   if (pi->client_ranges.size() && !pi->get_max_size()) {
     mds->clog->warn() << "bad client_range " << pi->client_ranges
-		      << " on ino " << pi->ino << "\n";
+		      << " on ino " << pi->ino;
   }
 
   if (pi->client_ranges.size() && pi->get_max_size()) {
@@ -162,8 +162,16 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
     if (r == -EBLACKLISTED) {
       mds->respawn();
       return;
+    } else {
+      // Something wrong on the OSD side trying to recover the size
+      // of this inode.  In principle we could record this as a piece
+      // of per-inode damage, but it's actually more likely that
+      // this indicates something wrong with the MDS (like maybe
+      // it has the wrong auth caps?)
+      mds->clog->error() << " OSD read error while recovering size for inode 0x"
+                         << std::hex << in->ino() << std::dec;
+      mds->damaged();
     }
-    assert(0 == "unexpected error from osd during recovery");
   }
 
   file_recovering.erase(in);

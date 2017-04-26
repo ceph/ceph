@@ -72,6 +72,32 @@ namespace librados
   };
   CEPH_RADOS_API std::ostream& operator<<(std::ostream& out, const librados::ListObject& lop);
 
+  class CEPH_RADOS_API NObjectIterator;
+
+  class CEPH_RADOS_API ObjectCursor
+  {
+    public:
+    ObjectCursor();
+    ObjectCursor(const ObjectCursor &rhs);
+    explicit ObjectCursor(rados_object_list_cursor c);
+    ~ObjectCursor();
+    ObjectCursor& operator=(const ObjectCursor& rhs);
+    bool operator<(const ObjectCursor &rhs) const;
+    bool operator==(const ObjectCursor &rhs) const;
+    void set(rados_object_list_cursor c);
+
+    friend class IoCtx;
+    friend class NObjectIteratorImpl;
+    friend std::ostream& operator<<(std::ostream& os, const librados::ObjectCursor& oc);
+
+    std::string to_str() const;
+    bool from_str(const std::string& s);
+
+    protected:
+    rados_object_list_cursor c_cursor;
+  };
+  CEPH_RADOS_API std::ostream& operator<<(std::ostream& os, const librados::ObjectCursor& oc);
+
   class CEPH_RADOS_API NObjectIterator : public std::iterator <std::forward_iterator_tag, ListObject> {
   public:
     static const NObjectIterator __EndObjectIterator;
@@ -95,6 +121,12 @@ namespace librados
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
 
+    /// move the iterator to a given cursor position
+    uint32_t seek(const ObjectCursor& cursor);
+
+    /// get current cursor position
+    ObjectCursor get_cursor();
+
     /**
      * Configure PGLS filter to be applied OSD-side (requires caller
      * to know/understand the format expected by the OSD)
@@ -105,21 +137,6 @@ namespace librados
     NObjectIterator(ObjListCtx *ctx_);
     void get_next();
     NObjectIteratorImpl *impl;
-  };
-
-  class CEPH_RADOS_API ObjectCursor
-  {
-    public:
-    ObjectCursor();
-    ObjectCursor(const ObjectCursor &rhs);
-    ~ObjectCursor();
-    bool operator<(const ObjectCursor &rhs);
-    void set(rados_object_list_cursor c);
-
-    friend class IoCtx;
-
-    protected:
-    rados_object_list_cursor c_cursor;
   };
 
   class CEPH_RADOS_API ObjectItem
@@ -342,7 +359,7 @@ namespace librados
     time_t *unused;
   public:
     ObjectWriteOperation() : unused(NULL) {}
-    ~ObjectWriteOperation() {}
+    ~ObjectWriteOperation() override {}
 
     void mtime(time_t *pt);
     void mtime2(struct timespec *pts);
@@ -457,13 +474,17 @@ namespace librados
   {
   public:
     ObjectReadOperation() {}
-    ~ObjectReadOperation() {}
+    ~ObjectReadOperation() override {}
 
     void stat(uint64_t *psize, time_t *pmtime, int *prval);
     void stat2(uint64_t *psize, struct timespec *pts, int *prval);
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
+    void checksum(rados_checksum_type_t type, const bufferlist &init_value_bl,
+		  uint64_t off, size_t len, size_t chunk_size, bufferlist *pbl,
+		  int *prval);
+
     /**
      * see aio_sparse_read()
      */
@@ -727,6 +748,9 @@ namespace librados
     int writesame(const std::string& oid, bufferlist& bl,
 		  size_t write_len, uint64_t off);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
+    int checksum(const std::string& o, rados_checksum_type_t type,
+		 const bufferlist &init_value_bl, size_t len, uint64_t off,
+		 size_t chunk_size, bufferlist *pbl);
     int remove(const std::string& oid);
     int remove(const std::string& oid, int flags);
     int trunc(const std::string& oid, uint64_t size);
@@ -861,6 +885,10 @@ namespace librados
     /// Start enumerating objects for a pool starting from a hash position
     NObjectIterator nobjects_begin(uint32_t start_hash_position);
     NObjectIterator nobjects_begin(uint32_t start_hash_position,
+                                   const bufferlist &filter);
+    /// Start enumerating objects for a pool starting from cursor
+    NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor);
+    NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor,
                                    const bufferlist &filter);
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
@@ -1186,6 +1214,9 @@ namespace librados
     int get_object_pg_hash_position2(const std::string& oid, uint32_t *pg_hash_position);
 
     config_t cct();
+
+    void set_osdmap_full_try();
+    void unset_osdmap_full_try();
 
   private:
     /* You can only get IoCtx instances from Rados */

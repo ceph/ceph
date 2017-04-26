@@ -30,38 +30,38 @@ private:
   bool m_filestore_splice;
 public:
   explicit GenericFileStoreBackend(FileStore *fs);
-  virtual ~GenericFileStoreBackend() {}
+  ~GenericFileStoreBackend() override {}
 
-  virtual const char *get_name() {
+  const char *get_name() override {
     return "generic";
   }
-  virtual int detect_features();
-  virtual int create_current();
-  virtual bool can_checkpoint() { return false; }
-  virtual int list_checkpoints(list<string>& ls) { return 0; }
-  virtual int create_checkpoint(const string& name, uint64_t *cid) { return -EOPNOTSUPP; }
-  virtual int sync_checkpoint(uint64_t id) { return -EOPNOTSUPP; }
-  virtual int rollback_to(const string& name) { return -EOPNOTSUPP; }
-  virtual int destroy_checkpoint(const string& name) { return -EOPNOTSUPP; }
-  virtual int syncfs();
-  virtual bool has_fiemap() { return ioctl_fiemap; }
-  virtual bool has_seek_data_hole() { return seek_data_hole; }
-  virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap);
-  virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) {
+  int detect_features() override;
+  int create_current() override;
+  bool can_checkpoint() override { return false; }
+  int list_checkpoints(list<string>& ls) override { return 0; }
+  int create_checkpoint(const string& name, uint64_t *cid) override { return -EOPNOTSUPP; }
+  int sync_checkpoint(uint64_t id) override { return -EOPNOTSUPP; }
+  int rollback_to(const string& name) override { return -EOPNOTSUPP; }
+  int destroy_checkpoint(const string& name) override { return -EOPNOTSUPP; }
+  int syncfs() override;
+  bool has_fiemap() override { return ioctl_fiemap; }
+  bool has_seek_data_hole() override { return seek_data_hole; }
+  int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) override;
+  int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) override {
     return _copy_range(from, to, srcoff, len, dstoff);
   }
-  virtual int set_alloc_hint(int fd, uint64_t hint) { return -EOPNOTSUPP; }
-  virtual bool has_splice() const { return use_splice; }
+  int set_alloc_hint(int fd, uint64_t hint) override { return -EOPNOTSUPP; }
+  bool has_splice() const override { return use_splice; }
 private:
   int _crc_load_or_init(int fd, SloppyCRCMap *cm);
   int _crc_save(int fd, SloppyCRCMap *cm);
 public:
-  virtual int _crc_update_write(int fd, loff_t off, size_t len, const bufferlist& bl);
-  virtual int _crc_update_truncate(int fd, loff_t off);
-  virtual int _crc_update_zero(int fd, loff_t off, size_t len);
-  virtual int _crc_update_clone_range(int srcfd, int destfd,
-				      loff_t srcoff, size_t len, loff_t dstoff);
-  virtual int _crc_verify_read(int fd, loff_t off, size_t len, const bufferlist& bl,
-			       ostream *out);
+  int _crc_update_write(int fd, loff_t off, size_t len, const bufferlist& bl) override;
+  int _crc_update_truncate(int fd, loff_t off) override;
+  int _crc_update_zero(int fd, loff_t off, size_t len) override;
+  int _crc_update_clone_range(int srcfd, int destfd,
+				      loff_t srcoff, size_t len, loff_t dstoff) override;
+  int _crc_verify_read(int fd, loff_t off, size_t len, const bufferlist& bl,
+			       ostream *out) override;
 };
 #endif

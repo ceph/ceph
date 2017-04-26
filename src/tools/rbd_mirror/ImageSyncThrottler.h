@@ -49,7 +49,7 @@ public:
   typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
 
   ImageSyncThrottler();
-  ~ImageSyncThrottler();
+  ~ImageSyncThrottler() override;
   ImageSyncThrottler(const ImageSyncThrottler&) = delete;
   ImageSyncThrottler& operator=(const ImageSyncThrottler&) = delete;
 
@@ -74,9 +74,9 @@ private:
 
   void handle_sync_finished(C_SyncHolder *sync_holder);
 
-  const char **get_tracked_conf_keys() const;
+  const char **get_tracked_conf_keys() const override;
   void handle_conf_change(const struct md_config_t *conf,
-                          const std::set<std::string> &changed);
+                          const std::set<std::string> &changed) override;
 
   uint32_t m_max_concurrent_syncs;
   Mutex m_lock;

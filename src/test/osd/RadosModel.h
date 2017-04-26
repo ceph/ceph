@@ -78,12 +78,12 @@ public:
 		       lock("watch lock") {}
   void handle_notify(uint64_t notify_id, uint64_t cookie,
 		     uint64_t notifier_id,
-		     bufferlist &bl) {
+		     bufferlist &bl) override {
     Mutex::Locker l(lock);
     waiting = false;
     cond.SignalAll();
   }
-  void handle_error(uint64_t cookie, int err) {
+  void handle_error(uint64_t cookie, int err) override {
     Mutex::Locker l(lock);
     cout << "watch handle_error " << err << std::endl;
   }
@@ -536,7 +536,7 @@ public:
     : TestOp(n, context, stat), oid(oid), comp(NULL)
   {}
 
-  void _begin()
+  void _begin() override
   {
     ContDesc cont;
     set<string> to_remove;
@@ -597,7 +597,7 @@ public:
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
   }
 
-  void _finish(CallbackInfo *info)
+  void _finish(CallbackInfo *info) override
   {
     Mutex::Locker l(context->state_lock);
     done = true;
@@ -607,12 +607,12 @@ public:
     context->kick();
   }
 
-  bool finished()
+  bool finished() override
   {
     return done;
   }
 
-  string getType()
+  string getType() override
   {
     return "RemoveAttrsOp";
   }
@@ -631,7 +631,7 @@ public:
       oid(oid), comp(NULL)
   {}
 
-  void _begin()
+  void _begin() override
   {
     ContDesc cont;
     {
@@ -687,7 +687,7 @@ public:
     context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
   }
 
-  void _finish(CallbackInfo *info)
+  void _finish(CallbackInfo *info) override
   {
     Mutex::Locker l(context->state_lock);
     int r;
@@ -702,12 +702,12 @@ public:
     context->kick();
   }
 
-  bool finished()
+  bool finished() override
   {
     return done;
   }
 
-  string getType()
+  string getType() override
   {
     return "SetAttrsOp";
   }
@@ -741,7 +741,7 @@ public:
       do_excl(do_excl)
   {}
 		
-  void _begin()
+  void _begin() override
   {
     context->state_lock.Lock();
     done = 0;
@@ -855,7 +855,7 @@ public:
     context->state_lock.Unlock();
   }
 
-  void _finish(CallbackInfo *info)
+  void _finish(CallbackInfo *info) override
   {
     assert(info);
     context->state_lock.Lock();
@@ -915,12 +915,12 @@ public:
     context->state_lock.Unlock();
   }
 
-  bool finished()
+  bool finished() override
   {
     return done;
   }
 
-  string getType()
+  string getType() override
   {
     return "WriteOp";
   }
@@ -948,7 +948,7 @@ public:
       last_acked_tid(0)
   {}
 
-  void _begin()
+  void _begin() override
   {
     context->state_lock.Lock();
     done = 0;
@@ -1032,7 +1032,7 @@ public:
     context->state_lock.Unlock();
   }
 
-  void _finish(CallbackInfo *info)
+  void _finish(CallbackInfo *info) override
   {
     assert(info);
     context->state_lock.Lock();
@@ -1092,12 +1092,12 @@ public:
     context->state_lock.Unlock();
   }
 
-  bool finished()
+  bool finished() override
   {
     return done;
   }
 
-  string getType()
+  string getType() override
   {
     return "WriteSameOp";
   }
@@ -1114,7 +1114,7 @@ public:
     : TestOp(n, context, stat), oid(oid)
   {}
 
-  void _begin()
+  void _begin() override
   {
     context->state_lock.Lock();
     if (context->get_watch_context(oid)) {
@@ -1157,7 +1157,7 @@ public:
     context->state_lock.Unlock();
   }
 
-  string getType()
+  string getType() override
   {
     return "DeleteOp";
   }
@@ -1179,6 +1179,9 @@ public:
   vector<std::map<uint64_t, uint64_t>> extent_results;
   vector<bool> is_sparse_read;
   uint64_t waiting_on;
+
+  vector<bufferlist> checksums;
+  vector<int> checksum_retvals;
 
   map<string, bufferlist> attrs;
   int attrretval;
@@ -1205,6 +1208,8 @@ public:
       extent_results(3),
       is_sparse_read(3, false),
       waiting_on(0),
+      checksums(3),
+      checksum_retvals(3),
       attrretval(0)
   {}
 
@@ -1218,6 +1223,10 @@ public:
 		   len,
 		   &results[index],
 		   &retvals[index]);
+      bufferlist init_value_bl;
+      ::encode(static_cast<uint32_t>(-1), init_value_bl);
+      read_op.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init_value_bl, 0, len,
+		       0, &checksums[index], &checksum_retvals[index]);
     } else {
       is_sparse_read[index] = true;
       read_op.sparse_read(0,
@@ -1228,7 +1237,7 @@ public:
     }
   }
 
-  void _begin()
+  void _begin() override
   {
     context->state_lock.Lock();
     if (!(rand() % 4) && !context->snaps.empty()) {
@@ -1317,7 +1326,7 @@ public:
     context->state_lock.Unlock();
   }
 
-  void _finish(CallbackInfo *info)
+  void _finish(CallbackInfo *info) override
   {
     Mutex::Locker l(context->state_lock);
     assert(!done);
@@ -1389,6 +1398,24 @@ public:
 	  } else {
 	    if (!old_value.check(results[i])) {
 	      cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
+	      context->errors++;
+	    }
+
+	    uint32_t checksum = 0;
+	    if (checksum_retvals[i] == 0) {
+	      try {
+	        auto bl_it = checksums[i].begin();
+	        uint32_t csum_count;
+	        ::decode(csum_count, bl_it);
+	        ::decode(checksum, bl_it);
+	      } catch (const buffer::error &err) {
+	        checksum_retvals[i] = -EBADMSG;
+	      }
+	    }
+	    if (checksum_retvals[i] != 0 || checksum != results[i].crc32c(-1)) {
+	      cerr << num << ": oid " << oid << " checksum " << checksums[i]
+	           << " incorrect, expecting " << results[i].crc32c(-1)
+                   << std::endl;
 	      context->errors++;
 	    }
 	  }
@@ -1473,12 +1500,12 @@ public:
     done = true;
   }
 
-  bool finished()
+  bool finished() override
   {
     return done;
   }
 
-  string getType()
+  string getType() override
   {
     return "ReadOp";
   }
@@ -1492,7 +1519,7 @@ public:
     : TestOp(n, context, stat)
   {}
 
-  void _begin()
+  void _begin() override
   {
     uint64_t snap;
     string snapname;
@@ -1539,11 +1566,11 @@ public:
     }
   }
 
-  string getType()
+  string getType() override
   {
     return "SnapCreateOp";
   }
-  bool must_quiesce_other_ops() { return context->pool_snaps; }
+  bool must_quiesce_other_ops() override { return context->pool_snaps; }
 };
 
 class SnapRemoveOp : public TestOp {
@@ -1556,7 +1583,7 @@ public:
       to_remove(snap)
   {}
 
-  void _begin()
+  void _begin() override
   {
     context->state_lock.Lock();
     uint64_t snap = context->snaps[to_remove];
@@ -1587,7 +1614,7 @@ public:
     context->state_lock.Unlock();
   }
 
-  string getType()
+  string getType() override
   {
     return "SnapRemoveOp";
   }
@@ -1604,7 +1631,7 @@ public:
       oid(_oid)
   {}
 
-  void _begin()
+  void _begin() override
   {
     context->state_lock.Lock();
     ObjectDesc contents;
@@ -1649,7 +1676,7 @@ public:
     }
   }
 
-  string getType()
+  string getType() override
   {
     return "WatchOp";
   }
@@ -1677,7 +1704,7 @@ public:
       last_finished(-1), outstanding(3)
   {}
 
-  void _begin()
+  void _begin() override
   {
     context->state_lock.Lock();
     if (context->get_watch_context(oid)) {
@@ -1756,7 +1783,7 @@ public:
     }
   }
 
-  void _finish(CallbackInfo *info)
+  void _finish(CallbackInfo *info) override
   {
     Mutex::Locker l(context->state_lock);
     uint64_t tid = info->id;
@@ -1780,12 +1807,12 @@ public:
     }
   }
 
-  bool finished()
+  bool finished() override
   {
     return done;
   }
 
-  string getType()
+  string getType() override
   {
     return "RollBackOp";
   }
@@ -1815,7 +1842,7 @@ public:
       version(0), r(0)
   {}
 
-  void _begin()
+  void _begin() override
   {
     ContDesc cont;
     {
@@ -1861,7 +1888,7 @@ public:
 
   }
 
-  void _finish(CallbackInfo *info)
+  void _finish(CallbackInfo *info) override
   {
     Mutex::Locker l(context->state_lock);
 
@@ -1910,12 +1937,12 @@ public:
     }
   }
 
-  bool finished()
+  bool finished() override
   {
     return done == 2;
   }
 
-  string getType()
+  string getType() override
   {
     return "CopyFromOp";
   }
@@ -1937,7 +1964,7 @@ public:
       hash(hash)
   {}
 
-  void _begin()
+  void _begin() override
   {
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -1948,7 +1975,7 @@ public:
     assert(r == 0);
   }
 
-  void _finish(CallbackInfo *info) {
+  void _finish(CallbackInfo *info) override {
     Mutex::Locker l(context->state_lock);
     if (!comp2) {
       if (ls.empty()) {
@@ -1987,11 +2014,11 @@ public:
     context->kick();
   }
 
-  bool finished() {
+  bool finished() override {
     return done;
   }
 
-  string getType() {
+  string getType() override {
     return "HitSetListOp";
   }
 };
@@ -2011,7 +2038,7 @@ public:
       oid(oid)
   {}
 
-  void _begin()
+  void _begin() override
   {
     context->state_lock.Lock();
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
@@ -2031,7 +2058,7 @@ public:
     assert(!r);
   }
 
-  void _finish(CallbackInfo *info)
+  void _finish(CallbackInfo *info) override
   {
     context->state_lock.Lock();
     assert(!done);
@@ -2044,12 +2071,12 @@ public:
     context->state_lock.Unlock();
   }
 
-  bool finished()
+  bool finished() override
   {
     return done;
   }
 
-  string getType()
+  string getType() override
   {
     return "UndirtyOp";
   }
@@ -2075,7 +2102,7 @@ public:
       dirty(false)
   {}
 
-  void _begin()
+  void _begin() override
   {
     context->state_lock.Lock();
 
@@ -2112,7 +2139,7 @@ public:
     }
   }
 
-  void _finish(CallbackInfo *info)
+  void _finish(CallbackInfo *info) override
   {
     context->state_lock.Lock();
     assert(!done);
@@ -2137,12 +2164,12 @@ public:
     context->state_lock.Unlock();
   }
 
-  bool finished()
+  bool finished() override
   {
     return done;
   }
 
-  string getType()
+  string getType() override
   {
     return "IsDirtyOp";
   }
@@ -2173,7 +2200,7 @@ public:
       can_fail(false)
   {}
 
-  void _begin()
+  void _begin() override
   {
     context->state_lock.Lock();
 
@@ -2224,7 +2251,7 @@ public:
     }
   }
 
-  void _finish(CallbackInfo *info)
+  void _finish(CallbackInfo *info) override
   {
     context->state_lock.Lock();
     assert(!done);
@@ -2251,12 +2278,12 @@ public:
     context->state_lock.Unlock();
   }
 
-  bool finished()
+  bool finished() override
   {
     return done;
   }
 
-  string getType()
+  string getType() override
   {
     return "CacheFlushOp";
   }
@@ -2278,7 +2305,7 @@ public:
       oid(oid)
   {}
 
-  void _begin()
+  void _begin() override
   {
     context->state_lock.Lock();
 
@@ -2316,7 +2343,7 @@ public:
     }
   }
 
-  void _finish(CallbackInfo *info)
+  void _finish(CallbackInfo *info) override
   {
     context->state_lock.Lock();
     assert(!done);
@@ -2341,12 +2368,12 @@ public:
     context->state_lock.Unlock();
   }
 
-  bool finished()
+  bool finished() override
   {
     return done;
   }
 
-  string getType()
+  string getType() override
   {
     return "CacheEvictOp";
   }

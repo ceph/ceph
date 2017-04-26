@@ -54,7 +54,7 @@ Request Parameters
 
 :Description: Specifies whether data entries should be returned.
 :Type: Boolean
-:Example: True [False]
+:Example: True [True]
 :Required: No
 
 
@@ -62,7 +62,7 @@ Request Parameters
 
 :Description: Specifies whether data summary should be returned.
 :Type: Boolean
-:Example: True [False]
+:Example: True [True]
 :Required: No
 
 
@@ -738,9 +738,8 @@ Create Subuser
 ==============
 
 Create a new subuser (primarily useful for clients using the Swift API).
-Note that either ``gen-subuser`` or ``subuser`` is required for a valid
-request. Note that in general for a subuser to be useful, it must be
-granted permissions by specifying ``access``. As with user creation if
+Note that in general for a subuser to be useful, it must be granted 
+permissions by specifying ``access``. As with user creation if
 ``subuser`` is specified without ``secret``, then a secret key will
 be automatically generated.
 
@@ -771,7 +770,7 @@ Request Parameters
 :Description: Specify the subuser ID to be created.
 :Type: String
 :Example: ``sub_foo``
-:Required: No
+:Required: Yes
 
 ``secret-key``
 
@@ -1481,9 +1480,16 @@ Request Parameters
 
 ``bucket``
 
-:Description: The bucket to unlink.
+:Description: The bucket name to unlink.
 :Type: String
 :Example: ``foo_bucket``
+:Required: Yes
+
+``bucket-id``
+
+:Description: The bucket id to unlink.
+:Type: String
+:Example: ``dev.6607669.420``
 :Required: Yes
 
 ``uid``
@@ -1689,7 +1695,7 @@ Request Parameters
 
 :Description: The administrative capability to add to the user.
 :Type: String
-:Example: ``usage=read, write``
+:Example: ``usage=read,write;user=write``
 :Required: Yes
 
 Response Entities
@@ -1729,12 +1735,11 @@ Example Request
 
 ::
 
-	PUT /{admin}/user?caps&format=json HTTP/1.1
+	PUT /{admin}/user?caps&user-caps=usage=read,write;user=write&format=json HTTP/1.1
 	Host: {fqdn}
 	Content-Type: text/plain
 	Authorization: {your-authorization-token}
 
-	usage=read
 
 
 Remove A User Capability
@@ -1834,10 +1839,11 @@ Valid parameters for quotas include:
 - **Maximum Size:** The ``max-size`` option allows you to specify a quota
   for the maximum number of bytes. A negative value disables this setting.
   
-- **Quota Scope:** The ``quota-scope`` option sets the scope for the quota.
+- **Quota Type:** The ``quota-type`` option sets the scope for the quota.
   The options are ``bucket`` and ``user``.
 
-
+- **Enable/Disable Quota:** The ``enabled`` option specifies whether the
+  quota should be enabled. The value should be either 'True' or 'False'.
 
 Get User Quota
 ~~~~~~~~~~~~~~

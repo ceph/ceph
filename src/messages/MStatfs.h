@@ -30,19 +30,19 @@ public:
   }
 
 private:
-  ~MStatfs() {}
+  ~MStatfs() override {}
 
 public:
-  const char *get_type_name() const { return "statfs"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "statfs"; }
+  void print(ostream& out) const override {
     out << "statfs(" << get_tid() << " v" << version << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(fsid, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);

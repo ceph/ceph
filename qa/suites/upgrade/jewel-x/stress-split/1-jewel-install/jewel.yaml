@@ -6,4 +6,5 @@ tasks:
     exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
 - print: "**** done install jewel"
 - ceph:
+    skip_mgr_daemons: true
 - print: "**** done ceph"

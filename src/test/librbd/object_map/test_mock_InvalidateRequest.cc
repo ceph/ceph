@@ -76,7 +76,9 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesSnapOnDiskFlag) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
-  ASSERT_EQ(0, librbd::snap_set(ictx, "snap1"));
+  ASSERT_EQ(0, librbd::snap_set(ictx,
+				cls::rbd::UserSnapshotNamespace(),
+				"snap1"));
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *request = new InvalidateRequest<>(*ictx, ictx->snap_id, false,

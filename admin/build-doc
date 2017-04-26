@@ -20,7 +20,7 @@ if command -v dpkg >/dev/null; then
         exit 1
     fi
 elif command -v yum >/dev/null; then
-    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml-devel libxslt-devel Cython graphviz; do
+    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml2-devel libxslt-devel Cython graphviz; do
 	if ! rpm -q $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
@@ -57,7 +57,7 @@ cd build-doc
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
 if [ ! -e $vdir ]; then
-    virtualenv --system-site-packages $vdir
+    virtualenv --system-site-packages $vdir -p python2
 fi
 $vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt
 
@@ -96,8 +96,24 @@ for bind in rados rbd cephfs rgw; do
     fi
 done
 
-$vdir/bin/sphinx-build -a -n -b dirhtml -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/html
-$vdir/bin/sphinx-build -a -b man -t man -d doctrees $TOPDIR/doc $TOPDIR/build-doc/output/man
+if [ -z "$@" ]; then
+    sphinx_targets="html man"
+else
+    sphinx_targets=$@
+fi
+for target in $sphinx_targets; do
+    builder=$target
+    case $target in
+        html)
+            builder=dirhtml
+            ;;
+        man)
+            extra_opt="-t man"
+            ;;
+    esac
+    $vdir/bin/sphinx-build -a -b $builder $extra_opt -d doctrees \
+                           $TOPDIR/doc $TOPDIR/build-doc/output/$target
+done
 
 #
 # Build and install JavaDocs

@@ -213,7 +213,7 @@ private:
   struct TypedSingletonWrapper : public SingletonWrapper {
     TypedSingletonWrapper(T *p) : singleton(p) {
     }
-    virtual ~TypedSingletonWrapper() {
+    ~TypedSingletonWrapper() override {
       delete singleton;
     }
 

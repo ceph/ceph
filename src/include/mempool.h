@@ -144,10 +144,12 @@ namespace mempool {
   f(bluestore_meta_onode)	      \
   f(bluestore_meta_other)	      \
   f(bluestore_alloc)		      \
+  f(bluestore_fsck)		      \
   f(bluefs)			      \
   f(buffer_meta)		      \
   f(buffer_data)		      \
   f(osd)			      \
+  f(osdmap)			      \
   f(osdmap_mapping)		      \
   f(unittest_1)			      \
   f(unittest_2)
@@ -249,8 +251,7 @@ public:
   void dump(ceph::Formatter *f) const;
 };
 
-// skip unittest_[12] by default
-void dump(ceph::Formatter *f, size_t skip=2);
+void dump(ceph::Formatter *f);
 
 
 // STL allocator for use with containers.  All actual state
@@ -376,11 +377,12 @@ public:
                                                                         \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using map = std::map<k, v, cmp,					\
-			 pool_allocator<std::pair<k,v>>>;		\
+			 pool_allocator<std::pair<const k,v>>>;		\
                                                                         \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using multimap = std::multimap<k,v,cmp,				\
-				   pool_allocator<std::pair<k,v>>>;	\
+				   pool_allocator<std::pair<const k,	\
+							    v>>>;	\
                                                                         \
     template<typename k, typename cmp = std::less<k> >			\
     using set = std::set<k,cmp,pool_allocator<k>>;			\
@@ -395,7 +397,7 @@ public:
 	     typename h=std::hash<k>,					\
 	     typename eq = std::equal_to<k>>				\
     using unordered_map =						\
-      std::unordered_map<k,v,h,eq,pool_allocator<std::pair<k,v>>>;	\
+      std::unordered_map<k,v,h,eq,pool_allocator<std::pair<const k,v>>>;\
                                                                         \
     inline size_t allocated_bytes() {					\
       return mempool::get_pool(id).allocated_bytes();			\

@@ -4,13 +4,13 @@
 #include "librbd/exclusive_lock/PreReleaseRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/ImageRequestWQ.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -108,9 +108,9 @@ void PreReleaseRequest<I>::send_block_writes() {
   {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
-      m_image_ctx.aio_work_queue->set_require_lock_on_read();
+      m_image_ctx.io_work_queue->set_require_lock_on_read();
     }
-    m_image_ctx.aio_work_queue->block_writes(ctx);
+    m_image_ctx.io_work_queue->block_writes(ctx);
   }
 }
 
@@ -125,7 +125,7 @@ void PreReleaseRequest<I>::handle_block_writes(int r) {
                << dendl;
   } else if (r < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(r) << dendl;
-    m_image_ctx.aio_work_queue->unblock_writes();
+    m_image_ctx.io_work_queue->unblock_writes();
     save_result(r);
     finish();
     return;
@@ -168,7 +168,7 @@ void PreReleaseRequest<I>::handle_invalidate_cache(int r) {
   } else if (r < 0 && r != -EBUSY) {
     lderr(cct) << "failed to invalidate cache: " << cpp_strerror(r)
                << dendl;
-    m_image_ctx.aio_work_queue->unblock_writes();
+    m_image_ctx.io_work_queue->unblock_writes();
     save_result(r);
     finish();
     return;

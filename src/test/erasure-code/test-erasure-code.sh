@@ -30,6 +30,7 @@ function run() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
     grep 'load: jerasure.*lrc' $dir/mon.a.log || return 1
@@ -258,8 +259,9 @@ function TEST_alignment_constraints() {
     # imposed by the stripe width
     # See http://tracker.ceph.com/issues/8622
     #
-    local stripe_width=$(ceph-conf --show-config-value osd_pool_erasure_code_stripe_width)
-    local block_size=$((stripe_width - 1))
+    local stripe_unit=$(ceph-conf --show-config-value osd_pool_erasure_code_stripe_unit)
+    eval local $(ceph osd erasure-code-profile get myprofile | grep k=)
+    local block_size=$((stripe_unit * k - 1))
     dd if=/dev/zero of=$dir/ORIGINAL bs=$block_size count=2
     rados --block-size=$block_size \
         --pool ecpool put UNALIGNED $dir/ORIGINAL || return 1
@@ -267,9 +269,7 @@ function TEST_alignment_constraints() {
 }
 
 function chunk_size() {
-    local stripe_width=$(ceph-conf --show-config-value osd_pool_erasure_code_stripe_width)
-    eval local $(ceph osd erasure-code-profile get default | grep k=)
-    echo $(($stripe_width / $k))
+    echo $(ceph-conf --show-config-value osd_pool_erasure_code_stripe_unit)
 }
 
 #

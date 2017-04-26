@@ -6,7 +6,8 @@
 #include <stdarg.h>
 
 #include "rgw_client_io.h"
-
+#include "rgw_crypt.h"
+#include "rgw_crypt_sanitize.h"
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw {
@@ -16,11 +17,11 @@ void BasicClient::init(CephContext *cct) {
   init_env(cct);
 
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-    std::map<string, string, ltstr_nocase>& env_map = get_env().get_map();
-    std::map<string, string, ltstr_nocase>::iterator iter;
+    const auto& env_map = get_env().get_map();
 
-    for (iter = env_map.begin(); iter != env_map.end(); ++iter) {
-      ldout(cct, 20) << iter->first << "=" << iter->second << dendl;
+    for (const auto& iter: env_map) {
+      rgw::crypt_sanitize::env x{iter.first, iter.second};
+      ldout(cct, 20) << iter.first << "=" << (x) << dendl;
     }
   }
 }

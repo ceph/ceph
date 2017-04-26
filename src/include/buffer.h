@@ -77,19 +77,19 @@ namespace buffer CEPH_BUFFER_API {
    */
 
   struct error : public std::exception{
-    const char *what() const throw ();
+    const char *what() const throw () override;
   };
   struct bad_alloc : public error {
-    const char *what() const throw ();
+    const char *what() const throw () override;
   };
   struct end_of_buffer : public error {
-    const char *what() const throw ();
+    const char *what() const throw () override;
   };
   struct malformed_input : public error {
     explicit malformed_input(const std::string& w) {
       snprintf(buf, sizeof(buf), "buffer::malformed_input: %s", w.c_str());
     }
-    const char *what() const throw ();
+    const char *what() const throw () override;
   private:
     char buf[256];
   };

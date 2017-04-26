@@ -113,12 +113,42 @@ BOOST_FUSION_ADAPT_STRUCT(StringConstraint,
 
 // </magic>
 
-void MonCapGrant::expand_profile(EntityName name) const
+void MonCapGrant::expand_profile(int daemon_type, const EntityName& name) const
 {
   // only generate this list once
   if (!profile_grants.empty())
     return;
 
+  if (profile == "read-only") {
+    // grants READ-ONLY caps monitor-wide
+    // 'auth' requires MON_CAP_X even for RO, which we do not grant here.
+    profile_grants.push_back(mon_rwxa_t(MON_CAP_R));
+    return;
+  }
+
+  if (profile == "read-write") {
+    // grants READ-WRITE caps monitor-wide
+    // 'auth' requires MON_CAP_X for all operations, which we do not grant.
+    profile_grants.push_back(mon_rwxa_t(MON_CAP_R | MON_CAP_W));
+    return;
+  }
+
+  switch (daemon_type) {
+  case CEPH_ENTITY_TYPE_MON:
+    expand_profile_mon(name);
+    return;
+  case CEPH_ENTITY_TYPE_MGR:
+    expand_profile_mgr(name);
+    return;
+  }
+}
+
+void MonCapGrant::expand_profile_mgr(const EntityName& name) const
+{
+}
+
+void MonCapGrant::expand_profile_mon(const EntityName& name) const
+{
   if (profile == "mon") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_ALL));
     profile_grants.push_back(MonCapGrant("log", MON_CAP_ALL));
@@ -137,7 +167,25 @@ void MonCapGrant::expand_profile(EntityName name) const
     profile_grants.push_back(MonCapGrant("osd pool rmsnap"));
     profile_grants.push_back(MonCapGrant("log", MON_CAP_W));
   }
-  if (profile == "osd" || profile == "mds" || profile == "mon") {
+  if (profile == "mgr") {
+    profile_grants.push_back(MonCapGrant("mgr", MON_CAP_ALL));
+    profile_grants.push_back(MonCapGrant("log", MON_CAP_W));
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("mds", MON_CAP_R));
+    profile_grants.push_back(MonCapGrant("osd", MON_CAP_R | MON_CAP_W));
+    profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R));
+    string prefix = string("daemon-private/mgr/");
+    profile_grants.push_back(MonCapGrant("config-key get", "key",
+					 StringConstraint("", prefix)));
+    profile_grants.push_back(MonCapGrant("config-key put", "key",
+					 StringConstraint("", prefix)));
+    profile_grants.push_back(MonCapGrant("config-key exists", "key",
+					 StringConstraint("", prefix)));
+    profile_grants.push_back(MonCapGrant("config-key delete", "key",
+					 StringConstraint("", prefix)));
+  }
+  if (profile == "osd" || profile == "mds" || profile == "mon" ||
+      profile == "mgr") {
     string prefix = string("daemon-private/") + stringify(name) + string("/");
     profile_grants.push_back(MonCapGrant("config-key get", "key", StringConstraint("", prefix)));
     profile_grants.push_back(MonCapGrant("config-key put", "key", StringConstraint("", prefix)));
@@ -170,6 +218,14 @@ void MonCapGrant::expand_profile(EntityName name) const
     profile_grants.back().command_args["caps_osd"] = StringConstraint("allow rwx", "");
     profile_grants.back().command_args["caps_mds"] = StringConstraint("allow", "");
   }
+  if (profile == "bootstrap-mgr") {
+    profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
+    profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));  // read osdmap
+    profile_grants.push_back(MonCapGrant("mon getmap"));
+    profile_grants.push_back(MonCapGrant("auth get-or-create"));  // FIXME: this can expose other mgr keys
+    profile_grants.back().command_args["entity"] = StringConstraint("", "mgr.");
+    profile_grants.back().command_args["caps_mon"] = StringConstraint("allow profile mgr", "");
+  }
   if (profile == "bootstrap-rgw") {
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));  // read monmap
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));  // read osdmap
@@ -191,18 +247,6 @@ void MonCapGrant::expand_profile(EntityName name) const
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
   }
 
-  if (profile == "read-only") {
-    // grants READ-ONLY caps monitor-wide
-    // 'auth' requires MON_CAP_X even for RO, which we do not grant here.
-    profile_grants.push_back(mon_rwxa_t(MON_CAP_R));
-  }
-
-  if (profile == "read-write") {
-    // grants READ-WRITE caps monitor-wide
-    // 'auth' requires MON_CAP_X for all operations, which we do not grant.
-    profile_grants.push_back(mon_rwxa_t(MON_CAP_R | MON_CAP_W));
-  }
-
   if (profile == "role-definer") {
     // grants ALL caps to the auth subsystem, read-only on the
     // monitor subsystem and nothing else.
@@ -212,16 +256,17 @@ void MonCapGrant::expand_profile(EntityName name) const
 }
 
 mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
+				    int daemon_type,
 				    EntityName name,
 				    const std::string& s, const std::string& c,
 				    const map<string,string>& c_args) const
 {
   if (profile.length()) {
-    expand_profile(name);
+    expand_profile(daemon_type, name);
     mon_rwxa_t a;
     for (list<MonCapGrant>::const_iterator p = profile_grants.begin();
 	 p != profile_grants.end(); ++p)
-      a = a | p->get_allowed(cct, name, s, c, c_args);
+      a = a | p->get_allowed(cct, daemon_type, name, s, c, c_args);
     return a;
   }
   if (service.length()) {
@@ -278,6 +323,7 @@ void MonCap::set_allow_all()
 }
 
 bool MonCap::is_capable(CephContext *cct,
+			int daemon_type,
 			EntityName name,
 			const string& service,
 			const string& command, const map<string,string>& command_args,
@@ -303,7 +349,8 @@ bool MonCap::is_capable(CephContext *cct,
     }
 
     // check enumerated caps
-    allow = allow | p->get_allowed(cct, name, service, command, command_args);
+    allow = allow | p->get_allowed(cct, daemon_type, name, service, command,
+				   command_args);
     if ((!op_may_read || (allow & MON_CAP_R)) &&
 	(!op_may_write || (allow & MON_CAP_W)) &&
 	(!op_may_exec || (allow & MON_CAP_X))) {

@@ -22,11 +22,11 @@ enum {
   l_bluefs_gift_bytes,
   l_bluefs_reclaim_bytes,
   l_bluefs_db_total_bytes,
-  l_bluefs_db_free_bytes,
+  l_bluefs_db_used_bytes,
   l_bluefs_wal_total_bytes,
-  l_bluefs_wal_free_bytes,
+  l_bluefs_wal_used_bytes,
   l_bluefs_slow_total_bytes,
-  l_bluefs_slow_free_bytes,
+  l_bluefs_slow_used_bytes,
   l_bluefs_num_files,
   l_bluefs_log_bytes,
   l_bluefs_log_compactions,
@@ -75,7 +75,7 @@ public:
 	num_writers(0),
 	num_reading(0)
       {}
-    ~File() {
+    ~File() override {
       assert(num_readers.load() == 0);
       assert(num_writers.load() == 0);
       assert(num_reading.load() == 0);
@@ -332,6 +332,7 @@ public:
   int mount();
   void umount();
 
+  void collect_metadata(map<string,string> *pm);
   int fsck();
 
   uint64_t get_fs_usage();

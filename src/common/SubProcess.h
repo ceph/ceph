@@ -116,7 +116,7 @@ public:
 		  int timeout = 0, int sigkill = SIGKILL);
 
 protected:
-  virtual void exec();
+  void exec() override;
 
 private:
   int timeout;

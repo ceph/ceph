@@ -38,6 +38,12 @@ const char *ceph_osd_state_name(int s)
 		return "autoout";
 	case CEPH_OSD_NEW:
 		return "new";
+	case CEPH_OSD_FULL:
+		return "full";
+	case CEPH_OSD_NEARFULL:
+		return "nearfull";
+	case CEPH_OSD_BACKFILLFULL:
+		return "backfillfull";
 	default:
 		return "???";
 	}	

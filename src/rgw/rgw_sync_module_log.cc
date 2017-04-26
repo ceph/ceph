@@ -27,7 +27,7 @@ public:
                         RGWBucketInfo& _bucket_info, rgw_obj_key& _key) : RGWCallStatRemoteObjCR(_sync_env, _bucket_info, _key) {
   }
 
-  ~RGWLogStatRemoteObjCR() {}
+  ~RGWLogStatRemoteObjCR() override {}
 
   RGWStatRemoteObjCBCR *allocate_callback() override {
     return new RGWLogStatRemoteObjCBCR(sync_env, bucket_info, key);

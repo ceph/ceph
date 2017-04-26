@@ -7,6 +7,7 @@
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
+#include "rgw_auth_registry.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
@@ -31,6 +32,7 @@ struct RGWProcessEnv {
   OpsLogSocket *olog;
   int port;
   std::string uri_prefix;
+  std::shared_ptr<rgw::auth::StrategyRegistry> auth_registry;
 };
 
 class RGWFrontendConfig;
@@ -40,6 +42,7 @@ class RGWProcess {
 protected:
   CephContext *cct;
   RGWRados* store;
+  rgw_auth_registry_ptr_t auth_registry;
   OpsLogSocket* olog;
   ThreadPool m_tp;
   Throttle req_throttle;
@@ -54,7 +57,7 @@ protected:
       : ThreadPool::WorkQueue<RGWRequest>("RGWWQ", timeout, suicide_timeout,
 					  tp), process(p) {}
 
-    bool _enqueue(RGWRequest* req) {
+    bool _enqueue(RGWRequest* req) override {
       process->m_req_queue.push_back(req);
       perfcounter->inc(l_rgw_qlen);
       dout(20) << "enqueued request req=" << hex << req << dec << dendl;
@@ -62,15 +65,15 @@ protected:
       return true;
     }
 
-    void _dequeue(RGWRequest* req) {
+    void _dequeue(RGWRequest* req) override {
       ceph_abort();
     }
 
-    bool _empty() {
+    bool _empty() override {
       return process->m_req_queue.empty();
     }
 
-    RGWRequest* _dequeue() {
+    RGWRequest* _dequeue() override {
       if (process->m_req_queue.empty())
 	return NULL;
       RGWRequest *req = process->m_req_queue.front();
@@ -92,7 +95,7 @@ protected:
 
     void _dump_queue();
 
-    void _clear() {
+    void _clear() override {
       assert(process->m_req_queue.empty());
     }
   } req_wq;
@@ -104,6 +107,7 @@ public:
              RGWFrontendConfig* const conf)
     : cct(cct),
       store(pe->store),
+      auth_registry(pe->auth_registry),
       olog(pe->olog),
       m_tp(cct, "RGWProcess::m_tp", "tp_rgw_process", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
@@ -124,8 +128,10 @@ public:
     m_tp.pause();
   }
 
-  void unpause_with_new_config(RGWRados *store) {
+  void unpause_with_new_config(RGWRados* const store,
+                               rgw_auth_registry_ptr_t auth_registry) {
     this->store = store;
+    this->auth_registry = std::move(auth_registry);
     m_tp.unpause();
   }
 
@@ -151,8 +157,8 @@ public:
       max_connections(num_threads + (num_threads >> 3)) {
   }
 
-  void run();
-  void handle_request(RGWRequest* req);
+  void run() override;
+  void handle_request(RGWRequest* req) override;
 };
 
 class RGWProcessControlThread : public Thread {
@@ -160,7 +166,7 @@ class RGWProcessControlThread : public Thread {
 public:
   RGWProcessControlThread(RGWProcess *_pprocess) : pprocess(_pprocess) {}
 
-  void *entry() {
+  void *entry() override {
     pprocess->run();
     return NULL;
   }
@@ -172,9 +178,9 @@ public:
   RGWLoadGenProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
 		  RGWFrontendConfig* _conf) :
   RGWProcess(cct, pe, num_threads, _conf) {}
-  void run();
+  void run() override;
   void checkpoint();
-  void handle_request(RGWRequest* req);
+  void handle_request(RGWRequest* req) override;
   void gen_request(const string& method, const string& resource,
 		  int content_length, atomic_t* fail_flag);
 
@@ -186,6 +192,7 @@ extern int process_request(RGWRados* store,
                            RGWREST* rest,
                            RGWRequest* req,
                            const std::string& frontend_prefix,
+                           const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
                            OpsLogSocket* olog);
 

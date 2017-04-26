@@ -38,6 +38,7 @@
 
 class MCommand;
 class MMgrDigest;
+class MLog;
 class Objecter;
 
 
@@ -53,7 +54,7 @@ protected:
   SafeTimer timer;
   Finisher finisher;
 
-  Context *waiting_for_fs_map;
+  Cond fs_map_cond;
 
   PyModules py_modules;
   DaemonStateIndex daemon_state;
@@ -69,7 +70,8 @@ protected:
   bool initializing;
 
 public:
-  Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_);
+  Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
+      LogChannelRef clog_, LogChannelRef audit_clog_);
   ~Mgr();
 
   bool is_initialized() const {return initialized;}
@@ -78,12 +80,12 @@ public:
   void handle_mgr_digest(MMgrDigest* m);
   void handle_fs_map(MFSMap* m);
   void handle_osd_map();
+  void handle_log(MLog *m);
 
   bool ms_dispatch(Message *m);
 
   void background_init();
   void shutdown();
-  int main(vector<const char *> args);
 };
 
 #endif

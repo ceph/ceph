@@ -11,6 +11,7 @@
 #include "common/armor.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
+#include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -219,7 +220,7 @@ int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info&
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
     map<string, string>::iterator i;
     for (i = m.begin(); i != m.end(); ++i) {
-      ldout(cct, 20) << "> " << i->first << " -> " << i->second << dendl;
+      ldout(cct, 20) << "> " << i->first << " -> " << rgw::crypt_sanitize::x_meta_map{i->first, i->second} << dendl;
     }
   }
 
@@ -428,7 +429,7 @@ static void add_grants_headers(map<int, string>& grants, map<string, string, lts
 
 int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs)
 {
-  string resource = obj.bucket.name + "/" + obj.get_object();
+  string resource = obj.bucket.name + "/" + obj.get_oid();
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
@@ -619,7 +620,7 @@ int RGWRESTStreamRWRequest::get_obj(RGWAccessKey& key, map<string, string>& extr
 {
   string urlsafe_bucket, urlsafe_object;
   url_encode(obj.bucket.get_key(':', 0), urlsafe_bucket);
-  url_encode(obj.get_orig_obj(), urlsafe_object);
+  url_encode(obj.key.name, urlsafe_object);
   string resource = urlsafe_bucket + "/" + urlsafe_object;
 
   return get_resource(key, extra_headers, resource);

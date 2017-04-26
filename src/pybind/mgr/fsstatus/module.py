@@ -156,7 +156,7 @@ class Module(MgrModule):
                         ) + "/s"
 
                     metadata = self.get_metadata('mds', info['name'])
-                    mds_versions[metadata['ceph_version']].append(info['name'])
+                    mds_versions[metadata.get('ceph_version', "unknown")].append(info['name'])
                     rank_table.add_row([
                         self.bold(rank.__str__()), c_state, info['name'],
                         activity,
@@ -215,7 +215,7 @@ class Module(MgrModule):
         standby_table = PrettyTable(["Standby MDS"])
         for standby in fsmap['standbys']:
             metadata = self.get_metadata('mds', standby['name'])
-            mds_versions[metadata['ceph_version']].append(standby['name'])
+            mds_versions[metadata.get('ceph_version', "unknown")].append(standby['name'])
 
             standby_table.add_row([standby['name']])
 

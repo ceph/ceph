@@ -78,7 +78,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     timer(cct, lock),
     refcnt(1),
     log_last_version(0), log_cb(NULL), log_cb_arg(NULL),
-    finisher(cct)
+    finisher(cct, "radosclient", "fn-radosclient")
 {
 }
 
@@ -89,8 +89,18 @@ int64_t librados::RadosClient::lookup_pool(const char *name)
     return r;
   }
 
-  return objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
-			       name);
+  int64_t ret = objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
+                                 name);
+  if (-ENOENT == ret) {
+    // Make sure we have the latest map
+    int r = wait_for_latest_osdmap();
+    if (r < 0)
+      return r;
+    ret = objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
+                                 name);
+  }
+
+  return ret;
 }
 
 bool librados::RadosClient::pool_requires_alignment(int64_t pool_id)
@@ -250,7 +260,7 @@ int librados::RadosClient::connect()
   // require OSDREPLYMUX feature.  this means we will fail to talk to
   // old servers.  this is necessary because otherwise we won't know
   // how to decompose the reply data into its constituent pieces.
-  messenger->set_default_policy(Messenger::Policy::lossy_client(0, CEPH_FEATURE_OSDREPLYMUX));
+  messenger->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
   ldout(cct, 1) << "starting msgr at " << messenger->get_myaddr() << dendl;
 
@@ -437,15 +447,7 @@ int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
 {
   int64_t poolid = lookup_pool(name);
   if (poolid < 0) {
-    // Make sure we have the latest map
-    int r = wait_for_latest_osdmap();
-    if (r < 0)
-      return r;
-
-    poolid = lookup_pool(name);
-    if (poolid < 0) {
-      return (int)poolid;
-    }
+    return (int)poolid;
   }
 
   *io = new librados::IoCtxImpl(this, objecter, poolid, CEPH_NOSNAP);
@@ -823,10 +825,12 @@ int librados::RadosClient::mgr_command(const vector<string>& cmd,
   Mutex::Locker l(lock);
 
   C_SaferCond cond;
-  mgrclient.start_command(cmd, inbl, outbl, outs, &cond);
+  int r = mgrclient.start_command(cmd, inbl, outbl, outs, &cond);
+  if (r < 0)
+    return r;
 
   lock.Unlock();
-  int r = cond.wait();
+  r = cond.wait();
   lock.Lock();
 
   return r;
@@ -886,10 +890,9 @@ int librados::RadosClient::osd_command(int osd, vector<string>& cmd,
 
   lock.Lock();
   // XXX do anything with tid?
-  int r = objecter->osd_command(osd, cmd, inbl, &tid, poutbl, prs,
-			 new C_SafeCond(&mylock, &cond, &done, &ret));
+  objecter->osd_command(osd, cmd, inbl, &tid, poutbl, prs,
+			new C_SafeCond(&mylock, &cond, &done, &ret));
   lock.Unlock();
-  assert(r == 0);
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);
@@ -907,10 +910,9 @@ int librados::RadosClient::pg_command(pg_t pgid, vector<string>& cmd,
   int ret;
   ceph_tid_t tid;
   lock.Lock();
-  int r = objecter->pg_command(pgid, cmd, inbl, &tid, poutbl, prs,
-		        new C_SafeCond(&mylock, &cond, &done, &ret));
+  objecter->pg_command(pgid, cmd, inbl, &tid, poutbl, prs,
+		       new C_SafeCond(&mylock, &cond, &done, &ret));
   lock.Unlock();
-  assert(r == 0);
   mylock.Lock();
   while (!done)
     cond.Wait(mylock);

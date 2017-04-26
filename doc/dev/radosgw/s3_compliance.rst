@@ -53,7 +53,7 @@ S3 Documentation reference : http://docs.aws.amazon.com/AmazonS3/latest/API/REST
 | Host                 | ?          |                                                                                                         |             |
 +----------------------+------------+---------------------------------------------------------------------------------------------------------+-------------+
 | x-amz-date           | Yes        | https://github.com/ceph/ceph/blob/8a2eb18494005aa968b71f18121da8ebab48e950/src/rgw/rgw_auth_s3.cc#L169  |             |
-|                      |            | should take precedence over DATE as mentioned here ->                                                  |             |
+|                      |            | should take precedence over DATE as mentioned here ->                                                   |             |
 |                      |            | http://docs.aws.amazon.com/AmazonS3/latest/API/RESTCommonRequestHeaders.html                            |             |
 +----------------------+------------+---------------------------------------------------------------------------------------------------------+-------------+
 | x-amz-security-token | No         |                                                                                                         |             |

@@ -76,8 +76,8 @@ Mantle with `vstart.sh`
 
 ::
 
-    bin/ceph mds set allow_multimds true --yes-i-really-mean-it
-    bin/ceph mds set max_mds 5
+    bin/ceph fs set cephfs allow_multimds true --yes-i-really-mean-it
+    bin/ceph fs set cephfs max_mds 5
     bin/ceph fs set cephfs_a balancer greedyspill.lua
 
 
@@ -161,7 +161,7 @@ Implementation Details
 Most of the implementation is in MDBalancer. Metrics are passed to the balancer
 policies via the Lua stack and a list of loads is returned back to MDBalancer.
 It sits alongside the current balancer implementation and it's enabled with a
-Ceph CLI command ("ceph mds set balancer mybalancer.lua"). If the Lua policy
+Ceph CLI command ("ceph fs set cephfs balancer mybalancer.lua"). If the Lua policy
 fails (for whatever reason), we fall back to the original metadata load
 balancer. The balancer is stored in the RADOS metadata pool and a string in the
 MDSMap tells the MDSs which balancer to use.

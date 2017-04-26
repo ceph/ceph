@@ -184,17 +184,13 @@ To build the documentation, navigate to the ``ceph`` repository directory::
 
 	cd ceph
 
-To build the documentation on Debian/Ubuntu, execute::
+To build the documentation on Debian/Ubuntu, Fedora, or CentOS/RHEL, execute::
 
 	admin/build-doc
 
-To build the documentation on Fedora, execute::
+To scan for the reachablity of external links, execute::
 
-	admin/build-doc
-
-To build the documentation on CentOS/RHEL, execute::
-
-	admin/build-doc
+	admin/build-doc linkcheck
 
 Executing ``admin/build-doc`` will create a ``build-doc`` directory under ``ceph``.
 You may need to create a directory under ``ceph/build-doc`` for output of Javadoc
@@ -317,14 +313,14 @@ For CentOS/RHEL distributions, the remaining python packages are not available i
 the default and ``epel`` repositories. So, use http://rpmfind.net/ to find the
 packages. Then, download them from a mirror and install them. For example::
 
-	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/python-jinja2-2.7.2-2.el7.noarch.rpm
+	wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-jinja2-2.7.2-2.el7.noarch.rpm
 	sudo yum install python-jinja2-2.7.2-2.el7.noarch.rpm
-	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/python-pygments-1.4-9.el7.noarch.rpm
+	wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-pygments-1.4-9.el7.noarch.rpm
 	sudo yum install python-pygments-1.4-9.el7.noarch.rpm
-	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/python-docutils-0.11-0.2.20130715svn7687.el7.noarch.rpm
+	wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-docutils-0.11-0.2.20130715svn7687.el7.noarch.rpm
 	sudo yum install python-docutils-0.11-0.2.20130715svn7687.el7.noarch.rpm
-	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/python-sphinx-1.1.3-8.el7.noarch.rpm
-	sudo yum install python-sphinx-1.1.3-8.el7.noarch.rpm
+	wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-sphinx-1.1.3-11.el7.noarch.rpm
+	sudo yum install python-sphinx-1.1.3-11.el7.noarch.rpm
 
 Ceph documentation makes extensive use of `ditaa`_, which isn't presently built
 for CentOS/RHEL7. You must install ``ditaa`` if you are making changes to
@@ -340,18 +336,14 @@ on CentOS/RHEL7, following dependencies are required:
 Use http://rpmfind.net/ to find compatible ``ditaa`` and the dependencies.
 Then, download them from a mirror and install them. For example::
 
-	wget ftp://rpmfind.net/linux/fedora/linux/releases/20/Everything/x86_64/os/Packages/j/jericho-html-3.2-6.fc20.noarch.rpm
-	sudo yum install jericho-html-3.2-6.fc20.noarch.rpm
-	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/jai-imageio-core-1.2-0.14.20100217cvs.el7.noarch.rpm
+	wget http://rpmfind.net/linux/fedora/linux/releases/22/Everything/x86_64/os/Packages/j/jericho-html-3.3-4.fc22.noarch.rpm
+	sudo yum install jericho-html-3.3-4.fc22.noarch.rpm
+	wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/jai-imageio-core-1.2-0.14.20100217cvs.el7.noarch.rpm
 	sudo yum install jai-imageio-core-1.2-0.14.20100217cvs.el7.noarch.rpm
-	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/batik-1.8-0.12.svn1230816.el7.noarch.rpm
+	wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/batik-1.8-0.12.svn1230816.el7.noarch.rpm
 	sudo yum install batik-1.8-0.12.svn1230816.el7.noarch.rpm
-	wget ftp://rpmfind.net/linux/fedora/linux/releases/20/Everything/x86_64/os/Packages/d/ditaa-0.9-10.r74.fc20.noarch.rpm
-	sudo yum install ditaa-0.9-10.r74.fc20.noarch.rpm
-
-.. important:: Do not install the ``fc21`` rpm for ``ditaa`` as it uses a ``JRE``
-	newer than the default installed in CentOS/RHEL7 which causes a conflict, throws
-	an ``Exception`` and doesn't allow the application to run.
+	wget http://rpmfind.net/linux/fedora/linux/releases/22/Everything/x86_64/os/Packages/d/ditaa-0.9-13.r74.fc21.noarch.rpm
+	sudo yum install ditaa-0.9-13.r74.fc21.noarch.rpm
 
 Once you have installed all these packages, build the documentation by following
 the steps given in ``Build the Source``.

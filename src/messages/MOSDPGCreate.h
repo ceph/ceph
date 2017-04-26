@@ -39,17 +39,17 @@ struct MOSDPGCreate : public Message {
     : Message(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION),
       epoch(e) { }
 private:
-  ~MOSDPGCreate() {}
+  ~MOSDPGCreate() override {}
 
 public:  
-  const char *get_type_name() const { return "pg_create"; }
+  const char *get_type_name() const override { return "pg_create"; }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(epoch, payload);
     ::encode(mkpg, payload);
     ::encode(ctimes, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     if (header.version >= 2) {
@@ -80,7 +80,7 @@ public:
     }
   }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "osd_pg_create(e" << epoch;
     for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
          i != mkpg.end();

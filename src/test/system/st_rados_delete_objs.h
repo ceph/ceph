@@ -35,8 +35,8 @@ public:
 		    int num_objs,
 		    const std::string &pool_name,
 		    const std::string &suffix);
-  ~StRadosDeleteObjs();
-  virtual int run();
+  ~StRadosDeleteObjs() override;
+  int run() override;
 private:
   CrossProcessSem *m_setup_sem;
   CrossProcessSem *m_deleted_sem;

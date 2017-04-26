@@ -29,7 +29,7 @@ protected:
 
 public:
   HealthMonitor(Monitor *m) : QuorumService(m) { }
-  virtual ~HealthMonitor() {
+  ~HealthMonitor() override {
     assert(services.empty());
   }
 

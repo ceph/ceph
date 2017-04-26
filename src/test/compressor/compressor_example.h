@@ -30,20 +30,20 @@
 class CompressorExample : public Compressor {
 public:
   CompressorExample() : Compressor(COMP_ALG_NONE, "example") {}
-  virtual ~CompressorExample() {}
+  ~CompressorExample() override {}
 
-  virtual int compress(const bufferlist &in, bufferlist &out)
+  int compress(const bufferlist &in, bufferlist &out) override
   {
     out = in;
     return 0;
   }
 
-  virtual int decompress(const bufferlist &in, bufferlist &out)
+  int decompress(const bufferlist &in, bufferlist &out) override
   {
     out = in;
     return 0;
   }
-  virtual int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out)
+  int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out) override
   {
     p.copy(MIN(p.get_remaining(), compressed_len), out);
     return 0;

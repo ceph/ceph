@@ -60,24 +60,24 @@ public:
       entries(entries) {}
 
 private:
-  ~MOSDPGUpdateLogMissing() {}
+  ~MOSDPGUpdateLogMissing() override {}
 
 public:
-  const char *get_type_name() const { return "PGUpdateLogMissing"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "PGUpdateLogMissing"; }
+  void print(ostream& out) const override {
     out << "pg_update_log_missing(" << pgid << " epoch " << map_epoch
 	<< " rep_tid " << rep_tid
 	<< " entries " << entries << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(map_epoch, payload);
     ::encode(pgid, payload);
     ::encode(from, payload);
     ::encode(rep_tid, payload);
     ::encode(entries, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(pgid, p);

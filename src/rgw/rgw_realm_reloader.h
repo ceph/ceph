@@ -34,7 +34,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   };
 
   RGWRealmReloader(RGWRados*& store, Pauser* frontends);
-  ~RGWRealmReloader();
+  ~RGWRealmReloader() override;
 
   /// respond to realm notifications by scheduling a reload()
   void handle_notify(RGWRealmNotify type, bufferlist::iterator& p) override;

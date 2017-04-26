@@ -114,7 +114,7 @@ int MonClient::get_monmap_privately()
   std::uniform_int_distribution<unsigned> ranks(0, monmap.size() - 1);
   while (monmap.fsid.is_zero()) {
     auto rank = ranks(rng);
-    auto& pending_con = _add_conn(rank);
+    auto& pending_con = _add_conn(rank, 0);
     auto con = pending_con.get_con();
     ldout(cct, 10) << "querying mon." << monmap.get_name(rank) << " "
 		   << con->get_peer_addr() << dendl;
@@ -249,7 +249,9 @@ bool MonClient::ms_dispatch(Message *m)
   Mutex::Locker lock(monc_lock);
 
   if (_hunting()) {
-    if (!pending_cons.count(m->get_source_addr())) {
+    auto pending_con = pending_cons.find(m->get_source_addr());
+    if (pending_con == pending_cons.end() ||
+	pending_con->second.get_con() != m->get_connection()) {
       // ignore any messages outside hunting sessions
       ldout(cct, 10) << "discarding stray monitor message " << *m << dendl;
       m->put();
@@ -293,10 +295,10 @@ bool MonClient::ms_dispatch(Message *m)
   return true;
 }
 
-void MonClient::send_log()
+void MonClient::send_log(bool flush)
 {
   if (log_client) {
-    Message *lm = log_client->get_mon_log_message();
+    Message *lm = log_client->get_mon_log_message(flush);
     if (lm)
       _send_mon_message(lm);
     more_log_pending = log_client->are_pending();
@@ -478,6 +480,10 @@ void MonClient::handle_auth(MAuthReply *m)
     int ret = active_con->authenticate(m);
     m->put();
     std::swap(auth, active_con->get_auth());
+    if (global_id != active_con->get_global_id()) {
+      lderr(cct) << __func__ << " peer assigned me a different global_id: "
+		 << active_con->get_global_id() << dendl;
+    }
     if (ret != -EAGAIN) {
       _finish_auth(ret);
     }
@@ -515,15 +521,12 @@ void MonClient::handle_auth(MAuthReply *m)
       _send_mon_message(waiting_for_session.front());
       waiting_for_session.pop_front();
     }
-
     _resend_mon_commands();
-
-    if (log_client) {
-      log_client->reset_session();
-      send_log();
-    }
-    if (active_con)
+    send_log(true);
+    if (active_con) {
       std::swap(auth, active_con->get_auth());
+      global_id = active_con->get_global_id();
+    }
   }
   _finish_auth(auth_err);
   if (!auth_err) {
@@ -578,9 +581,9 @@ void MonClient::_reopen_session(int rank)
   _start_hunting();
 
   if (rank >= 0) {
-    _add_conn(rank);
+    _add_conn(rank, global_id);
   } else {
-    _add_conns();
+    _add_conns(global_id);
   }
 
   // throw out old queued messages
@@ -610,12 +613,12 @@ void MonClient::_reopen_session(int rank)
     _renew_subs();
 }
 
-MonConnection& MonClient::_add_conn(unsigned rank)
+MonConnection& MonClient::_add_conn(unsigned rank, uint64_t global_id)
 {
   auto peer = monmap.get_addr(rank);
   auto conn = messenger->get_connection(monmap.get_inst(rank));
-  MonConnection mc(cct, conn);
-  auto inserted = pending_cons.insert(move(make_pair(peer, move(mc))));
+  MonConnection mc(cct, conn, global_id);
+  auto inserted = pending_cons.insert(make_pair(peer, move(mc)));
   ldout(cct, 10) << "picked mon." << monmap.get_name(rank)
                  << " con " << conn
                  << " addr " << conn->get_peer_addr()
@@ -623,7 +626,7 @@ MonConnection& MonClient::_add_conn(unsigned rank)
   return inserted.first->second;
 }
 
-void MonClient::_add_conns()
+void MonClient::_add_conns(uint64_t global_id)
 {
   const unsigned num_mons = monmap.size();
   vector<unsigned> ranks(num_mons);
@@ -639,7 +642,7 @@ void MonClient::_add_conns()
      n = num_mons;
   }
   for (unsigned i = 0; i < n; i++) {
-    _add_conn(ranks[i]);
+    _add_conn(ranks[i], global_id);
   }
 }
 
@@ -891,6 +894,9 @@ int MonClient::wait_auth_rotating(double timeout)
   utime_t until = now;
   until += timeout;
 
+  // Must be initialized
+  assert(auth != nullptr);
+
   if (auth->get_protocol() == CEPH_AUTH_NONE)
     return 0;
   
@@ -1024,7 +1030,7 @@ void MonClient::_finish_command(MonCommand *r, int ret, string rs)
   delete r;
 }
 
-int MonClient::start_mon_command(const vector<string>& cmd,
+void MonClient::start_mon_command(const vector<string>& cmd,
 				 const bufferlist& inbl,
 				 bufferlist *outbl, string *outs,
 				 Context *onfinish)
@@ -1052,11 +1058,9 @@ int MonClient::start_mon_command(const vector<string>& cmd,
   }
   mon_commands[r->tid] = r;
   _send_command(r);
-  // can't fail
-  return 0;
 }
 
-int MonClient::start_mon_command(const string &mon_name,
+void MonClient::start_mon_command(const string &mon_name,
 				 const vector<string>& cmd,
 				 const bufferlist& inbl,
 				 bufferlist *outbl, string *outs,
@@ -1072,11 +1076,9 @@ int MonClient::start_mon_command(const string &mon_name,
   r->onfinish = onfinish;
   mon_commands[r->tid] = r;
   _send_command(r);
-  // can't fail
-  return 0;
 }
 
-int MonClient::start_mon_command(int rank,
+void MonClient::start_mon_command(int rank,
 				 const vector<string>& cmd,
 				 const bufferlist& inbl,
 				 bufferlist *outbl, string *outs,
@@ -1092,7 +1094,6 @@ int MonClient::start_mon_command(int rank,
   r->onfinish = onfinish;
   mon_commands[r->tid] = r;
   _send_command(r);
-  return 0;
 }
 
 // ---------
@@ -1132,19 +1133,21 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
 
 AuthAuthorizer* MonClient::build_authorizer(int service_id) const {
   Mutex::Locker l(monc_lock);
-  assert(auth || active_con->get_auth());
-  if (auth)
+  if (auth) {
     return auth->build_authorizer(service_id);
-  else
-    return active_con->get_auth()->build_authorizer(service_id);
+  } else {
+    ldout(cct, 0) << __func__ << " for " << ceph_entity_type_name(service_id)
+		  << ", but no auth is available now" << dendl;
+    return nullptr;
+  }
 }
 
 #define dout_subsys ceph_subsys_monc
 #undef dout_prefix
 #define dout_prefix *_dout << "monclient" << (have_session() ? ": " : "(hunting): ")
 
-MonConnection::MonConnection(CephContext *cct, ConnectionRef con)
-  : cct(cct), con(con)
+MonConnection::MonConnection(CephContext *cct, ConnectionRef con, uint64_t global_id)
+  : cct(cct), con(con), global_id(global_id)
 {}
 
 MonConnection::~MonConnection()

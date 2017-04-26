@@ -113,12 +113,41 @@ no two *chunks* are stored in the same rack.
 More information can be found in the `erasure code profiles
 <../erasure-code-profile>`_ documentation.
 
+
+Erasure Coding with Overwrites
+------------------------------
+
+By default, erasure coded pools only work with uses like RGW that
+perform full object writes and appends.
+
+Since Luminous, partial writes for an erasure coded pool may be
+enabled with a per-pool setting. This lets RBD and Cephfs store their
+data in an erasure coded pool::
+
+    ceph osd pool set ec_pool allow_ec_overwrites true
+
+This can only be enabled on a pool residing on bluestore OSDs, since
+bluestore's checksumming is used to detect bitrot or other corruption
+during deep-scrub. In addition to being unsafe, using filestore with
+ec overwrites yields low performance compared to bluestore.
+
+Erasure coded pools do not support omap, so to use them with RBD and
+Cephfs you must instruct them to store their data in an ec pool, and
+their metadata in a replicated pool. For RBD, this means using the
+erasure coded pool as the ``--data-pool`` during image creation::
+
+    rbd create --size 1G --data-pool ec_pool replicated_pool/image_name
+
+For Cephfs, using an erasure coded pool means setting that pool in
+a `file layout<../../cephfs/file-layouts>`_.
+
+
 Erasure coded pool and cache tiering
 ------------------------------------
 
 Erasure coded pools require more resources than replicated pools and
-lack some functionalities such as partial writes. To overcome these
-limitations, it is recommended to set a `cache tier <../cache-tiering>`_
+lack some functionalities such as omap. To overcome these
+limitations, one can set up a `cache tier <../cache-tiering>`_
 before the erasure coded pool.
 
 For instance, if the pool *hot-storage* is made of fast storage::
@@ -130,13 +159,6 @@ For instance, if the pool *hot-storage* is made of fast storage::
 will place the *hot-storage* pool as tier of *ecpool* in *writeback*
 mode so that every write and read to the *ecpool* are actually using
 the *hot-storage* and benefit from its flexibility and speed.
-
-It is not possible to create an RBD image on an erasure coded pool
-because it requires partial writes. It is however possible to create
-an RBD image on an erasure coded pools when a replicated pool tier set
-a cache tier::
-
-    $ rbd create --size 10G ecpool/myvolume
 
 More information can be found in the `cache tiering
 <../cache-tiering>`_ documentation.

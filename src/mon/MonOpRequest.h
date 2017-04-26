@@ -108,7 +108,7 @@ private:
     }
   }
 
-  void _dump(Formatter *f) const {
+  void _dump(Formatter *f) const override {
     {
       f->open_array_section("events");
       Mutex::Locker l(lock);
@@ -126,12 +126,12 @@ private:
   }
 
 protected:
-  void _dump_op_descriptor_unlocked(ostream& stream) const {
+  void _dump_op_descriptor_unlocked(ostream& stream) const override {
     get_req()->print(stream);
   }
 
 public:
-  ~MonOpRequest() {
+  ~MonOpRequest() override {
     request->put();
     // certain ops may not have a session (e.g., AUTH or PING)
     if (session)

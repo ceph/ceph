@@ -79,11 +79,11 @@ public:
   int init_messenger() {
     dout(1) << __func__ << dendl;
 
-    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->ms_type : cct->_conf->ms_public_type;
+    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
     msg = Messenger::create(cct, public_msgr_type, entity_name_t::CLIENT(-1),
                             "test-mon-msg", 0, 0);
     assert(msg != NULL);
-    msg->set_default_policy(Messenger::Policy::lossy_client(0,0));
+    msg->set_default_policy(Messenger::Policy::lossy_client(0));
     dout(0) << __func__ << " starting messenger at "
             << msg->get_myaddr() << dendl;
     msg->start();

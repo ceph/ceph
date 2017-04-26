@@ -29,7 +29,7 @@ class MOSDPGQuery : public Message {
   version_t       epoch;
 
  public:
-  version_t get_epoch() { return epoch; }
+  version_t get_epoch() const { return epoch; }
   map<spg_t, pg_query_t>  pg_list;
 
   MOSDPGQuery() : Message(MSG_OSD_PG_QUERY,
@@ -46,11 +46,11 @@ class MOSDPGQuery : public Message {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:
-  ~MOSDPGQuery() {}
+  ~MOSDPGQuery() override {}
 
 public:  
-  const char *get_type_name() const { return "pg_query"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "pg_query"; }
+  void print(ostream& out) const override {
     out << "pg_query(";
     for (map<spg_t,pg_query_t>::const_iterator p = pg_list.begin();
 	 p != pg_list.end(); ++p) {
@@ -61,7 +61,7 @@ public:
     out << " epoch " << epoch << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(epoch, payload);
     vector<pair<pg_t, pg_query_t> > _pg_list;
     _pg_list.reserve(pg_list.size());
@@ -76,7 +76,7 @@ public:
     ::encode(_pg_list, payload, features);
     ::encode(_shard_list, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     vector<pair<pg_t, pg_query_t> > _pg_list;

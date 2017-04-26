@@ -21,14 +21,14 @@ namespace mirror {
 namespace image_sync {
 
 using librbd::util::create_context_callback;
-using librbd::util::create_rados_safe_callback;
+using librbd::util::create_rados_callback;
 
 template <typename I>
 SnapshotCreateRequest<I>::SnapshotCreateRequest(I *local_image_ctx,
                                                 const std::string &snap_name,
 						const cls::rbd::SnapshotNamespace &snap_namespace,
                                                 uint64_t size,
-                                                const librbd::parent_spec &spec,
+                                                const librbd::ParentSpec &spec,
                                                 uint64_t parent_overlap,
                                                 Context *on_finish)
   : m_local_image_ctx(local_image_ctx), m_snap_name(snap_name),
@@ -62,7 +62,7 @@ void SnapshotCreateRequest<I>::send_set_size() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::set_size(&op, m_size);
 
-  librados::AioCompletion *comp = create_rados_safe_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     SnapshotCreateRequest<I>, &SnapshotCreateRequest<I>::handle_set_size>(this);
   int r = m_local_image_ctx->md_ctx.aio_operate(m_local_image_ctx->header_oid,
                                                 comp, &op);
@@ -106,7 +106,7 @@ void SnapshotCreateRequest<I>::send_remove_parent() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::remove_parent(&op);
 
-  librados::AioCompletion *comp = create_rados_safe_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     SnapshotCreateRequest<I>,
     &SnapshotCreateRequest<I>::handle_remove_parent>(this);
   int r = m_local_image_ctx->md_ctx.aio_operate(m_local_image_ctx->header_oid,
@@ -152,7 +152,7 @@ void SnapshotCreateRequest<I>::send_set_parent() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::set_parent(&op, m_parent_spec, m_parent_overlap);
 
-  librados::AioCompletion *comp = create_rados_safe_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     SnapshotCreateRequest<I>,
     &SnapshotCreateRequest<I>::handle_set_parent>(this);
   int r = m_local_image_ctx->md_ctx.aio_operate(m_local_image_ctx->header_oid,
@@ -190,8 +190,8 @@ void SnapshotCreateRequest<I>::send_snap_create() {
     SnapshotCreateRequest<I>, &SnapshotCreateRequest<I>::handle_snap_create>(
       this);
   RWLock::RLocker owner_locker(m_local_image_ctx->owner_lock);
-  m_local_image_ctx->operations->execute_snap_create(m_snap_name.c_str(),
-						     m_snap_namespace,
+  m_local_image_ctx->operations->execute_snap_create(m_snap_namespace,
+						     m_snap_name.c_str(),
 						     ctx,
                                                      0U, true);
 }
@@ -218,7 +218,8 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
   }
 
   m_local_image_ctx->snap_lock.get_read();
-  auto snap_it = m_local_image_ctx->snap_ids.find(m_snap_name);
+  auto snap_it = m_local_image_ctx->snap_ids.find({cls::rbd::UserSnapshotNamespace(),
+						   m_snap_name});
   if (snap_it == m_local_image_ctx->snap_ids.end()) {
     derr << ": failed to locate snap: " << m_snap_name << dendl;
     m_local_image_ctx->snap_lock.put_read();
@@ -241,7 +242,7 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
   librados::ObjectWriteOperation op;
   librbd::cls_client::object_map_resize(&op, object_count, OBJECT_NONEXISTENT);
 
-  librados::AioCompletion *comp = create_rados_safe_callback<
+  librados::AioCompletion *comp = create_rados_callback<
     SnapshotCreateRequest<I>,
     &SnapshotCreateRequest<I>::handle_create_object_map>(this);
   int r = m_local_image_ctx->md_ctx.aio_operate(object_map_oid, comp, &op);

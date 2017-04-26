@@ -114,6 +114,17 @@ void add_image_option(po::options_description *opt,
     (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
+void add_image_id_option(po::options_description *opt,
+                         const std::string &desc_suffix) {
+  std::string name = IMAGE_ID;
+  std::string description = "image id";
+  description += desc_suffix;
+
+  // TODO add validator
+  opt->add_options()
+    (name.c_str(), po::value<std::string>(), description.c_str());
+}
+
 void add_group_option(po::options_description *opt,
 		      ArgumentModifier modifier,
 		      const std::string &desc_suffix) {
@@ -249,7 +260,6 @@ void add_journal_spec_options(po::options_description *pos,
   add_journal_option(opt, modifier);
 }
 
-
 void add_create_image_options(po::options_description *opt,
                               bool include_format) {
   // TODO get default image format from conf
@@ -293,6 +303,12 @@ void add_size_option(boost::program_options::options_description *opt) {
      "image size (in M/G/T)");
 }
 
+void add_sparse_size_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (IMAGE_SPARSE_SIZE.c_str(), po::value<ImageObjectSize>(),
+    "sparse size in B/K/M [default: 4K]");
+}
+
 void add_path_options(boost::program_options::options_description *pos,
                       boost::program_options::options_description *opt,
                       const std::string &description) {
@@ -329,6 +345,11 @@ void add_verbose_option(boost::program_options::options_description *opt) {
 void add_no_error_option(boost::program_options::options_description *opt) {
   opt->add_options()
     (NO_ERROR.c_str(), po::bool_switch(), "continue after error");
+}
+
+void add_export_format_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    ("export-format", po::value<ExportFormat>(), "format of image file");
 }
 
 std::string get_short_features_help(bool append_suffix) {
@@ -490,6 +511,30 @@ void validate(boost::any& v, const std::vector<std::string>& values,
     return;
   }
   throw po::validation_error(po::validation_error::invalid_option_value);
+}
+
+void validate(boost::any& v, const std::vector<std::string>& values,
+              ExportFormat *target_type, int) {
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+
+  std::string parse_error;
+  uint64_t format = strict_sistrtoll(s.c_str(), &parse_error);
+  if (!parse_error.empty() || (format != 1 && format != 2)) {
+    throw po::validation_error(po::validation_error::invalid_option_value);
+  }
+
+  v = boost::any(format);
+}
+
+void validate(boost::any& v, const std::vector<std::string>& values,
+              Secret *target_type, int) {
+  std::cerr << "rbd: --secret is deprecated, use --keyfile" << std::endl;
+
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+  g_conf->set_val_or_die("keyfile", s.c_str());
+  v = boost::any(s);
 }
 
 } // namespace argument_types

@@ -30,20 +30,20 @@ public:
     set_tid(tid);
   }
 private:
-  ~MExportDirAck() {}
+  ~MExportDirAck() override {}
 
 public:
-  const char *get_type_name() const { return "ExAck"; }
-    void print(ostream& o) const {
+  const char *get_type_name() const override { return "ExAck"; }
+    void print(ostream& o) const override {
     o << "export_ack(" << dirfrag << ")";
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
     ::decode(imported_caps, p);
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(dirfrag, payload);
     ::encode(imported_caps, payload);
   }

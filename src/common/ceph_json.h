@@ -88,7 +88,7 @@ class JSONParser : public JSONObj
   bool success;
 public:
   JSONParser();
-  virtual ~JSONParser();
+  ~JSONParser() override;
   void handle_data(const char *s, int len);
 
   bool parse(const char *buf_, int len);

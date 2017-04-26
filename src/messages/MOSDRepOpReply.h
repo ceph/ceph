@@ -57,7 +57,7 @@ public:
     return pgid;
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
@@ -74,7 +74,7 @@ public:
     ::decode(from, p);
     final_decode_needed = false;
   }
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid, payload);
@@ -95,11 +95,11 @@ public:
   int get_result() { return result; }
 
   void set_last_complete_ondisk(eversion_t v) { last_complete_ondisk = v; }
-  eversion_t get_last_complete_ondisk() { return last_complete_ondisk; }
+  eversion_t get_last_complete_ondisk() const { return last_complete_ondisk; }
 
 public:
   MOSDRepOpReply(
-    MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, int at) :
+    const MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, int at) :
     MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
     map_epoch(e),
     reqid(req->reqid),
@@ -116,12 +116,12 @@ public:
       ack_type(0), result(0),
       final_decode_needed(true) {}
 private:
-  ~MOSDRepOpReply() {}
+  ~MOSDRepOpReply() override {}
 
 public:
-  const char *get_type_name() const { return "osd_repop_reply"; }
+  const char *get_type_name() const override { return "osd_repop_reply"; }
 
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "osd_repop_reply(" << reqid
         << " " << pgid;
     if (!final_decode_needed) {

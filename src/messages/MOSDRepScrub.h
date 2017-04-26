@@ -64,11 +64,11 @@ struct MOSDRepScrub : public MOSDFastDispatchOp {
 
 
 private:
-  ~MOSDRepScrub() {}
+  ~MOSDRepScrub() override {}
 
 public:
-  const char *get_type_name() const { return "replica scrub"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "replica scrub"; }
+  void print(ostream& out) const override {
     out << "replica scrub(pg: ";
     out << pgid << ",from:" << scrub_from << ",to:" << scrub_to
         << ",epoch:" << map_epoch << ",start:" << start << ",end:" << end
@@ -79,7 +79,7 @@ public:
     out << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(pgid.pgid, payload);
     ::encode(scrub_from, payload);
     ::encode(scrub_to, payload);
@@ -91,7 +91,7 @@ public:
     ::encode(pgid.shard, payload);
     ::encode(seed, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid.pgid, p);
     ::decode(scrub_from, p);

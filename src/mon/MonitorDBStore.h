@@ -320,7 +320,7 @@ class MonitorDBStore
 		    Context *f)
       : store(s), t(t), oncommit(f)
     {}
-    void finish(int r) {
+    void finish(int r) override {
       /* The store serializes writes.  Each transaction is handled
        * sequentially by the io_work Finisher.  If a transaction takes longer
        * to apply its state to permanent storage, then no other transaction
@@ -434,7 +434,7 @@ class MonitorDBStore
 	sync_prefixes(prefixes)
     { }
 
-    virtual ~WholeStoreIteratorImpl() { }
+    ~WholeStoreIteratorImpl() override { }
 
     /**
      * Obtain a chunk of the store
@@ -445,7 +445,7 @@ class MonitorDBStore
      *			    differ from the one passed on to the function)
      * @param last_key[out] Last key in the chunk
      */
-    virtual void get_chunk_tx(TransactionRef tx, uint64_t max) {
+    void get_chunk_tx(TransactionRef tx, uint64_t max) override {
       assert(done == false);
       assert(iter->valid() == true);
 
@@ -463,7 +463,7 @@ class MonitorDBStore
       done = true;
     }
 
-    virtual pair<string,string> get_next_key() {
+    pair<string,string> get_next_key() override {
       assert(iter->valid());
 
       for (; iter->valid(); iter->next()) {
@@ -476,7 +476,7 @@ class MonitorDBStore
       return pair<string,string>();
     }
 
-    virtual bool _is_valid() {
+    bool _is_valid() override {
       return iter->valid();
     }
   };

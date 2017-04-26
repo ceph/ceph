@@ -89,18 +89,18 @@ public:
    * Destroy the AsyncMessenger. Pretty simple since all the work is done
    * elsewhere.
    */
-  virtual ~AsyncMessenger();
+  ~AsyncMessenger() override;
 
   /** @defgroup Accessors
    * @{
    */
   void set_addr_unknowns(const entity_addr_t &addr) override;
 
-  int get_dispatch_queue_len() {
+  int get_dispatch_queue_len() override {
     return dispatch_queue.get_queue_len();
   }
 
-  double get_dispatch_queue_max_age(utime_t now) {
+  double get_dispatch_queue_max_age(utime_t now) override {
     return dispatch_queue.get_max_age(now);
   }
   /** @} Accessors */
@@ -109,14 +109,14 @@ public:
    * @defgroup Configuration functions
    * @{
    */
-  void set_cluster_protocol(int p) {
+  void set_cluster_protocol(int p) override {
     assert(!started && !did_bind);
     cluster_protocol = p;
   }
 
-  int bind(const entity_addr_t& bind_addr);
-  int rebind(const set<int>& avoid_ports);
-  int client_bind(const entity_addr_t& bind_addr);
+  int bind(const entity_addr_t& bind_addr) override;
+  int rebind(const set<int>& avoid_ports) override;
+  int client_bind(const entity_addr_t& bind_addr) override;
 
   /** @} Configuration functions */
 
@@ -148,9 +148,8 @@ public:
    */
   ConnectionRef get_connection(const entity_inst_t& dest) override;
   ConnectionRef get_loopback_connection() override;
-  int send_keepalive(Connection *con);
-  virtual void mark_down(const entity_addr_t& addr) override;
-  virtual void mark_down_all() override {
+  void mark_down(const entity_addr_t& addr) override;
+  void mark_down_all() override {
     shutdown_connections(true);
   }
   /** @} // Connection Management */
@@ -236,6 +235,17 @@ private:
   /// true, specifying we haven't learned our addr; set false when we find it.
   // maybe this should be protected by the lock?
   bool need_addr;
+
+  /**
+   * set to bind address if bind was called before NetworkStack was ready to
+   * bind
+   */
+  entity_addr_t pending_bind_addr;
+
+  /**
+   * false; set to true if a pending bind exists
+   */
+  bool pending_bind = false;
 
   /**
    *  The following aren't lock-protected since you shouldn't be able to race

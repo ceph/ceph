@@ -39,9 +39,9 @@ const char *mempool::get_pool_name(mempool::pool_index_t ix) {
   return names[ix];
 }
 
-void mempool::dump(ceph::Formatter *f, size_t skip)
+void mempool::dump(ceph::Formatter *f)
 {
-  for (size_t i = skip; i < num_pools; ++i) {
+  for (size_t i = 0; i < num_pools; ++i) {
     const pool_t &pool = mempool::get_pool((pool_index_t)i);
     f->open_object_section(get_pool_name((pool_index_t)i));
     pool.dump(f);

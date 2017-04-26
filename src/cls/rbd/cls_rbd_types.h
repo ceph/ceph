@@ -237,6 +237,10 @@ struct UserSnapshotNamespace {
     return true;
   }
 
+  inline bool operator<(const UserSnapshotNamespace& usn) const {
+    return false;
+  }
+
 };
 
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
@@ -267,6 +271,16 @@ struct GroupSnapshotNamespace {
 	   snapshot_id == gsn.snapshot_id;
   }
 
+  inline bool operator<(const GroupSnapshotNamespace& gsn) const {
+    if (group_pool < gsn.group_pool) {
+      return true;
+    } else if (group_id < gsn.group_id) {
+      return true;
+    } else {
+      return snapshot_id < gsn.snapshot_id;
+    }
+  }
+
 };
 
 std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
@@ -281,6 +295,10 @@ struct UnknownSnapshotNamespace {
   void dump(Formatter *f) const {}
   inline bool operator==(const UnknownSnapshotNamespace& gsn) const {
     return true;
+  }
+
+  inline bool operator<(const UnknownSnapshotNamespace& usn) const {
+    return false;
   }
 };
 
@@ -309,6 +327,42 @@ struct SnapshotNamespaceOnDisk {
   }
 };
 WRITE_CLASS_ENCODER(SnapshotNamespaceOnDisk);
+
+enum TrashImageSource {
+  TRASH_IMAGE_SOURCE_USER = 0,
+  TRASH_IMAGE_SOURCE_MIRRORING = 1
+};
+
+inline void encode(const TrashImageSource &source, bufferlist& bl,
+		   uint64_t features=0)
+{
+  ::encode(static_cast<uint8_t>(source), bl);
+}
+
+inline void decode(TrashImageSource &source, bufferlist::iterator& it)
+{
+  uint8_t int_source;
+  ::decode(int_source, it);
+  source = static_cast<TrashImageSource>(int_source);
+}
+
+struct TrashImageSpec {
+  TrashImageSource source = TRASH_IMAGE_SOURCE_USER;
+  std::string name;
+  utime_t deletion_time; // time of deletion
+  utime_t deferment_end_time;
+
+  TrashImageSpec() {}
+  TrashImageSpec(TrashImageSource source, const std::string &name,
+                   utime_t deletion_time, utime_t deferment_end_time) :
+    source(source), name(name), deletion_time(deletion_time),
+    deferment_end_time(deferment_end_time) {}
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(TrashImageSpec);
 
 } // namespace rbd
 } // namespace cls

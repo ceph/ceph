@@ -23,13 +23,13 @@ public:
   {
   }
 
-  virtual void send() = 0;
+  void send() override = 0;
 
 protected:
   const uint64_t m_snap_id;
 
-  virtual bool should_complete(int r);
-  virtual int filter_return_code(int r) const {
+  bool should_complete(int r) override;
+  int filter_return_code(int r) const override {
     // never propagate an error back to the caller
     return 0;
   }

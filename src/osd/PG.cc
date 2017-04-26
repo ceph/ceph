@@ -36,6 +36,7 @@
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
+#include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDPGPush.h"
@@ -48,11 +49,13 @@
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MOSDBackoff.h"
-
+#include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDRepOpReply.h"
+#include "messages/MOSDRepScrubMap.h"
+
 #include "common/BackTrace.h"
 #include "common/EventTrace.h"
 
@@ -221,7 +224,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     p.get_split_bits(curmap->get_pg_num(_pool.id)),
     _pool.id,
     p.shard),
-  map_lock("PG::map_lock"),
   osdmap_ref(curmap), last_persisted_osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
   #ifdef PG_DEBUG_REFS
@@ -340,14 +342,15 @@ void PG::proc_master_log(
 }
     
 void PG::proc_replica_log(
-  ObjectStore::Transaction& t,
-  pg_info_t &oinfo, pg_log_t &olog, pg_missing_t& omissing,
+  pg_info_t &oinfo,
+  const pg_log_t &olog,
+  pg_missing_t& omissing,
   pg_shard_t from)
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
 	   << oinfo << " " << olog << " " << omissing << dendl;
 
-  pg_log.proc_replica_log(t, oinfo, olog, omissing, from);
+  pg_log.proc_replica_log(oinfo, olog, omissing, from);
 
   peer_info[from] = oinfo;
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
@@ -451,14 +454,14 @@ void PG::merge_log(
 {
   PGLogEntryHandler rollbacker{this, &t};
   pg_log.merge_log(
-    t, oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
+    oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
 }
 
 void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 {
   PGLogEntryHandler rollbacker{this, &t};
   pg_log.rewind_divergent_log(
-    t, newhead, info, &rollbacker, dirty_info, dirty_big_info);
+    newhead, info, &rollbacker, dirty_info, dirty_big_info);
 }
 
 /*
@@ -1757,7 +1760,7 @@ void PG::activate(ObjectStore::Transaction& t,
       // share past_intervals if we are creating the pg on the replica
       // based on whether our info for that peer was dne() *before*
       // updating pi.history in the backfill block above.
-      if (needs_past_intervals)
+      if (m && needs_past_intervals)
 	m->past_intervals = past_intervals;
 
       // update local version of peer's missing list!
@@ -1861,8 +1864,6 @@ void PG::activate(ObjectStore::Transaction& t,
 
     state_set(PG_STATE_ACTIVATING);
     release_pg_backoffs();
-  }
-  if (is_primary()) {
     projected_last_update = info.last_update;
   }
   if (acting.size() >= pool.info.min_size) {
@@ -1877,9 +1878,9 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
   if (op->get_req()->get_type() != CEPH_MSG_OSD_OP)
     return true;
 
-  MOSDOp *req = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *req = static_cast<const MOSDOp*>(op->get_req());
 
-  Session *session = (Session *)req->get_connection()->get_priv();
+  Session *session = static_cast<Session*>(req->get_connection()->get_priv());
   if (!session) {
     dout(0) << "op_has_sufficient_caps: no session for op " << *req << dendl;
     return false;
@@ -1906,48 +1907,6 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
 	   << " -> " << (cap ? "yes" : "NO")
 	   << dendl;
   return cap;
-}
-
-void PG::take_op_map_waiters()
-{
-  Mutex::Locker l(map_lock);
-  for (list<OpRequestRef>::iterator i = waiting_for_map.begin();
-       i != waiting_for_map.end();
-       ) {
-    if (op_must_wait_for_map(get_osdmap_with_maplock()->get_epoch(), *i)) {
-      break;
-    } else {
-      (*i)->mark_queued_for_pg();
-      osd->op_wq.queue(make_pair(PGRef(this), *i));
-      waiting_for_map.erase(i++);
-    }
-  }
-}
-
-void PG::queue_op(OpRequestRef& op)
-{
-  Mutex::Locker l(map_lock);
-  if (!waiting_for_map.empty()) {
-    // preserve ordering
-    waiting_for_map.push_back(op);
-    op->mark_delayed("waiting_for_map not empty");
-    return;
-  }
-  if (op_must_wait_for_map(get_osdmap_with_maplock()->get_epoch(), op)) {
-    waiting_for_map.push_back(op);
-    op->mark_delayed("op must wait for map");
-    return;
-  }
-  op->mark_queued_for_pg();
-  osd->op_wq.queue(make_pair(PGRef(this), op));
-  {
-    // after queue() to include any locking costs
-#ifdef WITH_LTTNG
-    osd_reqid_t reqid = op->get_reqid();
-#endif
-    tracepoint(pg, queue_op, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc, op->rmw_flags);
-  }
 }
 
 void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
@@ -2050,6 +2009,8 @@ bool PG::queue_scrub()
   if (is_scrubbing()) {
     return false;
   }
+  scrubber.priority = scrubber.must_scrub ?
+         cct->_conf->osd_requested_scrub_priority : get_scrub_priority();
   scrubber.must_scrub = false;
   state_set(PG_STATE_SCRUBBING);
   if (scrubber.must_deep_scrub) {
@@ -2625,7 +2586,7 @@ void PG::_update_calc_stats()
   if ((is_degraded() || is_undersized() || !is_clean()) && is_peered()) {
     // NOTE: we only generate copies, degraded, misplaced and unfound
     // values for the summation, not individual stat categories.
-    uint64_t num_objects = info.stats.stats.sum.num_objects;
+    int64_t num_objects = info.stats.stats.sum.num_objects;
 
     // Total sum of all missing
     int64_t missing = 0;
@@ -2746,6 +2707,10 @@ void PG::publish_stats_to_osd()
     if ((state & (PG_STATE_ACTIVE|PG_STATE_PEERED)) &&
 	!(info.stats.state & (PG_STATE_ACTIVE|PG_STATE_PEERED)))
       info.stats.last_became_peered = now;
+    if (!(state & PG_STATE_CREATING) &&
+	(info.stats.state & PG_STATE_CREATING)) {
+      osd->send_pg_created(get_pgid().pgid);
+    }
     info.stats.state = state;
   }
 
@@ -2753,9 +2718,11 @@ void PG::publish_stats_to_osd()
   _update_blocked_by();
 
   bool publish = false;
+  pg_stat_t pre_publish = info.stats;
+  pre_publish.stats.add(unstable_stats);
   utime_t cutoff = now;
   cutoff -= cct->_conf->osd_pg_stat_report_interval_max;
-  if (pg_stats_publish_valid && info.stats == pg_stats_publish &&
+  if (pg_stats_publish_valid && pre_publish == pg_stats_publish &&
       info.stats.last_fresh > cutoff) {
     dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
 	     << ": no change since " << info.stats.last_fresh << dendl;
@@ -2780,8 +2747,7 @@ void PG::publish_stats_to_osd()
 
     publish = true;
     pg_stats_publish_valid = true;
-    pg_stats_publish = info.stats;
-    pg_stats_publish.stats.add(unstable_stats);
+    pg_stats_publish = pre_publish;
 
     dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
 	     << ":" << pg_stats_publish.reported_seq << dendl;
@@ -2821,7 +2787,7 @@ void PG::init(
   const vector<int>& newup, int new_up_primary,
   const vector<int>& newacting, int new_acting_primary,
   const pg_history_t& history,
-  pg_interval_map_t& pi,
+  const pg_interval_map_t& pi,
   bool backfill,
   ObjectStore::Transaction *t)
 {
@@ -2840,7 +2806,7 @@ void PG::init(
     new_acting_primary);
 
   info.history = history;
-  past_intervals.swap(pi);
+  past_intervals = pi;
 
   info.stats.up = up;
   info.stats.up_primary = new_up_primary;
@@ -3323,6 +3289,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     ghobject_t(info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid),
     info,
     oss,
+    cct->_conf->osd_ignore_stale_divergent_priors,
     cct->_conf->osd_debug_verify_missing_on_start);
   if (oss.tellp())
     osd->clog->error() << oss.rdbuf();
@@ -3335,14 +3302,12 @@ void PG::log_weirdness()
 {
   if (pg_log.get_tail() != info.log_tail)
     osd->clog->error() << info.pgid
-		      << " info mismatch, log.tail " << pg_log.get_tail()
-		      << " != info.log_tail " << info.log_tail
-		      << "\n";
+		       << " info mismatch, log.tail " << pg_log.get_tail()
+		       << " != info.log_tail " << info.log_tail;
   if (pg_log.get_head() != info.last_update)
     osd->clog->error() << info.pgid
-		      << " info mismatch, log.head " << pg_log.get_head()
-		      << " != info.last_update " << info.last_update
-		      << "\n";
+		       << " info mismatch, log.head " << pg_log.get_head()
+		       << " != info.last_update " << info.last_update;
 
   if (!pg_log.get_log().empty()) {
     // sloppy check
@@ -3352,15 +3317,13 @@ void PG::log_weirdness()
 			<< pg_log.get_head() << "]"
 			<< " actual ["
 			<< pg_log.get_log().log.begin()->version << ","
-			<< pg_log.get_log().log.rbegin()->version << "]"
-			<< "\n";
+			 << pg_log.get_log().log.rbegin()->version << "]";
   }
   
   if (pg_log.get_log().caller_ops.size() > pg_log.get_log().log.size()) {
     osd->clog->error() << info.pgid
 		      << " caller_ops.size " << pg_log.get_log().caller_ops.size()
-		      << " > log size " << pg_log.get_log().log.size()
-		      << "\n";
+		       << " > log size " << pg_log.get_log().log.size();
   }
 }
 
@@ -3455,18 +3418,53 @@ void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef>>& m)
 
 void PG::requeue_op(OpRequestRef op)
 {
-  osd->op_wq.queue_front(make_pair(PGRef(this), op));
+  auto p = waiting_for_map.find(op->get_source());
+  if (p != waiting_for_map.end()) {
+    dout(20) << __func__ << " " << op << " (waiting_for_map " << p->first << ")"
+	     << dendl;
+    p->second.push_front(op);
+  } else {
+    dout(20) << __func__ << " " << op << dendl;
+    osd->enqueue_front(info.pgid, PGQueueable(op, get_osdmap()->get_epoch()));
+  }
 }
 
 void PG::requeue_ops(list<OpRequestRef> &ls)
 {
-  dout(15) << " requeue_ops " << ls << dendl;
   for (list<OpRequestRef>::reverse_iterator i = ls.rbegin();
        i != ls.rend();
        ++i) {
-    osd->op_wq.queue_front(make_pair(PGRef(this), *i));
+    auto p = waiting_for_map.find((*i)->get_source());
+    if (p != waiting_for_map.end()) {
+      dout(20) << __func__ << " " << *i << " (waiting_for_map " << p->first
+	       << ")" << dendl;
+      p->second.push_front(*i);
+    } else {
+      dout(20) << __func__ << " " << *i << dendl;
+      osd->enqueue_front(info.pgid, PGQueueable(*i, get_osdmap()->get_epoch()));
+    }
   }
   ls.clear();
+}
+
+void PG::requeue_map_waiters()
+{
+  epoch_t epoch = get_osdmap()->get_epoch();
+  auto p = waiting_for_map.begin();
+  while (p != waiting_for_map.end()) {
+    if (op_must_wait_for_map(epoch, p->second.front())) {
+      dout(20) << __func__ << " " << p->first << " front op "
+	       << p->second.front() << " must still wait, doing nothing"
+	       << dendl;
+      ++p;
+    } else {
+      dout(20) << __func__ << " " << p->first << " " << p->second << dendl;
+      for (auto q = p->second.rbegin(); q != p->second.rend(); ++q) {
+	osd->enqueue_front(info.pgid, PGQueueable(*q, epoch));
+      }
+      p = waiting_for_map.erase(p);
+    }
+  }
 }
 
 
@@ -3644,9 +3642,40 @@ void PG::unreg_next_scrub()
   }
 }
 
+void PG::do_replica_scrub_map(OpRequestRef op)
+{
+  const MOSDRepScrubMap *m = static_cast<const MOSDRepScrubMap*>(op->get_req());
+  dout(7) << __func__ << " " << *m << dendl;
+  if (m->map_epoch < info.history.same_interval_since) {
+    dout(10) << __func__ << " discarding old from "
+	     << m->map_epoch << " < " << info.history.same_interval_since
+	     << dendl;
+    return;
+  }
+  if (!scrubber.is_chunky_scrub_active()) {
+    dout(10) << __func__ << " scrub isn't active" << dendl;
+    return;
+  }
+
+  op->mark_started();
+
+  bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
+  scrubber.received_maps[m->from].decode(p, info.pgid.pool());
+  dout(10) << "map version is "
+	   << scrubber.received_maps[m->from].valid_through
+	   << dendl;
+
+  --scrubber.waiting_on;
+  scrubber.waiting_on_whom.erase(m->from);
+  if (scrubber.waiting_on == 0) {
+    requeue_scrub();
+  }
+}
+
 void PG::sub_op_scrub_map(OpRequestRef op)
 {
-  MOSDSubOp *m = static_cast<MOSDSubOp *>(op->get_req());
+  // for legacy jewel compatibility only
+  const MOSDSubOp *m = static_cast<const MOSDSubOp *>(op->get_req());
   assert(m->get_type() == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_map" << dendl;
 
@@ -3664,7 +3693,7 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   op->mark_started();
 
   dout(10) << " got " << m->from << " scrub map" << dendl;
-  bufferlist::iterator p = m->get_data().begin();
+  bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
 
   scrubber.received_maps[m->from].decode(p, info.pgid.pool());
   dout(10) << "map version is "
@@ -3698,67 +3727,75 @@ void PG::_request_scrub_map(
     replica.osd, repscrubop, get_osdmap()->get_epoch());
 }
 
-void PG::sub_op_scrub_reserve(OpRequestRef op)
+void PG::handle_scrub_reserve_request(OpRequestRef op)
 {
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_type() == MSG_OSD_SUBOP);
-  dout(7) << "sub_op_scrub_reserve" << dendl;
-
+  dout(7) << __func__ << " " << *op->get_req() << dendl;
+  op->mark_started();
   if (scrubber.reserved) {
-    dout(10) << "Ignoring reserve request: Already reserved" << dendl;
+    dout(10) << __func__ << " ignoring reserve request: Already reserved"
+	     << dendl;
     return;
   }
-
-  op->mark_started();
-
   scrubber.reserved = osd->inc_scrubs_pending();
-
-  MOSDSubOpReply *reply = new MOSDSubOpReply(
-    m, pg_whoami, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
-  ::encode(scrubber.reserved, reply->get_data());
-  osd->send_message_osd_cluster(reply, m->get_connection());
+  if (op->get_req()->get_type() == MSG_OSD_SCRUB_RESERVE) {
+    const MOSDScrubReserve *m =
+      static_cast<const MOSDScrubReserve*>(op->get_req());
+    Message *reply = new MOSDScrubReserve(
+      spg_t(info.pgid.pgid, primary.shard),
+      m->map_epoch,
+      scrubber.reserved ? MOSDScrubReserve::GRANT : MOSDScrubReserve::REJECT,
+      pg_whoami);
+    osd->send_message_osd_cluster(reply, op->get_req()->get_connection());
+  } else {
+    // for jewel compat only
+    const MOSDSubOp *req = static_cast<const MOSDSubOp*>(op->get_req());
+    assert(req->get_type() == MSG_OSD_SUBOP);
+    MOSDSubOpReply *reply = new MOSDSubOpReply(
+      req, pg_whoami, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
+    ::encode(scrubber.reserved, reply->get_data());
+    osd->send_message_osd_cluster(reply, op->get_req()->get_connection());
+  }
 }
 
-void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
+void PG::handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from)
 {
-  MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->get_req());
-  assert(reply->get_type() == MSG_OSD_SUBOPREPLY);
-  dout(7) << "sub_op_scrub_reserve_reply" << dendl;
-
+  dout(7) << __func__ << " " << *op->get_req() << dendl;
+  op->mark_started();
   if (!scrubber.reserved) {
     dout(10) << "ignoring obsolete scrub reserve reply" << dendl;
     return;
   }
-
-  op->mark_started();
-
-  pg_shard_t from = reply->from;
-  bufferlist::iterator p = reply->get_data().begin();
-  bool reserved;
-  ::decode(reserved, p);
-
   if (scrubber.reserved_peers.find(from) != scrubber.reserved_peers.end()) {
     dout(10) << " already had osd." << from << " reserved" << dendl;
   } else {
-    if (reserved) {
-      dout(10) << " osd." << from << " scrub reserve = success" << dendl;
-      scrubber.reserved_peers.insert(from);
-    } else {
-      /* One decline stops this pg from being scheduled for scrubbing. */
-      dout(10) << " osd." << from << " scrub reserve = fail" << dendl;
-      scrubber.reserve_failed = true;
-    }
+    dout(10) << " osd." << from << " scrub reserve = success" << dendl;
+    scrubber.reserved_peers.insert(from);
     sched_scrub();
   }
 }
 
-void PG::sub_op_scrub_unreserve(OpRequestRef op)
+void PG::handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from)
 {
-  assert(op->get_req()->get_type() == MSG_OSD_SUBOP);
-  dout(7) << "sub_op_scrub_unreserve" << dendl;
-
+  dout(7) << __func__ << " " << *op->get_req() << dendl;
   op->mark_started();
+  if (!scrubber.reserved) {
+    dout(10) << "ignoring obsolete scrub reserve reply" << dendl;
+    return;
+  }
+  if (scrubber.reserved_peers.find(from) != scrubber.reserved_peers.end()) {
+    dout(10) << " already had osd." << from << " reserved" << dendl;
+  } else {
+    /* One decline stops this pg from being scheduled for scrubbing. */
+    dout(10) << " osd." << from << " scrub reserve = fail" << dendl;
+    scrubber.reserve_failed = true;
+    sched_scrub();
+  }
+}
 
+void PG::handle_scrub_reserve_release(OpRequestRef op)
+{
+  dout(7) << __func__ << " " << *op->get_req() << dendl;
+  op->mark_started();
   clear_scrub_reserved();
 }
 
@@ -3775,12 +3812,22 @@ void PG::reject_reservation()
 
 void PG::schedule_backfill_full_retry()
 {
-  Mutex::Locker lock(osd->backfill_request_lock);
-  osd->backfill_request_timer.add_event_after(
+  Mutex::Locker lock(osd->recovery_request_lock);
+  osd->recovery_request_timer.add_event_after(
     cct->_conf->osd_backfill_retry_interval,
     new QueuePeeringEvt<RequestBackfill>(
       this, get_osdmap()->get_epoch(),
       RequestBackfill()));
+}
+
+void PG::schedule_recovery_full_retry()
+{
+  Mutex::Locker lock(osd->recovery_request_lock);
+  osd->recovery_request_timer.add_event_after(
+    cct->_conf->osd_recovery_retry_interval,
+    new QueuePeeringEvt<DoRecovery>(
+      this, get_osdmap()->get_epoch(),
+      DoRecovery()));
 }
 
 void PG::clear_scrub_reserved()
@@ -3802,17 +3849,27 @@ void PG::scrub_reserve_replicas()
        ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting reserve from osd." << *i << dendl;
-    vector<OSDOp> scrub(1);
-    scrub[0].op.op = CEPH_OSD_OP_SCRUB_RESERVE;
-    hobject_t poid;
-    eversion_t v;
-    osd_reqid_t reqid;
-    MOSDSubOp *subop = new MOSDSubOp(
-      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
-      get_osdmap()->get_epoch(), osd->get_tid(), v);
-    subop->ops = scrub;
-    osd->send_message_osd_cluster(
-      i->osd, subop, get_osdmap()->get_epoch());
+    if (HAVE_FEATURE(get_min_acting_features(), SERVER_LUMINOUS)) {
+      osd->send_message_osd_cluster(
+	i->osd,
+	new MOSDScrubReserve(spg_t(info.pgid.pgid, i->shard),
+			     get_osdmap()->get_epoch(),
+			     MOSDScrubReserve::REQUEST, pg_whoami),
+	get_osdmap()->get_epoch());
+    } else {
+      // for jewel compat only
+      vector<OSDOp> scrub(1);
+      scrub[0].op.op = CEPH_OSD_OP_SCRUB_RESERVE;
+      hobject_t poid;
+      eversion_t v;
+      osd_reqid_t reqid;
+      MOSDSubOp *subop = new MOSDSubOp(
+	reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
+	get_osdmap()->get_epoch(), osd->get_tid(), v);
+      subop->ops = scrub;
+      osd->send_message_osd_cluster(
+	i->osd, subop, get_osdmap()->get_epoch());
+    }
   }
 }
 
@@ -3824,16 +3881,26 @@ void PG::scrub_unreserve_replicas()
        ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting unreserve from osd." << *i << dendl;
-    vector<OSDOp> scrub(1);
-    scrub[0].op.op = CEPH_OSD_OP_SCRUB_UNRESERVE;
-    hobject_t poid;
-    eversion_t v;
-    osd_reqid_t reqid;
-    MOSDSubOp *subop = new MOSDSubOp(
-      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
-      get_osdmap()->get_epoch(), osd->get_tid(), v);
-    subop->ops = scrub;
-    osd->send_message_osd_cluster(i->osd, subop, get_osdmap()->get_epoch());
+    if (HAVE_FEATURE(get_min_acting_features(), SERVER_LUMINOUS)) {
+      osd->send_message_osd_cluster(
+	i->osd,
+	new MOSDScrubReserve(spg_t(info.pgid.pgid, i->shard),
+			     get_osdmap()->get_epoch(),
+			     MOSDScrubReserve::RELEASE, pg_whoami),
+	get_osdmap()->get_epoch());
+    } else {
+      // for jewel compat only
+      vector<OSDOp> scrub(1);
+      scrub[0].op.op = CEPH_OSD_OP_SCRUB_UNRESERVE;
+      hobject_t poid;
+      eversion_t v;
+      osd_reqid_t reqid;
+      MOSDSubOp *subop = new MOSDSubOp(
+	reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
+	get_osdmap()->get_epoch(), osd->get_tid(), v);
+      subop->ops = scrub;
+      osd->send_message_osd_cluster(i->osd, subop, get_osdmap()->get_epoch());
+    }
   }
 }
 
@@ -3881,7 +3948,7 @@ void PG::_scan_snaps(ScrubMap &smap)
       bl.push_back(o.attrs[OI_ATTR]);
       object_info_t oi;
       try {
-	oi = bl;
+	oi.decode(bl);
       } catch(...) {
 	o.nlinks = 0;
 	continue;
@@ -4045,7 +4112,7 @@ void PG::replica_scrub(
   OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
-  MOSDRepScrub *msg = static_cast<MOSDRepScrub *>(op->get_req());
+  const MOSDRepScrub *msg = static_cast<const MOSDRepScrub *>(op->get_req());
   assert(!scrubber.active_rep_scrub);
   dout(7) << "replica_scrub" << dendl;
 
@@ -4083,24 +4150,33 @@ void PG::replica_scrub(
     map, start, end, msg->deep, msg->seed,
     handle);
 
-  vector<OSDOp> scrub(1);
-  scrub[0].op.op = CEPH_OSD_OP_SCRUB_MAP;
-  hobject_t poid;
-  eversion_t v;
-  osd_reqid_t reqid;
-  MOSDSubOp *subop = new MOSDSubOp(
-    reqid,
-    pg_whoami,
-    spg_t(info.pgid.pgid, get_primary().shard),
-    poid,
-    0,
-    msg->map_epoch,
-    osd->get_tid(),
-    v);
-  ::encode(map, subop->get_data());
-  subop->ops = scrub;
-
-  osd->send_message_osd_cluster(subop, msg->get_connection());
+  if (HAVE_FEATURE(acting_features, SERVER_LUMINOUS)) {
+    MOSDRepScrubMap *reply = new MOSDRepScrubMap(
+      spg_t(info.pgid.pgid, get_primary().shard),
+      msg->map_epoch,
+      pg_whoami);
+    ::encode(map, reply->get_data());
+    osd->send_message_osd_cluster(reply, msg->get_connection());
+  } else {
+    // for jewel compatibility
+    vector<OSDOp> scrub(1);
+    scrub[0].op.op = CEPH_OSD_OP_SCRUB_MAP;
+    hobject_t poid;
+    eversion_t v;
+    osd_reqid_t reqid;
+    MOSDSubOp *subop = new MOSDSubOp(
+      reqid,
+      pg_whoami,
+      spg_t(info.pgid.pgid, get_primary().shard),
+      poid,
+      0,
+      msg->map_epoch,
+      osd->get_tid(),
+      v);
+    ::encode(map, subop->get_data());
+    subop->ops = scrub;
+    osd->send_message_osd_cluster(subop, msg->get_connection());
+  }
 }
 
 /* Scrub:
@@ -4708,7 +4784,6 @@ void PG::scrub_finish()
           << " remaining deep scrub error details lost)";
     if (repair)
       oss << ", " << scrubber.fixed << " fixed";
-    oss << "\n";
     if (total_errors)
       osd->clog->error(oss);
     else
@@ -4923,7 +4998,7 @@ void PG::fulfill_log(
     if (query.since != eversion_t() && query.since < pg_log.get_tail()) {
       osd->clog->error() << info.pgid << " got broken pg_query_t::LOG since " << query.since
 			<< " when my log.tail is " << pg_log.get_tail()
-			<< ", sending full log instead\n";
+			<< ", sending full log instead";
       mlog->log = pg_log.get_log();           // primary should not have requested this!!
     } else
       mlog->log.copy_after(pg_log.get_log(), query.since);
@@ -5175,6 +5250,7 @@ void PG::start_peering_interval(
   state_clear(PG_STATE_PEERED);
   state_clear(PG_STATE_DOWN);
   state_clear(PG_STATE_RECOVERY_WAIT);
+  state_clear(PG_STATE_RECOVERY_TOOFULL);
   state_clear(PG_STATE_RECOVERING);
 
   peer_purged.clear();
@@ -5392,7 +5468,7 @@ ostream& operator<<(ostream& out, const PG& pg)
 
 bool PG::can_discard_op(OpRequestRef& op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
   if (cct->_conf->osd_discard_disconnected_ops && OSD::op_is_discardable(m)) {
     dout(20) << " discard " << *m << dendl;
     return true;
@@ -5430,7 +5506,7 @@ bool PG::can_discard_op(OpRequestRef& op)
 template<typename T, int MSGTYPE>
 bool PG::can_discard_replica_op(OpRequestRef& op)
 {
-  T *m = static_cast<T *>(op->get_req());
+  const T *m = static_cast<const T *>(op->get_req());
   assert(m->get_type() == MSGTYPE);
 
   /* Mostly, this overlaps with the old_peering_msg
@@ -5455,7 +5531,7 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
 
 bool PG::can_discard_scan(OpRequestRef op)
 {
-  MOSDPGScan *m = static_cast<MOSDPGScan *>(op->get_req());
+  const MOSDPGScan *m = static_cast<const MOSDPGScan *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_SCAN);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
@@ -5467,7 +5543,7 @@ bool PG::can_discard_scan(OpRequestRef op)
 
 bool PG::can_discard_backfill(OpRequestRef op)
 {
-  MOSDPGBackfill *m = static_cast<MOSDPGBackfill *>(op->get_req());
+  const MOSDPGBackfill *m = static_cast<const MOSDPGBackfill *>(op->get_req());
   assert(m->get_type() == MSG_OSD_PG_BACKFILL);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
@@ -5511,6 +5587,10 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_replica_op<MOSDECSubOpReadReply, MSG_OSD_EC_READ_REPLY>(op);
   case MSG_OSD_REP_SCRUB:
     return can_discard_replica_op<MOSDRepScrub, MSG_OSD_REP_SCRUB>(op);
+  case MSG_OSD_SCRUB_RESERVE:
+    return can_discard_replica_op<MOSDScrubReserve, MSG_OSD_SCRUB_RESERVE>(op);
+  case MSG_OSD_REP_SCRUBMAP:
+    return can_discard_replica_op<MOSDRepScrubMap, MSG_OSD_REP_SCRUBMAP>(op);
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
     return can_discard_replica_op<
       MOSDPGUpdateLogMissing, MSG_OSD_PG_UPDATE_LOG_MISSING>(op);
@@ -5522,6 +5602,9 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_scan(op);
   case MSG_OSD_PG_BACKFILL:
     return can_discard_backfill(op);
+  case MSG_OSD_PG_BACKFILL_REMOVE:
+    return can_discard_replica_op<MOSDPGBackfillRemove,
+				  MSG_OSD_PG_BACKFILL_REMOVE>(op);
   }
   return true;
 }
@@ -5532,7 +5615,7 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
   case CEPH_MSG_OSD_OP:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDOp*>(op->get_req())->get_map_epoch());
+      static_cast<const MOSDOp*>(op->get_req())->get_map_epoch());
 
   case CEPH_MSG_OSD_BACKOFF:
     return false; // we don't care about maps
@@ -5540,82 +5623,97 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
   case MSG_OSD_SUBOP:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDSubOp*>(op->get_req())->map_epoch);
+      static_cast<const MOSDSubOp*>(op->get_req())->map_epoch);
 
   case MSG_OSD_REPOP:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDRepOp*>(op->get_req())->map_epoch);
+      static_cast<const MOSDRepOp*>(op->get_req())->map_epoch);
 
   case MSG_OSD_SUBOPREPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDSubOpReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDSubOpReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_REPOPREPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDRepOpReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDRepOpReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_SCAN:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGScan*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGScan*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_BACKFILL:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGBackfill*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGBackfill*>(op->get_req())->map_epoch);
+
+  case MSG_OSD_PG_BACKFILL_REMOVE:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<const MOSDPGBackfillRemove*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PUSH:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGPush*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGPush*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PULL:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGPull*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGPull*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PUSH_REPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGPushReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGPushReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_WRITE:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDECSubOpWrite*>(op->get_req())->map_epoch);
+      static_cast<const MOSDECSubOpWrite*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_WRITE_REPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDECSubOpWriteReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDECSubOpWriteReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_READ:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDECSubOpRead*>(op->get_req())->map_epoch);
+      static_cast<const MOSDECSubOpRead*>(op->get_req())->map_epoch);
 
   case MSG_OSD_EC_READ_REPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDECSubOpReadReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDECSubOpReadReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_REP_SCRUB:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDRepScrub*>(op->get_req())->map_epoch);
+      static_cast<const MOSDRepScrub*>(op->get_req())->map_epoch);
+
+  case MSG_OSD_SCRUB_RESERVE:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<const MOSDScrubReserve*>(op->get_req())->map_epoch);
+
+  case MSG_OSD_REP_SCRUBMAP:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<const MOSDRepScrubMap*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGUpdateLogMissing*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGUpdateLogMissing*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     return !have_same_or_newer_map(
       cur_epoch,
-      static_cast<MOSDPGUpdateLogMissingReply*>(op->get_req())->map_epoch);
+      static_cast<const MOSDPGUpdateLogMissingReply*>(op->get_req())->map_epoch);
   }
   ceph_abort();
   return false;
@@ -5624,7 +5722,7 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
 void PG::take_waiters()
 {
   dout(10) << "take_waiters" << dendl;
-  take_op_map_waiters();
+  requeue_map_waiters();
   for (list<CephPeeringEvtRef>::iterator i = peering_waiters.begin();
        i != peering_waiters.end();
        ++i) osd->queue_for_peering(this);
@@ -5768,6 +5866,24 @@ void PG::update_store_with_options()
   }
 }
 
+void PG::update_store_on_load()
+{
+  if (osd->store->get_type() == "filestore") {
+    // legacy filestore didn't store collection bit width; fix.
+    int bits = osd->store->collection_bits(coll);
+    if (bits < 0) {
+      if (coll.is_meta())
+	bits = 0;
+      else
+	bits = info.pgid.get_split_bits(pool.info.get_pg_num());
+      lderr(cct) << __func__ << " setting bit width to " << bits << dendl;
+      ObjectStore::Transaction t;
+      t.collection_set_bits(coll, bits);
+      osd->store->apply_transaction(osr.get(), std::move(t));
+    }
+  }
+}
+
 std::ostream& operator<<(std::ostream& oss,
 			 const struct PG::PriorSet &prior)
 {
@@ -5807,6 +5923,8 @@ boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
   // do we tell someone we're here?
   pg->send_notify = (!pg->is_primary());
   pg->update_store_with_options();
+
+  pg->update_store_on_load();
 
   return transit< Reset >();
 }
@@ -6063,14 +6181,8 @@ boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& no
 {
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 7) << "handle_pg_notify from osd." << notevt.from << dendl;
-  if (pg->peer_info.count(notevt.from) &&
-      pg->peer_info[notevt.from].last_update == notevt.notify.info.last_update) {
-    ldout(pg->cct, 10) << *pg << " got dup osd." << notevt.from << " info "
-		       << notevt.notify.info << ", identical to ours" << dendl;
-  } else {
-    pg->proc_replica_info(
-      notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
-  }
+  pg->proc_replica_info(
+    notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
   return discard_event();
 }
 
@@ -6390,6 +6502,24 @@ void PG::RecoveryState::NotBackfilling::exit()
   pg->osd->recoverystate_perf->tinc(rs_notbackfilling_latency, dur);
 }
 
+/*----NotRecovering------*/
+PG::RecoveryState::NotRecovering::NotRecovering(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active/NotRecovering")
+{
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->publish_stats_to_osd();
+}
+
+void PG::RecoveryState::NotRecovering::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now() - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_notrecovering_latency, dur);
+}
+
 /*---RepNotRecovering----*/
 PG::RecoveryState::RepNotRecovering::RepNotRecovering(my_context ctx)
   : my_base(ctx),
@@ -6456,18 +6586,17 @@ boost::statechart::result
 PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  double ratio, max_ratio;
+  ostringstream ss;
 
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected: failure injection"
 		       << dendl;
     post_event(RemoteReservationRejected());
-  } else if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
-      !pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
-    ldout(pg->cct, 10) << "backfill reservation rejected: full ratio is "
-		       << ratio << ", which is greater than max allowed ratio "
-		       << max_ratio << dendl;
+  } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
+      pg->osd->check_backfill_full(ss)) {
+    ldout(pg->cct, 10) << "backfill reservation rejected: "
+		       << ss.str() << dendl;
     post_event(RemoteReservationRejected());
   } else {
     pg->osd->remote_reserver.request_reservation(
@@ -6492,7 +6621,7 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
 {
   PG *pg = context< RecoveryMachine >().pg;
 
-  double ratio, max_ratio;
+  ostringstream ss;
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
@@ -6500,11 +6629,10 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
     pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
     post_event(RemoteReservationRejected());
     return discard_event();
-  } else if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
-	     !pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
-    ldout(pg->cct, 10) << "backfill reservation rejected after reservation: full ratio is "
-		       << ratio << ", which is greater than max allowed ratio "
-		       << max_ratio << dendl;
+  } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
+	     pg->osd->check_backfill_full(ss)) {
+    ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
+		       << ss.str() << dendl;
     pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
     post_event(RemoteReservationRejected());
     return discard_event();
@@ -6575,6 +6703,15 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
 {
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
+
+  // Make sure all nodes that part of the recovery aren't full
+  if (!pg->cct->_conf->osd_debug_skip_full_check_in_recovery &&
+      pg->osd->check_osdmap_full(pg->actingbackfill)) {
+    post_event(RecoveryTooFull());
+    return;
+  }
+
+  pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   pg->state_set(PG_STATE_RECOVERY_WAIT);
   pg->osd->local_reserver.request_reservation(
     pg->info.pgid,
@@ -6583,6 +6720,15 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
       LocalRecoveryReserved()),
     pg->get_recovery_priority());
   pg->publish_stats_to_osd();
+}
+
+boost::statechart::result
+PG::RecoveryState::WaitLocalRecoveryReserved::react(const RecoveryTooFull &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->state_set(PG_STATE_RECOVERY_TOOFULL);
+  pg->schedule_recovery_full_retry();
+  return transit<NotRecovering>();
 }
 
 void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
@@ -6641,6 +6787,7 @@ PG::RecoveryState::Recovering::Recovering(my_context ctx)
 
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
+  pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   pg->state_set(PG_STATE_RECOVERING);
   pg->publish_stats_to_osd();
   pg->queue_recovery();
@@ -6897,9 +7044,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
       pg->all_unfound_are_queried_or_lost(pg->get_osdmap())) {
     if (pg->cct->_conf->osd_auto_mark_unfound_lost) {
       pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound
-			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED\n";
+			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED";
     } else
-      pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound << " objects unfound and apparently lost\n";
+      pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound << " objects unfound and apparently lost";
   }
 
   if (pg->is_active()) {
@@ -6969,7 +7116,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt
   ldout(pg->cct, 10) << "searching osd." << logevt.from
 		     << " log for unfound items" << dendl;
   pg->proc_replica_log(
-    *context<RecoveryMachine>().get_cur_transaction(),
     logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
   bool got_missing = pg->search_for_missing(
     pg->peer_info[logevt.from],
@@ -7090,7 +7236,7 @@ void PG::RecoveryState::Active::exit()
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
-  pg->state_clear(PG_STATE_REPLAY);
+  pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_active_latency, dur);
   pg->agent_stop();
@@ -7137,7 +7283,7 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MLogRec&
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 10) << "received log from " << logevt.from << dendl;
   ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
-  pg->merge_log(*t,logevt.msg->info, logevt.msg->log, logevt.from);
+  pg->merge_log(*t, logevt.msg->info, logevt.msg->log, logevt.from);
   assert(pg->pg_log.get_head() == pg->info.last_update);
 
   return discard_event();
@@ -7774,16 +7920,12 @@ boost::statechart::result PG::RecoveryState::Incomplete::react(const AdvMap &adv
 boost::statechart::result PG::RecoveryState::Incomplete::react(const MNotifyRec& notevt) {
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 7) << "handle_pg_notify from osd." << notevt.from << dendl;
-  if (pg->peer_info.count(notevt.from) &&
-      pg->peer_info[notevt.from].last_update == notevt.notify.info.last_update) {
-    ldout(pg->cct, 10) << *pg << " got dup osd." << notevt.from << " info " << notevt.notify.info
-		       << ", identical to ours" << dendl;
-    return discard_event();
-  } else {
-    pg->proc_replica_info(
-      notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
-    // try again!
+  if (pg->proc_replica_info(
+    notevt.from, notevt.notify.info, notevt.notify.epoch_sent)) {
+    // We got something new, try again!
     return transit< GetLog >();
+  } else {
+    return discard_event();
   }
 }
 
@@ -7898,8 +8040,7 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
   PG *pg = context< RecoveryMachine >().pg;
 
   peer_missing_requested.erase(logevt.from);
-  pg->proc_replica_log(*context<RecoveryMachine>().get_cur_transaction(),
-		       logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
+  pg->proc_replica_log(logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
   
   if (peer_missing_requested.empty()) {
     if (pg->need_up_thru) {

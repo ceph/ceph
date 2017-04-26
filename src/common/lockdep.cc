@@ -146,7 +146,7 @@ int lockdep_get_free_id(void)
     int tmp = last_freed_id;
     last_freed_id = -1;
     free_ids[tmp/8] &= 255 - (1 << (tmp % 8));
-    lockdep_dout(1) << "reusing last freed id " << tmp << dendl;
+    lockdep_dout(1) << "lockdep reusing last freed id " << tmp << dendl;
     return tmp;
   }
   
@@ -157,7 +157,7 @@ int lockdep_get_free_id(void)
       for (int j = 0; j < 8; ++j) {
         if (free_ids[i] & (1 << j)) {
           free_ids[i] &= 255 - (1 << j);
-          lockdep_dout(1) << "using id " << i * 8 + j << dendl;
+          lockdep_dout(1) << "lockdep using id " << i * 8 + j << dendl;
           return i * 8 + j;
         }
       }

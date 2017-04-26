@@ -25,7 +25,7 @@ public:
   }
 
 protected:
-  virtual int overflow (int c);
+  int overflow (int c) override;
 
 private:
   size_t m_indent;

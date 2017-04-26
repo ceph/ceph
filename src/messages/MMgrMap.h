@@ -34,19 +34,19 @@ public:
   }
 
 private:
-  ~MMgrMap() {}
+  ~MMgrMap() override {}
 
 public:
-  const char *get_type_name() const { return "mgrmap"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "mgrmap"; }
+  void print(ostream& out) const override {
     out << get_type_name() << "(e " << map.epoch << ")";
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(map, p);
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(map, payload, features);
   }
 };

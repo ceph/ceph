@@ -89,7 +89,7 @@ protected:
     MDLog *log;
   public:
     explicit ReplayThread(MDLog *l) : log(l) {}
-    void* entry() {
+    void* entry() override {
       log->_replay_thread();
       return 0;
     }
@@ -111,7 +111,7 @@ protected:
   public:
     void set_completion(MDSInternalContextBase *c) {completion = c;}
     explicit RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
-    void* entry() {
+    void* entry() override {
       log->_recovery_thread(completion);
       return 0;
     }
@@ -152,7 +152,7 @@ protected:
     MDLog *log;
   public:
     explicit SubmitThread(MDLog *l) : log(l) {}
-    void* entry() {
+    void* entry() override {
       log->_submit_thread();
       return 0;
     }

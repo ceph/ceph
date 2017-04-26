@@ -85,7 +85,7 @@ class TestFlush(CephFSTestCase):
         # We will count the RADOS deletions and MDS file purges, to verify that
         # the expected behaviour is happening as a result of the purge
         initial_dels = self.fs.mds_asok(['perf', 'dump', 'objecter'])['objecter']['osdop_delete']
-        initial_purges = self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['strays_purged']
+        initial_purges = self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['strays_enqueued']
 
         # Use a client to delete a file
         self.mount_a.mount()
@@ -98,7 +98,7 @@ class TestFlush(CephFSTestCase):
 
         # We expect to see a single file purge
         self.wait_until_true(
-            lambda: self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['strays_purged'] - initial_purges >= 2,
+            lambda: self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['strays_enqueued'] - initial_purges >= 2,
             60)
 
         # We expect two deletions, one of the dirfrag and one of the backtrace

@@ -349,7 +349,7 @@ TEST(chain_xattr, fskip_chain_cleanup_and_ensure_single_attr)
 
   std::size_t existing_xattrs = get_xattrs(fd).size();
   char buf[800];
-  memset(buf, sizeof(buf), 0x1F);
+  memset(buf, 0x1F, sizeof(buf));
   // set chunked without either
   {
     std::size_t r = chain_fsetxattr(fd, name, buf, sizeof(buf));
@@ -394,7 +394,7 @@ TEST(chain_xattr, skip_chain_cleanup_and_ensure_single_attr)
   ::close(fd);
 
   char buf[3000];
-  memset(buf, sizeof(buf), 0x1F);
+  memset(buf, 0x1F, sizeof(buf));
   // set chunked without either
   {
     std::size_t r = chain_setxattr(file, name, buf, sizeof(buf));

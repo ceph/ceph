@@ -1,6 +1,6 @@
 exclude_arch: armv7l
 roles:
-- [mon.a, osd.0, osd.1, client.0]
+- [mon.a, mgr.x, osd.0, osd.1, client.0]
 tasks:
 - install:
 - ceph:

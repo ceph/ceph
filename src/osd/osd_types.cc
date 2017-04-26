@@ -789,12 +789,12 @@ std::string pg_state_string(int state)
     oss << "clean+";
   if (state & PG_STATE_RECOVERY_WAIT)
     oss << "recovery_wait+";
+  if (state & PG_STATE_RECOVERY_TOOFULL)
+    oss << "recovery_toofull+";
   if (state & PG_STATE_RECOVERING)
     oss << "recovering+";
   if (state & PG_STATE_DOWN)
     oss << "down+";
-  if (state & PG_STATE_REPLAY)
-    oss << "replay+";
   if (state & PG_STATE_UNDERSIZED)
     oss << "undersized+";
   if (state & PG_STATE_DEGRADED)
@@ -822,6 +822,10 @@ std::string pg_state_string(int state)
     oss << "incomplete+";
   if (state & PG_STATE_PEERED)
     oss << "peered+";
+  if (state & PG_STATE_SNAPTRIM)
+    oss << "snaptrim+";
+  if (state & PG_STATE_SNAPTRIM_WAIT)
+    oss << "snaptrim_wait+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -839,8 +843,6 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_CLEAN;
   else if (state == "down")
     type = PG_STATE_DOWN;
-  else if (state == "replay")
-    type = PG_STATE_REPLAY;
   else if (state == "scrubbing")
     type = PG_STATE_SCRUBBING;
   else if (state == "degraded")
@@ -869,12 +871,18 @@ int pg_string_state(const std::string& state)
     type = PG_STATE_BACKFILL_TOOFULL;
   else if (state == "recovery_wait")
     type = PG_STATE_RECOVERY_WAIT;
+  else if (state == "recovery_toofull")
+    type = PG_STATE_RECOVERY_TOOFULL;
   else if (state == "undersized")
     type = PG_STATE_UNDERSIZED;
   else if (state == "activating")
     type = PG_STATE_ACTIVATING;
   else if (state == "peered")
     type = PG_STATE_PEERED;
+  else if (state == "snaptrim")
+    type = PG_STATE_SNAPTRIM;
+  else if (state == "snaptrim_wait")
+    type = PG_STATE_SNAPTRIM_WAIT;
   else
     type = -1;
   return type;
@@ -2869,7 +2877,16 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
   f->dump_int("last_backfill_bitwise", (int)last_backfill_bitwise);
-  f->dump_stream("purged_snaps") << purged_snaps;
+  f->open_array_section("purged_snaps");
+  for (interval_set<snapid_t>::const_iterator i=purged_snaps.begin();
+       i != purged_snaps.end();
+       ++i) {
+    f->open_object_section("purged_snap_interval");
+    f->dump_stream("start") << i.get_start();
+    f->dump_stream("length") << i.get_len();
+    f->close_section();
+  }
+  f->close_section();
   f->open_object_section("history");
   history.dump(f);
   f->close_section();
@@ -3670,7 +3687,8 @@ void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
 ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 {
   out << e.version << " (" << e.prior_version << ") "
-      << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime
+      << std::left << std::setw(8) << e.get_op_name() << ' '
+      << e.soid << " by " << e.reqid << " " << e.mtime
       << " " << e.return_code;
   if (e.snaps.length()) {
     vector<snapid_t> snaps;
@@ -3918,37 +3936,6 @@ void object_copy_cursor_t::generate_test_instances(list<object_copy_cursor_t*>& 
 }
 
 // -- object_copy_data_t --
-
-void object_copy_data_t::encode_classic(bufferlist& bl) const
-{
-  ::encode(size, bl);
-  ::encode(mtime, bl);
-  ::encode(attrs, bl);
-  ::encode(data, bl);
-  if (omap_data.length())
-    bl.append(omap_data);
-  else
-    ::encode((__u32)0, bl);
-  ::encode(cursor, bl);
-}
-
-void object_copy_data_t::decode_classic(bufferlist::iterator& bl)
-{
-  ::decode(size, bl);
-  ::decode(mtime, bl);
-  ::decode(attrs, bl);
-  ::decode(data, bl);
-  {
-    map<string,bufferlist> omap;
-    ::decode(omap, bl);
-    omap_data.clear();
-    if (!omap.empty())
-      ::encode(omap, omap_data);
-  }
-  ::decode(cursor, bl);
-  flags = 0;
-  data_digest = omap_digest = 0;
-}
 
 void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
 {
@@ -5365,7 +5352,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << " cookie " << op.op.notify.cookie;
       break;
     case CEPH_OSD_OP_COPY_GET:
-    case CEPH_OSD_OP_COPY_GET_CLASSIC:
       out << " max " << op.op.copy_get.max;
       break;
     case CEPH_OSD_OP_COPY_FROM:

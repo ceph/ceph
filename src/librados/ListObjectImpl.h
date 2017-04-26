@@ -67,6 +67,12 @@ class NObjectIteratorImpl {
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
 
+    /// move the iterator to a given cursor position
+    uint32_t seek(const librados::ObjectCursor& cursor);
+
+    /// get current cursor position
+    librados::ObjectCursor get_cursor();
+
     void set_filter(const bufferlist &bl);
 
   private:

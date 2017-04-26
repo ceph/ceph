@@ -38,8 +38,6 @@ enum {
 #define OSD_REP_SPLAY   1
 #define OSD_REP_CHAIN   2
 
-#define OSD_POOL_ERASURE_CODE_STRIPE_WIDTH 4096
-
 class CephContext;
 
 extern const char *CEPH_CONF_FILE_DEFAULT;
@@ -207,9 +205,9 @@ public:
 
   // Set a configuration value.
   // Metavariables will be expanded.
-  int set_val(const char *key, const char *val, bool meta=true, bool safe=true);
-  int set_val(const char *key, const string& s, bool meta=true, bool safe=true) {
-    return set_val(key, s.c_str(), meta, safe);
+  int set_val(const char *key, const char *val, bool meta=true);
+  int set_val(const char *key, const string& s, bool meta=true) {
+    return set_val(key, s.c_str(), meta);
   }
 
   // Get a configuration value.

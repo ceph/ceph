@@ -19,7 +19,6 @@
 #include "rgw_client_io.h"
 
 #include "rgw_auth.h"
-#include "rgw_auth_decoimpl.h"
 #include "rgw_swift_auth.h"
 
 #include "rgw_request.h"
@@ -271,7 +270,7 @@ static void dump_container_metadata(struct req_state *,
 
 void RGWListBucket_ObjStore_SWIFT::send_response()
 {
-  vector<RGWObjEnt>::iterator iter = objs.begin();
+  vector<rgw_bucket_dir_entry>::iterator iter = objs.begin();
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
@@ -283,15 +282,18 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   while (iter != objs.end() || pref_iter != common_prefixes.end()) {
     bool do_pref = false;
     bool do_objs = false;
-    rgw_obj_key& key = iter->key;
+    rgw_obj_key key;
+    if (iter != objs.end()) {
+      key = iter->key;
+    }
     if (pref_iter == common_prefixes.end())
       do_objs = true;
     else if (iter == objs.end())
       do_pref = true;
-    else if (key.name.compare(pref_iter->first) == 0) {
+    else if (!key.empty() && key.name.compare(pref_iter->first) == 0) {
       do_objs = true;
       ++pref_iter;
-    } else if (key.name.compare(pref_iter->first) <= 0)
+    } else if (!key.empty() && key.name.compare(pref_iter->first) <= 0)
       do_objs = true;
     else
       do_pref = true;
@@ -302,12 +304,12 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
 
       s->formatter->open_object_section("object");
       s->formatter->dump_string("name", key.name);
-      s->formatter->dump_string("hash", iter->etag);
-      s->formatter->dump_int("bytes", iter->accounted_size);
-      string single_content_type = iter->content_type;
-      if (iter->content_type.size()) {
+      s->formatter->dump_string("hash", iter->meta.etag);
+      s->formatter->dump_int("bytes", iter->meta.accounted_size);
+      string single_content_type = iter->meta.content_type;
+      if (iter->meta.content_type.size()) {
         // content type might hold multiple values, just dump the last one
-        ssize_t pos = iter->content_type.rfind(',');
+        ssize_t pos = iter->meta.content_type.rfind(',');
         if (pos > 0) {
           ++pos;
           while (single_content_type[pos] == ' ')
@@ -316,7 +318,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
         }
         s->formatter->dump_string("content_type", single_content_type);
       }
-      dump_time(s, "last_modified", &iter->mtime);
+      dump_time(s, "last_modified", &iter->meta.mtime);
       s->formatter->close_section();
     }
 
@@ -663,7 +665,7 @@ void RGWDeleteBucket_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static int get_delete_at_param(req_state *s, real_time *delete_at)
+static int get_delete_at_param(req_state *s, boost::optional<real_time> &delete_at)
 {
   /* Handle Swift object expiration. */
   real_time delat_proposal;
@@ -678,6 +680,10 @@ static int get_delete_at_param(req_state *s, real_time *delete_at)
   }
 
   if (x_delete.empty()) {
+    delete_at = boost::none;
+    if (s->info.env->exists("HTTP_X_REMOVE_DELETE_AT")) {
+      delete_at = boost::in_place(real_time());
+    }
     return 0;
   }
   string err;
@@ -692,7 +698,7 @@ static int get_delete_at_param(req_state *s, real_time *delete_at)
     return -EINVAL;
   }
 
-  *delete_at = delat_proposal;
+  delete_at = delat_proposal;
 
   return 0;
 }
@@ -704,7 +710,7 @@ int RGWPutObj_ObjStore_SWIFT::verify_permission()
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
    * (403 Forbidden). */
-  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+  if (s->auth.identity->is_anonymous() && op_ret == -EACCES) {
     return -EPERM;
   } else {
     return op_ret;
@@ -746,7 +752,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
   policy.create_default(s->user->user_id, s->user->display_name);
 
-  int r = get_delete_at_param(s, &delete_at);
+  int r = get_delete_at_param(s, delete_at);
   if (r < 0) {
     ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
     return r;
@@ -919,7 +925,7 @@ int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
   }
 
   /* Handle Swift object expiration. */
-  int r = get_delete_at_param(s, &delete_at);
+  int r = get_delete_at_param(s, delete_at);
   if (r < 0) {
     ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
     return r;
@@ -1008,7 +1014,7 @@ int RGWDeleteObj_ObjStore_SWIFT::verify_permission()
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
    * (403 Forbidden). */
-  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+  if (s->auth.identity->is_anonymous() && op_ret == -EACCES) {
     return -EPERM;
   } else {
     return op_ret;
@@ -1118,7 +1124,9 @@ static void dump_object_metadata(struct req_state * const s,
     utime_t delete_at;
     try {
       ::decode(delete_at, iter->second);
-      dump_header(s, "X-Delete-At", delete_at.sec());
+      if (!delete_at.is_zero()) {
+        dump_header(s, "X-Delete-At", delete_at.sec());
+      }
     } catch (buffer::error& err) {
       ldout(s->cct, 0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT
                           " attr, ignoring"
@@ -1155,7 +1163,7 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
     attrs_mod = RGWRados::ATTRSMOD_MERGE;
   }
 
-  int r = get_delete_at_param(s, &delete_at);
+  int r = get_delete_at_param(s, delete_at);
   if (r < 0) {
     ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
     return r;
@@ -1228,7 +1236,7 @@ int RGWGetObj_ObjStore_SWIFT::verify_permission()
   /* We have to differentiate error codes depending on whether user is
    * anonymous (401 Unauthorized) or he doesn't have necessary permissions
    * (403 Forbidden). */
-  if (s->auth_identity->is_anonymous() && op_ret == -EACCES) {
+  if (s->auth.identity->is_anonymous() && op_ret == -EACCES) {
     return -EPERM;
   } else {
     return op_ret;
@@ -1418,6 +1426,136 @@ void RGWBulkDelete_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+
+std::unique_ptr<RGWBulkUploadOp::StreamGetter>
+RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
+{
+  class SwiftStreamGetter : public StreamGetter {
+    const size_t conlen;
+    size_t curpos;
+    req_state* const s;
+
+  public:
+    SwiftStreamGetter(req_state* const s, const size_t conlen)
+      : conlen(conlen),
+        curpos(0),
+        s(s) {
+    }
+
+    ssize_t get_at_most(size_t want, ceph::bufferlist& dst) override {
+      /* maximum requested by a caller */
+      /* data provided by client */
+      /* RadosGW's limit. */
+      const size_t max_chunk_size = \
+        static_cast<size_t>(s->cct->_conf->rgw_max_chunk_size);
+      const size_t max_to_read = std::min({ want, conlen - curpos, max_chunk_size });
+
+      ldout(s->cct, 20) << "bulk_upload: get_at_most max_to_read="
+                        << max_to_read
+                        << ", dst.c_str()=" << reinterpret_cast<intptr_t>(dst.c_str()) << dendl;
+
+      bufferptr bp(max_to_read);
+      const auto read_len = recv_body(s, bp.c_str(), max_to_read);
+      dst.append(bp, 0, read_len);
+      //const auto read_len = recv_body(s, dst.c_str(), max_to_read);
+      if (read_len < 0) {
+        return read_len;
+      }
+
+      curpos += read_len;
+      return curpos > s->cct->_conf->rgw_max_put_size ? -ERR_TOO_LARGE
+                                                      : read_len;
+    }
+
+    ssize_t get_exactly(size_t want, ceph::bufferlist& dst) override {
+      ldout(s->cct, 20) << "bulk_upload: get_exactly want=" << want << dendl;
+
+      /* FIXME: do this in a loop. */
+      const auto ret = get_at_most(want, dst);
+      ldout(s->cct, 20) << "bulk_upload: get_exactly ret=" << ret << dendl;
+      if (ret < 0) {
+        return ret;
+      } else if (static_cast<size_t>(ret) != want) {
+        return -EINVAL;
+      } else {
+        return want;
+      }
+    }
+  };
+
+  if (! s->length) {
+    op_ret = -EINVAL;
+    return nullptr;
+  } else {
+    ldout(s->cct, 20) << "bulk upload: create_stream for length="
+                      << s->length << dendl;
+
+    const size_t conlen = atoll(s->length);
+    return std::unique_ptr<SwiftStreamGetter>(new SwiftStreamGetter(s, conlen));
+  }
+}
+
+void RGWBulkUploadOp_ObjStore_SWIFT::send_response()
+{
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this /* RGWOp */, nullptr /* contype */,
+             CHUNKED_TRANSFER_ENCODING);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+
+  s->formatter->open_object_section("delete");
+
+  std::string resp_status;
+  std::string resp_body;
+
+  if (! failures.empty()) {
+    rgw_err err;
+
+    const auto last_err = { failures.back().err };
+    if (boost::algorithm::contains(last_err, terminal_errors)) {
+      /* The terminal errors are affecting the status of the whole upload. */
+      set_req_state_err(err, failures.back().err, s->prot_flags);
+    } else {
+      set_req_state_err(err, ERR_INVALID_REQUEST, s->prot_flags);
+    }
+
+    dump_errno(err, resp_status);
+  } else if (0 == num_created && failures.empty()) {
+    /* Nothing created, nothing failed. This means the archive contained no
+     * entity we could understand (regular file or directory). We need to
+     * send 400 Bad Request to an HTTP client in the internal status field. */
+    dump_errno(400, resp_status);
+    resp_body = "Invalid Tar File: No Valid Files";
+  } else {
+    /* 200 OK */
+    dump_errno(201, resp_status);
+  }
+
+  encode_json("Number Files Created", num_created, s->formatter);
+  encode_json("Response Body", resp_body, s->formatter);
+  encode_json("Response Status", resp_status, s->formatter);
+
+  s->formatter->open_array_section("Errors");
+  for (const auto& fail_desc : failures) {
+    s->formatter->open_array_section("object");
+
+    encode_json("Name", fail_desc.path, s->formatter);
+
+    rgw_err err;
+    set_req_state_err(err, fail_desc.err, s->prot_flags);
+    std::string status;
+    dump_errno(err, status);
+    encode_json("Status", status, s->formatter);
+
+    s->formatter->close_section();
+  }
+  s->formatter->close_section();
+
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+
 void RGWGetCrossDomainPolicy_ObjStore_SWIFT::send_response()
 {
   set_req_state_err(s, op_ret);
@@ -1585,6 +1723,14 @@ RGWOp *RGWHandler_REST_Service_SWIFT::op_head()
   return new RGWStatAccount_ObjStore_SWIFT;
 }
 
+RGWOp *RGWHandler_REST_Service_SWIFT::op_put()
+{
+  if (s->info.args.exists("extract-archive")) {
+    return new RGWBulkUploadOp_ObjStore_SWIFT;
+  }
+  return nullptr;
+}
+
 RGWOp *RGWHandler_REST_Service_SWIFT::op_post()
 {
   if (s->info.args.exists("bulk-delete")) {
@@ -1666,15 +1812,15 @@ bool RGWSwiftWebsiteHandler::can_be_website_req() const
   }
 
   /* We also need to handle early failures from the auth system. In such cases
-   * req_state::auth_identity may be empty. Let's treat that the same way as
+   * req_state::auth.identity may be empty. Let's treat that the same way as
    * the anonymous access. */
-  if (! s->auth_identity) {
+  if (! s->auth.identity) {
     return true;
   }
 
   /* Swift serves websites only for anonymous requests unless client explicitly
    * requested this behaviour by supplying X-Web-Mode HTTP header set to true. */
-  if (s->auth_identity->is_anonymous() || is_web_mode()) {
+  if (s->auth.identity->is_anonymous() || is_web_mode()) {
     return true;
   }
 
@@ -1775,7 +1921,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
         htmler.dump_subdir(subdir_name);
       }
 
-      for (const RGWObjEnt& obj : objs) {
+      for (const rgw_bucket_dir_entry& obj : objs) {
         if (! common_prefixes.count(obj.key.name + '/')) {
           htmler.dump_object(obj);
         }
@@ -1814,10 +1960,11 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
 
   /* First, get attrset of the object we'll try to retrieve. */
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.set_atomic(obj);
+  obj_ctx.obj.set_atomic(obj);
+  obj_ctx.obj.set_prefetch_data(obj);
 
   RGWObjState* state = nullptr;
-  if (store->get_obj_state(&obj_ctx, obj, &state, false) < 0) {
+  if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false) < 0) {
     return false;
   }
 
@@ -1843,10 +1990,11 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index)
   rgw_obj obj(s->bucket, index);
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  obj_ctx.set_atomic(obj);
+  obj_ctx.obj.set_atomic(obj);
+  obj_ctx.obj.set_prefetch_data(obj);
 
   RGWObjState* state = nullptr;
-  if (store->get_obj_state(&obj_ctx, obj, &state, false) < 0) {
+  if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false) < 0) {
     return false;
   }
 
@@ -2026,128 +2174,43 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_options()
   return new RGWOptionsCORS_ObjStore_SWIFT;
 }
 
+
 int RGWHandler_REST_SWIFT::authorize()
 {
-  /* Factories. */
-  class SwiftAuthFactory : public RGWTempURLAuthApplier::Factory,
-                           public RGWLocalAuthApplier::Factory,
-                           public RGWRemoteAuthApplier::Factory {
-    typedef RGWAuthApplier::aplptr_t aplptr_t;
+  try {
+    auto result = auth_strategy.authenticate(s);
 
-    RGWRados * const store;
-    const std::string acct_override;
-
-  public:
-    SwiftAuthFactory(RGWRados * const store,
-                     const std::string& acct_override)
-      : store(store),
-        acct_override(acct_override) {
-    }
-
-    aplptr_t create_apl_turl(CephContext * const cct,
-                             const RGWUserInfo& user_info) const override {
-      /* TempURL doesn't need any user account override. It's a Swift-specific
-       * mechanism that requires  account name internally, so there is no
-       * business with delegating the responsibility outside. */
-      return aplptr_t(new RGWTempURLAuthApplier(cct, user_info));
-    }
-
-    aplptr_t create_apl_local(CephContext * const cct,
-                              const RGWUserInfo& user_info,
-                              const std::string& subuser) const override {
-      return aplptr_t(
-        new RGWThirdPartyAccountAuthApplier<RGWLocalAuthApplier>(
-          RGWLocalAuthApplier(cct, user_info, subuser),
-          store, acct_override));
-    }
-
-    aplptr_t create_apl_remote(CephContext * const cct,
-                               RGWRemoteAuthApplier::acl_strategy_t&& acl_alg,
-                               const RGWRemoteAuthApplier::AuthInfo info
-                              ) const override {
-      return aplptr_t(
-        new RGWThirdPartyAccountAuthApplier<RGWRemoteAuthApplier>(
-          RGWRemoteAuthApplier(cct, store, std::move(acl_alg), info),
-          store, acct_override));
-    }
-  } aplfact(store, s->account_name);
-
-  /* Extractors. */
-  RGWXAuthTokenExtractor token_extr(s);
-
-  /* Auth engines. */
-  RGWTempURLAuthEngine tempurl(s, store,                    &aplfact);
-  RGWSignedTokenAuthEngine rgwtk(s->cct, store, token_extr, &aplfact);
-  RGWKeystoneAuthEngine keystone(s->cct,        token_extr, &aplfact);
-  RGWExternalTokenAuthEngine ext(s->cct, store, token_extr, &aplfact);
-  RGWAnonymousAuthEngine anoneng(s->cct,        token_extr, &aplfact);
-
-  /* Pipeline. */
-  constexpr size_t ENGINES_NUM = 5;
-  const std::array<const RGWAuthEngine *, ENGINES_NUM> engines = {
-    &tempurl, &rgwtk, &keystone, &ext, &anoneng
-  };
-
-  for (const auto engine : engines) {
-    if (! engine->is_applicable()) {
-      /* Engine said it isn't suitable for handling this particular
-       * request. Let's try a next one. */
-      continue;
+    if (result.get_status() != decltype(result)::Status::GRANTED) {
+      /* Access denied is acknowledged by returning a std::unique_ptr with
+       * nullptr inside. */
+      ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
+      return -EPERM;
     }
 
     try {
-      ldout(s->cct, 5) << "trying auth engine: " << engine->get_name() << dendl;
+      rgw::auth::IdentityApplier::aplptr_t applier = result.get_applier();
 
-      auto applier = engine->authenticate();
-      if (! applier) {
-        /* Access denied is acknowledged by returning a std::unique_ptr with
-         * nullptr inside. */
-        ldout(s->cct, 5) << "auth engine refused to authenicate" << dendl;
-        return -EPERM;
-      }
+      /* Account used by a given RGWOp is decoupled from identity employed
+       * in the authorization phase (RGWOp::verify_permissions). */
+      applier->load_acct_info(*s->user);
+      s->perm_mask = applier->get_perm_mask();
 
-      try {
-        /* Account used by a given RGWOp is decoupled from identity employed
-         * in the authorization phase (RGWOp::verify_permissions). */
-        applier->load_acct_info(*s->user);
-        s->perm_mask = applier->get_perm_mask();
+      /* This is the signle place where we pass req_state as a pointer
+       * to non-const and thus its modification is allowed. In the time
+       * of writing only RGWTempURLEngine needed that feature. */
+      applier->modify_request_state(s);
 
-        /* This is the signle place where we pass req_state as a pointer
-         * to non-const and thus its modification is allowed. In the time
-         * of writing only RGWTempURLEngine needed that feature. */
-        applier->modify_request_state(s);
+      s->auth.identity = std::move(applier);
+      s->auth.completer = std::move(result.get_completer());
 
-        s->auth_identity = std::move(applier);
-      } catch (int err) {
-        ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
-        return err;
-      }
+      return 0;
     } catch (int err) {
-      ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
+      ldout(s->cct, 5) << "applier throwed err=" << err << dendl;
       return err;
     }
-
-    /* FIXME(rzarzynski): move into separated RGWAuthApplier decorator. */
-    if (s->user->system && s->auth_identity->is_owner_of(s->user->user_id)) {
-      s->system_request = true;
-      ldout(s->cct, 20) << "system request over Swift API" << dendl;
-
-      rgw_user euid(s->info.args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
-      if (!euid.empty()) {
-        RGWUserInfo einfo;
-
-        const int ret = rgw_get_user_info_by_uid(store, euid, einfo);
-        if (ret < 0) {
-          ldout(s->cct, 0) << "User lookup failed, euid=" << euid
-                           << " ret=" << ret << dendl;
-          return ret;
-        }
-
-        *(s->user) = einfo;
-      }
-    }
-
-    return 0;
+  } catch (int err) {
+    ldout(s->cct, 5) << "auth engine throwed err=" << err << dendl;
+    return err;
   }
 
   /* All engines refused to handle this authentication request by
@@ -2410,8 +2473,10 @@ int RGWHandler_REST_SWIFT::init(RGWRados* store, struct req_state* s,
   return RGWHandler_REST::init(store, s, cio);
 }
 
-RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
-                                               const std::string& frontend_prefix)
+RGWHandler_REST*
+RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
+                              const rgw::auth::StrategyRegistry& auth_registry,
+                              const std::string& frontend_prefix)
 {
   int ret = RGWHandler_REST_SWIFT::init_from_header(s, frontend_prefix);
   if (ret < 0) {
@@ -2419,21 +2484,25 @@ RGWHandler_REST* RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
     return nullptr;
   }
 
+  const auto& auth_strategy = auth_registry.get_swift();
+
   if (s->init_state.url_bucket.empty()) {
-    return new RGWHandler_REST_Service_SWIFT;
+    return new RGWHandler_REST_Service_SWIFT(auth_strategy);
   }
 
   if (s->object.empty()) {
-    return new RGWHandler_REST_Bucket_SWIFT;
+    return new RGWHandler_REST_Bucket_SWIFT(auth_strategy);
   }
 
-  return new RGWHandler_REST_Obj_SWIFT;
+  return new RGWHandler_REST_Obj_SWIFT(auth_strategy);
 }
 
 RGWHandler_REST* RGWRESTMgr_SWIFT_Info::get_handler(
   struct req_state* const s,
+  const rgw::auth::StrategyRegistry& auth_registry,
   const std::string& frontend_prefix)
 {
   s->prot_flags |= RGW_REST_SWIFT;
-  return new RGWHandler_REST_SWIFT_Info;
+  const auto& auth_strategy = auth_registry.get_swift();
+  return new RGWHandler_REST_SWIFT_Info(auth_strategy);
 }

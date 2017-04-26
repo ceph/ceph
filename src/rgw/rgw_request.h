@@ -45,7 +45,7 @@ struct RGWFCGXRequest : public RGWRequest {
     qr->dequeue(&fcgx);
   }
 
-  ~RGWFCGXRequest() {
+  ~RGWFCGXRequest() override {
     FCGX_Finish_r(fcgx);
     qr->enqueue(fcgx);
   }

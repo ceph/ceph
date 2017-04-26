@@ -30,18 +30,18 @@ class MExportDirCancel : public Message {
     set_tid(tid);
   }
 private:
-  ~MExportDirCancel() {}
+  ~MExportDirCancel() override {}
 
 public:
-  const char *get_type_name() const { return "ExCancel"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "ExCancel"; }
+  void print(ostream& o) const override {
     o << "export_cancel(" << dirfrag << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(dirfrag, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
   }

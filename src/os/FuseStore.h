@@ -36,7 +36,7 @@ public:
     FuseStore *fs;
   public:
     explicit FuseThread(FuseStore *f) : fs(f) {}
-    void *entry() {
+    void *entry() override {
       fs->loop();
       return NULL;
     }

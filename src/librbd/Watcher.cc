@@ -11,16 +11,13 @@
 #include <boost/bind.hpp>
 
 #define dout_subsys ceph_subsys_rbd
-#undef dout_prefix
-#define dout_prefix *_dout << "librbd::Watcher: " << this << " " << __func__ \
-                           << ": "
 
 namespace librbd {
 
 using namespace watcher;
 
 using util::create_context_callback;
-using util::create_rados_safe_callback;
+using util::create_rados_callback;
 using std::string;
 
 namespace {
@@ -43,7 +40,7 @@ struct C_UnwatchAndFlush : public Context {
     if (!flushing) {
       flushing = true;
 
-      librados::AioCompletion *aio_comp = create_rados_safe_callback(this);
+      librados::AioCompletion *aio_comp = create_rados_callback(this);
       r = rados.aio_watch_flush(aio_comp);
       assert(r == 0);
       aio_comp->release();
@@ -66,6 +63,27 @@ struct C_UnwatchAndFlush : public Context {
 
 } // anonymous namespace
 
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::Watcher::C_NotifyAck " << this << " " \
+                           << __func__ << ": "
+
+Watcher::C_NotifyAck::C_NotifyAck(Watcher *watcher, uint64_t notify_id,
+                                  uint64_t handle)
+  : watcher(watcher), cct(watcher->m_cct), notify_id(notify_id),
+    handle(handle) {
+  ldout(cct, 10) << "id=" << notify_id << ", " << "handle=" << handle << dendl;
+}
+
+void Watcher::C_NotifyAck::finish(int r) {
+  ldout(cct, 10) << "r=" << r << dendl;
+  assert(r == 0);
+  watcher->acknowledge_notify(notify_id, handle, out);
+}
+
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::Watcher: " << this << " " << __func__ \
+                           << ": "
+
 Watcher::Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
                           const string& oid)
   : m_ioctx(ioctx), m_work_queue(work_queue), m_oid(oid),
@@ -87,7 +105,7 @@ void Watcher::register_watch(Context *on_finish) {
   assert(m_watch_state == WATCH_STATE_UNREGISTERED);
   m_watch_state = WATCH_STATE_REGISTERING;
 
-  librados::AioCompletion *aio_comp = create_rados_safe_callback(
+  librados::AioCompletion *aio_comp = create_rados_callback(
                                          new C_RegisterWatch(this, on_finish));
   int r = m_ioctx.aio_watch(m_oid, aio_comp, &m_watch_handle, &m_watch_ctx);
   assert(r == 0);
@@ -141,7 +159,7 @@ void Watcher::unregister_watch(Context *on_finish) {
         m_watch_state == WATCH_STATE_ERROR) {
       m_watch_state = WATCH_STATE_UNREGISTERED;
 
-      librados::AioCompletion *aio_comp = create_rados_safe_callback(
+      librados::AioCompletion *aio_comp = create_rados_callback(
                         new C_UnwatchAndFlush(m_ioctx, on_finish));
       int r = m_ioctx.aio_unwatch(m_watch_handle, aio_comp);
       assert(r == 0);
@@ -155,6 +173,11 @@ void Watcher::unregister_watch(Context *on_finish) {
 
 void Watcher::flush(Context *on_finish) {
   m_notifier.flush(on_finish);
+}
+
+std::string Watcher::get_oid() const {
+  RWLock::RLocker locker(m_watch_lock);
+  return m_oid;
 }
 
 void Watcher::set_oid(const string& oid) {
@@ -228,9 +251,10 @@ void Watcher::handle_rewatch(int r) {
   }
 }
 
-void Watcher::send_notify(bufferlist& payload, bufferlist *out_bl,
+void Watcher::send_notify(bufferlist& payload,
+                          watcher::NotifyResponse *response,
                           Context *on_finish) {
-  m_notifier.notify(payload, out_bl, on_finish);
+  m_notifier.notify(payload, response, on_finish);
 }
 
 void Watcher::WatchCtx::handle_notify(uint64_t notify_id,

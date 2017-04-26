@@ -30,7 +30,7 @@ class MOSDPGRemove : public Message {
  public:
   vector<spg_t> pg_list;
 
-  epoch_t get_epoch() { return epoch; }
+  epoch_t get_epoch() const { return epoch; }
 
   MOSDPGRemove() :
     Message(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {}
@@ -40,12 +40,12 @@ class MOSDPGRemove : public Message {
     pg_list.swap(l);
   }
 private:
-  ~MOSDPGRemove() {}
+  ~MOSDPGRemove() override {}
 
 public:  
-  const char *get_type_name() const { return "PGrm"; }
+  const char *get_type_name() const override { return "PGrm"; }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(epoch, payload);
 
     vector<pg_t> _pg_list;
@@ -59,7 +59,7 @@ public:
     ::encode(_pg_list, payload);
     ::encode(_shard_list, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     vector<pg_t> _pg_list;
@@ -76,7 +76,7 @@ public:
       pg_list.push_back(spg_t(_pg_list[i], _shard_list[i]));
     }
   }
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "osd pg remove(" << "epoch " << epoch << "; ";
     for (vector<spg_t>::const_iterator i = pg_list.begin();
          i != pg_list.end();

@@ -37,22 +37,21 @@ protected:
   MonClient *monc;
 
   Mutex lock;
-  SafeTimer timer;
   Finisher finisher;
 
   Context *waiting_for_mds_map;
 
 public:
   MDSUtility();
-  ~MDSUtility();
+  ~MDSUtility() override;
 
   void handle_fs_map(MFSMap* m);
-  bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con) { return false; }
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_handle_refused(Connection *con) { return false; }
+  bool ms_dispatch(Message *m) override;
+  bool ms_handle_reset(Connection *con) override { return false; }
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override { return false; }
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
-                         bool force_new);
+                         bool force_new) override;
   int init();
   void shutdown();
 };

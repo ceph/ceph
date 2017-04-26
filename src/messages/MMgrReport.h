@@ -55,7 +55,7 @@ WRITE_CLASS_ENCODER(PerfCounterType)
 
 class MMgrReport : public Message
 {
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -65,6 +65,7 @@ public:
    * counter, it must inline the counter's schema here.
    */
   std::vector<PerfCounterType> declare_types;
+  std::vector<std::string> undeclare_types;
 
   // For all counters present, sorted by idx, output
   // as many bytes as are needed to represent them
@@ -76,24 +77,27 @@ public:
 
   std::string daemon_name;
 
-  void decode_payload()
+  void decode_payload() override
   {
     bufferlist::iterator p = payload.begin();
     ::decode(daemon_name, p);
     ::decode(declare_types, p);
     ::decode(packed, p);
+    if (header.version >= 2)
+      ::decode(undeclare_types, p);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(daemon_name, payload);
     ::encode(declare_types, payload);
     ::encode(packed, payload);
+    ::encode(undeclare_types, payload);
   }
 
-  const char *get_type_name() const { return "mgrreport"; }
-  void print(ostream& out) const {
-    out << get_type_name() << "(" << declare_types.size() << " "
-        << packed.length() << ")"; 
+  const char *get_type_name() const override { return "mgrreport"; }
+  void print(ostream& out) const override {
+    out << get_type_name() << "(+" << declare_types.size() << "-" << undeclare_types.size()
+        << " packed " << packed.length() << ")";
   }
 
   MMgrReport()

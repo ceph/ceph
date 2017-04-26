@@ -3,6 +3,7 @@ meta:
 roles:
 - - cluster1.mon.a
   - cluster1.mon.b
+  - cluster1.mgr.x
   - cluster1.osd.0
   - cluster1.osd.1
   - cluster1.osd.2
@@ -12,6 +13,7 @@ roles:
 - - cluster1.mon.c
   - cluster2.mon.a
   - cluster2.mon.b
+  - cluster2.mgr.x
   - cluster2.osd.0
   - cluster2.osd.1
   - cluster2.osd.2

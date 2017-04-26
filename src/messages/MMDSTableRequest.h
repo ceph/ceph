@@ -33,11 +33,11 @@ class MMDSTableRequest : public Message {
     set_tid(v);
   }
 private:
-  ~MMDSTableRequest() {}
+  ~MMDSTableRequest() override {}
 
 public:  
-  virtual const char *get_type_name() const { return "mds_table_request"; }
-  void print(ostream& o) const {
+  const char *get_type_name() const override { return "mds_table_request"; }
+  void print(ostream& o) const override {
     o << "mds_table_request(" << get_mdstable_name(table)
       << " " << get_mdstableserver_opname(op);
     if (reqid) o << " " << reqid;
@@ -46,7 +46,7 @@ public:
     o << ")";
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(table, p);
     ::decode(op, p);
@@ -54,7 +54,7 @@ public:
     ::decode(bl, p);
   }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(table, payload);
     ::encode(op, payload);
     ::encode(reqid, payload);

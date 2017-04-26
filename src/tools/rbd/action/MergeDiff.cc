@@ -48,17 +48,17 @@ static int parse_diff_header(int fd, __u8 *tag, string *from, string *to, uint64
     if (r < 0)
       return r;
 
-    if (*tag == 'f') {
+    if (*tag == RBD_DIFF_FROM_SNAP) {
       r = utils::read_string(fd, 4096, from);   // 4k limit to make sure we don't get a garbage string
       if (r < 0)
         return r;
       dout(2) << " from snap " << *from << dendl;
-    } else if (*tag == 't') {
+    } else if (*tag == RBD_DIFF_TO_SNAP) {
       r = utils::read_string(fd, 4096, to);   // 4k limit to make sure we don't get a garbage string
       if (r < 0)
         return r;
       dout(2) << " to snap " << *to << dendl;
-    } else if (*tag == 's') {
+    } else if (*tag == RBD_DIFF_IMAGE_SIZE) {
       char buf[8];
       r = safe_read_exact(fd, buf, 8);
       if (r < 0)
@@ -86,13 +86,13 @@ static int parse_diff_body(int fd, __u8 *tag, uint64_t *offset, uint64_t *length
       return r;
   }
 
-  if (*tag == 'e') {
+  if (*tag == RBD_DIFF_END) {
     offset = 0;
     length = 0;
     return 0;
   }
 
-  if (*tag != 'w' && *tag != 'z')
+  if (*tag != RBD_DIFF_WRITE && *tag != RBD_DIFF_ZERO)
     return -ENOTSUP;
 
   char buf[16];
@@ -118,7 +118,7 @@ static int parse_diff_body(int fd, __u8 *tag, uint64_t *offset, uint64_t *length
  */
 static int accept_diff_body(int fd, int pd, __u8 tag, uint64_t offset, uint64_t length)
 {
-  if (tag == 'e')
+  if (tag == RBD_DIFF_END)
     return 0;
 
   bufferlist bl;
@@ -130,7 +130,7 @@ static int accept_diff_body(int fd, int pd, __u8 tag, uint64_t offset, uint64_t 
   if (r < 0)
     return r;
 
-  if (tag == 'w') {
+  if (tag == RBD_DIFF_WRITE) {
     bufferptr bp = buffer::create(length);
     r = safe_read_exact(fd, bp.c_str(), length);
     if (r < 0)
@@ -171,7 +171,7 @@ static int do_merge_diff(const char *first, const char *second,
 
   bool first_stdin = !strcmp(first, "-");
   if (first_stdin) {
-    fd = 0;
+    fd = STDIN_FILENO;
   } else {
     fd = open(first, O_RDONLY);
     if (fd < 0) {
@@ -227,18 +227,18 @@ static int do_merge_diff(const char *first, const char *second,
 
     __u8 tag;
     if (f_from.size()) {
-      tag = 'f';
+      tag = RBD_DIFF_FROM_SNAP;
       ::encode(tag, bl);
       ::encode(f_from, bl);
     }
 
     if (s_to.size()) {
-      tag = 't';
+      tag = RBD_DIFF_TO_SNAP;
       ::encode(tag, bl);
       ::encode(s_to, bl);
     }
 
-    tag = 's';
+    tag = RBD_DIFF_IMAGE_SIZE;
     ::encode(tag, bl);
     ::encode(s_size, bl);
 
@@ -271,9 +271,9 @@ static int do_merge_diff(const char *first, const char *second,
         goto done;
       }
 
-      if (f_tag == 'e') {
+      if (f_tag == RBD_DIFF_END) {
         f_end = true;
-        f_tag = 'z';
+        f_tag = RBD_DIFF_ZERO;
         f_off = f_size;
         if (f_size < s_size)
           f_len = s_size - f_size;
@@ -302,7 +302,7 @@ static int do_merge_diff(const char *first, const char *second,
         goto done;
       }
 
-      if (s_tag == 'e') {
+      if (s_tag == RBD_DIFF_END) {
         s_end = true;
         s_off = s_size;
         if (s_size < f_size)
@@ -342,7 +342,7 @@ static int do_merge_diff(const char *first, const char *second,
       uint64_t delta = s_off + s_len - f_off;
       if (delta > f_len)
         delta = f_len;
-      if (f_tag == 'w') {
+      if (f_tag == RBD_DIFF_WRITE) {
         if (first_stdin) {
           bufferptr bp = buffer::create(delta);
           r = safe_read_exact(fd, bp.c_str(), delta);
@@ -380,7 +380,7 @@ static int do_merge_diff(const char *first, const char *second,
   }
 
   {//tail
-    __u8 tag = 'e';
+    __u8 tag = RBD_DIFF_END;
     bufferlist bl;
     ::encode(tag, bl);
     r = bl.write_fd(pd);

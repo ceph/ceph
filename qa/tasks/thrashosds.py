@@ -120,6 +120,11 @@ def task(ctx, config):
     disable_objectstore_tool_tests: (false) disable ceph_objectstore_tool based
                                     tests
 
+    chance_thrash_cluster_full: .05
+
+    chance_thrash_pg_upmap: 1.0
+    chance_thrash_pg_upmap_items: 1.0
+
     example:
 
     tasks:

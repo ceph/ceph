@@ -66,7 +66,7 @@ public:
           MAX((cct->_conf->filestore_fd_cache_size / registry_shards), 1));
     }
   }
-  ~FDCache() {
+  ~FDCache() override {
     cct->_conf->remove_observer(this);
     delete[] registry;
   }
@@ -89,7 +89,7 @@ public:
   }
 
   /// md_config_obs_t
-  const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     static const char* KEYS[] = {
       "filestore_fd_cache_size",
       NULL
@@ -97,7 +97,7 @@ public:
     return KEYS;
   }
   void handle_conf_change(const md_config_t *conf,
-			  const std::set<std::string> &changed) {
+			  const std::set<std::string> &changed) override {
     if (changed.count("filestore_fd_cache_size")) {
       for (int i = 0; i < registry_shards; ++i)
         registry[i].set_size(

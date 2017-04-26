@@ -26,18 +26,18 @@ public:
 
   std::string daemon_name;
 
-  void decode_payload()
+  void decode_payload() override
   {
     bufferlist::iterator p = payload.begin();
     ::decode(daemon_name, p);
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(daemon_name, payload);
   }
 
-  const char *get_type_name() const { return "mgropen"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "mgropen"; }
+  void print(ostream& out) const override {
     out << get_type_name() << "(" << daemon_name << ")"; 
   }
 

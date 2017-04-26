@@ -12,12 +12,12 @@
 #include "common/RWLock.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
-#include "librbd/AioCompletion.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/WatchNotifyTypes.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 #include <boost/assign/std/set.hpp>
@@ -430,8 +430,8 @@ TEST_F(TestImageWatcher, NotifySnapCreate) {
 
   RWLock::RLocker l(ictx->owner_lock);
   C_SaferCond notify_ctx;
-  ictx->image_watcher->notify_snap_create("snap",
-	cls::rbd::UserSnapshotNamespace(), &notify_ctx);
+  ictx->image_watcher->notify_snap_create(cls::rbd::UserSnapshotNamespace(),
+	"snap", &notify_ctx);
   ASSERT_EQ(0, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
@@ -453,8 +453,8 @@ TEST_F(TestImageWatcher, NotifySnapCreateError) {
 
   RWLock::RLocker l(ictx->owner_lock);
   C_SaferCond notify_ctx;
-  ictx->image_watcher->notify_snap_create("snap",
-       cls::rbd::UserSnapshotNamespace(), &notify_ctx);
+  ictx->image_watcher->notify_snap_create(cls::rbd::UserSnapshotNamespace(),
+       "snap", &notify_ctx);
   ASSERT_EQ(-EEXIST, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
@@ -520,7 +520,9 @@ TEST_F(TestImageWatcher, NotifySnapRemove) {
 
   RWLock::RLocker l(ictx->owner_lock);
   C_SaferCond notify_ctx;
-  ictx->image_watcher->notify_snap_remove("snap", &notify_ctx);
+  ictx->image_watcher->notify_snap_remove(cls::rbd::UserSnapshotNamespace(),
+					  "snap",
+					  &notify_ctx);
   ASSERT_EQ(0, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
@@ -542,7 +544,9 @@ TEST_F(TestImageWatcher, NotifySnapProtect) {
 
   RWLock::RLocker l(ictx->owner_lock);
   C_SaferCond notify_ctx;
-  ictx->image_watcher->notify_snap_protect("snap", &notify_ctx);
+  ictx->image_watcher->notify_snap_protect(cls::rbd::UserSnapshotNamespace(),
+					   "snap",
+					   &notify_ctx);
   ASSERT_EQ(0, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;
@@ -564,7 +568,9 @@ TEST_F(TestImageWatcher, NotifySnapUnprotect) {
 
   RWLock::RLocker l(ictx->owner_lock);
   C_SaferCond notify_ctx;
-  ictx->image_watcher->notify_snap_unprotect("snap", &notify_ctx);
+  ictx->image_watcher->notify_snap_unprotect(cls::rbd::UserSnapshotNamespace(),
+					     "snap",
+					     &notify_ctx);
   ASSERT_EQ(0, notify_ctx.wait());
 
   NotifyOps expected_notify_ops;

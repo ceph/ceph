@@ -74,8 +74,6 @@ public:
 // PINS
 //int cdir_pins[CDIR_NUM_PINS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 
-boost::pool<> CDir::pool(sizeof(CDir));
-
 
 ostream& operator<<(ostream& out, const CDir& dir)
 {
@@ -198,9 +196,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   num_dentries_auth_subtree_nested(0),
   dir_auth(CDIR_AUTH_DEFAULT)
 {
-  g_num_dir++;
-  g_num_dira++;
-
   state = STATE_INITIAL;
 
   memset(&fnode, 0, sizeof(fnode));
@@ -557,6 +552,8 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   // verify open snaprealm parent
   if (in->snaprealm)
     in->snaprealm->adjust_parent();
+  else if (in->is_any_caps())
+    in->move_to_realm(inode->find_snaprealm());
 }
 
 void CDir::unlink_inode(CDentry *dn)
@@ -1484,10 +1481,38 @@ void CDir::fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys)
   _omap_fetch(c, keys);
 }
 
+class C_IO_Dir_OMAP_FetchedMore : public CDirIOContext {
+  MDSInternalContextBase *fin;
+public:
+  bufferlist hdrbl;
+  bool more = false;
+  map<string, bufferlist> omap;      ///< carry-over from before
+  map<string, bufferlist> omap_more; ///< new batch
+  int ret;
+  C_IO_Dir_OMAP_FetchedMore(CDir *d, MDSInternalContextBase *f) :
+    CDirIOContext(d), fin(f), ret(0) { }
+  void finish(int r) {
+    // merge results
+    if (omap.empty()) {
+      omap.swap(omap_more);
+    } else {
+      omap.insert(omap_more.begin(), omap_more.end());
+    }
+    if (more) {
+      dir->_omap_fetch_more(hdrbl, omap, fin);
+    } else {
+      dir->_omap_fetched(hdrbl, omap, !fin, r);
+      if (fin)
+	fin->complete(r);
+    }
+  }
+};
+
 class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
   MDSInternalContextBase *fin;
 public:
   bufferlist hdrbl;
+  bool more = false;
   map<string, bufferlist> omap;
   bufferlist btbl;
   int ret1, ret2, ret3;
@@ -1500,9 +1525,13 @@ public:
       dir->inode->verify_diri_backtrace(btbl, ret3);
     if (r >= 0) r = ret1;
     if (r >= 0) r = ret2;
-    dir->_omap_fetched(hdrbl, omap, !fin, r);
-    if (fin)
-      fin->complete(r);
+    if (more) {
+      dir->_omap_fetch_more(hdrbl, omap, fin);
+    } else {
+      dir->_omap_fetched(hdrbl, omap, !fin, r);
+      if (fin)
+	fin->complete(r);
+    }
   }
 };
 
@@ -1515,8 +1544,8 @@ void CDir::_omap_fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& 
   rd.omap_get_header(&fin->hdrbl, &fin->ret1);
   if (keys.empty()) {
     assert(!c);
-#warning use the pmore arg
-    rd.omap_get_vals("", "", (uint64_t)-1, &fin->omap, nullptr, &fin->ret2);
+    rd.omap_get_vals("", "", g_conf->mds_dir_keys_per_op,
+		     &fin->omap, &fin->more, &fin->ret2);
   } else {
     assert(c);
     std::set<std::string> str_keys;
@@ -1535,6 +1564,28 @@ void CDir::_omap_fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& 
     fin->ret3 = -ECANCELED;
   }
 
+  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
+			     new C_OnFinisher(fin, cache->mds->finisher));
+}
+
+void CDir::_omap_fetch_more(
+  bufferlist& hdrbl,
+  map<string, bufferlist>& omap,
+  MDSInternalContextBase *c)
+{
+  // we have more omap keys to fetch!
+  object_t oid = get_ondisk_object();
+  object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
+  C_IO_Dir_OMAP_FetchedMore *fin = new C_IO_Dir_OMAP_FetchedMore(this, c);
+  fin->hdrbl.claim(hdrbl);
+  fin->omap.swap(omap);
+  ObjectOperation rd;
+  rd.omap_get_vals(fin->omap.rbegin()->first,
+		   "", /* filter prefix */
+		   g_conf->mds_dir_keys_per_op,
+		   &fin->omap_more,
+		   &fin->more,
+		   &fin->ret);
   cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
 			     new C_OnFinisher(fin, cache->mds->finisher));
 }
@@ -1683,10 +1734,6 @@ CDentry *CDir::_load_dentry(
         if (in->inode.is_dirty_rstat())
           in->mark_dirty_rstat();
 
-        if (inode->is_stray()) {
-	  cache->notify_stray_loaded(dn);
-        }
-
         //in->hack_accessed = false;
         //in->hack_load_stamp = ceph_clock_now();
         //num_new_inodes_loaded++;
@@ -1701,7 +1748,7 @@ CDentry *CDir::_load_dentry(
           << " [" << first << "," << last << "] v" << inode_data.inode.version
           << " at " << dirpath << "/" << dname
           << ", but inode " << in->vino() << " v" << in->inode.version
-          << " already exists at " << inopath << "\n";
+	  << " already exists at " << inopath;
         return dn;
       }
     }
@@ -1907,8 +1954,9 @@ void CDir::_go_bad()
 
 void CDir::go_bad_dentry(snapid_t last, const std::string &dname)
 {
+  dout(10) << "go_bad_dentry " << dname << dendl;
   const bool fatal = cache->mds->damage_table.notify_dentry(
-      inode->ino(), frag, last, dname);
+      inode->ino(), frag, last, dname, get_path() + "/" + dname);
   if (fatal) {
     cache->mds->damaged();
     ceph_abort();  // unreachable, damaged() respawns us
@@ -1917,7 +1965,9 @@ void CDir::go_bad_dentry(snapid_t last, const std::string &dname)
 
 void CDir::go_bad(bool complete)
 {
-  const bool fatal = cache->mds->damage_table.notify_dirfrag(inode->ino(), frag);
+  dout(10) << "go_bad " << frag << dendl;
+  const bool fatal = cache->mds->damage_table.notify_dirfrag(
+      inode->ino(), frag, get_path());
   if (fatal) {
     cache->mds->damaged();
     ceph_abort();  // unreachable, damaged() respawns us
@@ -2221,7 +2271,7 @@ void CDir::_committed(int r, version_t v)
     if (r < 0) {
       dout(1) << "commit error " << r << " v " << v << dendl;
       cache->mds->clog->error() << "failed to commit dir " << dirfrag() << " object,"
-				<< " errno " << r << "\n";
+				<< " errno " << r;
       cache->mds->handle_write_error(r);
       return;
     }
@@ -2363,7 +2413,8 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
   unsigned s;
   ::decode(s, blp);
   state &= MASK_STATE_IMPORT_KEPT;
-  state |= (s & MASK_STATE_EXPORTED);
+  state_set(STATE_AUTH | (s & MASK_STATE_EXPORTED));
+
   if (is_dirty()) {
     get(PIN_DIRTY);
     _mark_dirty(ls);

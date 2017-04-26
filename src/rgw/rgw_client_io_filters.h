@@ -210,24 +210,16 @@ template <typename T>
 class ChunkingFilter : public DecoratedRestfulClient<T> {
   template<typename Td> friend class DecoratedRestfulClient;
 protected:
-  bool has_content_length;
   bool chunking_enabled;
 
 public:
   template <typename U>
   ChunkingFilter(U&& decoratee)
     : DecoratedRestfulClient<T>(std::forward<U>(decoratee)),
-      has_content_length(false),
       chunking_enabled(false) {
   }
 
-  size_t send_content_length(const uint64_t len) override {
-    has_content_length = true;
-    return DecoratedRestfulClient<T>::send_content_length(len);
-  }
-
   size_t send_chunked_transfer_encoding() override {
-    has_content_length = false;
     chunking_enabled = true;
     return DecoratedRestfulClient<T>::send_header("Transfer-Encoding",
                                                   "chunked");

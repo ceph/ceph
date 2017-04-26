@@ -66,7 +66,21 @@ MDSRank::MDSRank(
                g_conf->osd_num_op_tracker_shard),
     last_state(MDSMap::STATE_BOOT),
     state(MDSMap::STATE_BOOT),
-    stopping(false),
+    cluster_degraded(false), stopping(false),
+    purge_queue(g_ceph_context, whoami_,
+      mdsmap_->get_metadata_pool(), objecter,
+      new FunctionContext(
+          [this](int r){
+          // Purge Queue operates inside mds_lock when we're calling into
+          // it, and outside when in background, so must handle both cases.
+          if (mds_lock.is_locked_by_me()) {
+            damaged();
+          } else {
+            damaged_unlocked();
+          }
+        }
+      )
+    ),
     progress_thread(this), dispatch_depth(0),
     hb(NULL), last_tid(0), osd_epoch_barrier(0), beacon(beacon_),
     mds_slow_req_count(0),
@@ -78,11 +92,13 @@ MDSRank::MDSRank(
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
 
+  purge_queue.update_op_limit(*mdsmap);
+
   objecter->unset_honor_osdmap_full();
 
   finisher = new Finisher(msgr->cct);
 
-  mdcache = new MDCache(this);
+  mdcache = new MDCache(this, purge_queue);
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this, messenger, monc);
 
@@ -159,6 +175,8 @@ void MDSRankDispatcher::init()
 
   progress_thread.create("mds_rank_progr");
 
+  purge_queue.init();
+
   finisher->start();
 }
 
@@ -216,6 +234,34 @@ void MDSRankDispatcher::tick()
       snapserver->check_osd_map(false);
   }
 
+  // shut down?
+  if (is_stopping()) {
+    mdlog->trim();
+    if (mdcache->shutdown_pass()) {
+      uint64_t pq_progress = 0 ;
+      uint64_t pq_total = 0;
+      size_t pq_in_flight = 0;
+      if (!purge_queue.drain(&pq_progress, &pq_total, &pq_in_flight)) {
+        dout(7) << "shutdown_pass=true, but still waiting for purge queue"
+                << dendl;
+        // This takes unbounded time, so we must indicate progress
+        // to the administrator: we do it in a slightly imperfect way
+        // by sending periodic (tick frequency) clog messages while
+        // in this state.
+        clog->info() << "MDS rank " << whoami << " waiting for purge queue ("
+          << std::dec << pq_progress << "/" << pq_total << " " << pq_in_flight
+          << " files purging" << ")";
+      } else {
+        dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to "
+                   "down:stopped" << dendl;
+        stopping_done();
+      }
+    }
+    else {
+      dout(7) << "shutdown_pass=false" << dendl;
+    }
+  }
+
   // Expose ourselves to Beacon to update health indicators
   beacon.notify_health(this);
 }
@@ -239,6 +285,12 @@ void MDSRankDispatcher::shutdown()
   // shut down cache
   mdcache->shutdown();
 
+  purge_queue.shutdown();
+
+  mds_lock.Unlock();
+  finisher->stop(); // no flushing
+  mds_lock.Lock();
+
   if (objecter->initialized.read())
     objecter->shutdown();
 
@@ -251,8 +303,6 @@ void MDSRankDispatcher::shutdown()
   // release mds_lock for finisher/messenger threads (e.g.
   // MDSDaemon::ms_handle_reset called from Messenger).
   mds_lock.Unlock();
-
-  finisher->stop(); // no flushing
 
   // shut down messenger
   messenger->shutdown();
@@ -439,6 +489,8 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
       dout(0) << "unrecognized message " << *m << dendl;
       return false;
     }
+
+    heartbeat_reset();
   }
 
   if (dispatch_depth > 1)
@@ -476,7 +528,7 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     set<mds_rank_t> s;
     if (!is_active()) break;
     mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
-    if (s.size() < 2 || mdcache->get_num_inodes() < 10)
+    if (s.size() < 2 || CInode::count() < 10)
       break;  // need peers for this to work.
     if (mdcache->migrator->get_num_exporting() > g_conf->mds_thrash_exports * 5 ||
 	mdcache->migrator->get_export_queue_size() > g_conf->mds_thrash_exports * 10)
@@ -546,34 +598,23 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   */
 
   if (mlogger) {
-    mlogger->set(l_mdm_ino, g_num_ino);
-    mlogger->set(l_mdm_dir, g_num_dir);
-    mlogger->set(l_mdm_dn, g_num_dn);
-    mlogger->set(l_mdm_cap, g_num_cap);
+    mlogger->set(l_mdm_ino, CInode::count());
+    mlogger->set(l_mdm_dir, CDir::count());
+    mlogger->set(l_mdm_dn, CDentry::count());
+    mlogger->set(l_mdm_cap, Capability::count());
 
-    mlogger->inc(l_mdm_inoa, g_num_inoa);  g_num_inoa = 0;
-    mlogger->inc(l_mdm_inos, g_num_inos);  g_num_inos = 0;
-    mlogger->inc(l_mdm_dira, g_num_dira);  g_num_dira = 0;
-    mlogger->inc(l_mdm_dirs, g_num_dirs);  g_num_dirs = 0;
-    mlogger->inc(l_mdm_dna, g_num_dna);  g_num_dna = 0;
-    mlogger->inc(l_mdm_dns, g_num_dns);  g_num_dns = 0;
-    mlogger->inc(l_mdm_capa, g_num_capa);  g_num_capa = 0;
-    mlogger->inc(l_mdm_caps, g_num_caps);  g_num_caps = 0;
+    mlogger->set(l_mdm_inoa, CInode::increments());
+    mlogger->set(l_mdm_inos, CInode::decrements());
+    mlogger->set(l_mdm_dira, CDir::increments());
+    mlogger->set(l_mdm_dirs, CDir::decrements());
+    mlogger->set(l_mdm_dna, CDentry::increments());
+    mlogger->set(l_mdm_dns, CDentry::decrements());
+    mlogger->set(l_mdm_capa, Capability::increments());
+    mlogger->set(l_mdm_caps, Capability::decrements());
 
     mlogger->set(l_mdm_buf, buffer::get_total_alloc());
   }
 
-  // shut down?
-  if (is_stopping()) {
-    mdlog->trim();
-    if (mdcache->shutdown_pass()) {
-      dout(7) << "shutdown_pass=true, finished w/ shutdown, moving to down:stopped" << dendl;
-      stopping_done();
-    }
-    else {
-      dout(7) << "shutdown_pass=false" << dendl;
-    }
-  }
   return true;
 }
 
@@ -973,6 +1014,8 @@ void MDSRank::boot_start(BootStep step, int r)
 
         mdcache->open_mydir_inode(gather.new_sub());
 
+        purge_queue.open(new C_IO_Wrapper(this, gather.new_sub()));
+
         if (is_starting() ||
             whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
           mdcache->open_root_inode(gather.new_sub());
@@ -995,8 +1038,42 @@ void MDSRank::boot_start(BootStep step, int r)
       break;
     case MDS_BOOT_REPLAY_DONE:
       assert(is_any_replay());
+
+      // Sessiontable and inotable should be in sync after replay, validate
+      // that they are consistent.
+      validate_sessions();
+
       replay_done();
       break;
+  }
+}
+
+void MDSRank::validate_sessions()
+{
+  assert(mds_lock.is_locked_by_me());
+  std::vector<Session*> victims;
+
+  // Identify any sessions which have state inconsistent with other,
+  // after they have been loaded from rados during startup.
+  // Mitigate bugs like: http://tracker.ceph.com/issues/16842
+  const auto &sessions = sessionmap.get_sessions();
+  for (const auto &i : sessions) {
+    Session *session = i.second;
+    interval_set<inodeno_t> badones;
+    if (inotable->intersects_free(session->info.prealloc_inos, &badones)) {
+      clog->error() << "Client session loaded with invalid preallocated "
+                          "inodes, evicting session " << *session;
+
+      // Make the session consistent with inotable so that it can
+      // be cleanly torn down
+      session->info.prealloc_inos.subtract(badones);
+
+      victims.push_back(session);
+    }
+  }
+
+  for (const auto &session: victims) {
+    server->kill_session(session, nullptr);
   }
 }
 
@@ -1355,6 +1432,9 @@ void MDSRank::boot_create()
   // write empty sessionmap
   sessionmap.save(fin.new_sub());
 
+  // Create empty purge queue
+  purge_queue.create(new C_IO_Wrapper(this, fin.new_sub()));
+
   // initialize tables
   if (mdsmap->get_tableserver() == whoami) {
     dout(10) << "boot_create creating fresh snaptable" << dendl;
@@ -1529,8 +1609,15 @@ void MDSRankDispatcher::handle_mds_map(
     }
   }
 
-  if (oldmap->is_degraded() && !mdsmap->is_degraded() && state >= MDSMap::STATE_ACTIVE)
+  cluster_degraded = mdsmap->is_degraded();
+  if (oldmap->is_degraded() && !cluster_degraded && state >= MDSMap::STATE_ACTIVE) {
     dout(1) << "cluster recovered." << dendl;
+    auto it = waiting_for_active_peer.find(MDS_RANK_NONE);
+    if (it != waiting_for_active_peer.end()) {
+      queue_waiters(it->second);
+      waiting_for_active_peer.erase(it);
+    }
+  }
 
   // did someone go active?
   if (oldstate >= MDSMap::STATE_CLIENTREPLAY &&
@@ -1624,7 +1711,9 @@ void MDSRankDispatcher::handle_mds_map(
     }
   }
 
-  mdcache->notify_mdsmap_changed();
+  if (oldmap->get_max_mds() != mdsmap->get_max_mds()) {
+    purge_queue.update_op_limit(*mdsmap);
+  }
 }
 
 void MDSRank::handle_mds_recovery(mds_rank_t who)
@@ -1674,6 +1763,11 @@ bool MDSRankDispatcher::handle_asok_command(
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
 	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
+  } else if (command == "dump_historic_ops_by_duration") {
+    if (!op_tracker.dump_historic_ops(f, true)) {
+      ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
+	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+    }
   } else if (command == "osdmap barrier") {
     int64_t target_epoch = 0;
     bool got_val = cmd_getval(g_ceph_context, cmdmap, "target_epoch", target_epoch);
@@ -1702,13 +1796,18 @@ bool MDSRankDispatcher::handle_asok_command(
   } else if (command == "session evict") {
     std::string client_id;
     const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
-    assert(got_arg == true);
+    if(!got_arg) {
+      ss << "Invalid client_id specified";
+      return true;
+    }
 
     mds_lock.Lock();
-    std::stringstream ss;
-    bool killed = kill_session(strtol(client_id.c_str(), 0, 10), true, ss);
-    if (!killed)
-      dout(15) << ss.str() << dendl;
+    stringstream dss;
+    bool killed = kill_session(strtol(client_id.c_str(), 0, 10), true, dss);
+    if (!killed) {
+      dout(15) << dss.str() << dendl;
+      ss << dss.str();
+    }
     mds_lock.Unlock();
   } else if (command == "scrub_path") {
     string path;
@@ -2387,7 +2486,6 @@ void MDSRank::create_logger()
     mdm_plb.add_u64_counter(l_mdm_caps, "cap-", "Capabilities removed");
     mdm_plb.add_u64(l_mdm_rss, "rss", "RSS");
     mdm_plb.add_u64(l_mdm_heap, "heap", "Heap size");
-    mdm_plb.add_u64(l_mdm_malloc, "malloc", "Malloc size");
     mdm_plb.add_u64(l_mdm_buf, "buf", "Buffer size");
     mlogger = mdm_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(mlogger);
@@ -2395,6 +2493,7 @@ void MDSRank::create_logger()
 
   mdlog->create_logger();
   server->create_logger();
+  purge_queue.create_logger();
   sessionmap.register_perfcounters();
   mdcache->register_perfcounters();
 }
@@ -2424,7 +2523,7 @@ void MDSRankDispatcher::handle_osd_map()
 
   server->handle_osd_map();
 
-  mdcache->notify_osdmap_changed();
+  purge_queue.update_op_limit(*mdsmap);
 
   // By default the objecter only requests OSDMap updates on use,
   // we would like to always receive the latest maps in order to
@@ -2471,91 +2570,6 @@ void MDSRank::bcast_mds_map()
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 
-
-bool MDSRankDispatcher::handle_command_legacy(std::vector<std::string> args)
-{
-  if (args[0] == "dumpcache") {
-    if (args.size() > 1)
-      mdcache->dump_cache(args[1].c_str());
-    else
-      mdcache->dump_cache();
-  }
-  else if (args[0] == "session" && args[1] == "kill") {
-    std::stringstream ss;
-    bool killed = kill_session(strtol(args[2].c_str(), 0, 10), false, ss);
-    if (!killed)
-      dout(15) << ss.str() << dendl;
-
-  } else if (args[0] == "issue_caps") {
-    long inum = strtol(args[1].c_str(), 0, 10);
-    CInode *in = mdcache->get_inode(inodeno_t(inum));
-    if (in) {
-      bool r = locker->issue_caps(in);
-      dout(20) << "called issue_caps on inode "  << inum
-	       << " with result " << r << dendl;
-    } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
-  } else if (args[0] == "try_eval") {
-    long inum = strtol(args[1].c_str(), 0, 10);
-    int mask = strtol(args[2].c_str(), 0, 10);
-    CInode * ino = mdcache->get_inode(inodeno_t(inum));
-    if (ino) {
-      locker->try_eval(ino, mask);
-      dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
-    } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
-  } else if (args[0] == "fragment_dir") {
-    if (mdsmap->allows_dirfrags()) {
-      if (args.size() == 4) {
-	filepath fp(args[1].c_str());
-	CInode *in = mdcache->cache_traverse(fp);
-	if (in) {
-	  frag_t fg;
-	  if (fg.parse(args[2].c_str())) {
-	    CDir *dir = in->get_dirfrag(fg);
-	    if (dir) {
-	      if (dir->is_auth()) {
-		int by = atoi(args[3].c_str());
-		if (by)
-		  mdcache->split_dir(dir, by);
-		else
-		  dout(0) << "need to split by >0 bits" << dendl;
-	      } else dout(0) << "dir " << dir->dirfrag() << " not auth" << dendl;
-	    } else dout(0) << "dir " << in->ino() << " " << fg << " dne" << dendl;
-	  } else dout(0) << " frag " << args[2] << " does not parse" << dendl;
-	} else dout(0) << "path " << fp << " not found" << dendl;
-      } else dout(0) << "bad syntax" << dendl;
-    } else dout(0) << "dirfrags are disallowed by the mds map!" << dendl;
-  } else if (args[0] == "merge_dir") {
-    if (args.size() == 3) {
-      filepath fp(args[1].c_str());
-      CInode *in = mdcache->cache_traverse(fp);
-      if (in) {
-	frag_t fg;
-	if (fg.parse(args[2].c_str())) {
-	  mdcache->merge_dir(in, fg);
-	} else dout(0) << " frag " << args[2] << " does not parse" << dendl;
-      } else dout(0) << "path " << fp << " not found" << dendl;
-    } else dout(0) << "bad syntax" << dendl;
-  } else if (args[0] == "export_dir") {
-    if (args.size() == 3) {
-      filepath fp(args[1].c_str());
-      mds_rank_t target = mds_rank_t(atoi(args[2].c_str()));
-      if (target != whoami && mdsmap->is_up(target) && mdsmap->is_in(target)) {
-	CInode *in = mdcache->cache_traverse(fp);
-	if (in) {
-	  CDir *dir = in->get_dirfrag(frag_t());
-	  if (dir && dir->is_auth()) {
-	    mdcache->migrator->export_dir(dir, target);
-	  } else dout(0) << "bad export_dir path dirfrag frag_t() or dir not auth" << dendl;
-	} else dout(0) << "bad export_dir path" << dendl;
-      } else dout(0) << "bad export_dir target syntax" << dendl;
-    } else dout(0) << "bad export_dir syntax" << dendl;
-  } else {
-    return false;
-  }
-
-  return true;
-}
-
 MDSRankDispatcher::MDSRankDispatcher(
     mds_rank_t whoami_,
     Mutex &mds_lock_,
@@ -2598,7 +2612,7 @@ bool MDSRankDispatcher::handle_command(
       return true;
     }
 
-    Formatter *f = new JSONFormatter();
+    Formatter *f = new JSONFormatter(true);
     dump_sessions(filter, f);
     f->flush(*ds);
     delete f;
@@ -2618,7 +2632,7 @@ bool MDSRankDispatcher::handle_command(
     *need_reply = false;
     return true;
   } else if (prefix == "damage ls") {
-    Formatter *f = new JSONFormatter();
+    Formatter *f = new JSONFormatter(true);
     damage_table.dump(f);
     f->flush(*ds);
     delete f;

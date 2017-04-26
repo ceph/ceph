@@ -2,12 +2,12 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/ExclusiveLock.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/ImageState.h"
 #include "librbd/exclusive_lock/PreAcquireRequest.h"
 #include "librbd/exclusive_lock/PostAcquireRequest.h"
 #include "librbd/exclusive_lock/PreReleaseRequest.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/Utils.h"
 #include "common/Mutex.h"
 #include "common/dout.h"
@@ -83,8 +83,8 @@ void ExclusiveLock<I>::init(uint64_t features, Context *on_init) {
     ML<I>::set_state_initializing();
   }
 
-  m_image_ctx.aio_work_queue->block_writes(new C_InitComplete(this, features,
-                                                              on_init));
+  m_image_ctx.io_work_queue->block_writes(new C_InitComplete(this, features,
+                                                             on_init));
 }
 
 template <typename I>
@@ -116,7 +116,7 @@ void ExclusiveLock<I>::handle_init_complete(uint64_t features) {
   ldout(m_image_ctx.cct, 10) << "features=" << features << dendl;
 
   if ((features & RBD_FEATURE_JOURNALING) != 0) {
-    m_image_ctx.aio_work_queue->set_require_lock_on_read();
+    m_image_ctx.io_work_queue->set_require_lock_on_read();
   }
 
   Mutex::Locker locker(ML<I>::m_lock);
@@ -129,11 +129,11 @@ void ExclusiveLock<I>::shutdown_handler(int r, Context *on_finish) {
 
   {
     RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
-    m_image_ctx.aio_work_queue->clear_require_lock_on_read();
+    m_image_ctx.io_work_queue->clear_require_lock_on_read();
     m_image_ctx.exclusive_lock = nullptr;
   }
 
-  m_image_ctx.aio_work_queue->unblock_writes();
+  m_image_ctx.io_work_queue->unblock_writes();
   m_image_ctx.image_watcher->flush(on_finish);
 }
 
@@ -237,8 +237,8 @@ void ExclusiveLock<I>::handle_post_acquired_lock(int r) {
 
   if (r >= 0) {
     m_image_ctx.image_watcher->notify_acquired_lock();
-    m_image_ctx.aio_work_queue->clear_require_lock_on_read();
-    m_image_ctx.aio_work_queue->unblock_writes();
+    m_image_ctx.io_work_queue->clear_require_lock_on_read();
+    m_image_ctx.io_work_queue->unblock_writes();
   }
 
   on_finish->complete(r);
@@ -270,7 +270,7 @@ void ExclusiveLock<I>::post_release_lock_handler(bool shutting_down, int r,
 
     if (r >= 0) {
       m_image_ctx.image_watcher->notify_released_lock();
-      if (m_image_ctx.aio_work_queue->is_lock_request_needed()) {
+      if (m_image_ctx.io_work_queue->is_lock_request_needed()) {
         // if we have blocked IO -- re-request the lock
         RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
         ML<I>::acquire_lock(nullptr);
@@ -279,12 +279,12 @@ void ExclusiveLock<I>::post_release_lock_handler(bool shutting_down, int r,
   } else {
     {
       RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
-      m_image_ctx.aio_work_queue->clear_require_lock_on_read();
+      m_image_ctx.io_work_queue->clear_require_lock_on_read();
       m_image_ctx.exclusive_lock = nullptr;
     }
 
     if (r >= 0) {
-      m_image_ctx.aio_work_queue->unblock_writes();
+      m_image_ctx.io_work_queue->unblock_writes();
     }
 
     m_image_ctx.image_watcher->notify_released_lock();

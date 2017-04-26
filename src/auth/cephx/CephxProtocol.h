@@ -278,7 +278,7 @@ public:
     : AuthAuthorizer(CEPH_AUTH_CEPHX), cct(cct_), nonce(0) {}
 
   bool build_authorizer();
-  bool verify_reply(bufferlist::iterator& reply);
+  bool verify_reply(bufferlist::iterator& reply) override;
 };
 
 

@@ -49,7 +49,7 @@ class MOSDFailure : public PaxosServiceMessage {
       flags(extra_flags),
       epoch(e), failed_for(duration) { }
 private:
-  ~MOSDFailure() {}
+  ~MOSDFailure() override {}
 
 public: 
   entity_inst_t get_target() { return target_osd; }
@@ -59,9 +59,9 @@ public:
   bool is_immediate() const { 
     return flags & FLAG_IMMEDIATE; 
   }
-  epoch_t get_epoch() { return epoch; }
+  epoch_t get_epoch() const { return epoch; }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(fsid, p);
@@ -77,7 +77,7 @@ public:
       failed_for = 0;
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(fsid, payload);
     ::encode(target_osd, payload, features);
@@ -86,8 +86,8 @@ public:
     ::encode(failed_for, payload);
   }
 
-  const char *get_type_name() const { return "osd_failure"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_failure"; }
+  void print(ostream& out) const override {
     out << "osd_failure("
 	<< (if_osd_failed() ? "failed " : "recovered ")
 	<< (is_immediate() ? "immediate " : "timeout ")

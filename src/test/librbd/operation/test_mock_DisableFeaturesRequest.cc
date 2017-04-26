@@ -6,9 +6,9 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockJournalPolicy.h"
 #include "cls/rbd/cls_rbd_client.h"
-#include "librbd/AioCompletion.h"
 #include "librbd/internal.h"
 #include "librbd/image/SetFlagsRequest.h"
+#include "librbd/io/AioCompletion.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/journal/StandardPolicy.h"
@@ -203,12 +203,12 @@ public:
   }
 
   void expect_block_writes(MockOperationImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.aio_work_queue, block_writes(_))
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, block_writes(_))
       .WillOnce(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue));
   }
 
   void expect_unblock_writes(MockOperationImageCtx &mock_image_ctx) {
-    EXPECT_CALL(*mock_image_ctx.aio_work_queue, unblock_writes()).Times(1);
+    EXPECT_CALL(*mock_image_ctx.io_work_queue, unblock_writes()).Times(1);
   }
 
   void expect_verify_lock_ownership(MockOperationImageCtx &mock_image_ctx) {
@@ -333,7 +333,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, All) {
 
   C_SaferCond cond_ctx;
   MockDisableFeaturesRequest *req = new MockDisableFeaturesRequest(
-    mock_image_ctx, &cond_ctx, 0, features_to_disable);
+    mock_image_ctx, &cond_ctx, 0, features_to_disable, false);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -380,7 +380,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, ObjectMap) {
   C_SaferCond cond_ctx;
   MockDisableFeaturesRequest *req = new MockDisableFeaturesRequest(
     mock_image_ctx, &cond_ctx, 0,
-    RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF);
+    RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF, false);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -424,7 +424,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, ObjectMapError) {
   C_SaferCond cond_ctx;
   MockDisableFeaturesRequest *req = new MockDisableFeaturesRequest(
     mock_image_ctx, &cond_ctx, 0,
-    RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF);
+    RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF, false);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -467,7 +467,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, Mirroring) {
 
   C_SaferCond cond_ctx;
   MockDisableFeaturesRequest *req = new MockDisableFeaturesRequest(
-    mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_JOURNALING);
+    mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_JOURNALING, false);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -510,7 +510,7 @@ TEST_F(TestMockOperationDisableFeaturesRequest, MirroringError) {
 
   C_SaferCond cond_ctx;
   MockDisableFeaturesRequest *req = new MockDisableFeaturesRequest(
-    mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_JOURNALING);
+    mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_JOURNALING, false);
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();

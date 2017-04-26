@@ -57,8 +57,6 @@ using namespace std;
 class OSD;
 class OSDService;
 class MOSDOp;
-class MOSDSubOp;
-class MOSDSubOpReply;
 class MOSDPGScan;
 class MOSDPGBackfill;
 class MOSDPGInfo;
@@ -205,9 +203,9 @@ protected:
 
   virtual PGBackend *get_pgbackend() = 0;
 public:
-  std::string gen_prefix() const;
-  CephContext *get_cct() const { return cct; }
-  unsigned get_subsys() const { return ceph_subsys_osd; }
+  std::string gen_prefix() const override;
+  CephContext *get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return ceph_subsys_osd; }
 
   /*** PG ****/
   void update_snap_mapper_bits(uint32_t bits) {
@@ -218,26 +216,15 @@ public:
     return get_pgbackend()->get_is_recoverable_predicate();
   }
 protected:
-  // Ops waiting for map, should be queued at back
-  Mutex map_lock;
-  list<OpRequestRef> waiting_for_map;
   OSDMapRef osdmap_ref;
   OSDMapRef last_persisted_osdmap_ref;
   PGPool pool;
 
-  void queue_op(OpRequestRef& op);
-  void take_op_map_waiters();
+  void requeue_map_waiters();
 
   void update_osdmap_ref(OSDMapRef newmap) {
     assert(_lock.is_locked_by_me());
-    Mutex::Locker l(map_lock);
     osdmap_ref = std::move(newmap);
-  }
-
-  OSDMapRef get_osdmap_with_maplock() const {
-    assert(map_lock.is_locked());
-    assert(osdmap_ref);
-    return osdmap_ref;
   }
 
 public:
@@ -253,7 +240,7 @@ protected:
    * lock() should be called before doing anything.
    * get() should be called on pointer copy (to another thread, etc.).
    * put() should be called on destruction of some previously copied pointer.
-   * put_unlock() when done with the current pointer (_most common_).
+   * unlock() when done with the current pointer (_most common_).
    */  
   mutable Mutex _lock;
   std::atomic_uint ref{0};
@@ -538,7 +525,7 @@ public:
     eversion_t v;
     C_UpdateLastRollbackInfoTrimmedToApplied(PG *pg, epoch_t e, eversion_t v)
       : pg(pg), e(e), v(v) {}
-    void finish(int) {
+    void finish(int) override {
       pg->lock();
       if (!pg->pg_has_reset_since(e)) {
 	pg->last_rollback_info_trimmed_to_applied = v;
@@ -813,9 +800,64 @@ public:
 
 protected:
 
+  /*
+   * blocked request wait hierarchy
+   *
+   * In order to preserve request ordering we need to be careful about the
+   * order in which blocked requests get requeued.  Generally speaking, we
+   * push the requests back up to the op_wq in reverse order (most recent
+   * request first) so that they come back out again in the original order.
+   * However, because there are multiple wait queues, we need to requeue
+   * waitlists in order.  Generally speaking, we requeue the wait lists
+   * that are checked first.
+   *
+   * Here are the various wait lists, in the order they are used during
+   * request processing, with notes:
+   *
+   *  - waiting_for_map
+   *    - may start or stop blocking at any time (depending on client epoch)
+   *  - waiting_for_peered
+   *    - !is_peered() or flushes_in_progress
+   *    - only starts blocking on interval change; never restarts
+   *  - waiting_for_active
+   *    - !is_active()
+   *    - only starts blocking on interval change; never restarts
+   *  - waiting_for_scrub
+   *    - starts and stops blocking for varying intervals during scrub
+   *  - waiting_for_unreadable_object
+   *    - never restarts once object is readable (* except for EIO?)
+   *  - waiting_for_degraded_object
+   *    - never restarts once object is writeable (* except for EIO?)
+   *  - waiting_for_blocked_object
+   *    - starts and stops based on proxied op activity
+   *  - obc rwlocks
+   *    - starts and stops based on read/write activity
+   *
+   * Notes:
+   *
+   *  1. During and interval change, we requeue *everything* in the above order.
+   *
+   *  2. When an obc rwlock is released, we check for a scrub block and requeue
+   *     the op there if it applies.  We ignore the unreadable/degraded/blocked
+   *     queues because we assume they cannot apply at that time (this is
+   *     probably mostly true).
+   *
+   *  3. The requeue_ops helper will push ops onto the waiting_for_map list if
+   *     it is non-empty.
+   *
+   * These three behaviors are generally sufficient to maintain ordering, with
+   * the possible exception of cases where we make an object degraded or
+   * unreadable that was previously okay, e.g. when scrub or op processing
+   * encounter an unexpected error.  FIXME.
+   */
 
   // pg waiters
   unsigned flushes_in_progress;
+
+  // ops with newer maps than our (or blocked behind them)
+  // track these by client, since inter-request ordering doesn't otherwise
+  // matter.
+  unordered_map<entity_name_t,list<OpRequestRef>> waiting_for_map;
 
   // ops waiting on peered
   list<OpRequestRef>            waiting_for_peered;
@@ -924,7 +966,7 @@ public:
 
   virtual void calc_trim_to() = 0;
 
-  void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
+  void proc_replica_log(pg_info_t &oinfo, const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 		       pg_missing_t& omissing, pg_shard_t from);
@@ -937,20 +979,20 @@ public:
     PGLogEntryHandler(PG *pg, ObjectStore::Transaction *t) : pg(pg), t(t) {}
 
     // LogEntryHandler
-    void remove(const hobject_t &hoid) {
+    void remove(const hobject_t &hoid) override {
       pg->get_pgbackend()->remove(hoid, t);
     }
-    void try_stash(const hobject_t &hoid, version_t v) {
+    void try_stash(const hobject_t &hoid, version_t v) override {
       pg->get_pgbackend()->try_stash(hoid, v, t);
     }
-    void rollback(const pg_log_entry_t &entry) {
+    void rollback(const pg_log_entry_t &entry) override {
       assert(entry.can_rollback());
       pg->get_pgbackend()->rollback(entry, t);
     }
-    void rollforward(const pg_log_entry_t &entry) {
+    void rollforward(const pg_log_entry_t &entry) override {
       pg->get_pgbackend()->rollforward(entry, t);
     }
-    void trim(const pg_log_entry_t &entry) {
+    void trim(const pg_log_entry_t &entry) override {
       pg->get_pgbackend()->trim(entry, t);
     }
   };
@@ -1116,6 +1158,9 @@ public:
 
     // flags to indicate explicitly requested scrubs (by admin)
     bool must_scrub, must_deep_scrub, must_repair;
+
+    // Priority to use for scrub scheduling
+    unsigned priority;
 
     // this flag indicates whether we would like to do auto-repair of the PG or not
     bool auto_repair;
@@ -1288,13 +1333,17 @@ public:
   void replica_scrub(
     OpRequestRef op,
     ThreadPool::TPHandle &handle);
+  void do_replica_scrub_map(OpRequestRef op);
   void sub_op_scrub_map(OpRequestRef op);
-  void sub_op_scrub_reserve(OpRequestRef op);
-  void sub_op_scrub_reserve_reply(OpRequestRef op);
-  void sub_op_scrub_unreserve(OpRequestRef op);
+
+  void handle_scrub_reserve_request(OpRequestRef op);
+  void handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from);
+  void handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from);
+  void handle_scrub_reserve_release(OpRequestRef op);
 
   void reject_reservation();
   void schedule_backfill_full_retry();
+  void schedule_recovery_full_retry();
 
   // -- recovery state --
 
@@ -1305,7 +1354,7 @@ public:
     EVT evt;
     QueuePeeringEvt(PG *pg, epoch_t epoch, EVT evt) :
       pg(pg), epoch(epoch), evt(evt) {}
-    void finish(int r) {
+    void finish(int r) override {
       pg->lock();
       pg->queue_peering_event(PG::CephPeeringEvtRef(
 				new PG::CephPeeringEvt(
@@ -1356,7 +1405,7 @@ public:
     pg_shard_t from;
     pg_info_t info;
     epoch_t msg_epoch;
-    MInfoRec(pg_shard_t from, pg_info_t &info, epoch_t msg_epoch) :
+    MInfoRec(pg_shard_t from, const pg_info_t &info, epoch_t msg_epoch) :
       from(from), info(info), msg_epoch(msg_epoch) {}
     void print(std::ostream *out) const {
       *out << "MInfoRec from " << from << " info: " << info;
@@ -1377,7 +1426,7 @@ public:
     pg_shard_t from;
     pg_notify_t notify;
     uint64_t features;
-    MNotifyRec(pg_shard_t from, pg_notify_t &notify, uint64_t f) :
+    MNotifyRec(pg_shard_t from, const pg_notify_t &notify, uint64_t f) :
       from(from), notify(notify), features(f) {}
     void print(std::ostream *out) const {
       *out << "MNotifyRec from " << from << " notify: " << notify
@@ -1460,6 +1509,7 @@ public:
   TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
   TrivialEvent(BackfillTooFull)
+  TrivialEvent(RecoveryTooFull)
 
   TrivialEvent(AllReplicasRecovered)
   TrivialEvent(DoRecovery)
@@ -1467,7 +1517,6 @@ public:
   TrivialEvent(RemoteRecoveryReserved)
   TrivialEvent(AllRemotesReserved)
   TrivialEvent(AllBackfillsReserved)
-  TrivialEvent(Recovering)
   TrivialEvent(GoClean)
 
   TrivialEvent(AllReplicasActivated)
@@ -1806,6 +1855,14 @@ public:
       boost::statechart::result react(const RemoteReservationRejected& evt);
     };
 
+    struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {
+      typedef boost::mpl::list<
+	boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >
+	> reactions;
+      explicit NotRecovering(my_context ctx);
+      void exit();
+    };
+
     struct RepNotRecovering;
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started, RepNotRecovering >, NamedState {
       explicit ReplicaActive(my_context ctx);
@@ -1894,10 +1951,12 @@ public:
 
     struct WaitLocalRecoveryReserved : boost::statechart::state< WaitLocalRecoveryReserved, Active >, NamedState {
       typedef boost::mpl::list <
-	boost::statechart::transition< LocalRecoveryReserved, WaitRemoteRecoveryReserved >
+	boost::statechart::transition< LocalRecoveryReserved, WaitRemoteRecoveryReserved >,
+	boost::statechart::custom_reaction< RecoveryTooFull >
 	> reactions;
       explicit WaitLocalRecoveryReserved(my_context ctx);
       void exit();
+      boost::statechart::result react(const RecoveryTooFull &evt);
     };
 
     struct Activating : boost::statechart::state< Activating, Active >, NamedState {
@@ -2071,7 +2130,7 @@ public:
  public:
   PG(OSDService *o, OSDMapRef curmap,
      const PGPool &pool, spg_t p);
-  virtual ~PG();
+  ~PG() override;
 
  private:
   // Prevent copying
@@ -2183,7 +2242,7 @@ public:
     const vector<int>& acting,
     int acting_primary,
     const pg_history_t& history,
-    pg_interval_map_t& pim,
+    const pg_interval_map_t& pim,
     bool backfill,
     ObjectStore::Transaction *t);
 
@@ -2198,6 +2257,7 @@ private:
   void prepare_write_info(map<string,bufferlist> *km);
 
   void update_store_with_options();
+  void update_store_on_load();
 
 public:
   static int _prepare_write_info(

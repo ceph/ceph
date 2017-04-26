@@ -24,6 +24,7 @@ add_subdirectory(cls_lua)
 add_subdirectory(common)
 add_subdirectory(compressor)
 add_subdirectory(crush)
+add_subdirectory(direct_messenger)
 add_subdirectory(encoding)
 add_subdirectory(erasure-code)
 add_subdirectory(filestore)
@@ -502,6 +503,7 @@ endif(HAVE_BLKID)
 #following dependencies are run inside make check unit tests
 add_dependencies(tests
   ceph-mon
+  ceph-mgr
   ceph
   ceph-authtool
   get_command_descriptions

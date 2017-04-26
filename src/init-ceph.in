@@ -33,6 +33,10 @@ else
 	LIBEXECDIR=$CEPH_ROOT/src
 	ETCDIR=.
 	ASSUME_DEV=1
+	CEPH_LIB=$CEPH_ROOT/build/lib
+	echo "$PYTHONPATH" | grep -q $CEPH_LIB || export PYTHONPATH=$CEPH_LIB/cython_modules/lib.2:$PYTHONPATH
+	echo "$LD_LIBRARY_PATH" | grep -q $CEPH_LIB || export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
+	echo "$DYLD_LIBRARY_PATH" | grep -q $CEPH_LIB || export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
     else
 	BINDIR=@bindir@
 	SBINDIR=@sbindir@
@@ -261,7 +265,8 @@ get_local_name_list
 get_name_list "$@"
 
 # Reverse the order if we are stopping
-if [ "$command" = "stop" ]; then
+
+if [ "$command" = "stop" -o "$command" = "onestop" ]; then
     for f in $what; do
        new_order="$f $new_order"
     done
@@ -286,7 +291,7 @@ for name in $what; do
 
     get_conf pid_file "$run_dir/$type.$id.pid" "pid file"
 
-    if [ "$command" = "start" ]; then
+    if [ "$command" = "start" -o "$command" = "onestart" ]; then
 	if [ -n "$pid_file" ]; then
 	    do_cmd "mkdir -p "`dirname $pid_file`
 	    cmd="$cmd --pid-file $pid_file"
@@ -342,7 +347,7 @@ for name in $what; do
     get_conf asok "$run_dir/$cluster-$type.$id.asok" "admin socket"
 
     case "$command" in
-	start)
+	start|onestart)
             # Increase max_open_files, if the configuration calls for it.
             get_conf max_open_files "32768" "max open files"
 
@@ -454,7 +459,7 @@ for name in $what; do
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && touch $lockfile
 	    ;;
 
-	stop)
+	stop|onestop)
 	    get_conf pre_stop "" "pre stop command"
 	    get_conf post_stop "" "post stop command"
 	    [ -n "$pre_stop" ] && do_cmd "$pre_stop"
@@ -508,7 +513,7 @@ for name in $what; do
 	    signal_daemon $name ceph-$type $pid_file -1 "Reloading"
 	    ;;
 
-	restart)
+	restart|onerestart)
 	    $0 $options stop $name
 	    $0 $options start $name
 	    ;;

@@ -211,6 +211,11 @@ bool MDRequestImpl::slave_did_prepare()
   return has_more() && more()->slave_commit;
 }
 
+bool MDRequestImpl::slave_rolling_back()
+{
+  return has_more() && more()->slave_rolling_back;
+}
+
 bool MDRequestImpl::did_ino_allocation() const
 {
   return alloc_ino || used_prealloc_ino || prealloc_inos.size();
@@ -301,10 +306,16 @@ void MDRequestImpl::set_filepath(const filepath& fp)
   assert(!client_request);
   more()->filepath1 = fp;
 }
+
 void MDRequestImpl::set_filepath2(const filepath& fp)
 {
   assert(!client_request);
   more()->filepath2 = fp;
+}
+
+bool MDRequestImpl::is_replay() const
+{
+  return client_request ? client_request->is_replay() : false;
 }
 
 void MDRequestImpl::print(ostream &out) const

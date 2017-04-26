@@ -158,7 +158,7 @@ namespace CrushTreeDumper {
     explicit FormattingDumper(const CrushWrapper *crush) : Dumper<Formatter>(crush) {}
 
   protected:
-    virtual void dump_item(const Item &qi, Formatter *f) {
+    void dump_item(const Item &qi, Formatter *f) override {
       f->open_object_section("item");
       dump_item_fields(qi, f);
       dump_bucket_children(qi, f);

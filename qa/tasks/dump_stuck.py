@@ -26,7 +26,6 @@ def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
     inactive = manager.get_stuck_pgs('inactive', timeout)
     unclean = manager.get_stuck_pgs('unclean', timeout)
     stale = manager.get_stuck_pgs('stale', timeout)
-    log.info('hi mom')
     log.info('inactive %s / %d,  unclean %s / %d,  stale %s / %d',
              len(inactive), num_inactive,
              len(unclean), num_unclean,
@@ -34,19 +33,6 @@ def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
     assert len(inactive) == num_inactive
     assert len(unclean) == num_unclean
     assert len(stale) == num_stale
-
-    # check health output as well
-    health = manager.raw_cluster_cmd('health')
-    log.debug('ceph health is: %s', health)
-    if num_inactive > 0:
-        m = re.search('(\d+) pgs stuck inactive', health)
-        assert int(m.group(1)) == num_inactive
-    if num_unclean > 0:
-        m = re.search('(\d+) pgs stuck unclean', health)
-        assert int(m.group(1)) == num_unclean
-    if num_stale > 0:
-        m = re.search('(\d+) pgs stuck stale', health)
-        assert int(m.group(1)) == num_stale
 
 def task(ctx, config):
     """

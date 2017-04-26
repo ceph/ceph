@@ -1573,7 +1573,7 @@ instance for high availability.
 
 
 
-.. _RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters: http://ceph.com/papers/weil-rados-pdsw07.pdf
+.. _RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters: https://ceph.com/wp-content/uploads/2016/08/weil-rados-pdsw07.pdf
 .. _Paxos: http://en.wikipedia.org/wiki/Paxos_(computer_science)
 .. _Monitor Config Reference: ../rados/configuration/mon-config-ref
 .. _Monitoring OSDs and PGs: ../rados/operations/monitoring-osd-pg

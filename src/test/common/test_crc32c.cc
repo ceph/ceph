@@ -81,6 +81,7 @@ TEST(Crc32c, Performance) {
     std::cout << "intel baseline = " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(261108528u, val);
   }
+#if defined(__arm__) || defined(__aarch64__)
   if (ceph_arch_aarch64_crc32) // Skip if CRC32C instructions are not defined.
   {
     utime_t start = ceph_clock_now();
@@ -90,7 +91,7 @@ TEST(Crc32c, Performance) {
     std::cout << "aarch64 = " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(261108528u, val);
   }
-
+#endif
 }
 
 

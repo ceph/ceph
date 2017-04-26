@@ -18,8 +18,9 @@ def run_radosgw_agent(ctx, config):
     return_list = list()
     for (client, cconf) in config.items():
         # don't process entries that are not clients
-        if not client.startswith('client.'):
-            log.debug('key {data} does not start with \'client.\', moving on'.format(
+        log.debug("client is %r", client)
+        if not 'client.' in client:
+            log.debug('key {data} does not contain \'client.\', moving on'.format(
                       data=client))
             continue
 

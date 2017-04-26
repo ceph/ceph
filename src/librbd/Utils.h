@@ -50,7 +50,7 @@ public:
   }
 
 protected:
-  virtual void finish(int r) {
+  void finish(int r) override {
     (obj->*MF)(r);
   }
 };
@@ -63,7 +63,7 @@ public:
   }
 
 protected:
-  virtual void complete(int r) override {
+  void complete(int r) override {
     Context *on_finish = (obj->*MF)(&r);
     if (on_finish != nullptr) {
       on_finish->complete(r);
@@ -73,7 +73,7 @@ protected:
     }
     Context::complete(r);
   }
-  virtual void finish(int r) override {
+  void finish(int r) override {
   }
 };
 
@@ -85,7 +85,7 @@ struct C_AsyncCallback : public Context {
   C_AsyncCallback(WQ *op_work_queue, Context *on_finish)
     : op_work_queue(op_work_queue), on_finish(on_finish) {
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     op_work_queue->queue(on_finish, r);
   }
 };
@@ -100,42 +100,24 @@ const std::string header_name(const std::string &image_id);
 const std::string old_header_name(const std::string &image_name);
 std::string unique_lock_name(const std::string &name, void *address);
 
-librados::AioCompletion *create_rados_ack_callback(Context *on_finish);
+librados::AioCompletion *create_rados_callback(Context *on_finish);
 
 template <typename T>
-librados::AioCompletion *create_rados_ack_callback(T *obj) {
+librados::AioCompletion *create_rados_callback(T *obj) {
   return librados::Rados::aio_create_completion(
     obj, &detail::rados_callback<T>, nullptr);
 }
 
 template <typename T, void(T::*MF)(int)>
-librados::AioCompletion *create_rados_ack_callback(T *obj) {
+librados::AioCompletion *create_rados_callback(T *obj) {
   return librados::Rados::aio_create_completion(
     obj, &detail::rados_callback<T, MF>, nullptr);
 }
 
 template <typename T, Context*(T::*MF)(int*), bool destroy=true>
-librados::AioCompletion *create_rados_ack_callback(T *obj) {
+librados::AioCompletion *create_rados_callback(T *obj) {
   return librados::Rados::aio_create_completion(
     obj, &detail::rados_state_callback<T, MF, destroy>, nullptr);
-}
-
-template <typename T>
-librados::AioCompletion *create_rados_safe_callback(T *obj) {
-  return librados::Rados::aio_create_completion(
-    obj, nullptr, &detail::rados_callback<T>);
-}
-
-template <typename T, void(T::*MF)(int)>
-librados::AioCompletion *create_rados_safe_callback(T *obj) {
-  return librados::Rados::aio_create_completion(
-    obj, nullptr, &detail::rados_callback<T, MF>);
-}
-
-template <typename T, Context*(T::*MF)(int*), bool destroy=true>
-librados::AioCompletion *create_rados_safe_callback(T *obj) {
-  return librados::Rados::aio_create_completion(
-    obj, nullptr, &detail::rados_state_callback<T, MF, destroy>);
 }
 
 template <typename T, void(T::*MF)(int) = &T::complete>
@@ -205,6 +187,12 @@ private:
 
 uint64_t get_rbd_default_features(CephContext* cct);
 
+bool calc_sparse_extent(const bufferptr &bp,
+                        size_t sparse_size,
+                        uint64_t length,
+                        size_t *write_offset,
+                        size_t *write_length,
+                        size_t *offset);
 } // namespace util
 
 } // namespace librbd

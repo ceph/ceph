@@ -31,10 +31,7 @@
 
 MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_)
     : Dispatcher(cct_), cct(cct_), msgr(msgr_),
-      session(nullptr),
-      lock("mgrc"),
-      timer(cct_, lock),
-      report_callback(nullptr)
+      timer(cct_, lock)
 {
   assert(cct != nullptr);
 }
@@ -52,7 +49,17 @@ void MgrClient::shutdown()
 {
   Mutex::Locker l(lock);
 
+  if (connect_retry_callback) {
+    timer.cancel_event(connect_retry_callback);
+    connect_retry_callback = nullptr;
+  }
+
+  // forget about in-flight commands if we are prematurely shut down
+  // (e.g., by control-C)
+  command_table.clear();
+
   timer.shutdown();
+  session.reset();
 }
 
 bool MgrClient::ms_dispatch(Message *m)
@@ -85,49 +92,65 @@ void MgrClient::reconnect()
     ldout(cct, 4) << "Terminating session with "
 		  << session->con->get_peer_addr() << dendl;
     session->con->mark_down();
-    delete session;
-    session = nullptr;
+    session.reset();
     stats_period = 0;
     if (report_callback != nullptr) {
       timer.cancel_event(report_callback);
       report_callback = nullptr;
     }
+  }
 
-    std::vector<ceph_tid_t> erase_cmds;
-    auto commands = command_table.get_commands();
-    for (const auto &i : commands) {
-      // FIXME be nicer, retarget command on new mgr?
-      if (i.second.on_finish != nullptr) {
-	i.second.on_finish->complete(-ETIMEDOUT);
+  if (!map.get_available()) {
+    ldout(cct, 4) << "No active mgr available yet" << dendl;
+    return;
+  }
+
+  if (last_connect_attempt != utime_t()) {
+    utime_t now = ceph_clock_now();
+    utime_t when = last_connect_attempt;
+    when += cct->_conf->mgr_connect_retry_interval;
+    if (now < when) {
+      if (!connect_retry_callback) {
+	connect_retry_callback = new FunctionContext([this](int r){
+	    connect_retry_callback = nullptr;
+	    reconnect();
+	  });
+	timer.add_event_at(when, connect_retry_callback);
       }
-      erase_cmds.push_back(i.first);
-    }
-    for (const auto &tid : erase_cmds) {
-      command_table.erase(tid);
+      ldout(cct, 4) << "waiting to retry connect until " << when << dendl;
+      return;
     }
   }
 
-  if (map.get_available()) {
-    ldout(cct, 4) << "Starting new session with " << map.get_active_addr()
-		  << dendl;
-    entity_inst_t inst;
-    inst.addr = map.get_active_addr();
-    inst.name = entity_name_t::MGR(map.get_active_gid());
+  if (connect_retry_callback) {
+    timer.cancel_event(connect_retry_callback);
+    connect_retry_callback = nullptr;
+  }
 
-    session = new MgrSessionState();
-    session->con = msgr->get_connection(inst);
+  ldout(cct, 4) << "Starting new session with " << map.get_active_addr()
+		<< dendl;
+  entity_inst_t inst;
+  inst.addr = map.get_active_addr();
+  inst.name = entity_name_t::MGR(map.get_active_gid());
+  last_connect_attempt = ceph_clock_now();
 
-    // Don't send an open if we're just a client (i.e. doing
-    // command-sending, not stats etc)
-    if (g_conf && !g_conf->name.is_client()) {
-      auto open = new MMgrOpen();
-      open->daemon_name = g_conf->name.get_id();
-      session->con->send_message(open);
-    }
+  session.reset(new MgrSessionState());
+  session->con = msgr->get_connection(inst);
 
-    signal_cond_list(waiting_for_session);
-  } else {
-    ldout(cct, 4) << "No active mgr available yet" << dendl;
+  // Don't send an open if we're just a client (i.e. doing
+  // command-sending, not stats etc)
+  if (g_conf && !g_conf->name.is_client()) {
+    auto open = new MMgrOpen();
+    open->daemon_name = g_conf->name.get_id();
+    session->con->send_message(open);
+  }
+
+  // resend any pending commands
+  for (const auto &p : command_table.get_commands()) {
+    MCommand *m = p.second.get_message({});
+    assert(session);
+    assert(session->con);
+    session->con->send_message(m);
   }
 }
 
@@ -144,7 +167,7 @@ bool MgrClient::handle_mgr_map(MMgrMap *m)
   ldout(cct, 4) << "Active mgr is now " << map.get_active_addr() << dendl;
 
   // Reset session?
-  if (session == nullptr || 
+  if (!session ||
       session->con->get_peer_addr() != map.get_active_addr()) {
     reconnect();
   }
@@ -181,45 +204,45 @@ void MgrClient::send_report()
   pcc->with_counters([this, report](
         const PerfCountersCollection::CounterMap &by_path)
   {
-    bool const declared_all = (session->declared.size() == by_path.size());
-
-    if (!declared_all) {
-      for (const auto &i : by_path) {
-        auto path = i.first;
-        auto data = *(i.second);
-        
-        if (session->declared.count(path) == 0) {
-          PerfCounterType type;
-          type.path = path;
-          if (data.description) {
-            type.description = data.description;
-          }
-          if (data.nick) {
-            type.nick = data.nick;
-          }
-          type.type = data.type;
-          report->declare_types.push_back(std::move(type));
-          session->declared.insert(path);
-        }
+    ENCODE_START(1, 1, report->packed);
+    for (auto p = session->declared.begin(); p != session->declared.end(); ) {
+      if (by_path.count(*p) == 0) {
+	report->undeclare_types.push_back(*p);
+	ldout(cct,20) << __func__ << " undeclare " << *p << dendl;
+	p = session->declared.erase(p);
+      } else {
+	++p;
       }
     }
+    for (const auto &i : by_path) {
+      auto& path = i.first;
+      auto& data = *(i.second);
 
-    ldout(cct, 20) << by_path.size() << " counters, of which "
-             << report->declare_types.size() << " new" << dendl;
+      if (session->declared.count(path) == 0) {
+	ldout(cct,20) << __func__ << " declare " << path << dendl;
+	PerfCounterType type;
+	type.path = path;
+	if (data.description) {
+	  type.description = data.description;
+	}
+	if (data.nick) {
+	  type.nick = data.nick;
+	}
+	type.type = data.type;
+	report->declare_types.push_back(std::move(type));
+	session->declared.insert(path);
+      }
 
-    ENCODE_START(1, 1, report->packed);
-    for (const auto &path : session->declared) {
-      auto data = by_path.at(path);
-      ::encode(static_cast<uint64_t>(data->u64.read()),
-          report->packed);
-      if (data->type & PERFCOUNTER_LONGRUNAVG) {
-        ::encode(static_cast<uint64_t>(data->avgcount.read()),
-            report->packed);
-        ::encode(static_cast<uint64_t>(data->avgcount2.read()),
-            report->packed);
+      ::encode(static_cast<uint64_t>(data.u64.read()), report->packed);
+      if (data.type & PERFCOUNTER_LONGRUNAVG) {
+        ::encode(static_cast<uint64_t>(data.avgcount.read()), report->packed);
+        ::encode(static_cast<uint64_t>(data.avgcount2.read()), report->packed);
       }
     }
     ENCODE_FINISH(report->packed);
+
+    ldout(cct, 20) << by_path.size() << " counters, of which "
+		   << report->declare_types.size() << " new" << dendl;
   });
 
   ldout(cct, 20) << "encoded " << report->packed.length() << " bytes" << dendl;
@@ -245,7 +268,7 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
 
   ldout(cct, 20) << *m << dendl;
 
-  if (session == nullptr) {
+  if (!session) {
     lderr(cct) << "dropping unexpected configure message" << dendl;
     m->put();
     return true;
@@ -263,22 +286,6 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
   return true;
 }
 
-void MgrClient::wait_on_list(list<Cond*>& ls)
-{
-  assert(lock.is_locked_by_me());
-
-  Cond cond;
-  ls.push_back(&cond);
-  cond.Wait(lock);
-  ls.remove(&cond);
-}
-
-void MgrClient::signal_cond_list(list<Cond*>& ls)
-{
-  for (list<Cond*>::iterator it = ls.begin(); it != ls.end(); ++it)
-    (*it)->Signal();
-}
-
 int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
                   bufferlist *outbl, string *outs,
                   Context *onfinish)
@@ -287,12 +294,10 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 
   ldout(cct, 20) << "cmd: " << cmd << dendl;
 
-  if (session == nullptr) {
-    lderr(cct) << "no session, waiting" << dendl;
-    wait_on_list(waiting_for_session);
+  if (map.epoch == 0) {
+    ldout(cct,20) << " no MgrMap, assuming EACCES" << dendl;
+    return -EACCES;
   }
-
-  assert(map.epoch > 0);
 
   auto &op = command_table.start_command();
   op.cmd = cmd;
@@ -301,12 +306,11 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
   op.outs = outs;
   op.on_finish = onfinish;
 
-  // Leaving fsid argument null because it isn't used.
-  MCommand *m = op.get_message({});
-  assert(session);
-  assert(session->con);
-  session->con->send_message(m);
-
+  if (session && session->con) {
+    // Leaving fsid argument null because it isn't used.
+    MCommand *m = op.get_message({});
+    session->con->send_message(m);
+  }
   return 0;
 }
 

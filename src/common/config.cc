@@ -27,6 +27,7 @@
 #include "msg/msg_types.h"
 #include "osd/osd_types.h"
 #include "common/errno.h"
+#include "common/hostname.h"
 
 #include "include/assert.h"
 
@@ -301,8 +302,9 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     else if (ret != -ENOENT)
       return ret;
   }
+  // it must have been all ENOENTs, that's the only way we got here
   if (c == conf_files.end())
-    return -EINVAL;
+    return -ENOENT;
 
   if (cluster.size() == 0) {
     /*
@@ -817,7 +819,7 @@ md_config_t::config_option const *md_config_t::find_config_option(const std::str
   return config_options->end() == opt_it ? nullptr : &(*opt_it);
 }
 
-int md_config_t::set_val(const char *key, const char *val, bool meta, bool safe)
+int md_config_t::set_val(const char *key, const char *val, bool meta)
 {
   Mutex::Locker l(lock);
   if (!key)
@@ -853,7 +855,7 @@ int md_config_t::set_val(const char *key, const char *val, bool meta, bool safe)
 
   config_option const *opt = find_config_option(k);
   if (opt) {
-    if ((!opt->is_safe()) && safe && internal_safe_to_start_threads) {
+    if ((!opt->is_safe()) && internal_safe_to_start_threads) {
       // If threads have been started and the option is not thread safe
       if (observers.find(opt->name) == observers.end()) {
         // And there is no observer to safely change it...
@@ -1267,9 +1269,14 @@ bool md_config_t::expand_meta(std::string &origval,
 	else if (var == "cluster")
 	  out += cluster;
 	else if (var == "name")
-	  out += name.to_cstr();
+          out += name.to_cstr();
 	else if (var == "host")
-	  out += host;
+        {
+          if (host == "")
+            out += ceph_get_short_hostname();
+          else
+	    out += host;
+        }
 	else if (var == "num")
 	  out += name.get_id().c_str();
 	else if (var == "id")

@@ -28,19 +28,12 @@ Build-Depends: bc,
                libbabeltrace-ctf-dev,
                libbabeltrace-dev,
                libblkid-dev (>= 2.17),
-               libboost-dev (>= 1.42),
-               libboost-program-options-dev (>= 1.42),
-               libboost-system-dev (>= 1.42),
-               libboost-thread-dev (>= 1.42),
-	       libboost-regex-dev,
-	       libboost-random-dev,
-               libboost-iostreams-dev (>= 1.42),
-               libboost-python-dev,
                libcurl4-gnutls-dev,
                libexpat1-dev,
                libfcgi-dev,
                libfuse-dev,
                libgoogle-perftools-dev [i386 amd64 arm64],
+		libibverbs-dev,
                libkeyutils-dev,
                libleveldb-dev,
                libnss3-dev,
@@ -92,6 +85,7 @@ Depends: binutils,
          gdisk,
          grep,
          logrotate,
+         psmisc,
          ${python:Depends},
          xfsprogs,
          ${misc:Depends},
@@ -114,6 +108,22 @@ Description: common ceph daemon libraries and management tools
  This package contains the libraries and management tools that are common among
  the Ceph server daemons (ceph-mon, ceph-mgr, ceph-osd, ceph-mds). These tools
  are necessary for creating, running, and administering a Ceph storage cluster.
+
+Package: ceph-base-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-base (= ${binary:Version}), ${misc:Depends}
+Description: debugging symbols for ceph-base
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the libraries and management tools that are common among
+ the Ceph server daemons (ceph-mon, ceph-mgr, ceph-osd, ceph-mds). These tools
+ are necessary for creating, running, and administering a Ceph storage cluster.
+ .
+ This package contains the debugging symbols for ceph-base.
 
 Package: ceph-mds
 Architecture: linux-any

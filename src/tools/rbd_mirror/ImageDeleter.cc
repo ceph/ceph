@@ -281,7 +281,7 @@ bool ImageDeleter::process_image_delete() {
 
   bool is_primary = false;
   r = Journal<>::is_tag_owner(ioctx, m_active_delete->local_image_id,
-                              &is_primary);
+                              &is_primary, m_work_queue);
   if (r < 0 && r != -ENOENT) {
     derr << "error retrieving image primary info: " << cpp_strerror(r)
          << dendl;
@@ -339,7 +339,6 @@ bool ImageDeleter::process_image_delete() {
       derr << "error opening image id " << m_active_delete->local_image_id
            << ": " << cpp_strerror(r) << dendl;
       enqueue_failed_delete(r);
-      delete imgctx;
       return true;
     }
 
@@ -376,7 +375,8 @@ bool ImageDeleter::process_image_delete() {
         dout(20) << "snapshot " << imgctx->name << "@" << snap.name
                  << " is protected, issuing unprotect command" << dendl;
 
-        r = imgctx->operations->snap_unprotect(snap.name.c_str());
+        r = imgctx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(),
+					       snap.name.c_str());
         if (r == -EBUSY) {
           // there are still clones of snapshots of this image, therefore send
           // the delete request to the end of the queue
@@ -397,7 +397,8 @@ bool ImageDeleter::process_image_delete() {
         }
       }
 
-      r = imgctx->operations->snap_remove(snap.name.c_str());
+      r = imgctx->operations->snap_remove(cls::rbd::UserSnapshotNamespace(),
+					  snap.name.c_str());
       if (r < 0) {
         derr << "error removing snapshot " << imgctx->name << "@"
              << snap.name << ": " << cpp_strerror(r) << dendl;

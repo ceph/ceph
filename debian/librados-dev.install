@@ -10,4 +10,5 @@ usr/include/rados/rados_types.h
 usr/include/rados/rados_types.hpp
 usr/include/rados/memory.h
 usr/lib/librados.so
+usr/lib/librados_tp.so
 usr/share/man/man8/librados-config.8

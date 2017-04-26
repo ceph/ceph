@@ -51,7 +51,7 @@ class LockdepObs : public md_config_obs_t {
 public:
   explicit LockdepObs(CephContext *cct) : m_cct(cct), m_registered(false) {
   }
-  ~LockdepObs() {
+  ~LockdepObs() override {
     if (m_registered) {
       lockdep_unregister_ceph_context(m_cct);
     }
@@ -91,7 +91,7 @@ public:
       "get mempool stats");
     assert(r == 0);
   }
-  ~MempoolObs() {
+  ~MempoolObs() override {
     cct->_conf->remove_observer(this);
     cct->get_admin_socket()->unregister_command("dump_mempools");
   }
@@ -138,7 +138,7 @@ public:
   {
   }
 
-  ~CephContextServiceThread() {}
+  ~CephContextServiceThread() override {}
 
   void *entry() override
   {
@@ -305,14 +305,17 @@ public:
 	conf->enable_experimental_unrecoverable_data_corrupting_features,
 	cct->_experimental_features);
       ceph_spin_unlock(&cct->_feature_lock);
-      if (!cct->_experimental_features.empty()) {
-        if (cct->_experimental_features.count("*")) {
-          lderr(cct) << "WARNING: all dangerous and experimental features are enabled." << dendl;
-        } else {
-          lderr(cct) << "WARNING: the following dangerous and experimental features are enabled: "
-	    << cct->_experimental_features << dendl;
+      if (getenv("CEPH_DEV") == NULL) {
+        if (!cct->_experimental_features.empty()) {
+          if (cct->_experimental_features.count("*")) {
+            lderr(cct) << "WARNING: all dangerous and experimental features are enabled." << dendl;
+          } else {
+            lderr(cct) << "WARNING: the following dangerous and experimental features are enabled: "
+              << cct->_experimental_features << dendl;
+          }
         }
       }
+
     }
     if (changed.count("crush_location")) {
       cct->crush_location.update_from_conf();

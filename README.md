@@ -1,12 +1,9 @@
-============================================
-Ceph - a scalable distributed storage system
-============================================
+# Ceph - a scalable distributed storage system
 
 Please see http://ceph.com/ for current info.
 
 
-Contributing Code
-=================
+## Contributing Code
 
 Most of Ceph is licensed under the LGPL version 2.1.  Some
 miscellaneous code is under BSD-style license or is public domain.
@@ -24,8 +21,7 @@ We do not require assignment of copyright to contribute code; code is
 contributed under the terms of the applicable license.
 
 
-Checking out the source
-=======================
+## Checking out the source
 
 You can clone from github with
 
@@ -40,16 +36,14 @@ Ceph contains many git submodules that need to be checked out with
 	git submodule update --init --recursive
 
 
-Build Prerequisites
-===================
+## Build Prerequisites
 
 The list of Debian or RPM packages dependencies can be installed with:
 
 	./install-deps.sh
 
 
-Building Ceph
-=============
+## Building Ceph
 
 Note that these instructions are meant for developers who are
 compiling the code for development and testing.  To build binaries
@@ -66,7 +60,7 @@ Build instructions:
 	make
 
 This assumes you make your build dir a subdirectory of the ceph.git
-checkout. If you put it elsewhere, just replace .. above with a
+checkout. If you put it elsewhere, just replace .. in do_cmake.sh with a
 correct path to the checkout.
 
 To build only certain targets use:
@@ -77,8 +71,7 @@ To install:
 
         make install
  
-CMake Options
--------------
+### CMake Options
 
 If you run the `cmake` command by hand, there are many options you can
 set with "-D". For example the option to build the RADOS Gateway is
@@ -111,8 +104,7 @@ Other available values for 'DIAGNOSTICS_COLOR' are 'auto' (default) and
 'never'.
 
 
-Building a source tarball
-=========================
+## Building a source tarball
 
 To build a complete source tarball with everything needed to build from
 source and/or build a (deb or rpm) package, run
@@ -124,8 +116,7 @@ This will create a tarball like ceph-$version.tar.bz2 from git.
 are committed to git.)
 
 
-Running a test cluster
-======================
+## Running a test cluster
 
 To run a functional test cluster,
 
@@ -150,8 +141,7 @@ To start or stop individual daemons, the sysvinit script can be used:
 	./bin/init-ceph stop
 
 
-Running unit tests
-==================
+## Running unit tests
 
 To build and run all tests (in parallel using all processors), use `ctest`:
 
@@ -195,19 +185,16 @@ over manual test execution. To view these options run:
 	man ctest
 
 
-Building the Documentation
-==========================
+## Building the Documentation
 
-Prerequisites
--------------
+### Prerequisites
 
 The list of package dependencies for building the documentation can be
 found in doc_deps.deb.txt:
 
 	sudo apt-get install `cat doc_deps.deb.txt`
 
-Building the Documentation
---------------------------
+### Building the Documentation
 
 To build the documentation, ensure that you are in the top-level
 `/ceph directory, and execute the build script. For example:

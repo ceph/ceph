@@ -46,7 +46,7 @@ namespace journal { template <typename> class Replay; }
 namespace rbd {
 namespace mirror {
 
-struct Threads;
+template <typename> struct Threads;
 
 namespace image_replayer { template <typename> class BootstrapRequest; }
 namespace image_replayer { template <typename> class EventPreprocessor; }
@@ -69,7 +69,22 @@ public:
     STATE_STOPPED,
   };
 
-  ImageReplayer(Threads *threads, std::shared_ptr<ImageDeleter> image_deleter,
+  static ImageReplayer *create(
+    Threads<librbd::ImageCtx> *threads,
+    std::shared_ptr<ImageDeleter> image_deleter,
+    ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
+    RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
+    const std::string &global_image_id) {
+    return new ImageReplayer(threads, image_deleter, image_sync_throttler,
+                             local, local_mirror_uuid, local_pool_id,
+                             global_image_id);
+  }
+  void destroy() {
+    delete this;
+  }
+
+  ImageReplayer(Threads<librbd::ImageCtx> *threads,
+                std::shared_ptr<ImageDeleter> image_deleter,
                 ImageSyncThrottlerRef<ImageCtxT> image_sync_throttler,
                 RadosRef local, const std::string &local_mirror_uuid,
                 int64_t local_pool_id, const std::string &global_image_id);
@@ -106,10 +121,6 @@ public:
   inline std::string get_local_image_id() {
     Mutex::Locker locker(m_lock);
     return m_local_image_id;
-  }
-  inline std::string get_local_image_name() {
-    Mutex::Locker locker(m_lock);
-    return m_local_image_name;
   }
 
   void start(Context *on_finish = nullptr, bool manual = false);
@@ -244,15 +255,15 @@ private:
       : img_replayer(img_replayer) {
     }
 
-    virtual void handle_close() {
+    void handle_close() override {
       img_replayer->on_stop_journal_replay();
     }
 
-    virtual void handle_promoted() {
+    void handle_promoted() override {
       img_replayer->on_stop_journal_replay(0, "force promoted");
     }
 
-    virtual void handle_resync() {
+    void handle_resync() override {
       img_replayer->resync_image();
     }
   };
@@ -263,13 +274,13 @@ private:
       replayer(replayer) {
     }
 
-    virtual void update_progress(const std::string &description,
-				 bool flush = true);
+    void update_progress(const std::string &description,
+				 bool flush = true) override;
   private:
     ImageReplayer<ImageCtxT> *replayer;
   };
 
-  Threads *m_threads;
+  Threads<librbd::ImageCtx> *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
 
@@ -281,7 +292,6 @@ private:
   int64_t m_local_pool_id;
   std::string m_local_image_id;
   std::string m_global_image_id;
-  std::string m_local_image_name;
   std::string m_name;
   mutable Mutex m_lock;
   State m_state = STATE_STOPPED;
@@ -334,7 +344,7 @@ private:
 
     RemoteJournalerListener(ImageReplayer *replayer) : replayer(replayer) { }
 
-    void handle_update(::journal::JournalMetadata *);
+    void handle_update(::journal::JournalMetadata *) override;
   } m_remote_listener;
 
   struct C_ReplayCommitted : public Context {
@@ -345,7 +355,7 @@ private:
                       ReplayEntry &&replay_entry)
       : replayer(replayer), replay_entry(std::move(replay_entry)) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       replayer->handle_process_entry_safe(replay_entry, r);
     }
   };

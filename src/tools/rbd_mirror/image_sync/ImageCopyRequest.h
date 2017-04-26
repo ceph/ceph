@@ -55,8 +55,8 @@ public:
                    MirrorPeerSyncPoint *sync_point, Context *on_finish,
 		   ProgressContext *progress_ctx = nullptr);
 
-  void send();
-  void cancel();
+  void send() override;
+  void cancel() override;
 
 private:
   /**

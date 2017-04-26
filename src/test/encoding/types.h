@@ -116,17 +116,21 @@ TYPE(ObjectStore::Transaction)
 #include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
 
-#ifdef WITH_LIBAIO
+#ifdef HAVE_LIBAIO
 #include "os/bluestore/bluestore_types.h"
 TYPE(bluestore_cnode_t)
 TYPE(bluestore_compression_header_t)
 TYPE(bluestore_extent_ref_map_t)
 TYPE(bluestore_pextent_t)
-TYPE(bluestore_blob_t)
-TYPE(bluestore_lextent_t)
+// TODO: bluestore_blob_t repurposes the "feature" param of encode() for its
+// struct_v. at a higher level, BlueStore::ExtendMap encodes the extends using
+// a different interface than the normal ones. see
+// BlueStore::ExtentMap::encode_some(). maybe we can test it using another
+// approach.
+// TYPE_FEATUREFUL(bluestore_blob_t)
 TYPE(bluestore_onode_t)
-TYPE(bluestore_wal_op_t)
-TYPE(bluestore_wal_transaction_t)
+TYPE(bluestore_deferred_op_t)
+TYPE(bluestore_deferred_transaction_t)
 #endif
 
 #include "common/hobject.h"
@@ -150,8 +154,14 @@ TYPE_FEATUREFUL(MonMap)
 #include "mon/MonCap.h"
 TYPE(MonCap)
 
+#include "mon/MgrMap.h"
+TYPE_FEATUREFUL(MgrMap)
+
 #include "mon/mon_types.h"
 TYPE(LevelDBStoreStats)
+
+#include "mon/CreatingPGs.h"
+TYPE(creating_pgs_t)
 
 #include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)

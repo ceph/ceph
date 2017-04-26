@@ -103,7 +103,7 @@ protected:
 public:
   RGWStatRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
                        RGWBucketInfo& _bucket_info, rgw_obj_key& _key);
-  virtual ~RGWStatRemoteObjCBCR() {}
+  ~RGWStatRemoteObjCBCR() override {}
 
   void set_result(ceph::real_time& _mtime,
                   uint64_t _size,
@@ -129,7 +129,7 @@ public:
   RGWCallStatRemoteObjCR(RGWDataSyncEnv *_sync_env,
                      RGWBucketInfo& _bucket_info, rgw_obj_key& _key);
 
-  virtual ~RGWCallStatRemoteObjCR() {}
+  ~RGWCallStatRemoteObjCR() override {}
 
   int operate() override;
 

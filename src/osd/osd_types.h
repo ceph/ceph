@@ -402,6 +402,9 @@ struct pg_t {
   bool contains(int bits, const ghobject_t& oid) {
     return oid.match(bits, ps());
   }
+  bool contains(int bits, const hobject_t& oid) {
+    return oid.match(bits, ps());
+  }
 
   hobject_t get_hobj_start() const;
   hobject_t get_hobj_end(unsigned pg_num) const;
@@ -536,12 +539,6 @@ struct spg_t {
     ::decode(pgid, bl);
     ::decode(shard, bl);
     DECODE_FINISH(bl);
-  }
-
-  hobject_t make_temp_hobject(const string& name) const {
-    return hobject_t(object_t(name), "", CEPH_NOSNAP,
-		     pgid.ps(),
-		     hobject_t::POOL_TEMP_START - pgid.pool(), "");
   }
 
   ghobject_t make_temp_ghobject(const string& name) const {
@@ -951,7 +948,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_ACTIVE       (1<<1)  // i am active.  (primary: replicas too)
 #define PG_STATE_CLEAN        (1<<2)  // peers are complete, clean of stray replicas.
 #define PG_STATE_DOWN         (1<<4)  // a needed replica is down, PG offline
-#define PG_STATE_REPLAY       (1<<5)  // crashed, waiting for replay
+//#define PG_STATE_REPLAY       (1<<5)  // crashed, waiting for replay
 //#define PG_STATE_STRAY      (1<<6)  // i must notify the primary i exist.
 //#define PG_STATE_SPLITTING    (1<<7)  // i am splitting
 #define PG_STATE_SCRUBBING    (1<<8)  // scrubbing
@@ -972,6 +969,9 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_UNDERSIZED    (1<<23) // pg acting < pool size
 #define PG_STATE_ACTIVATING   (1<<24) // pg is peered but not yet active
 #define PG_STATE_PEERED        (1<<25) // peered, cannot go active, can recover
+#define PG_STATE_SNAPTRIM      (1<<26) // trimming snaps
+#define PG_STATE_SNAPTRIM_WAIT (1<<27) // queued to trim snaps
+#define PG_STATE_RECOVERY_TOOFULL (1<<28) // recovery can't proceed: too full
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);
@@ -1448,7 +1448,7 @@ public:
   }
   uint64_t required_alignment() const { return stripe_width; }
 
-  bool is_hacky_ecoverwrites() const {
+  bool allows_ecoverwrites() const {
     return has_flag(FLAG_EC_OVERWRITES);
   }
 
@@ -2821,27 +2821,27 @@ struct pg_log_entry_t {
   static const char *get_op_name(int op) {
     switch (op) {
     case MODIFY:
-      return "modify  ";
+      return "modify";
     case PROMOTE:
-      return "promote ";
+      return "promote";
     case CLONE:
-      return "clone   ";
+      return "clone";
     case DELETE:
-      return "delete  ";
+      return "delete";
     case BACKLOG:
-      return "backlog ";
+      return "backlog";
     case LOST_REVERT:
       return "l_revert";
     case LOST_DELETE:
       return "l_delete";
     case LOST_MARK:
-      return "l_mark  ";
+      return "l_mark";
     case CLEAN:
-      return "clean   ";
+      return "clean";
     case ERROR:
-      return "error   ";
+      return "error";
     default:
-      return "unknown ";
+      return "unknown";
     }
   }
   const char *get_op_name() const {
@@ -3714,8 +3714,6 @@ public:
     truncate_size(0) {}
 
   static void generate_test_instances(list<object_copy_data_t*>& o);
-  void encode_classic(bufferlist& bl) const;
-  void decode_classic(bufferlist::iterator& bl);
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
@@ -4113,10 +4111,6 @@ struct object_info_t {
 
   explicit object_info_t(bufferlist& bl) {
     decode(bl);
-  }
-  object_info_t operator=(bufferlist& bl) {
-    decode(bl);
-    return *this;
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(object_info_t)

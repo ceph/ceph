@@ -80,8 +80,8 @@ private:
   void send_unregister_image_watcher();
   void handle_unregister_image_watcher(int r);
 
-  void send_shut_down_aio_queue();
-  void handle_shut_down_aio_queue(int r);
+  void send_shut_down_io_queue();
+  void handle_shut_down_io_queue(int r);
 
   void send_shut_down_exclusive_lock();
   void handle_shut_down_exclusive_lock(int r);

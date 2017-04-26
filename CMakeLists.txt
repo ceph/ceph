@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(ceph)
-set(VERSION 12.0.0)
+set(VERSION 12.0.1)
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
@@ -173,7 +173,7 @@ else(ENABLE_SHARED)
 endif(ENABLE_SHARED)
 set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
-option(WITH_RDMA "Enable RDMA in async messenger" OFF)
+option(WITH_RDMA "Enable RDMA in async messenger" ON)
 if(WITH_RDMA)
   find_package(rdma REQUIRED)
   set(HAVE_RDMA ${RDMA_FOUND})
@@ -294,10 +294,6 @@ else(ALLOCATOR)
   endif(GPERFTOOLS_FOUND)
 endif(ALLOCATOR)
 
-# jemalloc does not support mallinfo
-if(NOT JEMALLOC_FOUND)
-  CHECK_FUNCTION_EXISTS(mallinfo HAVE_MALLINFO)
-endif()
 
 if(WITH_LIBCEPHFS OR WITH_KRBD)
   find_package(keyutils REQUIRED)
@@ -516,6 +512,12 @@ endif()
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
+set(BOOST_COMPONENTS
+	thread system regex random program_options date_time iostreams)
+if(WITH_MGR)
+	list(APPEND BOOST_COMPONENTS python)
+endif()
+
 if (WITH_SYSTEM_BOOST)
   if(ENABLE_SHARED)
     set(Boost_USE_STATIC_LIBS OFF)
@@ -531,35 +533,33 @@ else()
   set(BOOST_SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
   set(BOOST_PREFIX "${PROJECT_BINARY_DIR}/boost")
   set(BOOST_BUILD "${PROJECT_BINARY_DIR}/boost-build")
-  set(Boost_USE_STATIC_LIBS ON)
+  string(REPLACE ";" "," BOOST_WITH_LIBS "${BOOST_COMPONENTS}")
   execute_process(COMMAND "./bootstrap.sh"
     "--prefix=${BOOST_PREFIX}"
-    "--with-libraries=atomic,container,context,coroutine,coroutine2,date_time,filesystem,iostreams,program_options,python,random,regex,system,thread"
+    "--with-libraries=${BOOST_WITH_LIBS}"
     WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
-  # 2. install headers
   set(BOOST_ROOT "${BOOST_PREFIX}")
-  execute_process(COMMAND "./b2"
-    #"--buildid=ceph" # changes lib names--can omit for static
-    "--variant=release" # could override
-    "--link=static" # avoid library versioning issues
-    "--threading=multi"
-    "--build-dir=${BOOST_BUILD}"
-    "-j${BOOST_J}"
-    "cxxflags=${BOOST_CFLAGS}"
-    "headers"
+  set(b2 ./b2
+    --build-dir=${BOOST_BUILD} -j${BOOST_J})
+  if(CMAKE_VERBOSE_MAKEFILE)
+    list(APPEND b2 -d1)
+  else()
+    list(APPEND b2 -d0)
+  endif()
+  list(APPEND b2
+    variant=release link=static threading=multi cxxflags=${BOOST_CFLAGS})
+  # 2. install headers
+  execute_process(COMMAND
+    ${b2}
+    headers
     WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
   # 3. build and install libs
-  execute_process(COMMAND "./b2"
-    #"--buildid=ceph" # changes lib names--can omit for static
-    "--variant=release" # could override
-    "--link=static" # avoid library versioning issues
-    "--threading=multi"
-    "--build-dir=${BOOST_BUILD}"
-    "-j${BOOST_J}"
-    "cxxflags=${BOOST_CFLAGS}"
-    "install"
+  execute_process(COMMAND
+    ${b2}
+    install
     WORKING_DIRECTORY ${BOOST_SOURCE_DIR})
   # 4. set hints for FindBoost.cmake
+  set(Boost_USE_STATIC_LIBS ON)
   set(Boost_NO_SYSTEM_PATHS ON)
   include_directories(BEFORE ${BOOST_PREFIX}/include)
   # fixup for CheckIncludeFileCXX
@@ -570,12 +570,6 @@ else()
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
-
-set(BOOST_COMPONENTS
-	thread system regex random program_options date_time iostreams)
-if(WITH_MGR)
-	list(APPEND BOOST_COMPONENTS python)
-endif()
 
 # require minimally the bundled version
 find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
@@ -617,3 +611,11 @@ if(WITH_SYSTEMD)
   add_subdirectory(systemd)
 endif()
 
+include(CTags)
+option(CTAG_EXCLUDES "Exclude files/directories when running ctag.")
+add_tags(ctags
+  SRC_DIR src
+  TAG_FILE tags
+  EXCLUDE_OPTS ${CTAG_EXCLUDES}
+  EXCLUDES "*.js")
+add_custom_target(tags DEPENDS ctags)

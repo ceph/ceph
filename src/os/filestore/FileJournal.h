@@ -102,11 +102,11 @@ public:
     completions.pop_front();
   }
 
-  int prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl);
+  int prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist* tbl) override;
 
   void submit_entry(uint64_t seq, bufferlist& bl, uint32_t orig_len,
 		    Context *oncommit,
-		    TrackedOpRef osd_op = TrackedOpRef());
+		    TrackedOpRef osd_op = TrackedOpRef()) override;
   /// End protected by finisher_lock
 
   /*
@@ -137,8 +137,8 @@ public:
      * not known.
      *
      * If the first read on open fails, we can assume corruption
-     * if start_seq > committed_up_thru because the entry would have
-     * a sequence >= start_seq and therefore > committed_up_thru.
+     * if start_seq > committed_up_to because the entry would have
+     * a sequence >= start_seq and therefore > committed_up_to.
      */
     uint64_t start_seq;
 
@@ -257,7 +257,6 @@ private:
     aio_info(bufferlist& b, uint64_t o, uint64_t s)
       : iov(NULL), done(false), off(o), len(b.length()), seq(s) {
       bl.claim(b);
-      memset((void*)&iocb, 0, sizeof(iocb));
     }
     ~aio_info() {
       delete[] iov;
@@ -350,7 +349,7 @@ private:
   int write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq);
 
 
-  void align_bl(off64_t pos, bufferlist& bl);
+  void check_align(off64_t pos, bufferlist& bl);
   int write_bl(off64_t& pos, bufferlist& bl);
 
   /// read len from journal starting at in_pos and wrapping up to len
@@ -367,7 +366,7 @@ private:
     FileJournal *journal;
   public:
     explicit Writer(FileJournal *fj) : journal(fj) {}
-    void *entry() {
+    void *entry() override {
       journal->write_thread_entry();
       return 0;
     }
@@ -377,7 +376,7 @@ private:
     FileJournal *journal;
   public:
     explicit WriteFinisher(FileJournal *fj) : journal(fj) {}
-    void *entry() {
+    void *entry() override {
       journal->write_finish_thread_entry();
       return 0;
     }
@@ -436,41 +435,43 @@ private:
 
       cct->_conf->add_observer(this);
   }
-  ~FileJournal() {
+  ~FileJournal() override {
     assert(fd == -1);
     delete[] zero_buf;
     cct->_conf->remove_observer(this);
   }
 
-  int check();
-  int create();
-  int open(uint64_t fs_op_seq);
-  void close();
+  int check() override;
+  int create() override;
+  int open(uint64_t fs_op_seq) override;
+  void close() override;
   int peek_fsid(uuid_d& fsid);
 
-  int dump(ostream& out);
+  int dump(ostream& out) override;
   int simple_dump(ostream& out);
   int _fdump(Formatter &f, bool simple);
 
-  void flush();
+  void flush() override;
 
-  void reserve_throttle_and_backoff(uint64_t count);
+  void reserve_throttle_and_backoff(uint64_t count) override;
 
-  bool is_writeable() {
+  bool is_writeable() override {
     return read_pos == 0;
   }
-  int make_writeable();
+  int make_writeable() override;
 
   // writes
-  void commit_start(uint64_t seq);
-  void committed_thru(uint64_t seq);
-  bool should_commit_now() {
+  void commit_start(uint64_t seq) override;
+  void committed_thru(uint64_t seq) override;
+  bool should_commit_now() override {
     return full_state != FULL_NOTFULL && !write_stop;
   }
 
   void write_header_sync();
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
+
+  off64_t get_journal_size_estimate();
 
   // reads
 
@@ -512,7 +513,7 @@ private:
 
   bool read_entry(
     bufferlist &bl,
-    uint64_t &last_seq) {
+    uint64_t &last_seq) override {
     return read_entry(bl, last_seq, 0);
   }
 

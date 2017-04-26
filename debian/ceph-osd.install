@@ -4,7 +4,7 @@ usr/sbin/ceph-disk
 usr/sbin/ceph-disk-udev
 usr/bin/ceph-clsinfo
 usr/bin/ceph-objectstore-tool
-usr/bin/ceph-bluefs-tool
+usr/bin/ceph-bluestore-tool
 usr/bin/ceph_objectstore_bench
 usr/bin/ceph-osd
 usr/lib/ceph/ceph-osd-prestart.sh
@@ -12,3 +12,5 @@ usr/share/man/man8/ceph-clsinfo.8
 usr/share/man/man8/ceph-disk.8
 usr/share/man/man8/ceph-osd.8
 usr/lib/python*/dist-packages/ceph_disk*
+usr/lib/libosd_tp.so*
+usr/lib/libos_tp.so*

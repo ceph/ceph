@@ -12,6 +12,7 @@ roles:
   - osd.1
 - - osd.2
   - mon.c
+  - mgr.x
 tasks:
 #
 # Install hammer

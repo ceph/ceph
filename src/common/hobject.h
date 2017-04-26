@@ -272,6 +272,12 @@ public:
     return oid.name;
   }
 
+  hobject_t make_temp_hobject(const string& name) const {
+    return hobject_t(object_t(name), "", CEPH_NOSNAP,
+		     hash,
+		     hobject_t::POOL_TEMP_START - pool, "");
+  }
+
   void swap(hobject_t &o) {
     hobject_t temp(o);
     o = (*this);

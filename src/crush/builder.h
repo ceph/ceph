@@ -46,7 +46,7 @@ extern void crush_finalize(struct crush_map *map);
  * Allocate an empty crush_rule structure large enough to store __len__ steps.
  * Steps can be added to a rule via crush_rule_set_step(). The __ruleset__
  * is a user defined integer, not used by __libcrush__ and stored in
- * the allocated rule at __rule->ruleset__.
+ * the allocated rule at __rule->mask.ruleset__.
  *
  * The rule is designed to allow crush_do_rule() to get at least __minsize__ items
  * and at most __maxsize__ items.
@@ -54,6 +54,9 @@ extern void crush_finalize(struct crush_map *map);
  * The __type__ is defined by the caller and will be used by
  * crush_find_rule() when looking for a rule and by
  * __CRUSH_RULE_CHOOSE*__ steps when looking for items.
+ *
+ * The caller is responsible for deallocating the returned pointer via
+ * crush_destroy_rule().
  *
  * If __malloc(3)__ fails, return NULL.
  *
@@ -73,6 +76,9 @@ extern struct crush_rule *crush_make_rule(int len, int ruleset, int type, int mi
  *
  * - __CRUSH_RULE_NOOP__ do nothing.
  * - __CRUSH_RULE_TAKE__ select the __arg1__ item
+ * - __CRUSH_RULE_EMIT__ append the selection to the results and clear
+ *     the selection
+ *
  * - __CRUSH_RULE_CHOOSE_FIRSTN__ and __CRUSH_RULE_CHOOSE_INDEP__
  *     recursively explore each bucket currently selected, looking for
  *     __arg1__ items of type __arg2__ and select them.
@@ -80,17 +86,54 @@ extern struct crush_rule *crush_make_rule(int len, int ruleset, int type, int mi
  *     recursively explore each bucket currently selected, looking for
  *     __arg1__ leaves within all the buckets of type __arg2__ and
  *     select them.
- * - __CRUSH_RULE_EMIT__ append the selection to the results and clear
- *     the selection
  *
  * In all __CHOOSE__ steps, if __arg1__ is zero, the number of items
  * to select is determined by the __max_result__ argument of
  * crush_do_rule(), i.e. __arg1__ is __max_result__ minus the number of
  * items already in the result.
  *
+ * - __CRUSH_RULE_SET_CHOOSE_TRIES__ and __CRUSH_RULE_SET_CHOOSELEAF_TRIES__
+ *
+ *   The CHOOSE_FIRSTN and CHOOSE_INDEP rule step look for buckets of
+ *   a given type, randomly selecting them. If they are unlucky and
+ *   find the same bucket twice, they will try N+1 times (N being the
+ *   value of the choose_total_tries tunable). If there is a previous
+ *   SET_CHOOSE_TRIES step in the same rule, it will try C times
+ *   instead (C being the value of the argument of the
+ *   SET_CHOOSE_TRIES step).
+ *
+ *   Note: the __choose_total_tries__ tunable defined in crush_map is
+ *   the number of retry, not the number of tries. The number of tries
+ *   is the number of retry+1. The SET_CHOOSE_TRIES rule step sets the
+ *   number of tries and does not need the + 1. This confusing
+ *   difference is inherited from an off-by-one bug from years ago.
+ *
+ *   The CHOOSELEAF_FIRSTN and CHOOSELEAF_INDEP rule step do the same
+ *   as CHOOSE_FIRSTN and CHOOSE_INDEP but also recursively explore
+ *   each bucket found, looking for a single device. The same device
+ *   may be found in two different buckets because the crush map is
+ *   not a strict hierarchy, it is a DAG. When such a collision
+ *   happens, they will try again. The number of times they try to
+ *   find a non colliding device is:
+ *
+ *   - If FIRSTN and there is no previous SET_CHOOSELEAF_TRIES rule
+ *     step: try N + 1 times (N being the value of the
+ *     __choose_total_tries__ tunable defined in crush_map)
+ *
+ *   - If FIRSTN and there is a previous SET_CHOOSELEAF_TRIES rule
+ *     step: try P times (P being the value of the argument of the
+ *     SET_CHOOSELEAF_TRIES rule step)
+ *
+ *   - If INDEP and there is no previous SET_CHOOSELEAF_TRIES rule
+ *     step: try 1 time.
+ *
+ *   - If INDEP and there is a previous SET_CHOOSELEAF_TRIES rule step: try
+ *     P times (P being the value of the argument of the SET_CHOOSELEAF_TRIES
+ *     rule step)
+ *
  * @param rule the rule in which the step is inserted
  * @param pos the zero based step index
- * @param op one of __CRUSH_RULE_NOOP__, __CRUSH_RULE_TAKE__, __CRUSH_RULE_CHOOSE_FIRSTN__, __CRUSH_RULE_CHOOSE_INDEP__, __CRUSH_RULE_CHOOSELEAF_FIRSTN__, __CRUSH_RULE_CHOOSELEAF_INDEP__ or __CRUSH_RULE_EMIT__
+ * @param op one of __CRUSH_RULE_NOOP__, __CRUSH_RULE_TAKE__, __CRUSH_RULE_CHOOSE_FIRSTN__, __CRUSH_RULE_CHOOSE_INDEP__, __CRUSH_RULE_CHOOSELEAF_FIRSTN__, __CRUSH_RULE_CHOOSELEAF_INDEP__, __CRUSH_RULE_SET_CHOOSE_TRIES__, __CRUSH_RULE_SET_CHOOSELEAF_TRIES__ or __CRUSH_RULE_EMIT__
  * @param arg1 first argument for __op__
  * @param arg2 second argument for __op__
  */
@@ -119,7 +162,7 @@ extern int crush_get_next_bucket_id(struct crush_map *map);
 /** @ingroup API
  *
  * Add __bucket__ into the crush __map__ and assign it the
- * __bucketno__ unique identifier. If __bucketno__ is -1, the function
+ * __bucketno__ unique identifier. If __bucketno__ is 0, the function
  * will assign the lowest available identifier.  The bucket identifier
  * must be a negative integer. The bucket identifier is returned via
  * __idout__.
@@ -130,7 +173,7 @@ extern int crush_get_next_bucket_id(struct crush_map *map);
  *   to another bucket.
  *
  * @param[in] map the crush_map
- * @param[in] bucketno the bucket unique identifer or -1
+ * @param[in] bucketno the bucket unique identifer or 0
  * @param[in] bucket the bucket to add to the __map__
  * @param[out] idout a pointer to the bucket identifier
  *
@@ -151,6 +194,9 @@ extern int crush_add_bucket(struct crush_map *map,
  * to have a weight equal to __weights[0]__, otherwise the weight of
  * __items[x]__ is set to be the value of __weights[x]__.
  *
+ * The caller is responsible for deallocating the returned pointer via
+ * crush_destroy_bucket().
+ *
  * @param map __unused__
  * @param alg algorithm for item selection
  * @param hash always set to CRUSH_HASH_RJENKINS1
@@ -158,8 +204,12 @@ extern int crush_add_bucket(struct crush_map *map,
  * @param size of the __items__ array
  * @param items array of __size__ items
  * @param weights the weight of each item in __items__, depending on __alg__
+ *
+ * @returns a pointer to the newly created bucket or NULL
  */
 struct crush_bucket *crush_make_bucket(struct crush_map *map, int alg, int hash, int type, int size, int *items, int *weights);
+extern struct crush_choose_arg *crush_make_choose_args(struct crush_map *map, int num_positions);
+extern void crush_destroy_choose_args(struct crush_choose_arg *args);
 /** @ingroup API
  *
  * Add __item__ to __bucket__ with __weight__. The weight of the new
@@ -169,8 +219,10 @@ struct crush_bucket *crush_make_bucket(struct crush_map *map, int alg, int hash,
  * If __bucket->alg__ is ::CRUSH_BUCKET_UNIFORM, the value of __weight__ must be equal to
  * __(struct crush_bucket_uniform *)bucket->item_weight__.
  *
- * - return -ENOMEN if the __bucket__ cannot be resized with __realloc(3)__.
+ * - return -ENOMEM if the __bucket__ cannot be resized with __realloc(3)__.
  * - return -ERANGE if adding __weight__ to the weight of the bucket overflows.
+ * - return -EINVAL if __bucket->alg__ is ::CRUSH_BUCKET_UNIFORM and
+ *   the __weight__ is not equal to __(struct crush_bucket_uniform *)bucket->item_weight__.
  * - return -1 if the value of __bucket->alg__ is unknown.
  *
  * @returns 0 on success, < 0 on error
@@ -186,7 +238,7 @@ extern int crush_bucket_add_item(struct crush_map *map, struct crush_bucket *buc
  *
  * If __bucket->alg__ is different from ::CRUSH_BUCKET_UNIFORM,
  * set the  __weight__ of  __item__ in __bucket__. The former weight of the
- * item is subtracted from the weight of of the bucket and the new weight is added.
+ * item is subtracted from the weight of the bucket and the new weight is added.
  * The return value is the difference between the new item weight and the former
  * item weight.
  *
@@ -202,11 +254,11 @@ extern int crush_bucket_adjust_item_weight(struct crush_map *map, struct crush_b
  * - return -ERANGE if the sum of the weight of the items in __bucket__ overflows.
  * - return -1 if the value of __bucket->alg__ is unknown.
  *
- * @param crush a crush_map containing __bucket__
+ * @param map a crush_map containing __bucket__
  * @param bucket the root of the tree to reweight
  * @returns 0 on success, < 0 on error
  */
-extern int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *bucket);
+extern int crush_reweight_bucket(struct crush_map *map, struct crush_bucket *bucket);
 /** @ingroup API
  *
  * Remove __bucket__ from __map__ and deallocate it via crush_destroy_bucket().
@@ -224,7 +276,7 @@ extern int crush_remove_bucket(struct crush_map *map, struct crush_bucket *bucke
  * the bucket weight. If the weight of the item is greater than the
  * weight of the bucket, silentely set the bucket weight to zero.
  *
- * - return -ENOMEN if the __bucket__ cannot be sized down with __realloc(3)__.
+ * - return -ENOMEM if the __bucket__ cannot be sized down with __realloc(3)__.
  * - return -1 if the value of __bucket->alg__ is unknown.
  *
  * @param map __unused__
@@ -254,5 +306,8 @@ crush_make_straw_bucket(struct crush_map *map,
 
 extern int crush_addition_is_unsafe(__u32 a, __u32 b);
 extern int crush_multiplication_is_unsafe(__u32  a, __u32 b);
+
+extern void set_legacy_crush_map(struct crush_map *map);
+extern void set_optimal_crush_map(struct crush_map *map);
 
 #endif

@@ -456,7 +456,7 @@ bool ceph_argparse_witharg(std::vector<const char*> &args,
 }
 
 CephInitParameters ceph_argparse_early_args
-	  (std::vector<const char*>& args, uint32_t module_type, int flags,
+	  (std::vector<const char*>& args, uint32_t module_type,
 	   std::string *cluster, std::string *conf_file_list)
 {
   CephInitParameters iparams(module_type);

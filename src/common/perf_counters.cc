@@ -378,7 +378,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
         f->dump_string("description", "");
       }
 
-      if (d->nick != NULL) {
+      if (d->nick != NULL && !suppress_nicks) {
         f->dump_string("nick", d->nick);
       } else {
         f->dump_string("nick", "");
@@ -513,11 +513,9 @@ PerfCounters *PerfCountersBuilder::create_perf_counters()
 {
   PerfCounters::perf_counter_data_vec_t::const_iterator d = m_perf_counters->m_data.begin();
   PerfCounters::perf_counter_data_vec_t::const_iterator d_end = m_perf_counters->m_data.end();
-  for (; d != d_end; ++d) {
-    if (d->type == PERFCOUNTER_NONE) {
-      assert(d->type != PERFCOUNTER_NONE);
-    }
-  }
+  for (; d != d_end; ++d) 
+    assert(d->type != PERFCOUNTER_NONE);
+
   PerfCounters *ret = m_perf_counters;
   m_perf_counters = NULL;
   return ret;

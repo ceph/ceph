@@ -63,7 +63,7 @@ namespace rgw {
     RGWLibIO(const RGWUserInfo &_user_info)
       : user_info(_user_info) {}
 
-    virtual void init_env(CephContext *cct) override {}
+    void init_env(CephContext *cct) override {}
 
     const RGWUserInfo& get_user() {
       return user_info;
@@ -104,7 +104,7 @@ namespace rgw {
   class RGWRESTMgr_Lib : public RGWRESTMgr {
   public:
     RGWRESTMgr_Lib() {}
-    virtual ~RGWRESTMgr_Lib() {}
+    ~RGWRESTMgr_Lib() override {}
   }; /* RGWRESTMgr_Lib */
 
 /* XXX */
@@ -112,10 +112,10 @@ namespace rgw {
     friend class RGWRESTMgr_Lib;
   public:
 
-    virtual int authorize();
+    int authorize() override;
 
     RGWHandler_Lib() {}
-    virtual ~RGWHandler_Lib() {}
+    ~RGWHandler_Lib() override {}
     static int init_from_header(struct req_state *s);
   }; /* RGWHandler_Lib */
 
@@ -134,7 +134,7 @@ namespace rgw {
 
     RGWUserInfo* get_user() { return user; }
 
-  virtual int postauth_init() { return 0; }
+  int postauth_init() override { return 0; }
 
     /* descendant equivalent of *REST*::init_from_header(...):
      * prepare request for execute()--should mean, fixup URI-alikes
@@ -175,7 +175,7 @@ namespace rgw {
 
     virtual bool only_bucket() = 0;
 
-    virtual int read_permissions(RGWOp *op);
+    int read_permissions(RGWOp *op) override;
 
   }; /* RGWLibRequest */
 

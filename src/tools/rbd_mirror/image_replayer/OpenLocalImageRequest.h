@@ -21,18 +21,15 @@ class OpenLocalImageRequest {
 public:
   static OpenLocalImageRequest* create(librados::IoCtx &local_io_ctx,
                                        ImageCtxT **local_image_ctx,
-                                       const std::string &local_image_name,
                                        const std::string &local_image_id,
                                        ContextWQ *work_queue,
                                        Context *on_finish) {
     return new OpenLocalImageRequest(local_io_ctx, local_image_ctx,
-                                     local_image_name, local_image_id,
-                                     work_queue, on_finish);
+                                     local_image_id, work_queue, on_finish);
   }
 
   OpenLocalImageRequest(librados::IoCtx &local_io_ctx,
                         ImageCtxT **local_image_ctx,
-                        const std::string &local_image_name,
                         const std::string &local_image_id,
                         ContextWQ *m_work_queue,
                         Context *on_finish);
@@ -61,7 +58,6 @@ private:
    */
   librados::IoCtx &m_local_io_ctx;
   ImageCtxT **m_local_image_ctx;
-  std::string m_local_image_name;
   std::string m_local_image_id;
   ContextWQ *m_work_queue;
   Context *m_on_finish;
@@ -78,7 +74,7 @@ private:
   void send_lock_image();
   void handle_lock_image(int r);
 
-  void send_close_image(bool destroy_only, int r);
+  void send_close_image(int r);
   void handle_close_image(int r);
 
   void finish(int r);

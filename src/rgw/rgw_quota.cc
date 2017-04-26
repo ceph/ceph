@@ -265,9 +265,19 @@ public:
 
 int BucketAsyncRefreshHandler::init_fetch()
 {
+  RGWBucketInfo bucket_info;
+
+  RGWObjectCtx obj_ctx(store);
+
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
+    return r;
+  }
+
   ldout(store->ctx(), 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
 
-  int r = store->get_bucket_stats_async(bucket, RGW_NO_SHARD, this);
+  r = store->get_bucket_stats_async(bucket_info, RGW_NO_SHARD, this);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
 
@@ -327,14 +337,22 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, rgw_buck
 {
   RGWBucketInfo bucket_info;
 
+  RGWObjectCtx obj_ctx(store);
+
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
+    return r;
+  }
+
   string bucket_ver;
   string master_ver;
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  int r = store->get_bucket_stats(bucket, RGW_NO_SHARD, &bucket_ver,
+  r = store->get_bucket_stats(bucket_info, RGW_NO_SHARD, &bucket_ver,
                                   &master_ver, bucket_stats, nullptr);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "could not get bucket info for bucket="
+    ldout(store->ctx(), 0) << "could not get bucket stats for bucket="
                            << bucket.name << dendl;
     return r;
   }
@@ -535,7 +553,7 @@ public:
       user_sync_thread = NULL;
     }
   }
-  ~RGWUserStatsCache() {
+  ~RGWUserStatsCache() override {
     stop();
   }
 
@@ -576,7 +594,17 @@ int RGWUserStatsCache::fetch_stats_from_storage(const rgw_user& user, rgw_bucket
 
 int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket)
 {
-  int r = rgw_bucket_sync_user_stats(store, user, bucket);
+  RGWBucketInfo bucket_info;
+
+  RGWObjectCtx obj_ctx(store);
+
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
+    return r;
+  }
+
+  r = rgw_bucket_sync_user_stats(store, user, bucket_info);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: rgw_bucket_sync_user_stats() for user=" << user << ", bucket=" << bucket << " returned " << r << dendl;
     return r;
@@ -591,7 +619,7 @@ int RGWUserStatsCache::sync_user(const rgw_user& user)
   string user_str = user.to_str();
   int ret = store->cls_user_get_header(user_str, &header);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: can't read user header: ret=" << ret << dendl;
+    ldout(store->ctx(), 5) << "ERROR: can't read user header: ret=" << ret << dendl;
     return ret;
   }
 
@@ -644,7 +672,7 @@ int RGWUserStatsCache::sync_all_users()
       ldout(store->ctx(), 20) << "RGWUserStatsCache: sync user=" << user << dendl;
       int ret = sync_user(user);
       if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: sync_user() failed, user=" << user << " ret=" << ret << dendl;
+        ldout(store->ctx(), 5) << "ERROR: sync_user() failed, user=" << user << " ret=" << ret << dendl;
 
         /* continuing to next user */
         continue;

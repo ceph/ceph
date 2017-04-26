@@ -8,7 +8,7 @@
 
 //------------RGWPutObj_Compress---------------
 
-int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_obj *pobj, bool *again)
+int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again)
 {
   bufferlist in_bl;
   if (*again) {
@@ -121,7 +121,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
   return next->handle_data(out_bl, bl_ofs, out_bl.length() - bl_ofs);
 }
 
-void RGWGetObj_Decompress::fixup_range(off_t& ofs, off_t& end)
+int RGWGetObj_Decompress::fixup_range(off_t& ofs, off_t& end)
 {
   if (partial_content) {
     // if user set range, we need to calculate it in decompressed data
@@ -156,5 +156,5 @@ void RGWGetObj_Decompress::fixup_range(off_t& ofs, off_t& end)
   cur_ofs = ofs;
   waiting.clear();
 
-  next->fixup_range(ofs, end);
+  return next->fixup_range(ofs, end);
 }

@@ -52,9 +52,6 @@ using namespace libradosstriper;
 #include "PoolDump.h"
 #include "RadosImport.h"
 
-int rados_tool_sync(const std::map < std::string, std::string > &opts,
-                             std::vector<const char*> &args);
-
 using namespace librados;
 
 // two steps seem to be necessary to do this right
@@ -493,7 +490,7 @@ class RadosWatchCtx : public librados::WatchCtx2 {
   string name;
 public:
   RadosWatchCtx(IoCtx& io, const char *imgname) : ioctx(io), name(imgname) {}
-  ~RadosWatchCtx() {}
+  ~RadosWatchCtx() override {}
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
@@ -999,7 +996,7 @@ protected:
 public:
   RadosBencher(CephContext *cct_, librados::Rados& _r, librados::IoCtx& _i)
     : ObjBencher(cct_), completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false), write_destination(OP_WRITE_DEST_OBJ) {}
-  ~RadosBencher() { }
+  ~RadosBencher() override { }
 
   void set_write_destination(OpWriteDest dest) {
     write_destination = dest;
@@ -1864,9 +1861,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   // open rados
   ret = rados.init_with_context(g_ceph_context);
-  if (ret) {
+  if (ret < 0) {
      cerr << "couldn't initialize rados: " << cpp_strerror(ret) << std::endl;
-     ret = -1;
      goto out;
   }
 
@@ -2067,21 +2063,22 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
         int64_t pool_id = rados.pool_lookup(pool_name);
         formatter->dump_string("name", pool_name);
         if (pool_id >= 0)
-          formatter->dump_format("id", "%lld", pool_id);
+          formatter->dump_int("id", pool_id);
         else
-          cerr << "ERROR: lookup_pg_pool_name for name=" << pool_name << " returned " << pool_id << std::endl;
-	formatter->dump_format("size_bytes", "%lld", s.num_bytes);
-	formatter->dump_format("size_kb", "%lld", s.num_kb);
-	formatter->dump_format("num_objects", "%lld", s.num_objects);
-	formatter->dump_format("num_object_clones", "%lld", s.num_object_clones);
-	formatter->dump_format("num_object_copies", "%lld", s.num_object_copies);
-	formatter->dump_format("num_objects_missing_on_primary", "%lld", s.num_objects_missing_on_primary);
-	formatter->dump_format("num_objects_unfound", "%lld", s.num_objects_unfound);
-	formatter->dump_format("num_objects_degraded", "%lld", s.num_objects_degraded);
-	formatter->dump_format("read_ops", "%lld", s.num_rd);
-	formatter->dump_format("read_bytes", "%lld", s.num_rd_kb * 1024ull);
-	formatter->dump_format("write_ops", "%lld", s.num_wr);
-	formatter->dump_format("write_bytes", "%lld", s.num_wr_kb * 1024ull);
+          cerr << "ERROR: lookup_pg_pool_name for name=" << pool_name
+	       << " returned " << pool_id << std::endl;
+	formatter->dump_int("size_bytes",s.num_bytes);
+	formatter->dump_int("size_kb", s.num_kb);
+	formatter->dump_int("num_objects", s.num_objects);
+	formatter->dump_int("num_object_clones", s.num_object_clones);
+	formatter->dump_int("num_object_copies", s.num_object_copies);
+	formatter->dump_int("num_objects_missing_on_primary", s.num_objects_missing_on_primary);
+	formatter->dump_int("num_objects_unfound", s.num_objects_unfound);
+	formatter->dump_int("num_objects_degraded", s.num_objects_degraded);
+	formatter->dump_int("read_ops", s.num_rd);
+	formatter->dump_int("read_bytes", s.num_rd_kb * 1024ull);
+	formatter->dump_int("write_ops", s.num_wr);
+	formatter->dump_int("write_bytes", s.num_wr_kb * 1024ull);
 	formatter->close_section();
       }
     }
@@ -2109,10 +2106,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
            << std::endl;
     } else {
       formatter->close_section();
-      formatter->dump_format("total_objects", "%lld", (long long unsigned)tstats.num_objects);
-      formatter->dump_format("total_used", "%lld", (long long unsigned)tstats.kb_used);
-      formatter->dump_format("total_avail", "%lld", (long long unsigned)tstats.kb_avail);
-      formatter->dump_format("total_space", "%lld", (long long unsigned)tstats.kb);
+      formatter->dump_int("total_objects", tstats.num_objects);
+      formatter->dump_int("total_used", tstats.kb_used);
+      formatter->dump_int("total_avail", tstats.kb_avail);
+      formatter->dump_int("total_space", tstats.kb);
       formatter->close_section();
       formatter->flush(cout);
     }
@@ -2835,6 +2832,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cout << "successfully deleted pool " << nargs[1] << std::endl;
     } else { //error
       cerr << "pool " << nargs[1] << " could not be removed" << std::endl;
+      cerr << "Check your monitor configuration - `mon allow pool delete` is set to false by default,"
+     << " change it to true to allow deletion of pools" << std::endl;
     }
   }
   else if (strcmp(nargs[0], "purge") == 0) {
@@ -2855,12 +2854,15 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
     io_ctx.set_namespace(all_nspaces);
+    io_ctx.set_osdmap_full_try();
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     ret = bencher.clean_up_slow("", concurrent_ios);
     if (ret >= 0) {
       cout << "successfully purged pool " << nargs[1] << std::endl;
     } else { //error
       cerr << "pool " << nargs[1] << " could not be purged" << std::endl;
+      cerr << "Check your monitor configuration - `mon allow pool delete` is set to false by default,"
+     << " change it to true to allow deletion of pools" << std::endl;
     }
   }
   else if (strcmp(nargs[0], "lssnap") == 0) {

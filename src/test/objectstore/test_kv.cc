@@ -255,6 +255,59 @@ TEST_P(KVTest, Merge) {
   fini();
 }
 
+TEST_P(KVTest, RMRange) {
+  ASSERT_EQ(0, db->create_and_open(cout));
+  bufferlist value;
+  value.append("value");
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    t->set("prefix", "key1", value);
+    t->set("prefix", "key2", value);
+    t->set("prefix", "key3", value);
+    t->set("prefix", "key4", value);
+    t->set("prefix", "key45", value);
+    t->set("prefix", "key5", value);
+    t->set("prefix", "key6", value);
+    db->submit_transaction_sync(t);
+  }
+
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    t->set("prefix", "key7", value);
+    t->set("prefix", "key8", value);
+    t->rm_range_keys("prefix", "key2", "key7");
+    db->submit_transaction_sync(t);
+    bufferlist v1, v2;
+    ASSERT_EQ(0, db->get("prefix", "key1", &v1));
+    v1.clear();
+    ASSERT_EQ(-ENOENT, db->get("prefix", "key45", &v1));
+    ASSERT_EQ(0, db->get("prefix", "key8", &v1));
+    v1.clear();
+    ASSERT_EQ(-ENOENT, db->get("prefix", "key2", &v1));
+    ASSERT_EQ(0, db->get("prefix", "key7", &v2));
+  }
+
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    t->rm_range_keys("prefix", "key", "key");
+    db->submit_transaction_sync(t);
+    bufferlist v1, v2;
+    ASSERT_EQ(0, db->get("prefix", "key1", &v1));
+    ASSERT_EQ(0, db->get("prefix", "key8", &v2));
+  }
+
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    t->rm_range_keys("prefix", "key-", "key~");
+    db->submit_transaction_sync(t);
+    bufferlist v1, v2;
+    ASSERT_EQ(-ENOENT, db->get("prefix", "key1", &v1));
+    ASSERT_EQ(-ENOENT, db->get("prefix", "key8", &v2));
+  }
+
+  fini();
+}
+
 
 INSTANTIATE_TEST_CASE_P(
   KeyValueDB,

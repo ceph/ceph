@@ -166,6 +166,20 @@ void KineticStore::KineticTransactionImpl::rmkeys_by_prefix(const string &prefix
   }
 }
 
+void KineticStore::KineticTransactionImpl::rm_range_keys(const string &prefix, const string &start, const string &end)
+{
+  KeyValueDB::Iterator it = db->get_iterator(prefix);
+  it->lower_bound(start);
+  while (it->valid()) {
+    if (it->key() >= end) {
+      break;
+    }
+    ops.push_back(
+        KineticOp(KINETIC_OP_DELETE, combine_strings(prefix, it->key())));
+    it->next();
+  }
+}
+
 int KineticStore::get(
     const string &prefix,
     const std::set<string> &keys,

@@ -30,6 +30,7 @@ set(rgw_a_srcs
   rgw_acl_s3.cc
   rgw_acl_swift.cc
   rgw_auth.cc
+  rgw_auth_keystone.cc
   rgw_auth_s3.cc
   rgw_basic_types.cc
   rgw_bucket.cc
@@ -100,7 +101,9 @@ set(rgw_a_srcs
   rgw_website.cc
   rgw_xml.cc
   rgw_xml_enc.cc
-  rgw_torrent.cc)
+  rgw_torrent.cc
+  rgw_crypt.cc
+  rgw_crypt_sanitize.cc)
 
 if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND rgw_a_srcs rgw_fcgi.cc)

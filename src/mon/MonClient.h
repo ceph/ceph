@@ -67,7 +67,7 @@ struct MonClientPinger : public Dispatcher {
     return ret;
   }
 
-  bool ms_dispatch(Message *m) {
+  bool ms_dispatch(Message *m) override {
     Mutex::Locker l(lock);
     if (m->get_type() != CEPH_MSG_PING)
       return false;
@@ -82,14 +82,14 @@ struct MonClientPinger : public Dispatcher {
     m->put();
     return true;
   }
-  bool ms_handle_reset(Connection *con) {
+  bool ms_handle_reset(Connection *con) override {
     Mutex::Locker l(lock);
     done = true;
     ping_recvd_cond.SignalAll();
     return true;
   }
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_handle_refused(Connection *con) {
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override {
     return false;
   }
 };
@@ -97,7 +97,8 @@ struct MonClientPinger : public Dispatcher {
 class MonConnection {
 public:
   MonConnection(CephContext *cct,
-		ConnectionRef conn);
+		ConnectionRef conn,
+		uint64_t global_id);
   ~MonConnection();
   MonConnection(MonConnection&& rhs) = default;
   MonConnection& operator=(MonConnection&&) = default;
@@ -140,7 +141,7 @@ private:
   ConnectionRef con;
 
   std::unique_ptr<AuthClientHandler> auth;
-  uint64_t global_id = 0;
+  uint64_t global_id;
 };
 
 class MonClient : public Dispatcher {
@@ -166,14 +167,14 @@ private:
   LogClient *log_client;
   bool more_log_pending;
 
-  void send_log();
+  void send_log(bool flush = false);
 
   std::unique_ptr<AuthMethodList> auth_supported;
 
-  bool ms_dispatch(Message *m);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con) {}
-  bool ms_handle_refused(Connection *con) { return false; }
+  bool ms_dispatch(Message *m) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override { return false; }
 
   void handle_monmap(MMonMap *m);
 
@@ -190,6 +191,7 @@ private:
   // authenticate
   std::unique_ptr<AuthClientHandler> auth;
   uint32_t want_keys = 0;
+  uint64_t global_id = 0;
   Cond auth_cond;
   int authenticate_err = 0;
 
@@ -205,8 +207,8 @@ private:
   void _finish_hunting();
   void _finish_auth(int auth_err);
   void _reopen_session(int rank = -1);
-  MonConnection& _add_conn(unsigned rank);
-  void _add_conns();
+  MonConnection& _add_conn(unsigned rank, uint64_t global_id);
+  void _add_conns(uint64_t global_id);
   void _send_mon_message(Message *m);
 
 public:
@@ -323,7 +325,7 @@ public:
   explicit MonClient(CephContext *cct_);
   MonClient(const MonClient &) = delete;
   MonClient& operator=(const MonClient &) = delete;
-  ~MonClient();
+  ~MonClient() override;
 
   int init();
   void shutdown();
@@ -393,11 +395,7 @@ public:
 
   uint64_t get_global_id() const {
     Mutex::Locker l(monc_lock);
-    if (active_con) {
-      return active_con->get_global_id();
-    } else {
-      return 0;
-    }
+    return global_id;
   }
 
   void set_messenger(Messenger *m) { messenger = m; }
@@ -438,14 +436,14 @@ private:
   void handle_mon_command_ack(MMonCommandAck *ack);
 
 public:
-  int start_mon_command(const vector<string>& cmd, const bufferlist& inbl,
+  void start_mon_command(const vector<string>& cmd, const bufferlist& inbl,
 			bufferlist *outbl, string *outs,
 			Context *onfinish);
-  int start_mon_command(int mon_rank,
+  void start_mon_command(int mon_rank,
 			const vector<string>& cmd, const bufferlist& inbl,
 			bufferlist *outbl, string *outs,
 			Context *onfinish);
-  int start_mon_command(const string &mon_name,  ///< mon name, with mon. prefix
+  void start_mon_command(const string &mon_name,  ///< mon name, with mon. prefix
 			const vector<string>& cmd, const bufferlist& inbl,
 			bufferlist *outbl, string *outs,
 			Context *onfinish);
@@ -468,15 +466,10 @@ public:
    * to the MonMap
    */
   template<typename Callback, typename...Args>
-  auto with_monmap(Callback&& cb, Args&&...args) ->
-    typename std::enable_if<
-      std::is_void<
-    decltype(cb(const_cast<const MonMap&>(monmap),
-		std::forward<Args>(args)...))>::value,
-      void>::type {
+  auto with_monmap(Callback&& cb, Args&&...args) const ->
+    decltype(cb(monmap, std::forward<Args>(args)...)) {
     Mutex::Locker l(monc_lock);
-    std::forward<Callback>(cb)(const_cast<const MonMap&>(monmap),
-			       std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(monmap, std::forward<Args>(args)...);
   }
 
 private:

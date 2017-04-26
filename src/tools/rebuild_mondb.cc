@@ -223,8 +223,17 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
     t->erase(prefix, ms.combine_strings("full", e));
     ntrimmed++;
   }
-  if (!t->empty()) {
-    t->put(prefix, first_committed_name, sb.oldest_map);
+  // make sure we have a non-zero first_committed. OSDMonitor relies on this.
+  // because PaxosService::put_last_committed() set it to last_committed, if it
+  // is zero. which breaks OSDMonitor::update_from_paxos(), in which we believe
+  // that latest_full should always be greater than last_committed.
+  if (first_committed == 0 && sb.oldest_map < sb.newest_map) {
+    first_committed = 1;
+  } else if (ntrimmed) {
+    first_committed += ntrimmed;
+  }
+  if (first_committed) {
+    t->put(prefix, first_committed_name, first_committed);
     ms.apply_transaction(t);
     t = make_shared<MonitorDBStore::Transaction>();
   }

@@ -123,11 +123,11 @@ class OpsLogSocket : public OutputDataSocket {
   void formatter_to_bl(bufferlist& bl);
 
 protected:
-  void init_connection(bufferlist& bl);
+  void init_connection(bufferlist& bl) override;
 
 public:
   OpsLogSocket(CephContext *cct, uint64_t _backlog);
-  ~OpsLogSocket();
+  ~OpsLogSocket() override;
 
   void log(struct rgw_log_entry& entry);
 };

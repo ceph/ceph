@@ -17,7 +17,7 @@ namespace librbd {
 namespace image {
 
 using util::create_context_callback;
-using util::create_rados_ack_callback;
+using util::create_rados_callback;
 
 template <typename I>
 SetFlagsRequest<I>::SetFlagsRequest(I *image_ctx, uint64_t flags,
@@ -52,7 +52,7 @@ void SetFlagsRequest<I>::send_set_flags() {
     cls_client::set_flags(&op, snap_id, m_flags, m_mask);
 
     librados::AioCompletion *comp =
-      create_rados_ack_callback(gather_ctx->new_sub());
+      create_rados_callback(gather_ctx->new_sub());
     int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
     assert(r == 0);
     comp->release();

@@ -84,9 +84,9 @@ void RGWOp_Period_Post::execute()
   period.init(cct, store, false);
 
   // decode the period from input
-#define PERIOD_MAX_LEN 4096
+  const auto max_size = cct->_conf->rgw_max_put_param_size;
   bool empty;
-  http_ret = rgw_rest_get_json_input(cct, s, period, PERIOD_MAX_LEN, &empty);
+  http_ret = rgw_rest_get_json_input(cct, s, period, max_size, &empty);
   if (http_ret < 0) {
     lderr(cct) << "failed to decode period" << dendl;
     return;
@@ -222,6 +222,8 @@ void RGWOp_Period_Post::execute()
 
 class RGWHandler_Period : public RGWHandler_Auth_S3 {
  protected:
+  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
+
   RGWOp *op_get() override { return new RGWOp_Period_Get; }
   RGWOp *op_post() override { return new RGWOp_Period_Post; }
 };
@@ -229,8 +231,9 @@ class RGWHandler_Period : public RGWHandler_Auth_S3 {
 class RGWRESTMgr_Period : public RGWRESTMgr {
  public:
   RGWHandler_REST* get_handler(struct req_state*,
+                               const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
-    return new RGWHandler_Period;
+    return new RGWHandler_Period(auth_registry);
   }
 };
 
@@ -277,6 +280,7 @@ void RGWOp_Realm_Get::send_response()
 
 class RGWHandler_Realm : public RGWHandler_Auth_S3 {
 protected:
+  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
   RGWOp *op_get() override { return new RGWOp_Realm_Get; }
 };
 
@@ -286,8 +290,10 @@ RGWRESTMgr_Realm::RGWRESTMgr_Realm()
   register_resource("period", new RGWRESTMgr_Period);
 }
 
-RGWHandler_REST* RGWRESTMgr_Realm::get_handler(struct req_state*,
-                                               const std::string&)
+RGWHandler_REST*
+RGWRESTMgr_Realm::get_handler(struct req_state*,
+                              const rgw::auth::StrategyRegistry& auth_registry,
+                              const std::string&)
 {
-  return new RGWHandler_Realm;
+  return new RGWHandler_Realm(auth_registry);
 }

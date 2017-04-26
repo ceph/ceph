@@ -8,7 +8,7 @@
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
-#include "librbd/AioCompletion.h"
+#include "librbd/io/Types.h"
 #include "librbd/journal/Types.h"
 #include <boost/variant.hpp>
 #include <list>
@@ -17,8 +17,8 @@
 
 namespace librbd {
 
-class AioCompletion;
 class ImageCtx;
+namespace io { struct AioCompletion; }
 
 namespace journal {
 
@@ -68,7 +68,7 @@ private:
     C_OpOnComplete(Replay *replay, uint64_t op_tid)
       : replay(replay), op_tid(op_tid) {
     }
-    virtual void finish(int r) override {
+    void finish(int r) override {
       replay->handle_op_complete(op_tid, r);
     }
   };
@@ -80,7 +80,7 @@ private:
     C_AioModifyComplete(Replay *replay, Context *on_ready, Context *on_safe)
       : replay(replay), on_ready(on_ready), on_safe(on_safe) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       replay->handle_aio_modify_complete(on_ready, on_safe, r);
     }
   };
@@ -94,7 +94,7 @@ private:
       : replay(replay), on_flush_safe(on_flush_safe),
         on_safe_ctxs(on_safe_ctxs) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       replay->handle_aio_flush_complete(on_flush_safe, on_safe_ctxs, r);
     }
   };
@@ -133,6 +133,8 @@ private:
                     Context *on_safe);
   void handle_event(const AioWriteEvent &event, Context *on_ready,
                     Context *on_safe);
+  void handle_event(const AioWriteSameEvent &event, Context *on_ready,
+                    Context *on_safe);
   void handle_event(const AioFlushEvent &event, Context *on_ready,
                     Context *on_safe);
   void handle_event(const OpFinishEvent &event, Context *on_ready,
@@ -158,7 +160,7 @@ private:
   void handle_event(const DemoteEvent &event, Context *on_ready,
                     Context *on_safe);
   void handle_event(const SnapLimitEvent &event, Context *on_ready,
-		    Context *on_safe);
+                    Context *on_safe);
   void handle_event(const UpdateFeaturesEvent &event, Context *on_ready,
                     Context *on_safe);
   void handle_event(const MetadataSetEvent &event, Context *on_ready,
@@ -176,12 +178,12 @@ private:
                                       Context *on_safe, OpEvent **op_event);
   void handle_op_complete(uint64_t op_tid, int r);
 
-  AioCompletion *create_aio_modify_completion(Context *on_ready,
-                                              Context *on_safe,
-                                              aio_type_t aio_type,
-                                              bool *flush_required);
-  AioCompletion *create_aio_flush_completion(Context *on_safe);
-  void handle_aio_completion(AioCompletion *aio_comp);
+  io::AioCompletion *create_aio_modify_completion(Context *on_ready,
+                                                  Context *on_safe,
+                                                  io::aio_type_t aio_type,
+                                                  bool *flush_required);
+  io::AioCompletion *create_aio_flush_completion(Context *on_safe);
+  void handle_aio_completion(io::AioCompletion *aio_comp);
 
 };
 

@@ -400,7 +400,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				        s->bucket.bucket_id, entry.bucket);
 
-    rgw_obj obj(store->get_zone_params().log_pool, oid);
+    rgw_raw_obj obj(store->get_zone_params().log_pool, oid);
 
     ret = store->append_async(obj, bl.length(), bl);
     if (ret == -ENOENT) {

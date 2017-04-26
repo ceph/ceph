@@ -48,7 +48,7 @@ public:
     return pgid;
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
     ::decode(map_epoch, p);
@@ -74,7 +74,7 @@ public:
     }
   }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(op, payload);
     ::encode(map_epoch, payload);
     ::encode(query_epoch, payload);
@@ -97,11 +97,11 @@ public:
       begin(be), end(en) {
   }
 private:
-  ~MOSDPGScan() {}
+  ~MOSDPGScan() override {}
 
 public:
-  const char *get_type_name() const { return "pg_scan"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "pg_scan"; }
+  void print(ostream& out) const override {
     out << "pg_scan(" << get_op_name(op)
 	<< " " << pgid
 	<< " " << begin << "-" << end

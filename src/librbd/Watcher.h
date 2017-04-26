@@ -16,10 +16,21 @@ class ContextWQ;
 
 namespace librbd {
 
-class Watcher {
-  friend struct watcher::C_NotifyAck;
+namespace watcher { struct NotifyResponse; }
 
+class Watcher {
 public:
+  struct C_NotifyAck : public Context {
+    Watcher *watcher;
+    CephContext *cct;
+    uint64_t notify_id;
+    uint64_t handle;
+    bufferlist out;
+
+    C_NotifyAck(Watcher *watcher, uint64_t notify_id, uint64_t handle);
+    void finish(int r) override;
+  };
+
   Watcher(librados::IoCtx& ioctx, ContextWQ *work_queue,
           const std::string& oid);
   virtual ~Watcher();
@@ -28,6 +39,7 @@ public:
   void unregister_watch(Context *on_finish);
   void flush(Context *on_finish);
 
+  std::string get_oid() const;
   void set_oid(const string& oid);
 
   uint64_t get_watch_handle() const {
@@ -62,7 +74,8 @@ protected:
   watcher::Notifier m_notifier;
   WatchState m_watch_state;
 
-  void send_notify(bufferlist &payload, bufferlist *out_bl = nullptr,
+  void send_notify(bufferlist &payload,
+                   watcher::NotifyResponse *response = nullptr,
                    Context *on_finish = nullptr);
 
   virtual void handle_notify(uint64_t notify_id, uint64_t handle,
@@ -114,11 +127,11 @@ private:
 
     WatchCtx(Watcher &parent) : watcher(parent) {}
 
-    virtual void handle_notify(uint64_t notify_id,
-                               uint64_t handle,
-      			       uint64_t notifier_id,
-                               bufferlist& bl);
-    virtual void handle_error(uint64_t handle, int err);
+    void handle_notify(uint64_t notify_id,
+                       uint64_t handle,
+                       uint64_t notifier_id,
+                       bufferlist& bl) override;
+    void handle_error(uint64_t handle, int err) override;
   };
 
   struct C_RegisterWatch : public Context {
@@ -128,7 +141,7 @@ private:
     C_RegisterWatch(Watcher *watcher, Context *on_finish)
        : watcher(watcher), on_finish(on_finish) {
     }
-    virtual void finish(int r) override {
+    void finish(int r) override {
       watcher->handle_register_watch(r, on_finish);
     }
   };

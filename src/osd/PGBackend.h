@@ -185,7 +185,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual ObjectContextRef get_obc(
        const hobject_t &hoid,
-       map<string, bufferlist> &attrs) = 0;
+       const map<string, bufferlist> &attrs) = 0;
 
      virtual bool try_lock_for_read(
        const hobject_t &hoid,
@@ -202,7 +202,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual void log_operation(
        const vector<pg_log_entry_t> &logv,
-       boost::optional<pg_hit_set_history_t> &hset_history,
+       const boost::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
        const eversion_t &roll_forward_to,
        bool transaction_applied,
@@ -243,8 +243,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual uint64_t min_peer_features() const = 0;
 
-     virtual hobject_t get_temp_recovery_object(eversion_t version,
-						snapid_t snap) = 0;
+     virtual hobject_t get_temp_recovery_object(const hobject_t& target,
+						eversion_t version) = 0;
 
      virtual void send_message_osd_cluster(
        int peer, Message *m, epoch_t from_epoch) = 0;
@@ -260,6 +260,10 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual ceph_tid_t get_tid() = 0;
 
      virtual LogClientTemp clog_error() = 0;
+
+     virtual bool check_failsafe_full(ostream &ss) = 0;
+
+     virtual bool check_osdmap_full(const set<pg_shard_t> &missing_on) = 0;
 
      virtual ~Listener() {}
    };

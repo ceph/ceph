@@ -6,6 +6,8 @@ set(working_dir ${CMAKE_BINARY_DIR}/include)
 set(header_dir ${working_dir}/tracing)
 file(MAKE_DIRECTORY ${header_dir})
 
+add_custom_target(tracepoint_libraries)
+
 file(GLOB tps "*.tp")
 foreach(tp ${tps})
   get_filename_component(name ${tp} NAME_WE)
@@ -36,6 +38,7 @@ function(add_tracing_library name tracings version)
     VERSION ${version}
     SOVERSION ${soversion}
     INSTALL_RPATH "")
+  add_dependencies(tracepoint_libraries ${name})
 endfunction()
 
 set(osd_traces oprequest.tp osd.tp pg.tp)

@@ -1,0 +1,14 @@
+; This file is for unifying the coding style for different editors and IDEs.
+; Plugins are available for notepad++, emacs, vim, gedit,
+; textmate, visual studio, and more.
+;
+; See http://editorconfig.org for details.
+
+# Top-most EditorConfig file.
+root = true
+
+[**/APKBUILD*]
+indent_style = tab
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true

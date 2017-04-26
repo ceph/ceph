@@ -32,7 +32,7 @@ class RGWGC {
 
   public:
     GCWorker(CephContext *_cct, RGWGC *_gc) : cct(_cct), gc(_gc), lock("GCWorker") {}
-    void *entry();
+    void *entry() override;
     void stop();
   };
 

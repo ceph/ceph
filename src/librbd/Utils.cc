@@ -41,8 +41,8 @@ std::string unique_lock_name(const std::string &name, void *address) {
   return name + " (" + stringify(address) + ")";
 }
 
-librados::AioCompletion *create_rados_ack_callback(Context *on_finish) {
-  return create_rados_ack_callback<Context, &Context::complete>(on_finish);
+librados::AioCompletion *create_rados_callback(Context *on_finish) {
+  return create_rados_callback<Context, &Context::complete>(on_finish);
 }
 
 std::string generate_image_id(librados::IoCtx &ioctx) {
@@ -69,6 +69,35 @@ uint64_t get_rbd_default_features(CephContext* cct)
   return boost::lexical_cast<uint64_t>(str_val);
 }
 
+bool calc_sparse_extent(const bufferptr &bp,
+                        size_t sparse_size,
+                        uint64_t length,
+                        size_t *write_offset,
+                        size_t *write_length,
+                        size_t *offset) {
+  size_t extent_size;
+  if (*offset + sparse_size > length) {
+    extent_size = length - *offset;
+  } else {
+    extent_size = sparse_size;
+  }
+
+  bufferptr extent(bp, *offset, extent_size);
+  *offset += extent_size;
+
+  bool extent_is_zero = extent.is_zero();
+  if (!extent_is_zero) {
+    *write_length += extent_size;
+  }
+  if (extent_is_zero && *write_length == 0) {
+    *write_offset += extent_size;
+  }
+
+  if ((extent_is_zero || *offset == length) && *write_length != 0) {
+    return true;
+  }
+  return false;
+}
 } // namespace util
 
 } // namespace librbd

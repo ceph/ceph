@@ -58,6 +58,7 @@ manage_files_pattern(ceph_t, ceph_var_run_t, ceph_var_run_t)
 manage_lnk_files_pattern(ceph_t, ceph_var_run_t, ceph_var_run_t)
 
 kernel_read_system_state(ceph_t)
+kernel_read_network_state(ceph_t)
 
 corenet_all_recvfrom_unlabeled(ceph_t)
 corenet_all_recvfrom_netlabel(ceph_t)

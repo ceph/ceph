@@ -14,6 +14,7 @@
 #
 from mock import patch, DEFAULT
 import os
+import platform
 import io
 import shutil
 import subprocess
@@ -37,6 +38,9 @@ class TestCephDisk(object):
         main.setup_logging(verbose=True, log_stdout=False)
 
     def test_main_list_json(self, capsys):
+        if platform.system() == "FreeBSD":
+            return
+
         data = tempfile.mkdtemp()
         main.setup_statedir(data)
         args = main.parse_args(['list', '--format', 'json'])
@@ -49,6 +53,9 @@ class TestCephDisk(object):
         shutil.rmtree(data)
 
     def test_main_list_plain(self, capsys):
+        if platform.system() == "FreeBSD":
+            return
+
         data = tempfile.mkdtemp()
         main.setup_statedir(data)
         args = main.parse_args(['list'])
@@ -266,6 +273,9 @@ class TestCephDisk(object):
                     'state': 'prepared'} == desc
 
     def test_list_all_partitions(self):
+        if platform.system() == "FreeBSD":
+            return
+
         disk = "Xda"
         partition = "Xda1"
 
@@ -283,6 +293,9 @@ class TestCephDisk(object):
         # a data partition that fails to mount is silently
         # ignored
         #
+        if platform.system() == "FreeBSD":
+            return
+
         partition_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
         disk = "Xda"
         partition = "Xda1"
@@ -315,6 +328,9 @@ class TestCephDisk(object):
             assert expect == main.list_devices()
 
     def test_list_dmcrypt_data(self):
+        if platform.system() == "FreeBSD":
+            return
+
         partition_type2type = {
             main.PTYPE['plain']['osd']['ready']: 'plain',
             main.PTYPE['luks']['osd']['ready']: 'LUKS',
@@ -384,6 +400,9 @@ class TestCephDisk(object):
         #
         # multipath data partition
         #
+        if platform.system() == "FreeBSD":
+            return
+
         partition_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
         disk = "Xda"
         partition = "Xda1"
@@ -589,6 +608,9 @@ class TestCephDisk(object):
         #
         # not swap, unknown fs type, not mounted, with uuid
         #
+        if platform.system() == "FreeBSD":
+            return
+
         partition_uuid = "56244cf5-83ef-4984-888a-2d8b8e0e04b2"
         partition_type = "e51adfb9-e9fd-4718-9fc1-7a0cb03ea3f4"
         disk = "Xda"
@@ -1291,6 +1313,30 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         ):
             self.assertRaises(Exception, main._deallocate_osd_id,
                               cluster, osd_id)
+
+    def test_main_fix(self):
+        if platform.system() == "FreeBSD":
+            return
+
+        args = main.parse_args(['fix', '--all', '--selinux', '--permissions'])
+        commands = []
+
+        def _command(x):
+            commands.append(" ".join(x))
+            return ("", "", None)
+
+        with patch.multiple(
+            main,
+            command=_command,
+            command_init=lambda x: commands.append(x),
+            command_wait=lambda x: None,
+        ):
+            main.main_fix(args)
+            commands = " ".join(commands)
+            assert '/var/lib/ceph' in commands
+            assert 'restorecon' in commands
+            assert 'chown' in commands
+            assert 'find' in commands
 
 
 def raise_command_error(*args):

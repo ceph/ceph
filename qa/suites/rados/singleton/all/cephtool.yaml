@@ -2,6 +2,7 @@ roles:
 - - mon.a
   - mon.b
   - mon.c
+  - mgr.x
   - osd.0
   - osd.1
   - osd.2
@@ -18,6 +19,8 @@ tasks:
     - had wrong client addr
     - had wrong cluster addr
     - must scrub before tier agent can activate
+    - failsafe engaged, dropping updates
+    - failsafe disengaged, no longer dropping updates
 - workunit:
     clients:
       all:

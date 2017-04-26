@@ -147,7 +147,6 @@ ostream &operator<<(ostream &lhs, const ECBackend::Op &rhs)
   }
   lhs << " roll_forward_to=" << rhs.roll_forward_to
       << " temp_added=" << rhs.temp_added
-      << " pending_commit=" << rhs.pending_commit
       << " temp_cleared=" << rhs.temp_cleared
       << " pending_read=" << rhs.pending_read
       << " remote_read=" << rhs.remote_read
@@ -280,9 +279,14 @@ struct RecoveryMessages {
 };
 
 void ECBackend::handle_recovery_push(
-  PushOp &op,
+  const PushOp &op,
   RecoveryMessages *m)
 {
+  ostringstream ss;
+  if (get_parent()->check_failsafe_full(ss)) {
+    dout(10) << __func__ << " Out of space (failsafe) processing push request: " << ss.str() << dendl;
+    ceph_abort();
+  }
 
   bool oneshot = op.before_progress.first && op.after_progress.data_complete;
   ghobject_t tobj;
@@ -290,8 +294,8 @@ void ECBackend::handle_recovery_push(
     tobj = ghobject_t(op.soid, ghobject_t::NO_GEN,
 		      get_parent()->whoami_shard().shard);
   } else {
-    tobj = ghobject_t(get_parent()->get_temp_recovery_object(op.version,
-							     op.soid.snap),
+    tobj = ghobject_t(get_parent()->get_temp_recovery_object(op.soid,
+							     op.version),
 		      ghobject_t::NO_GEN,
 		      get_parent()->whoami_shard().shard);
     if (op.before_progress.first) {
@@ -362,7 +366,7 @@ void ECBackend::handle_recovery_push(
 }
 
 void ECBackend::handle_recovery_push_reply(
-  PushReplyOp &op,
+  const PushReplyOp &op,
   pg_shard_t from,
   RecoveryMessages *m)
 {
@@ -458,7 +462,7 @@ struct SendPushReplies : public Context {
     }
     replies.clear();
   }
-  ~SendPushReplies() {
+  ~SendPushReplies() override {
     for (map<int, MOSDPGPushReply*>::iterator i = replies.begin();
 	 i != replies.end();
 	 ++i) {
@@ -726,40 +730,44 @@ bool ECBackend::handle_message(
   int priority = _op->get_req()->get_priority();
   switch (_op->get_req()->get_type()) {
   case MSG_OSD_EC_WRITE: {
-    MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(_op->get_req());
+    // NOTE: this is non-const because handle_sub_write modifies the embedded
+    // ObjectStore::Transaction in place (and then std::move's it).  It does
+    // not conflict with ECSubWrite's operator<<.
+    MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(
+      _op->get_nonconst_req());
     handle_sub_write(op->op.from, _op, op->op);
     return true;
   }
   case MSG_OSD_EC_WRITE_REPLY: {
-    MOSDECSubOpWriteReply *op = static_cast<MOSDECSubOpWriteReply*>(
+    const MOSDECSubOpWriteReply *op = static_cast<const MOSDECSubOpWriteReply*>(
       _op->get_req());
-    op->set_priority(priority);
     handle_sub_write_reply(op->op.from, op->op);
     return true;
   }
   case MSG_OSD_EC_READ: {
-    MOSDECSubOpRead *op = static_cast<MOSDECSubOpRead*>(_op->get_req());
+    const MOSDECSubOpRead *op = static_cast<const MOSDECSubOpRead*>(_op->get_req());
     MOSDECSubOpReadReply *reply = new MOSDECSubOpReadReply;
     reply->pgid = get_parent()->primary_spg_t();
     reply->map_epoch = get_parent()->get_epoch();
     handle_sub_read(op->op.from, op->op, &(reply->op));
-    op->set_priority(priority);
     get_parent()->send_message_osd_cluster(
       op->op.from.osd, reply, get_parent()->get_epoch());
     return true;
   }
   case MSG_OSD_EC_READ_REPLY: {
+    // NOTE: this is non-const because handle_sub_read_reply steals resulting
+    // buffers.  It does not conflict with ECSubReadReply operator<<.
     MOSDECSubOpReadReply *op = static_cast<MOSDECSubOpReadReply*>(
-      _op->get_req());
+      _op->get_nonconst_req());
     RecoveryMessages rm;
     handle_sub_read_reply(op->op.from, op->op, &rm);
     dispatch_recovery_messages(rm, priority);
     return true;
   }
   case MSG_OSD_PG_PUSH: {
-    MOSDPGPush *op = static_cast<MOSDPGPush *>(_op->get_req());
+    const MOSDPGPush *op = static_cast<const MOSDPGPush *>(_op->get_req());
     RecoveryMessages rm;
-    for (vector<PushOp>::iterator i = op->pushes.begin();
+    for (vector<PushOp>::const_iterator i = op->pushes.begin();
 	 i != op->pushes.end();
 	 ++i) {
       handle_recovery_push(*i, &rm);
@@ -768,9 +776,10 @@ bool ECBackend::handle_message(
     return true;
   }
   case MSG_OSD_PG_PUSH_REPLY: {
-    MOSDPGPushReply *op = static_cast<MOSDPGPushReply *>(_op->get_req());
+    const MOSDPGPushReply *op = static_cast<const MOSDPGPushReply *>(
+      _op->get_req());
     RecoveryMessages rm;
-    for (vector<PushReplyOp>::iterator i = op->replies.begin();
+    for (vector<PushReplyOp>::const_iterator i = op->replies.begin();
 	 i != op->replies.end();
 	 ++i) {
       handle_recovery_push_reply(*i, op->from, &rm);
@@ -936,27 +945,25 @@ void ECBackend::handle_sub_write(
 
 void ECBackend::handle_sub_read(
   pg_shard_t from,
-  ECSubRead &op,
+  const ECSubRead &op,
   ECSubReadReply *reply)
 {
   shard_id_t shard = get_parent()->whoami_shard().shard;
-  for(map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >>::iterator i =
-        op.to_read.begin();
+  for(auto i = op.to_read.begin();
       i != op.to_read.end();
       ++i) {
     int r = 0;
     ECUtil::HashInfoRef hinfo;
-    if (!get_parent()->get_pool().is_hacky_ecoverwrites()) {
+    if (!get_parent()->get_pool().allows_ecoverwrites()) {
       hinfo = get_hash_info(i->first);
       if (!hinfo) {
 	r = -EIO;
-	get_parent()->clog_error() << __func__ << ": No hinfo for " << i->first << "\n";
+	get_parent()->clog_error() << __func__ << ": No hinfo for " << i->first;
 	dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
 	goto error;
       }
     }
-    for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::iterator j =
-	   i->second.begin(); j != i->second.end(); ++j) {
+    for (auto j = i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
       r = store->read(
 	ch,
@@ -982,7 +989,7 @@ void ECBackend::handle_sub_read(
 	  );
       }
 
-      if (!get_parent()->get_pool().is_hacky_ecoverwrites()) {
+      if (!get_parent()->get_pool().allows_ecoverwrites()) {
 	// This shows that we still need deep scrub because large enough files
 	// are read in sections, so the digest check here won't be done here.
 	// Do NOT check osd_read_eio_on_bad_digest here.  We need to report
@@ -995,7 +1002,7 @@ void ECBackend::handle_sub_read(
 	  h << bl;
 	  if (h.digest() != hinfo->get_chunk_hash(shard)) {
 	    get_parent()->clog_error() << __func__ << ": Bad hash for " << i->first << " digest 0x"
-				       << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << "\n";
+				       << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec;
 	    dout(5) << __func__ << ": Bad hash for " << i->first << " digest 0x"
 		    << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << dendl;
 	    r = -EIO;
@@ -1034,7 +1041,7 @@ error:
 
 void ECBackend::handle_sub_write_reply(
   pg_shard_t from,
-  ECSubWriteReply &op)
+  const ECSubWriteReply &op)
 {
   map<ceph_tid_t, Op>::iterator i = tid_to_op_map.find(op.tid);
   assert(i != tid_to_op_map.end());
@@ -1076,8 +1083,7 @@ void ECBackend::handle_sub_read_reply(
     return;
   }
   ReadOp &rop = iter->second;
-  for (map<hobject_t, list<pair<uint64_t, bufferlist> >>::iterator i =
-	 op.buffers_read.begin();
+  for (auto i = op.buffers_read.begin();
        i != op.buffers_read.end();
        ++i) {
     assert(!op.errors.count(i->first));	// If attribute error we better not have sent a buffer
@@ -1104,7 +1110,7 @@ void ECBackend::handle_sub_read_reply(
       riter->get<2>()[from].claim(j->second);
     }
   }
-  for (map<hobject_t, map<string, bufferlist>>::iterator i = op.attrs_read.begin();
+  for (auto i = op.attrs_read.begin();
        i != op.attrs_read.end();
        ++i) {
     assert(!op.errors.count(i->first));	// if read error better not have sent an attribute
@@ -1116,7 +1122,7 @@ void ECBackend::handle_sub_read_reply(
     rop.complete[i->first].attrs = map<string, bufferlist>();
     (*(rop.complete[i->first].attrs)).swap(i->second);
   }
-  for (map<hobject_t, int>::iterator i = op.errors.begin();
+  for (auto i = op.errors.begin();
        i != op.errors.end();
        ++i) {
     rop.complete[i->first].errors.insert(
@@ -1186,7 +1192,7 @@ void ECBackend::handle_sub_read_reply(
             rop.complete[iter->first].r = err;
 	  } else {
 	    get_parent()->clog_error() << __func__ << ": Error(s) ignored for "
-				       << iter->first << " enough copies available" << "\n";
+				       << iter->first << " enough copies available";
 	    dout(10) << __func__ << " Error(s) ignored for " << iter->first
 		     << " enough copies available" << dendl;
 	    rop.complete[iter->first].errors.clear();
@@ -1726,7 +1732,7 @@ bool ECBackend::try_state_to_reads()
 
   Op *op = &(waiting_state.front());
   if (op->requires_rmw() && pipeline_state.cache_invalid()) {
-    assert(get_parent()->get_pool().is_hacky_ecoverwrites());
+    assert(get_parent()->get_pool().allows_ecoverwrites());
     dout(20) << __func__ << ": blocking " << *op
 	     << " because it requires an rmw and the cache is invalid "
 	     << pipeline_state
@@ -1780,7 +1786,7 @@ bool ECBackend::try_state_to_reads()
   dout(10) << __func__ << ": " << *op << dendl;
 
   if (!op->remote_read.empty()) {
-    assert(get_parent()->get_pool().is_hacky_ecoverwrites());
+    assert(get_parent()->get_pool().allows_ecoverwrites());
     objects_read_async_no_cache(
       op->remote_read,
       [this, op](map<hobject_t,pair<int, extent_map> > &&results) {
@@ -1853,7 +1859,7 @@ bool ECBackend::try_reads_to_commit()
   dout(20) << __func__ << ": written: " << written << dendl;
   dout(20) << __func__ << ": op: " << *op << dendl;
 
-  if (!get_parent()->get_pool().is_hacky_ecoverwrites()) {
+  if (!get_parent()->get_pool().allows_ecoverwrites()) {
     for (auto &&i: op->log_entries) {
       if (i.requires_kraken()) {
 	derr << __func__ << ": log entry " << i << " requires kraken"
@@ -2359,7 +2365,7 @@ void ECBackend::be_deep_scrub(
     o.digest_present = false;
     return;
   } else {
-    if (!get_parent()->get_pool().is_hacky_ecoverwrites()) {
+    if (!get_parent()->get_pool().allows_ecoverwrites()) {
       assert(hinfo->has_chunk_hash());
       if (hinfo->get_total_chunk_size() != pos) {
 	dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;

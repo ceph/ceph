@@ -232,7 +232,7 @@ struct ObjectOperation {
     C_ObjectOperation_stat(uint64_t *ps, ceph::real_time *pm, time_t *pt, struct timespec *_pts,
 			   int *prval)
       : psize(ps), pmtime(pm), ptime(pt), pts(_pts), prval(prval) {}
-    void finish(int r) {
+    void finish(int r) override {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
@@ -302,7 +302,7 @@ struct ObjectOperation {
 				  std::map<uint64_t, uint64_t> *extents,
 				  int *prval)
       : data_bl(data_bl), extents(extents), prval(prval) {}
-    void finish(int r) {
+    void finish(int r) override {
       bufferlist::iterator iter = bl.begin();
       if (r >= 0) {
 	try {
@@ -367,6 +367,22 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
   }
 
+  void checksum(uint8_t type, const bufferlist &init_value_bl,
+		uint64_t off, uint64_t len, size_t chunk_size,
+		bufferlist *pbl, int *prval, Context *ctx) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_CHECKSUM);
+    osd_op.op.checksum.offset = off;
+    osd_op.op.checksum.length = len;
+    osd_op.op.checksum.type = type;
+    osd_op.op.checksum.chunk_size = chunk_size;
+    osd_op.indata.append(init_value_bl);
+
+    unsigned p = ops.size() - 1;
+    out_bl[p] = pbl;
+    out_rval[p] = prval;
+    out_handler[p] = ctx;
+  }
+
   // object attrs
   void getxattr(const char *name, bufferlist *pbl, int *prval) {
     bufferlist bl;
@@ -388,7 +404,7 @@ struct ObjectOperation {
 	*ptruncated = false;
       }
     }
-    void finish(int r) {
+    void finish(int r) override {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
@@ -430,7 +446,7 @@ struct ObjectOperation {
 	*ptruncated = false;
       }
     }
-    void finish(int r) {
+    void finish(int r) override {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
@@ -465,7 +481,7 @@ struct ObjectOperation {
     int *prval;
     C_ObjectOperation_decodewatchers(list<obj_watch_t> *pw, int *pr)
       : pwatchers(pw), prval(pr) {}
-    void finish(int r) {
+    void finish(int r) override {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
@@ -498,7 +514,7 @@ struct ObjectOperation {
     int *prval;
     C_ObjectOperation_decodesnaps(librados::snap_set_t *ps, int *pr)
       : psnaps(ps), prval(pr) {}
-    void finish(int r) {
+    void finish(int r) override {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	try {
@@ -709,7 +725,7 @@ struct ObjectOperation {
 	out_truncate_seq(otseq),
 	out_truncate_size(otsize),
 	prval(r) {}
-    void finish(int r) {
+    void finish(int r) override {
       // reqids are copied on ENOENT
       if (r < 0 && r != -ENOENT)
 	return;
@@ -802,7 +818,7 @@ struct ObjectOperation {
     int *prval;
     C_ObjectOperation_isdirty(bool *p, int *r)
       : pisdirty(p), prval(r) {}
-    void finish(int r) {
+    void finish(int r) override {
       if (r < 0)
 	return;
       try {
@@ -838,7 +854,7 @@ struct ObjectOperation {
 						      ceph::real_time> > *ut,
 				 int *r)
       : ptls(t), putls(ut), prval(r) {}
-    void finish(int r) {
+    void finish(int r) override {
       if (r < 0)
 	return;
       try {
@@ -1119,9 +1135,9 @@ struct ObjectOperation {
 class Objecter : public md_config_obs_t, public Dispatcher {
 public:
   // config observer bits
-  virtual const char** get_tracked_conf_keys() const;
-  virtual void handle_conf_change(const struct md_config_t *conf,
-				  const std::set <std::string> &changed);
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set <std::string> &changed) override;
 
 public:
   Messenger *messenger;
@@ -1144,6 +1160,7 @@ private:
   atomic_t global_op_flags; // flags which are applied to each IO op
   bool keep_balanced_budget;
   bool honor_osdmap_full;
+  bool osdmap_full_try;
 
 public:
   void maybe_request_map();
@@ -1182,6 +1199,9 @@ public:
 
   struct op_target_t {
     int flags = 0;
+
+    epoch_t epoch = 0;  ///< latest epoch we calculated the mapping
+
     object_t base_oid;
     object_locator_t base_oloc;
     object_t target_oid;
@@ -1333,8 +1353,14 @@ public:
       return tid < other.tid;
     }
 
+    bool respects_full() const {
+      return
+	(target.flags & (CEPH_OSD_FLAG_WRITE | CEPH_OSD_FLAG_RWORDERED)) &&
+	!(target.flags & (CEPH_OSD_FLAG_FULL_TRY | CEPH_OSD_FLAG_FULL_FORCE));
+    }
+
   private:
-    ~Op() {
+    ~Op() override {
       while (!out_handler.empty()) {
 	delete out_handler.back();
 	out_handler.pop_back();
@@ -1348,7 +1374,7 @@ public:
     version_t latest;
     C_Op_Map_Latest(Objecter *o, ceph_tid_t t) : objecter(o), tid(t),
 						 latest(0) {}
-    void finish(int r);
+    void finish(int r) override;
   };
 
   struct C_Command_Map_Latest : public Context {
@@ -1357,7 +1383,7 @@ public:
     version_t latest;
     C_Command_Map_Latest(Objecter *o, ceph_tid_t t) :  objecter(o), tid(t),
 						       latest(0) {}
-    void finish(int r);
+    void finish(int r) override;
   };
 
   struct C_Stat : public Context {
@@ -1367,7 +1393,7 @@ public:
     Context *fin;
     C_Stat(uint64_t *ps, ceph::real_time *pm, Context *c) :
       psize(ps), pmtime(pm), fin(c) {}
-    void finish(int r) {
+    void finish(int r) override {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	uint64_t s;
@@ -1389,7 +1415,7 @@ public:
     Context *fin;
     C_GetAttrs(map<string, bufferlist>& set, Context *c) : attrset(set),
 							   fin(c) {}
-    void finish(int r) {
+    void finish(int r) override {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
 	::decode(attrset, p);
@@ -1444,7 +1470,7 @@ public:
     epoch_t epoch;
     C_NList(NListContext *lc, Context * finish, Objecter *ob) :
       list_context(lc), final_finish(finish), objecter(ob), epoch(0) {}
-    void finish(int r) {
+    void finish(int r) override {
       if (r >= 0) {
 	objecter->_nlist_reply(list_context, r, final_finish, epoch);
       } else {
@@ -1544,7 +1570,7 @@ public:
 
   };
 
-  int submit_command(CommandOp *c, ceph_tid_t *ptid);
+  void submit_command(CommandOp *c, ceph_tid_t *ptid);
   int _calc_command_target(CommandOp *c, shunique_lock &sul);
   void _assign_command_session(CommandOp *c, shunique_lock &sul);
   void _send_command(CommandOp *c);
@@ -1646,7 +1672,7 @@ public:
     }
 
   private:
-    ~LingerOp() {
+    ~LingerOp() override {
       delete watch_context;
     }
   };
@@ -1658,10 +1684,10 @@ public:
     C_Linger_Commit(Objecter *o, LingerOp *l) : objecter(o), info(l) {
       info->get();
     }
-    ~C_Linger_Commit() {
+    ~C_Linger_Commit() override {
       info->put();
     }
-    void finish(int r) {
+    void finish(int r) override {
       objecter->_linger_commit(info, r, outbl);
     }
   };
@@ -1672,10 +1698,10 @@ public:
     C_Linger_Reconnect(Objecter *o, LingerOp *l) : objecter(o), info(l) {
       info->get();
     }
-    ~C_Linger_Reconnect() {
+    ~C_Linger_Reconnect() override {
       info->put();
     }
-    void finish(int r) {
+    void finish(int r) override {
       objecter->_linger_reconnect(info, r);
     }
   };
@@ -1689,10 +1715,10 @@ public:
       : objecter(o), info(l), register_gen(info->register_gen) {
       info->get();
     }
-    ~C_Linger_Ping() {
+    ~C_Linger_Ping() override {
       info->put();
     }
-    void finish(int r) {
+    void finish(int r) override {
       objecter->_linger_ping(info, r, sent, register_gen);
     }
   };
@@ -1703,7 +1729,7 @@ public:
     version_t latest;
     C_Linger_Map_Latest(Objecter *o, uint64_t id) :
       objecter(o), linger_id(id), latest(0) {}
-    void finish(int r);
+    void finish(int r) override;
   };
 
   // -- osd sessions --
@@ -1743,7 +1769,7 @@ public:
       num_locks(cct->_conf->objecter_completion_locks_per_session),
       completion_locks(new std::mutex[num_locks]) {}
 
-    ~OSDSession();
+    ~OSDSession() override;
 
     bool is_homeless() { return (osd == -1); }
 
@@ -1844,7 +1870,7 @@ public:
   }
 
 private:
-  void _check_op_pool_dne(Op *op, unique_lock& sl);
+  void _check_op_pool_dne(Op *op, unique_lock *sl);
   void _send_op_map_check(Op *op);
   void _op_cancel_map_check(Op *op);
   void _check_linger_pool_dne(LingerOp *op, bool *need_unregister);
@@ -1910,7 +1936,7 @@ private:
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
     osdmap(new OSDMap), initialized(0), last_tid(0), client_inc(-1),
     max_linger_id(0), num_in_flight(0), global_op_flags(0),
-    keep_balanced_budget(false), honor_osdmap_full(true),
+    keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
     last_seen_osdmap_version(0), last_seen_pgmap_version(0),
     logger(NULL), tick_event(0), m_request_state_hook(NULL),
     num_homeless_ops(0),
@@ -1923,7 +1949,7 @@ private:
     epoch_barrier(0),
     retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
   { }
-  ~Objecter();
+  ~Objecter() override;
 
   void init();
   void start(const OSDMap *o = nullptr);
@@ -1942,28 +1968,10 @@ private:
   // here or you will have great woe and misery.
 
   template<typename Callback, typename...Args>
-  auto with_osdmap(Callback&& cb, Args&&...args) ->
-    typename std::enable_if<
-      std::is_void<
-    decltype(cb(const_cast<const OSDMap&>(*osdmap),
-		std::forward<Args>(args)...))>::value,
-      void>::type {
+  auto with_osdmap(Callback&& cb, Args&&... args) const ->
+    decltype(cb(*osdmap, std::forward<Args>(args)...)) {
     shared_lock l(rwlock);
-    std::forward<Callback>(cb)(const_cast<const OSDMap&>(*osdmap),
-			       std::forward<Args>(args)...);
-  }
-
-  template<typename Callback, typename...Args>
-  auto with_osdmap(Callback&& cb, Args&&... args) ->
-    typename std::enable_if<
-      !std::is_void<
-	decltype(cb(const_cast<const OSDMap&>(*osdmap),
-		    std::forward<Args>(args)...))>::value,
-      decltype(cb(const_cast<const OSDMap&>(*osdmap),
-		  std::forward<Args>(args)...))>::type {
-    shared_lock l(rwlock);
-    return std::forward<Callback>(cb)(const_cast<const OSDMap&>(*osdmap),
-				      std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
   }
 
 
@@ -1979,6 +1987,9 @@ private:
 
   void set_honor_osdmap_full() { honor_osdmap_full = true; }
   void unset_honor_osdmap_full() { honor_osdmap_full = false; }
+
+  void set_osdmap_full_try() { osdmap_full_try = true; }
+  void unset_osdmap_full_try() { osdmap_full_try = false; }
 
   void _scan_requests(OSDSession *s,
 		      bool force_resend,
@@ -1996,11 +2007,11 @@ private:
 
   // messages
  public:
-  bool ms_dispatch(Message *m);
-  bool ms_can_fast_dispatch_any() const {
+  bool ms_dispatch(Message *m) override;
+  bool ms_can_fast_dispatch_any() const override {
     return true;
   }
-  bool ms_can_fast_dispatch(Message *m) const {
+  bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OPREPLY:
     case CEPH_MSG_WATCH_NOTIFY:
@@ -2009,7 +2020,7 @@ private:
       return false;
     }
   }
-  void ms_fast_dispatch(Message *m) {
+  void ms_fast_dispatch(Message *m) override {
     ms_dispatch(m);
   }
 
@@ -2099,7 +2110,7 @@ public:
   epoch_t op_cancel_writes(int r, int64_t pool=-1);
 
   // commands
-  int osd_command(int osd, vector<string>& cmd,
+  void osd_command(int osd, const std::vector<string>& cmd,
 		  const bufferlist& inbl, ceph_tid_t *ptid,
 		  bufferlist *poutbl, string *prs, Context *onfinish) {
     assert(osd >= 0);
@@ -2110,9 +2121,9 @@ public:
       poutbl,
       prs,
       onfinish);
-    return submit_command(c, ptid);
+    submit_command(c, ptid);
   }
-  int pg_command(pg_t pgid, vector<string>& cmd,
+  void pg_command(pg_t pgid, vector<string>& cmd,
 		 const bufferlist& inbl, ceph_tid_t *ptid,
 		 bufferlist *poutbl, string *prs, Context *onfinish) {
     CommandOp *c = new CommandOp(
@@ -2122,7 +2133,7 @@ public:
       poutbl,
       prs,
       onfinish);
-    return submit_command(c, ptid);
+    submit_command(c, ptid);
   }
 
   // mid-level helpers
@@ -2731,6 +2742,8 @@ public:
 
   void list_nobjects(NListContext *p, Context *onfinish);
   uint32_t list_nobjects_seek(NListContext *p, uint32_t pos);
+  uint32_t list_nobjects_seek(NListContext *list_context, const hobject_t& c);
+  void list_nobjects_get_cursor(NListContext *list_context, hobject_t *c);
 
   hobject_t enumerate_objects_begin();
   hobject_t enumerate_objects_end();
@@ -2822,7 +2835,7 @@ public:
       extents.swap(e);
       resultbl.swap(r);
     }
-    void finish(int r) {
+    void finish(int r) override {
       objecter->_sg_read_finish(extents, resultbl, bl, onfinish);
     }
   };
@@ -2892,13 +2905,13 @@ public:
 		   op_flags);
   }
 
-  void ms_handle_connect(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con);
-  bool ms_handle_refused(Connection *con);
+  void ms_handle_connect(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override;
+  bool ms_handle_refused(Connection *con) override;
   bool ms_get_authorizer(int dest_type,
 			 AuthAuthorizer **authorizer,
-			 bool force_new);
+			 bool force_new) override;
 
   void blacklist_self(bool set);
 
@@ -2907,6 +2920,10 @@ private:
   bool retry_writes_after_first_reply;
 public:
   void set_epoch_barrier(epoch_t epoch);
+
+  PerfCounters *get_logger() {
+    return logger;
+  }
 };
 
 #endif

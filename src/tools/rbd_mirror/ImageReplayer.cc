@@ -44,7 +44,7 @@ namespace rbd {
 namespace mirror {
 
 using librbd::util::create_context_callback;
-using librbd::util::create_rados_ack_callback;
+using librbd::util::create_rados_callback;
 using namespace rbd::mirror::image_replayer;
 
 template <typename I>
@@ -264,13 +264,13 @@ void ImageReplayer<I>::RemoteJournalerListener::handle_update(
 }
 
 template <typename I>
-ImageReplayer<I>::ImageReplayer(Threads *threads,
-                             shared_ptr<ImageDeleter> image_deleter,
-                             ImageSyncThrottlerRef<I> image_sync_throttler,
-                             RadosRef local,
-                             const std::string &local_mirror_uuid,
-                             int64_t local_pool_id,
-                             const std::string &global_image_id) :
+ImageReplayer<I>::ImageReplayer(Threads<librbd::ImageCtx> *threads,
+                                shared_ptr<ImageDeleter> image_deleter,
+                                ImageSyncThrottlerRef<I> image_sync_throttler,
+                                RadosRef local,
+                                const std::string &local_mirror_uuid,
+                                int64_t local_pool_id,
+                                const std::string &global_image_id) :
   m_threads(threads),
   m_image_deleter(image_deleter),
   m_image_sync_throttler(image_sync_throttler),
@@ -295,8 +295,9 @@ ImageReplayer<I>::ImageReplayer(Threads *threads,
 	 << ": " << cpp_strerror(r) << dendl;
     pool_name = stringify(m_local_pool_id);
   }
-  m_name = pool_name + "/" + m_global_image_id;
 
+  m_name = pool_name + "/" + m_global_image_id;
+  dout(20) << "registered asok hook: " << m_name << dendl;
   m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
                                                     this);
 }
@@ -420,15 +421,14 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
 
 template <typename I>
 void ImageReplayer<I>::bootstrap() {
-  dout(20) << "bootstrap params: "
-	   << "local_image_name=" << m_local_image_name << dendl;
+  dout(20) << dendl;
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
 
   BootstrapRequest<I> *request = BootstrapRequest<I>::create(
     m_local_ioctx, m_remote_image.io_ctx, m_image_sync_throttler,
-    &m_local_image_ctx, m_local_image_name, m_remote_image.image_id,
+    &m_local_image_ctx, m_local_image_id, m_remote_image.image_id,
     m_global_image_id, m_threads->work_queue, m_threads->timer,
     &m_threads->timer_lock, m_local_mirror_uuid, m_remote_image.mirror_uuid,
     m_remote_journaler, &m_client_meta, ctx, &m_do_resync, &m_progress_cxt);
@@ -454,7 +454,6 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     m_bootstrap_request = nullptr;
     if (m_local_image_ctx) {
       m_local_image_id = m_local_image_ctx->id;
-      m_local_image_name = m_local_image_ctx->name;
     }
   }
 
@@ -515,6 +514,7 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
       }
     }
     if (!m_asok_hook) {
+      dout(20) << "registered asok hook: " << m_name << dendl;
       m_asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
                                                         this);
     }
@@ -1318,7 +1318,7 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_status_set(&op, m_global_image_id, status);
 
-  librados::AioCompletion *aio_comp = create_rados_ack_callback<
+  librados::AioCompletion *aio_comp = create_rados_callback<
     ImageReplayer<I>, &ImageReplayer<I>::handle_mirror_status_update>(this);
   int r = m_local_ioctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
   assert(r == 0);
@@ -1423,7 +1423,7 @@ void ImageReplayer<I>::shut_down(int r) {
   if (m_local_image_ctx) {
     ctx = new FunctionContext([this, ctx](int r) {
       CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-        &m_local_image_ctx, m_threads->work_queue, false, ctx);
+        &m_local_image_ctx, ctx);
       request->send();
     });
   }

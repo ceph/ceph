@@ -54,8 +54,11 @@ private:
    *                                  <start> . . . . > . . . . .
    *                                     |                      .
    *                                     v                      .
-   *                                VALIDATE POOL               v (pool validation
-   *                                     |                      . disabled)
+   *                               VALIDATE POOL                v (pool validation
+   *                                     |                      .  disabled)
+   *                                     v                      .
+   *                             VALIDATE OVERWRITE             .
+   *                                     |                      .
    *                                     v                      .
    * (error: bottom up)           CREATE ID OBJECT. . < . . . . .
    *  _______<_______                    |
@@ -98,7 +101,8 @@ private:
                 bool skip_mirror_enable,
                 ContextWQ *op_work_queue, Context *on_finish);
 
-  IoCtx m_ioctx;
+  IoCtx &m_ioctx;
+  IoCtx m_data_io_ctx;
   std::string m_image_name;
   std::string m_image_id;
   uint64_t m_size;
@@ -130,52 +134,55 @@ private:
   cls::rbd::MirrorImage m_mirror_image_internal;
 
   void validate_pool();
-  Context *handle_validate_pool(int *result);
+  void handle_validate_pool(int r);
+
+  void validate_overwrite();
+  void handle_validate_overwrite(int r);
 
   void create_id_object();
-  Context *handle_create_id_object(int *result);
+  void handle_create_id_object(int r);
 
   void add_image_to_directory();
-  Context *handle_add_image_to_directory(int *result);
+  void handle_add_image_to_directory(int r);
 
   void negotiate_features();
-  Context *handle_negotiate_features(int *result);
+  void handle_negotiate_features(int r);
 
   void create_image();
-  Context *handle_create_image(int *result);
+  void handle_create_image(int r);
 
   void set_stripe_unit_count();
-  Context *handle_set_stripe_unit_count(int *result);
+  void handle_set_stripe_unit_count(int r);
 
   void object_map_resize();
-  Context *handle_object_map_resize(int *result);
+  void handle_object_map_resize(int r);
 
   void fetch_mirror_mode();
-  Context *handle_fetch_mirror_mode(int *result);
+  void handle_fetch_mirror_mode(int r);
 
   void journal_create();
-  Context *handle_journal_create(int *result);
+  void handle_journal_create(int r);
 
   void mirror_image_enable();
-  Context *handle_mirror_image_enable(int *result);
+  void handle_mirror_image_enable(int r);
 
   void complete(int r);
 
   // cleanup
   void journal_remove();
-  Context *handle_journal_remove(int *result);
+  void handle_journal_remove(int r);
 
   void remove_object_map();
-  Context *handle_remove_object_map(int *result);
+  void handle_remove_object_map(int r);
 
   void remove_header_object();
-  Context *handle_remove_header_object(int *result);
+  void handle_remove_header_object(int r);
 
   void remove_from_dir();
-  Context *handle_remove_from_dir(int *result);
+  void handle_remove_from_dir(int r);
 
   void remove_id_object();
-  Context *handle_remove_id_object(int *result);
+  void handle_remove_id_object(int r);
 };
 
 } //namespace image

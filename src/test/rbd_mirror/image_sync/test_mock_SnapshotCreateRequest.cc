@@ -80,7 +80,7 @@ public:
 
   void expect_snap_create(librbd::MockTestImageCtx &mock_image_ctx,
                           const std::string &snap_name, uint64_t snap_id, int r) {
-    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(StrEq(snap_name), _, _, 0, true))
+    EXPECT_CALL(*mock_image_ctx.operations, execute_snap_create(_, StrEq(snap_name), _, 0, true))
                   .WillOnce(DoAll(InvokeWithoutArgs([&mock_image_ctx, snap_id, snap_name]() {
                                     inject_snap(mock_image_ctx, snap_id, snap_name);
                                   }),
@@ -100,14 +100,15 @@ public:
 
   static void inject_snap(librbd::MockTestImageCtx &mock_image_ctx,
                    uint64_t snap_id, const std::string &snap_name) {
-    mock_image_ctx.snap_ids[snap_name] = snap_id;
+    mock_image_ctx.snap_ids[{cls::rbd::UserSnapshotNamespace(),
+			     snap_name}] = snap_id;
   }
 
   MockSnapshotCreateRequest *create_request(librbd::MockTestImageCtx &mock_local_image_ctx,
                                             const std::string &snap_name,
 					    const cls::rbd::SnapshotNamespace &snap_namespace,
                                             uint64_t size,
-                                            const librbd::parent_spec &spec,
+                                            const librbd::ParentSpec &spec,
                                             uint64_t parent_overlap,
                                             Context *on_finish) {
     return new MockSnapshotCreateRequest(&mock_local_image_ctx, snap_name, snap_namespace, size,

@@ -23,6 +23,9 @@ import threading
 import uuid
 
 
+FLAG_MGR = 8   # command is intended for mgr
+
+
 try:
     basestring
 except NameError:
@@ -884,9 +887,9 @@ def store_arg(desc, d):
         d[desc.name] = desc.instance.val
 
 
-def validate(args, signature, partial=False):
+def validate(args, signature, flags=0, partial=False):
     """
-    validate(args, signature, partial=False)
+    validate(args, signature, flags=0, partial=False)
 
     args is a list of either words or k,v pairs representing a possible
     command input following format of signature.  Runs a validation; no
@@ -982,6 +985,9 @@ def validate(args, signature, partial=False):
             print(save_exception[0], 'not valid: ', save_exception[1], file=sys.stderr)
         raise ArgumentError("unused arguments: " + str(myargs))
 
+    if flags & FLAG_MGR:
+        d['target'] = ('mgr','')
+
     # Finally, success
     return d
 
@@ -1037,7 +1043,7 @@ def validate_command(sigdict, args, verbose=False):
             for cmd in cmdsig.values():
                 sig = cmd['sig']
                 try:
-                    valid_dict = validate(args, sig)
+                    valid_dict = validate(args, sig, flags=cmd.get('flags', 0))
                     found = cmd
                     break
                 except ArgumentPrefix:
@@ -1078,7 +1084,7 @@ def find_cmd_target(childargs):
     should be sent to a monitor or an osd.  We do this before even
     asking for the 'real' set of command signatures, so we can ask the
     right daemon.
-    Returns ('osd', osdid), ('pg', pgid), or ('mon', '')
+    Returns ('osd', osdid), ('pg', pgid), ('mgr', '') or ('mon', '')
     """
     sig = parse_funcsig(['tell', {'name': 'target', 'type': 'CephName'}])
     try:
@@ -1307,6 +1313,8 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
         cmddict.update({'prefix': prefix})
     if argdict:
         cmddict.update(argdict)
+        if 'target' in argdict:
+            target = argdict.get('target')
 
     # grab prefix for error messages
     prefix = cmddict['prefix']

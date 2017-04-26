@@ -30,7 +30,7 @@ class EpollDriver : public EventDriver {
 
  public:
   explicit EpollDriver(CephContext *c): epfd(-1), events(NULL), cct(c), size(0) {}
-  virtual ~EpollDriver() {
+  ~EpollDriver() override {
     if (epfd != -1)
       close(epfd);
 

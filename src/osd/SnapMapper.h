@@ -45,15 +45,15 @@ public:
       : cid(cid), hoid(hoid), t(t) {}
   public:
     void set_keys(
-      const std::map<std::string, bufferlist> &to_set) {
+      const std::map<std::string, bufferlist> &to_set) override {
       t->omap_setkeys(cid, hoid, to_set);
     }
     void remove_keys(
-      const std::set<std::string> &to_remove) {
+      const std::set<std::string> &to_remove) override {
       t->omap_rmkeys(cid, hoid, to_remove);
     }
     void add_callback(
-      Context *c) {
+      Context *c) override {
       t->register_on_applied(c);
     }
   };
@@ -67,10 +67,10 @@ public:
     os(os), cid(cid), hoid(hoid) {}
   int get_keys(
     const std::set<std::string> &keys,
-    std::map<std::string, bufferlist> *out);
+    std::map<std::string, bufferlist> *out) override;
   int get_next(
     const std::string &key,
-    pair<std::string, bufferlist> *next);
+    pair<std::string, bufferlist> *next) override;
 };
 
 /**

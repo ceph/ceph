@@ -68,6 +68,19 @@ namespace {
 
 TracepointProvider::Traits tracepoint_traits("librados_tp.so", "rados_tracing");
 
+uint8_t get_checksum_op_type(rados_checksum_type_t type) {
+  switch (type) {
+  case LIBRADOS_CHECKSUM_TYPE_XXHASH32:
+    return CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH32;
+  case LIBRADOS_CHECKSUM_TYPE_XXHASH64:
+    return CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH64;
+  case LIBRADOS_CHECKSUM_TYPE_CRC32C:
+    return CEPH_OSD_CHECKSUM_OP_TYPE_CRC32C;
+  default:
+    return -1;
+  }
+}
+
 } // anonymous namespace
 
 /*
@@ -226,6 +239,17 @@ void librados::ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
 {
   ::ObjectOperation *o = &impl->o;
   o->sparse_read(off, len, m, data_bl, prval);
+}
+
+void librados::ObjectReadOperation::checksum(rados_checksum_type_t type,
+					     const bufferlist &init_value_bl,
+					     uint64_t off, size_t len,
+					     size_t chunk_size, bufferlist *pbl,
+					     int *prval)
+{
+  ::ObjectOperation *o = &impl->o;
+  o->checksum(get_checksum_op_type(type), init_value_bl, off, len, chunk_size,
+	      pbl, prval, nullptr);
 }
 
 void librados::ObjectReadOperation::tmap_get(bufferlist *pbl, int *prval)
@@ -737,6 +761,21 @@ uint32_t librados::NObjectIteratorImpl::seek(uint32_t pos)
   return r;
 }
 
+uint32_t librados::NObjectIteratorImpl::seek(const ObjectCursor& cursor)
+{
+  uint32_t r = rados_nobjects_list_seek_cursor(ctx.get(), (rados_object_list_cursor)cursor.c_cursor);
+  get_next();
+  return r;
+}
+
+librados::ObjectCursor librados::NObjectIteratorImpl::get_cursor()
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)ctx.get();
+  librados::ObjectCursor oc;
+  oc.set(lh->ctx->nlist_get_cursor(lh->nlc));
+  return oc;
+}
+
 void librados::NObjectIteratorImpl::set_filter(const bufferlist &bl)
 {
   assert(ctx);
@@ -846,6 +885,18 @@ uint32_t librados::NObjectIterator::seek(uint32_t pos)
 {
   assert(impl);
   return impl->seek(pos);
+}
+
+uint32_t librados::NObjectIterator::seek(const ObjectCursor& cursor)
+{
+  assert(impl);
+  return impl->seek(cursor);
+}
+
+librados::ObjectCursor librados::NObjectIterator::get_cursor()
+{
+  assert(impl);
+  return impl->get_cursor();
 }
 
 void librados::NObjectIterator::set_filter(const bufferlist &bl)
@@ -1134,6 +1185,16 @@ int librados::IoCtx::read(const std::string& oid, bufferlist& bl, size_t len, ui
 {
   object_t obj(oid);
   return io_ctx_impl->read(obj, bl, len, off);
+}
+
+int librados::IoCtx::checksum(const std::string& oid,
+			      rados_checksum_type_t type,
+			      const bufferlist &init_value_bl, size_t len,
+			      uint64_t off, size_t chunk_size, bufferlist *pbl)
+{
+  object_t obj(oid);
+  return io_ctx_impl->checksum(obj, get_checksum_op_type(type), init_value_bl,
+			       len, off, chunk_size, pbl);
 }
 
 int librados::IoCtx::remove(const std::string& oid)
@@ -1702,6 +1763,25 @@ librados::NObjectIterator librados::IoCtx::nobjects_begin(
   return iter;
 }
 
+librados::NObjectIterator librados::IoCtx::nobjects_begin(const ObjectCursor& cursor)
+{
+  bufferlist bl;
+  return nobjects_begin(cursor, bl);
+}
+
+librados::NObjectIterator librados::IoCtx::nobjects_begin(
+  const ObjectCursor& cursor, const bufferlist &filter)
+{
+  rados_list_ctx_t listh;
+  rados_nobjects_list_open(io_ctx_impl, &listh);
+  NObjectIterator iter((ObjListCtx*)listh);
+  if (filter.length() > 0) {
+    iter.set_filter(filter);
+  }
+  iter.seek(cursor);
+  return iter;
+}
+
 const librados::NObjectIterator& librados::IoCtx::nobjects_end() const
 {
   return NObjectIterator::__EndObjectIterator;
@@ -2080,6 +2160,16 @@ librados::config_t librados::IoCtx::cct()
 librados::IoCtx::IoCtx(IoCtxImpl *io_ctx_impl_)
   : io_ctx_impl(io_ctx_impl_)
 {
+}
+
+void librados::IoCtx::set_osdmap_full_try()
+{
+  io_ctx_impl->objecter->set_osdmap_full_try();
+}
+
+void librados::IoCtx::unset_osdmap_full_try()
+{
+  io_ctx_impl->objecter->unset_osdmap_full_try();
 }
 
 ///////////////////////////// Rados //////////////////////////////
@@ -2730,8 +2820,12 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path_list)
   tracepoint(librados, rados_conf_read_file_enter, cluster, path_list);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   md_config_t *conf = client->cct->_conf;
-  int ret = conf->parse_config_files(path_list, NULL, 0);
+  ostringstream warnings;
+  int ret = conf->parse_config_files(path_list, &warnings, 0);
   if (ret) {
+    if (warnings.tellp() > 0)
+      lderr(client->cct) << warnings.str() << dendl;
+    client->cct->_conf->complain_about_parse_errors(client->cct);
     tracepoint(librados, rados_conf_read_file_exit, ret);
     return ret;
   }
@@ -2992,7 +3086,7 @@ CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool_id,
     ss << pg;
     auto s = ss.str();
     unsigned rl = s.length() + 1;
-    if (len >= rl) {
+    if (b && len >= rl) {
       tracepoint(librados, rados_inconsistent_pg_list_pg, s.c_str());
       strncat(b, s.c_str(), rl);
       b += rl;
@@ -3448,6 +3542,36 @@ extern "C" int rados_read(rados_ioctx_t io, const char *o, char *buf, size_t len
 
   tracepoint(librados, rados_read_exit, ret, buf);
   return ret;
+}
+
+extern "C" int rados_checksum(rados_ioctx_t io, const char *o,
+                              rados_checksum_type_t type,
+                              const char *init_value, size_t init_value_len,
+                              size_t len, uint64_t off, size_t chunk_size,
+			      char *pchecksum, size_t checksum_len)
+{
+  tracepoint(librados, rados_checksum_enter, io, o, type, init_value,
+	     init_value_len, len, off, chunk_size);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+
+  bufferlist init_value_bl;
+  init_value_bl.append(init_value, init_value_len);
+
+  bufferlist checksum_bl;
+
+  int retval = ctx->checksum(oid, get_checksum_op_type(type), init_value_bl,
+			     len, off, chunk_size, &checksum_bl);
+  if (retval >= 0) {
+    if (checksum_bl.length() > checksum_len) {
+      tracepoint(librados, rados_checksum_exit, -ERANGE, NULL, 0);
+      return -ERANGE;
+    }
+
+    checksum_bl.copy(0, checksum_bl.length(), pchecksum);
+  }
+  tracepoint(librados, rados_checksum_exit, retval, pchecksum, checksum_len);
+  return retval;
 }
 
 extern "C" uint64_t rados_get_last_version(rados_ioctx_t io)
@@ -4151,6 +4275,28 @@ extern "C" uint32_t rados_nobjects_list_seek(rados_list_ctx_t listctx,
   uint32_t r = lh->ctx->nlist_seek(lh->nlc, pos);
   tracepoint(librados, rados_nobjects_list_seek_exit, r);
   return r;
+}
+
+extern "C" uint32_t rados_nobjects_list_seek_cursor(rados_list_ctx_t listctx,
+                                                    rados_object_list_cursor cursor)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+
+  tracepoint(librados, rados_nobjects_list_seek_cursor_enter, listctx);
+  uint32_t r = lh->ctx->nlist_seek(lh->nlc, cursor);
+  tracepoint(librados, rados_nobjects_list_seek_cursor_exit, r);
+  return r;
+}
+
+extern "C" int rados_nobjects_list_get_cursor(rados_list_ctx_t listctx,
+                                              rados_object_list_cursor *cursor)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+
+  tracepoint(librados, rados_nobjects_list_get_cursor_enter, listctx);
+  *cursor = lh->ctx->nlist_get_cursor(lh->nlc);
+  tracepoint(librados, rados_nobjects_list_get_cursor_exit, 0);
+  return 0;
 }
 
 extern "C" uint32_t rados_nobjects_list_get_pg_hash_position(
@@ -5453,6 +5599,31 @@ extern "C" void rados_read_op_read(rados_read_op_t read_op,
   tracepoint(librados, rados_read_op_read_exit);
 }
 
+extern "C" void rados_read_op_checksum(rados_read_op_t read_op,
+                                       rados_checksum_type_t type,
+                                       const char *init_value,
+                                       size_t init_value_len,
+                                       uint64_t offset, size_t len,
+                                       size_t chunk_size, char *pchecksum,
+				       size_t checksum_len, int *prval)
+{
+  tracepoint(librados, rados_read_op_checksum_enter, read_op, type, init_value,
+	     init_value_len, offset, len, chunk_size);
+  bufferlist init_value_bl;
+  init_value_bl.append(init_value, init_value_len);
+
+  C_bl_to_buf *ctx = nullptr;
+  if (pchecksum != nullptr) {
+    ctx = new C_bl_to_buf(pchecksum, checksum_len, nullptr, prval);
+  }
+  ((::ObjectOperation *)read_op)->checksum(get_checksum_op_type(type),
+					   init_value_bl, offset, len,
+					   chunk_size,
+					   (ctx ? &ctx->out_bl : nullptr),
+					   prval, ctx);
+  tracepoint(librados, rados_read_op_checksum_exit);
+}
+
 class C_out_buffer : public Context {
   char **out_buf;
   size_t *out_len;
@@ -5829,7 +6000,7 @@ CEPH_RADOS_API void rados_object_list_slice(
 
 librados::ObjectCursor::ObjectCursor()
 {
-  c_cursor = new hobject_t();
+  c_cursor = (rados_object_list_cursor)new hobject_t();
 }
 
 librados::ObjectCursor::~ObjectCursor()
@@ -5838,14 +6009,16 @@ librados::ObjectCursor::~ObjectCursor()
   delete h;
 }
 
-bool librados::ObjectCursor::operator<(const librados::ObjectCursor &rhs)
+librados::ObjectCursor::ObjectCursor(rados_object_list_cursor c)
 {
-  const hobject_t lhs_hobj = (c_cursor == nullptr) ? hobject_t() : *((hobject_t*)c_cursor);
-  const hobject_t rhs_hobj = (rhs.c_cursor == nullptr) ? hobject_t() : *((hobject_t*)(rhs.c_cursor));
-  return lhs_hobj < rhs_hobj;
+  if (!c) {
+    c_cursor = nullptr;
+  } else {
+    c_cursor = (rados_object_list_cursor)new hobject_t(*(hobject_t *)c);
+  }
 }
 
-librados::ObjectCursor::ObjectCursor(const librados::ObjectCursor &rhs)
+librados::ObjectCursor& librados::ObjectCursor::operator=(const librados::ObjectCursor& rhs)
 {
   if (rhs.c_cursor != nullptr) {
     hobject_t *h = (hobject_t*)rhs.c_cursor;
@@ -5853,6 +6026,25 @@ librados::ObjectCursor::ObjectCursor(const librados::ObjectCursor &rhs)
   } else {
     c_cursor = nullptr;
   }
+  return *this;
+}
+
+bool librados::ObjectCursor::operator<(const librados::ObjectCursor &rhs) const
+{
+  const hobject_t lhs_hobj = (c_cursor == nullptr) ? hobject_t() : *((hobject_t*)c_cursor);
+  const hobject_t rhs_hobj = (rhs.c_cursor == nullptr) ? hobject_t() : *((hobject_t*)(rhs.c_cursor));
+  return lhs_hobj < rhs_hobj;
+}
+
+bool librados::ObjectCursor::operator==(const librados::ObjectCursor &rhs) const
+{
+  const hobject_t lhs_hobj = (c_cursor == nullptr) ? hobject_t() : *((hobject_t*)c_cursor);
+  const hobject_t rhs_hobj = (rhs.c_cursor == nullptr) ? hobject_t() : *((hobject_t*)(rhs.c_cursor));
+  return cmp(lhs_hobj, rhs_hobj) == 0;
+}
+librados::ObjectCursor::ObjectCursor(const librados::ObjectCursor &rhs)
+{
+  *this = rhs;
 }
 
 librados::ObjectCursor librados::IoCtx::object_list_begin()
@@ -5877,6 +6069,32 @@ void librados::ObjectCursor::set(rados_object_list_cursor c)
 {
   delete (hobject_t*)c_cursor;
   c_cursor = c;
+}
+
+string librados::ObjectCursor::to_str() const
+{
+  stringstream ss;
+  ss << *(hobject_t *)c_cursor;
+  return ss.str();
+}
+
+bool librados::ObjectCursor::from_str(const string& s)
+{
+  if (s.empty()) {
+    *(hobject_t *)c_cursor = hobject_t();
+    return true;
+  }
+  return ((hobject_t *)c_cursor)->parse(s);
+}
+
+CEPH_RADOS_API std::ostream& librados::operator<<(std::ostream& os, const librados::ObjectCursor& oc)
+{
+  if (oc.c_cursor) {
+    os << *(hobject_t *)oc.c_cursor;
+  } else {
+    os << hobject_t();
+  }
+  return os;
 }
 
 bool librados::IoCtx::object_list_is_end(const ObjectCursor &oc)

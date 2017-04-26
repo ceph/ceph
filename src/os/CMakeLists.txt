@@ -36,7 +36,6 @@ if(HAVE_LIBAIO)
     bluestore/BlueRocksEnv.cc
     bluestore/BlueStore.cc
     bluestore/bluestore_types.cc
-    bluestore/ExtentFreelistManager.cc
     bluestore/FreelistManager.cc
     bluestore/KernelDevice.cc
     bluestore/StupidAllocator.cc
@@ -83,13 +82,15 @@ endif()
 target_link_libraries(os kv)
 
 add_dependencies(os compressor_plugins)
+add_dependencies(os ceph_crypto_isal)
+
 
 if(HAVE_LIBAIO)
-  add_executable(ceph-bluefs-tool
-    bluestore/bluefs_tool.cc)
-  target_link_libraries(ceph-bluefs-tool
+  add_executable(ceph-bluestore-tool
+    bluestore/bluestore_tool.cc)
+  target_link_libraries(ceph-bluestore-tool
     os global)
-  install(TARGETS ceph-bluefs-tool
+  install(TARGETS ceph-bluestore-tool
     DESTINATION bin)
 endif()
 

@@ -162,7 +162,7 @@ struct C_AioComplete : public Context {
     c->_get();
   }
 
-  void finish(int r) {
+  void finish(int r) override {
     rados_callback_t cb_complete = c->callback_complete;
     void *cb_complete_arg = c->callback_complete_arg;
     if (cb_complete)
@@ -196,7 +196,7 @@ struct C_AioCompleteAndSafe : public Context {
     c->get();
   }
 
-  void finish(int r) {
+  void finish(int r) override {
     c->lock.Lock();
     c->rval = r;
     c->complete = true;

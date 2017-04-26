@@ -33,14 +33,14 @@ class CephContext;
 
 struct PGLog : DoutPrefixProvider {
   DoutPrefixProvider *prefix_provider;
-  string gen_prefix() const {
+  string gen_prefix() const override {
     return prefix_provider ? prefix_provider->gen_prefix() : "";
   }
-  unsigned get_subsys() const {
+  unsigned get_subsys() const override {
     return prefix_provider ? prefix_provider->get_subsys() :
       (unsigned)ceph_subsys_osd;
   }
-  CephContext *get_cct() const {
+  CephContext *get_cct() const override {
     return cct;
   }
 
@@ -66,7 +66,7 @@ struct PGLog : DoutPrefixProvider {
     explicit read_log_and_missing_error(const char *what) {
       snprintf(buf, sizeof(buf), "read_log_and_missing_error: %s", what);
     }
-    const char *what() const throw () {
+    const char *what() const throw () override {
       return buf;
     }
   private:
@@ -703,7 +703,8 @@ public:
     log.last_requested = 0;
   }
 
-  void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, const pg_log_t &olog,
+  void proc_replica_log(pg_info_t &oinfo,
+			const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from) const;
 
 protected:
@@ -968,11 +969,14 @@ protected:
       this);
   }
 public:
-  void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
-                            pg_info_t &info, LogEntryHandler *rollbacker,
-                            bool &dirty_info, bool &dirty_big_info);
+  void rewind_divergent_log(eversion_t newhead,
+                            pg_info_t &info,
+                            LogEntryHandler *rollbacker,
+                            bool &dirty_info,
+                            bool &dirty_big_info);
 
-  void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
+  void merge_log(pg_info_t &oinfo,
+		 pg_log_t &olog,
 		 pg_shard_t from,
 		 pg_info_t &info, LogEntryHandler *rollbacker,
 		 bool &dirty_info, bool &dirty_big_info);
@@ -1094,11 +1098,13 @@ public:
     coll_t log_coll, ghobject_t log_oid,
     const pg_info_t &info,
     ostringstream &oss,
+    bool tolerate_divergent_missing_log,
     bool debug_verify_stored_missing = false
     ) {
     return read_log_and_missing(
       store, pg_coll, log_coll, log_oid, info,
       log, missing, oss,
+      tolerate_divergent_missing_log,
       &clear_divergent_priors,
       this,
       (pg_log_debug ? &log_keys_debug : 0),
@@ -1111,6 +1117,7 @@ public:
     const pg_info_t &info,
     IndexedLog &log,
     missing_type &missing, ostringstream &oss,
+    bool tolerate_divergent_missing_log,
     bool *clear_divergent_priors = NULL,
     const DoutPrefixProvider *dpp = NULL,
     set<string> *log_keys_debug = 0,
@@ -1238,9 +1245,9 @@ public:
 	      continue;
 	    if (i.second.need > log.tail ||
 	      i.first > info.last_backfill) {
-	      lderr(dpp->get_cct()) << __func__ << ": invalid missing set entry found "
-				    << i.first
-				    << dendl;
+	      ldpp_dout(dpp, -1) << __func__ << ": invalid missing set entry found "
+				 << i.first
+				 << dendl;
 	      assert(0 == "invalid missing set entry found");
 	    }
 	    bufferlist bv;
@@ -1286,7 +1293,20 @@ public:
 		 * version would not have been recovered, and a newer version
 		 * would show up in the log above.
 		 */
-	      assert(oi.version == i->first);
+	      	/**
+		 * Unfortunately the assessment above is incorrect because of
+		 * http://tracker.ceph.com/issues/17916 (we were incorrectly
+		 * not removing the divergent_priors set from disk state!),
+		 * so let's check that.
+		 */
+	      if (oi.version > i->first && tolerate_divergent_missing_log) {
+		ldpp_dout(dpp, 0) << "read_log divergent_priors entry (" << *i
+				  << ") inconsistent with disk state (" <<  oi
+				  << "), assuming it is tracker.ceph.com/issues/17916"
+				  << dendl;
+	      } else {
+		assert(oi.version == i->first);
+	      }
 	    } else {
 	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
 	      missing.add(i->second, i->first, eversion_t());

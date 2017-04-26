@@ -22,7 +22,7 @@
 
 class MMgrBeacon : public PaxosServiceMessage {
 
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
 protected:
@@ -30,6 +30,7 @@ protected:
   entity_addr_t server_addr;
   bool available;
   std::string name;
+  uuid_d fsid;
 
 public:
   MMgrBeacon()
@@ -38,10 +39,11 @@ public:
   {
   }
 
-  MMgrBeacon(uint64_t gid_, const std::string &name_,
+  MMgrBeacon(const uuid_d& fsid_, uint64_t gid_, const std::string &name_,
              entity_addr_t server_addr_, bool available_)
     : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
-      gid(gid_), server_addr(server_addr_), available(available_), name(name_)
+      gid(gid_), server_addr(server_addr_), available(available_), name(name_),
+      fsid(fsid_)
   {
   }
 
@@ -49,33 +51,38 @@ public:
   entity_addr_t get_server_addr() const { return server_addr; }
   bool get_available() const { return available; }
   const std::string& get_name() const { return name; }
+  const uuid_d& get_fsid() const { return fsid; }
 
 private:
-  ~MMgrBeacon() {}
+  ~MMgrBeacon() override {}
 
 public:
 
-  const char *get_type_name() const { return "mgrbeacon"; }
+  const char *get_type_name() const override { return "mgrbeacon"; }
 
-  void print(ostream& out) const {
-    out << get_type_name() << " mgr." << name << "(" << gid << ", "
-        << server_addr << ", " << available << ")";
+  void print(ostream& out) const override {
+    out << get_type_name() << " mgr." << name << "(" << fsid << ","
+	<< gid << ", " << server_addr << ", " << available << ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     paxos_encode();
     ::encode(server_addr, payload, features);
     ::encode(gid, payload);
     ::encode(available, payload);
     ::encode(name, payload);
+    ::encode(fsid, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(server_addr, p);
     ::decode(gid, p);
     ::decode(available, p);
     ::decode(name, p);
+    if (header.version >= 2) {
+      ::decode(fsid, p);
+    }
   }
 };
 

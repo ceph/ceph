@@ -576,7 +576,7 @@ void dump_time(struct req_state *s, const char *name, real_time *t)
   s->formatter->dump_string(name, buf);
 }
 
-void dump_owner(struct req_state *s, rgw_user& id, string& name,
+void dump_owner(struct req_state *s, const rgw_user& id, string& name,
 		const char *section)
 {
   if (!section)
@@ -644,6 +644,7 @@ void dump_trans_id(req_state *s)
 {
   if (s->prot_flags & RGW_REST_SWIFT) {
     dump_header(s, "X-Trans-Id", s->trans_id);
+    dump_header(s, "X-Openstack-Request-Id", s->trans_id);
   } else if (s->trans_id.length()) {
     dump_header(s, "x-amz-request-id", s->trans_id);
   }
@@ -775,7 +776,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
       if (!s->redirect.empty()) {
         dest_uri = s->redirect;
       } else if (!s->zonegroup_endpoint.empty()) {
-        string dest_uri = s->zonegroup_endpoint;
+        dest_uri = s->zonegroup_endpoint;
         /*
          * reqest_uri is always start with slash, so we need to remove
          * the unnecessary slash at the end of dest_uri.
@@ -807,7 +808,6 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no,
     } else {
       end_header(s, op);
     }
-    rgw_flush_formatter(s, s->formatter);
   }
   perfcounter->inc(l_rgw_failed_req);
 }
@@ -1192,6 +1192,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 
   int len = 0;
   if (cl) {
+    ACCOUNTING_IO(s)->set_account(true);
     bufferptr bp(cl);
 
     const auto read_len  = recv_body(s, bp.c_str(), cl);
@@ -1222,7 +1223,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
         bl.rebuild();
       }
     }
-
+    ACCOUNTING_IO(s)->set_account(false);
   }
 
   if ((uint64_t)ofs + len > s->cct->_conf->rgw_max_put_size) {
@@ -1253,55 +1254,19 @@ int RGWPostObj_ObjStore::verify_params()
 
 int RGWPutACLs_ObjStore::get_params()
 {
-  size_t cl = 0;
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-       op_ret = -ENOMEM;
-       return op_ret;
-    }
-    const auto read_len = recv_body(s, data, cl);
-    if (read_len < 0) {
-      return read_len;
-    } else {
-      len = read_len;
-    }
-    data[len] = '\0';
-  } else {
-    len = 0;
-  }
-
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   return op_ret;
 }
 
 int RGWPutLC_ObjStore::get_params()
 {
-  size_t cl = 0;
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-       op_ret = -ENOMEM;
-       return op_ret;
-    }
-    const auto read_len = recv_body(s, data, cl);
-    if (read_len < 0) {
-      return read_len;
-    } else {
-      len = read_len;
-    }
-    data[len] = '\0';
-  } else {
-    len = 0;
-  }
-
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   return op_ret;
 }
 
-static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max_read)
+static int read_all_chunked_input(req_state *s, char **pdata, int *plen, const uint64_t max_read)
 {
 #define READ_CHUNK 4096
 #define MAX_READ_CHUNK (128 * 1024)
@@ -1325,7 +1290,7 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max
       if (need_to_read < MAX_READ_CHUNK)
 	need_to_read *= 2;
 
-      if (total > max_read) {
+      if ((unsigned)total > max_read) {
 	free(data);
 	return -ERANGE;
       }
@@ -1351,7 +1316,7 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max
 }
 
 int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen,
-			    int max_len)
+			    const uint64_t max_len, const bool allow_chunked)
 {
   size_t cl = 0;
   int len = 0;
@@ -1359,6 +1324,9 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen,
 
   if (s->length)
     cl = atoll(s->length);
+  else if (!allow_chunked)
+    return -ERR_LENGTH_REQUIRED;
+
   if (cl) {
     if (cl > (size_t)max_len) {
       return -ERANGE;
@@ -1373,7 +1341,7 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen,
       return len;
     }
     data[len] = '\0';
-  } else if (!s->length) {
+  } else if (allow_chunked && !s->length) {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
     if (!encoding || strcmp(encoding, "chunked") != 0)
       return -ERR_LENGTH_REQUIRED;
@@ -1461,28 +1429,8 @@ int RGWDeleteMultiObj_ObjStore::get_params()
   // everything is probably fine, set the bucket
   bucket = s->bucket;
 
-  size_t cl = 0;
-
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-      op_ret = -ENOMEM;
-      return op_ret;
-    }
-    const auto read_len = recv_body(s, data, cl);
-    if (read_len < 0) {
-      op_ret = read_len;
-      return op_ret;
-    } else {
-      len = read_len;
-    }
-    data[len] = '\0';
-  } else {
-    return -EINVAL;
-  }
-
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   return op_ret;
 }
 
@@ -1577,17 +1525,21 @@ int RGWHandler_REST::allocate_formatter(struct req_state *s,
 
   const string& mm = s->info.args.get("multipart-manifest");
   const bool multipart_delete = (mm.compare("delete") == 0);
-
+  const bool swift_bulkupload = s->prot_flags & RGW_REST_SWIFT &&
+                                s->info.args.exists("extract-archive");
   switch (s->format) {
     case RGW_FORMAT_PLAIN:
       {
-        const bool use_kv_syntax = s->info.args.exists("bulk-delete") || multipart_delete;
+        const bool use_kv_syntax = s->info.args.exists("bulk-delete") ||
+                                   multipart_delete || swift_bulkupload;
         s->formatter = new RGWFormatter_Plain(use_kv_syntax);
         break;
       }
     case RGW_FORMAT_XML:
       {
-        const bool lowercase_underscore = s->info.args.exists("bulk-delete") || multipart_delete;
+        const bool lowercase_underscore = s->info.args.exists("bulk-delete") ||
+                                          multipart_delete || swift_bulkupload;
+
         s->formatter = new XMLFormatter(false, lowercase_underscore);
         break;
       }
@@ -2077,13 +2029,15 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   return 0;
 }
 
-RGWHandler_REST* RGWREST::get_handler(RGWRados * const store,
-                                      struct req_state* const s,
-                                      const std::string& frontend_prefix,
-                                      RGWRestfulIO* const rio,
-                                      RGWRESTMgr** const pmgr,
-                                      int* const init_error)
-{
+RGWHandler_REST* RGWREST::get_handler(
+  RGWRados * const store,
+  struct req_state* const s,
+  const rgw::auth::StrategyRegistry& auth_registry,
+  const std::string& frontend_prefix,
+  RGWRestfulIO* const rio,
+  RGWRESTMgr** const pmgr,
+  int* const init_error
+) {
   *init_error = preprocess(s, rio);
   if (*init_error < 0) {
     return nullptr;
@@ -2100,7 +2054,7 @@ RGWHandler_REST* RGWREST::get_handler(RGWRados * const store,
     *pmgr = m;
   }
 
-  RGWHandler_REST* handler = m->get_handler(s, frontend_prefix);
+  RGWHandler_REST* handler = m->get_handler(s, auth_registry, frontend_prefix);
   if (! handler) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;

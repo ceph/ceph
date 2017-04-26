@@ -356,6 +356,16 @@ int MemStore::read(
 int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
 		     uint64_t offset, size_t len, bufferlist& bl)
 {
+  map<uint64_t, uint64_t> destmap;
+  int r = fiemap(cid, oid, offset, len, destmap);
+  if (r >= 0)
+    ::encode(destmap, bl);
+  return r;
+}
+
+int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
+		     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap)
+{
   dout(10) << __func__ << " " << cid << " " << oid << " " << offset << "~"
 	   << len << dendl;
   CollectionRef c = get_collection(cid);
@@ -365,15 +375,13 @@ int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  map<uint64_t, uint64_t> m;
   size_t l = len;
   if (offset + l > o->get_size())
     l = o->get_size() - offset;
   if (offset >= o->get_size())
     goto out;
-  m[offset] = l;
+  destmap[offset] = l;
  out:
-  ::encode(m, bl);
   return 0;
 }
 
@@ -458,6 +466,16 @@ int MemStore::collection_empty(const coll_t& cid, bool *empty)
   RWLock::RLocker l(c->lock);
   *empty = c->object_map.empty();
   return 0;
+}
+
+int MemStore::collection_bits(const coll_t& cid)
+{
+  dout(10) << __func__ << " " << cid << dendl;
+  CollectionRef c = get_collection(cid);
+  if (!c)
+    return -ENOENT;
+  RWLock::RLocker l(c->lock);
+  return c->bits;
 }
 
 int MemStore::collection_list(const coll_t& cid,
@@ -854,7 +872,7 @@ void MemStore::_do_transaction(Transaction& t)
     case Transaction::OP_MKCOLL:
       {
         coll_t cid = i.get_cid(op->cid);
-	r = _create_collection(cid);
+	r = _create_collection(cid, op->split_bits);
       }
       break;
 
@@ -1038,7 +1056,7 @@ void MemStore::_do_transaction(Transaction& t)
 	if (r == -ENOSPC)
 	  // For now, if we hit _any_ ENOSPC, crash, before we do any damage
 	  // by partially applying transactions.
-	  msg = "ENOSPC handling not implemented";
+	  msg = "ENOSPC from MemStore, misconfigured cluster or insufficient memory";
 
 	if (r == -ENOTEMPTY) {
 	  msg = "ENOTEMPTY suggests garbage data in osd data dir";
@@ -1345,7 +1363,7 @@ int MemStore::_omap_setheader(const coll_t& cid, const ghobject_t &oid,
   return 0;
 }
 
-int MemStore::_create_collection(const coll_t& cid)
+int MemStore::_create_collection(const coll_t& cid, int bits)
 {
   dout(10) << __func__ << " " << cid << dendl;
   RWLock::WLocker l(coll_lock);
@@ -1353,6 +1371,7 @@ int MemStore::_create_collection(const coll_t& cid)
   if (!result.second)
     return -EEXIST;
   result.first->second.reset(new Collection(cct, cid));
+  result.first->second->bits = bits;
   return 0;
 }
 
@@ -1457,6 +1476,9 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
       ++p;
     }
   }
+
+  sc->bits = bits;
+  assert(dc->bits == (int)bits);
 
   return 0;
 }

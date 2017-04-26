@@ -75,10 +75,7 @@ OSDs Report Down OSDs
 
 By default, a Ceph OSD Daemon must report to the Ceph Monitors that another Ceph
 OSD Daemon is ``down`` three times before the Ceph Monitors acknowledge that the
-reported Ceph OSD Daemon is ``down``.  You can change the minimum number of
-``osd down`` reports by adding an ``mon osd min down reports`` setting (``osd
-min down reports`` prior to v0.62) under the ``[mon]`` section of your Ceph
-configuration file, or by setting the value at runtime. By default, only one
+reported Ceph OSD Daemon is ``down``. By default, only one
 Ceph OSD Daemon is required to report another Ceph OSD Daemon ``down``. You can
 change the number of Ceph OSD Daemones required to report a Ceph OSD Daemon
 ``down`` to a Ceph Monitor by adding an ``mon osd min down reporters`` setting
@@ -223,7 +220,7 @@ Monitor Settings
               mark Ceph OSD Daemons ``out``.
               
 :Type: Double
-:Default: ``.3``
+:Default: ``.75``
 
 
 ``mon osd laggy halflife``
@@ -317,14 +314,6 @@ Monitor Settings
 :Type: 32-bit Integer
 :Default: ``1``
 
-
-``mon osd min down reports`` 
-
-:Description: The minimum number of times a Ceph OSD Daemon must report 
-              that another Ceph OSD Daemon is ``down``.
-
-:Type: 32-bit Integer
-:Default: ``3`` 
 
 .. index:: OSD hearbeat
 

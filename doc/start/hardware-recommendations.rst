@@ -350,5 +350,5 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 .. _Ceph Write Throughput 2: http://ceph.com/community/ceph-performance-part-2-write-throughput-without-ssd-journals/
 .. _Argonaut v. Bobtail Performance Preview: http://ceph.com/uncategorized/argonaut-vs-bobtail-performance-preview/
 .. _Bobtail Performance - I/O Scheduler Comparison: http://ceph.com/community/ceph-bobtail-performance-io-scheduler-comparison/ 
-.. _Mapping Pools to Different Types of OSDs: http://ceph.com/docs/master/rados/operations/crush-map/#placing-different-pools-on-different-osds
+.. _Mapping Pools to Different Types of OSDs: ../../rados/operations/crush-map#placing-different-pools-on-different-osds
 .. _OS Recommendations: ../os-recommendations

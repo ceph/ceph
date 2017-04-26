@@ -11,7 +11,7 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/rbdmap map
 ExecReload=/usr/bin/rbdmap map
-ExecStop=/usr/bin/rbdmap unmap
+ExecStop=/usr/bin/rbdmap unmap-all
 
 [Install]
 WantedBy=multi-user.target

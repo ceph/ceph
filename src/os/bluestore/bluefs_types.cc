@@ -138,6 +138,7 @@ void bluefs_fnode_t::decode(bufferlist::iterator& p)
   ::decode(prefer_bdev, p);
   ::decode(extents, p);
   DECODE_FINISH(p);
+  recalc_allocated();
 }
 
 void bluefs_fnode_t::dump(Formatter *f) const
