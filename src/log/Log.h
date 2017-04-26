@@ -96,6 +96,7 @@ public:
 
   /// induce a segv on the next log event
   void inject_segv();
+  void reset_segv();
 };
 
 }

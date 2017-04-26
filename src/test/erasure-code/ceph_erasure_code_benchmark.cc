@@ -81,7 +81,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     ceph_options.push_back(i->c_str());
   }
 
-  global_init(
+  cct = global_init(
     &def_args, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
     CODE_ENVIRONMENT_UTILITY,
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);

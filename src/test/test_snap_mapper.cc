@@ -4,15 +4,14 @@
 #include <set>
 #include <boost/scoped_ptr.hpp>
 #include <sys/types.h>
+#include <cstdlib>
 
 #include "include/buffer.h"
 #include "common/map_cacher.hpp"
 #include "osd/SnapMapper.h"
-#include "global/global_init.h"
-#include "common/ceph_argparse.h"
+#include "test/unit.h"
 
 #include "gtest/gtest.h"
-#include "stdlib.h"
 
 using namespace std;
 
@@ -656,15 +655,4 @@ TEST_F(SnapMapperTest, More) {
 TEST_F(SnapMapperTest, MultiPG) {
   init(50);
   run();
-}
-
-int main(int argc, char **argv)
-{
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

@@ -1,12 +1,12 @@
 #include <gtest/gtest.h>
 #include "include/Context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/thread_status.h"
 #include "kv/RocksDBStore.h"
+#include "test/unit.h"
 #include <iostream>
+
 using namespace std;
 
 const string dir("store_test_temp_dir");
@@ -72,14 +72,4 @@ TEST(RocksDBOption, interpret) {
   ASSERT_EQ(10, num_low_pri_threads);
   //high pri threads is flusher_threads
   ASSERT_EQ(5, num_high_pri_threads);
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

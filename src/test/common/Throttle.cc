@@ -25,8 +25,7 @@
 #include "common/Thread.h"
 #include "common/Throttle.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include <gtest/gtest.h>
+#include "test/unit.h"
 
 #include <thread>
 #include <atomic>
@@ -410,17 +409,6 @@ TEST(BackoffThrottle, oversaturated)
   ASSERT_GT(results.first, 85);
   ASSERT_LT(results.second.count(), 0.002);
   ASSERT_GT(results.second.count(), 0.0005);
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }
 
 /*

@@ -787,7 +787,7 @@ int main(int argc, char **argv) {
     ceph_options.push_back(i->c_str());
   }
 
-  global_init(
+  auto cct = global_init(
     &def_args, ceph_options, CEPH_ENTITY_TYPE_MON,
     CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);

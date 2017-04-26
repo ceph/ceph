@@ -118,6 +118,7 @@ TEST(SignalHandler, LogInternal)
 {
   g_ceph_context->_log->inject_segv();
   ASSERT_DEATH(derr << "foo" << dendl, ".*");
+  g_ceph_context->_log->reset_segv();
 }
 
 

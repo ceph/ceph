@@ -155,7 +155,8 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
 
   for (auto i = args.begin(); i != args.end(); ++i) {
     if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
@@ -182,33 +183,29 @@ int main(int argc, const char **argv)
   int r = rados.init_with_context(g_ceph_context);
   if (r < 0) {
     derr << "could not initialize RADOS handle" << dendl;
-    goto cleanup;
+    return EXIT_FAILURE;
   }
 
   r = rados.connect();
   if (r < 0) {
     derr << "error connecting to local cluster" << dendl;
-    goto cleanup;
+    return EXIT_FAILURE;
   }
 
   r = rados.ioctx_create(pool_name.c_str(), io_ctx);
   if (r < 0) {
     derr << "error finding local pool " << pool_name << ": "
 	 << cpp_strerror(r) << dendl;
-    goto cleanup;
+    return EXIT_FAILURE;
   }
 
   r = rbd.open(io_ctx, image, image_name.c_str());
   if (r < 0) {
     derr << "error opening image " << image_name << ": "
          << cpp_strerror(r) << dendl;
-    goto cleanup;
+    return EXIT_FAILURE;
   }
 
   write_image(image);
-
- cleanup:
-  g_ceph_context->put();
-
-  return r < 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+  return EXIT_SUCCESS;
 }

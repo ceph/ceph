@@ -440,10 +440,10 @@ namespace rgw {
     def_args.push_back("--keyring=$rgw_data/keyring");
     def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name.log");
 
-    global_init(&def_args, args,
-		CEPH_ENTITY_TYPE_CLIENT,
-		CODE_ENVIRONMENT_DAEMON,
-		CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+    cct = global_init(&def_args, args,
+		      CEPH_ENTITY_TYPE_CLIENT,
+		      CODE_ENVIRONMENT_DAEMON,
+		      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
     Mutex mutex("main");
     SafeTimer init_timer(g_ceph_context, mutex);
@@ -550,7 +550,7 @@ namespace rgw {
     rgw_perf_stop(g_ceph_context);
 
     dout(1) << "final shutdown" << dendl;
-    g_ceph_context->put();
+    cct.reset();
 
     ceph::crypto::shutdown();
 

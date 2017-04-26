@@ -134,11 +134,12 @@ void global_pre_init(std::vector < const char * > *alt_def_args,
   g_conf->complain_about_parse_errors(g_ceph_context);
 }
 
-void global_init(std::vector < const char * > *alt_def_args,
-		 std::vector < const char* >& args,
-		 uint32_t module_type, code_environment_t code_env,
-		 int flags,
-		 const char *data_dir_option, bool run_pre_init)
+boost::intrusive_ptr<CephContext>
+global_init(std::vector < const char * > *alt_def_args,
+	    std::vector < const char* >& args,
+	    uint32_t module_type, code_environment_t code_env,
+	    int flags,
+	    const char *data_dir_option, bool run_pre_init)
 {
   // Ensure we're not calling the global init functions multiple times.
   static bool first_run = true;
@@ -331,6 +332,18 @@ void global_init(std::vector < const char * > *alt_def_args,
 
   if (code_env == CODE_ENVIRONMENT_DAEMON && !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
     output_ceph_version();
+
+  return boost::intrusive_ptr<CephContext>{g_ceph_context, false};
+}
+
+void intrusive_ptr_add_ref(CephContext* cct)
+{
+  cct->get();
+}
+
+void intrusive_ptr_release(CephContext* cct)
+{
+  cct->put();
 }
 
 void global_print_banner(void)
