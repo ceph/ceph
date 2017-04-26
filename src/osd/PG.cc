@@ -7962,6 +7962,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
 
   PG *pg = context< RecoveryMachine >().pg;
   assert(!pg->actingbackfill.empty());
+  eversion_t since;
   for (set<pg_shard_t>::iterator i = pg->actingbackfill.begin();
        i != pg->actingbackfill.end();
        ++i) {
@@ -7995,7 +7996,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
 
     // We pull the log from the peer's last_epoch_started to ensure we
     // get enough log to detect divergent updates.
-    eversion_t since(pi.last_epoch_started, 0);
+    since.epoch = pi.last_epoch_started;
     assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
     if (pi.log_tail <= since) {
       ldout(pg->cct, 10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
