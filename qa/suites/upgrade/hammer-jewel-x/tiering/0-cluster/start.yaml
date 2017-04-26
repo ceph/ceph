@@ -1,0 +1,16 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on legacy crush tunables: false
+    log-whitelist:
+      - wrongly marked me down
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mon.c
+  - osd.2
+  - osd.3
+- - client.0
