@@ -18,6 +18,7 @@
 #include "ceph_crypto.h"
 #include "auth/Crypto.h"
 
+#include <nspr.h>
 #include <pthread.h>
 #include <stdlib.h>
 
@@ -77,12 +78,15 @@ void ceph::crypto::init(CephContext *cct)
   assert(crypto_context != NULL);
 }
 
-void ceph::crypto::shutdown()
+void ceph::crypto::shutdown(bool shared)
 {
   pthread_mutex_lock(&crypto_init_mutex);
   assert(crypto_refs > 0);
   if (--crypto_refs == 0) {
     NSS_ShutdownContext(crypto_context);
+    if (!shared) {
+      PR_Cleanup();
+    }
     crypto_context = NULL;
     crypto_init_pid = 0;
   }
