@@ -257,6 +257,7 @@ namespace librbd {
                                 const ceph::BitVector<2> &object_map);
 
     // operations on rbd_namespace objects
+    int namespace_add(librados::IoCtx *ioctx, const std::string &nspace);
     void namespace_add(librados::ObjectWriteOperation *op, std::string &nspace);
     void namespace_list_start(librados::ObjectReadOperation *op,
                               const std::string &start, uint64_t max_return);

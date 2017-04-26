@@ -1331,6 +1331,15 @@ namespace librbd {
       return namespace_list_finish(&it, namespaces);
     }
 
+    int namespace_add(librados::IoCtx *ioctx, const std::string &nspace)
+    {
+      bufferlist in_bl;
+      bufferlist out_bl;
+      ::encode(nspace, in_bl);
+
+      return ioctx->exec(RBD_NAMESPACE, "rbd", "namespace_add", in_bl, out_bl);
+    }
+
     void namespace_add(librados::ObjectWriteOperation *op,
 		       std::string &nspace)
     {
