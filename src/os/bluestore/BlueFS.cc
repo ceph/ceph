@@ -60,31 +60,42 @@ void BlueFS::_init_logger()
   b.add_u64_counter(l_bluefs_reclaim_bytes, "reclaim_bytes",
 		    "Bytes reclaimed by BlueStore");
   b.add_u64(l_bluefs_db_total_bytes, "db_total_bytes",
-	    "Total bytes (main db device)");
+	    "Total bytes (main db device)",
+	    "b", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_db_used_bytes, "db_used_bytes",
-	    "Used bytes (main db device)");
+	    "Used bytes (main db device)",
+	    "u", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_wal_total_bytes, "wal_total_bytes",
-	    "Total bytes (wal device)");
+	    "Total bytes (wal device)",
+	    "walb", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_wal_used_bytes, "wal_used_bytes",
-	    "Used bytes (wal device)");
+	    "Used bytes (wal device)",
+	    "walu", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_slow_total_bytes, "slow_total_bytes",
-	    "Total bytes (slow device)");
+	    "Total bytes (slow device)",
+	    "slob", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_slow_used_bytes, "slow_used_bytes",
-	    "Used bytes (slow device)");
-  b.add_u64(l_bluefs_num_files, "num_files", "File count");
-  b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log");
+	    "Used bytes (slow device)",
+	    "slou", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64(l_bluefs_num_files, "num_files", "File count",
+	    "f", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log",
+	    "jlen", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_u64_counter(l_bluefs_log_compactions, "log_compactions",
 		    "Compactions of the metadata log");
   b.add_u64_counter(l_bluefs_logged_bytes, "logged_bytes",
-		    "Bytes written to the metadata log", "j");
+		    "Bytes written to the metadata log", "j",
+		    PerfCountersBuilder::PRIO_CRITICAL);
   b.add_u64_counter(l_bluefs_files_written_wal, "files_written_wal",
 		    "Files written to WAL");
   b.add_u64_counter(l_bluefs_files_written_sst, "files_written_sst",
 		    "Files written to SSTs");
   b.add_u64_counter(l_bluefs_bytes_written_wal, "bytes_written_wal",
-		    "Bytes written to WAL", "wal");
+		    "Bytes written to WAL", "wal",
+		    PerfCountersBuilder::PRIO_CRITICAL);
   b.add_u64_counter(l_bluefs_bytes_written_sst, "bytes_written_sst",
-		    "Bytes written to SSTs", "sst");
+		    "Bytes written to SSTs", "sst",
+		    PerfCountersBuilder::PRIO_CRITICAL);
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
