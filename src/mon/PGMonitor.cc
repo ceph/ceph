@@ -1504,8 +1504,8 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   // near-target max pools
-  const map<int64_t,pg_pool_t>& pools = mon->osdmon()->osdmap.get_pools();
-  for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin();
+  auto& pools = mon->osdmon()->osdmap.get_pools();
+  for (auto p = pools.begin();
        p != pools.end(); ++p) {
     if ((!p->second.target_max_objects && !p->second.target_max_bytes) ||
         !pg_map.pg_pool_sum.count(p->first))

@@ -389,7 +389,7 @@ inline typename std::enable_if<!traits::supported>::type
 {
   __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
   encode(n, bl);
-  for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+  for (auto p = ls.begin(); p != ls.end(); ++p)
     encode(*p, bl);
 }
 template<class T, class Alloc, typename traits=denc_traits<T>>
@@ -401,7 +401,7 @@ inline typename std::enable_if<!traits::supported>::type
     unsigned pos = bl.length();
     unsigned n = 0;
     encode(n, bl);
-    for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p) {
+    for (auto p = ls.begin(); p != ls.end(); ++p) {
       n++;
       encode(*p, bl, features);
     }
@@ -411,7 +411,7 @@ inline typename std::enable_if<!traits::supported>::type
   } else {
     __u32 n = (__u32)(ls.size());    // FIXME: this is slow on a list.
     encode(n, bl);
-    for (typename std::list<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+    for (auto p = ls.begin(); p != ls.end(); ++p)
       encode(*p, bl, features);
   }
 }
@@ -436,7 +436,7 @@ inline void encode(const std::list<ceph::shared_ptr<T>, Alloc>& ls,
 {
   __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
   encode(n, bl);
-  for (typename std::list<ceph::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p)
+  for (auto p = ls.begin(); p != ls.end(); ++p)
     encode(**p, bl);
 }
 template<class T, class Alloc>
@@ -445,7 +445,7 @@ inline void encode(const std::list<ceph::shared_ptr<T>, Alloc>& ls,
 {
   __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
   encode(n, bl);
-  for (typename std::list<ceph::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p)
+  for (auto p = ls.begin(); p != ls.end(); ++p)
     encode(**p, bl, features);
 }
 template<class T, class Alloc>
@@ -469,7 +469,7 @@ inline typename std::enable_if<!traits::supported>::type
 {
   __u32 n = (__u32)(s.size());
   encode(n, bl);
-  for (typename std::set<T>::const_iterator p = s.begin(); p != s.end(); ++p)
+  for (auto p = s.begin(); p != s.end(); ++p)
     encode(*p, bl);
 }
 template<class T, class Comp, class Alloc, typename traits=denc_traits<T>>
@@ -490,7 +490,7 @@ template<class T, class Comp, class Alloc, typename traits=denc_traits<T>>
 inline typename std::enable_if<!traits::supported>::type
   encode_nohead(const std::set<T,Comp,Alloc>& s, bufferlist& bl)
 {
-  for (typename std::set<T,Comp>::const_iterator p = s.begin(); p != s.end(); ++p)
+  for (auto p = s.begin(); p != s.end(); ++p)
     encode(*p, bl);
 }
 template<class T, class Comp, class Alloc, typename traits=denc_traits<T>>
@@ -554,7 +554,7 @@ inline void encode(const std::multiset<T,Comp,Alloc>& s, bufferlist& bl)
 {
   __u32 n = (__u32)(s.size());
   encode(n, bl);
-  for (typename std::multiset<T,Comp>::const_iterator p = s.begin(); p != s.end(); ++p)
+  for (auto p = s.begin(); p != s.end(); ++p)
     encode(*p, bl);
 }
 template<class T, class Comp, class Alloc>
@@ -623,7 +623,7 @@ template<class T, class Alloc, typename traits=denc_traits<T>>
 inline typename std::enable_if<!traits::supported>::type
   encode_nohead(const std::vector<T,Alloc>& v, bufferlist& bl)
 {
-  for (typename std::vector<T>::const_iterator p = v.begin(); p != v.end(); ++p)
+  for (auto p = v.begin(); p != v.end(); ++p)
     encode(*p, bl);
 }
 template<class T, class Alloc, typename traits=denc_traits<T>>
@@ -643,7 +643,7 @@ inline void encode(const std::vector<ceph::shared_ptr<T>,Alloc>& v,
 {
   __u32 n = (__u32)(v.size());
   encode(n, bl);
-  for (typename std::vector<ceph::shared_ptr<T> >::const_iterator p = v.begin(); p != v.end(); ++p)
+  for (auto p = v.begin(); p != v.end(); ++p)
     if (*p)
       encode(**p, bl, features);
     else
@@ -655,7 +655,7 @@ inline void encode(const std::vector<ceph::shared_ptr<T>,Alloc>& v,
 {
   __u32 n = (__u32)(v.size());
   encode(n, bl);
-  for (typename std::vector<ceph::shared_ptr<T> >::const_iterator p = v.begin(); p != v.end(); ++p)
+  for (auto p = v.begin(); p != v.end(); ++p)
     if (*p)
       encode(**p, bl);
     else
@@ -708,7 +708,7 @@ inline typename std::enable_if<!t_traits::supported ||
 {
   __u32 n = (__u32)(m.size());
   encode(n, bl);
-  for (typename std::map<T,U,Comp>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  for (auto p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl);
     encode(p->second, bl);
   }
@@ -721,7 +721,7 @@ inline typename std::enable_if<!t_traits::supported ||
 {
   __u32 n = (__u32)(m.size());
   encode(n, bl);
-  for (typename std::map<T,U,Comp>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  for (auto p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl, features);
     encode(p->second, bl, features);
   }
@@ -758,7 +758,7 @@ inline typename std::enable_if<!t_traits::supported ||
 				 !u_traits::supported>::type
   encode_nohead(const std::map<T,U,Comp,Alloc>& m, bufferlist& bl)
 {
-  for (typename std::map<T,U,Comp>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  for (auto p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl);
     encode(p->second, bl);
   }
@@ -769,7 +769,7 @@ inline typename std::enable_if<!t_traits::supported ||
 				 !u_traits::supported>::type
   encode_nohead(const std::map<T,U,Comp,Alloc>& m, bufferlist& bl, uint64_t features)
 {
-  for (typename std::map<T,U,Comp>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  for (auto p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl, features);
     encode(p->second, bl, features);
   }
@@ -812,8 +812,7 @@ template<class T, class U, class Comp, class Alloc,
 {
   __u32 n = (__u32)(m.size());
   encode(n, bl);
-  for (typename boost::container::flat_map<T,U,Comp>::const_iterator p
-	 = m.begin(); p != m.end(); ++p) {
+  for (auto p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl, features);
     encode(p->second, bl, features);
   }
@@ -852,8 +851,7 @@ template<class T, class U, class Comp, class Alloc,
   encode_nohead(const boost::container::flat_map<T,U,Comp,Alloc>& m,
 		bufferlist& bl)
 {
-  for (typename boost::container::flat_map<T,U,Comp>::const_iterator p
-	 = m.begin(); p != m.end(); ++p) {
+  for (auto p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl);
     encode(p->second, bl);
   }
@@ -865,8 +863,7 @@ template<class T, class U, class Comp, class Alloc,
   encode_nohead(const boost::container::flat_map<T,U,Comp,Alloc>& m,
 		bufferlist& bl, uint64_t features)
 {
-  for (typename boost::container::flat_map<T,U,Comp>::const_iterator p
-	 = m.begin(); p != m.end(); ++p) {
+  for (auto p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl, features);
     encode(p->second, bl, features);
   }
@@ -892,7 +889,7 @@ inline void encode(const std::multimap<T,U,Comp,Alloc>& m, bufferlist& bl)
 {
   __u32 n = (__u32)(m.size());
   encode(n, bl);
-  for (typename std::multimap<T,U,Comp>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  for (auto p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl);
     encode(p->second, bl);
   }
@@ -918,7 +915,7 @@ inline void encode(const unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl,
 {
   __u32 n = (__u32)(m.size());
   encode(n, bl);
-  for (typename unordered_map<T,U,Hash,Pred>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  for (auto p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl, features);
     encode(p->second, bl, features);
   }
@@ -928,7 +925,7 @@ inline void encode(const unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist& bl)
 {
   __u32 n = (__u32)(m.size());
   encode(n, bl);
-  for (typename unordered_map<T,U,Hash,Pred,Alloc>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  for (auto p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl);
     encode(p->second, bl);
   }
@@ -952,7 +949,7 @@ inline void encode(const ceph::unordered_set<T,Hash,Pred,Alloc>& m, bufferlist& 
 {
   __u32 n = (__u32)(m.size());
   encode(n, bl);
-  for (typename ceph::unordered_set<T,Hash,Pred>::const_iterator p = m.begin(); p != m.end(); ++p)
+  for (auto p = m.begin(); p != m.end(); ++p)
     encode(*p, bl);
 }
 template<class T, class Hash, class Pred, class Alloc>
@@ -974,7 +971,7 @@ inline void encode(const std::deque<T,Alloc>& ls, bufferlist& bl, uint64_t featu
 {
   __u32 n = ls.size();
   encode(n, bl);
-  for (typename std::deque<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+  for (auto p = ls.begin(); p != ls.end(); ++p)
     encode(*p, bl, features);
 }
 template<class T, class Alloc>
@@ -982,7 +979,7 @@ inline void encode(const std::deque<T,Alloc>& ls, bufferlist& bl)
 {
   __u32 n = ls.size();
   encode(n, bl);
-  for (typename std::deque<T>::const_iterator p = ls.begin(); p != ls.end(); ++p)
+  for (auto p = ls.begin(); p != ls.end(); ++p)
     encode(*p, bl);
 }
 template<class T, class Alloc>

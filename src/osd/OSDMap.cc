@@ -30,6 +30,10 @@
  
 #define dout_subsys ceph_subsys_osd
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMap, osdmap, osdmap);
+MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMap::Incremental, osdmap_inc, osdmap);
+
+
 // ----------------------------------
 // osd_info_t
 
@@ -1190,8 +1194,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   }
   if (entity_type == CEPH_ENTITY_TYPE_OSD) {
     for (auto &erasure_code_profile : erasure_code_profiles) {
-      const map<string,string> &profile = erasure_code_profile.second;
-      const auto &plugin = profile.find("plugin");
+      auto& profile = erasure_code_profile.second;
+      const auto& plugin = profile.find("plugin");
       if (plugin != profile.end()) {
 	if (plugin->second == "isa" || plugin->second == "lrc")
 	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
@@ -1355,7 +1359,7 @@ void OSDMap::clean_temps(CephContext *cct,
     vector<int> raw_up;
     int primary;
     tmpmap.pg_to_raw_up(pg.first, &raw_up, &primary);
-    if (raw_up == pg.second) {
+    if (vectors_equal(raw_up, pg.second)) {
       ldout(cct, 10) << __func__ << "  removing pg_temp " << pg.first << " "
 		     << pg.second << " that matches raw_up mapping" << dendl;
       if (osdmap.pg_temp->count(pg.first))
@@ -1714,7 +1718,7 @@ void OSDMap::_apply_remap(const pg_pool_t& pi, pg_t raw_pg, vector<int> *raw) co
 	return;
       }
     }
-    *raw = p->second;
+    *raw = vector<int>(p->second.begin(), p->second.end());
     return;
   }
 
@@ -2364,7 +2368,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
     ::decode(*pg_temp, bl);
     ::decode(*primary_temp, bl);
     if (struct_v >= 2) {
-      osd_primary_affinity.reset(new vector<__u32>);
+      osd_primary_affinity.reset(new mempool::osdmap::vector<__u32>);
       ::decode(*osd_primary_affinity, bl);
       if (osd_primary_affinity->empty())
 	osd_primary_affinity.reset();
@@ -2461,8 +2465,9 @@ void OSDMap::post_decode()
   _calc_up_osd_features();
 }
 
-void OSDMap::dump_erasure_code_profiles(const map<string,map<string,string> > &profiles,
-					Formatter *f)
+void OSDMap::dump_erasure_code_profiles(
+  const mempool::osdmap::map<string,map<string,string>>& profiles,
+  Formatter *f)
 {
   f->open_object_section("erasure_code_profiles");
   for (const auto &profile : profiles) {
@@ -3321,7 +3326,7 @@ int OSDMap::clean_pg_upmaps(
     vector<int> raw;
     int primary;
     pg_to_raw_osds(p.first, &raw, &primary);
-    if (raw == p.second) {
+    if (vectors_equal(raw, p.second)) {
       ldout(cct, 10) << " removing redundant pg_upmap " << p.first << " "
 		     << p.second << dendl;
       pending_inc->old_pg_upmap.insert(p.first);
@@ -3332,7 +3337,7 @@ int OSDMap::clean_pg_upmaps(
     vector<int> raw;
     int primary;
     pg_to_raw_osds(p.first, &raw, &primary);
-    vector<pair<int,int>> newmap;
+    mempool::osdmap::vector<pair<int,int>> newmap;
     for (auto& q : p.second) {
       if (std::find(raw.begin(), raw.end(), q.first) != raw.end()) {
 	newmap.push_back(q);
@@ -3530,7 +3535,7 @@ int OSDMap::calc_pg_upmaps(
 	  continue;
 	}
 	assert(orig != out);
-	vector<pair<int,int>>& rmi = tmp.pg_upmap_items[pg];
+	auto& rmi = tmp.pg_upmap_items[pg];
 	for (unsigned i = 0; i < out.size(); ++i) {
 	  if (orig[i] != out[i]) {
 	    rmi.push_back(make_pair(orig[i], out[i]));

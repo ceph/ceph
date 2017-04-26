@@ -454,9 +454,8 @@ int main(int argc, const char **argv)
     vector<int> size(30, 0);
     if (test_random)
       srand(getpid());
-    map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
-    for (map<int64_t,pg_pool_t>::iterator p = pools.begin();
-	 p != pools.end(); ++p) {
+    auto& pools = osdmap.get_pools();
+    for (auto p = pools.begin(); p != pools.end(); ++p) {
       if (pool != -1 && p->first != pool)
 	continue;
       if (pg_num > 0) 

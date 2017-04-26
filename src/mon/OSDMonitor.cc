@@ -1093,7 +1093,9 @@ void OSDMonitor::prime_pg_temp(
   {
     Mutex::Locker l(prime_pg_temp_lock);
     // do not touch a mapping if a change is pending
-    pending_inc.new_pg_temp.emplace(pgid, acting);
+    pending_inc.new_pg_temp.emplace(
+      pgid,
+      mempool::osdmap::vector<int>(acting.begin(), acting.end()));
   }
 }
 
@@ -2631,7 +2633,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
 {
   MOSDPGTemp *m = static_cast<MOSDPGTemp*>(op->get_req());
   dout(10) << "preprocess_pgtemp " << *m << dendl;
-  vector<int> empty;
+  mempool::osdmap::vector<int> empty;
   int from = m->get_orig_source().num();
   size_t ignore_cnt = 0;
 
@@ -2651,7 +2653,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     goto ignore;
   }
 
-  for (map<pg_t,vector<int32_t> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
+  for (auto p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
     dout(20) << " " << p->first
 	     << (osdmap.pg_temp->count(p->first) ? (*osdmap.pg_temp)[p->first] : empty)
              << " -> " << p->second << dendl;
@@ -2695,9 +2697,10 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
     // change?
     //  NOTE: we assume that this will clear pg_primary, so consider
     //        an existing pg_primary field to imply a change
-    if (p->second.size() && (osdmap.pg_temp->count(p->first) == 0 ||
-			     (*osdmap.pg_temp)[p->first] != p->second ||
-			     osdmap.primary_temp->count(p->first)))
+    if (p->second.size() &&
+	(osdmap.pg_temp->count(p->first) == 0 ||
+	 !vectors_equal((*osdmap.pg_temp)[p->first], p->second) ||
+	 osdmap.primary_temp->count(p->first)))
       return false;
   }
 
@@ -2744,7 +2747,8 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
                << ": pool has been removed" << dendl;
       continue;
     }
-    pending_inc.new_pg_temp[p->first] = p->second;
+    pending_inc.new_pg_temp[p->first] =
+      mempool::osdmap::vector<int>(p->second.begin(), p->second.end());
 
     // unconditionally clear pg_primary (until this message can encode
     // a change for that, too.. at which point we need to also fix
@@ -3136,10 +3140,11 @@ void OSDMonitor::check_pg_creates_sub(Subscription *sub)
   }
 }
 
-void OSDMonitor::scan_for_creating_pgs(const map<int64_t,pg_pool_t>& pools,
-				       const set<int64_t>& removed_pools,
-				       utime_t modified,
-				       creating_pgs_t* creating_pgs) const
+void OSDMonitor::scan_for_creating_pgs(
+  const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
+  const mempool::osdmap::set<int64_t>& removed_pools,
+  utime_t modified,
+  creating_pgs_t* creating_pgs) const
 {
   for (auto& p : pools) {
     int64_t poolid = p.first;
@@ -4793,13 +4798,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     f->close_section();
     f->flush(rdata);
   } else if (prefix == "osd erasure-code-profile ls") {
-    const map<string,map<string,string> > &profiles =
-      osdmap.get_erasure_code_profiles();
+    const auto &profiles = osdmap.get_erasure_code_profiles();
     if (f)
       f->open_array_section("erasure-code-profiles");
-    for(map<string,map<string,string> >::const_iterator i = profiles.begin();
-	i != profiles.end();
-	++i) {
+    for (auto i = profiles.begin(); i != profiles.end(); ++i) {
       if (f)
         f->dump_string("profile", i->first.c_str());
       else
@@ -4863,10 +4865,8 @@ bool OSDMonitor::update_pools_status()
 
   bool ret = false;
 
-  const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
-  for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
-       it != pools.end();
-       ++it) {
+  auto& pools = osdmap.get_pools();
+  for (auto it = pools.begin(); it != pools.end(); ++it) {
     if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
       continue;
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
@@ -4914,9 +4914,8 @@ void OSDMonitor::get_pools_health(
     list<pair<health_status_t,string> >& summary,
     list<pair<health_status_t,string> > *detail) const
 {
-  const map<int64_t,pg_pool_t>& pools = osdmap.get_pools();
-  for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin();
-       it != pools.end(); ++it) {
+  auto& pools = osdmap.get_pools();
+  for (auto it = pools.begin(); it != pools.end(); ++it) {
     if (!mon->pgmon()->pg_map.pg_pool_sum.count(it->first))
       continue;
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
@@ -5246,9 +5245,10 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
   return false;
 }
 
-bool OSDMonitor::erasure_code_profile_in_use(const map<int64_t, pg_pool_t> &pools,
-					     const string &profile,
-					     ostream *ss)
+bool OSDMonitor::erasure_code_profile_in_use(
+  const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
+  const string &profile,
+  ostream *ss)
 {
   bool found = false;
   for (map<int64_t, pg_pool_t>::const_iterator p = pools.begin();
@@ -6285,9 +6285,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     
-    const map<int64_t,pg_pool_t> &osdmap_pools = osdmap.get_pools();
-    map<int64_t,pg_pool_t>::const_iterator pit;
-    for (pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
+    const auto& osdmap_pools = osdmap.get_pools();
+    for (auto pit = osdmap_pools.begin(); pit != osdmap_pools.end(); ++pit) {
       const int64_t pool_id = pit->first;
       const pg_pool_t &pool = pit->second;
       int ruleno = pool.get_crush_ruleset();
@@ -7504,7 +7503,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       new_pg_temp.push_back(osd);
     }
 
-    pending_inc.new_pg_temp[pgid] = new_pg_temp;
+    pending_inc.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
+      new_pg_temp.begin(), new_pg_temp.end());
     ss << "set " << pgid << " pg_temp mapping to " << new_pg_temp;
     goto update;
   } else if (prefix == "osd primary-temp") {
@@ -7606,7 +7606,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       new_pg_upmap.push_back(osd);
     }
 
-    pending_inc.new_pg_upmap[pgid] = new_pg_upmap;
+    pending_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
+      new_pg_upmap.begin(), new_pg_upmap.end());
     ss << "set " << pgid << " pg_upmap mapping to " << new_pg_upmap;
     goto update;
   } else if (prefix == "osd rm-pg-upmap") {
@@ -7722,7 +7723,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       new_pg_upmap_items.push_back(make_pair(from, to));
     }
 
-    pending_inc.new_pg_upmap_items[pgid] = new_pg_upmap_items;
+    pending_inc.new_pg_upmap_items[pgid] =
+      mempool::osdmap::vector<pair<int32_t,int32_t>>(
+      new_pg_upmap_items.begin(), new_pg_upmap_items.end());
     ss << "set " << pgid << " pg_upmap_items mapping to " << new_pg_upmap_items;
     goto update;
   } else if (prefix == "osd rm-pg-upmap-items") {
@@ -7853,7 +7856,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
          << cmd_vartype_stringify(cmdmap["weights"]) << "'";
       goto reply;
     }
-    pending_inc.new_weight = std::move(weights);
+    pending_inc.new_weight.insert(weights.begin(), weights.end());
     wait_for_finished_proposal(
 	op,
 	new Monitor::C_Command(mon, op, 0, rs, rdata, get_last_committed() + 1));
@@ -8917,7 +8920,7 @@ done:
     string no_increasing;
     cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
     string out_str;
-    map<int32_t, uint32_t> new_weights;
+    mempool::osdmap::map<int32_t, uint32_t> new_weights;
     err = reweight::by_utilization(osdmap,
 				   mon->pgmon()->pg_map,
 				   oload,
@@ -9393,7 +9396,7 @@ int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
   pending_inc.old_pools.insert(pool);
 
   // remove any pg_temp mappings for this pool too
-  for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
+  for (auto p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
        ++p) {
     if (p->first.pool() == (uint64_t)pool) {
@@ -9402,7 +9405,7 @@ int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
       pending_inc.new_pg_temp[p->first].clear();
     }
   }
-  for (map<pg_t,int32_t>::iterator p = osdmap.primary_temp->begin();
+  for (auto p = osdmap.primary_temp->begin();
       p != osdmap.primary_temp->end();
       ++p) {
     if (p->first.pool() == (uint64_t)pool) {
