@@ -51,18 +51,9 @@ void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id)
  * acceptable in bucket names and thus qualified buckets cannot conflict
  * with the legacy or S3 buckets.
  */
-void rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry) {
-  if (bucket_name.empty()) {
-    bucket_entry.clear();
-  } else if (tenant_name.empty()) {
-    bucket_entry = bucket_name;
-  } else {
-    bucket_entry = tenant_name + "/" + bucket_name;
-  }
-}
-
-string rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_name) {
-  string bucket_entry;
+std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
+                                       const std::string& bucket_name) {
+  std::string bucket_entry;
 
   if (bucket_name.empty()) {
     bucket_entry.clear();
