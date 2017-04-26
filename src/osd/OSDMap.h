@@ -262,7 +262,10 @@ private:
   ceph::shared_ptr<CrushWrapper> crush;       // hierarchical map
 
   friend class OSDMonitor;
-  friend class PGMonitor;
+// <<<<<<< HEAD
+//   friend class PGMapUpdater;
+// =======
+// >>>>>>> 78b6eeb... mon: remove need for friending OSDMap to PGMapUpdater
 
  public:
   OSDMap() : epoch(0), 

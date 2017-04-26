@@ -123,8 +123,6 @@
 
 COMMAND("pg stat", "show placement group status.", "pg", "r", "cli,rest")
 COMMAND("pg getmap", "get binary pg map to -o/stdout", "pg", "r", "cli,rest")
-COMMAND("pg send_pg_creates", "trigger pg creates to be issued",\
-	"pg", "rw", "cli,rest")
 COMMAND("pg dump " \
 	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|delta|pools|osds|pgs|pgs_brief,n=N,req=false", \
 	"show human-readable versions of pg map (only 'all' valid with plain)", "pg", "r", "cli,rest")

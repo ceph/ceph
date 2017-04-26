@@ -2899,10 +2899,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       if (f)
         f->open_object_section("stats");
 
-      pgmon()->dump_fs_stats(ds, f.get(), verbose);
+      pgmon()->pg_map.dump_fs_stats(&ds, f.get(), verbose);
       if (!f)
         ds << '\n';
-      pgmon()->dump_pool_stats(ds, f.get(), verbose);
+      pgmon()->pg_map.dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
 
       if (f) {
         f->close_section();
