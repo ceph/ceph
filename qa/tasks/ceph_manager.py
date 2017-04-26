@@ -1771,7 +1771,7 @@ class CephManager:
         Wait for snap trimming on pool to end
         """
         POLL_PERIOD = 10
-        FATAL_TIMEOUT = 600
+        FATAL_TIMEOUT = 1200
         start = time.time()
         poolnum = self.get_pool_num(pool)
         poolnumstr = "%s." % (poolnum,)
