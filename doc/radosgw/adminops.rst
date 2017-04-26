@@ -215,8 +215,7 @@ TBD.
 Get User Info
 =============
 
-Get user information. If no user is specified returns the list of all users along with suspension
-information.
+Get user information.
 
 :caps: users=read
 
