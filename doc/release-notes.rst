@@ -42,8 +42,9 @@ Major changes from v12.0.1
   by "ceph tell mds.<id> ..."
 * RGW introduces server side encryption of uploaded objects with 3 options for
   the management of encryption keys, automatic encryption (only recommended for
-  test setups), customer provided keys similar to Amazon SSE KMS specification &
-  using a key management service (openstack barbician)
+  test setups), customer provided keys similar to Amazon SSE-C specification and
+  using a key management service (Openstack Barbician) similar to Amazon SSE-KMS
+  specification.
 
 Notable Changes
 ---------------
