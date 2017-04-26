@@ -76,7 +76,14 @@ def meta_sync_status(zone):
     log.debug('sync_markers=%s', sync_markers)
     assert(num_shards == len(sync_markers))
 
-    markers = {i: m['val']['marker'] for i, m in enumerate(sync_markers)}
+    markers={}
+    for i in range(num_shards):
+        # get marker, only if it's an incremental marker for the same realm epoch
+        if realm_epoch > sync_markers[i]['val']['realm_epoch'] or sync_markers[i]['val']['state'] == 0:
+            markers[i] = ''
+        else:
+            markers[i] = sync_markers[i]['val']['marker']
+
     return period, realm_epoch, num_shards, markers
 
 def meta_master_log_status(master_zone):

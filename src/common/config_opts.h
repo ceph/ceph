@@ -1656,7 +1656,6 @@ OPTION(rgw_sync_data_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(rgw_sync_meta_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
 
 
-OPTION(rgw_realm_reconfigure_delay, OPT_DOUBLE, 2) // seconds to wait before reloading realm configuration
 OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
 
