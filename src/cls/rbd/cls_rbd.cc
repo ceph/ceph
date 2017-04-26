@@ -2860,6 +2860,29 @@ int namespace_add(cls_method_context_t hctx, bufferlist *in,
   return cls_cxx_map_set_val(hctx, get_key_from_nspace(ns), &bl);
 }
 
+int namespace_remove(cls_method_context_t hctx, bufferlist *in,
+		     bufferlist *out)
+{
+  string ns;
+  bufferlist bl;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(ns, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "remove namespace: %s\n", ns.c_str());
+  int r = cls_cxx_map_remove_key(hctx, get_key_from_nspace(ns));
+  if (r < 0) {
+    CLS_ERR("error remove namespace: %s: %s", ns.c_str(), cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
 
 /**
  * Input:
@@ -5246,6 +5269,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_get_namespace;
   cls_method_handle_t h_set_namespace;
   cls_method_handle_t h_namespace_add;
+  cls_method_handle_t h_namespace_remove;
   cls_method_handle_t h_namespace_list;
   cls_method_handle_t h_old_snapshots_list;
   cls_method_handle_t h_old_snapshot_add;
@@ -5452,6 +5476,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "namespace_add",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  namespace_add, &h_namespace_add);
+  cls_register_cxx_method(h_class, "namespace_remove",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  namespace_remove, &h_namespace_remove);
   cls_register_cxx_method(h_class, "namespace_list",
 			  CLS_METHOD_RD,
 			  namespace_list, &h_namespace_list);
