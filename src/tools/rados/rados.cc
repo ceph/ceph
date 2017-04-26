@@ -293,15 +293,20 @@ static int do_get(IoCtx& io_ctx, RadosStriper& striper,
   uint64_t offset = 0;
   int ret;
   while (true) {
-    bufferlist outdata;
+    bufferlist outdatatemp;
     if (use_striper) {
-      ret = striper.read(oid, &outdata, op_size, offset);
+      ret = striper.read(oid, &outdatatemp, op_size, offset);
     } else {
-      ret = io_ctx.read(oid, outdata, op_size, offset);
+      ret = io_ctx.read(oid, outdatatemp, op_size, offset);
     }
     if (ret <= 0) {
       goto out;
     }
+
+    bufferlist outdata;
+	uint32_t len = outdatatemp.length();
+	outdatatemp.copy((unsigned)4,  len - (unsigned)4, outdata);
+
     ret = outdata.write_fd(fd);
     if (ret < 0) {
       cerr << "error writing to file: " << cpp_strerror(ret) << std::endl;
@@ -311,6 +316,7 @@ static int do_get(IoCtx& io_ctx, RadosStriper& striper,
       break;
     offset += outdata.length();
   }
+  cout<<std::endl;
   ret = 0;
 
  out:
