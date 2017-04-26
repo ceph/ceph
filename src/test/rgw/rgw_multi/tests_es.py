@@ -53,7 +53,7 @@ def do_check_mdsearch(conn, bucket, src_keys, req_str, src_filter):
     result_keys = req.search(sort_key = lambda k: (k.name, k.version_id))
     verify_search(src_keys, result_keys, src_filter)
 
-def test_es_object_search_by_name():
+def test_es_object_search():
     check_es_configured()
 
     realm = get_realm()
@@ -61,18 +61,24 @@ def test_es_object_search_by_name():
     zonegroup_conns = ZonegroupConns(zonegroup)
     buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
 
-    objnames = [ 'foo1', 'foo2', 'foo3', 'foo4' ]
-    content = 'asdasd'
+    min_size = 10
+    content = 'a' * min_size
 
     src_keys = []
 
     owner = None
 
+    max_keys = 5
+
+    etags = []
+    names = []
+
     # don't wait for meta sync just yet
     for zone, bucket in zone_bucket.items():
-        for objname in objnames:
+        for count in xrange(0, max_keys):
+            objname = 'foo' + str(count)
             k = new_key(zone, bucket.name, objname)
-            k.set_contents_from_string(content)
+            k.set_contents_from_string(content + 'x' * count)
 
             if not owner:
                 for list_key in bucket.list_versions():
@@ -83,6 +89,9 @@ def test_es_object_search_by_name():
             k.owner = owner # owner is not set when doing get_key()
 
             src_keys.append(k)
+            names.append(k.name)
+
+    max_size = min_size + count - 1
 
     zonegroup_meta_checkpoint(zonegroup)
 
@@ -95,11 +104,37 @@ def test_es_object_search_by_name():
 
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
 
+            # check name
             do_check_mdsearch(target_conn.conn, None, src_keys , 'bucket == ' + bucket.name, lambda k: True)
             do_check_mdsearch(target_conn.conn, bucket, src_keys , 'bucket == ' + bucket.name, lambda k: k.bucket.name == bucket.name)
-            # req = MDSearch(target_conn.conn, bucket.name, 'bucket == ' + bucket.name)
-            # result_keys = req.search(sort_key = lambda k: (k.name, k.version_id))
-            # verify_search(src_keys, result_keys, lambda k: k.bucket.name == bucket.name)
-            
 
+            for key in src_keys:
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name < ' + key.name, lambda k: k.name < key.name)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name <= ' + key.name, lambda k: k.name <= key.name)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name == ' + key.name, lambda k: k.name == key.name)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name >= ' + key.name, lambda k: k.name >= key.name)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name > ' + key.name, lambda k: k.name > key.name)
+
+            do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name == ' + names[0] + ' or name >= ' + names[2],
+                              lambda k: k.name == names[0] or k.name >= names[2])
+
+            # check etag
+            for key in src_keys:
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'etag < ' + key.etag[1:-1], lambda k: k.etag < key.etag)
+            for key in src_keys:
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'etag == ' + key.etag[1:-1], lambda k: k.etag == key.etag)
+            for key in src_keys:
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'etag > ' + key.etag[1:-1], lambda k: k.etag > key.etag)
+
+            # check size
+            for key in src_keys:
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'size < ' + str(key.size), lambda k: k.size < key.size)
+            for key in src_keys:
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'size <= ' + str(key.size), lambda k: k.size <= key.size)
+            for key in src_keys:
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'size == ' + str(key.size), lambda k: k.size == key.size)
+            for key in src_keys:
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'size >= ' + str(key.size), lambda k: k.size >= key.size)
+            for key in src_keys:
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'size > ' + str(key.size), lambda k: k.size > key.size)
 
