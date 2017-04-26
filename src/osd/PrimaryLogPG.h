@@ -1311,6 +1311,7 @@ protected:
 
   friend class C_ChecksumRead;
 
+  int do_extent_cmp(OpContext *ctx, OSDOp& osd_op);
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 
   bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
