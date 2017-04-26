@@ -43,9 +43,11 @@ class Cluster(multisite.Cluster):
         self.cluster_id = cluster_id
         self.needs_reset = True
 
-    def admin(self, args = [], **kwargs):
+    def admin(self, args = None, **kwargs):
         """ radosgw-admin command """
-        cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', self.cluster_id] + args
+        cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', self.cluster_id]
+        if args:
+            cmd += args
         if kwargs.pop('read_only', False):
             cmd += ['--rgw-cache-enabled', 'false']
         return bash(cmd, **kwargs)
@@ -67,14 +69,15 @@ class Gateway(multisite.Gateway):
         super(Gateway, self).__init__(*args, **kwargs)
         self.id = client_id
 
-    def start(self, args = []):
+    def start(self, args = None):
         """ start the gateway """
         assert(self.cluster)
         cmd = [mstart_path + 'mrgw.sh', self.cluster.cluster_id, str(self.port)]
         if self.id:
             cmd += ['-i', self.id]
         cmd += ['--debug-rgw=20', '--debug-ms=1']
-        cmd += args
+        if args:
+            cmd += args
         bash(cmd)
 
     def stop(self):

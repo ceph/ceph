@@ -6,7 +6,7 @@ class Cluster:
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def admin(self, args = [], **kwargs):
+    def admin(self, args = None, **kwargs):
         """ execute a radosgw-admin command """
         pass
 
@@ -57,15 +57,15 @@ class SystemObject:
         """ update internal state based on json data """
         pass
 
-    def command(self, cluster, cmd, args = [], **kwargs):
+    def command(self, cluster, cmd, args = None, **kwargs):
         """ run the given command and return the output and retcode """
-        args = self.build_command(cmd) + args
+        args = self.build_command(cmd) + (args or [])
         return cluster.admin(args, **kwargs)
 
-    def json_command(self, cluster, cmd, args = [], **kwargs):
+    def json_command(self, cluster, cmd, args = None, **kwargs):
         """ run the given command, parse the output and return the resulting
         data and retcode """
-        (s, r) = self.command(cluster, cmd, args, **kwargs)
+        (s, r) = self.command(cluster, cmd, args or [], **kwargs)
         if r == 0:
             output = s.decode('utf-8')
             output = output[output.find('{'):] # trim extra output before json
@@ -76,12 +76,12 @@ class SystemObject:
 
     # mixins for supported commands
     class Create(object):
-        def create(self, cluster, args = [], **kwargs):
+        def create(self, cluster, args = None, **kwargs):
             """ create the object with the given arguments """
             return self.json_command(cluster, 'create', args, **kwargs)
 
     class Delete(object):
-        def delete(self, cluster, args = [], **kwargs):
+        def delete(self, cluster, args = None, **kwargs):
             """ delete the object """
             # not json_command() because delete has no output
             (_, r) = self.command(cluster, 'delete', args, **kwargs)
@@ -90,19 +90,19 @@ class SystemObject:
             return r
 
     class Get(object):
-        def get(self, cluster, args = [], **kwargs):
+        def get(self, cluster, args = None, **kwargs):
             """ read the object from storage """
             kwargs['read_only'] = True
             return self.json_command(cluster, 'get', args, **kwargs)
 
     class Set(object):
-        def set(self, cluster, data, args = [], **kwargs):
+        def set(self, cluster, data, args = None, **kwargs):
             """ set the object by json """
             kwargs['stdin'] = StringIO(json.dumps(data))
             return self.json_command(cluster, 'set', args, **kwargs)
 
     class Modify(object):
-        def modify(self, cluster, args = [], **kwargs):
+        def modify(self, cluster, args = None, **kwargs):
             """ modify the object with the given arguments """
             return self.json_command(cluster, 'modify', args, **kwargs)
 
@@ -110,11 +110,11 @@ class SystemObject:
     class GetSet(Get, Set): pass
 
 class Zone(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, SystemObject.Modify):
-    def __init__(self, name, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = []):
+    def __init__(self, name, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = None):
         self.name = name
         self.zonegroup = zonegroup
         self.cluster = cluster
-        self.gateways = gateways
+        self.gateways = gateways or []
         super(Zone, self).__init__(data, zone_id)
 
     def zone_arg(self):
@@ -137,7 +137,7 @@ class Zone(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, SystemO
         self.id = data['id']
         self.name = data['name']
 
-    def start(self, args = []):
+    def start(self, args = None):
         """ start all gateways """
         for g in self.gateways:
             g.start(args)
@@ -154,10 +154,10 @@ class Zone(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, SystemO
         return self.zonegroup.realm() if self.zonegroup else None
 
 class ZoneGroup(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, SystemObject.Modify):
-    def __init__(self, name, period = None, data = None, zonegroup_id = None, zones = [], master_zone  = None):
+    def __init__(self, name, period = None, data = None, zonegroup_id = None, zones = None, master_zone  = None):
         self.name = name
         self.period = period
-        self.zones = zones
+        self.zones = zones or []
         self.master_zone = master_zone
         super(ZoneGroup, self).__init__(data, zonegroup_id)
 
@@ -192,18 +192,18 @@ class ZoneGroup(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, Sy
         if not self.master_zone or master_id != self.master_zone.id:
             self.master_zone = self.zone_by_id(master_id)
 
-    def add(self, cluster, zone, args = [], **kwargs):
+    def add(self, cluster, zone, args = None, **kwargs):
         """ add an existing zone to the zonegroup """
-        args += zone.zone_arg()
+        args = zone.zone_arg() + (args or [])
         (data, r) = self.json_command(cluster, 'add', args, **kwargs)
         if r == 0:
             zone.zonegroup = self
             self.zones.append(zone)
         return (data, r)
 
-    def remove(self, cluster, zone, args = [], **kwargs):
+    def remove(self, cluster, zone, args = None, **kwargs):
         """ remove an existing zone from the zonegroup """
-        args += zone.zone_arg()
+        args = zone.zone_arg() + (args or [])
         (data, r) = self.json_command(cluster, 'remove', args, **kwargs)
         if r == 0:
             zone.zonegroup = None
@@ -214,9 +214,9 @@ class ZoneGroup(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet, Sy
         return self.period.realm if self.period else None
 
 class Period(SystemObject, SystemObject.Get):
-    def __init__(self, realm = None, data = None, period_id = None, zonegroups = [], master_zonegroup = None):
+    def __init__(self, realm = None, data = None, period_id = None, zonegroups = None, master_zonegroup = None):
         self.realm = realm
-        self.zonegroups = zonegroups
+        self.zonegroups = zonegroups or []
         self.master_zonegroup = master_zonegroup
         super(Period, self).__init__(data, period_id)
 
@@ -238,18 +238,18 @@ class Period(SystemObject, SystemObject.Get):
         if not self.master_zonegroup or master_id != self.master_zonegroup.id:
             self.master_zonegroup = self.zonegroup_by_id(master_id)
 
-    def update(self, zone, args = [], **kwargs):
+    def update(self, zone, args = None, **kwargs):
         """ run 'radosgw-admin period update' on the given zone """
         assert(zone.cluster)
-        args = zone.zone_args() + args
+        args = zone.zone_args() + (args or [])
         if kwargs.pop('commit', False):
             args.append('--commit')
         return self.json_command(zone.cluster, 'update', args, **kwargs)
 
-    def commit(self, zone, args = [], **kwargs):
+    def commit(self, zone, args = None, **kwargs):
         """ run 'radosgw-admin period commit' on the given zone """
         assert(zone.cluster)
-        args = zone.zone_args() + args
+        args = zone.zone_args() + (args or [])
         return self.json_command(zone.cluster, 'commit', args, **kwargs)
 
 class Realm(SystemObject, SystemObject.CreateDelete, SystemObject.GetSet):
@@ -298,9 +298,9 @@ class Credentials:
         return ['--access-key', self.access_key, '--secret', self.secret]
 
 class User(SystemObject):
-    def __init__(self, uid, data = None, name = None, credentials = []):
+    def __init__(self, uid, data = None, name = None, credentials = None):
         self.name = name
-        self.credentials = credentials
+        self.credentials = credentials or []
         super(User, self).__init__(data, uid)
 
     def user_arg(self):
@@ -317,21 +317,21 @@ class User(SystemObject):
         self.name = data['display_name']
         self.credentials = [Credentials(k['access_key'], k['secret_key']) for k in data['keys']]
 
-    def create(self, zone, args = [], **kwargs):
+    def create(self, zone, args = None, **kwargs):
         """ create the user with the given arguments """
         assert(zone.cluster)
-        args += zone.zone_args()
+        args = zone.zone_args() + (args or [])
         return self.json_command(zone.cluster, 'create', args, **kwargs)
 
-    def info(self, zone, args = [], **kwargs):
+    def info(self, zone, args = None, **kwargs):
         """ read the user from storage """
         assert(zone.cluster)
-        args += zone.zone_args()
+        args = zone.zone_args() + (args or [])
         kwargs['read_only'] = True
         return self.json_command(zone.cluster, 'info', args, **kwargs)
 
-    def delete(self, zone, args = [], **kwargs):
+    def delete(self, zone, args = None, **kwargs):
         """ delete the user """
         assert(zone.cluster)
-        args += zone.zone_args()
+        args = zone.zone_args() + (args or [])
         return self.command(zone.cluster, 'delete', args, **kwargs)
