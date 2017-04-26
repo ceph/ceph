@@ -1396,7 +1396,7 @@ void Objecter::C_Op_Map_Latest::finish(int r)
 }
 
 int Objecter::pool_snap_by_name(int64_t poolid, const char *snap_name,
-				snapid_t *snap)
+				snapid_t *snap) const
 {
   shared_lock rl(rwlock);
 
@@ -1419,7 +1419,7 @@ int Objecter::pool_snap_by_name(int64_t poolid, const char *snap_name,
 }
 
 int Objecter::pool_snap_get_info(int64_t poolid, snapid_t snap,
-				 pool_snap_info_t *info)
+				 pool_snap_info_t *info) const
 {
   shared_lock rl(rwlock);
 
