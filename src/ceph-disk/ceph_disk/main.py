@@ -1913,6 +1913,9 @@ class DevicePartitionCryptLuks(DevicePartitionCrypt):
 
 class Prepare(object):
 
+    def __init__(self, args):
+        self.args = args
+
     @staticmethod
     def parser():
         parser = argparse.ArgumentParser(add_help=False)
@@ -1953,6 +1956,11 @@ class Prepare(object):
             help='bootstrap-osd keyring path template (%(default)s)',
             default='{statedir}/bootstrap-osd/{cluster}.keyring',
             dest='prepare_key_template',
+        )
+        parser.add_argument(
+            '--no-locking',
+            action='store_true', default=None,
+            help='let many prepare\'s run in parallel',
         )
         return parser
 
@@ -2014,8 +2022,11 @@ class Prepare(object):
         return parser
 
     def prepare(self):
-        with prepare_lock:
-            self.prepare_locked()
+        if self.args.no_locking:
+            self._prepare()
+        else:
+            with prepare_lock:
+                self._prepare()
 
     @staticmethod
     def factory(args):
@@ -2032,6 +2043,7 @@ class Prepare(object):
 class PrepareFilestore(Prepare):
 
     def __init__(self, args):
+        super(PrepareFilestore, self).__init__(args)
         if args.dmcrypt:
             self.lockbox = Lockbox(args)
         self.data = PrepareFilestoreData(args)
@@ -2043,7 +2055,7 @@ class PrepareFilestore(Prepare):
             PrepareJournal.parser(),
         ]
 
-    def prepare_locked(self):
+    def _prepare(self):
         if self.data.args.dmcrypt:
             self.lockbox.prepare()
         self.data.prepare(self.journal)
@@ -2052,6 +2064,7 @@ class PrepareFilestore(Prepare):
 class PrepareBluestore(Prepare):
 
     def __init__(self, args):
+        super(PrepareBluestore, self).__init__(args)
         if args.dmcrypt:
             self.lockbox = Lockbox(args)
         self.data = PrepareBluestoreData(args)
@@ -2078,7 +2091,7 @@ class PrepareBluestore(Prepare):
             PrepareBluestoreBlockWAL.parser(),
         ]
 
-    def prepare_locked(self):
+    def _prepare(self):
         if self.data.args.dmcrypt:
             self.lockbox.prepare()
         to_prepare_list = []
