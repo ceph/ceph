@@ -101,6 +101,7 @@ namespace librbd {
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
 		    std::set<std::pair<std::string, std::string> > & names);
+  int namespace_exists(IoCtx& io_ctx, const string &nspace, bool *exists);
   int namespace_add(IoCtx& io_ctx, const string &nspace);
   int namespace_list(IoCtx& io_ctx, set<string>& namespaces);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
