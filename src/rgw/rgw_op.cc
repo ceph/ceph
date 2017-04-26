@@ -2398,6 +2398,30 @@ void RGWPutBL::execute()
     return;
   }
 
+  if (status->is_enabled()) {
+     if (!status->enabled.target_bucket_specified) {
+       ldout(s->cct, 0) << "PutBL TargetBucket should be specified." << dendl;
+       op_ret = -ERR_MALFORMED_XML;
+       s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
+       return;
+     }
+
+     string tbucket = status->get_target_bucket();
+     if (tbucket.empty()) {
+       ldout(s->cct, 0) << "PutBL TargetBucket should be empty." << dendl;
+       op_ret = -ERR_INVALID_TARGET_BUCKET_FOR_LOGGING;
+       s->err.message = "The target bucket for logging does not exist";
+       return;
+     }
+
+     if (!status->enabled.target_prefix_specified) {
+       ldout(s->cct, 0) << "PutBL TargetPrefix should be specified." << dendl;
+       op_ret = -ERR_MALFORMED_XML;
+       s->err.message = "The XML you provided was not well-formed or did not validate against our published schema";
+       return;
+     }
+  }
+
   if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
     ldout(s->cct, 15) << "Old BucketLoggingStatus:";
     status->to_xml(*_dout);

@@ -33,17 +33,17 @@ bool BLLoggingEnabled_S3::xml_end(const char *el) {
 
   target_bucket.clear();
   target_prefix.clear();
-
+  
   bl_target_bucket = static_cast<BLTargetBucket_S3 *>(find_first("TargetBucket"));
-
   if (bl_target_bucket) {
     target_bucket = bl_target_bucket->get_data();
+    target_bucket_specified = true;
   }
 
   bl_target_prefix = static_cast<BLTargetPrefix_S3 *>(find_first("TargetPrefix"));
-
   if (bl_target_prefix) {
     target_prefix = bl_target_prefix->get_data();
+    target_prefix_specified = true;
   }
 
   return true;
@@ -54,8 +54,14 @@ bool RGWBucketLoggingStatus_S3::xml_end(const char *el) {
 
   if (bl_enabled) {
     enabled.set_true();
-    enabled.set_target_bucket(bl_enabled->get_target_bucket());
-    enabled.set_target_prefix(bl_enabled->get_target_prefix());
+    if (bl_enabled->target_bucket_specified) {
+      enabled.target_bucket_specified = true;
+      enabled.set_target_bucket(bl_enabled->get_target_bucket());
+    }
+    if (bl_enabled->target_prefix_specified) {
+      enabled.target_prefix_specified = true;
+      enabled.set_target_prefix(bl_enabled->get_target_prefix());
+    }
   } else {
     enabled.set_false();
   }

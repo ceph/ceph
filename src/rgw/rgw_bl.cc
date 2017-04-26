@@ -427,34 +427,29 @@ int RGWBL::bucket_bl_process(string& shard_id)
 
     rgw_bucket tbucket;
     string tbucket_name = status.get_target_bucket();
-    if (tbucket_name.empty()) {
-      tbucket = sbucket_info.bucket; // source bucket as the default when target bucket didn't be specified.
+    RGWBucketInfo tbucket_info;
+    map<string, bufferlist> tbucket_attrs;
+    RGWObjectCtx tobj_ctx(store);
+
+    // source/target bucket owned by same user
+    int ret = store->get_bucket_info(tobj_ctx, sbucket_tenant, tbucket_name,
+                                     tbucket_info, NULL, &tbucket_attrs);
+    if (ret < 0) {
+      ldout(cct, 0) << "RGWBL:get_bucket_info failed, target_bucket_name="
+                    << tbucket_name << dendl;
+      return ret;
     } else {
-      RGWBucketInfo tbucket_info;
-      map<string, bufferlist> tbucket_attrs;
-      RGWObjectCtx tobj_ctx(store);
-
-
-      // source/target bucket owned by same user
-      int ret = store->get_bucket_info(tobj_ctx, sbucket_tenant, tbucket_name, 
-                                       tbucket_info, NULL, &tbucket_attrs);
-      if (ret < 0) {
-        ldout(cct, 0) << "RGWBL:get_bucket_info failed, target_bucket_name="
-                      << tbucket_name << dendl;
-        return ret;
-      } else {
-        if (ret == 0) {
-           tbucket = tbucket_info.bucket;
-           // TODO(jiaying) check tbucket deliver group acl
-	   map<string, bufferlist>::iterator piter = tbucket_attrs.find(RGW_ATTR_ACL);
-	   if (piter == tbucket_attrs.end()) {
-	     ldout(cct, 0) << __func__ << " can't find tbucket ACL attr"
-			   << " tbucket_name=" << tbucket_name << dendl;
-	     return -1;
-	   } else {
-	     tobject_attrs[piter->first] = piter->second;
-	   }
-        }
+      if (ret == 0) {
+         tbucket = tbucket_info.bucket;
+         // TODO(jiaying) check tbucket deliver group acl
+         map<string, bufferlist>::iterator piter = tbucket_attrs.find(RGW_ATTR_ACL);
+         if (piter == tbucket_attrs.end()) {
+           ldout(cct, 0) << __func__ << " can't find tbucket ACL attr"
+	                 << " tbucket_name=" << tbucket_name << dendl;
+           return -1;
+         } else {
+           tobject_attrs[piter->first] = piter->second;
+         }
       }
     }
 

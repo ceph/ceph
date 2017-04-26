@@ -114,9 +114,13 @@ protected:
   string target_prefix;
 
 public:
+  bool target_bucket_specified;
+  bool target_prefix_specified;
 
-  BLLoggingEnabled() : cct(nullptr), status(false) {};
-  BLLoggingEnabled(CephContext *_cct) : cct(_cct), status(false) {};
+  BLLoggingEnabled() : cct(nullptr), status(false), target_bucket_specified(false),
+                       target_prefix_specified(false) {};
+  BLLoggingEnabled(CephContext *_cct) : cct(_cct), status(false), target_bucket_specified(false),
+                       target_prefix_specified(false) {};
   ~BLLoggingEnabled(){};
 
   void set_true() {
