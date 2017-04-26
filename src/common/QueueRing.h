@@ -43,8 +43,10 @@ class QueueRing {
 
   std::vector<QueueBucket> buckets;
   int num_buckets;
-  atomic_t cur_read_bucket;
-  atomic_t cur_write_bucket;
+
+  std::atomic<int64_t> cur_read_bucket = { 0 };
+  std::atomic<int64_t> cur_write_bucket = { 0 };
+
 public:
   QueueRing(int n) : buckets(n), num_buckets(n) {
   }

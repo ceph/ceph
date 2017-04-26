@@ -28,7 +28,7 @@
 
 struct RefCountedObject {
 private:
-  mutable atomic_t nref;
+  mutable std::atomic<uint64_t> nref;
   CephContext *cct;
 public:
   RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
@@ -122,10 +122,10 @@ struct RefCountedCond : public RefCountedObject {
  *    
  */
 struct RefCountedWaitObject {
-  atomic_t nref;
+  std::atomic<uint64_t> nref = { 1 };
   RefCountedCond *c;
 
-  RefCountedWaitObject() : nref(1) {
+  RefCountedWaitObject() {
     c = new RefCountedCond;
   }
   virtual ~RefCountedWaitObject() {

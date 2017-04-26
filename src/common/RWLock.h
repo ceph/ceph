@@ -39,7 +39,7 @@ public:
   const RWLock& operator=(const RWLock& other) = delete;
 
   RWLock(const std::string &n, bool track_lock=true, bool ld=true, bool prioritize_write=false)
-    : name(n), id(-1), nrlock(0), nwlock(0), track(track_lock),
+    : name(n), id(-1), track(track_lock),
       lockdep(ld) {
 #if defined(PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP)
     if (prioritize_write) {

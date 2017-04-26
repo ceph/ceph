@@ -3,7 +3,6 @@
 
 #include "common/config.h"
 #include "Finisher.h"
-
 #include "common/debug.h"
 #define dout_subsys ceph_subsys_finisher
 #undef dout_prefix
