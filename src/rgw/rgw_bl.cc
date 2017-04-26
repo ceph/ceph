@@ -400,10 +400,10 @@ int RGWBL::bucket_bl_process(string& shard_id)
     return -1;
   }
 
-  if (!status.is_enabled()){
-    // bucketlogging is diabled, but rm entry in following bucket_bl_post failed.
-    // need to cleanup
-    // return ???
+  if (!status.is_enabled()) {
+    ldout(cct, 0) << __func__ << " bucket logging is diabled in the config, "
+                  << "need to rm entry in following bucket_bl_post" << dendl;
+    return -ENOENT;
   }
 
   int final_ret;
