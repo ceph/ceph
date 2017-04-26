@@ -652,6 +652,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
+  int namespace_add(IoCtx& io_ctx, const string &nspace)
+  {
+    CephContext *cct = (CephContext *)io_ctx.cct();
+    ldout(cct, 20) << "add namespace: " << nspace << &io_ctx << dendl;
+    
+    return cls_client::namespace_add(&io_ctx, nspace);
+  }
+
   int namespace_list(IoCtx& io_ctx, set<string>& namespaces)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
