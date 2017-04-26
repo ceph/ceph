@@ -184,7 +184,7 @@ public:
   void checkpoint();
   void handle_request(RGWRequest* req) override;
   void gen_request(const string& method, const string& resource,
-		  int content_length, std::atomic<int64_t>* fail_flag);
+		  int content_length, std::atomic<bool>* fail_flag);
 
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 };
