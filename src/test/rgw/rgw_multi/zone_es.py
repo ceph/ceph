@@ -5,6 +5,8 @@ import logging
 import boto
 import boto.s3.connection
 
+import dateutil.parser
+
 from nose.tools import eq_ as eq
 try:
     from itertools import izip_longest as zip_longest
@@ -12,8 +14,14 @@ except ImportError:
     from itertools import zip_longest
 
 from rgw_multi.multisite import *
+from rgw_multi.tools import *
 
 log = logging.getLogger(__name__)
+
+def get_key_ver(k):
+    if not k.version_id:
+        return 'null'
+    return k.version_id
 
 def check_object_eq(k1, k2, check_extra = True):
     assert k1
@@ -27,13 +35,15 @@ def check_object_eq(k1, k2, check_extra = True):
     # eq(k1.content_disposition, k2.content_disposition)
     # eq(k1.content_language, k2.content_language)
     eq(k1.etag, k2.etag)
-    eq(k1.last_modified, k2.last_modified)
+    mtime1 = dateutil.parser.parse(k1.last_modified)
+    mtime2 = dateutil.parser.parse(k2.last_modified)
+    assert abs((mtime1 - mtime2).total_seconds()) < 1 # handle different time resolution
     if check_extra:
         eq(k1.owner.id, k2.owner.id)
         eq(k1.owner.display_name, k2.owner.display_name)
     # eq(k1.storage_class, k2.storage_class)
     eq(k1.size, k2.size)
-    eq(k1.version_id, k2.version_id)
+    eq(get_key_ver(k1), get_key_ver(k2))
     # eq(k1.encrypted, k2.encrypted)
 
 def make_request(conn, method, bucket, key, query_args, headers):
@@ -41,9 +51,6 @@ def make_request(conn, method, bucket, key, query_args, headers):
     if result.status / 100 != 2:
         raise boto.exception.S3ResponseError(result.status, result.reason, result.read())
     return result
-
-def dump_json(o):
-    return json.dumps(o, indent=4)
 
 def append_query_arg(s, n, v):
     if not v:
@@ -57,12 +64,16 @@ class MDSearch:
     def __init__(self, conn, bucket_name, query, query_args = None, marker = None):
         self.conn = conn
         self.bucket_name = bucket_name or ''
+        if bucket_name:
+            self.bucket = boto.s3.bucket.Bucket(name=bucket_name)
+        else:
+            self.bucket = None
         self.query = query
         self.query_args = query_args
         self.max_keys = None
         self.marker = marker
 
-    def search(self):
+    def raw_search(self):
         q = self.query or ''
         query_args = append_query_arg(self.query_args, 'query', urllib.quote_plus(q))
         if self.max_keys is not None:
@@ -75,7 +86,50 @@ class MDSearch:
         headers = {}
 
         result = make_request(self.conn, "GET", bucket=self.bucket_name, key='', query_args=query_args, headers=headers)
-        return json.loads(result.read())
+
+        l = []
+
+        result_dict = json.loads(result.read())
+
+        for entry in result_dict['Objects']:
+            k = boto.s3.key.Key(self.bucket, entry['Key'])
+
+            k.version_id = entry['Instance']
+            k.etag = entry['ETag']
+            k.owner = boto.s3.user.User(id=entry['Owner']['ID'], display_name=entry['Owner']['DisplayName'])
+            k.last_modified = entry['LastModified']
+            k.size = entry['Size']
+            k.content_type = entry['ContentType']
+            k.versioned_epoch = entry['VersionedEpoch']
+
+            k.metadata = {}
+            for e in entry['CustomMetadata']:
+                k.metadata[e['Name']] = e['Value']
+
+            l.append(k)
+
+        return result_dict, l
+
+    def search(self, drain = True, sort = True, sort_key = None):
+        l = []
+
+        is_done = False
+
+        while not is_done:
+            result, result_keys = self.raw_search()
+
+            l = l + result_keys
+
+            is_done = not (drain and (result['IsTruncated'] == "true"))
+            marker = result['Marker']
+
+        if sort:
+            if not sort_key:
+                sort_key = lambda k: (k.name, -k.versioned_epoch)
+            l.sort(key = sort_key)
+
+        return l
+
 
 
 class ESZoneBucket:
@@ -91,36 +145,9 @@ class ESZoneBucket:
         marker = None
         is_done = False
 
-        l = []
+        req = MDSearch(self.conn, self.name, 'bucket == ' + self.name, marker=marker)
 
-        while not is_done:
-            req = MDSearch(self.conn, self.name, 'bucket == ' + self.name, marker=marker)
-
-            result = req.search()
-
-            for entry in result['Objects']:
-                k = boto.s3.key.Key(self.bucket, entry['Key'])
-
-                k.version_id = entry['Instance']
-                k.etag = entry['ETag']
-                k.owner = boto.s3.user.User(id=entry['Owner']['ID'], display_name=entry['Owner']['DisplayName'])
-                k.last_modified = entry['LastModified']
-                k.size = entry['Size']
-                k.content_type = entry['ContentType']
-                k.versioned_epoch = entry['VersionedEpoch']
-
-                k.metadata = {}
-                for e in entry['CustomMetadata']:
-                    k.metadata[e['Name']] = e['Value']
-
-                l.append(k)
-
-            is_done = (result['IsTruncated'] == "false")
-            marker = result['Marker']
-
-        l.sort(key = lambda l: (l.name, -l.versioned_epoch))
-
-        for k in l:
+        for k in req.search():
             yield k
 
 
@@ -180,7 +207,7 @@ class ESZone(Zone):
 
             for k1, k2 in zip_longest(b1.get_all_versions(), b2.get_all_versions()):
                 if k1 is None:
-                    log.critical('key=%s is missing from zone=%s', k2.name, self.self.name)
+                    log.critical('key=%s is missing from zone=%s', k2.name, self.name)
                     assert False
                 if k2 is None:
                     log.critical('key=%s is missing from zone=%s', k1.name, zone_conn.name)
