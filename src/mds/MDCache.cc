@@ -10382,8 +10382,10 @@ void MDCache::handle_dentry_link(MDentryLink *m)
       __u8 d_type;
       ::decode(ino, p);
       ::decode(d_type, p);
-      dir->link_remote_inode(dn, ino, d_type);
-    }
+        if (dir != NULL) {
+          dir->link_remote_inode(dn, ino, d_type);
+        }
+      }
   } else {
     ceph_abort();
   }
