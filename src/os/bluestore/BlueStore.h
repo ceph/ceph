@@ -2247,8 +2247,13 @@ public:
   void set_fsid(uuid_d u) override {
     fsid = u;
   }
+
   uuid_d get_fsid() override {
     return fsid;
+  }
+
+  bool is_synchronous_apply() const override {
+    return true;
   }
 
   uint64_t estimate_objects_overhead(uint64_t num_objects) override {
