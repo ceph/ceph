@@ -652,15 +652,31 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
+  int request_default_ns(IoCtx& io_ctx) {
+    CephContext *cct = (CephContext *)io_ctx.cct();
+
+    string ns = io_ctx.get_namespace();
+    if (RBD_DEFAULT_NS != ns) {
+      lderr(cct) << "IoCtx for default namespace required, but not " << ns << " " << dendl;
+      return -EINVAL;
+    }
+
+    return 0;
+  }
+
   int namespace_exists(IoCtx& io_ctx, const string &nspace, bool *exists)
   {
-    string nspace_backup = io_ctx.get_namespace();
-    io_ctx.set_namespace(RBD_DEFAULT_NS);
-    set<string> namespaces;
+    CephContext *cct = (CephContext *)io_ctx.cct();
+    ldout(cct, 20) << "namespace: " << nspace << &io_ctx << dendl;
 
-    int r = namespace_list(io_ctx, namespaces);
+    int r = request_default_ns(io_ctx);
     if (r < 0) {
-      io_ctx.set_namespace(nspace_backup);
+      return r;
+    }
+
+    set<string> namespaces;
+    r = namespace_list(io_ctx, namespaces);
+    if (r < 0) {
       return r;
     }
 
@@ -671,7 +687,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	break;
       }
     }
-    io_ctx.set_namespace(nspace_backup);
     return 0;
   }
 
@@ -680,6 +695,11 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = (CephContext *)io_ctx.cct();
     ldout(cct, 20) << "add namespace: " << nspace << &io_ctx << dendl;
     
+    int r = request_default_ns(io_ctx);
+    if (r < 0) {
+      return r;
+    }
+
     bool exists = false;
     r = namespace_exists(io_ctx, nspace, &exists);
     if (r == -ENOENT) {
@@ -696,6 +716,42 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -EINVAL;
     }
     return cls_client::namespace_add(&io_ctx, nspace);
+  }
+
+  int namespace_remove(IoCtx& io_ctx, const string &nspace)
+  {
+    CephContext *cct = (CephContext *)io_ctx.cct();
+    ldout(cct, 20) << "remove namespace: " << nspace << &io_ctx << dendl;
+
+    int r = request_default_ns(io_ctx);
+    if (r < 0) {
+      return r;
+    }
+
+    bool exists = false;
+    r = namespace_exists(io_ctx, nspace, &exists);
+    if (r < 0) {
+      return r;
+    }
+    if (!exists) {
+      lderr(cct) << "namespace: " << nspace << " does not exist." << &io_ctx << dendl;
+      return -EINVAL;
+    }
+
+    vector<string> images;
+    io_ctx.set_namespace(nspace);
+    r = list(io_ctx, images);
+    io_ctx.set_namespace(RBD_DEFAULT_NS);
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    } 
+
+    if (r != -ENOENT && !images.empty()) {
+      lderr(cct) << "namespace: " << nspace << " is not empty." << dendl;
+      return -EINVAL;
+    }
+
+    return cls_client::namespace_remove(&io_ctx, nspace);
   }
 
   int namespace_list(IoCtx& io_ctx, set<string>& namespaces)
