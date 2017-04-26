@@ -7961,6 +7961,15 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
+  //find the first interval after peering completed
+  map<epoch_t, pg_interval_t>::const_reverse_iterator p = pg->past_intervals.rbegin();
+  for (; p != pg->past_intervals.rend(); ++p) {
+    if (p->second.last < pg->info.history.last_epoch_started) {
+      p--;
+      break;
+    }
+  }
+
   assert(!pg->actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = pg->actingbackfill.begin();
        i != pg->actingbackfill.end();
@@ -7996,6 +8005,11 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
     // We pull the log from the peer's last_epoch_started to ensure we
     // get enough log to detect divergent updates.
     eversion_t since(pi.last_epoch_started, 0);
+    //We can ensure the peer isn't divergent in the following case
+    if (p != pg->past_intervals.rend() &&
+        count(p->second.acting.begin(), p->second.acting.end(), i->osd) != 0) {
+      since = pi.last_update;
+    }
     assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
     if (pi.log_tail <= since) {
       ldout(pg->cct, 10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
