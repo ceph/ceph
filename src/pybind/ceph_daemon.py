@@ -335,7 +335,7 @@ class DaemonWatcher(object):
         self._stats = OrderedDict()
         for section_name, section_stats in self._schema.items():
             for name, schema_data in section_stats.items():
-                prio = schema_data.get('priority')
+                prio = schema_data.get('priority', 0)
                 if self._should_include(section_name, name, prio):
                     if section_name not in self._stats:
                         self._stats[section_name] = OrderedDict()
