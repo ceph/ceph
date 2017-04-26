@@ -14,16 +14,21 @@
 namespace librbd {
 namespace cache {
 
-BlockGuard::BlockGuard(CephContext *cct, uint32_t max_blocks,
+BlockGuard::BlockGuard(CephContext *cct, uint64_t cache_size,
                        uint32_t block_size)
-  : m_cct(cct), m_max_blocks(max_blocks), m_block_size(block_size),
+  : m_cct(cct), m_max_blocks(cache_size%block_size?cache_size/block_size+1:cache_size/block_size), m_block_size(block_size),
     m_lock("librbd::cache::BlockGuard::m_lock"),
-    m_detained_block_pool(max_blocks),
-    m_detained_blocks_buckets(max_blocks),
+    m_detained_block_pool(m_max_blocks),
+    m_detained_blocks_buckets(m_max_blocks),
     m_detained_blocks(BlockToDetainedBlocks::bucket_traits(
-      &m_detained_blocks_buckets.front(), max_blocks)) {
+      &m_detained_blocks_buckets.front(), m_max_blocks)) {
   for (auto &detained_block : m_detained_block_pool) {
     m_free_detained_blocks.push_back(detained_block);
+  }
+  for(auto block = 0; block < m_max_blocks; block++) {
+    //chendi: initiate universal BlockIOMap
+    Block* block_info = new Block(block);
+    m_Block_map.insert(std::make_pair(block, block_info));
   }
 }
 
@@ -32,10 +37,10 @@ void BlockGuard::create_block_ios(IOType io_type,
                                   BlockIOs *block_ios,
                                   C_BlockRequest *block_request) {
   typedef std::unordered_map<uint64_t, BlockIO> BlockToBlockIOs;
-
   //ldout(m_cct, 20) << "image_extents=" << image_extents << dendl;
 
   BlockToBlockIOs block_to_block_ios;
+  BlockToBlocksMap::iterator block_it;
   uint64_t buffer_offset = 0;
   for (auto &extent : image_extents) {
     uint64_t image_offset = extent.first;
@@ -48,7 +53,12 @@ void BlockGuard::create_block_ios(IOType io_type,
       uint32_t block_length = block_end_offset - block_offset;
 
       // TODO block extent merging(?)
+      // chendi: find block_io from map
+      block_it = m_Block_map.find(block);
+      assert(block_it != m_Block_map.end());
       auto &block_io = block_to_block_ios[block];
+      block_io.block_info = block_it->second;
+      
       block_io.extents.emplace_back(buffer_offset, block_offset, block_length);
 
       buffer_offset += block_length;
@@ -64,8 +74,8 @@ void BlockGuard::create_block_ios(IOType io_type,
       pair.second.extents.size() != 1 ||
       pair.second.extents.front().block_offset != 0 ||
       pair.second.extents.front().block_length != m_block_size);
-    pair.second.block_request = block_request;
     pair.second.block = pair.first;
+    pair.second.block_request = block_request;
     pair.second.tid = 0;
 
     ldout(m_cct, 20) << "block_io=[" << pair.second << "]" << dendl;
@@ -90,7 +100,7 @@ int BlockGuard::detain(uint64_t block, BlockIO *block_io) {
     }
 
     if (block_io != nullptr) {
-      detained_block->block_ios.emplace_back(std::move(*block_io));
+      detained_block->block_ios.emplace_back(*block_io);
     }
 
     // alert the caller that the IO was detained
@@ -106,6 +116,9 @@ int BlockGuard::detain(uint64_t block, BlockIO *block_io) {
 
     detained_block->block = block;
     m_detained_blocks.insert(*detained_block);
+    if (block_io != nullptr) {
+      detained_block->block_ios.emplace_back(*block_io);
+    }
     return 0;
   }
 }
@@ -119,7 +132,7 @@ int BlockGuard::release(uint64_t block, BlockIOs *block_ios) {
   ldout(m_cct, 20) << "block=" << block << ", "
                    << "pending_ios="
                    << (detained_block.block_ios.empty() ?
-                        0 : detained_block.block_ios.size() - 1) << ", "
+                        0 : detained_block.block_ios.size()) << ", "
                    << "free_slots=" << m_free_detained_blocks.size() << dendl;
 
   if (!detained_block.block_ios.empty()) {
