@@ -26,6 +26,8 @@
 #include "rgw_bucket.h"
 #include "rgw_user.h"
 
+#include <atomic>
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -410,7 +412,7 @@ void UserAsyncRefreshHandler::handle_response(int r)
 }
 
 class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
-  atomic_t down_flag;
+  std::atomic<bool> down_flag = { false };
   RWLock rwlock;
   map<rgw_bucket, rgw_user> modified_buckets;
 
@@ -569,11 +571,11 @@ public:
   }
 
   bool going_down() {
-    return (down_flag.read() != 0);
+    return down_flag;
   }
 
   void stop() {
-    down_flag.set(1);
+    down_flag = true;
     rwlock.get_write();
     stop_thread(&buckets_sync_thread);
     rwlock.unlock();

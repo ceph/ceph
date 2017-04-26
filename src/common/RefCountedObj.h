@@ -21,6 +21,11 @@
 #include "common/ceph_context.h"
 #include "common/valgrind.h"
 
+#include <atomic>
+
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
+
 struct RefCountedObject {
 private:
   mutable atomic_t nref;

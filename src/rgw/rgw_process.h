@@ -17,6 +17,8 @@
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 
+#include <atomic>
+
 #if !defined(dout_subsys)
 #define dout_subsys ceph_subsys_rgw
 #define def_dout_subsys
@@ -182,7 +184,7 @@ public:
   void checkpoint();
   void handle_request(RGWRequest* req) override;
   void gen_request(const string& method, const string& resource,
-		  int content_length, atomic_t* fail_flag);
+		  int content_length, std::atomic<int64_t>* fail_flag);
 
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 };

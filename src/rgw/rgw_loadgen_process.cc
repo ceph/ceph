@@ -13,6 +13,8 @@
 #include "rgw_loadgen.h"
 #include "rgw_client_io.h"
 
+#include <atomic>
+
 #define dout_subsys ceph_subsys_rgw
 
 extern void signal_shutdown();
@@ -37,7 +39,7 @@ void RGWLoadGenProcess::run()
 
   vector<string> buckets(num_buckets);
 
-  atomic_t failed;
+  std::atomic<long int> failed = { 0 };
 
   for (i = 0; i < num_buckets; i++) {
     buckets[i] = "/loadgen";
@@ -51,7 +53,7 @@ void RGWLoadGenProcess::run()
 
   string *objs = new string[num_objs];
 
-  if (failed.read()) {
+  if (failed) {
     derr << "ERROR: bucket creation failed" << dendl;
     goto done;
   }
@@ -69,7 +71,7 @@ void RGWLoadGenProcess::run()
 
   checkpoint();
 
-  if (failed.read()) {
+  if (failed) {
     derr << "ERROR: bucket creation failed" << dendl;
     goto done;
   }
@@ -102,7 +104,7 @@ done:
 
 void RGWLoadGenProcess::gen_request(const string& method,
 				    const string& resource,
-				    int content_length, atomic_t* fail_flag)
+				    int content_length, std::atomic<long int>* fail_flag)
 {
   RGWLoadGenRequest* req =
     new RGWLoadGenRequest(store->get_new_req_id(), method, resource,
@@ -138,7 +140,7 @@ void RGWLoadGenProcess::handle_request(RGWRequest* r)
     dout(20) << "process_request() returned " << ret << dendl;
 
     if (req->fail_flag) {
-      req->fail_flag->inc();
+      req->fail_flag++;
     }
   }
 
