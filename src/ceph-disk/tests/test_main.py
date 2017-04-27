@@ -465,6 +465,9 @@ class TestCephDisk(object):
                   main.PTYPE['regular']['journal']['ready'])
 
     def test_list_bluestore(self):
+        if platform.system() == "FreeBSD":
+            return
+
         self.list(main.PTYPE['plain']['osd']['ready'],
                   main.PTYPE['plain']['block']['ready'])
         self.list(main.PTYPE['luks']['osd']['ready'],
