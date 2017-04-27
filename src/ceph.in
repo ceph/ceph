@@ -276,7 +276,7 @@ ping <mon.id>           Send simple presence/life test to a mon
 daemon {type.id|path} <cmd>
                         Same as --admin-daemon, but auto-find admin socket
 daemonperf {type.id | path} [stat-pats] [priority] [<interval>] [<count>]
-daemonperf {type.id | path} list [stat-pats] [priority]
+daemonperf {type.id | path} list|ls [stat-pats] [priority]
                         Get selected perf stats from daemon/admin socket
                         Optional shell-glob comma-delim match string stat-pats
                         Optional selection priority (can abbreviate name):
@@ -638,7 +638,7 @@ def daemonperf(childargs, sockpath):
     Handle daemonperf command; returns errno or 0
 
     daemonperf <daemon> [priority string] [statpats] [interval] [count]
-    daemonperf <daemon> list [statpats]
+    daemonperf <daemon> list|ls [statpats]
     """
 
     interval = 1
@@ -669,7 +669,7 @@ def daemonperf(childargs, sockpath):
     while len(childargs) and not isnum(childargs[0]):
         arg = childargs.pop(0)
         # 'list'?
-        if arg == 'list':
+        if arg in ['list', 'ls']:
             do_list = True;
             continue;
         # prio?
