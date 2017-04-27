@@ -50,7 +50,7 @@ int RGWReshard::add(cls_rgw_reshard_entry& entry)
 
   ret = l.lock_exclusive(&io_ctx, reshard_oid);
   if (ret == -EBUSY) {
-    dout(0) << "RGWReshard::add failed to acquire lock on " << reshard_oid << dendl;
+    ldout(cct, 0) << "RGWReshard::add failed to acquire lock on " << reshard_oid << dendl;
     return 0;
   }
   if (ret < 0)
@@ -77,7 +77,7 @@ int RGWReshard::list(string& marker, uint32_t max, std::list<cls_rgw_reshard_ent
 
   ret = l.lock_shared(&io_ctx, reshard_oid);
   if (ret == -EBUSY) {
-    dout(0) << "RGWReshard::list failed to acquire lock on " << reshard_oid << dendl;
+    ldout(cct, 0) << "RGWReshard::list failed to acquire lock on " << reshard_oid << dendl;
     return 0;
   }
   if (ret < 0)
@@ -100,7 +100,7 @@ int RGWReshard::get_head(cls_rgw_reshard_entry& entry)
 
   ret = l.lock_shared(&io_ctx, reshard_oid);
   if (ret == -EBUSY) {
-    dout(0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
+    ldout(cct, 0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
     return 0;
   }
   if (ret < 0)
@@ -123,7 +123,7 @@ int RGWReshard::get(cls_rgw_reshard_entry& entry)
 
   ret = l.lock_shared(&io_ctx, reshard_oid);
   if (ret == -EBUSY) {
-    dout(0) << "RGWReshardLog::get failed to acquire lock on " << reshard_oid << dendl;
+    ldout(cct, 0) << "RGWReshardLog::get failed to acquire lock on " << reshard_oid << dendl;
     return 0;
   }
   if (ret < 0)
@@ -146,7 +146,7 @@ int RGWReshard::remove(cls_rgw_reshard_entry& entry)
 
   ret = l.lock_exclusive(&io_ctx, reshard_oid);
   if (ret == -EBUSY) {
-    dout(0) << "RGWReshardLog::remove failed to acquire lock on " << reshard_oid << dendl;
+    ldout(cct, 0) << "RGWReshardLog::remove failed to acquire lock on " << reshard_oid << dendl;
     return 0;
   }
   if (ret < 0)
@@ -177,7 +177,7 @@ int RGWReshard::set_bucket_resharding(const string& bucket_instance_oid, cls_rgw
 
   ret = l.lock_exclusive(&io_ctx, bucket_instance_oid);
   if (ret == -EBUSY) {
-    dout(0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
+    ldout(cct, 0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
     return 0;
   }
   if (ret < 0)
@@ -230,7 +230,7 @@ int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_r
 
   ret = l.lock_exclusive(&io_ctx, bucket_instance_oid);
   if (ret == -EBUSY) {
-    dout(0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
+    ldout(cct, 0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
     return 0;
   }
   if (ret < 0)
@@ -268,7 +268,6 @@ int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_r
   return ret;
 }
 
-
 int RGWReshard::lock_bucket_index_shared(const string& oid)
 {
   int ret = get_io_ctx(io_ctx);
@@ -277,7 +276,7 @@ int RGWReshard::lock_bucket_index_shared(const string& oid)
 
   ret = instance_lock.lock_shared(&io_ctx, oid);
   if (ret == -EBUSY) {
-    dout(0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
+    ldout(cct, 0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
     return 0;
   }
 
