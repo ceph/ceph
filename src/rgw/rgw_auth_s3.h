@@ -9,6 +9,8 @@
 #include <string>
 #include <tuple>
 
+#include <boost/container/static_vector.hpp>
+
 #include "rgw_common.h"
 #include "rgw_rest_s3.h"
 
@@ -128,14 +130,65 @@ public:
 };
 
 
+/* TODO(rzarzynski): decompose the AWSv4Completer into two separate completers:
+ * one for single chunk mode and second for streaming mode. */
 class AWSv4Completer : public rgw::auth::Completer,
                        public rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>,
                        public std::enable_shared_from_this<AWSv4Completer> {
 private:
   using io_base_t = rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>;
 
+  class ChunkMeta {
+    size_t data_offset_in_stream = 0;
+    size_t data_length = 0;
+    std::string signature;
+
+    ChunkMeta(const size_t data_starts_in_stream,
+              const size_t data_length,
+              const boost::string_ref signature)
+      : data_offset_in_stream(data_starts_in_stream),
+        data_length(data_length),
+        signature(signature.to_string()) {
+    }
+
+    ChunkMeta(const boost::string_ref signature)
+      : signature(signature.to_string()) {
+    }
+
+  public:
+    static constexpr size_t SIG_SIZE = 64;
+
+    /* Let's suppose the data length fields can't exceed uint64_t. */
+    static constexpr size_t META_MAX_SIZE = \
+      strlen("\r\nffffffffffffffff;chunk-signature=") + SIG_SIZE + strlen("\r\n");
+
+    /* The metadata size of for the last, empty chunk. */
+    static constexpr size_t META_MIN_SIZE = \
+      strlen("0;chunk-signature=") + SIG_SIZE + strlen("\r\n");
+
+    /* Detect whether a given stream_pos fits in boundaries of a chunk. */
+    bool is_new_chunk_in_stream(size_t stream_pos) const;
+
+    /* Get the remaining data size. */
+    size_t get_data_size(size_t stream_pos) const;
+
+    /* Factory: create an object representing metadata of first, initial chunk
+     * in a stream. */
+    static ChunkMeta create_first(const boost::string_ref seed_signature) {
+      return ChunkMeta(seed_signature);
+    }
+
+    /* Factory: parse a block of META_MAX_SIZE bytes and creates an object
+     * representing non-first chunk in a stream. As the process is sequential
+     * and depends on the previous chunk, caller must pass it. */
+    static std::pair<ChunkMeta, size_t>
+    create_next(ChunkMeta&& prev, const char* metabuf, size_t metabuf_len);
+  } chunk_meta;
+
+  boost::container::static_vector<char, ChunkMeta::META_MAX_SIZE> parsing_buf;
   SHA256* sha256_hash = nullptr;
 
+  size_t stream_pos = 0;
   const bool aws4_auth_needs_complete = true;
   const bool aws4_auth_streaming_mode = false;
 
@@ -160,6 +213,7 @@ private:
                  std::string seed_signature,
                  const signing_key_t& signing_key)
     : io_base_t(nullptr),
+      chunk_meta(ChunkMeta::create_first(seed_signature)),
       aws4_auth_needs_complete(false),
       aws4_auth_streaming_mode(true),
       date(std::move(date)),
@@ -174,6 +228,8 @@ private:
       sha256_hash(calc_hash_sha256_open_stream()),
       s(s) {
   }
+
+  size_t recv_chunked(char* buf, size_t max);
 
 public:
   /* rgw::io::DecoratedRestfulClient. */

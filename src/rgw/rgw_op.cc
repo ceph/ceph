@@ -3278,12 +3278,14 @@ void RGWPutObj::execute()
     }
   }
 
+#if 0
   if (!chunked_upload &&
       ofs != s->content_length &&
       !s->aws4_auth_streaming_mode) {
     op_ret = -ERR_REQUEST_TIMEOUT;
     goto done;
   }
+#endif
   s->obj_size = ofs;
 
   perfcounter->inc(l_rgw_put_b, s->obj_size);
