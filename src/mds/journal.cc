@@ -335,13 +335,20 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 
     if (mode == TO_AUTH_SUBTREE_ROOT) {
       // subtree root?
-      if (dir->is_subtree_root() && !dir->state_test(CDir::STATE_EXPORTBOUND)) {
-	if (dir->is_auth() && !dir->is_ambiguous_auth()) {
-	  // it's an auth subtree, we don't need maybe (if any), and we're done.
-	  dout(20) << "EMetaBlob::add_dir_context(" << dir << ") reached unambig auth subtree, don't need " << maybe
-		   << " at " << *dir << dendl;
-	  maybe.clear();
-	  break;
+      if (dir->is_subtree_root() &&
+	  !dir->state_test(CDir::STATE_EXPORTBOUND)) {
+	if (dir->is_auth() && !dir->is_ambiguous_auth() ) {
+	  if (dir->state_test(CDir::STATE_AUXSUBTREE) &&
+	      dir->get_dir_auth().first == diri->authority().first) {
+	    // auxiliary subtree. treat it as normal dirfrag
+	    dout(20) << "EMetaBlob::add_dir_context(" << dir << ") auxiliary subtree " << dendl;
+	  } else {
+	    // it's an auth subtree, we don't need maybe (if any), and we're done.
+	    dout(20) << "EMetaBlob::add_dir_context(" << dir << ") reached unambig auth subtree, don't need " << maybe
+		     << " at " << *dir << dendl;
+	    maybe.clear();
+	    break;
+	  }
 	} else {
 	  dout(20) << "EMetaBlob::add_dir_context(" << dir << ") reached ambig or !auth subtree, need " << maybe
 		   << " at " << *dir << dendl;

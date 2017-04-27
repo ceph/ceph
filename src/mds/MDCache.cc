@@ -931,7 +931,8 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
   if (parent != dir &&                              // we have a parent,
       parent->dir_auth == dir->dir_auth &&          // auth matches,
       dir->dir_auth.second == CDIR_AUTH_UNKNOWN &&  // auth is unambiguous,
-      !dir->state_test(CDir::STATE_EXPORTBOUND)) {  // not an exportbound,
+      !dir->state_test(CDir::STATE_EXPORTBOUND) && // not an exportbound,
+      !dir->state_test(CDir::STATE_AUXSUBTREE)) {  // not aux subtree
     // merge with parent.
     dout(10) << "  subtree merge at " << *dir << dendl;
     dir->set_dir_auth(CDIR_AUTH_DEFAULT);
