@@ -3245,8 +3245,8 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
       // Need the create time from the monitor using its clock to set
       // last_scrub_stamp upon pg creation.
       const auto& creation = creating_pgs.pgs[pg];
-      m->mkpg[pg] = pg_create_t{creation.first, pg, 0};
-      m->ctimes[pg] = creation.second;
+      m->mkpg.emplace(pg, pg_create_t{creation.first, pg, 0});
+      m->ctimes.emplace(pg, creation.second);
       dout(20) << __func__ << " will create " << pg
 	       << " at " << creation.first << dendl;
     }
