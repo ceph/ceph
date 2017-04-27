@@ -50,7 +50,7 @@ std::string handle_pyerror()
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 MgrPyModule::MgrPyModule(const std::string &module_name_)
-  : module_name(module_name_), pModule(nullptr), pClass(nullptr),
+  : module_name(module_name_),
     pClassInstance(nullptr)
 {}
 
@@ -60,8 +60,6 @@ MgrPyModule::~MgrPyModule()
   gstate = PyGILState_Ensure();
 
   Py_XDECREF(pClassInstance);
-  Py_XDECREF(pClass);
-  Py_XDECREF(pModule);
 
   PyGILState_Release(gstate);
 }
@@ -70,7 +68,7 @@ int MgrPyModule::load()
 {
   // Load the module
   PyObject *pName = PyString_FromString(module_name.c_str());
-  pModule = PyImport_Import(pName);
+  auto pModule = PyImport_Import(pName);
   Py_DECREF(pName);
   if (pModule == nullptr) {
     derr << "Module not found: '" << module_name << "'" << dendl;
@@ -79,7 +77,8 @@ int MgrPyModule::load()
 
   // Find the class
   // TODO: let them call it what they want instead of just 'Module'
-  pClass = PyObject_GetAttrString(pModule, (const char*)"Module");
+  auto pClass = PyObject_GetAttrString(pModule, (const char*)"Module");
+  Py_DECREF(pModule);
   if (pClass == nullptr) {
     derr << "Class not found in module '" << module_name << "'" << dendl;
     return -EINVAL;
@@ -91,6 +90,7 @@ int MgrPyModule::load()
   auto pyHandle = PyString_FromString(module_name.c_str());
   auto pArgs = PyTuple_Pack(1, pyHandle);
   pClassInstance = PyObject_CallObject(pClass, pArgs);
+  Py_DECREF(pClass);
   Py_DECREF(pyHandle);
   Py_DECREF(pArgs);
   if (pClassInstance == nullptr) {
