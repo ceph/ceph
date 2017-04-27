@@ -273,7 +273,7 @@ private:
   int _flush(FileWriter *h, bool force);
   int _fsync(FileWriter *h, std::unique_lock<std::mutex>& l);
 
-  void _claim_completed_aios(FileWriter *h, list<FS::aio_t> *ls);
+  void _claim_completed_aios(FileWriter *h, list<aio_t> *ls);
   void wait_for_aio(FileWriter *h);  // safe to call without a lock
 
   int _flush_and_sync_log(std::unique_lock<std::mutex>& l,

@@ -24,6 +24,7 @@ set(libos_srcs
   kstore/KStore.cc
   kstore/kstore_types.cc
   fs/FS.cc
+  fs/aio.cc
   ${libos_xfs_srcs})
 
 if(HAVE_LIBAIO)

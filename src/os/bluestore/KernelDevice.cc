@@ -334,7 +334,7 @@ void KernelDevice::_aio_thread()
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
     int max = 16;
-    FS::aio_t *aio[max];
+    aio_t *aio[max];
     int r = aio_queue.get_next_completed(cct->_conf->bdev_aio_poll_ms,
 					 aio, max);
     if (r < 0) {
@@ -435,7 +435,7 @@ void KernelDevice::_aio_log_start(
   }
 }
 
-void KernelDevice::debug_aio_link(FS::aio_t& aio)
+void KernelDevice::debug_aio_link(aio_t& aio)
 {
   if (debug_queue.empty()) {
     debug_oldest = &aio;
@@ -443,7 +443,7 @@ void KernelDevice::debug_aio_link(FS::aio_t& aio)
   debug_queue.push_back(aio);
 }
 
-void KernelDevice::debug_aio_unlink(FS::aio_t& aio)
+void KernelDevice::debug_aio_unlink(aio_t& aio)
 {
   if (aio.queue_item.is_linked()) {
     debug_queue.erase(debug_queue.iterator_to(aio));
@@ -483,9 +483,9 @@ void KernelDevice::aio_submit(IOContext *ioc)
   // move these aside, and get our end iterator position now, as the
   // aios might complete as soon as they are submitted and queue more
   // wal aio's.
-  list<FS::aio_t>::iterator e = ioc->running_aios.begin();
+  list<aio_t>::iterator e = ioc->running_aios.begin();
   ioc->running_aios.splice(e, ioc->pending_aios);
-  list<FS::aio_t>::iterator p = ioc->running_aios.begin();
+  list<aio_t>::iterator p = ioc->running_aios.begin();
 
   int pending = ioc->num_pending.load();
   ioc->num_running += pending;
@@ -494,7 +494,7 @@ void KernelDevice::aio_submit(IOContext *ioc)
 
   bool done = false;
   while (!done) {
-    FS::aio_t& aio = *p;
+    aio_t& aio = *p;
     aio.priv = static_cast<void*>(ioc);
     dout(20) << __func__ << "  aio " << &aio << " fd " << aio.fd
 	     << " 0x" << std::hex << aio.offset << "~" << aio.length
@@ -506,7 +506,7 @@ void KernelDevice::aio_submit(IOContext *ioc)
     // be careful: as soon as we submit aio we race with completion.
     // since we are holding a ref take care not to dereference txc at
     // all after that point.
-    list<FS::aio_t>::iterator cur = p;
+    list<aio_t>::iterator cur = p;
     ++p;
     done = (p == e);
 
@@ -555,9 +555,9 @@ int KernelDevice::aio_write(
 
 #ifdef HAVE_LIBAIO
   if (aio && dio && !buffered) {
-    ioc->pending_aios.push_back(FS::aio_t(ioc, fd_direct));
+    ioc->pending_aios.push_back(aio_t(ioc, fd_direct));
     ++ioc->num_pending;
-    FS::aio_t& aio = ioc->pending_aios.back();
+    aio_t& aio = ioc->pending_aios.back();
     if (cct->_conf->bdev_inject_crash &&
 	rand() % cct->_conf->bdev_inject_crash == 0) {
       derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
@@ -664,9 +664,9 @@ int KernelDevice::aio_read(
 #ifdef HAVE_LIBAIO
   if (aio && dio) {
     _aio_log_start(ioc, off, len);
-    ioc->pending_aios.push_back(FS::aio_t(ioc, fd_direct));
+    ioc->pending_aios.push_back(aio_t(ioc, fd_direct));
     ++ioc->num_pending;
-    FS::aio_t& aio = ioc->pending_aios.back();
+    aio_t& aio = ioc->pending_aios.back();
     aio.pread(off, len);
     for (unsigned i=0; i<aio.iov.size(); ++i) {
       dout(30) << "aio " << i << " " << aio.iov[i].iov_base
