@@ -21,6 +21,7 @@
 #include "common/admin_socket.h"
 #include "common/perf_counters.h"
 #include "common/Thread.h"
+#include "common/code_environment.h"
 #include "common/ceph_context.h"
 #include "common/ceph_crypto.h"
 #include "common/config.h"
@@ -659,7 +660,7 @@ CephContext::~CephContext()
   delete _crypto_none;
   delete _crypto_aes;
   if (_crypto_inited)
-    ceph::crypto::shutdown();
+    ceph::crypto::shutdown(g_code_env == CODE_ENVIRONMENT_LIBRARY);
 }
 
 void CephContext::put() {
