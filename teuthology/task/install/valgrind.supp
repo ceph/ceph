@@ -393,3 +393,48 @@
 	fun:_ZN11CephContextC1Eji
 	...
 }
+{
+    python does not reset the member field when dealloc an object
+    Memcheck:Leak
+    match-leak-kinds: possible
+    ...
+    fun:Py_InitializeEx
+    ...
+}
+{
+    python should be able to take care of itself
+    Memcheck:Leak
+    match-leak-kinds: possible
+    ...
+    fun:PyEval_EvalCode
+}
+{
+    python should be able to take care of itself
+    Memcheck:Leak
+    match-leak-kinds: possible
+    ...
+    fun:PyImport_ImportModuleLevel
+}
+{
+    python should be able to take care of itself
+    Memcheck:Leak
+    match-leak-kinds: possible
+    ...
+    fun:PyEval_CallObjectWithKeywords
+}
+{
+    python should be able to take care of itself
+    Memcheck:Leak
+    match-leak-kinds: possible
+    ...
+    fun:PyEval_EvalFrameEx
+    ...
+    obj:/usr/lib64/libpython2.7.so.1.0
+}
+{
+    python should be able to take care of itself
+    Memcheck:Leak
+    match-leak-kinds: possible
+    ...
+    fun:PyObject_Call
+}
