@@ -1718,3 +1718,5 @@ OPTION(event_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should b
 OPTION(internal_safe_to_start_threads, OPT_BOOL, false)
 
 OPTION(debug_deliberately_leak_memory, OPT_BOOL, false)
+
+OPTION(rgw_swift_custom_header, OPT_STR, "") // option to enable swift custom headers
