@@ -1,6 +1,5 @@
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
-#include "include/atomic.h"
 #include "include/utime.h"
 #include "common/Thread.h"
 #include "common/Clock.h"
@@ -13,6 +12,7 @@
 #include <sstream>
 #include <iostream>
 #include <string>
+#include <atomic>
 
 #include "test/librados/TestCase.h"
 
@@ -23,7 +23,7 @@ using std::ostringstream;
 using std::string;
 
 static sem_t *sem;
-static atomic_t stop_flag;
+static std::atomic<bool> stop_flag = { false };
 
 class WatchNotifyTestCtx : public WatchCtx
 {
@@ -45,7 +45,7 @@ struct WatcherUnwatcher : public Thread {
   void *entry() override {
     Rados cluster;
     connect_cluster_pp(cluster);
-    while (!stop_flag.read()) {
+    while (!stop_flag) {
       IoCtx ioctx;
       cluster.ioctx_create(pool.c_str(), ioctx);
 
@@ -113,7 +113,7 @@ TEST_P(WatchStress, Stress1) {
     ioctx.unwatch("foo", handle);
     ioctx.close();
   }
-  stop_flag.set(1);
+  stop_flag = true;
   thr->join();
   nioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, ncluster));
