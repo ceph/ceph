@@ -172,7 +172,14 @@ SUBSYS(eventtrace, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
-OPTION(keyring, OPT_STR, "/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin") // default changed by common_preinit() for mds and osd
+OPTION(keyring, OPT_STR, 
+    // default changed by common_preinit() for mds and osd
+    "/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin," 
+#if defined(__FreeBSD)
+    "/usr/local/etc/ceph/$cluster.$name.keyring,/usr/local/etc/ceph/$cluster.keyring,"
+    "/usr/local/etc/ceph/keyring,/usr/local/etc/ceph/keyring.bin," 
+#endif
+    )
 OPTION(heartbeat_interval, OPT_INT, 5)
 OPTION(heartbeat_file, OPT_STR, "")
 OPTION(heartbeat_inject_failure, OPT_INT, 0)    // force an unhealthy heartbeat for N seconds
