@@ -28,13 +28,15 @@ def is_es_zone(zone_conn):
 
     return zone_conn.zone.tier_type() == "elasticsearch"
 
-def verify_search(src_keys, result_keys, f):
+def verify_search(bucket_name, src_keys, result_keys, f):
     check_keys = []
     for k in src_keys:
-        log.debug('ZZZ ' + k.bucket.name)
+        if bucket_name:
+            if bucket_name != k.bucket.name:
+                continue
         if f(k):
             check_keys.append(k)
-    check_keys.sort(key = lambda l: (l.name, l.version_id))
+    check_keys.sort(key = lambda l: (l.bucket.name, l.name, l.version_id))
 
     log.debug('check keys:' + dump_json(check_keys))
     log.debug('result keys:' + dump_json(result_keys))
@@ -50,8 +52,8 @@ def do_check_mdsearch(conn, bucket, src_keys, req_str, src_filter):
     else:
         bucket_name = ''
     req = MDSearch(conn, bucket_name, req_str)
-    result_keys = req.search(sort_key = lambda k: (k.name, k.version_id))
-    verify_search(src_keys, result_keys, src_filter)
+    result_keys = req.search(sort_key = lambda k: (k.bucket.name, k.name, k.version_id))
+    verify_search(bucket_name, src_keys, result_keys, src_filter)
 
 def test_es_object_search():
     check_es_configured()
@@ -59,7 +61,7 @@ def test_es_object_search():
     realm = get_realm()
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
-    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns, buckets_per_zone = 2)
 
     min_size = 10
     content = 'a' * min_size
@@ -73,10 +75,12 @@ def test_es_object_search():
     etags = []
     names = []
 
+    obj_prefix=''.join(random.choice(string.ascii_lowercase) for _ in range(6))
+
     # don't wait for meta sync just yet
-    for zone, bucket in zone_bucket.items():
+    for zone, bucket in zone_bucket:
         for count in xrange(0, max_keys):
-            objname = 'foo' + str(count)
+            objname = obj_prefix + str(count)
             k = new_key(zone, bucket.name, objname)
             k.set_contents_from_string(content + 'x' * count)
 
@@ -95,19 +99,36 @@ def test_es_object_search():
 
     zonegroup_meta_checkpoint(zonegroup)
 
-    for source_conn, bucket in zone_bucket.items():
-        for target_conn in zonegroup_conns.zones:
-            if source_conn.zone == target_conn.zone:
-                continue
-            if not is_es_zone(target_conn):
-                continue
+    targets = []
+    for target_conn in zonegroup_conns.zones:
+        if not is_es_zone(target_conn):
+            continue
 
+        targets.append(target_conn)
+
+    buckets = []
+    # make sure all targets are synced
+    for source_conn, bucket in zone_bucket:
+        buckets.append(bucket)
+        for target_conn in targets:
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
 
+    for target_conn in targets:
+
+        # bucket checks
+        for bucket in buckets:
             # check name
-            do_check_mdsearch(target_conn.conn, None, src_keys , 'bucket == ' + bucket.name, lambda k: True)
+            do_check_mdsearch(target_conn.conn, None, src_keys , 'bucket == ' + bucket.name, lambda k: k.bucket.name == bucket.name)
             do_check_mdsearch(target_conn.conn, bucket, src_keys , 'bucket == ' + bucket.name, lambda k: k.bucket.name == bucket.name)
 
+        # check on all buckets
+        for key in src_keys:
+            # limiting to checking specific key name, otherwise could get results from
+            # other runs / tests
+            do_check_mdsearch(target_conn.conn, None, src_keys , 'name == ' + key.name, lambda k: k.name == key.name)
+
+        # check on specific bucket
+        for bucket in buckets:
             for key in src_keys:
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name < ' + key.name, lambda k: k.name < key.name)
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name <= ' + key.name, lambda k: k.name <= key.name)
