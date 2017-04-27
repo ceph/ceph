@@ -108,6 +108,18 @@ int KernelDevice::open(const string& p)
     derr << __func__ << " fstat got " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
+
+  // Operate as though the block size is 4 KB.  The backing file
+  // blksize doesn't strictly matter except that some file systems may
+  // require a read/modify/write if we write something smaller than
+  // it.
+  block_size = cct->_conf->bdev_block_size;
+  if (block_size != (unsigned)st.st_blksize) {
+    dout(1) << __func__ << " backing device/file reports st_blksize "
+	    << st.st_blksize << ", using bdev_block_size "
+	    << block_size << " anyway" << dendl;
+  }
+
   if (S_ISBLK(st.st_mode)) {
     int64_t s;
     r = get_block_device_size(fd_direct, &s);
@@ -118,6 +130,7 @@ int KernelDevice::open(const string& p)
   } else {
     size = st.st_size;
   }
+  size &= ~(block_size);
 
   {
     char partition[PATH_MAX], devname[PATH_MAX];
@@ -130,17 +143,6 @@ int KernelDevice::open(const string& p)
       dout(20) << __func__ << " devname " << devname << dendl;
       rotational = block_device_is_rotational(devname);
     }
-  }
-
-  // Operate as though the block size is 4 KB.  The backing file
-  // blksize doesn't strictly matter except that some file systems may
-  // require a read/modify/write if we write something smaller than
-  // it.
-  block_size = cct->_conf->bdev_block_size;
-  if (block_size != (unsigned)st.st_blksize) {
-    dout(1) << __func__ << " backing device/file reports st_blksize "
-	    << st.st_blksize << ", using bdev_block_size "
-	    << block_size << " anyway" << dendl;
   }
 
   fs = FS::create_by_fd(fd_direct);
