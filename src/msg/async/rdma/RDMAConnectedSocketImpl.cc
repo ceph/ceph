@@ -111,10 +111,12 @@ RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
   for (unsigned i=0; i < wc.size(); ++i) {
     ret = ibdev->post_chunk(reinterpret_cast<Chunk*>(wc[i].wr_id));
     assert(ret == 0);
+    dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
   }
   for (unsigned i=0; i < buffers.size(); ++i) {
     ret = ibdev->post_chunk(buffers[i]);
     assert(ret == 0);
+    dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
   }
 
   delete cmgr;
@@ -355,6 +357,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
         ldout(cct, 20) << __func__ << " got remote close msg..." << dendl;
       }
       assert(ibdev->post_chunk(chunk) == 0);
+      dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
     } else {
       if (read == (ssize_t)len) {
         buffers.push_back(chunk);
@@ -366,6 +369,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
       } else {
         read += chunk->read(buf+read, response->byte_len);
         assert(ibdev->post_chunk(chunk) == 0);
+        dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
       }
     }
   }
@@ -388,6 +392,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
     ldout(cct, 25) << __func__ << " this iter read: " << tmp << " bytes." << " offset: " << (*c)->get_offset() << " ,bound: " << (*c)->get_bound()  << ". Chunk:" << *c  << dendl;
     if ((*c)->over()) {
       assert(ibdev->post_chunk(*c) == 0);
+      dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
       ldout(cct, 25) << __func__ << " one chunk over." << dendl;
     }
     if (read == len) {
