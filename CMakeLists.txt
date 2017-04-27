@@ -513,7 +513,7 @@ endif()
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
 set(BOOST_COMPONENTS
-	thread system regex random program_options date_time iostreams)
+	container thread system regex random program_options date_time iostreams)
 if(WITH_MGR)
 	list(APPEND BOOST_COMPONENTS python)
 endif()
