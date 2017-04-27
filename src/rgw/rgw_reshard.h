@@ -25,7 +25,6 @@ class RGWReshard {
   public:
     RGWReshard(CephContext* cct, RGWRados* _store);
     int add(cls_rgw_reshard_entry& entry);
-    int get_head(cls_rgw_reshard_entry& entry);
     int get(cls_rgw_reshard_entry& entry);
     int remove(cls_rgw_reshard_entry& entry);
     int list(string& marker, uint32_t max, list<cls_rgw_reshard_entry>& entries, bool& is_truncated);
