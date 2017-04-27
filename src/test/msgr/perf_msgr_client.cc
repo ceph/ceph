@@ -22,13 +22,14 @@
 
 using namespace std;
 
-#include "include/atomic.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "common/Cycles.h"
 #include "global/global_init.h"
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
+
+#include <atomic>
 
 class MessengerClient {
   class ClientThread;
@@ -67,7 +68,7 @@ class MessengerClient {
     Messenger *msgr;
     int concurrent;
     ConnectionRef conn;
-    atomic_t client_inc;
+    std::atomic<unsigned> client_inc = { 0 };
     object_t oid;
     object_locator_t oloc;
     pg_t pgid;
@@ -82,7 +83,7 @@ class MessengerClient {
     uint64_t inflight;
 
     ClientThread(Messenger *m, int c, ConnectionRef con, int len, int ops, int think_time_us):
-        msgr(m), concurrent(c), conn(con), client_inc(0), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
+        msgr(m), concurrent(c), conn(con), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
         dispatcher(think_time_us, this), lock("MessengerBenchmark::ClientThread::lock") {
       m->add_dispatcher_head(&dispatcher);
       bufferptr ptr(msg_len);
@@ -98,7 +99,7 @@ class MessengerClient {
 	hobject_t hobj(oid, oloc.key, CEPH_NOSNAP, pgid.ps(), pgid.pool(),
 		       oloc.nspace);
 	spg_t spgid(pgid);
-        MOSDOp *m = new MOSDOp(client_inc.read(), 0, hobj, spgid, 0, 0, 0);
+        MOSDOp *m = new MOSDOp(client_inc, 0, hobj, spgid, 0, 0, 0);
         m->write(0, msg_len, data);
         inflight++;
         conn->send_message(m);

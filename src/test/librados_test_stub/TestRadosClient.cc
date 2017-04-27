@@ -11,6 +11,8 @@
 #include <boost/thread.hpp>
 #include <errno.h>
 
+#include <atomic>
+
 static int get_concurrency() {
   int concurrency = 0;
   char *env = getenv("LIBRADOS_CONCURRENCY");
@@ -114,11 +116,11 @@ TestRadosClient::~TestRadosClient() {
 }
 
 void TestRadosClient::get() {
-  m_refcount.inc();
+  m_refcount++;
 }
 
 void TestRadosClient::put() {
-  if (m_refcount.dec() == 0) {
+  if (--m_refcount == 0) {
     shutdown();
     delete this;
   }
@@ -180,7 +182,7 @@ void TestRadosClient::add_aio_operation(const std::string& oid,
 
 struct WaitForFlush {
   int flushed() {
-    if (count.dec() == 0) {
+    if (--count == 0) {
       aio_finisher->queue(new FunctionContext(boost::bind(
         &finish_aio_completion, c, 0)));
       delete this;
@@ -188,7 +190,7 @@ struct WaitForFlush {
     return 0;
   }
 
-  atomic_t count;
+  std::atomic<int64_t> count = { 0 };
   Finisher *aio_finisher;
   AioCompletionImpl *c;
 };
@@ -204,7 +206,7 @@ void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
   c->get();
 
   WaitForFlush *wait_for_flush = new WaitForFlush();
-  wait_for_flush->count.set(m_finishers.size());
+  wait_for_flush->count = m_finishers.size();
   wait_for_flush->aio_finisher = m_aio_finisher;
   wait_for_flush->c = c;
 
