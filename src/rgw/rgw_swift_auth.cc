@@ -304,7 +304,7 @@ ExternalTokenEngine::authenticate(const std::string& token,
   }
 
   std::string auth_url = g_conf->rgw_swift_auth_url;
-  if (auth_url[auth_url.length() - 1] != '/') {
+  if (auth_url.back() != '/') {
     auth_url.append("/");
   }
 
