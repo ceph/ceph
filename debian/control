@@ -50,6 +50,7 @@ Build-Depends: bc,
                python (>= 2.7),
                python-all-dev,
                python-nose,
+	       python-prettytable,
 	       python-setuptools,
                python-sphinx,
                python3-all-dev,
@@ -363,7 +364,8 @@ Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
          python-rbd (= ${binary:Version}),
          python-rgw (= ${binary:Version}),
          ${python:Depends},
-	 python-requests
+	 python-requests,
+	 python-prettytable
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools,
 	  ceph (<< 10),
