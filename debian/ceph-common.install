@@ -1,3 +1,5 @@
+#! /usr/bin/dh-exec --with=install
+
 etc/bash_completion.d/rados
 etc/bash_completion.d/rbd
 usr/bin/ceph
@@ -18,7 +20,7 @@ usr/bin/ceph-post-file
 usr/bin/ceph-brag
 usr/sbin/mount.ceph sbin
 usr/lib/ceph/compressor/*
-usr/lib/ceph/crypto/*
+usr/lib/ceph/crypto/* [amd64]
 usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-conf.8
 usr/share/man/man8/ceph-dencoder.8
