@@ -2338,19 +2338,6 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
   return 0;
 }
 
-void buffer::list::prepare_iov(std::vector<iovec> *piov) const
-{
-  assert(_buffers.size() <= IOV_MAX);
-  piov->resize(_buffers.size());
-  unsigned n = 0;
-  for (std::list<buffer::ptr>::const_iterator p = _buffers.begin();
-       p != _buffers.end();
-       ++p, ++n) {
-    (*piov)[n].iov_base = (void *)p->c_str();
-    (*piov)[n].iov_len = p->length();
-  }
-}
-
 int buffer::list::write_fd_zero_copy(int fd) const
 {
   if (!can_zero_copy())
