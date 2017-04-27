@@ -69,13 +69,13 @@ def task(ctx, config):
     global log
 
     # regions and config found from rgw task
-    assert ctx.rgw.regions
-        "tasks radosgw_admin needs region(s) declared from the rgw task"
+    assert ctx.rgw.regions is not None, \
+        "radosgw_admin task needs region(s) declared from the rgw task"
     regions = ctx.rgw.regions
     log.debug('regions are: %r', regions)
 
-    assert ctx.rgw.config
-        "tasks radosgw_admin needs a config passed from the rgw task"
+    assert ctx.rgw.config, \
+        "radosgw_admin task needs a config passed from the rgw task"
     config = ctx.rgw.config
     log.debug('config is: %r', config)
 
