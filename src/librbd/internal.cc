@@ -1351,7 +1351,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     int r = ictx->state->open(true);
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
-      delete ictx;
       if (r != -ENOENT) {
 	return r;
       }
