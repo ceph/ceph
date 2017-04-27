@@ -18,6 +18,7 @@
 #include <atomic>
 
 #include "os/fs/FS.h"
+#include "os/fs/aio.h"
 #include "include/interval_set.h"
 
 #include "BlockDevice.h"
@@ -26,7 +27,7 @@ class KernelDevice : public BlockDevice {
   int fd_direct, fd_buffered;
   uint64_t size;
   uint64_t block_size;
-  string path;
+  std::string path;
   FS *fs;
   bool aio, dio;
 
@@ -36,7 +37,7 @@ class KernelDevice : public BlockDevice {
   std::atomic<bool> io_since_flush = {false};
   std::mutex flush_mutex;
 
-  FS::aio_queue_t aio_queue;
+  aio_queue_t aio_queue;
   aio_callback_t aio_callback;
   void *aio_callback_priv;
   bool aio_stop;
@@ -64,12 +65,12 @@ class KernelDevice : public BlockDevice {
   int direct_read_unaligned(uint64_t off, uint64_t len, char *buf);
 
   // stalled aio debugging
-  FS::aio_list_t debug_queue;
+  aio_list_t debug_queue;
   std::mutex debug_queue_lock;
-  FS::aio_t *debug_oldest = nullptr;
+  aio_t *debug_oldest = nullptr;
   utime_t debug_stall_since;
-  void debug_aio_link(FS::aio_t& aio);
-  void debug_aio_unlink(FS::aio_t& aio);
+  void debug_aio_link(aio_t& aio);
+  void debug_aio_unlink(aio_t& aio);
 
 public:
   KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);
@@ -83,7 +84,7 @@ public:
     return block_size;
   }
 
-  int collect_metadata(string prefix, map<string,string> *pm) const override;
+  int collect_metadata(std::string prefix, map<std::string,std::string> *pm) const override;
 
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc,
@@ -99,7 +100,7 @@ public:
 
   // for managing buffered readers/writers
   int invalidate_cache(uint64_t off, uint64_t len) override;
-  int open(const string& path) override;
+  int open(const std::string& path) override;
   void close() override;
 };
 
