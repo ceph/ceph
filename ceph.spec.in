@@ -121,6 +121,7 @@ BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-devel
 BuildRequires:	python-nose
+BuildRequires:	python-prettytable
 BuildRequires:	python-requests
 BuildRequires:	python-sphinx
 BuildRequires:	python-virtualenv
@@ -256,6 +257,7 @@ Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python-rgw = %{epoch}:%{version}-%{release}
+Requires:	python-prettytable
 Requires:	python-requests
 %{?systemd_requires}
 %if 0%{?suse_version}
