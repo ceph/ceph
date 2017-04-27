@@ -1,0 +1,7 @@
+meta:
+- desc: "Run the rados cls tests"
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - cls

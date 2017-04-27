@@ -70,7 +70,6 @@ static const struct timespec* abstime(struct timespec &ts, long ms) {
 }
 
 /* Basic locking */
-
 TEST(LibCephFS, BasicLocking) {
   struct ceph_mount_info *cmount = NULL;
   STARTUP_CEPH();
@@ -427,7 +426,8 @@ static void process_ConcurrentLocking(str_ConcurrentLocking& s) {
   exit(EXIT_SUCCESS);
 }
 
-TEST(LibCephFS, InterProcessLocking) {
+// Disabled because of fork() issues (http://tracker.ceph.com/issues/16556)
+TEST(LibCephFS, DISABLED_InterProcessLocking) {
   PROCESS_SLOW_MS();
   // Process synchronization
   char c_file[1024];
@@ -526,7 +526,8 @@ TEST(LibCephFS, InterProcessLocking) {
   CLEANUP_CEPH();
 }
 
-TEST(LibCephFS, ThreesomeInterProcessLocking) {
+// Disabled because of fork() issues (http://tracker.ceph.com/issues/16556)
+TEST(LibCephFS, DISABLED_ThreesomeInterProcessLocking) {
   PROCESS_SLOW_MS();
   // Process synchronization
   char c_file[1024];

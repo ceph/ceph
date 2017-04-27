@@ -27,6 +27,10 @@ public:
     return new ReplayStatusFormatter(journaler, mirror_uuid);
   }
 
+  static void destroy(ReplayStatusFormatter* formatter) {
+    delete formatter;
+  }
+
   ReplayStatusFormatter(Journaler *journaler, const std::string &mirror_uuid);
 
   bool get_or_send_update(std::string *description, Context *on_finish);

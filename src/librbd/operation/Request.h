@@ -22,10 +22,10 @@ public:
   Request(ImageCtxT &image_ctx, Context *on_finish,
           uint64_t journal_op_tid = 0);
 
-  virtual void send();
+  void send();
 
 protected:
-  virtual void finish(int r) override;
+  void finish(int r) override;
   virtual void send_op() = 0;
 
   virtual bool can_affect_io() const {
@@ -58,7 +58,7 @@ protected:
 
   // NOTE: temporary until converted to new state machine format
   Context *create_context_finisher(int r);
-  virtual void finish_and_destroy(int r) override;
+  void finish_and_destroy(int r) override;
 
 private:
   struct C_AppendOpEvent : public Context {
@@ -67,7 +67,7 @@ private:
     C_AppendOpEvent(Request *request, Context *on_safe)
       : request(request), on_safe(on_safe) {
     }
-    virtual void finish(int r) override {
+    void finish(int r) override {
       if (r >= 0) {
         request->m_appended_op_event = true;
       }
@@ -81,7 +81,7 @@ private:
     C_CommitOpEvent(Request *request, int ret_val)
       : request(request), ret_val(ret_val) {
     }
-    virtual void finish(int r) override {
+    void finish(int r) override {
       request->handle_commit_op_event(r, ret_val);
       delete request;
     }

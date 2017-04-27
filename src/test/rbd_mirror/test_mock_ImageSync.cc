@@ -39,8 +39,8 @@ struct TypeTraits<librbd::MockTestImageCtx> {
 } // namespace librbd
 
 // template definitions
-#include "tools/rbd_mirror/ImageSync.cc"
 template class rbd::mirror::ImageSync<librbd::MockTestImageCtx>;
+#include "tools/rbd_mirror/ImageSync.cc"
 
 namespace rbd {
 namespace mirror {
@@ -180,7 +180,7 @@ public:
   typedef image_sync::SyncPointCreateRequest<librbd::MockTestImageCtx> MockSyncPointCreateRequest;
   typedef image_sync::SyncPointPruneRequest<librbd::MockTestImageCtx> MockSyncPointPruneRequest;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;
@@ -197,8 +197,11 @@ public:
     EXPECT_CALL(mock_sync_point_create_request, send())
       .WillOnce(Invoke([this, &mock_local_image_ctx, &mock_sync_point_create_request, r]() {
           if (r == 0) {
-            mock_local_image_ctx.snap_ids["snap1"] = 123;
-            m_client_meta.sync_points.emplace_back("snap1", boost::none);
+            mock_local_image_ctx.snap_ids[{cls::rbd::UserSnapshotNamespace(),
+					   "snap1"}] = 123;
+            m_client_meta.sync_points.emplace_back(cls::rbd::UserSnapshotNamespace(),
+						   "snap1",
+						   boost::none);
           }
           m_threads->work_queue->queue(mock_sync_point_create_request.on_finish, r);
         }));
@@ -313,10 +316,10 @@ TEST_F(TestMockImageSync, RestartSync) {
   MockSyncPointCreateRequest mock_sync_point_create_request;
   MockSyncPointPruneRequest mock_sync_point_prune_request;
 
-  m_client_meta.sync_points = {{"snap1", boost::none},
-                               {"snap2", "snap1", boost::none}};
-  mock_local_image_ctx.snap_ids["snap1"] = 123;
-  mock_local_image_ctx.snap_ids["snap2"] = 234;
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(), "snap1", boost::none},
+                               {cls::rbd::UserSnapshotNamespace(), "snap2", "snap1", boost::none}};
+  mock_local_image_ctx.snap_ids[{cls::rbd::UserSnapshotNamespace(), "snap1"}] = 123;
+  mock_local_image_ctx.snap_ids[{cls::rbd::UserSnapshotNamespace(), "snap2"}] = 234;
 
   librbd::MockObjectMap *mock_object_map = new librbd::MockObjectMap();
   mock_local_image_ctx.object_map = mock_object_map;
@@ -348,7 +351,7 @@ TEST_F(TestMockImageSync, CancelImageCopy) {
   MockSyncPointCreateRequest mock_sync_point_create_request;
   MockSyncPointPruneRequest mock_sync_point_prune_request;
 
-  m_client_meta.sync_points = {{"snap1", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(), "snap1", boost::none}};
 
   InSequence seq;
   expect_prune_sync_point(mock_sync_point_prune_request, false, 0);

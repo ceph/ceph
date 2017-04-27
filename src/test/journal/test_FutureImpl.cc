@@ -13,14 +13,14 @@ public:
     uint64_t refs;
     uint64_t flushes;
     FlushHandler() : refs(0), flushes(0) {}
-    virtual void get() {
+    void get() override {
       ++refs;
     }
-    virtual void put() {
+    void put() override {
       assert(refs > 0);
       --refs;
     }
-    virtual void flush(const journal::FutureImplPtr &future) {
+    void flush(const journal::FutureImplPtr &future) override {
       ++flushes;
     }
   };

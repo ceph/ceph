@@ -21,10 +21,10 @@ struct C_HandleComplete : public Context {
     : replay_handler(_replay_handler) {
     replay_handler->get();
   }
-  virtual ~C_HandleComplete() {
+  ~C_HandleComplete() override {
     replay_handler->put();
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     replay_handler->handle_complete(r);
   }
 };
@@ -36,10 +36,10 @@ struct C_HandleEntriesAvailable : public Context {
       : replay_handler(_replay_handler) {
     replay_handler->get();
   }
-  virtual ~C_HandleEntriesAvailable() {
+  ~C_HandleEntriesAvailable() override {
     replay_handler->put();
   }
-  virtual void finish(int r) {
+  void finish(int r) override {
     replay_handler->handle_entries_available();
   }
 };

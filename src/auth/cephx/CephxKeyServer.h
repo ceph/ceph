@@ -173,7 +173,7 @@ struct KeyServerData {
       break;
 
     default:
-      assert(0);
+      ceph_abort();
     }
   }
 
@@ -200,7 +200,7 @@ public:
   KeyServer(CephContext *cct_, KeyRing *extra_secrets);
   bool generate_secret(CryptoKey& secret);
 
-  bool get_secret(const EntityName& name, CryptoKey& secret) const;
+  bool get_secret(const EntityName& name, CryptoKey& secret) const override;
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
   bool get_caps(const EntityName& name, const string& type, AuthCapsInfo& caps) const;
   bool get_active_rotating_secret(const EntityName& name, CryptoKey& secret) const;
@@ -217,7 +217,7 @@ public:
   bool get_service_secret(uint32_t service_id, CryptoKey& service_key, 
 			  uint64_t& secret_id) const;
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
-			  CryptoKey& secret) const;
+			  CryptoKey& secret) const override;
 
   bool generate_secret(EntityName& name, CryptoKey& secret);
 

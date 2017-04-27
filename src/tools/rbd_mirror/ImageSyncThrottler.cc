@@ -16,6 +16,7 @@
 #include "ImageSync.h"
 #include "common/ceph_context.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::ImageSyncThrottler:: " << this \
@@ -26,6 +27,25 @@ using std::set;
 
 namespace rbd {
 namespace mirror {
+
+template <typename ImageCtxT>
+struct ImageSyncThrottler<ImageCtxT>::C_SyncHolder : public Context {
+  ImageSyncThrottler<ImageCtxT> *m_sync_throttler;
+  PoolImageId m_local_pool_image_id;
+  ImageSync<ImageCtxT> *m_sync = nullptr;
+  Context *m_on_finish;
+
+  C_SyncHolder(ImageSyncThrottler<ImageCtxT> *sync_throttler,
+               const PoolImageId &local_pool_image_id, Context *on_finish)
+    : m_sync_throttler(sync_throttler),
+      m_local_pool_image_id(local_pool_image_id), m_on_finish(on_finish) {
+  }
+
+  void finish(int r) override {
+    m_sync_throttler->handle_sync_finished(this);
+    m_on_finish->complete(r);
+  }
+};
 
 template <typename I>
 ImageSyncThrottler<I>::ImageSyncThrottler()

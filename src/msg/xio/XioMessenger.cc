@@ -52,8 +52,6 @@ static const level_pair LEVELS[] = {
   make_pair("trace", 20)
 };
 
-// maintain our own global context, we can't rely on g_ceph_context
-// for things like librados
 static CephContext *context;
 
 int get_level()
@@ -350,7 +348,7 @@ static ostream& _prefix(std::ostream *_dout, XioMessenger *msgr) {
 }
 
 XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
-			   string mname, uint64_t _nonce, uint64_t features,
+			   string mname, uint64_t _nonce,
 			   uint64_t cflags, DispatchStrategy *ds)
   : SimplePolicyMessenger(cct, name, mname, _nonce),
     XioInit(cct),
@@ -378,14 +376,13 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
   /* update class instance count */
   nInstances.inc();
 
-  local_features = features;
-  loop_con->set_features(features);
+  loop_con->set_features(CEPH_FEATURES_ALL);
 
   ldout(cct,2) << "Create msgr: " << this << " instance: "
     << nInstances.read() << " type: " << name.type_str()
     << " subtype: " << mname << " nportals: " << get_nportals(cflags)
-    << " nconns_per_portal: " << get_nconns_per_portal(cflags) << " features: "
-    << features << dendl;
+    << " nconns_per_portal: " << get_nconns_per_portal(cflags)
+    << dendl;
 
 } /* ctor */
 
@@ -775,9 +772,7 @@ static inline XioMsg* pool_alloc_xio_msg(Message *m, XioConnection *xcon,
     return NULL;
   XioMsg *xmsg = reinterpret_cast<XioMsg*>(mp_mem.addr);
   assert(!!xmsg);
-  new (xmsg) XioMsg(m, xcon, mp_mem, ex_cnt,
-		    static_cast<XioMessenger*>(
-		      xcon->get_messenger())->local_features);
+  new (xmsg) XioMsg(m, xcon, mp_mem, ex_cnt, CEPH_FEATURES_ALL);
   return xmsg;
 }
 

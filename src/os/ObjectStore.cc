@@ -64,10 +64,10 @@ ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& type,
 				 const string& data,
 				 const string& journal,
-			         osflagbits_t flags)
+				 osflagbits_t flags)
 {
   if (type == "filestore") {
-    return new FileStore(data, journal, flags);
+    return new FileStore(cct, data, journal, flags);
   }
   if (type == "memstore") {
     return new MemStore(cct, data);
@@ -76,6 +76,18 @@ ObjectStore *ObjectStore::create(CephContext *cct,
   if (type == "bluestore" &&
       cct->check_experimental_feature_enabled("bluestore")) {
     return new BlueStore(cct, data);
+  }
+  if (type == "random" &&
+      cct->check_experimental_feature_enabled("bluestore")) {
+    if (rand() % 2) {
+      return new FileStore(cct, data, journal, flags);
+    } else {
+      return new BlueStore(cct, data);
+    }
+  }
+#else
+  if (type == "random") {
+    return new FileStore(cct, data, journal, flags);
   }
 #endif
   if (type == "kstore" &&
@@ -95,7 +107,7 @@ int ObjectStore::probe_block_device_fsid(
 #if defined(HAVE_LIBAIO)
   // first try bluestore -- it has a crc on its header and will fail
   // reliably.
-  r = BlueStore::get_block_device_fsid(path, fsid);
+  r = BlueStore::get_block_device_fsid(cct, path, fsid);
   if (r == 0) {
     lgeneric_dout(cct, 0) << __func__ << " " << path << " is bluestore, "
 			  << *fsid << dendl;
@@ -104,7 +116,7 @@ int ObjectStore::probe_block_device_fsid(
 #endif
 
   // okay, try FileStore (journal).
-  r = FileStore::get_block_device_fsid(path, fsid);
+  r = FileStore::get_block_device_fsid(cct, path, fsid);
   if (r == 0) {
     lgeneric_dout(cct, 0) << __func__ << " " << path << " is filestore, "
 			  << *fsid << dendl;

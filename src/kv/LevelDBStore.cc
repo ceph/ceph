@@ -11,6 +11,7 @@ using std::string;
 #include "common/debug.h"
 #include "common/perf_counters.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_leveldb
 #undef dout_prefix
 #define dout_prefix *_dout << "leveldb: "
@@ -21,12 +22,12 @@ public:
   explicit CephLevelDBLogger(CephContext *c) : cct(c) {
     cct->get();
   }
-  ~CephLevelDBLogger() {
+  ~CephLevelDBLogger() override {
     cct->put();
   }
 
   // Write an entry to the log file with the specified format.
-  void Logv(const char* format, va_list ap) {
+  void Logv(const char* format, va_list ap) override {
     dout(1);
     char buf[65536];
     vsnprintf(buf, sizeof(buf), format, ap);
@@ -168,11 +169,11 @@ void LevelDBStore::close()
 
 int LevelDBStore::submit_transaction(KeyValueDB::Transaction t)
 {
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   LevelDBTransactionImpl * _t =
     static_cast<LevelDBTransactionImpl *>(t.get());
   leveldb::Status s = db->Write(leveldb::WriteOptions(), &(_t->bat));
-  utime_t lat = ceph_clock_now(g_ceph_context) - start;
+  utime_t lat = ceph_clock_now() - start;
   logger->inc(l_leveldb_txns);
   logger->tinc(l_leveldb_submit_latency, lat);
   return s.ok() ? 0 : -1;
@@ -180,13 +181,13 @@ int LevelDBStore::submit_transaction(KeyValueDB::Transaction t)
 
 int LevelDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   LevelDBTransactionImpl * _t =
     static_cast<LevelDBTransactionImpl *>(t.get());
   leveldb::WriteOptions options;
   options.sync = true;
   leveldb::Status s = db->Write(options, &(_t->bat));
-  utime_t lat = ceph_clock_now(g_ceph_context) - start;
+  utime_t lat = ceph_clock_now() - start;
   logger->inc(l_leveldb_txns);
   logger->tinc(l_leveldb_submit_sync_latency, lat);
   return s.ok() ? 0 : -1;
@@ -236,8 +237,20 @@ void LevelDBStore::LevelDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   for (it->seek_to_first();
        it->valid();
        it->next()) {
-    string key = combine_strings(prefix, it->key());
-    bat.Delete(key);
+    bat.Delete(leveldb::Slice(combine_strings(prefix, it->key())));
+  }
+}
+
+void LevelDBStore::LevelDBTransactionImpl::rm_range_keys(const string &prefix, const string &start, const string &end)
+{
+  KeyValueDB::Iterator it = db->get_iterator(prefix);
+  it->lower_bound(start);
+  while (it->valid()) {
+    if (it->key() >= end) {
+      break;
+    }
+    bat.Delete(combine_strings(prefix, it->key()));
+    it->next();
   }
 }
 
@@ -246,7 +259,7 @@ int LevelDBStore::get(
     const std::set<string> &keys,
     std::map<string, bufferlist> *out)
 {
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   for (std::set<string>::const_iterator i = keys.begin();
        i != keys.end(); ++i) {
     std::string value;
@@ -255,7 +268,7 @@ int LevelDBStore::get(
     if (status.ok())
       (*out)[*i].append(value);
   }
-  utime_t lat = ceph_clock_now(g_ceph_context) - start;
+  utime_t lat = ceph_clock_now() - start;
   logger->inc(l_leveldb_gets);
   logger->tinc(l_leveldb_get_latency, lat);
   return 0;
@@ -266,7 +279,7 @@ int LevelDBStore::get(const string &prefix,
       bufferlist *out)
 {
   assert(out && (out->length() == 0));
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now();
   int r = 0;
   string value, k;
   leveldb::Status s;
@@ -277,7 +290,7 @@ int LevelDBStore::get(const string &prefix,
   } else {
     r = -ENOENT;
   }
-  utime_t lat = ceph_clock_now(g_ceph_context) - start;
+  utime_t lat = ceph_clock_now() - start;
   logger->inc(l_leveldb_gets);
   logger->tinc(l_leveldb_get_latency, lat);
   return r;

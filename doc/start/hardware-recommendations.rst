@@ -226,7 +226,7 @@ deployment tools  (e.g., Dell's Crowbar) deploy with five different networks,
 but employ VLANs to make hardware and network cabling more manageable. VLANs
 using 802.1q protocol require VLAN-capable NICs and Switches. The added hardware
 expense may be offset by the operational cost savings for network setup and
-maintenance. When using VLANs to handle VM traffic between between the cluster
+maintenance. When using VLANs to handle VM traffic between the cluster
 and compute stacks (e.g., OpenStack, CloudStack, etc.), it is also worth
 considering using 10G Ethernet. Top-of-rack routers for each network also need
 to be able to communicate with spine routers that have even faster
@@ -350,5 +350,5 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 .. _Ceph Write Throughput 2: http://ceph.com/community/ceph-performance-part-2-write-throughput-without-ssd-journals/
 .. _Argonaut v. Bobtail Performance Preview: http://ceph.com/uncategorized/argonaut-vs-bobtail-performance-preview/
 .. _Bobtail Performance - I/O Scheduler Comparison: http://ceph.com/community/ceph-bobtail-performance-io-scheduler-comparison/ 
-.. _Mapping Pools to Different Types of OSDs: http://ceph.com/docs/master/rados/operations/crush-map/#placing-different-pools-on-different-osds
+.. _Mapping Pools to Different Types of OSDs: ../../rados/operations/crush-map#placing-different-pools-on-different-osds
 .. _OS Recommendations: ../os-recommendations

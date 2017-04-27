@@ -45,12 +45,16 @@ creation of multiple filesystems use ``ceph fs flag set enable_multiple true``.
 Daemons
 -------
 
-These commands act on specific mds daemons or ranks.  For convenience,
-they accept arguments that 
+These commands act on specific mds daemons or ranks.
 
 ::
 
     mds fail <gid/name/role
+
+This command deactivates an MDS causing it to flush its entire journal to
+backing RADOS objects and close all open client sessions. Deactivating an MDS
+is primarily intended for bringing down a rank after reducing the number of
+active MDS (max_mds).
 
 ::
 
@@ -69,7 +73,6 @@ they accept arguments that
     mds repaired <role>
 
 
-
 Global settings
 ---------------
 
@@ -81,11 +84,12 @@ Global settings
 
     fs flag set <flag name> <flag val> [<confirmation string>]
 
-    flag name must be one of ['enable_multiple']
+"flag name" must be one of ['enable_multiple']
 
-    some flags require you to confirm your intentions with "--yes-i-really-mean-it"
-    or a similar string they will prompt you with. Consider these actions carefully
-    before proceeding; they are placed on especially dangerous activities.
+Some flags require you to confirm your intentions with "--yes-i-really-mean-it"
+or a similar string they will prompt you with. Consider these actions carefully
+before proceeding; they are placed on especially dangerous activities.
+
 
 Advanced
 --------
@@ -120,7 +124,7 @@ filesystem.
     mds rmfailed
 
 Legacy
-======
+------
 
 ::
 
@@ -130,7 +134,7 @@ Legacy
     mds set_max_mds # replaced by "fs set max_mds"
     mds set # replaced by "fs set"
     mds cluster_down  # replaced by "fs set cluster_down"
-    mds cluster_up  # replaced by "fs set cluster_down"
+    mds cluster_up  # replaced by "fs set cluster_up"
     mds newfs # replaced by "fs new"
     mds add_data_pool # replaced by "fs add_data_pool"
     mds remove_data_pool #replaced by "fs remove_data_pool"

@@ -43,19 +43,19 @@ For general object store configuration, refer to the following:
 To optimize the performance of your cluster, refer to the following:
 
 .. toctree::
-	:maxdepth: 1
+   :maxdepth: 1
 
-	Network Settings <network-config-ref>
-	Auth Settings <auth-config-ref>
-	Monitor Settings <mon-config-ref>
-	Heartbeat Settings <mon-osd-interaction>
-	OSD Settings <osd-config-ref>
-	Filestore Settings <filestore-config-ref>
-	Key/Value Store Settings <keyvaluestore-config-ref>
-	Journal Settings <journal-ref>
-	Pool, PG & CRUSH Settings <pool-pg-config-ref.rst>
-	Messaging Settings <ms-ref>	
-	General Settings <general-config-ref>
+   Network Settings <network-config-ref>
+   Auth Settings <auth-config-ref>
+   Monitor Settings <mon-config-ref>
+   mon-lookup-dns
+   Heartbeat Settings <mon-osd-interaction>
+   OSD Settings <osd-config-ref>
+   Filestore Settings <filestore-config-ref>
+   Journal Settings <journal-ref>
+   Pool, PG & CRUSH Settings <pool-pg-config-ref.rst>
+   Messaging Settings <ms-ref>
+   General Settings <general-config-ref>
 
    
 .. raw:: html

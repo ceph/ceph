@@ -44,7 +44,7 @@ class C_Count : public Context {
 public:
   C_Count(op_data *op, atomic_t *outstanding)
     : m_op(op), m_outstanding(outstanding) {}
-  void finish(int r) {
+  void finish(int r) override {
     m_op->done.inc();
     assert(m_outstanding->read() > 0);
     m_outstanding->dec();
@@ -300,7 +300,7 @@ int correctness_test(uint64_t delay_ns)
   std::cout << "wrote dirtying data" << std::endl;
 
   std::cout << "Waiting to read data into cache" << std::endl;
-  r = frontreadcond.wait();
+  frontreadcond.wait();
   verify_finisher.wait();
 
   std::cout << "Validating data" << std::endl;
@@ -355,7 +355,8 @@ int main(int argc, const char **argv)
   std::vector<const char*> args;
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
 
   long long delay_ns = 0;
   long long num_ops = 1000;

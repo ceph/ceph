@@ -88,7 +88,8 @@ int main(int argc, const char **argv)
 	messenger = new XioMessenger(g_ceph_context,
 				     entity_name_t::MON(-1),
 				     "xio_server",
-				     0 /* nonce */, XIO_ALL_FEATURES, 0 /* cflags */,
+				     0 /* nonce */,
+				     0 /* cflags */,
 				     dstrategy);
 
 	static_cast<XioMessenger*>(messenger)->set_magic(
@@ -96,7 +97,7 @@ int main(int argc, const char **argv)
 	  MSG_MAGIC_TRACE_CTR /* timing prints */);
 
 	messenger->set_default_policy(
-	  Messenger::Policy::stateless_server(CEPH_FEATURES_ALL, 0));
+	  Messenger::Policy::stateless_server(0));
 
 	r = messenger->bind(bind_addr);
 	if (r < 0)

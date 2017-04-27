@@ -46,15 +46,18 @@ protected:
     uint64_t stripe_unit = strtoll(s_xattr.c_str(), NULL, 10);
     ASSERT_LT((unsigned)0, stripe_unit);
     ASSERT_EQ(stripe_unit, exp_stripe_unit);
+    xattrbl.clear();
     ASSERT_LT(0, ioctx.getxattr(firstOid, "striper.layout.stripe_count", xattrbl));
     s_xattr = std::string(xattrbl.c_str(), xattrbl.length()); // adds 0 byte at the end
     uint64_t stripe_count = strtoll(s_xattr.c_str(), NULL, 10);
     ASSERT_LT(0U, stripe_count);
     ASSERT_EQ(stripe_count, exp_stripe_count);
+    xattrbl.clear();
     ASSERT_LT(0, ioctx.getxattr(firstOid, "striper.layout.object_size", xattrbl));
     s_xattr = std::string(xattrbl.c_str(), xattrbl.length()); // adds 0 byte at the end
     uint64_t object_size = strtoll(s_xattr.c_str(), NULL, 10);
     ASSERT_EQ(object_size, exp_object_size);
+    xattrbl.clear();
     ASSERT_LT(0, ioctx.getxattr(firstOid, "striper.size", xattrbl));
     s_xattr = std::string(xattrbl.c_str(), xattrbl.length()); // adds 0 byte at the end
     uint64_t xa_size = strtoll(s_xattr.c_str(), NULL, 10);
@@ -162,12 +165,13 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
       << "_" << testData.size;
   std::string soid = oss.str();
   // writing striped data
+  char* buf1;
   bufferlist bl1;
   {
     SCOPED_TRACE("Writing initial object"); 
-    char buf[testData.size];
-    for (unsigned int i = 0; i < testData.size; i++) buf[i] = 13*((unsigned char)i);
-    bl1.append(buf, testData.size);
+    buf1 = (char*) calloc(1, testData.size);
+    for (unsigned int i = 0; i < testData.size; i++) buf1[i] = 13*((unsigned char)i);
+    bl1.append(buf1, testData.size);
     ASSERT_EQ(0, striper.write(soid, bl1, testData.size, 0));
     // checking object state from Rados point of view
     ASSERT_NO_FATAL_FAILURE(checkObjectFromRados(soid, bl1, testData.stripe_unit,
@@ -175,10 +179,11 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
                                                  testData.size));
   }
   // adding more data to object and checking again
+  char* buf2;
   bufferlist bl2;
   {
     SCOPED_TRACE("Testing append");
-    char buf2[testData.size];
+    buf2 = (char*) calloc(1, testData.size);
     for (unsigned int i = 0; i < testData.size; i++) buf2[i] = 17*((unsigned char)i);
     bl2.append(buf2, testData.size);
     ASSERT_EQ(0, striper.append(soid, bl2, testData.size));
@@ -224,7 +229,9 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
     for (uint64_t object_nb = 0;
          object_nb < testData.size*2/testData.object_size + testData.stripe_count;
          object_nb++) {
-      ASSERT_EQ(-ENOENT, ioctx.stat(getObjName(soid, object_nb), &size, &mtime));
+      char* oid = getObjName(soid, object_nb);
+      ASSERT_EQ(-ENOENT, ioctx.stat(oid, &size, &mtime));
+      free(oid);
     }
   }
   {
@@ -234,6 +241,7 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
     // remove the object size attribute from the striped object
     char* firstOid = getObjName(soid, 0);
     ASSERT_EQ(0, ioctx.rmxattr(firstOid, "striper.size"));
+    free(firstOid);
     // check that stat fails
     uint64_t size;
     time_t mtime;   
@@ -244,10 +252,13 @@ TEST_P(StriperTestRT, StripedRoundtrip) {
     for (uint64_t object_nb = 0;
          object_nb < testData.size*2/testData.object_size + testData.stripe_count;
          object_nb++) {
-      ASSERT_EQ(-ENOENT, ioctx.stat(getObjName(soid, object_nb), &size, &mtime));
+      char* oid = getObjName(soid, object_nb);
+      ASSERT_EQ(-ENOENT, ioctx.stat(oid, &size, &mtime));
+      free(oid);
     }
-    free(firstOid);
   }
+  free(buf1);
+  free(buf2);
 }
 
 const TestData simple_stripe_schemes[] = {

@@ -104,7 +104,7 @@ protected:
   public:
     C_RetryMessage(PaxosService *s, MonOpRequestRef op_) :
       C_MonOp(op_), svc(s) { }
-    void _finish(int r) {
+    void _finish(int r) override {
       if (r == -EAGAIN || r >= 0)
 	svc->dispatch(op);
       else if (r == -ECANCELED)
@@ -114,67 +114,6 @@ protected:
     }
   };
 
-  /**
-   * Callback used to make sure we call the PaxosService::_active function
-   * whenever a condition is fulfilled.
-   *
-   * This is used in multiple situations, from waiting for the Paxos to commit
-   * our proposed value, to waiting for the Paxos to become active once an
-   * election is finished.
-   */
-  class C_Active : public Context {
-    PaxosService *svc;
-  public:
-    explicit C_Active(PaxosService *s) : svc(s) {}
-    void finish(int r) {
-      if (r >= 0)
-	svc->_active();
-    }
-  };
-
-  /**
-   * Callback class used to propose the pending value once the proposal_timer
-   * fires up.
-   */
-  class C_Propose : public Context {
-    PaxosService *ps;
-  public:
-    explicit C_Propose(PaxosService *p) : ps(p) { }
-    void finish(int r) {
-      ps->proposal_timer = 0;
-      if (r >= 0)
-	ps->propose_pending();
-      else if (r == -ECANCELED || r == -EAGAIN)
-	return;
-      else
-	assert(0 == "bad return value for C_Propose");
-    }
-  };
-
-  /**
-   * Callback class used to mark us as active once a proposal finishes going
-   * through Paxos.
-   *
-   * We should wake people up *only* *after* we inform the service we
-   * just went active. And we should wake people up only once we finish
-   * going active. This is why we first go active, avoiding to wake up the
-   * wrong people at the wrong time, such as waking up a C_RetryMessage
-   * before waking up a C_Active, thus ending up without a pending value.
-   */
-  class C_Committed : public Context {
-    PaxosService *ps;
-  public:
-    explicit C_Committed(PaxosService *p) : ps(p) { }
-    void finish(int r) {
-      ps->proposing = false;
-      if (r >= 0)
-	ps->_active();
-      else if (r == -ECANCELED || r == -EAGAIN)
-	return;
-      else
-	assert(0 == "bad return value for C_Committed");
-    }
-  };
   /**
    * @}
    */
@@ -576,10 +515,7 @@ public:
    * @returns true if writeable; false otherwise
    */
   bool is_writeable() {
-    return
-      !is_proposing() &&
-      is_write_ready() &&
-      (paxos->is_active() || paxos->is_updating() || paxos->is_writing());
+    return is_write_ready(); 
   }
 
   /**
@@ -602,7 +538,7 @@ public:
    */
   void wait_for_finished_proposal(MonOpRequestRef op, Context *c) {
     if (op)
-      op->mark_event(service_name + ":wait_for_finished_proposal");
+      op->mark_event_string(service_name + ":wait_for_finished_proposal");
     waiting_for_finished_proposal.push_back(c);
   }
   void wait_for_finished_proposal_ctx(Context *c) {
@@ -617,7 +553,7 @@ public:
    */
   void wait_for_active(MonOpRequestRef op, Context *c) {
     if (op)
-      op->mark_event(service_name + ":wait_for_active");
+      op->mark_event_string(service_name + ":wait_for_active");
 
     if (!is_proposing()) {
       paxos->wait_for_active(op, c);
@@ -644,7 +580,7 @@ public:
      * happens to be readable at that specific point in time.
      */
     if (op)
-      op->mark_event(service_name + ":wait_for_readable");
+      op->mark_event_string(service_name + ":wait_for_readable");
 
     if (is_proposing() ||
 	ver > get_last_committed() ||
@@ -652,7 +588,7 @@ public:
       wait_for_finished_proposal(op, c);
     else {
       if (op)
-        op->mark_event(service_name + ":wait_for_readable/paxos");
+        op->mark_event_string(service_name + ":wait_for_readable/paxos");
 
       paxos->wait_for_readable(op, c);
     }
@@ -670,7 +606,7 @@ public:
    */
   void wait_for_writeable(MonOpRequestRef op, Context *c) {
     if (op)
-      op->mark_event(service_name + ":wait_for_writeable");
+      op->mark_event_string(service_name + ":wait_for_writeable");
 
     if (is_proposing())
       wait_for_finished_proposal(op, c);

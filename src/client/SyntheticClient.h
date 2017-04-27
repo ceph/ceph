@@ -207,12 +207,12 @@ class SyntheticClient {
   }
 
   bool time_to_stop() {
-    utime_t now = ceph_clock_now(client->cct);
-    if (0) cout << "time_to_stop .. now " << now 
-		<< " until " << run_until 
-		<< " start " << run_start 
+    utime_t now = ceph_clock_now();
+    if (0) cout << "time_to_stop .. now " << now
+		<< " until " << run_until
+		<< " start " << run_start
 		<< std::endl;
-    if (run_until.sec() && now > run_until) 
+    if (run_until.sec() && now > run_until)
       return true;
     else
       return false;
@@ -265,13 +265,14 @@ class SyntheticClient {
 
   void import_find(const char *basedir, const char *find, bool writedata);
 
-  int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name);
-  int lookup_ino(inodeno_t ino);
+  int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
+		  const UserPerm& perms);
+  int lookup_ino(inodeno_t ino, const UserPerm& perms);
 
   int chunk_file(string &filename);
 
-  void mksnap(const char *base, const char *name);
-  void rmsnap(const char *base, const char *name);
+  void mksnap(const char *base, const char *name, const UserPerm& perms);
+  void rmsnap(const char *base, const char *name, const UserPerm& perms);
   void mksnapfile(const char *dir);
 
 };

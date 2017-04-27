@@ -16,6 +16,7 @@ import argparse
 import configobj
 import mock
 import os
+import platform
 import pytest
 import shutil
 import tempfile
@@ -39,7 +40,7 @@ class Base(object):
         os.unlink(self.conf_file)
 
     def save_conf(self):
-        self.conf.write(open(self.conf_file, 'w'))
+        self.conf.write(open(self.conf_file, 'wb'))
 
 
 class TestPrepare(Base):
@@ -133,6 +134,8 @@ class TestDevice(Base):
                               m_update_partition,
                               m_get_free_partition_index,
                               m_is_partition):
+        if platform.system() == 'FreeBSD':
+            return
         m_is_partition.return_value = False
         partition_number = 1
         m_get_free_partition_index.return_value = partition_number
@@ -154,7 +157,7 @@ class TestDevice(Base):
                        partition_number,
                        main.PTYPE['regular']['journal']['ready']),
                    '--mbrtogpt', '--', path]
-        m_command_check_call.assert_called_with(command)
+        m_command_check_call.assert_called_with(command, exit=True)
         m_update_partition.assert_called_with(path, 'created')
 
         actual_partition_number = device.create_partition(
@@ -167,7 +170,7 @@ class TestDevice(Base):
                        partition_number,
                        main.PTYPE['regular']['journal']['ready']),
                    '--mbrtogpt', '--', path]
-        m_command_check_call.assert_called_with(command)
+        m_command_check_call.assert_called_with(command, exit=True)
 
 
 class TestDevicePartition(Base):

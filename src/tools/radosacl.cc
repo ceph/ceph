@@ -151,11 +151,12 @@ int main(int argc, const char **argv)
 
   ACLID id;
 
-  snprintf(id.id, ID_SIZE + 1, "%.16x", 0x1234);
+  snprintf(id.id, sizeof(id.id), "%.8x", 0x1234);
   cout << "id=" << id.id << std::endl;
 
   r = io_ctx.exec(oid, "acl", "get", bl, bl2);
-  cout << "exec returned " << r << " len=" << bl2.length() << std::endl;
+  cout << "exec(acl get) returned " << r
+       << " len=" << bl2.length() << std::endl;
   ObjectACLs oa;
   if (r >= 0) {
     bufferlist::iterator iter = bl2.begin();
@@ -166,6 +167,8 @@ int main(int argc, const char **argv)
   bl.clear();
   oa.encode(bl);
   r = io_ctx.exec(oid, "acl", "set", bl, bl2);
+  cout << "exec(acl set) returned " << r
+       << " len=" << bl2.length() << std::endl;
 
   const unsigned char *md5 = (const unsigned char *)bl2.c_str();
   char md5_str[bl2.length()*2 + 1];

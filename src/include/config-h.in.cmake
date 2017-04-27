@@ -102,6 +102,9 @@
 /* SPDK conditional compilation */
 #cmakedefine HAVE_SPDK
 
+/* DPDK conditional compilation */
+#cmakedefine HAVE_DPDK
+
 /* Defined if LevelDB supports bloom filters */
 #cmakedefine HAVE_LEVELDB_FILTER_POLICY
 
@@ -123,8 +126,39 @@
 /* Accelio conditional compilation */
 #cmakedefine HAVE_XIO
 
+
+/* AsyncMessenger RDMA conditional compilation */
+#cmakedefine HAVE_RDMA
+
+/* ibverbs experimental conditional compilation */
+#cmakedefine HAVE_IBV_EXP
+
+/* define if embedded enabled */
+#cmakedefine WITH_EMBEDDED
+
+/* define if cephfs enabled */
+#cmakedefine WITH_CEPHFS
+
+/* define if rbd enabled */
+#cmakedefine WITH_RBD
+
+/* define if kernel rbd enabled */
+#cmakedefine WITH_KRBD
+
+/* define if key-value-store is enabled */
+#cmakedefine WITH_KVS
+
 /* define if radosgw enabled */
 #cmakedefine WITH_RADOSGW
+
+/* define if radosgw enabled */
+#cmakedefine WITH_RADOSGW_FCGI_FRONTEND
+
+/* define if leveldb is enabled */
+#cmakedefine WITH_LEVELDB
+
+/* define if radosgw's asio frontend enabled */
+#cmakedefine WITH_RADOSGW_ASIO_FRONTEND
 
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
@@ -246,6 +280,12 @@
 /* Support ARMv8 CRC instructions */
 #cmakedefine HAVE_ARMV8_CRC
 
+/* Support ARMv8 CRYPTO instructions */
+#cmakedefine HAVE_ARMV8_CRYPTO
+
+/* Support ARMv8 CRC and CRYPTO intrinsics */
+#cmakedefine HAVE_ARMV8_CRC_CRYPTO_INTRINSICS
+
 /* Define if you have struct stat.st_mtimespec.tv_nsec */
 #cmakedefine HAVE_STAT_ST_MTIMESPEC_TV_NSEC
 
@@ -266,5 +306,8 @@
 
 /* Defined if pthread_getname_np() is available */
 #cmakedefine HAVE_PTHREAD_GETNAME_NP 1
+
+/* Support POWER8 instructions */
+#cmakedefine HAVE_POWER8
 
 #endif /* CONFIG_H */

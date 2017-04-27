@@ -149,7 +149,7 @@ int main(int argc, const char **argv)
    * now let's read that object back! Just for fun, we'll do it using
    * async IO instead of synchronous. (This would be more useful if we
    * wanted to send off multiple reads at once; see
-   * http://ceph.com/docs/master/rados/api/librados/#asychronous-io )
+   * http://docs.ceph.com/docs/master/rados/api/librados/#asychronous-io )
    */
   {
     librados::bufferlist read_buf;

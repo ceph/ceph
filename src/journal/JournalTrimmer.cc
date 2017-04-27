@@ -13,6 +13,22 @@
 
 namespace journal {
 
+struct JournalTrimmer::C_RemoveSet : public Context {
+  JournalTrimmer *journal_trimmer;
+  uint64_t object_set;
+  Mutex lock;
+  uint32_t refs;
+  int return_value;
+
+  C_RemoveSet(JournalTrimmer *_journal_trimmer, uint64_t _object_set,
+              uint8_t _splay_width);
+  void complete(int r) override;
+  void finish(int r) override {
+    journal_trimmer->handle_set_removed(r, object_set);
+    journal_trimmer->m_async_op_tracker.finish_op();
+  }
+};
+
 JournalTrimmer::JournalTrimmer(librados::IoCtx &ioctx,
                                const std::string &object_oid_prefix,
                                const JournalMetadataPtr &journal_metadata)
@@ -63,8 +79,10 @@ void JournalTrimmer::remove_objects(bool force, Context *on_finish) {
 
         if (registered_clients.size() == 0) {
           on_finish->complete(-EINVAL);
+          return;
         } else if (registered_clients.size() > 1) {
           on_finish->complete(-EBUSY);
+          return;
         }
       }
 
@@ -141,8 +159,11 @@ void JournalTrimmer::handle_metadata_updated() {
   uint64_t minimum_commit_set = active_set;
   std::string minimum_client_id;
 
-  // TODO: add support for trimming past "laggy" clients
   for (auto &client : registered_clients) {
+    if (client.state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+      continue;
+    }
+
     if (client.commit_position.object_positions.empty()) {
       // client hasn't recorded any commits
       minimum_commit_set = minimum_set;

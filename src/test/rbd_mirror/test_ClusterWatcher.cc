@@ -1,12 +1,14 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "include/rados/librados.hpp"
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "common/Mutex.h"
 #include "librbd/internal.h"
+#include "librbd/api/Mirror.h"
 #include "tools/rbd_mirror/ClusterWatcher.h"
 #include "tools/rbd_mirror/types.h"
+#include "test/rbd_mirror/test_fixture.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 #include <boost/scope_exit.hpp>
@@ -25,7 +27,7 @@ using std::string;
 void register_test_cluster_watcher() {
 }
 
-class TestClusterWatcher : public ::testing::Test {
+class TestClusterWatcher : public ::rbd::mirror::TestFixture {
 public:
 
   TestClusterWatcher() : m_lock("TestClusterWatcherLock")
@@ -35,7 +37,7 @@ public:
     m_cluster_watcher.reset(new ClusterWatcher(m_cluster, m_lock));
   }
 
-  ~TestClusterWatcher() {
+  ~TestClusterWatcher() override {
     m_cluster->wait_for_latest_osdmap();
     for (auto& pool : m_pools) {
       EXPECT_EQ(0, m_cluster->pool_delete(pool.c_str()));
@@ -53,15 +55,16 @@ public:
     if (enable_mirroring) {
       librados::IoCtx ioctx;
       ASSERT_EQ(0, m_cluster->ioctx_create2(pool_id, ioctx));
-      ASSERT_EQ(0, librbd::mirror_mode_set(ioctx, RBD_MIRROR_MODE_POOL));
+      ASSERT_EQ(0, librbd::api::Mirror<>::mode_set(ioctx,
+                                                   RBD_MIRROR_MODE_POOL));
 
       std::string gen_uuid;
-      ASSERT_EQ(0, librbd::mirror_peer_add(ioctx,
-                                           uuid != nullptr ? uuid : &gen_uuid,
-					   peer.cluster_name,
-					   peer.client_name));
+      ASSERT_EQ(0, librbd::api::Mirror<>::peer_add(ioctx,
+                                                   uuid != nullptr ? uuid :
+                                                                     &gen_uuid,
+					           peer.cluster_name,
+					           peer.client_name));
       m_pool_peers[pool_id].insert(peer);
-      m_mirrored_pools.insert(pool_name);
     }
     if (name != nullptr) {
       *name = pool_name;
@@ -73,7 +76,6 @@ public:
     ASSERT_GE(pool_id, 0);
     if (m_pool_peers.find(pool_id) != m_pool_peers.end()) {
       m_pool_peers[pool_id].erase(peer);
-      m_mirrored_pools.erase(name);
       if (m_pool_peers[pool_id].empty()) {
 	m_pool_peers.erase(pool_id);
       }
@@ -122,7 +124,6 @@ public:
     m_cluster_watcher->refresh_pools();
     Mutex::Locker l(m_lock);
     ASSERT_EQ(m_pool_peers, m_cluster_watcher->get_pool_peers());
-    ASSERT_EQ(m_mirrored_pools, m_cluster_watcher->get_pool_names());
   }
 
   Mutex m_lock;
@@ -130,7 +131,6 @@ public:
   unique_ptr<ClusterWatcher> m_cluster_watcher;
 
   set<string> m_pools;
-  set<string> m_mirrored_pools;
   ClusterWatcher::PoolPeers m_pool_peers;
 };
 

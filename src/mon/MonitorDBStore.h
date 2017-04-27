@@ -30,6 +30,8 @@
 #include "common/debug.h"
 #include "common/safe_io.h"
 
+#define dout_context g_ceph_context
+
 class MonitorDBStore
 {
   string path;
@@ -184,7 +186,7 @@ class MonitorDBStore
     }
 
     void append_from_encoded(bufferlist& bl) {
-      TransactionRef other(new Transaction);
+      auto other(std::make_shared<Transaction>());
       bufferlist::iterator it = bl.begin();
       other->decode(it);
       append(other);
@@ -290,7 +292,7 @@ class MonitorDBStore
 	break;
       default:
 	derr << __func__ << " unknown op type " << op.type << dendl;
-	ceph_assert(0);
+	ceph_abort();
 	break;
       }
     }
@@ -318,7 +320,7 @@ class MonitorDBStore
 		    Context *f)
       : store(s), t(t), oncommit(f)
     {}
-    void finish(int r) {
+    void finish(int r) override {
       /* The store serializes writes.  Each transaction is handled
        * sequentially by the io_work Finisher.  If a transaction takes longer
        * to apply its state to permanent storage, then no other transaction
@@ -374,7 +376,7 @@ class MonitorDBStore
 			 string &key,
 			 bufferlist &value,
 			 uint64_t max) {
-      TransactionRef tmp(new Transaction);
+      auto tmp(std::make_shared<Transaction>());
       bufferlist tmp_bl;
       tmp->put(prefix, key, value);
       tmp->encode(tmp_bl);
@@ -432,7 +434,7 @@ class MonitorDBStore
 	sync_prefixes(prefixes)
     { }
 
-    virtual ~WholeStoreIteratorImpl() { }
+    ~WholeStoreIteratorImpl() override { }
 
     /**
      * Obtain a chunk of the store
@@ -443,7 +445,7 @@ class MonitorDBStore
      *			    differ from the one passed on to the function)
      * @param last_key[out] Last key in the chunk
      */
-    virtual void get_chunk_tx(TransactionRef tx, uint64_t max) {
+    void get_chunk_tx(TransactionRef tx, uint64_t max) override {
       assert(done == false);
       assert(iter->valid() == true);
 
@@ -461,7 +463,7 @@ class MonitorDBStore
       done = true;
     }
 
-    virtual pair<string,string> get_next_key() {
+    pair<string,string> get_next_key() override {
       assert(iter->valid());
 
       for (; iter->valid(); iter->next()) {
@@ -474,7 +476,7 @@ class MonitorDBStore
       return pair<string,string>();
     }
 
-    virtual bool _is_valid() {
+    bool _is_valid() override {
       return iter->valid();
     }
   };
@@ -644,7 +646,8 @@ class MonitorDBStore
     string kv_type;
     int r = read_meta("kv_backend", &kv_type);
     if (r < 0) {
-      kv_type = g_conf->mon_keyvaluedb;
+      // assume old monitors that did not mark the type were leveldb.
+      kv_type = "leveldb";
       r = write_meta("kv_backend", kv_type);
       if (r < 0)
 	return r;

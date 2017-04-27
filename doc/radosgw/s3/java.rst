@@ -111,7 +111,7 @@ modified date.
 	do {
 		for (S3ObjectSummary objectSummary : objects.getObjectSummaries()) {
 			System.out.println(objectSummary.getKey() + "\t" +
-				ObjectSummary.getSize() + "\t" +
+				objectSummary.getSize() + "\t" +
 				StringUtils.fromDate(objectSummary.getLastModified()));
 		}
 		objects = conn.listNextBatchOfObjects(objects);

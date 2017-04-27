@@ -41,11 +41,11 @@ public:
   SnapshotRenameRequest(ImageCtxT &image_ctx, Context *on_finish,
                         uint64_t snap_id, const std::string &snap_name);
 
-  virtual journal::Event create_event(uint64_t op_tid) const;
+  journal::Event create_event(uint64_t op_tid) const override;
 
 protected:
-  virtual void send_op();
-  virtual bool should_complete(int r);
+  void send_op() override;
+  bool should_complete(int r) override;
 
 private:
   uint64_t m_snap_id;

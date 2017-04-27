@@ -68,18 +68,17 @@ A sample python script to demonstrate the above is given below:
    from time import time
 
    method = 'GET'
-   host = 'https://objectstore.example.com'
+   host = 'https://objectstore.example.com/swift'
    duration_in_seconds = 300  # Duration for which the url is valid
    expires = int(time() + duration_in_seconds)
    path = '/v1/your-bucket/your-object'
    key = 'secret'
    hmac_body = '%s\n%s\n%s' % (method, expires, path)
-   hmac_body = hmac.new(key, hmac_body, sha1).hexdigest()
    sig = hmac.new(key, hmac_body, sha1).hexdigest()
    rest_uri = "{host}{path}?temp_url_sig={sig}&temp_url_expires={expires}".format(
 		host=host, path=path, sig=sig, expires=expires)
    print rest_uri
 
    # Example Output
-   # https://objectstore.example.com/v1/your-bucket/your-object?temp_url_sig=ff4657876227fc6025f04fcf1e82818266d022c6&temp_url_expires=1423200992
+   # https://objectstore.example.com/swift/v1/your-bucket/your-object?temp_url_sig=ff4657876227fc6025f04fcf1e82818266d022c6&temp_url_expires=1423200992
 

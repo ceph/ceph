@@ -27,6 +27,60 @@ using std::chrono::seconds;
 
 
 
+class ObjectCacher::C_ReadFinish : public Context {
+  ObjectCacher *oc;
+  int64_t poolid;
+  sobject_t oid;
+  loff_t start;
+  uint64_t length;
+  xlist<C_ReadFinish*>::item set_item;
+  bool trust_enoent;
+  ceph_tid_t tid;
+
+public:
+  bufferlist bl;
+  C_ReadFinish(ObjectCacher *c, Object *ob, ceph_tid_t t, loff_t s,
+	       uint64_t l) :
+    oc(c), poolid(ob->oloc.pool), oid(ob->get_soid()), start(s), length(l),
+    set_item(this), trust_enoent(true),
+    tid(t) {
+    ob->reads.push_back(&set_item);
+  }
+
+  void finish(int r) override {
+    oc->bh_read_finish(poolid, oid, tid, start, length, bl, r, trust_enoent);
+
+    // object destructor clears the list
+    if (set_item.is_on_list())
+      set_item.remove_myself();
+  }
+
+  void distrust_enoent() {
+    trust_enoent = false;
+  }
+};
+
+class ObjectCacher::C_RetryRead : public Context {
+  ObjectCacher *oc;
+  OSDRead *rd;
+  ObjectSet *oset;
+  Context *onfinish;
+public:
+  C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c)
+    : oc(_oc), rd(r), oset(os), onfinish(c) {}
+  void finish(int r) override {
+    if (r < 0) {
+      if (onfinish)
+        onfinish->complete(r);
+      return;
+    }
+    int ret = oc->_readx(rd, oset, onfinish, false);
+    if (ret != 0 && onfinish) {
+      onfinish->complete(ret);
+    }
+  }
+};
+
 ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left,
 						      loff_t off)
 {
@@ -168,10 +222,10 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
 /*
  * count bytes we have cached in given range
  */
-bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left)
+bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left) const
 {
   assert(oc->lock.is_locked());
-  map<loff_t, BufferHead*>::iterator p = data_lower_bound(cur);
+  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(cur);
   while (left > 0) {
     if (p == data.end())
       return false;
@@ -187,7 +241,7 @@ bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left)
       // gap
       return false;
     } else
-      assert(0);
+      ceph_abort();
   }
 
   return true;
@@ -227,7 +281,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
   loff_t cur = ex.offset;
   loff_t left = ex.length;
 
-  map<loff_t, BufferHead*>::iterator p = data_lower_bound(ex.offset);
+  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(ex.offset);
   while (left > 0) {
     // at end?
     if (p == data.end()) {
@@ -266,7 +320,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
         errors[cur] = e;
         ldout(oc->cct, 20) << "map_read error " << *e << dendl;
       } else {
-        assert(0);
+        ceph_abort();
       }
       
       loff_t lenfromcur = MIN(e->end() - cur, left);
@@ -295,7 +349,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
       left -= MIN(left, n->length());
       continue;    // more?
     } else {
-      assert(0);
+      ceph_abort();
     }
   }
   return 0;
@@ -353,7 +407,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
   loff_t cur = ex.offset;
   loff_t left = ex.length;
 
-  map<loff_t, BufferHead*>::iterator p = data_lower_bound(ex.offset);
+  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(ex.offset);
   while (left > 0) {
     loff_t max = left;
 
@@ -510,7 +564,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
     complete = false;
   }
 
-  map<loff_t, BufferHead*>::iterator p = data_lower_bound(off);
+  map<loff_t, BufferHead*>::const_iterator p = data_lower_bound(off);
   while (p != data.end()) {
     BufferHead *bh = p->second;
     if (bh->start() >= off + len)
@@ -783,7 +837,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
     // apply to bh's!
     loff_t opos = start;
     while (true) {
-      map<loff_t, BufferHead*>::iterator p = ob->data_lower_bound(opos);
+      map<loff_t, BufferHead*>::const_iterator p = ob->data_lower_bound(opos);
       if (p == ob->data.end())
 	break;
       if (opos >= start+(loff_t)length) {
@@ -937,7 +991,7 @@ public:
     oc(c), poolid(_poolid), oid(o), tid(0) {
       ranges.swap(_ranges);
     }
-  void finish(int r) {
+  void finish(int r) override {
     oc->bh_write_commit(poolid, oid, ranges, tid, r);
   }
 };
@@ -973,7 +1027,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
     if (bh->snapc.seq > snapc.seq)
       snapc = bh->snapc;
     if (bh->last_write > last_write)
-      bh->last_write = bh->last_write;
+      last_write = bh->last_write;
   }
 
   C_WriteCommit *oncommit = new C_WriteCommit(this, ob->oloc.pool, ob->get_soid(), ranges);
@@ -1060,9 +1114,9 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
       }
     }
 
-    list <BufferHead*> hit;
+    vector<pair<loff_t, BufferHead*>> hit;
     // apply to bh's!
-    for (map<loff_t, BufferHead*>::iterator p = ob->data_lower_bound(start);
+    for (map<loff_t, BufferHead*>::const_iterator p = ob->data_lower_bound(start);
 	 p != ob->data.end();
 	 ++p) {
       BufferHead *bh = p->second;
@@ -1095,7 +1149,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 	bh->set_journal_tid(0);
 	if (bh->get_nocache())
 	  bh_lru_rest.lru_bottouch(bh);
-	hit.push_back(bh);
+	hit.push_back(make_pair(bh->start(), bh));
 	ldout(cct, 10) << "bh_write_commit clean " << *bh << dendl;
       } else {
 	mark_dirty(bh);
@@ -1105,11 +1159,10 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
       }
     }
 
-    for (list<BufferHead*>::iterator bh = hit.begin();
-	bh != hit.end();
-	++bh) {
-      assert(*bh);
-      ob->try_merge_bh(*bh);
+    for (auto& p : hit) {
+      //p.second maybe merged and deleted in merge_left
+      if (ob->data.count(p.first))
+	ob->try_merge_bh(p.second);
     }
   }
 
@@ -1181,7 +1234,7 @@ void ObjectCacher::trim()
       break;
 
     ldout(cct, 10) << "trim trimming " << *bh << dendl;
-    assert(bh->is_clean() || bh->is_zero());
+    assert(bh->is_clean() || bh->is_zero() || bh->is_error());
 
     Object *ob = bh->ob;
     bh_remove(ob, bh);
@@ -1655,7 +1708,7 @@ class ObjectCacher::C_WaitForWrite : public Context {
 public:
   C_WaitForWrite(ObjectCacher *oc, uint64_t len, Context *onfinish) :
     m_oc(oc), m_len(len), m_onfinish(onfinish) {}
-  void finish(int r);
+  void finish(int r) override;
 private:
   ObjectCacher *m_oc;
   uint64_t m_len;
@@ -1749,7 +1802,6 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
 void ObjectCacher::flusher_entry()
 {
   ldout(cct, 10) << "flusher start" << dendl;
-  writeback_handler.get_client_lock();
   lock.Lock();
   while (!flusher_stop) {
     loff_t all = get_stat_tx() + get_stat_rx() + get_stat_clean() +
@@ -1791,8 +1843,6 @@ void ObjectCacher::flusher_entry()
       if (!max) {
 	// back off the lock to avoid starving other threads
 	lock.Unlock();
-	writeback_handler.put_client_lock();
-	writeback_handler.get_client_lock();
 	lock.Lock();
 	continue;
       }
@@ -1800,12 +1850,7 @@ void ObjectCacher::flusher_entry()
     if (flusher_stop)
       break;
 
-    writeback_handler.put_client_lock();
-    flusher_cond.WaitInterval(cct, lock, seconds(1));
-    lock.Unlock();
-
-    writeback_handler.get_client_lock();
-    lock.Lock();
+    flusher_cond.WaitInterval(lock, seconds(1));
   }
 
   /* Wait for reads to finish. This is only possible if handling
@@ -1821,7 +1866,6 @@ void ObjectCacher::flusher_entry()
   }
 
   lock.Unlock();
-  writeback_handler.put_client_lock();
   ldout(cct, 10) << "flusher finish" << dendl;
 }
 
@@ -1905,7 +1949,7 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length)
   list<BufferHead*> blist;
   bool clean = true;
   ldout(cct, 10) << "flush " << *ob << " " << offset << "~" << length << dendl;
-  for (map<loff_t,BufferHead*>::iterator p = ob->data_lower_bound(offset);
+  for (map<loff_t,BufferHead*>::const_iterator p = ob->data_lower_bound(offset);
        p != ob->data.end();
        ++p) {
     BufferHead *bh = p->second;
@@ -1968,7 +2012,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 
   list<BufferHead*> blist;
   Object *last_ob = NULL;
-  set<BufferHead*, BufferHead::ptr_lt>::iterator it, p, q;
+  set<BufferHead*, BufferHead::ptr_lt>::const_iterator it, p, q;
 
   // Buffer heads in dirty_or_tx_bh are sorted in ObjectSet/Object/offset
   // order. But items in oset->objects are not sorted. So the iterator can
@@ -2391,7 +2435,7 @@ void ObjectCacher::verify_stats() const
 	  error += bh->length();
 	  break;
 	default:
-	  assert(0);
+	  ceph_abort();
 	}
       }
     }
@@ -2508,7 +2552,7 @@ void ObjectCacher::bh_set_state(BufferHead *bh, int s)
   }
 
   if (s != BufferHead::STATE_ERROR &&
-      bh->get_state() == BufferHead::STATE_ERROR) {
+      state == BufferHead::STATE_ERROR) {
     bh->error = 0;
   }
 
@@ -2556,5 +2600,7 @@ void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
     dirty_or_tx_bh.erase(bh);
   }
   bh_stat_sub(bh);
+  if (get_stat_dirty_waiting() > 0)
+    stat_cond.Signal();
 }
 

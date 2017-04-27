@@ -27,12 +27,12 @@ typedef boost::mt11213b gen_type;
 class AsyncCompressorTest : public ::testing::Test {
  public:
   AsyncCompressor *async_compressor;
-  virtual void SetUp() {
+  void SetUp() override {
     cerr << __func__ << " start set up " << std::endl;
     async_compressor = new AsyncCompressor(g_ceph_context);
     async_compressor->init();
   }
-  virtual void TearDown() {
+  void TearDown() override {
     async_compressor->terminate();
     delete async_compressor;
   }
@@ -207,12 +207,12 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   const char* env = getenv("CEPH_LIB");
   string directory(env ? env : ".libs");
-  g_conf->set_val("plugin_dir", directory, false, false);
+  g_conf->set_val("plugin_dir", directory, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

@@ -39,13 +39,12 @@ void FutureImpl::flush(Context *on_safe) {
         m_contexts.push_back(on_safe);
       }
 
-      prev_future = prepare_flush(&flush_handlers);
+      prev_future = prepare_flush(&flush_handlers, m_lock);
     }
   }
 
   // instruct prior futures to flush as well
   while (prev_future) {
-    Mutex::Locker locker(prev_future->m_lock);
     prev_future = prev_future->prepare_flush(&flush_handlers);
   }
 
@@ -62,6 +61,12 @@ void FutureImpl::flush(Context *on_safe) {
 }
 
 FutureImplPtr FutureImpl::prepare_flush(FlushHandlers *flush_handlers) {
+  Mutex::Locker locker(m_lock);
+  return prepare_flush(flush_handlers, m_lock);
+}
+
+FutureImplPtr FutureImpl::prepare_flush(FlushHandlers *flush_handlers,
+                                        Mutex &lock) {
   assert(m_lock.is_locked());
 
   if (m_flush_state == FLUSH_STATE_NONE) {

@@ -31,7 +31,7 @@
 
 ThreadPool::ThreadPool(CephContext *cct_, string nm, string tn, int n, const char *option)
   : cct(cct_), name(std::move(nm)), thread_name(std::move(tn)),
-    lockname(nm + "::lock"),
+    lockname(name + "::lock"),
     _lock(lockname.c_str()),  // this should be safe due to declaration order
     _stop(false),
     _pause(0),
@@ -39,7 +39,6 @@ ThreadPool::ThreadPool(CephContext *cct_, string nm, string tn, int n, const cha
     ioprio_class(-1),
     ioprio_priority(-1),
     _num_threads(n),
-    last_work_queue(0),
     processing(0)
 {
   if (option) {
@@ -117,9 +116,8 @@ void ThreadPool::worker(WorkThread *wt)
       int tries = work_queues.size();
       bool did = false;
       while (tries--) {
-	last_work_queue++;
-	last_work_queue %= work_queues.size();
-	wq = work_queues[last_work_queue];
+	next_work_queue %= work_queues.size();
+	wq = work_queues[next_work_queue++];
 	
 	void *item = wq->_void_dequeue();
 	if (item) {
@@ -150,7 +148,7 @@ void ThreadPool::worker(WorkThread *wt)
       hb,
       cct->_conf->threadpool_default_timeout,
       0);
-    _cond.WaitInterval(cct, _lock,
+    _cond.WaitInterval(_lock,
       utime_t(
 	cct->_conf->threadpool_empty_queue_max_wait, 0));
   }
@@ -325,7 +323,7 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
        cct->get_heartbeat_map()->reset_timeout(
 	 hb,
 	 wq->timeout_interval, wq->suicide_interval);
-       shardedpool_cond.WaitInterval(cct, shardedpool_lock,
+       shardedpool_cond.WaitInterval(shardedpool_lock,
 	 utime_t(
 	   cct->_conf->threadpool_empty_queue_max_wait, 0));
       }
@@ -341,7 +339,7 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 	  cct->get_heartbeat_map()->reset_timeout(
 	    hb,
 	    wq->timeout_interval, wq->suicide_interval);
-          shardedpool_cond.WaitInterval(cct, shardedpool_lock,
+          shardedpool_cond.WaitInterval(shardedpool_lock,
 	    utime_t(
 	      cct->_conf->threadpool_empty_queue_max_wait, 0));
         }

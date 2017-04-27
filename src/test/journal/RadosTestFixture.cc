@@ -22,10 +22,10 @@ void RadosTestFixture::SetUpTestCase() {
 }
 
 void RadosTestFixture::TearDownTestCase() {
-  ASSERT_EQ(0, destroy_one_pool_pp(_pool_name, _rados));
-
   _thread_pool->stop();
   delete _thread_pool;
+
+  ASSERT_EQ(0, destroy_one_pool_pp(_pool_name, _rados));
 }
 
 std::string RadosTestFixture::get_temp_oid() {
@@ -68,10 +68,12 @@ int RadosTestFixture::create(const std::string &oid, uint8_t order,
 
 journal::JournalMetadataPtr RadosTestFixture::create_metadata(
     const std::string &oid, const std::string &client_id,
-    double commit_interval, uint64_t max_fetch_bytes) {
+    double commit_interval, uint64_t max_fetch_bytes,
+    int max_concurrent_object_sets) {
   journal::Settings settings;
   settings.commit_interval = commit_interval;
   settings.max_fetch_bytes = max_fetch_bytes;
+  settings.max_concurrent_object_sets = max_concurrent_object_sets;
 
   journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
     m_work_queue, m_timer, &m_timer_lock, m_ioctx, oid, client_id, settings));
@@ -117,8 +119,7 @@ bool RadosTestFixture::wait_for_update(journal::JournalMetadataPtr metadata) {
   Mutex::Locker locker(m_listener.mutex);
   while (m_listener.updates[metadata.get()] == 0) {
     if (m_listener.cond.WaitInterval(
-          reinterpret_cast<CephContext*>(m_ioctx.cct()),
-          m_listener.mutex, utime_t(10, 0)) != 0) {
+	  m_listener.mutex, utime_t(10, 0)) != 0) {
       return false;
     }
   }

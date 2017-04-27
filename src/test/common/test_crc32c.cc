@@ -50,47 +50,48 @@ TEST(Crc32c, Performance) {
   std::cout << "calculating crc" << std::endl;
 
   {
-    utime_t start = ceph_clock_now(NULL);
+    utime_t start = ceph_clock_now();
     unsigned val = ceph_crc32c(0, (unsigned char *)a, len);
-    utime_t end = ceph_clock_now(NULL);
+    utime_t end = ceph_clock_now();
     float rate = (float)len / (float)(1024*1024) / (float)(end - start);
     std::cout << "best choice = " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(261108528u, val);
   }
   {
-    utime_t start = ceph_clock_now(NULL);
+    utime_t start = ceph_clock_now();
     unsigned val = ceph_crc32c(0xffffffff, (unsigned char *)a, len);
-    utime_t end = ceph_clock_now(NULL);
+    utime_t end = ceph_clock_now();
     float rate = (float)len / (float)(1024*1024) / (float)(end - start);
     std::cout << "best choice 0xffffffff = " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(3895876243u, val);
   }
   {
-    utime_t start = ceph_clock_now(NULL);
+    utime_t start = ceph_clock_now();
     unsigned val = ceph_crc32c_sctp(0, (unsigned char *)a, len);
-    utime_t end = ceph_clock_now(NULL);
+    utime_t end = ceph_clock_now();
     float rate = (float)len / (float)(1024*1024) / (float)(end - start);
     std::cout << "sctp = " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(261108528u, val);
   }
   {
-    utime_t start = ceph_clock_now(NULL);
+    utime_t start = ceph_clock_now();
     unsigned val = ceph_crc32c_intel_baseline(0, (unsigned char *)a, len);
-    utime_t end = ceph_clock_now(NULL);
+    utime_t end = ceph_clock_now();
     float rate = (float)len / (float)(1024*1024) / (float)(end - start);
     std::cout << "intel baseline = " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(261108528u, val);
   }
+#if defined(__arm__) || defined(__aarch64__)
   if (ceph_arch_aarch64_crc32) // Skip if CRC32C instructions are not defined.
   {
-    utime_t start = ceph_clock_now(NULL);
+    utime_t start = ceph_clock_now();
     unsigned val = ceph_crc32c_aarch64(0, (unsigned char *)a, len);
-    utime_t end = ceph_clock_now(NULL);
+    utime_t end = ceph_clock_now();
     float rate = (float)len / (float)(1024*1024) / (float)(end - start);
     std::cout << "aarch64 = " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(261108528u, val);
   }
-
+#endif
 }
 
 

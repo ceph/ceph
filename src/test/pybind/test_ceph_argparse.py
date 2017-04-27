@@ -1,4 +1,4 @@
-#!/usr/bin/nosetests --nocapture
+#!/usr/bin/env nosetests 
 # -*- mode:python; tab-width:4; indent-tabs-mode:t; coding:utf-8 -*-
 # vim: ts=4 sw=4 smarttab expandtab fileencoding=utf-8
 #
@@ -182,21 +182,6 @@ class TestPG(TestArgparse):
 
     def test_force_create_pg(self):
         self.one_pgid('force_create_pg')
-
-    def set_ratio(self, command):
-        self.assert_valid_command(['pg',
-                                   command,
-                                   '0.0'])
-        assert_equal({}, validate_command(sigdict, ['pg', command]))
-        assert_equal({}, validate_command(sigdict, ['pg',
-                                                    command,
-                                                    '2.0']))
-
-    def test_set_full_ratio(self):
-        self.set_ratio('set_full_ratio')
-
-    def test_set_nearfull_ratio(self):
-        self.set_ratio('set_nearfull_ratio')
 
 
 class TestAuth(TestArgparse):
@@ -505,9 +490,9 @@ class TestFS(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['fs', 'ls', 'toomany']))
 
     def test_fs_set_default(self):
-        self.assert_valid_command(['fs', 'set_default', 'cephfs'])
-        assert_equal({}, validate_command(sigdict, ['fs', 'set_default']))
-        assert_equal({}, validate_command(sigdict, ['fs', 'set_default', 'cephfs', 'toomany']))
+        self.assert_valid_command(['fs', 'set-default', 'cephfs'])
+        assert_equal({}, validate_command(sigdict, ['fs', 'set-default']))
+        assert_equal({}, validate_command(sigdict, ['fs', 'set-default', 'cephfs', 'toomany']))
 
 class TestMon(TestArgparse):
 
@@ -1121,9 +1106,6 @@ class TestOSD(TestArgparse):
                                                     '100',
                                                     'toomany']))
 
-    def test_thrash(self):
-        self.check_1_natural_arg('osd', 'thrash')
-
     def test_tier_op(self):
         for op in ('add', 'remove', 'set-overlay'):
             self.assert_valid_command(['osd', 'tier', op,
@@ -1155,6 +1137,24 @@ class TestOSD(TestArgparse):
                                                     'remove-overlay',
                                                     'poolname',
                                                     'toomany']))
+
+    def set_ratio(self, command):
+        self.assert_valid_command(['osd',
+                                   command,
+                                   '0.0'])
+        assert_equal({}, validate_command(sigdict, ['osd', command]))
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    command,
+                                                    '2.0']))
+
+    def test_set_full_ratio(self):
+        self.set_ratio('set-full-ratio')
+
+    def test_set_backfillfull_ratio(self):
+        self.set_ratio('set-backfillfull-ratio')
+
+    def test_set_nearfull_ratio(self):
+        self.set_ratio('set-nearfull-ratio')
 
 
 class TestConfigKey(TestArgparse):

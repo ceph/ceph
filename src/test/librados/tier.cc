@@ -10,9 +10,6 @@
 #include "include/stringify.h"
 #include "include/types.h"
 #include "global/global_context.h"
-#include "global/global_init.h"
-#include "common/ceph_argparse.h"
-#include "common/common_init.h"
 #include "common/Cond.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
@@ -70,7 +67,7 @@ class LibRadosTwoPoolsPP : public RadosTestPP
 {
 public:
   LibRadosTwoPoolsPP() {};
-  virtual ~LibRadosTwoPoolsPP() {};
+  ~LibRadosTwoPoolsPP() override {};
 protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
@@ -81,14 +78,14 @@ protected:
   }
   static std::string cache_pool_name;
 
-  virtual void SetUp() {
+  void SetUp() override {
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
     cache_ioctx.set_namespace(nspace);
   }
-  virtual void TearDown() {
+  void TearDown() override {
     // flush + evict cache
     flush_evict_all(cluster, cache_ioctx);
 
@@ -116,6 +113,28 @@ protected:
   }
   librados::IoCtx cache_ioctx;
 };
+
+class Completions
+{
+public:
+  Completions() = default;
+  librados::AioCompletion* getCompletion() {
+    librados::AioCompletion* comp = librados::Rados::aio_create_completion();
+    m_completions.push_back(comp);
+    return comp;
+  }
+
+  ~Completions() {
+    for (auto& comp : m_completions) {
+      comp->release();
+    }
+  }
+
+private:
+  vector<librados::AioCompletion *> m_completions;
+};
+
+Completions completions;
 
 std::string LibRadosTwoPoolsPP::cache_pool_name;
 
@@ -2025,8 +2044,7 @@ void start_flush_read()
   //cout << " starting read" << std::endl;
   ObjectReadOperation op;
   op.stat(NULL, NULL, NULL);
-  librados::AioCompletion *completion =
-    librados::Rados::aio_create_completion();
+  librados::AioCompletion *completion = completions.getCompletion();
   completion->set_complete_callback(0, flush_read_race_cb);
   read_ioctx->aio_operate("foo", completion, &op, NULL);
 }
@@ -2041,7 +2059,6 @@ void flush_read_race_cb(completion_t cb, void *arg)
   } else {
     start_flush_read();
   }
-  // fixme: i'm leaking cb...
   test_lock.Unlock();
 }
 
@@ -2165,11 +2182,11 @@ TEST_F(LibRadosTwoPoolsPP, HitSetRead) {
   cache_ioctx.set_namespace("");
 
   // keep reading until we see our object appear in the HitSet
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   utime_t hard_stop = start + utime_t(600, 0);
 
   while (true) {
-    utime_t now = ceph_clock_now(NULL);
+    utime_t now = ceph_clock_now();
     ASSERT_TRUE(now < hard_stop);
 
     string name = "foo";
@@ -2286,12 +2303,16 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
     c->wait_for_complete();
     c->release();
 
-    //std::cout << "bl len is " << bl.length() << "\n";
-    //bl.hexdump(std::cout);
-    //std::cout << std::endl;
-
-    bufferlist::iterator p = bl.begin();
-    ::decode(hitsets[i], p);
+    try {
+      bufferlist::iterator p = bl.begin();
+      ::decode(hitsets[i], p);
+    }
+    catch (buffer::error& e) {
+      std::cout << "failed to decode hit set; bl len is " << bl.length() << "\n";
+      bl.hexdump(std::cout);
+      std::cout << std::endl;
+      throw e;
+    }
 
     // cope with racing splits by refreshing pg_num
     if (i == num_pg - 1)
@@ -2344,7 +2365,7 @@ TEST_F(LibRadosTwoPoolsPP, HitSetTrim) {
   cache_ioctx.set_namespace("");
 
   // do a bunch of writes and make sure the hitsets rotate
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   utime_t hard_stop = start + utime_t(count * period * 50, 0);
 
   time_t first = 0;
@@ -2377,7 +2398,7 @@ TEST_F(LibRadosTwoPoolsPP, HitSetTrim) {
       }
     }
 
-    utime_t now = ceph_clock_now(NULL);
+    utime_t now = ceph_clock_now();
     ASSERT_TRUE(now < hard_stop);
 
     sleep(1);
@@ -2721,7 +2742,7 @@ class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
   LibRadosTwoPoolsECPP() {};
-  virtual ~LibRadosTwoPoolsECPP() {};
+  ~LibRadosTwoPoolsECPP() override {};
 protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
@@ -2732,14 +2753,14 @@ protected:
   }
   static std::string cache_pool_name;
 
-  virtual void SetUp() {
+  void SetUp() override {
     cache_pool_name = get_temp_pool_name();
     ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestECPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
     cache_ioctx.set_namespace(nspace);
   }
-  virtual void TearDown() {
+  void TearDown() override {
     // flush + evict cache
     flush_evict_all(cluster, cache_ioctx);
 
@@ -4827,11 +4848,11 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetRead) {
   cache_ioctx.set_namespace("");
 
   // keep reading until we see our object appear in the HitSet
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   utime_t hard_stop = start + utime_t(600, 0);
 
   while (true) {
-    utime_t now = ceph_clock_now(NULL);
+    utime_t now = ceph_clock_now();
     ASSERT_TRUE(now < hard_stop);
 
     string name = "foo";
@@ -4970,7 +4991,7 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetTrim) {
   cache_ioctx.set_namespace("");
 
   // do a bunch of writes and make sure the hitsets rotate
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   utime_t hard_stop = start + utime_t(count * period * 50, 0);
 
   time_t first = 0;
@@ -5007,7 +5028,7 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetTrim) {
       }
     }
 
-    utime_t now = ceph_clock_now(NULL);
+    utime_t now = ceph_clock_now();
     ASSERT_TRUE(now < hard_stop);
 
     sleep(1);
@@ -5346,18 +5367,4 @@ TEST_F(LibRadosTwoPoolsECPP, CachePin) {
 
   // wait for maps to settle before next test
   cluster.wait_for_latest_osdmap();
-}
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args),
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  return RUN_ALL_TESTS();
 }

@@ -9,6 +9,7 @@
 #include <list>
 #include <stdint.h>
 #include <string>
+#include <ostream>
 
 struct plain_stack_entry {
   int size;
@@ -23,40 +24,65 @@ class RGWFormatter_Plain : public Formatter {
   void reset_buf();
 public:
   explicit RGWFormatter_Plain(bool use_kv = false);
-  virtual ~RGWFormatter_Plain();
+  ~RGWFormatter_Plain() override;
 
-  virtual void set_status(int status, const char* status_name) {};
-  virtual void output_header() {};
-  virtual void output_footer() {};
-  virtual void flush(ostream& os);
-  virtual void reset();
+  void set_status(int status, const char* status_name) override {};
+  void output_header() override {};
+  void output_footer() override {};
+  void flush(ostream& os) override;
+  void reset() override;
 
-  virtual void open_array_section(const char *name);
-  virtual void open_array_section_in_ns(const char *name, const char *ns);
-  virtual void open_object_section(const char *name);
-  virtual void open_object_section_in_ns(const char *name, const char *ns);
-  virtual void close_section();
-  virtual void dump_unsigned(const char *name, uint64_t u);
-  virtual void dump_int(const char *name, int64_t u);
-  virtual void dump_float(const char *name, double d);
-  virtual void dump_string(const char *name, const std::string& s);
-  virtual std::ostream& dump_stream(const char *name);
-  virtual void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap);
-  virtual int get_len() const;
-  virtual void write_raw_data(const char *data);
+  void open_array_section(const char *name) override;
+  void open_array_section_in_ns(const char *name, const char *ns) override;
+  void open_object_section(const char *name) override;
+  void open_object_section_in_ns(const char *name, const char *ns) override;
+  void close_section() override;
+  void dump_unsigned(const char *name, uint64_t u) override;
+  void dump_int(const char *name, int64_t u) override;
+  void dump_float(const char *name, double d) override;
+  void dump_string(const char *name, const std::string& s) override;
+  std::ostream& dump_stream(const char *name) override;
+  void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
+  int get_len() const override;
+  void write_raw_data(const char *data) override;
 
 private:
   void write_data(const char *fmt, ...);
   void dump_value_int(const char *name, const char *fmt, ...);
 
-  char *buf;
-  int len;
-  int max_len;
+  char *buf = nullptr;
+  int len = 0;
+  int max_len = 0;
 
   std::list<struct plain_stack_entry> stack;
-  size_t min_stack_level;
+  size_t min_stack_level = 0;
   bool use_kv;
+  bool wrote_something = 0;
 };
+
+
+/* This is a presentation layer. No logic inside, please. */
+class RGWSwiftWebsiteListingFormatter {
+  std::ostream& ss;
+  const std::string prefix;
+protected:
+  std::string format_name(const std::string& item_name) const;
+public:
+  RGWSwiftWebsiteListingFormatter(std::ostream& ss,
+                                  std::string prefix)
+    : ss(ss),
+      prefix(std::move(prefix)) {
+  }
+
+  /* The supplied css_path can be empty. In such situation a default,
+   * embedded style sheet will be generated. */
+  void generate_header(const std::string& dir_path,
+                       const std::string& css_path);
+  void generate_footer();
+  void dump_object(const rgw_bucket_dir_entry& objent);
+  void dump_subdir(const std::string& name);
+};
+
 
 class RGWFormatterFlusher {
 protected:
@@ -91,7 +117,7 @@ public:
 class RGWStreamFlusher : public RGWFormatterFlusher {
   ostream& os;
 protected:
-  virtual void do_flush() {
+  void do_flush() override {
     formatter->flush(os);
   }
 public:

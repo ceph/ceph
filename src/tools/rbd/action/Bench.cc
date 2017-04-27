@@ -156,7 +156,7 @@ struct rbd_bencher {
     while (in_flight > max) {
       utime_t dur;
       dur.set_from_double(.2);
-      cond.WaitInterval(g_ceph_context, lock, dur);
+      cond.WaitInterval(lock, dur);
     }
   }
 
@@ -196,6 +196,11 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     return -EINVAL;
   }
 
+  if (io_size > std::numeric_limits<uint32_t>::max()) {
+    std::cerr << "rbd: io-size should be less than 4G" << std::endl;
+    return -EINVAL;
+  }
+
   rbd_bencher b(&image, io_type, io_size);
 
   std::cout << "bench "
@@ -208,7 +213,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 
   srand(time(NULL) % (unsigned long) -1);
 
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   utime_t last;
   unsigned ios = 0;
 
@@ -268,7 +273,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
       cur_off += io_size;
     }
 
-    utime_t now = ceph_clock_now(NULL);
+    utime_t now = ceph_clock_now();
     utime_t elapsed = now - start;
     if (last.is_zero()) {
       last = elapsed;
@@ -295,7 +300,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
               << std::endl;
   }
 
-  utime_t now = ceph_clock_now(NULL);
+  utime_t now = ceph_clock_now();
   double elapsed = now - start;
 
   printf("elapsed: %5d  ops: %8d  ops/sec: %8.2lf  bytes/sec: %8.2lf\n",
@@ -309,10 +314,10 @@ void add_bench_common_options(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 
   options->add_options()
-    ("io-size", po::value<Size>(), "IO size (in B/K/M/G/T)")
-    ("io-threads", po::value<uint32_t>(), "ios in flight")
-    ("io-total", po::value<Size>(), "total size for IO (in B/K/M/G/T)")
-    ("io-pattern", po::value<IOPattern>(), "IO pattern (rand or seq)");
+    ("io-size", po::value<Size>(), "IO size (in B/K/M/G/T) [default: 4K]")
+    ("io-threads", po::value<uint32_t>(), "ios in flight [default: 16]")
+    ("io-total", po::value<Size>(), "total size for IO (in B/K/M/G/T) [default: 1G]")
+    ("io-pattern", po::value<IOPattern>(), "IO pattern (rand or seq) [default: seq]");
 }
 
 void get_arguments_for_write(po::options_description *positional,
@@ -350,12 +355,20 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   } else {
     bench_io_size = 4096;
   }
+  if (bench_io_size == 0) {
+    std::cerr << "rbd: --io-size should be greater than zero." << std::endl;
+    return -EINVAL;
+  }
 
   uint32_t bench_io_threads;
   if (vm.count("io-threads")) {
     bench_io_threads = vm["io-threads"].as<uint32_t>();
   } else {
     bench_io_threads = 16;
+  }
+  if (bench_io_threads == 0) {
+    std::cerr << "rbd: --io-threads should be greater than zero." << std::endl;
+    return -EINVAL;
   }
 
   uint64_t bench_bytes;
@@ -375,7 +388,7 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
+  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;

@@ -58,16 +58,18 @@ private:
 public:
   // export stages.  used to clean up intelligently if there's a failure.
   const static int EXPORT_CANCELLED	= 0;  // cancelled
-  const static int EXPORT_LOCKING	= 1;  // acquiring locks
-  const static int EXPORT_DISCOVERING	= 2;  // dest is disovering export dir
-  const static int EXPORT_FREEZING	= 3;  // we're freezing the dir tree
-  const static int EXPORT_PREPPING	= 4;  // sending dest spanning tree to export bounds
-  const static int EXPORT_WARNING	= 5;  // warning bystanders of dir_auth_pending
-  const static int EXPORT_EXPORTING	= 6;  // sent actual export, waiting for ack
-  const static int EXPORT_LOGGINGFINISH	= 7;  // logging EExportFinish
-  const static int EXPORT_NOTIFYING	= 8;  // waiting for notifyacks
+  const static int EXPORT_CANCELLING	= 1;  // waiting for cancel notifyacks
+  const static int EXPORT_LOCKING	= 2;  // acquiring locks
+  const static int EXPORT_DISCOVERING	= 3;  // dest is disovering export dir
+  const static int EXPORT_FREEZING	= 4;  // we're freezing the dir tree
+  const static int EXPORT_PREPPING	= 5;  // sending dest spanning tree to export bounds
+  const static int EXPORT_WARNING	= 6;  // warning bystanders of dir_auth_pending
+  const static int EXPORT_EXPORTING	= 7;  // sent actual export, waiting for ack
+  const static int EXPORT_LOGGINGFINISH	= 8;  // logging EExportFinish
+  const static int EXPORT_NOTIFYING	= 9;  // waiting for notifyacks
   static const char *get_export_statename(int s) {
     switch (s) {
+    case EXPORT_CANCELLING: return "cancelling";
     case EXPORT_LOCKING: return "locking";
     case EXPORT_DISCOVERING: return "discovering";
     case EXPORT_FREEZING: return "freezing";
@@ -76,7 +78,7 @@ public:
     case EXPORT_EXPORTING: return "exporting";
     case EXPORT_LOGGINGFINISH: return "loggingfinish";
     case EXPORT_NOTIFYING: return "notifying";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -89,7 +91,6 @@ protected:
     set<mds_rank_t> warning_ack_waiting;
     set<mds_rank_t> notify_ack_waiting;
     map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
-    list<MDSInternalContextBase*> waiting_for_finish;
     MutationRef mut;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
@@ -125,7 +126,7 @@ public:
     case IMPORT_ACKING: return "acking";
     case IMPORT_FINISHING: return "finishing";
     case IMPORT_ABORTING: return "aborting";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -153,23 +154,26 @@ public:
 
   void show_importing();
   void show_exporting();
+
+  int get_num_exporting() const { return export_state.size(); }
+  int get_export_queue_size() const { return export_queue.size(); }
   
   // -- status --
-  int is_exporting(CDir *dir) {
-    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+  int is_exporting(CDir *dir) const {
+    map<CDir*, export_state_t>::const_iterator it = export_state.find(dir);
     if (it != export_state.end()) return it->second.state;
     return 0;
   }
-  bool is_exporting() { return !export_state.empty(); }
-  int is_importing(dirfrag_t df) {
-    map<dirfrag_t, import_state_t>::iterator it = import_state.find(df);
+  bool is_exporting() const { return !export_state.empty(); }
+  int is_importing(dirfrag_t df) const {
+    map<dirfrag_t, import_state_t>::const_iterator it = import_state.find(df);
     if (it != import_state.end()) return it->second.state;
     return 0;
   }
-  bool is_importing() { return !import_state.empty(); }
+  bool is_importing() const { return !import_state.empty(); }
 
-  bool is_ambiguous_import(dirfrag_t df) {
-    map<dirfrag_t, import_state_t>::iterator p = import_state.find(df);
+  bool is_ambiguous_import(dirfrag_t df) const {
+    map<dirfrag_t, import_state_t>::const_iterator p = import_state.find(df);
     if (p == import_state.end())
       return false;
     if (p->second.state >= IMPORT_LOGGINGSTART &&
@@ -178,19 +182,19 @@ public:
     return false;
   }
 
-  int get_import_state(dirfrag_t df) {
-    map<dirfrag_t, import_state_t>::iterator it = import_state.find(df);
+  int get_import_state(dirfrag_t df) const {
+    map<dirfrag_t, import_state_t>::const_iterator it = import_state.find(df);
     assert(it != import_state.end());
     return it->second.state;
   }
-  int get_import_peer(dirfrag_t df) {
-    map<dirfrag_t, import_state_t>::iterator it = import_state.find(df);
+  int get_import_peer(dirfrag_t df) const {
+    map<dirfrag_t, import_state_t>::const_iterator it = import_state.find(df);
     assert(it != import_state.end());
     return it->second.peer;
   }
 
-  int get_export_state(CDir *dir) {
-    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+  int get_export_state(CDir *dir) const {
+    map<CDir*, export_state_t>::const_iterator it = export_state.find(dir);
     assert(it != export_state.end());
     return it->second.state;
   }
@@ -205,8 +209,8 @@ public:
     return (it->second.warning_ack_waiting.count(who) == 0);
   }
 
-  bool export_has_notified(CDir *dir, mds_rank_t who) {
-    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+  bool export_has_notified(CDir *dir, mds_rank_t who) const {
+    map<CDir*, export_state_t>::const_iterator it = export_state.find(dir);
     assert(it != export_state.end());
     assert(it->second.state == EXPORT_NOTIFYING);
     return (it->second.notify_ack_waiting.count(who) == 0);
@@ -260,11 +264,6 @@ public:
 			 map<inodeno_t,map<client_t,Capability::Import> >& peer_imported,
 			 list<MDSInternalContextBase*>& finished, int *num_dentries);
 
-  void add_export_finish_waiter(CDir *dir, MDSInternalContextBase *c) {
-    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
-    assert(it != export_state.end());
-    it->second.waiting_for_finish.push_back(c);
-  }
   void clear_export_proxy_pins(CDir *dir);
 
   void export_caps(CInode *in);
@@ -277,6 +276,7 @@ public:
   void export_go(CDir *dir);
   void export_go_synced(CDir *dir, uint64_t tid);
   void export_try_cancel(CDir *dir, bool notify_peer=true);
+  void export_cancel_finish(CDir *dir);
   void export_reverse(CDir *dir);
   void export_notify_abort(CDir *dir, set<CDir*>& bounds);
   void handle_export_ack(MExportDirAck *m);
@@ -291,6 +291,7 @@ public:
   friend class C_M_ExportGo;
   friend class C_M_ExportSessionsFlushed;
   friend class MigratorContext;
+  friend class MigratorLogContext;
 
   // importer
   void handle_export_discover(MExportDirDiscover *m);
@@ -299,8 +300,8 @@ public:
   void handle_export_dir(MExportDir *m);
 
 public:
-  void decode_import_inode(CDentry *dn, bufferlist::iterator& blp, mds_rank_t oldauth, 
-			   LogSegment *ls, uint64_t log_offset,
+  void decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
+			   mds_rank_t oldauth, LogSegment *ls,
 			   map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 			   list<ScatterLock*>& updated_scatterlocks);
   void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::iterator &blp,

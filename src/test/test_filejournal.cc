@@ -70,7 +70,8 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
   char mb[10];
@@ -119,8 +120,8 @@ TEST(TestFileJournal, Create) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
   }
 }
@@ -133,8 +134,8 @@ TEST(TestFileJournal, WriteSmall) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 
@@ -158,8 +159,8 @@ TEST(TestFileJournal, WriteBig) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 
@@ -186,8 +187,8 @@ TEST(TestFileJournal, WriteMany) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 
@@ -219,8 +220,8 @@ TEST(TestFileJournal, WriteManyVecs) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 
@@ -271,8 +272,8 @@ TEST(TestFileJournal, ReplaySmall) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 
@@ -331,8 +332,8 @@ TEST(TestFileJournal, ReplayCorrupt) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 
@@ -416,8 +417,8 @@ TEST(TestFileJournal, WriteTrim) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 
@@ -468,8 +469,8 @@ TEST(TestFileJournal, WriteTrimSmall) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 
@@ -518,8 +519,8 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 
@@ -577,8 +578,8 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 
@@ -636,8 +637,8 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
   for (unsigned i = 0 ; i < 3; ++i) {
     SCOPED_TRACE(subtests[i].description);
     fsid.generate_random();
-    FileJournal j(fsid, finisher, &sync_cond, path, subtests[i].directio,
-		  subtests[i].aio, subtests[i].faio);
+    FileJournal j(g_ceph_context, fsid, finisher, &sync_cond, path,
+		  subtests[i].directio, subtests[i].aio, subtests[i].faio);
     ASSERT_EQ(0, j.create());
     j.make_writeable();
 

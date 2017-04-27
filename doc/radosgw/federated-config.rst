@@ -817,10 +817,9 @@ there is a unified namespace between the two regions.
 
 .. _CRUSH Map: ../../rados/operations/crush-map
 .. _Install Ceph Object Gateway: ../../install/install-ceph-gateway
-.. _Cephx Administration: ../../rados/operations/authentication/#cephx-administration
 .. _Ceph configuration file: ../../rados/configuration/ceph-conf
 .. _Configuration Reference - Pools: ../config-ref#pools
 .. _Configuration Reference - Regions: ../config-ref#regions
 .. _Configuration Reference - Zones: ../config-ref#zones
 .. _Pools: ../../rados/operations/pools
-.. _Simple Configuration: ../config
+.. _Simple Configuration: ../config-fcgi

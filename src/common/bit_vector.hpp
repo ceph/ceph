@@ -115,7 +115,7 @@ template <uint8_t _b>
 const uint32_t BitVector<_b>::BLOCK_SIZE = 4096;
 
 template <uint8_t _b>
-BitVector<_b>::BitVector() : m_size(0), m_crc_enabled(true)
+BitVector<_b>::BitVector() : m_size(0), m_crc_enabled(true), m_header_crc(0)
 {
 }
 

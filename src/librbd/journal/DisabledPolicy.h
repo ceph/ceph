@@ -14,14 +14,13 @@ namespace journal {
 
 class DisabledPolicy : public Policy {
 public:
-  virtual bool append_disabled() const {
-    assert(false);
-    return false;
-  }
-  virtual bool journal_disabled() const {
+  bool append_disabled() const override {
     return true;
   }
-  virtual void allocate_tag_on_lock(Context *on_finish) {
+  bool journal_disabled() const override {
+    return true;
+  }
+  void allocate_tag_on_lock(Context *on_finish) override {
     assert(false);
   }
 };

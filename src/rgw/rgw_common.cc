@@ -2,6 +2,10 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
+#include <vector>
+#include <algorithm>
+#include <string>
+#include <boost/tokenizer.hpp>
 #include <boost/algorithm/string.hpp>
 
 #include "json_spirit/json_spirit.h"
@@ -10,6 +14,7 @@
 #include "rgw_common.h"
 #include "rgw_acl.h"
 #include "rgw_string.h"
+#include "rgw_rados.h"
 
 #include "common/ceph_crypto.h"
 #include "common/armor.h"
@@ -20,10 +25,17 @@
 #include "common/strtol.h"
 #include "include/str_list.h"
 #include "auth/Crypto.h"
+#include "rgw_crypt_sanitize.h"
 
 #include <sstream>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+#define POLICY_ACTION           0x01
+#define POLICY_RESOURCE         0x02
+#define POLICY_ARN              0x04
+#define POLICY_STRING           0x08
 
 PerfCounters *perfcounter = NULL;
 
@@ -175,9 +187,9 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   : cct(_cct), cio(NULL), op(OP_UNKNOWN), user(u), has_acl_header(false),
     info(_cct, e)
 {
-  enable_ops_log = e->conf->enable_ops_log;
-  enable_usage_log = e->conf->enable_usage_log;
-  defer_to_bucket_acls = e->conf->defer_to_bucket_acls;
+  enable_ops_log = e->conf.enable_ops_log;
+  enable_usage_log = e->conf.enable_usage_log;
+  defer_to_bucket_acls = e->conf.defer_to_bucket_acls;
   content_started = false;
   format = 0;
   formatter = NULL;
@@ -193,7 +205,7 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
 
   system_request = false;
 
-  time = ceph_clock_now(cct);
+  time = ceph_clock_now();
   perm_mask = 0;
   bucket_instance_shard_id = -1;
   content_length = 0;
@@ -277,7 +289,7 @@ void req_info::init_meta_info(bool *found_bad_meta)
     }
   }
   for (iter = x_meta_map.begin(); iter != x_meta_map.end(); ++iter) {
-    dout(10) << "x>> " << iter->first << ":" << iter->second << dendl;
+    dout(10) << "x>> " << iter->first << ":" << rgw::crypt_sanitize::x_meta_map{iter->first, iter->second} << dendl;
   }
 }
 
@@ -468,10 +480,36 @@ int parse_time(const char *time_str, real_time *time)
     return -EINVAL;
   }
 
-  time_t sec = timegm(&tm);
+  time_t sec = internal_timegm(&tm);
   *time = utime_t(sec, ns).to_real_time();
 
   return 0;
+}
+
+#define TIME_BUF_SIZE 128
+
+void rgw_to_iso8601(const real_time& t, char *dest, int buf_size)
+{
+  utime_t ut(t);
+
+  char buf[TIME_BUF_SIZE];
+  struct tm result;
+  time_t epoch = ut.sec();
+  struct tm *tmp = gmtime_r(&epoch, &result);
+  if (tmp == NULL)
+    return;
+
+  if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T", tmp) == 0)
+    return;
+
+  snprintf(dest, buf_size, "%s.%03dZ", buf, (int)(ut.usec() / 1000));
+}
+
+void rgw_to_iso8601(const real_time& t, string *dest)
+{
+  char buf[TIME_BUF_SIZE];
+  rgw_to_iso8601(t, buf, sizeof(buf));
+  *dest = buf;
 }
 
 /*
@@ -707,7 +745,12 @@ int RGWHTTPArgs::parse()
 {
   int pos = 0;
   bool end = false;
-  if (str[pos] == '?') pos++;
+
+  if (str.empty())
+    return 0;
+
+  if (str[pos] == '?')
+    pos++;
 
   while (!end) {
     int fpos = str.find('&', pos);
@@ -834,7 +877,7 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
-string RGWHTTPArgs::sys_get(const string& name, bool * const exists)
+string RGWHTTPArgs::sys_get(const string& name, bool * const exists) const
 {
   const auto iter = sys_val_map.find(name);
   const bool e = (iter != sys_val_map.end());
@@ -857,7 +900,7 @@ bool verify_user_permission(struct req_state * const s,
   if ((perm & (int)s->perm_mask) != perm)
     return false;
 
-  return user_acl->verify_permission(*s->auth_identity, perm, perm);
+  return user_acl->verify_permission(*s->auth.identity, perm, perm);
 }
 
 bool verify_user_permission(struct req_state * const s,
@@ -871,8 +914,12 @@ bool verify_requester_payer_permission(struct req_state *s)
   if (!s->bucket_info.requester_pays)
     return true;
 
-  if (s->auth_identity->is_owner_of(s->bucket_info.owner))
+  if (s->auth.identity->is_owner_of(s->bucket_info.owner))
     return true;
+  
+  if (s->auth.identity->is_anonymous()) {
+    return false;
+  }
 
   const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
   if (!request_payer) {
@@ -904,14 +951,14 @@ bool verify_bucket_permission(struct req_state * const s,
   if (!verify_requester_payer_permission(s))
     return false;
 
-  if (bucket_acl->verify_permission(*s->auth_identity, perm, perm,
+  if (bucket_acl->verify_permission(*s->auth.identity, perm, perm,
                                     s->info.env->get("HTTP_REFERER")))
     return true;
 
   if (!user_acl)
     return false;
 
-  return user_acl->verify_permission(*s->auth_identity, perm, perm);
+  return user_acl->verify_permission(*s->auth.identity, perm, perm);
 }
 
 bool verify_bucket_permission(struct req_state * const s, const int perm)
@@ -950,7 +997,7 @@ bool verify_object_permission(struct req_state * const s,
     return false;
   }
 
-  bool ret = object_acl->verify_permission(*s->auth_identity, s->perm_mask, perm);
+  bool ret = object_acl->verify_permission(*s->auth.identity, s->perm_mask, perm);
   if (ret) {
     return true;
   }
@@ -972,14 +1019,14 @@ bool verify_object_permission(struct req_state * const s,
 
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
-  if (bucket_acl->verify_permission(*s->auth_identity, swift_perm, swift_perm,
+  if (bucket_acl->verify_permission(*s->auth.identity, swift_perm, swift_perm,
                                     s->info.env->get("HTTP_REFERER")))
     return true;
 
   if (!user_acl)
     return false;
 
-  return user_acl->verify_permission(*s->auth_identity, swift_perm, swift_perm);
+  return user_acl->verify_permission(*s->auth.identity, swift_perm, swift_perm);
 }
 
 bool verify_object_permission(struct req_state *s, int perm)
@@ -1109,6 +1156,14 @@ void url_encode(const string& src, string& dst)
   }
 }
 
+std::string url_encode(const std::string& src)
+{
+  std::string dst;
+  url_encode(src, dst);
+
+  return dst;
+}
+
 string rgw_trim_whitespace(const string& src)
 {
   if (src.empty()) {
@@ -1132,6 +1187,19 @@ string rgw_trim_whitespace(const string& src)
   }
 
   return src.substr(start, end - start + 1);
+}
+
+boost::string_ref rgw_trim_whitespace(const boost::string_ref& src)
+{
+  boost::string_ref res = src;
+
+  while (res.size() > 0 && std::isspace(res.front())) {
+    res.remove_prefix(1);
+  }
+  while (res.size() > 0 && std::isspace(res.back())) {
+    res.remove_suffix(1);
+  }
+  return res;
 }
 
 string rgw_trim_quotes(const string& val)
@@ -1381,6 +1449,83 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
   return false;
 }
 
+static ssize_t unescape_str(const string& s, ssize_t ofs, char esc_char, char special_char, string *dest)
+{
+  const char *src = s.c_str();
+  char dest_buf[s.size() + 1];
+  char *destp = dest_buf;
+  bool esc = false;
+
+  dest_buf[0] = '\0';
+
+  for (size_t i = ofs; i < s.size(); i++) {
+    char c = src[i];
+    if (!esc && c == esc_char) {
+      esc = true;
+      continue;
+    }
+    if (!esc && c == special_char) {
+      *destp = '\0';
+      *dest = dest_buf;
+      return (ssize_t)i + 1;
+    }
+    *destp++ = c;
+    esc = false;
+  }
+  *destp = '\0';
+  *dest = dest_buf;
+  return string::npos;
+}
+
+static void escape_str(const string& s, char esc_char, char special_char, string *dest)
+{
+  const char *src = s.c_str();
+  char dest_buf[s.size() * 2 + 1];
+  char *destp = dest_buf;
+
+  for (size_t i = 0; i < s.size(); i++) {
+    char c = src[i];
+    if (c == esc_char || c == special_char) {
+      *destp++ = esc_char;
+    }
+    *destp++ = c;
+  }
+  *destp++ = '\0';
+  *dest = dest_buf;
+}
+
+void rgw_pool::from_str(const string& s)
+{
+  size_t pos = unescape_str(s, 0, '\\', ':', &name);
+  if (pos != string::npos) {
+    pos = unescape_str(s, pos, '\\', ':', &ns);
+    /* ignore return; if pos != string::npos it means that we had a colon
+     * in the middle of ns that wasn't escaped, we're going to stop there
+     */
+  }
+}
+
+string rgw_pool::to_str() const
+{
+  string esc_name;
+  escape_str(name, '\\', ':', &esc_name);
+  if (ns.empty()) {
+    return esc_name;
+  }
+  string esc_ns;
+  escape_str(ns, '\\', ':', &esc_ns);
+  return esc_name + ":" + esc_ns;
+}
+
+void rgw_raw_obj::decode_from_rgw_obj(bufferlist::iterator& bl)
+{
+  rgw_obj old_obj;
+  ::decode(old_obj, bl);
+
+  get_obj_bucket_and_oid_loc(old_obj, oid, loc);
+  pool = old_obj.get_explicit_data_pool();
+}
+
 std::string rgw_bucket::get_key(char tenant_delim, char id_delim) const
 {
   static constexpr size_t shard_len{12}; // ":4294967295\0"
@@ -1424,3 +1569,77 @@ int rgw_parse_op_type_list(const string& str, uint32_t *perm)
   return parse_list_of_flags(op_type_mapping, str, perm);
 }
 
+static int match_internal(boost::string_ref pattern, boost::string_ref input, int (*function)(const char&, const char&))
+{
+  boost::string_ref::iterator it1 = pattern.begin();
+  boost::string_ref::iterator it2 = input.begin();
+  while(true) {
+    if (it1 == pattern.end() && it2 == input.end())
+        return 1;
+    if (it1 == pattern.end() || it2 == input.end())
+        return 0;
+    if (*it1 == '*' && (it1 + 1) == pattern.end() && it2 != input.end())
+      return 1;
+    if (*it1 == '*' && (it1 + 1) == pattern.end() && it2 == input.end())
+      return 0;
+    if (function(*it1, *it2) || *it1 == '?') {
+      ++it1;
+      ++it2;
+      continue;
+    }
+    if (*it1 == '*') {
+      if (function(*(it1 + 1), *it2))
+        ++it1;
+      else
+        ++it2;
+      continue;
+    }
+    return 0;
+  }
+  return 0;
+}
+
+static int matchcase(const char& c1, const char& c2)
+{
+  if (c1 == c2)
+      return 1;
+  return 0;
+}
+
+static int matchignorecase(const char& c1, const char& c2)
+{
+  if (tolower(c1) == tolower(c2))
+      return 1;
+  return 0;
+}
+
+int match(const string& pattern, const string& input, int flag)
+{
+  auto last_pos_input = 0, last_pos_pattern = 0;
+
+  while(true) {
+    auto cur_pos_input = input.find(":", last_pos_input);
+    auto cur_pos_pattern = pattern.find(":", last_pos_pattern);
+
+    string substr_input = input.substr(last_pos_input, cur_pos_input);
+    string substr_pattern = pattern.substr(last_pos_pattern, cur_pos_pattern);
+
+    int res;
+    if (flag & POLICY_ACTION || flag & POLICY_ARN) {
+      res = match_internal(substr_pattern, substr_input, &matchignorecase);
+    } else {
+      res = match_internal(substr_pattern, substr_input, &matchcase);
+    }
+    if (res == 0)
+      return 0;
+
+    if (cur_pos_pattern == string::npos && cur_pos_input == string::npos)
+      return 1;
+    else if ((cur_pos_pattern == string::npos && cur_pos_input != string::npos) ||
+             (cur_pos_pattern != string::npos && cur_pos_input == string::npos))
+      return 0;
+
+    last_pos_pattern = cur_pos_pattern + 1;
+    last_pos_input = cur_pos_input + 1;
+  }
+}

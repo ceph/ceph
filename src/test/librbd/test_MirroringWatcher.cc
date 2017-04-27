@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_fixture.h"
@@ -23,11 +23,10 @@ struct MockMirroringWatcher : public MirroringWatcher<> {
     : MirroringWatcher<>(image_ctx.md_ctx, image_ctx.op_work_queue) {
   }
 
-  MOCK_METHOD2(handle_mode_updated, void(cls::rbd::MirrorMode, Context*));
-  MOCK_METHOD4(handle_image_updated, void(cls::rbd::MirrorImageState,
+  MOCK_METHOD1(handle_mode_updated, void(cls::rbd::MirrorMode));
+  MOCK_METHOD3(handle_image_updated, void(cls::rbd::MirrorImageState,
                                           const std::string &,
-                                          const std::string &,
-                                          Context*));
+                                          const std::string &));
 };
 
 } // anonymous namespace
@@ -39,7 +38,7 @@ using ::testing::WithArg;
 
 class TestMirroringWatcher : public TestFixture {
 public:
-  virtual void SetUp() {
+  void SetUp() override {
     TestFixture::SetUp();
 
     bufferlist bl;
@@ -58,7 +57,7 @@ public:
     }
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     if (m_image_watcher != nullptr) {
       C_SaferCond ctx;
       m_image_watcher->unregister_watch(&ctx);
@@ -73,28 +72,24 @@ public:
 };
 
 TEST_F(TestMirroringWatcher, ModeUpdated) {
-  EXPECT_CALL(*m_image_watcher, handle_mode_updated(cls::rbd::MIRROR_MODE_DISABLED, _))
-    .WillRepeatedly(WithArg<1>(Invoke([](Context *on_finish) {
-        on_finish->complete(0);
-      })));
+  EXPECT_CALL(*m_image_watcher, handle_mode_updated(cls::rbd::MIRROR_MODE_DISABLED));
 
-  ASSERT_EQ(0, MockMirroringWatcher::notify_mode_updated(m_ioctx, cls::rbd::MIRROR_MODE_DISABLED));
-
+  C_SaferCond ctx;
+  MockMirroringWatcher::notify_mode_updated(m_ioctx, cls::rbd::MIRROR_MODE_DISABLED, &ctx);
+  ASSERT_EQ(0, ctx.wait());
 }
 
 TEST_F(TestMirroringWatcher, ImageStatusUpdated) {
   EXPECT_CALL(*m_image_watcher,
               handle_image_updated(cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-                                   StrEq("image id"), StrEq("global image id"),
-                                   _))
-    .WillRepeatedly(WithArg<3>(Invoke([](Context *on_finish) {
-        on_finish->complete(0);
-      })));
+                                   StrEq("image id"),
+                                   StrEq("global image id")));
 
-  ASSERT_EQ(0, MockMirroringWatcher::notify_image_updated(m_ioctx,
-                                                          cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
-                                                          "image id",
-                                                          "global image id"));
+  C_SaferCond ctx;
+  MockMirroringWatcher::notify_image_updated(m_ioctx,
+                                             cls::rbd::MIRROR_IMAGE_STATE_ENABLED,
+                                             "image id", "global image id", &ctx);
+  ASSERT_EQ(0, ctx.wait());
 }
 
 } // namespace librbd

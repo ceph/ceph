@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -31,7 +31,7 @@ public:
   typedef SnapshotProtectRequest<MockImageCtx> MockSnapshotProtectRequest;
 
   void expect_get_snap_id(MockImageCtx &mock_image_ctx, uint64_t snap_id) {
-    EXPECT_CALL(mock_image_ctx, get_snap_id(_))
+    EXPECT_CALL(mock_image_ctx, get_snap_id(_, _))
                   .WillOnce(Return(snap_id));
   }
 
@@ -76,7 +76,7 @@ TEST_F(TestMockOperationSnapshotProtectRequest, Success) {
 
   C_SaferCond cond_ctx;
   MockSnapshotProtectRequest *req = new MockSnapshotProtectRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1");
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -101,7 +101,7 @@ TEST_F(TestMockOperationSnapshotProtectRequest, GetSnapIdMissing) {
 
   C_SaferCond cond_ctx;
   MockSnapshotProtectRequest *req = new MockSnapshotProtectRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1");
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -127,7 +127,7 @@ TEST_F(TestMockOperationSnapshotProtectRequest, IsSnapProtectedError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotProtectRequest *req = new MockSnapshotProtectRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1");
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -153,7 +153,7 @@ TEST_F(TestMockOperationSnapshotProtectRequest, SnapAlreadyProtected) {
 
   C_SaferCond cond_ctx;
   MockSnapshotProtectRequest *req = new MockSnapshotProtectRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1");
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();
@@ -180,7 +180,7 @@ TEST_F(TestMockOperationSnapshotProtectRequest, SetProtectionStateError) {
 
   C_SaferCond cond_ctx;
   MockSnapshotProtectRequest *req = new MockSnapshotProtectRequest(
-    mock_image_ctx, &cond_ctx, "snap1");
+    mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), "snap1");
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     req->send();

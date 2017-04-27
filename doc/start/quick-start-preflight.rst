@@ -57,11 +57,12 @@ For CentOS 7, perform the following steps:
         sudo subscription-manager repos --enable=rhel-7-server-extras-rpms
 
 #. Install and enable the Extra Packages for Enterprise Linux (EPEL)
-   repository. Please see the `EPEL wiki`_ page for more information.
+   repository::
 
-#. On CentOS, you can execute the following command chain::
+        sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
-        sudo yum install -y yum-utils && sudo yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/7/x86_64/ && sudo yum install --nogpgcheck -y epel-release && sudo rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7 && sudo rm /etc/yum.repos.d/dl.fedoraproject.org*
+   Please see the `EPEL wiki`_ page for more information.
+
 
 #. Add the package to your repository. Open a text editor and create a
    Yellowdog Updater, Modified (YUM) entry. Use the file path
@@ -283,11 +284,21 @@ On some distributions (e.g., RHEL), the default firewall configuration is fairly
 strict. You may need to adjust your firewall settings allow inbound requests so
 that clients in your network can communicate with daemons on your Ceph nodes.
 
-For ``firewalld`` on RHEL 7, add port ``6789`` for Ceph Monitor nodes and ports
-``6800:7300`` for Ceph OSDs to the public zone and ensure that you make the
-setting permanent so that it is enabled on reboot. For example::
+For ``firewalld`` on RHEL 7, add the ``ceph-mon`` service for Ceph Monitor
+nodes and the ``ceph`` service for Ceph OSDs and MDSs to the public zone and
+ensure that you make the settings permanent so that they are enabled on reboot.
 
-	sudo firewall-cmd --zone=public --add-port=6789/tcp --permanent
+For example, on monitors::
+
+	sudo firewall-cmd --zone=public --add-service=ceph-mon --permanent
+
+and on OSDs and MDSs::
+
+	sudo firewall-cmd --zone=public --add-service=ceph --permanent
+
+Once you have finished configuring firewalld with the ``--permanent`` flag, you can make the changes live immediately without rebooting::
+
+	sudo firewall-cmd --reload
 
 For ``iptables``, add port ``6789`` for Ceph Monitors and ports ``6800:7300``
 for Ceph OSDs. For example::

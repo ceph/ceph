@@ -57,7 +57,7 @@ private:
                        const std::string &client_id, ContextWQ *op_work_queue,
                        Context *on_finish);
 
-  IoCtx m_ioctx;
+  IoCtx &m_ioctx;
   std::string m_image_id;
   uint8_t m_order;
   uint8_t m_splay_width;

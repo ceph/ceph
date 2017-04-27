@@ -1,0 +1,6 @@
+tasks:
+- qemu:
+    all:
+      test: http://git.ceph.com/?p={repo};a=blob_plain;h={branch};f=qa/workunits/suites/iozone.sh
+      image_size: 20480
+exclude_arch: armv7l

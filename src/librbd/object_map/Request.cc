@@ -28,10 +28,7 @@ bool Request::should_complete(int r) {
       return invalidate();
     }
 
-    {
-      RWLock::WLocker l2(m_image_ctx.object_map_lock);
-      finish_request();
-    }
+    finish_request();
     return true;
 
   case STATE_INVALIDATE:

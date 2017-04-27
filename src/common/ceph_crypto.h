@@ -49,7 +49,7 @@ namespace ceph {
   }
 }
 #elif defined(USE_NSS)
-// you *must* use CRYPTO_CXXFLAGS in Makefile.am for including this include
+// you *must* use CRYPTO_CXXFLAGS in CMakeLists.txt for including this include
 # include <nss.h>
 # include <pk11pub.h>
 
@@ -177,6 +177,7 @@ namespace ceph {
 }
 
 #else
+// cppcheck-suppress preprocessorErrorDirective
 # error "No supported crypto implementation found."
 #endif
 

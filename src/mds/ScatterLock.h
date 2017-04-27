@@ -58,20 +58,21 @@ class ScatterLock : public SimpleLock {
     DIRTY            = 1 << 2,
     FLUSHING         = 1 << 3,
     FLUSHED          = 1 << 4,
+    REJOIN_MIX	     = 1 << 5, // no rdlock until the recovering mds become active
   };
 
 public:
   ScatterLock(MDSCacheObject *o, LockType *lt) : 
     SimpleLock(o, lt), _more(NULL)
   {}
-  ~ScatterLock() {
+  ~ScatterLock() override {
     if (_more) {
       _more->item_updated.remove_myself();   // FIXME this should happen sooner, i think...
       delete _more;
     }
   }
 
-  bool is_scatterlock() const {
+  bool is_scatterlock() const override {
     return true;
   }
 
@@ -94,6 +95,14 @@ public:
     return
       get_state() == LOCK_SYNC ||
       get_state() == LOCK_MIX;
+  }
+
+  void set_xlock_snap_sync(MDSInternalContextBase *c)
+  {
+    assert(get_type() == CEPH_LOCK_IFILE);
+    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
+    state = LOCK_XLOCKSNAP;
+    add_waiter(WAIT_STABLE, c);
   }
 
   xlist<ScatterLock*>::item *get_updated_item() { return &more()->item_updated; }
@@ -127,17 +136,20 @@ public:
     return have_more() ? _more->state_flags & UNSCATTER_WANTED : false;
   }
 
-  bool is_dirty() const {
+  bool is_dirty() const override {
     return have_more() ? _more->state_flags & DIRTY : false;
   }
-  bool is_flushing() const {
+  bool is_flushing() const override {
     return have_more() ? _more->state_flags & FLUSHING: false;
   }
-  bool is_flushed() const {
+  bool is_flushed() const override {
     return have_more() ? _more->state_flags & FLUSHED: false;
   }
   bool is_dirty_or_flushing() const {
     return have_more() ? (is_dirty() || is_flushing()) : false;
+  }
+  bool is_rejoin_mix() const {
+    return have_more() ? _more->state_flags & REJOIN_MIX : false;
   }
 
   void mark_dirty() { 
@@ -167,9 +179,16 @@ public:
     start_flush();
     finish_flush();
   }
-  void clear_flushed() {
+  void clear_flushed() override {
     if (have_more()) {
       _more->state_flags &= ~FLUSHED;
+      try_clear_more();
+    }
+  }
+
+  void clear_rejoin_mix() {
+    if (have_more()) {
+      _more->state_flags &= ~REJOIN_MIX;
       try_clear_more();
     }
   }
@@ -182,14 +201,13 @@ public:
   void infer_state_from_strong_rejoin(int rstate, bool locktoo) {
     if (rstate == LOCK_MIX || 
 	rstate == LOCK_MIX_LOCK || // replica still has wrlocks?
-	rstate == LOCK_MIX_SYNC || // "
-	rstate == LOCK_MIX_TSYN)  // "
+	rstate == LOCK_MIX_SYNC)
       state = LOCK_MIX;
     else if (locktoo && rstate == LOCK_LOCK)
       state = LOCK_LOCK;
   }
 
-  void encode_state_for_rejoin(bufferlist& bl, int rep) const {
+  void encode_state_for_rejoin(bufferlist& bl, int rep) {
     __s16 s = get_replica_state();
     if (is_gathering(rep)) {
       // the recovering mds may hold rejoined wrlocks
@@ -198,6 +216,10 @@ public:
       else
 	s = LOCK_MIX_LOCK;
     }
+
+    if (s == LOCK_MIX || s == LOCK_MIX_LOCK || s == LOCK_MIX_SYNC)
+      more()->state_flags |= REJOIN_MIX;
+
     ::encode(s, bl);
   }
 
@@ -220,7 +242,7 @@ public:
     return SimpleLock::remove_replica(from);
   }
 
-  virtual void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "(";
     _print(out);
     if (is_dirty())

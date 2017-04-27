@@ -1,0 +1,9 @@
+tasks:
+- cifs-mount:
+    client.1:
+      share: ceph
+- workunit:
+    clients:
+      client.1:
+        - kernel_untar_build.sh
+

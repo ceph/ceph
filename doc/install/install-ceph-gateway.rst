@@ -83,9 +83,8 @@ your administration server. Add a section entitled
 ``[client.rgw.<gateway-node>]``, replacing ``<gateway-node>`` with the short
 node name of your Ceph Object Gateway node (i.e., ``hostname -s``).
 
-.. note:: In version 0.94, the Ceph Object Gateway does not support SSL. You
-          may setup a reverse proxy web server with SSL to dispatch HTTPS 
-          requests as HTTP requests to CivetWeb.
+.. note:: As of version 11.0.1, the Ceph Object Gateway **does** support SSL.
+	See `Using SSL with Civetweb`_ for information on how to set that up.
 
 For example, if your node name is ``gateway-node1``, add a section like this
 after the ``[global]`` section::
@@ -144,6 +143,28 @@ If you add a new ``IPv4`` iptables rule after installing
 execute the following as the ``root`` user::
 
  iptables-save > /etc/iptables/rules.v4
+
+Using SSL with Civetweb
+-----------------------
+.. _Using SSL with Civetweb:
+
+Before using SSL with civetweb, you will need a certificate that will match
+the host name that that will be used to access the Ceph Object Gateway.
+You may wish to obtain one that has `subject alternate name` fields for
+more flexibility.  If you intend to use S3-style subdomains
+(`Add Wildcard to DNS`_), you will need a `wildcard` certificate.
+
+Civetweb requires that the server key, server certificate, and any other
+CA or intermediate certificates be supplied in one file.  Each of these
+items must be in `pem` form.  Because the combined file contains the
+secret key, it should be protected from unauthorized access.
+
+To configure ssl operation, append ``s`` to the port number.  Currently
+it is not possible to configure the radosgw to listen on both
+http and https, you must pick only one.  So::
+
+ [client.rgw.gateway-node1]
+ rgw_frontends = civetweb port=443s ssl_certificate=/etc/ceph/private/keyandcert.pem
 
 Migrating from Apache to Civetweb
 ---------------------------------
@@ -241,7 +262,7 @@ configuration file, restart your gateway. On Red Hat Enteprise Linux execute::
 
 On Ubuntu execute::
 
- sudo service radosgw restart id=rgw.<short-hostname>sudo service radosgw restart id=rgw.<short-hostname>
+ sudo service radosgw restart id=rgw.<short-hostname>
 
 For federated configurations, each zone may have a different ``index_pool``
 setting for failover. To make the value consistent for a region's zones, you
@@ -267,6 +288,7 @@ Where ``client.rgw.ceph-client`` is the name of the gateway user.
 
 Add Wildcard to DNS
 -------------------
+.. _Add Wildcard to DNS:
 
 To use Ceph with S3-style subdomains (e.g., bucket-name.domain-name.com), you
 need to add a wildcard to the DNS record of the DNS server you use with the
@@ -300,7 +322,7 @@ For ``bind``, add a wildcard to the DNS record. For example::
  *       IN      CNAME   @
 
 Restart your DNS server and ping your server with a subdomain to ensure that
-your ``ceph-radosgw`` daemon can process the subdomain requests::
+your DNS configuration works as expected::
 
  ping mybucket.{hostname}
 
@@ -496,7 +518,7 @@ You need to write and run a Python test script for verifying S3 access. The S3
 access test script will connect to the ``radosgw``, create a new bucket and
 list all buckets. The values for ``aws_access_key_id`` and
 ``aws_secret_access_key`` are taken from the values of ``access_key`` and
-``secret_key`` returned by the ``radosgw_admin`` command.
+``secret_key`` returned by the ``radosgw-admin`` command.
 
 Execute the following steps:
 
@@ -510,27 +532,27 @@ Execute the following steps:
 
 #. Add the following contents to the file::
 
-    import boto
     import boto.s3.connection
 
     access_key = 'I0PJDPCIYZ665MW88W9R'
     secret_key = 'dxaXZ8U90SXydYzyS5ivamEP20hkLSUViiaR+ZDA'
     conn = boto.connect_s3(
-            aws_access_key_id = access_key,
-            aws_secret_access_key = secret_key,
-            host = '{hostname}', port = {port},
-            is_secure=False, calling_format = boto.s3.connection.OrdinaryCallingFormat(),
-            )
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            host='{hostname}', port={port},
+            is_secure=False, calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+           )
 
     bucket = conn.create_bucket('my-new-bucket')
-        for bucket in conn.get_all_buckets():
-                print "{name} {created}".format(
-                        name = bucket.name,
-                        created = bucket.creation_date,
-     )
+    for bucket in conn.get_all_buckets():
+        print "{name} {created}".format(
+            name=bucket.name,
+            created=bucket.creation_date,
+        )
+
 
    Replace ``{hostname}`` with the hostname of the host where you have
-   configured the gateway service i.e., the ``gateway host``. Replace {port}
+   configured the gateway service i.e., the ``gateway host``. Replace ``{port}``
    with the port number you are using with Civetweb.
 
 #. Run the script::

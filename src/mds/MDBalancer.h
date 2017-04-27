@@ -24,6 +24,7 @@ using std::map;
 
 #include "include/types.h"
 #include "common/Clock.h"
+#include "common/Cond.h"
 #include "CInode.h"
 
 
@@ -44,14 +45,18 @@ class MDBalancer {
 
   int last_epoch_under;  
   int last_epoch_over; 
+  string bal_code;
+  string bal_version;
 
   utime_t last_heartbeat;
-  utime_t last_fragment;
   utime_t last_sample;    
   utime_t rebalance_time; //ensure a consistent view of load for rebalance
 
-  // todo
-  set<dirfrag_t>   split_queue, merge_queue;
+  // Dirfrags which are marked to be passed on to MDCache::[split|merge]_dir
+  // just as soon as a delayed context comes back and triggers it.
+  // These sets just prevent us from spawning extra timer contexts for
+  // dirfrags that already have one in flight.
+  set<dirfrag_t>   split_pending, merge_pending;
 
   // per-epoch scatter/gathered info
   map<mds_rank_t, mds_load_t>  mds_load;
@@ -88,17 +93,17 @@ public:
 
   int proc_message(Message *m);
   
+  int localize_balancer();
   void send_heartbeat();
   void handle_heartbeat(MHeartbeat *m);
 
   void tick();
 
-  void do_fragmenting();
-
   void export_empties();
   //set up the rebalancing targets for export and do one if the
   //MDSMap is up to date
   void prep_rebalance(int beat);
+  int mantle_prep_rebalance();
   /*check if the monitor has recorded the current export targets;
     if it has then do the actual export. Otherwise send off our
     export targets message again*/
@@ -117,12 +122,16 @@ public:
   void hit_dir(utime_t now, class CDir *dir, int type, int who=-1, double amount=1.0);
   void hit_recursive(utime_t now, class CDir *dir, int type, double amount, double rd_adj);
 
-
-  void show_imports(bool external=false);
-
-  void queue_split(CDir *dir);
+  void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);
 
+  /**
+   * Based on size and configuration, decide whether to issue a queue_split
+   * or queue_merge for this CDir.
+   *
+   * \param hot whether the directory's temperature is enough to split it
+   */
+  void maybe_fragment(CDir *dir, bool hot);
 };
 
 

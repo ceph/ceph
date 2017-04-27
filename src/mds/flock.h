@@ -87,7 +87,7 @@ public:
    * @param fl The filelock to check for
    * @returns True if the lock is waiting, false otherwise
    */
-  bool is_waiting(const ceph_filelock &fl);
+  bool is_waiting(const ceph_filelock &fl) const;
   /**
    * Remove a lock from the waiting_locks list
    *
@@ -144,7 +144,7 @@ private:
   bool is_deadlock(const ceph_filelock& fl,
 		   list<multimap<uint64_t, ceph_filelock>::iterator>&
 		      overlapping_locks,
-		   const ceph_filelock *first_fl=NULL, unsigned depth=0);
+		   const ceph_filelock *first_fl=NULL, unsigned depth=0) const;
 
   /**
    * Add a lock to the waiting_locks list

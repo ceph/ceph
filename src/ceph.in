@@ -33,6 +33,11 @@ except NameError:
 CEPH_GIT_VER="@CEPH_GIT_VER@"
 CEPH_GIT_NICE_VER="@CEPH_GIT_NICE_VER@"
 
+# Flags from src/mon/Monitor.h
+FLAG_NOFORWARD  = (1 << 0)
+FLAG_OBSOLETE   = (1 << 1)
+FLAG_DEPRECATED = (1 << 2)
+
 # Make life easier on developers:
 # If in src/, and .libs and pybind exist here, assume we're running
 # from a Ceph source dir and tweak PYTHONPATH and LD_LIBRARY_PATH
@@ -70,17 +75,7 @@ def get_pythonlib_dir():
     """Returns the name of a distutils build directory"""
     return "lib.{version[0]}".format(version=sys.version_info)
 
-if MYDIR.endswith('src') and \
-   os.path.exists(os.path.join(MYDIR, '.libs')) and \
-   os.path.exists(os.path.join(MYDIR, 'pybind')) and \
-   os.path.exists(os.path.join(MYDIR, 'build')):
-
-    python_libpath = os.path.join(MYDIR, 'build', get_pythonlib_dir())
-    respawn_in_path(os.path.join(MYDIR, '.libs'), 'pybind', python_libpath)
-    if 'PATH' in os.environ and MYDIR not in os.environ['PATH']:
-        os.environ['PATH'] += ':' + MYDIR
-
-elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
+if os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
      and os.path.exists(os.path.join(os.getcwd(), "bin/init-ceph")):
     src_path = None
     for l in open("./CMakeCache.txt"):
@@ -262,6 +257,21 @@ def do_basic_help(parser, args):
     """
     hdr('General usage:')
     parser.print_help()
+    print_locally_handled_command_help()
+
+def print_locally_handled_command_help():
+    hdr("Local commands:")
+    print("""
+ping <mon.id>           Send simple presence/life test to a mon
+                        <mon.id> may be 'mon.*' for all mons
+daemon {type.id|path} <cmd>
+                        Same as --admin-daemon, but auto-find admin socket
+daemonperf {type.id | path} [<interval>] [<count>]
+                        Get selected perf stats from daemon/admin socket
+                        Run <count> times (default forever),
+                        once per <interval> seconds (default 1)
+    """, file=sys.stdout)
+
 
 def do_extended_help(parser, args):
     def help_for_sigs(sigs, partial=None):
@@ -346,6 +356,10 @@ def format_help(cmddict, partial=None):
     for cmd in sorted(cmddict.values(), key=descsort_key):
 
         if not cmd['help']:
+            continue
+        flags = cmd.get('flags')
+        if (flags is not None and
+            (flags & (FLAG_OBSOLETE | FLAG_DEPRECATED)) != 0):
             continue
         concise = concise_sig(cmd['sig'])
         if partial and not concise.startswith(partial):
@@ -459,7 +473,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     if parsed_args.output_format:
                         valid_dict['format'] = parsed_args.output_format
                     if verbose:
-                        print("Submitting command ", valid_dict, file=sys.stderr)
+                        print("Submitting command: ", valid_dict, file=sys.stderr)
                     ret, outbuf, outs = json_command(cluster_handle,
                                                      target=target,
                                                      argdict=valid_dict)
@@ -475,7 +489,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     print("Invalid command", file=sys.stderr)
 
     if verbose:
-        print("Submitting command ", valid_dict, file=sys.stderr)
+        print("Submitting command: ", valid_dict, file=sys.stderr)
     return json_command(cluster_handle, target=target, argdict=valid_dict,
                         inbuf=inbuf)
 
@@ -542,7 +556,10 @@ def ping_monitor(cluster_handle, name, timeout):
         run_in_thread(cluster_handle.connect, timeout=timeout)
         for m in monids() :
             s = run_in_thread(cluster_handle.ping_monitor, m)
-            print("mon.{0}".format(m) + '\n' + s)
+            if s is None:
+                print("mon.{0}".format(m) + '\n' + "Error connecting to monitor.")
+            else:
+                print("mon.{0}".format(m) + '\n' + s)
     else :
             s = run_in_thread(cluster_handle.ping_monitor, mon_id)
             print(s)
@@ -642,7 +659,6 @@ def main():
         try:
             raw_write(admin_socket(sockpath, childargs, format))
         except Exception as e:
-            print('admin_socket: {0}'.format(e))
             print('admin_socket: {0}'.format(e), file=sys.stderr)
             return errno.EINVAL
         return 0
@@ -688,7 +704,7 @@ def main():
                                        conffile=conffile)
         retargs = run_in_thread(cluster_handle.conf_parse_argv, childargs)
     except rados.Error as e:
-        print('Error initializing cluster client: {0}'.format(repr(e)), file=sys.stderr)
+        print('Error initializing cluster client: {0!r}'.format(e), file=sys.stderr)
         return 1
 
     childargs = retargs
@@ -733,10 +749,10 @@ def main():
         print('Cluster connection aborted', file=sys.stderr)
         return 1
     except rados.PermissionDeniedError as e:
-        print('Error connecting to cluster: {0}'.format(e.__class__.__name__), file=sys.stderr)
+        print(str(e), file=sys.stderr)
         return errno.EACCES
     except Exception as e:
-        print('Error connecting to cluster: {0}'.format(e.__class__.__name__), file=sys.stderr)
+        print(str(e), file=sys.stderr)
         return 1
 
     if parsed_args.help:

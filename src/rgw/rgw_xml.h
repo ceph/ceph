@@ -75,10 +75,10 @@ protected:
   }
 public:
   RGWXMLParser();
-  virtual ~RGWXMLParser();
+  ~RGWXMLParser() override;
   bool init();
   bool xml_start(const char *el, const char **attr);
-  bool xml_end(const char *el);
+  bool xml_end(const char *el) override;
   void handle_data(const char *s, int len);
 
   bool parse(const char *buf, int len, int done);
@@ -100,7 +100,7 @@ public:
   class XMLParser : public RGWXMLParser {
   public:
     XMLParser() {}
-    virtual ~XMLParser() {}
+    ~XMLParser() override {}
   } parser;
 
   explicit RGWXMLDecoder(bufferlist& bl) {

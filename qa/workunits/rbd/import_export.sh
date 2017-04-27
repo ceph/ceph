@@ -1,5 +1,16 @@
 #!/bin/sh -ex
 
+# returns data pool for a given image
+get_image_data_pool () {
+    image=$1
+    data_pool=$(rbd info $image | grep "data_pool: " | awk -F':' '{ print $NF }')
+    if [ -z $data_pool ]; then
+       data_pool='rbd'
+    fi
+
+    echo $data_pool
+}
+
 # return list of object numbers populated in image
 objects () {
    image=$1
@@ -8,7 +19,7 @@ objects () {
    # strip off prefix and leading zeros from objects; sort, although
    # it doesn't necessarily make sense as they're hex, at least it makes
    # the list repeatable and comparable
-   objects=$(rados ls -p rbd | grep $prefix | \
+   objects=$(rados ls -p $(get_image_data_pool $image) | grep $prefix | \
        sed -e 's/'$prefix'\.//' -e 's/^0*\([0-9a-f]\)/\1/' | sort -u)
    echo $objects
 }
@@ -63,6 +74,70 @@ cmp ${TMPDIR}/img ${TMPDIR}/img3
 
 rm ${TMPDIR}/img ${TMPDIR}/img2 ${TMPDIR}/img3
 
+# try with --export-format for snapshots
+dd if=/bin/dd of=${TMPDIR}/img bs=1k count=10 seek=100
+rbd import $RBD_CREATE_ARGS ${TMPDIR}/img testimg
+rbd snap create testimg@snap
+rbd export --export-format 2 testimg ${TMPDIR}/img_v2
+rbd import --export-format 2 ${TMPDIR}/img_v2 testimg_import
+rbd info testimg_import
+rbd info testimg_import@snap
+
+# compare the contents between testimg and testimg_import
+rbd export testimg_import ${TMPDIR}/img_import
+compare_files_and_ondisk_sizes ${TMPDIR}/img ${TMPDIR}/img_import
+
+rbd export testimg@snap ${TMPDIR}/img_snap
+rbd export testimg_import@snap ${TMPDIR}/img_snap_import
+compare_files_and_ondisk_sizes ${TMPDIR}/img_snap ${TMPDIR}/img_snap_import
+
+rm ${TMPDIR}/img_v2
+rm ${TMPDIR}/img_import
+rm ${TMPDIR}/img_snap
+rm ${TMPDIR}/img_snap_import
+
+rbd snap rm testimg_import@snap
+rbd remove testimg_import
+rbd snap rm testimg@snap
+rbd rm testimg
+
+# order
+rbd import --order 20 ${TMPDIR}/img testimg
+rbd export --export-format 2 testimg ${TMPDIR}/img_v2
+rbd import --export-format 2 ${TMPDIR}/img_v2 testimg_import
+rbd info testimg_import|grep order|awk '{print $2}'|grep 20
+
+rm ${TMPDIR}/img_v2
+
+rbd remove testimg_import
+rbd remove testimg
+
+# features
+rbd import --image-feature layering ${TMPDIR}/img testimg
+FEATURES_BEFORE=`rbd info testimg|grep features`
+rbd export --export-format 2 testimg ${TMPDIR}/img_v2
+rbd import --export-format 2 ${TMPDIR}/img_v2 testimg_import
+FEATURES_AFTER=`rbd info testimg_import|grep features`
+if [ "$FEATURES_BEFORE" != "$FEATURES_AFTER" ]; then
+  false
+fi
+
+rm ${TMPDIR}/img_v2
+
+rbd remove testimg_import
+rbd remove testimg
+
+# stripe
+rbd import --stripe-count 1000 --stripe-unit 4096 ${TMPDIR}/img testimg
+rbd export --export-format 2 testimg ${TMPDIR}/img_v2
+rbd import --export-format 2 ${TMPDIR}/img_v2 testimg_import
+rbd info testimg_import|grep "stripe unit"|awk '{print $3}'|grep 4096
+rbd info testimg_import|grep "stripe count"|awk '{print $3}'|grep 1000
+
+rm ${TMPDIR}/img_v2
+
+rbd remove testimg_import
+rbd remove testimg
 
 tiered=0
 if ceph osd dump | grep ^pool | grep "'rbd'" | grep tier; then
@@ -79,6 +154,7 @@ dd if=/dev/urandom bs=1M count=1 of=${TMPDIR}/sparse2; truncate ${TMPDIR}/sparse
 # 1M-block images; validate resulting blocks
 
 # 1M sparse, 1M data
+rbd rm sparse1 || true
 rbd import $RBD_CREATE_ARGS --order 20 ${TMPDIR}/sparse1
 rbd ls -l | grep sparse1 | grep -i '2048k'
 [ $tiered -eq 1 -o "$(objects sparse1)" = '1' ]
@@ -90,6 +166,7 @@ rm ${TMPDIR}/sparse1.out
 rbd rm sparse1
 
 # 1M data, 1M sparse
+rbd rm sparse2 || true
 rbd import $RBD_CREATE_ARGS --order 20 ${TMPDIR}/sparse2
 rbd ls -l | grep sparse2 | grep -i '2048k'
 [ $tiered -eq 1 -o "$(objects sparse2)" = '0' ]
@@ -140,12 +217,13 @@ echo "zeros export to sparse file"
 rbd create $RBD_CREATE_ARGS sparse --size 4
 prefix=$(rbd info sparse | grep block_name_prefix | awk '{print $NF;}')
 # drop in 0 object directly
-dd if=/dev/zero bs=4M count=1 | rados -p rbd put ${prefix}.000000000000 -
+dd if=/dev/zero bs=4M count=1 | rados -p $(get_image_data_pool sparse) \
+                                      put ${prefix}.000000000000 -
 [ $tiered -eq 1 -o "$(objects sparse)" = '0' ]
 # 1 object full of zeros; export should still create 0-disk-usage file
 rm ${TMPDIR}/sparse || true
 rbd export sparse ${TMPDIR}/sparse
-[ $(stat ${TMPDIR}/sparse --format=%b) = '0' ] 
+[ $(stat ${TMPDIR}/sparse --format=%b) = '0' ]
 rbd rm sparse
 
 rm ${TMPDIR}/sparse ${TMPDIR}/sparse1 ${TMPDIR}/sparse2 ${TMPDIR}/sparse3 || true

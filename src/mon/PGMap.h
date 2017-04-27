@@ -22,8 +22,13 @@
 #define CEPH_PGMAP_H
 
 #include "common/debug.h"
+#include "common/TextTable.h"
 #include "osd/osd_types.h"
 #include <sstream>
+
+// FIXME: don't like including this here to get OSDMap::Incremental, maybe
+// PGMapUpdater needs its own header.
+#include "osd/OSDMap.h"
 
 namespace ceph { class Formatter; }
 
@@ -176,6 +181,8 @@ public:
 
   epoch_t calc_min_last_epoch_clean() const;
 
+  int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
+
  public:
 
   set<pg_t> creating_pgs;
@@ -269,12 +276,20 @@ public:
   void dirty_all(Incremental& inc);
 
   void dump(Formatter *f) const; 
+  void dump_pool_stats(const OSDMap &osd_map, stringstream *ss, Formatter *f,
+      bool verbose) const;
+  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
+  static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
+			    const object_stat_sum_t &sum,
+			    uint64_t avail,
+			    float raw_used_rate,
+			    bool verbose, const pg_pool_t *pool);
   void dump_basic(Formatter *f) const;
   void dump_pg_stats(Formatter *f, bool brief) const;
   void dump_pool_stats(Formatter *f) const;
   void dump_osd_stats(Formatter *f) const;
   void dump_delta(Formatter *f) const;
-  void dump_filtered_pg_stats(Formatter *f, set<pg_t>& pgs);
+  void dump_filtered_pg_stats(Formatter *f, set<pg_t>& pgs) const;
 
   void dump_pg_stats_plain(ostream& ss,
 			   const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats,
@@ -284,7 +299,10 @@ public:
   bool get_stuck_counts(const utime_t cutoff, map<string, int>& note) const;
   void dump_stuck(Formatter *f, int types, utime_t cutoff) const;
   void dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const;
-
+  int dump_stuck_pg_stats(stringstream &ds,
+			   Formatter *f,
+			   int threshold,
+			   vector<string>& args) const;
   void dump(ostream& ss) const;
   void dump_basic(ostream& ss) const;
   void dump_pg_stats(ostream& ss, bool brief) const;
@@ -292,7 +310,7 @@ public:
   void dump_pool_stats(ostream& ss, bool header) const;
   void dump_osd_stats(ostream& ss) const;
   void dump_osd_sum_stats(ostream& ss) const;
-  void dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs);
+  void dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const;
 
   void dump_osd_perf_stats(Formatter *f) const;
   void print_osd_perf_stats(std::ostream *ss) const;
@@ -301,7 +319,7 @@ public:
   void print_osd_blocked_by_stats(std::ostream *ss) const;
 
   void get_filtered_pg_stats(uint32_t state, int64_t poolid, int64_t osdid,
-                             bool primary, set<pg_t>& pgs);
+                             bool primary, set<pg_t>& pgs) const;
   void recovery_summary(Formatter *f, list<string> *psl,
                         const pool_stat_t& delta_sum) const;
   void overall_recovery_summary(Formatter *f, list<string> *psl) const;
@@ -369,6 +387,76 @@ WRITE_CLASS_ENCODER_FEATURES(PGMap)
 inline ostream& operator<<(ostream& out, const PGMap& m) {
   m.print_oneline_summary(NULL, &out);
   return out;
+}
+
+int process_pg_map_command(
+  const string& prefix,
+  const map<string,cmd_vartype>& cmdmap,
+  const PGMap& pg_map,
+  const OSDMap& osdmap,
+  Formatter *f,
+  stringstream *ss,
+  bufferlist *odata);
+
+class PGMapUpdater
+{
+public:
+  static void check_osd_map(
+      const OSDMap::Incremental &osd_inc,
+      std::set<int> *need_check_down_pg_osds,
+      std::map<int,utime_t> *last_osd_report,
+      PGMap *pg_map,
+      PGMap::Incremental *pending_inc);
+
+  /**
+   * check latest osdmap for new pgs to register
+   */
+  static void register_new_pgs(
+      const OSDMap &osd_map,
+      const PGMap &pg_map,
+      PGMap::Incremental *pending_inc);
+
+  /**
+   * recalculate creating pg mappings
+   */
+  static void update_creating_pgs(
+      const OSDMap &osd_map,
+      const PGMap &pg_map,
+      PGMap::Incremental *pending_inc);
+
+  static void register_pg(
+      const OSDMap &osd_map,
+      pg_t pgid, epoch_t epoch,
+      bool new_pool,
+      const PGMap &pg_map,
+      PGMap::Incremental *pending_inc);
+
+  // mark pg's state stale if its acting primary osd is down
+  static void check_down_pgs(
+      const OSDMap &osd_map,
+      const PGMap &pg_map,
+      bool check_all,
+      const set<int>& need_check_down_pg_osds,
+      PGMap::Incremental *pending_inc);
+};
+
+namespace reweight {
+/* Assign a lower weight to overloaded OSDs.
+ *
+ * The osds that will get a lower weight are those with with a utilization
+ * percentage 'oload' percent greater than the average utilization.
+ */
+  int by_utilization(const OSDMap &osd_map,
+		     const PGMap &pg_map,
+		     int oload,
+		     double max_changef,
+		     int max_osds,
+		     bool by_pg, const set<int64_t> *pools,
+		     bool no_increasing,
+		     mempool::osdmap::map<int32_t, uint32_t>* new_weights,
+		     std::stringstream *ss,
+		     std::string *out_str,
+		     Formatter *f);
 }
 
 #endif

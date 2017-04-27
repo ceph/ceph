@@ -197,7 +197,7 @@ void LogChannel::update_config(map<string,string> &log_to_monitors,
   set_log_prio(prio);
 
   if (to_graylog && !graylog) { /* should but isn't */
-    graylog = ceph::log::Graylog::Ref(new ceph::log::Graylog("clog"));
+    graylog = std::make_shared<ceph::logging::Graylog>("clog");
   } else if (!to_graylog && graylog) { /* shouldn't but is */
     graylog.reset();
   }
@@ -238,11 +238,10 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
   int lvl = (prio == CLOG_ERROR ? -1 : 0);
   ldout(cct,lvl) << "log " << prio << " : " << s << dendl;
   LogEntry e;
-  // who will be set when we queue the entry on LogClient
-  //e.who = messenger->get_myinst();
-  e.stamp = ceph_clock_now(cct);
-  // seq will be set when we queue the entry on LogClient
-  // e.seq = ++last_log;
+  e.stamp = ceph_clock_now();
+  // seq and who should be set for syslog/graylog/log_to_mon
+  e.who = parent->get_myinst();
+  e.seq = parent->get_next_seq();
   e.prio = prio;
   e.msg = s;
   e.channel = get_log_channel();
@@ -265,15 +264,13 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
   }
 }
 
-void LogClient::reset_session()
+Message *LogClient::get_mon_log_message(bool flush)
 {
   Mutex::Locker l(log_lock);
-  last_log_sent = last_log - log_queue.size();
-}
-
-Message *LogClient::get_mon_log_message()
-{
-  Mutex::Locker l(log_lock);
+  if (flush) {
+    // reset session
+    last_log_sent = last_log - log_queue.size();
+  }
   return _get_mon_log_message();
 }
 
@@ -342,8 +339,6 @@ void LogClient::_send_to_mon()
 version_t LogClient::queue(LogEntry &entry)
 {
   Mutex::Locker l(log_lock);
-  entry.seq = ++last_log;
-  entry.who = messenger->get_myinst();
   log_queue.push_back(entry);
 
   if (is_mon) {
@@ -351,6 +346,16 @@ version_t LogClient::queue(LogEntry &entry)
   }
 
   return entry.seq;
+}
+
+uint64_t LogClient::get_next_seq()
+{
+  return ++last_log;
+}
+
+const entity_inst_t& LogClient::get_myinst()
+{
+  return messenger->get_myinst();
 }
 
 bool LogClient::handle_log_ack(MLogAck *m)

@@ -1,14 +1,16 @@
 #!/usr/bin/python
 
-import time
-import os
-import fcntl
 import errno
+import fcntl
+import os
 import signal
 import struct
+import time
+
 
 def handler(signum, frame):
     pass
+
 
 def lock_two(f1, f2):
     lockdata = struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 10, 0, 0)
@@ -16,19 +18,20 @@ def lock_two(f1, f2):
     time.sleep(10)
 
     # don't wait forever
-    signal.signal(signal.SIGALRM, handler);
-    signal.alarm(10);
-    exitcode = 0;
+    signal.signal(signal.SIGALRM, handler)
+    signal.alarm(10)
+    exitcode = 0
     try:
         fcntl.fcntl(f2, fcntl.F_SETLKW, lockdata)
-    except IOError, e:
+    except IOError as e:
         if e.errno == errno.EDEADLK:
             exitcode = 1
         elif e.errno == errno.EINTR:
             exitcode = 2
         else:
-            exitcode = 3;
-    os._exit(exitcode);
+            exitcode = 3
+    os._exit(exitcode)
+
 
 def main():
     pid1 = os.fork()
@@ -52,17 +55,18 @@ def main():
     deadlk_count = 0
     i = 0
     while i < 3:
-        pid, status = os.wait();
+        pid, status = os.wait()
         exitcode = status >> 8
         if exitcode == 1:
-            deadlk_count = deadlk_count + 1;
+            deadlk_count += 1
         elif exitcode != 0:
             raise RuntimeError("unexpect exit code of child")
-	i = i + 1
+        i += 1
 
     if deadlk_count != 1:
         raise RuntimeError("unexpect count of EDEADLK")
 
-    print 'ok'
+    print('ok')
+
 
 main()

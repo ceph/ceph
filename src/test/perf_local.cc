@@ -184,7 +184,7 @@ double buffer_basic()
 }
 
 struct DummyBlock {
-  int a, b, c, d;
+  int a = 1, b = 2, c = 3, d = 4;
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(a, bl);
@@ -330,7 +330,7 @@ class CondPingPong {
     CondPingPong *p;
    public:
     explicit Consumer(CondPingPong *p): p(p) {}
-    void* entry() {
+    void* entry() override {
       p->consume();
       return 0;
     }
@@ -450,7 +450,7 @@ double eventcenter_poll()
 {
   int count = 1000000;
   EventCenter center(g_ceph_context);
-  center.init(1000, 0);
+  center.init(1000, 0, "posix");
   center.set_owner();
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
@@ -467,13 +467,13 @@ class CenterWorker : public Thread {
  public:
   EventCenter center;
   explicit CenterWorker(CephContext *c): cct(c), done(false), center(c) {
-    center.init(100, 0);
+    center.init(100, 0, "posix");
   }
   void stop() {
     done = true;
     center.wakeup();
   }
-  void* entry() {
+  void* entry() override {
     center.set_owner();
     bind_thread_to_cpu(2);
     while (!done)
@@ -487,7 +487,7 @@ class CountEvent: public EventCallback {
 
  public:
   explicit CountEvent(atomic_t *atomic): count(atomic) {}
-  void do_request(int id) {
+  void do_request(int id) override {
     count->dec();
   }
 };
@@ -749,7 +749,7 @@ double test_spinlock()
 // Helper for spawn_thread. This is the main function that the thread executes
 // (intentionally empty).
 class ThreadHelper : public Thread {
-  void *entry() { return 0; }
+  void *entry() override { return 0; }
 };
 
 // Measure the cost of start and joining with a thread.
@@ -768,7 +768,7 @@ double spawn_thread()
 
 class FakeContext : public Context {
  public:
-  virtual void finish(int r) {}
+  void finish(int r) override {}
 };
 
 // Measure the cost of starting and stopping a Dispatch::Timer.
@@ -889,7 +889,7 @@ double perf_ceph_clock_now()
   int count = 100000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    ceph_clock_now(g_ceph_context);
+    ceph_clock_now();
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -1018,7 +1018,8 @@ int main(int argc, char *argv[])
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   Cycles::init();
 

@@ -11,15 +11,15 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 
-#include "librbd/AioObjectRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/LibrbdWriteback.h"
-#include "librbd/AioCompletion.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ObjectRequest.h"
 
 #include "include/assert.h"
 
@@ -50,15 +50,12 @@ namespace librbd {
    */
   class C_ReadRequest : public Context {
   public:
-    C_ReadRequest(CephContext *cct, Context *c, RWLock *owner_lock,
-                  Mutex *cache_lock)
-      : m_cct(cct), m_ctx(c), m_owner_lock(owner_lock),
-        m_cache_lock(cache_lock) {
+    C_ReadRequest(CephContext *cct, Context *c, Mutex *cache_lock)
+      : m_cct(cct), m_ctx(c), m_cache_lock(cache_lock) {
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       ldout(m_cct, 20) << "aio_cb completing " << dendl;
       {
-        RWLock::RLocker owner_locker(*m_owner_lock);
         Mutex::Locker cache_locker(*m_cache_lock);
 	m_ctx->complete(r);
       }
@@ -67,7 +64,6 @@ namespace librbd {
   private:
     CephContext *m_cct;
     Context *m_ctx;
-    RWLock *m_owner_lock;
     Mutex *m_cache_lock;
   };
 
@@ -76,8 +72,8 @@ namespace librbd {
     C_OrderedWrite(CephContext *cct, LibrbdWriteback::write_result_d *result,
 		   LibrbdWriteback *wb)
       : m_cct(cct), m_result(result), m_wb_handler(wb) {}
-    virtual ~C_OrderedWrite() {}
-    virtual void finish(int r) {
+    ~C_OrderedWrite() override {}
+    void finish(int r) override {
       ldout(m_cct, 20) << "C_OrderedWrite completing " << m_result << dendl;
       {
 	Mutex::Locker l(m_wb_handler->m_lock);
@@ -120,9 +116,14 @@ namespace librbd {
                      << journal_tid << " safe" << dendl;
     }
 
-    virtual void complete(int r) {
+    void complete(int r) override {
       if (request_sent || r < 0) {
-        commit_io_event_extent(r);
+        if (request_sent && r == 0) {
+          // only commit IO events that are safely recorded to the backing image
+          // since the cache will retry all IOs that fail
+          commit_io_event_extent(0);
+        }
+
         req_comp->complete(r);
         delete this;
       } else {
@@ -130,7 +131,7 @@ namespace librbd {
       }
     }
 
-    virtual void finish(int r) {
+    void finish(int r) override {
     }
 
     void commit_io_event_extent(int r) {
@@ -157,12 +158,11 @@ namespace librbd {
       ldout(cct, 20) << this << " C_WriteJournalCommit: "
                      << "journal committed: sending write request" << dendl;
 
-      RWLock::RLocker owner_locker(image_ctx->owner_lock);
       assert(image_ctx->exclusive_lock->is_lock_owner());
 
       request_sent = true;
-      AioObjectWrite *req = new AioObjectWrite(image_ctx, oid, object_no, off,
-                                               bl, snapc, this, 0);
+      auto req = new io::ObjectWriteRequest(image_ctx, oid, object_no, off,
+                                            bl, snapc, this, 0);
       req->send();
     }
   };
@@ -179,7 +179,7 @@ namespace librbd {
         length(length) {
     }
 
-    virtual void finish(int r) {
+    void finish(int r) override {
       // all IO operations are flushed prior to closing the journal
       assert(image_ctx->journal != nullptr);
 
@@ -199,8 +199,7 @@ namespace librbd {
 			     __u32 trunc_seq, int op_flags, Context *onfinish)
   {
     // on completion, take the mutex and then call onfinish.
-    Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_ictx->owner_lock,
-                                     &m_lock);
+    Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_lock);
 
     {
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
@@ -217,7 +216,7 @@ namespace librbd {
     int flags = m_ictx->get_read_flags(snapid);
 
     librados::AioCompletion *rados_completion =
-      util::create_rados_ack_callback(req);
+      util::create_rados_callback(req);
     int r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
 					 flags, NULL);
     rados_completion->release();
@@ -257,7 +256,6 @@ namespace librbd {
 				    __u32 trunc_seq, ceph_tid_t journal_tid,
 				    Context *oncommit)
   {
-    assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     write_result_d *result = new write_result_d(oid.name, oncommit);
@@ -273,8 +271,8 @@ namespace librbd {
                                               bl, snapc, req_comp,
 					      journal_tid));
     } else {
-      AioObjectWrite *req = new AioObjectWrite(m_ictx, oid.name, object_no,
-					       off, bl, snapc, req_comp, 0);
+      auto req = new io::ObjectWriteRequest(m_ictx, oid.name, object_no,
+					    off, bl, snapc, req_comp, 0);
       req->send();
     }
     return ++m_tid;
@@ -292,7 +290,6 @@ namespace librbd {
                            << "journal_tid=" << original_journal_tid << ", "
                            << "new_journal_tid=" << new_journal_tid << dendl;
 
-    assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     // all IO operations are flushed prior to closing the journal
@@ -315,14 +312,6 @@ namespace librbd {
 					        it->second, 0);
       }
     }
-  }
-
-  void LibrbdWriteback::get_client_lock() {
-    m_ictx->owner_lock.get_read();
-  }
-
-  void LibrbdWriteback::put_client_lock() {
-    m_ictx->owner_lock.put_read();
   }
 
   void LibrbdWriteback::complete_writes(const std::string& oid)

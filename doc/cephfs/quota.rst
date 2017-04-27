@@ -1,5 +1,5 @@
-CephFS Quotas
-=============
+Quotas
+======
 
 CephFS allows quotas to be set on any directory in the system.  The
 quota can restrict the number of *bytes* or the number of *files*

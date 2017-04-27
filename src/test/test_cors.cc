@@ -883,7 +883,8 @@ int main(int argc, char *argv[]){
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+                         CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_test = new test_cors_helper();
   finisher = new Finisher(g_ceph_context);
@@ -904,6 +905,8 @@ int main(int argc, char *argv[]){
   }
 #endif
   finisher->stop();
+  delete g_test;
+  delete finisher;
   return 0;
 }
 

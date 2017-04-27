@@ -41,7 +41,7 @@ class CryptoHandler;
 namespace ceph {
   class PluginRegistry;
   class HeartbeatMap;
-  namespace log {
+  namespace logging {
     class Log;
   }
 }
@@ -71,7 +71,7 @@ public:
   void put();
 
   md_config_t *_conf;
-  ceph::log::Log *_log;
+  ceph::logging::Log *_log;
 
   /* init ceph::crypto */
   void init_crypto();
@@ -213,7 +213,7 @@ private:
   struct TypedSingletonWrapper : public SingletonWrapper {
     TypedSingletonWrapper(T *p) : singleton(p) {
     }
-    virtual ~TypedSingletonWrapper() {
+    ~TypedSingletonWrapper() override {
       delete singleton;
     }
 

@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "tools/rbd_mirror/ProgressContext.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "rbd::mirror::image_sync::ImageCopyRequest: " \
@@ -38,7 +39,7 @@ ImageCopyRequest<I>::ImageCopyRequest(I *local_image_ctx, I *remote_image_ctx,
     m_progress_ctx(progress_ctx),
     m_lock(unique_lock_name("ImageCopyRequest::m_lock", this)),
     m_updating_sync_point(false), m_update_sync_ctx(nullptr),
-    m_update_sync_point_interval(g_ceph_context->_conf->rbd_mirror_sync_point_update_age),
+    m_update_sync_point_interval(m_local_image_ctx->cct->_conf->rbd_mirror_sync_point_update_age),
     m_client_meta_copy(*client_meta) {
   assert(!m_client_meta_copy.sync_points.empty());
 }
@@ -363,7 +364,8 @@ int ImageCopyRequest<I>::compute_snap_map() {
   librados::snap_t snap_id_end;
   {
     RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
-    snap_id_end = m_remote_image_ctx->get_snap_id(m_sync_point->snap_name);
+    snap_id_end = m_remote_image_ctx->get_snap_id(
+	cls::rbd::UserSnapshotNamespace(), m_sync_point->snap_name);
     if (snap_id_end == CEPH_NOSNAP) {
       derr << ": failed to locate snapshot: "
            << m_sync_point->snap_name << dendl;
@@ -372,7 +374,7 @@ int ImageCopyRequest<I>::compute_snap_map() {
 
     if (!m_sync_point->from_snap_name.empty()) {
       snap_id_start = m_remote_image_ctx->get_snap_id(
-        m_sync_point->from_snap_name);
+        cls::rbd::UserSnapshotNamespace(), m_sync_point->from_snap_name);
       if (snap_id_start == CEPH_NOSNAP) {
         derr << ": failed to locate from snapshot: "
              << m_sync_point->from_snap_name << dendl;

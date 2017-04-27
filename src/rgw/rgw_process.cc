@@ -32,8 +32,90 @@ void RGWProcess::RGWWQ::_dump_queue()
   }
 } /* RGWProcess::RGWWQ::_dump_queue */
 
-int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
-		    RGWStreamIO* client_io, OpsLogSocket* olog)
+
+int rgw_process_authenticated(RGWHandler_REST * const handler,
+                              RGWOp *& op,
+                              RGWRequest * const req,
+                              req_state * const s,
+                              const bool skip_retarget)
+{
+  req->log(s, "init permissions");
+  int ret = handler->init_permissions(op);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /**
+   * Only some accesses support website mode, and website mode does NOT apply
+   * if you are using the REST endpoint either (ergo, no authenticated access)
+   */
+  if (! skip_retarget) {
+    req->log(s, "recalculating target");
+    ret = handler->retarget(op, &op);
+    if (ret < 0) {
+      return ret;
+    }
+    req->op = op;
+  } else {
+    req->log(s, "retargeting skipped because of SubOp mode");
+  }
+
+  /* If necessary extract object ACL and put them into req_state. */
+  req->log(s, "reading permissions");
+  ret = handler->read_permissions(op);
+  if (ret < 0) {
+    return ret;
+  }
+
+  req->log(s, "init op");
+  ret = op->init_processing();
+  if (ret < 0) {
+    return ret;
+  }
+
+  req->log(s, "verifying op mask");
+  ret = op->verify_op_mask();
+  if (ret < 0) {
+    return ret;
+  }
+
+  req->log(s, "verifying op permissions");
+  ret = op->verify_permission();
+  if (ret < 0) {
+    if (s->system_request) {
+      dout(2) << "overriding permissions due to system operation" << dendl;
+    } else if (s->auth.identity->is_admin_of(s->user->user_id)) {
+      dout(2) << "overriding permissions due to admin operation" << dendl;
+    } else {
+      return ret;
+    }
+  }
+
+  req->log(s, "verifying op params");
+  ret = op->verify_params();
+  if (ret < 0) {
+    return ret;
+  }
+
+  req->log(s, "pre-executing");
+  op->pre_exec();
+
+  req->log(s, "executing");
+  op->execute();
+
+  req->log(s, "completing");
+  op->complete();
+
+  return 0;
+}
+
+int process_request(RGWRados* const store,
+                    RGWREST* const rest,
+                    RGWRequest* const req,
+                    const std::string& frontend_prefix,
+                    const rgw_auth_registry_t& auth_registry,
+                    RGWRestfulIO* const client_io,
+                    OpsLogSocket* const olog)
 {
   int ret = 0;
 
@@ -65,8 +147,10 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
   int init_error = 0;
   bool should_log = false;
   RGWRESTMgr *mgr;
-  RGWHandler_REST *handler = rest->get_handler(store, s, client_io, &mgr,
-					      &init_error);
+  RGWHandler_REST *handler = rest->get_handler(store, s,
+                                               auth_registry,
+                                               frontend_prefix,
+                                               client_io, &mgr, &init_error);
   if (init_error != 0) {
     abort_early(s, NULL, init_error, NULL);
     goto done;
@@ -81,13 +165,14 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler);
     goto done;
   }
+
   req->op = op;
   dout(10) << "op=" << typeid(*op).name() << dendl;
 
   s->op_type = op->get_type();
 
-  req->log(s, "authorizing");
-  ret = handler->authorize();
+  req->log(s, "verifying requester");
+  ret = op->verify_requester(auth_registry);
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;
     abort_early(s, NULL, ret, handler);
@@ -96,8 +181,8 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
 
   /* FIXME: remove this after switching all handlers to the new authentication
    * infrastructure. */
-  if (nullptr == s->auth_identity) {
-    s->auth_identity = rgw_auth_transform_old_authinfo(s);
+  if (nullptr == s->auth.identity) {
+    s->auth.identity = rgw::auth::transform_old_authinfo(s);
   }
 
   req->log(s, "normalizing buckets and tenants");
@@ -114,81 +199,21 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
     goto done;
   }
 
-  req->log(s, "init permissions");
-  ret = handler->init_permissions(op);
+  ret = rgw_process_authenticated(handler, op, req, s);
   if (ret < 0) {
     abort_early(s, op, ret, handler);
     goto done;
   }
-
-  /**
-   * Only some accesses support website mode, and website mode does NOT apply
-   * if you are using the REST endpoint either (ergo, no authenticated access)
-   */
-  req->log(s, "recalculating target");
-  ret = handler->retarget(op, &op);
-  if (ret < 0) {
-    abort_early(s, op, ret, handler);
-    goto done;
-  }
-  req->op = op;
-
-  req->log(s, "reading permissions");
-  ret = handler->read_permissions(op);
-  if (ret < 0) {
-    abort_early(s, op, ret, handler);
-    goto done;
-  }
-
-  req->log(s, "init op");
-  ret = op->init_processing();
-  if (ret < 0) {
-    abort_early(s, op, ret, handler);
-    goto done;
-  }
-
-  req->log(s, "verifying op mask");
-  ret = op->verify_op_mask();
-  if (ret < 0) {
-    abort_early(s, op, ret, handler);
-    goto done;
-  }
-
-  req->log(s, "verifying op permissions");
-  ret = op->verify_permission();
-  if (ret < 0) {
-    if (s->system_request) {
-      dout(2) << "overriding permissions due to system operation" << dendl;
-    } else if (s->auth_identity->is_admin_of(s->user->user_id)) {
-      dout(2) << "overriding permissions due to admin operation" << dendl;
-    } else {
-      abort_early(s, op, ret, handler);
-      goto done;
-    }
-  }
-
-  req->log(s, "verifying op params");
-  ret = op->verify_params();
-  if (ret < 0) {
-    abort_early(s, op, ret, handler);
-    goto done;
-  }
-
-  req->log(s, "pre-executing");
-  op->pre_exec();
-
-  req->log(s, "executing");
-  op->execute();
-
-  req->log(s, "completing");
-  op->complete();
 done:
-  int r = client_io->complete_request();
-  if (r < 0) {
-    dout(0) << "ERROR: client_io->complete_request() returned " << r << dendl;
+  try {
+    client_io->complete_request();
+  } catch (rgw::io::Exception& e) {
+    dout(0) << "ERROR: client_io->complete_request() returned "
+            << e.what() << dendl;
   }
+
   if (should_log) {
-    rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
+    rgw_log_op(store, rest, s, (op ? op->name() : "unknown"), olog);
   }
 
   int http_ret = s->err.http_ret;

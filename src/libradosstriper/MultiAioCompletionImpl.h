@@ -148,6 +148,12 @@ struct libradosstriper::MultiAioCompletionImpl {
     _get();
     lock.Unlock();
   }
+  void add_safe_request() {
+    lock.Lock();
+    pending_complete++;
+    _get();
+    lock.Unlock();
+  }
   void complete() {
     assert(lock.is_locked());
     if (callback_complete) {

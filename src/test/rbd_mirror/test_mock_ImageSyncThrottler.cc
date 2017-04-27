@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -109,7 +109,7 @@ class TestMockImageSyncThrottler : public TestMockFixture {
 public:
   typedef ImageSyncThrottler<librbd::MockTestImageCtx> MockImageSyncThrottler;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;
@@ -126,7 +126,7 @@ public:
     m_mock_journaler = new journal::MockJournaler();
   }
 
-  virtual void TearDown() {
+  void TearDown() override {
     MockImageSync::instances.clear();
     delete mock_sync_throttler;
     delete m_mock_local_image_ctx;

@@ -29,7 +29,7 @@ enum {
   MAY_EXECUTE = 4,
   MAY_CHOWN = 16,
   MAY_CHGRP = 32,
-  MAY_SET_POOL = 64,
+  MAY_SET_VXATTR = 64,
 };
 
 class CephContext;
@@ -38,12 +38,12 @@ class CephContext;
 struct MDSCapSpec {
   bool read, write, any;
 
-  // True if the capability permits modifying the pool on file layouts
-  bool layout_pool;
+  // True if the capability permits setting vxattrs (layout, quota, etc)
+  bool set_vxattr;
 
-  MDSCapSpec() : read(false), write(false), any(false), layout_pool(false) {}
+  MDSCapSpec() : read(false), write(false), any(false), set_vxattr(false) {}
   MDSCapSpec(bool r, bool w, bool a, bool lop)
-    : read(r), write(w), any(a), layout_pool(lop) {}
+    : read(r), write(w), any(a), set_vxattr(lop) {}
 
   bool allow_all() const {
     return any;
@@ -59,8 +59,8 @@ struct MDSCapSpec {
     return true;
   }
 
-  bool allows_set_pool() const {
-    return layout_pool;
+  bool allows_set_vxattr() const {
+    return set_vxattr;
   }
 };
 
@@ -93,7 +93,8 @@ struct MDSCapMatch {
   // check whether this grant matches against a given file and caller uid:gid
   bool match(const std::string &target_path,
 	     const int caller_uid,
-	     const int caller_gid) const;
+	     const int caller_gid,
+	     const vector<uint64_t> *caller_gid_list) const;
 
   /**
    * Check whether this path *might* be accessible (actual permission
@@ -132,8 +133,8 @@ public:
   bool allow_all() const;
   bool is_capable(const std::string &inode_path,
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
-		  uid_t uid, gid_t gid, unsigned mask,
-		  uid_t new_uid, gid_t new_gid) const;
+		  uid_t uid, gid_t gid, const vector<uint64_t> *caller_gid_list,
+		  unsigned mask, uid_t new_uid, gid_t new_gid) const;
   bool path_capable(const std::string &inode_path) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);

@@ -7,6 +7,7 @@
 #endif
 
 #include <boost/asio.hpp>
+#include <boost/intrusive_ptr.hpp>
 
 #ifdef NEED_ASSERT_H
 #pragma pop_macro("_ASSERT_H")
@@ -30,7 +31,8 @@ class RGWAioCompletionNotifier;
 class RGWCompletionManager : public RefCountedObject {
   CephContext *cct;
   list<void *> complete_reqs;
-  set<RGWAioCompletionNotifier *> cns;
+  using NotifierRef = boost::intrusive_ptr<RGWAioCompletionNotifier>;
+  set<NotifierRef> cns;
 
   Mutex lock;
   Cond cond;
@@ -41,24 +43,14 @@ class RGWCompletionManager : public RefCountedObject {
 
   map<void *, void *> waiters;
 
-  class WaitContext : public Context {
-    RGWCompletionManager *manager;
-    void *opaque;
-  public:
-    WaitContext(RGWCompletionManager *_cm, void *_opaque) : manager(_cm), opaque(_opaque) {}
-    void finish(int r) {
-      manager->_wakeup(opaque);
-    }
-  };
-
-  friend class WaitContext;
+  class WaitContext;
 
 protected:
   void _wakeup(void *opaque);
   void _complete(RGWAioCompletionNotifier *cn, void *user_info);
 public:
   RGWCompletionManager(CephContext *_cct);
-  ~RGWCompletionManager();
+  ~RGWCompletionManager() override;
 
   void complete(RGWAioCompletionNotifier *cn, void *user_info);
   int get_next(void **user_info);
@@ -86,7 +78,7 @@ class RGWAioCompletionNotifier : public RefCountedObject {
 
 public:
   RGWAioCompletionNotifier(RGWCompletionManager *_mgr, void *_user_data);
-  ~RGWAioCompletionNotifier() {
+  ~RGWAioCompletionNotifier() override {
     c->release();
     lock.Lock();
     bool need_unregister = registered;
@@ -243,7 +235,7 @@ protected:
 
 public:
   RGWCoroutine(CephContext *_cct) : status(_cct), _yield_ret(false), cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
-  virtual ~RGWCoroutine();
+  ~RGWCoroutine() override;
 
   virtual int operate() = 0;
 
@@ -379,7 +371,7 @@ protected:
   bool collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesStack **collected_stack); /* returns true if found a stack to collect */
 public:
   RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start = NULL);
-  ~RGWCoroutinesStack();
+  ~RGWCoroutinesStack() override;
 
   int operate(RGWCoroutinesEnv *env);
 
@@ -500,14 +492,14 @@ class RGWCoroutinesManagerRegistry : public RefCountedObject, public AdminSocket
 
 public:
   RGWCoroutinesManagerRegistry(CephContext *_cct) : cct(_cct), lock("RGWCoroutinesRegistry::lock") {}
-  ~RGWCoroutinesManagerRegistry();
+  ~RGWCoroutinesManagerRegistry() override;
 
   void add(RGWCoroutinesManager *mgr);
   void remove(RGWCoroutinesManager *mgr);
 
   int hook_to_admin_command(const string& command);
   bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out);
+	    bufferlist& out) override;
     
   void dump(Formatter *f) const;
 };
@@ -570,7 +562,7 @@ public:
 class RGWSimpleCoroutine : public RGWCoroutine {
   bool called_cleanup;
 
-  int operate();
+  int operate() override;
 
   int state_init();
   int state_send_request();
@@ -581,7 +573,7 @@ class RGWSimpleCoroutine : public RGWCoroutine {
 
 public:
   RGWSimpleCoroutine(CephContext *_cct) : RGWCoroutine(_cct), called_cleanup(false) {}
-  ~RGWSimpleCoroutine();
+  ~RGWSimpleCoroutine() override;
 
   virtual int init() { return 0; }
   virtual int send_request() = 0;

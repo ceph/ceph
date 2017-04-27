@@ -28,6 +28,7 @@
 #include "common/debug.h"
 #include "global/global_init.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 namespace {
@@ -207,7 +208,7 @@ TEST(LibRGW, LOOKUP_OBJECT) {
 }
 
 TEST(LibRGW, OPEN1) {
-  int ret = rgw_open(fs, object_fh, RGW_OPEN_FLAG_NONE);
+  int ret = rgw_open(fs, object_fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
@@ -234,7 +235,7 @@ TEST(LibRGW, CLOSE1) {
 }
 
 TEST(LibRGW, OPEN2) {
-  int ret = rgw_open(fs, object_fh, RGW_OPEN_FLAG_NONE);
+  int ret = rgw_open(fs, object_fh, 0 /* posix flags */, RGW_OPEN_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 

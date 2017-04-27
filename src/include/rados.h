@@ -114,6 +114,9 @@ struct ceph_eversion {
 #define CEPH_OSD_UP      (1<<1)
 #define CEPH_OSD_AUTOOUT (1<<2)  /* osd was automatically marked out */
 #define CEPH_OSD_NEW     (1<<3)  /* osd is new, never marked in */
+#define CEPH_OSD_FULL    (1<<4)  /* osd is at or above full threshold */
+#define CEPH_OSD_NEARFULL (1<<5) /* osd is at or above nearfull threshold */
+#define CEPH_OSD_BACKFILLFULL (1<<6) /* osd is at or above backfillfull threshold */
 
 extern const char *ceph_osd_state_name(int s);
 
@@ -146,6 +149,13 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_SORTBITWISE (1<<15) /* use bitwise hobject_t sort */
 #define CEPH_OSDMAP_REQUIRE_JEWEL (1<<16) /* require jewel for booting osds */
 #define CEPH_OSDMAP_REQUIRE_KRAKEN (1<<17) /* require kraken for booting osds */
+#define CEPH_OSDMAP_REQUIRE_LUMINOUS (1<<18) /* require l for booting osds */
+
+/* these are hidden in 'ceph status' view */
+#define CEPH_OSDMAP_SEMIHIDDEN_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL|	\
+				      CEPH_OSDMAP_REQUIRE_KRAKEN |	\
+				      CEPH_OSDMAP_REQUIRE_LUMINOUS |	\
+				      CEPH_OSDMAP_SORTBITWISE)
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -172,7 +182,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSD_OP_TYPE_ATTR  0x0300
 #define CEPH_OSD_OP_TYPE_EXEC  0x0400
 #define CEPH_OSD_OP_TYPE_PG    0x0500
-#define CEPH_OSD_OP_TYPE_MULTI 0x0600 /* multiobject */
+//      LEAVE UNUSED           0x0600 used to be multiobject ops
 
 #define __CEPH_OSD_OP1(mode, nr) \
 	(CEPH_OSD_OP_MODE_##mode | (nr))
@@ -186,6 +196,7 @@ extern const char *ceph_osd_state_name(int s);
 	f(READ,		__CEPH_OSD_OP(RD, DATA, 1),	"read")		    \
 	f(STAT,		__CEPH_OSD_OP(RD, DATA, 2),	"stat")		    \
 	f(MAPEXT,	__CEPH_OSD_OP(RD, DATA, 3),	"mapext")	    \
+	f(CHECKSUM,	__CEPH_OSD_OP(RD, DATA, 31),	"checksum")	    \
 									    \
 	/* fancy read */						    \
 	f(MASKTRUNC,	__CEPH_OSD_OP(RD, DATA, 4),	"masktrunc")	    \
@@ -239,7 +250,7 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* tiering */							    \
 	f(COPY_FROM,	__CEPH_OSD_OP(WR, DATA, 26),	"copy-from")	    \
-	f(COPY_GET_CLASSIC, __CEPH_OSD_OP(RD, DATA, 27), "copy-get-classic") \
+	/* was copy-get-classic */					\
 	f(UNDIRTY,	__CEPH_OSD_OP(WR, DATA, 28),	"undirty")	    \
 	f(ISDIRTY,	__CEPH_OSD_OP(RD, DATA, 29),	"isdirty")	    \
 	f(COPY_GET,	__CEPH_OSD_OP(RD, DATA, 30),	"copy-get")	    \
@@ -259,11 +270,7 @@ extern const char *ceph_osd_state_name(int s);
 									    \
 	/* ESX/SCSI */							    \
 	f(WRITESAME,	__CEPH_OSD_OP(WR, DATA, 38),	"write-same")	    \
-									    \
-	/** multi **/							    \
-	f(CLONERANGE,	__CEPH_OSD_OP(WR, MULTI, 1),	"clonerange")	    \
-	f(ASSERT_SRC_VERSION, __CEPH_OSD_OP(RD, MULTI, 2), "assert-src-version") \
-	f(SRC_CMPXATTR,	__CEPH_OSD_OP(RD, MULTI, 3),	"src-cmpxattr")	    \
+	f(CMPEXT,	__CEPH_OSD_OP(RD, DATA, 32),	"cmpext")	    \
 									    \
 	/** attrs **/							    \
 	/* read */							    \
@@ -323,10 +330,6 @@ static inline int ceph_osd_op_type_pg(int op)
 {
 	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_PG;
 }
-static inline int ceph_osd_op_type_multi(int op)
-{
-	return (op & CEPH_OSD_OP_TYPE) == CEPH_OSD_OP_TYPE_MULTI;
-}
 
 static inline int ceph_osd_op_mode_subop(int op)
 {
@@ -359,6 +362,7 @@ static inline int ceph_osd_op_uses_extent(int op)
 	case CEPH_OSD_OP_ZERO:
 	case CEPH_OSD_OP_APPEND:
 	case CEPH_OSD_OP_TRIMTRUNC:
+	case CEPH_OSD_OP_CMPEXT:
 		return true;
 	default:
 		return false;
@@ -463,6 +467,12 @@ enum {
 	CEPH_OSD_WATCH_OP_PING = 7,
 };
 
+enum {
+	CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH32 = 0,
+	CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH64 = 1,
+	CEPH_OSD_CHECKSUM_OP_TYPE_CRC32C   = 2
+};
+
 const char *ceph_osd_watch_op_name(int o);
 
 enum {
@@ -479,6 +489,14 @@ enum {
 };
 
 const char *ceph_osd_alloc_hint_flag_name(int f);
+
+enum {
+	CEPH_OSD_BACKOFF_OP_BLOCK = 1,
+	CEPH_OSD_BACKOFF_OP_ACK_BLOCK = 2,
+	CEPH_OSD_BACKOFF_OP_UNBLOCK = 3,
+};
+
+const char *ceph_osd_backoff_op_name(int op);
 
 /*
  * an individual object operation.  each may be accompanied by some data
@@ -517,6 +535,7 @@ struct ceph_osd_op {
 			__le64 ver;     /* no longer used */
 			__u8 op;	/* CEPH_OSD_WATCH_OP_* */
 			__u32 gen;      /* registration generation */
+			__u32 timeout; /* connection timeout */
 		} __attribute__ ((packed)) watch;
 		struct {
 			__le64 cookie;
@@ -558,9 +577,27 @@ struct ceph_osd_op {
 			__le64 length;
 			__le64 data_length;
 		} __attribute__ ((packed)) writesame;
+		struct {
+			__le64 offset;
+			__le64 length;
+			__le32 chunk_size;
+			__u8 type;              /* CEPH_OSD_CHECKSUM_OP_TYPE_* */
+		} __attribute__ ((packed)) checksum;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));
+
+/*
+ * Check the compatibility of struct ceph_osd_op
+ *  (2+4+(2*8+8+4)+4) = (sizeof(ceph_osd_op::op) +
+ *                     sizeof(ceph_osd_op::flags) +
+ *                     sizeof(ceph_osd_op::extent) +
+ *                     sizeof(ceph_osd_op::payload_len))
+ */
+#ifdef __cplusplus
+static_assert(sizeof(ceph_osd_op) == (2+4+(2*8+8+4)+4),
+              "sizeof(ceph_osd_op) breaks the compatibility");
+#endif
 
 struct ceph_osd_reply_head {
 	__le32 client_inc;                /* client incarnation */

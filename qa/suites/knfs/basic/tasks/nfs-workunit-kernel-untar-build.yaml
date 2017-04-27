@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+    timeout: 6h
+    clients:
+        client.1:
+            - kernel_untar_build.sh

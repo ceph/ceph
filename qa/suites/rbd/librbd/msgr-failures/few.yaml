@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms inject socket failures: 5000
+    log-whitelist:
+    - wrongly marked me down

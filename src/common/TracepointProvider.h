@@ -36,7 +36,7 @@ public:
     }
 
     inline bool is_enabled() const {
-      return tracepoint_provider->m_enabled;
+      return tracepoint_provider->m_handle != nullptr;
     }
   private:
     TracepointProvider *tracepoint_provider;
@@ -52,7 +52,7 @@ public:
 
   TracepointProvider(CephContext *cct, const char *library,
                      const char *config_key);
-  virtual ~TracepointProvider();
+  ~TracepointProvider() override;
 
   template <const Traits &traits>
   static void initialize(CephContext *cct) {
@@ -63,11 +63,11 @@ public:
   }
 
 protected:
-  virtual const char** get_tracked_conf_keys() const {
+  const char** get_tracked_conf_keys() const override {
     return m_config_keys;
   }
-  virtual void handle_conf_change(const struct md_config_t *conf,
-                                  const std::set <std::string> &changed);
+  void handle_conf_change(const struct md_config_t *conf,
+                                  const std::set <std::string> &changed) override;
 
 private:
   CephContext *m_cct;
@@ -75,7 +75,7 @@ private:
   mutable const char* m_config_keys[2];
 
   Mutex m_lock;
-  bool m_enabled;
+  void* m_handle = nullptr;
 
   void verify_config(const struct md_config_t *conf);
 };

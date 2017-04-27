@@ -61,6 +61,10 @@
   
   Options for the display/test stage
   
+     -f --format           the format of --dump, defaults to json-pretty
+                           can be one of json, json-pretty, xml, xml-pretty,
+                           table, table-kv, html, html-pretty
+     --dump                dump the crush map
      --tree                print map summary as a tree
      --check [max_id]      check if any item is referencing an unknown name/type
      -i mapfn --show-location id

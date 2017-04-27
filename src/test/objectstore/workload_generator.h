@@ -132,7 +132,7 @@ public:
     explicit C_OnReadable(WorkloadGenerator *state)
      :TestObjectStoreState::C_OnFinished(state), wrkldgen_state(state) { }
 
-    void finish(int r)
+    void finish(int r) override
     {
       TestObjectStoreState::C_OnFinished::finish(r);
       wrkldgen_state->m_nr_runs.inc();
@@ -146,7 +146,7 @@ public:
     C_OnDestroyed(WorkloadGenerator *state, coll_entry_t *entry) :
           C_OnReadable(state), m_entry(entry) {}
 
-    void finish(int r) {
+    void finish(int r) override {
       C_OnReadable::finish(r);
       delete m_entry;
     }
@@ -160,7 +160,7 @@ public:
     C_StatWrapper(C_StatState *state, Context *context)
       : stat_state(state), ctx(context) { }
 
-    void finish(int r) {
+    void finish(int r) override {
       ctx->complete(r);
 
       stat_state->wrkldgen->m_stats_lock.Lock();

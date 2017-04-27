@@ -18,15 +18,16 @@ public:
   static std::string get_temp_oid();
 
   RadosTestFixture();
-  virtual void SetUp();
-  virtual void TearDown();
+  void SetUp() override;
+  void TearDown() override;
 
   int create(const std::string &oid, uint8_t order = 14,
              uint8_t splay_width = 2);
   journal::JournalMetadataPtr create_metadata(const std::string &oid,
                                               const std::string &client_id = "client",
                                               double commit_internal = 0.1,
-                                              uint64_t max_fetch_bytes = 0);
+                                              uint64_t max_fetch_bytes = 0,
+                                              int max_concurrent_object_sets = 0);
   int append(const std::string &oid, const bufferlist &bl);
 
   int client_register(const std::string &oid, const std::string &id = "client",
@@ -45,7 +46,7 @@ public:
     Listener(RadosTestFixture *_test_fixture)
       : test_fixture(_test_fixture), mutex("mutex") {}
 
-    virtual void handle_update(journal::JournalMetadata *metadata) {
+    void handle_update(journal::JournalMetadata *metadata) override {
       Mutex::Locker locker(mutex);
       ++updates[metadata];
       cond.Signal();

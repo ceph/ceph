@@ -1,0 +1,8 @@
+roles:
+- [mon.a, mgr.x, mds.a, mds.a-s]
+- [mon.b, mgr.y, mds.b, mds.b-s]
+- [mon.c, mgr.z, mds.c, mds.c-s]
+- [osd.0]
+- [osd.1]
+- [osd.2]
+- [client.0]

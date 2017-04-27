@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_LOG_H
 #define CEPH_RGW_LOG_H
 
+#include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
 #include "include/utime.h"
 #include "common/Formatter.h"
@@ -12,6 +13,9 @@
 class RGWRados;
 
 struct rgw_log_entry {
+
+  using headers_map = boost::container::flat_map<std::string, std::string>;
+
   rgw_user object_owner;
   rgw_user bucket_owner;
   string bucket;
@@ -30,9 +34,10 @@ struct rgw_log_entry {
   string user_agent;
   string referrer;
   string bucket_id;
+  headers_map x_headers;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(8, 5, bl);
+    ENCODE_START(9, 5, bl);
     ::encode(object_owner.id, bl);
     ::encode(bucket_owner.id, bl);
     ::encode(bucket, bl);
@@ -54,6 +59,7 @@ struct rgw_log_entry {
     ::encode(obj, bl);
     ::encode(object_owner, bl);
     ::encode(bucket_owner, bl);
+    ::encode(x_headers, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
@@ -100,6 +106,9 @@ struct rgw_log_entry {
       ::decode(object_owner, p);
       ::decode(bucket_owner, p);
     }
+    if (struct_v >= 9) {
+      ::decode(x_headers, p);
+    }
     DECODE_FINISH(p);
   }
   void dump(Formatter *f) const;
@@ -114,19 +123,23 @@ class OpsLogSocket : public OutputDataSocket {
   void formatter_to_bl(bufferlist& bl);
 
 protected:
-  void init_connection(bufferlist& bl);
+  void init_connection(bufferlist& bl) override;
 
 public:
   OpsLogSocket(CephContext *cct, uint64_t _backlog);
-  ~OpsLogSocket();
+  ~OpsLogSocket() override;
 
   void log(struct rgw_log_entry& entry);
 };
 
-int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsLogSocket *olog);
+class RGWREST;
+
+int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
+	       const string& op_name, OpsLogSocket *olog);
 void rgw_log_usage_init(CephContext *cct, RGWRados *store);
 void rgw_log_usage_finalize();
-void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter);
+void rgw_format_ops_log_entry(struct rgw_log_entry& entry,
+			      Formatter *formatter);
 
-#endif
+#endif /* CEPH_RGW_LOG_H */
 

@@ -60,16 +60,16 @@ class MDiscover : public Message {
     want_base_dir(want_base_dir_),
     want_xlocked(discover_xlocks_) { }
 private:
-  ~MDiscover() {}
+  ~MDiscover() override {}
 
 public:
-  const char *get_type_name() const { return "Dis"; }
-  void print(ostream &out) const {
+  const char *get_type_name() const override { return "Dis"; }
+  void print(ostream &out) const override {
     out << "discover(" << header.tid << " " << base_ino << "." << base_dir_frag
 	<< " " << want << ")";
   }
 
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(base_ino, p);
     ::decode(base_dir_frag, p);
@@ -78,7 +78,7 @@ public:
     ::decode(want_base_dir, p);
     ::decode(want_xlocked, p);
   }
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(base_ino, payload);
     ::encode(base_dir_frag, payload);
     ::encode(snapid, payload);

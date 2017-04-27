@@ -16,6 +16,7 @@
 #define CEPH_MDS_SERVER_H
 
 #include "MDSRank.h"
+#include "Mutation.h"
 
 class OSDMap;
 class PerfCounters;
@@ -27,11 +28,6 @@ struct SnapInfo;
 class MClientRequest;
 class MClientReply;
 class MDLog;
-
-struct MutationImpl;
-struct MDRequestImpl;
-typedef ceph::shared_ptr<MutationImpl> MutationRef;
-typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 enum {
   l_mdss_first = 1000,
@@ -59,6 +55,7 @@ private:
 
   friend class MDSContinuation;
   friend class ServerContext;
+  friend class ServerLogContext;
 
 public:
   bool terminating_sessions;
@@ -112,8 +109,8 @@ public:
   void handle_client_request(MClientRequest *m);
 
   void journal_and_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
-			 LogEvent *le, MDSInternalContextBase *fin);
-  void submit_mdlog_entry(LogEvent *le, MDSInternalContextBase *fin,
+			 LogEvent *le, MDSLogContextBase *fin);
+  void submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin,
                           MDRequestRef& mdr, const char *evt);
   void dispatch_client_request(MDRequestRef& mdr);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
@@ -144,7 +141,7 @@ public:
   CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 			    file_layout_t *layout=NULL);
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
-  void apply_allocated_inos(MDRequestRef& mdr);
+  void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, set<SimpleLock*>& rdlocks, bool want_auth,
 			      bool no_want_auth=false,
@@ -186,6 +183,7 @@ public:
 			 set<SimpleLock*> wrlocks,
 			 set<SimpleLock*> xlocks);
   void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
+			    file_layout_t *dir_layout,
 			    set<SimpleLock*> rdlocks,
 			    set<SimpleLock*> wrlocks,
 			    set<SimpleLock*> xlocks);
@@ -231,7 +229,7 @@ public:
   void _unlink_local_finish(MDRequestRef& mdr,
 			    CDentry *dn, CDentry *straydn,
 			    version_t);
-  bool _rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, CDentry *dn, CDentry *straydn);
+  bool _rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CDentry*>& trace, CDentry *straydn);
   void handle_slave_rmdir_prep(MDRequestRef& mdr);
   void _logged_slave_rmdir(MDRequestRef& mdr, CDentry *srcdn, CDentry *straydn);
   void _commit_slave_rmdir(MDRequestRef& mdr, int r);
@@ -255,7 +253,7 @@ public:
 
   // helpers
   bool _rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_rank_t> &witnesse,
-			       CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+			       vector<CDentry*>& srctrace, vector<CDentry*>& dsttrace, CDentry *straydn);
   version_t _rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, bufferlist *client_map_bl);
   bool _need_force_journal(CInode *diri, bool empty);
   void _rename_prepare(MDRequestRef& mdr,

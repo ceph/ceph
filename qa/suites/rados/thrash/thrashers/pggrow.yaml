@@ -1,0 +1,17 @@
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - objects unfound and apparently lost
+    conf:
+      osd:
+        osd scrub min interval: 60
+        osd scrub max interval: 120
+        filestore odsync write: true
+        osd max backfills: 2
+        osd snap trim sleep: .5
+- thrashosds:
+    timeout: 1200
+    chance_pgnum_grow: 2
+    chance_pgpnum_fix: 1

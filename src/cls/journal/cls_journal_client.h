@@ -53,6 +53,9 @@ void client_update_data(librados::ObjectWriteOperation *op,
                         const std::string &id, const bufferlist &data);
 int client_update_state(librados::IoCtx &ioctx, const std::string &oid,
                         const std::string &id, cls::journal::ClientState state);
+void client_update_state(librados::ObjectWriteOperation *op,
+                         const std::string &id,
+                         cls::journal::ClientState state);
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,
                       const std::string &id);
@@ -64,6 +67,8 @@ void client_commit(librados::ObjectWriteOperation *op, const std::string &id,
 
 int client_list(librados::IoCtx &ioctx, const std::string &oid,
                 std::set<cls::journal::Client> *clients);
+void client_list(librados::IoCtx &ioctx, const std::string &oid,
+                 std::set<cls::journal::Client> *clients, Context *on_finish);
 
 // journal tag helpers
 int get_next_tag_tid(librados::IoCtx &ioctx, const std::string &oid,

@@ -1,0 +1,24 @@
+
+# Valgrind makes everything slow, so ignore slow requests
+overrides:
+  ceph:
+    log-whitelist:
+      - slow requests are blocked
+
+os_type: centos   # xenial valgrind buggy, see http://tracker.ceph.com/issues/18126
+overrides:
+  install:
+    ceph:
+      flavor: notcmalloc
+      debuginfo: true
+  ceph:
+    conf:
+      global:
+        osd heartbeat grace: 40
+    valgrind:
+      mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
+      osd: [--tool=memcheck]
+      mds: [--tool=memcheck]
+  ceph-fuse:
+    client.0:
+      valgrind: [--tool=memcheck, --leak-check=full, --show-reachable=yes]

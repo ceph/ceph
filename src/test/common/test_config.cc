@@ -23,21 +23,7 @@
 #include "common/errno.h"
 #include "gtest/gtest.h"
 
-#define _STR(x) #x
-#define STRINGIFY(x) _STR(x)
-
-static struct config_option config_optionsp[] = {
-#define OPTION(name, type, def_val) \
-       { STRINGIFY(name), type, offsetof(struct md_config_t, name) },
-#define SUBSYS(name, log, gather)
-#define DEFAULT_SUBSYS(log, gather)
-#include "common/config_opts.h"
-#undef OPTION
-#undef SUBSYS
-#undef DEFAULT_SUBSYS
-};
-
-static const int NUM_CONFIG_OPTIONS = sizeof(config_optionsp) / sizeof(config_option);
+extern std::string exec(const char* cmd); // defined in test_hostname.cc
 
 class test_md_config_t : public md_config_t, public ::testing::Test {
 public:
@@ -53,6 +39,16 @@ public:
       EXPECT_EQ(before + "/var/run/ceph/var/run/ceph" + after, val);
       EXPECT_EQ("", oss.str());
     }
+    {
+      ostringstream oss;
+      std::string before = " BEFORE ";
+      std::string after = " AFTER ";
+      std::string val(before + "$host${host}" + after);
+      EXPECT_TRUE(expand_meta(val, &oss));
+      std::string hostname = exec("hostname -s");
+      EXPECT_EQ(before + hostname + hostname + after, val);
+      EXPECT_EQ("", oss.str());
+    }
     // no meta expansion if variables are unknown
     {
       ostringstream oss;
@@ -64,6 +60,9 @@ public:
     }
     // recursive variable expansion
     {
+      std::string host = "localhost";
+      EXPECT_EQ(0, set_val("host", host.c_str(), false));
+
       std::string mon_host = "$cluster_network";
       EXPECT_EQ(0, set_val("mon_host", mon_host.c_str(), false));
 
@@ -113,10 +112,10 @@ public:
   void test_expand_all_meta() {
     Mutex::Locker l(lock);
     int before_count = 0, data_dir = 0;
-    for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
-      config_option *opt = config_optionsp + i;
-      if (opt->type == OPT_STR) {
-        std::string *str = (std::string *)opt->conf_ptr(this);
+    for (auto& opt: *config_options) {
+      std::string *str;
+      opt.conf_ptr(str, this);
+      if (str) {
         if (str->find("$") != string::npos)
           before_count++;
         if (str->find("$data_dir") != string::npos)
@@ -129,11 +128,10 @@ public:
     ASSERT_LT(0, before_count);
     expand_all_meta();
     int after_count = 0;
-    for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
-      config_option *opt = config_optionsp + i;
-      if (opt->type == OPT_STR) {
-        std::string *str = (std::string *)opt->conf_ptr(this);
-
+    for (auto& opt: *config_options) {
+      std::string *str;
+      opt.conf_ptr(str, this);
+      if (str) {
         size_t pos = 0;
         while ((pos = str->find("$", pos)) != string::npos) {
           if (str->substr(pos, 8) != "$channel") {

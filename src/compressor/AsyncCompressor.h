@@ -58,17 +58,17 @@ class AsyncCompressor {
     CompressWQ(AsyncCompressor *ac, time_t timeout, time_t suicide_timeout, ThreadPool *tp)
       : ThreadPool::WorkQueue<Job>("AsyncCompressor::CompressWQ", timeout, suicide_timeout, tp), async_compressor(ac) {}
 
-    bool _enqueue(Job *item) {
+    bool _enqueue(Job *item) override {
       job_queue.push_back(item);
       return true;
     }
-    void _dequeue(Job *item) {
-      assert(0);
+    void _dequeue(Job *item) override {
+      ceph_abort();
     }
-    bool _empty() {
+    bool _empty() override {
       return job_queue.empty();
     }
-    Job* _dequeue() {
+    Job* _dequeue() override {
       if (job_queue.empty())
         return NULL;
       Job *item = NULL;
@@ -78,7 +78,7 @@ class AsyncCompressor {
         if (item->status.compare_and_swap(WAIT, WORKING)) {
           break;
         } else {
-          Mutex::Locker (async_compressor->job_lock);
+          Mutex::Locker l(async_compressor->job_lock);
           async_compressor->jobs.erase(item->id);
           item = NULL;
         }
@@ -100,8 +100,8 @@ class AsyncCompressor {
         item->status.set(ERROR);
       }
     }
-    void _process_finish(Job *item) {}
-    void _clear() {}
+    void _process_finish(Job *item) override {}
+    void _clear() override {}
   } compress_wq;
   friend class CompressWQ;
   void _compress(bufferlist &in, bufferlist &out);

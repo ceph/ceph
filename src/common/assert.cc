@@ -47,10 +47,9 @@ namespace ceph {
 			  const char *func)
   {
     ostringstream tss;
-    tss << ceph_clock_now(g_assert_context);
+    tss << ceph_clock_now();
 
     char buf[8096];
-    BackTrace *bt = new BackTrace(1);
     snprintf(buf, sizeof(buf),
 	     "%s: In function '%s' thread %llx time %s\n"
 	     "%s: %d: FAILED assert(%s)\n",
@@ -60,7 +59,7 @@ namespace ceph {
 
     // TODO: get rid of this memory allocation.
     ostringstream oss;
-    bt->print(oss);
+    oss << BackTrace(1);
     dout_emergency(oss.str());
 
     dout_emergency(" NOTE: a copy of the executable, or `objdump -rdS <executable>` "
@@ -68,7 +67,7 @@ namespace ceph {
 
     if (g_assert_context) {
       lderr(g_assert_context) << buf << std::endl;
-      bt->print(*_dout);
+      *_dout << oss.str();
       *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
 	     << "is needed to interpret this.\n" << dendl;
 
@@ -82,7 +81,7 @@ namespace ceph {
 			   const char *func, const char* msg, ...)
   {
     ostringstream tss;
-    tss << ceph_clock_now(g_assert_context);
+    tss << ceph_clock_now();
 
     class BufAppender {
     public:
@@ -130,7 +129,7 @@ namespace ceph {
 
     // TODO: get rid of this memory allocation.
     ostringstream oss;
-    bt->print(oss);
+    oss << *bt;
     dout_emergency(oss.str());
 
     dout_emergency(" NOTE: a copy of the executable, or `objdump -rdS <executable>` "
@@ -138,7 +137,7 @@ namespace ceph {
 
     if (g_assert_context) {
       lderr(g_assert_context) << buf << std::endl;
-      bt->print(*_dout);
+      *_dout << oss.str();
       *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
 	     << "is needed to interpret this.\n" << dendl;
 

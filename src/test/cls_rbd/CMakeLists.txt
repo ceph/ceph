@@ -1,9 +1,7 @@
 # cls_test_cls_rbd
 add_executable(ceph_test_cls_rbd
   test_cls_rbd.cc
-  $<TARGET_OBJECTS:common_texttable_obj>
-  $<TARGET_OBJECTS:parse_secret_objs>
-  )
+  $<TARGET_OBJECTS:common_texttable_obj>)
 set_target_properties(ceph_test_cls_rbd PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 target_link_libraries(ceph_test_cls_rbd
@@ -16,11 +14,7 @@ target_link_libraries(ceph_test_cls_rbd
   ${CMAKE_DL_LIBS}
   ${CRYPTO_LIBS}
   ${EXTRALIBS}
-  radostest
-  blkid
-  udev
-  keyutils
-  )
+  radostest)
 install(TARGETS
   ceph_test_cls_rbd
   DESTINATION ${CMAKE_INSTALL_BINDIR})

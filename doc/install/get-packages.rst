@@ -107,30 +107,16 @@ You may find releases for CentOS/RHEL and others (installed with YUM) at::
 
 	https://download.ceph.com/rpm-{release-name}
 
-The major releases of Ceph include:
+The major releases of Ceph are summarized at:
 
-- **Hammer:** Hammer is the most recent, and is also the eighth major release
-  of Ceph.  These packages are recommended for anyone deploying Ceph in a
-  production environment. Critical bug fixes are backported and point releases
-  are made as necessary.
+    http://docs.ceph.com/docs/master/releases/
 
-- **Giant:** Giant is the seventh major release of Ceph. These packages are
-  recommended for anyone deploying Ceph in a production environment.  Critical
-  bug fixes are backported and point releases are made as necessary.
+Every second major release is considered Long Term Stable (LTS). Critical
+bugfixes are backported to LTS releases until their retirement. Since retired
+releases are no longer maintained, we recommend that users upgrade their
+clusters regularly - preferably to the latest LTS release.
 
-- **Firefly:** Firefly is the sixth major release of Ceph. These packages
-  are recommended for anyone deploying Ceph in a production environment.
-  Firefly is a long-term stable release, so critical bug fixes are backported
-  and point releases are made as necessary.
-
-- **Emperor:** Emperor is the fifth major release of Ceph. These packages
-  are are old and no longer maintained, so we recommend that users upgrade to
-  Firefly immediately.
-
-- **Argonaut, Bobtail, Cuttlefish, Dumpling:** These are the first four
-  releases of Ceph. These packages are old and no longer maintained (Dumpling
-  was retired in May 2015), so we recommend that users upgrade to a more
-  recent version.
+The most recent LTS release is Jewel (10.2.x).
 
 .. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
 
@@ -192,7 +178,6 @@ over standard packages, so you must ensure that you set
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-noarch]
@@ -201,7 +186,6 @@ over standard packages, so you must ensure that you set
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-source]
@@ -210,7 +194,6 @@ over standard packages, so you must ensure that you set
 	enabled=0
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -223,7 +206,6 @@ for development releases instead. ::
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-noarch]
@@ -232,7 +214,6 @@ for development releases instead. ::
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-source]
@@ -241,7 +222,6 @@ for development releases instead. ::
 	enabled=0
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
@@ -301,7 +281,6 @@ below, replace ``{distro}`` with your Linux distribution (e.g., ``el7``), and
 	baseurl=http://gitbuilder.ceph.com/ceph-rpm-{distro}-x86_64-basic/ref/{branch}/SRPMS
 	enabled=0
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
@@ -343,7 +322,6 @@ directory to see which distributions Ceph supports.
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[apache2-ceph-source]
@@ -352,7 +330,6 @@ directory to see which distributions Ceph supports.
 	enabled=0
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
@@ -364,7 +341,6 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[fastcgi-ceph-noarch]
@@ -373,7 +349,6 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	enabled=1
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[fastcgi-ceph-source]
@@ -382,7 +357,6 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	enabled=0
 	priority=2
 	gpgcheck=1
-	type=rpm-md
 	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
@@ -423,7 +397,7 @@ RPM Packages
 Ceph requires additional additional third party libraries.
 To add the EPEL repository, execute the following::
 
-   su -c 'rpm -Uvh http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm'
+   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 
 Ceph requires the following packages:
 

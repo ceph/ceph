@@ -1,0 +1,33 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - must scrub before tier agent can activate
+tasks:
+- exec:
+    client.0:
+      - sudo ceph osd pool create base 4
+      - sudo ceph osd pool create cache 4
+      - sudo ceph osd tier add base cache
+      - sudo ceph osd tier cache-mode cache readproxy
+      - sudo ceph osd tier set-overlay base cache
+      - sudo ceph osd pool set cache hit_set_type bloom
+      - sudo ceph osd pool set cache hit_set_count 8
+      - sudo ceph osd pool set cache hit_set_period 3600
+      - sudo ceph osd pool set cache target_max_objects 250
+- rados:
+    clients: [client.0]
+    pools: [base]
+    ops: 4000
+    objects: 500
+    pool_snaps: true
+    op_weights:
+      read: 100
+      write: 100
+      delete: 50
+      copy_from: 50
+      flush: 50
+      try_flush: 50
+      evict: 50
+      snap_create: 50
+      snap_remove: 50
+      rollback: 50

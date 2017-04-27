@@ -6,31 +6,20 @@
 
 #include <string>
 #include <map>
+#include "include/assert.h"
+#include "rgw_crypt_sanitize.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
-
-RGWEnv::RGWEnv()
-{
-  conf = new RGWConf;
-}
-
-RGWEnv::~RGWEnv()
-{
-  delete conf;
-}
 
 void RGWEnv::init(CephContext *cct)
 {
-  conf->init(cct, this);
+  conf.init(cct, this);
 }
 
-void RGWEnv::set(const char *name, const char *val)
+void RGWEnv::set(const boost::string_ref& name, const boost::string_ref& val)
 {
-  if (!val)
-    val = "";
-  env_map[name] = val;
-
-  dout(20) << "RGWEnv::set(): " << name << ": " << val << dendl;
+  env_map[std::string{name}] = std::string{val};
 }
 
 void RGWEnv::init(CephContext *cct, char **envp)

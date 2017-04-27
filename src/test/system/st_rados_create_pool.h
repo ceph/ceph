@@ -37,8 +37,8 @@ public:
 		    const std::string &pool_name,
 		    int num_objects,
 		    const std::string &suffix);
-  ~StRadosCreatePool();
-  virtual int run();
+  ~StRadosCreatePool() override;
+  int run() override;
 private:
   CrossProcessSem *m_setup_sem;
   CrossProcessSem *m_pool_setup_sem;

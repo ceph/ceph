@@ -4,11 +4,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include "include/on_exit.h"
+#include "include/assert.h"
 
 #ifndef MAP_ANONYMOUS
 # ifdef MAP_ANON
 #  define MAP_ANONYMOUS MAP_ANON
 # else
+// cppcheck-suppress preprocessorErrorDirective
 #  error "Don't know how to create anonymous mmap"
 # endif
 #endif
@@ -106,7 +108,7 @@ int main(int argc, char **argv)
     *new_val = EXIT_FUNC_VAL;
     exit_func_mgr.add_callback(exit_func_cb, new_val);
     call_exit();
-    assert(0);
+    ceph_abort();
   }
 
   return 0;

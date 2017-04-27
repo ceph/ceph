@@ -1,0 +1,9 @@
+tasks:
+- install:
+- ceph:
+    fs: btrfs
+- ceph-fuse:
+- workunit:
+    clients:
+      all:
+        - suites/fsstress.sh

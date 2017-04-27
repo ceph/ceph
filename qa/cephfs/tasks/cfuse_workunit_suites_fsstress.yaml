@@ -1,0 +1,5 @@
+tasks:
+- workunit:
+    clients:
+      all:
+        - suites/fsstress.sh

@@ -33,6 +33,7 @@ static const str_to_entity_type_t STR_TO_ENTITY_TYPE[] = {
   { CEPH_ENTITY_TYPE_MON, "mon" },
   { CEPH_ENTITY_TYPE_OSD, "osd" },
   { CEPH_ENTITY_TYPE_MDS, "mds" },
+  { CEPH_ENTITY_TYPE_MGR, "mgr" },
   { CEPH_ENTITY_TYPE_CLIENT, "client" },
 };
 
@@ -57,9 +58,9 @@ to_cstr() const
 bool EntityName::
 from_str(const string& s)
 {
-  int pos = s.find('.');
+  size_t pos = s.find('.');
 
-  if (pos < 0)
+  if (pos == string::npos)
     return false;
  
   string type_ = s.substr(0, pos);

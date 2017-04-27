@@ -57,9 +57,11 @@ using namespace std;
 
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
+#include "messages/MOSDBeacon.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDFull.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -70,6 +72,7 @@ using namespace std;
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
 
+#include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
@@ -77,11 +80,14 @@ using namespace std;
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGTrim.h"
-#include "messages/MOSDPGMissing.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepScrub.h"
+#include "messages/MOSDRepScrubMap.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MOSDPGBackfill.h"
+#include "messages/MOSDBackoff.h"
+#include "messages/MOSDPGBackfillRemove.h"
 
 #include "messages/MRemoveSnaps.h"
 
@@ -156,6 +162,13 @@ using namespace std;
 #include "messages/MCacheExpire.h"
 #include "messages/MInodeFileCaps.h"
 
+#include "messages/MMgrBeacon.h"
+#include "messages/MMgrMap.h"
+#include "messages/MMgrDigest.h"
+#include "messages/MMgrReport.h"
+#include "messages/MMgrOpen.h"
+#include "messages/MMgrConfigure.h"
+
 #include "messages/MLock.h"
 
 #include "messages/MWatchNotify.h"
@@ -183,7 +196,12 @@ void Message::encode(uint64_t features, int crcflags)
 {
   // encode and copy out of *m
   if (empty_payload()) {
+    assert(middle.length() == 0);
     encode_payload(features);
+
+    if (byte_throttler) {
+      byte_throttler->take(payload.length() + middle.length());
+    }
 
     // if the encoder didn't specify past compatibility, we assume it
     // is incompatible.
@@ -412,6 +430,9 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_ALIVE:
     m = new MOSDAlive();
     break;
+  case MSG_OSD_BEACON:
+    m = new MOSDBeacon();
+    break;
   case MSG_OSD_PGTEMP:
     m = new MOSDPGTemp;
     break;
@@ -420,6 +441,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_MARK_ME_DOWN:
     m = new MOSDMarkMeDown();
+    break;
+  case MSG_OSD_FULL:
+    m = new MOSDFull();
     break;
   case MSG_OSD_PING:
     m = new MOSDPing();
@@ -442,11 +466,17 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_REPOPREPLY:
     m = new MOSDRepOpReply();
     break;
+  case MSG_OSD_PG_CREATED:
+    m = new MOSDPGCreated();
+    break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
     m = new MOSDPGUpdateLogMissing();
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     m = new MOSDPGUpdateLogMissingReply();
+    break;
+  case CEPH_MSG_OSD_BACKOFF:
+    m = new MOSDBackoff;
     break;
 
   case CEPH_MSG_OSD_MAP:
@@ -482,20 +512,26 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_SCRUB:
     m = new MOSDScrub;
     break;
+  case MSG_OSD_SCRUB_RESERVE:
+    m = new MOSDScrubReserve;
+    break;
   case MSG_REMOVE_SNAPS:
     m = new MRemoveSnaps;
     break;
-  case MSG_OSD_PG_MISSING:
-    m = new MOSDPGMissing;
-    break;
   case MSG_OSD_REP_SCRUB:
     m = new MOSDRepScrub;
+    break;
+  case MSG_OSD_REP_SCRUBMAP:
+    m = new MOSDRepScrubMap;
     break;
   case MSG_OSD_PG_SCAN:
     m = new MOSDPGScan;
     break;
   case MSG_OSD_PG_BACKFILL:
     m = new MOSDPGBackfill;
+    break;
+  case MSG_OSD_PG_BACKFILL_REMOVE:
+    m = new MOSDPGBackfillRemove;
     break;
   case MSG_OSD_PG_PUSH:
     m = new MOSDPGPush;
@@ -706,6 +742,30 @@ Message *decode_message(CephContext *cct, int crcflags,
     m = new MLock();
     break;
 
+  case MSG_MGR_BEACON:
+    m = new MMgrBeacon();
+    break;
+
+  case MSG_MGR_MAP:
+    m = new MMgrMap();
+    break;
+
+  case MSG_MGR_DIGEST:
+    m = new MMgrDigest();
+    break;
+
+  case MSG_MGR_OPEN:
+    m = new MMgrOpen();
+    break;
+
+  case MSG_MGR_REPORT:
+    m = new MMgrReport();
+    break;
+
+  case MSG_MGR_CONFIGURE:
+    m = new MMgrConfigure();
+    break;
+
   case MSG_TIMECHECK:
     m = new MTimeCheck();
     break;
@@ -728,7 +788,7 @@ Message *decode_message(CephContext *cct, int crcflags,
     if (cct) {
       ldout(cct, 0) << "can't decode unknown message type " << type << " MSG_AUTH=" << CEPH_MSG_AUTH << dendl;
       if (cct->_conf->ms_die_on_bad_msg)
-	assert(0);
+	ceph_abort();
     }
     return 0;
   }
@@ -746,7 +806,7 @@ Message *decode_message(CephContext *cct, int crcflags,
 		    << " because compat_version " << header.compat_version
 		    << " > supported version " << m->get_header().version << dendl;
       if (cct->_conf->ms_die_on_bad_msg)
-	assert(0);
+	ceph_abort();
     }
     m->put();
     return 0;
@@ -770,7 +830,7 @@ Message *decode_message(CephContext *cct, int crcflags,
       m->get_payload().hexdump(*_dout);
       *_dout << dendl;
       if (cct->_conf->ms_die_on_bad_msg)
-	assert(0);
+	ceph_abort();
     }
     m->put();
     return 0;

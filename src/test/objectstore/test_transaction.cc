@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 #include "common/Clock.h"
 #include "include/utime.h"
+#include <boost/tuple/tuple.hpp>
 
 TEST(Transaction, MoveConstruct)
 {
@@ -79,7 +80,6 @@ TEST(Transaction, Swap)
 ObjectStore::Transaction generate_transaction()
 {
   auto a = ObjectStore::Transaction{};
-  a.set_use_tbl(false);
   a.nop();
 
   coll_t cid;
@@ -112,10 +112,34 @@ ObjectStore::Transaction generate_transaction()
   return a;
 }
 
+TEST(Transaction, MoveRangesDelSrcObj)
+{
+  auto t = ObjectStore::Transaction{};
+  t.nop();
+
+  coll_t c(spg_t(pg_t(1,2), shard_id_t::NO_SHARD));
+
+  ghobject_t o1(hobject_t("obj", "", 123, 456, -1, ""));
+  ghobject_t o2(hobject_t("obj2", "", 123, 456, -1, ""));
+  vector<std::pair<uint64_t, uint64_t>> move_info = {
+    make_pair(1, 5),
+    make_pair(10, 5)
+  };
+
+  t.touch(c, o1);
+  bufferlist bl;
+  bl.append("some data");
+  t.write(c, o1, 1, bl.length(), bl);
+  t.write(c, o1, 10, bl.length(), bl);
+
+  t.clone(c, o1, o2);
+  bl.append("some other data");
+  t.write(c, o2, 1, bl.length(), bl);
+}
+
 TEST(Transaction, GetNumBytes)
 {
   auto a = ObjectStore::Transaction{};
-  a.set_use_tbl(false);
   a.nop();
   ASSERT_TRUE(a.get_encoded_bytes() == a.get_encoded_bytes_test());
 
@@ -162,7 +186,7 @@ void bench_num_bytes(bool legacy)
     cout << "get_encoded_bytes: ";
   }
 
-  utime_t start = ceph_clock_now(NULL);
+  utime_t start = ceph_clock_now();
   if (legacy) {
     for (int i = 0; i < max; ++i) {
       a.get_encoded_bytes_test();
@@ -173,7 +197,7 @@ void bench_num_bytes(bool legacy)
     }
   }
 
-  utime_t end = ceph_clock_now(NULL);
+  utime_t end = ceph_clock_now();
   cout << max << " encodes in " << (end - start) << std::endl;
 
 }

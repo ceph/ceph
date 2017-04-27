@@ -167,20 +167,20 @@ public:
       current = rand();
     }
 
-    ContDesc get_cont() const { return cont; }
-    uint64_t get_pos() const { return pos; }
+    ContDesc get_cont() const override { return cont; }
+    uint64_t get_pos() const override { return pos; }
 
-    iterator_impl &operator++() {
+    iterator_impl &operator++() override {
       pos++;
       current = rand();
       return *this;
     }
 
-    char operator*() {
+    char operator*() override {
       return current;
     }
 
-    void seek(uint64_t _pos) {
+    void seek(uint64_t _pos) override {
       if (_pos < pos) {
 	iterator_impl begin = iterator_impl(cont, cont_gen);
 	begin.seek(_pos);
@@ -191,22 +191,22 @@ public:
       }
     }
 
-    bool end() {
+    bool end() override {
       return pos >= cont_gen->get_length(cont);
     }
   };
 
-  ContentsGenerator::iterator_impl *get_iterator_impl(const ContDesc &in) {
+  ContentsGenerator::iterator_impl *get_iterator_impl(const ContDesc &in) override {
     RandGenerator::iterator_impl *i = new iterator_impl(in, this);
     return i;
   }
 
-  void put_iterator_impl(ContentsGenerator::iterator_impl *in) {
+  void put_iterator_impl(ContentsGenerator::iterator_impl *in) override {
     delete in;
   }
 
   ContentsGenerator::iterator_impl *dup_iterator_impl(
-    const ContentsGenerator::iterator_impl *in) {
+    const ContentsGenerator::iterator_impl *in) override {
     ContentsGenerator::iterator_impl *retval = get_iterator_impl(in->get_cont());
     retval->seek(in->get_pos());
     return retval;
@@ -224,8 +224,8 @@ public:
     min_stride_size(min_stride_size),
     max_stride_size(max_stride_size) {}
   void get_ranges_map(
-    const ContDesc &cont, std::map<uint64_t, uint64_t> &out);
-  uint64_t get_length(const ContDesc &in) {
+    const ContDesc &cont, std::map<uint64_t, uint64_t> &out) override;
+  uint64_t get_length(const ContDesc &in) override {
     RandWrap rand(in.seqnum);
     if (max_length == 0)
       return 0;
@@ -240,10 +240,10 @@ public:
   AttrGenerator(uint64_t max_len, uint64_t big_max_len)
     : max_len(max_len), big_max_len(big_max_len) {}
   void get_ranges_map(
-    const ContDesc &cont, std::map<uint64_t, uint64_t> &out) {
+    const ContDesc &cont, std::map<uint64_t, uint64_t> &out) override {
     out.insert(std::pair<uint64_t, uint64_t>(0, get_length(cont)));
   }
-  uint64_t get_length(const ContDesc &in) {
+  uint64_t get_length(const ContDesc &in) override {
     RandWrap rand(in.seqnum);
     // make some attrs big
     if (in.seqnum & 3)
@@ -292,11 +292,11 @@ public:
     RandWrap rand(in.seqnum);
     return round_up(rand() % max_append_total, alignment);
   }
-  uint64_t get_length(const ContDesc &in) {
+  uint64_t get_length(const ContDesc &in) override {
     return off + get_append_size(in);
   }
   void get_ranges_map(
-    const ContDesc &cont, std::map<uint64_t, uint64_t> &out);
+    const ContDesc &cont, std::map<uint64_t, uint64_t> &out) override;
 };
 
 class ObjectDesc {
@@ -402,7 +402,7 @@ public:
 
     void seek(uint64_t _pos) {
       if (_pos < pos) {
-	assert(0);
+	ceph_abort();
       }
       while (pos < _pos) {
 	assert(cur_valid_till >= pos);

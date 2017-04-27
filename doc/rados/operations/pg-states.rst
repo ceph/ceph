@@ -19,12 +19,6 @@ map is ``active + clean``.
 *Down*
   A replica with necessary data is down, so the placement group is offline.
 
-*Replay*
-  The placement group is waiting for clients to replay operations after an OSD crashed.
-
-*Splitting*
-  Ceph is splitting the placement group into multiple placement groups. (functional?)
-
 *Scrubbing*
   Ceph is checking the placement group for inconsistencies.
 
@@ -60,8 +54,8 @@ map is ``active + clean``.
   Ceph detects that a placement group is missing information about
   writes that may have occurred, or does not have any healthy
   copies. If you see this state, try to start any failed OSDs that may
-  contain the needed information or temporarily adjust min_size to
-  allow recovery.
+  contain the needed information. In the case of an erasure coded pool
+  temporarily reducing min_size may allow recovery.
 
 *Stale*
   The placement group is in an unknown state - the monitors have not received

@@ -171,6 +171,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		} else if (strncmp(data, "secret", 6) == 0) {
 			if (!value || !*value) {
 				printf("mount option secret requires a value.\n");
+				free(saw_name);
 				return NULL;
 			}
 
@@ -201,8 +202,10 @@ static char *parse_options(const char *data, int *filesys_flags)
 			skip = 0;
 		} else {
 			skip = 0;
-			if (verboseflag)
-				printf("ceph: Unknown mount option %s\n",data);
+			if (verboseflag) {
+			  fprintf(stderr, "mount.ceph: unrecognized mount option \"%s\", "
+			                  "passing to kernel.\n", data);
+            }
 		}
 
 		/* Copy (possibly modified) option to out */

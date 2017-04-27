@@ -14,6 +14,7 @@
 
 #include "MemWriteback.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_objectcacher
 #undef dout_prefix
 #define dout_prefix *_dout << "MemWriteback(" << this << ") "
@@ -36,7 +37,7 @@ public:
     : wb(mwb), m_cct(cct), m_con(c),
       m_delay(delay_ns * std::chrono::nanoseconds(1)),
       m_lock(lock), m_oid(oid), m_off(off), m_len(len), m_bl(pbl) {}
-  void finish(int r) {
+  void finish(int r) override {
     std::this_thread::sleep_for(m_delay);
     m_lock->Lock();
     r = wb->read_object_data(m_oid, m_off, m_len, m_bl);
@@ -64,7 +65,7 @@ public:
     : wb(mwb), m_cct(cct), m_con(c),
       m_delay(delay_ns * std::chrono::nanoseconds(1)),
       m_lock(lock), m_oid(oid), m_off(off), m_len(len), m_bl(bl) {}
-  void finish(int r) {
+  void finish(int r) override {
     std::this_thread::sleep_for(m_delay);
     m_lock->Lock();
     wb->write_object_data(m_oid, m_off, m_len, m_bl);

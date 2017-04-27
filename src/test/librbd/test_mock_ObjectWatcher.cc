@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -153,8 +153,7 @@ public:
   bool wait_for_watch(MockImageCtx &mock_image_ctx, size_t count) {
     Mutex::Locker locker(m_lock);
     while (m_watch_count < count) {
-      if (m_cond.WaitInterval(mock_image_ctx.cct, m_lock,
-                              utime_t(10, 0)) != 0) {
+      if (m_cond.WaitInterval(m_lock, utime_t(10, 0)) != 0) {
         return false;
       }
     }

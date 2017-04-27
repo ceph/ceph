@@ -10,6 +10,7 @@
 
 #include <list>
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -131,7 +132,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
 int RGWGC::process(int index, int max_secs)
 {
   rados::cls::lock::Lock l(gc_index_lock_name);
-  utime_t end = ceph_clock_now(g_ceph_context);
+  utime_t end = ceph_clock_now();
   std::list<string> remove_tags;
 
   /* max_secs should be greater than zero. We don't want a zero max_secs
@@ -175,7 +176,7 @@ int RGWGC::process(int index, int max_secs)
       std::list<cls_rgw_obj>::iterator liter;
       cls_rgw_obj_chain& chain = info.chain;
 
-      utime_t now = ceph_clock_now(g_ceph_context);
+      utime_t now = ceph_clock_now();
       if (now >= end)
         goto done;
 
@@ -186,7 +187,7 @@ int RGWGC::process(int index, int max_secs)
         if (obj.pool != last_pool) {
           delete ctx;
           ctx = new IoCtx;
-	  ret = store->get_rados_handle()->ioctx_create(obj.pool.c_str(), *ctx);
+	  ret = rgw_init_ioctx(store->get_rados_handle(), obj.pool, *ctx);
 	  if (ret < 0) {
 	    dout(0) << "ERROR: failed to create ioctx pool=" << obj.pool << dendl;
 	    continue;
@@ -195,19 +196,18 @@ int RGWGC::process(int index, int max_secs)
         }
 
         ctx->locator_set_key(obj.loc);
-        rgw_obj key_obj;
-        key_obj.set_obj(obj.key.name);
-        key_obj.set_instance(obj.key.instance);
 
-	dout(0) << "gc::process: removing " << obj.pool << ":" << key_obj.get_object() << dendl;
+        const string& oid = obj.key.name; /* just stored raw oid there */
+
+	dout(0) << "gc::process: removing " << obj.pool << ":" << obj.key.name << dendl;
 	ObjectWriteOperation op;
 	cls_refcount_put(op, info.tag, true);
-        ret = ctx->operate(key_obj.get_object(), &op);
+        ret = ctx->operate(oid, &op);
 	if (ret == -ENOENT)
 	  ret = 0;
         if (ret < 0) {
           remove_tag = false;
-          dout(0) << "failed to remove " << obj.pool << ":" << key_obj.get_object() << "@" << obj.loc << dendl;
+          dout(0) << "failed to remove " << obj.pool << ":" << oid << "@" << obj.loc << dendl;
         }
 
         if (going_down()) // leave early, even if tag isn't removed, it's ok
@@ -275,7 +275,7 @@ void RGWGC::stop_processor()
 
 void *RGWGC::GCWorker::entry() {
   do {
-    utime_t start = ceph_clock_now(cct);
+    utime_t start = ceph_clock_now();
     dout(2) << "garbage collection: start" << dendl;
     int r = gc->process();
     if (r < 0) {
@@ -286,7 +286,7 @@ void *RGWGC::GCWorker::entry() {
     if (gc->going_down())
       break;
 
-    utime_t end = ceph_clock_now(cct);
+    utime_t end = ceph_clock_now();
     end -= start;
     int secs = cct->_conf->rgw_gc_processor_period;
 
@@ -296,7 +296,7 @@ void *RGWGC::GCWorker::entry() {
     secs -= end.sec();
 
     lock.Lock();
-    cond.WaitInterval(cct, lock, utime_t(secs, 0));
+    cond.WaitInterval(lock, utime_t(secs, 0));
     lock.Unlock();
   } while (!gc->going_down());
 

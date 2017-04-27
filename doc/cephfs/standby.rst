@@ -9,6 +9,8 @@ or *FSCID*.
 
 Each CephFS filesystem has a number of *ranks*, one by default,
 which start at zero.  A rank may be thought of as a metadata shard.
+Controlling the number of ranks in a filesystem is described
+in :doc:`/cephfs/multimds`
 
 Each CephFS ceph-mds process (a *daemon*) initially starts up
 without a rank.  It may be assigned one by the monitor cluster.
@@ -19,12 +21,7 @@ If a rank is not associated with a daemon, the rank is
 considered *failed*.  Once a rank is assigned to a daemon,
 the rank is considered *up*.
 
-Each CephFS filesystem has a *max_mds* setting, which controls
-how many ranks will be created.  The actual number of ranks
-in the filesystem will only be increased if a spare daemon is
-available to take on the new rank.
-
-An daemon has a *name* that is set statically by the administrator
+A daemon has a *name* that is set statically by the administrator
 when the daemon is first configured.  Typical configurations
 use the hostname where the daemon runs as the daemon name.
 
@@ -64,6 +61,20 @@ If an MDS daemon stops communicating with the monitor, the monitor will
 wait ``mds_beacon_grace`` seconds (default 15 seconds) before marking
 the daemon as *laggy*.
 
+Each file system may specify a number of standby daemons to be considered
+healthy. This number includes daemons in standby-replay waiting for a rank to
+fail (remember that a standby-replay daemon will not be assigned to take over a
+failure for another rank or a failure in a another CephFS file system). The
+pool of standby daemons not in replay count towards any file system count.
+Each file system may set the number of standby daemons wanted using:
+
+::
+
+    ceph fs set <fs name> standby_count_wanted <count>
+
+Setting ``count`` to 0 will disable the health check.
+
+
 Configuring standby daemons
 ---------------------------
 
@@ -95,7 +106,7 @@ mds_standby_replay
 ~~~~~~~~~~~~~~~~~~
 
 If this is set to true, then the standby daemon will continuously read
-the metadata journal an up rank.  This will give it
+the metadata journal of an up rank.  This will give it
 a warm metadata cache, and speed up the process of failing over
 if the daemon serving the rank fails.
 

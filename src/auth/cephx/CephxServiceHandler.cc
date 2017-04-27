@@ -106,7 +106,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
         should_enc_ticket = true;
       }
 
-      info.ticket.init_timestamps(ceph_clock_now(cct), cct->_conf->auth_mon_ticket_ttl);
+      info.ticket.init_timestamps(ceph_clock_now(), cct->_conf->auth_mon_ticket_ttl);
       info.ticket.name = entity_name;
       info.ticket.global_id = global_id;
       info.ticket.auid = eauth.auid;
@@ -163,18 +163,31 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       ret = 0;
       vector<CephXSessionAuthInfo> info_vec;
-      for (uint32_t service_id = 1; service_id <= ticket_req.keys; service_id <<= 1) {
+      int found_services = 0;
+      int service_err = 0;
+      for (uint32_t service_id = 1; service_id <= ticket_req.keys;
+	   service_id <<= 1) {
         if (ticket_req.keys & service_id) {
-	  ldout(cct, 10) << " adding key for service " << ceph_entity_type_name(service_id) << dendl;
+	  ldout(cct, 10) << " adding key for service "
+			 << ceph_entity_type_name(service_id) << dendl;
           CephXSessionAuthInfo info;
-          int r = key_server->build_session_auth_info(service_id, auth_ticket_info, info);
+          int r = key_server->build_session_auth_info(service_id,
+						      auth_ticket_info, info);
+	  // tolerate missing MGR rotating key for the purposes of upgrades.
           if (r < 0) {
-            ret = r;
-            break;
-          }
+	    ldout(cct, 10) << "   missing key for service "
+			   << ceph_entity_type_name(service_id) << dendl;
+	    service_err = r;
+	    continue;
+	  }
           info.validity += cct->_conf->auth_service_ticket_ttl;
           info_vec.push_back(info);
+	  ++found_services;
         }
+      }
+      if (!found_services && service_err) {
+	ldout(cct, 10) << __func__ << " did not find any service keys" << dendl;
+	ret = service_err;
       }
       CryptoKey no_key;
       build_cephx_response_header(cephx_header.request_type, ret, result_bl);

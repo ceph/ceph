@@ -222,7 +222,7 @@ threshold it will use that percentage instead. ::
 
 Describes what reweight-by-utilization would do. ::
 
-    ceph osd test-reweight-by-utilization
+	ceph osd test-reweight-by-utilization
 
 Adds/removes the address to/from the blacklist. When adding an address,
 you can specify how long it should be blacklisted in seconds; otherwise,
@@ -255,8 +255,6 @@ Changes a pool setting. ::
 Valid fields are:
 
 	* ``size``: Sets the number of copies of data in the pool.
-	* ``crash_replay_interval``: The number of seconds to allow
-	  clients to replay acknowledged but uncommited requests.
 	* ``pg_num``: The placement group number.
 	* ``pgp_num``: Effective number when calculating pg placement.
 	* ``crush_ruleset``: rule number for mapping placement.
@@ -281,14 +279,14 @@ Sends a repair command to OSD.N. To send the command to all OSDs, use ``*``. ::
 
 	ceph osd repair N
 
-Runs a simple throughput benchmark against OSD.N, writing ``NUMBER_OF_OBJECTS``
+Runs a simple throughput benchmark against OSD.N, writing ``TOTAL_DATA_BYTES``
 in write requests of ``BYTES_PER_WRITE`` each. By default, the test
 writes 1 GB in total in 4-MB increments.
 The benchmark is non-destructive and will not overwrite existing live
 OSD data, but might temporarily affect the performance of clients
 concurrently accessing the OSD. ::
 
-	ceph tell osd.N bench [NUMER_OF_OBJECTS] [BYTES_PER_WRITE]
+	ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE]
 
 
 MDS Subsystem
@@ -321,89 +319,143 @@ Mon Subsystem
 Show monitor stats::
 
 	ceph mon stat
-	
-	2011-12-14 10:40:59.044395 mon {- [mon,stat]
-	2011-12-14 10:40:59.057111 mon.1 -} 'e3: 5 mons at {a=10.1.2.3:6789/0,b=10.1.2.4:6789/0,c=10.1.2.5:6789/0,d=10.1.2.6:6789/0,e=10.1.2.7:6789/0}, election epoch 16, quorum 0,1,2,3' (0)
+
+	e2: 3 mons at {a=127.0.0.1:40000/0,b=127.0.0.1:40001/0,c=127.0.0.1:40002/0}, election epoch 6, quorum 0,1,2 a,b,c
+
 
 The ``quorum`` list at the end lists monitor nodes that are part of the current quorum.
 
 This is also available more directly::
 
-	ceph quorum_status
+	ceph quorum_status -f json-pretty
 	
-	2011-12-14 10:44:20.417705 mon {- [quorum_status]
-	2011-12-14 10:44:20.431890 mon.0 -} 
-
 .. code-block:: javascript	
-	
-	'{ "election_epoch": 10,	
-	  "quorum": [
-	        0,
-	        1,
-	        2],
-	  "monmap": { "epoch": 1,
-	      "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
-	      "modified": "2011-12-12 13:28:27.505520",
-	      "created": "2011-12-12 13:28:27.505520",
-	      "mons": [
-	            { "rank": 0,
-	              "name": "a",
-	              "addr": "127.0.0.1:6789\/0"},
-	            { "rank": 1,
-	              "name": "b",
-	              "addr": "127.0.0.1:6790\/0"},
-	            { "rank": 2,
-	              "name": "c",
-	              "addr": "127.0.0.1:6791\/0"}]}}' (0)
+
+	{
+	    "election_epoch": 6,
+	    "quorum": [
+		0,
+		1,
+		2
+	    ],
+	    "quorum_names": [
+		"a",
+		"b",
+		"c"
+	    ],
+	    "quorum_leader_name": "a",
+	    "monmap": {
+		"epoch": 2,
+		"fsid": "ba807e74-b64f-4b72-b43f-597dfe60ddbc",
+		"modified": "2016-12-26 14:42:09.288066",
+		"created": "2016-12-26 14:42:03.573585",
+		"features": {
+		    "persistent": [
+			"kraken"
+		    ],
+		    "optional": []
+		},
+		"mons": [
+		    {
+			"rank": 0,
+			"name": "a",
+			"addr": "127.0.0.1:40000\/0",
+			"public_addr": "127.0.0.1:40000\/0"
+		    },
+		    {
+			"rank": 1,
+			"name": "b",
+			"addr": "127.0.0.1:40001\/0",
+			"public_addr": "127.0.0.1:40001\/0"
+		    },
+		    {
+			"rank": 2,
+			"name": "c",
+			"addr": "127.0.0.1:40002\/0",
+			"public_addr": "127.0.0.1:40002\/0"
+		    }
+		]
+	    }
+	}
+	  
 
 The above will block until a quorum is reached.
 
 For a status of just the monitor you connect to (use ``-m HOST:PORT``
 to select)::
 
-	ceph mon_status
+	ceph mon_status -f json-pretty
 	
 	
-	2011-12-14 10:45:30.644414 mon {- [mon_status]
-	2011-12-14 10:45:30.644632 mon.0 -} 
-
 .. code-block:: javascript
 	
-	'{ "name": "a",
-	  "rank": 0,
-	  "state": "leader",
-	  "election_epoch": 10,
-	  "quorum": [
-	        0,
-	        1,
-	        2],
-	  "outside_quorum": [],
-	  "monmap": { "epoch": 1,
-	      "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
-	      "modified": "2011-12-12 13:28:27.505520",
-	      "created": "2011-12-12 13:28:27.505520",
-	      "mons": [
-	            { "rank": 0,
-	              "name": "a",
-	              "addr": "127.0.0.1:6789\/0"},
-	            { "rank": 1,
-	              "name": "b",
-	              "addr": "127.0.0.1:6790\/0"},
-	            { "rank": 2,
-	              "name": "c",
-	              "addr": "127.0.0.1:6791\/0"}]}}' (0)
+	{
+	    "name": "b",
+	    "rank": 1,
+	    "state": "peon",
+	    "election_epoch": 6,
+	    "quorum": [
+		0,
+		1,
+		2
+	    ],
+	    "features": {
+		"required_con": "9025616074522624",
+		"required_mon": [
+		    "kraken"
+		],
+		"quorum_con": "1152921504336314367",
+		"quorum_mon": [
+		    "kraken"
+		]
+	    },
+	    "outside_quorum": [],
+	    "extra_probe_peers": [],
+	    "sync_provider": [],
+	    "monmap": {
+		"epoch": 2,
+		"fsid": "ba807e74-b64f-4b72-b43f-597dfe60ddbc",
+		"modified": "2016-12-26 14:42:09.288066",
+		"created": "2016-12-26 14:42:03.573585",
+		"features": {
+		    "persistent": [
+			"kraken"
+		    ],
+		    "optional": []
+		},
+		"mons": [
+		    {
+			"rank": 0,
+			"name": "a",
+			"addr": "127.0.0.1:40000\/0",
+			"public_addr": "127.0.0.1:40000\/0"
+		    },
+		    {
+			"rank": 1,
+			"name": "b",
+			"addr": "127.0.0.1:40001\/0",
+			"public_addr": "127.0.0.1:40001\/0"
+		    },
+		    {
+			"rank": 2,
+			"name": "c",
+			"addr": "127.0.0.1:40002\/0",
+			"public_addr": "127.0.0.1:40002\/0"
+		    }
+		]
+	    }
+	}
 
 A dump of the monitor state::
 
 	ceph mon dump
 
-	2011-12-14 10:43:08.015333 mon {- [mon,dump]
-	2011-12-14 10:43:08.015567 mon.0 -} 'dumped monmap epoch 1' (0)
-	epoch 1
-	fsid 444b489c-4f16-4b75-83f0-cb8097468898
-	last_changed 2011-12-12 13:28:27.505520
-	created 2011-12-12 13:28:27.505520
-	0: 127.0.0.1:6789/0 mon.a
-	1: 127.0.0.1:6790/0 mon.b
-	2: 127.0.0.1:6791/0 mon.c
+	dumped monmap epoch 2
+	epoch 2
+	fsid ba807e74-b64f-4b72-b43f-597dfe60ddbc
+	last_changed 2016-12-26 14:42:09.288066
+	created 2016-12-26 14:42:03.573585
+	0: 127.0.0.1:40000/0 mon.a
+	1: 127.0.0.1:40001/0 mon.b
+	2: 127.0.0.1:40002/0 mon.c
 

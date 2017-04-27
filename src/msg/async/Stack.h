@@ -23,6 +23,7 @@
 #include "msg/msg_types.h"
 #include "msg/async/Event.h"
 
+class Worker;
 class ConnectedSocketImpl {
  public:
   virtual ~ConnectedSocketImpl() {}
@@ -41,13 +42,14 @@ struct SocketOptions {
   bool nodelay = true;
   int rcbuf_size = 0;
   int priority = -1;
+  entity_addr_t connect_bind_addr;
 };
 
 /// \cond internal
 class ServerSocketImpl {
  public:
   virtual ~ServerSocketImpl() {}
-  virtual int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out) = 0;
+  virtual int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) = 0;
   virtual void abort_accept() = 0;
   /// Get file descriptor
   virtual int fd() const = 0;
@@ -157,8 +159,8 @@ class ServerSocket {
   ///
   /// \Accepts a \ref ConnectedSocket representing the connection, and
   ///          a \ref entity_addr_t describing the remote endpoint.
-  int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out) {
-    return _ssi->accept(sock, opt, out);
+  int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) {
+    return _ssi->accept(sock, opt, out, w);
   }
 
   /// Stops any \ref accept() in progress.
@@ -216,7 +218,7 @@ class Worker {
   Worker(CephContext *c, unsigned i)
     : cct(c), perf_logger(NULL), id(i), references(0), center(c) {
     char name[128];
-    sprintf(name, "AsyncMessenger::Worker-%d", id);
+    sprintf(name, "AsyncMessenger::Worker-%u", id);
     // initialize perf_logger
     PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
 
@@ -242,6 +244,7 @@ class Worker {
                      const SocketOptions &opts, ServerSocket *) = 0;
   virtual int connect(const entity_addr_t &addr,
                       const SocketOptions &opts, ConnectedSocket *socket) = 0;
+  virtual void destroy() {}
 
   virtual void initialize() {}
   PerfCounters *get_perf_counter() { return perf_logger; }
@@ -279,16 +282,17 @@ class NetworkStack : public CephContext::ForkWatcher {
   Spinlock pool_spin;
   bool started = false;
 
-  void add_thread(unsigned i, std::function<void ()> &ts);
+  std::function<void ()> add_thread(unsigned i);
 
  protected:
   CephContext *cct;
   vector<Worker*> workers;
-  // Used to indicate whether thread started
 
   explicit NetworkStack(CephContext *c, const string &t);
  public:
-  virtual ~NetworkStack() {
+  NetworkStack(const NetworkStack &) = delete;
+  NetworkStack& operator=(const NetworkStack &) = delete;
+  ~NetworkStack() override {
     for (auto &&w : workers)
       delete w;
   }
@@ -307,6 +311,7 @@ class NetworkStack : public CephContext::ForkWatcher {
   // But for dpdk backend, we maintain listen table in each thread. So we
   // need to let each thread do binding port.
   virtual bool support_local_listen_table() const { return false; }
+  virtual bool nonblock_connect_need_writable_event() const { return true; }
 
   void start();
   void stop();
@@ -323,17 +328,16 @@ class NetworkStack : public CephContext::ForkWatcher {
   virtual void spawn_worker(unsigned i, std::function<void ()> &&) = 0;
   virtual void join_worker(unsigned i) = 0;
 
-  virtual void handle_pre_fork() override {
+  void handle_pre_fork() override {
     stop();
   }
 
-  virtual void handle_post_fork() override {
+  void handle_post_fork() override {
     start();
   }
 
- private:
-  NetworkStack(const NetworkStack &);
-  NetworkStack& operator=(const NetworkStack &);
+  virtual bool is_ready() { return true; };
+  virtual void ready() { };
 };
 
 #endif //CEPH_MSG_ASYNC_STACK_H

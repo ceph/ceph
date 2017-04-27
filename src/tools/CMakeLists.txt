@@ -3,11 +3,13 @@ set(rados_srcs
   RadosDump.cc
   rados/RadosImport.cc
   rados/PoolDump.cc
+  ${PROJECT_SOURCE_DIR}/src/common/util.cc
   ${PROJECT_SOURCE_DIR}/src/common/obj_bencher.cc)
 add_executable(rados ${rados_srcs})
 target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} radosstriper)
 install(TARGETS rados DESTINATION bin)
 
+if(WITH_TESTS)
 add_executable(ceph_scratchtool scratchtool.c)
 target_link_libraries(ceph_scratchtool librados global)
 install(TARGETS ceph_scratchtool DESTINATION bin)
@@ -30,9 +32,11 @@ install(TARGETS ceph-monstore-tool DESTINATION bin)
 install(PROGRAMS
   ceph-monstore-update-crush.sh
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/ceph)
+endif(WITH_TESTS)
 
 add_executable(ceph-objectstore-tool
   ceph_objectstore_tool.cc
+  rebuild_mondb.cc
   RadosDump.cc)
 target_link_libraries(ceph-objectstore-tool osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} ${CMAKE_DL_LIBS})
 if(WITH_FUSE)
@@ -40,13 +44,19 @@ if(WITH_FUSE)
 endif(WITH_FUSE)
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
-add_executable(ceph-client-debug ceph-client-debug.cc)
-target_link_libraries(ceph-client-debug cephfs global client)
-install(TARGETS ceph-client-debug DESTINATION bin)
+if(WITH_LIBCEPHFS)
+if(WITH_TESTS)
+  add_executable(ceph-client-debug ceph-client-debug.cc)
+  target_link_libraries(ceph-client-debug cephfs global client)
+  install(TARGETS ceph-client-debug DESTINATION bin)
+endif(WITH_TESTS)
+endif(WITH_LIBCEPHFS)
 
+if(WITH_TESTS)
 add_executable(ceph-kvstore-tool ceph_kvstore_tool.cc)
 target_link_libraries(ceph-kvstore-tool os global)
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
+endif(WITH_TESTS)
 
 set(ceph_conf_srcs ceph_conf.cc)
 add_executable(ceph-conf ${ceph_conf_srcs})
@@ -68,10 +78,12 @@ add_executable(osdmaptool ${osdomaptool_srcs})
 target_link_libraries(osdmaptool global)
 install(TARGETS osdmaptool DESTINATION bin)
 
+if(WITH_TESTS)
 set(ceph_psim_srcs psim.cc)
 add_executable(ceph_psim ${ceph_psim_srcs})
 target_link_libraries(ceph_psim global)
 install(TARGETS ceph_psim DESTINATION bin)
+endif(WITH_TESTS)
 
 set(ceph_authtool_srcs ceph_authtool.cc)
 add_executable(ceph-authtool ${ceph_authtool_srcs})
@@ -85,5 +97,7 @@ endif(WITH_CEPHFS)
 if(WITH_RBD)
   add_subdirectory(rbd)
   add_subdirectory(rbd_mirror)
-  add_subdirectory(rbd_nbd)
+  if(LINUX)
+    add_subdirectory(rbd_nbd)
+  endif()
 endif(WITH_RBD)

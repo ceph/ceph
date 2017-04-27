@@ -69,7 +69,7 @@ class ObjectCacher {
       : snap(s), bl(b), fadvise_flags(f) {}
   };
 
-  OSDRead *prepare_read(snapid_t snap, bufferlist *b, int f) {
+  OSDRead *prepare_read(snapid_t snap, bufferlist *b, int f) const {
     return new OSDRead(snap, b, f);
   }
 
@@ -87,8 +87,11 @@ class ObjectCacher {
 	journal_tid(_journal_tid) {}
   };
 
-  OSDWrite *prepare_write(const SnapContext& sc, const bufferlist &b,
-			  ceph::real_time mt, int f, ceph_tid_t journal_tid) {
+  OSDWrite *prepare_write(const SnapContext& sc,
+			  const bufferlist &b,
+			  ceph::real_time mt,
+			  int f,
+			  ceph_tid_t journal_tid) const {
     return new OSDWrite(sc, b, mt, f, journal_tid);
   }
 
@@ -189,14 +192,14 @@ class ObjectCacher {
     void set_dontneed(bool v) {
       dontneed = v;
     }
-    bool get_dontneed() {
+    bool get_dontneed() const {
       return dontneed;
     }
 
     void set_nocache(bool v) {
       nocache = v;
     }
-    bool get_nocache() {
+    bool get_nocache() const {
       return nocache;
     }
 
@@ -283,7 +286,7 @@ class ObjectCacher {
     const object_locator_t& get_oloc() const { return oloc; }
     void set_object_locator(object_locator_t& l) { oloc = l; }
 
-    bool can_close() {
+    bool can_close() const {
       if (lru_is_expireable()) {
 	assert(data.empty());
 	assert(waitfor_commit.empty());
@@ -306,8 +309,8 @@ class ObjectCacher {
      * @param offset object byte offset
      * @return iterator pointing to buffer, or data.end()
      */
-    map<loff_t,BufferHead*>::iterator data_lower_bound(loff_t offset) {
-      map<loff_t,BufferHead*>::iterator p = data.lower_bound(offset);
+    map<loff_t,BufferHead*>::const_iterator data_lower_bound(loff_t offset) const {
+      map<loff_t,BufferHead*>::const_iterator p = data.lower_bound(offset);
       if (p != data.begin() &&
 	  (p == data.end() || p->first > offset)) {
 	--p;     // might overlap!
@@ -332,14 +335,14 @@ class ObjectCacher {
 	put();
     }
 
-    bool is_empty() { return data.empty(); }
+    bool is_empty() const { return data.empty(); }
 
     // mid-level
     BufferHead *split(BufferHead *bh, loff_t off);
     void merge_left(BufferHead *left, BufferHead *right);
     void try_merge_bh(BufferHead *bh);
 
-    bool is_cached(loff_t off, loff_t len);
+    bool is_cached(loff_t off, loff_t len) const;
     bool include_all_cached_data(loff_t off, loff_t len);
     int map_read(ObjectExtent &ex,
                  map<loff_t, BufferHead*>& hits,
@@ -421,7 +424,7 @@ class ObjectCacher {
     ObjectCacher *oc;
   public:
     explicit FlusherThread(ObjectCacher *o) : oc(o) {}
-    void *entry() {
+    void *entry() override {
       oc->flusher_entry();
       return 0;
     }
@@ -459,12 +462,12 @@ class ObjectCacher {
 
   void bh_stat_add(BufferHead *bh);
   void bh_stat_sub(BufferHead *bh);
-  loff_t get_stat_tx() { return stat_tx; }
-  loff_t get_stat_rx() { return stat_rx; }
-  loff_t get_stat_dirty() { return stat_dirty; }
-  loff_t get_stat_dirty_waiting() { return stat_dirty_waiting; }
-  loff_t get_stat_clean() { return stat_clean; }
-  loff_t get_stat_zero() { return stat_zero; }
+  loff_t get_stat_tx() const { return stat_tx; }
+  loff_t get_stat_rx() const { return stat_rx; }
+  loff_t get_stat_dirty() const { return stat_dirty; }
+  loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
+  loff_t get_stat_clean() const { return stat_clean; }
+  loff_t get_stat_zero() const { return stat_zero; }
 
   void touch_bh(BufferHead *bh) {
     if (bh->is_dirty())
@@ -509,7 +512,7 @@ class ObjectCacher {
   void mark_dirty(BufferHead *bh) {
     bh_set_state(bh, BufferHead::STATE_DIRTY);
     bh_lru_dirty.lru_touch(bh);
-    //bh->set_dirty_stamp(ceph_clock_now(g_ceph_context));
+    //bh->set_dirty_stamp(ceph_clock_now());
   }
 
   void bh_add(Object *ob, BufferHead *bh);
@@ -556,40 +559,6 @@ class ObjectCacher {
 		       vector<pair<loff_t, uint64_t> >& ranges,
 		       ceph_tid_t t, int r);
 
-
-  class C_ReadFinish : public Context {
-    ObjectCacher *oc;
-    int64_t poolid;
-    sobject_t oid;
-    loff_t start;
-    uint64_t length;
-    xlist<C_ReadFinish*>::item set_item;
-    bool trust_enoent;
-    ceph_tid_t tid;
-
-  public:
-    bufferlist bl;
-    C_ReadFinish(ObjectCacher *c, Object *ob, ceph_tid_t t, loff_t s,
-		 uint64_t l) :
-      oc(c), poolid(ob->oloc.pool), oid(ob->get_soid()), start(s), length(l),
-      set_item(this), trust_enoent(true),
-      tid(t) {
-      ob->reads.push_back(&set_item);
-    }
-
-    void finish(int r) {
-      oc->bh_read_finish(poolid, oid, tid, start, length, bl, r, trust_enoent);
-
-      // object destructor clears the list
-      if (set_item.is_on_list())
-	set_item.remove_myself();
-    }
-
-    void distrust_enoent() {
-      trust_enoent = false;
-    }
-  };
-
   class C_WriteCommit;
   class C_WaitForWrite;
 
@@ -619,27 +588,7 @@ class ObjectCacher {
   }
 
 
-  class C_RetryRead : public Context {
-    ObjectCacher *oc;
-    OSDRead *rd;
-    ObjectSet *oset;
-    Context *onfinish;
-  public:
-    C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c)
-      : oc(_oc), rd(r), oset(os), onfinish(c) {}
-    void finish(int r) {
-      if (r < 0) {
-	if (onfinish)
-	  onfinish->complete(r);
-	return;
-      }
-      int ret = oc->_readx(rd, oset, onfinish, false);
-      if (ret != 0 && onfinish) {
-	onfinish->complete(ret);
-      }
-    }
-  };
-
+  class C_RetryRead;
 
 
   // non-blocking.  async.

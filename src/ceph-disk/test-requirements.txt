@@ -8,4 +8,4 @@ testtools>=0.9.32
 mock
 pytest
 tox>=2.0
-flake8
+flake8==3.0.4

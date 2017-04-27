@@ -11,12 +11,13 @@ token that Keystone validates will be considered as valid by the gateway.
 The following configuration options are available for Keystone integration::
 
 	[client.radosgw.gateway]
+	rgw keystone api version = {keystone api version}
 	rgw keystone url = {keystone server url:keystone server admin port}
 	rgw keystone admin token = {keystone admin token}
 	rgw keystone accepted roles = {accepted user roles}
 	rgw keystone token cache size = {number of tokens to cache}
 	rgw keystone revocation interval = {number of seconds before checking revoked tickets}
-	rgw keystone make new tenants = {true for private tenant for each new user}
+	rgw keystone implicit tenants = {true for private tenant for each new user}
 	rgw s3 auth use keystone = true
 	nss db path = {path to nss db}
 
@@ -39,6 +40,12 @@ has different roles assigned to it on possibly more than a single tenant. When
 the Ceph Object Gateway gets the ticket, it looks at the tenant, and the user
 roles that are assigned to that ticket, and accepts/rejects the request
 according to the ``rgw keystone accepted roles`` configurable.
+
+For a v3 version of the OpenStack Identity API you should replace
+``rgw keystone admin tenant`` with::
+
+   rgw keystone admin domain = {keystone admin domain name}
+   rgw keystone admin project = {keystone admin project name}
 
 
 Prior to Kilo

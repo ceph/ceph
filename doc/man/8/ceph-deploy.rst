@@ -484,89 +484,29 @@ Another option :option:`--master` can also be used with this command.
 Options
 =======
 
-.. option:: --version
+.. option:: --address
 
-	The current installed version of :program:`ceph-deploy`.
-
-.. option:: --username
-
-	The username to connect to the remote host.
-
-.. option:: --overwrite-conf
-
-	Overwrite an existing conf file on remote host (if present).
-
-.. option:: --cluster
-
-	Name of the cluster.
-
-.. option:: --ceph-conf
-
-	Use (or reuse) a given ``ceph.conf`` file.
-
-.. option:: --no-ssh-copykey
-
-	Do not attempt to copy ssh keys.
-
-.. option:: --fsid
-
-	Provide an alternate FSID for ``ceph.conf`` generation.
-
-.. option:: --cluster-network
-
-	Specify the (internal) cluster network.
-
-.. option:: --public-network
-
-	Specify the public network for a cluster.
-
-.. option:: --testing
-
-	Install the latest development release.
-
-.. option:: --dev
-
-	Install a bleeding edge built from Git branch or tag (default: master).
+	IP address of the host node to be added to the cluster.
 
 .. option:: --adjust-repos
 
 	Install packages modifying source repos.
 
-.. option:: --no-adjust-repos
+.. option:: --ceph-conf
 
-	Install packages without modifying source repos.
+	Use (or reuse) a given ``ceph.conf`` file.
 
-.. option:: --repo
+.. option:: --cluster
 
-	Install repo files only (skips package installation).
+	Name of the cluster.
 
-.. option:: --local-mirror
+.. option:: --dev
 
-	Fetch packages and push them to hosts for a local repo mirror.
+	Install a bleeding edge built from Git branch or tag (default: master).
 
-.. option:: --repo-url
+.. option:: --cluster-network
 
-	Specify a repo url that mirrors/contains Ceph packages.
-
-.. option:: --gpg-url
-
-	Specify a GPG key url to be used with custom repos (defaults to ceph.com).
-
-.. option:: --address
-
-	IP address of the host node to be added to the cluster.
-
-.. option:: --keyrings
-
-	Concatenate multiple keyrings to be seeded on new monitors.
-
-.. option:: --zap-disk
-
-	Destroy the partition table and content of a disk.
-
-.. option:: --fs-type
-
-	Filesystem to use to format disk (e.g., ``xfs``, ``btrfs``).
+	Specify the (internal) cluster network.
 
 .. option:: --dmcrypt
 
@@ -580,13 +520,77 @@ Options
 
 	Comma-separated package(s) to install on remote hosts.
 
-.. option:: --remove
+.. option:: --fs-type
 
-	Comma-separated package(s) to remove from remote hosts.
+	Filesystem to use to format disk ``(xfs, btrfs or ext4)``.
+
+.. option:: --fsid
+
+	Provide an alternate FSID for ``ceph.conf`` generation.
+
+.. option:: --gpg-url
+
+	Specify a GPG key url to be used with custom repos (defaults to ceph.com).
+
+.. option:: --keyrings
+
+	Concatenate multiple keyrings to be seeded on new monitors.
+
+.. option:: --local-mirror
+
+	Fetch packages and push them to hosts for a local repo mirror.
 
 .. option:: --master
 
 	The domain for the Calamari master server.
+
+.. option:: --mkfs
+
+	Inject keys to MONs on remote nodes.
+
+.. option:: --no-adjust-repos
+
+	Install packages without modifying source repos.
+
+.. option:: --no-ssh-copykey
+
+	Do not attempt to copy ssh keys.
+
+.. option:: --overwrite-conf
+
+	Overwrite an existing conf file on remote host (if present).
+
+.. option:: --public-network
+
+	Specify the public network for a cluster.
+
+.. option:: --remove
+
+	Comma-separated package(s) to remove from remote hosts.
+
+.. option:: --repo
+
+	Install repo files only (skips package installation).
+
+.. option:: --repo-url
+
+	Specify a repo url that mirrors/contains Ceph packages.
+
+.. option:: --testing
+
+	Install the latest development release.
+
+.. option:: --username
+
+	The username to connect to the remote host.
+
+.. option:: --version
+
+	The current installed version of :program:`ceph-deploy`.
+
+.. option:: --zap-disk
+
+	Destroy the partition table and content of a disk.
 
 
 Availability

@@ -17,13 +17,6 @@
 CLS_VER(1,0)
 CLS_NAME(user)
 
-cls_handle_t h_class;
-cls_method_handle_t h_user_set_buckets_info;
-cls_method_handle_t h_user_complete_stats_sync;
-cls_method_handle_t h_user_remove_bucket;
-cls_method_handle_t h_user_list_buckets;
-cls_method_handle_t h_user_get_header;
-
 static int write_entry(cls_method_context_t hctx, const string& key, const cls_user_bucket_entry& entry)
 {
   bufferlist bl;
@@ -170,7 +163,13 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
             key.c_str(), (long long)update_entry.size, (long long)update_entry.count);
 
-    apply_entry_stats(update_entry, &entry);
+    // sync entry stats when not an op.add, as when the case is op.add if its a
+    // new entry we already have copied update_entry earlier, OTOH, for an existing entry
+    // we end up clobbering the existing stats for the bucket
+    if (!op.add){
+      apply_entry_stats(update_entry, &entry);
+    }
+
     entry.user_stats_sync = true;
 
     ret = write_entry(hctx, key, entry);
@@ -370,9 +369,16 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(user)
 {
   CLS_LOG(1, "Loaded user class!");
+
+  cls_handle_t h_class;
+  cls_method_handle_t h_user_set_buckets_info;
+  cls_method_handle_t h_user_complete_stats_sync;
+  cls_method_handle_t h_user_remove_bucket;
+  cls_method_handle_t h_user_list_buckets;
+  cls_method_handle_t h_user_get_header;
 
   cls_register("user", &h_class);
 

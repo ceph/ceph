@@ -38,6 +38,11 @@ CEPH_DISK_ARGS=
 CEPH_DISK_ARGS+=" --verbose"
 CEPH_DISK_ARGS+=" --prepend-to-path="
 TIMEOUT=360
+if [ `uname` != FreeBSD ]; then
+    PROCDIR=""
+else
+    PROCDIR="/compat/linux"
+fi
 
 cat=$(which cat)
 timeout=$(which timeout)
@@ -59,11 +64,12 @@ function teardown() {
         return
     fi
     kill_daemons $dir
-    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+    if [ `uname` != FreeBSD ] && \
+       [ $(stat -f -c '%T' .) == "btrfs" ]; then
         rm -fr $dir/*/*db
         __teardown_btrfs $dir
     fi
-    grep " $(pwd)/$dir/" < /proc/mounts | while read mounted rest ; do
+    grep " $(pwd)/$dir/" < ${PROCDIR}/proc/mounts | while read mounted rest ; do
         umount $mounted
     done
     rm -fr $dir
@@ -150,7 +156,7 @@ function test_path() {
 function test_no_path() {
     local dir=$1
     shift
-    ( export PATH=../ceph-detect-init/virtualenv/bin:virtualenv/bin:$CEPH_BIN:/usr/bin:/bin ; test_activate_dir $dir) || return 1
+    ( export PATH=../ceph-detect-init/virtualenv/bin:virtualenv/bin:$CEPH_BIN:/usr/bin:/bin:/usr/local/bin ; test_activate_dir $dir) || return 1
 }
 
 function test_mark_init() {
@@ -169,7 +175,7 @@ function test_mark_init() {
     ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $osd_data || return 1
 
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    ${CEPH_DISK} $CEPH_DISK_ARGS \
         --verbose \
         activate \
         --mark-init=auto \
@@ -255,11 +261,20 @@ function test_activate() {
     local to_prepare=$1
     local to_activate=$2
     local osd_uuid=$($uuidgen)
+    local timeoutcmd
+
+    if [ `uname` = FreeBSD ]; then
+        # for unknown reasons FreeBSD timeout does not return here
+        # So we run without timeout
+        timeoutcmd=""
+    else 
+	timeoutcmd="${timeout} $TIMEOUT"
+    fi
 
     ${CEPH_DISK} $CEPH_DISK_ARGS \
         prepare --osd-uuid $osd_uuid $to_prepare || return 1
 
-    $timeout $TIMEOUT ${CEPH_DISK} $CEPH_DISK_ARGS \
+    $timeoutcmd ${CEPH_DISK} $CEPH_DISK_ARGS \
         activate \
         --mark-init=none \
         $to_activate || return 1
@@ -347,6 +362,47 @@ function test_ceph_osd_mkfs() {
     [ -f $dir/used-ceph-osd ] || return 1
 }
 
+function test_crush_device_class() {
+    local dir=$1
+    shift
+
+    run_mon $dir a
+
+    local osd_data=$dir/dir
+    $mkdir -p $osd_data
+
+    local osd_uuid=$($uuidgen)
+
+    $mkdir -p $osd_data
+
+    ${CEPH_DISK} $CEPH_DISK_ARGS \
+        prepare --osd-uuid $osd_uuid \
+                --crush-device-class CRUSH_CLASS \
+                $osd_data || return 1
+    test -f $osd_data/crush_device_class || return 1
+    test $(cat $osd_data/crush_device_class) = CRUSH_CLASS || return 1
+
+    ceph osd crush class create CRUSH_CLASS || return 1
+
+    CEPH_ARGS="--crush-location=root=default $CEPH_ARGS" \
+      ${CEPH_DISK} $CEPH_DISK_ARGS \
+        --verbose \
+        activate \
+        --mark-init=none \
+        $osd_data || return 1
+
+    ok=false
+    for delay in 2 4 8 16 32 64 128 256 ; do
+        if ceph osd crush dump | grep --quiet 'CRUSH_CLASS' ; then
+            ok=true
+            break
+        fi
+        sleep $delay
+        ceph osd crush dump # for debugging purposes
+    done
+    $ok || return 1
+}
+
 function run() {
     local dir=$1
     shift
@@ -381,10 +437,13 @@ function run() {
     default_actions+="test_activate_dir_magic "
     default_actions+="test_activate_dir "
     default_actions+="test_keyring_path "
-    default_actions+="test_mark_init "
+    [ `uname` != FreeBSD ] && \
+      default_actions+="test_mark_init "
     default_actions+="test_zap "
-    default_actions+="test_activate_dir_bluestore "
+    [ `uname` != FreeBSD ] && \
+      default_actions+="test_activate_dir_bluestore "
     default_actions+="test_ceph_osd_mkfs "
+    default_actions+="test_crush_device_class "
     local actions=${@:-$default_actions}
     for action in $actions  ; do
         setup $dir || return 1

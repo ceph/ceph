@@ -16,9 +16,6 @@
 
 #include "include/stringify.h"
 #include "mds/MDSAuthCaps.h"
-#include "common/ceph_argparse.h"
-#include "common/common_init.h"
-#include "global/global_init.h"
 
 #include "gtest/gtest.h"
 
@@ -114,84 +111,97 @@ TEST(MDSAuthCaps, AllowAll) {
 
   ASSERT_TRUE(cap.parse(g_ceph_context, "allow *", NULL));
   ASSERT_TRUE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable("foo/bar", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo/bar", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
 }
 
 TEST(MDSAuthCaps, AllowUid) {
   MDSAuthCaps cap(g_ceph_context);
-  ASSERT_TRUE(cap.parse(g_ceph_context, "allow * uid=10 gids=10,11; allow * uid=12 gids=12", NULL));
+  ASSERT_TRUE(cap.parse(g_ceph_context, "allow * uid=10 gids=10,11,12; allow * uid=12 gids=12,10", NULL));
   ASSERT_FALSE(cap.allow_all());
 
   // uid/gid must be valid
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 0, 0, MAY_READ, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 10, 0, MAY_READ, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 9, 10, MAY_READ, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0777, 10, 10, MAY_READ, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0777, 12, 12, MAY_READ, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 10, 12, MAY_READ, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 0, 0, NULL, MAY_READ, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 10, 0, NULL, MAY_READ, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 9, 10, NULL, MAY_READ, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0777, 10, 10, NULL, MAY_READ, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0777, 12, 12, NULL, MAY_READ, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 10, 13, NULL, MAY_READ, 0, 0));
 
   // user
-  ASSERT_TRUE(cap.is_capable("foo", 10, 10, 0500, 10, 11, MAY_READ, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 10, 10, 0500, 10, 11, MAY_WRITE, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 10, 10, 0500, 10, 11, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 10, 10, 0700, 10, 11, MAY_READ, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 10, 10, 0700, 10, 11, MAY_WRITE, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 10, 10, 0700, 10, 10, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 10, 0, 0700, 10, 10, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 12, 0, 0700, 10, 10, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 12, 0, 0700, 12, 12, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0700, 10, 10, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 10, 10, 0500, 10, 11, NULL, MAY_READ, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 10, 10, 0500, 10, 11, NULL, MAY_WRITE, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 10, 10, 0500, 10, 11, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 10, 10, 0700, 10, 11, NULL, MAY_READ, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 10, 10, 0700, 10, 11, NULL, MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 10, 10, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 10, 0, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 12, 0, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 12, 0, 0700, 12, 12, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0700, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0));
 
   // group
-  ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0750, 10, 10, MAY_READ, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 10, 0750, 10, 10, MAY_WRITE, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0770, 10, 10, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0770, 10, 11, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 0, 11, 0770, 10, 10, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 0, 11, 0770, 10, 11, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 0, 12, 0770, 12, 12, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 10, 0770, 12, 12, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 12, 0770, 10, 10, MAY_READ | MAY_WRITE, 0, 0));
+  vector<uint64_t> glist10;
+  glist10.push_back(10);
+  vector<uint64_t> dglist10;
+  dglist10.push_back(8);
+  dglist10.push_back(10);
+  vector<uint64_t> glist11;
+  glist11.push_back(11);
+  vector<uint64_t> glist12;
+  glist12.push_back(12);
+  ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0750, 10, 10, NULL, MAY_READ, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 10, 0750, 10, 10, NULL, MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0770, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0770, 10, 11, &glist10, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 11, 0770, 10, 10, &glist11, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 11, 0770, 10, 11, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 12, 0770, 12, 12, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 10, 0770, 12, 12, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0770, 12, 12, &glist10, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 10, 0770, 12, 12, &dglist10, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 11, 0770, 12, 12, &glist11, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 12, 0770, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 12, 0770, 10, 10, &glist12, MAY_READ | MAY_WRITE, 0, 0));
 
   // user > group
-  ASSERT_TRUE(cap.is_capable("foo", 10, 10, 0570, 10, 10, MAY_READ, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 10, 10, 0570, 10, 10, MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 10, 10, 0570, 10, 10, NULL, MAY_READ, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 10, 10, 0570, 10, 10, NULL, MAY_WRITE, 0, 0));
 
   // other
-  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0775, 10, 10, MAY_READ, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0770, 10, 10, MAY_READ, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0775, 10, 10, MAY_WRITE, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0775, 10, 10, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0777, 10, 10, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0773, 10, 10, MAY_READ, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0775, 10, 10, NULL, MAY_READ, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0770, 10, 10, NULL, MAY_READ, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0775, 10, 10, NULL, MAY_WRITE, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0775, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0777, 10, 10, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0773, 10, 10, NULL, MAY_READ, 0, 0));
 
   // group > other
-  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0557, 10, 10, MAY_READ, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 10, 0557, 10, 10, MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0557, 10, 10, NULL, MAY_READ, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 10, 0557, 10, 10, NULL, MAY_WRITE, 0, 0));
 
   // user > other
-  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0557, 10, 10, MAY_READ, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 10, 0, 0557, 10, 10, MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("foo", 0, 0, 0557, 10, 10, NULL, MAY_READ, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 10, 0, 0557, 10, 10, NULL, MAY_WRITE, 0, 0));
 }
 
 TEST(MDSAuthCaps, AllowPath) {
   MDSAuthCaps cap;
   ASSERT_TRUE(cap.parse(g_ceph_context, "allow * path=/sandbox", NULL));
   ASSERT_FALSE(cap.allow_all());
-  ASSERT_TRUE(cap.is_capable("sandbox/foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_TRUE(cap.is_capable("sandbox", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(cap.is_capable("sandboxed", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("sandbox/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(cap.is_capable("sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(cap.is_capable("sandboxed", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
 }
 
 TEST(MDSAuthCaps, AllowPathChars) {
   MDSAuthCaps unquo_cap;
   ASSERT_TRUE(unquo_cap.parse(g_ceph_context, "allow * path=/sandbox-._foo", NULL));
   ASSERT_FALSE(unquo_cap.allow_all());
-  ASSERT_TRUE(unquo_cap.is_capable("sandbox-._foo/foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(unquo_cap.is_capable("sandbox", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(unquo_cap.is_capable("sandbox-._food", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(unquo_cap.is_capable("foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(unquo_cap.is_capable("sandbox-._foo/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(unquo_cap.is_capable("sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(unquo_cap.is_capable("sandbox-._food", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(unquo_cap.is_capable("foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
 }
 
 
@@ -199,10 +209,10 @@ TEST(MDSAuthCaps, AllowPathCharsQuoted) {
   MDSAuthCaps quo_cap;
   ASSERT_TRUE(quo_cap.parse(g_ceph_context, "allow * path=\"/sandbox-._foo\"", NULL));
   ASSERT_FALSE(quo_cap.allow_all());
-  ASSERT_TRUE(quo_cap.is_capable("sandbox-._foo/foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(quo_cap.is_capable("sandbox", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(quo_cap.is_capable("sandbox-._food", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
-  ASSERT_FALSE(quo_cap.is_capable("foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_TRUE(quo_cap.is_capable("sandbox-._foo/foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(quo_cap.is_capable("sandbox", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(quo_cap.is_capable("sandbox-._food", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(quo_cap.is_capable("foo", 0, 0, 0777, 0, 0, NULL, MAY_READ | MAY_WRITE, 0, 0));
 }
 
 TEST(MDSAuthCaps, OutputParsed) {
@@ -243,18 +253,4 @@ TEST(MDSAuthCaps, OutputParsed) {
     ASSERT_TRUE(cap.parse(g_ceph_context, test_values[i].input, &cout));
     ASSERT_EQ(test_values[i].output, stringify(cap));
   }
-}
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args, NULL);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  return RUN_ALL_TESTS();
 }

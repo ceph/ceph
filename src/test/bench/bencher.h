@@ -101,7 +101,7 @@ public:
     );
 
   void run_bench();
-  void *entry() {
+  void *entry() override {
     run_bench();
     return 0;
   }
@@ -131,7 +131,7 @@ public:
       op_dist(op_dist) {}
 
   boost::tuple<string, uint64_t, uint64_t, Bencher::OpType>
-  operator()() {
+  operator()() override {
     boost::tuple<string, uint64_t, uint64_t, Bencher::OpType> ret =
       boost::make_tuple(*object_pos, cur_pos, length, (*op_dist)());
     cur_pos += length;

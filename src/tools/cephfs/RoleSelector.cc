@@ -35,8 +35,8 @@ int MDSRoleSelector::parse(const FSMap &fsmap, std::string const &str)
   if (colon_pos == std::string::npos) {
     // An unqualified rank.  Only valid if there is only one
     // namespace.
-    if (fsmap.get_filesystems().size() == 1) {
-      fscid = fsmap.get_filesystems().begin()->first;
+    if (fsmap.filesystem_count() == 1) {
+      fscid = fsmap.get_filesystem()->fscid;
       return parse_rank(fsmap, str);
     } else {
       return -EINVAL;

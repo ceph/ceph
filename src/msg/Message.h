@@ -65,11 +65,14 @@
 #define MSG_OSD_FAILURE      72
 #define MSG_OSD_ALIVE        73
 #define MSG_OSD_MARK_ME_DOWN 74
+#define MSG_OSD_FULL         75
 
 #define MSG_OSD_SUBOP        76
 #define MSG_OSD_SUBOPREPLY   77
 
 #define MSG_OSD_PGTEMP       78
+
+#define MSG_OSD_BEACON       79
 
 #define MSG_OSD_PG_NOTIFY      80
 #define MSG_OSD_PG_QUERY       81
@@ -85,11 +88,12 @@
 #define MSG_REMOVE_SNAPS       90
 
 #define MSG_OSD_SCRUB          91
-#define MSG_OSD_PG_MISSING     92
+#define MSG_OSD_SCRUB_RESERVE  92  // previous PG_MISSING
 #define MSG_OSD_REP_SCRUB      93
 
 #define MSG_OSD_PG_SCAN        94
 #define MSG_OSD_PG_BACKFILL    95
+#define MSG_OSD_PG_BACKFILL_REMOVE 96
 
 #define MSG_COMMAND            97
 #define MSG_COMMAND_REPLY      98
@@ -111,6 +115,8 @@
 #define MSG_OSD_PG_UPDATE_LOG_MISSING  114
 #define MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY  115
 
+#define MSG_OSD_PG_CREATED      116
+#define MSG_OSD_REP_SCRUBMAP    117
 
 // *** MDS ***
 
@@ -175,6 +181,20 @@
 
 // Special
 #define MSG_NOP                   0x607
+
+// *** ceph-mgr <-> OSD/MDS daemons ***
+#define MSG_MGR_OPEN              0x700
+#define MSG_MGR_CONFIGURE         0x701
+#define MSG_MGR_REPORT            0x702
+
+// *** ceph-mgr <-> ceph-mon ***
+#define MSG_MGR_BEACON            0x703
+
+// *** ceph-mon(MgrMonitor) -> OSD/MDS daemons ***
+#define MSG_MGR_MAP               0x704
+
+// *** ceph-mon(MgrMonitor) -> ceph-mgr
+#define MSG_MGR_DIGEST               0x705
 
 // ======================================================
 
@@ -273,7 +293,7 @@ public:
   }
 
 protected:
-  virtual ~Message() {
+  ~Message() override {
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
     release_message_throttle();
@@ -315,8 +335,9 @@ public:
    */
 
   void clear_payload() {
-    if (byte_throttler)
+    if (byte_throttler) {
       byte_throttler->put(payload.length() + middle.length());
+    }
     payload.clear();
     middle.clear();
   }
@@ -346,10 +367,10 @@ public:
 
   void set_middle(bufferlist& bl) {
     if (byte_throttler)
-      byte_throttler->put(payload.length());
+      byte_throttler->put(middle.length());
     middle.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
-      byte_throttler->take(payload.length());
+      byte_throttler->take(middle.length());
   }
   bufferlist& get_middle() { return middle; }
 
@@ -361,6 +382,7 @@ public:
       byte_throttler->take(data.length());
   }
 
+  const bufferlist& get_data() const { return data; }
   bufferlist& get_data() { return data; }
   void claim_data(bufferlist& bl,
 		  unsigned int flags = buffer::list::CLAIM_DEFAULT) {

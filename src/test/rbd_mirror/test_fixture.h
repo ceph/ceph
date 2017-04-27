@@ -17,7 +17,7 @@ class RBD;
 namespace rbd {
 namespace mirror {
 
-class Threads;
+template <typename> class Threads;
 
 class TestFixture : public ::testing::Test {
 public:
@@ -26,8 +26,8 @@ public:
   static void SetUpTestCase();
   static void TearDownTestCase();
 
-  virtual void SetUp();
-  virtual void TearDown();
+  void SetUp() override;
+  void TearDown() override;
 
   librados::IoCtx m_local_io_ctx;
   librados::IoCtx m_remote_io_ctx;
@@ -37,7 +37,8 @@ public:
 
   std::set<librbd::ImageCtx *> m_image_ctxs;
 
-  Threads *m_threads = nullptr;
+  Threads<librbd::ImageCtx> *m_threads = nullptr;
+
 
   int create_image(librbd::RBD &rbd, librados::IoCtx &ioctx,
                    const std::string &name, uint64_t size);
@@ -48,11 +49,13 @@ public:
                   librados::snap_t *snap_id = nullptr);
 
   static std::string get_temp_image_name();
+  static int create_image_data_pool(std::string &data_pool);
 
   static std::string _local_pool_name;
   static std::string _remote_pool_name;
   static std::shared_ptr<librados::Rados> _rados;
   static uint64_t _image_number;
+  static std::string _data_pool;
 };
 
 } // namespace mirror

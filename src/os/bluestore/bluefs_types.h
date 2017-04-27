@@ -29,18 +29,23 @@ struct bluefs_fnode_t {
   uint64_t size;
   utime_t mtime;
   uint8_t prefer_bdev;
-  vector<bluefs_extent_t> extents;
+  mempool::bluefs::vector<bluefs_extent_t> extents;
+  uint64_t allocated;
 
-  bluefs_fnode_t() : ino(0), size(0), prefer_bdev(0) {}
+  bluefs_fnode_t() : ino(0), size(0), prefer_bdev(0), allocated(0) {}
 
   uint64_t get_allocated() const {
-    uint64_t r = 0;
-    for (auto& p : extents)
-      r += p.length;
-    return r;
+    return allocated;
   }
 
-  vector<bluefs_extent_t>::iterator seek(uint64_t off, uint64_t *x_off);
+  void recalc_allocated() {
+    allocated = 0;
+    for (auto& p : extents)
+      allocated += p.length;
+  }
+
+  mempool::bluefs::vector<bluefs_extent_t>::iterator seek(
+    uint64_t off, uint64_t *x_off);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);

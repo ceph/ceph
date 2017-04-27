@@ -12,7 +12,8 @@
  * 
  */
 
-
+#include "include/compat.h"
+#include "include/mempool.h"
 #include "armor.h"
 #include "common/environment.h"
 #include "common/errno.h"
@@ -21,11 +22,13 @@
 #include "common/strtol.h"
 #include "common/likely.h"
 #include "common/valgrind.h"
+#include "common/deleter.h"
 #include "include/atomic.h"
 #include "common/RWLock.h"
 #include "include/types.h"
 #include "include/compat.h"
 #include "include/inline_memory.h"
+#include "include/scope_guard.h"
 #if defined(HAVE_XIO)
 #include "msg/xio/XioMsg.h"
 #endif
@@ -36,14 +39,14 @@
 #include <sys/uio.h>
 #include <limits.h>
 
+#include <atomic>
 #include <ostream>
-namespace ceph {
 
 #define CEPH_BUFFER_ALLOC_UNIT  (MIN(CEPH_PAGE_SIZE, 4096))
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
 
 #ifdef BUFFER_DEBUG
-static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
+static std::atomic_flag buffer_debug_lock = ATOMIC_FLAG_INIT;
 # define bdout { simple_spin_lock(&buffer_debug_lock); std::cout
 # define bendl std::endl; simple_spin_unlock(&buffer_debug_lock); }
 #else
@@ -117,9 +120,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     int r;
     std::string err;
     struct stat stat_result;
-    if (::stat("/proc/sys/fs/pipe-max-size", &stat_result) == -1)
+    if (::stat(PROCPREFIX "/proc/sys/fs/pipe-max-size", &stat_result) == -1)
       return -errno;
-    r = safe_read_file("/proc/sys/fs/", "pipe-max-size",
+    r = safe_read_file(PROCPREFIX "/proc/sys/fs/", "pipe-max-size",
 		       buf, sizeof(buf) - 1);
     if (r < 0)
       return r;
@@ -165,16 +168,14 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     unsigned len;
     atomic_t nref;
 
-    mutable simple_spinlock_t crc_spinlock;
+    mutable std::atomic_flag crc_spinlock = ATOMIC_FLAG_INIT;
     map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
     explicit raw(unsigned l)
-      : data(NULL), len(l), nref(0),
-	crc_spinlock(SIMPLE_SPINLOCK_INITIALIZER)
+      : data(NULL), len(l), nref(0)
     { }
     raw(char *c, unsigned l)
-      : data(c), len(l), nref(0),
-	crc_spinlock(SIMPLE_SPINLOCK_INITIALIZER)
+      : data(c), len(l), nref(0)
     { }
     virtual ~raw() {}
 
@@ -238,6 +239,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   };
 
+  MEMPOOL_DEFINE_FACTORY(char, char, buffer_data);
+
   /*
    * raw_combined is always placed within a single allocation along
    * with the data buffer.  the data goes at the beginning, and
@@ -252,10 +255,10 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_total_alloc(len);
       inc_history_alloc(len);
     }
-    ~raw_combined() {
+    ~raw_combined() override {
       dec_total_alloc(len);
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return create(len, alignment);
     }
 
@@ -266,14 +269,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 				  alignof(buffer::raw_combined));
       size_t datalen = ROUND_UP_TO(len, alignof(buffer::raw_combined));
 
-#ifdef DARWIN
-      char *ptr = (char *) valloc(rawlen + datalen);
-#else
-      char *ptr = 0;
-      int r = ::posix_memalign((void**)(void*)&ptr, align, rawlen + datalen);
-      if (r)
-	throw bad_alloc();
-#endif /* DARWIN */
+      char *ptr = mempool::buffer_data::alloc_char.allocate_aligned(
+	rawlen + datalen, align);
       if (!ptr)
 	throw bad_alloc();
 
@@ -284,12 +281,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
     static void operator delete(void *ptr) {
       raw_combined *raw = (raw_combined *)ptr;
-      ::free((void *)raw->data);
+      size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined),
+				  alignof(buffer::raw_combined));
+      size_t datalen = ROUND_UP_TO(raw->len, alignof(buffer::raw_combined));
+      mempool::buffer_data::alloc_char.deallocate_aligned(
+	raw->data, rawlen + datalen);
     }
   };
 
   class buffer::raw_malloc : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     explicit raw_malloc(unsigned l) : raw(l) {
       if (len) {
 	data = (char *)malloc(len);
@@ -306,12 +309,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_total_alloc(len);
       bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
-    ~raw_malloc() {
+    ~raw_malloc() override {
       free(data);
       dec_total_alloc(len);
       bdout << "raw_malloc " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new raw_malloc(len);
     }
   };
@@ -319,6 +322,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 #ifndef __CYGWIN__
   class buffer::raw_mmap_pages : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     explicit raw_mmap_pages(unsigned l) : raw(l) {
       data = (char*)::mmap(NULL, len, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
       if (!data)
@@ -327,12 +332,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_history_alloc(len);
       bdout << "raw_mmap " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
-    ~raw_mmap_pages() {
+    ~raw_mmap_pages() override {
       ::munmap(data, len);
       dec_total_alloc(len);
       bdout << "raw_mmap " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new raw_mmap_pages(len);
     }
   };
@@ -340,29 +345,24 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   class buffer::raw_posix_aligned : public buffer::raw {
     unsigned align;
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     raw_posix_aligned(unsigned l, unsigned _align) : raw(l) {
       align = _align;
       assert((align >= sizeof(void *)) && (align & (align - 1)) == 0);
-#ifdef DARWIN
-      data = (char *) valloc (len);
-#else
-      data = 0;
-      int r = ::posix_memalign((void**)(void*)&data, align, len);
-      if (r)
-	throw bad_alloc();
-#endif /* DARWIN */
+      data = mempool::buffer_data::alloc_char.allocate_aligned(len, align);
       if (!data)
 	throw bad_alloc();
       inc_total_alloc(len);
       inc_history_alloc(len);
       bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " l=" << l << ", align=" << align << " total_alloc=" << buffer::get_total_alloc() << bendl;
     }
-    ~raw_posix_aligned() {
-      ::free((void*)data);
+    ~raw_posix_aligned() override {
+      mempool::buffer_data::alloc_char.deallocate_aligned(data, len);
       dec_total_alloc(len);
       bdout << "raw_posix_aligned " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new raw_posix_aligned(len, align);
     }
   };
@@ -401,6 +401,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 #ifdef CEPH_HAVE_SPLICE
   class buffer::raw_pipe : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     explicit raw_pipe(unsigned len) : raw(len), source_consumed(false) {
       size_t max = get_max_pipe_size();
       if (len > max) {
@@ -437,7 +439,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	    << buffer::get_total_alloc() << bendl;
     }
 
-    ~raw_pipe() {
+    ~raw_pipe() override {
       if (data)
 	free(data);
       close_pipe(pipefds);
@@ -446,7 +448,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	    << buffer::get_total_alloc() << bendl;
     }
 
-    bool can_zero_copy() const {
+    bool can_zero_copy() const override {
       return true;
     }
 
@@ -463,7 +465,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       return 0;
     }
 
-    int zero_copy_to_fd(int fd, loff_t *offset) {
+    int zero_copy_to_fd(int fd, loff_t *offset) override {
       assert(!source_consumed);
       int flags = SPLICE_F_NONBLOCK;
       ssize_t r = safe_splice_exact(pipefds[0], NULL, fd, offset, len, flags);
@@ -476,13 +478,13 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       return 0;
     }
 
-    buffer::raw* clone_empty() {
+    buffer::raw* clone_empty() override {
       // cloning doesn't make sense for pipe-based buffers,
       // and is only used by unit tests for other types of buffers
       return NULL;
     }
 
-    char *get_data() {
+    char *get_data() override {
       if (data)
 	return data;
       return copy_pipe(pipefds);
@@ -513,7 +515,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       return 0;
     }
 
-    void close_pipe(int *fds) {
+    static void close_pipe(const int *fds) {
       if (fds[0] >= 0)
 	VOID_TEMP_FAILURE_RETRY(::close(fds[0]));
       if (fds[1] >= 0)
@@ -535,6 +537,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	      << bendl;
 	throw error_code(r);
       }
+      auto sg = make_scope_guard([=] { close_pipe(tmpfd); });	  
       r = set_nonblocking(tmpfd);
       if (r < 0) {
 	bdout << "raw_pipe: error setting nonblocking flag on temp pipe: "
@@ -551,12 +554,10 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	r = errno;
 	bdout << "raw_pipe: error tee'ing into temp pipe: " << cpp_strerror(r)
 	      << bendl;
-	close_pipe(tmpfd);
 	throw error_code(r);
       }
       data = (char *)malloc(len);
       if (!data) {
-	close_pipe(tmpfd);
 	throw bad_alloc();
       }
       r = safe_read(tmpfd[0], data, len);
@@ -565,10 +566,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	      << bendl;
 	free(data);
 	data = NULL;
-	close_pipe(tmpfd);
 	throw error_code(r);
       }
-      close_pipe(tmpfd);
       return data;
     }
     bool source_consumed;
@@ -581,9 +580,11 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
    */
   class buffer::raw_char : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     explicit raw_char(unsigned l) : raw(l) {
       if (len)
-	data = new char[len];
+	data = mempool::buffer_data::alloc_char.allocate(len);
       else
 	data = 0;
       inc_total_alloc(len);
@@ -594,18 +595,21 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       inc_total_alloc(len);
       bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
-    ~raw_char() {
-      delete[] data;
+    ~raw_char() override {
+      if (data)
+	mempool::buffer_data::alloc_char.deallocate(data, len);
       dec_total_alloc(len);
       bdout << "raw_char " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new raw_char(len);
     }
   };
 
   class buffer::raw_unshareable : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     explicit raw_unshareable(unsigned l) : raw(l) {
       if (len)
 	data = new char[len];
@@ -614,22 +618,35 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
     raw_unshareable(unsigned l, char *b) : raw(b, l) {
     }
-    raw* clone_empty() {
+    raw* clone_empty() override {
       return new raw_char(len);
     }
-    bool is_shareable() {
+    bool is_shareable() override {
       return false; // !shareable, will force make_shareable()
     }
-    ~raw_unshareable() {
+    ~raw_unshareable() override {
       delete[] data;
     }
   };
 
   class buffer::raw_static : public buffer::raw {
   public:
+    MEMPOOL_CLASS_HELPERS();
+
     raw_static(const char *d, unsigned l) : raw((char*)d, l) { }
-    ~raw_static() {}
-    raw* clone_empty() {
+    ~raw_static() override {}
+    raw* clone_empty() override {
+      return new buffer::raw_char(len);
+    }
+  };
+
+  class buffer::raw_claim_buffer : public buffer::raw {
+    deleter del;
+   public:
+    raw_claim_buffer(const char *b, unsigned l, deleter d)
+        : raw((char*)b, l), del(std::move(d)) { }
+    ~raw_claim_buffer() override {}
+    raw* clone_empty() override {
       return new buffer::raw_char(len);
     }
   };
@@ -708,6 +725,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   buffer::raw* buffer::create_static(unsigned len, char *buf) {
     return new raw_static(buf, len);
   }
+  buffer::raw* buffer::claim_buffer(unsigned len, char *buf, deleter del) {
+    return new raw_claim_buffer(buf, len, std::move(del));
+  }
 
   buffer::raw* buffer::create_aligned(unsigned len, unsigned align) {
     // If alignment is a page multiple, use a separate buffer::raw to
@@ -750,20 +770,6 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   buffer::raw* buffer::create_unshareable(unsigned len) {
     return new raw_unshareable(len);
-  }
-
-  class dummy_raw : public buffer::raw {
-  public:
-    dummy_raw()
-      : raw(UINT_MAX)
-    {}
-    virtual raw* clone_empty() override {
-      return new dummy_raw();
-    }
-  };
-
-  buffer::raw* buffer::create_dummy() {
-    return new dummy_raw();
   }
 
   buffer::ptr::ptr(raw *r) : _raw(r), _off(0), _len(r->len)   // no lock needed; this is an unref raw.
@@ -899,6 +905,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (buffer_track_c_str)
       buffer_c_str_accesses.inc();
     return _raw->get_data() + _off;
+  }
+  const char *buffer::ptr::end_c_str() const {
+    assert(_raw);
+    if (buffer_track_c_str)
+      buffer_c_str_accesses.inc();
+    return _raw->get_data() + _off + _len;
+  }
+  char *buffer::ptr::end_c_str() {
+    assert(_raw);
+    if (buffer_track_c_str)
+      buffer_c_str_accesses.inc();
+    return _raw->get_data() + _off + _len;
   }
 
   unsigned buffer::ptr::unused_tail_length() const
@@ -1055,7 +1073,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     : iterator_impl<is_const>(i.bl, i.off, i.p, i.p_off) {}
 
   template<bool is_const>
-  void buffer::list::iterator_impl<is_const>::advance(ssize_t o)
+  void buffer::list::iterator_impl<is_const>::advance(int o)
   {
     //cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
     if (o > 0) {
@@ -1094,7 +1112,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
 
   template<bool is_const>
-  void buffer::list::iterator_impl<is_const>::seek(size_t o)
+  void buffer::list::iterator_impl<is_const>::seek(unsigned o)
   {
     p = ls->begin();
     off = p_off = 0;
@@ -1151,8 +1169,39 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   template<bool is_const>
   void buffer::list::iterator_impl<is_const>::copy(unsigned len, ptr &dest)
   {
+    copy_deep(len, dest);
+  }
+
+  template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::copy_deep(unsigned len, ptr &dest)
+  {
+    if (!len) {
+      return;
+    }
+    if (p == ls->end())
+      throw end_of_buffer();
+    assert(p->length() > 0);
     dest = create(len);
     copy(len, dest.c_str());
+  }
+  template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::copy_shallow(unsigned len,
+							   ptr &dest)
+  {
+    if (!len) {
+      return;
+    }
+    if (p == ls->end())
+      throw end_of_buffer();
+    assert(p->length() > 0);
+    unsigned howmuch = p->length() - p_off;
+    if (howmuch < len) {
+      dest = create(len);
+      copy(len, dest.c_str());
+    } else {
+      dest = ptr(*p, p_off, len);
+      advance(len);
+    }
   }
 
   template<bool is_const>
@@ -1261,12 +1310,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     : iterator_impl(l, o, ip, po)
   {}
 
-  void buffer::list::iterator::advance(ssize_t o)
+  void buffer::list::iterator::advance(int o)
   {
     buffer::list::iterator_impl<false>::advance(o);
   }
 
-  void buffer::list::iterator::seek(size_t o)
+  void buffer::list::iterator::seek(unsigned o)
   {
     buffer::list::iterator_impl<false>::seek(o);
   }
@@ -1300,7 +1349,17 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   void buffer::list::iterator::copy(unsigned len, ptr &dest)
   {
-    buffer::list::iterator_impl<false>::copy(len, dest);
+    return buffer::list::iterator_impl<false>::copy_deep(len, dest);
+  }
+
+  void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
+  {
+    buffer::list::iterator_impl<false>::copy_deep(len, dest);
+  }
+
+  void buffer::list::iterator::copy_shallow(unsigned len, ptr &dest)
+  {
+    buffer::list::iterator_impl<false>::copy_shallow(len, dest);
   }
 
   void buffer::list::iterator::copy(unsigned len, list &dest)
@@ -1734,7 +1793,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
         if (gap > len) gap = len;
     //cout << "append first char is " << data[0] << ", last char is " << data[len-1] << std::endl;
         append_buffer.append(data, gap);
-        append(append_buffer, append_buffer.end() - gap, gap);	// add segment to the list
+        append(append_buffer, append_buffer.length() - gap, gap);	// add segment to the list
         len -= gap;
         data += gap;
       }
@@ -1799,6 +1858,14 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	append("\n", 1);
     }
   }
+
+  void buffer::list::prepend_zero(unsigned len)
+  {
+    ptr bp(len);
+    bp.zero(false);
+    _len += len;
+    _buffers.emplace_front(std::move(bp));
+  }
   
   void buffer::list::append_zero(unsigned len)
   {
@@ -1825,7 +1892,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       }
       return (*p)[n];
     }
-    assert(0);
+    ceph_abort();
   }
 
   /*
@@ -2396,7 +2463,7 @@ void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
       if (row_is_zeros) {
 	if (was_zeros) {
 	  if (!did_star) {
-	    out << "*\n";
+	    out << "\n*";
 	    did_star = true;
 	  }
 	  continue;
@@ -2474,4 +2541,19 @@ std::ostream& buffer::operator<<(std::ostream& out, const buffer::error& e)
 {
   return out << e.what();
 }
-}
+
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_malloc, buffer_raw_malloc,
+			      buffer_meta);
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_mmap_pages, buffer_raw_mmap_pagse,
+			      buffer_meta);
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_posix_aligned,
+			      buffer_raw_posix_aligned, buffer_meta);
+#ifdef CEPH_HAVE_SPLICE
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_pipe, buffer_raw_pipe, buffer_meta);
+#endif
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_char, buffer_raw_char, buffer_meta);
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_unshareable, buffer_raw_unshareable,
+			      buffer_meta);
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_static, buffer_raw_static,
+			      buffer_meta);
+

@@ -16,7 +16,9 @@
 #ifndef CEPH_SIMPLELOCK_H
 #define CEPH_SIMPLELOCK_H
 
-#include "mdstypes.h"
+#include <boost/intrusive_ptr.hpp>
+
+#include "MDSCacheObject.h"
 #include "MDSContext.h"
 
 // -- lock types --
@@ -37,13 +39,14 @@ inline const char *get_lock_type_name(int t) {
   case CEPH_LOCK_INO: return "ino";
   case CEPH_LOCK_IFLOCK: return "iflock";
   case CEPH_LOCK_IPOLICY: return "ipolicy";
-  default: assert(0); return 0;
+  default: ceph_abort(); return 0;
   }
 }
 
 #include "include/memory.h"
+
 struct MutationImpl;
-typedef ceph::shared_ptr<MutationImpl> MutationRef;
+typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
 extern "C" {
 #include "locks.h"
@@ -101,6 +104,7 @@ public:
     case LOCK_PREXLOCK: return "prexlock";
     case LOCK_XLOCK: return "xlock";
     case LOCK_XLOCKDONE: return "xlockdone";
+    case LOCK_XLOCKSNAP: return "xlocksnap";
     case LOCK_LOCK_XLOCK: return "lock->xlock";
 
     case LOCK_SYNC_LOCK: return "sync->lock";
@@ -140,7 +144,7 @@ public:
 
     case LOCK_SNAP_SYNC: return "snap->sync";
 
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -192,18 +196,17 @@ private:
 			excl_client(-1) {}
   };
 
-  mutable unstable_bits_t *_unstable;
+  mutable std::unique_ptr<unstable_bits_t> _unstable;
 
   bool have_more() const { return _unstable ? true : false; }
   unstable_bits_t *more() const {
     if (!_unstable)
-      _unstable = new unstable_bits_t;
-    return _unstable;
+      _unstable.reset(new unstable_bits_t);
+    return _unstable.get();
   }
   void try_clear_more() {
     if (_unstable && _unstable->empty()) {
-      delete _unstable;
-      _unstable = NULL;
+      _unstable.reset();
     }
   }
 
@@ -223,12 +226,9 @@ public:
     parent(o), 
     state(LOCK_SYNC),
     num_rdlock(0),
-    num_client_lease(0),
-    _unstable(NULL)
+    num_client_lease(0)
   {}
-  virtual ~SimpleLock() {
-    delete _unstable;
-  }
+  virtual ~SimpleLock() {}
 
   virtual bool is_scatterlock() const {
     return false;
@@ -257,7 +257,7 @@ public:
     case CEPH_LOCK_IFLOCK:   return 8 +10*SimpleLock::WAIT_BITS;
     case CEPH_LOCK_IPOLICY:  return 8 +11*SimpleLock::WAIT_BITS;
     default:
-      assert(0);
+      ceph_abort();
     }
   }
 
@@ -334,6 +334,11 @@ public:
 
   bool is_stable() const {
     return get_sm()->states[state].next == 0;
+  }
+  bool is_unstable_and_locked() const {
+    if (is_stable())
+      return false;
+    return is_rdlocked() || is_wrlocked() || is_xlocked();
   }
   int get_next_state() {
     return get_sm()->states[state].next;
@@ -493,7 +498,8 @@ public:
     more()->xlock_by.reset();
   }
   void put_xlock() {
-    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE || is_locallock() ||
+    assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
+	   state == LOCK_XLOCKSNAP || is_locallock() ||
 	   state == LOCK_LOCK /* if we are a master of a slave */);
     --more()->num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);

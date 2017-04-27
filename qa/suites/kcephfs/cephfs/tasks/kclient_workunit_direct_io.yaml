@@ -1,0 +1,7 @@
+tasks:
+- kclient:
+- workunit:
+    clients:
+      all:
+        - direct_io
+

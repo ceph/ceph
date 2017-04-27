@@ -21,6 +21,7 @@
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "mon/MonClient.h"
+#include "mgr/MgrClient.h"
 #include "msg/Dispatcher.h"
 
 #include "IoCtxImpl.h"
@@ -36,6 +37,9 @@ class AioCompletionImpl;
 
 class librados::RadosClient : public Dispatcher
 {
+  std::unique_ptr<CephContext,
+		  std::function<void(CephContext*)> > cct_deleter;
+
 public:
   using Dispatcher::cct;
   md_config_t *conf;
@@ -47,17 +51,19 @@ private:
   } state;
 
   MonClient monclient;
+  MgrClient mgrclient;
   Messenger *messenger;
 
   uint64_t instance_id;
 
   bool _dispatch(Message *m);
-  bool ms_dispatch(Message *m);
+  bool ms_dispatch(Message *m) override;
 
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
-  void ms_handle_connect(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con);
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
+  void ms_handle_connect(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override;
+  bool ms_handle_refused(Connection *con) override;
 
   Objecter *objecter;
 
@@ -77,7 +83,7 @@ public:
   Finisher finisher;
 
   explicit RadosClient(CephContext *cct_);
-  ~RadosClient();
+  ~RadosClient() override;
   int ping_monitor(string mon_id, string *result);
   int connect();
   void shutdown();
@@ -129,6 +135,8 @@ public:
 	          bufferlist *outbl, string *outs);
   int mon_command(string name,
 		  const vector<string>& cmd, const bufferlist &inbl,
+	          bufferlist *outbl, string *outs);
+  int mgr_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
   int osd_command(int osd, vector<string>& cmd, const bufferlist& inbl,
                   bufferlist *poutbl, string *prs);

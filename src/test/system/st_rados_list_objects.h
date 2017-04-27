@@ -39,8 +39,8 @@ public:
 		     CrossProcessSem *pool_setup_sem,
 		     CrossProcessSem *midway_sem_wait,
 		     CrossProcessSem *midway_sem_post);
-  ~StRadosListObjects();
-  virtual int run();
+  ~StRadosListObjects() override;
+  int run() override;
 private:
   std::string m_pool_name;
   bool m_accept_list_errors;

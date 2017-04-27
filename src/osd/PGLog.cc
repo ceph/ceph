@@ -19,6 +19,7 @@
 #include "include/unordered_map.h"
 #include "common/ceph_context.h"
 
+#define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
@@ -30,68 +31,20 @@ static ostream& _prefix(std::ostream *_dout, const PGLog *pglog)
 
 //////////////////// PGLog::IndexedLog ////////////////////
 
-void PGLog::IndexedLog::advance_rollback_info_trimmed_to(
-  eversion_t to,
-  LogEntryHandler *h)
-{
-  assert(to <= can_rollback_to);
-
-  if (to > rollback_info_trimmed_to)
-    rollback_info_trimmed_to = to;
-
-  while (rollback_info_trimmed_to_riter != log.rbegin()) {
-    --rollback_info_trimmed_to_riter;
-    if (rollback_info_trimmed_to_riter->version > rollback_info_trimmed_to) {
-      ++rollback_info_trimmed_to_riter;
-      break;
-    }
-    h->trim(*rollback_info_trimmed_to_riter);
-  }
-}
-
-void PGLog::IndexedLog::filter_log(spg_t pgid, const OSDMap &map, const string &hit_set_namespace)
-{
-  IndexedLog out;
-  pg_log_t reject;
-
-  pg_log_t::filter_log(pgid, map, hit_set_namespace, *this, out, reject);
-
-  *this = out;
-  index();
-}
-
-void PGLog::IndexedLog::split_into(
+void PGLog::IndexedLog::split_out_child(
   pg_t child_pgid,
   unsigned split_bits,
-  PGLog::IndexedLog *olog)
+  PGLog::IndexedLog *target)
 {
-  list<pg_log_entry_t> oldlog;
-  oldlog.swap(log);
-
-  eversion_t old_tail;
-  olog->head = head;
-  olog->tail = tail;
-  unsigned mask = ~((~0)<<split_bits);
-  for (list<pg_log_entry_t>::iterator i = oldlog.begin();
-       i != oldlog.end();
-       ) {
-    if ((i->soid.get_hash() & mask) == child_pgid.m_seed) {
-      olog->log.push_back(*i);
-    } else {
-      log.push_back(*i);
-    }
-    oldlog.erase(i++);
-  }
-
-
-  olog->can_rollback_to = can_rollback_to;
-
-  olog->index();
+  unindex();
+  *target = pg_log_t::split_out_child(child_pgid, split_bits);
   index();
+  target->index();
+  reset_rollback_info_trimmed_to_riter();
 }
 
 void PGLog::IndexedLog::trim(
-  LogEntryHandler *handler,
+  CephContext* cct,
   eversion_t s,
   set<eversion_t> *trimmed)
 {
@@ -102,9 +55,7 @@ void PGLog::IndexedLog::trim(
 		    << " on " << *this << dendl;
   }
 
-  if (s > can_rollback_to)
-    can_rollback_to = s;
-  advance_rollback_info_trimmed_to(s, handler);
+  assert(s <= can_rollback_to);
 
   while (!log.empty()) {
     pg_log_entry_t &e = *log.begin();
@@ -164,7 +115,6 @@ void PGLog::clear_info_log(
 }
 
 void PGLog::trim(
-  LogEntryHandler *handler,
   eversion_t trim_to,
   pg_info_t &info)
 {
@@ -174,14 +124,15 @@ void PGLog::trim(
     assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
-    log.trim(handler, trim_to, &trimmed);
+    log.trim(cct, trim_to, &trimmed);
     info.log_tail = log.tail;
   }
 }
 
 void PGLog::proc_replica_log(
-  ObjectStore::Transaction& t,
-  pg_info_t &oinfo, const pg_log_t &olog, pg_missing_t& omissing,
+  pg_info_t &oinfo,
+  const pg_log_t &olog,
+  pg_missing_t& omissing,
   pg_shard_t from) const
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
@@ -209,7 +160,7 @@ void PGLog::proc_replica_log(
     we will send the peer enough log to arrive at the same state.
   */
 
-  for (map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator i = omissing.get_items().begin();
+  for (map<hobject_t, pg_missing_item>::const_iterator i = omissing.get_items().begin();
        i != omissing.get_items().end();
        ++i) {
     dout(20) << " before missing " << i->first << " need " << i->second.need
@@ -230,50 +181,30 @@ void PGLog::proc_replica_log(
   }
 
   /* Because olog.head >= log.tail, we know that both pgs must at least have
-   * the event represented by log.tail.  Thus, lower_bound >= log.tail.  It's
+   * the event represented by log.tail.  Similarly, because log.head >= olog.tail,
+   * we know that the even represented by olog.tail must be common to both logs.
+   * Furthermore, the event represented by a log tail was necessarily trimmed,
+   * thus neither olog.tail nor log.tail can be divergent. It's
    * possible that olog/log contain no actual events between olog.head and
-   * log.tail, however, since they might have been split out.  Thus, if
-   * we cannot find an event e such that log.tail <= e.version <= log.head,
-   * the last_update must actually be log.tail.
+   * MAX(log.tail, olog.tail), however, since they might have been split out.
+   * Thus, if we cannot find an event e such that
+   * log.tail <= e.version <= log.head, the last_update must actually be
+   * MAX(log.tail, olog.tail).
    */
+  eversion_t limit = MAX(olog.tail, log.tail);
   eversion_t lu =
     (first_non_divergent == log.log.rend() ||
-     first_non_divergent->version < log.tail) ?
-    log.tail :
+     first_non_divergent->version < limit) ?
+    limit :
     first_non_divergent->version;
 
-  list<pg_log_entry_t> divergent;
-  list<pg_log_entry_t>::const_iterator pp = olog.log.end();
-  while (true) {
-    if (pp == olog.log.begin())
-      break;
-
-    --pp;
-    const pg_log_entry_t& oe = *pp;
-
-    // don't continue past the tail of our log.
-    if (oe.version <= log.tail) {
-      ++pp;
-      break;
-    }
-
-    if (oe.version <= lu) {
-      ++pp;
-      break;
-    }
-
-    divergent.push_front(oe);
-  }
-
-
-  IndexedLog folog;
-  folog.log.insert(folog.log.begin(), olog.log.begin(), pp);
-  folog.index();
+  IndexedLog folog(olog);
+  auto divergent = folog.rewind_from_head(lu);
   _merge_divergent_entries(
     folog,
     divergent,
     oinfo,
-    olog.can_rollback_to,
+    olog.get_can_rollback_to(),
     omissing,
     0,
     this);
@@ -307,63 +238,41 @@ void PGLog::proc_replica_log(
  * This rewinds entries off the head of our log that are divergent.
  * This is used by replicas during activation.
  *
- * @param t transaction
  * @param newhead new head to rewind to
  */
-void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
+void PGLog::rewind_divergent_log(eversion_t newhead,
 				 pg_info_t &info, LogEntryHandler *rollbacker,
 				 bool &dirty_info, bool &dirty_big_info)
 {
   dout(10) << "rewind_divergent_log truncate divergent future " << newhead << dendl;
-  assert(newhead >= log.tail);
 
-  list<pg_log_entry_t>::iterator p = log.log.end();
-  list<pg_log_entry_t> divergent;
-  while (true) {
-    if (p == log.log.begin()) {
-      // yikes, the whole thing is divergent!
-      divergent.swap(log.log);
-      break;
-    }
-    --p;
-    mark_dirty_from(p->version);
-    if (p->version <= newhead) {
-      ++p;
-      divergent.splice(divergent.begin(), log.log, p, log.log.end());
-      break;
-    }
-    assert(p->version > newhead);
-    dout(10) << "rewind_divergent_log future divergent " << *p << dendl;
-  }
 
-  log.head = newhead;
-  info.last_update = newhead;
   if (info.last_complete > newhead)
     info.last_complete = newhead;
 
-  if (log.rollback_info_trimmed_to > newhead)
-    log.rollback_info_trimmed_to = newhead;
-
-  log.index();
+  auto divergent = log.rewind_from_head(newhead);
+  if (!divergent.empty()) {
+    mark_dirty_from(divergent.front().version);
+  }
+  for (auto &&entry: divergent) {
+    dout(10) << "rewind_divergent_log future divergent " << entry << dendl;
+  }
+  info.last_update = newhead;
 
   _merge_divergent_entries(
     log,
     divergent,
     info,
-    log.can_rollback_to,
+    log.get_can_rollback_to(),
     missing,
     rollbacker,
     this);
-
-  if (info.last_update < log.can_rollback_to)
-    log.can_rollback_to = info.last_update;
 
   dirty_info = true;
   dirty_big_info = true;
 }
 
-void PGLog::merge_log(ObjectStore::Transaction& t,
-                      pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
+void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
                       pg_info_t &info, LogEntryHandler *rollbacker,
                       bool &dirty_info, bool &dirty_big_info)
 {
@@ -377,7 +286,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   // The logs must overlap.
   assert(log.head >= olog.tail && olog.head >= log.tail);
 
-  for (map<hobject_t, pg_missing_item, hobject_t::BitwiseComparator>::const_iterator i = missing.get_items().begin();
+  for (map<hobject_t, pg_missing_item>::const_iterator i = missing.get_items().begin();
        i != missing.get_items().end();
        ++i) {
     dout(20) << "pg_missing_t sobject: " << i->first << dendl;
@@ -389,6 +298,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   //  this is just filling in history.  it does not affect our
   //  missing set, as that should already be consistent with our
   //  current log.
+  eversion_t orig_tail = log.tail;
   if (olog.tail < log.tail) {
     dout(10) << "merge_log extending tail to " << olog.tail << dendl;
     list<pg_log_entry_t>::iterator from = olog.log.begin();
@@ -424,7 +334,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
 
   // do we have divergent entries to throw out?
   if (olog.head < log.head) {
-    rewind_divergent_log(t, olog.head, info, rollbacker, dirty_info, dirty_big_info);
+    rewind_divergent_log(olog.head, info, rollbacker, dirty_info, dirty_big_info);
     changed = true;
   }
 
@@ -435,68 +345,57 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     // find start point in olog
     list<pg_log_entry_t>::iterator to = olog.log.end();
     list<pg_log_entry_t>::iterator from = olog.log.end();
-    eversion_t lower_bound = olog.tail;
+    eversion_t lower_bound = MAX(olog.tail, orig_tail);
     while (1) {
       if (from == olog.log.begin())
 	break;
       --from;
       dout(20) << "  ? " << *from << dendl;
       if (from->version <= log.head) {
-	dout(20) << "merge_log cut point (usually last shared) is " << *from << dendl;
-	lower_bound = from->version;
+	lower_bound = MAX(lower_bound, from->version);
 	++from;
 	break;
       }
     }
+    dout(20) << "merge_log cut point (usually last shared) is "
+	     << lower_bound << dendl;
     mark_dirty_from(lower_bound);
 
+    auto divergent = log.rewind_from_head(lower_bound);
     // move aside divergent items
-    list<pg_log_entry_t> divergent;
-    while (!log.empty()) {
-      pg_log_entry_t &oe = *log.log.rbegin();
-      /*
-       * look at eversion.version here.  we want to avoid a situation like:
-       *  our log: 100'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
-       *  new log: 122'10 (0'0) m 10000004d3a.00000000/head by client4225.1:18529
-       *  lower_bound = 100'9
-       * i.e, same request, different version.  If the eversion.version is > the
-       * lower_bound, we it is divergent.
-       */
-      if (oe.version.version <= lower_bound.version)
-	break;
+    for (auto &&oe: divergent) {
       dout(10) << "merge_log divergent " << oe << dendl;
-      divergent.push_front(oe);
-      log.log.pop_back();
     }
+    log.roll_forward_to(log.head, rollbacker);
 
-    list<pg_log_entry_t> entries;
-    entries.splice(entries.end(), olog.log, from, to);
+    mempool::osd::list<pg_log_entry_t> new_entries;
+    new_entries.splice(new_entries.end(), olog.log, from, to);
     append_log_entries_update_missing(
       info.last_backfill,
       info.last_backfill_bitwise,
-      entries,
+      new_entries,
+      false,
       &log,
       missing,
       rollbacker,
       this);
-    log.index();   
-
-    info.last_update = log.head = olog.head;
-
-    info.last_user_version = oinfo.last_user_version;
-    info.purged_snaps = oinfo.purged_snaps;
 
     _merge_divergent_entries(
       log,
       divergent,
       info,
-      log.can_rollback_to,
+      log.get_can_rollback_to(),
       missing,
       rollbacker,
       this);
 
+    info.last_update = log.head = olog.head;
+
     // We cannot rollback into the new log entries
-    log.can_rollback_to = log.head;
+    log.skip_can_rollback_to_to_head();
+
+    info.last_user_version = oinfo.last_user_version;
+    info.purged_snaps = oinfo.purged_snaps;
 
     changed = true;
   }
@@ -678,8 +577,12 @@ void PGLog::_write_log_and_missing_wo_missing(
     ::encode(divergent_priors, (*km)["divergent_priors"]);
   }
   if (require_rollback) {
-  ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
-  ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
+    ::encode(
+      log.get_can_rollback_to(),
+      (*km)["can_rollback_to"]);
+    ::encode(
+      log.get_rollback_info_trimmed_to(),
+      (*km)["rollback_info_trimmed_to"]);
   }
 
   if (!to_remove.empty())
@@ -772,8 +675,12 @@ void PGLog::_write_log_and_missing(
       }
     });
   if (require_rollback) {
-    ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
-    ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
+    ::encode(
+      log.get_can_rollback_to(),
+      (*km)["can_rollback_to"]);
+    ::encode(
+      log.get_rollback_info_trimmed_to(),
+      (*km)["rollback_info_trimmed_to"]);
   }
 
   if (!to_remove.empty())

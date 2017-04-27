@@ -41,6 +41,9 @@ public:
       chunk_size(stripe_width / stripe_size) {
     assert(stripe_width % stripe_size == 0);
   }
+  bool logical_offset_is_stripe_aligned(uint64_t logical) const {
+    return (logical % stripe_width) == 0;
+  }
   uint64_t get_stripe_width() const {
     return stripe_width;
   }
@@ -104,12 +107,14 @@ int encode(
   map<int, bufferlist> *out);
 
 class HashInfo {
-  uint64_t total_chunk_size;
+  uint64_t total_chunk_size = 0;
   vector<uint32_t> cumulative_shard_hashes;
+
+  // purely ephemeral, represents the size once all in-flight ops commit
+  uint64_t projected_total_chunk_size = 0;
 public:
-  HashInfo() : total_chunk_size(0) {}
-  explicit HashInfo(unsigned num_chunks)
-  : total_chunk_size(0),
+  HashInfo() {}
+  explicit HashInfo(unsigned num_chunks) :
     cumulative_shard_hashes(num_chunks, -1) {}
   void append(uint64_t old_size, map<int, bufferlist> &to_append);
   void clear() {
@@ -129,7 +134,38 @@ public:
   uint64_t get_total_chunk_size() const {
     return total_chunk_size;
   }
+  uint64_t get_projected_total_chunk_size() const {
+    return projected_total_chunk_size;
+  }
+  uint64_t get_total_logical_size(const stripe_info_t &sinfo) const {
+    return get_total_chunk_size() *
+      (sinfo.get_stripe_width()/sinfo.get_chunk_size());
+  }
+  uint64_t get_projected_total_logical_size(const stripe_info_t &sinfo) const {
+    return get_projected_total_chunk_size() *
+      (sinfo.get_stripe_width()/sinfo.get_chunk_size());
+  }
+  void set_projected_total_logical_size(
+    const stripe_info_t &sinfo,
+    uint64_t logical_size) {
+    assert(sinfo.logical_offset_is_stripe_aligned(logical_size));
+    projected_total_chunk_size = sinfo.aligned_logical_offset_to_chunk_offset(
+      logical_size);
+  }
+  void set_total_chunk_size_clear_hash(uint64_t new_chunk_size) {
+    cumulative_shard_hashes.clear();
+    total_chunk_size = new_chunk_size;
+  }
+  bool has_chunk_hash() const {
+    return !cumulative_shard_hashes.empty();
+  }
+  void update_to(const HashInfo &rhs) {
+    auto ptcs = projected_total_chunk_size;
+    *this = rhs;
+    projected_total_chunk_size = ptcs;
+  }
 };
+
 typedef ceph::shared_ptr<HashInfo> HashInfoRef;
 
 bool is_hinfo_key_string(const string &key);

@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_TEST_LIBRBD_TEST_MOCK_FIXTURE_H
@@ -12,7 +12,8 @@
 #include <gmock/gmock.h>
 
 namespace librados {
-class TestRadosClient;
+class TestCluster;
+class MockTestMemCluster;
 class MockTestMemIoCtxImpl;
 class MockTestMemRadosClient;
 }
@@ -59,17 +60,12 @@ MATCHER_P(ContentsEqual, bl, "") {
 
 class TestMockFixture : public TestFixture {
 public:
-  typedef boost::shared_ptr<librados::TestRadosClient> TestRadosClientPtr;
+  typedef boost::shared_ptr<librados::TestCluster> TestClusterRef;
 
   static void SetUpTestCase();
   static void TearDownTestCase();
 
-  virtual void SetUp();
-  virtual void TearDown();
-
-  ::testing::NiceMock<librados::MockTestMemRadosClient> &get_mock_rados_client() {
-    return *s_mock_rados_client;
-  }
+  void TearDown() override;
 
   void expect_op_work_queue(librbd::MockImageCtx &mock_image_ctx);
   void expect_unlock_exclusive_lock(librbd::ImageCtx &ictx);
@@ -90,8 +86,7 @@ public:
   void expect_commit_op_event(librbd::MockImageCtx &mock_image_ctx, int r);
 
 private:
-  static TestRadosClientPtr s_test_rados_client;
-  static ::testing::NiceMock<librados::MockTestMemRadosClient> *s_mock_rados_client;
+  static TestClusterRef s_test_cluster;
 };
 
 #endif // CEPH_TEST_LIBRBD_TEST_MOCK_FIXTURE_H

@@ -37,6 +37,7 @@ function TEST_reuse_id() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     wait_for_clean || return 1

@@ -6,10 +6,9 @@ set(osd_srcs
   OSD.cc
   Watch.cc
   ClassHandler.cc
-  OpRequest.cc
   PG.cc
   PGLog.cc
-  ReplicatedPG.cc
+  PrimaryLogPG.cc
   ReplicatedBackend.cc
   ECBackend.cc
   ECTransaction.cc
@@ -17,10 +16,12 @@ set(osd_srcs
   OSDCap.cc
   Watch.cc
   ClassHandler.cc
+  Session.cc
   SnapMapper.cc
   ScrubStore.cc
   osd_types.cc
   ECUtil.cc
+  ExtentCache.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${osdc_osd_srcs})
 if(HAS_VTA)
@@ -35,5 +36,8 @@ add_library(osd STATIC ${osd_srcs}
   $<TARGET_OBJECTS:common_util_obj>)
 target_link_libraries(osd ${LEVELDB_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 if(WITH_LTTNG)
-  add_dependencies(osd osd-tp)
+  add_dependencies(osd osd-tp pg-tp)
+endif()
+if(WITH_LTTNG AND WITH_EVENTTRACE)
+  add_dependencies(osd eventtrace_tp)
 endif()

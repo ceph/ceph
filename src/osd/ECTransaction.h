@@ -19,194 +19,176 @@
 #include "PGBackend.h"
 #include "ECUtil.h"
 #include "erasure-code/ErasureCodeInterface.h"
+#include "PGTransaction.h"
+#include "ExtentCache.h"
 
-class ECTransaction : public PGBackend::PGTransaction {
-public:
-  struct AppendOp {
-    hobject_t oid;
-    uint64_t off;
-    bufferlist bl;
-    uint32_t fadvise_flags;
-    AppendOp(const hobject_t &oid, uint64_t off, bufferlist &bl, uint32_t flags)
-      : oid(oid), off(off), bl(bl), fadvise_flags(flags) {}
-  };
-  struct CloneOp {
-    hobject_t source;
-    hobject_t target;
-    CloneOp(const hobject_t &source, const hobject_t &target)
-      : source(source), target(target) {}
-  };
-  struct RenameOp {
-    hobject_t source;
-    hobject_t destination;
-    RenameOp(const hobject_t &source, const hobject_t &destination)
-      : source(source), destination(destination) {}
-  };
-  struct StashOp {
-    hobject_t oid;
-    version_t version;
-    StashOp(const hobject_t &oid, version_t version)
-      : oid(oid), version(version) {}
-  };
-  struct TouchOp {
-    hobject_t oid;
-    explicit TouchOp(const hobject_t &oid) : oid(oid) {}
-  };
-  struct RemoveOp {
-    hobject_t oid;
-    explicit RemoveOp(const hobject_t &oid) : oid(oid) {}
-  };
-  struct SetAttrsOp {
-    hobject_t oid;
-    map<string, bufferlist> attrs;
-    SetAttrsOp(const hobject_t &oid, map<string, bufferlist> &_attrs)
-      : oid(oid) {
-      attrs.swap(_attrs);
-    }
-    SetAttrsOp(const hobject_t &oid, const string &key, bufferlist &val)
-      : oid(oid) {
-      attrs.insert(make_pair(key, val));
-    }
-  };
-  struct RmAttrOp {
-    hobject_t oid;
-    string key;
-    RmAttrOp(const hobject_t &oid, const string &key) : oid(oid), key(key) {}
-  };
-  struct AllocHintOp {
-    hobject_t oid;
-    uint64_t expected_object_size;
-    uint64_t expected_write_size;
-    uint32_t flags;
-    AllocHintOp(const hobject_t &oid,
-                uint64_t expected_object_size,
-                uint64_t expected_write_size,
-		uint32_t flags)
-      : oid(oid),
-	expected_object_size(expected_object_size),
-        expected_write_size(expected_write_size),
-	flags(flags) {}
-  };
-  struct NoOp {};
-  typedef boost::variant<
-    AppendOp,
-    CloneOp,
-    RenameOp,
-    StashOp,
-    TouchOp,
-    RemoveOp,
-    SetAttrsOp,
-    RmAttrOp,
-    AllocHintOp,
-    NoOp> Op;
-  list<Op> ops;
-  uint64_t written;
+namespace ECTransaction {
+  struct WritePlan {
+    PGTransactionUPtr t;
+    bool invalidates_cache = false; // Yes, both are possible
+    map<hobject_t,extent_set> to_read;
+    map<hobject_t,extent_set> will_write; // superset of to_read
 
-  ECTransaction() : written(0) {}
-  /// Write
-  void touch(
-    const hobject_t &hoid) {
-    ops.push_back(TouchOp(hoid));
-  }
-  void append(
-    const hobject_t &hoid,
-    uint64_t off,
-    uint64_t len,
-    bufferlist &bl,
-    uint32_t fadvise_flags) {
-    if (len == 0) {
-      touch(hoid);
-      return;
-    }
-    written += len;
-    assert(len == bl.length());
-    ops.push_back(AppendOp(hoid, off, bl, fadvise_flags));
-  }
-  void stash(
-    const hobject_t &hoid,
-    version_t former_version) {
-    ops.push_back(StashOp(hoid, former_version));
-  }
-  void remove(
-    const hobject_t &hoid) {
-    ops.push_back(RemoveOp(hoid));
-  }
-  void setattrs(
-    const hobject_t &hoid,
-    map<string, bufferlist> &attrs) {
-    ops.push_back(SetAttrsOp(hoid, attrs));
-  }
-  void setattr(
-    const hobject_t &hoid,
-    const string &attrname,
-    bufferlist &bl) {
-    ops.push_back(SetAttrsOp(hoid, attrname, bl));
-  }
-  void rmattr(
-    const hobject_t &hoid,
-    const string &attrname) {
-    ops.push_back(RmAttrOp(hoid, attrname));
-  }
-  void clone(
-    const hobject_t &from,
-    const hobject_t &to) {
-    ops.push_back(CloneOp(from, to));
-  }
-  void rename(
-    const hobject_t &from,
-    const hobject_t &to) {
-    ops.push_back(RenameOp(from, to));
-  }
-  void set_alloc_hint(
-    const hobject_t &hoid,
-    uint64_t expected_object_size,
-    uint64_t expected_write_size,
-    uint32_t flags) {
-    ops.push_back(AllocHintOp(hoid, expected_object_size, expected_write_size,
-			      flags));
+    map<hobject_t,ECUtil::HashInfoRef> hash_infos;
+  };
+
+  bool requires_overwrite(
+    uint64_t prev_size,
+    const PGTransaction::ObjectOperation &op);
+
+  template <typename F>
+  WritePlan get_write_plan(
+    const ECUtil::stripe_info_t &sinfo,
+    PGTransactionUPtr &&t,
+    F &&get_hinfo,
+    DoutPrefixProvider *dpp) {
+    WritePlan plan;
+    t->safe_create_traverse(
+      [&](pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
+	ECUtil::HashInfoRef hinfo = get_hinfo(i.first);
+	plan.hash_infos[i.first] = hinfo;
+
+	uint64_t projected_size =
+	  hinfo->get_projected_total_logical_size(sinfo);
+
+	if (i.second.has_source()) {
+	  plan.invalidates_cache = true;
+	}
+
+	if (i.second.deletes_first()) {
+	  ldpp_dout(dpp, 20) << __func__ << ": delete, setting projected size"
+			     << " to 0" << dendl;
+	  projected_size = 0;
+	}
+
+	hobject_t source;
+	if (i.second.has_source(&source)) {
+	  ECUtil::HashInfoRef shinfo = get_hinfo(source);
+	  projected_size = shinfo->get_projected_total_logical_size(sinfo);
+	  plan.hash_infos[source] = shinfo;
+	}
+
+	auto &will_write = plan.will_write[i.first];
+	if (i.second.truncate &&
+	    i.second.truncate->first < projected_size) {
+	  if (!(sinfo.logical_offset_is_stripe_aligned(
+		  i.second.truncate->first))) {
+	    plan.to_read[i.first].union_insert(
+	      sinfo.logical_to_prev_stripe_offset(i.second.truncate->first),
+	      sinfo.get_stripe_width());
+
+	    ldpp_dout(dpp, 20) << __func__ << ": unaligned truncate" << dendl;
+
+	    will_write.union_insert(
+	      sinfo.logical_to_prev_stripe_offset(i.second.truncate->first),
+	      sinfo.get_stripe_width());
+	  }
+	  projected_size = sinfo.logical_to_next_stripe_offset(
+	    i.second.truncate->first);
+	}
+
+	extent_set raw_write_set;
+	for (auto &&extent: i.second.buffer_updates) {
+	  using BufferUpdate = PGTransaction::ObjectOperation::BufferUpdate;
+	  if (boost::get<BufferUpdate::CloneRange>(&(extent.get_val()))) {
+	    assert(
+	      0 ==
+	      "CloneRange is not allowed, do_op should have returned ENOTSUPP");
+	  }
+	  raw_write_set.insert(extent.get_off(), extent.get_len());
+	}
+
+	for (auto extent = raw_write_set.begin();
+	     extent != raw_write_set.end();
+	     ++extent) {
+	  uint64_t head_start =
+	    sinfo.logical_to_prev_stripe_offset(extent.get_start());
+	  uint64_t head_finish =
+	    sinfo.logical_to_next_stripe_offset(extent.get_start());
+	  if (head_start > projected_size) {
+	    head_start = projected_size;
+	  }
+	  if (head_start != head_finish &&
+	      head_start < projected_size) {
+	    assert(head_finish <= projected_size);
+	    assert(head_finish - head_start == sinfo.get_stripe_width());
+	    plan.to_read[i.first].union_insert(
+	      head_start, sinfo.get_stripe_width());
+	  }
+
+	  uint64_t tail_start =
+	    sinfo.logical_to_prev_stripe_offset(
+	      extent.get_start() + extent.get_len());
+	  uint64_t tail_finish =
+	    sinfo.logical_to_next_stripe_offset(
+	      extent.get_start() + extent.get_len());
+	  if (tail_start != tail_finish &&
+	      (head_start == head_finish || tail_start != head_start) &&
+	      tail_start < projected_size) {
+	    assert(tail_finish <= projected_size);
+	    assert(tail_finish - tail_start == sinfo.get_stripe_width());
+	    plan.to_read[i.first].union_insert(
+	      tail_start, sinfo.get_stripe_width());
+	  }
+
+	  if (head_start != tail_finish) {
+	    assert(
+	      sinfo.logical_offset_is_stripe_aligned(
+		tail_finish - head_start)
+	      );
+	    will_write.union_insert(
+	      head_start, tail_finish - head_start);
+	    if (tail_finish > projected_size)
+	      projected_size = tail_finish;
+	  } else {
+	    assert(tail_finish <= projected_size);
+	  }
+	}
+
+	if (i.second.truncate &&
+	    i.second.truncate->second > projected_size) {
+	  uint64_t truncating_to =
+	    sinfo.logical_to_next_stripe_offset(i.second.truncate->second);
+	  ldpp_dout(dpp, 20) << __func__ << ": truncating out to "
+			     <<  truncating_to
+			     << dendl;
+	  will_write.union_insert(projected_size, truncating_to - projected_size);
+	  projected_size = truncating_to;
+	}
+
+	ldpp_dout(dpp, 20) << __func__ << ": " << i.first
+			   << " projected size "
+			   << projected_size
+			   << dendl;
+	hinfo->set_projected_total_logical_size(
+	  sinfo,
+	  projected_size);
+
+	/* validate post conditions:
+	 * to_read should have an entry for i.first iff it isn't empty
+	 * and if we are reading from i.first, we can't be renaming or
+	 * cloning it */
+	assert(plan.to_read.count(i.first) == 0 ||
+	       (!plan.to_read.at(i.first).empty() &&
+		!i.second.has_source()));
+      });
+    plan.t = std::move(t);
+    return plan;
   }
 
-  void append(PGTransaction *_to_append) {
-    ECTransaction *to_append = static_cast<ECTransaction*>(_to_append);
-    written += to_append->written;
-    to_append->written = 0;
-    ops.splice(ops.end(), to_append->ops,
-	       to_append->ops.begin(), to_append->ops.end());
-  }
-  void nop() {
-    ops.push_back(NoOp());
-  }
-  bool empty() const {
-    return ops.empty();
-  }
-  uint64_t get_bytes_written() const {
-    return written;
-  }
-  template <typename T>
-  void visit(T &vis) const {
-    for (list<Op>::const_iterator i = ops.begin(); i != ops.end(); ++i) {
-      boost::apply_visitor(vis, *i);
-    }
-  }
-  template <typename T>
-  void reverse_visit(T &vis) const {
-    for (list<Op>::const_reverse_iterator i = ops.rbegin();
-	 i != ops.rend();
-	 ++i) {
-      boost::apply_visitor(vis, *i);
-    }
-  }
-  void get_append_objects(
-     set<hobject_t, hobject_t::BitwiseComparator> *out) const;
   void generate_transactions(
-    map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> &hash_infos,
+    WritePlan &plan,
     ErasureCodeInterfaceRef &ecimpl,
     pg_t pgid,
+    bool legacy_log_entries,
     const ECUtil::stripe_info_t &sinfo,
+    const map<hobject_t,extent_map> &partial_extents,
+    vector<pg_log_entry_t> &entries,
+    map<hobject_t,extent_map> *written,
     map<shard_id_t, ObjectStore::Transaction> *transactions,
-    set<hobject_t, hobject_t::BitwiseComparator> *temp_added,
-    set<hobject_t, hobject_t::BitwiseComparator> *temp_removed,
-    stringstream *out = 0) const;
+    set<hobject_t> *temp_added,
+    set<hobject_t> *temp_removed,
+    DoutPrefixProvider *dpp);
 };
 
 #endif

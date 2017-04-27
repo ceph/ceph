@@ -7,12 +7,12 @@
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "common/AsyncOpTracker.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
 #include "cls/journal/cls_journal_types.h"
-#include "journal/AsyncOpTracker.h"
 #include "journal/JournalMetadataListener.h"
 #include "journal/Settings.h"
 #include <boost/intrusive_ptr.hpp>
@@ -46,7 +46,7 @@ public:
   JournalMetadata(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
                   librados::IoCtx &ioctx, const std::string &oid,
                   const std::string &client_id, const Settings &settings);
-  ~JournalMetadata();
+  ~JournalMetadata() override;
 
   void init(Context *on_init);
   void shut_down(Context *on_finish);
@@ -71,7 +71,8 @@ public:
   void allocate_tag(uint64_t tag_class, const bufferlist &data,
                     Tag *tag, Context *on_finish);
   void get_tag(uint64_t tag_tid, Tag *tag, Context *on_finish);
-  void get_tags(const boost::optional<uint64_t> &tag_class, Tags *tags,
+  void get_tags(uint64_t start_after_tag_tid,
+                const boost::optional<uint64_t> &tag_class, Tags *tags,
                 Context *on_finish);
 
   inline const Settings &get_settings() const {
@@ -95,6 +96,10 @@ public:
 
   inline void queue(Context *on_finish, int r) {
     m_work_queue->queue(on_finish, r);
+  }
+
+  inline ContextWQ *get_work_queue() {
+    return m_work_queue;
   }
 
   inline SafeTimer &get_timer() {
@@ -146,7 +151,9 @@ public:
   void committed(uint64_t commit_tid, const CreateContext &create_context);
 
   void notify_update();
-  void async_notify_update();
+  void async_notify_update(Context *on_safe);
+
+  void wait_for_ops();
 
 private:
   typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
@@ -173,11 +180,11 @@ private:
     C_WatchCtx(JournalMetadata *_journal_metadata)
       : journal_metadata(_journal_metadata) {}
 
-    virtual void handle_notify(uint64_t notify_id, uint64_t cookie,
-                               uint64_t notifier_id, bufferlist& bl) {
+    void handle_notify(uint64_t notify_id, uint64_t cookie,
+                               uint64_t notifier_id, bufferlist& bl) override {
       journal_metadata->handle_watch_notify(notify_id, cookie);
     }
-    virtual void handle_error(uint64_t cookie, int err) {
+    void handle_error(uint64_t cookie, int err) override {
       journal_metadata->handle_watch_error(err);
     }
   };
@@ -189,10 +196,10 @@ private:
       : journal_metadata(_journal_metadata) {
       journal_metadata->m_async_op_tracker.start_op();
     }
-    virtual ~C_WatchReset() {
+    ~C_WatchReset() override {
       journal_metadata->m_async_op_tracker.finish_op();
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       journal_metadata->handle_watch_reset();
     }
   };
@@ -204,10 +211,10 @@ private:
       : journal_metadata(_journal_metadata) {
       journal_metadata->m_async_op_tracker.start_op();
     }
-    virtual ~C_CommitPositionTask() {
+    ~C_CommitPositionTask() override {
       journal_metadata->m_async_op_tracker.finish_op();
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       Mutex::Locker locker(journal_metadata->m_lock);
       journal_metadata->handle_commit_position_task();
     };
@@ -215,16 +222,20 @@ private:
 
   struct C_AioNotify : public Context {
     JournalMetadata* journal_metadata;
+    Context *on_safe;
 
-    C_AioNotify(JournalMetadata *_journal_metadata)
-      : journal_metadata(_journal_metadata) {
+    C_AioNotify(JournalMetadata *_journal_metadata, Context *_on_safe)
+      : journal_metadata(_journal_metadata), on_safe(_on_safe) {
       journal_metadata->m_async_op_tracker.start_op();
     }
-    virtual ~C_AioNotify() {
+    ~C_AioNotify() override {
       journal_metadata->m_async_op_tracker.finish_op();
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       journal_metadata->handle_notified(r);
+      if (on_safe != nullptr) {
+        on_safe->complete(0);
+      }
     }
   };
 
@@ -236,12 +247,13 @@ private:
       : journal_metadata(_journal_metadata), on_safe(_on_safe) {
       journal_metadata->m_async_op_tracker.start_op();
     }
-    virtual ~C_NotifyUpdate() {
+    ~C_NotifyUpdate() override {
       journal_metadata->m_async_op_tracker.finish_op();
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       if (r == 0) {
-        journal_metadata->async_notify_update();
+        journal_metadata->async_notify_update(on_safe);
+        return;
       }
       if (on_safe != NULL) {
         on_safe->complete(r);
@@ -258,10 +270,10 @@ private:
       Mutex::Locker locker(journal_metadata->m_lock);
       journal_metadata->m_async_op_tracker.start_op();
     }
-    virtual ~C_ImmutableMetadata() {
+    ~C_ImmutableMetadata() override {
       journal_metadata->m_async_op_tracker.finish_op();
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       journal_metadata->handle_immutable_metadata(r, on_finish);
     }
   };
@@ -279,10 +291,10 @@ private:
       Mutex::Locker locker(journal_metadata->m_lock);
       journal_metadata->m_async_op_tracker.start_op();
     }
-    virtual ~C_Refresh() {
+    ~C_Refresh() override {
       journal_metadata->m_async_op_tracker.finish_op();
     }
-    virtual void finish(int r) {
+    void finish(int r) override {
       journal_metadata->handle_refresh_complete(this, r);
     }
   };
@@ -343,6 +355,8 @@ private:
   void handle_watch_notify(uint64_t notify_id, uint64_t cookie);
   void handle_watch_error(int err);
   void handle_notified(int r);
+
+  Context *schedule_laggy_clients_disconnect(Context *on_finish);
 
   friend std::ostream &operator<<(std::ostream &os,
 				  const JournalMetadata &journal_metadata);

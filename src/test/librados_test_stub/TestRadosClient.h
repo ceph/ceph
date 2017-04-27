@@ -6,8 +6,6 @@
 
 #include "include/rados/librados.hpp"
 #include "common/config.h"
-#include "common/Cond.h"
-#include "common/Mutex.h"
 #include "include/atomic.h"
 #include "include/buffer_fwd.h"
 #include "test/librados_test_stub/TestWatchNotify.h"
@@ -15,7 +13,6 @@
 #include <boost/functional/hash.hpp>
 #include <list>
 #include <map>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -55,14 +52,15 @@ public:
     std::string oid;
   };
 
-  TestRadosClient(CephContext *cct);
+  TestRadosClient(CephContext *cct, TestWatchNotify *watch_notify);
 
   void get();
   void put();
 
   virtual CephContext *cct();
 
-  virtual uint64_t get_instance_id();
+  virtual uint32_t get_nonce() = 0;
+  virtual uint64_t get_instance_id() = 0;
 
   virtual int connect();
   virtual void shutdown();
@@ -88,10 +86,14 @@ public:
   virtual int aio_watch_flush(AioCompletionImpl *c);
   virtual int watch_flush() = 0;
 
+  virtual bool is_blacklisted() const = 0;
   virtual int blacklist_add(const std::string& client_address,
 			    uint32_t expire_seconds) = 0;
 
-  TestWatchNotify &get_watch_notify() {
+  Finisher *get_aio_finisher() {
+    return m_aio_finisher;
+  }
+  TestWatchNotify *get_watch_notify() {
     return m_watch_notify;
   }
 
@@ -105,25 +107,21 @@ public:
 protected:
   virtual ~TestRadosClient();
 
+  virtual void transaction_start(const std::string &oid) = 0;
+  virtual void transaction_finish(const std::string &oid) = 0;
+
 private:
 
   CephContext *m_cct;
   atomic_t m_refcount;
+
+  TestWatchNotify *m_watch_notify;
 
   Finisher *get_finisher(const std::string& oid);
 
   Finisher *m_aio_finisher;
   std::vector<Finisher *> m_finishers;
   boost::hash<std::string> m_hash;
-
-  TestWatchNotify m_watch_notify;
-
-  Mutex m_transaction_lock;
-  Cond m_transaction_cond;
-  std::set<std::string> m_transactions;
-
-  void transaction_start(const std::string &oid);
-  void transaction_finish(const std::string &oid);
 
 };
 

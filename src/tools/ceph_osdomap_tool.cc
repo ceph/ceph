@@ -27,14 +27,17 @@ using namespace std;
 
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
-  string store_path, cmd, out_path;
+  string store_path, cmd, out_path, oid;
+  bool debug = false;
   desc.add_options()
     ("help", "produce help message")
     ("omap-path", po::value<string>(&store_path),
      "path to mon directory, mandatory (current/omap usually)")
     ("paranoid", "use paranoid checking")
+    ("debug", "Additional debug output from DBObjectMap")
+    ("oid", po::value<string>(&oid), "Restrict to this object id when dumping objects")
     ("command", po::value<string>(&cmd),
-     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check], mandatory")
+     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check, dump-headers, repair], mandatory")
     ;
   po::positional_options_description p;
   p.add("command", 1);
@@ -64,12 +67,19 @@ int main(int argc, char **argv) {
     ceph_options.push_back(i->c_str());
   }
 
-  global_init(
+  if (vm.count("debug")) debug = true;
+
+  auto cct = global_init(
     &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
-    CODE_ENVIRONMENT_UTILITY, 0);
+    CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
   g_conf = g_ceph_context->_conf;
+  if (debug) {
+    g_conf->set_val_or_die("log_to_stderr", "true");
+    g_conf->set_val_or_die("err_to_stderr", "true");
+  }
+  g_conf->apply_changes(NULL);
 
   if (vm.count("help")) {
     std::cerr << desc << std::endl;
@@ -91,7 +101,7 @@ int main(int argc, char **argv) {
     std::cerr << "Enabling paranoid checks" << std::endl;
     store->options.paranoid_checks = true;
     }*/
-  DBObjectMap omap(store);
+  DBObjectMap omap(cct.get(), store);
   stringstream out;
   int r = store->open(out);
   if (r < 0) {
@@ -99,6 +109,9 @@ int main(int argc, char **argv) {
     std::cerr << "Output: " << out.str() << std::endl;
     goto done;
   }
+  // We don't call omap.init() here because it will repair
+  // the DBObjectMap which we might want to examine for diagnostic
+  // reasons.  Instead use --command repair.
   r = 0;
 
 
@@ -123,6 +136,8 @@ int main(int argc, char **argv) {
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
+      if (vm.count("oid") != 0 && i->hobj.oid.name != oid)
+        continue;
       std::cout << *i << std::endl;
     }
     r = 0;
@@ -136,6 +151,8 @@ int main(int argc, char **argv) {
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
+      if (vm.count("oid") != 0 && i->hobj.oid.name != oid)
+        continue;
       std::cout << "Object: " << *i << std::endl;
       ObjectMap::ObjectMapIterator j = omap.get_iterator(ghobject_t(i->hobj));
       for (j->seek_to_first(); j->valid(); j->next()) {
@@ -143,17 +160,35 @@ int main(int argc, char **argv) {
 	j->value().hexdump(std::cout);
       }
     }
-  } else if (cmd == "check") {
-    r = omap.check(std::cout);
-    if (!r) {
-      std::cerr << "check got: " << cpp_strerror(r) << std::endl;
+  } else if (cmd == "check" || cmd == "repair") {
+    ostringstream ss;
+    bool repair = (cmd == "repair");
+    r = omap.check(ss, repair);
+    if (r) {
+      std::cerr << ss.str() << std::endl;
+      if (r > 0) {
+        std::cerr << "check got " << r << " error(s)" << std::endl;
+        r = 1;
+        goto done;
+      }
+    }
+    std::cout << (repair ? "repair" : "check") << " succeeded" << std::endl;
+  } else if (cmd == "dump-headers") {
+    vector<DBObjectMap::_Header> headers;
+    r = omap.list_object_headers(&headers);
+    if (r < 0) {
+      std::cerr << "list_object_headers got: " << cpp_strerror(r) << std::endl;
+      r = 1;
       goto done;
     }
-    std::cout << "check succeeded" << std::endl;
+    for (auto i : headers)
+      std::cout << i << std::endl;
   } else {
     std::cerr << "Did not recognize command " << cmd << std::endl;
+    r = 1;
     goto done;
   }
+  r = 0;
 
   done:
   return r;

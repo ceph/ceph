@@ -16,14 +16,13 @@
 #ifndef CEPH_MOSDREPOP_H
 #define CEPH_MOSDREPOP_H
 
-#include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "MOSDFastDispatchOp.h"
 
 /*
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDRepOp : public Message {
+class MOSDRepOp : public MOSDFastDispatchOp {
 
   static const int HEAD_VERSION = 1;
   static const int COMPAT_VERSION = 1;
@@ -55,7 +54,7 @@ public:
 
   // piggybacked osd/og state
   eversion_t pg_trim_to;   // primary->replica: trim to here
-  eversion_t pg_trim_rollback_to;   // primary->replica: trim rollback
+  eversion_t pg_roll_forward_to;   // primary->replica: trim rollback
                                     // info to here
 
   hobject_t new_temp_oid;      ///< new temp object that we must now start tracking
@@ -64,11 +63,18 @@ public:
   /// non-empty if this transaction involves a hit_set history update
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
 
-  int get_cost() const {
+  epoch_t get_map_epoch() const override {
+    return map_epoch;
+  }
+  spg_t get_spg() const override {
+    return pgid;
+  }
+
+  int get_cost() const override {
     return data.length();
   }
 
-  virtual void decode_payload() {
+  void decode_payload() override {
     p = payload.begin();
     // splitted to partial and final
     ::decode(map_epoch, p);
@@ -93,11 +99,11 @@ public:
 
     ::decode(from, p);
     ::decode(updated_hit_set_history, p);
-    ::decode(pg_trim_rollback_to, p);
+    ::decode(pg_roll_forward_to, p);
     final_decode_needed = false;
   }
 
-  virtual void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid, payload);
@@ -112,17 +118,17 @@ public:
     ::encode(discard_temp_oid, payload);
     ::encode(from, payload);
     ::encode(updated_hit_set_history, payload);
-    ::encode(pg_trim_rollback_to, payload);
+    ::encode(pg_roll_forward_to, payload);
   }
 
   MOSDRepOp()
-    : Message(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0),
       final_decode_needed(true), acks_wanted (0) {}
   MOSDRepOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po, int aw,
 	    epoch_t mape, ceph_tid_t rtid, eversion_t v)
-    : Message(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
       reqid(r),
       pgid(p),
@@ -134,11 +140,11 @@ public:
     set_tid(rtid);
   }
 private:
-  ~MOSDRepOp() {}
+  ~MOSDRepOp() override {}
 
 public:
-  const char *get_type_name() const { return "osd_repop"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "osd_repop"; }
+  void print(ostream& out) const override {
     out << "osd_repop(" << reqid
           << " " << pgid;
     if (!final_decode_needed) {

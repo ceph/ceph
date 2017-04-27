@@ -3,22 +3,23 @@
 #include "gtest/gtest.h"
 
 #include "mds/mdstypes.h"
+#include "include/err.h"
 #include "include/buffer.h"
 #include "include/rbd_types.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
+#include "common/Checksummer.h"
 #include "global/global_context.h"
-#include "global/global_init.h"
-#include "common/ceph_argparse.h"
-#include "common/common_init.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
+#include "gtest/gtest.h"
 
 #include <errno.h>
 #include <map>
 #include <sstream>
 #include <string>
+
 
 using namespace librados;
 using std::map;
@@ -67,10 +68,90 @@ TEST(LibRadosMiscConnectFailure, ConnectFailure) {
   ASSERT_EQ(-ENOTCONN, rados_monitor_log(cluster, "error",
                                          test_rados_log_cb, NULL));
 
-  ASSERT_NE(0, rados_connect(cluster));
-  ASSERT_NE(0, rados_connect(cluster));
+  // try this a few times; sometimes we don't schedule fast enough for the
+  // cond to time out
+  int r;
+  for (unsigned i=0; i<16; ++i) {
+    cout << i << std::endl;
+    r = rados_connect(cluster);
+    if (r < 0)
+      break;  // yay, we timed out
+    // try again
+    rados_shutdown(cluster);
+  }
+  ASSERT_NE(0, r);
 
   rados_shutdown(cluster);
+}
+
+TEST(LibRadosMiscPool, PoolCreationRace) {
+  rados_t cluster_a, cluster_b;
+
+  char *id = getenv("CEPH_CLIENT_ID");
+  if (id)
+    std::cerr << "Client id is: " << id << std::endl;
+
+  ASSERT_EQ(0, rados_create(&cluster_a, NULL));
+  ASSERT_EQ(0, rados_conf_read_file(cluster_a, NULL));
+  // kludge: i want to --log-file foo and only get cluster b
+  //ASSERT_EQ(0, rados_conf_parse_env(cluster_a, NULL));
+  ASSERT_EQ(0, rados_connect(cluster_a));
+
+  ASSERT_EQ(0, rados_create(&cluster_b, NULL));
+  ASSERT_EQ(0, rados_conf_read_file(cluster_b, NULL));
+  ASSERT_EQ(0, rados_conf_parse_env(cluster_b, NULL));
+  ASSERT_EQ(0, rados_conf_set(cluster_b,
+			      "objecter_debug_inject_relock_delay", "true"));
+  ASSERT_EQ(0, rados_connect(cluster_b));
+
+  char poolname[80];
+  snprintf(poolname, sizeof(poolname), "poolrace.%d", rand());
+  rados_pool_create(cluster_a, poolname);
+  rados_ioctx_t a, b;
+  rados_ioctx_create(cluster_a, poolname, &a);
+  int64_t poolid = rados_ioctx_get_id(a);
+
+  rados_ioctx_create2(cluster_b, poolid+1, &b);
+
+  char pool2name[80];
+  snprintf(pool2name, sizeof(pool2name), "poolrace2.%d", rand());
+  rados_pool_create(cluster_a, pool2name);
+
+  list<rados_completion_t> cls;
+  // this should normally trigger pretty easily, but we need to bound
+  // the requests because if we get too many we'll get stuck by always
+  // sending enough messages that we hit the socket failure injection.
+  int max = 512;
+  while (max--) {
+    char buf[100];
+    rados_completion_t c;
+    rados_aio_create_completion(0, 0, 0, &c);
+    cls.push_back(c);
+    rados_aio_read(b, "PoolCreationRaceObj", c, buf, 100, 0);
+    cout << "started " << (void*)c << std::endl;
+    if (rados_aio_is_complete(cls.front())) {
+      break;
+    }
+  }
+  while (!rados_aio_is_complete(cls.front())) {
+    cout << "waiting 1 sec" << std::endl;
+    sleep(1);
+  }
+
+  cout << " started " << cls.size() << " aios" << std::endl;
+  for (auto c : cls) {
+    cout << "waiting " << (void*)c << std::endl;
+    rados_aio_wait_for_complete_and_cb(c);
+    rados_aio_release(c);
+  }
+  cout << "done." << std::endl;
+
+  rados_ioctx_destroy(a);
+  rados_ioctx_destroy(b);
+  rados_pool_delete(cluster_a, poolname);
+  rados_pool_delete(cluster_a, pool2name);
+  rados_shutdown(cluster_b);
+  rados_shutdown(cluster_a);
 }
 
 TEST_F(LibRadosMisc, ClusterFSID) {
@@ -404,7 +485,7 @@ TEST_F(LibRadosMiscPP, Tmap2OmapPP) {
     map<string, bufferlist> m;
     ObjectReadOperation o;
     o.omap_get_header(&got, NULL);
-    o.omap_get_vals("", 1024, &m, NULL);
+    o.omap_get_vals2("", 1024, &m, nullptr, nullptr);
     ASSERT_EQ(0, ioctx.operate("foo", &o, NULL));
 
     // compare header
@@ -591,36 +672,12 @@ TEST_F(LibRadosMiscPP, AioOperatePP) {
   ASSERT_EQ(0, ioctx.aio_operate("foo", my_completion, &o));
   ASSERT_EQ(0, my_completion->wait_for_complete_and_cb());
   ASSERT_EQ(my_aio_complete, true);
+  my_completion->release();
 
   uint64_t size;
   time_t mtime;
   ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
   ASSERT_EQ(1024U, size);
-}
-
-TEST_F(LibRadosMiscPP, CloneRangePP) {
-  char buf[64];
-  memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl;
-  bl.append(buf, sizeof(buf));
-  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
-  ioctx.locator_set_key("foo");
-  ASSERT_EQ(0, ioctx.clone_range("bar", 0, "foo", 0, sizeof(buf)));
-  bufferlist bl2;
-  ASSERT_EQ(sizeof(buf), (size_t)ioctx.read("bar", bl2, sizeof(buf), 0));
-  ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
-}
-
-TEST_F(LibRadosMisc, CloneRange) {
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ(0, rados_write(ioctx, "src", buf, sizeof(buf), 0));
-  rados_ioctx_locator_set_key(ioctx, "src");
-  ASSERT_EQ(0, rados_clone_range(ioctx, "dst", 0, "src", 0, sizeof(buf)));
-  char buf2[sizeof(buf)];
-  memset(buf2, 0, sizeof(buf2));
-  ASSERT_EQ((int)sizeof(buf2), rados_read(ioctx, "dst", buf2, sizeof(buf2), 0));
-  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
 }
 
 TEST_F(LibRadosMiscPP, AssertExistsPP) {
@@ -791,7 +848,7 @@ class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
   LibRadosTwoPoolsECPP() {};
-  virtual ~LibRadosTwoPoolsECPP() {};
+  ~LibRadosTwoPoolsECPP() override {};
 protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
@@ -805,12 +862,12 @@ protected:
   }
   static std::string src_pool_name;
 
-  virtual void SetUp() {
+  void SetUp() override {
     RadosTestECPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(src_pool_name.c_str(), src_ioctx));
     src_ioctx.set_namespace(nspace);
   }
-  virtual void TearDown() {
+  void TearDown() override {
     // wait for maps to settle before next test
     cluster.wait_for_latest_osdmap();
 
@@ -1016,15 +1073,158 @@ TEST_F(LibRadosMisc, WriteSame) {
   ASSERT_EQ(0, rados_writesame(ioctx, "ws", buf, sizeof(buf), sizeof(buf), 0));
 }
 
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
+template <typename T>
+class LibRadosChecksum : public LibRadosMiscPP {
+public:
+  typedef typename T::alg_t alg_t;
+  typedef typename T::value_t value_t;
+  typedef typename alg_t::init_value_t init_value_t;
 
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
+  static const rados_checksum_type_t type = T::type;
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
+  bufferlist content_bl;
 
-  return RUN_ALL_TESTS();
+  using LibRadosMiscPP::SetUpTestCase;
+  using LibRadosMiscPP::TearDownTestCase;
+
+  void SetUp() override {
+    LibRadosMiscPP::SetUp();
+
+    std::string content(4096, '\0');
+    for (size_t i = 0; i < content.length(); ++i) {
+      content[i] = static_cast<char>(rand() % (126 - 33) + 33);
+    }
+    content_bl.append(content);
+    ASSERT_EQ(0, ioctx.write("foo", content_bl, content_bl.length(), 0));
+  }
+};
+
+template <rados_checksum_type_t _type, typename AlgT, typename ValueT>
+class LibRadosChecksumParams {
+public:
+  typedef AlgT alg_t;
+  typedef ValueT value_t;
+  static const rados_checksum_type_t type = _type;
+};
+
+typedef ::testing::Types<
+    LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_XXHASH32,
+			   Checksummer::xxhash32, uint32_t>,
+    LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_XXHASH64,
+			   Checksummer::xxhash64, uint64_t>,
+    LibRadosChecksumParams<LIBRADOS_CHECKSUM_TYPE_CRC32C,
+			   Checksummer::crc32c, uint32_t>
+  > LibRadosChecksumTypes;
+
+TYPED_TEST_CASE(LibRadosChecksum, LibRadosChecksumTypes);
+
+TYPED_TEST(LibRadosChecksum, Subset) {
+  uint32_t chunk_size = 1024;
+  uint32_t csum_count = this->content_bl.length() / chunk_size;
+
+  typename TestFixture::init_value_t init_value = -1;
+  bufferlist init_value_bl;
+  ::encode(init_value, init_value_bl);
+
+  std::vector<bufferlist> checksum_bls(csum_count);
+  std::vector<int> checksum_rvals(csum_count);
+
+  // individual checksum ops for each chunk
+  ObjectReadOperation op;
+  for (uint32_t i = 0; i < csum_count; ++i) {
+    op.checksum(TestFixture::type, init_value_bl, i * chunk_size, chunk_size,
+		0, &checksum_bls[i], &checksum_rvals[i]);
+  }
+  ASSERT_EQ(0, this->ioctx.operate("foo", &op, NULL));
+
+  for (uint32_t i = 0; i < csum_count; ++i) {
+    ASSERT_EQ(0, checksum_rvals[i]);
+
+    auto bl_it = checksum_bls[i].begin();
+    uint32_t count;
+    ::decode(count, bl_it);
+    ASSERT_EQ(1U, count);
+
+    typename TestFixture::value_t value;
+    ::decode(value, bl_it);
+
+    bufferlist content_sub_bl;
+    content_sub_bl.substr_of(this->content_bl, i * chunk_size, chunk_size);
+
+    typename TestFixture::value_t expected_value;
+    bufferptr expected_value_bp = buffer::create_static(
+      sizeof(expected_value), reinterpret_cast<char*>(&expected_value));
+    Checksummer::template calculate<typename TestFixture::alg_t>(
+      init_value, chunk_size, 0, chunk_size, content_sub_bl,
+      &expected_value_bp);
+    ASSERT_EQ(expected_value, value);
+  }
+}
+
+TYPED_TEST(LibRadosChecksum, Chunked) {
+  uint32_t chunk_size = 1024;
+  uint32_t csum_count = this->content_bl.length() / chunk_size;
+
+  typename TestFixture::init_value_t init_value = -1;
+  bufferlist init_value_bl;
+  ::encode(init_value, init_value_bl);
+
+  bufferlist checksum_bl;
+  int checksum_rval;
+
+  // single op with chunked checksum results
+  ObjectReadOperation op;
+  op.checksum(TestFixture::type, init_value_bl, 0, this->content_bl.length(),
+	      chunk_size, &checksum_bl, &checksum_rval);
+  ASSERT_EQ(0, this->ioctx.operate("foo", &op, NULL));
+  ASSERT_EQ(0, checksum_rval);
+
+  auto bl_it = checksum_bl.begin();
+  uint32_t count;
+  ::decode(count, bl_it);
+  ASSERT_EQ(csum_count, count);
+
+  std::vector<typename TestFixture::value_t> expected_values(csum_count);
+  bufferptr expected_values_bp = buffer::create_static(
+    csum_count * sizeof(typename TestFixture::value_t),
+    reinterpret_cast<char*>(&expected_values[0]));
+
+  Checksummer::template calculate<typename TestFixture::alg_t>(
+    init_value, chunk_size, 0, this->content_bl.length(), this->content_bl,
+    &expected_values_bp);
+
+  for (uint32_t i = 0; i < csum_count; ++i) {
+    typename TestFixture::value_t value;
+    ::decode(value, bl_it);
+    ASSERT_EQ(expected_values[i], value);
+  }
+}
+
+TEST_F(LibRadosMiscPP, CmpExtPP) {
+  bufferlist cmp_bl, bad_cmp_bl, write_bl;
+  char stored_str[] = "1234567891";
+  char mismatch_str[] = "1234577777";
+
+  write_bl.append(stored_str);
+  ioctx.write("cmpextpp", write_bl, write_bl.length(), 0);
+  cmp_bl.append(stored_str);
+  ASSERT_EQ(0, ioctx.cmpext("cmpextpp", 0, cmp_bl));
+
+  bad_cmp_bl.append(mismatch_str);
+  ASSERT_EQ(-MAX_ERRNO - 5, ioctx.cmpext("cmpextpp", 0, bad_cmp_bl));
+}
+
+TEST_F(LibRadosMisc, CmpExt) {
+  bufferlist cmp_bl, bad_cmp_bl, write_bl;
+  char stored_str[] = "1234567891";
+  char mismatch_str[] = "1234577777";
+
+  ASSERT_EQ(0,
+	    rados_write(ioctx, "cmpextpp", stored_str, sizeof(stored_str), 0));
+
+  ASSERT_EQ(0,
+	    rados_cmpext(ioctx, "cmpextpp", stored_str, sizeof(stored_str), 0));
+
+  ASSERT_EQ(-MAX_ERRNO - 5,
+	    rados_cmpext(ioctx, "cmpextpp", mismatch_str, sizeof(mismatch_str), 0));
 }

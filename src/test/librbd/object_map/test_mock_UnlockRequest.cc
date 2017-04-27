@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librbd/test_mock_fixture.h"
@@ -25,7 +25,8 @@ public:
   typedef UnlockRequest<MockImageCtx> MockUnlockRequest;
 
   void expect_unlock(MockImageCtx &mock_image_ctx, int r) {
-    std::string oid(ObjectMap::object_map_name(mock_image_ctx.id, CEPH_NOSNAP));
+    std::string oid(ObjectMap<>::object_map_name(mock_image_ctx.id,
+                                                 CEPH_NOSNAP));
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(oid, _, StrEq("lock"), StrEq("unlock"), _, _, _))
                   .WillOnce(Return(r));

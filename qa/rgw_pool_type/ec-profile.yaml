@@ -1,0 +1,10 @@
+overrides:
+  rgw:
+    ec-data-pool: true
+    erasure_code_profile:
+      name: testprofile
+      k: 3
+      m: 1
+      ruleset-failure-domain: osd
+  s3tests:
+    slow_backend: true

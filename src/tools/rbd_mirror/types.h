@@ -6,6 +6,7 @@
 
 #include <iostream>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,28 @@ typedef shared_ptr<librbd::Image> ImageRef;
 
 template <typename I = librbd::ImageCtx>
 using ImageSyncThrottlerRef = std::shared_ptr<ImageSyncThrottler<I>>;
+
+struct ImageId {
+  std::string global_id;
+  std::string id;
+
+  explicit ImageId(const std::string &global_id) : global_id(global_id) {
+  }
+  ImageId(const std::string &global_id, const std::string &id)
+    : global_id(global_id), id(id) {
+  }
+
+  inline bool operator==(const ImageId &rhs) const {
+    return (global_id == rhs.global_id && id == rhs.id);
+  }
+  inline bool operator<(const ImageId &rhs) const {
+    return global_id < rhs.global_id;
+  }
+};
+
+std::ostream &operator<<(std::ostream &, const ImageId &image_id);
+
+typedef std::set<ImageId> ImageIds;
 
 struct peer_t {
   peer_t() = default;
@@ -49,9 +72,10 @@ struct peer_t {
   }
 };
 
+std::ostream& operator<<(std::ostream& lhs, const peer_t &peer);
+
 } // namespace mirror
 } // namespace rbd
 
-std::ostream& operator<<(std::ostream& lhs, const rbd::mirror::peer_t &peer);
 
 #endif // CEPH_RBD_MIRROR_TYPES_H

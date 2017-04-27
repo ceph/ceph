@@ -14,8 +14,6 @@
 
 // For ceph_timespec
 #include "include/types.h"
-
-#include "ceph_context.h"
 #include "ceph_time.h"
 #include "config.h"
 
@@ -47,13 +45,6 @@ int clock_gettime(int clk_id, struct timespec *tp)
 
 namespace ceph {
   namespace time_detail {
-    real_clock::time_point real_clock::now(const CephContext* cct) noexcept {
-      auto t = now();
-      if (cct)
-	t += make_timespan(cct->_conf->clock_offset);
-      return t;
-    }
-
     void real_clock::to_ceph_timespec(const time_point& t,
 				      struct ceph_timespec& ts) {
       ts.tv_sec = to_time_t(t);
@@ -67,14 +58,6 @@ namespace ceph {
     real_clock::time_point real_clock::from_ceph_timespec(
       const struct ceph_timespec& ts) {
       return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
-    }
-
-    coarse_real_clock::time_point coarse_real_clock::now(
-      const CephContext* cct) noexcept {
-      auto t = now();
-      if (cct)
-	t += make_timespan(cct->_conf->clock_offset);
-      return t;
     }
 
     void coarse_real_clock::to_ceph_timespec(const time_point& t,
@@ -92,7 +75,7 @@ namespace ceph {
       const struct ceph_timespec& ts) {
       return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
     }
-  };
+  }
 
   using std::chrono::duration_cast;
   using std::chrono::seconds;

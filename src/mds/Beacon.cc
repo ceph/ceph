@@ -27,10 +27,23 @@
 
 #include "Beacon.h"
 
+#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds.beacon." << name << ' '
 
+
+class Beacon::C_MDS_BeaconSender : public Context {
+public:
+  explicit C_MDS_BeaconSender(Beacon *beacon_) : beacon(beacon_) {}
+  void finish(int r) override {
+    assert(beacon->lock.is_locked_by_me());
+    beacon->sender = NULL;
+    beacon->_send();
+  }
+private:
+  Beacon *beacon;
+};
 
 Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
   Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock),
@@ -106,7 +119,7 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
 
   // update lab
   if (seq_stamp.count(seq)) {
-    utime_t now = ceph_clock_now(g_ceph_context);
+    utime_t now = ceph_clock_now();
     if (seq_stamp[seq] > last_acked_stamp) {
       last_acked_stamp = seq_stamp[seq];
       utime_t rtt = now - last_acked_stamp;
@@ -160,9 +173,9 @@ void Beacon::send_and_wait(const double duration)
            << " for up to " << duration << "s" << dendl;
 
   utime_t timeout;
-  timeout.set_from_double(ceph_clock_now(cct) + duration);
+  timeout.set_from_double(ceph_clock_now() + duration);
   while ((!seq_stamp.empty() && seq_stamp.begin()->first <= awaiting_seq)
-         && ceph_clock_now(cct) < timeout) {
+         && ceph_clock_now() < timeout) {
     waiting_cond.WaitUntil(lock, timeout);
   }
 
@@ -193,7 +206,7 @@ void Beacon::_send()
 	   << " seq " << last_seq
 	   << dendl;
 
-  seq_stamp[last_seq] = ceph_clock_now(g_ceph_context);
+  seq_stamp[last_seq] = ceph_clock_now();
 
   assert(want_state != MDSMap::STATE_NULL);
   
@@ -215,6 +228,7 @@ void Beacon::_send()
   if (want_state == MDSMap::STATE_BOOT) {
     map<string, string> sys_info;
     collect_sys_info(&sys_info, cct);
+    sys_info["addr"] = stringify(monc->get_myaddr());
     beacon->set_sys_info(sys_info);
   }
   monc->send_mon_message(beacon);
@@ -251,7 +265,7 @@ bool Beacon::is_laggy()
   if (last_acked_stamp == utime_t())
     return false;
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now();
   utime_t since = now - last_acked_stamp;
   if (since > g_conf->mds_beacon_grace) {
     dout(5) << "is_laggy " << since << " > " << g_conf->mds_beacon_grace
@@ -384,8 +398,10 @@ void Beacon::notify_health(MDSRank const *mds)
   {
     set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
-    utime_t cutoff = ceph_clock_now(g_ceph_context);
+
+    utime_t cutoff = ceph_clock_now();
     cutoff -= g_conf->mds_recall_state_timeout;
+    utime_t last_recall = mds->mdcache->last_recall_state;
 
     std::list<MDSHealthMetric> late_recall_metrics;
     std::list<MDSHealthMetric> large_completed_requests_metrics;
@@ -395,7 +411,10 @@ void Beacon::notify_health(MDSRank const *mds)
         dout(20) << "Session servicing RECALL " << session->info.inst
           << ": " << session->recalled_at << " " << session->recall_release_count
           << "/" << session->recall_count << dendl;
-        if (session->recalled_at < cutoff) {
+	if (last_recall < cutoff || session->last_recall_sent < last_recall) {
+	  dout(20) << "  no longer recall" << dendl;
+	  session->clear_recalled_at();
+	} else if (session->recalled_at < cutoff) {
           dout(20) << "  exceeded timeout " << session->recalled_at << " vs. " << cutoff << dendl;
           std::ostringstream oss;
 	  oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
@@ -464,9 +483,10 @@ void Beacon::notify_health(MDSRank const *mds)
   }
 
   // Report if we have significantly exceeded our cache size limit
-  if (mds->mdcache->get_num_inodes() > g_conf->mds_cache_size * 1.5) {
+  if (mds->mdcache->get_cache_size() >
+        g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
     std::ostringstream oss;
-    oss << "Too many inodes in cache (" << mds->mdcache->get_num_inodes()
+    oss << "Too many inodes in cache (" << mds->mdcache->get_cache_size()
         << "/" << g_conf->mds_cache_size << "), "
         << mds->mdcache->num_inodes_with_caps << " inodes in use by clients, "
         << mds->mdcache->get_num_strays() << " stray files";

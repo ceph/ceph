@@ -23,17 +23,16 @@ namespace journal {
 
 template<typename I>
 CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &imageid,
-                                              uint8_t order, uint8_t splay_width,
-                                              const std::string &object_pool,
-                                              uint64_t tag_class, TagData &tag_data,
-                                              const std::string &client_id,
-                                              ContextWQ *op_work_queue,
-                                              Context *on_finish)
-  : m_image_id(imageid), m_order(order), m_splay_width(splay_width),
-    m_object_pool(object_pool), m_tag_class(tag_class), m_tag_data(tag_data),
-    m_image_client_id(client_id), m_op_work_queue(op_work_queue),
-    m_on_finish(on_finish) {
-  m_ioctx.dup(ioctx);
+                                uint8_t order, uint8_t splay_width,
+                                const std::string &object_pool,
+                                uint64_t tag_class, TagData &tag_data,
+                                const std::string &client_id,
+                                ContextWQ *op_work_queue,
+                                Context *on_finish)
+  : m_ioctx(ioctx), m_image_id(imageid), m_order(order),
+    m_splay_width(splay_width), m_object_pool(object_pool),
+    m_tag_class(tag_class), m_tag_data(tag_data), m_image_client_id(client_id),
+    m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 }
 

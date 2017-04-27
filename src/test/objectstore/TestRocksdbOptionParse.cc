@@ -1,15 +1,14 @@
 #include <gtest/gtest.h>
 #include "include/Context.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/thread_status.h"
 #include "kv/RocksDBStore.h"
 #include <iostream>
+
 using namespace std;
 
-const string dir("store_test_temp_dir");
+const string dir("rocksdb.test_temp_dir");
 
 TEST(RocksDBOption, simple) {
   rocksdb::Options options;
@@ -26,8 +25,7 @@ TEST(RocksDBOption, simple) {
 			  "max_bytes_for_level_base = 104857600;"
 			  "target_file_size_base = 10485760;"
 			  "num_levels = 3;"
-			  "compression = kNoCompression;"
-			  "disable_data_sync = false;";
+			  "compression = kNoCompression;";
   int r = db->ParseOptionsFromString(options_string, options);
   ASSERT_EQ(0, r);
   ASSERT_EQ(536870912u, options.write_buffer_size);
@@ -39,8 +37,7 @@ TEST(RocksDBOption, simple) {
   ASSERT_EQ(104857600u, options.max_bytes_for_level_base);
   ASSERT_EQ(10485760u, options.target_file_size_base);
   ASSERT_EQ(3, options.num_levels);
-  ASSERT_FALSE(options.disableDataSync);
- // ASSERT_EQ("none", options.compression);
+  ASSERT_EQ(rocksdb::kNoCompression, options.compression);
 }
 TEST(RocksDBOption, interpret) {
   rocksdb::Options options;
@@ -72,14 +69,4 @@ TEST(RocksDBOption, interpret) {
   ASSERT_EQ(10, num_low_pri_threads);
   //high pri threads is flusher_threads
   ASSERT_EQ(5, num_high_pri_threads);
-}
-
-int main(int argc, char **argv) {
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
 }

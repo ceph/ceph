@@ -14,7 +14,15 @@
 
 #include "acconfig.h"
 
+#if defined(__linux__)
+#define PROCPREFIX
+#endif
+
 #if defined(__FreeBSD__)
+
+// FreeBSD supports Linux procfs with its compatibility module
+// And all compatibility stuff is standard mounted on this 
+#define PROCPREFIX "/compat/linux"
 
 /* Make sure that ENODATA is defined in the correct way */
 #ifndef ENODATA
@@ -38,17 +46,12 @@
 #undef ENODATA
 #define ENODATA ENOATTR
 #endif
-
 #ifndef MSG_MORE
 #define	MSG_MORE 0
 #endif
 
 #ifndef O_DSYNC
 #define O_DSYNC O_SYNC
-#endif
-
-#ifndef HOST_NAME_MAX
-#define HOST_NAME_MAX 64
 #endif
 
 // Fix clock accuracy
@@ -59,17 +62,35 @@
 #define CLOCK_MONOTONIC_COARSE CLOCK_MONOTONIC
 #endif
 #endif
+#if !defined(CLOCK_REALTIME_COARSE)
+#if defined(CLOCK_REALTIME_FAST)
+#define CLOCK_REALTIME_COARSE CLOCK_REALTIME_FAST
+#else
+#define CLOCK_REALTIME_COARSE CLOCK_REALTIME
+#endif
+#endif
 
 /* And include the extra required include file */
 #include <pthread_np.h>
 
 #endif /* !__FreeBSD__ */
 
-#if defined(__APPLE__)
-/* PATH_MAX */
+#if defined(__APPLE__) || defined(__FreeBSD__)
+/* get PATH_MAX */
 #include <limits.h>
+
+#ifndef EREMOTEIO
 #define EREMOTEIO 121
+#endif
+
+#ifndef HOST_NAME_MAX
+#ifdef MAXHOSTNAMELEN 
+#define HOST_NAME_MAX MAXHOSTNAMELEN 
+#else
 #define HOST_NAME_MAX 255
+#endif
+#endif
+
 #endif /* __APPLE__ */
 
 /* O_LARGEFILE is not defined/required on OSX/FreeBSD */

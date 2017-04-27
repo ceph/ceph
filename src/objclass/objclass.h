@@ -13,9 +13,16 @@
 
 struct obj_list_watch_response_t;
 
+#if __GNUC__ >= 4
+  #define CEPH_CLS_API    __attribute__ ((visibility ("default")))
+#else
+  #define CEPH_CLS_API
+#endif
+
 extern "C" {
 #endif
 
+#ifndef BUILDING_FOR_EMBEDDED
 #define CLS_VER(maj,min) \
 int __cls_ver__## maj ## _ ##min = 0; \
 int __cls_ver_maj = maj; \
@@ -24,6 +31,14 @@ int __cls_ver_min = min;
 #define CLS_NAME(name) \
 int __cls_name__## name = 0; \
 const char *__cls_name = #name;
+#define CLS_INIT(name) \
+void CEPH_CLS_API __cls_init()
+#else
+#define CLS_VER(maj,min)
+#define CLS_NAME(name)
+#define CLS_INIT(name) \
+void CEPH_CLS_API name##_cls_init()
+#endif
 
 #define CLS_METHOD_RD       0x1 /// method executes read operations
 #define CLS_METHOD_WR       0x2 /// method executes write operations
@@ -102,6 +117,7 @@ typedef int (*cls_method_cxx_call_t)(cls_method_context_t ctx,
 				     class buffer::list *inbl, class buffer::list *outbl);
 
 class PGLSFilter {
+  CephContext* cct;
 protected:
   string xattr;
 public:
@@ -194,6 +210,7 @@ extern int cls_gen_rand_base64(char *dest, int size); /* size should be the requ
 extern uint64_t cls_current_version(cls_method_context_t hctx);
 extern int cls_current_subop_num(cls_method_context_t hctx);
 extern uint64_t cls_get_features(cls_method_context_t hctx);
+extern uint64_t cls_get_client_features(cls_method_context_t hctx);
 
 /* helpers */
 extern void cls_cxx_subop_version(cls_method_context_t hctx, string *s);

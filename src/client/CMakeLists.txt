@@ -1,6 +1,7 @@
 set(libclient_srcs
   Client.cc
   Dentry.cc
+  Fh.cc
   Inode.cc
   MetaRequest.cc
   ClientSnapRealm.cc
@@ -8,4 +9,4 @@ set(libclient_srcs
   Trace.cc
   posix_acl.cc)
 add_library(client STATIC ${libclient_srcs})
-target_link_libraries(client common osdc)
+target_link_libraries(client osdc)

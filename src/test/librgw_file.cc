@@ -73,7 +73,8 @@ TEST(LibRGW, GETATTR_ROOT) {
 }
 
 extern "C" {
-  static bool r1_cb(const char* name, void *arg, uint64_t offset) {
+  static bool r1_cb(const char* name, void *arg, uint64_t offset,
+		    uint32_t flags) {
     // don't need arg--it would point to fids1
     fids1.push_back(fid_type(name, offset, nullptr /* handle */));
     return true; /* XXX ? */
@@ -106,14 +107,12 @@ TEST(LibRGW, LOOKUP_BUCKETS) {
   if (! fs)
     return;
 
-  int ret = 0;
   for (auto& fid_row : bucket_matrix) {
     auto& fid = get<0>(fid_row);
     // auto& obj_vector = get<1>(fid_row);
     struct rgw_file_handle *rgw_fh = nullptr;
-    ret = rgw_lookup(fs, fs->root_fh, get<0>(fid).c_str(), &rgw_fh,
-		    0 /* flags */);
-    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(0, rgw_lookup(fs, fs->root_fh, get<0>(fid).c_str(), &rgw_fh,
+			    0 /* flags */));
     get<2>(fid) = rgw_fh;
     ASSERT_NE(get<2>(fid), nullptr);
   }
@@ -126,20 +125,19 @@ TEST(LibRGW, GETATTR_BUCKETS) {
     if (! fs)
       return;
 
-    int ret = 0;
     struct stat st;
 
     for (auto& fid_row : bucket_matrix) {
       auto& fid = get<0>(fid_row);
       struct rgw_file_handle *rgw_fh = get<2>(fid);
-      ret = rgw_getattr(fs, rgw_fh, &st, RGW_GETATTR_FLAG_NONE);
-      ASSERT_EQ(ret, 0);
+      ASSERT_EQ(0, rgw_getattr(fs, rgw_fh, &st, RGW_GETATTR_FLAG_NONE));
     }
   }
 }
 
 extern "C" {
-  static bool r2_cb(const char* name, void *arg, uint64_t offset) {
+  static bool r2_cb(const char* name, void *arg, uint64_t offset,
+		    uint32_t flags) {
     std::vector<fid_type>& obj_vector = *(static_cast<std::vector<fid_type>*>(arg));
     obj_vector.push_back(fid_type(name, offset, nullptr));
     return true; /* XXX ? */

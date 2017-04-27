@@ -8,7 +8,7 @@
 class RGWRESTMgr_Admin : public RGWRESTMgr {
 public:
   RGWRESTMgr_Admin() {}
-  virtual ~RGWRESTMgr_Admin() {}
+  ~RGWRESTMgr_Admin() override {}
 };
 
 

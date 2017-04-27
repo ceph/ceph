@@ -33,7 +33,7 @@ public:
 protected:
   ImageCtxT &m_image_ctx;
 
-  virtual void finish(int r) {
+  void finish(int r) override {
     m_finisher.finish_op(r);
   }
 
@@ -55,7 +55,7 @@ public:
 		      uint64_t end_object_no);
 
   void start_ops(uint64_t max_concurrent);
-  virtual void finish_op(int r);
+  void finish_op(int r) override;
 
 private:
   Mutex m_lock;

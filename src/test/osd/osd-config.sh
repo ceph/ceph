@@ -40,6 +40,7 @@ function TEST_config_init() {
     local dir=$1
 
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     local advance=1000
     local stale=1000
     local cache=500
@@ -57,6 +58,7 @@ function TEST_config_track() {
     local dir=$1
 
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
 
     local osd_map_cache_size=$(CEPH_ARGS='' ceph-conf \

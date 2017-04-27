@@ -95,7 +95,7 @@ public:
   typedef ImageCopyRequest<librbd::MockTestImageCtx> MockImageCopyRequest;
   typedef ObjectCopyRequest<librbd::MockTestImageCtx> MockObjectCopyRequest;
 
-  virtual void SetUp() {
+  void SetUp() override {
     TestMockFixture::SetUp();
 
     librbd::RBD rbd;
@@ -107,10 +107,11 @@ public:
   }
 
   void expect_get_snap_id(librbd::MockTestImageCtx &mock_image_ctx) {
-    EXPECT_CALL(mock_image_ctx, get_snap_id(_))
-      .WillRepeatedly(Invoke([&mock_image_ctx](std::string snap_name) {
+    EXPECT_CALL(mock_image_ctx, get_snap_id(_, _))
+      .WillRepeatedly(Invoke([&mock_image_ctx](cls::rbd::SnapshotNamespace snap_namespace,
+					       std::string snap_name) {
         assert(mock_image_ctx.image_ctx->snap_lock.is_locked());
-        return mock_image_ctx.image_ctx->get_snap_id(snap_name);
+        return mock_image_ctx.image_ctx->get_snap_id(snap_namespace, snap_name);
       }));
   }
 
@@ -134,8 +135,7 @@ public:
                                std::function<void()> fn = []() {}) {
     Mutex::Locker locker(mock_object_copy_request.lock);
     while (mock_object_copy_request.object_contexts.count(object_num) == 0) {
-      if (mock_object_copy_request.cond.WaitInterval(m_local_image_ctx->cct,
-                                                     mock_object_copy_request.lock,
+      if (mock_object_copy_request.cond.WaitInterval(mock_object_copy_request.lock,
                                                      utime_t(10, 0)) != 0) {
         return false;
       }
@@ -153,8 +153,7 @@ public:
   MockImageCopyRequest::SnapMap wait_for_snap_map(MockObjectCopyRequest &mock_object_copy_request) {
     Mutex::Locker locker(mock_object_copy_request.lock);
     while (mock_object_copy_request.snap_map == nullptr) {
-      if (mock_object_copy_request.cond.WaitInterval(m_local_image_ctx->cct,
-                                                     mock_object_copy_request.lock,
+      if (mock_object_copy_request.cond.WaitInterval(mock_object_copy_request.lock,
                                                      utime_t(10, 0)) != 0) {
         return MockImageCopyRequest::SnapMap();
       }
@@ -208,7 +207,9 @@ public:
 
 TEST_F(TestMockImageSyncImageCopyRequest, SimpleImage) {
   ASSERT_EQ(0, create_snap("snap1"));
-  m_client_meta.sync_points = {{"snap1", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(),
+				"snap1",
+				boost::none}};
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -239,7 +240,9 @@ TEST_F(TestMockImageSyncImageCopyRequest, SimpleImage) {
 
 TEST_F(TestMockImageSyncImageCopyRequest, Throttled) {
   ASSERT_EQ(0, create_snap("snap1"));
-  m_client_meta.sync_points = {{"snap1", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(),
+				"snap1",
+				boost::none}};
 
   std::string update_sync_age;;
   ASSERT_EQ(0, _rados->conf_get("rbd_mirror_sync_point_update_age", update_sync_age));
@@ -315,7 +318,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, SnapshotSubset) {
   ASSERT_EQ(0, create_snap("snap1"));
   ASSERT_EQ(0, create_snap("snap2"));
   ASSERT_EQ(0, create_snap("snap3"));
-  m_client_meta.sync_points = {{"snap3", "snap2", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(),
+				"snap3", "snap2", boost::none}};
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -352,8 +356,8 @@ TEST_F(TestMockImageSyncImageCopyRequest, SnapshotSubset) {
 TEST_F(TestMockImageSyncImageCopyRequest, RestartCatchup) {
   ASSERT_EQ(0, create_snap("snap1"));
   ASSERT_EQ(0, create_snap("snap2"));
-  m_client_meta.sync_points = {{"snap1", boost::none},
-                               {"snap2", "snap1", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(), "snap1", boost::none},
+                               {cls::rbd::UserSnapshotNamespace(), "snap2", "snap1", boost::none}};
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -385,7 +389,9 @@ TEST_F(TestMockImageSyncImageCopyRequest, RestartCatchup) {
 
 TEST_F(TestMockImageSyncImageCopyRequest, RestartPartialSync) {
   ASSERT_EQ(0, create_snap("snap1"));
-  m_client_meta.sync_points = {{"snap1", librbd::journal::MirrorPeerSyncPoint::ObjectNumber{0U}}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(),
+				"snap1",
+				librbd::journal::MirrorPeerSyncPoint::ObjectNumber{0U}}};
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -422,7 +428,7 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel) {
   } BOOST_SCOPE_EXIT_END;
 
   ASSERT_EQ(0, create_snap("snap1"));
-  m_client_meta.sync_points = {{"snap1", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(), "snap1", boost::none}};
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -468,7 +474,7 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel_Inflight_Sync) {
   } BOOST_SCOPE_EXIT_END;
 
   ASSERT_EQ(0, create_snap("snap1"));
-  m_client_meta.sync_points = {{"snap1", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(), "snap1", boost::none}};
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -516,7 +522,7 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel_Inflight_Sync) {
 
 TEST_F(TestMockImageSyncImageCopyRequest, Cancel1) {
   ASSERT_EQ(0, create_snap("snap1"));
-  m_client_meta.sync_points = {{"snap1", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(), "snap1", boost::none}};
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -547,7 +553,7 @@ TEST_F(TestMockImageSyncImageCopyRequest, Cancel1) {
 
 TEST_F(TestMockImageSyncImageCopyRequest, MissingSnap) {
   ASSERT_EQ(0, create_snap("snap1"));
-  m_client_meta.sync_points = {{"missing-snap", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(), "missing-snap", boost::none}};
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -567,7 +573,10 @@ TEST_F(TestMockImageSyncImageCopyRequest, MissingSnap) {
 
 TEST_F(TestMockImageSyncImageCopyRequest, MissingFromSnap) {
   ASSERT_EQ(0, create_snap("snap1"));
-  m_client_meta.sync_points = {{"snap1", "missing-snap", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(),
+				"snap1",
+				"missing-snap",
+				boost::none}};
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -589,7 +598,10 @@ TEST_F(TestMockImageSyncImageCopyRequest, EmptySnapMap) {
   ASSERT_EQ(0, create_snap("snap1"));
   ASSERT_EQ(0, create_snap("snap2"));
   m_client_meta.snap_seqs = {{0, 0}};
-  m_client_meta.sync_points = {{"snap2", "snap1", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(),
+				"snap2",
+				"snap1",
+				boost::none}};
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -611,7 +623,10 @@ TEST_F(TestMockImageSyncImageCopyRequest, EmptySnapSeqs) {
   ASSERT_EQ(0, create_snap("snap1"));
   ASSERT_EQ(0, create_snap("snap2"));
   m_client_meta.snap_seqs = {};
-  m_client_meta.sync_points = {{"snap2", "snap1", boost::none}};
+  m_client_meta.sync_points = {{cls::rbd::UserSnapshotNamespace(),
+				"snap2",
+				"snap1",
+				boost::none}};
 
   librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);

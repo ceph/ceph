@@ -14,7 +14,7 @@ public:
 	    list<pair<pair<coll_t, string>, uint64_t> > in_flight)
     : tracker(tracker), in_flight(in_flight) {}
 
-  void finish(int r) {
+  void finish(int r) override {
     for (list<pair<pair<coll_t, string>, uint64_t> >::iterator i =
 	   in_flight.begin();
 	 i != in_flight.end();
@@ -32,7 +32,7 @@ public:
 	      list<pair<pair<coll_t, string>, uint64_t> > in_flight)
     : tracker(tracker), in_flight(in_flight) {}
 
-  void finish(int r) {
+  void finish(int r) override {
     for (list<pair<pair<coll_t, string>, uint64_t> >::iterator i =
 	   in_flight.begin();
 	 i != in_flight.end();
@@ -327,7 +327,7 @@ void FileStoreTracker::verify(const coll_t &coll, const string &obj,
     }
   }
   std::cerr << "Verifying " << make_pair(coll, obj) << " failed " << std::endl;
-  assert(0);
+  ceph_abort();
 }
 
 ObjectContents FileStoreTracker::get_current_content(

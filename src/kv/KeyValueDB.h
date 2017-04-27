@@ -11,6 +11,7 @@
 #include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
+#include "common/Formatter.h"
 
 using std::string;
 /**
@@ -55,7 +56,13 @@ public:
       const std::string &k,	      ///< [in] Key to set
       const bufferlist &bl    ///< [in] Value to set
       ) = 0;
-
+    virtual void set(
+      const std::string &prefix,
+      const char *k,
+      size_t keylen,
+      const bufferlist& bl) {
+      set(prefix, string(k, keylen), bl);
+    }
 
     /// Removes Keys (via encoded bufferlist)
     void rmkeys(
@@ -87,6 +94,13 @@ public:
       const std::string &prefix,   ///< [in] Prefix to search for
       const std::string &k	      ///< [in] Key to remove
       ) = 0;
+    virtual void rmkey(
+      const std::string &prefix,   ///< [in] Prefix to search for
+      const char *k,	      ///< [in] Key to remove
+      size_t keylen
+      ) {
+      rmkey(prefix, string(k, keylen));
+    }
 
     /// Remove Single Key which exists and was not overwritten.
     /// This API is only related to performance optimization, and should only be 
@@ -101,6 +115,12 @@ public:
     /// Removes keys beginning with prefix
     virtual void rmkeys_by_prefix(
       const std::string &prefix ///< [in] Prefix by which to remove keys
+      ) = 0;
+
+    virtual void rm_range_keys(
+      const string &prefix,    ///< [in] Prefix by which to remove keys
+      const string &start,     ///< [in] The start bound of remove keys
+      const string &end        ///< [in] The start bound of remove keys
       ) = 0;
 
     /// Merge value into key
@@ -153,6 +173,11 @@ public:
     }
     return r;
   }
+  virtual int get(const string &prefix,
+		  const char *key, size_t keylen,
+		  bufferlist *value) {
+    return get(prefix, string(key, keylen), value);
+  }
 
   class GenericIteratorImpl {
   public:
@@ -191,6 +216,12 @@ public:
       }
     }
     virtual int status() = 0;
+    virtual size_t key_size() {
+      return 0;
+    }
+    virtual size_t value_size() {
+      return 0;
+    }
     virtual ~WholeSpaceIteratorImpl() { }
   };
   typedef ceph::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
@@ -201,28 +232,28 @@ public:
   public:
     IteratorImpl(const std::string &prefix, WholeSpaceIterator iter) :
       prefix(prefix), generic_iter(iter) { }
-    virtual ~IteratorImpl() { }
+    ~IteratorImpl() override { }
 
-    int seek_to_first() {
+    int seek_to_first() override {
       return generic_iter->seek_to_first(prefix);
     }
     int seek_to_last() {
       return generic_iter->seek_to_last(prefix);
     }
-    int upper_bound(const std::string &after) {
+    int upper_bound(const std::string &after) override {
       return generic_iter->upper_bound(prefix, after);
     }
-    int lower_bound(const std::string &to) {
+    int lower_bound(const std::string &to) override {
       return generic_iter->lower_bound(prefix, to);
     }
-    bool valid() {
+    bool valid() override {
       if (!generic_iter->valid())
 	return false;
       return generic_iter->raw_key_is_prefixed(prefix);
     }
     // Note that next() and prev() shouldn't validate iters,
     // it's responsibility of caller to ensure they're valid.
-    int next(bool validate=true) {
+    int next(bool validate=true) override {
       if (validate) {
         if (valid())
           return generic_iter->next();
@@ -241,19 +272,19 @@ public:
         return generic_iter->prev();  
       }      
     }
-    std::string key() {
+    std::string key() override {
       return generic_iter->key();
     }
     std::pair<std::string, std::string> raw_key() {
       return generic_iter->raw_key();
     }
-    bufferlist value() {
+    bufferlist value() override {
       return generic_iter->value();
     }
     bufferptr value_as_ptr() {
       return generic_iter->value_as_ptr();
     }
-    int status() {
+    int status() override {
       return generic_iter->status();
     }
   };
@@ -266,14 +297,6 @@ public:
 
   Iterator get_iterator(const std::string &prefix) {
     return std::make_shared<IteratorImpl>(prefix, get_iterator());
-  }
-
-  WholeSpaceIterator get_snapshot_iterator() {
-    return _get_snapshot_iterator();
-  }
-
-  Iterator get_snapshot_iterator(const std::string &prefix) {
-    return std::make_shared<IteratorImpl>(prefix, get_snapshot_iterator());
   }
 
   virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
@@ -320,13 +343,15 @@ public:
     return -EOPNOTSUPP;
   }
 
+  virtual void get_statistics(Formatter *f) {
+    return;
+  }
 protected:
   /// List of matching prefixes and merge operators
   std::vector<std::pair<std::string,
 			std::shared_ptr<MergeOperator> > > merge_ops;
 
   virtual WholeSpaceIterator _get_iterator() = 0;
-  virtual WholeSpaceIterator _get_snapshot_iterator() = 0;
 };
 
 #endif

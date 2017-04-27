@@ -80,13 +80,13 @@ class MMDSSlaveRequest : public Message {
 
     case OP_DROPLOCKS: return "drop_locks";
 
-    case OP_RENAMENOTIFY: return "reame_notify";
+    case OP_RENAMENOTIFY: return "rename_notify";
     case OP_RENAMENOTIFYACK: return "rename_notify_ack";
 
     case OP_ABORT: return "abort";
       //case OP_COMMIT: return "commit";
 
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -96,10 +96,11 @@ class MMDSSlaveRequest : public Message {
   __s16 op;
   __u16 flags;
 
-  static const unsigned FLAG_NONBLOCK	= 1;
-  static const unsigned FLAG_WOULDBLOCK	= 2;
-  static const unsigned FLAG_NOTJOURNALED = 4;
-  static const unsigned FLAG_EROFS = 8;
+  static const unsigned FLAG_NONBLOCK	=	1<<0;
+  static const unsigned FLAG_WOULDBLOCK	=	1<<1;
+  static const unsigned FLAG_NOTJOURNALED =	1<<2;
+  static const unsigned FLAG_EROFS =		1<<3;
+  static const unsigned FLAG_ABORT =		1<<4;
 
   // for locking
   __u16 lock_type;  // lock object type
@@ -139,6 +140,8 @@ public:
   bool is_not_journaled() { return (flags & FLAG_NOTJOURNALED); }
   void mark_error_rofs() { flags |= FLAG_EROFS; }
   bool is_error_rofs() { return (flags & FLAG_EROFS); }
+  bool is_abort() { return (flags & FLAG_ABORT); }
+  void mark_abort() { flags |= FLAG_ABORT; }
 
   void set_lock_type(int t) { lock_type = t; }
 
@@ -150,10 +153,10 @@ public:
     reqid(ri), attempt(att), op(o), flags(0), lock_type(0),
     inode_export_v(0) { }
 private:
-  ~MMDSSlaveRequest() {}
+  ~MMDSSlaveRequest() override {}
 
 public:
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     ::encode(reqid, payload);
     ::encode(attempt, payload);
     ::encode(op, payload);
@@ -170,7 +173,7 @@ public:
     ::encode(srci_replica, payload);
     ::encode(stray, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(reqid, p);
     ::decode(attempt, p);
@@ -189,8 +192,8 @@ public:
     ::decode(stray, p);
   }
 
-  const char *get_type_name() const { return "slave_request"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "slave_request"; }
+  void print(ostream& out) const override {
     out << "slave_request(" << reqid
 	<< "." << attempt
 	<< " " << get_opname(op) 

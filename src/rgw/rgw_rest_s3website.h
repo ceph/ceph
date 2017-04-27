@@ -18,41 +18,41 @@
 
 class RGWHandler_REST_S3Website : public RGWHandler_REST_S3 {
 protected:
-  int retarget(RGWOp *op, RGWOp **new_op);
+  int retarget(RGWOp *op, RGWOp **new_op) override;
   // TODO: this should be virtual I think, and ensure that it's always
   // overridden, but that conflates that op_get/op_head are defined in this
   // class and call this; and don't need to be overridden later.
   virtual RGWOp *get_obj_op(bool get_data) { return NULL; }
-  RGWOp *op_get();
-  RGWOp *op_head();
+  RGWOp *op_get() override;
+  RGWOp *op_head() override;
   // Only allowed to use GET+HEAD
-  RGWOp *op_put() { return NULL; }
-  RGWOp *op_delete() { return NULL; }
-  RGWOp *op_post() { return NULL; }
-  RGWOp *op_copy() { return NULL; }
-  RGWOp *op_options() { return NULL; }
+  RGWOp *op_put() override { return NULL; }
+  RGWOp *op_delete() override { return NULL; }
+  RGWOp *op_post() override { return NULL; }
+  RGWOp *op_copy() override { return NULL; }
+  RGWOp *op_options() override { return NULL; }
 
   int serve_errordoc(int http_ret, const string &errordoc_key);
 public:
-  RGWHandler_REST_S3Website() : RGWHandler_REST_S3() {}
-  virtual ~RGWHandler_REST_S3Website() {}
-  virtual int error_handler(int err_no, string *error_content);
+  using RGWHandler_REST_S3::RGWHandler_REST_S3;
+  ~RGWHandler_REST_S3Website() override = default;
+  int error_handler(int err_no, string *error_content) override;
 };
 
 class RGWHandler_REST_Service_S3Website : public RGWHandler_REST_S3Website {
 protected:
-  virtual RGWOp *get_obj_op(bool get_data);
+  RGWOp *get_obj_op(bool get_data) override;
 public:
-  RGWHandler_REST_Service_S3Website() {}
-  virtual ~RGWHandler_REST_Service_S3Website() {}
+  using RGWHandler_REST_S3Website::RGWHandler_REST_S3Website;
+  ~RGWHandler_REST_Service_S3Website() override = default;
 };
 
 class RGWHandler_REST_Obj_S3Website : public RGWHandler_REST_S3Website {
 protected:
-  virtual RGWOp *get_obj_op(bool get_data);
+  RGWOp *get_obj_op(bool get_data) override;
 public:
-  RGWHandler_REST_Obj_S3Website() {}
-  virtual ~RGWHandler_REST_Obj_S3Website() {}
+  using RGWHandler_REST_S3Website::RGWHandler_REST_S3Website;
+  ~RGWHandler_REST_Obj_S3Website() override = default;
 };
 
 /* The cross-inheritance from Obj to Bucket is deliberate!
@@ -60,10 +60,10 @@ public:
  */
 class RGWHandler_REST_Bucket_S3Website : public RGWHandler_REST_S3Website {
 protected:
-  RGWOp *get_obj_op(bool get_data);
+  RGWOp *get_obj_op(bool get_data) override;
 public:
-  RGWHandler_REST_Bucket_S3Website() {}
-  virtual ~RGWHandler_REST_Bucket_S3Website() {}
+  using RGWHandler_REST_S3Website::RGWHandler_REST_S3Website;
+  ~RGWHandler_REST_Bucket_S3Website() override = default;
 };
 
 // TODO: do we actually need this?
@@ -75,12 +75,12 @@ private:
 public:
   RGWGetObj_ObjStore_S3Website() : is_errordoc_request(false) {}
   explicit RGWGetObj_ObjStore_S3Website(bool is_errordoc_request) : is_errordoc_request(false) { this->is_errordoc_request = is_errordoc_request; }
-  ~RGWGetObj_ObjStore_S3Website() {}
-  int send_response_data_error();
-  int send_response_data(bufferlist& bl, off_t ofs, off_t len);
+  ~RGWGetObj_ObjStore_S3Website() override {}
+  int send_response_data_error() override;
+  int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
   // We override RGWGetObj_ObjStore::get_params here, to allow ignoring all
   // conditional params for error pages.
-  int get_params() {
+  int get_params() override {
       if (is_errordoc_request) {
         range_str = NULL;
         if_mod = NULL;

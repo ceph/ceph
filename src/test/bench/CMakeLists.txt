@@ -12,7 +12,7 @@ target_link_libraries(ceph_smalliobench librados ${Boost_PROGRAM_OPTIONS_LIBRARY
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}) 
 
 # ceph_smalliobenchrbd
-if (${WITH_RBD})
+if(WITH_RBD)
   set(smalliobenchrbd_srcs
     small_io_bench_rbd.cc
     rbd_backend.cc
@@ -21,21 +21,24 @@ if (${WITH_RBD})
   )
   add_executable(ceph_smalliobenchrbd
     ${smalliobenchrbd_srcs}
-    $<TARGET_OBJECTS:common_texttable_obj>
-    $<TARGET_OBJECTS:parse_secret_objs>
-    )
+    $<TARGET_OBJECTS:common_texttable_obj>)
   target_link_libraries(ceph_smalliobenchrbd
     librbd
     librados
     os
     global
     ${Boost_PROGRAM_OPTIONS_LIBRARY}
-    udev
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
-    keyutils
     )
-endif (${WITH_RBD})
+  add_dependencies(ceph_smalliobenchrbd
+    cls_rbd
+    cls_journal
+    cls_lock)
+  install(TARGETS
+    ceph_smalliobenchrbd
+    DESTINATION bin)
+endif(WITH_RBD)
 
 # ceph_smalliobenchfs
 set(ceph_smalliobenchfs_srcs
@@ -75,7 +78,6 @@ target_link_libraries(ceph_tpbench librados ${Boost_PROGRAM_OPTIONS_LIBRARY} glo
 
 install(TARGETS
   ceph_smalliobench
-  ceph_smalliobenchrbd
   ceph_smalliobenchfs
   ceph_smalliobenchdumb
   ceph_tpbench

@@ -98,6 +98,7 @@ about Ceph, see our `Architecture`_ section.
    cephfs/index
    rbd/rbd
    radosgw/index
+   mgr/index
    api/index
    architecture
    Development <dev/index>

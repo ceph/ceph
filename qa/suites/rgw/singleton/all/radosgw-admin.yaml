@@ -1,0 +1,20 @@
+roles:
+- [mon.a, osd.0]
+- [mgr.x, client.0, osd.1, osd.2, osd.3]
+openstack:
+- volumes: # attached to each instance
+    count: 3
+    size: 10 # GB
+tasks:
+- install:
+- ceph:
+    conf:
+      client:
+        debug ms: 1
+        rgw gc obj min wait: 15
+      osd:
+        debug ms: 1
+        debug objclass : 20
+- rgw:
+    client.0:
+- radosgw-admin:

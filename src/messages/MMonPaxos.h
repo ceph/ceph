@@ -43,7 +43,7 @@ class MMonPaxos : public Message {
     case OP_COMMIT: return "commit";
     case OP_LEASE: return "lease";
     case OP_LEASE_ACK: return "lease_ack";
-    default: assert(0); return 0;
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -74,12 +74,12 @@ class MMonPaxos : public Message {
   }
 
 private:
-  ~MMonPaxos() {}
+  ~MMonPaxos() override {}
 
 public:  
-  const char *get_type_name() const { return "paxos"; }
+  const char *get_type_name() const override { return "paxos"; }
   
-  void print(ostream& out) const {
+  void print(ostream& out) const override {
     out << "paxos(" << get_opname(op) 
 	<< " lc " << last_committed
 	<< " fc " << first_committed
@@ -89,7 +89,7 @@ public:
     out <<  ")";
   }
 
-  void encode_payload(uint64_t features) {
+  void encode_payload(uint64_t features) override {
     header.version = HEAD_VERSION;
     ::encode(epoch, payload);
     ::encode(op, payload);
@@ -104,7 +104,7 @@ public:
     ::encode(latest_value, payload);
     ::encode(values, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     ::decode(epoch, p);
     ::decode(op, p);

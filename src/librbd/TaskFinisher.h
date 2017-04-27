@@ -119,7 +119,7 @@ private:
     {
     }
   protected:
-    virtual void finish(int r) {
+    void finish(int r) override {
       m_task_finisher->complete(m_task);
     }
   private:

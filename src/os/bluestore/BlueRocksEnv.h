@@ -32,7 +32,7 @@ public:
   rocksdb::Status NewSequentialFile(
     const std::string& fname,
     std::unique_ptr<rocksdb::SequentialFile>* result,
-    const rocksdb::EnvOptions& options);
+    const rocksdb::EnvOptions& options) override;
 
   // Create a brand new random access read-only file with the
   // specified name.  On success, stores a pointer to the new file in
@@ -44,7 +44,7 @@ public:
   rocksdb::Status NewRandomAccessFile(
     const std::string& fname,
     std::unique_ptr<rocksdb::RandomAccessFile>* result,
-    const rocksdb::EnvOptions& options);
+    const rocksdb::EnvOptions& options) override;
 
   // Create an object that writes to a new file with the specified
   // name.  Deletes any existing file with the same name and creates a
@@ -56,14 +56,14 @@ public:
   rocksdb::Status NewWritableFile(
     const std::string& fname,
     std::unique_ptr<rocksdb::WritableFile>* result,
-    const rocksdb::EnvOptions& options);
+    const rocksdb::EnvOptions& options) override;
 
   // Reuse an existing file by renaming it and opening it as writable.
   rocksdb::Status ReuseWritableFile(
     const std::string& fname,
     const std::string& old_fname,
     std::unique_ptr<rocksdb::WritableFile>* result,
-    const rocksdb::EnvOptions& options);
+    const rocksdb::EnvOptions& options) override;
 
   // Create an object that represents a directory. Will fail if directory
   // doesn't exist. If the directory exists, it will open the directory
@@ -74,45 +74,45 @@ public:
   // returns non-OK.
   rocksdb::Status NewDirectory(
     const std::string& name,
-    std::unique_ptr<rocksdb::Directory>* result);
+    std::unique_ptr<rocksdb::Directory>* result) override;
 
   // Returns OK if the named file exists.
   //         NotFound if the named file does not exist,
   //                  the calling process does not have permission to determine
   //                  whether this file exists, or if the path is invalid.
   //         IOError if an IO Error was encountered
-  rocksdb::Status FileExists(const std::string& fname);
+  rocksdb::Status FileExists(const std::string& fname) override;
 
   // Store in *result the names of the children of the specified directory.
   // The names are relative to "dir".
   // Original contents of *results are dropped.
   rocksdb::Status GetChildren(const std::string& dir,
-                             std::vector<std::string>* result);
+                             std::vector<std::string>* result) override;
 
   // Delete the named file.
-  rocksdb::Status DeleteFile(const std::string& fname);
+  rocksdb::Status DeleteFile(const std::string& fname) override;
 
   // Create the specified directory. Returns error if directory exists.
-  rocksdb::Status CreateDir(const std::string& dirname);
+  rocksdb::Status CreateDir(const std::string& dirname) override;
 
   // Create directory if missing. Return Ok if it exists, or successful in
   // Creating.
-  rocksdb::Status CreateDirIfMissing(const std::string& dirname);
+  rocksdb::Status CreateDirIfMissing(const std::string& dirname) override;
 
   // Delete the specified directory.
-  rocksdb::Status DeleteDir(const std::string& dirname);
+  rocksdb::Status DeleteDir(const std::string& dirname) override;
 
   // Store the size of fname in *file_size.
-  rocksdb::Status GetFileSize(const std::string& fname, uint64_t* file_size);
+  rocksdb::Status GetFileSize(const std::string& fname, uint64_t* file_size) override;
 
   // Store the last modification time of fname in *file_mtime.
   rocksdb::Status GetFileModificationTime(const std::string& fname,
-                                         uint64_t* file_mtime);
+                                         uint64_t* file_mtime) override;
   // Rename file src to target.
   rocksdb::Status RenameFile(const std::string& src,
-                            const std::string& target);
+                            const std::string& target) override;
   // Hard Link file src to target.
-  rocksdb::Status LinkFile(const std::string& src, const std::string& target);
+  rocksdb::Status LinkFile(const std::string& src, const std::string& target) override;
 
   // Lock the specified file.  Used to prevent concurrent access to
   // the same db by multiple processes.  On failure, stores nullptr in
@@ -128,27 +128,27 @@ public:
   // to go away.
   //
   // May create the named file if it does not already exist.
-  rocksdb::Status LockFile(const std::string& fname, rocksdb::FileLock** lock);
+  rocksdb::Status LockFile(const std::string& fname, rocksdb::FileLock** lock) override;
 
   // Release the lock acquired by a previous successful call to LockFile.
   // REQUIRES: lock was returned by a successful LockFile() call
   // REQUIRES: lock has not already been unlocked.
-  rocksdb::Status UnlockFile(rocksdb::FileLock* lock);
+  rocksdb::Status UnlockFile(rocksdb::FileLock* lock) override;
 
   // *path is set to a temporary directory that can be used for testing. It may
   // or may not have just been created. The directory may or may not differ
   // between runs of the same process, but subsequent calls will return the
   // same directory.
-  rocksdb::Status GetTestDirectory(std::string* path);
+  rocksdb::Status GetTestDirectory(std::string* path) override;
 
   // Create and return a log file for storing informational messages.
   rocksdb::Status NewLogger(
     const std::string& fname,
-    std::shared_ptr<rocksdb::Logger>* result);
+    std::shared_ptr<rocksdb::Logger>* result) override;
 
   // Get full directory name for this db.
   rocksdb::Status GetAbsolutePath(const std::string& db_path,
-      std::string* output_path);
+      std::string* output_path) override;
 
   explicit BlueRocksEnv(BlueFS *f);
 private:

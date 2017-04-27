@@ -144,7 +144,10 @@ class TestRados(object):
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'')
         for mon in json.loads(buf.decode('utf8'))['mons']:
             while True:
-                buf = json.loads(self.rados.ping_monitor(mon['name']))
+                output = self.rados.ping_monitor(mon['name'])
+                if output is None:
+                    continue
+                buf = json.loads(output)
                 if buf.get('health'):
                     break
 
@@ -672,6 +675,32 @@ class TestIoctx(object):
         eq(contents, b"bar")
         [i.remove() for i in self.ioctx.list_objects()]
 
+    def test_aio_stat(self):
+        lock = threading.Condition()
+        count = [0]
+        def cb(_, size, mtime):
+            with lock:
+                count[0] += 1
+                lock.notify()
+
+        comp = self.ioctx.aio_stat("foo", cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 1:
+                lock.wait()
+        eq(comp.get_return_value(), -2)
+
+        self.ioctx.write("foo", b"bar")
+
+        comp = self.ioctx.aio_stat("foo", cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 2:
+                lock.wait()
+        eq(comp.get_return_value(), 0)
+
+        [i.remove() for i in self.ioctx.list_objects()]
+
     def _take_down_acting_set(self, pool, objectname):
         # find acting_set for pool:objectname and take it down; used to
         # verify that async reads don't complete while acting set is missing
@@ -798,6 +827,37 @@ class TestIoctx(object):
 
         ret, buf = self.ioctx.execute("foo", "hello", "say_hello", b"nose")
         eq(buf, b"Hello, nose!")
+
+    def test_aio_execute(self):
+        count = [0]
+        retval = [None]
+        lock = threading.Condition()
+        def cb(_, buf):
+            with lock:
+                if retval[0] is None:
+                    retval[0] = buf
+                count[0] += 1
+                lock.notify()
+        self.ioctx.write("foo", b"") # ensure object exists
+
+        comp = self.ioctx.aio_execute("foo", "hello", "say_hello", b"", 32, cb, cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 2:
+                lock.wait()
+        eq(comp.get_return_value(), 13)
+        eq(retval[0], b"Hello, world!")
+
+        retval[0] = None
+        comp = self.ioctx.aio_execute("foo", "hello", "say_hello", b"nose", 32, cb, cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] < 4:
+                lock.wait()
+        eq(comp.get_return_value(), 12)
+        eq(retval[0], b"Hello, nose!")
+
+        [i.remove() for i in self.ioctx.list_objects()]
 
 class TestObject(object):
 

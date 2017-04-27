@@ -4,21 +4,27 @@
 #ifndef CEPH_RGW_LOADGEN_H
 #define CEPH_RGW_LOADGEN_H
 
+#include <map>
+#include <string>
+
 #include "rgw_client_io.h"
 
 
 struct RGWLoadGenRequestEnv {
   int port;
   uint64_t content_length;
-  string content_type;
-  string request_method;
-  string uri;
-  string query_string;
-  string date_str;
+  std::string content_type;
+  std::string request_method;
+  std::string uri;
+  std::string query_string;
+  std::string date_str;
 
-  map<string, string> headers;
+  std::map<std::string, std::string> headers;
 
-  RGWLoadGenRequestEnv() : port(0), content_length(0) {}
+  RGWLoadGenRequestEnv()
+    : port(0),
+      content_length(0) {
+  }
 
   void set_date(utime_t& tm);
   int sign(RGWAccessKey& access_key);
@@ -26,24 +32,44 @@ struct RGWLoadGenRequestEnv {
 
 /* XXX does RGWLoadGenIO actually want to perform stream/HTTP I/O,
  * or (e.g) are these NOOPs? */
-class RGWLoadGenIO : public RGWStreamIO
+class RGWLoadGenIO : public rgw::io::RestfulClient
 {
   uint64_t left_to_read;
-  RGWLoadGenRequestEnv *req;
+  RGWLoadGenRequestEnv* req;
+  RGWEnv env;
+
+  void init_env(CephContext *cct) override;
+  size_t read_data(char *buf, size_t len);
+  size_t write_data(const char *buf, size_t len);
+
 public:
-  void init_env(CephContext *cct);
+  explicit RGWLoadGenIO(RGWLoadGenRequestEnv* const req)
+    : left_to_read(0),
+      req(req) {
+  }
 
-  int write_data(const char *buf, int len);
-  int read_data(char *buf, int len);
+  size_t send_status(int status, const char *status_name) override;
+  size_t send_100_continue() override;
+  size_t send_header(const boost::string_ref& name,
+                     const boost::string_ref& value) override;
+  size_t complete_header() override;
+  size_t send_content_length(uint64_t len) override;
 
-  int send_status(int status, const char *status_name);
-  int send_100_continue();
-  int complete_header();
-  int complete_request();
-  int send_content_length(uint64_t len);
+  size_t recv_body(char* buf, size_t max) override {
+    return read_data(buf, max);
+  }
 
-  explicit RGWLoadGenIO(RGWLoadGenRequestEnv *_re) : left_to_read(0), req(_re) {}
-  void flush();
+  size_t send_body(const char* buf, size_t len) override {
+    return write_data(buf, len);
+  }
+
+  void flush() override;
+
+  RGWEnv& get_env() noexcept override {
+    return env;
+  }
+
+  size_t complete_request() override;
 };
 
 #endif

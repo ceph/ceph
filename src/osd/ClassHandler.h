@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 #ifndef CEPH_CLASSHANDLER_H
 #define CEPH_CLASSHANDLER_H
 
@@ -100,7 +102,6 @@ public:
   };
 
 private:
-  Mutex mutex;
   map<string, ClassData> classes;
 
   ClassData *_get_class(const string& cname, bool check_allowed);
@@ -110,10 +111,13 @@ private:
       const std::string& list);
 
 public:
+  Mutex mutex;
+
   explicit ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
-  
+
   int open_all_classes();
 
+  void add_embedded_class(const string& cname);
   int open_class(const string& cname, ClassData **pcls);
   
   ClassData *register_class(const char *cname);

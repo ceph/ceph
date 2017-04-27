@@ -49,6 +49,13 @@ enum RGWCheckMTimeType {
   CLS_RGW_CHECK_TIME_MTIME_GE = 4,
 };
 
+#define ROUND_BLOCK_SIZE 4096
+
+static inline uint64_t cls_rgw_get_rounded_size(uint64_t size)
+{
+  return (size + ROUND_BLOCK_SIZE - 1) & ~(ROUND_BLOCK_SIZE - 1);
+}
+
 struct rgw_bucket_pending_info {
   RGWPendingState state;
   ceph::real_time timestamp;
@@ -232,6 +239,10 @@ struct cls_rgw_obj_key {
   cls_rgw_obj_key(const string &_name) : name(_name) {}
   cls_rgw_obj_key(const string& n, const string& i) : name(n), instance(i) {}
 
+  void set(const string& _name) {
+    name = _name;
+  }
+
   bool operator==(const cls_rgw_obj_key& k) const {
     return (name.compare(k.name) == 0) &&
            (instance.compare(k.instance) == 0);
@@ -242,6 +253,12 @@ struct cls_rgw_obj_key {
       r = instance.compare(k.instance);
     }
     return (r < 0);
+  }
+  bool operator<=(const cls_rgw_obj_key& k) const {
+    return !(k < *this);
+  }
+  bool empty() {
+    return name.empty();
   }
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -307,7 +324,7 @@ struct rgw_bucket_dir_entry {
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     ::decode(key.name, bl);
     ::decode(ver.epoch, bl);
     ::decode(exists, bl);
@@ -361,6 +378,8 @@ enum BIIndexType {
   OLHIdx        = 3,
 };
 
+struct rgw_bucket_category_stats;
+
 struct rgw_cls_bi_entry {
   BIIndexType type;
   string idx;
@@ -388,6 +407,8 @@ struct rgw_cls_bi_entry {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
+
+  bool get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_bucket_category_stats *accounted_stats);
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
@@ -543,21 +564,28 @@ struct rgw_bucket_category_stats {
   uint64_t total_size;
   uint64_t total_size_rounded;
   uint64_t num_entries;
+  uint64_t actual_size{0}; //< account for compression, encryption
 
   rgw_bucket_category_stats() : total_size(0), total_size_rounded(0), num_entries(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     ::encode(total_size, bl);
     ::encode(total_size_rounded, bl);
     ::encode(num_entries, bl);
+    ::encode(actual_size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     ::decode(total_size, bl);
     ::decode(total_size_rounded, bl);
     ::decode(num_entries, bl);
+    if (struct_v >= 3) {
+      ::decode(actual_size, bl);
+    } else {
+      actual_size = total_size;
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -854,7 +882,7 @@ struct cls_rgw_obj_chain {
 
   cls_rgw_obj_chain() {}
 
-  void push_obj(string& pool, cls_rgw_obj_key& key, string& loc) {
+  void push_obj(const string& pool, const cls_rgw_obj_key& key, const string& loc) {
     cls_rgw_obj obj;
     obj.pool = pool;
     obj.key = key;
@@ -885,6 +913,10 @@ struct cls_rgw_obj_chain {
   }
   static void generate_test_instances(list<cls_rgw_obj_chain*>& ls) {
     ls.push_back(new cls_rgw_obj_chain);
+  }
+
+  bool empty() {
+    return objs.empty();
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj_chain)

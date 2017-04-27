@@ -126,7 +126,7 @@ public:
 	return 0;
       }
     }
-    assert(0); // not reachable
+    ceph_abort(); // not reachable
     return -EINVAL;
   } ///< @return error value, 0 on success, -ENOENT if no more entries
 

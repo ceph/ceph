@@ -49,7 +49,7 @@ public:
   typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
 
   ImageSyncThrottler();
-  ~ImageSyncThrottler();
+  ~ImageSyncThrottler() override;
   ImageSyncThrottler(const ImageSyncThrottler&) = delete;
   ImageSyncThrottler& operator=(const ImageSyncThrottler&) = delete;
 
@@ -70,29 +70,13 @@ public:
 private:
   typedef std::pair<int64_t, std::string> PoolImageId;
 
-  struct C_SyncHolder : public Context {
-    ImageSyncThrottler<ImageCtxT> *m_sync_throttler;
-    PoolImageId m_local_pool_image_id;
-    ImageSync<ImageCtxT> *m_sync = nullptr;
-    Context *m_on_finish;
-
-    C_SyncHolder(ImageSyncThrottler<ImageCtxT> *sync_throttler,
-                 const PoolImageId &local_pool_image_id, Context *on_finish)
-      : m_sync_throttler(sync_throttler),
-        m_local_pool_image_id(local_pool_image_id), m_on_finish(on_finish) {
-    }
-
-    virtual void finish(int r) {
-      m_sync_throttler->handle_sync_finished(this);
-      m_on_finish->complete(r);
-    }
-  };
+  struct C_SyncHolder;
 
   void handle_sync_finished(C_SyncHolder *sync_holder);
 
-  const char **get_tracked_conf_keys() const;
+  const char **get_tracked_conf_keys() const override;
   void handle_conf_change(const struct md_config_t *conf,
-                          const std::set<std::string> &changed);
+                          const std::set<std::string> &changed) override;
 
   uint32_t m_max_concurrent_syncs;
   Mutex m_lock;

@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_IMAGE_SNAP_SET_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_SNAP_SET_REQUEST_H
 
+#include "cls/rbd/cls_rbd_client.h"
 #include <string>
 
 class Context;
@@ -12,7 +13,7 @@ namespace librbd {
 
 template <typename> class ExclusiveLock;
 class ImageCtx;
-class ObjectMap;
+template <typename> class ObjectMap;
 
 namespace image {
 
@@ -22,9 +23,10 @@ template <typename ImageCtxT = ImageCtx>
 class SetSnapRequest {
 public:
   static SetSnapRequest *create(ImageCtxT &image_ctx,
-                                const std::string &snap_name,
+                                const cls::rbd::SnapshotNamespace& snap_namespace,
+				const std::string &snap_name,
                                 Context *on_finish) {
-    return new SetSnapRequest(image_ctx, snap_name, on_finish);
+    return new SetSnapRequest(image_ctx, snap_namespace, snap_name, on_finish);
   }
 
   ~SetSnapRequest();
@@ -75,16 +77,18 @@ private:
    * @endverbatim
    */
 
-  SetSnapRequest(ImageCtxT &image_ctx, const std::string &snap_name,
+  SetSnapRequest(ImageCtxT &image_ctx, const cls::rbd::SnapshotNamespace& snap_namespace,
+		 const std::string &snap_name,
                 Context *on_finish);
 
   ImageCtxT &m_image_ctx;
+  cls::rbd::SnapshotNamespace m_snap_namespace;
   std::string m_snap_name;
   Context *m_on_finish;
 
   uint64_t m_snap_id;
   ExclusiveLock<ImageCtxT> *m_exclusive_lock;
-  ObjectMap *m_object_map;
+  ObjectMap<ImageCtxT> *m_object_map;
   RefreshParentRequest<ImageCtxT> *m_refresh_parent;
 
   bool m_writes_blocked;

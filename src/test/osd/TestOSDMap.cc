@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include "gtest/gtest.h"
 #include "osd/OSDMap.h"
+#include "osd/OSDMapMapping.h"
 
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -11,10 +12,10 @@
 using namespace std;
 
 int main(int argc, char **argv) {
-  std::vector<const char *> preargs;
   std::vector<const char*> args(argv, argv+argc);
-  global_init(&preargs, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-              CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   // make sure we have 3 copies, or some tests won't work
   g_ceph_context->_conf->set_val("osd_pool_default_size", "3", false);
@@ -28,6 +29,8 @@ class OSDMapTest : public testing::Test {
   const static int num_osds = 6;
 public:
   OSDMap osdmap;
+  OSDMapMapping mapping;
+
   OSDMapTest() {}
 
   void set_up_map() {
@@ -76,17 +79,29 @@ public:
 		     vector<int> *any,
 		     vector<int> *first,
 		     vector<int> *primary) {
+    mapping.update(osdmap);
     for (int i=0; i<num; ++i) {
-      vector<int> o;
-      int p;
+      vector<int> up, acting;
+      int up_primary, acting_primary;
       pg_t pgid(i, pool);
-      osdmap.pg_to_acting_osds(pgid, &o, &p);
-      for (unsigned j=0; j<o.size(); ++j)
-	(*any)[o[j]]++;
-      if (!o.empty())
-	(*first)[o[0]]++;
-      if (p >= 0)
-	(*primary)[p]++;
+      osdmap.pg_to_up_acting_osds(pgid,
+				  &up, &up_primary, &acting, &acting_primary);
+      for (unsigned j=0; j<acting.size(); ++j)
+	(*any)[acting[j]]++;
+      if (!acting.empty())
+	(*first)[acting[0]]++;
+      if (acting_primary >= 0)
+	(*primary)[acting_primary]++;
+
+      // compare to precalc mapping
+      vector<int> up2, acting2;
+      int up_primary2, acting_primary2;
+      pgid = osdmap.raw_pg_to_pg(pgid);
+      mapping.get(pgid, &up2, &up_primary2, &acting2, &acting_primary2);
+      ASSERT_EQ(up, up2);
+      ASSERT_EQ(up_primary, up_primary2);
+      ASSERT_EQ(acting, acting2);
+      ASSERT_EQ(acting_primary, acting_primary2);
     }
   }
 };
@@ -220,7 +235,8 @@ TEST_F(OSDMapTest, PGTempRespected) {
 
   // apply pg_temp to osdmap
   OSDMap::Incremental pgtemp_map(osdmap.get_epoch() + 1);
-  pgtemp_map.new_pg_temp[pgid] = new_acting_osds;
+  pgtemp_map.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
+    new_acting_osds.begin(), new_acting_osds.end());
   osdmap.apply_incremental(pgtemp_map);
 
   osdmap.pg_to_up_acting_osds(pgid, &up_osds, &up_primary,
@@ -261,7 +277,8 @@ TEST_F(OSDMapTest, CleanTemps) {
     int up_primary, acting_primary;
     osdmap.pg_to_up_acting_osds(pga, &up_osds, &up_primary,
 				&acting_osds, &acting_primary);
-    pgtemp_map.new_pg_temp[pga] = up_osds;
+    pgtemp_map.new_pg_temp[pga] = mempool::osdmap::vector<int>(
+      up_osds.begin(), up_osds.end());
     pgtemp_map.new_primary_temp[pga] = up_primary;
   }
   pg_t pgb = osdmap.raw_pg_to_pg(pg_t(1, 0));
@@ -270,7 +287,8 @@ TEST_F(OSDMapTest, CleanTemps) {
     int up_primary, acting_primary;
     osdmap.pg_to_up_acting_osds(pgb, &up_osds, &up_primary,
 				&acting_osds, &acting_primary);
-    pending_inc.new_pg_temp[pgb] = up_osds;
+    pending_inc.new_pg_temp[pgb] = mempool::osdmap::vector<int>(
+      up_osds.begin(), up_osds.end());
     pending_inc.new_primary_temp[pgb] = up_primary;
   }
 
@@ -319,7 +337,8 @@ TEST_F(OSDMapTest, KeepsNecessaryTemps) {
   if (i == (int)get_num_osds())
     FAIL() << "did not find unused OSD for temp mapping";
 
-  pgtemp_map.new_pg_temp[pgid] = up_osds;
+  pgtemp_map.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
+    up_osds.begin(), up_osds.end());
   pgtemp_map.new_primary_temp[pgid] = up_osds[1];
   osdmap.apply_incremental(pgtemp_map);
 
@@ -376,8 +395,9 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
 	  ASSERT_LT(0, first[i]);
 	  ASSERT_LT(0, primary[i]);
 	} else {
-	  if (p->second.is_replicated())
+	  if (p->second.is_replicated()) {
 	    ASSERT_EQ(0, first[i]);
+	  }
 	  ASSERT_EQ(0, primary[i]);
 	}
       }
@@ -397,8 +417,9 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
 	  ASSERT_LT(0, first[i]);
 	  ASSERT_LT(0, primary[i]);
 	} else if (i == 1) {
-	  if (p->second.is_replicated())
+	  if (p->second.is_replicated()) {
 	    ASSERT_EQ(0, first[i]);
+	  }
 	  ASSERT_EQ(0, primary[i]);
 	} else {
 	  ASSERT_LT(10000/6/4, primary[0]);

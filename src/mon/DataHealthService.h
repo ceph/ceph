@@ -43,13 +43,13 @@ class DataHealthService :
   }
 
 protected:
-  virtual void service_tick();
-  virtual bool service_dispatch_op(MonOpRequestRef op);
-  virtual void service_shutdown() { }
+  void service_tick() override;
+  bool service_dispatch_op(MonOpRequestRef op) override;
+  void service_shutdown() override { }
 
-  virtual void start_epoch();
-  virtual void finish_epoch() { }
-  virtual void cleanup() { }
+  void start_epoch() override;
+  void finish_epoch() override { }
+  void cleanup() override { }
 
 public:
   DataHealthService(Monitor *m) :
@@ -58,22 +58,22 @@ public:
   {
     set_update_period(g_conf->mon_health_data_update_interval);
   }
-  virtual ~DataHealthService() { }
+  ~DataHealthService() override { }
 
-  virtual void init() {
+  void init() override {
     generic_dout(20) << "data_health " << __func__ << dendl;
     start_tick();
   }
 
-  virtual void get_health(Formatter *f,
+  void get_health(Formatter *f,
                           list<pair<health_status_t,string> >& summary,
-                          list<pair<health_status_t,string> > *detail);
+                          list<pair<health_status_t,string> > *detail) override;
 
-  virtual int get_type() {
+  int get_type() override {
     return HealthService::SERVICE_HEALTH_DATA;
   }
 
-  virtual string get_name() const {
+  string get_name() const override {
     return "data_health";
   }
 };

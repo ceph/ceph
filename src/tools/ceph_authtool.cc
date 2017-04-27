@@ -63,8 +63,9 @@ int main(int argc, const char **argv)
   map<string,bufferlist> caps;
   std::string fn;
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
   bool gen_key = false;
   bool gen_print_key = false;
@@ -253,7 +254,7 @@ int main(int argc, const char **argv)
     }
     complain_about_parse_errors(g_ceph_context, &parse_errors);
     map<string, bufferlist> caps;
-    const char *key_names[] = { "mon", "osd", "mds", NULL };
+    const char *key_names[] = { "mon", "osd", "mds", "mgr", NULL };
     for (int i=0; key_names[i]; i++) {
       std::string val;
       if (cf.read("global", key_names[i], val) == 0) {

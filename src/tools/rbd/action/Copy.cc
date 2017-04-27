@@ -17,10 +17,11 @@ namespace po = boost::program_options;
 
 static int do_copy(librbd::Image &src, librados::IoCtx& dest_pp,
 		   const char *destname, librbd::ImageOptions& opts,
-		   bool no_progress)
+		   bool no_progress,
+		   size_t sparse_size)
 {
   utils::ProgressContext pc("Image copy", no_progress);
-  int r = src.copy_with_progress3(dest_pp, destname, opts, pc);
+  int r = src.copy_with_progress4(dest_pp, destname, opts, pc, sparse_size);
   if (r < 0){
     pc.fail();
     return r;
@@ -35,6 +36,7 @@ void get_arguments(po::options_description *positional,
                                      at::ARGUMENT_MODIFIER_SOURCE);
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
   at::add_create_image_options(options, false);
+  at::add_sparse_size_option(options);
   at::add_no_progress_option(options);
 }
 
@@ -70,7 +72,7 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, snap_name, true,
+  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -82,8 +84,12 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  size_t sparse_size = utils::RBD_DEFAULT_SPARSE_SIZE;
+  if (vm.count(at::IMAGE_SPARSE_SIZE)) {
+    sparse_size = vm[at::IMAGE_SPARSE_SIZE].as<size_t>();
+  }
   r = do_copy(image, dst_io_ctx, dst_image_name.c_str(), opts,
-              vm[at::NO_PROGRESS].as<bool>());
+              vm[at::NO_PROGRESS].as<bool>(), sparse_size);
   if (r < 0) {
     std::cerr << "rbd: copy failed: " << cpp_strerror(r) << std::endl;
     return r;

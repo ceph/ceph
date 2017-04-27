@@ -36,10 +36,11 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
   int s, on = 1;
 
   if ((s = ::socket(domain, SOCK_STREAM, 0)) == -1) {
-    lderr(cct) << __func__ << " couldn't created socket " << cpp_strerror(errno) << dendl;
+    lderr(cct) << __func__ << " couldn't create socket " << cpp_strerror(errno) << dendl;
     return -errno;
   }
 
+#if !defined(__FreeBSD__)
   /* Make sure connection-intensive things like the benchmark
    * will be able to close/open sockets a zillion of times */
   if (reuse_addr) {
@@ -50,6 +51,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
       return -errno;
     }
   }
+#endif
 
   return s;
 }
@@ -121,16 +123,31 @@ int NetHandler::set_socket_options(int sd, bool nodelay, int size)
   return r;
 }
 
-void NetHandler::set_priority(int sd, int prio)
+void NetHandler::set_priority(int sd, int prio, int domain)
 {
   if (prio >= 0) {
     int r = -1;
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-    if (r < 0) {
-      ldout(cct, 0) << __func__ << " couldn't set IP_TOS to " << iptos
-                    << ": " << cpp_strerror(errno) << dendl;
+    if (domain == AF_INET) {
+      r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
+      r = -errno;
+      if (r < 0) {
+        ldout(cct,0) << "couldn't set IP_TOS to " << iptos
+                           << ": " << cpp_strerror(r) << dendl;
+      }
+    } else if (domain == AF_INET6) {
+      r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
+      if (r)
+	r = -errno;
+      if (r < 0) {
+        ldout(cct,0) << "couldn't set IPV6_TCLASS to " << iptos
+                           << ": " << cpp_strerror(r) << dendl;
+      }
+    } else {
+      ldout(cct,0) << "couldn't set ToS of unknown family to " << iptos
+                         << dendl;
     }
 #endif
 #if defined(SO_PRIORITY) 
@@ -148,7 +165,7 @@ void NetHandler::set_priority(int sd, int prio)
   }
 }
 
-int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
+int NetHandler::generic_connect(const entity_addr_t& addr, const entity_addr_t &bind_addr, bool nonblock)
 {
   int ret;
   int s = create_socket(addr.get_family());
@@ -165,6 +182,19 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
 
   set_socket_options(s, cct->_conf->ms_tcp_nodelay, cct->_conf->ms_tcp_rcvbuf);
 
+  {
+    entity_addr_t addr = bind_addr;
+    if (cct->_conf->ms_bind_before_connect && (!addr.is_blank_ip())) {
+      addr.set_port(0);
+      ret = ::bind(s, addr.get_sockaddr(), addr.get_sockaddr_len());
+      if (ret < 0) {
+        ret = -errno;
+        ldout(cct, 2) << __func__ << " client bind error " << ", " << cpp_strerror(ret) << dendl;
+        close(s);
+        return ret;
+      }
+    }
+  }
 
   ret = ::connect(s, addr.get_sockaddr(), addr.get_sockaddr_len());
   if (ret < 0) {
@@ -193,14 +223,14 @@ int NetHandler::reconnect(const entity_addr_t &addr, int sd)
   return 0;
 }
 
-int NetHandler::connect(const entity_addr_t &addr)
+int NetHandler::connect(const entity_addr_t &addr, const entity_addr_t& bind_addr)
 {
-  return generic_connect(addr, false);
+  return generic_connect(addr, bind_addr, false);
 }
 
-int NetHandler::nonblock_connect(const entity_addr_t &addr)
+int NetHandler::nonblock_connect(const entity_addr_t &addr, const entity_addr_t& bind_addr)
 {
-  return generic_connect(addr, true);
+  return generic_connect(addr, bind_addr, true);
 }
 
 

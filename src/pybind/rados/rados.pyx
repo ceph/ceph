@@ -155,6 +155,10 @@ cdef extern from "rados/librados.h" nogil:
                           const char *inbuf, size_t inbuflen,
                           char **outbuf, size_t *outbuflen,
                           char **outs, size_t *outslen)
+    int rados_mgr_command(rados_t cluster, const char **cmd, size_t cmdlen,
+                          const char *inbuf, size_t inbuflen,
+                          char **outbuf, size_t *outbuflen,
+                          char **outs, size_t *outslen)
     int rados_mon_command_target(rados_t cluster, const char *name, const char **cmd, size_t cmdlen,
                                  const char *inbuf, size_t inbuflen,
                                  char **outbuf, size_t *outbuflen,
@@ -221,6 +225,7 @@ cdef extern from "rados/librados.h" nogil:
 
     int rados_aio_create_completion(void * cb_arg, rados_callback_t cb_complete, rados_callback_t cb_safe, rados_completion_t * pc)
     void rados_aio_release(rados_completion_t c)
+    int rados_aio_stat(rados_ioctx_t io, const char *oid, rados_completion_t completion, uint64_t *psize, time_t *pmtime)
     int rados_aio_write(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len, uint64_t off)
     int rados_aio_append(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len)
     int rados_aio_write_full(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * buf, size_t len)
@@ -238,6 +243,8 @@ cdef extern from "rados/librados.h" nogil:
 
     int rados_exec(rados_ioctx_t io, const char * oid, const char * cls, const char * method,
                    const char * in_buf, size_t in_len, char * buf, size_t out_len)
+    int rados_aio_exec(rados_ioctx_t io, const char * oid, rados_completion_t completion, const char * cls, const char * method,
+                       const char * in_buf, size_t in_len, char * buf, size_t out_len)
 
     int rados_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, const char * oid, time_t * mtime, int flags)
     int rados_aio_write_op_operate(rados_write_op_t write_op, rados_ioctx_t io, rados_completion_t completion, const char *oid, time_t *mtime, int flags)
@@ -294,7 +301,7 @@ class Error(Exception):
     """ `Error` class, derived from `Exception` """
 
 
-class InvalidArgument(Error):
+class InvalidArgumentError(Error):
     pass
 
 
@@ -370,19 +377,34 @@ class TimedOut(Error):
     pass
 
 
-
-cdef errno_to_exception = {
-    errno.EPERM     : PermissionError,
-    errno.ENOENT    : ObjectNotFound,
-    errno.EIO       : IOError,
-    errno.ENOSPC    : NoSpace,
-    errno.EEXIST    : ObjectExists,
-    errno.EBUSY     : ObjectBusy,
-    errno.ENODATA   : NoData,
-    errno.EINTR     : InterruptedOrTimeoutError,
-    errno.ETIMEDOUT : TimedOut,
-    errno.EACCES    : PermissionDeniedError
-}
+IF UNAME_SYSNAME == "FreeBSD":
+    cdef errno_to_exception = {
+        errno.EPERM     : PermissionError,
+        errno.ENOENT    : ObjectNotFound,
+        errno.EIO       : IOError,
+        errno.ENOSPC    : NoSpace,
+        errno.EEXIST    : ObjectExists,
+        errno.EBUSY     : ObjectBusy,
+        errno.ENOATTR   : NoData,
+        errno.EINTR     : InterruptedOrTimeoutError,
+        errno.ETIMEDOUT : TimedOut,
+        errno.EACCES    : PermissionDeniedError,
+        errno.EINVAL    : InvalidArgumentError,
+    }
+ELSE:
+    cdef errno_to_exception = {
+        errno.EPERM     : PermissionError,
+        errno.ENOENT    : ObjectNotFound,
+        errno.EIO       : IOError,
+        errno.ENOSPC    : NoSpace,
+        errno.EEXIST    : ObjectExists,
+        errno.EBUSY     : ObjectBusy,
+        errno.ENODATA   : NoData,
+        errno.EINTR     : InterruptedOrTimeoutError,
+        errno.ETIMEDOUT : TimedOut,
+        errno.EACCES    : PermissionDeniedError,
+        errno.EINVAL    : InvalidArgumentError,
+    }
 
 
 cdef make_ex(ret, msg):
@@ -1224,6 +1246,47 @@ Rados object in state %s." % self.state)
         finally:
             free(_cmd)
 
+    def mgr_command(self, cmd, inbuf, timeout=0):
+        """
+        returns (int ret, string outbuf, string outs)
+        """
+        # NOTE(sileht): timeout is ignored because C API doesn't provide
+        # timeout argument, but we keep it for backward compat with old python binding
+        self.require_state("connected")
+
+        cmd = cstr_list(cmd, 'cmd')
+        inbuf = cstr(inbuf, 'inbuf')
+
+        cdef:
+            char **_cmd = to_bytes_array(cmd)
+            size_t _cmdlen = len(cmd)
+
+            char *_inbuf = inbuf
+            size_t _inbuf_len = len(inbuf)
+
+            char *_outbuf
+            size_t _outbuf_len
+            char *_outs
+            size_t _outs_len
+
+        try:
+            with nogil:
+                ret = rados_mgr_command(self.cluster,
+                                        <const char **>_cmd, _cmdlen,
+                                        <const char*>_inbuf, _inbuf_len,
+                                        &_outbuf, &_outbuf_len,
+                                        &_outs, &_outs_len)
+
+            my_outs = decode_cstr(_outs[:_outs_len])
+            my_outbuf = _outbuf[:_outbuf_len]
+            if _outs_len:
+                rados_buffer_free(_outs)
+            if _outbuf_len:
+                rados_buffer_free(_outbuf)
+            return (ret, my_outbuf, my_outs)
+        finally:
+            free(_cmd)
+
     def pg_command(self, pgid, cmd, inbuf, timeout=0):
         """
         pg_command(pgid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
@@ -1944,6 +2007,54 @@ cdef class Ioctx(object):
         completion_obj.rados_comp = completion
         return completion_obj
 
+    @requires(('object_name', str_type), ('oncomplete', opt(Callable)))
+    def aio_stat(self, object_name, oncomplete):
+        """
+        Asynchronously get object stats (size/mtime)
+
+        oncomplete will be called with the returned size and mtime
+        as well as the completion:
+
+        oncomplete(completion, size, mtime)
+
+        :param object_name: the name of the object to get stats from
+        :type object_name: str
+        :param oncomplete: what to do when the stat is complete
+        :type oncomplete: completion
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+
+        object_name = cstr(object_name, 'object_name')
+
+        cdef:
+            Completion completion
+            char *_object_name = object_name
+            uint64_t psize
+            time_t pmtime
+
+        def oncomplete_(completion_v):
+            cdef Completion _completion_v = completion_v
+            return_value = _completion_v.get_return_value()
+            if return_value >= 0:
+                return oncomplete(_completion_v, psize, time.localtime(pmtime))
+            else:
+                return oncomplete(_completion_v, None, None)
+
+        completion = self.__get_completion(oncomplete_, None)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_stat(self.io, _object_name, completion.rados_comp,
+                                 &psize, &pmtime)
+
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "error stating %s" % object_name)
+        return completion
+
+    @requires(('object_name', str_type), ('to_write', bytes), ('offset', int),
+              ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
     def aio_write(self, object_name, to_write, offset=0,
                   oncomplete=None, onsafe=None):
         """
@@ -1987,6 +2098,8 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error writing object %s" % object_name)
         return completion
 
+    @requires(('object_name', str_type), ('to_write', bytes), ('oncomplete', opt(Callable)),
+              ('onsafe', opt(Callable)))
     def aio_write_full(self, object_name, to_write,
                        oncomplete=None, onsafe=None):
         """
@@ -2030,6 +2143,8 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error writing object %s" % object_name)
         return completion
 
+    @requires(('object_name', str_type), ('to_append', bytes), ('oncomplete', opt(Callable)),
+              ('onsafe', opt(Callable)))
     def aio_append(self, object_name, to_append, oncomplete=None, onsafe=None):
         """
         Asychronously append data to an object
@@ -2082,6 +2197,8 @@ cdef class Ioctx(object):
         if ret < 0:
             raise make_ex(ret, "error flushing")
 
+    @requires(('object_name', str_type), ('length', int), ('offset', int),
+              ('oncomplete', opt(Callable)))
     def aio_read(self, object_name, length, offset, oncomplete):
         """
         Asychronously read data from an object
@@ -2133,6 +2250,78 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error reading %s" % object_name)
         return completion
 
+    @requires(('object_name', str_type), ('cls', str_type), ('method', str_type),
+              ('data', bytes), ('length', int),
+              ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
+    def aio_execute(self, object_name, cls, method, data,
+                    length=8192, oncomplete=None, onsafe=None):
+        """
+        Asynchronously execute an OSD class method on an object.
+
+        oncomplete and onsafe will be called with the data returned from
+        the plugin as well as the completion:
+
+        oncomplete(completion, data)
+        onsafe(completion, data)
+
+        :param object_name: name of the object
+        :type object_name: str
+        :param cls: name of the object class
+        :type cls: str
+        :param method: name of the method
+        :type method: str
+        :param data: input data
+        :type data: bytes
+        :param length: size of output buffer in bytes (default=8192)
+        :type length: int
+        :param oncomplete: what to do when the execution is complete
+        :type oncomplete: completion
+        :param onsafe:  what to do when the execution is safe and complete
+        :type onsafe: completion
+
+        :raises: :class:`Error`
+        :returns: completion object
+        """
+
+        object_name = cstr(object_name, 'object_name')
+        cls = cstr(cls, 'cls')
+        method = cstr(method, 'method')
+        cdef:
+            Completion completion
+            char *_object_name = object_name
+            char *_cls = cls
+            char *_method = method
+            char *_data = data
+            size_t _data_len = len(data)
+
+            char *ref_buf
+            size_t _length = length
+
+        def oncomplete_(completion_v):
+            cdef Completion _completion_v = completion_v
+            return_value = _completion_v.get_return_value()
+            if return_value > 0 and return_value != length:
+                _PyBytes_Resize(&_completion_v.buf, return_value)
+            return oncomplete(_completion_v, <object>_completion_v.buf if return_value >= 0 else None)
+
+        def onsafe_(completion_v):
+            cdef Completion _completion_v = completion_v
+            return_value = _completion_v.get_return_value()
+            return onsafe(_completion_v, <object>_completion_v.buf if return_value >= 0 else None)
+
+        completion = self.__get_completion(oncomplete_ if oncomplete else None, onsafe_ if onsafe else None)
+        completion.buf = PyBytes_FromStringAndSize(NULL, length)
+        ret_buf = PyBytes_AsString(completion.buf)
+        self.__track_completion(completion)
+        with nogil:
+            ret = rados_aio_exec(self.io, _object_name, completion.rados_comp,
+                                 _cls, _method, _data, _data_len, ret_buf, _length)
+        if ret < 0:
+            completion._cleanup()
+            raise make_ex(ret, "error executing %s::%s on %s" % (cls, method, object_name))
+        return completion
+
+    @requires(('object_name', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
     def aio_remove(self, object_name, oncomplete=None, onsafe=None):
         """
         Asychronously remove an object
@@ -2450,7 +2639,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :type method: str
         :param data: input data
         :type data: bytes
-        :param length: size of output buffer in bytes (default=8291)
+        :param length: size of output buffer in bytes (default=8192)
         :type length: int
 
         :raises: :class:`TypeError`

@@ -1,10 +1,11 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_TEST_LIBRBD_MOCK_OBJECT_MAP_H
 #define CEPH_TEST_LIBRBD_MOCK_OBJECT_MAP_H
 
 #include "common/RWLock.h"
+#include "librbd/Utils.h"
 #include "gmock/gmock.h"
 
 namespace librbd {
@@ -17,7 +18,25 @@ struct MockObjectMap {
 
   MOCK_METHOD3(aio_resize, void(uint64_t new_size, uint8_t default_object_state,
                                 Context *on_finish));
-  MOCK_METHOD6(aio_update, void(uint64_t snap_id, uint64_t start_object_no,
+
+  template <typename T, void(T::*MF)(int)>
+  bool aio_update(uint64_t snap_id, uint64_t start_object_no, uint8_t new_state,
+                  const boost::optional<uint8_t> &current_state,
+                  T *callback_object) {
+    return aio_update<T, MF>(snap_id, start_object_no, start_object_no + 1,
+                             new_state, current_state, callback_object);
+  }
+
+  template <typename T, void(T::*MF)(int)>
+  bool aio_update(uint64_t snap_id, uint64_t start_object_no,
+                  uint64_t end_object_no, uint8_t new_state,
+                  const boost::optional<uint8_t> &current_state,
+                  T *callback_object) {
+    return aio_update(snap_id, start_object_no, end_object_no, new_state,
+                      current_state,
+                      util::create_context_callback<T, MF>(callback_object));
+  }
+  MOCK_METHOD6(aio_update, bool(uint64_t snap_id, uint64_t start_object_no,
                                 uint64_t end_object_no, uint8_t new_state,
                                 const boost::optional<uint8_t> &current_state,
                                 Context *on_finish));
