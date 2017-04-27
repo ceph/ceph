@@ -953,8 +953,8 @@ void Pipe::set_socket_options()
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
                          << ": " << cpp_strerror(r) << dendl;
     }
-#endif
   }
+#endif
 }
 
 int Pipe::connect()
