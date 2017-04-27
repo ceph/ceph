@@ -436,26 +436,27 @@ def check_all_buckets_dont_exist(zone_conn, buckets):
 
     return True
 
-def create_bucket_per_zone(zonegroup_conns):
+def create_bucket_per_zone(zonegroup_conns, buckets_per_zone = 1):
     buckets = []
-    zone_bucket = {}
+    zone_bucket = []
     for zone in zonegroup_conns.rw_zones:
-        bucket_name = gen_bucket_name()
-        log.info('create bucket zone=%s name=%s', zone.name, bucket_name)
-        bucket = zone.create_bucket(bucket_name)
-        buckets.append(bucket_name)
-        zone_bucket[zone] = bucket
+        for i in xrange(buckets_per_zone):
+            bucket_name = gen_bucket_name()
+            log.info('create bucket zone=%s name=%s', zone.name, bucket_name)
+            bucket = zone.create_bucket(bucket_name)
+            buckets.append(bucket_name)
+            zone_bucket.append((zone, bucket))
 
     return buckets, zone_bucket
 
 def create_bucket_per_zone_in_realm():
     buckets = []
-    zone_bucket = {}
+    zone_bucket = []
     for zonegroup in realm.current_period.zonegroups:
         zg_conn = ZonegroupConns(zonegroup)
         b, z = create_bucket_per_zone(zg_conn)
         buckets.extend(b)
-        zone_bucket.update(z)
+        zone_bucket.extend(z)
     return buckets, zone_bucket
 
 def test_bucket_create():
@@ -499,7 +500,7 @@ def test_bucket_remove():
     for zone in zonegroup_conns.zones:
         assert check_all_buckets_exist(zone, buckets)
 
-    for zone, bucket_name in zone_bucket.items():
+    for zone, bucket_name in zone_bucket:
         zone.conn.delete_bucket(bucket_name)
 
     zonegroup_meta_checkpoint(zonegroup)
@@ -530,14 +531,14 @@ def test_object_sync():
     content = 'asdasd'
 
     # don't wait for meta sync just yet
-    for zone, bucket_name in zone_bucket.items():
+    for zone, bucket_name in zone_bucket:
         for objname in objnames:
             k = new_key(zone, bucket_name, objname)
             k.set_contents_from_string(content)
 
     zonegroup_meta_checkpoint(zonegroup)
 
-    for source_conn, bucket in zone_bucket.items():
+    for source_conn, bucket in zone_bucket:
         for target_conn in zonegroup_conns.zones:
             if source_conn.zone == target_conn.zone:
                 continue
@@ -554,14 +555,14 @@ def test_object_delete():
     content = 'asdasd'
 
     # don't wait for meta sync just yet
-    for zone, bucket in zone_bucket.items():
+    for zone, bucket in zone_bucket:
         k = new_key(zone, bucket, objname)
         k.set_contents_from_string(content)
 
     zonegroup_meta_checkpoint(zonegroup)
 
     # check object exists
-    for source_conn, bucket in zone_bucket.items():
+    for source_conn, bucket in zone_bucket:
         for target_conn in zonegroup_conns.zones:
             if source_conn.zone == target_conn.zone:
                 continue
@@ -570,7 +571,7 @@ def test_object_delete():
             check_bucket_eq(source_conn, target_conn, bucket)
 
     # check object removal
-    for source_conn, bucket in zone_bucket.items():
+    for source_conn, bucket in zone_bucket:
         k = get_key(source_conn, bucket, objname)
         k.delete()
         for target_conn in zonegroup_conns.zones:
@@ -592,21 +593,21 @@ def test_versioned_object_incremental_sync():
     buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
 
     # enable versioning
-    for _, bucket in zone_bucket.items():
+    for _, bucket in zone_bucket:
         bucket.configure_versioning(True)
 
     zonegroup_meta_checkpoint(zonegroup)
 
     # upload a dummy object to each bucket and wait for sync. this forces each
     # bucket to finish a full sync and switch to incremental
-    for source_conn, bucket in zone_bucket.items():
+    for source_conn, bucket in zone_bucket:
         new_key(source_conn, bucket, 'dummy').set_contents_from_string('')
         for target_conn in zonegroup_conns.zones:
             if source_conn.zone == target_conn.zone:
                 continue
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
 
-    for _, bucket in zone_bucket.items():
+    for _, bucket in zone_bucket:
         # create and delete multiple versions of an object from each zone
         for zone_conn in zonegroup_conns.rw_zones:
             obj = 'obj-' + zone_conn.name
@@ -630,7 +631,7 @@ def test_versioned_object_incremental_sync():
             log.debug('version3 id=%s', v.version_id)
             k.bucket.delete_key(obj, version_id=v.version_id)
 
-    for source_conn, bucket in zone_bucket.items():
+    for source_conn, bucket in zone_bucket:
         for target_conn in zonegroup_conns.zones:
             if source_conn.zone == target_conn.zone:
                 continue
@@ -639,7 +640,7 @@ def test_versioned_object_incremental_sync():
 
 def test_bucket_versioning():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
-    for _, bucket in zone_bucket.items():
+    for _, bucket in zone_bucket:
         bucket.configure_versioning(True)
         res = bucket.get_versioning_status()
         key = 'Versioning'
@@ -647,7 +648,7 @@ def test_bucket_versioning():
 
 def test_bucket_acl():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
-    for _, bucket in zone_bucket.items():
+    for _, bucket in zone_bucket:
         assert(len(bucket.get_acl().acl.grants) == 1) # single grant on owner
         bucket.set_acl('public-read')
         assert(len(bucket.get_acl().acl.grants) == 2) # new grant on AllUsers
@@ -658,7 +659,7 @@ def test_bucket_delete_notempty():
     buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
     zonegroup_meta_checkpoint(zonegroup)
 
-    for zone_conn, bucket_name in zone_bucket.items():
+    for zone_conn, bucket_name in zone_bucket:
         # upload an object to each bucket on its own zone
         conn = zone_conn.get_connection()
         bucket = conn.get_bucket(bucket_name)
@@ -674,7 +675,7 @@ def test_bucket_delete_notempty():
 
     # assert that each bucket still exists on the master
     c1 = zonegroup_conns.master_zone.conn
-    for _, bucket_name in zone_bucket.items():
+    for _, bucket_name in zone_bucket:
         assert c1.get_bucket(bucket_name)
 
 def test_multi_period_incremental_sync():
@@ -701,7 +702,7 @@ def test_multi_period_incremental_sync():
     set_master_zone(z2)
     mdlog_periods += [realm.current_period.id]
 
-    for zone_conn, _ in zone_bucket.items():
+    for zone_conn, _ in zone_bucket:
         if zone_conn.zone == z3:
             continue
         bucket_name = gen_bucket_name()
@@ -716,7 +717,7 @@ def test_multi_period_incremental_sync():
     set_master_zone(z1)
     mdlog_periods += [realm.current_period.id]
 
-    for zone_conn, bucket_name in zone_bucket.items():
+    for zone_conn, bucket_name in zone_bucket:
         if zone_conn.zone == z3:
             continue
         bucket_name = gen_bucket_name()
@@ -729,13 +730,13 @@ def test_multi_period_incremental_sync():
     zonegroup_meta_checkpoint(zonegroup)
 
     # verify that we end up with the same objects
-    for source_conn, _ in zone_bucket.items():
-        for bucket_name in buckets:
+    for bucket_name in buckets:
+        for source_conn, _ in zone_bucket:
             for target_conn in zonegroup_conns.zones:
                 if source_conn.zone == target_conn.zone:
                     continue
 
-                check_bucket_eq(source_conn, target_conn, bucket)
+                target_conn.check_bucket_eq(source_conn, bucket_name)
 
     # verify that mdlogs are not empty and match for each period
     for period in mdlog_periods:
