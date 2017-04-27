@@ -1,5 +1,6 @@
 from teuthology import misc
 from teuthology.orchestra.daemon.state import DaemonState
+from teuthology.orchestra.daemon.systemd import SystemDState
 
 
 class DaemonGroup(object):
@@ -53,8 +54,11 @@ class DaemonGroup(object):
         if id_ in self.daemons[role]:
             self.daemons[role][id_].stop()
             self.daemons[role][id_] = None
-        self.daemons[role][id_] = DaemonState(
-            remote, role, id_, self.use_init, *args, **kwargs)
+        klass = DaemonState
+        if self.use_init == 'systemd':
+            klass = SystemDState
+        self.daemons[role][id_] = klass(
+            remote, role, id_, *args, **kwargs)
 
     def get_daemon(self, type_, id_, cluster='ceph'):
         """
