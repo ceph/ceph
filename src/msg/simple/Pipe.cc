@@ -917,6 +917,7 @@ void Pipe::set_socket_options()
   }
 #endif
 
+#ifdef SO_PRIORITY
   int prio = msgr->get_socket_priority();
   if (prio >= 0) {
     int r = -1;
@@ -938,17 +939,15 @@ void Pipe::set_socket_options()
                            << ": " << cpp_strerror(r) << dendl;
       }
     } else {
-      ldout(msgr->cct,0) << "couldn't set ToS of unknown family to " << iptos
-                         << dendl;
+      lderr(msgr->cct) << "couldn't set ToS of unknown family ("
+		       << peer_addr.get_family() << ")"
+		       << " to " << iptos << dendl;
     }
 #endif
-#if defined(SO_PRIORITY) 
     // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
     // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
     // We need to call setsockopt(SO_PRIORITY) after it.
-#if defined(__linux__)
     r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
-#endif
     if (r < 0) {
       r = -errno;
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
