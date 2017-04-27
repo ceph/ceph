@@ -24,6 +24,7 @@
 #include "gtest/gtest.h"
 #include "osd/PGLog.h"
 #include "osd/OSDMap.h"
+#include "include/coredumpctl.h"
 
 class PGLogTest : public ::testing::Test, protected PGLog {
 public:
@@ -1211,6 +1212,7 @@ TEST_F(PGLogTest, merge_log) {
     olog.tail = eversion_t(1, 1);
 
     TestHandler h(remove_snap);
+    PrCtl unset_dumpable;
     ASSERT_DEATH(merge_log(oinfo, olog, fromosd, info, &h,
 			   dirty_info, dirty_big_info), "");
   }
