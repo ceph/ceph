@@ -1762,7 +1762,7 @@ bool ReplicatedBackend::handle_pull_response(
 	   << dendl;
   if (pop.version == eversion_t()) {
     // replica doesn't have it!
-    _failed_push(from, pop.soid);
+    _failed_pull(from, pop.soid);
     return false;
   }
 
@@ -2356,8 +2356,9 @@ void ReplicatedBackend::sub_op_push(OpRequestRef op)
   return;
 }
 
-void ReplicatedBackend::_failed_push(pg_shard_t from, const hobject_t &soid)
+void ReplicatedBackend::_failed_pull(pg_shard_t from, const hobject_t &soid)
 {
+  dout(20) << __func__ << ": " << soid << " from " << from << dendl;
   list<pg_shard_t> fl = { from };
   get_parent()->failed_push(fl, soid);
   pull_from_peer[from].erase(soid);
