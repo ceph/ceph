@@ -1186,6 +1186,9 @@ class TestExclusiveLock(object):
                     image.lock_break(RBD_LOCK_MODE_EXCLUSIVE,
                                      lock_owners[0]['owner'])
 
+                    assert_raises(ConnectionShutdown,
+                                  blacklist_image.is_exclusive_lock_owner)
+
                     blacklist_rados.wait_for_latest_osdmap()
                     data = rand_data(256)
                     assert_raises(ConnectionShutdown,
