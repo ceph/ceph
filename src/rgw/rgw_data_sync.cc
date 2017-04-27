@@ -2891,6 +2891,7 @@ string RGWBucketSyncStatusManager::status_oid(const string& source_zone,
 }
 
 
+// TODO: move into rgw_data_sync_trim.cc
 #undef dout_prefix
 #define dout_prefix (*_dout << "data trim: ")
 
