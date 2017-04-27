@@ -504,6 +504,9 @@ function test_auth()
   #
   local auid=444
   ceph-authtool --create-keyring --name client.TEST --gen-key --set-uid $auid TEST-keyring
+  expect_false ceph auth import --in-file TEST-keyring
+  rm TEST-keyring
+  ceph-authtool --create-keyring --name client.TEST --gen-key --cap mon "allow r" --set-uid $auid TEST-keyring
   ceph auth import --in-file TEST-keyring
   rm TEST-keyring
   ceph auth get client.TEST > $TMPFILE
