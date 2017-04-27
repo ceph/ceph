@@ -2287,6 +2287,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries_complete()
 }
 
 
+// TODO: move into rgw_sync_trim.cc
 #undef dout_prefix
 #define dout_prefix (*_dout << "meta trim: ")
 
