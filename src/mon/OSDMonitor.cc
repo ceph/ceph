@@ -1118,7 +1118,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	      << mapping_job.get() << " did not complete, "
 	      << mapping_job->shards << " left" << dendl;
       mapping_job->abort();
-    } else if (mapping.get_epoch() == osdmap.get_epoch()) {
+    } else if (mapping.get_epoch() < osdmap.get_epoch()) {
       dout(1) << __func__ << " skipping prime_pg_temp; mapping job "
 	      << mapping_job.get() << " is prior epoch "
 	      << mapping.get_epoch() << dendl;
