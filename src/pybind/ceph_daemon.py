@@ -88,7 +88,12 @@ def admin_socket(asok_path, cmd, format=''):
 
 
 def _gettermsize():
-    return struct.unpack('hhhh', ioctl(0, TIOCGWINSZ, 8*'\x00'))[0:2]
+    try:
+        rows, cols = struct.unpack('hhhh', ioctl(0, TIOCGWINSZ, 8*'\x00'))[0:2]
+    except IOError:
+        return 25, 80
+
+    return rows,cols
 
 
 class Termsize(object):
