@@ -478,27 +478,6 @@ void cls_rgw_reshard_get_ret::dump(Formatter *f) const
   ::encode_json("entry", entry, f);
 }
 
-void cls_rgw_reshard_get_head_op::generate_test_instances(list<cls_rgw_reshard_get_head_op*>& ls)
-{
-  ls.push_back(new cls_rgw_reshard_get_head_op);
-  ls.push_back(new cls_rgw_reshard_get_head_op);
-}
-
-void cls_rgw_reshard_get_head_op::dump(Formatter *f) const
-{
-}
-
-void cls_rgw_reshard_get_head_ret::generate_test_instances(list<cls_rgw_reshard_get_head_ret*>& ls)
-{
-  ls.push_back(new cls_rgw_reshard_get_head_ret);
-  ls.push_back(new cls_rgw_reshard_get_head_ret);
-}
-
-void cls_rgw_reshard_get_head_ret::dump(Formatter *f) const
-{
-  ::encode_json("entry", entry, f);
-}
-
 void cls_rgw_reshard_remove_op::generate_test_instances(list<cls_rgw_reshard_remove_op*>& ls)
 {
   ls.push_back(new cls_rgw_reshard_remove_op);

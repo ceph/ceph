@@ -1257,45 +1257,6 @@ struct cls_rgw_reshard_get_ret {
 };
 WRITE_CLASS_ENCODER(cls_rgw_reshard_get_ret)
 
-struct cls_rgw_reshard_get_head_op {
-
-  cls_rgw_reshard_get_head_op() {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    DECODE_FINISH(bl);
-  }
-  static void generate_test_instances(list<cls_rgw_reshard_get_head_op*>& o);
-  void dump(Formatter *f) const;
-};
-WRITE_CLASS_ENCODER(cls_rgw_reshard_get_head_op)
-
-struct cls_rgw_reshard_get_head_ret {
-  cls_rgw_reshard_entry entry;
-
-  cls_rgw_reshard_get_head_ret() {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(entry, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    ::decode(entry, bl);
-    DECODE_FINISH(bl);
-  }
-  static void generate_test_instances(list<cls_rgw_reshard_get_head_ret*>& o);
-  void dump(Formatter *f) const;
-};
-WRITE_CLASS_ENCODER(cls_rgw_reshard_get_head_ret)
-
 struct cls_rgw_reshard_remove_op {
   string bucket_name;
   string bucket_id;
