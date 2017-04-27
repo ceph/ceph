@@ -567,7 +567,8 @@ int RGWBL::process()
     int index = (i + start) % max_objs;
     ret = process(index, max_secs);
     if (ret < 0)
-      return ret;
+      dout(0) << __func__ << " processed  bl object=" << obj_names[index]
+                          << " ret=" << cpp_strerror(-ret) << dendl;
   }
 
   return 0;
