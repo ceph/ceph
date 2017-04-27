@@ -1350,9 +1350,21 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ImageCtx *ictx = new ImageCtx(image_name, "", nullptr, io_ctx, false);
     int r = ictx->state->open(true);
     if (r < 0) {
-      ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
+      ictx = nullptr;
+
       if (r != -ENOENT) {
-	return r;
+        ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
+        return r;
+      }
+
+      // try to get image id from the directory
+      r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, image_name, &image_id);
+      if (r < 0) {
+        if (r != -ENOENT) {
+          ldout(cct, 2) << "error reading image id from dirctory: "
+                        << cpp_strerror(-r) << dendl;
+        }
+        return r;
       }
     } else {
       if (ictx->old_format) {
@@ -1375,6 +1387,9 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     BOOST_SCOPE_EXIT_ALL(ictx, cct) {
+      if (ictx == nullptr)
+        return;
+
       bool is_locked = ictx->exclusive_lock != nullptr &&
                        ictx->exclusive_lock->is_lock_owner();
       if (is_locked) {
