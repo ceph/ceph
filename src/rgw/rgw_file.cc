@@ -66,6 +66,62 @@ namespace rgw {
     return 0;
   }
 
+  void RGWLibFS::fill_fs_stats(struct rgw_statvfs *vfs_st,
+                               int64_t max_size, int64_t max_entries,
+                               size_t size, uint64_t num_entries) {
+    if (max_size >= 0) {
+      vfs_st->f_blocks = (max_size + vfs_st->f_frsize - 1) / vfs_st->f_frsize;
+      vfs_st->f_bfree = vfs_st->f_blocks - (size + vfs_st->f_frsize - 1) / vfs_st->f_frsize;
+      vfs_st->f_bavail = vfs_st->f_bfree;
+    }
+    if (max_entries >= 0) {
+      vfs_st->f_files = max_entries;
+      vfs_st->f_ffree = max_entries - num_entries;
+      vfs_st->f_favail = vfs_st->f_ffree;
+    }
+  }
+
+  int RGWLibFS::stat_fs_inst(RGWFileHandle* rgw_fh, struct rgw_statvfs *vfs_st,
+                             uint32_t flags)
+  {
+    int rc;
+
+    vfs_st->f_bsize = 1024*1024;	/* 1M */
+    vfs_st->f_frsize = 1024;		/* minimal allocation unit (who cares) */
+    vfs_st->f_fsid[0] = get_fsid();
+    vfs_st->f_fsid[1] = get_fsid();
+    vfs_st->f_flag = 0;
+    vfs_st->f_namemax = NAME_MAX;
+    vfs_st->f_blocks = UINT64_MAX;
+    vfs_st->f_bfree = UINT64_MAX;
+    vfs_st->f_bavail = UINT64_MAX;
+    vfs_st->f_files = UINT64_MAX;
+    vfs_st->f_ffree = UINT64_MAX;
+    vfs_st->f_favail = UINT64_MAX;
+
+    if (rgw_fh->is_root()) {
+      UserStats ustat;
+      RGWStatUserRequest req(cct, get_user(), ustat);
+      rc = rgwlib.get_fe()->execute_req(&req);
+      if ((rc == 0) &&
+          (req.get_ret() == 0)) {
+        fill_fs_stats(vfs_st, ustat.max_size, ustat.max_entries,
+                      ustat.size, ustat.num_entries);
+      }
+    } else {
+      BucketStats bstat;
+      RGWStatBucketRequest req(cct, get_user(), rgw_fh->bucket_name(), bstat);
+      rc = rgwlib.get_fe()->execute_req(&req);
+      if ((rc == 0) &&
+          (req.get_ret() == 0) &&
+          (req.matched())) {
+        fill_fs_stats(vfs_st, bstat.max_size, bstat.max_entries,
+                      bstat.size, bstat.num_entries);
+      }
+    }
+    return rc;
+  }
+
   LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent, const char *path,
 				       RGWLibFS::BucketStats& bs,
 				       uint32_t flags)
@@ -1608,21 +1664,9 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 	       struct rgw_statvfs *vfs_st, uint32_t flags)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  RGWFileHandle* rgw_fh = get_rgwfh(parent_fh);
 
-  /* XXX for now, just publish a huge capacity and
-   * limited utiliztion */
-  vfs_st->f_bsize = 1024*1024 /* 1M */;
-  vfs_st->f_frsize = 1024;    /* minimal allocation unit (who cares) */
-  vfs_st->f_blocks = UINT64_MAX;
-  vfs_st->f_bfree = UINT64_MAX;
-  vfs_st->f_bavail = UINT64_MAX;
-  vfs_st->f_files = 1024; /* object count, do we have an est? */
-  vfs_st->f_ffree = UINT64_MAX;
-  vfs_st->f_fsid[0] = fs->get_fsid();
-  vfs_st->f_fsid[1] = fs->get_fsid();
-  vfs_st->f_flag = 0;
-  vfs_st->f_namemax = 4096;
-  return 0;
+  return fs->stat_fs_inst(rgw_fh, vfs_st, flags);
 }
 
 /*

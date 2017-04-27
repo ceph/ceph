@@ -855,6 +855,15 @@ namespace rgw {
       size_t size_rounded;
       real_time creation_time;
       uint64_t num_entries;
+      int64_t max_size;
+      int64_t max_entries;
+    };
+
+    struct UserStats {
+      size_t size;
+      uint64_t num_entries;
+      int64_t max_size;
+      int64_t max_entries;
     };
 
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
@@ -1107,6 +1116,13 @@ namespace rgw {
 		uint32_t flags);
 
     void update_fh(RGWFileHandle *rgw_fh);
+
+    void fill_fs_stats(struct rgw_statvfs *vfs_st,
+                       int64_t max_size, int64_t max_entries,
+                       size_t size, uint64_t num_entries);
+
+    int stat_fs_inst(RGWFileHandle* rgw_fh, struct rgw_statvfs *vfs_st,
+                     uint32_t flags);
 
     LookupFHResult stat_bucket(RGWFileHandle* parent, const char *path,
 			       RGWLibFS::BucketStats& bs,
@@ -2091,12 +2107,22 @@ public:
   }
 
   void send_response() override {
-    bucket.creation_time = get_state()->bucket_info.creation_time;
+    struct req_state *s = get_state();
+
+    bucket.creation_time = s->bucket_info.creation_time;
     bs.size = bucket.size;
     bs.size_rounded = bucket.size_rounded;
     bs.creation_time = bucket.creation_time;
     bs.num_entries = bucket.count;
-    std::swap(attrs, get_state()->bucket_attrs);
+    std::swap(attrs, s->bucket_attrs);
+
+    if (s->bucket_info.quota.enabled) {
+      bs.max_size = s->bucket_info.quota.max_size;
+      bs.max_entries = s->bucket_info.quota.max_objects;
+    } else {
+      bs.max_size = -1;
+      bs.max_entries = -1;
+    }
   }
 
   bool matched() {
@@ -2205,6 +2231,69 @@ public:
     send_response();
   }
 }; /* RGWStatLeafRequest */
+
+class RGWStatUserRequest : public RGWLibRequest,
+                           public RGWGetUsage /* RGWOp */
+{
+public:
+  RGWLibFS::UserStats &us;
+
+  RGWStatUserRequest(CephContext* _cct, RGWUserInfo *_user,
+                     RGWLibFS::UserStats &_us)
+    : RGWLibRequest(_cct, _user), us(_us) {
+    op = this;
+  }
+
+  bool only_bucket() override { return false; }
+
+  int op_init() override {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  int header_init() override {
+
+    struct req_state* s = get_state();
+    s->info.method = "GET";
+    s->op = OP_GET;
+
+    /* XXX derp derp derp */
+    s->relative_uri = "";
+    s->info.request_uri = ""; // XXX
+    s->info.effective_uri = "";
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+
+  int get_params() override {
+    return 0;
+  }
+
+  void send_response() override {
+    struct req_state* s = get_state();
+
+    us.size = header.stats.total_bytes;
+    us.num_entries = header.stats.total_entries;
+    if (s->user->user_quota.enabled) {
+      us.max_size = s->user->user_quota.max_size;
+      us.max_entries = s->user->user_quota.max_objects;
+    } else {
+      us.max_size = -1;
+      us.max_entries = -1;
+    }
+  }
+}; /* RGWStatUserRequest */
 
 /*
   put object
