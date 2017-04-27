@@ -29,6 +29,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include <boost/intrusive/list.hpp>
+#include <boost/container/small_vector.hpp>
 
 class FS {
 public:
@@ -57,7 +58,7 @@ public:
     struct iocb iocb;  // must be first element; see shenanigans in aio_queue_t
     void *priv;
     int fd;
-    vector<iovec> iov;
+    boost::container::small_vector<iovec,4> iov;
     uint64_t offset, length;
     int rval;
     bufferlist bl;  ///< write payload (so that it remains stable for duration)
