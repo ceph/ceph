@@ -89,29 +89,6 @@ int RGWReshard::list(string& marker, uint32_t max, std::list<cls_rgw_reshard_ent
   return ret;
 }
 
-int RGWReshard::get_head(cls_rgw_reshard_entry& entry)
-{
-  rados::cls::lock::Lock l(reshard_lock_name);
-  librados::IoCtx io_ctx;
-
-  int ret = get_io_ctx(io_ctx);
-  if (ret < 0)
-    return ret;
-
-  ret = l.lock_shared(&io_ctx, reshard_oid);
-  if (ret == -EBUSY) {
-    ldout(cct, 0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
-    return 0;
-  }
-  if (ret < 0)
-    return ret;
-
-  ret = cls_rgw_reshard_get_head(io_ctx, reshard_oid, entry);
-
-  l.unlock(&io_ctx, reshard_oid);
-  return ret;
-}
-
 int RGWReshard::get(cls_rgw_reshard_entry& entry)
 {
   rados::cls::lock::Lock l(reshard_lock_name);
