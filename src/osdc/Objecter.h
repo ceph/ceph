@@ -2060,9 +2060,11 @@ private:
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map();
 
-  int pool_snap_by_name(int64_t poolid, const char *snap_name, snapid_t *snap);
+  int pool_snap_by_name(int64_t poolid,
+			const char *snap_name,
+			snapid_t *snap) const;
   int pool_snap_get_info(int64_t poolid, snapid_t snap,
-			 pool_snap_info_t *info);
+			 pool_snap_info_t *info) const;
   int pool_snap_list(int64_t poolid, vector<uint64_t> *snaps);
 private:
 
