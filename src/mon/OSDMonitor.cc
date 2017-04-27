@@ -303,8 +303,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   if (mon->monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {
     bufferlist bl;
-    mon->store->get(OSD_PG_CREATING_PREFIX, "creating", bl);
-    if (bl.length()) {
+    if (!mon->store->get(OSD_PG_CREATING_PREFIX, "creating", bl)) {
       auto p = bl.begin();
       std::lock_guard<std::mutex> l(creating_pgs_lock);
       creating_pgs.decode(p);
