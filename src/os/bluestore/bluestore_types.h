@@ -20,7 +20,6 @@
 #include "include/types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
-#include "include/small_encoding.h"
 #include "common/hobject.h"
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
