@@ -849,7 +849,7 @@ void crush_init_workspace(const struct crush_map *m, void *v) {
 	struct crush_work *w = (struct crush_work *)v;
 	char *point = (char *)v;
 	__s32 b;
-	point += sizeof(struct crush_work *);
+	point += sizeof(struct crush_work);
 	w->work = (struct crush_work_bucket **)point;
 	point += m->max_buckets * sizeof(struct crush_work_bucket *);
 	for (b = 0; b < m->max_buckets; ++b) {
