@@ -499,9 +499,9 @@ void KernelDevice::aio_submit(IOContext *ioc)
     dout(20) << __func__ << "  aio " << &aio << " fd " << aio.fd
 	     << " 0x" << std::hex << aio.offset << "~" << aio.length
 	     << std::dec << dendl;
-    for (vector<iovec>::iterator q = aio.iov.begin(); q != aio.iov.end(); ++q)
-      dout(30) << __func__ << "   iov " << (void*)q->iov_base
-	       << " len " << q->iov_len << dendl;
+    for (auto& io : aio.iov)
+      dout(30) << __func__ << "   iov " << (void*)io.iov_base
+	       << " len " << io.iov_len << dendl;
 
     // be careful: as soon as we submit aio we race with completion.
     // since we are holding a ref take care not to dereference txc at
