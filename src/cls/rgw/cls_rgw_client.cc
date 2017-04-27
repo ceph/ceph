@@ -837,28 +837,6 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_resh
   return 0;
 }
 
-int cls_rgw_reshard_get_head(librados::IoCtx& io_ctx, const string& oid, cls_rgw_reshard_entry& entry)
-{
-  bufferlist in, out;
-  struct cls_rgw_reshard_get_head_op call;
-  ::encode(call, in);
-  int r = io_ctx.exec(oid, "rgw", "reshard_get_head", in, out);
-  if (r < 0)
-    return r;
-
-  struct cls_rgw_reshard_get_head_ret op_ret;
-  bufferlist::iterator iter = out.begin();
-  try {
-    ::decode(op_ret, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
-  }
-
-  entry = op_ret.entry;
-
-  return 0;
-}
-
 void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
 {
   bufferlist in;

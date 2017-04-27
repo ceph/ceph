@@ -3539,30 +3539,6 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
-
-static int rgw_reshard_get_head(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
-{
-  bufferlist bl;
-  int ret = cls_cxx_map_read_header(hctx, &bl);
-  if (ret < 0)
-    return ret;
-  cls_rgw_reshard_entry  entry;
-  if (bl.length() != 0) {
-    bufferlist::iterator iter = bl.begin();
-    try {
-      ::decode(entry, iter);
-    } catch (buffer::error& err) {
-      CLS_LOG(0, "ERROR: rgw_reshard_get_head(): failed to decode entry %s\n",err.what());
-      return -EINVAL;
-    }
-  }
-
-  cls_rgw_reshard_get_head_ret op_ret;
-  op_ret.entry = entry;
-  ::encode(op_ret, *out);
-  return 0;
-}
-
 static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   bufferlist::iterator in_iter = in->begin();
@@ -3734,7 +3710,6 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_reshard_add;
   cls_method_handle_t h_rgw_reshard_list;
   cls_method_handle_t h_rgw_reshard_get;
-  cls_method_handle_t h_rgw_reshard_get_head;
   cls_method_handle_t h_rgw_reshard_remove;
   cls_method_handle_t h_rgw_set_bucket_resharding;
   cls_method_handle_t h_rgw_clear_bucket_resharding;
@@ -3792,7 +3767,6 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, "reshard_add", CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_add, &h_rgw_reshard_add);
   cls_register_cxx_method(h_class, "reshard_list", CLS_METHOD_RD, rgw_reshard_list, &h_rgw_reshard_list);
   cls_register_cxx_method(h_class, "reshard_get", CLS_METHOD_RD,rgw_reshard_get, &h_rgw_reshard_get);
-  cls_register_cxx_method(h_class, "reshard_get_head", CLS_METHOD_RD, rgw_reshard_get_head, &h_rgw_reshard_get_head);
   cls_register_cxx_method(h_class, "reshard_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_remove, &h_rgw_reshard_remove);
   cls_register_cxx_method(h_class, "set_bucket_resharding", CLS_METHOD_RD | CLS_METHOD_WR,
 			  rgw_set_bucket_resharding, &h_rgw_set_bucket_resharding);
