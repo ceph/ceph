@@ -3628,21 +3628,17 @@ static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
     return -EINVAL;
   }
 
-  bufferlist bl;
-  ::encode(true, bl);
-  int ret = cls_cxx_setxattr(hctx, resharding_attr.c_str(), &bl);
-  if (ret < 0) {
-    CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, resharding_attr.c_str(), ret);
-    return ret;
+  struct rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s(): failed to read header\n", __func__);
+    return rc;
   }
 
-  ret = cls_cxx_write(hctx, 0, op.entry.data.length(), &op.entry.data);
-  if (ret < 0) {
-    CLS_LOG(0, "ERROR: %s(): cls_cxx_write returned %d", __func__, ret);
-    return ret;
-  }
+  header.is_resharding = true;
+  header.new_bucket_instance_id = op.entry.new_bucket_instance_id;
 
-  return 0;
+  return write_bucket_header(hctx, &header);
 }
 
 static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
@@ -3657,21 +3653,16 @@ static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in
     return -EINVAL;
   }
 
-  bufferlist bl;
-  ::encode(false, bl);
-  int ret = cls_cxx_setxattr(hctx, resharding_attr.c_str(), &bl);
-  if (ret < 0) {
-    CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, resharding_attr.c_str(), ret);
-    return ret;
+  struct rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s(): failed to read header\n", __func__);
+    return rc;
   }
+  header.is_resharding = false;
+  header.new_bucket_instance_id.clear();
 
-  ret = cls_cxx_write(hctx, 0, op.entry.data.length(), &op.entry.data);
-  if (ret < 0) {
-    CLS_LOG(0, "ERROR: %s(): cls_cxx_write returned %d", __func__, ret);
-    return ret;
-  }
-
-  return 0;
+  return write_bucket_header(hctx, &header);
 }
 
 static int rgw_get_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
@@ -3686,20 +3677,15 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
     return -EINVAL;
   }
 
-  bufferlist bl;
-  int ret = cls_cxx_getxattr(hctx, resharding_attr.c_str(), &bl);
-  if (ret < 0) {
-    CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattr (attr=%s) returned %d", __func__, resharding_attr.c_str(), ret);
-    return ret;
+  struct rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s(): failed to read header\n", __func__);
+    return rc;
   }
 
   cls_rgw_get_bucket_resharding_ret op_ret;
-  try {
-    ::decode(op_ret.resharding, bl);
-  } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_rgw_get_bucket_resharding: failed to decode entry\n");
-    return -EINVAL;
-  }
+  op_ret.resharding = header.is_resharding;
 
   ::encode(op_ret, *out);
 

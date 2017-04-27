@@ -610,20 +610,24 @@ struct rgw_bucket_dir_header {
   uint64_t ver;
   uint64_t master_ver;
   string max_marker;
+  bool is_resharding;
+  string new_bucket_instance_id;
 
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(5, 2, bl);
+    ENCODE_START(6, 2, bl);
     ::encode(stats, bl);
     ::encode(tag_timeout, bl);
     ::encode(ver, bl);
     ::encode(master_ver, bl);
     ::encode(max_marker, bl);
+    ::encode(is_resharding, bl);
+    ::encode(new_bucket_instance_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
     ::decode(stats, bl);
     if (struct_v > 2) {
       ::decode(tag_timeout, bl);
@@ -638,6 +642,12 @@ struct rgw_bucket_dir_header {
     }
     if (struct_v >= 5) {
       ::decode(max_marker, bl);
+    }
+    if (struct_v >= 6) {
+      ::decode(is_resharding, bl);
+      ::decode(new_bucket_instance_id, bl);
+    } else {
+        is_resharding = false;
     }
     DECODE_FINISH(bl);
   }

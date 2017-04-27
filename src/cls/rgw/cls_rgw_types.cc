@@ -517,6 +517,8 @@ void rgw_bucket_dir_header::dump(Formatter *f) const
     iter->second.dump(f);
     f->close_section();
   }
+  f->dump_bool("is_resharding", is_resharding);
+  f->dump_string("new_bucket_instance_id",new_bucket_instance_id);
   f->close_section();
 }
 
