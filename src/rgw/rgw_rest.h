@@ -304,7 +304,13 @@ public:
   ~RGWDeleteLC_ObjStore() override {}
 
 };
+class RGWPutBL_ObjStore : public RGWPutBL {
+public:
+  RGWPutBL_ObjStore() {}
+  ~RGWPutBL_ObjStore() {}
+  int get_params();
 
+};
 class RGWGetCORS_ObjStore : public RGWGetCORS {
 public:
   RGWGetCORS_ObjStore() {}

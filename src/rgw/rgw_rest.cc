@@ -1265,7 +1265,12 @@ int RGWPutLC_ObjStore::get_params()
   op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   return op_ret;
 }
-
+int RGWPutBL_ObjStore::get_params() 
+{
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
+  return ret;
+}
 static int read_all_chunked_input(req_state *s, char **pdata, int *plen, const uint64_t max_read)
 {
 #define READ_CHUNK 4096

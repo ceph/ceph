@@ -3471,7 +3471,24 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
   ::encode(op_ret, *out);
   return 0;
 }
-
+/* bucket logging */
+static int rgw_cls_bl_set_entry(cls_method_handle_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+  cls_rgw_bl_set_entry_op op;
+  try {
+     ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+     CLS_LOG(1, "ERROR: rgw_cls_bl_set_entry(): failed to decode entry\n");
+     return -EINVAL;
+  }
+  bufferlist bl;
+  ::encode(op.entry, bl); 
+  int ret = cls_cxx_map_set_val(hctx, op.entry.first, &bl);
+  if (ret < 0)
+    ret = 3737;
+  return ret;
+}
 CLS_INIT(rgw)
 {
   CLS_LOG(1, "Loaded rgw class!");
@@ -3511,7 +3528,8 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_lc_put_head;
   cls_method_handle_t h_rgw_lc_get_head;
   cls_method_handle_t h_rgw_lc_list_entries;
-
+  
+  cls_method_handle_t h_rgw_bl_set_entry;
 
   cls_register(RGW_CLASS, &h_class);
 
@@ -3561,7 +3579,9 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_LC_PUT_HEAD, CLS_METHOD_RD| CLS_METHOD_WR, rgw_cls_lc_put_head, &h_rgw_lc_put_head);
   cls_register_cxx_method(h_class, RGW_LC_GET_HEAD, CLS_METHOD_RD, rgw_cls_lc_get_head, &h_rgw_lc_get_head);
   cls_register_cxx_method(h_class, RGW_LC_LIST_ENTRIES, CLS_METHOD_RD, rgw_cls_lc_list_entries, &h_rgw_lc_list_entries);
-  
+
+  /* bucket logging*/
+  cls_register_cxx_method(h_class, "bl_set_entry", CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_bl_set_entry, &h_rgw_bl_set_entry);  
   return;
 }
 

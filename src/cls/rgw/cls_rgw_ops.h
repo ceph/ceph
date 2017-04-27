@@ -1118,5 +1118,23 @@ struct cls_rgw_lc_list_entries_ret {
 
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_ret)
-
+struct cls_rgw_bl_set_entry_op {
+     pair<string, int> entry;
+     cls_rgw_bl_set_entry_op() {}
+ 
+     void encode(bufferlist& bl) const {
+       ENCODE_START(1, 1, bl);
+       ::encode(entry, bl);
+       ENCODE_FINISH(bl);
+         
+     }
+     
+    void decode(bufferlist::iterator& bl) {
+       DECODE_START(1, bl);
+       ::decode(entry, bl);
+       DECODE_FINISH(bl);
+        
+     }
+};
+WRITE_CLASS_ENCODER(cls_rgw_bl_set_entry_op)
 #endif /* CEPH_CLS_RGW_OPS_H */

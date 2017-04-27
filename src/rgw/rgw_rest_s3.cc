@@ -3089,10 +3089,11 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_head()
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 {
-  if (s->info.args.sub_resource_exists("logging"))
-    return NULL;
+  //if (s->info.args.sub_resource_exists("logging"))
+  //  return NULL;
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
+
   if (s->info.args.sub_resource_exists("website")) {
     if (!s->cct->_conf->rgw_enable_static_website) {
       return NULL;
@@ -3101,6 +3102,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
   }
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
+  } else if (is_bl_op()) {
+    return new RGWPutBL_ObjStore_S3;
   } else if (is_cors_op()) {
     return new RGWPutCORS_ObjStore_S3;
   } else if (is_request_payment_op()) {

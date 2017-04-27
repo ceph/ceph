@@ -14,6 +14,7 @@
 #include "rgw_acl_s3.h"
 #include "rgw_policy_s3.h"
 #include "rgw_lc_s3.h"
+#include "rgw_bl_s3.h"
 #include "rgw_keystone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_ldap.h"
@@ -318,7 +319,13 @@ public:
   
  void send_response() override;
 };
+class RGWPutBL_ObjStore_S3 : public RGWPutBL_ObjStore {
+public:
+  RGWPutBL_ObjStore_S3() {}
+  ~RGWPutBL_ObjStore_S3() {}
 
+  void send_response() {}
+};
 class RGWGetCORS_ObjStore_S3 : public RGWGetCORS_ObjStore {
 public:
   RGWGetCORS_ObjStore_S3() {}
@@ -524,8 +531,11 @@ protected:
   bool is_lc_op() {
       return s->info.args.exists("lifecycle");
   }
+  bool is_bl_op() {
+    return s->info.args.exists("logging");
+  }
   bool is_obj_update_op() override {
-    return is_acl_op() || is_cors_op();
+    return is_acl_op() || is_cors_op() || is_bl_op();
   }
   bool is_request_payment_op() {
     return s->info.args.exists("requestPayment");

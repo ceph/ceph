@@ -773,3 +773,14 @@ int cls_rgw_lc_list(IoCtx& io_ctx, string& oid,
 
  return r;
 }
+/*bucket logging*/
+int cls_rgw_bl_set_entry(IoCtx& io_ctx, string& oid, pair<string, int>& entry)
+{
+  bufferlist in, out;
+  cls_rgw_bl_set_entry_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bl_set_entry", in, out);
+  return r;
+}
+

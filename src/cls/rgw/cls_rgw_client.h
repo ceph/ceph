@@ -492,7 +492,8 @@ int cls_rgw_lc_list(librados::IoCtx& io_ctx, string& oid,
                     const string& marker,
                     uint32_t max_entries,
                     map<string, int>& entries);
-
+/* bucket logging */
+int cls_rgw_bl_set_entry(librados::IoCtx& io_ctx, string& oid, pair<string, int>& entry);
 
 
 

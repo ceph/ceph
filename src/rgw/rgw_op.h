@@ -39,6 +39,7 @@
 #include "rgw_quota.h"
 
 #include "rgw_lc.h"
+#include "rgw_bl.h"
 #include "rgw_torrent.h"
 
 #include "include/assert.h"
@@ -1934,6 +1935,30 @@ public:
   virtual const string name() { return "get_obj_layout"; }
   virtual RGWOpType get_type() { return RGW_OP_GET_OBJ_LAYOUT; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+class RGWPutBL : public RGWOp {
+protected:
+  int ret;
+  int len;
+  char *data;
+public:
+  RGWPutBL() {
+    len = 0;
+    data = NULL;
+  }  
+  virtual ~RGWPutBL() {
+    free(data);
+  }  
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) {
+    RGWOp::init(store, s, dialect_handler);
+  }
+  int verify_permission();
+  void pre_exec();
+  void execute();
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "put_bucketlogging";   }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE;   }
 };
 
 

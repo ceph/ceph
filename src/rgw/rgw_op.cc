@@ -4425,7 +4425,84 @@ void RGWDeleteLC::execute()
   l.unlock(ctx, oid);
   return;
 }
-
+int RGWPutBL::verify_permission()
+{
+  bool perm;
+  perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
+  if (!perm)
+    return -EACCES;
+  return 0;
+}
+void RGWPutBL::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+static void get_bl_oid(struct req_state *s, string& oid)
+{
+  string shard_id = s->bucket.name +':'+s->bucket.bucket_id;
+  int max_objs = (s->cct->_conf->rgw_bl_max_objs > HASH_PRIME_BL)?HASH_PRIME_BL:s->cct->_conf->rgw_bl_max_objs;
+  int index = ceph_str_hash_linux(shard_id.c_str(), shard_id.size()) % HASH_PRIME_BL % max_objs;
+  oid = bl_oid_prefix;
+  char buf[32];
+  snprintf(buf, 32, ".%d", index);
+  oid.append(buf);
+  return;
+}
+void RGWPutBL::execute()
+{
+  bufferlist bl;
+  RGWBucketloggingConfiguration_S3 *config = NULL;
+  RGWBLXMLParser_S3 parser(s->cct);
+  RGWBucketloggingConfiguration_S3 new_config(s->cct);
+   
+  if (!parser.init()) {
+    ret = -EINVAL;
+    return;
+  }
+  ret = get_params();
+  if (ret < 0) 
+    return;
+  ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
+  if (!parser.parse(data, len, 1)) {
+    ret = -EACCES;
+    return;
+  }
+  new_config.encode(bl);
+  map<string, bufferlist> attrs;
+  attrs = s->bucket_attrs;
+  attrs[RGW_ATTR_BL] = bl;
+  ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  if (ret)
+    return;
+  string shard_id = s->bucket.name + ':' + s->bucket.bucket_id;
+  string oid;
+  string oid;
+  get_bl_oid(s, oid);
+  pair<string, int> entry(shard_id, 0);
+  int max_lock_secs = 30;
+  static string lc_index_lock_name = "bl_lock_name";
+  rados::cls::lock::Lock l(lc_index_lock_name);
+  utime_t time(max_lock_secs, 0);
+  l.set_duration(time);
+  librados::IoCtx *ctx = store->get_bl_pool_ctx();
+  do {
+    ret = l.lock_exclusive(ctx, oid);
+    if (ret == -EBUSY) {
+      dout(0) <<"RGWBL:lock failed, 5s" << dendl;
+      sleep(5);
+      continue;
+    }
+    if (ret < 0) {
+      dout(0) <<"RGWBL:lock failed" <<dendl;
+      break;
+    }
+    ret = cls_rgw_bl_set_entry(*ctx,oid, entry);
+    if (ret < 0) {
+      dout(0)<<"RGWBL:failed set entry"<<dendl;
+    }
+    break;
+  } while(1)
+}
 int RGWGetCORS::verify_permission()
 {
   if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
