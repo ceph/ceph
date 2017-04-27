@@ -4555,20 +4555,23 @@ TEST_F(TestLibRBD, Mirror) {
 
   // Add some images to the pool
   int order = 0;
-  ASSERT_EQ(0, create_image_pp(rbd, ioctx, "parent", 2 << 20, &order));
+  std::string parent_name = get_temp_image_name();
+  std::string child_name = get_temp_image_name();
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, parent_name.c_str(), 2 << 20,
+                               &order));
   bool old_format;
   uint64_t features;
   ASSERT_EQ(0, get_features(&old_format, &features));
   if ((features & RBD_FEATURE_LAYERING) != 0) {
     librbd::Image parent;
-    ASSERT_EQ(0, rbd.open(ioctx, parent, "parent", NULL));
+    ASSERT_EQ(0, rbd.open(ioctx, parent, parent_name.c_str(), NULL));
     ASSERT_EQ(0, parent.snap_create("parent_snap"));
     ASSERT_EQ(0, parent.close());
-    ASSERT_EQ(0, rbd.open(ioctx, parent, "parent", "parent_snap"));
+    ASSERT_EQ(0, rbd.open(ioctx, parent, parent_name.c_str(), "parent_snap"));
     ASSERT_EQ(0, parent.snap_protect("parent_snap"));
     ASSERT_EQ(0, parent.close());
-    ASSERT_EQ(0, rbd.clone(ioctx, "parent", "parent_snap", ioctx, "child",
-                           features, &order));
+    ASSERT_EQ(0, rbd.clone(ioctx, parent_name.c_str(), "parent_snap", ioctx,
+                           child_name.c_str(), features, &order));
   }
 
   ASSERT_EQ(RBD_MIRROR_MODE_IMAGE, mirror_mode);
