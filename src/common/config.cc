@@ -63,7 +63,11 @@ using std::pair;
 using std::set;
 using std::string;
 
-const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf";
+const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf"
+#if defined(__FreeBSD__)
+    ", /usr/local/etc/ceph/$cluster.conf"
+#endif
+    ;
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
