@@ -26,6 +26,11 @@ class CephAnsible(Task):
             roles=['ceph-mon'],
         ),
         dict(
+            hosts='mgrs',
+            become=True,
+            roles=['ceph-mgr'],
+        ),
+        dict(
             hosts='osds',
             become=True,
             roles=['ceph-osd'],
@@ -152,6 +157,7 @@ class CephAnsible(Task):
     def generate_hosts_file(self):
         groups_to_roles = dict(
             mons='mon',
+            mgrs='mgr',
             mdss='mds',
             osds='osd',
             rgws='rgw',
