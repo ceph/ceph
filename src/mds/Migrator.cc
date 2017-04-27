@@ -819,6 +819,32 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
     return;
   }
 
+  if (g_conf->mds_thrash_exports) {
+    // create random subtree bound (which will not be exported)
+    list<CDir*> ls;
+    for (auto p = dir->begin(); p != dir->end(); ++p) {
+      auto dn = p->second;
+      CDentry::linkage_t *dnl= dn->get_linkage();
+      if (dnl->is_primary()) {
+	CInode *in = dnl->get_inode();
+	if (in->is_dir())
+	  in->get_nested_dirfrags(ls);
+      }
+    }
+    if (ls.size() > 0) {
+      int n = rand() % ls.size();
+      auto p = ls.begin();
+      while (n--) ++p;
+      CDir *bd = *p;
+      if (!(bd->is_frozen() || bd->is_freezing())) {
+	assert(bd->is_auth());
+	dir->state_set(CDir::STATE_AUXSUBTREE);
+	mds->mdcache->adjust_subtree_auth(dir, mds->get_nodeid());
+	dout(0) << "export_dir: create aux subtree " << *bd << " under " << *dir << dendl;
+      }
+    }
+  }
+
   mds->hit_export_target(ceph_clock_now(), dest, -1);
 
   dir->auth_pin(this);
@@ -1942,6 +1968,9 @@ void Migrator::export_finish(CDir *dir)
     bd->put(CDir::PIN_EXPORTBOUND);
     bd->state_clear(CDir::STATE_EXPORTBOUND);
   }
+
+  if (dir->state_test(CDir::STATE_AUXSUBTREE))
+    dir->state_clear(CDir::STATE_AUXSUBTREE);
 
   // adjust auth, with possible subtree merge.
   //  (we do this _after_ removing EXPORTBOUND pins, to allow merges)

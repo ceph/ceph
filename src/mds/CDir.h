@@ -111,6 +111,7 @@ public:
   static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
   static const unsigned STATE_DIRTYDFT =      (1<<18);  // dirty dirfragtree
   static const unsigned STATE_BADFRAG =       (1<<19);  // bad dirfrag
+  static const unsigned STATE_AUXSUBTREE =    (1<<20);  // no subtree merge
 
   // common states
   static const unsigned STATE_CLEAN =  0;
