@@ -4234,9 +4234,11 @@ int BlueStore::_open_db(bool create, bool kv_no_open)
       initial = MAX(initial, cct->_conf->bluestore_bluefs_min);
       // align to bluefs's alloc_size
       initial = P2ROUNDUP(initial, cct->_conf->bluefs_alloc_size);
-      initial += cct->_conf->bluefs_alloc_size - SUPER_RESERVED;
-      bluefs->add_block_extent(bluefs_shared_bdev, SUPER_RESERVED, initial);
-      bluefs_extents.insert(SUPER_RESERVED, initial);
+      // put bluefs in the middle of the device in case it is an HDD
+      uint64_t start = P2ALIGN((bdev->get_size() - initial) / 2,
+			       cct->_conf->bluefs_alloc_size);
+      bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
+      bluefs_extents.insert(start, initial);
     }
 
     bfn = path + "/block.wal";
