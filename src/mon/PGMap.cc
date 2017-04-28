@@ -1659,6 +1659,18 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
          << kb_t(osd_sum.kb) << " avail\n";
   }
 
+
+  if (num_pg_active < num_pg) {
+    float p = (float)num_pg_active / (float)num_pg;
+    if (f) {
+      f->dump_float("active_pgs_ratio", p);
+    } else {
+      char b[20];
+      snprintf(b, sizeof(b), "%.3lf", (1.0 - p) * 100.0);
+      *out << "            " << b << "% pgs inactive\n";
+    }
+  }
+
   list<string> sl;
   overall_recovery_summary(f, &sl);
   if (!f && !sl.empty()) {
