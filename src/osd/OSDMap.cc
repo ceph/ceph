@@ -1663,7 +1663,7 @@ void OSDMap::_remove_nonexistent_osds(const pg_pool_t& pool,
     if (removed)
       osds.resize(osds.size() - removed);
   } else {
-    for (auto osd : osds) {
+    for (auto& osd : osds) {
       if (!exists(osd))
 	osd = CRUSH_ITEM_NONE;
     }
