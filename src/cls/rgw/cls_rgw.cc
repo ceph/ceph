@@ -3519,7 +3519,10 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
   bufferlist::iterator iter;
   map<string, bufferlist> vals;
   string filter_prefix;
-  int ret = cls_cxx_map_get_vals(hctx, op.marker, filter_prefix, op.max, &vals);
+  #define MAX_RESHARD_LIST_ENTRIES 1000
+  /* one extra entry for identifying truncation */
+  int32_t max = (op.max < MAX_RESHARD_LIST_ENTRIES ? op.max : MAX_RESHARD_LIST_ENTRIES) + 1;
+  int ret = cls_cxx_map_get_vals(hctx, op.marker, filter_prefix, max, &vals);
   if (ret < 0)
     return ret;
   map<string, bufferlist>::iterator it;
