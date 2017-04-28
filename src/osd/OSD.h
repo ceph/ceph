@@ -1719,7 +1719,7 @@ private:
     struct ShardData {
       Cond sdata_cond;
 
-      Mutex sdata_op_ordering_lock;   ///< protects all members below
+      Mutex sdata_lock;   ///< protects all members below
 
       OSDMapRef waiting_for_pg_osdmap;
       struct pg_slot {
@@ -1761,8 +1761,7 @@ private:
 	string lock_name, string ordering_lock,
 	uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct,
 	io_queue opqueue)
-	: sdata_op_ordering_lock(ordering_lock.c_str(), false, true,
-				 false, cct) {
+	: sdata_lock(ordering_lock.c_str(), false, true, false, cct) {
 	if (opqueue == weightedpriority) {
 	  pqueue = std::unique_ptr
 	    <WeightedPriorityQueue<pair<spg_t,PGQueueable>,entity_inst_t>>(
@@ -1835,9 +1834,9 @@ private:
       for(uint32_t i = 0; i < num_shards; i++) {
 	ShardData* sdata = shard_list[i];
 	assert (NULL != sdata); 
-	sdata->sdata_op_ordering_lock.Lock();
+	sdata->sdata_lock.Lock();
 	sdata->sdata_cond.Signal();
-	sdata->sdata_op_ordering_lock.Unlock();
+	sdata->sdata_lock.Unlock();
       }
     }
 
@@ -1847,11 +1846,11 @@ private:
 	char lock_name[32] = {0};
 	snprintf(lock_name, sizeof(lock_name), "%s%d", "OSD:ShardedOpWQ:", i);
 	assert (NULL != sdata);
-	sdata->sdata_op_ordering_lock.Lock();
+	sdata->sdata_lock.Lock();
 	f->open_object_section(lock_name);
 	sdata->pqueue->dump(f);
 	f->close_section();
-	sdata->sdata_op_ordering_lock.Unlock();
+	sdata->sdata_lock.Unlock();
       }
     }
 
@@ -1887,7 +1886,7 @@ private:
       uint32_t shard_index = thread_index % num_shards; 
       ShardData* sdata = shard_list[shard_index];
       assert(NULL != sdata);
-      Mutex::Locker l(sdata->sdata_op_ordering_lock);
+      Mutex::Locker l(sdata->sdata_lock);
       return sdata->pqueue->empty();
     }
   } op_shardedwq;
