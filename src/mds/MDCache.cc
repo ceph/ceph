@@ -869,25 +869,6 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool do_eval)
   show_subtrees();
 }
 
-void MDCache::split_export_pins(CInode *dir)
-{
-  assert(dir->is_dir());
-  for (CInode *in : dir->export_pin_list) {
-    mds_rank_t export_pin = in->get_export_pin(false);
-    if (export_pin >= 0 && export_pin == mds->get_nodeid()) {
-      dout(7) << "splitting fragments of " << *in << dendl;
-      std::list<CDir *> ls;
-      in->get_dirfrags(ls);
-      for (auto &cd : ls) {
-        if (cd->is_full_dir_auth()) {
-          adjust_subtree_auth(cd, mds_authority_t(mds->get_nodeid(), CDIR_AUTH_UNKNOWN));
-        }
-      }
-    } else {
-      split_export_pins(in);
-    }
-  }
-}
 
 void MDCache::try_subtree_merge(CDir *dir)
 {

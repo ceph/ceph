@@ -1061,10 +1061,6 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   // note the bounds.
   //  force it into a subtree by listing auth as <me,me>.
   cache->adjust_subtree_auth(dir, mds->get_nodeid(), mds->get_nodeid());
-
-  /* force export pinned children into separate subtrees */
-  cache->split_export_pins(dir);
-
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
 
@@ -1571,6 +1567,16 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
       ::encode(d_type, exportbl);
       continue;
     }
+
+    /* XXX The inode may be pinned to me (in->get_inode().export_pin) but it is
+     * not a subtree by the time I've found it here. So, keeping it is
+     * difficult as we've already notified the importer of the subtree bounds
+     * (MExportDirPrep).  Creating a new subtree for this pinned inode would
+     * probably require widespread changes and is not worth the effort since
+     * the importer will simply export this inode and its subtrees back to us
+     * (Migrator::decode_import_inode). This should be rare enough to not
+     * justify mucking with things here.
+     */
 
     // primary link
     // -- inode
