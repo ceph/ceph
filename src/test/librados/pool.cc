@@ -15,6 +15,9 @@ TEST(LibRadosPools, PoolList) {
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
   ASSERT_LT(rados_pool_list(cluster, buf, POOL_LIST_BUF_SZ), POOL_LIST_BUF_SZ);
 
+  // we can pass a null buffer too.
+  ASSERT_LT(rados_pool_list(cluster, NULL, POOL_LIST_BUF_SZ), POOL_LIST_BUF_SZ);
+
   bool found_pool = false;
   while (buf[0] != '\0') {
     if ((found_pool == false) && (strcmp(buf, pool_name.c_str()) == 0)) {
