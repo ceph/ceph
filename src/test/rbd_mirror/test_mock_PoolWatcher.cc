@@ -163,8 +163,13 @@ public:
     MockListener(TestMockPoolWatcher *test) : test(test) {
     }
 
-    MOCK_METHOD3(handle_update, void(const std::string &, const ImageIds &,
-                                     const ImageIds &));
+    MOCK_METHOD3(mock_handle_update, void(const std::string &, const ImageIds &,
+                                          const ImageIds &));
+    void handle_update(const std::string &mirror_uuid,
+                       ImageIds &&added_image_ids,
+                       ImageIds &&removed_image_ids) override {
+      mock_handle_update(mirror_uuid, added_image_ids, removed_image_ids);
+    }
   };
 
   TestMockPoolWatcher() : m_lock("TestMockPoolWatcher::m_lock") {
@@ -208,8 +213,8 @@ public:
                                      const std::string &mirror_uuid,
                                      const ImageIds &added_image_ids,
                                      const ImageIds &removed_image_ids) {
-    EXPECT_CALL(mock_listener, handle_update(mirror_uuid, added_image_ids,
-                                             removed_image_ids))
+    EXPECT_CALL(mock_listener, mock_handle_update(mirror_uuid, added_image_ids,
+                                                  removed_image_ids))
       .WillOnce(WithoutArgs(Invoke([this]() {
           Mutex::Locker locker(m_lock);
           ++m_update_count;

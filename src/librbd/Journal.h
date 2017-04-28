@@ -102,15 +102,11 @@ public:
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
   static int reset(librados::IoCtx &io_ctx, const std::string &image_id);
 
-  static int is_tag_owner(ImageCtxT *image_ctx, bool *is_tag_owner);
-  static int is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
-                          bool *is_tag_owner, ContextWQ *op_work_queue);
   static void is_tag_owner(ImageCtxT *image_ctx, bool *is_tag_owner,
                            Context *on_finish);
   static void is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
                            bool *is_tag_owner, ContextWQ *op_work_queue,
                            Context *on_finish);
-  static int get_tag_owner(ImageCtxT *image_ctx, std::string *mirror_uuid);
   static void get_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
                             std::string *mirror_uuid,
                             ContextWQ *op_work_queue, Context *on_finish);
