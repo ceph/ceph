@@ -80,13 +80,21 @@ void LastEpochClean::Lec::report(ps_t ps, epoch_t last_epoch_clean)
   if (epoch_by_pg.size() <= ps) {
     epoch_by_pg.resize(ps + 1, 0);
   }
-  if (epoch_by_pg[ps] >= last_epoch_clean) {
+  const auto old_lec = epoch_by_pg[ps];
+  if (old_lec >= last_epoch_clean) {
     // stale lec
     return;
   }
   epoch_by_pg[ps] = last_epoch_clean;
   if (last_epoch_clean < floor) {
     floor = last_epoch_clean;
+  } else if (last_epoch_clean > floor) {
+    if (old_lec == floor) {
+      // probably should increase floor?
+      auto new_floor = std::min_element(std::begin(epoch_by_pg),
+					std::end(epoch_by_pg));
+      floor = *new_floor;
+    }
   }
   if (ps != next_missing) {
     return;
