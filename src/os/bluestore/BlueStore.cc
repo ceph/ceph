@@ -9767,7 +9767,7 @@ int BlueStore::_do_write(
     auto order = min_alloc_size_order.load();
     if (o->onode.expected_write_size) {
       wctx.csum_order = std::max(order,
-			         (size_t)ctzl(o->onode.expected_write_size));
+			         (uint8_t)ctz(o->onode.expected_write_size));
     } else {
       wctx.csum_order = order;
     }

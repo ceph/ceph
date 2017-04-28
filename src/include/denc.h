@@ -344,7 +344,7 @@ inline void denc_signed_varint_lowz(int64_t v,
     v = -v;
     negative = true;
   }
-  int lowznib = v ? (ctz(v) / 4) : 0;
+  unsigned lowznib = v ? (ctz(v) / 4) : 0u;
   if (lowznib > 3)
     lowznib = 3;
   v >>= lowznib * 4;
