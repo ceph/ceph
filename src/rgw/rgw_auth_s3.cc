@@ -1029,21 +1029,7 @@ size_t AWSv4Completer::recv_body(char* const buf, const size_t max)
 
 void AWSv4Completer::modify_request_state(req_state* const s_rw)
 {
-  /* TODO(rzarzynski): switch to the dedicated filter over RestfulClient. */
-  //s_rw->aws4_auth_streaming_mode = aws4_auth_streaming_mode;
-
-  s_rw->aws4_auth = std::unique_ptr<rgw_aws4_auth>(new rgw_aws4_auth);
-
-  s_rw->aws4_auth->date = date;
-  s_rw->aws4_auth->credential_scope = credential_scope;
-
-  /* If we're here, the provided signature has been successfully validated
-   * earlier. */
-  s_rw->aws4_auth->seed_signature = seed_signature;
-
-  if (signing_key) {
-    s_rw->aws4_auth->signing_key = std::move(*signing_key);
-  } else if (aws4_auth_streaming_mode) {
+  if (!signing_key && aws4_auth_streaming_mode) {
     /* Some external authorizers (like Keystone) aren't fully compliant with
      * AWSv4. They do not provide the secret_key which is necessary to handle
      * the streamed upload. */

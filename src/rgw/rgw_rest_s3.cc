@@ -1188,149 +1188,11 @@ int RGWPutObj_ObjStore_S3::get_params()
   return RGWPutObj_ObjStore::get_params();
 }
 
-int RGWPutObj_ObjStore_S3::validate_aws4_single_chunk(char *chunk_str,
-                                                      char *chunk_data_str,
-                                                      unsigned int chunk_data_size,
-                                                      string chunk_signature)
-{
-
-  /* string to sign */
-
-  const std::string hash_empty_str = rgw::auth::s3::hash_string_sha256("", 0);
-
-  const std::string hash_chunk_data = \
-    rgw::auth::s3::hash_string_sha256(chunk_data_str, chunk_data_size);
-
-  string string_to_sign = "AWS4-HMAC-SHA256-PAYLOAD\n";
-  string_to_sign.append(s->aws4_auth->date + "\n");
-  string_to_sign.append(s->aws4_auth->credential_scope + "\n");
-  string_to_sign.append(s->aws4_auth->seed_signature + "\n");
-  string_to_sign.append(hash_empty_str + "\n");
-  string_to_sign.append(hash_chunk_data);
-
-  /* new chunk signature */
-  const auto sighex = buf_to_hex(calc_hmac_sha256(s->aws4_auth->signing_key,
-                                                  string_to_sign));
-  /* FIXME(rzarzynski): std::string here is really unnecessary. */
-  std::string new_chunk_signature = std::string(sighex.data(), sighex.size());
-
-  ldout(s->cct, 20) << "--------------- aws4 chunk validation" << dendl;
-  ldout(s->cct, 20) << "chunk_signature     = " << chunk_signature << dendl;
-  ldout(s->cct, 20) << "new_chunk_signature = " << new_chunk_signature << dendl;
-  ldout(s->cct, 20) << "aws4 chunk signing_key    = "
-                    << buf_to_hex(s->aws4_auth->signing_key).data()
-                    << dendl;
-  ldout(s->cct, 20) << "aws4 chunk string_to_sign = "
-                    << rgw::crypt_sanitize::log_content{string_to_sign.c_str()}
-                    << dendl;
-
-  /* chunk auth ok? */
-
-  if (new_chunk_signature != chunk_signature) {
-    ldout(s->cct, 20) << "ERROR: AWS4 chunk signature does NOT match (new_chunk_signature != chunk_signature)" << dendl;
-    return -ERR_SIGNATURE_NO_MATCH;
-  }
-
-  /* update seed signature */
-
-  s->aws4_auth->seed_signature = new_chunk_signature;
-
-  return 0;
-}
-
-int RGWPutObj_ObjStore_S3::validate_and_unwrap_available_aws4_chunked_data(bufferlist& bl_in,
-                                                                           bufferlist& bl_out)
-{
-
-  /* string(IntHexBase(chunk-size)) + ";chunk-signature=" + signature + \r\n + chunk-data + \r\n */
-
-  const unsigned int chunk_str_min_len = 1 + 17 + 64 + 2; /* len('0') = 1 */
-
-  char *chunk_str = bl_in.c_str();
-  unsigned int budget = bl_in.length();
-
-  bl_out.clear();
-
-  while (true) {
-
-    /* check available metadata */
-
-    if (budget < chunk_str_min_len) {
-      return -ERR_SIGNATURE_NO_MATCH;
-    }
-
-    unsigned int chunk_offset = 0;
-
-    /* grab chunk size */
-
-    while ((chunk_offset < chunk_str_min_len) && (chunk_str[chunk_offset] != ';'))
-      chunk_offset++;
-    string str = string(chunk_str, chunk_offset);
-    unsigned int chunk_data_size;
-    stringstream ss;
-    ss << std::hex << str;
-    ss >> chunk_data_size;
-    if (ss.fail()) {
-      return -ERR_SIGNATURE_NO_MATCH;
-    }
-
-    /* grab chunk signature */
-
-    chunk_offset += 17;
-    string chunk_signature = string(chunk_str, chunk_offset, 64);
-
-    /* get chunk data */
-
-    chunk_offset += 64 + 2;
-    char *chunk_data_str = chunk_str + chunk_offset;
-
-    /* handle budget */
-
-    budget -= chunk_offset;
-    if (budget < chunk_data_size) {
-      return -ERR_SIGNATURE_NO_MATCH;
-    } else {
-      budget -= chunk_data_size;
-    }
-
-    /* auth single chunk */
-
-    if (validate_aws4_single_chunk(chunk_str, chunk_data_str, chunk_data_size, chunk_signature) < 0) {
-      ldout(s->cct, 20) << "ERROR AWS4 single chunk validation" << dendl;
-      return -ERR_SIGNATURE_NO_MATCH;
-    }
-
-    /* aggregate single chunk */
-
-    bl_out.append(chunk_data_str, chunk_data_size);
-
-    /* last chunk or no more budget? */
-
-    if ((chunk_data_size == 0) || (budget == 0))
-      break;
-
-    /* next chunk */
-
-    chunk_offset += chunk_data_size;
-    chunk_str += chunk_offset;
-  }
-
-  /* authorization ok */
-
-  return 0;
-
-}
-
 int RGWPutObj_ObjStore_S3::get_data(bufferlist& bl)
 {
-  int ret = RGWPutObj_ObjStore::get_data(bl);
-  if (ret > 0 && s->aws4_auth_streaming_mode) {
-    int ret_auth = validate_and_unwrap_available_aws4_chunked_data(bl, s->aws4_auth->bl);
-    if (ret_auth < 0) {
-      return ret_auth;
-    }
-  } else if (ret == 0) {
-    int ret_auth = do_aws4_auth_completion();
+  const int ret = RGWPutObj_ObjStore::get_data(bl);
+  if (ret == 0) {
+    const int ret_auth = do_aws4_auth_completion();
     if (ret_auth < 0) {
       return ret_auth;
     }
@@ -1714,16 +1576,19 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
         /* AWS4 */
 
+#if 0
         try {
           s->aws4_auth = std::unique_ptr<rgw_aws4_auth>(new rgw_aws4_auth);
         } catch (std::bad_alloc&) {
           return -ENOMEM;
         }
+#endif
 
         /* FIXME(rzarzynski): clean this up! */
         std::string encoded_policy_str(s->auth.s3_postobj_creds.encoded_policy.c_str(),
                                        s->auth.s3_postobj_creds.encoded_policy.length());
 
+#if 0
         s->aws4_auth->signing_key = \
           rgw::auth::s3::get_v4_signing_key(s->cct, cs_aux, s3_secret_key);
 
@@ -1740,6 +1605,9 @@ int RGWPostObj_ObjStore_S3::get_policy()
         if (received_signature_str != new_signature_str) {
           return -ERR_SIGNATURE_NO_MATCH;
         }
+#else
+        return -ERR_SIGNATURE_NO_MATCH;
+#endif
       }
 
       /* Deep copy. */

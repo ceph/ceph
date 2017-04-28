@@ -3174,17 +3174,17 @@ void RGWPutObj::execute()
   }
 
   do {
-    bufferlist data_in;
+    bufferlist data;
     if (fst > lst)
       break;
     if (!copy_source) {
-      len = get_data(data_in);
+      len = get_data(data);
     } else {
       uint64_t cur_lst = min(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
-      op_ret = get_data(fst, cur_lst, data_in);
+      op_ret = get_data(fst, cur_lst, data);
       if (op_ret < 0)
         goto done;
-      len = data_in.length();
+      len = data.length();
       s->content_length += len;
       fst += len;
     }
@@ -3193,19 +3193,12 @@ void RGWPutObj::execute()
       goto done;
     }
 
-    bufferlist &data = data_in;
-    if (len && s->aws4_auth_streaming_mode) {
-      /* use unwrapped data */
-      data = s->aws4_auth->bl;
-      len = data.length();
-    }
-
     if (need_calc_md5) {
       hash.Update((const byte *)data.c_str(), data.length());
     }
 
     /* update torrrent */
-    torrent.update(data_in);
+    torrent.update(data);
 
     /* do we need this operation to be synchronous? if we're dealing with an object with immutable
      * head, e.g., multipart object we need to make sure we're the first one writing to this object

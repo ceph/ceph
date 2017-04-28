@@ -203,7 +203,6 @@ private:
   std::string seed_signature;
   boost::optional<std::array<unsigned char,
                   CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>> signing_key;
-  ceph::bufferlist bl;
 
   /* TODO(rzarzynski): this won't be necessary after moving to filter-over-
    * rgw::io::RestfulClient. */

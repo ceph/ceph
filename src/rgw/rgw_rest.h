@@ -212,8 +212,6 @@ public:
   int verify_params() override;
   int get_params() override;
   int get_data(bufferlist& bl) override;
-
-  int get_padding_last_aws4_chunk_encoded(bufferlist &bl, uint64_t chunk_size);
 };
 
 class RGWPostObj_ObjStore : public RGWPostObj
