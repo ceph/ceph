@@ -48,7 +48,8 @@ Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
   finisher(g_ceph_context, "Mgr", "mgr-fin"),
   py_modules(daemon_state, cluster_state, *monc, finisher),
   cluster_state(monc, nullptr),
-  server(monc, daemon_state, cluster_state, py_modules, clog_, audit_clog_),
+  server(monc, finisher, daemon_state, cluster_state, py_modules,
+         clog_, audit_clog_),
   initialized(false),
   initializing(false)
 {
@@ -343,11 +344,17 @@ void Mgr::shutdown()
   // give up the lock for us.
   Mutex::Locker l(lock);
 
+  monc->sub_unwant("log-info");
+  monc->sub_unwant("mgrdigest");
+  monc->sub_unwant("fsmap");
+
   // First stop the server so that we're not taking any more incoming requests
   server.shutdown();
 
+  lock.Unlock();
   // after the messenger is stopped, signal modules to shutdown via finisher
   py_modules.shutdown();
+  lock.Lock();
 
   // Then stop the finisher to ensure its enqueued contexts aren't going
   // to touch references to the things we're about to tear down
@@ -430,6 +437,8 @@ void Mgr::handle_log(MLog *m)
   for (const auto &e : m->entries) {
     py_modules.notify_all(e);
   }
+
+  m->put();
 }
 
 bool Mgr::ms_dispatch(Message *m)
@@ -453,11 +462,12 @@ bool Mgr::ms_dispatch(Message *m)
       ceph_abort();
 
       py_modules.notify_all("mon_map", "");
+      m->put();
       break;
     case CEPH_MSG_FS_MAP:
       py_modules.notify_all("fs_map", "");
       handle_fs_map((MFSMap*)m);
-      m->put();
+      return false; // I shall let this pass through for Client
       break;
     case CEPH_MSG_OSD_MAP:
       handle_osd_map();
@@ -471,7 +481,6 @@ bool Mgr::ms_dispatch(Message *m)
       break;
     case MSG_LOG:
       handle_log(static_cast<MLog *>(m));
-      m->put();
       break;
 
     default:
@@ -553,6 +562,7 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
   // the pgmap might have changed since last time we were here.
   py_modules.notify_all("pg_summary", "");
   dout(10) << "done." << dendl;
+
   m->put();
 }
 

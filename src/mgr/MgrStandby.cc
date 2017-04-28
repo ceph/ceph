@@ -242,6 +242,8 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       active_mgr.reset();
     }
   }
+
+  mmap->put();
 }
 
 bool MgrStandby::ms_dispatch(Message *m)
@@ -256,13 +258,14 @@ bool MgrStandby::ms_dispatch(Message *m)
 
     default:
       if (active_mgr) {
-        return active_mgr->ms_dispatch(m);
+        lock.Unlock();
+        active_mgr->ms_dispatch(m);
+        lock.Lock();
       } else {
         return false;
       }
   }
 
-  m->put();
   return true;
 }
 
