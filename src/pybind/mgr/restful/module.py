@@ -419,7 +419,7 @@ class Module(MgrModule):
         osds_by_pool = {}
         for pool_id, pool in pools.items():
             pool_osds = None
-            for rule in [r for r in crush_rules if r['ruleset'] == pool['crush_ruleset']]:
+            for rule in [r for r in crush_rules if r['rule_id'] == pool['crush_rule']]:
                 if rule['min_size'] <= pool['size'] <= rule['max_size']:
                     pool_osds = common.crush_rule_osds(self.get('osd_map_tree')['nodes'], rule)
 
