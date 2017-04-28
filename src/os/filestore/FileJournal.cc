@@ -1410,7 +1410,10 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
     aio_lock.Unlock();
 
     iocb *piocb = &aio.iocb;
-    int attempts = 10;
+    
+    // 2^16 * 125us = ~8 seconds, so max sleep is ~16 seconds
+    int attempts = 16;
+    int delay = 125;
     do {
       int r = io_submit(aio_ctx, 1, &piocb);
       dout(20) << "write_aio_bl io_submit return value: " << r << dendl;
@@ -1418,7 +1421,8 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
 	derr << "io_submit to " << aio.off << "~" << cur_len
 	     << " got " << cpp_strerror(r) << dendl;
 	if (r == -EAGAIN && attempts-- > 0) {
-	  usleep(500);
+	  usleep(delay);
+	  delay *= 2;
 	  continue;
 	}
 	check_align(pos, tbl);
