@@ -132,6 +132,7 @@ def get_key(cluster, mon_id):
                             'mon', 'allow *',
                             'osd', 'allow *',
                             'mds', 'allow *',
+                            'mgr', 'allow *',
                             ],
                         stdout=f,
                         )
