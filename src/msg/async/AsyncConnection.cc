@@ -417,7 +417,7 @@ void AsyncConnection::process()
       case STATE_OPEN_TAG_ACK:
         {
           ceph_le64 *seq;
-          r = read_until(sizeof(seq), state_buffer);
+          r = read_until(sizeof(*seq), state_buffer);
           if (r < 0) {
             ldout(async_msgr->cct, 1) << __func__ << " read ack seq failed" << dendl;
             goto fail;

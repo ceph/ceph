@@ -63,7 +63,11 @@ using std::pair;
 using std::set;
 using std::string;
 
-const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf";
+const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf"
+#if defined(__FreeBSD__)
+    ", /usr/local/etc/ceph/$cluster.conf"
+#endif
+    ;
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
@@ -302,8 +306,9 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     else if (ret != -ENOENT)
       return ret;
   }
+  // it must have been all ENOENTs, that's the only way we got here
   if (c == conf_files.end())
-    return -EINVAL;
+    return -ENOENT;
 
   if (cluster.size() == 0) {
     /*

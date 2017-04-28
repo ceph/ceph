@@ -892,6 +892,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/radosgw
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mgr
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -929,8 +930,10 @@ rm -rf %{buildroot}
 %{_libdir}/ceph/erasure-code/libec_*.so*
 %dir %{_libdir}/ceph/compressor
 %{_libdir}/ceph/compressor/libceph_*.so*
+%ifarch x86_64
 %dir %{_libdir}/ceph/crypto
 %{_libdir}/ceph/crypto/libceph_*.so*
+%endif
 %if %{with lttng}
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
@@ -960,6 +963,7 @@ rm -rf %{buildroot}
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mgr
 
 %post base
 /sbin/ldconfig

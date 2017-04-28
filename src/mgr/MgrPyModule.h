@@ -43,8 +43,6 @@ class MgrPyModule
 {
 private:
   const std::string module_name;
-  PyObject *pModule;
-  PyObject *pClass;
   PyObject *pClassInstance;
 
   std::vector<ModuleCommand> commands;

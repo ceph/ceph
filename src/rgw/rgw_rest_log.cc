@@ -863,8 +863,7 @@ void RGWOp_MDLog_Status::execute()
     http_ret = -ENOENT;
     return;
   }
-  http_ret = sync->read_sync_status();
-  status = sync->get_sync_status();
+  http_ret = sync->read_sync_status(&status);
 }
 
 void RGWOp_MDLog_Status::send_response()

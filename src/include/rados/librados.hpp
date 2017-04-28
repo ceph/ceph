@@ -301,6 +301,7 @@ namespace librados
     //flag mean ObjectOperationFlags
     void set_op_flags2(int flags);
 
+    void cmpext(uint64_t off, bufferlist& cmp_bl, int *prval);
     void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
     void exec(const char *cls, const char *method, bufferlist& inbl);
@@ -755,6 +756,7 @@ namespace librados
     int remove(const std::string& oid, int flags);
     int trunc(const std::string& oid, uint64_t size);
     int mapext(const std::string& o, uint64_t off, size_t len, std::map<uint64_t,uint64_t>& m);
+    int cmpext(const std::string& o, uint64_t off, bufferlist& cmp_bl);
     int sparse_read(const std::string& o, std::map<uint64_t,uint64_t>& m, bufferlist& bl, size_t len, uint64_t off);
     int getxattr(const std::string& oid, const char *name, bufferlist& bl);
     int getxattrs(const std::string& oid, std::map<std::string, bufferlist>& attrset);
@@ -991,6 +993,20 @@ namespace librados
     int aio_sparse_read(const std::string& oid, AioCompletion *c,
 			std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
 			size_t len, uint64_t off, uint64_t snapid);
+    /**
+     * Asynchronously compare an on-disk object range with a buffer
+     *
+     * @param oid the name of the object to read from
+     * @param c what to do when the read is complete
+     * @param off object byte offset at which to start the comparison
+     * @param cmp_bl buffer containing bytes to be compared with object contents
+     * @returns 0 on success, negative error code on failure,
+     *  (-MAX_ERRNO - mismatch_off) on mismatch
+     */
+    int aio_cmpext(const std::string& oid,
+		   librados::AioCompletion *c,
+		   uint64_t off,
+		   bufferlist& cmp_bl);
     int aio_write(const std::string& oid, AioCompletion *c, const bufferlist& bl,
 		  size_t len, uint64_t off);
     int aio_append(const std::string& oid, AioCompletion *c, const bufferlist& bl,

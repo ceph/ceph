@@ -172,7 +172,14 @@ SUBSYS(eventtrace, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
-OPTION(keyring, OPT_STR, "/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin") // default changed by common_preinit() for mds and osd
+OPTION(keyring, OPT_STR, 
+    // default changed by common_preinit() for mds and osd
+    "/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin," 
+#if defined(__FreeBSD)
+    "/usr/local/etc/ceph/$cluster.$name.keyring,/usr/local/etc/ceph/$cluster.keyring,"
+    "/usr/local/etc/ceph/keyring,/usr/local/etc/ceph/keyring.bin," 
+#endif
+    )
 OPTION(heartbeat_interval, OPT_INT, 5)
 OPTION(heartbeat_file, OPT_STR, "")
 OPTION(heartbeat_inject_failure, OPT_INT, 0)    // force an unhealthy heartbeat for N seconds
@@ -1113,7 +1120,6 @@ OPTION(bluestore_cache_size, OPT_U64, 1024*1024*1024)
 OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .9)
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
-OPTION(bluestore_freelist_type, OPT_STR, "bitmap") // extent | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
 OPTION(bluestore_bitmapallocator_blocks_per_zone, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
 OPTION(bluestore_bitmapallocator_span_size, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
@@ -1125,13 +1131,11 @@ OPTION(bluestore_fsck_on_umount_deep, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_mkfs, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_mkfs_deep, OPT_BOOL, false)
 OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false) // submit kv txn in queueing thread (not kv_sync_thread)
-OPTION(bluestore_max_ops, OPT_U64, 512)
-OPTION(bluestore_max_bytes, OPT_U64, 64*1024*1024)
-OPTION(bluestore_throttle_cost_per_io_hdd, OPT_U64, 200000)
+OPTION(bluestore_throttle_bytes, OPT_U64, 64*1024*1024)
+OPTION(bluestore_throttle_deferred_bytes, OPT_U64, 128*1024*1024)
+OPTION(bluestore_throttle_cost_per_io_hdd, OPT_U64, 1500000)
 OPTION(bluestore_throttle_cost_per_io_ssd, OPT_U64, 4000)
 OPTION(bluestore_throttle_cost_per_io, OPT_U64, 0)
-OPTION(bluestore_deferred_max_ops, OPT_U64, 512)
-OPTION(bluestore_deferred_max_bytes, OPT_U64, 128*1024*1024)
 OPTION(bluestore_deferred_batch_ops, OPT_U64, 0)
 OPTION(bluestore_deferred_batch_ops_hdd, OPT_U64, 64)
 OPTION(bluestore_deferred_batch_ops_ssd, OPT_U64, 16)
@@ -1155,6 +1159,7 @@ OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(kstore_backend, OPT_STR, "rocksdb")
 OPTION(kstore_rocksdb_options, OPT_STR, "compression=kNoCompression")
+OPTION(kstore_rocksdb_bloom_bits_per_key, OPT_INT, 0)
 OPTION(kstore_fsck_on_mount, OPT_BOOL, false)
 OPTION(kstore_fsck_on_mount_deep, OPT_BOOL, true)
 OPTION(kstore_nid_prealloc, OPT_U64, 1024)
@@ -1164,7 +1169,7 @@ OPTION(kstore_onode_map_size, OPT_U64, 1024)
 OPTION(kstore_cache_tails, OPT_BOOL, true)
 OPTION(kstore_default_stripe_size, OPT_INT, 65536)
 
-OPTION(filestore_omap_backend, OPT_STR, "leveldb")
+OPTION(filestore_omap_backend, OPT_STR, "rocksdb")
 OPTION(filestore_omap_backend_path, OPT_STR, "")
 
 /// filestore wb throttle limits
@@ -1657,7 +1662,6 @@ OPTION(rgw_sync_data_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(rgw_sync_meta_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
 
 
-OPTION(rgw_realm_reconfigure_delay, OPT_DOUBLE, 2) // seconds to wait before reloading realm configuration
 OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
 
@@ -1714,3 +1718,5 @@ OPTION(event_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should b
 OPTION(internal_safe_to_start_threads, OPT_BOOL, false)
 
 OPTION(debug_deliberately_leak_memory, OPT_BOOL, false)
+
+OPTION(rgw_swift_custom_header, OPT_STR, "") // option to enable swift custom headers

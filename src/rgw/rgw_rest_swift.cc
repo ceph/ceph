@@ -306,6 +306,8 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       s->formatter->dump_string("name", key.name);
       s->formatter->dump_string("hash", iter->meta.etag);
       s->formatter->dump_int("bytes", iter->meta.accounted_size);
+      if (!iter->meta.user_data.empty())
+        s->formatter->dump_string("user_custom_data", iter->meta.user_data);
       string single_content_type = iter->meta.content_type;
       if (iter->meta.content_type.size()) {
         // content type might hold multiple values, just dump the last one
@@ -502,6 +504,7 @@ static int get_swift_container_settings(req_state * const s,
                                         RGWRados * const store,
                                         RGWAccessControlPolicy * const policy,
                                         bool * const has_policy,
+                                        uint32_t * rw_mask,
                                         RGWCORSConfiguration * const cors_config,
                                         bool * const has_cors)
 {
@@ -524,7 +527,8 @@ static int get_swift_container_settings(req_state * const s,
                                        s->user->user_id,
                                        s->user->display_name,
                                        read_list,
-                                       write_list);
+                                       write_list,
+                                       *rw_mask);
     if (r < 0) {
       return r;
     }
@@ -622,8 +626,10 @@ static int get_swift_versioning_settings(
 int RGWCreateBucket_ObjStore_SWIFT::get_params()
 {
   bool has_policy;
+  uint32_t policy_rw_mask = 0;
 
-  int r = get_swift_container_settings(s, store, &policy, &has_policy, &cors_config, &has_cors);
+  int r = get_swift_container_settings(s, store, &policy, &has_policy,
+				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;
   }
@@ -756,6 +762,13 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
   if (r < 0) {
     ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
     return r;
+  }
+
+  if (!s->cct->_conf->rgw_swift_custom_header.empty()) {
+    string custom_header = s->cct->_conf->rgw_swift_custom_header;
+    if (s->info.env->exists(custom_header.c_str())) {
+      user_data = s->info.env->get(custom_header.c_str());
+    }
   }
 
   dlo_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
@@ -895,7 +908,7 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
   }
 
   int r = get_swift_container_settings(s, store, &policy, &has_policy,
-				       &cors_config, &has_cors);
+				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;
   }

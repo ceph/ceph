@@ -339,8 +339,7 @@ if(HAVE_XIO)
     msg/xio/XioMsg.cc
     msg/xio/XioPool.cc
     msg/xio/XioMessenger.cc
-    msg/xio/XioPortal.cc
-    msg/xio/QueueStrategy.cc)
+    msg/xio/XioPortal.cc)
 endif(HAVE_XIO)
 
 set(async_rdma_common_srcs)
@@ -448,6 +447,7 @@ set(libcommon_files
   msg/async/Stack.cc
   msg/async/PosixStack.cc
   msg/async/net_handler.cc
+  msg/QueueStrategy.cc
   ${xio_common_srcs}
   ${async_rdma_common_srcs}
   ${dpdk_common_srcs}
@@ -651,7 +651,7 @@ if (WITH_MGR)
   add_executable(ceph-mgr ${mgr_srcs}
                  $<TARGET_OBJECTS:heap_profiler_objs>)
   target_include_directories(ceph-mgr PRIVATE "${PYTHON_INCLUDE_DIRS}")
-  target_link_libraries(ceph-mgr mds osdc global-static common
+  target_link_libraries(ceph-mgr osdc global-static common
       ${Boost_PYTHON_LIBRARY} ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)

@@ -866,6 +866,8 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   set<int> need_check_down_pg_osds;
 
   // apply latest map(s)
+  const OSDMap& osdmap = mon->osdmon()->osdmap;
+  epoch = std::max(epoch, osdmap.get_epoch());
   for (epoch_t e = pg_map.last_osdmap_epoch+1;
        e <= epoch;
        e++) {
@@ -881,7 +883,6 @@ void PGMonitor::check_osd_map(epoch_t epoch)
                                 &last_osd_report, &pg_map, &pending_inc);
   }
 
-  const OSDMap& osdmap = mon->osdmon()->osdmap;
   assert(pg_map.last_osdmap_epoch < epoch);
   pending_inc.osdmap_epoch = epoch;
   PGMapUpdater::update_creating_pgs(osdmap, pg_map, &pending_inc);
@@ -1503,8 +1504,8 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   // near-target max pools
-  const map<int64_t,pg_pool_t>& pools = mon->osdmon()->osdmap.get_pools();
-  for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin();
+  auto& pools = mon->osdmon()->osdmap.get_pools();
+  for (auto p = pools.begin();
        p != pools.end(); ++p) {
     if ((!p->second.target_max_objects && !p->second.target_max_bytes) ||
         !pg_map.pg_pool_sum.count(p->first))

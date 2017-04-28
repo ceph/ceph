@@ -1208,8 +1208,9 @@ public:
     choose_args.clear();
   }
 
+  template<typename WeightVector>
   void do_rule(int rule, int x, vector<int>& out, int maxout,
-	       const vector<__u32>& weight,
+	       const WeightVector& weight,
 	       uint64_t choose_args_index) const {
     int rawout[maxout];
     char work[crush_work_size(crush, maxout)];

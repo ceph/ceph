@@ -310,4 +310,6 @@
 /* Support POWER8 instructions */
 #cmakedefine HAVE_POWER8
 
+#cmakedefine PYTHON_EXECUTABLE "@PYTHON_EXECUTABLE@"
+
 #endif /* CONFIG_H */

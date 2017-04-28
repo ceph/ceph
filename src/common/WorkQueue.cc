@@ -39,7 +39,6 @@ ThreadPool::ThreadPool(CephContext *cct_, string nm, string tn, int n, const cha
     ioprio_class(-1),
     ioprio_priority(-1),
     _num_threads(n),
-    last_work_queue(0),
     processing(0)
 {
   if (option) {
@@ -117,9 +116,8 @@ void ThreadPool::worker(WorkThread *wt)
       int tries = work_queues.size();
       bool did = false;
       while (tries--) {
-	last_work_queue++;
-	last_work_queue %= work_queues.size();
-	wq = work_queues[last_work_queue];
+	next_work_queue %= work_queues.size();
+	wq = work_queues[next_work_queue++];
 	
 	void *item = wq->_void_dequeue();
 	if (item) {

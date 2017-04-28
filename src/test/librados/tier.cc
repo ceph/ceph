@@ -530,11 +530,18 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapScrub) {
     IoCtx cache_ioctx;
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
     for (int i=0; i<10; ++i) {
-      ostringstream ss;
-      ss << "{\"prefix\": \"pg scrub\", \"pgid\": \""
-	 << cache_ioctx.get_id() << "." << i
-	 << "\"}";
-      cluster.mon_command(ss.str(), inbl, NULL, NULL);
+      do {
+	ostringstream ss;
+	ss << "{\"prefix\": \"pg scrub\", \"pgid\": \""
+	   << cache_ioctx.get_id() << "." << i
+	   << "\"}";
+	int r = cluster.mon_command(ss.str(), inbl, NULL, NULL);
+	if (r == -ENOENT ||  // in case mgr osdmap is stale
+	    r == -EAGAIN) {
+	  sleep(5);
+	  continue;
+	}
+      } while (false);
     }
 
     // give it a few seconds to go.  this is sloppy but is usually enough time
@@ -3072,8 +3079,11 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteSnap) {
 	 << hash
 	 << "\"}";
       int r = cluster.mon_command(ss.str(), inbl, NULL, NULL);
-      if (r == -EAGAIN)
+      if (r == -EAGAIN ||
+	  r == -ENOENT) {  // in case mgr osdmap is a bit stale
+	sleep(5);
 	continue;
+      }
       ASSERT_EQ(0, r);
       break;
     }

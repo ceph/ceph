@@ -1331,9 +1331,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
   for (map<ceph_tid_t,CommandOp*>::iterator p = need_resend_command.begin();
        p != need_resend_command.end(); ++p) {
     CommandOp *c = p->second;
-    _assign_command_session(c, sul);
-    if (c->session && !c->session->is_homeless()) {
-      _send_command(c);
+    if (c->target.osd >= 0) {
+      _assign_command_session(c, sul);
+      if (c->session && !c->session->is_homeless()) {
+	_send_command(c);
+      }
     }
   }
 
@@ -1396,18 +1398,17 @@ void Objecter::C_Op_Map_Latest::finish(int r)
 }
 
 int Objecter::pool_snap_by_name(int64_t poolid, const char *snap_name,
-				snapid_t *snap)
+				snapid_t *snap) const
 {
   shared_lock rl(rwlock);
 
-  const map<int64_t, pg_pool_t>& pools = osdmap->get_pools();
-  map<int64_t, pg_pool_t>::const_iterator iter = pools.find(poolid);
+  auto& pools = osdmap->get_pools();
+  auto iter = pools.find(poolid);
   if (iter == pools.end()) {
     return -ENOENT;
   }
   const pg_pool_t& pg_pool = iter->second;
-  map<snapid_t, pool_snap_info_t>::const_iterator p;
-  for (p = pg_pool.snaps.begin();
+  for (auto p = pg_pool.snaps.begin();
        p != pg_pool.snaps.end();
        ++p) {
     if (p->second.name == snap_name) {
@@ -1419,17 +1420,17 @@ int Objecter::pool_snap_by_name(int64_t poolid, const char *snap_name,
 }
 
 int Objecter::pool_snap_get_info(int64_t poolid, snapid_t snap,
-				 pool_snap_info_t *info)
+				 pool_snap_info_t *info) const
 {
   shared_lock rl(rwlock);
 
-  const map<int64_t, pg_pool_t>& pools = osdmap->get_pools();
-  map<int64_t, pg_pool_t>::const_iterator iter = pools.find(poolid);
+  auto& pools = osdmap->get_pools();
+  auto iter = pools.find(poolid);
   if (iter == pools.end()) {
     return -ENOENT;
   }
   const pg_pool_t& pg_pool = iter->second;
-  map<snapid_t,pool_snap_info_t>::const_iterator p = pg_pool.snaps.find(snap);
+  auto p = pg_pool.snaps.find(snap);
   if (p == pg_pool.snaps.end())
     return -ENOENT;
   *info = p->second;
@@ -4727,11 +4728,13 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
     if (!osdmap->exists(c->target_osd)) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "osd dne";
+      c->target.osd = -1;
       return RECALC_OP_TARGET_OSD_DNE;
     }
     if (osdmap->is_down(c->target_osd)) {
       c->map_check_error = -ENXIO;
       c->map_check_error_str = "osd down";
+      c->target.osd = -1;
       return RECALC_OP_TARGET_OSD_DOWN;
     }
     c->target.osd = c->target_osd;
@@ -4740,10 +4743,12 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
     if (ret == RECALC_OP_TARGET_POOL_DNE) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "pool dne";
+      c->target.osd = -1;
       return ret;
     } else if (ret == RECALC_OP_TARGET_OSD_DOWN) {
       c->map_check_error = -ENXIO;
       c->map_check_error_str = "osd down";
+      c->target.osd = -1;
       return ret;
     }
   }
