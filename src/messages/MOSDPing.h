@@ -24,7 +24,7 @@
 class MOSDPing : public Message {
 
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 2;
 
  public:
   enum {
@@ -71,8 +71,7 @@ public:
     ::decode(peer_as_of_epoch, p);
     ::decode(op, p);
     ::decode(peer_stat, p);
-    if (header.version >= 2)
-      ::decode(stamp, p);
+    ::decode(stamp, p);
   }
   void encode_payload(uint64_t features) override {
     ::encode(fsid, payload);

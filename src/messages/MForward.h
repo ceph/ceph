@@ -35,7 +35,7 @@ struct MForward : public Message {
   string msg_desc;  // for operator<< only
   
   static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 3;
 
   MForward() : Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
                tid(0), con_features(0), msg(NULL) {}
@@ -91,20 +91,8 @@ public:
     ::decode(client, p);
     ::decode(client_caps, p);
     msg = (PaxosServiceMessage *)decode_message(NULL, 0, p);
-    if (header.version >= 2) {
-      ::decode(con_features, p);
-    } else {
-      con_features = 0;
-    }
-    if (header.version >= 3) {
-      ::decode(entity_name, p);
-    } else {
-      // we are able to know the entity type, obtaining it from the
-      // entity_name_t on 'client', but we have no idea about the
-      // entity name, so we'll just use a friendly '?' instead.
-      entity_name.set(client.name.type(), "?");
-    }
-
+    ::decode(con_features, p);
+    ::decode(entity_name, p);
   }
 
   PaxosServiceMessage *claim_message() {

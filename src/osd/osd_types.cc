@@ -1887,7 +1887,7 @@ void object_stat_sum_t::dump(Formatter *f) const
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(15, 3, bl);
+  ENCODE_START(15, 14, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
 #else
@@ -1932,7 +1932,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
   bool decode_finish = false;
-  DECODE_START_LEGACY_COMPAT_LEN(14, 3, 3, bl);
+  DECODE_START(15, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   if (struct_v >= 15) {
     bl.copy(sizeof(object_stat_sum_t), (char*)(&num_bytes));
@@ -1941,102 +1941,39 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
 #endif
   if (!decode_finish) {
     ::decode(num_bytes, bl);
-    if (struct_v < 3) {
-      uint64_t num_kb;
-      ::decode(num_kb, bl);
-    }
     ::decode(num_objects, bl);
     ::decode(num_object_clones, bl);
     ::decode(num_object_copies, bl);
     ::decode(num_objects_missing_on_primary, bl);
     ::decode(num_objects_degraded, bl);
-    if (struct_v >= 2)
-      ::decode(num_objects_unfound, bl);
+    ::decode(num_objects_unfound, bl);
     ::decode(num_rd, bl);
     ::decode(num_rd_kb, bl);
     ::decode(num_wr, bl);
     ::decode(num_wr_kb, bl);
-    if (struct_v >= 4)
-      ::decode(num_scrub_errors, bl);
-    else
-      num_scrub_errors = 0;
-    if (struct_v >= 5) {
-      ::decode(num_objects_recovered, bl);
-      ::decode(num_bytes_recovered, bl);
-      ::decode(num_keys_recovered, bl);
-    } else {
-      num_objects_recovered = 0;
-      num_bytes_recovered = 0;
-      num_keys_recovered = 0;
-    }
-    if (struct_v >= 6) {
-      ::decode(num_shallow_scrub_errors, bl);
-      ::decode(num_deep_scrub_errors, bl);
-    } else {
-      num_shallow_scrub_errors = 0;
-      num_deep_scrub_errors = 0;
-    }
-    if (struct_v >= 7) {
-      ::decode(num_objects_dirty, bl);
-      ::decode(num_whiteouts, bl);
-    } else {
-      num_objects_dirty = 0;
-      num_whiteouts = 0;
-    }
-    if (struct_v >= 8) {
-      ::decode(num_objects_omap, bl);
-    } else {
-      num_objects_omap = 0;
-    }
-    if (struct_v >= 9) {
-      ::decode(num_objects_hit_set_archive, bl);
-    } else {
-      num_objects_hit_set_archive = 0;
-    }
-    if (struct_v >= 10) {
-      ::decode(num_objects_misplaced, bl);
-    } else {
-      num_objects_misplaced = 0;
-    }
-    if (struct_v >= 11) {
-      ::decode(num_bytes_hit_set_archive, bl);
-    } else {
-      num_bytes_hit_set_archive = 0;
-    }
-    if (struct_v >= 12) {
-      ::decode(num_flush, bl);
-      ::decode(num_flush_kb, bl);
-      ::decode(num_evict, bl);
-      ::decode(num_evict_kb, bl);
-      ::decode(num_promote, bl);
-    } else {
-      num_flush = 0;
-      num_flush_kb = 0;
-      num_evict = 0;
-      num_evict_kb = 0;
-      num_promote = 0;
-    }
-    if (struct_v >= 13) {
-      ::decode(num_flush_mode_high, bl);
-      ::decode(num_flush_mode_low, bl);
-      ::decode(num_evict_mode_some, bl);
-      ::decode(num_evict_mode_full, bl);
-    } else {
-      num_flush_mode_high = 0;
-      num_flush_mode_low = 0;
-      num_evict_mode_some = 0;
-      num_evict_mode_full = 0;
-    }
-    if (struct_v >= 14) {
-      ::decode(num_objects_pinned, bl);
-    } else {
-      num_objects_pinned = 0;
-    }
-    if (struct_v >= 15) {
-      ::decode(num_objects_missing, bl);
-    } else {
-      num_objects_missing = 0;
-    }
+    ::decode(num_scrub_errors, bl);
+    ::decode(num_objects_recovered, bl);
+    ::decode(num_bytes_recovered, bl);
+    ::decode(num_keys_recovered, bl);
+    ::decode(num_shallow_scrub_errors, bl);
+    ::decode(num_deep_scrub_errors, bl);
+    ::decode(num_objects_dirty, bl);
+    ::decode(num_whiteouts, bl);
+    ::decode(num_objects_omap, bl);
+    ::decode(num_objects_hit_set_archive, bl);
+    ::decode(num_objects_misplaced, bl);
+    ::decode(num_bytes_hit_set_archive, bl);
+    ::decode(num_flush, bl);
+    ::decode(num_flush_kb, bl);
+    ::decode(num_evict, bl);
+    ::decode(num_evict_kb, bl);
+    ::decode(num_promote, bl);
+    ::decode(num_flush_mode_high, bl);
+    ::decode(num_flush_mode_low, bl);
+    ::decode(num_evict_mode_some, bl);
+    ::decode(num_evict_mode_full, bl);
+    ::decode(num_objects_pinned, bl);
+    ::decode(num_objects_missing, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -2323,7 +2260,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(22, 8, bl);
+  ENCODE_START(22, 22, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
@@ -2370,7 +2307,7 @@ void pg_stat_t::encode(bufferlist &bl) const
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
   bool tmp;
-  DECODE_START_LEGACY_COMPAT_LEN(22, 8, 8, bl);
+  DECODE_START(22, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
   ::decode(reported_epoch, bl);
@@ -2378,145 +2315,45 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   ::decode(log_start, bl);
   ::decode(ondisk_log_start, bl);
   ::decode(created, bl);
-  if (struct_v >= 7)
-    ::decode(last_epoch_clean, bl);
-  else
-    last_epoch_clean = 0;
-  if (struct_v < 6) {
-    old_pg_t opgid;
-    ::decode(opgid, bl);
-    parent = opgid;
-  } else {
-    ::decode(parent, bl);
-  }
+  ::decode(last_epoch_clean, bl);
+  ::decode(parent, bl);
   ::decode(parent_split_bits, bl);
   ::decode(last_scrub, bl);
   ::decode(last_scrub_stamp, bl);
-  if (struct_v <= 4) {
-    ::decode(stats.sum.num_bytes, bl);
-    uint64_t num_kb;
-    ::decode(num_kb, bl);
-    ::decode(stats.sum.num_objects, bl);
-    ::decode(stats.sum.num_object_clones, bl);
-    ::decode(stats.sum.num_object_copies, bl);
-    ::decode(stats.sum.num_objects_missing_on_primary, bl);
-    ::decode(stats.sum.num_objects_degraded, bl);
-    ::decode(log_size, bl);
-    ::decode(ondisk_log_size, bl);
-    if (struct_v >= 2) {
-      ::decode(stats.sum.num_rd, bl);
-      ::decode(stats.sum.num_rd_kb, bl);
-      ::decode(stats.sum.num_wr, bl);
-      ::decode(stats.sum.num_wr_kb, bl);
-    }
-    if (struct_v >= 3) {
-      ::decode(up, bl);
-    }
-    if (struct_v == 4) {
-      ::decode(stats.sum.num_objects_unfound, bl);  // sigh.
-    }
-    ::decode(acting, bl);
-  } else {
-    ::decode(stats, bl);
-    ::decode(log_size, bl);
-    ::decode(ondisk_log_size, bl);
-    ::decode(up, bl);
-    ::decode(acting, bl);
-    if (struct_v >= 9) {
-      ::decode(last_fresh, bl);
-      ::decode(last_change, bl);
-      ::decode(last_active, bl);
-      ::decode(last_clean, bl);
-      ::decode(last_unstale, bl);
-      ::decode(mapping_epoch, bl);
-      if (struct_v >= 10) {
-        ::decode(last_deep_scrub, bl);
-        ::decode(last_deep_scrub_stamp, bl);
-      }
-    }
-  }
-  if (struct_v < 11) {
-    stats_invalid = false;
-  } else {    
-    ::decode(tmp, bl);
-    stats_invalid = tmp;
-  }
-  if (struct_v >= 12) {
-    ::decode(last_clean_scrub_stamp, bl);
-  } else {
-    last_clean_scrub_stamp = utime_t();
-  }
-  if (struct_v >= 13) {
-    ::decode(last_became_active, bl);
-  } else {
-    last_became_active = last_active;
-  }
-  if (struct_v >= 14) {
-    ::decode(tmp, bl);
-    dirty_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_dirty accounting.
-    dirty_stats_invalid = true;
-  }
-  if (struct_v >= 15) {
-    ::decode(up_primary, bl);
-    ::decode(acting_primary, bl);
-  } else {
-    up_primary = up.size() ? up[0] : -1;
-    acting_primary = acting.size() ? acting[0] : -1;
-  }
-  if (struct_v >= 16) {
-    ::decode(tmp, bl);
-    omap_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_omap accounting.
-    omap_stats_invalid = true;
-  }
-  if (struct_v >= 17) {
-    ::decode(tmp, bl);
-    hitset_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_hit_set_archive accounting.
-    hitset_stats_invalid = true;
-  }
-  if (struct_v >= 18) {
-    ::decode(blocked_by, bl);
-  } else {
-    blocked_by.clear();
-  }
-  if (struct_v >= 19) {
-    ::decode(last_undegraded, bl);
-    ::decode(last_fullsized, bl);
-  } else {
-    last_undegraded = utime_t();
-    last_fullsized = utime_t();
-  }
-  if (struct_v >= 20) {
-    ::decode(tmp, bl);
-    hitset_bytes_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_bytes_hit_set_archive accounting.
-    hitset_bytes_stats_invalid = true;
-  }
-  if (struct_v >= 21) {
-    ::decode(last_peered, bl);
-    ::decode(last_became_peered, bl);
-  } else {
-    last_peered = last_active;
-    last_became_peered = last_became_active;
-  }
-  if (struct_v >= 22) {
-    ::decode(tmp, bl);
-    pin_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_pinned accounting.
-    pin_stats_invalid = true;
-  }
+  ::decode(stats, bl);
+  ::decode(log_size, bl);
+  ::decode(ondisk_log_size, bl);
+  ::decode(up, bl);
+  ::decode(acting, bl);
+  ::decode(last_fresh, bl);
+  ::decode(last_change, bl);
+  ::decode(last_active, bl);
+  ::decode(last_clean, bl);
+  ::decode(last_unstale, bl);
+  ::decode(mapping_epoch, bl);
+  ::decode(last_deep_scrub, bl);
+  ::decode(last_deep_scrub_stamp, bl);
+  ::decode(tmp, bl);
+  stats_invalid = tmp;
+  ::decode(last_clean_scrub_stamp, bl);
+  ::decode(last_became_active, bl);
+  ::decode(tmp, bl);
+  dirty_stats_invalid = tmp;
+  ::decode(up_primary, bl);
+  ::decode(acting_primary, bl);
+  ::decode(tmp, bl);
+  omap_stats_invalid = tmp;
+  ::decode(tmp, bl);
+  hitset_stats_invalid = tmp;
+  ::decode(blocked_by, bl);
+  ::decode(last_undegraded, bl);
+  ::decode(last_fullsized, bl);
+  ::decode(tmp, bl);
+  hitset_bytes_stats_invalid = tmp;
+  ::decode(last_peered, bl);
+  ::decode(last_became_peered, bl);
+  ::decode(tmp, bl);
+  pin_stats_invalid = tmp;
   DECODE_FINISH(bl);
 }
 
@@ -2814,55 +2651,24 @@ void pg_info_t::encode(bufferlist &bl) const
 
 void pg_info_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(31, 26, 26, bl);
-  if (struct_v < 23) {
-    old_pg_t opgid;
-    ::decode(opgid, bl);
-    pgid.pgid = opgid;
-  } else {
-    ::decode(pgid.pgid, bl);
-  }
+  DECODE_START(31, bl);
+  ::decode(pgid.pgid, bl);
   ::decode(last_update, bl);
   ::decode(last_complete, bl);
   ::decode(log_tail, bl);
-  if (struct_v < 25) {
-    bool log_backlog;
-    ::decode(log_backlog, bl);
-  }
-  hobject_t old_last_backfill;
-  if (struct_v >= 24) {
+  {
+    hobject_t old_last_backfill;
     ::decode(old_last_backfill, bl);
   }
   ::decode(stats, bl);
   history.decode(bl);
-  if (struct_v >= 22)
-    ::decode(purged_snaps, bl);
-  else {
-    set<snapid_t> snap_trimq;
-    ::decode(snap_trimq, bl);
-  }
-  if (struct_v < 27) {
-    last_epoch_started = history.last_epoch_started;
-  } else {
-    ::decode(last_epoch_started, bl);
-  }
-  if (struct_v >= 28)
-    ::decode(last_user_version, bl);
-  else
-    last_user_version = last_update.version;
-  if (struct_v >= 29)
-    ::decode(hit_set, bl);
-  if (struct_v >= 30)
-    ::decode(pgid.shard, bl);
-  else
-    pgid.shard = shard_id_t::NO_SHARD;
-  if (struct_v >= 31) {
-    ::decode(last_backfill, bl);
-    ::decode(last_backfill_bitwise, bl);
-  } else {
-    last_backfill = old_last_backfill;
-    last_backfill_bitwise = false;
-  }
+  ::decode(purged_snaps, bl);
+  ::decode(last_epoch_started, bl);
+  ::decode(last_user_version, bl);
+  ::decode(hit_set, bl);
+  ::decode(pgid.shard, bl);
+  ::decode(last_backfill, bl);
+  ::decode(last_backfill_bitwise, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2933,7 +2739,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
 // -- pg_notify_t --
 void pg_notify_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(2, 2, bl);
   ::encode(query_epoch, bl);
   ::encode(epoch_sent, bl);
   ::encode(info, bl);
@@ -2948,13 +2754,8 @@ void pg_notify_t::decode(bufferlist::iterator &bl)
   ::decode(query_epoch, bl);
   ::decode(epoch_sent, bl);
   ::decode(info, bl);
-  if (struct_v >= 2) {
-    ::decode(to, bl);
-    ::decode(from, bl);
-  } else {
-    to = shard_id_t::NO_SHARD;
-    from = shard_id_t::NO_SHARD;
-  }
+  ::decode(to, bl);
+  ::decode(from, bl);
   DECODE_FINISH(bl);
 }
 
@@ -3282,7 +3083,7 @@ ostream& operator<<(ostream& out, const pg_interval_t& i)
 // -- pg_query_t --
 
 void pg_query_t::encode(bufferlist &bl, uint64_t features) const {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(3, 3, bl);
   ::encode(type, bl);
   ::encode(since, bl);
   history.encode(bl);
@@ -3293,27 +3094,14 @@ void pg_query_t::encode(bufferlist &bl, uint64_t features) const {
 }
 
 void pg_query_t::decode(bufferlist::iterator &bl) {
-  bufferlist::iterator bl2 = bl;
-  try {
-    DECODE_START(3, bl);
-    ::decode(type, bl);
-    ::decode(since, bl);
-    history.decode(bl);
-    ::decode(epoch_sent, bl);
-    if (struct_v >= 3) {
-      ::decode(to, bl);
-      ::decode(from, bl);
-    } else {
-      to = shard_id_t::NO_SHARD;
-      from = shard_id_t::NO_SHARD;
-    }
-    DECODE_FINISH(bl);
-  } catch (...) {
-    bl = bl2;
-    ::decode(type, bl);
-    ::decode(since, bl);
-    history.decode(bl);
-  }
+  DECODE_START(3, bl);
+  ::decode(type, bl);
+  ::decode(since, bl);
+  history.decode(bl);
+  ::decode(epoch_sent, bl);
+  ::decode(to, bl);
+  ::decode(from, bl);
+  DECODE_FINISH(bl);
 }
 
 void pg_query_t::dump(Formatter *f) const

@@ -3429,11 +3429,7 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
       assert(cct->_conf->osd_kill_backfill_at != 2);
 
       info.set_last_backfill(m->last_backfill);
-      if (m->compat_stat_sum) {
-	info.stats.stats = m->stats.stats; // Previously, we only sent sum
-      } else {
-	info.stats = m->stats;
-      }
+      info.stats = m->stats;
 
       ObjectStore::Transaction t;
       dirty_info = true;

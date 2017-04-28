@@ -22,6 +22,7 @@
 class MOSDFailure : public PaxosServiceMessage {
 
   static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 3;
 
  public:
   enum {
@@ -38,13 +39,13 @@ class MOSDFailure : public PaxosServiceMessage {
 
   MOSDFailure() : PaxosServiceMessage(MSG_OSD_FAILURE, 0, HEAD_VERSION) { }
   MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, epoch_t e)
-    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION),
+    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
       fsid(fs), target_osd(f),
       flags(FLAG_FAILED),
       epoch(e), failed_for(duration) { }
   MOSDFailure(const uuid_d &fs, const entity_inst_t& f, int duration, 
               epoch_t e, __u8 extra_flags)
-    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION),
+    : PaxosServiceMessage(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
       fsid(fs), target_osd(f),
       flags(extra_flags),
       epoch(e), failed_for(duration) { }
@@ -67,14 +68,8 @@ public:
     ::decode(fsid, p);
     ::decode(target_osd, p);
     ::decode(epoch, p);
-    if (header.version >= 2)
-      ::decode(flags, p);
-    else
-      flags = FLAG_FAILED;
-    if (header.version >= 3)
-      ::decode(failed_for, p);
-    else
-      failed_for = 0;
+    ::decode(flags, p);
+    ::decode(failed_for, p);
   }
 
   void encode_payload(uint64_t features) override {

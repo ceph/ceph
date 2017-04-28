@@ -1060,11 +1060,8 @@ decode(std::array<T, N>& v, bufferlist::iterator& p)
 
 #define ENCODE_FINISH(bl) ENCODE_FINISH_NEW_COMPAT(bl, 0)
 
-#define DECODE_ERR_VERSION(func, v)			\
-  (std::string(func) + " unknown encoding version > " #v)
-
-#define DECODE_ERR_OLDVERSION(func, v)			\
-  (std::string(func) + " no longer understand old encoding version < " #v)
+#define DECODE_ERR_OLDVERSION(func, v, compatv)					\
+  (std::string(func) + " no longer understand old encoding version " #v " < " #compatv)
 
 #define DECODE_ERR_PAST(func) \
   (std::string(func) + " decode past end of struct encoding")
@@ -1078,7 +1075,7 @@ decode(std::array<T, N>& v, bufferlist::iterator& p)
  */
 #define DECODE_OLDEST(oldestv)						\
   if (struct_v < oldestv)						\
-    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v)); 
+    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v, oldestv)); 
 
 /**
  * start a decoding block
@@ -1091,7 +1088,7 @@ decode(std::array<T, N>& v, bufferlist::iterator& p)
   ::decode(struct_v, bl);						\
   ::decode(struct_compat, bl);						\
   if (v < struct_compat)						\
-    throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, v)); \
+    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v, struct_compat)); \
   __u32 struct_len;							\
   ::decode(struct_len, bl);						\
   if (struct_len > bl.get_remaining())					\
@@ -1106,7 +1103,7 @@ decode(std::array<T, N>& v, bufferlist::iterator& p)
     __u8 struct_compat;							\
     ::decode(struct_compat, bl);					\
     if (v < struct_compat)						\
-      throw buffer::malformed_input(DECODE_ERR_VERSION(__PRETTY_FUNCTION__, v)); \
+      throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v, struct_compat)); \
   } else if (skip_v) {							\
     if ((int)bl.get_remaining() < skip_v)				\
       throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
