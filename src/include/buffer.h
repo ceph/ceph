@@ -873,11 +873,10 @@ namespace buffer CEPH_BUFFER_API {
       assert(_buffers.size() <= IOV_MAX);
       piov->resize(_buffers.size());
       unsigned n = 0;
-      for (std::list<buffer::ptr>::const_iterator p = _buffers.begin();
-	   p != _buffers.end();
-	   ++p, ++n) {
-	(*piov)[n].iov_base = (void *)p->c_str();
-	(*piov)[n].iov_len = p->length();
+      for (auto& p : _buffers) {
+	(*piov)[n].iov_base = (void *)p.c_str();
+	(*piov)[n].iov_len = p.length();
+	++n;
       }
     }
     uint32_t crc32c(uint32_t crc) const;
