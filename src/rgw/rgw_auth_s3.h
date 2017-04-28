@@ -172,6 +172,10 @@ private:
     /* Get the remaining data size. */
     size_t get_data_size(size_t stream_pos) const;
 
+    const std::string& get_signature() const {
+      return signature;
+    }
+
     /* Factory: create an object representing metadata of first, initial chunk
      * in a stream. */
     static ChunkMeta create_first(const boost::string_ref seed_signature) {
@@ -214,6 +218,7 @@ private:
                  const signing_key_t& signing_key)
     : io_base_t(nullptr),
       chunk_meta(ChunkMeta::create_first(seed_signature)),
+      sha256_hash(calc_hash_sha256_open_stream()),
       aws4_auth_needs_complete(false),
       aws4_auth_streaming_mode(true),
       date(std::move(date)),
@@ -229,6 +234,8 @@ private:
       s(s) {
   }
 
+  bool is_signature_mismatched();
+  std::string calc_chunk_signature(const std::string& payload_hash) const;
   size_t recv_chunked(char* buf, size_t max);
 
 public:
@@ -287,6 +294,8 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
+static constexpr char AWS4_EMPTY_PAYLOAD_HASH[] = \
+  "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 int parse_credentials(const req_info& info,             /* in */
                       std::string& access_key_id,       /* out */
