@@ -255,8 +255,14 @@ CEPH_RBD_API int rbd_remove(rados_ioctx_t io, const char *name);
 CEPH_RBD_API int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
 			                  librbd_progress_fn_t cb,
                                           void *cbdata);
+CEPH_RBD_API int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname,
+                            const char *destname);
+
 CEPH_RBD_API int rbd_trash_move(rados_ioctx_t io, const char *name,
                                 uint64_t delay);
+CEPH_RBD_API int rbd_trash_get(rados_ioctx_t io, const char *id,
+                               rbd_trash_image_info_t *info);
+CEPH_RBD_API void rbd_trash_get_cleanup(rbd_trash_image_info_t *info);
 CEPH_RBD_API int rbd_trash_list(rados_ioctx_t io,
                                 rbd_trash_image_info_t *trash_entries,
                                 size_t *num_entries);
@@ -268,8 +274,6 @@ CEPH_RBD_API int rbd_trash_remove_with_progress(rados_ioctx_t io, const char *id
                                                 void *cbdata);
 CEPH_RBD_API int rbd_trash_restore(rados_ioctx_t io, const char *id,
                                    const char *name);
-CEPH_RBD_API int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname,
-                            const char *destname);
 
 /* pool mirroring */
 CEPH_RBD_API int rbd_mirror_mode_get(rados_ioctx_t io_ctx,
