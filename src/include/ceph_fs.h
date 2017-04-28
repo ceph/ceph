@@ -67,6 +67,7 @@ struct ceph_dir_layout {
 #define CEPH_CRYPTO_AES  0x1
 #define CEPH_CRYPTO_AES_256_CBC 0x2
 #define CEPH_CRYPTO_AES_256_ECB 0x3
+#define CEPH_CRYPTO_AES_256_CTR 0x4
 
 #define CEPH_AES_IV "cephsageyudagreg"
 

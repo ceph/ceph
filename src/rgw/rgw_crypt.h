@@ -76,12 +76,11 @@ public:
 };
 
 static const size_t AES_256_KEYSIZE = 256 / 8;
+
 bool AES_256_ECB_encrypt(CephContext* cct,
-                         const uint8_t* key,
-                         size_t key_size,
-                         const uint8_t* data_in,
-                         uint8_t* data_out,
-                         size_t data_size);
+                         const bufferptr& key,
+                         const bufferlist& in,
+                         bufferlist& out);
 
 class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   CephContext* cct;
