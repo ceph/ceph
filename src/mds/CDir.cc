@@ -869,12 +869,19 @@ void CDir::steal_dentry(CDentry *dn)
   dn->dir = this;
 }
 
-void CDir::prepare_old_fragment(bool replay)
+void CDir::prepare_old_fragment(map<string_snap_t, std::list<MDSInternalContextBase*> >& dentry_waiters, bool replay)
 {
   // auth_pin old fragment for duration so that any auth_pinning
   // during the dentry migration doesn't trigger side effects
   if (!replay && is_auth())
     auth_pin(this);
+
+  if (!waiting_on_dentry.empty()) {
+    for (auto p = waiting_on_dentry.begin(); p != waiting_on_dentry.end(); ++p)
+      dentry_waiters[p->first].swap(p->second);
+    waiting_on_dentry.clear();
+    put(PIN_DNWAITER);
+  }
 }
 
 void CDir::prepare_new_fragment(bool replay)
@@ -960,7 +967,8 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
     fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat);
   dout(10) << " rstatdiff " << rstatdiff << " fragstatdiff " << fragstatdiff << dendl;
 
-  prepare_old_fragment(replay);
+  map<string_snap_t, std::list<MDSInternalContextBase*> > dentry_waiters;
+  prepare_old_fragment(dentry_waiters, replay);
 
   // create subfrag dirs
   int n = 0;
@@ -1002,6 +1010,16 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
     dout(15) << " subfrag " << subfrag << " n=" << n << " for " << p->first << dendl;
     CDir *f = subfrags[n];
     f->steal_dentry(dn);
+  }
+
+  for (auto& p : dentry_waiters) {
+    frag_t subfrag = inode->pick_dirfrag(p.first.name);
+    int n = (subfrag.value() & (subfrag.mask() ^ frag.mask())) >> subfrag.mask_shift();
+    CDir *f = subfrags[n];
+
+    if (f->waiting_on_dentry.empty())
+      f->get(PIN_DNWAITER);
+    f->waiting_on_dentry[p.first].swap(p.second);
   }
 
   // FIXME: handle dirty old rstat
@@ -1048,6 +1066,8 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
   version_t rstat_version = inode->get_projected_inode()->rstat.version;
   version_t dirstat_version = inode->get_projected_inode()->dirstat.version;
 
+  map<string_snap_t, std::list<MDSInternalContextBase*> > dentry_waiters;
+
   for (auto dir : subs) {
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
     assert(!dir->is_auth() || dir->is_complete() || replay);
@@ -1058,7 +1078,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
       fragstatdiff.add_delta(dir->fnode.accounted_fragstat, dir->fnode.fragstat,
 			     &touched_mtime, &touched_chattr);
 
-    dir->prepare_old_fragment(replay);
+    dir->prepare_old_fragment(dentry_waiters, replay);
 
     // steal dentries
     while (!dir->items.empty()) 
@@ -1083,6 +1103,13 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
 
     dir->finish_old_fragment(waiters, replay);
     inode->close_dirfrag(dir->get_frag());
+  }
+
+  if (!dentry_waiters.empty()) {
+    get(PIN_DNWAITER);
+    for (auto& p : dentry_waiters) {
+      waiting_on_dentry[p.first].swap(p.second);
+    }
   }
 
   if (is_auth() && !replay)

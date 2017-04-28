@@ -483,7 +483,7 @@ public:
 
 private:
   void prepare_new_fragment(bool replay);
-  void prepare_old_fragment(bool replay);
+  void prepare_old_fragment(map<string_snap_t, std::list<MDSInternalContextBase*> >& dentry_waiters, bool replay);
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
   void finish_old_fragment(list<MDSInternalContextBase*>& waiters, bool replay);
   void init_fragment_pins();

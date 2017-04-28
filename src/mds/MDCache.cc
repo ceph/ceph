@@ -10101,10 +10101,11 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     if (who >= 0)
       dout(7) << " dir_auth_hint is " << m->get_dir_auth_hint() << dendl;
 
-    frag_t fg = m->get_base_dir_frag();
-    CDir *dir = cur->get_dirfrag(fg);
 
     if (m->get_wanted_base_dir()) {
+      frag_t fg = m->get_base_dir_frag();
+      CDir *dir = cur->get_dirfrag(fg);
+
       if (cur->is_waiting_for_dir(fg)) {
 	if (cur->is_auth())
 	  cur->take_waiting(CInode::WAIT_DIR, finished);
@@ -10118,6 +10119,8 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
     // try again?
     if (m->get_error_dentry().length()) {
+      frag_t fg = cur->pick_dirfrag(m->get_error_dentry());
+      CDir *dir = cur->get_dirfrag(fg);
       // wanted a dentry
       if (dir && dir->is_waiting_for_dentry(m->get_error_dentry(), m->get_wanted_snapid())) {
 	if (dir->is_auth() || dir->lookup(m->get_error_dentry())) {
