@@ -1030,11 +1030,23 @@ namespace librbd {
   int Image::parent_info(string *parent_pool_name, string *parent_name,
 			 string *parent_snap_name)
   {
+    return parent_info2(parent_pool_name, parent_name, nullptr,
+                        parent_snap_name);
+  }
+
+  int Image::parent_info2(string *parent_pool_name, string *parent_name,
+                          string *parent_id, string *parent_snap_name)
+  {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    tracepoint(librbd, get_parent_info_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
+    tracepoint(librbd, get_parent_info_enter, ictx, ictx->name.c_str(),
+               ictx->snap_name.c_str(), ictx->read_only);
     int r = librbd::get_parent_info(ictx, parent_pool_name, parent_name,
-				   parent_snap_name);
-    tracepoint(librbd, get_parent_info_exit, r, parent_pool_name ? parent_pool_name->c_str() : NULL, parent_name ? parent_name->c_str() : NULL, parent_snap_name ? parent_snap_name->c_str() : NULL);
+                                    parent_id, parent_snap_name);
+    tracepoint(librbd, get_parent_info_exit, r,
+               parent_pool_name ? parent_pool_name->c_str() : NULL,
+               parent_name ? parent_name->c_str() : NULL,
+               parent_id ? parent_id->c_str() : NULL,
+               parent_snap_name ? parent_snap_name->c_str() : NULL);
     return r;
   }
 
@@ -2825,22 +2837,38 @@ extern "C" int64_t rbd_get_data_pool_id(rbd_image_t image)
 }
 
 extern "C" int rbd_get_parent_info(rbd_image_t image,
-  char *parent_pool_name, size_t ppool_namelen, char *parent_name,
-  size_t pnamelen, char *parent_snap_name, size_t psnap_namelen)
+                                   char *parent_pool_name, size_t ppool_namelen,
+                                   char *parent_name, size_t pnamelen,
+                                   char *parent_snap_name, size_t psnap_namelen)
+{
+  return rbd_get_parent_info2(image, parent_pool_name, ppool_namelen,
+                              parent_name, pnamelen, nullptr, 0,
+                              parent_snap_name, psnap_namelen);
+}
+
+extern "C" int rbd_get_parent_info2(rbd_image_t image,
+                                    char *parent_pool_name,
+                                    size_t ppool_namelen,
+                                    char *parent_name, size_t pnamelen,
+                                    char *parent_id, size_t pidlen,
+                                    char *parent_snap_name,
+                                    size_t psnap_namelen)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  tracepoint(librbd, get_parent_info_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-  string p_pool_name, p_name, p_snap_name;
+  tracepoint(librbd, get_parent_info_enter, ictx, ictx->name.c_str(),
+             ictx->snap_name.c_str(), ictx->read_only);
+  string p_pool_name, p_name, p_id, p_snap_name;
 
-  int r = librbd::get_parent_info(ictx, &p_pool_name, &p_name, &p_snap_name);
+  int r = librbd::get_parent_info(ictx, &p_pool_name, &p_name, &p_id,
+                                  &p_snap_name);
   if (r < 0) {
-    tracepoint(librbd, get_parent_info_exit, r, NULL, NULL, NULL);
+    tracepoint(librbd, get_parent_info_exit, r, NULL, NULL, NULL, NULL);
     return r;
   }
 
   if (parent_pool_name) {
     if (p_pool_name.length() + 1 > ppool_namelen) {
-      tracepoint(librbd, get_parent_info_exit, -ERANGE, NULL, NULL, NULL);
+      tracepoint(librbd, get_parent_info_exit, -ERANGE, NULL, NULL, NULL, NULL);
       return -ERANGE;
     }
 
@@ -2848,22 +2876,31 @@ extern "C" int rbd_get_parent_info(rbd_image_t image,
   }
   if (parent_name) {
     if (p_name.length() + 1 > pnamelen) {
-      tracepoint(librbd, get_parent_info_exit, -ERANGE, NULL, NULL, NULL);
+      tracepoint(librbd, get_parent_info_exit, -ERANGE, NULL, NULL, NULL, NULL);
       return -ERANGE;
     }
 
     strcpy(parent_name, p_name.c_str());
   }
+  if (parent_id) {
+    if (p_id.length() + 1 > pidlen) {
+      tracepoint(librbd, get_parent_info_exit, -ERANGE, NULL, NULL, NULL, NULL);
+      return -ERANGE;
+    }
+
+    strcpy(parent_id, p_id.c_str());
+  }
   if (parent_snap_name) {
     if (p_snap_name.length() + 1 > psnap_namelen) {
-      tracepoint(librbd, get_parent_info_exit, -ERANGE, NULL, NULL, NULL);
+      tracepoint(librbd, get_parent_info_exit, -ERANGE, NULL, NULL, NULL, NULL);
       return -ERANGE;
     }
 
     strcpy(parent_snap_name, p_snap_name.c_str());
   }
 
-  tracepoint(librbd, get_parent_info_exit, 0, parent_pool_name, parent_name, parent_snap_name);
+  tracepoint(librbd, get_parent_info_exit, 0, parent_pool_name, parent_name,
+             parent_id, parent_snap_name);
   return 0;
 }
 

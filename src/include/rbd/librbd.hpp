@@ -253,7 +253,9 @@ public:
   std::string get_block_name_prefix();
   int64_t get_data_pool_id();
   int parent_info(std::string *parent_poolname, std::string *parent_name,
-		      std::string *parent_snapname);
+		  std::string *parent_snapname);
+  int parent_info2(std::string *parent_poolname, std::string *parent_name,
+                   std::string *parent_id, std::string *parent_snapname);
   int old_format(uint8_t *old);
   int size(uint64_t *size);
   int get_group(group_spec_t *group_spec);

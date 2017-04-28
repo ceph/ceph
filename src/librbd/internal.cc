@@ -1045,7 +1045,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   }
 
   int get_parent_info(ImageCtx *ictx, string *parent_pool_name,
-		      string *parent_name, string *parent_snap_name)
+                      string *parent_name, string *parent_id,
+                      string *parent_snap_name)
   {
     int r = ictx->state->refresh_if_required();
     if (r < 0)
@@ -1096,6 +1097,9 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (parent_name) {
       RWLock::RLocker snap_locker(ictx->parent->snap_lock);
       *parent_name = ictx->parent->name;
+    }
+    if (parent_id) {
+      *parent_id = ictx->parent->id;
     }
 
     return 0;

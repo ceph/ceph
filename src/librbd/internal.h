@@ -128,7 +128,8 @@ namespace librbd {
   int get_features(ImageCtx *ictx, uint64_t *features);
   int get_overlap(ImageCtx *ictx, uint64_t *overlap);
   int get_parent_info(ImageCtx *ictx, std::string *parent_pool_name,
-		      std::string *parent_name, std::string *parent_snap_name);
+                      std::string *parent_name, std::string *parent_id,
+                      std::string *parent_snap_name);
   int get_flags(ImageCtx *ictx, uint64_t *flags);
   int set_image_notification(ImageCtx *ictx, int fd, int type);
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);

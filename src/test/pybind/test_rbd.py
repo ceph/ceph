@@ -938,6 +938,7 @@ class TestClone(object):
         eq(pool, pool_name)
         eq(image, image_name)
         eq(snap, 'snap1')
+        eq(self.image.id(), self.clone.parent_id())
 
         # create a new pool...
         pool_name2 = get_temp_pool_name()
@@ -954,6 +955,7 @@ class TestClone(object):
         eq(pool, pool_name)
         eq(image, image_name)
         eq(snap, 'snap1')
+        eq(self.image.id(), self.other_clone.parent_id())
 
         # can't unprotect snap with children
         assert_raises(ImageBusy, self.image.unprotect_snap, 'snap1')
@@ -1127,6 +1129,8 @@ class TestClone(object):
                 clone.flatten()
                 assert_raises(ImageNotFound, clone.parent_info)
                 assert_raises(ImageNotFound, clone2.parent_info)
+                assert_raises(ImageNotFound, clone.parent_id)
+                assert_raises(ImageNotFound, clone2.parent_id)
                 after_flatten = clone.read(IMG_SIZE // 2, 256)
                 eq(data, after_flatten)
                 after_flatten = clone2.read(IMG_SIZE // 2, 256)
@@ -1220,6 +1224,7 @@ class TestExclusiveLock(object):
                 image1.write(data, 0)
                 image2.flatten()
                 assert_raises(ImageNotFound, image1.parent_info)
+                assert_raises(ImageNotFound, image1.parent_id)
                 parent = True
                 for x in range(30):
                     try:

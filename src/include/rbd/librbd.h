@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -370,6 +370,13 @@ CEPH_RBD_API int rbd_get_parent_info(rbd_image_t image,
 			             char *parent_name, size_t pnamelen,
 			             char *parent_snapname,
                                      size_t psnapnamelen);
+CEPH_RBD_API int rbd_get_parent_info2(rbd_image_t image,
+                                      char *parent_poolname,
+                                      size_t ppoolnamelen,
+                                      char *parent_name, size_t pnamelen,
+                                      char *parent_id, size_t pidlen,
+                                      char *parent_snapname,
+                                      size_t psnapnamelen);
 CEPH_RBD_API int rbd_get_flags(rbd_image_t image, uint64_t *flags);
 CEPH_RBD_API int rbd_set_image_notification(rbd_image_t image, int fd, int type);
 
