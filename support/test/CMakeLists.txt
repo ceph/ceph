@@ -1,4 +1,3 @@
-include_directories(${GTEST_INCLUDE_DIR})
 include_directories(../src)
 
 set(local_flags "-Wall -pthread")
@@ -21,17 +20,10 @@ set_source_files_properties(${test_srcs}
   COMPILE_FLAGS "${local_flags}"
   )
 
-add_executable(dmclock-data-struct-tests EXCLUDE_FROM_ALL ${test_srcs})
+add_executable(dmclock-data-struct-tests ${test_srcs})
 
 target_link_libraries(dmclock-data-struct-tests
   LINK_PRIVATE gtest gtest_main pthread)
 
-# for every argument, adds a test with that name, using it as a gtest filter
-function(make_tests)
-  foreach(targ ${ARGN})
-    add_test(NAME ${targ}
-      COMMAND dmclock-data-struct-tests --gtest_filter=${targ}.*)
-  endforeach()
-endfunction()
-
-make_tests(ind_intru_heap)
+add_test(NAME dmclock-data-struct-tests
+  COMMAND $<TARGET_FILE:dmclock-data-struct-tests>)

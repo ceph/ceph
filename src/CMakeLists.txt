@@ -17,10 +17,3 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 endif()
 
 add_library(dmclock STATIC ${dmc_srcs})
-
-# file(COPY sim DESTINATION .)
-
-# add_custom_target(runsim
-#   DEPENDS sim
-#   COMMAND $<TARGET_FILE:sim>
-#  COMMAND printf '\\a\\a\\a')
