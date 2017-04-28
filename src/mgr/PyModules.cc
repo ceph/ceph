@@ -459,22 +459,15 @@ void PyModules::start()
 void PyModules::shutdown()
 {
   Mutex::Locker locker(lock);
+  assert(global_handle);
 
   // Signal modules to drop out of serve() and/or tear down resources
-  C_SaferCond shutdown_called;
-  C_GatherBuilder gather(g_ceph_context);
   for (auto &i : modules) {
     auto module = i.second.get();
-    auto shutdown_cb = gather.new_sub();
-    finisher.queue(new FunctionContext([module, shutdown_cb](int r){
-      module->shutdown();
-      shutdown_cb->complete(0);
-    }));
-  }
-
-  if (gather.has_subs()) {
-    gather.set_finisher(&shutdown_called);
-    gather.activate();
+    const auto& name = i.first;
+    dout(10) << "waiting for module " << name << " to shutdown" << dendl;
+    module->shutdown();
+    dout(10) << "module " << name << " shutdown" << dendl;
   }
 
   // For modules implementing serve(), finish the threads where we
@@ -486,17 +479,13 @@ void PyModules::shutdown()
   }
   serve_threads.clear();
 
-  // Wait for the module's shutdown() to complete before
-  // we proceed to destroy the module.
-  if (!modules.empty()) {
-    dout(4) << "waiting for module shutdown calls" << dendl;
-    shutdown_called.wait();
-  }
-
   modules.clear();
 
   PyGILState_Ensure();
   Py_Finalize();
+
+  // nobody needs me anymore.
+  global_handle = nullptr;
 }
 
 void PyModules::notify_all(const std::string &notify_type,

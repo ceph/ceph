@@ -343,12 +343,13 @@ void Mgr::shutdown()
   // give up the lock for us.
   Mutex::Locker l(lock);
 
-  // First stop the server so that we're not taking any more incoming requests
-  server.shutdown();
-
-  // after the messenger is stopped, signal modules to shutdown via finisher
-  py_modules.shutdown();
-
+  finisher.queue(new FunctionContext([&](int) {
+    // First stop the server so that we're not taking any more incoming
+    // requests
+    server.shutdown();
+    // after the messenger is stopped, signal modules to shutdown via finisher
+    py_modules.shutdown();
+  }));
   // Then stop the finisher to ensure its enqueued contexts aren't going
   // to touch references to the things we're about to tear down
   finisher.wait_for_empty();
