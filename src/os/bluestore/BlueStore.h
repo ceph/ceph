@@ -1795,8 +1795,11 @@ private:
   int deferred_batch_ops = 0; ///< deferred batch size
 
   ///< bits for min_alloc_size
-  std::atomic<size_t> min_alloc_size_order = {0};
-  
+  std::atomic<uint8_t> min_alloc_size_order = {0};
+  static_assert(std::numeric_limits<uint8_t>::max() >
+		std::numeric_limits<decltype(min_alloc_size)>::digits,
+		"not enough bits for min_alloc_size");
+
   ///< size threshold for forced deferred writes
   std::atomic<uint64_t> prefer_deferred_size = {0};
 
