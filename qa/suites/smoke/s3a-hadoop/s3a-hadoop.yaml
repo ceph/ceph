@@ -1,5 +1,3 @@
-os_type: centos
-os_version: "7.3"
 overrides:
     ceph_ansible:
       osd_auto_discovery: false
