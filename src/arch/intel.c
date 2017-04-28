@@ -25,24 +25,7 @@ int ceph_arch_intel_sse2 = 0;
 int ceph_arch_intel_aesni = 0;
 
 #ifdef __x86_64__
-
-/* Note: valgrind redefines cpuid : it is different from the native processor. */
-/* intel cpu? */
-static void do_cpuid(unsigned int *eax, unsigned int *ebx, unsigned int *ecx,
-                     unsigned int *edx)
-{
-        int id = *eax;
-
-        asm("movl %4, %%eax;"
-            "cpuid;"
-            "movl %%eax, %0;"
-            "movl %%ebx, %1;"
-            "movl %%ecx, %2;"
-            "movl %%edx, %3;"
-                : "=r" (*eax), "=r" (*ebx), "=r" (*ecx), "=r" (*edx)
-                : "r" (id)
-                : "eax", "ebx", "ecx", "edx");
-}
+#include <cpuid.h>
 
 /* http://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits */
 
@@ -57,8 +40,10 @@ static void do_cpuid(unsigned int *eax, unsigned int *ebx, unsigned int *ecx,
 int ceph_arch_intel_probe(void)
 {
 	/* i know how to check this on x86_64... */
-	unsigned int eax = 1, ebx, ecx, edx;
-	do_cpuid(&eax, &ebx, &ecx, &edx);
+	unsigned int eax, ebx, ecx = 0, edx = 0;
+	if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
+	  return 1;
+	}
 	if ((ecx & CPUID_PCLMUL) != 0) {
 		ceph_arch_intel_pclmul = 1;
 	}
