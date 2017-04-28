@@ -3,6 +3,7 @@
 #include "gtest/gtest.h"
 
 #include "mds/mdstypes.h"
+#include "include/err.h"
 #include "include/buffer.h"
 #include "include/rbd_types.h"
 #include "include/rados/librados.h"
@@ -1197,4 +1198,33 @@ TYPED_TEST(LibRadosChecksum, Chunked) {
     ::decode(value, bl_it);
     ASSERT_EQ(expected_values[i], value);
   }
+}
+
+TEST_F(LibRadosMiscPP, CmpExtPP) {
+  bufferlist cmp_bl, bad_cmp_bl, write_bl;
+  char stored_str[] = "1234567891";
+  char mismatch_str[] = "1234577777";
+
+  write_bl.append(stored_str);
+  ioctx.write("cmpextpp", write_bl, write_bl.length(), 0);
+  cmp_bl.append(stored_str);
+  ASSERT_EQ(0, ioctx.cmpext("cmpextpp", 0, cmp_bl));
+
+  bad_cmp_bl.append(mismatch_str);
+  ASSERT_EQ(-MAX_ERRNO - 5, ioctx.cmpext("cmpextpp", 0, bad_cmp_bl));
+}
+
+TEST_F(LibRadosMisc, CmpExt) {
+  bufferlist cmp_bl, bad_cmp_bl, write_bl;
+  char stored_str[] = "1234567891";
+  char mismatch_str[] = "1234577777";
+
+  ASSERT_EQ(0,
+	    rados_write(ioctx, "cmpextpp", stored_str, sizeof(stored_str), 0));
+
+  ASSERT_EQ(0,
+	    rados_cmpext(ioctx, "cmpextpp", stored_str, sizeof(stored_str), 0));
+
+  ASSERT_EQ(-MAX_ERRNO - 5,
+	    rados_cmpext(ioctx, "cmpextpp", mismatch_str, sizeof(mismatch_str), 0));
 }
