@@ -238,7 +238,7 @@ def task(ctx, config):
                     min_size = config.get('min_size', None);
                     if min_size is not None:
                         manager.raw_cluster_cmd(
-                            'osd', 'pool', 'set', pool, 'min_size', min_size)
+                            'osd', 'pool', 'set', pool, 'min_size', str(min_size))
 
                 (remote,) = ctx.cluster.only(role).remotes.iterkeys()
                 proc = remote.run(
