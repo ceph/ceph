@@ -2797,6 +2797,9 @@ void MDCache::send_subtree_resolves()
       resolves[*p] = new MMDSResolve;
   }
 
+  map<dirfrag_t, vector<dirfrag_t> > my_subtrees;
+  map<dirfrag_t, vector<dirfrag_t> > my_ambig_imports;
+
   // known
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
@@ -2817,10 +2820,8 @@ void MDCache::send_subtree_resolves()
       vector<dirfrag_t> dfls;
       for (set<CDir*>::iterator q = bounds.begin(); q != bounds.end(); ++q)
 	dfls.push_back((*q)->dirfrag());
-      for (map<mds_rank_t, MMDSResolve*>::iterator q = resolves.begin();
-	   q != resolves.end();
-	   ++q)
-	resolves[q->first]->add_ambiguous_import(dir->dirfrag(), dfls);
+
+      my_ambig_imports[dir->dirfrag()] = dfls;
       dout(10) << " ambig " << dir->dirfrag() << " " << dfls << dendl;
     } else {
       // not ambiguous.
@@ -2835,11 +2836,9 @@ void MDCache::send_subtree_resolves()
 	   ++q) {
 	CDir *bound = *q;
 	dfls.push_back(bound->dirfrag());
-	for (map<mds_rank_t, MMDSResolve*>::iterator r = resolves.begin();
-	     r != resolves.end();
-	     ++r)
-	  resolves[r->first]->add_subtree_bound(dir->dirfrag(), bound->dirfrag());
       }
+
+      my_subtrees[dir->dirfrag()] = dfls;
       dout(10) << " claim " << dir->dirfrag() << " " << dfls << dendl;
     }
   }
@@ -2848,19 +2847,37 @@ void MDCache::send_subtree_resolves()
   for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
        p != my_ambiguous_imports.end();
        ++p) {
-    for (map<mds_rank_t, MMDSResolve*>::iterator q = resolves.begin();
-	 q != resolves.end();
-	 ++q)
-      resolves[q->first]->add_ambiguous_import(p->first, p->second);
+    my_ambig_imports[p->first] = p->second;
     dout(10) << " ambig " << p->first << " " << p->second << dendl;
+  }
+
+  // simplify the claimed subtree.
+  for (auto p = my_subtrees.begin(); p != my_subtrees.end(); ++p) {
+    unsigned i = 0;
+    while (i < p->second.size()) {
+      dirfrag_t b = p->second[i];
+      if (my_subtrees.count(b)) {
+	vector<dirfrag_t>& bb = my_subtrees[b];
+	dout(10) << " simplify: " << p->first << " swallowing " << b << " with bounds " << bb << dendl;
+	for (vector<dirfrag_t>::iterator r = bb.begin(); r != bb.end(); ++r)
+	  p->second.push_back(*r);
+	my_subtrees.erase(b);
+	p->second.erase(p->second.begin() + i);
+      } else {
+	++i;
+      }
+    }
   }
 
   // send
   for (map<mds_rank_t, MMDSResolve*>::iterator p = resolves.begin();
        p != resolves.end();
        ++p) {
+    MMDSResolve* m = p->second;
+    m->subtrees = my_subtrees;
+    m->ambiguous_imports = my_ambig_imports;
     dout(10) << "sending subtee resolve to mds." << p->first << dendl;
-    mds->send_message_mds(p->second, p->first);
+    mds->send_message_mds(m, p->first);
   }
   resolves_pending = false;
 }
