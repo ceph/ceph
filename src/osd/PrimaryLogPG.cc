@@ -4469,6 +4469,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_COPY_FROM:  // we handle user_version update explicitly
     case CEPH_OSD_OP_CACHE_PIN:
     case CEPH_OSD_OP_CACHE_UNPIN:
+    case CEPH_OSD_OP_SET_REDIRECT:
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
@@ -5703,6 +5704,65 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+    case CEPH_OSD_OP_SET_REDIRECT:
+      ++ctx->num_write;
+      {
+	if (pool.info.is_tier()) {
+	  result = -EINVAL;
+	  break;
+	}
+	object_t target_name;
+	object_locator_t target_oloc;
+	snapid_t target_snapid = (uint64_t)op.copy_from.snapid;
+	version_t target_version = op.copy_from.src_version;
+	try {
+	  ::decode(target_name, bp);
+	  ::decode(target_oloc, bp);
+	}
+	catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
+	pg_t raw_pg;
+	get_osdmap()->object_locator_to_pg(target_name, target_oloc, raw_pg);
+	hobject_t target(target_name, target_oloc.key, target_snapid,
+		raw_pg.ps(), raw_pg.pool(),
+		target_oloc.nspace);
+	if (target == soid) {
+	  dout(20) << " set-redirect self is invalid" << dendl;
+	  result = -EINVAL;
+	  break;
+	}
+	oi.manifest.redirect_target = target;
+	oi.manifest.type = object_manifest_t::TYPE_REDIRECT;
+	t->truncate(soid, 0);
+	if (oi.is_omap() && pool.info.supports_omap()) {
+	  t->omap_clear(soid);
+	  obs.oi.clear_omap_digest();
+	  obs.oi.clear_flag(object_info_t::FLAG_OMAP);
+	}
+	ctx->delta_stats.num_bytes -= oi.size;
+	oi.size = 0;
+	oi.new_object();
+	oi.user_version = target_version;
+	ctx->user_at_version = target_version;
+	/* rm_attrs */
+	map<string,bufferlist> rmattrs;
+	result = getattrs_maybe_cache(ctx->obc,
+		    &rmattrs,
+		    true);
+	if (result < 0) {
+	  return result;
+	}
+	map<string, bufferlist>::iterator iter;
+	for (iter = rmattrs.begin(); iter != rmattrs.end(); ++iter) {
+	  const string& name = iter->first;
+	  t->rmattr(soid, name);
+	}
+	dout(10) << "set-redirect oid:" << oi.soid << " user_version: " << oi.user_version << dendl;
+      }
+
+      break;
 
       // -- object attrs --
       

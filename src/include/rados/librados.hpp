@@ -463,6 +463,14 @@ namespace librados
     void cache_pin();
     void cache_unpin();
 
+    /**
+     * Extensible tier
+     *
+     * Set redirect target
+     */
+    void set_redirect(const std::string& tgt_obj, const IoCtx& tgt_ioctx,
+		      uint64_t tgt_version);
+
     friend class IoCtx;
   };
 

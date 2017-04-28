@@ -272,6 +272,9 @@ extern const char *ceph_osd_state_name(int s);
 	f(WRITESAME,	__CEPH_OSD_OP(WR, DATA, 38),	"write-same")	    \
 	f(CMPEXT,	__CEPH_OSD_OP(RD, DATA, 32),	"cmpext")	    \
 									    \
+	/* Extensible */						    \
+	f(SET_REDIRECT,	__CEPH_OSD_OP(WR, DATA, 39),	"set-redirect")	    \
+									    \
 	/** attrs **/							    \
 	/* read */							    \
 	f(GETXATTR,	__CEPH_OSD_OP(RD, ATTR, 1),	"getxattr")	    \
