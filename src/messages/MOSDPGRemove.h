@@ -22,8 +22,8 @@
 
 class MOSDPGRemove : public Message {
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 2;
 
   epoch_t epoch;
 
@@ -46,35 +46,46 @@ public:
   const char *get_type_name() const override { return "PGrm"; }
 
   void encode_payload(uint64_t features) override {
-    ::encode(epoch, payload);
+    if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      // for jewel+kraken
+      header.version = 2;
+      ::encode(epoch, payload);
 
-    vector<pg_t> _pg_list;
-    _pg_list.reserve(pg_list.size());
-    vector<shard_id_t> _shard_list;
-    _shard_list.reserve(pg_list.size());
-    for (vector<spg_t>::iterator i = pg_list.begin(); i != pg_list.end(); ++i) {
-      _pg_list.push_back(i->pgid);
-      _shard_list.push_back(i->shard);
+      vector<pg_t> _pg_list;
+      _pg_list.reserve(pg_list.size());
+      vector<shard_id_t> _shard_list;
+      _shard_list.reserve(pg_list.size());
+      for (auto i = pg_list.begin(); i != pg_list.end(); ++i) {
+	_pg_list.push_back(i->pgid);
+	_shard_list.push_back(i->shard);
+      }
+      ::encode(_pg_list, payload);
+      ::encode(_shard_list, payload);
+      return;
     }
-    ::encode(_pg_list, payload);
-    ::encode(_shard_list, payload);
+    ::encode(epoch, payload);
+    ::encode(pg_list, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    vector<pg_t> _pg_list;
-    ::decode(_pg_list, p);
+    if (header.version == 2) {
+      // jewel/kraken
+      ::decode(epoch, p);
+      vector<pg_t> _pg_list;
+      ::decode(_pg_list, p);
 
-    vector<shard_id_t> _shard_list(_pg_list.size(), shard_id_t::NO_SHARD);
-    if (header.version >= 2) {
+      vector<shard_id_t> _shard_list(_pg_list.size(), shard_id_t::NO_SHARD);
       _shard_list.clear();
       ::decode(_shard_list, p);
+      assert(_shard_list.size() == _pg_list.size());
+      pg_list.reserve(_shard_list.size());
+      for (unsigned i = 0; i < _shard_list.size(); ++i) {
+	pg_list.push_back(spg_t(_pg_list[i], _shard_list[i]));
+      }
+      return;
     }
-    assert(_shard_list.size() == _pg_list.size());
-    pg_list.reserve(_shard_list.size());
-    for (unsigned i = 0; i < _shard_list.size(); ++i) {
-      pg_list.push_back(spg_t(_pg_list[i], _shard_list[i]));
-    }
+    ::decode(epoch, p);
+    ::decode(pg_list, p);
   }
   void print(ostream& out) const override {
     out << "osd pg remove(" << "epoch " << epoch << "; ";

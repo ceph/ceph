@@ -25,7 +25,7 @@
 struct MOSDScrub : public Message {
 
   static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 2;
 
   uuid_d fsid;
   vector<pg_t> scrub_pgs;
@@ -68,11 +68,7 @@ public:
     ::decode(fsid, p);
     ::decode(scrub_pgs, p);
     ::decode(repair, p);
-    if (header.version >= 2) {
-      ::decode(deep, p);
-    } else {
-      deep = false;
-    }
+    ::decode(deep, p);
   }
 };
 

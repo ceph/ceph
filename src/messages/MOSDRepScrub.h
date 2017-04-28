@@ -25,7 +25,7 @@
 struct MOSDRepScrub : public MOSDFastDispatchOp {
 
   static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 6;
 
   spg_t pgid;             // PG to scrub
   eversion_t scrub_from; // only scrub log entries after scrub_from
@@ -97,31 +97,12 @@ public:
     ::decode(scrub_from, p);
     ::decode(scrub_to, p);
     ::decode(map_epoch, p);
-
-    if (header.version >= 3) {
-      ::decode(chunky, p);
-      ::decode(start, p);
-      ::decode(end, p);
-      if (header.version >= 4) {
-        ::decode(deep, p);
-      } else {
-        deep = false;
-      }
-    } else { // v2 scrub: non-chunky
-      chunky = false;
-      deep = false;
-    }
-
-    if (header.version >= 5) {
-      ::decode(pgid.shard, p);
-    } else {
-      pgid.shard = shard_id_t::NO_SHARD;
-    }
-    if (header.version >= 6) {
-      ::decode(seed, p);
-    } else {
-      seed = 0;
-    }
+    ::decode(chunky, p);
+    ::decode(start, p);
+    ::decode(end, p);
+    ::decode(deep, p);
+    ::decode(pgid.shard, p);
+    ::decode(seed, p);
   }
 };
 
