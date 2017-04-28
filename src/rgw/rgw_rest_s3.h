@@ -185,13 +185,6 @@ public:
   int get_data(bufferlist& bl) override;
   void send_response() override;
 
-  int validate_aws4_single_chunk(char *chunk_str,
-                                 char *chunk_data_str,
-                                 unsigned int chunk_data_size,
-                                 string chunk_signature);
-  int validate_and_unwrap_available_aws4_chunked_data(bufferlist& bl_in,
-                                                      bufferlist& bl_out);
-
   int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor>* filter,
                          RGWPutObjDataProcessor* cb) override;
   int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter,

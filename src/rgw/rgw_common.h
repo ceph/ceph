@@ -1694,15 +1694,6 @@ inline ostream& operator<<(ostream& out, const rgw_obj_index_key &o) {
   }
 }
 
-struct rgw_aws4_auth {
-  string date;
-  string credential_scope;
-  string seed_signature;
-  std::array<unsigned char,
-             CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> signing_key;
-  bufferlist bl;
-};
-
 struct req_init_state {
   /* Keeps [[tenant]:]bucket until we parse the token. */
   string url_bucket;
@@ -1804,10 +1795,6 @@ struct req_state {
   /* Is the request made by an user marked as a system one?
    * Being system user means we also have the admin status. */
   bool system_request;
-
-  /* aws4 auth support */
-  bool aws4_auth_streaming_mode;
-  unique_ptr<rgw_aws4_auth> aws4_auth;
 
   string canned_acl;
   bool has_acl_header;
