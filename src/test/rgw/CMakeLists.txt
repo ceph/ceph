@@ -99,9 +99,8 @@ target_link_libraries(unittest_rgw_crypto
   cls_user_client
   librados
   global
-  curl
-  uuid
-  expat
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
