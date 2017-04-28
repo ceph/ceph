@@ -4830,9 +4830,14 @@ def main_trigger(args):
 def main_fix(args):
     # A hash table containing 'path': ('uid', 'gid', blocking, recursive)
     fix_table = [
+        ('/usr/bin/ceph-mon', 'ceph', 'ceph', True, False),
+        ('/usr/bin/ceph-mds', 'ceph', 'ceph', True, False),
+        ('/usr/bin/ceph-osd', 'ceph', 'ceph', True, False),
+        ('/usr/bin/radosgw', 'ceph', 'ceph', True, False),
         ('/etc/ceph', 'ceph', 'ceph', True, True),
         ('/var/run/ceph', 'ceph', 'ceph', True, True),
         ('/var/log/ceph', 'ceph', 'ceph', True, True),
+        ('/var/log/radosgw', 'ceph', 'ceph', True, True),
         ('/var/lib/ceph', 'ceph', 'ceph', True, False),
     ]
 
