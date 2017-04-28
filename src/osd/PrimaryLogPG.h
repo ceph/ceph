@@ -263,6 +263,7 @@ public:
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff) override;
   void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) override;
+  bool primary_error(const hobject_t& soid, eversion_t v) override;
   void cancel_pull(const hobject_t &soid) override;
   void apply_stats(
     const hobject_t &soid,
@@ -1068,6 +1069,7 @@ protected:
   hobject_t last_backfill_started;
   bool new_backfill;
 
+  void primary_error(const hobject_t& soid, eversion_t v);
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h);
 
@@ -1221,7 +1223,7 @@ protected:
     ThreadPool::TPHandle &handle ///< [in] tp handle
     );
 
-  void prep_backfill_object_push(
+  int prep_backfill_object_push(
     hobject_t oid, eversion_t v, ObjectContextRef obc,
     vector<pg_shard_t> peers,
     PGBackend::RecoveryHandle *h);
