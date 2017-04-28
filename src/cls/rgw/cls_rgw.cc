@@ -3480,6 +3480,16 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
   return 0;
 }
 
+static void generate_reshard_key(const string& bucket_name, const string& bucket_id, string& key)
+{
+  key = bucket_name + "." + bucket_id;
+}
+
+static void generate_reshard_key(const cls_rgw_reshard_entry& entry, string& key)
+{
+  generate_reshard_key(entry.bucket_name, entry.bucket_id, key);
+}
+
 static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist::iterator in_iter = in->begin();
@@ -3495,7 +3505,8 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
   bufferlist bl;
   ::encode(op.entry, bl);
 
-  string key = op.entry.bucket_name + "." + op.entry.bucket_id;
+  string key;
+  generate_reshard_key(op.entry, key);
   int ret = cls_cxx_map_set_val(hctx, key, &bl);
   if (ret < 0) {
     CLS_ERR("error adding reshard job for bucket %s with key %s",op.entry.bucket_name.c_str(), key.c_str());
@@ -3555,7 +3566,8 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
   }
 
   bufferlist bl;
-  string key = op.entry.bucket_name + "." + op.entry.bucket_id;
+  string key;
+  generate_reshard_key(op.entry, key);
   int ret = cls_cxx_map_get_val(hctx, key, &bl);
   if (ret < 0)
     return ret;
@@ -3588,7 +3600,8 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
     return -EINVAL;
   }
 
-  string key = op.bucket_name + "." + op.bucket_id;
+  string key;
+  generate_reshard_key(op.bucket_name, op.bucket_id, key);
   int ret = cls_cxx_map_remove_key(hctx, key);
   return ret;
 }
