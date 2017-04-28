@@ -1595,8 +1595,14 @@ if test $STATUS -eq 0; then
     /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
 fi
 
-# Now, relabel the files
-/usr/sbin/fixfiles -C ${FILE_CONTEXT}.pre restore 2> /dev/null
+# Relabel the files
+# Use ceph-disk fix for first package install and fixfiles otherwise
+if [ "$1" = "1" ]; then
+    /usr/sbin/ceph-disk fix --selinux
+else
+    /usr/sbin/fixfiles -C ${FILE_CONTEXT}.pre restore 2> /dev/null
+fi
+
 rm -f ${FILE_CONTEXT}.pre
 # The fixfiles command won't fix label for /var/run/ceph
 /usr/sbin/restorecon -R /var/run/ceph > /dev/null 2>&1
