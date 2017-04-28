@@ -824,6 +824,7 @@ COMMAND("config-key exists " \
 	"name=key,type=CephString", \
 	"check for <key>'s existence", "config-key", "r", "cli,rest")
 COMMAND("config-key list ", "list keys", "config-key", "r", "cli,rest")
+COMMAND("config-key dump", "dump keys and values", "config-key", "r", "cli,rest")
 
 
 /*

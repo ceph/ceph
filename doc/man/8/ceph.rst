@@ -13,7 +13,7 @@ Synopsis
 
 | **ceph** **compact**
 
-| **ceph** **config-key** [ *del* | *exists* | *get* | *list* | *put* ] ...
+| **ceph** **config-key** [ *del* | *exists* | *get* | *list* | *dump* | *put* ] ...
 
 | **ceph** **daemon** *<name>* \| *<path>* *<command>* ...
 
@@ -201,7 +201,13 @@ Usage::
 
 	ceph config-key list
 
-Subcommand ``put`` puts configuration key and values.
+Subcommand ``dump`` dumps configuration keys and values.
+
+Usage::
+
+	ceph config-key dump
+
+Subcommand ``put`` puts configuration key and value.
 
 Usage::
 
