@@ -4432,15 +4432,10 @@ void CInode::set_export_pin(mds_rank_t rank)
   assert(is_dir());
   assert(is_projected());
   get_projected_inode()->export_pin = rank;
-  if (rank == mdcache->mds->get_nodeid()) {
-    link_export_pin();
-  } else {
-    unlink_export_pin();
-  }
   maybe_export_pin();
 }
 
-mds_rank_t CInode::get_export_pin(bool inherit) const
+mds_rank_t CInode::get_export_pin(void) const
 {
   /* An inode that is export pinned may not necessarily be a subtree root, we
    * need to traverse the parents. A base or system inode cannot be pinned.
@@ -4452,8 +4447,6 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
     if (pin >= 0) {
       return pin;
     }
-    if (!inherit)
-      break;
   }
   return MDS_RANK_NONE;
 }
@@ -4467,42 +4460,5 @@ bool CInode::is_exportable(mds_rank_t dest) const
     return false;
   } else {
     return true;
-  }
-}
-
-void CInode::unlink_export_pin(void)
-{
-  if (is_dir()) {
-    auto list = export_pin_parent_link.get_list();
-    if (list) {
-      CDentry *entry = get_projected_parent_dn();
-      assert(entry);
-      CInode *parent = entry->dir->inode;
-      assert(parent && list == &parent->export_pin_list);
-      export_pin_parent_link.remove_myself();
-      if (list->empty()) {
-        parent->unlink_export_pin();
-      }
-    }
-  }
-}
-
-/* Because an inode may be pinned to us **but not a subtree**, it is necessary
- * to be able to convert this inode (actually, its fragments) to subtrees if
- * this inode's parent is exported. This chain of linked lists keeps track of
- * pinned children.
- */
-void CInode::link_export_pin(void)
-{
-  if (is_dir()) {
-    mds_rank_t pin = get_projected_inode()->export_pin;
-    if (pin >= 0 && pin == mdcache->mds->get_nodeid()) {
-      unlink_export_pin();
-      CDentry *cde = get_projected_parent_dn();
-      while (cde) {
-        cde->dir->inode->export_pin_list.push_front(&cde->get_projected_linkage()->inode->export_pin_parent_link);
-        cde = cde->dir->inode->get_projected_parent_dn();
-      }
-    }
   }
 }

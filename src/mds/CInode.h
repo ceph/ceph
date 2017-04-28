@@ -680,8 +680,7 @@ public:
     nestlock(this, &nestlock_type),
     flocklock(this, &flocklock_type),
     policylock(this, &policylock_type),
-    loner_cap(-1), want_loner_cap(-1),
-    export_pin_parent_link(this)
+    loner_cap(-1), want_loner_cap(-1)
   {
     state = 0;  
     if (auth) state_set(STATE_AUTH);
@@ -692,8 +691,6 @@ public:
     clear_file_locks();
     assert(num_projected_xattrs == 0);
     assert(num_projected_srnodes == 0);
-    assert(export_pin_list.empty());
-    unlink_export_pin();
   }
   
 
@@ -1070,12 +1067,9 @@ public:
   void set_primary_parent(CDentry *p) {
     assert(parent == 0);
     parent = p;
-    link_export_pin();
   }
   void remove_primary_parent(CDentry *dn) {
     assert(dn == parent);
-    if (projected_parent.empty())
-      unlink_export_pin();
     parent = 0;
   }
   void add_remote_parent(CDentry *p);
@@ -1086,7 +1080,6 @@ public:
 
   void push_projected_parent(CDentry *dn) {
     projected_parent.push_back(dn);
-    link_export_pin(); /* fix export pin links */
   }
   void pop_projected_parent() {
     assert(projected_parent.size());
@@ -1098,15 +1091,8 @@ private:
   void maybe_export_pin();
 public:
   void set_export_pin(mds_rank_t rank);
-  mds_rank_t get_export_pin(bool inherit=true) const;
+  mds_rank_t get_export_pin(void) const;
   bool is_exportable(mds_rank_t dest) const;
-
-private:
-  xlist<CInode *> export_pin_list;
-  xlist<CInode *>::item export_pin_parent_link;
-public:
-  void link_export_pin(void);
-  void unlink_export_pin(void);
 
   void print(ostream& out) override;
   void dump(Formatter *f) const;
