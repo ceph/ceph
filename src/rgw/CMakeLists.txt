@@ -135,11 +135,11 @@ if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND radosgw_srcs rgw_fcgi_process.cc)
 endif()
 
-if (WITH_RADOSGW_ASIO_FRONTEND)
+if (WITH_RADOSGW_BEAST_FRONTEND)
   list(APPEND radosgw_srcs
     rgw_asio_client.cc
     rgw_asio_frontend.cc)
-endif (WITH_RADOSGW_ASIO_FRONTEND)
+endif (WITH_RADOSGW_BEAST_FRONTEND)
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
