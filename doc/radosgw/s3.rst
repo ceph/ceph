@@ -42,6 +42,8 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+----------------------------------------+
 | **Policy (Buckets, Objects)**   | Supported       | ACLs & bucket policies are supported   |
 +---------------------------------+-----------------+----------------------------------------+
+| **Bucket Logging**              | Supported       |                                        |
++---------------------------------+-----------------+----------------------------------------+
 | **Bucket Website**              | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
 | **Bucket ACLs (Get, Put)**      | Supported       | Different set of canned ACLs           |
