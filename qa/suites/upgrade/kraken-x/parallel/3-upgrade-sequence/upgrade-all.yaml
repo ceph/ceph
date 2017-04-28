@@ -4,7 +4,7 @@ meta:
 upgrade-sequence:
    sequential:
    - ceph.restart:
-       daemons: [mon.a, mon.b, mon.c]
+       daemons: [mon.a, mon.b, mon.c, mgr.x]
    - ceph.restart:
        daemons: [osd.0, osd.1, osd.2, osd.3]
        wait-for-healthy: false
