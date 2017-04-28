@@ -1064,7 +1064,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     } else {
       r = ictx->get_parent_spec(ictx->snap_id, &parent_spec);
       if (r < 0) {
-	lderr(ictx->cct) << "Can't find snapshot id = " << ictx->snap_id << dendl;
+	lderr(ictx->cct) << "Can't find snapshot id = " << ictx->snap_id
+                         << dendl;
 	return r;
       }
       if (parent_spec.pool_id == -1)
@@ -1093,13 +1094,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     if (parent_name) {
-      r = cls_client::dir_get_name(&ictx->parent->md_ctx, RBD_DIRECTORY,
-				   parent_spec.image_id, parent_name);
-      if (r < 0) {
-	lderr(ictx->cct) << "error getting parent image name: "
-			 << cpp_strerror(r) << dendl;
-	return r;
-      }
+      RWLock::RLocker snap_locker(ictx->parent->snap_lock);
+      *parent_name = ictx->parent->name;
     }
 
     return 0;
