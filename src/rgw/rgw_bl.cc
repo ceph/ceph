@@ -251,7 +251,8 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
   buffer->append(pending_column.str());
 }
 
-int RGWBL::bucket_bl_upload(bufferlist* opslog_buffer, rgw_obj obj)
+int RGWBL::bucket_bl_upload(bufferlist* opslog_buffer, rgw_obj obj,
+			    map<string, bufferlist> tobject_attrs)
 {
   string url = cct->_conf->rgw_bl_url;
   if (url.empty()) {
@@ -274,10 +275,7 @@ int RGWBL::bucket_bl_upload(bufferlist* opslog_buffer, rgw_obj obj)
     return -EPERM;
   }
 
-  map<string, bufferlist> attrs;
-  attrs.clear();
-
-  int ret = req.put_obj_init(key, obj, opslog_buffer->length(), attrs);
+  int ret = req.put_obj_init(key, obj, opslog_buffer->length(), tobject_attrs);
   if(ret < 0) {
     ldout(cct, 0) << "RGWBL::bucket_bl_upload"
                   << " req.put_obj_init failed ret="
@@ -320,7 +318,8 @@ int RGWBL::bucket_bl_remove(const string obj_name)
 } 
 
 int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
-			     const string target_prefix)
+			     const string target_prefix,
+			     map<string, bufferlist> tobject_attrs)
 {
   bufferlist opslog_buffer;
   ldout(cct, 20) << __func__ << " fetch phrase:" << dendl;
@@ -344,7 +343,7 @@ int RGWBL::bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
   rgw_obj tobject(target_bucket, target_key);
 
   ldout(cct, 20) << __func__ << " upload phrase:" << dendl;
-  r = bucket_bl_upload(&opslog_buffer, tobject);
+  r = bucket_bl_upload(&opslog_buffer, tobject, tobject_attrs);
   opslog_buffer.clear();
   if (r < 0) {
     ldout(cct, 0) << __func__ << " bucket_bl_upload() failed ret="
@@ -413,6 +412,8 @@ int RGWBL::bucket_bl_process(string& shard_id)
   }
 
   int final_ret;
+  map<string, bufferlist> tobject_attrs;
+
   string filter("");
   filter += sbucket_id;
   filter += "-";
@@ -438,6 +439,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
       map<string, bufferlist> tbucket_attrs;
       RGWObjectCtx tobj_ctx(store);
 
+
       // source/target bucket owned by same user
       int ret = store->get_bucket_info(tobj_ctx, sbucket_tenant, tbucket_name, 
                                        tbucket_info, NULL, &tbucket_attrs);
@@ -449,7 +451,15 @@ int RGWBL::bucket_bl_process(string& shard_id)
         if (ret == 0) {
            tbucket = tbucket_info.bucket;
            // TODO(jiaying) check tbucket deliver group acl
-        } 
+	   map<string, bufferlist>::iterator piter = tbucket_attrs.find(RGW_ATTR_ACL);
+	   if (piter == tbucket_attrs.end()) {
+	     ldout(cct, 0) << __func__ << " can't find tbucket ACL attr"
+			   << " tbucket_name=" << tbucket_name << dendl;
+	     return -1;
+	   } else {
+	     tobject_attrs[piter->first] = piter->second;
+	   }
+        }
       }
     }
 
@@ -469,7 +479,7 @@ int RGWBL::bucket_bl_process(string& shard_id)
 	final_ret = r;
 	break;
       } else {
-	int r = bucket_bl_deliver(opslog_obj, tbucket, tprefix);
+	int r = bucket_bl_deliver(opslog_obj, tbucket, tprefix, tobject_attrs);
 	if (r < 0 ){
 	  final_ret = r;
 	  break;

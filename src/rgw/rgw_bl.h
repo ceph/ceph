@@ -93,10 +93,11 @@ class RGWBL {
 
   void format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer);
   int bucket_bl_fetch(const string opslog_obj, bufferlist* opslog_entries);
-  int bucket_bl_upload(bufferlist* opslog_buffer, rgw_obj target_object);
+  int bucket_bl_upload(bufferlist* opslog_buffer, rgw_obj target_object,
+                       map<string, bufferlist> tobject_attrs);
   int bucket_bl_remove(const string opslog_obj);
   int bucket_bl_deliver(string opslog_obj, const rgw_bucket target_bucket,
-			       const string target_prefix);
+                        const string target_prefix, map<string, bufferlist> tobject_attrs);
 
   bool going_down();
   void start_processor();
