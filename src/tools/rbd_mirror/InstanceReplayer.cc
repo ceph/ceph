@@ -156,13 +156,13 @@ void InstanceReplayer<I>::acquire_image(const std::string &global_image_id,
   }
 
   auto image_replayer = it->second;
+  if (!peer_mirror_uuid.empty()) {
+    auto iter = m_peers.find(Peer(peer_mirror_uuid));
+    assert(iter != m_peers.end());
+    auto io_ctx = iter->io_ctx;
 
-  auto iter = m_peers.find(Peer(peer_mirror_uuid));
-  assert(iter != m_peers.end());
-  auto io_ctx = iter->io_ctx;
-
-  image_replayer->add_remote_image(peer_mirror_uuid, peer_image_id, io_ctx);
-
+    image_replayer->add_remote_image(peer_mirror_uuid, peer_image_id, io_ctx);
+  }
   start_image_replayer(image_replayer);
 
   m_threads->work_queue->queue(on_finish, 0);
@@ -190,11 +190,13 @@ void InstanceReplayer<I>::release_image(const std::string &global_image_id,
   }
 
   auto image_replayer = it->second;
-
-  image_replayer->remove_remote_image(peer_mirror_uuid, peer_image_id);
+  if (!peer_mirror_uuid.empty()) {
+    image_replayer->remove_remote_image(peer_mirror_uuid, peer_image_id,
+					schedule_delete);
+  }
 
   if (!image_replayer->remote_images_empty()) {
-    dout(20) << global_image_id << ": still has remote images" << dendl;
+    dout(20) << global_image_id << ": still has peer images" << dendl;
     m_threads->work_queue->queue(on_finish, 0);
     return;
   }
@@ -211,15 +213,8 @@ void InstanceReplayer<I>::release_image(const std::string &global_image_id,
     on_finish = new FunctionContext(
       [this, image_replayer, on_finish] (int r) {
         auto global_image_id = image_replayer->get_global_image_id();
-        auto local_image_id = image_replayer->get_local_image_id();
-        if (local_image_id.empty()) {
-          dout(20) << global_image_id << ": unknown local_image_id"
-                   << " (image does not exist or primary), skipping delete"
-                   << dendl;
-        } else {
-          m_image_deleter->schedule_image_delete(
-            m_local_rados, m_local_pool_id, local_image_id, global_image_id);
-        }
+        m_image_deleter->schedule_image_delete(
+          m_local_rados, m_local_pool_id, global_image_id);
         on_finish->complete(0);
       });
   }

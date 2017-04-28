@@ -622,8 +622,6 @@ TEST_F(TestImageReplayer, Resync)
 
   start();
 
-  std::string image_id = m_replayer->get_local_image_id();
-
   generate_test_data();
 
   open_remote_image(&ictx);
@@ -653,7 +651,6 @@ TEST_F(TestImageReplayer, Resync)
   m_replayer->start(&cond);
   ASSERT_EQ(0, cond.wait());
 
-  ASSERT_NE(image_id, m_replayer->get_local_image_id());
   ASSERT_TRUE(m_replayer->is_replaying());
 
   wait_for_replay_complete();
@@ -673,8 +670,6 @@ TEST_F(TestImageReplayer, Resync_While_Stop)
   bootstrap();
 
   start();
-
-  std::string image_id = m_replayer->get_local_image_id();
 
   generate_test_data();
 
@@ -718,7 +713,6 @@ TEST_F(TestImageReplayer, Resync_While_Stop)
   m_replayer->start(&cond3);
   ASSERT_EQ(0, cond3.wait());
 
-  ASSERT_NE(image_id, m_replayer->get_local_image_id());
   ASSERT_TRUE(m_replayer->is_replaying());
 
   wait_for_replay_complete();
@@ -736,8 +730,6 @@ TEST_F(TestImageReplayer, Resync_StartInterrupted)
 {
 
   bootstrap();
-
-  std::string image_id = m_replayer->get_local_image_id();
 
   librbd::ImageCtx *ictx;
   open_local_image(&ictx);
@@ -763,8 +755,6 @@ TEST_F(TestImageReplayer, Resync_StartInterrupted)
   std::string oid = ::journal::Journaler::header_oid(m_remote_image_id);
   m_watch_ctx = new C_WatchCtx(this, oid);
   ASSERT_EQ(0, m_remote_ioctx.watch2(oid, &m_watch_handle, m_watch_ctx));
-
-  ASSERT_NE(image_id, m_replayer->get_local_image_id());
 
   ASSERT_TRUE(m_replayer->is_replaying());
 

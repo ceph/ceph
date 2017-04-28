@@ -109,7 +109,8 @@ public:
                         const std::string &remote_image_id,
                         librados::IoCtx &remote_io_ctx);
   void remove_remote_image(const std::string &remote_mirror_uuid,
-                           const std::string &remote_image_id);
+                           const std::string &remote_image_id,
+			   bool schedule_delete);
   bool remote_images_empty() const;
 
   inline int64_t get_local_pool_id() const {
@@ -117,10 +118,6 @@ public:
   }
   inline const std::string& get_global_image_id() const {
     return m_global_image_id;
-  }
-  inline std::string get_local_image_id() {
-    Mutex::Locker locker(m_lock);
-    return m_local_image_id;
   }
 
   void start(Context *on_finish = nullptr, bool manual = false);
@@ -144,6 +141,9 @@ protected:
    *    |                                                   ^
    *    v                                                   *
    * <starting>                                             *
+   *    |                                                   *
+   *    v                                           (error) *
+   * PREPARE_LOCAL_IMAGE  * * * * * * * * * * * * * * * * * *
    *    |                                                   *
    *    v                                           (error) *
    * BOOTSTRAP_IMAGE  * * * * * * * * * * * * * * * * * * * *
@@ -304,6 +304,7 @@ private:
     nullptr;
   librados::IoCtx m_local_ioctx;
   ImageCtxT *m_local_image_ctx = nullptr;
+  std::string m_local_image_tag_owner;
 
   decltype(ImageCtxT::journal) m_local_journal = nullptr;
   librbd::journal::Replay<ImageCtxT> *m_local_replay = nullptr;
@@ -387,6 +388,9 @@ private:
   void shut_down(int r);
   void handle_shut_down(int r);
   void handle_remote_journal_metadata_updated();
+
+  void prepare_local_image();
+  void handle_prepare_local_image(int r);
 
   void bootstrap();
   void handle_bootstrap(int r);

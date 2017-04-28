@@ -72,8 +72,9 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD3(add_remote_image, void(const std::string &,
                                       const std::string &,
                                       librados::IoCtx &));
-  MOCK_METHOD2(remove_remote_image, void(const std::string &,
-                                         const std::string &));
+  MOCK_METHOD3(remove_remote_image, void(const std::string &,
+                                         const std::string &,
+                                         bool));
   MOCK_METHOD0(remote_images_empty, bool());
   MOCK_METHOD0(get_global_image_id, const std::string &());
   MOCK_METHOD0(get_local_image_id, const std::string &());
@@ -174,7 +175,8 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   C_SaferCond on_release;
 
   EXPECT_CALL(mock_image_replayer,
-              remove_remote_image("remote_mirror_uuid", "remote_image_id"));
+              remove_remote_image("remote_mirror_uuid", "remote_image_id",
+                                  false));
   EXPECT_CALL(mock_image_replayer, remote_images_empty())
     .WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_stopped())
