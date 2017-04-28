@@ -1331,9 +1331,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
   for (map<ceph_tid_t,CommandOp*>::iterator p = need_resend_command.begin();
        p != need_resend_command.end(); ++p) {
     CommandOp *c = p->second;
-    _assign_command_session(c, sul);
-    if (c->session && !c->session->is_homeless()) {
-      _send_command(c);
+    if (c->target.osd >= 0) {
+      _assign_command_session(c, sul);
+      if (c->session && !c->session->is_homeless()) {
+	_send_command(c);
+      }
     }
   }
 
@@ -4726,11 +4728,13 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
     if (!osdmap->exists(c->target_osd)) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "osd dne";
+      c->target.osd = -1;
       return RECALC_OP_TARGET_OSD_DNE;
     }
     if (osdmap->is_down(c->target_osd)) {
       c->map_check_error = -ENXIO;
       c->map_check_error_str = "osd down";
+      c->target.osd = -1;
       return RECALC_OP_TARGET_OSD_DOWN;
     }
     c->target.osd = c->target_osd;
@@ -4739,10 +4743,12 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
     if (ret == RECALC_OP_TARGET_POOL_DNE) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "pool dne";
+      c->target.osd = -1;
       return ret;
     } else if (ret == RECALC_OP_TARGET_OSD_DOWN) {
       c->map_check_error = -ENXIO;
       c->map_check_error_str = "osd down";
+      c->target.osd = -1;
       return ret;
     }
   }
