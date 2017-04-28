@@ -1122,6 +1122,18 @@ struct ObjectOperation {
     add_op(CEPH_OSD_OP_CACHE_EVICT);
   }
 
+  /*
+   * Extensible tier
+   */
+  void set_redirect(object_t tgt, snapid_t snapid, object_locator_t tgt_oloc, 
+		    version_t tgt_version) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_REDIRECT);
+    osd_op.op.copy_from.snapid = snapid;
+    osd_op.op.copy_from.src_version = tgt_version;
+    ::encode(tgt, osd_op.indata);
+    ::encode(tgt_oloc, osd_op.indata);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {
