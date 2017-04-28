@@ -6474,6 +6474,11 @@ bool MDCache::trim(int max, int count)
       if (!diri->is_auth()) {
 	if (dir->get_num_ref() > 1)  // only subtree pin
 	  continue;
+	list<CDir*> ls;
+	diri->get_subtree_dirfrags(ls);
+	if (diri->get_num_ref() > (int)ls.size()) // only pinned by subtrees
+	  continue;
+
 	// don't trim subtree root if its auth MDS is recovering.
 	// This simplify the cache rejoin code.
 	if (dir->is_subtree_root() &&
@@ -9680,7 +9685,7 @@ void MDCache::discover_path(CDir *base,
       !base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
-    d.pin_base(base);
+    d.pin_base(base->inode);
     d.frag = base->get_frag();
     d.snap = snap;
     d.want_path = want_path;
