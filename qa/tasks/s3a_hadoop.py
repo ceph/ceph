@@ -125,8 +125,8 @@ def setup_dnsmasq(client, name):
     """
     resolv_conf = "nameserver 127.0.0.1\n"
     dnsmasq_template = """address=/{name}/{ip_address}
-server=8.8.8.8
-server=8.8.4.4
+server=10.8.128.1
+server=10.10.160.1
 """.format(name=name, ip_address=client.ip_address)
     dnsmasq_config_path = '/etc/dnsmasq.d/ceph'
     # point resolv.conf to local dnsmasq
