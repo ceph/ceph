@@ -9347,7 +9347,6 @@ void OSD::ShardedOpWQ::wake_pg_waiters(spg_t pgid)
 {
   uint32_t shard_index = pgid.hash_to_shard(shard_list.size());
   auto sdata = shard_list[shard_index];
-  bool queued = false;
   unsigned pushes_to_free = 0;
   {
     Mutex::Locker l(sdata->sdata_op_ordering_lock);
@@ -9367,16 +9366,11 @@ void OSD::ShardedOpWQ::wake_pg_waiters(spg_t pgid)
       p->second.to_process.clear();
       p->second.waiting_for_pg = false;
       ++p->second.requeue_seq;
-      queued = true;
+      sdata->sdata_cond.SignalOne();
     }
   }
   if (pushes_to_free > 0) {
     osd->service.release_reserved_pushes(pushes_to_free);
-  }
-  if (queued) {
-    sdata->sdata_lock.Lock();
-    sdata->sdata_cond.SignalOne();
-    sdata->sdata_lock.Unlock();
   }
 }
 
@@ -9461,14 +9455,10 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   if (sdata->pqueue->empty()) {
     dout(20) << __func__ << " empty q, waiting" << dendl;
     // optimistically sleep a moment; maybe another work item will come along.
-    sdata->sdata_op_ordering_lock.Unlock();
     osd->cct->get_heartbeat_map()->reset_timeout(hb,
       osd->cct->_conf->threadpool_default_timeout, 0);
-    sdata->sdata_lock.Lock();
-    sdata->sdata_cond.WaitInterval(sdata->sdata_lock,
+    sdata->sdata_cond.WaitInterval(sdata->sdata_op_ordering_lock,
       utime_t(osd->cct->_conf->threadpool_empty_queue_max_wait, 0));
-    sdata->sdata_lock.Unlock();
-    sdata->sdata_op_ordering_lock.Lock();
     if (sdata->pqueue->empty()) {
       sdata->sdata_op_ordering_lock.Unlock();
       return;
@@ -9666,12 +9656,8 @@ void OSD::ShardedOpWQ::_enqueue(pair<spg_t, PGQueueable> item) {
     sdata->pqueue->enqueue(
       item.second.get_owner(),
       priority, cost, item);
-  sdata->sdata_op_ordering_lock.Unlock();
-
-  sdata->sdata_lock.Lock();
   sdata->sdata_cond.SignalOne();
-  sdata->sdata_lock.Unlock();
-
+  sdata->sdata_op_ordering_lock.Unlock();
 }
 
 void OSD::ShardedOpWQ::_enqueue_front(pair<spg_t, PGQueueable> item)
@@ -9696,10 +9682,8 @@ void OSD::ShardedOpWQ::_enqueue_front(pair<spg_t, PGQueueable> item)
     dout(20) << __func__ << " " << item.first << " " << item.second << dendl;
   }
   sdata->_enqueue_front(item, osd->op_prio_cutoff);
-  sdata->sdata_op_ordering_lock.Unlock();
-  sdata->sdata_lock.Lock();
   sdata->sdata_cond.SignalOne();
-  sdata->sdata_lock.Unlock();
+  sdata->sdata_op_ordering_lock.Unlock();
 }
 
 namespace ceph { 
