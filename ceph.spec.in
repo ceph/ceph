@@ -392,6 +392,7 @@ Summary:	Ceph Object Storage Daemon
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{epoch}:%{version}-%{release}
+Requires:	hdparm
 # for sgdisk, used by ceph-disk
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	gdisk
