@@ -1178,6 +1178,9 @@ class TestConfigKey(TestArgparse):
     def test_exists(self):
         self.check_1_string_arg('config-key', 'exists')
 
+    def test_dump(self):
+        self.check_no_arg('config-key', 'dump')
+
     def test_list(self):
         self.check_no_arg('config-key', 'list')
 # Local Variables:

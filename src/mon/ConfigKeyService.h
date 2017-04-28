@@ -30,6 +30,7 @@ class ConfigKeyService : public QuorumService
   void store_put(const string &key, bufferlist &bl, Context *cb = NULL);
   void store_delete(const string &key, Context *cb = NULL);
   void store_list(stringstream &ss);
+  void store_dump(stringstream &ss);
   bool store_exists(const string &key);
 
   static const string STORE_PREFIX;
