@@ -2389,26 +2389,6 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
   // fixme
 }
 
-int CrushWrapper::_get_osd_pool_default_crush_replicated_ruleset(CephContext *cct,
-                                                                 bool quiet)
-{
-  int crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
-  if (crush_ruleset == -1) {
-    crush_ruleset = cct->_conf->osd_pool_default_crush_replicated_ruleset;
-  } else if (!quiet) {
-    ldout(cct, 0) << "osd_pool_default_crush_rule is deprecated "
-                  << "use osd_pool_default_crush_replicated_ruleset instead"
-                  << dendl;
-    ldout(cct, 0) << "osd_pool_default_crush_rule = "
-                  << cct->_conf-> osd_pool_default_crush_rule << " overrides "
-                  << "osd_pool_default_crush_replicated_ruleset = "
-                  << cct->_conf->osd_pool_default_crush_replicated_ruleset
-                  << dendl;
-  }
-
-  return crush_ruleset;
-}
-
 /**
  * Determine the default CRUSH ruleset ID to be used with
  * newly created replicated pools.
@@ -2417,14 +2397,12 @@ int CrushWrapper::_get_osd_pool_default_crush_replicated_ruleset(CephContext *cc
  */
 int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
 {
-  int crush_ruleset = _get_osd_pool_default_crush_replicated_ruleset(cct,
-                                                                     false);
-  if (crush_ruleset == CEPH_DEFAULT_CRUSH_REPLICATED_RULESET) {
+  int crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
+  if (crush_ruleset < 0) {
     crush_ruleset = find_first_ruleset(pg_pool_t::TYPE_REPLICATED);
   } else if (!ruleset_exists(crush_ruleset)) {
     crush_ruleset = -1; // match find_first_ruleset() retval
   }
-
   return crush_ruleset;
 }
 

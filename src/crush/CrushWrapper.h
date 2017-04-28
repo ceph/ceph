@@ -1357,8 +1357,6 @@ public:
   void dump_tree(Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
-  int _get_osd_pool_default_crush_replicated_ruleset(CephContext *cct,
-                                                     bool quiet);
   int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
 
   static bool is_valid_crush_name(const string& s);

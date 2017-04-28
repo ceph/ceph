@@ -35,44 +35,6 @@ function run() {
     done
 }
 
-function TEST_default_deprectated_0() {
-    local dir=$1
-    # explicitly set the default crush rule
-    local expected=66
-    run_mon $dir a \
-        --osd_pool_default_crush_replicated_ruleset $expected || return 1
-    ceph osd pool get rbd crush_ruleset | grep 'ruleset: '$expected || return 1
-    ceph osd crush rule dump replicated_ruleset | grep '"ruleset": '$expected || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
-    ! grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
-}
-
-function TEST_default_deprectated_1() {
-    local dir=$1
-    # explicitly set the default crush rule using deprecated option
-    local expected=55
-    run_mon $dir a \
-        --osd_pool_default_crush_rule $expected || return 1
-    ceph osd pool get rbd crush_ruleset | grep 'ruleset: '$expected || return 1
-    ceph osd crush rule dump replicated_ruleset | grep '"ruleset": '$expected || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
-    grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
-}
-
-function TEST_default_deprectated_2() {
-    local dir=$1
-    local expected=77
-    local unexpected=33
-    run_mon $dir a \
-        --osd_pool_default_crush_rule $expected \
-        --osd_pool_default_crush_replicated_ruleset $unexpected || return 1
-    ceph osd pool get rbd crush_ruleset | grep 'ruleset: '$expected || return 1
-    ! ceph --format json osd dump | grep '"crush_ruleset":'$unexpected || return 1
-    ceph osd crush rule dump replicated_ruleset | grep '"ruleset": '$expected || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
-    grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
-}
-
 # Before http://tracker.ceph.com/issues/8307 the invalid profile was created
 function TEST_erasure_invalid_profile() {
     local dir=$1
@@ -188,42 +150,6 @@ function TEST_replicated_pool_with_ruleset() {
     #non-existent crush ruleset
     ceph osd pool create newpool 12 12 replicated non-existent 2>&1 | \
         grep "doesn't exist" || return 1
-}
-
-function TEST_replicated_pool_with_non_existent_default_ruleset_0() {
-    local dir=$1
-    run_mon $dir a || return 1
-    # change the default crush rule
-    ceph tell mon.a injectargs -- \
-        --osd_pool_default_crush_replicated_ruleset 66 || return 1
-    ceph osd pool create mypool 12 12 replicated 2>&1 | \
-        grep "No suitable CRUSH rule exists" || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
-    ! grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
-}
-
-function TEST_replicated_pool_with_non_existent_default_ruleset_1() {
-    local dir=$1
-    run_mon $dir a || return 1
-    # change the default crush rule using deprecated option
-    ceph tell mon.a injectargs -- \
-        --osd_pool_default_crush_rule 55 || return 1
-    ceph osd pool create mypool 12 12 replicated 2>&1 | \
-        grep "No suitable CRUSH rule exists" || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
-    grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
-}
-
-function TEST_replicated_pool_with_non_existent_default_ruleset_2() {
-    local dir=$1
-    run_mon $dir a || return 1
-    ceph tell mon.a injectargs -- \
-        --osd_pool_default_crush_rule 77 \
-        --osd_pool_default_crush_replicated_ruleset 33 || return 1
-    ceph osd pool create mypool 12 12 replicated 2>&1 | \
-        grep "No suitable CRUSH rule exists" || return 1
-    CEPH_ARGS='' ceph --admin-daemon $dir/ceph-mon.a.asok log flush || return 1
-    grep "osd_pool_default_crush_rule is deprecated " $dir/mon.a.log || return 1
 }
 
 function TEST_erasure_code_pool_lrc() {
