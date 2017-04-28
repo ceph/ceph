@@ -3068,10 +3068,12 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
       break;
     const char* pool = i->second.c_str();
     tracepoint(librados, rados_pool_list_pool, pool);
-    strncat(b, pool, rl);
+    if (b) {
+      strncat(b, pool, rl);
+      b += rl;
+    }
     needed += rl;
     len -= rl;
-    b += rl;
   }
   for (; i != p_end; ++i) {
     int rl = i->second.length() + 1;

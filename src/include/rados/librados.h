@@ -649,6 +649,8 @@ CEPH_RADOS_API int rados_wait_for_latest_osdmap(rados_t cluster);
  * If len is too short to fit all the pool name entries we need, we will fill
  * as much as we can.
  *
+ * Buf may be null to determine the buffer size needed to list all pools.
+ *
  * @param cluster cluster handle
  * @param buf output buffer
  * @param len output buffer length
