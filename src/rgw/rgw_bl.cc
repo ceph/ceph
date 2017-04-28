@@ -646,14 +646,14 @@ int RGWBL::process(int index, int max_lock_secs)
 
     l.unlock(&store->bl_pool_ctx, obj_names[index]);
     ret = bucket_bl_process(entry.first);
-    ret = bucket_bl_post(index, max_lock_secs, entry, ret);
-    return 0;
+    bucket_bl_post(index, max_lock_secs, entry, ret);
+    continue;
 
  exit:
     l.unlock(&store->bl_pool_ctx, obj_names[index]);
     return 0;
 
-  }while(1);
+  } while (1);
 
 }
 
