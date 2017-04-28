@@ -303,7 +303,7 @@ struct inconsistent_obj_wrapper;
     * @param missing [in] set of info, missing pairs for queried nodes
     * @param overlaps [in] mapping of object to file offset overlaps
     */
-   virtual void recover_object(
+   virtual int recover_object(
      const hobject_t &hoid, ///< [in] object to recover
      eversion_t v,          ///< [in] version to recover
      ObjectContextRef head,  ///< [in] context of the head/snapdir object

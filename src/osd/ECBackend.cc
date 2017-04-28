@@ -653,7 +653,7 @@ void ECBackend::run_recovery_op(
   delete _h;
 }
 
-void ECBackend::recover_object(
+int ECBackend::recover_object(
   const hobject_t &hoid,
   eversion_t v,
   ObjectContextRef head,
@@ -683,6 +683,7 @@ void ECBackend::recover_object(
     }
   }
   dout(10) << __func__ << ": built op " << h->ops.back() << dendl;
+  return 0;
 }
 
 bool ECBackend::can_handle_while_inactive(

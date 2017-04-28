@@ -9474,12 +9474,14 @@ int ReplicatedPG::recover_missing(
   start_recovery_op(soid);
   assert(!recovering.count(soid));
   recovering.insert(make_pair(soid, obc));
-  pgbackend->recover_object(
+  int r = pgbackend->recover_object(
     soid,
     v,
     head_obc,
     obc,
     h);
+  // This is only a pull which shouldn't return an error
+  assert(r >= 0);
   return PULL_YES;
 }
 
@@ -10685,6 +10687,34 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
   return started;
 }
 
+bool ReplicatedPG::primary_error(
+  const hobject_t& soid, eversion_t v)
+{
+  pg_log.missing_add(soid, v, eversion_t());
+  pg_log.set_last_requested(0);
+  missing_loc.remove_location(soid, pg_whoami);
+  bool uhoh = true;
+  assert(!actingbackfill.empty());
+  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+       i != actingbackfill.end();
+       ++i) {
+    if (*i == get_primary()) continue;
+    pg_shard_t peer = *i;
+    if (!peer_missing[peer].is_missing(soid, v)) {
+      missing_loc.add_location(soid, peer);
+      dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
+	       << ", there should be a copy on shard " << peer << dendl;
+      uhoh = false;
+    }
+  }
+  if (uhoh)
+    osd->clog->error() << info.pgid << " missing primary copy of " << soid << ", unfound";
+  else
+    osd->clog->error() << info.pgid << " missing primary copy of " << soid
+			 << ", will try copies on " << missing_loc.get_locations(soid);
+  return uhoh;
+}
+
 int ReplicatedPG::prep_object_replica_pushes(
   const hobject_t& soid, eversion_t v,
   PGBackend::RecoveryHandle *h)
@@ -10695,28 +10725,7 @@ int ReplicatedPG::prep_object_replica_pushes(
   // NOTE: we know we will get a valid oloc off of disk here.
   ObjectContextRef obc = get_object_context(soid, false);
   if (!obc) {
-    pg_log.missing_add(soid, v, eversion_t());
-    missing_loc.remove_location(soid, pg_whoami);
-    bool uhoh = true;
-    assert(!actingbackfill.empty());
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
-	 ++i) {
-      if (*i == get_primary()) continue;
-      pg_shard_t peer = *i;
-      if (!peer_missing[peer].is_missing(soid, v)) {
-	missing_loc.add_location(soid, peer);
-	dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
-		 << ", there should be a copy on shard " << peer << dendl;
-	uhoh = false;
-      }
-    }
-    if (uhoh)
-      osd->clog->error() << info.pgid << " missing primary copy of " << soid << ", unfound\n";
-    else
-      osd->clog->error() << info.pgid << " missing primary copy of " << soid
-			<< ", will try copies on " << missing_loc.get_locations(soid)
-			<< "\n";
+    primary_error(soid, v);
     return 0;
   }
 
@@ -10739,13 +10748,20 @@ int ReplicatedPG::prep_object_replica_pushes(
    * In almost all cases, therefore, this lock should be uncontended.
    */
   obc->ondisk_read_lock();
-  pgbackend->recover_object(
+  int r = pgbackend->recover_object(
     soid,
     v,
     ObjectContextRef(),
     obc, // has snapset context
     h);
   obc->ondisk_read_unlock();
+  if (r < 0) {
+    dout(0) << __func__ << " Error " << r << " on oid " << soid << dendl;
+    list<pg_shard_t> fl = { pg_whoami };
+    failed_push(fl, soid);
+    primary_error(soid, v);
+    return 0;
+  }
   return 1;
 }
 
@@ -11258,7 +11274,7 @@ int ReplicatedPG::recover_backfill(
   return ops;
 }
 
-void ReplicatedPG::prep_backfill_object_push(
+int ReplicatedPG::prep_backfill_object_push(
   hobject_t oid, eversion_t v,
   ObjectContextRef obc,
   vector<pg_shard_t> peers,
@@ -11281,13 +11297,14 @@ void ReplicatedPG::prep_backfill_object_push(
 
   // We need to take the read_lock here in order to flush in-progress writes
   obc->ondisk_read_lock();
-  pgbackend->recover_object(
+  int r = pgbackend->recover_object(
     oid,
     v,
     ObjectContextRef(),
     obc,
     h);
   obc->ondisk_read_unlock();
+  return r;
 }
 
 void ReplicatedPG::update_range(
@@ -13063,19 +13080,8 @@ int ReplicatedPG::rep_repair_primary_object(const hobject_t& soid, OpRequestRef 
   assert(!pool.info.require_rollback());
   assert(is_primary());
 
-  // Get non-primary shards
-  list<pg_shard_t> op_shards;
-  for (auto&& i : actingset) {
-    if (i == pg_whoami) continue; // Exclude self (primary)
-    op_shards.push_back(i);
-  }
-  if (op_shards.empty()) {
-    dout(0) << __func__ << " No other replicas available for " << soid << dendl;
-    return -EIO;
-  }
-
   dout(10) << __func__ << " " << soid
-	   << " peers osd.{" << op_shards << "}" << dendl;
+	   << " peers osd.{" << actingbackfill << "}" << dendl;
 
   if (!is_clean()) {
     block_for_clean(soid, op);
@@ -13097,13 +13103,16 @@ int ReplicatedPG::rep_repair_primary_object(const hobject_t& soid, OpRequestRef 
     return -EIO;
   }
 
-  pg_log.missing_add(soid, oi.version, eversion_t());
-
-  pg_log.set_last_requested(0);
-
   missing_loc.add_missing(soid, oi.version, eversion_t());
-  for (auto &&i : op_shards)
-    missing_loc.add_location(soid, i);
+  if (primary_error(soid, oi.version)) {
+    dout(0) << __func__ << " No other replicas available for " << soid << dendl;
+    // XXX: If we knew that there is no down osd which could include this
+    // object, it would be nice if we could return EIO here.
+    // If a "never fail" flag was available, that could be used
+    // for rbd to NOT return EIO until object marked lost.
+
+    // Drop through to save this op in case an osd comes up with the object.
+  }
 
   // Restart the op after object becomes readable again
   waiting_for_unreadable_object[soid].push_back(op);

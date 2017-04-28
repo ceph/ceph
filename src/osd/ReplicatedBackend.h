@@ -51,7 +51,7 @@ public:
     int priority);
 
   /// @see PGBackend::recover_object
-  void recover_object(
+  int recover_object(
     const hobject_t &hoid,
     eversion_t v,
     ObjectContextRef head,
@@ -294,14 +294,14 @@ private:
     const hobject_t &soid,
     ObjectContextRef obj,
     RPGHandle *h);
-  void prep_push_to_replica(
+  int prep_push_to_replica(
     ObjectContextRef obc, const hobject_t& soid, pg_shard_t peer,
     PushOp *pop, bool cache_dont_need = true);
-  void prep_push(ObjectContextRef obc,
+  int prep_push(ObjectContextRef obc,
 		 const hobject_t& oid, pg_shard_t dest,
 		 PushOp *op,
 		 bool cache_dont_need);
-  void prep_push(ObjectContextRef obc,
+  int prep_push(ObjectContextRef obc,
 		 const hobject_t& soid, pg_shard_t peer,
 		 eversion_t version,
 		 interval_set<uint64_t> &data_subset,

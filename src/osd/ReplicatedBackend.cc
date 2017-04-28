@@ -78,7 +78,7 @@ void ReplicatedBackend::run_recovery_op(
   delete h;
 }
 
-void ReplicatedBackend::recover_object(
+int ReplicatedBackend::recover_object(
   const hobject_t &hoid,
   eversion_t v,
   ObjectContextRef head,
@@ -96,15 +96,18 @@ void ReplicatedBackend::recover_object(
       hoid,
       head,
       h);
-    return;
   } else {
     assert(obc);
     int started = start_pushes(
       hoid,
       obc,
       h);
-    assert(started > 0);
+    if (started < 0) {
+      pushing[hoid].clear();
+      return started;
+    }
   }
+  return 0;
 }
 
 void ReplicatedBackend::check_recovery_sources(const OSDMapRef osdmap)
@@ -875,7 +878,10 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
       map<hobject_t, ReplicatedBackend::PullInfo, hobject_t::BitwiseComparator>::iterator j =
 	bc->pulling.find(*i);
       assert(j != bc->pulling.end());
-      if (!bc->start_pushes(*i, j->second.obc, h)) {
+      int started = bc->start_pushes(*i, j->second.obc, h);
+      // XXX: Handle errors here?
+      assert(started >= 0);
+      if (!started) {
 	bc->get_parent()->on_global_recover(
 	  *i, j->second.stat);
       }
@@ -1497,7 +1503,7 @@ void ReplicatedBackend::prepare_pull(
  * intelligently push an object to a replica.  make use of existing
  * clones/heads and dup data ranges where possible.
  */
-void ReplicatedBackend::prep_push_to_replica(
+int ReplicatedBackend::prep_push_to_replica(
   ObjectContextRef obc, const hobject_t& soid, pg_shard_t peer,
   PushOp *pop, bool cache_dont_need)
 {
@@ -1555,10 +1561,10 @@ void ReplicatedBackend::prep_push_to_replica(
       data_subset, clone_subsets);
   }
 
-  prep_push(obc, soid, peer, oi.version, data_subset, clone_subsets, pop, cache_dont_need);
+  return prep_push(obc, soid, peer, oi.version, data_subset, clone_subsets, pop, cache_dont_need);
 }
 
-void ReplicatedBackend::prep_push(ObjectContextRef obc,
+int ReplicatedBackend::prep_push(ObjectContextRef obc,
 			     const hobject_t& soid, pg_shard_t peer,
 			     PushOp *pop, bool cache_dont_need)
 {
@@ -1567,12 +1573,12 @@ void ReplicatedBackend::prep_push(ObjectContextRef obc,
     data_subset.insert(0, obc->obs.oi.size);
   map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subsets;
 
-  prep_push(obc, soid, peer,
+  return prep_push(obc, soid, peer,
 	    obc->obs.oi.version, data_subset, clone_subsets,
 	    pop, cache_dont_need);
 }
 
-void ReplicatedBackend::prep_push(
+int ReplicatedBackend::prep_push(
   ObjectContextRef obc,
   const hobject_t& soid, pg_shard_t peer,
   eversion_t version,
@@ -1602,9 +1608,10 @@ void ReplicatedBackend::prep_push(
 			&new_progress,
 			pop,
 			&(pi.stat), cache_dont_need);
-  // XXX: What can we do here?
-  assert(r == 0);
+  if (r < 0)
+    return r;
   pi.recovery_progress = new_progress;
+  return 0;
 }
 
 int ReplicatedBackend::send_pull_legacy(int prio, pg_shard_t peer,
@@ -2040,8 +2047,9 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     int r = store->read(ch, ghobject_t(recovery_info.soid),
 		p.get_start(), p.get_len(), bit,
                 cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED: 0);
-    if (r < 0)
+    if (r < 0) {
       return r;
+    }
     if (p.get_len() != bit.length()) {
       dout(10) << " extent " << p.get_start() << "~" << p.get_len()
 	       << " is actually " << p.get_start() << "~" << bit.length()
@@ -2391,8 +2399,14 @@ int ReplicatedBackend::start_pushes(
     if (j->second.is_missing(soid)) {
       ++pushes;
       h->pushes[peer].push_back(PushOp());
-      prep_push_to_replica(obc, soid, peer,
+      int r = prep_push_to_replica(obc, soid, peer,
 			   &(h->pushes[peer].back()), h->cache_dont_need);
+      if (r < 0) {
+	// prep_push_to_replica() should fail on first attempt or not at all
+	assert(pushes == 1);
+	h->pushes[peer].pop_back();
+	return r;
+      }
     }
   }
   return pushes;
