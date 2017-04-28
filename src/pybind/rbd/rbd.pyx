@@ -229,10 +229,11 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
     int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
                                   size_t prefix_len)
-    int rbd_get_parent_info(rbd_image_t image,
-                            char *parent_poolname, size_t ppoolnamelen,
-                            char *parent_name, size_t pnamelen,
-                            char *parent_snapname, size_t psnapnamelen)
+    int rbd_get_parent_info2(rbd_image_t image,
+                             char *parent_poolname, size_t ppoolnamelen,
+                             char *parent_name, size_t pnamelen,
+                             char *parent_id, size_t pidlen,
+                             char *parent_snapname, size_t psnapnamelen)
     int rbd_get_flags(rbd_image_t image, uint64_t *flags)
     ssize_t rbd_read2(rbd_image_t image, uint64_t ofs, size_t len,
                       char *buf, int op_flags)
@@ -1506,8 +1507,8 @@ cdef class Image(object):
                 name = <char *>realloc_chk(name, size)
                 snapname = <char *>realloc_chk(snapname, size)
                 with nogil:
-                    ret = rbd_get_parent_info(self.image, pool, size, name,
-                                              size, snapname, size)
+                    ret = rbd_get_parent_info2(self.image, pool, size, name,
+                                               size, NULL, 0, snapname, size)
                 if ret == -errno.ERANGE:
                     size *= 2
 
@@ -1518,6 +1519,32 @@ cdef class Image(object):
             free(pool)
             free(name)
             free(snapname)
+
+    def parent_id(self):
+        """
+        Get image id of a cloned image's parent (if any)
+
+        :returns: str - the parent id
+        :raises: :class:`ImageNotFound` if the image doesn't have a parent
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            size_t size = 32
+            char *parent_id = NULL
+        try:
+            while ret == -errno.ERANGE and size <= 4096:
+                parent_id = <char *>realloc_chk(parent_id, size)
+                with nogil:
+                    ret = rbd_get_parent_info2(self.image, NULL, 0, NULL, 0,
+                                               parent_id, size, NULL, 0)
+                if ret == -errno.ERANGE:
+                    size *= 2
+
+            if ret != 0:
+                raise make_ex(ret, 'error getting parent id for image %s' % (self.name,))
+            return decode_cstr(parent_id)
+        finally:
+            free(parent_id)
 
     def old_format(self):
         """
