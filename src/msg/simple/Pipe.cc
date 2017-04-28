@@ -1419,8 +1419,17 @@ void Pipe::discard_requeued_up_to(uint64_t seq)
     rq.pop_front();
     out_seq++;
   }
-  if (rq.empty())
+
+  if (rq.empty()) {
+    // Bump up the out_seq to match its peer's in_seq, for example, if the connection with
+    // the peer was marked down, and there is a re-connection from peer, we need to make
+    // sure the in/out seq are synced to prevent message (wrongly) ignoring from peer or even
+    // crash if we need to a do reconnect (for whatever reasons)
+    if (seq > out_seq) {
+      out_seq = seq;
+    }
     out_q.erase(CEPH_MSG_PRIO_HIGHEST);
+  }
 }
 
 /*
