@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_CACHE_FILE_JOURNAL_STORE
 
 #include "librbd/cache/Types.h"
-#include "librbd/cache/file/AioFile.h"
+#include "librbd/cache/file/SyncFile.h"
 #include "common/Mutex.h"
 #include <boost/intrusive/slist.hpp>
 #include <boost/intrusive/set.hpp>
@@ -120,8 +120,8 @@ private:
   ImageCtxT &m_image_ctx;
   BlockGuard &m_block_guard;
   MetaStore<ImageCtxT> &m_metastore;
-  AioFile<ImageCtx> m_event_file;
-  AioFile<ImageCtx> m_block_file;
+  SyncFile<ImageCtx> m_event_file;
+  SyncFile<ImageCtx> m_block_file;
 
   mutable Mutex m_lock;
   uint64_t m_tid = 0;

@@ -5,7 +5,8 @@
 #define CEPH_LIBRBD_CACHE_FILE_META_STORE
 
 #include "include/int_types.h"
-#include "librbd/cache/file/AioFile.h"
+#include "librbd/cache/file/SyncFile.h"
+#include "common/Mutex.h"
 
 struct Context;
 
@@ -36,7 +37,7 @@ private:
   ImageCtxT &m_image_ctx;
   uint32_t m_block_size;
 
-  AioFile<ImageCtx> m_aio_file;
+  SyncFile<ImageCtx> m_aio_file;
 
 };
 

@@ -85,7 +85,7 @@ void BlockGuard::create_block_ios(IOType io_type,
 
 int BlockGuard::detain(uint64_t block, BlockIO *block_io) {
   Mutex::Locker locker(m_lock);
-  ldout(m_cct, 20) << "block=" << block << ", "
+  ldout(m_cct, 1) << "block=" << block << ", "
                    << "free_slots=" << m_free_detained_blocks.size() << dendl;
   assert(block_io == nullptr || block == block_io->block);
 
@@ -107,7 +107,7 @@ int BlockGuard::detain(uint64_t block, BlockIO *block_io) {
     return 1;
   } else {
     if (m_free_detained_blocks.empty()) {
-      ldout(m_cct, 20) << "no free detained block cells" << dendl;
+      ldout(m_cct, 1) << "no free detained block cells" << dendl;
       return -ENOMEM;
     }
 
@@ -129,7 +129,7 @@ int BlockGuard::release(uint64_t block, BlockIOs *block_ios) {
   assert(detained_block_it != m_detained_blocks.end());
 
   auto &detained_block = *detained_block_it;
-  ldout(m_cct, 20) << "block=" << block << ", "
+  ldout(m_cct, 1) << "block=" << block << ", "
                    << "pending_ios="
                    << (detained_block.block_ios.empty() ?
                         0 : detained_block.block_ios.size()) << ", "

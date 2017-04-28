@@ -6,7 +6,7 @@
 
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
-#include "librbd/cache/file/AioFile.h"
+#include "librbd/cache/file/SyncFile.h"
 #include <vector>
 
 struct Context;
@@ -40,7 +40,7 @@ public:
 private:
   ImageCtxT &m_image_ctx;
   MetaStore<ImageCtxT> &m_metastore;
-  AioFile<ImageCtx> m_cache_file;
+  SyncFile<ImageCtx> m_cache_file;
 
 };
 

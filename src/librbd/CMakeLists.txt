@@ -41,7 +41,7 @@ set(librbd_internal_srcs
   cache/BlockGuard.cc
   cache/ImageWriteback.cc
   cache/FileImageCache.cc
-  cache/file/AioFile.cc
+  cache/file/SyncFile.cc
   cache/file/ImageStore.cc
   cache/file/JournalStore.cc
   cache/file/MetaStore.cc
