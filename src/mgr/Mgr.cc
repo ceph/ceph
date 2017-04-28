@@ -70,12 +70,19 @@ class MetadataUpdate : public Context
   DaemonStateIndex &daemon_state;
   DaemonKey key;
 
+  std::map<std::string, std::string> defaults;
+
 public:
   bufferlist outbl;
   std::string outs;
 
   MetadataUpdate(DaemonStateIndex &daemon_state_, const DaemonKey &key_)
     : daemon_state(daemon_state_), key(key_) {}
+
+  void set_default(const std::string &k, const std::string &v)
+  {
+    defaults[k] = v;
+  }
 
   void finish(int r) override
   {
@@ -93,6 +100,13 @@ public:
         }
 
         json_spirit::mObject daemon_meta = json_result.get_obj();
+
+        // Apply any defaults
+        for (const auto &i : defaults) {
+          if (daemon_meta.find(i.first) == daemon_meta.end()) {
+            daemon_meta[i.first] = i.second;
+          }
+        }
 
         DaemonStatePtr state;
         if (daemon_state.exists(key)) {
@@ -509,9 +523,6 @@ void Mgr::handle_fs_map(MFSMap* m)
     bool update = false;
     if (daemon_state.exists(k)) {
       auto metadata = daemon_state.get(k);
-      // FIXME: nothing stopping old daemons being here, they won't have
-      // addr: need to handle case of pre-ceph-mgr daemons that don't have
-      // the fields we expect
       if (metadata->metadata.empty() ||
 	  metadata->metadata.count("addr") == 0) {
         update = true;
@@ -531,6 +542,11 @@ void Mgr::handle_fs_map(MFSMap* m)
     if (update) {
       daemon_state.notify_updating(k);
       auto c = new MetadataUpdate(daemon_state, k);
+
+      // Older MDS daemons don't have addr in the metadata, so
+      // fake it if the returned metadata doesn't have the field.
+      c->set_default("addr", stringify(info.addr));
+
       std::ostringstream cmd;
       cmd << "{\"prefix\": \"mds metadata\", \"who\": \""
           << info.name << "\"}";
