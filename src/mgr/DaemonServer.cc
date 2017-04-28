@@ -469,7 +469,32 @@ bool DaemonServer::handle_command(MCommand *m)
                                               ARRAY_SIZE(mgr_commands));
   _generate_command_map(cmdmap, param_str_map);
   if (!mgr_cmd) {
-    return _reply(m, -EINVAL, "command not supported", odata);
+    // fall back to registered python handlers
+    MgrPyModule *handler = nullptr;
+    auto py_commands = py_modules.get_commands();
+    for (const auto &pyc : py_commands) {
+      auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
+      dout(1) << "pyc_prefix: '" << pyc_prefix << "'" << dendl;
+      if (pyc_prefix == prefix) {
+        handler = pyc.handler;
+        break;
+      }
+    }
+
+    if (handler == nullptr) {
+      ss << "No handler found for '" << prefix << "'";
+      dout(4) << "No handler found for '" << prefix << "'" << dendl;
+      return _reply(m, -EINVAL, ss.str(), odata);
+    }
+
+    // FIXME: go run this python part in another thread, not inline
+    // with a ms_dispatch, so that the python part can block if it
+    // wants to.
+    dout(4) << "passing through " << cmdmap.size() << dendl;
+    stringstream ds;
+    r = handler->handle_command(cmdmap, &ds, &ss);
+    odata.append(ds);
+    return _reply(m, 0, ss.str(), odata);
   }
 
   // validate user's permissions for requested command
@@ -628,35 +653,7 @@ bool DaemonServer::handle_command(MCommand *m)
   }
   if (r != -EOPNOTSUPP)
       return _reply(m, r, ss.str(), odata);
-  // fall back to registered python handlers
-  else {
-    // Let's find you a handler!
-    MgrPyModule *handler = nullptr;
-    auto py_commands = py_modules.get_commands();
-    for (const auto &pyc : py_commands) {
-      auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
-      dout(1) << "pyc_prefix: '" << pyc_prefix << "'" << dendl;
-      if (pyc_prefix == prefix) {
-        handler = pyc.handler;
-        break;
-      }
-    }
-
-    if (handler == nullptr) {
-      ss << "No handler found for '" << prefix << "'";
-      dout(4) << "No handler found for '" << prefix << "'" << dendl;
-      return _reply(m, -EINVAL, ss.str(), odata);
-    }
-
-    // FIXME: go run this python part in another thread, not inline
-    // with a ms_dispatch, so that the python part can block if it
-    // wants to.
-    dout(4) << "passing through " << cmdmap.size() << dendl;
-    stringstream ds;
-    r = handler->handle_command(cmdmap, &ds, &ss);
-    odata.append(ds);
-    return _reply(m, 0, ss.str(), odata);
-  }
+  return true;
 }
 
 bool DaemonServer::_reply(MCommand* m,
