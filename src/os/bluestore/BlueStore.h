@@ -988,7 +988,6 @@ public:
     std::atomic<int> flushing_count = {0};
     std::mutex flush_lock;  ///< protect flush_txns
     std::condition_variable flush_cond;   ///< wait here for uncommitted txns
-    set<TransContext*> flush_txns;        ///< unapplied txns
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_meta_other::string& k)
@@ -1635,7 +1634,7 @@ public:
     void discard() override {
       // Note that we may have txc's in flight when the parent Sequencer
       // goes away.  Reflect this with zombie==registered==true and let
-      // _osr_reap_done or _osr_drain_all clean up later.
+      // _osr_drain_all clean up later.
       assert(!zombie);
       zombie = true;
       parent = nullptr;
@@ -1961,7 +1960,6 @@ private:
   void _txc_finish(TransContext *txc);
   void _txc_release_alloc(TransContext *txc);
 
-  bool _osr_reap_done(OpSequencer *osr);
   void _osr_drain_preceding(TransContext *txc);
   void _osr_drain_all();
   void _osr_unregister_all();
