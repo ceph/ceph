@@ -184,6 +184,15 @@ void mirror_image_status_cpp_to_c(const librbd::mirror_image_status_t &cpp_statu
   c_status->up = cpp_status.up;
 }
 
+void trash_image_info_cpp_to_c(const librbd::trash_image_info_t &cpp_info,
+                               rbd_trash_image_info_t *c_info) {
+  c_info->id = strdup(cpp_info.id.c_str());
+  c_info->name = strdup(cpp_info.name.c_str());
+  c_info->source = cpp_info.source;
+  c_info->deletion_time = cpp_info.deletion_time;
+  c_info->deferment_end_time = cpp_info.deferment_end_time;
+}
+
 struct C_MirrorImageGetInfo : public Context {
     rbd_mirror_image_info_t *mirror_image_info;
   Context *on_finish;
@@ -549,6 +558,10 @@ namespace librbd {
                                delay);
     tracepoint(librbd, trash_move_exit, r);
     return r;
+  }
+
+  int RBD::trash_get(IoCtx &io_ctx, const char *id, trash_image_info_t *info) {
+    return librbd::trash_get(io_ctx, id, info);
   }
 
   int RBD::trash_list(IoCtx &io_ctx, vector<trash_image_info_t> &entries) {
@@ -2295,6 +2308,26 @@ extern "C" int rbd_trash_move(rados_ioctx_t p, const char *name,
   return r;
 }
 
+extern "C" int rbd_trash_get(rados_ioctx_t io, const char *id,
+                             rbd_trash_image_info_t *info) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
+
+  librbd::trash_image_info_t cpp_info;
+  int r = librbd::trash_get(io_ctx, id, &cpp_info);
+  if (r < 0) {
+    return r;
+  }
+
+  trash_image_info_cpp_to_c(cpp_info, info);
+  return 0;
+}
+
+extern "C" void rbd_trash_get_cleanup(rbd_trash_image_info_t *info) {
+  free(info->id);
+  free(info->name);
+}
+
 extern "C" int rbd_trash_list(rados_ioctx_t p, rbd_trash_image_info_t *entries,
                               size_t *num_entries) {
   librados::IoCtx io_ctx;
@@ -2318,12 +2351,7 @@ extern "C" int rbd_trash_list(rados_ioctx_t p, rbd_trash_image_info_t *entries,
 
   int i=0;
   for (const auto &entry : cpp_entries) {
-    entries[i].id = strdup(entry.id.c_str());
-    entries[i].name = strdup(entry.name.c_str());
-    entries[i].source = entry.source;
-    entries[i].deletion_time = entry.deletion_time;
-    entries[i].deferment_end_time = entry.deferment_end_time;
-    i++;
+    trash_image_info_cpp_to_c(entry, &entries[i++]);
   }
   *num_entries = cpp_entries.size();
 
@@ -2333,8 +2361,7 @@ extern "C" int rbd_trash_list(rados_ioctx_t p, rbd_trash_image_info_t *entries,
 extern "C" void rbd_trash_list_cleanup(rbd_trash_image_info_t *entries,
                                        size_t num_entries) {
   for (size_t i=0; i < num_entries; i++) {
-    free(entries[i].id);
-    free(entries[i].name);
+    rbd_trash_get_cleanup(&entries[i]);
   }
 }
 

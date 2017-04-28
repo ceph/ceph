@@ -1501,6 +1501,21 @@ class TestTrash(object):
         RBD().trash_move(ioctx, image_name, 0)
         RBD().trash_remove(ioctx, image_id)
 
+    def test_get(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        RBD().trash_move(ioctx, image_name, 1000)
+
+        info = RBD().trash_get(ioctx, image_id)
+        eq(image_id, info['id'])
+        eq(image_name, info['name'])
+        eq('USER', info['source'])
+        assert(info['deferment_end_time'] > info['deletion_time'])
+
+        RBD().trash_remove(ioctx, image_id, True)
+
     def test_list(self):
         create_image()
         with Image(ioctx, image_name) as image:

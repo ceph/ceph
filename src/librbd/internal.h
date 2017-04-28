@@ -143,8 +143,10 @@ namespace librbd {
   int remove(librados::IoCtx& io_ctx, const std::string &image_name,
              const std::string &image_id, ProgressContext& prog_ctx,
              bool force=false, bool from_trash_remove=false);
+
   int trash_move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
                  const std::string &image_name, uint64_t delay);
+  int trash_get(IoCtx &io_ctx, const std::string &id, trash_image_info_t *info);
   int trash_list(librados::IoCtx &io_ctx,
                  std::vector<trash_image_info_t> &entries);
   int trash_remove(librados::IoCtx &io_ctx, const std::string &image_id,

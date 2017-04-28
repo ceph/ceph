@@ -1433,6 +1433,28 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
+  int trash_get(IoCtx &io_ctx, const std::string &id,
+                trash_image_info_t *info) {
+    CephContext *cct((CephContext *)io_ctx.cct());
+    ldout(cct, 20) << __func__ << " " << &io_ctx << dendl;
+
+    cls::rbd::TrashImageSpec spec;
+    int r = cls_client::trash_get(&io_ctx, id, &spec);
+    if (r == -ENOENT) {
+      return r;
+    } else if (r < 0) {
+      lderr(cct) << "error retrieving trash entry: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    rbd_trash_image_source_t source = static_cast<rbd_trash_image_source_t>(
+      spec.source);
+    *info = trash_image_info_t{id, spec.name, source, spec.deletion_time.sec(),
+                               spec.deferment_end_time.sec()};
+    return 0;
+  }
+
   int trash_list(IoCtx &io_ctx, vector<trash_image_info_t> &entries) {
     CephContext *cct((CephContext *)io_ctx.cct());
     ldout(cct, 20) << "trash_list " << &io_ctx << dendl;
