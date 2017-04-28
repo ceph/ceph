@@ -884,6 +884,51 @@ AWSv4Completer::ChunkMeta::create_next(ChunkMeta&& old,
                         semicolon_pos + 83);
 }
 
+std::string
+AWSv4Completer::calc_chunk_signature(const std::string& payload_hash) const
+{
+  if (!signing_key) {
+    return std::string();
+  }
+
+  std::string string_to_sign = "AWS4-HMAC-SHA256-PAYLOAD\n";
+
+  string_to_sign.append(date + "\n");
+  string_to_sign.append(credential_scope + "\n");
+  string_to_sign.append(seed_signature + "\n");
+  string_to_sign.append(std::string(AWS4_EMPTY_PAYLOAD_HASH) + "\n");
+  string_to_sign.append(payload_hash);
+
+  dout(20) << "AWSv4Completer: string_to_sign=\n" << string_to_sign << dendl;
+  /* new chunk signature */
+  const auto sighex = buf_to_hex(calc_hmac_sha256(*signing_key,
+                                                  string_to_sign));
+  /* FIXME(rzarzynski): std::string here is really unnecessary. */
+  return std::string(sighex.data(), sighex.size() - 1);
+}
+
+
+bool AWSv4Completer::is_signature_mismatched()
+{
+  /* The validity of previous chunk can be verified only after getting meta-
+   * data of the next one. */
+  const auto payload_hash = calc_hash_sha256_restart_stream(&sha256_hash);
+  const auto calc_signature = calc_chunk_signature(payload_hash);
+
+  if (chunk_meta.get_signature() != calc_signature) {
+    dout(20) << "AWSv4Completer: chunk signature mismatch" << dendl;
+    dout(20) << "AWSv4Completer: declared signature="
+             << chunk_meta.get_signature() << dendl;
+    dout(20) << "AWSv4Completer: calculated signature="
+             << calc_signature << dendl;
+
+    return true;
+  } else {
+    seed_signature = chunk_meta.get_signature();
+    return false;
+  }
+}
+
 size_t AWSv4Completer::recv_chunked(char* const buf, const size_t buf_max)
 {
   /* Buffer stores only parsed stream. Raw values reflect the stream
@@ -891,10 +936,16 @@ size_t AWSv4Completer::recv_chunked(char* const buf, const size_t buf_max)
   size_t buf_pos = 0;
 
   if (chunk_meta.is_new_chunk_in_stream(stream_pos)) {
+    /* Verify signature of the previous chunk. We aren't doing that for new
+     * one as the procedure requires calculation of payload hash. This code
+     * won't be triggered for the last, zero-length chunk. Instead, is will
+     * be checked in the complete() method.  */
+    if (stream_pos >= ChunkMeta::META_MAX_SIZE && is_signature_mismatched()) {
+      throw rgw::io::Exception(ERR_SIGNATURE_NO_MATCH, std::system_category());
+    }
+
     /* We don't have metadata for this range. This means a new chunk, so we
      * need to parse a fresh portion of the stream. Let's start. */
-    dout(20) << "AWSv4Completer: -- parsing a new chunk" << dendl;
-
     size_t to_extract = parsing_buf.capacity() - parsing_buf.size();
     do {
       const size_t orig_size = parsing_buf.size();
@@ -919,10 +970,6 @@ size_t AWSv4Completer::recv_chunked(char* const buf, const size_t buf_max)
      * can be chunk's data plus possibly beginning of next chunks' metadata. */
     parsing_buf.erase(std::begin(parsing_buf),
                       std::begin(parsing_buf) + consumed);
-
-    /* The validity of previous chunk can be verified only after getting meta-
-     * data of the next one. */
-    /* TODO(rzarzynski): implement chunk's signature verification. */
   }
 
   size_t to_extract = \
@@ -939,6 +986,8 @@ size_t AWSv4Completer::recv_chunked(char* const buf, const size_t buf_max)
     std::copy(std::begin(parsing_buf), data_end_iter, buf);
     parsing_buf.erase(std::begin(parsing_buf), data_end_iter);
 
+    calc_hash_sha256_update_stream(sha256_hash, buf, data_len);
+
     to_extract -= data_len;
     buf_pos += data_len;
   }
@@ -951,6 +1000,8 @@ size_t AWSv4Completer::recv_chunked(char* const buf, const size_t buf_max)
     if (received == 0) {
       break;
     }
+
+    calc_hash_sha256_update_stream(sha256_hash, buf + buf_pos, received);
 
     buf_pos += received;
     stream_pos += received;
@@ -983,12 +1034,12 @@ void AWSv4Completer::modify_request_state(req_state* const s_rw)
 
   s_rw->aws4_auth = std::unique_ptr<rgw_aws4_auth>(new rgw_aws4_auth);
 
-  s_rw->aws4_auth->date = std::move(date);
-  s_rw->aws4_auth->credential_scope = std::move(date);
+  s_rw->aws4_auth->date = date;
+  s_rw->aws4_auth->credential_scope = credential_scope;
 
   /* If we're here, the provided signature has been successfully validated
    * earlier. */
-  s_rw->aws4_auth->seed_signature = std::move(seed_signature);
+  s_rw->aws4_auth->seed_signature = seed_signature;
 
   if (signing_key) {
     s_rw->aws4_auth->signing_key = std::move(*signing_key);
@@ -1006,6 +1057,11 @@ void AWSv4Completer::modify_request_state(req_state* const s_rw)
 
 bool AWSv4Completer::complete()
 {
+  /* Now it's time to verify the signature of the last, zero-length chunk. */
+  if (aws4_auth_streaming_mode && is_signature_mismatched()) {
+    return false;
+  }
+
   if (!aws4_auth_needs_complete) {
     return true;
   }
