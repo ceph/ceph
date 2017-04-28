@@ -28,7 +28,8 @@ int create_image(librados::IoCtx& io_ctx, I *_image_ctx, const char *imgname,
   return librbd::create_v2(io_ctx, imgname, bid, size, order, features,
                            stripe_unit, stripe_count, journal_order,
                            journal_splay_width, journal_pool,
-                           non_primary_global_image_id, primary_mirror_uuid);
+                           non_primary_global_image_id, primary_mirror_uuid,
+                           false);
 }
 
 template <typename I>

@@ -1053,7 +1053,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 		uint64_t stripe_count, uint8_t journal_order,
                 uint8_t journal_splay_width, const std::string &journal_pool,
                 const std::string &non_primary_global_image_id,
-                const std::string &primary_mirror_uuid)
+                const std::string &primary_mirror_uuid,
+                bool negotiate_features)
   {
     ostringstream bid_ss;
     uint32_t extra;
@@ -1102,6 +1103,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       lderr(cct) << "error adding image to directory: " << cpp_strerror(r)
 		 << dendl;
       goto err_remove_id;
+    }
+
+    if (negotiate_features) {
+      uint64_t all_features = 0;
+      r = cls_client::get_all_features(&io_ctx, RBD_DIRECTORY, &all_features);
+      if (r < 0) {
+	ldout(cct, 10) << "error retrieving server supported features set: "
+		       << cpp_strerror(r) << dendl;
+      } else if ((features & all_features) != features) {
+	features &= all_features;
+	ldout(cct, 10) << "limiting default features set to server supported: "
+		       << features << dendl;
+      }
     }
 
     oss << RBD_DATA_PREFIX << id;
@@ -1243,10 +1257,19 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order)
   {
-    CephContext *cct = (CephContext *)io_ctx.cct();
-    bool old_format = cct->_conf->rbd_default_format == 1;
-    uint64_t features = old_format ? 0 : cct->_conf->rbd_default_features;
-    return create(io_ctx, imgname, size, old_format, features, order, 0, 0);
+    uint64_t order_ = *order;
+    ImageOptions opts;
+
+    int r = opts.set(RBD_IMAGE_OPTION_ORDER, order_);
+    assert(r == 0);
+
+    r = create(io_ctx, imgname, size, opts, "", "");
+
+    int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
+    assert(r1 == 0);
+    *order = order_;
+
+    return r;
   }
 
   int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -1294,10 +1317,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
     bool old_format = format == 1;
 
-    uint64_t features;
-    if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
-      features = old_format ? 0 : cct->_conf->rbd_default_features;
+    uint64_t features = 0;
+    bool negotiate_features = false;
+    if (!old_format && opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
+      features = cct->_conf->rbd_default_features;
+      negotiate_features = true;
     }
+
     uint64_t stripe_unit = 0;
     uint64_t stripe_count = 0;
     opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
@@ -1380,7 +1406,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       r = create_v2(io_ctx, imgname, bid, size, order, features, stripe_unit,
 		    stripe_count, journal_order, journal_splay_width,
                     journal_pool, non_primary_global_image_id,
-                    primary_mirror_uuid);
+                    primary_mirror_uuid, negotiate_features);
     }
 
     int r1 = opts.set(RBD_IMAGE_OPTION_ORDER, order);
@@ -1479,6 +1505,13 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 	return -ENOSYS;
       }
       use_p_features = false;
+    } else {
+      // inherit default features -- ensure layering is enabled
+      if ((cct->_conf->rbd_default_features & RBD_FEATURE_LAYERING) !=
+	     RBD_FEATURE_LAYERING) {
+	lderr(cct) << "clone image must support layering" << dendl;
+	return -EINVAL;
+      }
     }
 
     // make sure child doesn't already exist, in either format
