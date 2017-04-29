@@ -671,11 +671,12 @@ def daemonperf(childargs, sockpath):
         # 'list'?
         if arg in ['list', 'ls']:
             do_list = True;
-            continue;
+            continue
         # prio?
-        priority = prio_from_name(arg)
-        if priority is not None:
-            continue;
+        prio = prio_from_name(arg)
+        if prio is not None:
+            priority = prio
+            continue
         # statpats
         statpats = arg.split(',')
 
