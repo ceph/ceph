@@ -2254,8 +2254,9 @@ extern void calc_hash_sha256(const string& msg, string& dest);
 
 using ceph::crypto::SHA256;
 extern SHA256* calc_hash_sha256_open_stream();
-extern void    calc_hash_sha256_update_stream(SHA256 *hash, const char *msg, int len);
-extern string  calc_hash_sha256_close_stream(SHA256 **hash);
+extern void calc_hash_sha256_update_stream(SHA256 *hash, const char *msg, int len);
+extern std::string calc_hash_sha256_close_stream(SHA256 **hash);
+extern std::string calc_hash_sha256_restart_stream(SHA256 **phash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 

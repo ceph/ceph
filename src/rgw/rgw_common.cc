@@ -724,6 +724,14 @@ string calc_hash_sha256_close_stream(SHA256 **phash)
   return std::string(hex_str);
 }
 
+std::string calc_hash_sha256_restart_stream(SHA256 **phash)
+{
+  const auto hash = calc_hash_sha256_close_stream(phash);
+  *phash = calc_hash_sha256_open_stream();
+
+  return hash;
+}
+
 int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
 {
   char buf[size];
