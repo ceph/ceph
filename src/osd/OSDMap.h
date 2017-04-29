@@ -951,7 +951,7 @@ public:
     Formatter *f) const;
 
   string get_flag_string() const;
-  static string get_flag_string(unsigned flags);
+  string get_flag_string(unsigned flags) const;
   static void dump_erasure_code_profiles(
     const mempool::osdmap::map<string,map<string,string> > &profiles,
     Formatter *f);
