@@ -132,7 +132,7 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
       index = entry.id;
     }
 
-    CLS_LOG(0, "storing entry at %s", index.c_str());
+    CLS_LOG(20, "storing entry at %s", index.c_str());
 
 
     if (index > header.max_marker)
