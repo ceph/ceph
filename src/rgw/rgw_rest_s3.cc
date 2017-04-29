@@ -3780,7 +3780,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
           throw -ERR_NOT_IMPLEMENTED;
       }
 
-      const auto cmpl_factory = std::bind(AWSv4Completer::create_for_single_chunk,
+      const auto cmpl_factory = std::bind(AWSv4ComplSingle::create,
                                           s,
                                           std::placeholders::_1);
       return std::make_tuple(std::move(access_key_id),
@@ -3817,7 +3817,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       /* In the case of query string-based authentication there should be no
        * x-amz-content-sha256 header and the value "UNSIGNED-PAYLOAD" is used
        * for CanonReq. */
-      const auto cmpl_factory = std::bind(AWSv4Completer::create_for_multi_chunk,
+      const auto cmpl_factory = std::bind(AWSv4ComplMulti::create,
                                           s,
                                           std::move(date),
                                           std::move(credential_scope),
