@@ -132,25 +132,24 @@ void NetHandler::set_priority(int sd, int prio, int domain)
 #ifdef IPTOS_CLASS_CS6
   int iptos = IPTOS_CLASS_CS6;
   int r = -1;
-  if (domain == AF_INET) {
+  switch (domain) {
+  case AF_INET:
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-    if (r < 0) {
-      r = errno;
-      ldout(cct,0) << "couldn't set IP_TOS to " << iptos
-		   << ": " << cpp_strerror(r) << dendl;
-    }
-  } else if (domain == AF_INET6) {
+    break;
+  case AF_INET6:
     r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
-    if (r < 0) {
-      r = errno;
-      ldout(cct,0) << "couldn't set IPV6_TCLASS to " << iptos
-		   << ": " << cpp_strerror(r) << dendl;
-    }
-  } else {
+    break;
+  default:
     lderr(cct) << "couldn't set ToS of unknown family (" << domain << ")"
 	       << " to " << iptos << dendl;
     return;
   }
+  if (r < 0) {
+    r = errno;
+    ldout(cct,0) << "couldn't set TOS to " << iptos
+		 << ": " << cpp_strerror(r) << dendl;
+  }
+
 #endif	// IPTOS_CLASS_CS6
   // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
   // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
