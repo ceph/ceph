@@ -2035,7 +2035,7 @@ RGWRESTMgr::~RGWRESTMgr()
   delete default_mgr;
 }
 
-static int64_t parse_content_length(const char *content_length)
+int64_t parse_content_length(const char *content_length)
 {
   int64_t len = -1;
 

@@ -687,6 +687,7 @@ static inline void dump_header_if_nonempty(struct req_state* s,
 }
 
 extern void dump_content_length(struct req_state *s, uint64_t len);
+extern int64_t parse_content_length(const char *content_length);
 extern void dump_etag(struct req_state *s,
                       const boost::string_ref& etag,
                       bool quoted = false);

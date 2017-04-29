@@ -1021,6 +1021,21 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
 
 void AWSv4ComplMulti::modify_request_state(req_state* const s_rw)
 {
+  const char* const decoded_length = \
+    s_rw->info.env->get("HTTP_X_AMZ_DECODED_CONTENT_LENGTH");
+
+  if (!decoded_length) {
+    throw -EINVAL;
+  } else {
+    s_rw->length = decoded_length;
+    s_rw->content_length = parse_content_length(decoded_length);
+
+    if (s_rw->content_length < 0) {
+      ldout(cct, 10) << "negative AWSv4's content length, aborting" << dendl;
+      throw -EINVAL;
+    }
+  }
+
   /* Install the filter over rgw::io::RestfulClient. */
   AWS_AUTHv4_IO(s_rw)->add_filter(
     std::static_pointer_cast<io_base_t>(shared_from_this()));
