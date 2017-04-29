@@ -543,6 +543,8 @@ bool PyModules::get_config(const std::string &handle,
 
   const std::string global_key = config_prefix + handle + "." + key;
 
+  dout(4) << __func__ << "key: " << global_key << dendl;
+
   if (config_cache.count(global_key)) {
     *val = config_cache.at(global_key);
     return true;
