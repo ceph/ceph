@@ -923,25 +923,29 @@ void Pipe::set_socket_options()
     int r = -1;
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
-
-    if (peer_addr.get_family() == AF_INET) {
-      r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-      if (r < 0) {
-        r = -errno;
-        ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
-                           << ": " << cpp_strerror(r) << dendl;
-      }
-    } else if (peer_addr.get_family() == AF_INET6) {
-      r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
-      if (r < 0) {
-        r = -errno;
-        ldout(msgr->cct,0) << "couldn't set IPV6_TCLASS to " << iptos
-                           << ": " << cpp_strerror(r) << dendl;
-      }
+    int addr_family = 0;
+    if (!peer_addr.is_blank_ip()) {
+      addr_family = peer_addr.get_family();
     } else {
+      addr_family = msgr->get_myaddr().get_family();
+    }
+    switch (addr_family) {
+    case AF_INET:
+      r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
+      break;
+    case AF_INET6:
+      r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
+      break;
+    default:
       lderr(msgr->cct) << "couldn't set ToS of unknown family ("
-		       << peer_addr.get_family() << ")"
+		       << addr_family << ")"
 		       << " to " << iptos << dendl;
+      return;
+    }
+    if (r < 0) {
+      r = -errno;
+      ldout(msgr->cct,0) << "couldn't set TOS to " << iptos
+			 << ": " << cpp_strerror(r) << dendl;
     }
 #endif
     // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
