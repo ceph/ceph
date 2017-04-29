@@ -130,13 +130,20 @@ public:
 };
 
 
-/* TODO(rzarzynski): decompose the AWSv4Completer into two separate completers:
- * one for single chunk mode and second for streaming mode. */
-class AWSv4Completer : public rgw::auth::Completer,
-                       public rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>,
-                       public std::enable_shared_from_this<AWSv4Completer> {
-private:
+class AWSv4ComplMulti : public rgw::auth::Completer,
+                        public rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>,
+                        public std::enable_shared_from_this<AWSv4ComplMulti> {
   using io_base_t = rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>;
+  using signing_key_t = std::array<unsigned char,
+                                   CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>;
+
+  CephContext* const cct;
+
+  /* TODO(rzarzynski): move to boost::string_ref. This should be just fine
+   * as (all?) parameters here are actually views over req_info. */
+  const std::string date;
+  const std::string credential_scope;
+  const signing_key_t signing_key;
 
   class ChunkMeta {
     size_t data_offset_in_stream = 0;
@@ -185,77 +192,90 @@ private:
     /* Factory: parse a block of META_MAX_SIZE bytes and creates an object
      * representing non-first chunk in a stream. As the process is sequential
      * and depends on the previous chunk, caller must pass it. */
-    static std::pair<ChunkMeta, size_t>
-    create_next(ChunkMeta&& prev, const char* metabuf, size_t metabuf_len);
+    static std::pair<ChunkMeta, size_t> create_next(CephContext* cct,
+                                                    ChunkMeta&& prev,
+                                                    const char* metabuf,
+                                                    size_t metabuf_len);
   } chunk_meta;
 
+  size_t stream_pos;
   boost::container::static_vector<char, ChunkMeta::META_MAX_SIZE> parsing_buf;
-  SHA256* sha256_hash = nullptr;
+  SHA256* sha256_hash;
+  std::string prev_chunk_signature;
 
-  size_t stream_pos = 0;
-  const bool aws4_auth_needs_complete = true;
-  const bool aws4_auth_streaming_mode = false;
-
-  /* TODO(rzarzynski): move to boost::string_ref. This should be just fine
-   * as (all?) parameters here are actually views over req_info. */
-  std::string date;
-  std::string credential_scope;
-  std::string seed_signature;
-  boost::optional<std::array<unsigned char,
-                  CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>> signing_key;
-
-  /* TODO(rzarzynski): this won't be necessary after moving to filter-over-
-   * rgw::io::RestfulClient. */
-  const req_state* const s;
-
-  using signing_key_t = boost::optional<std::array<unsigned char,
-                                        CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>>;
-  AWSv4Completer(const req_state* const s,
-                 std::string date,
-                 std::string credential_scope,
-                 std::string seed_signature,
-                 const signing_key_t& signing_key)
+  AWSv4ComplMulti(const req_state* const s,
+                  std::string date,
+                  std::string credential_scope,
+                  std::string seed_signature,
+                  const signing_key_t& signing_key)
     : io_base_t(nullptr),
-      chunk_meta(ChunkMeta::create_first(seed_signature)),
-      sha256_hash(calc_hash_sha256_open_stream()),
-      aws4_auth_needs_complete(false),
-      aws4_auth_streaming_mode(true),
+      cct(s->cct),
       date(std::move(date)),
       credential_scope(std::move(credential_scope)),
-      seed_signature(std::move(seed_signature)),
       signing_key(signing_key),
-      s(s) {
-  }
 
-  AWSv4Completer(const req_state* const s)
-    : io_base_t(nullptr),
+      /* The evolving state. */
+      chunk_meta(ChunkMeta::create_first(seed_signature)),
+      stream_pos(0),
       sha256_hash(calc_hash_sha256_open_stream()),
-      s(s) {
+      prev_chunk_signature(std::move(seed_signature)) {
   }
 
   bool is_signature_mismatched();
   std::string calc_chunk_signature(const std::string& payload_hash) const;
-  size_t recv_chunked(char* buf, size_t max);
 
 public:
+  ~AWSv4ComplMulti() {
+    if (sha256_hash) {
+      calc_hash_sha256_close_stream(&sha256_hash);
+    }
+  }
+
   /* rgw::io::DecoratedRestfulClient. */
   size_t recv_body(char* buf, size_t max) override;
 
   /* rgw::auth::Completer. */
-  void modify_request_state(req_state* s) override;
+  void modify_request_state(req_state* s_rw) override;
   bool complete() override;
 
   /* Factories. */
-  static cmplptr_t
-  create_for_single_chunk(const req_state* s,
-                          const boost::optional<std::string>&);
+  static cmplptr_t create(const req_state* s,
+                          std::string date,
+                          std::string credential_scope,
+                          std::string seed_signature,
+                          const boost::optional<std::string>& secret_key);
 
-  static cmplptr_t
-  create_for_multi_chunk(const req_state* s,
-                         std::string date,
-                         std::string credential_scope,
-                         std::string seed_signature,
-                         const boost::optional<std::string>& secret_key);
+};
+
+class AWSv4ComplSingle : public rgw::auth::Completer,
+                         public rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>,
+                         public std::enable_shared_from_this<AWSv4ComplSingle> {
+  using io_base_t = rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>;
+
+  CephContext* const cct;
+  const char* const expected_request_payload_hash;
+  ceph::crypto::SHA256* sha256_hash = nullptr;
+
+  /* Defined in rgw_auth_s3.cc because of get_v4_exp_payload_hash(). */
+  AWSv4ComplSingle(const req_state* const s);
+
+public:
+  ~AWSv4ComplSingle() {
+    if (sha256_hash) {
+      calc_hash_sha256_close_stream(&sha256_hash);
+    }
+  }
+
+  /* rgw::io::DecoratedRestfulClient. */
+  size_t recv_body(char* buf, size_t max) override;
+
+  /* rgw::auth::Completer. */
+  void modify_request_state(req_state* s_rw) override;
+  bool complete() override;
+
+  /* Factories. */
+  static cmplptr_t create(const req_state* s,
+                          const boost::optional<std::string>&);
 
 };
 

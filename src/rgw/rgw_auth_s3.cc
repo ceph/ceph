@@ -811,12 +811,12 @@ std::string get_v4_signature(CephContext* const cct,
   return signature;
 }
 
-bool AWSv4Completer::ChunkMeta::is_new_chunk_in_stream(size_t stream_pos) const
+bool AWSv4ComplMulti::ChunkMeta::is_new_chunk_in_stream(size_t stream_pos) const
 {
   return stream_pos >= (data_offset_in_stream + data_length);
 }
 
-size_t AWSv4Completer::ChunkMeta::get_data_size(size_t stream_pos) const
+size_t AWSv4ComplMulti::ChunkMeta::get_data_size(size_t stream_pos) const
 {
   if (stream_pos > (data_offset_in_stream + data_length)) {
     /* Data in parsing_buf. */
@@ -826,16 +826,20 @@ size_t AWSv4Completer::ChunkMeta::get_data_size(size_t stream_pos) const
   }
 }
 
-std::pair<AWSv4Completer::ChunkMeta, size_t /* consumed */>
-AWSv4Completer::ChunkMeta::create_next(ChunkMeta&& old,
-                                       const char* const metabuf,
-                                       const size_t metabuf_len)
+
+/* AWSv4 completers begin. */
+std::pair<AWSv4ComplMulti::ChunkMeta, size_t /* consumed */>
+AWSv4ComplMulti::ChunkMeta::create_next(CephContext* const cct,
+                                        ChunkMeta&& old,
+                                        const char* const metabuf,
+                                        const size_t metabuf_len)
 {
   boost::string_ref metastr(metabuf, metabuf_len);
 
   const size_t semicolon_pos = metastr.find(";");
   if (semicolon_pos == boost::string_ref::npos) {
-    dout(20) << "AWSv4Completer cannot find the ';' separator" << dendl;
+    ldout(cct, 20) << "AWSv4ComplMulti cannot find the ';' separator"
+                   << dendl;
     throw rgw::io::Exception(EINVAL, std::system_category());
   }
 
@@ -843,7 +847,8 @@ AWSv4Completer::ChunkMeta::create_next(ChunkMeta&& old,
   /* strtoull ignores the "\r\n" sequence after each non-first chunk. */
   const size_t data_length = std::strtoull(metabuf, &data_field_end, 16);
   if (data_length == 0 && data_field_end == metabuf) {
-    dout(20) << "AWSv4Completer: cannot parse the data size" << dendl;
+    ldout(cct, 20) << "AWSv4ComplMulti: cannot parse the data size"
+                   << dendl;
     throw rgw::io::Exception(EINVAL, std::system_category());
   }
 
@@ -851,21 +856,24 @@ AWSv4Completer::ChunkMeta::create_next(ChunkMeta&& old,
   const auto signature_part = metastr.substr(semicolon_pos + 1);
   const size_t eq_sign_pos = signature_part.find("=");
   if (eq_sign_pos == boost::string_ref::npos) {
-    dout(20) << "AWSv4Completer: cannot find the '=' separator" << dendl;
+    ldout(cct, 20) << "AWSv4ComplMulti: cannot find the '=' separator"
+                   << dendl;
     throw rgw::io::Exception(EINVAL, std::system_category());
   }
 
   /* OK, we have at least the beginning of a signature. */
   const size_t data_sep_pos = signature_part.find("\r\n");
   if (data_sep_pos == boost::string_ref::npos) {
-    dout(20) << "AWSv4Completer: no new line at signature end" << dendl;
+    ldout(cct, 20) << "AWSv4ComplMulti: no new line at signature end"
+                   << dendl;
     throw rgw::io::Exception(EINVAL, std::system_category());
   }
 
   const auto signature = \
     signature_part.substr(eq_sign_pos + 1, data_sep_pos - 1 - eq_sign_pos);
   if (signature.length() != SIG_SIZE) {
-    dout(20) << "AWSv4Completer: signature.length() != 64" << dendl;
+    ldout(cct, 20) << "AWSv4ComplMulti: signature.length() != 64"
+                   << dendl;
     throw rgw::io::Exception(EINVAL, std::system_category());
   }
 
@@ -873,10 +881,10 @@ AWSv4Completer::ChunkMeta::create_next(ChunkMeta&& old,
     + semicolon_pos + strlen(";") + data_sep_pos  + strlen("\r\n")
     + old.data_offset_in_stream + old.data_length;
 
-  dout(20) << "parsed new chunk; signature=" << signature
-           << ", data_length=" << data_length
-           << ", data_starts_in_stream=" << data_starts_in_stream
-           << dendl;
+  ldout(cct, 20) << "parsed new chunk; signature=" << signature
+                 << ", data_length=" << data_length
+                 << ", data_starts_in_stream=" << data_starts_in_stream
+                 << dendl;
 
   return std::make_pair(ChunkMeta(data_starts_in_stream,
                                   data_length,
@@ -885,30 +893,28 @@ AWSv4Completer::ChunkMeta::create_next(ChunkMeta&& old,
 }
 
 std::string
-AWSv4Completer::calc_chunk_signature(const std::string& payload_hash) const
+AWSv4ComplMulti::calc_chunk_signature(const std::string& payload_hash) const
 {
-  if (!signing_key) {
-    return std::string();
-  }
-
   std::string string_to_sign = "AWS4-HMAC-SHA256-PAYLOAD\n";
 
   string_to_sign.append(date + "\n");
   string_to_sign.append(credential_scope + "\n");
-  string_to_sign.append(seed_signature + "\n");
+  string_to_sign.append(prev_chunk_signature + "\n");
   string_to_sign.append(std::string(AWS4_EMPTY_PAYLOAD_HASH) + "\n");
   string_to_sign.append(payload_hash);
 
-  dout(20) << "AWSv4Completer: string_to_sign=\n" << string_to_sign << dendl;
+  ldout(cct, 20) << "AWSv4ComplMulti: string_to_sign=\n" << string_to_sign
+                 << dendl;
+
   /* new chunk signature */
-  const auto sighex = buf_to_hex(calc_hmac_sha256(*signing_key,
+  const auto sighex = buf_to_hex(calc_hmac_sha256(signing_key,
                                                   string_to_sign));
   /* FIXME(rzarzynski): std::string here is really unnecessary. */
   return std::string(sighex.data(), sighex.size() - 1);
 }
 
 
-bool AWSv4Completer::is_signature_mismatched()
+bool AWSv4ComplMulti::is_signature_mismatched()
 {
   /* The validity of previous chunk can be verified only after getting meta-
    * data of the next one. */
@@ -916,20 +922,21 @@ bool AWSv4Completer::is_signature_mismatched()
   const auto calc_signature = calc_chunk_signature(payload_hash);
 
   if (chunk_meta.get_signature() != calc_signature) {
-    dout(20) << "AWSv4Completer: chunk signature mismatch" << dendl;
-    dout(20) << "AWSv4Completer: declared signature="
-             << chunk_meta.get_signature() << dendl;
-    dout(20) << "AWSv4Completer: calculated signature="
-             << calc_signature << dendl;
+    ldout(cct, 20) << "AWSv4ComplMulti: ERROR: chunk signature mismatch"
+                   << dendl;
+    ldout(cct, 20) << "AWSv4ComplMulti: declared signature="
+                   << chunk_meta.get_signature() << dendl;
+    ldout(cct, 20) << "AWSv4ComplMulti: calculated signature="
+                   << calc_signature << dendl;
 
     return true;
   } else {
-    seed_signature = chunk_meta.get_signature();
+    prev_chunk_signature = chunk_meta.get_signature();
     return false;
   }
 }
 
-size_t AWSv4Completer::recv_chunked(char* const buf, const size_t buf_max)
+size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
 {
   /* Buffer stores only parsed stream. Raw values reflect the stream
    * we're getting from a client. */
@@ -963,8 +970,8 @@ size_t AWSv4Completer::recv_chunked(char* const buf, const size_t buf_max)
 
     size_t consumed;
     std::tie(chunk_meta, consumed) = \
-      ChunkMeta::create_next(std::move(chunk_meta),
-                                 parsing_buf.data(), parsing_buf.size());
+      ChunkMeta::create_next(cct, std::move(chunk_meta),
+                             parsing_buf.data(), parsing_buf.size());
 
     /* We can drop the bytes consumed during metadata parsing. The remainder
      * can be chunk's data plus possibly beginning of next chunks' metadata. */
@@ -1008,58 +1015,71 @@ size_t AWSv4Completer::recv_chunked(char* const buf, const size_t buf_max)
     to_extract -= received;
   }
 
-  dout(20) << "AWSv4Completer: filled=" << buf_pos << dendl;
+  dout(20) << "AWSv4ComplMulti: filled=" << buf_pos << dendl;
   return buf_pos;
 }
 
-size_t AWSv4Completer::recv_body(char* const buf, const size_t max)
+void AWSv4ComplMulti::modify_request_state(req_state* const s_rw)
 {
-  if (aws4_auth_streaming_mode) {
-    return recv_chunked(buf, max);
-  }
-
-  const auto received = io_base_t::recv_body(buf, max);
-
-  if (sha256_hash) {
-    calc_hash_sha256_update_stream(sha256_hash, buf, received);
-  }
-
-  return received;
+  /* Install the filter over rgw::io::RestfulClient. */
+  AWS_AUTHv4_IO(s_rw)->add_filter(
+    std::static_pointer_cast<io_base_t>(shared_from_this()));
 }
 
-void AWSv4Completer::modify_request_state(req_state* const s_rw)
+bool AWSv4ComplMulti::complete()
 {
-  if (!signing_key && aws4_auth_streaming_mode) {
+  /* Now it's time to verify the signature of the last, zero-length chunk. */
+  if (is_signature_mismatched()) {
+    ldout(cct, 10) << "ERROR: signature of last chunk does not match"
+                   << dendl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
+rgw::auth::Completer::cmplptr_t
+AWSv4ComplMulti::create(const req_state* const s,
+                        std::string date,
+                        std::string credential_scope,
+                        std::string seed_signature,
+                        const boost::optional<std::string>& secret_key)
+{
+  if (!secret_key) {
     /* Some external authorizers (like Keystone) aren't fully compliant with
      * AWSv4. They do not provide the secret_key which is necessary to handle
      * the streamed upload. */
     throw -ERR_NOT_IMPLEMENTED;
   }
 
+  const auto signing_key = \
+    rgw::auth::s3::get_v4_signing_key(s->cct, credential_scope, *secret_key);
+
+  return rgw::auth::Completer::cmplptr_t(
+    new AWSv4ComplMulti(s,
+                        std::move(date),
+                        std::move(credential_scope),
+                        std::move(seed_signature),
+                        signing_key));
+}
+
+size_t AWSv4ComplSingle::recv_body(char* const buf, const size_t max)
+{
+  const auto received = io_base_t::recv_body(buf, max);
+  calc_hash_sha256_update_stream(sha256_hash, buf, received);
+
+  return received;
+}
+
+void AWSv4ComplSingle::modify_request_state(req_state* const s_rw)
+{
   /* Install the filter over rgw::io::RestfulClient. */
   AWS_AUTHv4_IO(s_rw)->add_filter(
     std::static_pointer_cast<io_base_t>(shared_from_this()));
 }
 
-bool AWSv4Completer::complete()
+bool AWSv4ComplSingle::complete()
 {
-  /* Now it's time to verify the signature of the last, zero-length chunk. */
-  if (aws4_auth_streaming_mode && is_signature_mismatched()) {
-    return false;
-  }
-
-  if (!aws4_auth_needs_complete) {
-    return true;
-  }
-
-  /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
-   * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
-   * header lets get the information very early -- before seeing first byte
-   * of HTTP body. As a consequence, we can decouple Signature verification
-   * from payload's fingerprint check. */
-  const char *expected_request_payload_hash = \
-    rgw::auth::s3::get_v4_exp_payload_hash(s->info);
-
   /* The completer is only for the cases where signed payload has been
    * requested. It won't be used, for instance, during the query string-based
    * authentication. */
@@ -1069,43 +1089,28 @@ bool AWSv4Completer::complete()
   if (payload_hash.compare(expected_request_payload_hash) == 0) {
     return true;
   } else {
-    ldout(s->cct, 10) << "ERROR: x-amz-content-sha256 does not match"
-                      << dendl;
-    ldout(s->cct, 10) << "ERROR:   grab_aws4_sha256_hash()="
-                      << payload_hash << dendl;
-    ldout(s->cct, 10) << "ERROR:   expected_request_payload_hash="
-                      << expected_request_payload_hash << dendl;
+    ldout(cct, 10) << "ERROR: x-amz-content-sha256 does not match"
+                   << dendl;
+    ldout(cct, 10) << "ERROR:   grab_aws4_sha256_hash()="
+                   << payload_hash << dendl;
+    ldout(cct, 10) << "ERROR:   expected_request_payload_hash="
+                   << expected_request_payload_hash << dendl;
     return false;
   }
 }
 
-rgw::auth::Completer::cmplptr_t
-AWSv4Completer::create_for_single_chunk(const req_state* const s,
-                                        const boost::optional<std::string>&)
-{
-  return rgw::auth::Completer::cmplptr_t(new AWSv4Completer(s));
+AWSv4ComplSingle::AWSv4ComplSingle(const req_state* const s)
+  : io_base_t(nullptr),
+    cct(s->cct),
+    expected_request_payload_hash(get_v4_exp_payload_hash(s->info)),
+    sha256_hash(calc_hash_sha256_open_stream()) {
 }
 
 rgw::auth::Completer::cmplptr_t
-AWSv4Completer::create_for_multi_chunk(const req_state* const s,
-                                       std::string date,
-                                       std::string credential_scope,
-                                       std::string seed_signature,
-                                       const boost::optional<std::string>& secret_key)
+AWSv4ComplSingle::create(const req_state* const s,
+                         const boost::optional<std::string>&)
 {
-  boost::optional<std::array<unsigned char,
-                  CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>> signing_key;
-  if (secret_key) {
-    signing_key = rgw::auth::s3::get_v4_signing_key(s->cct, credential_scope,
-                                                    *secret_key);
-  }
-
-  return rgw::auth::Completer::cmplptr_t(
-    new AWSv4Completer(s,
-                       std::move(date),
-                       std::move(credential_scope),
-                       std::move(seed_signature),
-                       signing_key));
+  return rgw::auth::Completer::cmplptr_t(new AWSv4ComplSingle(s));
 }
 
 } /* namespace s3 */
