@@ -36,7 +36,7 @@ class CrushCompiler {
 		    ostream &out);
   int decompile_choose_arg_map(crush_choose_arg_map arg_map,
 			       ostream &out);
-  int decompile_choose_args(std::pair<const long unsigned int, crush_choose_arg_map> &i,
+  int decompile_choose_args(const std::pair<const long unsigned int, crush_choose_arg_map> &i,
 			    ostream &out);
   int decompile_bucket_impl(int i, ostream &out);
   int decompile_bucket(int cur,
