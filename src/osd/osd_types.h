@@ -3986,7 +3986,7 @@ struct object_info_t {
 
   flag_t flags;
 
-  static string get_flag_string(flag_t flags) {
+  string get_flag_string(flag_t flags) const {
     string s;
     if (flags & FLAG_LOST)
       s += "|lost";
