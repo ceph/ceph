@@ -496,7 +496,7 @@ int cls_rgw_lc_list(librados::IoCtx& io_ctx, string& oid,
 /* resharding */
 void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry);
 int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& marker, uint32_t max,
-                         list<cls_rgw_reshard_entry>& entries, bool& is_truncated);
+                         list<cls_rgw_reshard_entry>& entries, bool* is_truncated);
 int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const string& oid, cls_rgw_reshard_entry& entry);
 int cls_rgw_reshard_get_head(librados::IoCtx& io_ctx, const string& oid, cls_rgw_reshard_entry& entry);
 void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry);

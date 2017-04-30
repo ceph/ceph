@@ -83,7 +83,7 @@ int RGWReshard::list(string& marker, uint32_t max, std::list<cls_rgw_reshard_ent
   if (ret < 0)
     return ret;
 
-  ret =  cls_rgw_reshard_list(io_ctx, reshard_oid, marker, max, entries, is_truncated);
+  ret =  cls_rgw_reshard_list(io_ctx, reshard_oid, marker, max, entries, &is_truncated);
 
   l.unlock(&io_ctx, reshard_oid);
   return ret;

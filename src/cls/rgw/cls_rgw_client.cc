@@ -789,7 +789,7 @@ void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_resha
 }
 
 int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& marker, uint32_t max,
-                         list<cls_rgw_reshard_entry>& entries, bool& is_truncated)
+                         list<cls_rgw_reshard_entry>& entries, bool* is_truncated)
 {
   bufferlist in, out;
   struct cls_rgw_reshard_list_op call;
@@ -809,7 +809,7 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& mar
   }
 
   entries.swap(op_ret.entries);
-  is_truncated = op_ret.is_truncated;
+  *is_truncated = op_ret.is_truncated;
 
   return 0;
 }
