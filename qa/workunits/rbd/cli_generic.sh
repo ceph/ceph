@@ -414,7 +414,7 @@ test_trash() {
     rbd ls | wc -l | grep 1
     rbd ls -l | grep 'test2.*2.*'
 
-    rbd trash mv test2 --delay 10
+    rbd trash mv test2 --delay 3600
     rbd trash ls | grep test2
     rbd trash ls | wc -l | grep 1
     rbd trash ls -l | grep 'test2.*USER.*protected until'
