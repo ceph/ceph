@@ -8,6 +8,7 @@ bin/ceph-crush-location
 bin/ceph-debugpack
 bin/ceph-dencoder
 bin/ceph-detect-init
+bin/ceph-fuse
 bin/ceph-kvstore-tool
 bin/ceph-mds
 bin/ceph-mgr
@@ -39,6 +40,7 @@ bin/radosgw-admin
 bin/radosgw-object-expirer
 bin/radosgw-token
 bin/rbd
+bin/rbd-fuse
 bin/rbd-mirror
 bin/rbd-replay
 bin/rbd-replay-many
@@ -75,6 +77,9 @@ lib/ceph/compressor/libceph_zlib.so.2.0.0
 lib/ceph/compressor/libceph_zstd.so
 lib/ceph/compressor/libceph_zstd.so.2
 lib/ceph/compressor/libceph_zstd.so.2.0.0
+lib/ceph/crypto/libceph_crypto_isal.so
+lib/ceph/crypto/libceph_crypto_isal.so.1
+lib/ceph/crypto/libceph_crypto_isal.so.1.0.0
 lib/ceph/erasure-code/libec_isa.so
 lib/ceph/erasure-code/libec_isa.so.2
 lib/ceph/erasure-code/libec_isa.so.2.14.0
@@ -88,6 +93,7 @@ lib/ceph/erasure-code/libec_shec_generic.so
 lib/ceph/erasure-code/libec_shec_sse3.so
 lib/ceph/erasure-code/libec_shec_sse4.so
 lib/ceph/libceph-common.so
+lib/ceph/libceph-common.so.0
 lib/ceph/mgr/.gitignore
 lib/ceph/mgr/fsstatus/__init__.py
 lib/ceph/mgr/fsstatus/module.py
@@ -127,7 +133,7 @@ lib/libradosstriper.so.1
 lib/libradosstriper.so.1.0.0
 lib/librbd.so
 lib/librbd.so.1
-lib/librbd.so.1.0.0
+lib/librbd.so.1.12.0
 lib/librgw.so
 lib/librgw.so.2
 lib/librgw.so.2.0.0
@@ -149,6 +155,8 @@ lib/librgw.so.2.0.0
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/centos/__init__.pyc
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/debian/__init__.py
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/debian/__init__.pyc
+%%PYTHON_SITELIBDIR%%/ceph_detect_init/docker/__init__.py
+%%PYTHON_SITELIBDIR%%/ceph_detect_init/docker/__init__.pyc
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/exc.py
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/exc.pyc
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/fedora/__init__.py
@@ -159,6 +167,8 @@ lib/librgw.so.2.0.0
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/gentoo/__init__.pyc
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/main.py
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/main.pyc
+%%PYTHON_SITELIBDIR%%/ceph_detect_init/oraclevms/__init__.py
+%%PYTHON_SITELIBDIR%%/ceph_detect_init/oraclevms/__init__.pyc
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/rhel/__init__.py
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/rhel/__init__.pyc
 %%PYTHON_SITELIBDIR%%/ceph_detect_init/suse/__init__.py
@@ -243,6 +253,7 @@ man/man8/ceph-dencoder.8.gz
 man/man8/ceph-deploy.8.gz
 man/man8/ceph-detect-init.8.gz
 man/man8/ceph-disk.8.gz
+man/man8/ceph-fuse.8.gz
 man/man8/ceph-mds.8.gz
 man/man8/ceph-mon.8.gz
 man/man8/ceph-osd.8.gz
@@ -260,6 +271,7 @@ man/man8/osdmaptool.8.gz
 man/man8/rados.8.gz
 man/man8/radosgw-admin.8.gz
 man/man8/radosgw.8.gz
+man/man8/rbd-fuse.8.gz
 man/man8/rbd-mirror.8.gz
 man/man8/rbd-nbd.8.gz
 man/man8/rbd-replay-many.8.gz
@@ -269,15 +281,21 @@ man/man8/rbd.8.gz
 man/man8/rbdmap.8.gz
 sbin/ceph-create-keys
 sbin/ceph-disk
+sbin/mount.fuse.ceph
 %%DATADIR%%/id_rsa_drop.ceph.com
 %%DATADIR%%/id_rsa_drop.ceph.com.pub
 %%DATADIR%%/known_hosts_drop.ceph.com
 @dir /var/lib/ceph/bootstrap-mds
 @dir /var/lib/ceph/bootstrap-osd
+@dir /var/lib/ceph/bootstrap-rgw
+@dir /var/lib/ceph/bootstrap-mgr
 @dir /var/lib/ceph/mds
 @dir /var/lib/ceph/mon
 @dir /var/lib/ceph/osd
+@dir /var/lib/ceph/mgr
 @dir /var/lib/ceph/tmp
+@dir /var/lib/ceph/radosgw
 @dir /var/lib/ceph
 @dir /var/lib
 @dir /var/log/ceph
+@dir /var/run/ceph

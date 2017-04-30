@@ -2,7 +2,7 @@
 # $FreeBSD: head/net/ceph-devel/Makefile 437431 2017-04-01 11:59:18Z antoine $
 
 PORTNAME=	ceph
-DISTVERSION=	wip.v2017-2-14
+DISTVERSION=	wip.FreeBSD.201704
 CATEGORIES=	net
 PKGNAMESUFFIX=	-devel
 
@@ -43,28 +43,29 @@ RUN_DEPENDS=	\
 
 USE_GITHUB=	yes
 GH_ACCOUNT=	wjwithagen:DEFAULT
-GH_TUPLE+=	facebook:rocksdb:a0deec9:rocksdb/src/rocksdb
-GH_TUPLE+=	ceph:ceph-erasure-code-corpus:b5c8634:cepherasurecodecorpus/ceph-erasure-code-corpus
+GH_TUPLE+=	facebook:rocksdb:2.7.fb-4991-g9f2cc5:rocksdb/src/rocksdb
+GH_TUPLE+=	ceph:ceph-erasure-code-corpus:master:cepherasurecodecorpus/ceph-erasure-code-corpus
 GH_TUPLE+=	ceph:ceph-object-corpus:master:cephobjectcorpus/ceph-object-corpus
 GH_TUPLE+=	ceph:civetweb:v1.5-1809-g7f9f5d1:civetweb/src/civetweb
 GH_TUPLE+=	ceph:jerasure:v2-ceph:jerasure/src/erasure-code/jerasure/jerasure
 GH_TUPLE+=	ceph:gf-complete:v3-ceph:gfcomplete/src/erasure-code/jerasure/gf-complete
 GH_TUPLE+=	ceph:googletest:ceph-release-1.7.x:googletest/src/googletest
-GH_TUPLE+=	ceph:spdk:v1.2.0-39-g9322c25:spdk/src/spdk
+GH_TUPLE+=	ceph:spdk:v17.03-34-g5742e9b9:spdk/src/spdk
 GH_TUPLE+=	ceph:xxHash:v0.5.1-2-g1f40c65:xxHash/src/xxHash
 GH_TUPLE+=	ceph:isa-l:v2.16.0:isal/src/isa-l
-GH_TUPLE+=	ceph:lua:lua-5.3-ceph:lua/src/lua
+GH_TUPLE+=	ceph:lua:5.3.2-2-g1fce39c:lua/src/lua
 GH_TUPLE+=	ceph:Beast:999e2fa:Beast/src/Beast
 GH_TUPLE+=	boostorg:boost:boost-1.61.0-275-g1790aff:boost/src/boost
-GH_TUPLE+=	ceph:dpdk:a38e5ec:dpd/src/dpd
+GH_TUPLE+=	ceph:dpdk:v16.11:dpd/src/dpd
 GH_TUPLE+=	facebook:zstd:v1.1.2:zstd/src/zstd
+GH_TUPLE+=	01org:isa-l_crypto:603529a:isalcrypto/src/crypto/isa-l/isa-l_crypto
 
 CMAKE_BUILD_TYPE=	Release
 CMAKE_ARGS=	\
 	-D ENABLE_GIT_VERSION:BOOL=OFF \
 	-D WITH_SYSTEM_BOOST:BOOL=ON \
 	-D WITH_LTTNG:BOOL=OFF \
-	-D WITH_FUSE:BOOL=OFF \
+	-D WITH_FUSE:BOOL=ON \
 	-D WITH_KRBD:BOOL=OFF \
 	-D WITH_XFS:BOOL=OFF \
 	-D WITH_KVS:BOOL=OFF \
@@ -72,8 +73,11 @@ CMAKE_ARGS=	\
 	-D WITH_CEPHFS:BOOL=OFF \
 	-D WITH_EMBEDDED:BOOL=OFF
 
-USES=	gmake cmake:outsource python:2.7 gettext-runtime shebangfix
-SHEBANG_FILES=src/rbdmap src/ceph-post-file.in src/rbd-replay-many
+USES=	gmake cmake:outsource python:2.7 fuse gettext-runtime shebangfix
+SHEBANG_FILES=src/rbdmap src/ceph-post-file.in src/rbd-replay-many \
+	src/brag/client/ceph-brag src/ceph-rest-api \
+	src/tools/ceph-monstore-update-crush.sh src/mount.fuse.ceph \
+	src/ceph-create-keys
 
 # even though i386 will build, it is not really advised.
 ONLY_FOR_ARCHS=	amd64
@@ -91,11 +95,22 @@ post-install:
 	${MKDIR} ${STAGEDIR}${PREFIX}/etc/ceph
 	${MKDIR} ${STAGEDIR}/var/lib/ceph/bootstrap-mds
 	${MKDIR} ${STAGEDIR}/var/lib/ceph/bootstrap-osd
+	${MKDIR} ${STAGEDIR}/var/lib/ceph/bootstrap-rgw
+	${MKDIR} ${STAGEDIR}/var/lib/ceph/bootstrap-mgr
 	${MKDIR} ${STAGEDIR}/var/lib/ceph/mds
 	${MKDIR} ${STAGEDIR}/var/lib/ceph/mon
 	${MKDIR} ${STAGEDIR}/var/lib/ceph/osd
+	${MKDIR} ${STAGEDIR}/var/lib/ceph/mgr
 	${MKDIR} ${STAGEDIR}/var/lib/ceph/tmp
+	${MKDIR} ${STAGEDIR}/var/lib/ceph/radosgw
 	${MKDIR} ${STAGEDIR}/var/log/ceph
+	${MKDIR} ${STAGEDIR}/var/run/ceph
+	${CHOWN} -R 167:167 ${STAGEDIR}/var/lib/ceph
+	${CHOWN} 167:167 ${STAGEDIR}/var/log/ceph
+	${CHOWN} 167:167 ${STAGEDIR}/var/run/ceph
+	${CHMOD} -R 750 ${STAGEDIR}/var/lib/ceph
+	${CHOWN} 750 ${STAGEDIR}/var/log/ceph
+	${CHOWN} 750 ${STAGEDIR}/var/run/ceph
 	# Use the Ceph init.d script as the interface to regular
 	# starting and stopping deamons. rc.d work is done thru
 	# a separate rc.d/ceph script calling init-ceph again.
@@ -117,4 +132,10 @@ post-install:
 	${RMDIR} ${STAGEDIR}${PREFIX}/etc/init.d
 	${INSTALL_DATA} ${WRKSRC}/src/sample.ceph.conf ${STAGEDIR}${PREFIX}/etc/ceph/ceph.conf.sample
 
-.include <bsd.port.mk>
+.include <bsd.port.pre.mk>
+
+.if ${OSVERSION} < 1100000
+IGNORE=         not supported on this version of FreeBSD
+.endif
+
+.include <bsd.port.post.mk>
