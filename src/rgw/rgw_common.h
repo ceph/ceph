@@ -1781,6 +1781,9 @@ struct req_state {
 
       std::string access_key;
       std::string signature;
+      std::string x_amz_algorithm;
+      std::string x_amz_credential;
+      std::string x_amz_date;
       ceph::bufferlist encoded_policy;
     } s3_postobj_creds;
   } auth;

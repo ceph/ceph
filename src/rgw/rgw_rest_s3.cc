@@ -1506,9 +1506,8 @@ int RGWPostObj_ObjStore_S3::get_policy()
     bool aws4_auth = false;
 
     /* x-amz-algorithm handling */
-    string x_amz_algorithm;
-    if ((part_str(parts, "x-amz-algorithm", &x_amz_algorithm)) &&
-        (x_amz_algorithm.compare("AWS4-HMAC-SHA256") == 0)) {
+    if ((part_str(parts, "x-amz-algorithm", &s->auth.s3_postobj_creds.x_amz_algorithm)) &&
+        (s->auth.s3_postobj_creds.x_amz_algorithm.compare("AWS4-HMAC-SHA256") == 0)) {
       ldout(s->cct, 0) << "Signature verification algorithm AWS v4 (AWS4-HMAC-SHA256)" << dendl;
       aws4_auth = true;
     } else {
@@ -1516,110 +1515,33 @@ int RGWPostObj_ObjStore_S3::get_policy()
     }
 
     // check that the signature matches the encoded policy
-
     if (aws4_auth) {
-
       /* AWS4 */
 
-      string s3_access_key;
-
-      string received_credential_str;
-      string date_cs;
-      string region_cs;
-      string service_cs;
-
-      string received_signature_str;
-      string received_date_str;
-
       /* x-amz-credential handling */
-      if (!part_str(parts, "x-amz-credential", &received_credential_str)) {
+      if (!part_str(parts, "x-amz-credential",
+                    &s->auth.s3_postobj_creds.x_amz_credential)) {
         ldout(s->cct, 0) << "No S3 aws4 credential found!" << dendl;
         err_msg = "Missing aws4 credential";
         return -EINVAL;
       }
-      size_t pos;
-      string cs_aux = received_credential_str;
-      /* s3_access_key */
-      s3_access_key = cs_aux;
-      pos = s3_access_key.find("/");
-      s3_access_key = s3_access_key.substr(0, pos);
-      cs_aux = cs_aux.substr(pos + 1, cs_aux.length());
 
       /* x-amz-signature handling */
-      if (!part_str(parts, "x-amz-signature", &received_signature_str)) {
+      if (!part_str(parts, "x-amz-signature",
+                    &s->auth.s3_postobj_creds.signature)) {
         ldout(s->cct, 0) << "No aws4 signature found!" << dendl;
         err_msg = "Missing aws4 signature";
         return -EINVAL;
       }
+
       /* x-amz-date handling */
+      std::string received_date_str;
       if (!part_str(parts, "x-amz-date", &received_date_str)) {
         ldout(s->cct, 0) << "No aws4 date found!" << dendl;
         err_msg = "Missing aws4 date";
         return -EINVAL;
       }
-
-      RGWUserInfo user_info;
-      op_ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
-      if (op_ret < 0) {
-        return -EACCES;
-      } else {
-        map<string, RGWAccessKey> access_keys = user_info.access_keys;
-        map<string, RGWAccessKey>::const_iterator iter = access_keys.find(s3_access_key);
-        // We know the key must exist, since the user was returned by
-        // rgw_get_user_info_by_access_key, but it doesn't hurt to check!
-        if (iter == access_keys.end()) {
-          ldout(s->cct, 0) << "Secret key lookup failed!" << dendl;
-          err_msg = "No secret key for matching access key";
-          return -EACCES;
-        }
-        string s3_secret_key = (iter->second).key;
-
-        /* AWS4 */
-
-#if 0
-        try {
-          s->aws4_auth = std::unique_ptr<rgw_aws4_auth>(new rgw_aws4_auth);
-        } catch (std::bad_alloc&) {
-          return -ENOMEM;
-        }
-#endif
-
-        /* FIXME(rzarzynski): clean this up! */
-        std::string encoded_policy_str(s->auth.s3_postobj_creds.encoded_policy.c_str(),
-                                       s->auth.s3_postobj_creds.encoded_policy.length());
-
-#if 0
-        s->aws4_auth->signing_key = \
-          rgw::auth::s3::get_v4_signing_key(s->cct, cs_aux, s3_secret_key);
-
-        std::string new_signature_str = \
-          rgw::auth::s3::get_v4_signature(s->cct,
-                                          s->aws4_auth->signing_key,
-                                          encoded_policy_str);
-
-        ldout(s->cct, 10) << "----------------------------- Verifying signatures" << dendl;
-        ldout(s->cct, 10) << "Signature     = " << received_signature_str << dendl;
-        ldout(s->cct, 10) << "New Signature = " << new_signature_str << dendl;
-        ldout(s->cct, 10) << "-----------------------------" << dendl;
-
-        if (received_signature_str != new_signature_str) {
-          return -ERR_SIGNATURE_NO_MATCH;
-        }
-#else
-        return -ERR_SIGNATURE_NO_MATCH;
-#endif
-      }
-
-      /* Deep copy. */
-      *(s->user) = user_info;
-      s->owner.set_id(user_info.user_id);
-      s->owner.set_name(user_info.display_name);
-
-      /* FIXME: remove this after switching S3 to the new authentication
-       * infrastructure. */
-      s->auth.identity = rgw::auth::transform_old_authinfo(s);
     } else {
-
       /* AWS2 */
 
       // check that the signature matches the encoded policy
@@ -1635,44 +1557,44 @@ int RGWPostObj_ObjStore_S3::get_policy()
         err_msg = "Missing aws2 signature";
         return -EINVAL;
       }
+    }
 
-      /* FIXME: this is a makeshift solution. The browser upload authentication will be
-       * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
-       * method. */
-      const auto& strategy = auth_registry_ptr->get_s3_post();
+    /* FIXME: this is a makeshift solution. The browser upload authentication will be
+     * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
+     * method. */
+    const auto& strategy = auth_registry_ptr->get_s3_post();
+    try {
+      auto result = strategy.authenticate(s);
+      if (result.get_status() != decltype(result)::Status::GRANTED) {
+        return -EACCES;
+      }
+
       try {
-        auto result = strategy.authenticate(s);
-        if (result.get_status() != decltype(result)::Status::GRANTED) {
-          return -EACCES;
+        auto applier = result.get_applier();
+        auto completer = result.get_completer();
+
+        applier->load_acct_info(*s->user);
+        s->perm_mask = applier->get_perm_mask();
+
+        /* This is the signle place where we pass req_state as a pointer
+         * to non-const and thus its modification is allowed. In the time
+         * of writing only RGWTempURLEngine needed that feature. */
+        applier->modify_request_state(s);
+        if (completer) {
+          completer->modify_request_state(s);
         }
 
-        try {
-          auto applier = result.get_applier();
-          auto completer = result.get_completer();
+        s->auth.identity = std::move(applier);
+        s->auth.completer = std::move(completer);
 
-          applier->load_acct_info(*s->user);
-          s->perm_mask = applier->get_perm_mask();
-
-          /* This is the signle place where we pass req_state as a pointer
-           * to non-const and thus its modification is allowed. In the time
-           * of writing only RGWTempURLEngine needed that feature. */
-          applier->modify_request_state(s);
-          if (completer) {
-            completer->modify_request_state(s);
-          }
-
-          s->auth.identity = std::move(applier);
-          s->auth.completer = std::move(completer);
-
-          s->owner.set_id(s->user->user_id);
-          s->owner.set_name(s->user->display_name);
-          /* OK, fall through. */
-        } catch (int err) {
-          return -EACCES;
-        }
+        s->owner.set_id(s->user->user_id);
+        s->owner.set_name(s->user->display_name);
+        /* OK, fall through. */
       } catch (int err) {
         return -EACCES;
       }
+    } catch (int err) {
+      return -EACCES;
     }
 
     ldout(s->cct, 0) << "Successful Signature Verification!" << dendl;
@@ -3896,6 +3818,52 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
                          null_completer_factory);
 }
 
+
+std::tuple<AWSVerAbstractor::access_key_id_t,
+           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::string_to_sign_t,
+           AWSVerAbstractor::signature_factory_t,
+           AWSVerAbstractor::completer_factory_t>
+AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
+{
+  return std::make_tuple(s->auth.s3_postobj_creds.access_key,
+                         s->auth.s3_postobj_creds.signature,
+                         to_string(s->auth.s3_postobj_creds.encoded_policy),
+                         rgw::auth::s3::get_v2_signature,
+                         null_completer_factory);
+}
+
+std::tuple<AWSVerAbstractor::access_key_id_t,
+           AWSVerAbstractor::signature_t,
+           AWSVerAbstractor::string_to_sign_t,
+           AWSVerAbstractor::signature_factory_t,
+           AWSVerAbstractor::completer_factory_t>
+AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
+{
+  const std::string& credential = s->auth.s3_postobj_creds.x_amz_credential;
+
+  /* grab access key id */
+  const size_t pos = credential.find("/");
+  const std::string access_key_id = credential.substr(0, pos);
+  dout(10) << "access key id = " << access_key_id << dendl;
+
+  /* grab credential scope */
+  const std::string credential_scope = credential.substr(pos + 1);
+  dout(10) << "credential scope = " << credential_scope << dendl;
+
+  const auto sig_factory = std::bind(v4_signature,
+                                     credential_scope,
+                                     std::placeholders::_1,
+                                     std::placeholders::_2,
+                                     std::placeholders::_3);
+
+  return std::make_tuple(access_key_id,
+                         s->auth.s3_postobj_creds.signature,
+                         to_string(s->auth.s3_postobj_creds.encoded_policy),
+                         sig_factory,
+                         null_completer_factory);
+}
+
 std::tuple<AWSVerAbstractor::access_key_id_t,
            AWSVerAbstractor::signature_t,
            AWSVerAbstractor::string_to_sign_t,
@@ -3903,11 +3871,14 @@ std::tuple<AWSVerAbstractor::access_key_id_t,
            AWSVerAbstractor::completer_factory_t>
 AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
 {
-  return std::make_tuple(s->auth.s3_postobj_creds.access_key,
-                         s->auth.s3_postobj_creds.signature,
-                         to_string(s->auth.s3_postobj_creds.encoded_policy),
-                         rgw::auth::s3::get_v2_signature,
-                         null_completer_factory);
+  if (s->auth.s3_postobj_creds.x_amz_algorithm == "AWS4-HMAC-SHA256") {
+    ldout(s->cct, 0) << "Signature verification algorithm AWS v4"
+                     << " (AWS4-HMAC-SHA256)" << dendl;
+    return get_auth_data_v2(s);
+  } else {
+    ldout(s->cct, 0) << "Signature verification algorithm AWS v2" << dendl;
+    return get_auth_data_v2(s);
+  }
 }
 
 } /* namespace s3 */
