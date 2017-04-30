@@ -779,6 +779,15 @@ class AWSBrowserUploadAbstractor : public AWSEngine::VersionAbstractor {
                        static_cast<std::string::size_type>(bl.length()));
   }
 
+  using auth_data_t = std::tuple<access_key_id_t,
+                                 signature_t,
+                                 string_to_sign_t,
+                                 signature_factory_t,
+                                 completer_factory_t>;
+
+  auth_data_t get_auth_data_v2(const req_state* s) const;
+  auth_data_t get_auth_data_v4(const req_state* s) const;
+
 public:
   AWSBrowserUploadAbstractor(CephContext*) {
   }
