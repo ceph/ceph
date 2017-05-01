@@ -7406,7 +7406,7 @@ BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
 
 void BlueStore::_txc_calc_cost(TransContext *txc)
 {
-  // this is about the simplest model for trasnaction cost you can
+  // this is about the simplest model for transaction cost you can
   // imagine.  there is some fixed overhead cost by saying there is a
   // minimum of one "io".  and then we have some cost per "io" that is
   // a configurable (with different hdd and ssd defaults), and add
