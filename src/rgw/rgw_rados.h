@@ -2180,12 +2180,14 @@ class RGWRados
   friend class RGWDataSyncProcessorThread;
   friend class RGWStateLog;
   friend class RGWReplicaLogger;
+  friend class RGWReshard;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
   int open_gc_pool_ctx();
   int open_lc_pool_ctx();
   int open_objexp_pool_ctx();
+  int open_reshard_pool_ctx();
 
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx);
   int open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx);
@@ -2282,6 +2284,7 @@ protected:
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
   librados::IoCtx lc_pool_ctx;        // .rgw.lc
   librados::IoCtx objexp_pool_ctx;
+  librados::IoCtx reshard_pool_ctx;
 
   bool pools_initialized;
 
