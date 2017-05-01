@@ -12,8 +12,26 @@
 class CephContext;
 class RGWRados;
 
-#define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
+
+/* gets a locked lock , release it when exiting context */
+class BucketIndexLockGuard
+{
+   CephContext *cct;
+   RGWRados *store;
+   rados::cls::lock::Lock l;
+   string oid;
+   librados::IoCtx io_ctx;
+   bool locked;
+public:
+  BucketIndexLockGuard(CephContext* cct, RGWRados* store, const string& bucket_instance_id,
+		                         const string& oid, const librados::IoCtx& io_ctx);
+  /* unlocks the lock */
+  ~BucketIndexLockGuard();
+protected:
+  friend class RGWReshard;
+  int lock();
+  int unlock();
+};
 
 class RGWReshard {
     CephContext *cct;
@@ -21,6 +39,9 @@ class RGWReshard {
     string lock_name;
     int max_jobs;
     rados::cls::lock::Lock instance_lock;
+
+    int lock_bucket_index_shared(const string& oid);
+    int unlock_bucket_index(const string& oid);
 
   public:
     RGWReshard(CephContext* cct, RGWRados* _store);
@@ -30,6 +51,11 @@ class RGWReshard {
     int list(string& marker, uint32_t max, list<cls_rgw_reshard_entry>& entries, bool& is_truncated);
     int set_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
     int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
+    /*
+      if succefull, keeps the bucket index locked. It will be unlocked
+      in the guard dtor.
+     */
+    int block_while_resharding(const string& bucket_instance_oid, BucketIndexLockGuard& guard);
 };
 
 #endif

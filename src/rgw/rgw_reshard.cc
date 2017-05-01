@@ -100,9 +100,13 @@ int RGWReshard::remove(cls_rgw_reshard_entry& entry)
   return ret;
 }
 
+std::string create_bucket_index_lock_name(const string& bucket_instance_id) {
+  return bucket_instance_lock_name + "." + bucket_instance_id;
+}
+
 int RGWReshard::set_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
 {
-  rados::cls::lock::Lock l(reshard_lock_name);
+  rados::cls::lock::Lock l(create_bucket_index_lock_name(entry.old_instance_id));
 
   if (entry.new_instance_id.empty()) {
     ldout(cct, 0) << "RGWReshard::" << __func__ << " missing new bucket instance id" << dendl;
@@ -155,7 +159,7 @@ done:
 
 int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
 {
-  rados::cls::lock::Lock l(bucket_instance_lock_name);
+  rados::cls::lock::Lock l(create_bucket_index_lock_name(entry.old_instance_id));
 
   int ret = l.lock_exclusive(&store->reshard_pool_ctx, bucket_instance_oid);
   if (ret == -EBUSY) {
@@ -214,18 +218,18 @@ int RGWReshard::unlock_bucket_index(const string& oid)
   return 0;
 }
 
-
 const int num_retries = 10;
 const int default_reshard_sleep_duration = 30;
 
-int RGWReshard::block_while_resharding(const string& bucket_instance_oid)
+int RGWReshard::block_while_resharding(const string& bucket_instance_oid,
+				                                  BucketIndexLockGuard& guard)
 {
   int ret = 0;
   cls_rgw_bucket_instance_entry entry;
   bool resharding = false;
 
   for (int i=0; i< num_retries;i++) {
-    ret = lock_bucket_index_shared(bucket_instance_oid);
+    ret = guard.lock();
     if (ret < 0) {
       return ret;
     }
@@ -239,7 +243,8 @@ int RGWReshard::block_while_resharding(const string& bucket_instance_oid)
     }
 
     if (resharding) {
-      ret = unlock_bucket_index(bucket_instance_oid);
+      /* clear resharding uses the same lock */
+      ret = guard.unlock();
       if (ret < 0) {
 	return ret;
       }
@@ -249,9 +254,51 @@ int RGWReshard::block_while_resharding(const string& bucket_instance_oid)
     }
   }
   ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
-  ret = unlock_bucket_index(bucket_instance_oid);
-  if (ret < 0) {
+  return -EAGAIN;
+}
+
+BucketIndexLockGuard::BucketIndexLockGuard(CephContext* _cct, RGWRados* _store,
+					   const string& bucket_instance_id, const string& _oid, const librados::IoCtx& _io_ctx) :
+  cct(_cct),store(_store),
+  l(create_bucket_index_lock_name(bucket_instance_id)),
+  oid(_oid), io_ctx(_io_ctx),locked(false)
+{
+}
+
+int BucketIndexLockGuard::lock()
+{
+  if (!locked) {
+    int ret = l.lock_shared(&store->reshard_pool_ctx, oid);
+    if (ret == -EBUSY) {
+      ldout(cct,0) << "RGWReshardLog::add failed to acquire lock on " << oid << dendl;
+      return 0;
+    }
+    if (ret < 0) {
+      return ret;
+    }
+    locked = true;
+    return ret;
+  } else {
+    ldout(cct,0) << " % alread lock" << oid << dendl;
+    return -EBUSY;
+  }
+}
+
+int BucketIndexLockGuard::unlock()
+{
+  if (locked) {
+    int ret = l.unlock(&io_ctx, oid);
+    if (ret <0) {
+      ldout(cct, 0) << "failed to unlock " << oid << dendl;
+    } else {
+      locked = false;
+    }
     return ret;
   }
-  return -EAGAIN;
+  return 0;
+}
+
+BucketIndexLockGuard::~BucketIndexLockGuard()
+{
+  unlock();
 }
