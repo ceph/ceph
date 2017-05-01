@@ -263,7 +263,9 @@ void MgrMonitor::check_sub(Subscription *sub)
     }
   } else {
     assert(sub->type == "mgrdigest");
-    send_digests();
+    if (digest_callback == nullptr) {
+      send_digests();
+    }
   }
 }
 
@@ -536,7 +538,9 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
 
 void MgrMonitor::init()
 {
-  send_digests();  // To get it to schedule its own event
+  if (digest_callback == nullptr) {
+    send_digests();  // To get it to schedule its own event
+  }
 }
 
 void MgrMonitor::on_shutdown()

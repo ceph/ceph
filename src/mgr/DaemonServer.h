@@ -54,6 +54,7 @@ protected:
 
   Messenger *msgr;
   MonClient *monc;
+  Finisher  &finisher;
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   PyModules &py_modules;
@@ -85,6 +86,7 @@ public:
   entity_addr_t get_myaddr() const;
 
   DaemonServer(MonClient *monc_,
+               Finisher &finisher_,
 	       DaemonStateIndex &daemon_state_,
 	       ClusterState &cluster_state_,
 	       PyModules &py_modules_,
