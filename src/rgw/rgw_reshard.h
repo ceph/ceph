@@ -12,15 +12,15 @@
 class CephContext;
 class RGWRados;
 
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_rgw
+
 class RGWReshard {
     CephContext *cct;
     RGWRados *store;
     string lock_name;
     int max_jobs;
     rados::cls::lock::Lock instance_lock;
-    librados::IoCtx io_ctx;
-
-    int get_io_ctx(librados::IoCtx& io_ctx);
 
   public:
     RGWReshard(CephContext* cct, RGWRados* _store);
