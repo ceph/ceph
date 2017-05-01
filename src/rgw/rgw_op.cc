@@ -2328,7 +2328,7 @@ void RGWCreateBucket::execute()
     bucket.name = s->bucket_name;
     op_ret = store->select_bucket_placement(*(s->user), zonegroup_id,
 					    placement_rule,
-					    bucket, &selected_placement_rule, nullptr);
+					    &selected_placement_rule, nullptr);
     if (selected_placement_rule != s->bucket_info.placement_rule) {
       op_ret = -EEXIST;
       return;
@@ -5543,7 +5543,6 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
     op_ret = store->select_bucket_placement(*(s->user),
                                             store->get_zonegroup().get_id(),
                                             placement_rule,
-                                            bucket,
                                             &selected_placement_rule,
                                             nullptr);
     if (selected_placement_rule != binfo.placement_rule) {
