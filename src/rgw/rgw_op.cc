@@ -362,7 +362,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   int ret = 0;
   rgw_obj_key obj;
   RGWUserInfo bucket_owner_info;
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  RGWObjectCtx obj_ctx(store);
 
   string bi = s->info.args.get(RGW_SYS_PARAM_PREFIX "bucket-instance");
   if (!bi.empty()) {
@@ -5433,6 +5433,27 @@ RGWBulkUploadOp::parse_path(const boost::string_ref& path)
   return boost::none;
 }
 
+std::pair<std::string, std::string>
+RGWBulkUploadOp::handle_upload_path(struct req_state *s)
+{
+  std::string bucket_path, file_prefix;
+  if (! s->init_state.url_bucket.empty()) {
+    file_prefix = bucket_path = s->init_state.url_bucket + "/";
+    if (! s->object.empty()) {
+      std::string& object_name = s->object.name;
+
+      /* As rgw_obj_key::empty() already verified emptiness of s->object.name,
+       * we can safely examine its last element. */
+      if (object_name.back() == '/') {
+        file_prefix.append(object_name);
+      } else {
+        file_prefix.append(object_name).append("/");
+      }
+    }
+  }
+  return std::make_pair(bucket_path, file_prefix);
+}
+
 int RGWBulkUploadOp::handle_dir_verify_permission()
 {
   if (s->user->max_buckets > 0) {
@@ -5809,6 +5830,11 @@ void RGWBulkUploadOp::execute()
     return;
   }
 
+  /* Handling the $UPLOAD_PATH accordingly to the Swift's Bulk middleware. See: 
+   * https://github.com/openstack/swift/blob/2.13.0/swift/common/middleware/bulk.py#L31-L41 */
+  std::string bucket_path, file_prefix;
+  std::tie(bucket_path, file_prefix) = handle_upload_path(s);
+
   auto status = rgw::tar::StatusIndicator::create();
   do {
     op_ret = stream->get_exactly(rgw::tar::BLOCK_SIZE, buffer);
@@ -5833,25 +5859,28 @@ void RGWBulkUploadOp::execute()
         case rgw::tar::FileType::NORMAL_FILE: {
           ldout(s->cct, 2) << "bulk upload: handling regular file" << dendl;
 
+          boost::string_ref filename = bucket_path.empty() ? header->get_filename() : \
+                            file_prefix + header->get_filename().to_string();
           auto body = AlignedStreamGetter(0, header->get_filesize(),
                                           rgw::tar::BLOCK_SIZE, *stream);
-          op_ret = handle_file(header->get_filename(),
+          op_ret = handle_file(filename,
                                header->get_filesize(),
                                body);
           if (! op_ret) {
             /* Only regular files counts. */
             num_created++;
           } else {
-            failures.emplace_back(op_ret, header->get_filename().to_string());
+            failures.emplace_back(op_ret, filename.to_string());
           }
           break;
         }
         case rgw::tar::FileType::DIRECTORY: {
           ldout(s->cct, 2) << "bulk upload: handling regular directory" << dendl;
 
-          op_ret = handle_dir(header->get_filename());
+          boost::string_ref dirname = bucket_path.empty() ? header->get_filename() : bucket_path;
+          op_ret = handle_dir(dirname);
           if (op_ret < 0 && op_ret != -ERR_BUCKET_EXISTS) {
-            failures.emplace_back(op_ret, header->get_filename().to_string());
+            failures.emplace_back(op_ret, dirname.to_string());
           }
           break;
         }
