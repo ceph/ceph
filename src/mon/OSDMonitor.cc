@@ -925,6 +925,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
     pending_creatings.created_pools.insert(pg.pool());
     pending_creatings.pgs.erase(pg);
   }
+  pending_created_pgs.clear();
   // PAXOS_PGMAP is less than PAXOS_OSDMAP, so PGMonitor::update_from_paxos()
   // should have prepared the latest pgmap if any
   const auto& pgm = mon->pgmon()->pg_map;
