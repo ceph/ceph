@@ -3644,7 +3644,6 @@ int main(int argc, const char **argv)
         }
 
         if (need_update) {
-          zonegroup.post_process_params();
 	  ret = zonegroup.update();
 	  if (ret < 0) {
 	    cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
