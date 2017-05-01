@@ -3480,7 +3480,7 @@ int OSDMap::calc_pg_upmaps(
 		     << dendl;
       osd_deviation[i.first] = deviation;
       deviation_osd.insert(make_pair(deviation, i.first));
-      if (deviation > 0)
+      if (deviation >= 1.0)
 	overfull.insert(i.first);
     }
 
