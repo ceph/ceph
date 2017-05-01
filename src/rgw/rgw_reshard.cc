@@ -20,35 +20,12 @@ RGWReshard::RGWReshard(CephContext *_cct, RGWRados* _store):cct(_cct), store(_st
     max_jobs = cct->_conf->rgw_reshard_max_jobs;
 }
 
-int RGWReshard::get_io_ctx(librados::IoCtx& io_ctx)
-{
-  string reshard_pool = store->get_zone_params().reshard_pool.name;
-  librados::Rados *rad = store->get_rados_handle();
-  int r = rad->ioctx_create(reshard_pool.c_str(), io_ctx);
-  if (r == -ENOENT) {
-    r = store->create_pool(store->get_zone_params().reshard_pool);
-    if (r < 0)
-      return r;
-
-    // retry
-    r = rad->ioctx_create(reshard_pool.c_str(), io_ctx);
-  }
-  if (r < 0)
-    return r;
-
-  return 0;
-}
 
 int RGWReshard::add(cls_rgw_reshard_entry& entry)
 {
   rados::cls::lock::Lock l(reshard_lock_name);
-  librados::IoCtx io_ctx;
 
-  int ret = get_io_ctx(io_ctx);
-  if (ret < 0)
-    return ret;
-
-  ret = l.lock_exclusive(&io_ctx, reshard_oid);
+  int ret = l.lock_exclusive(&store->reshard_pool_ctx, reshard_oid);
   if (ret == -EBUSY) {
     ldout(cct, 0) << "RGWReshard::add failed to acquire lock on " << reshard_oid << dendl;
     return 0;
@@ -59,9 +36,9 @@ int RGWReshard::add(cls_rgw_reshard_entry& entry)
   librados::ObjectWriteOperation op;
   cls_rgw_reshard_add(op, entry);
 
-  ret = io_ctx.operate(reshard_oid, &op);
+  ret = store->reshard_pool_ctx.operate(reshard_oid, &op);
 
-  l.unlock(&io_ctx, reshard_oid);
+  l.unlock(&store->reshard_pool_ctx, reshard_oid);
   return ret;
 }
 
@@ -69,13 +46,8 @@ int RGWReshard::add(cls_rgw_reshard_entry& entry)
 int RGWReshard::list(string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool& is_truncated)
 {
   rados::cls::lock::Lock l(reshard_lock_name);
-  librados::IoCtx io_ctx;
 
-  int ret = get_io_ctx(io_ctx);
-  if (ret < 0)
-    return ret;
-
-  ret = l.lock_shared(&io_ctx, reshard_oid);
+  int ret = l.lock_shared(&store->reshard_pool_ctx, reshard_oid);
   if (ret == -EBUSY) {
     ldout(cct, 0) << "RGWReshard::list failed to acquire lock on " << reshard_oid << dendl;
     return 0;
@@ -83,22 +55,17 @@ int RGWReshard::list(string& marker, uint32_t max, std::list<cls_rgw_reshard_ent
   if (ret < 0)
     return ret;
 
-  ret =  cls_rgw_reshard_list(io_ctx, reshard_oid, marker, max, entries, &is_truncated);
+  ret =  cls_rgw_reshard_list(store->reshard_pool_ctx, reshard_oid, marker, max, entries, &is_truncated);
 
-  l.unlock(&io_ctx, reshard_oid);
+  l.unlock(&store->reshard_pool_ctx, reshard_oid);
   return ret;
 }
 
 int RGWReshard::get(cls_rgw_reshard_entry& entry)
 {
   rados::cls::lock::Lock l(reshard_lock_name);
-  librados::IoCtx io_ctx;
 
-  int ret = get_io_ctx(io_ctx);
-  if (ret < 0)
-    return ret;
-
-  ret = l.lock_shared(&io_ctx, reshard_oid);
+  int ret = l.lock_shared(&store->reshard_pool_ctx, reshard_oid);
   if (ret == -EBUSY) {
     ldout(cct, 0) << "RGWReshardLog::get failed to acquire lock on " << reshard_oid << dendl;
     return 0;
@@ -106,22 +73,17 @@ int RGWReshard::get(cls_rgw_reshard_entry& entry)
   if (ret < 0)
     return ret;
 
-  ret = cls_rgw_reshard_get(io_ctx, reshard_oid, entry);
+  ret = cls_rgw_reshard_get(store->reshard_pool_ctx, reshard_oid, entry);
 
-  l.unlock(&io_ctx, reshard_oid);
+  l.unlock(&store->reshard_pool_ctx, reshard_oid);
   return ret;
 }
 
 int RGWReshard::remove(cls_rgw_reshard_entry& entry)
 {
   rados::cls::lock::Lock l(reshard_lock_name);
-  librados::IoCtx io_ctx;
 
-  int ret = get_io_ctx(io_ctx);
-  if (ret < 0)
-    return ret;
-
-  ret = l.lock_exclusive(&io_ctx, reshard_oid);
+  int ret = l.lock_exclusive(&store->reshard_pool_ctx, reshard_oid);
   if (ret == -EBUSY) {
     ldout(cct, 0) << "RGWReshardLog::remove failed to acquire lock on " << reshard_oid << dendl;
     return 0;
@@ -132,27 +94,22 @@ int RGWReshard::remove(cls_rgw_reshard_entry& entry)
   librados::ObjectWriteOperation op;
   cls_rgw_reshard_remove(op, entry);
 
-  ret =  io_ctx.operate(reshard_oid, &op);
+  ret =  store->reshard_pool_ctx.operate(reshard_oid, &op);
 
-  l.unlock(&io_ctx, reshard_oid);
+  l.unlock(&store->reshard_pool_ctx, reshard_oid);
   return ret;
 }
 
 int RGWReshard::set_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
 {
   rados::cls::lock::Lock l(reshard_lock_name);
-  librados::IoCtx io_ctx;
-
-  int ret = get_io_ctx(io_ctx);
-  if (ret < 0)
-    return ret;
 
   if (entry.new_instance_id.empty()) {
     ldout(cct, 0) << "RGWReshard::" << __func__ << " missing new bucket instance id" << dendl;
     return -EEXIST;
   }
 
-  ret = l.lock_exclusive(&io_ctx, bucket_instance_oid);
+  int ret = l.lock_exclusive(&store->reshard_pool_ctx, bucket_instance_oid);
   if (ret == -EBUSY) {
     ldout(cct, 0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
     return 0;
@@ -185,27 +142,22 @@ int RGWReshard::set_bucket_resharding(const string& bucket_instance_oid, cls_rgw
     goto done;
   }
 
-  ret =   cls_rgw_set_bucket_resharding(io_ctx, bucket_instance_oid, instance_entry);
+  ret =   cls_rgw_set_bucket_resharding(store->reshard_pool_ctx, bucket_instance_oid, instance_entry);
   if (ret < 0) {
     ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: cls_rgw_set_bucket_reshardind: "
 		  << cpp_strerror(-ret) << dendl;
     goto done;
   }
 done:
-  l.unlock(&io_ctx, bucket_instance_oid);
+  l.unlock(&store->reshard_pool_ctx, bucket_instance_oid);
   return ret;
 }
 
 int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
 {
   rados::cls::lock::Lock l(bucket_instance_lock_name);
-  librados::IoCtx io_ctx;
 
-  int ret = get_io_ctx(io_ctx);
-  if (ret < 0)
-    return ret;
-
-  ret = l.lock_exclusive(&io_ctx, bucket_instance_oid);
+  int ret = l.lock_exclusive(&store->reshard_pool_ctx, bucket_instance_oid);
   if (ret == -EBUSY) {
     ldout(cct, 0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
     return 0;
@@ -235,23 +187,19 @@ int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_r
   } catch(buffer::error& err) {
     ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: could not decode buffer info, caught buffer::error"
 		  << dendl;
-    l.unlock(&io_ctx, bucket_instance_oid);
+    l.unlock(&store->reshard_pool_ctx, bucket_instance_oid);
     return -EIO;
   }
 
-  ret =   cls_rgw_clear_bucket_resharding(io_ctx, bucket_instance_oid, instance_entry);
+  ret =   cls_rgw_clear_bucket_resharding(store->reshard_pool_ctx, bucket_instance_oid, instance_entry);
 
-  l.unlock(&io_ctx, bucket_instance_oid);
+  l.unlock(&store->reshard_pool_ctx, bucket_instance_oid);
   return ret;
 }
 
 int RGWReshard::lock_bucket_index_shared(const string& oid)
 {
-  int ret = get_io_ctx(io_ctx);
-  if (ret < 0)
-    return ret;
-
-  ret = instance_lock.lock_shared(&io_ctx, oid);
+  int ret = instance_lock.lock_shared(&store->reshard_pool_ctx, oid);
   if (ret == -EBUSY) {
     ldout(cct, 0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
     return 0;
@@ -262,10 +210,7 @@ int RGWReshard::lock_bucket_index_shared(const string& oid)
 
 int RGWReshard::unlock_bucket_index(const string& oid)
 {
-  int ret = get_io_ctx(io_ctx);
-  if (ret < 0)
-    return ret;
-  instance_lock.unlock(&io_ctx, oid);
+  instance_lock.unlock(&store->reshard_pool_ctx, oid);
   return 0;
 }
 
@@ -285,7 +230,7 @@ int RGWReshard::block_while_resharding(const string& bucket_instance_oid)
       return ret;
     }
 
-    ret = cls_rgw_get_bucket_resharding(io_ctx, bucket_instance_oid,
+    ret = cls_rgw_get_bucket_resharding(store->reshard_pool_ctx, bucket_instance_oid,
 					entry, resharding);
     if (ret < 0 && ret != -ENOENT && ret != -ENODATA) {
       ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: failed to get bucket resharding :"  <<
