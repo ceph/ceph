@@ -3502,8 +3502,8 @@ int OSDMap::calc_pg_upmaps(
     bool restart = false;
     for (auto p = deviation_osd.rbegin(); p != deviation_osd.rend(); ++p) {
       int osd = p->second;
+      float deviation = p->first;
       float target = osd_weight[osd] * pgs_per_weight;
-      float deviation = deviation_osd.rbegin()->first;
       if (deviation/target < max_deviation) {
 	ldout(cct, 10) << " osd." << osd
 		       << " target " << target
