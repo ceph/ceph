@@ -658,6 +658,9 @@ def cluster(ctx, config):
                     mds_dir + '/keyring',
                 ],
             )
+            remote.run(args=[
+                'sudo', 'chown', '-R', 'ceph:ceph', mds_dir
+            ])
 
     cclient.create_keyring(ctx, cluster_name)
     log.info('Running mkfs on osd nodes...')
