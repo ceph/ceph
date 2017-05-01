@@ -623,6 +623,9 @@ class Filesystem(MDSCluster):
 
         :return:
         """
+        # First, check to see that processes haven't exited with an error code
+        for mds in self._ctx.daemons.iter_daemons_of_role('mds'):
+            mds.check_status()
 
         active_count = 0
         try:
