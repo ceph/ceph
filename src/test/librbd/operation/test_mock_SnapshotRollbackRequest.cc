@@ -70,10 +70,6 @@ struct AsyncRequest<MockOperationImageCtx> : public AsyncRequest<MockImageCtx> {
 #include "librbd/operation/Request.cc"
 #include "librbd/operation/SnapshotRollbackRequest.cc"
 
-template class librbd::AsyncRequest<librbd::MockImageCtx>;
-template class librbd::AsyncObjectThrottle<librbd::MockImageCtx>;
-template class librbd::operation::Request<librbd::MockImageCtx>;
-
 namespace librbd {
 namespace operation {
 
