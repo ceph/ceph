@@ -427,6 +427,9 @@ protected:
 
   boost::optional<std::pair<std::string, rgw_obj_key>>
   parse_path(const boost::string_ref& path);
+  
+  std::pair<std::string, std::string>
+  handle_upload_path(struct req_state *s);
 
   bool handle_file_verify_permission(RGWBucketInfo& binfo,
                                      std::map<std::string, ceph::bufferlist>& battrs,
