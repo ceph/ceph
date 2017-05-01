@@ -883,6 +883,13 @@ namespace buffer CEPH_BUFFER_API {
     }
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();
+
+    // These functions return a bufferlist with a pointer to a single
+    // static buffer. They /must/ not outlive the memory they
+    // reference.
+    static list static_from_mem(char* c, size_t l);
+    static list static_from_cstring(char* c);
+    static list static_from_string(std::string& s);
   };
 
   /*
