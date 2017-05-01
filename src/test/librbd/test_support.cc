@@ -40,7 +40,7 @@ int create_image_full_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
       stripe_unit = (1ull << (*order-1));
     }
 
-    printf("creating image with stripe unit: %ld, stripe count: %ld\n",
+    printf("creating image with stripe unit: %" PRIu64 ", stripe count: %" PRIu64 "\n",
            stripe_unit, IMAGE_STRIPE_COUNT);
     return rbd.create3(ioctx, name.c_str(), size, features, order, stripe_unit,
                        IMAGE_STRIPE_COUNT);
