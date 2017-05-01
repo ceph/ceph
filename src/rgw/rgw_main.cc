@@ -60,6 +60,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <atomic>
 
 #include "include/types.h"
 #include "common/BackTrace.h"
@@ -77,11 +78,11 @@ static sig_t sighandler_alrm;
 class RGWProcess;
 
 static int signal_fd[2] = {0, 0};
-static atomic_t disable_signal_fd;
+static std::atomic<int64_t> disable_signal_fd = { 0 };
 
 void signal_shutdown()
 {
-  if (!disable_signal_fd.read()) {
+  if (!disable_signal_fd) {
     int val = 0;
     int ret = write(signal_fd[0], (char *)&val, sizeof(val));
     if (ret < 0) {

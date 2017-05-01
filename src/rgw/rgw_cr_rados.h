@@ -6,6 +6,8 @@
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
 
+#include <atomic>
+
 class RGWAsyncRadosRequest : public RefCountedObject {
   RGWCoroutine *caller;
   RGWAioCompletionNotifier *notifier;
@@ -57,7 +59,7 @@ public:
 
 class RGWAsyncRadosProcessor {
   deque<RGWAsyncRadosRequest *> m_req_queue;
-  atomic_t going_down;
+  std::atomic<bool> going_down = { false };
 protected:
   RGWRados *store;
   ThreadPool m_tp;
@@ -91,7 +93,7 @@ public:
   void queue(RGWAsyncRadosRequest *req);
 
   bool is_going_down() {
-    return (going_down.read() != 0);
+    return going_down;
   }
 };
 
@@ -1014,7 +1016,7 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   int interval;
 
   Mutex lock;
-  atomic_t going_down;
+  std::atomic<bool> going_down = { false };
   bool locked{false};
 
   RGWCoroutine *caller;
@@ -1044,7 +1046,7 @@ public:
   }
 
   void go_down() {
-    going_down.set(1);
+    going_down = true;
     wakeup();
   }
 

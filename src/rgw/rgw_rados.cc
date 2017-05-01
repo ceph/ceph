@@ -55,6 +55,7 @@ using namespace librados;
 #include <string>
 #include <iostream>
 #include <vector>
+#include <atomic>
 #include <list>
 #include <map>
 #include "auth/Crypto.h" // get_random_bytes()
@@ -70,6 +71,8 @@ using namespace librados;
 #include "rgw_realm_watcher.h"
 
 #include "compressor/Compressor.h"
+
+#include <atomic>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -2958,7 +2961,7 @@ protected:
   CephContext *cct;
   RGWRados *store;
 
-  atomic_t down_flag;
+  std::atomic<bool> down_flag = { false };
 
   string thread_name;
 
@@ -2974,7 +2977,8 @@ public:
   virtual int init() { return 0; }
   virtual int process() = 0;
 
-  bool going_down() { return down_flag.read() != 0; }
+  bool going_down() { return down_flag; }
+
   void start();
   void stop();
 };
@@ -2987,7 +2991,7 @@ void RGWRadosThread::start()
 
 void RGWRadosThread::stop()
 {
-  down_flag.set(1);
+  down_flag = true;
   stop_process();
   if (worker) {
     worker->stop();
@@ -5213,14 +5217,14 @@ int RGWRados::Bucket::List::list_objects(int max, vector<rgw_bucket_dir_entry> *
     if (delim_pos >= 0) {
       string s = cur_marker.name.substr(0, delim_pos);
       s.append(bigger_than_delim);
-      cur_marker.set(s);
+      cur_marker = s;
     }
   }
   
   string skip_after_delim;
   while (truncated && count <= max) {
     if (skip_after_delim > cur_marker.name) {
-      cur_marker.set(skip_after_delim);
+      cur_marker = skip_after_delim;
       ldout(cct, 20) << "setting cur_marker=" << cur_marker.name << "[" << cur_marker.instance << "]" << dendl;
     }
     std::map<string, rgw_bucket_dir_entry> ent_map;
@@ -9794,8 +9798,8 @@ struct get_obj_data : public RefCountedObject {
   Mutex data_lock;
   list<get_obj_aio_data> aio_data;
   RGWGetDataCB *client_cb;
-  atomic_t cancelled;
-  atomic_t err_code;
+  std::atomic<bool> cancelled = { false };
+  std::atomic<int64_t> err_code = { 0 };
   Throttle throttle;
   list<bufferlist> read_list;
 
@@ -9807,16 +9811,16 @@ struct get_obj_data : public RefCountedObject {
       throttle(cct, "get_obj_data", cct->_conf->rgw_get_obj_window_size, false) {}
   ~get_obj_data() override { } 
   void set_cancelled(int r) {
-    cancelled.set(1);
-    err_code.set(r);
+    cancelled = true;
+    err_code = r;
   }
 
   bool is_cancelled() {
-    return cancelled.read() == 1;
+    return cancelled;
   }
 
   int get_err_code() {
-    return err_code.read();
+    return err_code;
   }
 
   int wait_next_io(bool *done) {
@@ -11660,7 +11664,7 @@ int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<rgw_bucket_
     if (filter && !filter->filter(oid, oid))
       continue;
 
-    e.key.set(oid);
+    e.key = oid;
     objs.push_back(e);
   }
 
