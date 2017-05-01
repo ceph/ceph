@@ -935,7 +935,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
       assert(st != pgm.pg_stat.end());
       auto created = make_pair(st->second.created, st->second.last_scrub_stamp);
       // no need to add the pg, if it already exists in creating_pgs
-      creating_pgs.pgs.emplace(pgid, created);
+      pending_creatings.pgs.emplace(pgid, created);
     }
   }
   for (auto old_pool : inc.old_pools) {
@@ -3233,6 +3233,7 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
 {
   dout(30) << __func__ << " osd." << osd << " next=" << next
 	   << " " << creating_pgs_by_osd_epoch << dendl;
+  std::lock_guard<std::mutex> l(creating_pgs_lock);
   auto creating_pgs_by_epoch = creating_pgs_by_osd_epoch.find(osd);
   if (creating_pgs_by_epoch == creating_pgs_by_osd_epoch.end())
     return next;
