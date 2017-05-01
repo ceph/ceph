@@ -109,7 +109,8 @@ static int create_image_full(rados_ioctx_t ioctx, const char *name,
       stripe_unit = (1ull << (*order-1));
     }
 
-    printf("creating image with stripe unit: %ld, stripe count: %ld\n",
+    printf("creating image with stripe unit: %" PRIu64 ", "
+	   "stripe count: %" PRIu64 "\n",
            stripe_unit, IMAGE_STRIPE_COUNT);
     return rbd_create3(ioctx, name, size, features, order,
                        stripe_unit, IMAGE_STRIPE_COUNT);
@@ -1845,7 +1846,7 @@ TEST_F(TestLibRBD, TestScatterGatherIO)
                              sizeof(read_iovs) / sizeof(struct iovec),
                              1<<order, comp));
   ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
-  ASSERT_EQ(10U, rbd_aio_get_return_value(comp));
+  ASSERT_EQ(10, rbd_aio_get_return_value(comp));
   rbd_aio_release(comp);
   ASSERT_EQ("This1111 is a ", read_buffer);
 
@@ -1858,7 +1859,7 @@ TEST_F(TestLibRBD, TestScatterGatherIO)
                              sizeof(linear_iovs) / sizeof(struct iovec),
                              1<<order, comp));
   ASSERT_EQ(0, rbd_aio_wait_for_complete(comp));
-  ASSERT_EQ(4U, rbd_aio_get_return_value(comp));
+  ASSERT_EQ(4, rbd_aio_get_return_value(comp));
   rbd_aio_release(comp);
   ASSERT_EQ("1111This111111", linear_buffer);
 
@@ -3666,7 +3667,7 @@ TEST_F(TestLibRBD, Flatten)
 
   bufferlist bl;
   bl.append(std::string(4096, '1'));
-  ASSERT_EQ(bl.length(), parent_image.write(0, bl.length(), bl));
+  ASSERT_EQ((ssize_t)bl.length(), parent_image.write(0, bl.length(), bl));
 
   ASSERT_EQ(0, parent_image.snap_create("snap1"));
   ASSERT_EQ(0, parent_image.snap_protect("snap1"));
@@ -3687,7 +3688,7 @@ TEST_F(TestLibRBD, Flatten)
   bufferlist read_bl;
   clone_image.aio_read(0, bl.length(), read_bl, read_comp);
   ASSERT_EQ(0, read_comp->wait_for_complete());
-  ASSERT_EQ(bl.length(), read_comp->get_return_value());
+  ASSERT_EQ((ssize_t)bl.length(), read_comp->get_return_value());
   read_comp->release();
   ASSERT_TRUE(bl.contents_equal(read_bl));
 
@@ -3862,7 +3863,7 @@ TEST_F(TestLibRBD, SnapCreateViaLockOwner)
 
   bufferlist bl;
   bl.append(std::string(4096, '1'));
-  ASSERT_EQ(bl.length(), image1.write(0, bl.length(), bl));
+  ASSERT_EQ((ssize_t)bl.length(), image1.write(0, bl.length(), bl));
 
   bool lock_owner;
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
@@ -4646,10 +4647,10 @@ TEST_F(TestLibRBD, RebuildObjectMap)
       return;
     }
 
-    ASSERT_EQ(bl.length(), image.write(0, bl.length(), bl));
+    ASSERT_EQ((ssize_t)bl.length(), image.write(0, bl.length(), bl));
 
     ASSERT_EQ(0, image.snap_create("snap1"));
-    ASSERT_EQ(bl.length(), image.write(1<<order, bl.length(), bl));
+    ASSERT_EQ((ssize_t)bl.length(), image.write(1<<order, bl.length(), bl));
 
     std::string image_id;
     ASSERT_EQ(0, get_image_id(image, &image_id));
@@ -4678,11 +4679,11 @@ TEST_F(TestLibRBD, RebuildObjectMap)
   ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
 
   bufferlist read_bl;
-  ASSERT_EQ(bl.length(), image2.read(0, bl.length(), read_bl));
+  ASSERT_EQ((ssize_t)bl.length(), image2.read(0, bl.length(), read_bl));
   ASSERT_TRUE(bl.contents_equal(read_bl));
 
   read_bl.clear();
-  ASSERT_EQ(bl.length(), image2.read(1<<order, bl.length(), read_bl));
+  ASSERT_EQ((ssize_t)bl.length(), image2.read(1<<order, bl.length(), read_bl));
   ASSERT_TRUE(bl.contents_equal(read_bl));
 
   ASSERT_PASSED(validate_object_map, image1);
@@ -4738,10 +4739,10 @@ TEST_F(TestLibRBD, CheckObjectMap)
     uint64_t features;
     ASSERT_EQ(0, image.features(&features));
 
-    ASSERT_EQ(bl1.length(), image.write(0, bl1.length(), bl1));
+    ASSERT_EQ((ssize_t)bl1.length(), image.write(0, bl1.length(), bl1));
 
     ASSERT_EQ(0, image.snap_create("snap1"));
-    ASSERT_EQ(bl1.length(), image.write(1<<order, bl1.length(), bl1));
+    ASSERT_EQ((ssize_t)bl1.length(), image.write(1<<order, bl1.length(), bl1));
   }
 
   librbd::Image image1;
@@ -4755,7 +4756,7 @@ TEST_F(TestLibRBD, CheckObjectMap)
   ASSERT_LT(0, ioctx.read(object_map_oid, bl2, 1024, 0));
 
   bool lock_owner;
-  ASSERT_EQ(bl1.length(), image1.write(3 * (1 << 18), bl1.length(), bl1));
+  ASSERT_EQ((ssize_t)bl1.length(), image1.write(3 * (1 << 18), bl1.length(), bl1));
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
   ASSERT_TRUE(lock_owner);
 
@@ -4833,7 +4834,7 @@ TEST_F(TestLibRBD, BlockingAIO)
   bufferlist read_bl;
   image.aio_read(0, bl.length(), read_bl, read_comp);
   ASSERT_EQ(0, read_comp->wait_for_complete());
-  ASSERT_EQ(bl.length(), read_comp->get_return_value());
+  ASSERT_EQ((ssize_t)bl.length(), read_comp->get_return_value());
   read_comp->release();
 
   bufferlist expected_bl;
@@ -4888,8 +4889,8 @@ TEST_F(TestLibRBD, ExclusiveLockTransition)
   ASSERT_EQ(0, rbd.open(ioctx, image3, name.c_str(), NULL));
   for (size_t object_no = 0; object_no < (size >> 12); ++object_no) {
     bufferlist read_bl;
-    ASSERT_EQ(bl.length(), image3.read(object_no << order, bl.length(),
-                                       read_bl));
+    ASSERT_EQ((ssize_t)bl.length(), image3.read(object_no << order, bl.length(),
+						read_bl));
     ASSERT_TRUE(bl.contents_equal(read_bl));
   }
 

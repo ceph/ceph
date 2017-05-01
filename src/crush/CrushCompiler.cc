@@ -287,7 +287,7 @@ int CrushCompiler::decompile_choose_arg_map(crush_choose_arg_map arg_map,
   return 0;
 }
 
-int CrushCompiler::decompile_choose_args(std::pair<const long unsigned int, crush_choose_arg_map> &i,
+int CrushCompiler::decompile_choose_args(const std::pair<const long unsigned int, crush_choose_arg_map> &i,
                                          ostream &out)
 {
   out << "choose_args " << i.first << " {\n";

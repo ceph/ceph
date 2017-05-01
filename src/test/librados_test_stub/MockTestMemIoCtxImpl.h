@@ -99,7 +99,7 @@ public:
   }
   MOCK_METHOD5(sparse_read, int(const std::string& oid,
                                uint64_t off,
-                               size_t len,
+                               uint64_t len,
                                std::map<uint64_t, uint64_t> *m,
                                bufferlist *bl));
   int do_sparse_read(const std::string& oid, uint64_t off, size_t len,
