@@ -1218,6 +1218,11 @@ int CrushWrapper::get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap)
   crush_rule *rule = crush->rules[ruleno];
 
   // build a weight map for each TAKE in the rule, and then merge them
+
+  // FIXME: if there are multiple takes that place a different number of
+  // objects we do not take that into account.  (Also, note that doing this
+  // right is also a function of the pool, since the crush rule
+  // might choose 2 + choose 2 but pool size may only be 3.)
   for (unsigned i=0; i<rule->len; ++i) {
     map<int,float> m;
     float sum = 0;
