@@ -109,7 +109,8 @@ static int create_image_full(rados_ioctx_t ioctx, const char *name,
       stripe_unit = (1ull << (*order-1));
     }
 
-    printf("creating image with stripe unit: %ld, stripe count: %ld\n",
+    printf("creating image with stripe unit: %" PRIu64 ", "
+	   "stripe count: %" PRIu64 "\n",
            stripe_unit, IMAGE_STRIPE_COUNT);
     return rbd_create3(ioctx, name, size, features, order,
                        stripe_unit, IMAGE_STRIPE_COUNT);

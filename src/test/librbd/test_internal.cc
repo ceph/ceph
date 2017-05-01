@@ -1030,7 +1030,7 @@ TEST_F(TestInternal, TestCoR)
   ASSERT_EQ(0, image.stat(info, sizeof(info)));
 
   const int object_num = info.size / info.obj_size;
-  printf("made parent image \"%s\": %ldK (%d * %ldK)\n", m_image_name.c_str(),
+  printf("made parent image \"%s\": %ldK (%d * %" PRIu64 "K)\n", m_image_name.c_str(),
          (unsigned long)m_image_size, object_num, info.obj_size/1024);
 
   // write something into parent
@@ -1167,8 +1167,8 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   ASSERT_EQ(0, image.stat(info, sizeof(info)));
 
   const int object_num = info.size / info.obj_size;
-  printf("made parent image \"%s\": %ldK (%d * %ldK)\n", m_image_name.c_str(),
-         (unsigned long)m_image_size, object_num, info.obj_size/1024);
+  printf("made parent image \"%s\": %" PRIu64 "K (%d * %" PRIu64 "K)\n",
+	 m_image_name.c_str(), m_image_size, object_num, info.obj_size/1024);
 
   // write something into parent
   char test_data[TEST_IO_SIZE + 1];
