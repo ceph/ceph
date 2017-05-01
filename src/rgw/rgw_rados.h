@@ -2181,6 +2181,7 @@ class RGWRados
   friend class RGWStateLog;
   friend class RGWReplicaLogger;
   friend class RGWReshard;
+  friend class BucketIndexLockGuard;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
