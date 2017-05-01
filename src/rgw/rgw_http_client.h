@@ -6,9 +6,10 @@
 
 #include "common/RWLock.h"
 #include "common/Cond.h"
-#include "include/atomic.h"
 #include "rgw_common.h"
 #include "rgw_string.h"
+
+#include <atomic>
 
 using param_pair_t = pair<string, string>;
 using param_vec_t = vector<param_pair_t>;
@@ -33,7 +34,7 @@ class RGWHTTPClient
   string last_url;
   bool verify_ssl; // Do not validate self signed certificates, default to false
 
-  atomic_t stopped;
+  std::atomic<unsigned> stopped { 0 };
 
 protected:
   CephContext *cct;
@@ -219,8 +220,8 @@ class RGWHTTPManager {
   RGWCompletionManager *completion_mgr;
   void *multi_handle;
   bool is_threaded;
-  atomic_t going_down;
-  atomic_t is_stopped;
+  std::atomic<unsigned> going_down { 0 };
+  std::atomic<unsigned> is_stopped { 0 };
 
   RWLock reqs_lock;
   map<uint64_t, rgw_http_req_data *> reqs;
