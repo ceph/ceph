@@ -11378,8 +11378,14 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
       handle.reset_tp_timeout();
       const hobject_t soid(p->second);
 
+      if (missing_loc.is_unfound(soid)) {
+	dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
+	continue;
+      }
+
       if (soid > pi->second.last_backfill) {
 	if (!recovering.count(soid)) {
+          derr << __func__ << ": object " << soid << " last_backfill " << pi->second.last_backfill << dendl;
 	  derr << __func__ << ": object added to missing set for backfill, but "
 	       << "is not in recovering, error!" << dendl;
 	  ceph_abort();
@@ -11389,11 +11395,6 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 
       if (recovering.count(soid)) {
 	dout(10) << __func__ << ": already recovering " << soid << dendl;
-	continue;
-      }
-
-      if (missing_loc.is_unfound(soid)) {
-	dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
 	continue;
       }
 
@@ -11534,8 +11535,6 @@ uint64_t PrimaryLogPG::recover_backfill(
   update_range(&backfill_info, handle);
 
   unsigned ops = 0;
-  vector<boost::tuple<hobject_t, eversion_t,
-                      ObjectContextRef, vector<pg_shard_t> > > to_push;
   vector<boost::tuple<hobject_t, eversion_t, pg_shard_t> > to_remove;
   set<hobject_t> add_to_stat;
 
@@ -11547,6 +11546,7 @@ uint64_t PrimaryLogPG::recover_backfill(
   }
   backfill_info.trim_to(last_backfill_started);
 
+  PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
   while (ops < max) {
     if (backfill_info.begin <= earliest_peer_backfill() &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
@@ -11726,10 +11726,13 @@ uint64_t PrimaryLogPG::recover_backfill(
 	  vector<pg_shard_t> all_push = need_ver_targs;
 	  all_push.insert(all_push.end(), missing_targs.begin(), missing_targs.end());
 
-	  to_push.push_back(
-	    boost::tuple<hobject_t, eversion_t, ObjectContextRef, vector<pg_shard_t> >
-	    (backfill_info.begin, obj_v, obc, all_push));
-	  // Count all simultaneous pushes of the same object as a single op
+	  handle.reset_tp_timeout();
+	  int r = prep_backfill_object_push(backfill_info.begin, obj_v, obc, all_push, h);
+	  if (r < 0) {
+	    *work_started = true;
+	    dout(0) << __func__ << " Error " << r << " trying to backfill " << backfill_info.begin << dendl;
+	    break;
+	  }
 	  ops++;
 	} else {
 	  *work_started = true;
@@ -11810,12 +11813,6 @@ uint64_t PrimaryLogPG::recover_backfill(
     }
   }
 
-  PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-  for (unsigned i = 0; i < to_push.size(); ++i) {
-    handle.reset_tp_timeout();
-    prep_backfill_object_push(to_push[i].get<0>(), to_push[i].get<1>(),
-	    to_push[i].get<2>(), to_push[i].get<3>(), h);
-  }
   pgbackend->run_recovery_op(h, get_recovery_op_priority());
 
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
@@ -11912,7 +11909,7 @@ int PrimaryLogPG::prep_backfill_object_push(
   vector<pg_shard_t> peers,
   PGBackend::RecoveryHandle *h)
 {
-  dout(10) << "push_backfill_object " << oid << " v " << v << " to peers " << peers << dendl;
+  dout(10) << __func__ << " " << oid << " v " << v << " to peers " << peers << dendl;
   assert(!peers.empty());
 
   backfills_in_flight.insert(oid);
@@ -11936,6 +11933,14 @@ int PrimaryLogPG::prep_backfill_object_push(
     obc,
     h);
   obc->ondisk_read_unlock();
+  if (r < 0) {
+    dout(0) << __func__ << " Error " << r << " on oid " << oid << dendl;
+    list<pg_shard_t> fl = { pg_whoami };
+    failed_push(fl, oid);
+    primary_error(oid, v);
+    backfills_in_flight.erase(oid);
+    missing_loc.add_missing(oid, v, eversion_t());
+  }
   return r;
 }
 
