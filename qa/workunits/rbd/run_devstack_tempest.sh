@@ -84,8 +84,12 @@ cat<<EOF > ${STACK_HOME_PATH}/start.sh
 #!/bin/bash -ex
 cd ${STACK_OPT_PATH}
 git clone https://git.openstack.org/openstack-dev/devstack -b ${STACK_BRANCH}
-cd devstack
 
+# TODO workaround for https://github.com/pypa/setuptools/issues/951
+git clone https://git.openstack.org/openstack/requirements.git -b ${STACK_BRANCH}
+sed -i 's/appdirs===1.4.0/appdirs===1.4.3/' requirements/upper-constraints.txt
+
+cd devstack
 cp ${STACK_HOME_PATH}/local.conf .
 
 export PYTHONUNBUFFERED=true
@@ -93,7 +97,6 @@ export PROJECTS="openstack/devstack-plugin-ceph"
 
 ./stack.sh
 EOF
-
 
 # execute devstack
 chmod 0755 ${STACK_HOME_PATH}/start.sh
