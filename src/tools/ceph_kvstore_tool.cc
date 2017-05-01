@@ -28,6 +28,10 @@
 #include "kv/KeyValueDB.h"
 #include "common/url_escape.h"
 
+#ifdef HAVE_LIBAIO
+#include "os/bluestore/BlueStore.h"
+#endif
+
 using namespace std;
 
 class StoreTool
@@ -37,12 +41,28 @@ class StoreTool
 
   public:
   StoreTool(string type, const string &path) : store_path(path) {
-    KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context, type, path);
-    int r = db_ptr->open(std::cerr);
-    if (r < 0) {
-      cerr << "failed to open type " << type << " path " << path << ": "
-	   << cpp_strerror(r) << std::endl;
+    KeyValueDB *db_ptr;
+    if (type == "bluestore-kv") {
+#ifdef HAVE_LIBAIO
+      // note: we'll leak this!  the only user is ceph-kvstore-tool and
+      // we don't care.
+      BlueStore *bluestore = new BlueStore(g_ceph_context, path);
+      int r = bluestore->start_kv_only(&db_ptr);
+      if (r < 0) {
+	exit(1);
+      }
+#else
+      cerr << "bluestore not compiled in" << std::endl;
       exit(1);
+#endif
+    } else {
+      db_ptr = KeyValueDB::create(g_ceph_context, type, path);
+      int r = db_ptr->open(std::cerr);
+      if (r < 0) {
+	cerr << "failed to open type " << type << " path " << path << ": "
+	     << cpp_strerror(r) << std::endl;
+	exit(1);
+      }
     }
     db.reset(db_ptr);
   }
