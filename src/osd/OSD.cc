@@ -2947,6 +2947,8 @@ int OSD::shutdown()
   cct->_conf->set_val("debug_ms", "100");
   cct->_conf->apply_changes(NULL);
 
+  mgrc.set_pgstats_cb(std::function<MPGStats*()>());
+
   service.start_shutdown();
 
   // stop sending work to pgs.  this just prevents any new work in _process
