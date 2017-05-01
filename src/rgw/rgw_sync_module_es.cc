@@ -374,9 +374,23 @@ struct es_obj_metadata {
     if (!custom_date.empty()) {
       f->open_array_section("custom-date");
       for (auto i : custom_date) {
+        /*
+         * try to exlicitly parse date field, otherwise elasticsearch could reject the whole doc,
+         * which will end up with failed sync
+         */
+        real_time t;
+        int r = parse_time(i.second.c_str(), &t);
+        if (r < 0) {
+          ldout(cct, 20) << __func__ << "(): failed to parse time (" << i.second << "), skipping encoding of custom date attribute" << dendl;
+          continue;
+        }
+
+        string time_str;
+        rgw_to_iso8601(t, &time_str);
+
         f->open_object_section("entity");
         ::encode_json("name", i.first.c_str(), f);
-        ::encode_json("value", i.second, f);
+        ::encode_json("value", time_str.c_str(), f);
         f->close_section();
       }
       f->close_section();
