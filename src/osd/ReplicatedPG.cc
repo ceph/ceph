@@ -10796,8 +10796,14 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
       handle.reset_tp_timeout();
       const hobject_t soid(p->second);
 
+      if (missing_loc.is_unfound(soid)) {
+	dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
+	continue;
+      }
+
       if (cmp(soid, pi->second.last_backfill, get_sort_bitwise()) > 0) {
 	if (!recovering.count(soid)) {
+          derr << __func__ << ": object " << soid << " last_backfill " << pi->second.last_backfill << dendl;
 	  derr << __func__ << ": object added to missing set for backfill, but "
 	       << "is not in recovering, error!" << dendl;
 	  assert(0);
@@ -10807,11 +10813,6 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
 
       if (recovering.count(soid)) {
 	dout(10) << __func__ << ": already recovering " << soid << dendl;
-	continue;
-      }
-
-      if (missing_loc.is_unfound(soid)) {
-	dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
 	continue;
       }
 
@@ -10970,8 +10971,6 @@ int ReplicatedPG::recover_backfill(
   update_range(&backfill_info, handle);
 
   int ops = 0;
-  vector<boost::tuple<hobject_t, eversion_t,
-                      ObjectContextRef, vector<pg_shard_t> > > to_push;
   vector<boost::tuple<hobject_t, eversion_t, pg_shard_t> > to_remove;
   set<hobject_t, hobject_t::BitwiseComparator> add_to_stat;
 
@@ -10987,6 +10986,7 @@ int ReplicatedPG::recover_backfill(
   hobject_t backfill_pos = MIN_HOBJ(backfill_info.begin,
 				    earliest_peer_backfill(),
 				    get_sort_bitwise());
+  PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
   while (ops < max) {
     if (cmp(backfill_info.begin, earliest_peer_backfill(),
 	    get_sort_bitwise()) <= 0 &&
@@ -11125,10 +11125,13 @@ int ReplicatedPG::recover_backfill(
 	  vector<pg_shard_t> all_push = need_ver_targs;
 	  all_push.insert(all_push.end(), missing_targs.begin(), missing_targs.end());
 
-	  to_push.push_back(
-	    boost::tuple<hobject_t, eversion_t, ObjectContextRef, vector<pg_shard_t> >
-	    (backfill_info.begin, obj_v, obc, all_push));
-	  // Count all simultaneous pushes of the same object as a single op
+	  handle.reset_tp_timeout();
+	  int r = prep_backfill_object_push(backfill_info.begin, obj_v, obc, all_push, h);
+	  if (r < 0) {
+	    *work_started = true;
+	    dout(0) << __func__ << " Error " << r << " trying to backfill " << backfill_info.begin << dendl;
+	    break;
+	  }
 	  ops++;
 	} else {
 	  *work_started = true;
@@ -11178,12 +11181,6 @@ int ReplicatedPG::recover_backfill(
     pending_backfill_updates[to_remove[i].get<0>()]; // add empty stat!
   }
 
-  PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-  for (unsigned i = 0; i < to_push.size(); ++i) {
-    handle.reset_tp_timeout();
-    prep_backfill_object_push(to_push[i].get<0>(), to_push[i].get<1>(),
-	    to_push[i].get<2>(), to_push[i].get<3>(), h);
-  }
   pgbackend->run_recovery_op(h, get_recovery_op_priority());
 
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
@@ -11280,7 +11277,7 @@ int ReplicatedPG::prep_backfill_object_push(
   vector<pg_shard_t> peers,
   PGBackend::RecoveryHandle *h)
 {
-  dout(10) << "push_backfill_object " << oid << " v " << v << " to peers " << peers << dendl;
+  dout(10) << __func__ << " " << oid << " v " << v << " to peers " << peers << dendl;
   assert(!peers.empty());
 
   backfills_in_flight.insert(oid);
@@ -11304,6 +11301,14 @@ int ReplicatedPG::prep_backfill_object_push(
     obc,
     h);
   obc->ondisk_read_unlock();
+  if (r < 0) {
+    dout(0) << __func__ << " Error " << r << " on oid " << oid << dendl;
+    list<pg_shard_t> fl = { pg_whoami };
+    failed_push(fl, oid);
+    primary_error(oid, v);
+    backfills_in_flight.erase(oid);
+    missing_loc.add_missing(oid, v, eversion_t());
+  }
   return r;
 }
 

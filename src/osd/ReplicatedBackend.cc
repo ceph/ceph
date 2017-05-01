@@ -2379,6 +2379,9 @@ void ReplicatedBackend::_failed_pull(pg_shard_t from, const hobject_t &soid)
   pulling.erase(soid);
 }
 
+// This can read the local replica multiple times.  This
+// isn't so bad as long as the ObjectStore caches and
+// h->cache_dont_need is NOT true.
 int ReplicatedBackend::start_pushes(
   const hobject_t &soid,
   ObjectContextRef obc,
