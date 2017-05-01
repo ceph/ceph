@@ -3405,7 +3405,7 @@ bool OSDMap::try_pg_upmap(
 
 int OSDMap::calc_pg_upmaps(
   CephContext *cct,
-  float max_deviation,
+  float max_deviation_ratio,
   int max,
   const set<int64_t>& only_pools_orig,
   OSDMap::Incremental *pending_inc)
@@ -3504,12 +3504,12 @@ int OSDMap::calc_pg_upmaps(
       int osd = p->second;
       float deviation = p->first;
       float target = osd_weight[osd] * pgs_per_weight;
-      if (deviation/target < max_deviation) {
+      if (deviation/target < max_deviation_ratio) {
 	ldout(cct, 10) << " osd." << osd
 		       << " target " << target
 		       << " deviation " << deviation
-		       << " -> " << deviation/target
-		       << " < max " << max_deviation << dendl;
+		       << " -> ratio " << deviation/target
+		       << " < max ratio " << max_deviation_ratio << dendl;
 	break;
       }
       int num_to_move = deviation;
