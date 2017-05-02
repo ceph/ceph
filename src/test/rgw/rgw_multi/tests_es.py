@@ -82,6 +82,9 @@ def init_env(create_obj, num_keys = 5, buckets_per_zone = 1, bucket_init_cb = No
             objname = obj_prefix + str(count)
             k = new_key(zone, bucket.name, objname)
             # k.set_contents_from_string(content + 'x' * count)
+            if not create_obj:
+                continue
+
             create_obj(k, count)
 
             if not owner:
@@ -96,9 +99,11 @@ def init_env(create_obj, num_keys = 5, buckets_per_zone = 1, bucket_init_cb = No
 
     zonegroup_meta_checkpoint(zonegroup)
 
+    sources = []
     targets = []
     for target_conn in zonegroup_conns.zones:
         if not is_es_zone(target_conn):
+            sources.append(target_conn)
             continue
 
         targets.append(target_conn)
@@ -110,7 +115,7 @@ def init_env(create_obj, num_keys = 5, buckets_per_zone = 1, bucket_init_cb = No
         for target_conn in targets:
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
 
-    return targets, buckets, src_keys
+    return targets, sources, buckets, src_keys
 
 def test_es_object_search():
     min_size = 10
@@ -119,7 +124,7 @@ def test_es_object_search():
     def create_obj(k, i):
         k.set_contents_from_string(content + 'x' * i)
 
-    targets, buckets, src_keys = init_es_test(create_obj, num_keys = 5, buckets_per_zone = 2)
+    targets, _, buckets, src_keys = init_env(create_obj, num_keys = 5, buckets_per_zone = 2)
 
     for target_conn in targets:
 
@@ -185,7 +190,7 @@ def test_es_object_search_custom():
                                                                   'X-Amz-Meta-Foo-Int': str(i * 5),
                                                                   'X-Amz-Meta-Foo-Date': date_str})
 
-    targets, buckets, src_keys = init_es_test(create_obj, num_keys = 5, buckets_per_zone = 1, bucket_init_cb = bucket_init)
+    targets, _, buckets, src_keys = init_env(create_obj, num_keys = 5, buckets_per_zone = 1, bucket_init_cb = bucket_init)
 
 
     for target_conn in targets:
@@ -236,3 +241,35 @@ def test_es_object_search_custom():
                                                                      ' and (x-amz-meta-foo-str <= ' + str_vals[i + 1] + ')',
                         lambda k: k.bucket.name == bucket.name and (k.get_metadata('foo-str') >= str_vals[i] and
                                                                     k.get_metadata('foo-str') <= str_vals[i + 1]) )
+
+def test_es_bucket_conf():
+    min_size = 0
+
+    def bucket_init(zone_conn, bucket):
+        req = MDSearchConfig(zone_conn.conn, bucket.name)
+        req.set_config('x-amz-meta-foo-str; string, x-amz-meta-foo-int; int, x-amz-meta-foo-date; date')
+
+    targets, sources, buckets, _ = init_env(None, num_keys = 5, buckets_per_zone = 1, bucket_init_cb = bucket_init)
+
+    for source_conn in sources:
+        for bucket in buckets:
+            req = MDSearchConfig(source_conn.conn, bucket.name)
+            conf = req.get_config()
+
+            d = {}
+
+            for entry in conf:
+              d[entry['Key']] = entry['Type']
+
+            eq(len(d), 3)
+            eq(d['x-amz-meta-foo-str'], 'str')
+            eq(d['x-amz-meta-foo-int'], 'int')
+            eq(d['x-amz-meta-foo-date'], 'date')
+
+            req.del_config()
+
+            conf = req.get_config()
+
+            eq(len(conf), 0)
+
+        break # no need to iterate over all zones

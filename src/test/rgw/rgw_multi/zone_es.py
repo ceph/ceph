@@ -143,17 +143,27 @@ class MDSearchConfig:
 
     def send_request(self, conf, method):
         query_args = 'mdsearch'
-        headers = { 'X-Amz-Meta-Search': conf }
+        headers = None
+        if conf:
+            headers = { 'X-Amz-Meta-Search': conf }
+
+        query_args = append_query_arg(query_args, 'format', 'json')
 
         result = make_request(self.conn, method, bucket=self.bucket_name, key='', query_args=query_args, headers=headers)
         if result.status / 100 != 2:
             raise boto.exception.S3ResponseError(result.status, result.reason, result.read())
 
+        return result
+
+    def get_config(self):
+        result = self.send_request(None, 'GET')
+        return json.loads(result.read())
+
     def set_config(self, conf):
         self.send_request(conf, 'POST')
 
-    def del_config(self, conf):
-        self.send_request(conf, 'DELETE')
+    def del_config(self):
+        self.send_request(None, 'DELETE')
 
 
 class ESZoneBucket:
