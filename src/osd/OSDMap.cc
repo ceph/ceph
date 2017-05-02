@@ -293,6 +293,34 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
   }
 }
 
+int OSDMap::get_parent_subtree_id(CephContext *cct, int id, int subtree_type, set<int> *down_cache) const
+{
+  set<int> local_down_cache;
+  if (!down_cache) {
+    down_cache = &local_down_cache;
+  }
+
+  int current = id;
+  while (true) {
+    int type;
+    if (current >= 0) {
+      type = 0;
+    } else {
+      type = crush->get_bucket_type(current);
+    }
+    assert(type >= 0);
+
+    if (type >= subtree_type) {
+      return current;
+    }
+
+    int r = crush->get_immediate_parent_id(current, &current);
+    if (r < 0) {
+      return -ENOENT;
+    }
+  }
+}
+
 void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
 {
   __u16 v = 5;
