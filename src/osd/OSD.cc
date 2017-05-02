@@ -7926,16 +7926,9 @@ void OSD::handle_pg_create(OpRequestRef op)
     osdmap->pg_to_up_acting_osds(on, &up, &up_primary, &acting, &acting_primary);
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
-    if (up_primary != whoami) {
-      dout(10) << "mkpg " << on << "  not primary (role="
-	       << role << "), skipping" << dendl;
-      continue;
-    }
-    if (up != acting) {
-      dout(10) << "mkpg " << on << "  up " << up
-	       << " != acting " << acting << ", ignoring" << dendl;
-      // we'll get a query soon anyway, since we know the pg
-      // must exist. we can ignore this.
+    if (acting_primary != whoami) {
+      dout(10) << "mkpg " << on << "  not acting_primary (" << acting_primary
+	       << "), my role=" << role << ", skipping" << dendl;
       continue;
     }
 
