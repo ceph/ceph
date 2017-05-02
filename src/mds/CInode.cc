@@ -4441,25 +4441,24 @@ void CInode::maybe_export_pin()
         for (auto it = dirfrags.begin(); it != dirfrags.end(); it++) {
           CDir *cd = it->second;
           if (cd->state_test(CDir::STATE_AUXSUBTREE)) continue;
-          dout(15) << "aux subtree pinning " << *cd << dendl;
           CDir *subtree = mdcache->get_subtree_root(cd);
           if (!subtree) continue;
           if (subtree->is_ambiguous_auth()) {
             subtree->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_CInode_ExportPin(this));
-            dout(15) << "delaying pinning for single auth on subtree " << *subtree << dendl;
+            dout(15) << "aux subtree pin of " << *cd << " delayed for single auth on subtree " << *subtree << dendl;
           } else if (subtree->is_auth()) {
             assert(cd->is_auth());
             if (subtree->is_frozen() || subtree->is_freezing()) {
               subtree->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_CInode_ExportPin(this));
-              dout(15) << "delaying pinning for thaw on subtree " << *subtree << dendl;
+              dout(15) << "aux subtree pin of " << *cd << " delayed for unfreeze on subtree " << *subtree << dendl;
             } else {
               cd->state_set(CDir::STATE_AUXSUBTREE);
               mdcache->adjust_subtree_auth(cd, mdcache->mds->get_nodeid());
-              dout(15) << "set aux subtree " << *cd << dendl;
+              dout(15) << "aux subtree pinned " << *cd << dendl;
             }
           } else {
             assert(!cd->is_auth());
-            dout(15) << "not auth for fragment so not setting aux subtree for " << *cd << dendl;
+            dout(15) << "not setting aux subtree pin for " << *cd << " because not auth" << dendl;
           }
         }
       } else {
@@ -4469,7 +4468,7 @@ void CInode::maybe_export_pin()
             assert(!(cd->is_frozen() || cd->is_freezing()));
             assert(!cd->state_test(CDir::STATE_EXPORTBOUND));
             cd->state_clear(CDir::STATE_AUXSUBTREE); /* merge will happen eventually */
-            dout(15) << "cleared aux subtree " << *cd << dendl;
+            dout(15) << "cleared aux subtree pin " << *cd << dendl;
           }
         }
         dout(20) << "adding to export_pin_queue " << *this << dendl;
