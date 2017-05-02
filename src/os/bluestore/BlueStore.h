@@ -1906,7 +1906,7 @@ private:
 
   int _open_bdev(bool create);
   void _close_bdev();
-  int _open_db(bool create, bool kv_no_open=false);
+  int _open_db(bool create);
   void _close_db();
   int _open_fm(bool create);
   void _close_fm();
