@@ -55,7 +55,10 @@ class DaemonGroup(object):
             self.daemons[role][id_] = None
         klass = DaemonState
         if remote.init_system == 'systemd':
-            klass = SystemDState
+            # We currently cannot use systemd and valgrind together because
+            # it would require rewriting the unit files
+            if not any(map(lambda i: i == 'valgrind', args)):
+                klass = SystemDState
         self.daemons[role][id_] = klass(
             remote, role, id_, *args, **kwargs)
 
