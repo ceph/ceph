@@ -60,16 +60,17 @@ namespace {
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-PyModules::PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-                     Objecter &objecter_, Client &client_,
-		     Finisher &f)
+// constructor/destructor implementations cannot be in .h,
+// because ServeThread is still an "incomplete" type there
+
+PyModules::PyModules(DaemonStateIndex &ds, ClusterState &cs,
+	  MonClient &mc, Objecter &objecter_, Client &client_,
+	  Finisher &f)
   : daemon_state(ds), cluster_state(cs), monc(mc),
-    objecter(objecter_), client(client_),
-    finisher(f)
+    objecter(objecter_), client(client_), finisher(f),
+    lock("PyModules")
 {}
 
-// we can not have the default destructor in header, because ServeThread is
-// still an "incomplete" type. so we need to define the destructor here.
 PyModules::~PyModules() = default;
 
 void PyModules::dump_server(const std::string &hostname,
