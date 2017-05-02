@@ -465,7 +465,7 @@ OPTION(client_dirsize_rbytes, OPT_BOOL, true)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, true) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_disable_pagecache, OPT_BOOL, false)
 OPTION(fuse_allow_other, OPT_BOOL, true)
-OPTION(fuse_default_permissions, OPT_BOOL, true)
+OPTION(fuse_default_permissions, OPT_BOOL, false)
 OPTION(fuse_big_writes, OPT_BOOL, true)
 OPTION(fuse_atomic_o_trunc, OPT_BOOL, true)
 OPTION(fuse_debug, OPT_BOOL, false)
