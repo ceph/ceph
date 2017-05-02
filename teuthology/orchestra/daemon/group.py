@@ -30,8 +30,7 @@ class DaemonGroup(object):
         self.register_daemon(remote, type_, id_, *args, **kwargs)
         cluster = kwargs.pop('cluster', 'ceph')
         role = cluster + '.' + type_
-        if remote.init_system is None:
-            self.daemons[role][id_].restart()
+        self.daemons[role][id_].restart()
 
     def register_daemon(self, remote, type_, id_, *args, **kwargs):
         """
