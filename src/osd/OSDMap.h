@@ -495,6 +495,10 @@ public:
   bool subtree_is_down(int id, set<int> *down_cache) const;
   bool containing_subtree_is_down(CephContext *cct, int osd, int subtree_type, set<int> *down_cache) const;
   
+  /**
+   * get the id of the parent subtree
+   */
+  int get_parent_subtree_id(CephContext *cct, int osd, int subtree_type, set<int> *down_cache) const;
   int identify_osd(const entity_addr_t& addr) const;
   int identify_osd(const uuid_d& u) const;
   int identify_osd_on_all_channels(const entity_addr_t& addr) const;

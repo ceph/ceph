@@ -3460,7 +3460,14 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
   } else {
     int num_in_osds = 0;
     int num_down_in_osds = 0;
+    int num_in_subtrees = 0;
+    int num_down_in_subtrees = 0;
     set<int> osds;
+    set<int> down_cache;  // quick cache of down subtrees
+    set<int> in_subtrees;
+    set<int> up_in_subtrees;
+    set<int> down_in_subtrees;
+    int type = osdmap.crush->get_type_id(g_conf->mon_osd_down_out_subtree_limit);
     for (int i = 0; i < osdmap.get_max_osd(); i++) {
       if (!osdmap.exists(i)) {
         if (osdmap.crush->item_exists(i)) {
@@ -3471,22 +3478,53 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (osdmap.is_out(i))
         continue;
       ++num_in_osds;
+      // get the id of the parent subtree
+      int subtree_id = osdmap.get_parent_subtree_id(g_ceph_context, i, type, &down_cache);
+      if (subtree_id != -ENOENT) {
+        in_subtrees.insert(subtree_id);
+      }
+
       if (!osdmap.is_up(i)) {
 	++num_down_in_osds;
 	if (detail) {
 	  const osd_info_t& info = osdmap.get_info(i);
 	  ostringstream ss;
-	  ss << "osd." << i << " is down since epoch " << info.down_at
+	  ss << "osd." << i << " belonging to " << g_conf->mon_osd_down_out_subtree_limit
+	     << " id " << subtree_id << " is down since epoch " << info.down_at
 	     << ", last address " << osdmap.get_addr(i);
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
       }
+      else {
+	// if an osd in a subtree is up, implies subtree is not down
+        up_in_subtrees.insert(subtree_id);
+      }
     }
+
+    set_difference(in_subtrees.begin(), in_subtrees.end(),
+	           up_in_subtrees.begin(), up_in_subtrees.end(),
+		   inserter(down_in_subtrees, down_in_subtrees.end()));
+    num_in_subtrees = in_subtrees.size();
+    num_down_in_subtrees = down_in_subtrees.size();
     assert(num_down_in_osds <= num_in_osds);
+    assert(num_down_in_subtrees <= num_in_subtrees);
     if (num_down_in_osds > 0) {
       ostringstream ss;
-      ss << num_down_in_osds << "/" << num_in_osds << " in osds are down";
-      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      ss << num_down_in_osds << "/" << num_in_osds << " in osds are down. ";
+      if (num_down_in_subtrees == 1) {
+        ss << num_down_in_subtrees << "/" << num_in_subtrees << " of CRUSH type " <<
+	      g_conf->mon_osd_down_out_subtree_limit << " is down. ";
+      }
+      else {
+        ss << num_down_in_subtrees << "/" << num_in_subtrees << " of CRUSH type " <<
+              g_conf->mon_osd_down_out_subtree_limit << " are down. ";
+        summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+      if (detail) {
+	ss << "CRUSH type " << g_conf->mon_osd_down_out_subtree_limit << " down list: [" <<
+	       down_in_subtrees << "]";
+        detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
     }
 
     if (!osds.empty()) {
