@@ -1300,6 +1300,7 @@ int RGWPeriod::create(bool exclusive)
   ret = store_info(exclusive);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR:  storing info for " << id << ": " << cpp_strerror(-ret) << dendl;
+    return ret;
   }
 
   ret = set_latest_epoch(epoch);
@@ -1571,7 +1572,11 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period,
     return r;
   }
   // set as latest epoch
-  r = set_latest_epoch(epoch);
+  r = update_latest_epoch(epoch);
+  if (r == -EEXIST) {
+    // already have this epoch (or a more recent one)
+    return 0;
+  }
   if (r < 0) {
     ldout(cct, 0) << "failed to set latest epoch: " << cpp_strerror(-r) << dendl;
     return r;
