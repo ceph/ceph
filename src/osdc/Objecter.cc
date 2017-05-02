@@ -1458,9 +1458,9 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock *sl)
 {
   // rwlock is locked unique
 
-  if (op->attempts) {
-    // we send a reply earlier, which means that previously the pool
-    // existed, and now it does not (i.e., it was deleted).
+  if (op->target.pool_ever_existed) {
+    // the pool previously existed and now it does not, which means it
+    // was deleted.
     op->map_dne_bound = osdmap->get_epoch();
     ldout(cct, 10) << "check_op_pool_dne tid " << op->tid
 		   << " pool previously exists but now does not"
@@ -2749,6 +2749,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 		<< t->target_oloc << " -> pgid " << pgid << dendl;
   ldout(cct,30) << __func__ << "  target pi " << pi
 		<< " pg_num " << pi->get_pg_num() << dendl;
+  t->pool_ever_existed = true;
 
   int size = pi->size;
   int min_size = pi->min_size;
