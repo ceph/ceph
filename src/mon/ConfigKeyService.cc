@@ -19,6 +19,7 @@
 #include "mon/Monitor.h"
 #include "mon/ConfigKeyService.h"
 #include "mon/MonitorDBStore.h"
+#include "mon/OSDMonitor.h"
 #include "common/errno.h"
 #include "include/stringify.h"
 
@@ -246,10 +247,14 @@ out:
   return (ret == 0);
 }
 
+string _get_dmcrypt_prefix(const uuid_d& uuid, const string k)
+{
+  return "dm-crypt/osd/" + stringify(uuid) + "/" + k;
+}
+
 void ConfigKeyService::do_osd_destroy(int32_t id, uuid_d& uuid)
 {
-  string dmcrypt_prefix =
-    "dm-crypt/osd/" + stringify(uuid) + "/";
+  string dmcrypt_prefix = _get_dmcrypt_prefix(uuid, "");
   string daemon_prefix =
     "daemon-private/osd." + stringify(id) + "/";
 
@@ -259,4 +264,44 @@ void ConfigKeyService::do_osd_destroy(int32_t id, uuid_d& uuid)
   }
 
   paxos->trigger_propose();
+}
+
+int ConfigKeyService::validate_osd_new(
+    const uuid_d& uuid,
+    const string& dmcrypt_key,
+    stringstream& ss)
+{
+  string dmcrypt_prefix = _get_dmcrypt_prefix(uuid, "luks");
+  bufferlist value;
+  value.append(dmcrypt_key);
+
+  if (store_exists(dmcrypt_prefix)) {
+    bufferlist existing_value;
+    int err = store_get(dmcrypt_prefix, existing_value);
+    if (err < 0) {
+      dout(10) << __func__ << " unable to get dm-crypt key from store (r = "
+               << err << ")" << dendl;
+      return err;
+    }
+    if (existing_value.contents_equal(value)) {
+      // both values match; this will be an idempotent op.
+      return 0;
+    }
+    ss << "dm-crypt key already exists and does not match";
+    return -EEXIST;
+  }
+  return 0;
+}
+
+void ConfigKeyService::do_osd_new(
+    const uuid_d& uuid,
+    const string& dmcrypt_key)
+{
+  assert(paxos->is_plugged());
+
+  string dmcrypt_key_prefix = _get_dmcrypt_prefix(uuid, "luks");
+  bufferlist dmcrypt_key_value;
+  dmcrypt_key_value.append(dmcrypt_key);
+  // store_put() will call trigger_propose
+  store_put(dmcrypt_key_prefix, dmcrypt_key_value, nullptr);
 }

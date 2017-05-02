@@ -714,6 +714,13 @@ COMMAND("osd create " \
 	"name=uuid,type=CephUUID,req=false " \
 	"name=id,type=CephOsdName,req=false", \
 	"create new osd (with optional UUID and ID)", "osd", "rw", "cli,rest")
+COMMAND("osd new " \
+        "name=uuid,type=CephUUID,req=true " \
+        "name=id,type=CephOsdName,req=false", \
+        "Create a new OSD. If supplied, the `id` to be replaced needs to " \
+        "exist and have been previously destroyed. " \
+        "Reads secrets from JSON file via `-i <file>` (see man page).", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd blacklist " \
 	"name=blacklistop,type=CephChoices,strings=add|rm " \
 	"name=addr,type=CephEntityAddr " \

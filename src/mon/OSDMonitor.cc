@@ -6531,7 +6531,104 @@ int OSDMonitor::prepare_command_osd_create(
     // osd is about to exist
     return -EAGAIN;
   }
+  return 0;
+}
 
+int OSDMonitor::prepare_command_osd_new(
+    MonOpRequestRef op,
+    const map<string,cmd_vartype>& cmdmap,
+    const map<string,string>& secrets,
+    stringstream &ss)
+{
+  uuid_d uuid;
+  string uuidstr;
+  int64_t id = -1;
+
+  assert(paxos->is_plugged());
+
+  dout(10) << __func__ << " " << op << dendl;
+
+  /* validate command. abort now if something's wrong. */
+  if (!cmd_getval(g_ceph_context, cmdmap, "uuid", uuidstr)) {
+    ss << "requires the OSD's UUID to be specified.";
+    return -EINVAL;
+  }
+
+  if (!uuid.parse(uuidstr.c_str())) {
+    ss << "invalid UUID value '" << uuidstr << "'.";
+    return -EINVAL;
+  } else if (osdmap.identify_osd(uuid) >= 0) {
+    ss << "UUID already exists; please provide a unique UUID.";
+    return -EEXIST;
+  }
+
+  if (!cmd_getval(g_ceph_context, cmdmap, "replace_id", id)) {
+    ss << "requires an existing OSD id.";
+    return -EINVAL;
+  } else if (id < 0) {
+    ss << "requires an existing OSD id, greater or equal than 0.";
+    return -ENOENT;
+  } else if (!osdmap.exists(id)) {
+    ss << "osd." << id << " does not exist.";
+    return -ENOENT;
+  } else if (!osdmap.is_destroyed(id)) {
+    ss << "osd." << id << " has not been destroyed.";
+    return -EBUSY;
+  }
+
+  string cephx_secret, lockbox_secret, dmcrypt_key;
+  bool has_lockbox = false;
+
+  if (secrets.count("cephx_secret") == 0) {
+    ss << "requires a cephx secret.";
+    return -EINVAL;
+  }
+  cephx_secret = secrets.at("cephx_secret");
+
+  if (secrets.count("cephx_lockbox_secret") > 0) {
+    if (secrets.count("dmcrypt_key") == 0) {
+      ss << "requires both a cephx lockbox secret and a dm-crypt key.";
+      return -EINVAL;
+    }
+    has_lockbox = true;
+    lockbox_secret = secrets.at("cephx_lockbox_secret");
+    dmcrypt_key = secrets.at("dmcrypt_key");
+  }
+
+  AuthMonitor::auth_entity_t cephx_entity, lockbox_entity;
+  int err = mon->authmon()->validate_osd_new(id, uuid,
+                                             cephx_secret,
+                                             lockbox_secret,
+                                             cephx_entity,
+                                             lockbox_entity,
+                                             ss);
+  if (err < 0) {
+    return err;
+  }
+
+  ConfigKeyService* svc = (ConfigKeyService*)mon->config_key_service;
+  if (has_lockbox) {
+    err = svc->validate_osd_new(uuid, dmcrypt_key, ss);
+    if (err < 0) {
+      return err;
+    }
+  }
+
+  // perform updates.
+  err = mon->authmon()->do_osd_new(cephx_entity,
+                                       lockbox_entity,
+                                       has_lockbox);
+  assert(0 == err);
+
+  if (has_lockbox) {
+    svc->do_osd_new(uuid, dmcrypt_key);
+  }
+
+  pending_inc.new_weight[id] = CEPH_OSD_OUT;
+  pending_inc.new_state[id] |= CEPH_OSD_DESTROYED | CEPH_OSD_NEW;
+  pending_inc.new_uuid[id] = uuid;
+
+  ss << "new osd." << id << " uuid " << uuid;
   return 0;
 }
 
@@ -8574,6 +8671,48 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } else {
       ss << "purged osd." << id;
     }
+    getline(ss, rs);
+    wait_for_finished_proposal(op,
+        new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
+    force_immediate_propose();
+    return true;
+
+  } else if (prefix == "osd new") {
+
+    // make sure authmon is writeable.
+    if (!mon->authmon()->is_writeable()) {
+      dout(10) << __func__ << " waiting for auth mon to be writeable for "
+               << "osd destroy" << dendl;
+      mon->authmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+      return false;
+    }
+
+    map<string,string> secrets_map;
+
+    bufferlist bl = m->get_data();
+    string secrets_json = bl.to_str();
+    dout(20) << __func__ << " osd new json = " << secrets_json << dendl;
+
+    err = get_json_str_map(secrets_json, ss, &secrets_map);
+    if (err < 0)
+      goto reply;
+
+    if (secrets_map.empty()) {
+      ss << "'osd new' requires a populated json file as input.";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    dout(20) << __func__ << " osd new secrets " << secrets_map << dendl;
+
+    paxos->plug();
+    err = prepare_command_osd_new(op, cmdmap, secrets_map, ss);
+    paxos->unplug();
+
+    if (err < 0) {
+      goto reply;
+    }
+
     getline(ss, rs);
     wait_for_finished_proposal(op,
         new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
