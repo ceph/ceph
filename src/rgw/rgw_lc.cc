@@ -6,7 +6,6 @@
 #include <common/errno.h>
 #include "auth/Crypto.h"
 #include "cls/rgw/cls_rgw_client.h"
-#include "cls/refcount/cls_refcount_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "rgw_common.h"
 #include "rgw_bucket.h"
