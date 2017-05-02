@@ -795,7 +795,9 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
   ASSERT_LT(age, age_bound * 1000);
   ASSERT_GT(age, 0);
   rados_conf_set(cluster, "objecter_inject_no_watch_ping", "true");
-  int left = 2 * timeout;
+  // allow a long time here since an osd peering event will renew our
+  // watch.
+  int left = 16 * timeout;
   std::cout << "waiting up to " << left << " for osd to time us out ..."
 	    << std::endl;
   while (notify_err == 0 && --left) {
