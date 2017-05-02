@@ -479,7 +479,7 @@ bool PG::search_for_missing(
   pg_shard_t from,
   RecoveryCtx *ctx)
 {
-  unsigned num_unfound_before = missing_loc.num_unfound();
+  uint64_t num_unfound_before = missing_loc.num_unfound();
   bool found_missing = missing_loc.add_source_info(
     from, oinfo, omissing, ctx->handle);
   if (found_missing && num_unfound_before != missing_loc.num_unfound())
@@ -604,11 +604,12 @@ bool PG::MissingLoc::add_source_info(
 void PG::discover_all_missing(map<int, map<spg_t,pg_query_t> > &query_map)
 {
   auto &missing = pg_log.get_missing();
-  assert(have_unfound());
+  uint64_t unfound = get_num_unfound();
+  assert(unfound > 0);
 
   dout(10) << __func__ << " "
 	   << missing.num_missing() << " missing, "
-	   << get_num_unfound() << " unfound"
+	   << unfound << " unfound"
 	   << dendl;
 
   std::set<pg_shard_t>::const_iterator m = might_have_unfound.begin();
@@ -5422,7 +5423,7 @@ ostream& operator<<(ostream& out, const PG& pg)
   if (pg.pg_log.get_missing().num_missing()) {
     out << " m=" << pg.pg_log.get_missing().num_missing();
     if (pg.is_primary()) {
-      int unfound = pg.get_num_unfound();
+      uint64_t unfound = pg.get_num_unfound();
       if (unfound)
 	out << " u=" << unfound;
     }
@@ -6995,7 +6996,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
   if (pg->cct->_conf->osd_check_for_log_corruption)
     pg->check_log_for_corruption(pg->osd->store);
 
-  int unfound = pg->missing_loc.num_unfound();
+  uint64_t unfound = pg->missing_loc.num_unfound();
   if (unfound > 0 &&
       pg->all_unfound_are_queried_or_lost(pg->get_osdmap())) {
     if (pg->cct->_conf->osd_auto_mark_unfound_lost) {
