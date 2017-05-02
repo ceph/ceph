@@ -451,6 +451,23 @@ class Remote(object):
             self._is_vm = teuthology.lock.query.is_vm(self.name)
         return self._is_vm
 
+    @property
+    def init_system(self):
+        """
+        Which init system does the remote use?
+
+        :returns: 'systemd' or None
+        """
+        if not hasattr(self, '_init_system'):
+            self._init_system = None
+            proc = self.run(
+                args=['which', 'systemctl'],
+                check_status=False,
+            )
+            if proc.returncode == 0:
+                self._init_system = 'systemd'
+        return self._init_system
+
     def __del__(self):
         if self.ssh is not None:
             self.ssh.close()
