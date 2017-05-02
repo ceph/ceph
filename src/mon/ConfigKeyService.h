@@ -67,6 +67,11 @@ public:
   void service_tick() override { }
 
   void do_osd_destroy(int32_t id, uuid_d& uuid);
+  int validate_osd_new(
+      const uuid_d& uuid,
+      const string& dmcrypt_key,
+      stringstream& ss);
+  void do_osd_new(const uuid_d& uuid, const string& dmcrypt_key);
 
   int get_type() override {
     return QuorumService::SERVICE_CONFIG_KEY;

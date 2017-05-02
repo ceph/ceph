@@ -499,6 +499,12 @@ public:
       bool has_ancestor,
       bool unlink_only);
   int prepare_command_osd_remove(int32_t id);
+  int prepare_command_osd_new(
+      MonOpRequestRef op,
+      const map<string,cmd_vartype>& cmdmap,
+      const map<string,string>& secrets,
+      stringstream &ss);
+
   int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                stringstream& ss);
 

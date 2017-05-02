@@ -103,6 +103,12 @@ public:
     }
   };
 
+  struct auth_entity_t {
+    EntityName name;
+    EntityAuth auth;
+  };
+
+
 private:
   vector<Incremental> pending_auth;
   version_t last_rotating_ver;
@@ -161,9 +167,13 @@ private:
 
   bool entity_is_pending(EntityName& entity);
   int exists_and_matches_entity(
-      EntityName& name,
-      EntityAuth& auth,
-      map<string,bufferlist>& caps,
+      const auth_entity_t& entity,
+      bool has_secret,
+      stringstream& ss);
+  int exists_and_matches_entity(
+      const EntityName& name,
+      const EntityAuth& auth,
+      const map<string,bufferlist>& caps,
       bool has_secret,
       stringstream& ss);
   int remove_entity(const EntityName &entity);
@@ -193,7 +203,32 @@ private:
       const EntityName& cephx_entity,
       const EntityName& lockbox_entity);
 
+  int do_osd_new(
+      const auth_entity_t& cephx_entity,
+      const auth_entity_t& lockbox_entity,
+      bool has_lockbox);
+  int validate_osd_new(
+      int32_t id,
+      const uuid_d& uuid,
+      const string& cephx_secret,
+      const string& lockbox_secret,
+      auth_entity_t& cephx_entity,
+      auth_entity_t& lockbox_entity,
+      stringstream& ss);
+
   void dump_info(Formatter *f);
+
+  bool is_valid_cephx_key(const string& k) {
+    if (k.empty())
+      return false;
+
+    EntityAuth ea;
+    try {
+      ea.key.decode_base64(k);
+      return true;
+    } catch (buffer::error& e) { /* fallthrough */ }
+    return false;
+  }
 };
 
 
