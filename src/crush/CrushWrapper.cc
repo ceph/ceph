@@ -2224,6 +2224,29 @@ int CrushWrapper::_choose_type_stack(
   ldout(cct, 10) << __func__ << " cumulative_fanout " << cumulative_fanout
 		 << dendl;
 
+  // identify underful targets for each intermediate level.
+  // this serves two purposes:
+  //   1. we can tell when we are selecting a bucket that does not have any underfull
+  //      devices beneath it.  that means that if the current input includes an overfull
+  //      device, we won't be able to find an underfull device with this parent to
+  //      swap for it.
+  //   2. when we decide we should reject a bucket due to the above, this list gives us
+  //      a list of peers to consider that *do* have underfull devices available..  (we
+  //      are careful to pick one that has the same parent.)
+  vector<set<int>> underfull_buckets; // level -> set of buckets with >0 underfull item(s)
+  underfull_buckets.resize(stack.size() - 1);
+  for (auto osd : underfull) {
+    int item = osd;
+    for (int j = (int)stack.size() - 2; j >= 0; --j) {
+      int type = stack[j].first;
+      item = get_parent_of_type(item, type);
+      ldout(cct, 10) << __func__ << " underfull " << osd << " type " << type
+		     << " is " << item << dendl;
+      underfull_buckets[j].insert(item);
+    }
+  }
+  ldout(cct, 20) << __func__ << " underfull_buckets " << underfull_buckets << dendl;
+
   for (unsigned j = 0; j < stack.size(); ++j) {
     int type = stack[j].first;
     int fanout = stack[j].second;
@@ -2235,17 +2258,22 @@ int CrushWrapper::_choose_type_stack(
     auto tmpi = i;
     for (auto from : w) {
       ldout(cct, 10) << " from " << from << dendl;
-
+      // identify leaves under each choice.  we use this to check whether any of these
+      // leaves are overfull.  (if so, we need to make sure there are underfull candidates
+      // to swap for them.)
+      vector<set<int>> leaves;
+      leaves.resize(fanout);
       for (int pos = 0; pos < fanout; ++pos) {
 	if (type > 0) {
 	  // non-leaf
 	  int item = get_parent_of_type(*tmpi, type);
 	  o.push_back(item);
-	  ldout(cct, 10) << __func__ << "   from " << *tmpi << " got " << item
-			 << " of type " << type << dendl;
 	  int n = cum_fanout;
-	  while (n-- && tmpi != orig.end())
-	    ++tmpi;
+	  while (n-- && tmpi != orig.end()) {
+	    leaves[pos].insert(*tmpi++);
+	  }
+	  ldout(cct, 10) << __func__ << "   from " << *tmpi << " got " << item
+			 << " of type " << type << " over leaves " << leaves[pos] << dendl;
 	} else {
 	  // leaf
 	  bool replaced = false;
@@ -2284,6 +2312,50 @@ int CrushWrapper::_choose_type_stack(
 	  if (i == orig.end()) {
 	    ldout(cct, 10) << __func__ << " end of orig, break 1" << dendl;
 	    break;
+	  }
+	}
+      }
+      if (j + 1 < stack.size()) {
+	// check if any buckets have overfull leaves but no underfull candidates
+	for (int pos = 0; pos < fanout; ++pos) {
+	  if (underfull_buckets[j].count(o[pos]) == 0) {
+	    // are any leaves overfull?
+	    bool any_overfull = false;
+	    for (auto osd : leaves[pos]) {
+	      if (overfull.count(osd)) {
+		any_overfull = true;
+	      }
+	    }
+	    if (any_overfull) {
+	      ldout(cct, 10) << " bucket " << o[pos] << " has no underfull targets and "
+			     << ">0 leaves " << leaves[pos] << " is overfull; alts "
+			     << underfull_buckets[j]
+			     << dendl;
+	      for (auto alt : underfull_buckets[j]) {
+		if (std::find(o.begin(), o.end(), alt) == o.end()) {
+		  // see if alt has the same parent
+		  if (j == 0 ||
+		      get_parent_of_type(o[pos], stack[j-1].first) ==
+		      get_parent_of_type(alt, stack[j-1].first)) {
+		    if (j)
+		      ldout(cct, 10) << "  replacing " << o[pos]
+				     << " (which has no underfull leaves) with " << alt
+				     << " (same parent "
+				     << get_parent_of_type(alt, stack[j-1].first) << " type "
+				     << type << ")" << dendl;
+		    else
+		      ldout(cct, 10) << "  replacing " << o[pos]
+				     << " (which has no underfull leaves) with " << alt
+				     << " (first level)" << dendl;
+		    o[pos] = alt;
+		    break;
+		  } else {
+		    ldout(cct, 30) << "  alt " << alt << " for " << o[pos]
+				   << " has different parent, skipping" << dendl;
+		  }
+		}
+	      }
+	    }
 	  }
 	}
       }
