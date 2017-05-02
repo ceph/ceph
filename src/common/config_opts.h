@@ -857,6 +857,7 @@ OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 150) // make this < map_cache_
 
 OPTION(osd_min_pg_log_entries, OPT_U32, 3000)  // number of entries to keep in the pg log when trimming it
 OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // max entries, say when degraded, before we trim
+OPTION(osd_force_recovery_pg_log_entries_factor, OPT_FLOAT, 1.3) // max entries factor before force recovery
 OPTION(osd_pg_log_trim_min, OPT_U32, 100)
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT, 256)

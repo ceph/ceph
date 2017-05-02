@@ -677,6 +677,48 @@ void PrimaryLogPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef o
   op->mark_delayed("waiting for blocked object");
 }
 
+void PrimaryLogPG::maybe_force_recovery()
+{
+  // no force if not in degraded/recovery/backfill stats
+  if (!is_degraded() &&
+      !state_test(PG_STATE_RECOVERING |
+                  PG_STATE_RECOVERY_WAIT |
+		  PG_STATE_BACKFILL |
+		  PG_STATE_BACKFILL_WAIT |
+		  PG_STATE_BACKFILL_TOOFULL))
+    return;
+
+  if (pg_log.get_log().approx_size() <
+      cct->_conf->osd_max_pg_log_entries *
+        cct->_conf->osd_force_recovery_pg_log_entries_factor)
+    return;
+
+  // find the oldest missing object
+  version_t min_version = 0;
+  hobject_t soid;
+  if (!pg_log.get_missing().get_items().empty()) {
+    min_version = pg_log.get_missing().get_rmissing().begin()->first;
+    soid = pg_log.get_missing().get_rmissing().begin()->second;
+  }
+  assert(!actingbackfill.empty());
+  for (set<pg_shard_t>::iterator it = actingbackfill.begin();
+       it != actingbackfill.end();
+       ++it) {
+    if (*it == get_primary()) continue;
+    pg_shard_t peer = *it;
+    if (peer_missing.count(peer) &&
+	!peer_missing[peer].get_items().empty() &&
+	min_version > peer_missing[peer].get_rmissing().begin()->first) {
+      min_version = peer_missing[peer].get_rmissing().begin()->first;
+      soid = peer_missing[peer].get_rmissing().begin()->second;
+    }
+  }
+
+  // recover it
+  if (soid != hobject_t())
+    maybe_kick_recovery(soid);
+}
+
 class PGLSPlainFilter : public PGLSFilter {
   string val;
 public:
@@ -2238,6 +2280,9 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   } else if (op->may_write() || op->may_cache()) {
     osd->logger->tinc(l_osd_op_w_prepare_lat, prepare_latency);
   }
+
+  // force recovery of the oldest missing object if too many logs
+  maybe_force_recovery();
 }
 
 void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
@@ -9754,9 +9799,7 @@ void PrimaryLogPG::_committed_pushed_object(
 	    last_complete_ondisk),
 	  get_osdmap()->get_epoch());
       } else {
-	// we are the primary.  tell replicas to trim?
-	if (calc_min_last_complete_ondisk())
-	  trim_peers();
+	calc_min_last_complete_ondisk();
       }
     }
 

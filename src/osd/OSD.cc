@@ -8400,10 +8400,8 @@ void OSD::handle_pg_trim(OpRequestRef op)
     dout(10) << *pg << " replica osd." << from << " lcod " << m->trim_to << dendl;
     pg->peer_last_complete_ondisk[pg_shard_t(from, m->pgid.shard)] =
       m->trim_to;
-    if (pg->calc_min_last_complete_ondisk()) {
-      dout(10) << *pg << " min lcod now " << pg->min_last_complete_ondisk << dendl;
-      pg->trim_peers();
-    }
+    // trim log when the pg is recovered
+    pg->calc_min_last_complete_ondisk();
   } else {
     // primary is instructing us to trim
     ObjectStore::Transaction t;
