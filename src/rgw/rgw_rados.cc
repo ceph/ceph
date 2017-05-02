@@ -11363,6 +11363,11 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx,
 
   ldout(cct, 20) << "rgw_get_bucket_info: bucket instance: " << entry_point.bucket << dendl;
 
+  /* fix bucket with empty name */
+  if (entry_point.bucket.name.empty()) {
+    ldout(cct, 0) << "get_bucket_info:  fixing empty bucket name in entry point " << dendl;
+    entry_point.bucket.name = bucket_name;
+  }
 
   /* read bucket instance info */
 
