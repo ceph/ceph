@@ -1400,7 +1400,7 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   }
 
   // drop lock while we wait for io
-  list<FS::aio_t> completed_ios;
+  list<aio_t> completed_ios;
   _claim_completed_aios(log_writer, &completed_ios);
   l.unlock();
   wait_for_aio(log_writer);
@@ -1643,7 +1643,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 
 // we need to retire old completed aios so they don't stick around in
 // memory indefinitely (along with their bufferlist refs).
-void BlueFS::_claim_completed_aios(FileWriter *h, list<FS::aio_t> *ls)
+void BlueFS::_claim_completed_aios(FileWriter *h, list<aio_t> *ls)
 {
   for (auto p : h->iocv) {
     if (p) {
@@ -1742,7 +1742,7 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
      return r;
   uint64_t old_dirty_seq = h->file->dirty_seq;
 
-  list<FS::aio_t> completed_ios;
+  list<aio_t> completed_ios;
   _claim_completed_aios(h, &completed_ios);
   lock.unlock();
   wait_for_aio(h);
