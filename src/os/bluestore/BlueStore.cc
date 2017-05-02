@@ -4130,7 +4130,7 @@ bool BlueStore::test_mount_in_use()
   return ret;
 }
 
-int BlueStore::_open_db(bool create, bool kv_no_open)
+int BlueStore::_open_db(bool create)
 {
   int r;
   assert(!db);
@@ -4369,9 +4369,6 @@ int BlueStore::_open_db(bool create, bool kv_no_open)
   if (kv_backend == "rocksdb")
     options = cct->_conf->bluestore_rocksdb_options;
   db->init(options);
-  if (kv_no_open) {
-    return 0;
-  }
   if (create)
     r = db->create_and_open(err);
   else
@@ -4968,7 +4965,7 @@ int BlueStore::_mount(bool kv_only)
   if (r < 0)
     goto out_fsid;
 
-  r = _open_db(false, kv_only);
+  r = _open_db(false);
   if (r < 0)
     goto out_bdev;
 
