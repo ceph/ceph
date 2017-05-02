@@ -2761,7 +2761,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
   pg_t prev_pgid(prev_seed, pgid.pool());
-  if (any_change && pg_interval_t::is_new_interval(
+  if (any_change && PastIntervals::is_new_interval(
 	t->acting_primary,
 	acting_primary,
 	t->acting,

@@ -2539,7 +2539,7 @@ void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
 
 void pg_history_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(7, 4, bl);
+  ENCODE_START(8, 4, bl);
   ::encode(epoch_created, bl);
   ::encode(last_epoch_started, bl);
   ::encode(last_epoch_clean, bl);
@@ -2553,12 +2553,14 @@ void pg_history_t::encode(bufferlist &bl) const
   ::encode(last_deep_scrub_stamp, bl);
   ::encode(last_clean_scrub_stamp, bl);
   ::encode(last_epoch_marked_full, bl);
+  ::encode(last_interval_started, bl);
+  ::encode(last_interval_clean, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_history_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 4, 4, bl);
   ::decode(epoch_created, bl);
   ::decode(last_epoch_started, bl);
   if (struct_v >= 3)
@@ -2583,6 +2585,21 @@ void pg_history_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 7) {
     ::decode(last_epoch_marked_full, bl);
   }
+  if (struct_v >= 8) {
+    ::decode(last_interval_started, bl);
+    ::decode(last_interval_clean, bl);
+  } else {
+    if (last_epoch_started >= same_interval_since) {
+      last_interval_started = same_interval_since;
+    } else {
+      last_interval_started = last_epoch_started; // best guess
+    }
+    if (last_epoch_clean >= same_interval_since) {
+      last_interval_clean = same_interval_since;
+    } else {
+      last_interval_clean = last_epoch_clean; // best guess
+    }
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2590,7 +2607,9 @@ void pg_history_t::dump(Formatter *f) const
 {
   f->dump_int("epoch_created", epoch_created);
   f->dump_int("last_epoch_started", last_epoch_started);
+  f->dump_int("last_interval_started", last_interval_started);
   f->dump_int("last_epoch_clean", last_epoch_clean);
+  f->dump_int("last_interval_clean", last_interval_clean);
   f->dump_int("last_epoch_split", last_epoch_split);
   f->dump_int("last_epoch_marked_full", last_epoch_marked_full);
   f->dump_int("same_up_since", same_up_since);
@@ -2609,7 +2628,9 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
   o.push_back(new pg_history_t);
   o.back()->epoch_created = 1;
   o.back()->last_epoch_started = 2;
+  o.back()->last_interval_started = 2;
   o.back()->last_epoch_clean = 3;
+  o.back()->last_interval_clean = 2;
   o.back()->last_epoch_split = 4;
   o.back()->same_up_since = 5;
   o.back()->same_interval_since = 6;
@@ -2627,7 +2648,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(31, 26, bl);
+  ENCODE_START(32, 26, bl);
   ::encode(pgid.pgid, bl);
   ::encode(last_update, bl);
   ::encode(last_complete, bl);
@@ -2646,12 +2667,13 @@ void pg_info_t::encode(bufferlist &bl) const
   ::encode(pgid.shard, bl);
   ::encode(last_backfill, bl);
   ::encode(last_backfill_bitwise, bl);
+  ::encode(last_interval_started, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(31, bl);
+  DECODE_START(32, bl);
   ::decode(pgid.pgid, bl);
   ::decode(last_update, bl);
   ::decode(last_complete, bl);
@@ -2669,6 +2691,11 @@ void pg_info_t::decode(bufferlist::iterator &bl)
   ::decode(pgid.shard, bl);
   ::decode(last_backfill, bl);
   ::decode(last_backfill_bitwise, bl);
+  if (struct_v >= 32) {
+    ::decode(last_interval_started, bl);
+  } else {
+    last_interval_started = last_epoch_started;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2780,9 +2807,9 @@ void pg_notify_t::generate_test_instances(list<pg_notify_t*>& o)
 
 ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
 {
-  lhs << "(query_epoch:" << notify.query_epoch
-      << ", epoch_sent:" << notify.epoch_sent
-      << ", info:" << notify.info;
+  lhs << "(query:" << notify.query_epoch
+      << " sent:" << notify.epoch_sent
+      << " " << notify.info;
   if (notify.from != shard_id_t::NO_SHARD ||
       notify.to != shard_id_t::NO_SHARD)
     lhs << " " << (unsigned)notify.from
@@ -2792,7 +2819,7 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
 
 // -- pg_interval_t --
 
-void pg_interval_t::encode(bufferlist& bl) const
+void PastIntervals::pg_interval_t::encode(bufferlist& bl) const
 {
   ENCODE_START(4, 2, bl);
   ::encode(first, bl);
@@ -2805,7 +2832,7 @@ void pg_interval_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void pg_interval_t::decode(bufferlist::iterator& bl)
+void PastIntervals::pg_interval_t::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   ::decode(first, bl);
@@ -2828,7 +2855,7 @@ void pg_interval_t::decode(bufferlist::iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void pg_interval_t::dump(Formatter *f) const
+void PastIntervals::pg_interval_t::dump(Formatter *f) const
 {
   f->dump_unsigned("first", first);
   f->dump_unsigned("last", last);
@@ -2845,7 +2872,7 @@ void pg_interval_t::dump(Formatter *f) const
   f->dump_int("up_primary", up_primary);
 }
 
-void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
+void PastIntervals::pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
 {
   o.push_back(new pg_interval_t);
   o.push_back(new pg_interval_t);
@@ -2857,7 +2884,471 @@ void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
   o.back()->maybe_went_rw = true;
 }
 
-bool pg_interval_t::is_new_interval(
+WRITE_CLASS_ENCODER(PastIntervals::pg_interval_t)
+
+class pi_simple_rep : public PastIntervals::interval_rep {
+  map<epoch_t, PastIntervals::pg_interval_t> interval_map;
+
+  pi_simple_rep(
+    bool ec_pool,
+    std::list<PastIntervals::pg_interval_t> &&intervals) {
+    for (auto &&i: intervals)
+      add_interval(ec_pool, i);
+  }
+
+public:
+  pi_simple_rep() = default;
+  pi_simple_rep(const pi_simple_rep &) = default;
+  pi_simple_rep(pi_simple_rep &&) = default;
+  pi_simple_rep &operator=(pi_simple_rep &&) = default;
+  pi_simple_rep &operator=(const pi_simple_rep &) = default;
+
+  size_t size() const override { return interval_map.size(); }
+  bool empty() const override { return interval_map.empty(); }
+  void clear() override { interval_map.clear(); }
+  pair<epoch_t, epoch_t> get_bounds() const override {
+    auto iter = interval_map.begin();
+    if (iter != interval_map.end()) {
+      auto riter = interval_map.rbegin();
+      return make_pair(
+	iter->second.first,
+	riter->second.last + 1);
+    } else {
+      return make_pair(0, 0);
+    }
+  }
+  set<pg_shard_t> get_all_participants(
+    bool ec_pool) const override {
+    set<pg_shard_t> all_participants;
+
+    // We need to decide who might have unfound objects that we need
+    auto p = interval_map.rbegin();
+    auto end = interval_map.rend();
+    for (; p != end; ++p) {
+      const PastIntervals::pg_interval_t &interval(p->second);
+      // If nothing changed, we don't care about this interval.
+      if (!interval.maybe_went_rw)
+	continue;
+
+      int i = 0;
+      std::vector<int>::const_iterator a = interval.acting.begin();
+      std::vector<int>::const_iterator a_end = interval.acting.end();
+      for (; a != a_end; ++a, ++i) {
+	pg_shard_t shard(*a, ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD);
+	if (*a != CRUSH_ITEM_NONE)
+	  all_participants.insert(shard);
+      }
+    }
+    return all_participants;
+  }
+  void add_interval(
+    bool ec_pool,
+    const PastIntervals::pg_interval_t &interval) override {
+    interval_map[interval.first] = interval;
+  }
+  unique_ptr<PastIntervals::interval_rep> clone() const override {
+    return unique_ptr<PastIntervals::interval_rep>(new pi_simple_rep(*this));
+  }
+  ostream &print(ostream &out) const override {
+    return out << interval_map;
+  }
+  void encode(bufferlist &bl) const override {
+    ::encode(interval_map, bl);
+  }
+  void decode(bufferlist::iterator &bl) override {
+    ::decode(interval_map, bl);
+  }
+  void dump(Formatter *f) const override {
+    f->open_array_section("PastIntervals::compat_rep");
+    for (auto &&i: interval_map) {
+      f->open_object_section("pg_interval_t");
+      f->dump_int("epoch", i.first);
+      f->open_object_section("interval");
+      i.second.dump(f);
+      f->close_section();
+      f->close_section();
+    }
+    f->close_section();
+  }
+  bool is_classic() const override {
+    return true;
+  }
+  static void generate_test_instances(list<pi_simple_rep*> &o) {
+    using ival = PastIntervals::pg_interval_t;
+    using ivallst = std::list<ival>;
+    o.push_back(
+      new pi_simple_rep(
+	true, ivallst
+	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+	, ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
+	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
+	}));
+    o.push_back(
+      new pi_simple_rep(
+	false, ivallst
+	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+	, ival{{   1, 2}, {   1, 2}, 20, 30,  true, 1, 1}
+	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
+	}));
+    o.push_back(
+      new pi_simple_rep(
+	true, ivallst
+	{ ival{{2, 1, 0}, {2, 1, 0}, 10, 20,  true, 1, 1}
+	, ival{{   0, 2}, {   0, 2}, 21, 30,  true, 0, 0}
+	, ival{{   0, 2}, {2,    0}, 31, 35,  true, 2, 2}
+	, ival{{   0, 2}, {   0, 2}, 36, 50,  true, 0, 0}
+	}));
+    return;
+  }
+  void iterate_mayberw_back_to(
+    bool ec_pool,
+    epoch_t les,
+    std::function<void(epoch_t, const set<pg_shard_t> &)> &&f) const override {
+    for (auto i = interval_map.rbegin(); i != interval_map.rend(); ++i) {
+      if (!i->second.maybe_went_rw)
+	continue;
+      if (i->second.last < les)
+	break;
+      set<pg_shard_t> actingset;
+      for (unsigned j = 0; j < i->second.acting.size(); ++j) {
+	if (i->second.acting[j] == CRUSH_ITEM_NONE)
+	  continue;
+	actingset.insert(
+	  pg_shard_t(
+	    i->second.acting[j],
+	    ec_pool ? shard_id_t(j) : shard_id_t::NO_SHARD));
+      }
+      f(i->second.first, actingset);
+    }
+  }
+
+  bool has_full_intervals() const override { return true; }
+  void iterate_all_intervals(
+    std::function<void(const PastIntervals::pg_interval_t &)> &&f
+    ) const override {
+    for (auto &&i: interval_map) {
+      f(i.second);
+    }
+  }
+  virtual ~pi_simple_rep() override {}
+};
+
+/**
+ * pi_compact_rep
+ *
+ * PastIntervals only needs to be able to answer two questions:
+ * 1) Where should the primary look for unfound objects?
+ * 2) List a set of subsets of the OSDs such that contacting at least
+ *    one from each subset guarrantees we speak to at least one witness
+ *    of any completed write.
+ *
+ * Crucially, 2) does not require keeping *all* past intervals.  Certainly,
+ * we don't need to keep any where maybe_went_rw would be false.  We also
+ * needn't keep two intervals where the actingset in one is a subset
+ * of the other (only need to keep the smaller of the two sets).  In order
+ * to accurately trim the set of intervals as last_epoch_started changes
+ * without rebuilding the set from scratch, we'll retain the larger set
+ * if it in an older interval.
+ */
+struct compact_interval_t {
+  epoch_t first;
+  epoch_t last;
+  set<pg_shard_t> acting;
+  bool supersedes(const compact_interval_t &other) {
+    for (auto &&i: acting) {
+      if (!other.acting.count(i))
+	return false;
+    }
+    return true;
+  }
+  void dump(Formatter *f) const {
+    f->open_object_section("compact_interval_t");
+    f->dump_stream("first") << first;
+    f->dump_stream("last") << last;
+    f->dump_stream("acting") << acting;
+    f->close_section();
+  }
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(first, bl);
+    ::encode(last, bl);
+    ::encode(acting, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(first, bl);
+    ::decode(last, bl);
+    ::decode(acting, bl);
+    DECODE_FINISH(bl);
+  }
+  static void generate_test_instances(list<compact_interval_t*> & o) {
+    /* Not going to be used, we'll generate pi_compact_rep directly */
+  }
+};
+ostream &operator<<(ostream &o, const compact_interval_t &rhs)
+{
+  return o << "([" << rhs.first << "," << rhs.last
+	   << "] acting " << rhs.acting << ")";
+}
+WRITE_CLASS_ENCODER(compact_interval_t)
+
+class pi_compact_rep : public PastIntervals::interval_rep {
+  epoch_t first = 0;
+  epoch_t last = 0; // inclusive
+  set<pg_shard_t> all_participants;
+  list<compact_interval_t> intervals;
+  pi_compact_rep(
+    bool ec_pool,
+    std::list<PastIntervals::pg_interval_t> &&intervals) {
+    for (auto &&i: intervals)
+      add_interval(ec_pool, i);
+  }
+public:
+  pi_compact_rep() = default;
+  pi_compact_rep(const pi_compact_rep &) = default;
+  pi_compact_rep(pi_compact_rep &&) = default;
+  pi_compact_rep &operator=(const pi_compact_rep &) = default;
+  pi_compact_rep &operator=(pi_compact_rep &&) = default;
+
+  size_t size() const override { return intervals.size(); }
+  bool empty() const override {
+    return first > last || (first == 0 && last == 0);
+  }
+  void clear() override {
+    *this = pi_compact_rep();
+  }
+  pair<epoch_t, epoch_t> get_bounds() const override {
+    return make_pair(first, last + 1);
+  }
+  set<pg_shard_t> get_all_participants(
+    bool ec_pool) const override {
+    return all_participants;
+  }
+  void add_interval(
+    bool ec_pool, const PastIntervals::pg_interval_t &interval) override {
+    if (first == 0)
+      first = interval.first;
+    assert(interval.last > last);
+    last = interval.last;
+    set<pg_shard_t> acting;
+    for (unsigned i = 0; i < interval.acting.size(); ++i) {
+      if (interval.acting[i] == CRUSH_ITEM_NONE)
+	continue;
+      acting.insert(
+	pg_shard_t(
+	  interval.acting[i],
+	  ec_pool ? shard_id_t(i) : shard_id_t::NO_SHARD));
+    }
+    all_participants.insert(acting.begin(), acting.end());
+    if (!interval.maybe_went_rw)
+      return;
+    intervals.push_back(
+      compact_interval_t{interval.first, interval.last, acting});
+    auto plast = intervals.end();
+    --plast;
+    for (auto cur = intervals.begin(); cur != plast; ) {
+      if (plast->supersedes(*cur)) {
+	intervals.erase(cur++);
+      } else {
+	++cur;
+      }
+    }
+  }
+  unique_ptr<PastIntervals::interval_rep> clone() const override {
+    return unique_ptr<PastIntervals::interval_rep>(new pi_compact_rep(*this));
+  }
+  ostream &print(ostream &out) const override {
+    return out << "([" << first << "," << last
+	       << "] intervals=" << intervals << ")";
+  }
+  void encode(bufferlist &bl) const override {
+    ENCODE_START(1, 1, bl);
+    ::encode(first, bl);
+    ::encode(last, bl);
+    ::encode(all_participants, bl);
+    ::encode(intervals, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) override {
+    DECODE_START(1, bl);
+    ::decode(first, bl);
+    ::decode(last, bl);
+    ::decode(all_participants, bl);
+    ::decode(intervals, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const override {
+    f->open_object_section("PastIntervals::compact_rep");
+    f->dump_stream("first") << first;
+    f->dump_stream("last") << last;
+    f->open_array_section("all_participants");
+    for (auto& i : all_participants) {
+      f->dump_object("pg_shard", i);
+    }
+    f->close_section();
+    f->open_array_section("intervals");
+    for (auto &&i: intervals) {
+      i.dump(f);
+    }
+    f->close_section();
+    f->close_section();
+  }
+  bool is_classic() const override {
+    return false;
+  }
+  static void generate_test_instances(list<pi_compact_rep*> &o) {
+    using ival = PastIntervals::pg_interval_t;
+    using ivallst = std::list<ival>;
+    o.push_back(
+      new pi_compact_rep(
+	true, ivallst
+	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+	, ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
+	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
+	}));
+    o.push_back(
+      new pi_compact_rep(
+	false, ivallst
+	{ ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+	, ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
+	, ival{{      2}, {      2}, 31, 35, false, 2, 2}
+	, ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
+	}));
+    o.push_back(
+      new pi_compact_rep(
+	true, ivallst
+	{ ival{{2, 1, 0}, {2, 1, 0}, 10, 20,  true, 1, 1}
+	, ival{{   0, 2}, {   0, 2}, 21, 30,  true, 0, 0}
+	, ival{{   0, 2}, {2,    0}, 31, 35,  true, 2, 2}
+	, ival{{   0, 2}, {   0, 2}, 36, 50,  true, 0, 0}
+	}));
+  }
+  void iterate_mayberw_back_to(
+    bool ec_pool,
+    epoch_t les,
+    std::function<void(epoch_t, const set<pg_shard_t> &)> &&f) const override {
+    for (auto i = intervals.rbegin(); i != intervals.rend(); ++i) {
+      if (i->last < les)
+	break;
+      f(i->first, i->acting);
+    }
+  }
+  virtual ~pi_compact_rep() override {}
+};
+WRITE_CLASS_ENCODER(pi_compact_rep)
+
+PastIntervals::PastIntervals(const PastIntervals &rhs)
+  : past_intervals(rhs.past_intervals ?
+		   rhs.past_intervals->clone() :
+		   nullptr) {}
+
+PastIntervals &PastIntervals::operator=(const PastIntervals &rhs)
+{
+  PastIntervals other(rhs);
+  ::swap(other, *this);
+  return *this;
+}
+
+ostream& operator<<(ostream& out, const PastIntervals &i)
+{
+  if (i.past_intervals) {
+    return i.past_intervals->print(out);
+  } else {
+    return out << "(empty)";
+  }
+}
+
+ostream& operator<<(ostream& out, const PastIntervals::PriorSet &i)
+{
+  return out << "PriorSet("
+	     << "ec_pool: " << i.ec_pool
+	     << ", probe: " << i.probe
+	     << ", down: " << i.down
+	     << ", blocked_by: " << i.blocked_by
+	     << ", pg_down: " << i.pg_down
+	     << ")";
+}
+
+void PastIntervals::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  __u8 type = 0;
+  ::decode(type, bl);
+  switch (type) {
+  case 0:
+    break;
+  case 1:
+    past_intervals.reset(new pi_simple_rep);
+    past_intervals->decode(bl);
+    break;
+  case 2:
+    past_intervals.reset(new pi_compact_rep);
+    past_intervals->decode(bl);
+    break;
+  }
+  DECODE_FINISH(bl);
+}
+
+void PastIntervals::decode_classic(bufferlist::iterator &bl)
+{
+  past_intervals.reset(new pi_simple_rep);
+  past_intervals->decode(bl);
+}
+
+void PastIntervals::generate_test_instances(list<PastIntervals*> &o)
+{
+  {
+    list<pi_simple_rep *> simple;
+    pi_simple_rep::generate_test_instances(simple);
+    for (auto &&i: simple) {
+      // takes ownership of contents
+      o.push_back(new PastIntervals(i));
+    }
+  }
+  {
+    list<pi_compact_rep *> compact;
+    pi_compact_rep::generate_test_instances(compact);
+    for (auto &&i: compact) {
+      // takes ownership of contents
+      o.push_back(new PastIntervals(i));
+    }
+  }
+  return;
+}
+
+void PastIntervals::update_type(bool ec_pool, bool compact)
+{
+  if (!compact) {
+    if (!past_intervals) {
+      past_intervals.reset(new pi_simple_rep);
+    } else {
+      // we never convert from compact back to classic
+      assert(is_classic());
+    }
+  } else {
+    if (!past_intervals) {
+      past_intervals.reset(new pi_compact_rep);
+    } else if (is_classic()) {
+      auto old = std::move(past_intervals);
+      past_intervals.reset(new pi_compact_rep);
+      assert(old->has_full_intervals());
+      old->iterate_all_intervals([&](const pg_interval_t &i) {
+	  past_intervals->add_interval(ec_pool, i);
+	});
+    }
+  }
+}
+
+void PastIntervals::update_type_from_map(bool ec_pool, const OSDMap &osdmap)
+{
+  update_type(ec_pool, osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS));
+}
+
+bool PastIntervals::is_new_interval(
   int old_acting_primary,
   int new_acting_primary,
   const vector<int> &old_acting,
@@ -2885,7 +3376,7 @@ bool pg_interval_t::is_new_interval(
     old_sort_bitwise != new_sort_bitwise;
 }
 
-bool pg_interval_t::is_new_interval(
+bool PastIntervals::is_new_interval(
   int old_acting_primary,
   int new_acting_primary,
   const vector<int> &old_acting,
@@ -2917,7 +3408,7 @@ bool pg_interval_t::is_new_interval(
 		    pgid);
 }
 
-bool pg_interval_t::check_new_interval(
+bool PastIntervals::check_new_interval(
   int old_acting_primary,
   int new_acting_primary,
   const vector<int> &old_acting,
@@ -2932,7 +3423,7 @@ bool pg_interval_t::check_new_interval(
   OSDMapRef lastmap,
   pg_t pgid,
   IsPGRecoverablePredicate *could_have_gone_active,
-  map<epoch_t, pg_interval_t> *past_intervals,
+  PastIntervals *past_intervals,
   std::ostream *out)
 {
   /*
@@ -2980,6 +3471,8 @@ bool pg_interval_t::check_new_interval(
   //  NOTE: a change in the up set primary triggers an interval
   //  change, even though the interval members in the pg_interval_t
   //  do not change.
+  assert(past_intervals);
+  assert(past_intervals->past_intervals);
   if (is_new_interval(
 	old_acting_primary,
 	new_acting_primary,
@@ -2992,7 +3485,7 @@ bool pg_interval_t::check_new_interval(
 	osdmap,
 	lastmap,
 	pgid)) {
-    pg_interval_t& i = (*past_intervals)[same_interval_since];
+    pg_interval_t i;
     i.first = same_interval_since;
     i.last = osdmap->get_epoch() - 1;
     assert(i.first <= i.last);
@@ -3061,13 +3554,74 @@ bool pg_interval_t::check_new_interval(
       if (out)
 	*out << __func__ << " " << i << " : acting set is too small" << std::endl;
     }
+    past_intervals->past_intervals->add_interval(old_pg_pool.ec_pool(), i);
     return true;
   } else {
     return false;
   }
 }
 
-ostream& operator<<(ostream& out, const pg_interval_t& i)
+
+// true if the given map affects the prior set
+bool PastIntervals::PriorSet::affected_by_map(
+  const OSDMap &osdmap,
+  const DoutPrefixProvider *dpp) const
+{
+  for (set<pg_shard_t>::iterator p = probe.begin();
+       p != probe.end();
+       ++p) {
+    int o = p->osd;
+
+    // did someone in the prior set go down?
+    if (osdmap.is_down(o) && down.count(o) == 0) {
+      ldpp_dout(dpp, 10) << "affected_by_map osd." << o << " now down" << dendl;
+      return true;
+    }
+
+    // did a down osd in cur get (re)marked as lost?
+    map<int, epoch_t>::const_iterator r = blocked_by.find(o);
+    if (r != blocked_by.end()) {
+      if (!osdmap.exists(o)) {
+	ldpp_dout(dpp, 10) << "affected_by_map osd." << o << " no longer exists" << dendl;
+	return true;
+      }
+      if (osdmap.get_info(o).lost_at != r->second) {
+	ldpp_dout(dpp, 10) << "affected_by_map osd." << o << " (re)marked as lost" << dendl;
+	return true;
+      }
+    }
+  }
+
+  // did someone in the prior down set go up?
+  for (set<int>::const_iterator p = down.begin();
+       p != down.end();
+       ++p) {
+    int o = *p;
+
+    if (osdmap.is_up(o)) {
+      ldpp_dout(dpp, 10) << "affected_by_map osd." << o << " now up" << dendl;
+      return true;
+    }
+
+    // did someone in the prior set get lost or destroyed?
+    if (!osdmap.exists(o)) {
+      ldpp_dout(dpp, 10) << "affected_by_map osd." << o << " no longer exists" << dendl;
+      return true;
+    }
+    // did a down osd in down get (re)marked as lost?
+    map<int, epoch_t>::const_iterator r = blocked_by.find(o);
+    if (r != blocked_by.end()) {
+      if (osdmap.get_info(o).lost_at != r->second) {
+        ldpp_dout(dpp, 10) << "affected_by_map osd." << o << " (re)marked as lost" << dendl;
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+ostream& operator<<(ostream& out, const PastIntervals::pg_interval_t& i)
 {
   out << "interval(" << i.first << "-" << i.last
       << " up " << i.up << "(" << i.up_primary << ")"

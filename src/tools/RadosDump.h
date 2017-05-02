@@ -284,7 +284,7 @@ struct metadata_section {
   epoch_t map_epoch;
   pg_info_t info;
   pg_log_t log;
-  map<epoch_t,pg_interval_t> past_intervals;
+  PastIntervals past_intervals;
   OSDMap osdmap;
   bufferlist osdmap_bl;  // Used in lieu of encoding osdmap due to crc checking
   map<eversion_t, hobject_t> divergent_priors;
@@ -295,7 +295,7 @@ struct metadata_section {
     epoch_t map_epoch,
     const pg_info_t &info,
     const pg_log_t &log,
-    const map<epoch_t,pg_interval_t> &past_intervals,
+    const PastIntervals &past_intervals,
     const pg_missing_t &missing)
     : struct_ver(struct_ver),
       map_epoch(map_epoch),
@@ -308,7 +308,7 @@ struct metadata_section {
       map_epoch(0) { }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 6, bl);
     ::encode(struct_ver, bl);
     ::encode(map_epoch, bl);
     ::encode(info, bl);
@@ -322,13 +322,15 @@ struct metadata_section {
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(5, bl);
+    DECODE_START(6, bl);
     ::decode(struct_ver, bl);
     ::decode(map_epoch, bl);
     ::decode(info, bl);
     ::decode(log, bl);
-    if (struct_v > 1) {
+    if (struct_v >= 6) {
       ::decode(past_intervals, bl);
+    } else if (struct_v > 1) {
+      past_intervals.decode_classic(bl);
     } else {
       cout << "NOTICE: Older export without past_intervals" << std::endl;
     }
