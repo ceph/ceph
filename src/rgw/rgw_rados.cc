@@ -1188,6 +1188,51 @@ int RGWPeriod::set_latest_epoch(epoch_t epoch, bool exclusive,
                             exclusive, objv, real_time(), nullptr);
 }
 
+int RGWPeriod::update_latest_epoch(epoch_t epoch)
+{
+  static constexpr int MAX_RETRIES = 20;
+
+  for (int i = 0; i < MAX_RETRIES; i++) {
+    RGWPeriodLatestEpochInfo info;
+    RGWObjVersionTracker objv;
+    bool exclusive = false;
+
+    // read existing epoch
+    int r = read_latest_epoch(info, &objv);
+    if (r == -ENOENT) {
+      // use an exclusive create to set the epoch atomically
+      exclusive = true;
+      ldout(cct, 20) << "creating initial latest_epoch=" << epoch
+          << " for period=" << id << dendl;
+    } else if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to read latest_epoch" << dendl;
+      return r;
+    } else if (epoch <= info.epoch) {
+      r = -EEXIST; // fail with EEXIST if epoch is not newer
+      ldout(cct, 1) << "found existing latest_epoch " << info.epoch
+          << " >= given epoch " << epoch << ", returning r=" << r << dendl;
+      return r;
+    } else {
+      ldout(cct, 20) << "updating latest_epoch from " << info.epoch
+          << " -> " << epoch << " on period=" << id << dendl;
+    }
+
+    r = set_latest_epoch(epoch, exclusive, &objv);
+    if (r == -EEXIST) {
+      continue; // exclusive create raced with another update, retry
+    } else if (r == -ECANCELED) {
+      continue; // write raced with a conflicting version, retry
+    }
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to write latest_epoch" << dendl;
+      return r;
+    }
+    return 0; // return success
+  }
+
+  return -ECANCELED; // fail after max retries
+}
+
 int RGWPeriod::delete_obj()
 {
   rgw_pool pool(get_pool(cct));
