@@ -122,8 +122,7 @@ class SystemDState(DaemonState):
         :param args: positional arguments passed to remote.run
         :param kwargs: keyword arguments passed to remote.run
         """
-        self.log.info('Restarting daemon')
-        self.log.info("using systemd to restart")
+        self.log.info('Restarting daemon using systemd')
         if not self.running():
             self.log.info('starting a non-running daemon')
             self.remote.run(args=[run.Raw(self.start_cmd)])
@@ -136,8 +135,9 @@ class SystemDState(DaemonState):
 
         :param extra_args: Extra keyword arguments to be added.
         """
-        self.log.info('Restarting daemon with args')
-        self.log.warn("restart with args not supported with systemd")
+        self.log.warn(
+                "restart_with_args() is not supported with systemd; performing"
+                "normal restart")
         self.restart()
 
     def running(self):
@@ -157,8 +157,7 @@ class SystemDState(DaemonState):
 
         :param sig: signal to send
         """
-        self.log.info("using systemd to send signal")
-        self.log.warn("systemd may restart daemon after kill signal")
+        self.log.warn("systemd may restart daemons automatically")
         pid = self.pid
         self.log.info("Sending signal %s to process %s", sig, pid)
         sig = '-' + str(sig)
@@ -172,7 +171,6 @@ class SystemDState(DaemonState):
             self.log.warn('Restarting a running daemon')
             self.restart()
             return
-        self.log.info("using systemd to start")
         self.remote.run(args=[run.Raw(self.start_cmd)])
 
     def stop(self, timeout=300):
@@ -187,7 +185,6 @@ class SystemDState(DaemonState):
         if not self.running():
             self.log.error('tried to stop a non-running daemon')
             return
-        self.log.info("using systemd to stop")
         self.remote.run(args=[run.Raw(self.stop_cmd)])
         self.log.info('Stopped')
 
@@ -199,11 +196,11 @@ class SystemDState(DaemonState):
         Wait for daemon to stop (but don't trigger the stop).  Pass up
         any exception.  Mark the daemon as not running.
         """
-        self.log.info("Wait not suported in systemd")
+        self.log.error("wait() not suported in systemd")
 
     def wait_for_exit(self):
         """
         clear remote run command value after waiting for exit.
         """
         # TODO: This ought to be possible, no?
-        self.log.error("wait_for_exit is not supported with systemd")
+        self.log.error("wait_for_exit() is not supported with systemd")
