@@ -1,0 +1,44 @@
+Some libraries that Ceph uses are incorporated into the build tree
+through a technique known as git subtrees. This is an alternative to
+git submodules, that is also used in Ceph.
+
+One such library is the dmclock library. Here are some basic notes on
+the use of git subtrees.
+
+When a subtree is added to the repo, commands such as these were run
+from the top-level ceph directory:
+
+    git subtree add --prefix src/dmclock \
+	git@github.com:ceph/dmclock.git master --squash
+
+That essentially brings in a full copy of the library into the
+subdirectory src/dmclock, but squashes all the commits into a single
+one.
+
+If in time the library is updated and you'd like to bring the updates
+in, you could run:
+
+    git subtree pull --prefix src/dmclock \
+        git@github.com:ceph/dmclock.git master --squash
+
+WARNINGS
+
+If you'd like to modify the library contained in a subtree it's likely
+best to modify it in the library's repo and then pull in the changes
+with "git subtree pull ..." (see above).
+
+IMPORTANT: If you modify the library within the ceph tree, then do NOT
+combined changes within the subtree and outside the subtree in a
+single commit. Each commit should either only contain changes within
+the subtree or outside the subtree. That gives you the option to
+cleanly push those changes back to the library's repo.
+
+IMPORTANT: If you do a rebase and the commits that are redone include
+the commits that encapsulate a "git subtree add ..." or "git subtree
+pull ..." you have to be VERY CAREFUL. Those commits lose the prefix
+and try to apply the changes to the wrong paths! Instead, you
+essentially have to do the rebase interactively, remove the commits
+for the subtree add/pull, and manually re-do them between the other
+commits. Some developers prefer not to even do a "git rebase ..." and
+instead cherry-pick the commits and manually do the subtree
+adds/pulls.

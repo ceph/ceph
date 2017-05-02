@@ -26,5 +26,7 @@ usr/bin/ceph_xattr_bench
 usr/bin/ceph-monstore-tool
 usr/bin/ceph-osdomap-tool
 usr/bin/ceph-kvstore-tool
+usr/bin/dmclock-tests
+usr/bin/dmclock-data-struct-tests
 usr/share/java/libcephfs-test.jar
 usr/lib/ceph/ceph-monstore-update-crush.sh
