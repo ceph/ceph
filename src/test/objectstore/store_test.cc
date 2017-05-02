@@ -36,6 +36,7 @@
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/stringify.h"
+#include "include/coredumpctl.h"
 
 #include "include/unordered_map.h"
 #include "store_test_fixture.h"
@@ -2847,8 +2848,8 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ObjectStore::Transaction t;
     t.remove_collection(cid);
     cerr << "Invalid rm coll" << std::endl;
+    PrCtl unset_dumpable;
     EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), ".*Directory not empty.*");
-
   }
   {
     ObjectStore::Transaction t;
@@ -2869,6 +2870,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
     t.remove_collection(cid);
+    PrCtl unset_dumpable;
     EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), ".*Directory not empty.*");
   }
   {

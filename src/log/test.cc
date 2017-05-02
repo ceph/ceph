@@ -3,6 +3,7 @@
 #include "log/Log.h"
 #include "common/Clock.h"
 #include "common/PrebufferedStreambuf.h"
+#include "include/coredumpctl.h"
 #include "SubsystemMap.h"
 
 using namespace ceph::logging;
@@ -201,7 +202,10 @@ void do_segv()
 
   log.inject_segv();
   Entry *e = new Entry(ceph_clock_now(), pthread_self(), 10, 1);
-  log.submit_entry(e);  // this should segv
+  {
+    PrCtl unset_dumpable;
+    log.submit_entry(e);  // this should segv
+  }
 
   log.flush();
   log.stop();
