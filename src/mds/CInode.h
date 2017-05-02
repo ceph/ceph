@@ -648,7 +648,7 @@ public:
   friend class StrayManager;
   friend class CDir;
   friend class CInodeExport;
-  friend class C_CInode_AuxSubtree;
+  friend class C_CInode_ExportPin;
 
   // ---------------------------
   CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP) : 

@@ -4391,12 +4391,12 @@ int64_t CInode::get_backtrace_pool() const
   }
 }
 
-class C_CInode_AuxSubtree : public MDSInternalContext {
+class C_CInode_ExportPin : public MDSInternalContext {
 public:
-  explicit C_CInode_AuxSubtree(CInode *in) : MDSInternalContext(in->mdcache->mds), in(in) {
+  explicit C_CInode_ExportPin(CInode *in) : MDSInternalContext(in->mdcache->mds), in(in) {
     in->get(MDSCacheObject::PIN_PTRWAITER);
   }
-  ~C_CInode_AuxSubtree() {
+  ~C_CInode_ExportPin() {
     in->put(MDSCacheObject::PIN_PTRWAITER);
   }
 
@@ -4445,12 +4445,12 @@ void CInode::maybe_export_pin()
           CDir *subtree = mdcache->get_subtree_root(cd);
           if (!subtree) continue;
           if (subtree->is_ambiguous_auth()) {
-            subtree->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_CInode_AuxSubtree(this));
+            subtree->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_CInode_ExportPin(this));
             dout(15) << "delaying pinning for single auth on subtree " << *subtree << dendl;
           } else if (subtree->is_auth()) {
             assert(cd->is_auth());
             if (subtree->is_frozen() || subtree->is_freezing()) {
-              subtree->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_CInode_AuxSubtree(this));
+              subtree->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_CInode_ExportPin(this));
               dout(15) << "delaying pinning for thaw on subtree " << *subtree << dendl;
             } else {
               cd->state_set(CDir::STATE_AUXSUBTREE);
