@@ -1875,6 +1875,8 @@ public:
   int get_latest_epoch(epoch_t& epoch);
   int set_latest_epoch(epoch_t epoch, bool exclusive = false,
                        RGWObjVersionTracker *objv = nullptr);
+  // update latest_epoch if the given epoch is higher, else return -EEXIST
+  int update_latest_epoch(epoch_t epoch);
 
   int init(CephContext *_cct, RGWRados *_store, const string &period_realm_id, const string &period_realm_name = "",
 	   bool setup_obj = true);
