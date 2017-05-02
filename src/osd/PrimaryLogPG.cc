@@ -2096,6 +2096,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       return;
   }
 
+  if (obc.get() && obc->obs.exists && obc->obs.oi.has_manifest()) {
+    if (maybe_handle_manifest(op,
+			       write_ordered,
+			       obc))
+    return;
+  }
+
   if (maybe_handle_cache(op,
 			 write_ordered,
 			 obc,
@@ -2238,6 +2245,47 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   } else if (op->may_write() || op->may_cache()) {
     osd->logger->tinc(l_osd_op_w_prepare_lat, prepare_latency);
   }
+}
+PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
+  OpRequestRef op,
+  bool write_ordered,
+  ObjectContextRef obc)
+{
+  if (obc)
+    dout(10) << __func__ << " " << obc->obs.oi << " "
+       << (obc->obs.exists ? "exists" : "DNE")
+       << dendl;
+
+  // if it is write-ordered and blocked, stop now
+  if (obc.get() && obc->is_blocked() && write_ordered) {
+    // we're already doing something with this object
+    dout(20) << __func__ << " blocked on " << obc->obs.oi.soid << dendl;
+    return cache_result_t::NOOP;
+  }
+
+  vector<OSDOp> ops = static_cast<const MOSDOp*>(op->get_req())->ops;
+  for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p) {
+    OSDOp& osd_op = *p;
+    ceph_osd_op& op = osd_op.op;
+    if (op.op == CEPH_OSD_OP_SET_REDIRECT) {
+      return cache_result_t::NOOP;
+    }
+  }
+
+  switch (obc->obs.oi.manifest.type) {
+  case object_manifest_t::TYPE_REDIRECT:
+    if (op->may_write() || write_ordered) {
+      do_proxy_write(op, obc->obs.oi.soid, obc);
+    } else {
+      do_proxy_read(op, obc);
+    }
+    return cache_result_t::HANDLED_PROXY;
+  case object_manifest_t::TYPE_CHUNKED:
+  default:
+    assert(0 == "unrecognized manifest type");
+  }
+
+  return cache_result_t::NOOP;
 }
 
 void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
@@ -2600,15 +2648,30 @@ struct C_ProxyRead : public Context {
   }
 };
 
-void PrimaryLogPG::do_proxy_read(OpRequestRef op)
+void PrimaryLogPG::do_proxy_read(OpRequestRef op, ObjectContextRef obc)
 {
   // NOTE: non-const here because the ProxyReadOp needs mutable refs to
   // stash the result in the request's OSDOp vector
   MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
-  object_locator_t oloc(m->get_object_locator());
-  oloc.pool = pool.info.tier_of;
-
-  const hobject_t& soid = m->get_hobj();
+  object_locator_t oloc;
+  hobject_t soid;
+  /* extensible tier */
+  if (obc && obc->obs.exists && obc->obs.oi.has_manifest()) {
+    switch (obc->obs.oi.manifest.type) {
+      case object_manifest_t::TYPE_REDIRECT:
+	  oloc = object_locator_t(obc->obs.oi.manifest.redirect_target);
+	  soid = obc->obs.oi.manifest.redirect_target;  
+	  break;
+      case object_manifest_t::TYPE_CHUNKED:
+      default:
+	assert(0 == "unrecognized manifest type");
+    }
+  } else {
+  /* proxy */
+    soid = m->get_hobj();
+    oloc = object_locator_t(m->get_object_locator());
+    oloc.pool = pool.info.tier_of;
+  }
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
 
   // pass through some original flags that make sense.
@@ -2792,15 +2855,31 @@ struct C_ProxyWrite_Commit : public Context {
   }
 };
 
-void PrimaryLogPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid)
+void PrimaryLogPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid, ObjectContextRef obc)
 {
   // NOTE: non-const because ProxyWriteOp takes a mutable ref
   MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
-  object_locator_t oloc(m->get_object_locator());
-  oloc.pool = pool.info.tier_of;
+  object_locator_t oloc;
   SnapContext snapc(m->get_snap_seq(), m->get_snaps());
+  hobject_t soid;
+  /* extensible tier */
+  if (obc && obc->obs.exists && obc->obs.oi.has_manifest()) {
+    switch (obc->obs.oi.manifest.type) {
+      case object_manifest_t::TYPE_REDIRECT:
+	  oloc = object_locator_t(obc->obs.oi.manifest.redirect_target);
+	  soid = obc->obs.oi.manifest.redirect_target;  
+	  break;
+      case object_manifest_t::TYPE_CHUNKED:
+      default:
+	assert(0 == "unrecognized manifest type");
+    }
+  } else {
+  /* proxy */
+    soid = m->get_hobj();
+    oloc = object_locator_t(m->get_object_locator());
+    oloc.pool = pool.info.tier_of;
+  }
 
-  const hobject_t& soid = m->get_hobj();
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
   dout(10) << __func__ << " Start proxy write for " << *m << dendl;
 
@@ -6482,16 +6561,26 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
   }
   {
     ObjectContextRef promote_obc;
-    switch (
-      maybe_handle_cache_detail(
-	ctx->op,
-	true,
-	rollback_to,
-	ret,
-	missing_oid,
-	true,
-	false,
-	&promote_obc)) {
+    cache_result_t tier_mode_result;
+    if (obs.exists && obs.oi.has_manifest()) { 
+      tier_mode_result = 
+	maybe_handle_manifest_detail(
+	  ctx->op,
+	  true,
+	  rollback_to);
+    } else {
+      tier_mode_result = 
+	maybe_handle_cache_detail(
+	  ctx->op,
+	  true,
+	  rollback_to,
+	  ret,
+	  missing_oid,
+	  true,
+	  false,
+	  &promote_obc);
+    }
+    switch (tier_mode_result) {
     case cache_result_t::NOOP:
       break;
     case cache_result_t::BLOCKED_PROMOTE:
