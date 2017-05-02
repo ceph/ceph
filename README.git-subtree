@@ -1,6 +1,6 @@
 Some libraries that Ceph uses are incorporated into the build tree
 through a technique known as git subtrees. This is an alternative to
-git submodules, that is also used in Ceph.
+git submodules, which is also used in Ceph.
 
 One such library is the dmclock library. Here are some basic notes on
 the use of git subtrees.
@@ -23,22 +23,26 @@ in, you could run:
 
 WARNINGS
 
-If you'd like to modify the library contained in a subtree it's likely
-best to modify it in the library's repo and then pull in the changes
-with "git subtree pull ..." (see above).
+1. A rebase should NEVER include the commits by which a subtree is
+added or pulled. Those commits do not include the prefix that was used
+for the subtree add/pull, and therefore the commits are applied to the
+wrong files or, more likely, to non-existant files. If something like
+this must be done, a workable approach is to a) do an interactive
+rebase, b) remove the commits for the former subtree add/pull, and
+either c) replace those commits with executions (x/exec) of the
+commands used to add/pull the subtrees, or d) do those commands from
+the command-line by using (e/edit) on preceding commits.
 
-IMPORTANT: If you modify the library within the ceph tree, then do NOT
-combined changes within the subtree and outside the subtree in a
+2. If you'd like to modify the library contained in a subtree you'll
+need to choose whether to just change your subtree and maintain those
+differences into the future (until the library incorporates them) or,
+if you're able, modify the library and use a "git subtree pull ..." to
+bring them in.
+
+3. If you modify the library within the ceph tree, then it's best not
+to combine changes within the subtree and outside the subtree in a
 single commit. Each commit should either only contain changes within
 the subtree or outside the subtree. That gives you the option to
-cleanly push those changes back to the library's repo.
-
-IMPORTANT: If you do a rebase and the commits that are redone include
-the commits that encapsulate a "git subtree add ..." or "git subtree
-pull ..." you have to be VERY CAREFUL. Those commits lose the prefix
-and try to apply the changes to the wrong paths! Instead, you
-essentially have to do the rebase interactively, remove the commits
-for the subtree add/pull, and manually re-do them between the other
-commits. Some developers prefer not to even do a "git rebase ..." and
-instead cherry-pick the commits and manually do the subtree
-adds/pulls.
+cleanly push those changes back to the library's repo. That way if you
+ultimately decide to make the changes to the library, you can easily
+remove the subtree commits.
