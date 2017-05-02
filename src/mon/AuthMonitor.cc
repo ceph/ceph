@@ -658,13 +658,8 @@ int AuthMonitor::import_keyring(KeyRing& keyring)
       dout(0) << "import: no caps supplied" << dendl;
       return -EINVAL;
     }
-    KeyServerData::Incremental auth_inc;
-    auth_inc.name = p->first;
-    auth_inc.auth = p->second;
-    auth_inc.op = KeyServerData::AUTH_INC_ADD;
-    dout(10) << " importing " << auth_inc.name << dendl;
-    dout(30) << "    " << auth_inc.auth << dendl;
-    push_cephx_inc(auth_inc);
+    int err = add_entity(p->first, p->second);
+    assert(err == 0);
   }
   return 0;
 }
@@ -680,6 +675,79 @@ int AuthMonitor::remove_entity(const EntityName &entity)
   auth_inc.op = KeyServerData::AUTH_INC_DEL;
   push_cephx_inc(auth_inc);
 
+  return 0;
+}
+
+bool AuthMonitor::entity_is_pending(EntityName& entity)
+{
+  // are we about to have it?
+  for (auto& p : pending_auth) {
+    if (p.inc_type == AUTH_DATA) {
+      KeyServerData::Incremental inc;
+      bufferlist::iterator q = p.auth_data.begin();
+      ::decode(inc, q);
+      if (inc.op == KeyServerData::AUTH_INC_ADD &&
+          inc.name == entity) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+int AuthMonitor::exists_and_matches_entity(
+    EntityName& name,
+    EntityAuth& auth,
+    map<string,bufferlist>& caps,
+    bool has_secret,
+    stringstream& ss)
+{
+
+  EntityAuth existing_auth;
+  // does entry already exist?
+  if (mon->key_server.get_auth(name, existing_auth)) {
+    // key match?
+    if (has_secret) {
+      if (existing_auth.key.get_secret().cmp(auth.key.get_secret())) {
+        ss << "entity " << name << " exists but key does not match";
+        return -EINVAL;
+      }
+    }
+
+    // caps match?
+    if (caps.size() != existing_auth.caps.size()) {
+      ss << "entity " << name << " exists but caps do not match";
+      return -EINVAL;
+    }
+    for (auto& it : caps) {
+      if (existing_auth.caps.count(it.first) == 0 ||
+          !existing_auth.caps[it.first].contents_equal(it.second)) {
+        ss << "entity " << name << " exists but cap "
+          << it.first << " does not match";
+        return -EINVAL;
+      }
+    }
+
+    // they match, no-op
+    return 0;
+  }
+  return -ENOENT;
+}
+
+int AuthMonitor::add_entity(
+    const EntityName& name,
+    const EntityAuth& auth)
+{
+
+  // okay, add it.
+  KeyServerData::Incremental auth_inc;
+  auth_inc.op = KeyServerData::AUTH_INC_ADD;
+  auth_inc.name = name;
+  auth_inc.auth = auth;
+
+  dout(10) << " importing " << auth_inc.name << dendl;
+  dout(30) << "    " << auth_inc.auth << dendl;
+  push_cephx_inc(auth_inc);
   return 0;
 }
 
@@ -853,20 +921,10 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     }
 
     // are we about to have it?
-    for (vector<Incremental>::iterator p = pending_auth.begin();
-        p != pending_auth.end();
-        ++p) {
-      if (p->inc_type == AUTH_DATA) {
-        KeyServerData::Incremental inc;
-        bufferlist::iterator q = p->auth_data.begin();
-        ::decode(inc, q);
-        if (inc.op == KeyServerData::AUTH_INC_ADD &&
-            inc.name == entity) {
-          wait_for_finished_proposal(op,
-              new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
-          return true;
-        }
-      }
+    if (entity_is_pending(entity)) {
+      wait_for_finished_proposal(op,
+          new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
+      return true;
     }
 
     // build new caps from provided arguments (if available)
@@ -898,53 +956,31 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    // does entry already exist?
-    if (mon->key_server.get_auth(auth_inc.name, auth_inc.auth)) {
-      // key match?
-      if (has_keyring) {
-        if (auth_inc.auth.key.get_secret().cmp(new_inc.key.get_secret())) {
-	  ss << "entity " << auth_inc.name << " exists but key does not match";
-	  err = -EINVAL;
-	  goto done;
-	}
+    err = exists_and_matches_entity(auth_inc.name, new_inc,
+                                    new_caps, has_keyring, ss);
+    // if entity/key/caps do not exist in the keyring, just fall through
+    // and add the entity; otherwise, make sure everything matches (in
+    // which case it's a no-op), because if not we must fail.
+    if (err != -ENOENT) {
+      if (err < 0) {
+        goto done;
       }
-
-      // caps match?
-      if (new_caps.size() != auth_inc.auth.caps.size()) {
-	ss << "entity " << auth_inc.name << " exists but caps do not match";
-	err = -EINVAL;
-	goto done;
-      }
-      for (map<string,bufferlist>::iterator it = new_caps.begin();
-	   it != new_caps.end(); ++it) {
-        if (auth_inc.auth.caps.count(it->first) == 0 ||
-            !auth_inc.auth.caps[it->first].contents_equal(it->second)) {
-          ss << "entity " << auth_inc.name << " exists but cap "
-	     << it->first << " does not match";
-          err = -EINVAL;
-          goto done;
-        }
-      }
-
-      // they match, no-op
-      err = 0;
+      // no-op.
+      assert(err == 0);
       goto done;
     }
+    err = 0;
 
     // okay, add it.
-    auth_inc.op = KeyServerData::AUTH_INC_ADD;
-    auth_inc.auth.caps = new_caps;
-    if (has_keyring) {
-      auth_inc.auth.key = new_inc.key;
-    } else {
+    if (!has_keyring) {
       dout(10) << "AuthMonitor::prepare_command generating random key for "
-               << auth_inc.name << dendl;
-      auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+        << auth_inc.name << dendl;
+      new_inc.key.create(g_ceph_context, CEPH_CRYPTO_AES);
     }
+    new_inc.caps = new_caps;
 
-    dout(10) << " importing " << auth_inc.name << dendl;
-    dout(30) << "    " << auth_inc.auth << dendl;
-    push_cephx_inc(auth_inc);
+    err = add_entity(auth_inc.name, new_inc);
+    assert(err == 0);
 
     ss << "added key for " << auth_inc.name;
     getline(ss, rs);
