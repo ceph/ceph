@@ -2239,15 +2239,7 @@ int CrushWrapper::_choose_type_stack(
       for (int pos = 0; pos < fanout; ++pos) {
 	if (type > 0) {
 	  // non-leaf
-	  int item = *tmpi;
-	  do {
-	    int r = get_immediate_parent_id(item, &item);
-	    if (r < 0) {
-	      ldout(cct, 10) << __func__ << " parent of " << item << " got "
-			     << cpp_strerror(r) << dendl;
-	      return -EINVAL;
-	    }
-	  } while (get_bucket_type(item) != type);
+	  int item = get_parent_of_type(*tmpi, type);
 	  o.push_back(item);
 	  ldout(cct, 10) << __func__ << "   from " << *tmpi << " got " << item
 			 << " of type " << type << dendl;
