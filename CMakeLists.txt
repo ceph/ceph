@@ -548,6 +548,24 @@ else()
   endif()
   list(APPEND b2
     variant=release link=static threading=multi cxxflags=${BOOST_CFLAGS})
+  if(NOT CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL CMAKE_SYSTEM_PROCESSOR)
+    # we are crosscompiling
+    if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+      set(b2_cc gcc)
+    elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+      set(b2_cc clang)
+    else()
+      message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
+    endif()
+    # edit the config.jam so, b2 will be able to use the specified toolset
+    execute_process(
+      COMMAND
+      sed -i
+      "s|using ${b2_cc} ;|using ${b2_cc} : ${CMAKE_SYSTEM_PROCESSOR} : ${CMAKE_CXX_COMPILER} ;|"
+      ${PROJECT_SOURCE_DIR}/src/boost/project-config.jam)
+    # use ${CMAKE_SYSTEM_PROCESSOR} as the version identifier of compiler
+    list(APPEND b2 toolset=${b2_cc}-${CMAKE_SYSTEM_PROCESSOR})
+  endif()
   # 2. install headers
   execute_process(COMMAND
     ${b2}
