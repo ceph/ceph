@@ -495,8 +495,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
   return ret;
 }
 
-int RGWLC::bucket_lc_post(int index, int max_lock_sec, cls_rgw_lc_obj_head& head,
-                                                              pair<string, int >& entry, int& result)
+int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry, int& result)
 {
   utime_t lock_duration(cct->_conf->rgw_lc_lock_max_time, 0);
 
@@ -636,7 +635,7 @@ int RGWLC::process(int index, int max_lock_secs)
     }
     l.unlock(&store->lc_pool_ctx, obj_names[index]);
     ret = bucket_lc_process(entry.first);
-    ret = bucket_lc_post(index, max_lock_secs, head, entry, ret);
+    bucket_lc_post(index, max_lock_secs, entry, ret);
     return 0;
 exit:
     l.unlock(&store->lc_pool_ctx, obj_names[index]);

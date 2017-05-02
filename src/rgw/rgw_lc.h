@@ -262,8 +262,7 @@ class RGWLC {
   int list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map);
   int bucket_lc_prepare(int index);
   int bucket_lc_process(string& shard_id);
-  int bucket_lc_post(int index, int max_lock_sec, cls_rgw_lc_obj_head& head, 
-                                                              pair<string, int >& entry, int& result);
+  int bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry, int& result);
   bool going_down();
   void start_processor();
   void stop_processor();
