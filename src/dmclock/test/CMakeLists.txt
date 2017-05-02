@@ -31,5 +31,7 @@ endif()
   
 add_dependencies(dmclock-tests dmclock)
 
-add_test(NAME dmclock-tests
-  COMMAND $<TARGET_FILE:dmclock-tests>)
+if(NOT FREEBSD)
+  add_test(NAME dmclock-tests
+    COMMAND $<TARGET_FILE:dmclock-tests>)
+endif()
