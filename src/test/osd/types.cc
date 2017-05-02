@@ -19,6 +19,7 @@
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
 #include "gtest/gtest.h"
+#include "include/coredumpctl.h"
 #include "common/Thread.h"
 #include "include/stringify.h"
 #include "osd/ReplicatedBackend.h"
@@ -852,6 +853,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_FALSE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
+    PrCtl unset_dumpable;
     EXPECT_DEATH(missing.add_next_event(e), "");
   }
 
@@ -1004,14 +1006,20 @@ TEST(pg_missing_t, got)
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     // assert if the oid does not exist
-    EXPECT_DEATH(missing.got(oid, eversion_t()), "");
+    {
+      PrCtl unset_dumpable;
+      EXPECT_DEATH(missing.got(oid, eversion_t()), "");
+    }
     EXPECT_FALSE(missing.is_missing(oid));
     epoch_t epoch = 10;
     eversion_t need(epoch,10);
     missing.add(oid, need, eversion_t());
     EXPECT_TRUE(missing.is_missing(oid));
     // assert if that the version to be removed is lower than the version of the object
-    EXPECT_DEATH(missing.got(oid, eversion_t(epoch / 2,20)), "");
+    {
+      PrCtl unset_dumpable;
+      EXPECT_DEATH(missing.got(oid, eversion_t(epoch / 2,20)), "");
+    }
     // remove of a later version removes the object
     missing.got(oid, eversion_t(epoch * 2,20));
     EXPECT_FALSE(missing.is_missing(oid));
@@ -1455,6 +1463,7 @@ TEST(ghobject_t, parse) {
 
 TEST(pool_opts_t, invalid_opt) {
   EXPECT_FALSE(pool_opts_t::is_opt_name("INVALID_OPT"));
+  PrCtl unset_dumpable;
   EXPECT_DEATH(pool_opts_t::get_opt_desc("INVALID_OPT"), "");
 }
 
@@ -1466,7 +1475,10 @@ TEST(pool_opts_t, scrub_min_interval) {
 
   pool_opts_t opts;
   EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MIN_INTERVAL));
-  EXPECT_DEATH(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL), "");
+  {
+    PrCtl unset_dumpable;
+    EXPECT_DEATH(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL), "");
+  }
   double val;
   EXPECT_FALSE(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &val));
   opts.set(pool_opts_t::SCRUB_MIN_INTERVAL, static_cast<double>(2015));
@@ -1484,7 +1496,10 @@ TEST(pool_opts_t, scrub_max_interval) {
 
   pool_opts_t opts;
   EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MAX_INTERVAL));
-  EXPECT_DEATH(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL), "");
+  {
+    PrCtl unset_dumpable;
+    EXPECT_DEATH(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL), "");
+  }
   double val;
   EXPECT_FALSE(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &val));
   opts.set(pool_opts_t::SCRUB_MAX_INTERVAL, static_cast<double>(2015));
@@ -1502,7 +1517,10 @@ TEST(pool_opts_t, deep_scrub_interval) {
 
   pool_opts_t opts;
   EXPECT_FALSE(opts.is_set(pool_opts_t::DEEP_SCRUB_INTERVAL));
-  EXPECT_DEATH(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL), "");
+  {
+    PrCtl unset_dumpable;
+    EXPECT_DEATH(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL), "");
+  }
   double val;
   EXPECT_FALSE(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &val));
   opts.set(pool_opts_t::DEEP_SCRUB_INTERVAL, static_cast<double>(2015));
