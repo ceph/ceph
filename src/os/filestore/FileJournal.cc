@@ -835,6 +835,8 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
 	  assert(aio_write_queue_bytes >= bytes);
 	  aio_write_queue_bytes -= bytes;
 	}
+#else
+	(void)bytes;
 #endif
       }
       if (r == -ENOSPC) {
