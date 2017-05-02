@@ -552,8 +552,8 @@ def ping_monitor(cluster_handle, name, timeout):
         return 1
 
     mon_id = name[len('mon.'):]
+    run_in_thread(cluster_handle.connect, timeout=timeout)
     if (mon_id == '*') :
-        run_in_thread(cluster_handle.connect, timeout=timeout)
         for m in monids() :
             s = run_in_thread(cluster_handle.ping_monitor, m)
             if s is None:
