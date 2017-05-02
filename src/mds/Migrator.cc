@@ -1568,16 +1568,6 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
       continue;
     }
 
-    /* XXX The inode may be pinned to me (in->get_inode().export_pin) but it is
-     * not a subtree by the time I've found it here. So, keeping it is
-     * difficult as we've already notified the importer of the subtree bounds
-     * (MExportDirPrep).  Creating a new subtree for this pinned inode would
-     * probably require widespread changes and is not worth the effort since
-     * the importer will simply export this inode and its subtrees back to us
-     * (Migrator::decode_import_inode). This should be rare enough to not
-     * justify mucking with things here.
-     */
-
     // primary link
     // -- inode
     exportbl.append("I", 1);    // inode dentry

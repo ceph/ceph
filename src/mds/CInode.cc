@@ -4391,35 +4391,87 @@ int64_t CInode::get_backtrace_pool() const
   }
 }
 
+class C_CInode_AuxSubtree : public MDSInternalContext {
+public:
+  explicit C_CInode_AuxSubtree(CInode *in) : MDSInternalContext(in->mdcache->mds), in(in) {
+    in->get(MDSCacheObject::PIN_PTRWAITER);
+  }
+  ~C_CInode_AuxSubtree() {
+    in->put(MDSCacheObject::PIN_PTRWAITER);
+  }
+
+  void finish(int r) override {
+    in->maybe_export_pin();
+  }
+private:
+  CInode *in;
+};
+
 void CInode::maybe_export_pin()
 {
-  if (g_conf->mds_bal_export_pin && is_dir() && !mdcache->export_pin_queue.count(this)) {
+  if (g_conf->mds_bal_export_pin && is_dir()) {
     dout(20) << "maybe_export_pin " << *this << dendl;
     mds_rank_t pin = get_projected_inode()->export_pin;
     if (pin == MDS_RANK_NONE) {
-      /* Try to find farthest full auth parent fragment which is pinned
-       * elsewhere.  There cannot be a break in the authority chain of
-       * directories, otherwise this inode itself will not be exported.
-       */
-      CInode *auth_last = this; /* N.B. we may not be full auth for any fragments of this inode, but adding it to the queue is harmless. */
-      bool auth_barrier = false;
-      for (CDir *cd = get_projected_parent_dir(); cd && !cd->inode->is_base() && !cd->inode->is_system(); cd = cd->inode->get_projected_parent_dir()) {
-        if (cd->is_full_dir_auth() && !auth_barrier) {
-          auth_last = cd->inode;
-        } else {
-          auth_barrier = true;
-        }
-        pin = cd->inode->get_projected_inode()->export_pin;
-        if (pin != MDS_RANK_NONE) {
-          if (pin != mdcache->mds->get_nodeid()) {
-            dout(20) << "adding ancestor to export_pin_queue " << *auth_last << dendl;
-            mdcache->export_pin_queue.insert(auth_last);
+      if (!mdcache->export_pin_queue.count(this)) {
+        /* Try to find farthest full auth parent fragment which is pinned
+         * elsewhere.  There cannot be a break in the authority chain of
+         * directories, otherwise this inode itself will not be exported.
+         */
+        CInode *auth_last = this; /* N.B. we may not be full auth for any fragments of this inode, but adding it to the queue is harmless. */
+        bool auth_barrier = false;
+        for (CDir *cd = get_projected_parent_dir(); cd && !cd->inode->is_base() && !cd->inode->is_system(); cd = cd->inode->get_projected_parent_dir()) {
+          if (cd->is_full_dir_auth() && !auth_barrier) {
+            auth_last = cd->inode;
+          } else {
+            auth_barrier = true;
           }
-          break;
+          pin = cd->inode->get_projected_inode()->export_pin;
+          if (pin != MDS_RANK_NONE) {
+            if (pin != mdcache->mds->get_nodeid()) {
+              dout(20) << "adding ancestor to export_pin_queue " << *auth_last << dendl;
+              mdcache->export_pin_queue.insert(auth_last);
+            }
+            break;
+          }
         }
       }
     } else {
-      if (pin != mdcache->mds->get_nodeid()) {
+      if (pin == mdcache->mds->get_nodeid()) {
+        for (auto it = dirfrags.begin(); it != dirfrags.end(); it++) {
+          CDir *cd = it->second;
+          if (cd->state_test(CDir::STATE_AUXSUBTREE)) continue;
+          dout(15) << "aux subtree pinning " << *cd << dendl;
+          CDir *subtree = mdcache->get_subtree_root(cd);
+          if (!subtree) continue;
+          if (subtree->is_ambiguous_auth()) {
+            subtree->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_CInode_AuxSubtree(this));
+            dout(15) << "delaying pinning for single auth on subtree " << *subtree << dendl;
+          } else if (subtree->is_auth()) {
+            assert(cd->is_auth());
+            if (subtree->is_frozen() || subtree->is_freezing()) {
+              subtree->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_CInode_AuxSubtree(this));
+              dout(15) << "delaying pinning for thaw on subtree " << *subtree << dendl;
+            } else {
+              cd->state_set(CDir::STATE_AUXSUBTREE);
+              mdcache->adjust_subtree_auth(cd, mdcache->mds->get_nodeid());
+              dout(15) << "set aux subtree " << *cd << dendl;
+            }
+          } else {
+            assert(!cd->is_auth());
+            dout(15) << "not auth for fragment so not setting aux subtree for " << *cd << dendl;
+          }
+        }
+      } else {
+        for (auto it = dirfrags.begin(); it != dirfrags.end(); it++) {
+          CDir *cd = it->second;
+          if (cd->is_auth() && cd->state_test(CDir::STATE_AUXSUBTREE)) {
+            assert(!(cd->is_frozen() || cd->is_freezing()));
+            assert(!cd->state_test(CDir::STATE_EXPORTBOUND));
+            cd->state_clear(CDir::STATE_AUXSUBTREE); /* merge will happen eventually */
+            dout(15) << "cleared aux subtree " << *cd << dendl;
+          }
+        }
         dout(20) << "adding to export_pin_queue " << *this << dendl;
         mdcache->export_pin_queue.insert(this);
       }

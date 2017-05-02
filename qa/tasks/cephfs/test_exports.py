@@ -57,7 +57,7 @@ class TestExports(CephFSTestCase):
         subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 1)['name'])
         log.info(subtrees)
         subtrees = filter(lambda s: s['dir']['path'].startswith('/1'), subtrees)
-        self.assertTrue(len(subtrees) == 1 and subtrees[0]['auth_first'] == 1)
+        self.assertTrue(len(subtrees) == 2 and subtrees[0]['auth_first'] == 1 and subtrees[1]['auth_first'] == 1)
 
         # change pin /1/2 to rank 0
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "0", "1/2"])
@@ -85,7 +85,7 @@ class TestExports(CephFSTestCase):
         subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 1)['name'])
         log.info(subtrees)
         subtrees = filter(lambda s: s['dir']['path'].startswith('/1'), subtrees)
-        self.assertTrue(len(subtrees) == 1 and subtrees[0]['auth_first'] == 1)
+        self.assertTrue(len(subtrees) == 2 and subtrees[0]['auth_first'] == 1 and subtrees[1]['auth_first'] == 1)
 
         # add another directory pinned to 1
         self.mount_a.run_shell(["mkdir", "-p", "1/4/5"])
@@ -97,7 +97,7 @@ class TestExports(CephFSTestCase):
         subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 0)['name'])
         log.info(subtrees)
         subtrees = filter(lambda s: s['dir']['path'] == '/1', subtrees)
-        self.assertTrue(len(subtrees) == 0) # /1 is merged into root
+        self.assertTrue(len(subtrees) == 1)
         subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 1)['name'])
         log.info(subtrees)
         subtrees = filter(lambda s: s['dir']['path'].startswith('/1/'), subtrees)
