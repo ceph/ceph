@@ -1067,12 +1067,12 @@ void OSDMonitor::prime_pg_temp(
 {
   if (mon->monmap->get_required_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
-    if (!creating_pgs.pgs.count(pgid)) {
+    if (creating_pgs.pgs.count(pgid)) {
       return;
     }
   } else {
     const auto& pg_map = mon->pgmon()->pg_map;
-    if (!pg_map.creating_pgs.count(pgid)) {
+    if (pg_map.creating_pgs.count(pgid)) {
       return;
     }
   }
