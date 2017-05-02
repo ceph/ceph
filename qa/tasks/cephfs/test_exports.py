@@ -8,9 +8,6 @@ log = logging.getLogger(__name__)
 
 class TestExports(CephFSTestCase):
     def test_export_pin(self):
-        if not isinstance(self.mount_a, FuseMount):
-            self.skipTest("FUSE needed for measuring op counts")
-
         self.fs.set_allow_multimds(True)
         self.fs.set_max_mds(2)
 
