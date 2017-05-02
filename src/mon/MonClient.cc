@@ -450,7 +450,11 @@ int MonClient::authenticate(double timeout)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
   while (!active_con && !authenticate_err) {
     if (timeout > 0.0) {
-      int r = auth_cond.WaitUntil(monc_lock, until);
+      utime_t now = ceph_clock_now(cct);
+      int r = ETIMEDOUT;
+      if (now < until) {
+	r = auth_cond.WaitUntil(monc_lock, until);
+      }
       if (r == ETIMEDOUT) {
 	ldout(cct, 0) << "authenticate timed out after " << timeout << dendl;
 	authenticate_err = -r;
