@@ -159,7 +159,17 @@ private:
 
   bool check_rotate();
 
+  bool entity_is_pending(EntityName& entity);
+  int exists_and_matches_entity(
+      EntityName& name,
+      EntityAuth& auth,
+      map<string,bufferlist>& caps,
+      bool has_secret,
+      stringstream& ss);
   int remove_entity(const EntityName &entity);
+  int add_entity(
+      const EntityName& name,
+      const EntityAuth& auth);
 
  public:
   AuthMonitor(Monitor *mn, Paxos *p, const string& service_name)
