@@ -1044,6 +1044,17 @@ int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
   return -ENOENT;
 }
 
+int CrushWrapper::get_parent_of_type(int item, int type) const
+{
+  do {
+    int r = get_immediate_parent_id(item, &item);
+    if (r < 0) {
+      return 0;
+    }
+  } while (get_bucket_type(item) != type);
+  return item;
+}
+
 bool CrushWrapper::class_is_in_use(int class_id)
 {
   for (auto &i : class_bucket)
