@@ -11178,6 +11178,8 @@ uint64_t PrimaryLogPG::recover_backfill(
         assert(pbi.begin == check);
 
         to_remove.push_back(boost::make_tuple(check, pbi.objects.begin()->second, bt));
+        // Give deletion ops a cost in backfill, removing objects is not free.
+        ++ops;
         pbi.pop_front();
       }
 
@@ -11226,10 +11228,6 @@ uint64_t PrimaryLogPG::recover_backfill(
 	    check == backfill_info.begin.get_head()))
 	last_backfill_started = check;
 
-      // Don't increment ops here because deletions
-      // are cheap and not replied to unlike real recovery_ops,
-      // and we can't increment ops without requeueing ourself
-      // for recovery.
     } else {
       eversion_t& obj_v = backfill_info.objects.begin()->second;
 
