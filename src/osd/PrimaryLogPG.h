@@ -1722,6 +1722,8 @@ public:
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
 
+  void maybe_force_recovery();
+
   void mark_all_unfound_lost(
     int what,
     ConnectionRef con,

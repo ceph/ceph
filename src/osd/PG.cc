@@ -3020,12 +3020,13 @@ void PG::write_if_dirty(ObjectStore::Transaction& t)
     t.omap_setkeys(coll, pgmeta_oid, km);
 }
 
-void PG::trim_peers()
+void PG::trim_log()
 {
   assert(is_primary());
   calc_trim_to();
-  dout(10) << "trim_peers " << pg_trim_to << dendl;
+  dout(10) << __func__ << " to " << pg_trim_to << dendl;
   if (pg_trim_to != eversion_t()) {
+    // inform peers to trim log
     assert(!actingbackfill.empty());
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
@@ -3039,6 +3040,10 @@ void PG::trim_peers()
 	  pg_trim_to),
 	get_osdmap()->get_epoch());
     }
+
+    // trim primary as well
+    pg_log.trim(pg_trim_to, info);
+    dirty_info = true;
   }
 }
 
@@ -6813,6 +6818,9 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
     pg->state_clear(PG_STATE_DEGRADED);
     pg->publish_stats_to_osd();
   }
+
+  // trim pglog on recovered
+  pg->trim_log();
 
   // adjust acting set?  (e.g. because backfill completed...)
   bool history_les_bound = false;
