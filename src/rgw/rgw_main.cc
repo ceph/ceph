@@ -471,8 +471,6 @@ int main(int argc, const char **argv)
     RGWFrontend *fe = NULL;
 
     if (framework == "civetweb" || framework == "mongoose") {
-      int port;
-      config->get_val("port", 80, &port);
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
