@@ -1132,28 +1132,6 @@ const string& RGWPeriod::get_pool_name(CephContext *cct)
   return cct->_conf->rgw_period_root_pool;
 }
 
-int RGWPeriod::use_next_epoch()
-{
-  epoch_t latest_epoch;
-  int ret = get_latest_epoch(latest_epoch);
-  if (ret < 0) {
-    return ret;
-  }
-  epoch = latest_epoch + 1;
-  ret = read_info();
-  if (ret < 0 && ret != -ENOENT) {
-    return ret;
-  }
-  if (ret == -ENOENT) {
-    ret = create();
-    if (ret < 0) {
-      ldout(cct, 0) << "Error creating new epoch " << epoch << dendl;
-      return ret;
-    }
-  }
-  return 0;
-}
-
 int RGWPeriod::add_zonegroup(const RGWZoneGroup& zonegroup)
 {
   if (zonegroup.realm_id != realm_id) {

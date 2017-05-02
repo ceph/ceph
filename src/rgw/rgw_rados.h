@@ -1504,7 +1504,6 @@ public:
   int init(CephContext *_cct, RGWRados *_store, const string &period_realm_id, const string &period_realm_name = "",
 	   bool setup_obj = true);
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true);  
-  int use_next_epoch();
 
   int create(bool exclusive = true);
   int delete_obj();
