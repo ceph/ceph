@@ -984,7 +984,7 @@ int PrimaryLogPG::do_command(
       return -EROFS;
     }
 
-    int unfound = missing_loc.num_unfound();
+    uint64_t unfound = missing_loc.num_unfound();
     if (!unfound) {
       ss << "pg has no unfound objects";
       return 0;  // make command idempotent
@@ -10030,7 +10030,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
   ObcLockManager manager;
   eversion_t v = get_next_version();
   v.epoch = get_osdmap()->get_epoch();
-  unsigned num_unfound = missing_loc.num_unfound();
+  uint64_t num_unfound = missing_loc.num_unfound();
   while (m != mend) {
     const hobject_t &oid(m->first);
     if (!missing_loc.is_unfound(oid)) {
@@ -10600,8 +10600,8 @@ bool PrimaryLogPG::start_recovery_ops(
 
   const pg_missing_t &missing = pg_log.get_missing();
 
-  int num_missing = missing.num_missing();
-  int num_unfound = get_num_unfound();
+  unsigned int num_missing = missing.num_missing();
+  uint64_t num_unfound = get_num_unfound();
 
   if (num_missing == 0) {
     info.last_complete = info.last_update;
