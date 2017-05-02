@@ -162,7 +162,7 @@ class SystemDState(DaemonState):
         pid = self.pid
         self.log.info("Sending signal %s to process %s", sig, pid)
         sig = '-' + str(sig)
-        self.remote.run(args=['sudo', 'kill', str(sig), pid])
+        self.remote.run(args=['sudo', 'kill', str(sig), str(pid)])
 
     def start(self, timeout=300):
         """
