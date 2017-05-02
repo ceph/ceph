@@ -1120,14 +1120,15 @@ const string RGWPeriod::get_period_oid()
   return oss.str();
 }
 
-int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info)
+int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info,
+                                 RGWObjVersionTracker *objv)
 {
   string oid = get_period_oid_prefix() + get_latest_epoch_oid();
 
   rgw_pool pool(get_pool(cct));
   bufferlist bl;
   RGWObjectCtx obj_ctx(store);
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, objv, nullptr);
   if (ret < 0) {
     ldout(cct, 1) << "error read_lastest_epoch " << pool << ":" << oid << dendl;
     return ret;
@@ -1170,7 +1171,8 @@ int RGWPeriod::use_latest_epoch()
   return 0;
 }
 
-int RGWPeriod::set_latest_epoch(epoch_t epoch, bool exclusive)
+int RGWPeriod::set_latest_epoch(epoch_t epoch, bool exclusive,
+                                RGWObjVersionTracker *objv)
 {
   string oid = get_period_oid_prefix() + get_latest_epoch_oid();
 
@@ -1183,7 +1185,7 @@ int RGWPeriod::set_latest_epoch(epoch_t epoch, bool exclusive)
   ::encode(info, bl);
 
   return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(),
-                            exclusive, NULL, real_time(), NULL);
+                            exclusive, objv, real_time(), nullptr);
 }
 
 int RGWPeriod::delete_obj()

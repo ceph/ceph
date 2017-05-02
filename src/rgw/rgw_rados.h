@@ -1807,7 +1807,8 @@ class RGWPeriod
   RGWRados *store;
 
   int read_info();
-  int read_latest_epoch(RGWPeriodLatestEpochInfo& epoch_info);
+  int read_latest_epoch(RGWPeriodLatestEpochInfo& epoch_info,
+                        RGWObjVersionTracker *objv = nullptr);
   int use_latest_epoch();
   int use_current_period();
 
@@ -1872,7 +1873,8 @@ public:
   bool is_single_zonegroup(CephContext *cct, RGWRados *store);
 
   int get_latest_epoch(epoch_t& epoch);
-  int set_latest_epoch(epoch_t epoch, bool exclusive = false);
+  int set_latest_epoch(epoch_t epoch, bool exclusive = false,
+                       RGWObjVersionTracker *objv = nullptr);
 
   int init(CephContext *_cct, RGWRados *_store, const string &period_realm_id, const string &period_realm_name = "",
 	   bool setup_obj = true);
