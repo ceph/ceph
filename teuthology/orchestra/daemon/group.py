@@ -7,13 +7,12 @@ class DaemonGroup(object):
     """
     Collection of daemon state instances
     """
-    def __init__(self, use_init=False):
+    def __init__(self):
         """
         self.daemons is a dictionary indexed by role.  Each entry is a
         dictionary of DaemonState values indexed by an id parameter.
         """
         self.daemons = {}
-        self.use_init = use_init
 
     def add_daemon(self, remote, type_, id_, *args, **kwargs):
         """
@@ -31,7 +30,7 @@ class DaemonGroup(object):
         self.register_daemon(remote, type_, id_, *args, **kwargs)
         cluster = kwargs.pop('cluster', 'ceph')
         role = cluster + '.' + type_
-        if not self.use_init:
+        if remote.init_system is None:
             self.daemons[role][id_].restart()
 
     def register_daemon(self, remote, type_, id_, *args, **kwargs):
@@ -55,7 +54,7 @@ class DaemonGroup(object):
             self.daemons[role][id_].stop()
             self.daemons[role][id_] = None
         klass = DaemonState
-        if self.use_init == 'systemd':
+        if remote.init_system == 'systemd':
             klass = SystemDState
         self.daemons[role][id_] = klass(
             remote, role, id_, *args, **kwargs)
