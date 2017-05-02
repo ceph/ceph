@@ -20,7 +20,7 @@
 
 class MOSDPGLog : public Message {
 
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 2;
 
   epoch_t epoch;
@@ -36,7 +36,7 @@ public:
   pg_info_t info;
   pg_log_t log;
   pg_missing_t missing;
-  pg_interval_map_t past_intervals;
+  PastIntervals past_intervals;
 
   epoch_t get_epoch() const { return epoch; }
   spg_t get_pgid() const { return spg_t(info.pgid.pgid, to); }
@@ -71,6 +71,7 @@ public:
     // swapped out by OSD code.
     out << "pg_log(" << info.pgid << " epoch " << epoch
 	<< " log " << log
+	<< " pi " << past_intervals
 	<< " query_epoch " << query_epoch << ")";
   }
 
@@ -80,7 +81,12 @@ public:
     ::encode(log, payload);
     ::encode(missing, payload);
     ::encode(query_epoch, payload);
-    ::encode(past_intervals, payload);
+    if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      ::encode(past_intervals, payload);
+    } else {
+      header.version = 4;
+      past_intervals.encode_classic(payload);
+    }
     ::encode(to, payload);
     ::encode(from, payload);
   }
@@ -94,7 +100,11 @@ public:
       ::decode(query_epoch, p);
     }
     if (header.version >= 3) {
-      ::decode(past_intervals, p);
+      if (header.version >= 5) {
+	::decode(past_intervals, p);
+      } else {
+	past_intervals.decode_classic(p);
+      }
     }
     if (header.version >= 4) {
       ::decode(to, p);

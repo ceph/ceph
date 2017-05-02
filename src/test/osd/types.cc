@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -122,6 +122,10 @@ TEST(hobject, prefixes5)
 
 TEST(pg_interval_t, check_new_interval)
 {
+// iterate through all 4 combinations
+for (unsigned i = 0; i < 4; ++i) {
+  bool compact = i & 1;
+  bool ec_pool = i & 2;
   //
   // Create a situation where osdmaps are the same so that
   // each test case can diverge from it using minimal code.
@@ -170,10 +174,10 @@ TEST(pg_interval_t, check_new_interval)
   // being split
   //
   {
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_FALSE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_FALSE(PastIntervals::check_new_interval(old_primary,
 						   new_primary,
 						   old_acting,
 						   new_acting,
@@ -199,10 +203,10 @@ TEST(pg_interval_t, check_new_interval)
     int _new_primary = osd_id + 1;
     new_acting.push_back(_new_primary);
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -218,11 +222,6 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals));
     old_primary = new_primary;
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
-    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
   }
 
   //
@@ -233,10 +232,10 @@ TEST(pg_interval_t, check_new_interval)
     int _new_primary = osd_id + 1;
     new_up.push_back(_new_primary);
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -251,11 +250,6 @@ TEST(pg_interval_t, check_new_interval)
 						  pgid,
                                                   recoverable.get(),
 						  &past_intervals));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
-    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
   }
 
   //
@@ -265,10 +259,10 @@ TEST(pg_interval_t, check_new_interval)
     vector<int> new_up;
     int _new_up_primary = osd_id + 1;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -283,11 +277,6 @@ TEST(pg_interval_t, check_new_interval)
 						  pgid,
                                                   recoverable.get(),
 						  &past_intervals));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
-    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
   }
 
   //
@@ -304,10 +293,10 @@ TEST(pg_interval_t, check_new_interval)
     inc.new_pools[pool_id].set_pg_num(new_pg_num);
     osdmap->apply_incremental(inc);
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -322,11 +311,6 @@ TEST(pg_interval_t, check_new_interval)
 						  pgid,
                                                   recoverable.get(),
 						  &past_intervals));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
-    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
   }
 
   //
@@ -343,10 +327,10 @@ TEST(pg_interval_t, check_new_interval)
     inc.new_pools[pool_id].set_pg_num(pg_num);
     osdmap->apply_incremental(inc);
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -361,11 +345,6 @@ TEST(pg_interval_t, check_new_interval)
 						  pgid,
                                                   recoverable.get(),
 						  &past_intervals));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
-    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
-    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
   }
 
   //
@@ -375,12 +354,12 @@ TEST(pg_interval_t, check_new_interval)
   {
     vector<int> old_acting;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ostringstream out;
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -396,8 +375,6 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals,
 						  &out));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_FALSE(past_intervals[same_interval_since].maybe_went_rw);
     ASSERT_NE(string::npos, out.str().find("acting set is too small"));
   }
 
@@ -429,10 +406,10 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -448,8 +425,6 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals,
 						  &out));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_FALSE(past_intervals[same_interval_since].maybe_went_rw);
     ASSERT_NE(string::npos, out.str().find("acting set is too small"));
   }
 
@@ -464,10 +439,10 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -483,8 +458,6 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals,
 						  &out));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_TRUE(past_intervals[same_interval_since].maybe_went_rw);
     ASSERT_NE(string::npos, out.str().find("includes interval"));
   }
   //
@@ -509,10 +482,10 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -528,8 +501,6 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals,
 						  &out));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_TRUE(past_intervals[same_interval_since].maybe_went_rw);
     ASSERT_NE(string::npos, out.str().find("presumed to have been rw"));
   }
 
@@ -558,10 +529,10 @@ TEST(pg_interval_t, check_new_interval)
 
     ostringstream out;
 
-    map<epoch_t, pg_interval_t> past_intervals;
+    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
 
     ASSERT_TRUE(past_intervals.empty());
-    ASSERT_TRUE(pg_interval_t::check_new_interval(old_primary,
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
 						  new_primary,
 						  old_acting,
 						  new_acting,
@@ -577,10 +548,9 @@ TEST(pg_interval_t, check_new_interval)
                                                   recoverable.get(),
 						  &past_intervals,
 						  &out));
-    ASSERT_EQ((unsigned int)1, past_intervals.size());
-    ASSERT_FALSE(past_intervals[same_interval_since].maybe_went_rw);
     ASSERT_NE(string::npos, out.str().find("does not include interval"));
   }
+} // end for, didn't want to reindent
 }
 
 TEST(pg_t, get_ancestor)
@@ -1541,6 +1511,299 @@ TEST(pool_opts_t, deep_scrub_interval) {
   opts.unset(pool_opts_t::DEEP_SCRUB_INTERVAL);
   EXPECT_FALSE(opts.is_set(pool_opts_t::DEEP_SCRUB_INTERVAL));
 }
+
+struct RequiredPredicate : IsPGRecoverablePredicate {
+  unsigned required_size;
+  RequiredPredicate(unsigned required_size) : required_size(required_size) {}
+  bool operator()(const set<pg_shard_t> &have) const override {
+    return have.size() >= required_size;
+  }
+};
+
+using namespace std;
+struct MapPredicate {
+  map<int, pair<PastIntervals::osd_state_t, epoch_t>> states;
+  MapPredicate(
+    vector<pair<int, pair<PastIntervals::osd_state_t, epoch_t>>> _states)
+   : states(_states.begin(), _states.end()) {}
+  PastIntervals::osd_state_t operator()(epoch_t start, int osd, epoch_t *lost_at) {
+    auto val = states.at(osd);
+    if (lost_at)
+      *lost_at = val.second;
+    return val.first;
+  }
+};
+
+using sit = shard_id_t;
+using PI = PastIntervals;
+using pst = pg_shard_t;
+using ival = PastIntervals::pg_interval_t;
+using ivallst = std::list<ival>;
+const int N = 0x7fffffff /* CRUSH_ITEM_NONE, can't import crush.h here */;
+
+struct PITest : ::testing::Test {
+  PITest() {}
+  void run(
+    bool ec_pool,
+    ivallst intervals,
+    epoch_t last_epoch_started,
+    unsigned min_to_peer,
+    vector<pair<int, pair<PastIntervals::osd_state_t, epoch_t>>> osd_states,
+    vector<int> up,
+    vector<int> acting,
+    set<pg_shard_t> probe,
+    set<int> down,
+    map<int, epoch_t> blocked_by,
+    bool pg_down) {
+    RequiredPredicate rec_pred(min_to_peer);
+    MapPredicate map_pred(osd_states);
+
+    PI::PriorSet correct(
+      ec_pool,
+      probe,
+      down,
+      blocked_by,
+      pg_down,
+      new RequiredPredicate(rec_pred));
+
+    PastIntervals simple, compact;
+    simple.update_type(ec_pool, false);
+    compact.update_type(ec_pool, true);
+    for (auto &&i: intervals) {
+      simple.add_interval(ec_pool, i);
+      compact.add_interval(ec_pool, i);
+    }
+    PI::PriorSet simple_ps = simple.get_prior_set(
+      ec_pool,
+      last_epoch_started,
+      new RequiredPredicate(rec_pred),
+      map_pred,
+      up,
+      acting,
+      nullptr);
+    PI::PriorSet compact_ps = compact.get_prior_set(
+      ec_pool,
+      last_epoch_started,
+      new RequiredPredicate(rec_pred),
+      map_pred,
+      up,
+      acting,
+      nullptr);
+    ASSERT_EQ(correct, simple_ps);
+    ASSERT_EQ(correct, compact_ps);
+  }
+};
+
+TEST_F(PITest, past_intervals_rep) {
+  run(
+    /* ec_pool    */ false,
+    /* intervals  */
+    { ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+    , ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
+    , ival{{      2}, {      2}, 31, 35, false, 2, 2}
+    , ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
+    },
+    /* les        */ 5,
+    /* min_peer   */ 1,
+    /* osd states at end */
+    { make_pair(0, make_pair(PI::UP   , 0))
+    , make_pair(1, make_pair(PI::UP   , 0))
+    , make_pair(2, make_pair(PI::DOWN , 0))
+    },
+    /* acting     */ {0, 1   },
+    /* up         */ {0, 1   },
+    /* probe      */ {pst(0), pst(1)},
+    /* down       */ {2},
+    /* blocked_by */ {},
+    /* pg_down    */ false);
+}
+
+TEST_F(PITest, past_intervals_ec) {
+  run(
+    /* ec_pool    */ true,
+    /* intervals  */
+    { ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+    , ival{{N, 1, 2}, {N, 1, 2}, 21, 30,  true, 1, 1}
+    },
+    /* les        */ 5,
+    /* min_peer   */ 2,
+    /* osd states at end */
+    { make_pair(0, make_pair(PI::DOWN , 0))
+    , make_pair(1, make_pair(PI::UP   , 0))
+    , make_pair(2, make_pair(PI::UP   , 0))
+    },
+    /* acting     */ {N, 1, 2},
+    /* up         */ {N, 1, 2},
+    /* probe      */ {pst(1, sit(1)), pst(2, sit(2))},
+    /* down       */ {0},
+    /* blocked_by */ {},
+    /* pg_down    */ false);
+}
+
+TEST_F(PITest, past_intervals_rep_down) {
+  run(
+    /* ec_pool    */ false,
+    /* intervals  */
+    { ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+    , ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
+    , ival{{      2}, {      2}, 31, 35,  true, 2, 2}
+    , ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
+    },
+    /* les        */ 5,
+    /* min_peer   */ 1,
+    /* osd states at end */
+    { make_pair(0, make_pair(PI::UP   , 0))
+    , make_pair(1, make_pair(PI::UP   , 0))
+    , make_pair(2, make_pair(PI::DOWN , 0))
+    },
+    /* acting     */ {0, 1   },
+    /* up         */ {0, 1   },
+    /* probe      */ {pst(0), pst(1)},
+    /* down       */ {2},
+    /* blocked_by */ {{2, 0}},
+    /* pg_down    */ true);
+}
+
+TEST_F(PITest, past_intervals_ec_down) {
+  run(
+    /* ec_pool    */ true,
+    /* intervals  */
+    { ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+    , ival{{N, 1, 2}, {N, 1, 2}, 21, 30,  true, 1, 1}
+    , ival{{N, N, 2}, {N, N, 2}, 31, 35, false, 2, 2}
+    },
+    /* les        */ 5,
+    /* min_peer   */ 2,
+    /* osd states at end */
+    { make_pair(0, make_pair(PI::UP   , 0))
+    , make_pair(1, make_pair(PI::DOWN , 0))
+    , make_pair(2, make_pair(PI::UP   , 0))
+    },
+    /* acting     */ {0, N, 2},
+    /* up         */ {0, N, 2},
+    /* probe      */ {pst(0, sit(0)), pst(2, sit(2))},
+    /* down       */ {1},
+    /* blocked_by */ {{1, 0}},
+    /* pg_down    */ true);
+}
+
+TEST_F(PITest, past_intervals_rep_no_subsets) {
+  run(
+    /* ec_pool    */ false,
+    /* intervals  */
+    { ival{{0,    2}, {0,    2}, 10, 20,  true, 0, 0}
+    , ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
+    , ival{{0, 1   }, {0, 1   }, 31, 35,  true, 0, 0}
+    },
+    /* les        */ 5,
+    /* min_peer   */ 1,
+    /* osd states at end */
+    { make_pair(0, make_pair(PI::UP   , 0))
+    , make_pair(1, make_pair(PI::UP   , 0))
+    , make_pair(2, make_pair(PI::DOWN , 0))
+    },
+    /* acting     */ {0, 1   },
+    /* up         */ {0, 1   },
+    /* probe      */ {pst(0), pst(1)},
+    /* down       */ {2},
+    /* blocked_by */ {},
+    /* pg_down    */ false);
+}
+
+TEST_F(PITest, past_intervals_ec_no_subsets) {
+  run(
+    /* ec_pool    */ true,
+    /* intervals  */
+    { ival{{0, N, 2}, {0, N, 2}, 10, 20,  true, 0, 0}
+    , ival{{N, 1, 2}, {N, 1, 2}, 21, 30,  true, 1, 1}
+    , ival{{0, 1, N}, {0, 1, N}, 31, 35,  true, 0, 0}
+    },
+    /* les        */ 5,
+    /* min_peer   */ 2,
+    /* osd states at end */
+    { make_pair(0, make_pair(PI::UP   , 0))
+    , make_pair(1, make_pair(PI::DOWN , 0))
+    , make_pair(2, make_pair(PI::UP   , 0))
+    },
+    /* acting     */ {0, N, 2},
+    /* up         */ {0, N, 2},
+    /* probe      */ {pst(0, sit(0)), pst(2, sit(2))},
+    /* down       */ {1},
+    /* blocked_by */ {{1, 0}},
+    /* pg_down    */ true);
+}
+
+TEST_F(PITest, past_intervals_ec_no_subsets2) {
+  run(
+    /* ec_pool    */ true,
+    /* intervals  */
+    { ival{{N, 1, 2}, {N, 1, 2}, 10, 20,  true, 0, 0}
+    , ival{{0, N, 2}, {0, N, 2}, 21, 30,  true, 1, 1}
+    , ival{{0, 3, N}, {0, 3, N}, 31, 35,  true, 0, 0}
+    },
+    /* les        */ 31,
+    /* min_peer   */ 2,
+    /* osd states at end */
+    { make_pair(0, make_pair(PI::UP   , 0))
+    , make_pair(1, make_pair(PI::DOWN , 0))
+    , make_pair(2, make_pair(PI::UP   , 0))
+    , make_pair(3, make_pair(PI::UP   , 0))
+    },
+    /* acting     */ {0, N, 2},
+    /* up         */ {0, N, 2},
+    /* probe      */ {pst(0, sit(0)), pst(2, sit(2)), pst(3, sit(1))},
+    /* down       */ {1},
+    /* blocked_by */ {},
+    /* pg_down    */ false);
+}
+
+TEST_F(PITest, past_intervals_rep_lost) {
+  run(
+    /* ec_pool    */ false,
+    /* intervals  */
+    { ival{{0, 1, 2}, {0, 1, 2}, 10, 20,  true, 0, 0}
+    , ival{{   1, 2}, {   1, 2}, 21, 30,  true, 1, 1}
+    , ival{{      2}, {      2}, 31, 35,  true, 2, 2}
+    , ival{{0,    2}, {0,    2}, 36, 50,  true, 0, 0}
+    },
+    /* les        */ 5,
+    /* min_peer   */ 1,
+    /* osd states at end */
+    { make_pair(0, make_pair(PI::UP   , 0))
+    , make_pair(1, make_pair(PI::UP   , 0))
+    , make_pair(2, make_pair(PI::LOST , 55))
+    },
+    /* acting     */ {0, 1   },
+    /* up         */ {0, 1   },
+    /* probe      */ {pst(0), pst(1)},
+    /* down       */ {2},
+    /* blocked_by */ {},
+    /* pg_down    */ false);
+}
+
+TEST_F(PITest, past_intervals_ec_lost) {
+  run(
+    /* ec_pool    */ true,
+    /* intervals  */
+    { ival{{0, N, 2}, {0, N, 2}, 10, 20,  true, 0, 0}
+    , ival{{N, 1, 2}, {N, 1, 2}, 21, 30,  true, 1, 1}
+    , ival{{0, 1, N}, {0, 1, N}, 31, 35,  true, 0, 0}
+    },
+    /* les        */ 5,
+    /* min_peer   */ 2,
+    /* osd states at end */
+    { make_pair(0, make_pair(PI::UP   , 0))
+    , make_pair(1, make_pair(PI::LOST , 36))
+    , make_pair(2, make_pair(PI::UP   , 0))
+    },
+    /* acting     */ {0, N, 2},
+    /* up         */ {0, N, 2},
+    /* probe      */ {pst(0, sit(0)), pst(2, sit(2))},
+    /* down       */ {1},
+    /* blocked_by */ {},
+    /* pg_down    */ false);
+}
+
 
 /*
  * Local Variables:
