@@ -172,23 +172,12 @@ int	randomize_parent_overlap = 1;
 int 	mapped_reads = 0;		/* -R flag disables it */
 int	fsxgoodfd = 0;
 int	o_direct = 0;			/* -Z flag */
-int	aio = 0;
 
 int num_clones = 0;
 
 int page_size;
 int page_mask;
 int mmap_mask;
-#ifdef AIO
-int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset);
-#define READ 0
-#define WRITE 1
-#define fsxread(a,b,c,d)	aio_rw(READ, a,b,c,d)
-#define fsxwrite(a,b,c,d)	aio_rw(WRITE, a,b,c,d)
-#else
-#define fsxread(a,b,c,d)	read(a,b,c)
-#define fsxwrite(a,b,c,d)	write(a,b,c)
-#endif
 
 FILE *	fsxlogf = NULL;
 int badoff = -1;
@@ -2397,9 +2386,6 @@ usage(void)
 	-x: preallocate file space before starting, XFS only (default 0)\n\
 	-y: synchronize changes to a file\n"
 
-#ifdef AIO
-"	-A: Use the AIO system calls\n"
-#endif
 "	-C: do not use clone calls\n\
 	-D startingop: debug output starting at specified operation\n"
 #ifdef FALLOCATE
@@ -2455,108 +2441,6 @@ getnum(char *s, char **e)
 		}
 	return (ret);
 }
-
-#ifdef AIO
-
-#define QSZ     1024
-io_context_t	io_ctx;
-struct iocb 	iocb;
-
-int aio_setup()
-{
-	int ret;
-	ret = io_queue_init(QSZ, &io_ctx);
-	if (ret != 0) {
-		fprintf(stderr, "aio_setup: io_queue_init failed: %s\n",
-                        strerror(ret));
-                return(-1);
-        }
-        return(0);
-}
-
-int
-__aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
-{
-	struct io_event event;
-	static struct timespec ts;
-	struct iocb *iocbs[] = { &iocb };
-	int ret;
-	long res;
-
-	if (rw == READ) {
-		io_prep_pread(&iocb, fd, buf, len, offset);
-	} else {
-		io_prep_pwrite(&iocb, fd, buf, len, offset);
-	}
-
-	ts.tv_sec = 30;
-	ts.tv_nsec = 0;
-	ret = io_submit(io_ctx, 1, iocbs);
-	if (ret != 1) {
-		fprintf(stderr, "errcode=%d\n", ret);
-		fprintf(stderr, "aio_rw: io_submit failed: %s\n",
-				strerror(ret));
-		goto out_error;
-	}
-
-	ret = io_getevents(io_ctx, 1, 1, &event, &ts);
-	if (ret != 1) {
-		if (ret == 0)
-			fprintf(stderr, "aio_rw: no events available\n");
-		else {
-			fprintf(stderr, "errcode=%d\n", -ret);
-			fprintf(stderr, "aio_rw: io_getevents failed: %s\n",
-				 	strerror(-ret));
-		}
-		goto out_error;
-	}
-	if (len != event.res) {
-		/*
-		 * The b0rked libaio defines event.res as unsigned.
-		 * However the kernel strucuture has it signed,
-		 * and it's used to pass negated error value.
-		 * Till the library is fixed use the temp var.
-		 */
-		res = (long)event.res;
-		if (res >= 0)
-			fprintf(stderr, "bad io length: %lu instead of %u\n",
-					res, len);
-		else {
-			fprintf(stderr, "errcode=%ld\n", -res);
-			fprintf(stderr, "aio_rw: async io failed: %s\n",
-					strerror(-res));
-			ret = res;
-			goto out_error;
-		}
-
-	}
-	return event.res;
-
-out_error:
-	/*
-	 * The caller expects error return in traditional libc
-	 * convention, i.e. -1 and the errno set to error.
-	 */
-	errno = -ret;
-	return -1;
-}
-
-int aio_rw(int rw, int fd, char *buf, unsigned len, unsigned offset)
-{
-	int ret;
-
-	if (aio) {
-		ret = __aio_rw(rw, fd, buf, len, offset);
-	} else {
-		if (rw == READ)
-			ret = read(fd, buf, len);
-		else
-			ret = write(fd, buf, len);
-	}
-	return ret;
-}
-
-#endif
 
 void
 test_fallocate()
@@ -2637,7 +2521,7 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfh:jkl:m:no:p:qr:s:t:w:xyACD:FHKMLN:OP:RS:UWZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfh:jkl:m:no:p:qr:s:t:w:xyCD:FHKMLN:OP:RS:UWZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -2737,9 +2621,6 @@ main(int argc, char **argv)
 			break;
 		case 'y':
 			do_fsync = 1;
-			break;
-		case 'A':
-		        aio = 1;
 			break;
 		case 'C':
 			clone_calls = 0;
@@ -2870,11 +2751,6 @@ main(int argc, char **argv)
 		prterr(logfile);
 		exit(93);
 	}
-
-#ifdef AIO
-	if (aio) 
-		aio_setup();
-#endif
 
 	original_buf = (char *) malloc(maxfilelen);
 	for (i = 0; i < (int)maxfilelen; i++)
