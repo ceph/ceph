@@ -2947,7 +2947,8 @@ int OSD::shutdown()
   cct->_conf->set_val("debug_ms", "100");
   cct->_conf->apply_changes(NULL);
 
-  mgrc.set_pgstats_cb(std::function<MPGStats*()>());
+  // stop MgrClient earlier as it's more like an internal consumer of OSD
+  mgrc.shutdown();
 
   service.start_shutdown();
 
@@ -3110,7 +3111,6 @@ int OSD::shutdown()
   store = 0;
   dout(10) << "Store synced" << dendl;
 
-  mgrc.shutdown();
   monc->shutdown();
   osd_lock.Unlock();
 
