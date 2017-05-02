@@ -3114,6 +3114,8 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     dir->verify_fragstat();
 #endif
 
+  dir->inode->maybe_export_pin();
+
   dout(7) << "decode_import_dir done " << *dir << dendl;
   return num_imported;
 }
