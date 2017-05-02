@@ -332,6 +332,17 @@ add_subdirectory(json_spirit)
 
 include_directories("${CMAKE_SOURCE_DIR}/src/xxHash")
 
+set(GMOCK_INCLUDE_DIRS
+  "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include/gmock")
+set(GTEST_INCLUDE_DIRS
+  "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include/gtest")
+
+include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/src")
+include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
+
+# needed for source files that friend unit tests (e.g., using FRIEND_TEST)
+include_directories("${CMAKE_SOURCE_DIR}/src/googletest/googletest/include")
+
 set(xio_common_srcs)
 if(HAVE_XIO)
   list(APPEND xio_common_srcs
@@ -811,6 +822,7 @@ set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
 
 add_subdirectory(osd)
+
 set(ceph_osd_srcs
   ceph_osd.cc)
 add_executable(ceph-osd ${ceph_osd_srcs}
@@ -843,6 +855,18 @@ endif(WITH_TESTS)
 add_subdirectory(compressor)
 
 add_subdirectory(tools)
+
+# dmClock
+
+add_subdirectory(dmclock) # after gmock
+add_dependencies(tests dmclock-tests dmclock-data-struct-tests)
+
+if(WITH_TESTS)
+  install(PROGRAMS
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/dmclock-tests
+    ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/dmclock-data-struct-tests
+    DESTINATION bin)
+endif(WITH_TESTS)
 
 if(HAVE_INTEL)
   add_subdirectory(crypto/isa-l)
