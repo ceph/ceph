@@ -66,7 +66,8 @@ struct cls_rbd_snap {
   cls_rbd_parent parent;
   uint64_t flags;
   utime_t timestamp;
-  cls::rbd::SnapshotNamespaceOnDisk snapshot_namespace;
+  cls::rbd::SnapshotNamespaceOnDisk snapshot_namespace = {
+    cls::rbd::UserSnapshotNamespace{}};
 
   /// true if we have a parent
   bool has_parent() const {
@@ -107,8 +108,6 @@ struct cls_rbd_snap {
     }
     if (struct_v >= 5) {
       ::decode(snapshot_namespace, p);
-    } else {
-      snapshot_namespace = cls::rbd::SnapshotNamespaceOnDisk(cls::rbd::UserSnapshotNamespace());
     }
     if (struct_v >= 6) {
       ::decode(timestamp, p);
