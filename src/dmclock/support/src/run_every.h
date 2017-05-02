@@ -11,7 +11,7 @@
 #include <mutex>
 #include <condition_variable>
 #include <thread>
-
+#include <functional>
 
 namespace crimson {
   using std::chrono::duration_cast;
