@@ -1143,12 +1143,6 @@ int RGWPeriod::create(bool exclusive)
 
 int RGWPeriod::store_info(bool exclusive)
 {
-  epoch_t latest_epoch = FIRST_EPOCH - 1;
-  int ret = get_latest_epoch(latest_epoch);
-  if (ret < 0 && ret != -ENOENT) {
-    ldout(cct, 0) << "ERROR: RGWPeriod::get_latest_epoch() returned " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
   string pool_name = get_pool_name(cct);
 
   rgw_bucket pool(pool_name.c_str());
@@ -1156,19 +1150,9 @@ int RGWPeriod::store_info(bool exclusive)
   string oid = get_period_oid();
   bufferlist bl;
   ::encode(*this, bl);
-  ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, real_time(), NULL);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: rgw_put_system_obj(" << pool << ":" << oid << "): " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  if (latest_epoch < epoch) {
-    ret = set_latest_epoch(epoch);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: RGWPeriod::set_latest_epoch() returned " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-  }
-  return 0;
+
+  return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(),
+                            exclusive, NULL, real_time(), NULL);
 }
 
 const string& RGWPeriod::get_pool_name(CephContext *cct)
