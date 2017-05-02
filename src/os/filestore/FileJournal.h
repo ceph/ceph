@@ -31,6 +31,9 @@ using std::deque;
 # include <libaio.h>
 #endif
 
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
+
 /**
  * Implements journaling on top of block device or file.
  *
