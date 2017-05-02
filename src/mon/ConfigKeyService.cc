@@ -83,6 +83,21 @@ void ConfigKeyService::store_list(stringstream &ss)
   f.flush(ss);
 }
 
+void ConfigKeyService::store_dump(stringstream &ss)
+{
+  KeyValueDB::Iterator iter =
+    mon->store->get_iterator(STORE_PREFIX);
+
+  JSONFormatter f(true);
+  f.open_object_section("config-key store");
+
+  while (iter->valid()) {
+    f.dump_string(iter->key().c_str(), iter->value().to_str());
+    iter->next();
+  }
+  f.close_section();
+  f.flush(ss);
+}
 
 bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 {
@@ -185,6 +200,12 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
   } else if (prefix == "config-key list") {
     stringstream tmp_ss;
     store_list(tmp_ss);
+    rdata.append(tmp_ss);
+    ret = 0;
+
+  } else if (prefix == "config-key dump") {
+    stringstream tmp_ss;
+    store_dump(tmp_ss);
     rdata.append(tmp_ss);
     ret = 0;
   }
