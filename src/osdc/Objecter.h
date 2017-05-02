@@ -1240,6 +1240,9 @@ public:
     ///< true if we are directed at base_pgid, not base_oid
     bool precalc_pgid = false;
 
+    ///< true if we have ever mapped to a valid pool
+    bool pool_ever_existed = false;
+
     ///< explcit pg target, if any
     pg_t base_pgid;
 
