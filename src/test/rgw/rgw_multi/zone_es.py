@@ -105,7 +105,7 @@ class MDSearch:
 
             k.metadata = {}
             for e in entry['CustomMetadata']:
-                k.metadata[e['Name']] = e['Value']
+                k.metadata[e['Name']] = str(e['Value']) # int values will return as int, cast to string for compatibility with object meta response
 
             l.append(k)
 
@@ -131,6 +131,29 @@ class MDSearch:
 
         return l
 
+
+class MDSearchConfig:
+    def __init__(self, conn, bucket_name):
+        self.conn = conn
+        self.bucket_name = bucket_name or ''
+        if bucket_name:
+            self.bucket = boto.s3.bucket.Bucket(name=bucket_name)
+        else:
+            self.bucket = None
+
+    def send_request(self, conf, method):
+        query_args = 'mdsearch'
+        headers = { 'X-Amz-Meta-Search': conf }
+
+        result = make_request(self.conn, method, bucket=self.bucket_name, key='', query_args=query_args, headers=headers)
+        if result.status / 100 != 2:
+            raise boto.exception.S3ResponseError(result.status, result.reason, result.read())
+
+    def set_config(self, conf):
+        self.send_request(conf, 'POST')
+
+    def del_config(self, conf):
+        self.send_request(conf, 'DELETE')
 
 
 class ESZoneBucket:

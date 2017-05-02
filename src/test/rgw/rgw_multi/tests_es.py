@@ -5,6 +5,9 @@ import logging
 import boto
 import boto.s3.connection
 
+import datetime
+import dateutil
+
 from nose.tools import eq_ as eq
 
 from rgw_multi.multisite import *
@@ -55,34 +58,31 @@ def do_check_mdsearch(conn, bucket, src_keys, req_str, src_filter):
     result_keys = req.search(sort_key = lambda k: (k.bucket.name, k.name, k.version_id))
     verify_search(bucket_name, src_keys, result_keys, src_filter)
 
-def test_es_object_search():
+def init_env(create_obj, num_keys = 5, buckets_per_zone = 1, bucket_init_cb = None):
     check_es_configured()
 
     realm = get_realm()
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
-    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns, buckets_per_zone = 2)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns, buckets_per_zone = buckets_per_zone)
 
-    min_size = 10
-    content = 'a' * min_size
+    if bucket_init_cb:
+        for zone_conn, bucket in zone_bucket:
+            bucket_init_cb(zone_conn, bucket)
 
     src_keys = []
 
     owner = None
 
-    max_keys = 5
-
-    etags = []
-    names = []
-
     obj_prefix=''.join(random.choice(string.ascii_lowercase) for _ in range(6))
 
     # don't wait for meta sync just yet
     for zone, bucket in zone_bucket:
-        for count in xrange(0, max_keys):
+        for count in xrange(0, num_keys):
             objname = obj_prefix + str(count)
             k = new_key(zone, bucket.name, objname)
-            k.set_contents_from_string(content + 'x' * count)
+            # k.set_contents_from_string(content + 'x' * count)
+            create_obj(k, count)
 
             if not owner:
                 for list_key in bucket.list_versions():
@@ -93,9 +93,6 @@ def test_es_object_search():
             k.owner = owner # owner is not set when doing get_key()
 
             src_keys.append(k)
-            names.append(k.name)
-
-    max_size = min_size + count - 1
 
     zonegroup_meta_checkpoint(zonegroup)
 
@@ -112,6 +109,17 @@ def test_es_object_search():
         buckets.append(bucket)
         for target_conn in targets:
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
+
+    return targets, buckets, src_keys
+
+def test_es_object_search():
+    min_size = 10
+    content = 'a' * min_size
+
+    def create_obj(k, i):
+        k.set_contents_from_string(content + 'x' * i)
+
+    targets, buckets, src_keys = init_es_test(create_obj, num_keys = 5, buckets_per_zone = 2)
 
     for target_conn in targets:
 
@@ -136,8 +144,8 @@ def test_es_object_search():
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name >= ' + key.name, lambda k: k.name >= key.name)
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name > ' + key.name, lambda k: k.name > key.name)
 
-            do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name == ' + names[0] + ' or name >= ' + names[2],
-                              lambda k: k.name == names[0] or k.name >= names[2])
+            do_check_mdsearch(target_conn.conn, bucket, src_keys , 'name == ' + src_keys[0].name + ' or name >= ' + src_keys[2].name,
+                              lambda k: k.name == src_keys[0].name or k.name >= src_keys[2].name)
 
             # check etag
             for key in src_keys:
@@ -158,4 +166,55 @@ def test_es_object_search():
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'size >= ' + str(key.size), lambda k: k.size >= key.size)
             for key in src_keys:
                 do_check_mdsearch(target_conn.conn, bucket, src_keys , 'size > ' + str(key.size), lambda k: k.size > key.size)
+
+def date_from_str(s):
+    return dateutil.parser.parse(s)
+
+def test_es_object_search_custom():
+    min_size = 10
+    content = 'a' * min_size
+
+    def bucket_init(zone_conn, bucket):
+        req = MDSearchConfig(zone_conn.conn, bucket.name)
+        req.set_config('x-amz-meta-foo-str; string, x-amz-meta-foo-int; int, x-amz-meta-foo-date; date')
+
+    def create_obj(k, i):
+        date = datetime.datetime.now() + datetime.timedelta(seconds=1) * i
+        k.set_contents_from_string(content + 'x' * i, headers = { 'X-Amz-Meta-Foo-Str': str(i * 5),
+                                                                  'X-Amz-Meta-Foo-Int': str(i * 5),
+                                                                  'X-Amz-Meta-Foo-Date' : date.isoformat()})
+
+    targets, buckets, src_keys = init_es_test(create_obj, num_keys = 5, buckets_per_zone = 1, bucket_init_cb = bucket_init)
+
+
+    for target_conn in targets:
+
+        # bucket checks
+        for bucket in buckets:
+            for key in src_keys:
+                # check string values
+                val = key.get_metadata('foo-str')
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-str < ' + val, lambda k: k.get_metadata('foo-str') < val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-str <= ' + val, lambda k: k.get_metadata('foo-str') <= val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-str == ' + val, lambda k: k.get_metadata('foo-str') == val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-str >= ' + val, lambda k: k.get_metadata('foo-str') >= val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-str > ' + val, lambda k: k.get_metadata('foo-str') > val)
+
+                # check int values
+                sval = key.get_metadata('foo-int')
+                val = int(sval)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-int < ' + sval, lambda k: int(k.get_metadata('foo-int')) < val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-int <= ' + sval, lambda k: int(k.get_metadata('foo-int')) <= val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-int == ' + sval, lambda k: int(k.get_metadata('foo-int')) == val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-int >= ' + sval, lambda k: int(k.get_metadata('foo-int')) >= val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-int > ' + sval, lambda k: int(k.get_metadata('foo-int')) > val)
+
+                # check int values
+                sval = key.get_metadata('foo-date')
+                val = date_from_str(sval)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-date < ' + sval, lambda k: date_from_str(k.get_metadata('foo-date')) < val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-date <= ' + sval, lambda k: date_from_str(k.get_metadata('foo-date')) <= val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-date == ' + sval, lambda k: date_from_str(k.get_metadata('foo-date')) == val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-date >= ' + sval, lambda k: date_from_str(k.get_metadata('foo-date')) >= val)
+                do_check_mdsearch(target_conn.conn, bucket, src_keys , 'x-amz-meta-foo-date > ' + sval, lambda k: date_from_str(k.get_metadata('foo-date')) > val)
 
