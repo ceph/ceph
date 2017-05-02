@@ -337,6 +337,7 @@ void PGMap::calc_stats()
 {
   num_pg_by_state.clear();
   num_pg = 0;
+  num_pg_active = 0;
   num_osd = 0;
   pg_pool_sum.clear();
   pg_sum = pool_stat_t();
@@ -457,6 +458,10 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
     }
   }
 
+  if (s.state & PG_STATE_ACTIVE) {
+    ++num_pg_active;
+  }
+
   if (sameosds)
     return;
 
@@ -498,6 +503,10 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
       if (r.empty())
 	creating_pgs_by_osd_epoch.erase(s.acting_primary);
     }
+  }
+
+  if (s.state & PG_STATE_ACTIVE) {
+    --num_pg_active;
   }
 
   if (sameosds)
@@ -1655,6 +1664,18 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
          << kb_t(osd_sum.kb_used) << " used, "
          << kb_t(osd_sum.kb_avail) << " / "
          << kb_t(osd_sum.kb) << " avail\n";
+  }
+
+
+  if (num_pg_active < num_pg) {
+    float p = (float)num_pg_active / (float)num_pg;
+    if (f) {
+      f->dump_float("active_pgs_ratio", p);
+    } else {
+      char b[20];
+      snprintf(b, sizeof(b), "%.3lf", (1.0 - p) * 100.0);
+      *out << "            " << b << "% pgs inactive\n";
+    }
   }
 
   list<string> sl;
