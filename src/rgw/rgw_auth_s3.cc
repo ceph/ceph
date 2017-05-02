@@ -790,24 +790,16 @@ std::string get_v4_signature(CephContext* const cct,
                              const std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>& signing_key,
                              const std::string& string_to_sign)
 {
+  /* The server-side generated signature for comparison. */
+  const auto signature_k = \
+    buf_to_hex(calc_hmac_sha256(signing_key, string_to_sign));
 
-  /* new signature */
+  /* FIXME(rzarzynski): we might want to switch the return type from
+   * std::string to std::array<char, N>. */
+  const std::string signature = \
+    std::string(signature_k.data(), signature_k.size() - 1);
 
-  char signature_k[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  /* FIXME(rzarzynski): eradicate the reinterpret_cast. */
-  calc_hmac_sha256(reinterpret_cast<const char*>(signing_key.data()), CEPH_CRYPTO_HMACSHA256_DIGESTSIZE,
-                   string_to_sign.c_str(), string_to_sign.size(),
-                   signature_k);
-
-  char aux[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1];
-  buf_to_hex((unsigned char *) signature_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
-
-  ldout(cct, 10) << "signature_k   = " << string(aux) << dendl;
-
-  std::string signature = string(aux);
-
-  ldout(cct, 10) << "new signature = " << signature << dendl;
-
+  ldout(cct, 10) << "generated signature = " << signature << dendl;
   return signature;
 }
 
