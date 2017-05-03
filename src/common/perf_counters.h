@@ -313,12 +313,14 @@ public:
 		    const char *description=NULL,
 		    const char *nick = NULL,
 		    int prio=0);
-  void add_histogram(int key, const char* name,
-		     PerfHistogramCommon::axis_config_d x_axis_config,
-		     PerfHistogramCommon::axis_config_d y_axis_config,
-		     const char *description=NULL,
-		     const char* nick = NULL,
-		     int prio=0);
+  void add_u64_counter_histogram(
+    int key, const char* name,
+    PerfHistogramCommon::axis_config_d x_axis_config,
+    PerfHistogramCommon::axis_config_d y_axis_config,
+    const char *description=NULL,
+    const char* nick = NULL,
+    int prio=0);
+
   PerfCounters* create_perf_counters();
 private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
