@@ -466,7 +466,7 @@ public:
     // mirror image operations
     librbd::RBD rbd;
     int r = rbd.list(m_io_ctx, m_image_names);
-    if (r < 0) {
+    if (r < 0 && r != -ENOENT) {
       std::cerr << "rbd: failed to list images within pool" << std::endl;
       return r;
     }
