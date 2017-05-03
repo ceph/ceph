@@ -1,6 +1,7 @@
 #! /usr/bin/dh-exec --with=install
 
 etc/bash_completion.d/rados
+etc/bash_completion.d/radosgw-admin
 etc/bash_completion.d/rbd
 usr/bin/ceph
 usr/bin/ceph-authtool
@@ -13,6 +14,7 @@ usr/bin/cephfs-data-scan
 usr/bin/cephfs-journal-tool
 usr/bin/cephfs-table-tool
 usr/bin/rados
+usr/bin/radosgw-admin
 usr/bin/rbd
 usr/bin/rbdmap
 usr/bin/rbd-replay*
@@ -30,6 +32,7 @@ usr/share/man/man8/ceph-post-file.8
 usr/share/man/man8/ceph.8
 usr/share/man/man8/mount.ceph.8
 usr/share/man/man8/rados.8
+usr/share/man/man8/radosgw-admin.8
 usr/share/man/man8/rbd.8
 usr/share/man/man8/rbdmap.8
 usr/share/man/man8/rbd-replay*.8
