@@ -317,7 +317,7 @@ void PerfCounters::hinc(int idx, int64_t x, int64_t y)
   assert(idx < m_upper_bound);
 
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  assert(data.type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_U64));
+  assert(data.type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
   assert(data.histogram);
 
   data.histogram->inc(x, y);
@@ -407,7 +407,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
 	}
 	f->close_section();
       } else if (d->type & PERFCOUNTER_HISTOGRAM) {
-        assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_U64));
+        assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
         assert(d->histogram);
         f->open_object_section(d->name);
         d->histogram->dump_formatted(f);
@@ -504,7 +504,7 @@ void PerfCountersBuilder::add_histogram(
   const char *description, const char *nick, int prio)
 {
   add_impl(idx, name, description, nick, prio,
-	   PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM,
+	   PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER,
            unique_ptr<PerfHistogram<>>{new PerfHistogram<>{x_axis_config, y_axis_config}});
 }
 
