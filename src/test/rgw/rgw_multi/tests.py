@@ -44,6 +44,7 @@ def init_multi(_realm, _user, _config=None):
     user = _user
     global config
     config = _config or Config()
+    realm_meta_checkpoint(realm)
 
 def get_realm():
     return realm
