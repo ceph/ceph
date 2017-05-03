@@ -1,6 +1,6 @@
-TIMESTAMP = 1493509663
-SHA256 (wjwithagen-ceph-wip.FreeBSD.201704_GH0.tar.gz) = ca437d6c40634922a4beb6b9cfe7aa242e5c53cfe6e4a9663c9369ac27f323b2
-SIZE (wjwithagen-ceph-wip.FreeBSD.201704_GH0.tar.gz) = 10050367
+TIMESTAMP = 1493758988
+SHA256 (wjwithagen-ceph-wip.v2017-05-01_GH0.tar.gz) = 124f21e9b696d65e178107f1fbebd5f91a0136db0c38a13ca6d6d4329c53a45e
+SIZE (wjwithagen-ceph-wip.v2017-05-01_GH0.tar.gz) = 10046369
 SHA256 (facebook-rocksdb-2.7.fb-4991-g9f2cc5_GH0.tar.gz) = de92acb5f01d157331c9c978152016c8855049cd361d65e366fc379834265f37
 SIZE (facebook-rocksdb-2.7.fb-4991-g9f2cc5_GH0.tar.gz) = 3270485
 SHA256 (ceph-ceph-erasure-code-corpus-master_GH0.tar.gz) = 0a0129c92c3c1b717c39810833a476e16086b73736f2d2a77af93e3070b79356

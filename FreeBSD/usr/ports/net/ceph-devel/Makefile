@@ -1,8 +1,8 @@
 # Created by: Willem Jan Withagen <wjw@digiware.nl>
-# $FreeBSD: head/net/ceph-devel/Makefile 437431 2017-04-01 11:59:18Z antoine $
+# $FreeBSD: head/net/ceph-devel/Makefile 440007 2017-05-03 09:25:30Z mmokhi $
 
 PORTNAME=	ceph
-DISTVERSION=	wip.FreeBSD.201704
+DISTVERSION=	wip.v2017-05-01
 CATEGORIES=	net
 PKGNAMESUFFIX=	-devel
 
@@ -64,6 +64,7 @@ CMAKE_BUILD_TYPE=	Release
 CMAKE_ARGS=	\
 	-D ENABLE_GIT_VERSION:BOOL=OFF \
 	-D WITH_SYSTEM_BOOST:BOOL=ON \
+	-D CEPH_MAN_DIR:STRING=man \
 	-D WITH_LTTNG:BOOL=OFF \
 	-D WITH_FUSE:BOOL=ON \
 	-D WITH_KRBD:BOOL=OFF \
@@ -81,6 +82,7 @@ SHEBANG_FILES=src/rbdmap src/ceph-post-file.in src/rbd-replay-many \
 
 # even though i386 will build, it is not really advised.
 ONLY_FOR_ARCHS=	amd64
+IGNORE_FreeBSD_10=	Doesnt build for FreeBSD 10.x
 
 USE_RC_SUBR=	ceph
 USE_LDCONFIG=	yes
@@ -132,10 +134,4 @@ post-install:
 	${RMDIR} ${STAGEDIR}${PREFIX}/etc/init.d
 	${INSTALL_DATA} ${WRKSRC}/src/sample.ceph.conf ${STAGEDIR}${PREFIX}/etc/ceph/ceph.conf.sample
 
-.include <bsd.port.pre.mk>
-
-.if ${OSVERSION} < 1100000
-IGNORE=         not supported on this version of FreeBSD
-.endif
-
-.include <bsd.port.post.mk>
+.include <bsd.port.mk>

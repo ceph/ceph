@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $FreeBSD$
+# $FreeBSD: head/net/ceph-devel/files/ceph.in 440007 2017-05-03 09:25:30Z mmokhi $
 #
 
 # PROVIDE: ceph
@@ -27,30 +27,10 @@ load_rc_config ${name}
 : ${ceph_enable="NO"}
 : ${ceph_configfile:=%%PREFIX%%/etc/ceph/ceph.conf}
 
-start_cmd="cephstart_cmd"
-stop_cmd="cephstop_cmd"
-restart_cmd="cephrestart_cmd"
-condrestart_cmd="cephcondrestart_cmd"
-
-cephstart_cmd()
-{ 
-    %%PREFIX%%/bin/init-ceph $* 
-}
-
-cephstop_cmd()
-{ 
-    %%PREFIX%%/bin/init-ceph $* 
-}
-
-cephrestart_cmd()
-{ 
-    %%PREFIX%%/bin/init-ceph $* 
-}
-
-cephcondrestart_cmd()
-{ 
-    %%PREFIX%%/bin/init-ceph $* 
-}
+start_cmd="%%PREFIX%%/bin/init-ceph $*"
+stop_cmd="%%PREFIX%%/bin/init-ceph $*"
+restart_cmd="%%PREFIX%%/bin/init-ceph $*"
+condrestart_cmd="%%PREFIX%%/bin/init-ceph $*"
 
 run_rc_command "$1" "$*"
 
