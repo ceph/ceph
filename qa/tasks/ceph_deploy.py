@@ -567,6 +567,8 @@ def cli_test(ctx, config):
                                                 sudo=True)
     new_mon_install = 'install {branch} --mon '.format(
         branch=test_branch) + nodename
+    new_mgr_install = 'install {branch} --mgr '.format(
+        branch=test_branch) + nodename
     new_osd_install = 'install {branch} --osd '.format(
         branch=test_branch) + nodename
     new_admin = 'install {branch} --cli '.format(branch=test_branch) + nodename
@@ -574,6 +576,7 @@ def cli_test(ctx, config):
     # either use create-keys or push command
     push_keys = 'admin ' + nodename
     execute_cdeploy(admin, new_mon_install, path)
+    execute_cdeploy(admin, new_mgr_install, path)
     execute_cdeploy(admin, new_osd_install, path)
     execute_cdeploy(admin, new_admin, path)
     execute_cdeploy(admin, create_initial, path)
