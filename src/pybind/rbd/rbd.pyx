@@ -180,6 +180,9 @@ cdef extern from "rbd/librbd.h" nogil:
                    const char *destname)
 
     int rbd_trash_move(rados_ioctx_t io, const char *name, uint64_t delay)
+    int rbd_trash_get(rados_ioctx_t io, const char *id,
+                      rbd_trash_image_info_t *info)
+    void rbd_trash_get_cleanup(rbd_trash_image_info_t *info)
     int rbd_trash_list(rados_ioctx_t io, rbd_trash_image_info_t *trash_entries,
                        size_t *num_entries)
     void rbd_trash_list_cleanup(rbd_trash_image_info_t *trash_entries,
@@ -229,10 +232,11 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
     int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
                                   size_t prefix_len)
-    int rbd_get_parent_info(rbd_image_t image,
-                            char *parent_poolname, size_t ppoolnamelen,
-                            char *parent_name, size_t pnamelen,
-                            char *parent_snapname, size_t psnapnamelen)
+    int rbd_get_parent_info2(rbd_image_t image,
+                             char *parent_poolname, size_t ppoolnamelen,
+                             char *parent_name, size_t pnamelen,
+                             char *parent_id, size_t pidlen,
+                             char *parent_snapname, size_t psnapnamelen)
     int rbd_get_flags(rbd_image_t image, uint64_t *flags)
     ssize_t rbd_read2(rbd_image_t image, uint64_t ofs, size_t len,
                       char *buf, int op_flags)
@@ -929,6 +933,49 @@ class RBD(object):
         if ret != 0:
             raise make_ex(ret, 'error deleting image from trash')
 
+    def trash_get(self, ioctx, image_id):
+        """
+        Retrieve RBD image info from trash
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_id: the id of the image to restore
+        :type image_id: str
+        :returns: dict - contains the following keys:
+
+            * ``id`` (str) - image id
+
+            * ``name`` (str) - image name
+
+            * ``source`` (str) - source of deletion
+
+            * ``deletion_time`` (datetime) - time of deletion
+
+            * ``deferment_end_time`` (datetime) - time that an image is allowed
+              to be removed from trash
+
+        :raises: :class:`ImageNotFound`
+        """
+        image_id = cstr(image_id, 'image_id')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_id = image_id
+            rbd_trash_image_info_t c_info
+        with nogil:
+            ret = rbd_trash_get(_ioctx, _image_id, &c_info)
+        if ret != 0:
+            raise make_ex(ret, 'error restoring image from trash')
+
+        __source_string = ['USER', 'MIRRORING']
+        info = {
+            'id'          : decode_cstr(c_info.id),
+            'name'        : decode_cstr(c_info.name),
+            'source'      : __source_string[c_info.source],
+            'deletion_time' : datetime.fromtimestamp(c_info.deletion_time),
+            'deferment_end_time' : datetime.fromtimestamp(c_info.deferment_end_time)
+            }
+        rbd_trash_get_cleanup(&c_info)
+        return info
+
     def trash_list(self, ioctx):
         """
         Lists all entries from trash.
@@ -1516,8 +1563,8 @@ cdef class Image(object):
                 name = <char *>realloc_chk(name, size)
                 snapname = <char *>realloc_chk(snapname, size)
                 with nogil:
-                    ret = rbd_get_parent_info(self.image, pool, size, name,
-                                              size, snapname, size)
+                    ret = rbd_get_parent_info2(self.image, pool, size, name,
+                                               size, NULL, 0, snapname, size)
                 if ret == -errno.ERANGE:
                     size *= 2
 
@@ -1528,6 +1575,32 @@ cdef class Image(object):
             free(pool)
             free(name)
             free(snapname)
+
+    def parent_id(self):
+        """
+        Get image id of a cloned image's parent (if any)
+
+        :returns: str - the parent id
+        :raises: :class:`ImageNotFound` if the image doesn't have a parent
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            size_t size = 32
+            char *parent_id = NULL
+        try:
+            while ret == -errno.ERANGE and size <= 4096:
+                parent_id = <char *>realloc_chk(parent_id, size)
+                with nogil:
+                    ret = rbd_get_parent_info2(self.image, NULL, 0, NULL, 0,
+                                               parent_id, size, NULL, 0)
+                if ret == -errno.ERANGE:
+                    size *= 2
+
+            if ret != 0:
+                raise make_ex(ret, 'error getting parent id for image %s' % (self.name,))
+            return decode_cstr(parent_id)
+        finally:
+            free(parent_id)
 
     def old_format(self):
         """

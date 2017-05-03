@@ -158,14 +158,15 @@ public:
 	     IoCtx& c_ioctx, const char *c_name, ImageOptions& opts);
   int remove(IoCtx& io_ctx, const char *name);
   int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
+  int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
+
   int trash_move(IoCtx &io_ctx, const char *name, uint64_t delay);
+  int trash_get(IoCtx &io_ctx, const char *id, trash_image_info_t *info);
   int trash_list(IoCtx &io_ctx, std::vector<trash_image_info_t> &entries);
   int trash_remove(IoCtx &io_ctx, const char *image_id, bool force);
-  int trash_remove_with_progress(IoCtx &io_ctx, const char *image_id, bool force,
-                                 ProgressContext &pctx);
+  int trash_remove_with_progress(IoCtx &io_ctx, const char *image_id,
+                                 bool force, ProgressContext &pctx);
   int trash_restore(IoCtx &io_ctx, const char *id, const char *name);
-
-  int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
 
   // RBD pool mirroring support functions
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
@@ -253,7 +254,9 @@ public:
   std::string get_block_name_prefix();
   int64_t get_data_pool_id();
   int parent_info(std::string *parent_poolname, std::string *parent_name,
-		      std::string *parent_snapname);
+		  std::string *parent_snapname);
+  int parent_info2(std::string *parent_poolname, std::string *parent_name,
+                   std::string *parent_id, std::string *parent_snapname);
   int old_format(uint8_t *old);
   int size(uint64_t *size);
   int get_group(group_spec_t *group_spec);

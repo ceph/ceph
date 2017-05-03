@@ -938,6 +938,7 @@ class TestClone(object):
         eq(pool, pool_name)
         eq(image, image_name)
         eq(snap, 'snap1')
+        eq(self.image.id(), self.clone.parent_id())
 
         # create a new pool...
         pool_name2 = get_temp_pool_name()
@@ -954,6 +955,7 @@ class TestClone(object):
         eq(pool, pool_name)
         eq(image, image_name)
         eq(snap, 'snap1')
+        eq(self.image.id(), self.other_clone.parent_id())
 
         # can't unprotect snap with children
         assert_raises(ImageBusy, self.image.unprotect_snap, 'snap1')
@@ -1127,6 +1129,8 @@ class TestClone(object):
                 clone.flatten()
                 assert_raises(ImageNotFound, clone.parent_info)
                 assert_raises(ImageNotFound, clone2.parent_info)
+                assert_raises(ImageNotFound, clone.parent_id)
+                assert_raises(ImageNotFound, clone2.parent_id)
                 after_flatten = clone.read(IMG_SIZE // 2, 256)
                 eq(data, after_flatten)
                 after_flatten = clone2.read(IMG_SIZE // 2, 256)
@@ -1220,6 +1224,7 @@ class TestExclusiveLock(object):
                 image1.write(data, 0)
                 image2.flatten()
                 assert_raises(ImageNotFound, image1.parent_info)
+                assert_raises(ImageNotFound, image1.parent_id)
                 parent = True
                 for x in range(30):
                     try:
@@ -1495,6 +1500,21 @@ class TestTrash(object):
 
         RBD().trash_move(ioctx, image_name, 0)
         RBD().trash_remove(ioctx, image_id)
+
+    def test_get(self):
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        RBD().trash_move(ioctx, image_name, 1000)
+
+        info = RBD().trash_get(ioctx, image_id)
+        eq(image_id, info['id'])
+        eq(image_name, info['name'])
+        eq('USER', info['source'])
+        assert(info['deferment_end_time'] > info['deletion_time'])
+
+        RBD().trash_remove(ioctx, image_id, True)
 
     def test_list(self):
         create_image()
