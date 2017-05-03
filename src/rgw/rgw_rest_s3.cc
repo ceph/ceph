@@ -2748,14 +2748,13 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
       val = boost::algorithm::to_lower_copy(rgw_trim_whitespace(args[1]));
     }
 
-#define X_AMZ_META_PREFIX "x-amz-meta-"
-    if (!boost::algorithm::starts_with(key, X_AMZ_META_PREFIX)) {
-      s->err.message = string("invalid expression, key must start with '" X_AMZ_META_PREFIX "' : ") + expression;
+    if (!boost::algorithm::starts_with(key, RGW_AMZ_META_PREFIX)) {
+      s->err.message = string("invalid expression, key must start with '" RGW_AMZ_META_PREFIX "' : ") + expression;
       ldout(s->cct, 20) << s->err.message << dendl;
       return -EINVAL;
     }
 
-    key = key.substr(sizeof(X_AMZ_META_PREFIX) - 1);
+    key = key.substr(sizeof(RGW_AMZ_META_PREFIX) - 1);
 
     ESEntityTypeMap::EntityType entity_type;
 
