@@ -655,6 +655,13 @@ CDir *CInode::add_dirfrag(CDir *dir)
     dir->get(CDir::PIN_STICKY);
   }
 
+  if (get_export_pin(false) != mdcache->mds->get_nodeid()) {
+    /* We don't need to look at parents export pins as that would be done when
+     * the parent's dirfrags are loaded.
+     */
+    maybe_export_pin();
+  }
+
   return dir;
 }
 
@@ -4486,7 +4493,7 @@ void CInode::set_export_pin(mds_rank_t rank)
   maybe_export_pin();
 }
 
-mds_rank_t CInode::get_export_pin(void) const
+mds_rank_t CInode::get_export_pin(bool inherit) const
 {
   /* An inode that is export pinned may not necessarily be a subtree root, we
    * need to traverse the parents. A base or system inode cannot be pinned.
@@ -4498,6 +4505,7 @@ mds_rank_t CInode::get_export_pin(void) const
     if (pin >= 0) {
       return pin;
     }
+    if (!inherit) break;
   }
   return MDS_RANK_NONE;
 }
