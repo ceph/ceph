@@ -1356,7 +1356,6 @@ int OSDMap::apply_incremental(const Incremental &inc)
       (*osd_uuid)[i->first] = uuid_d();
       osd_info[i->first] = osd_info_t();
       osd_xinfo[i->first] = osd_xinfo_t();
-      osd_weight[i->first] = CEPH_OSD_IN;
       set_primary_affinity(i->first, CEPH_OSD_DEFAULT_PRIMARY_AFFINITY);
       osd_addrs->client_addr[i->first].reset(new entity_addr_t());
       osd_addrs->cluster_addr[i->first].reset(new entity_addr_t());
