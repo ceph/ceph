@@ -373,9 +373,10 @@ void KernelDevice::_aio_thread()
 	  // destroy this ioc).  and avoid ref to ioc after aio_wake()
 	  // in case that triggers destruction.
 	  void *priv = ioc->priv;
-	  ioc->aio_wake();
 	  if (priv) {
 	    aio_callback(aio_callback_priv, priv);
+	  } else {
+	    ioc->aio_wake();
 	  }
 	}
       }
