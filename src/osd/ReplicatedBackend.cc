@@ -584,6 +584,11 @@ void ReplicatedBackend::op_applied(
   FUNCTRACE();
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_APPLIED_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
+  if (!in_progress_ops.count(op->tid) || &(in_progress_ops.find(op->tid)->second) != op) {
+    // the op has been cancelled because of a change
+    return;
+  }
+
   if (op->op)
     op->op->mark_event("op_applied");
 
@@ -606,6 +611,11 @@ void ReplicatedBackend::op_commit(
   FUNCTRACE();
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
+  if (!in_progress_ops.count(op->tid) || &(in_progress_ops.find(op->tid)->second) != op) {
+    // the op has been cancelled because of a change
+    return;
+  }
+
   if (op->op)
     op->op->mark_event("op_commit");
 
