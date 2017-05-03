@@ -1613,12 +1613,6 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
     return ret;
   }
 
-  if (remote.empty() && url.empty()) {
-    // use the new master zone's connection
-    remote = master_zone;
-    cout << "Sending period to new master zone " << remote << std::endl;
-  }
-
   // push period to the master with an empty period id
   period.set_id("");
 
