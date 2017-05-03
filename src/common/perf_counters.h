@@ -37,11 +37,11 @@ class PerfCountersBuilder;
 enum perfcounter_type_d : uint8_t
 {
   PERFCOUNTER_NONE = 0,
-  PERFCOUNTER_TIME = 0x1,
-  PERFCOUNTER_U64 = 0x2,
-  PERFCOUNTER_LONGRUNAVG = 0x4,
-  PERFCOUNTER_COUNTER = 0x8,
-  PERFCOUNTER_HISTOGRAM = 0x10,
+  PERFCOUNTER_TIME = 0x1,       // float (measuring seconds)
+  PERFCOUNTER_U64 = 0x2,        // integer (note: either TIME or U64 *must* be set)
+  PERFCOUNTER_LONGRUNAVG = 0x4, // paired counter + sum (time)
+  PERFCOUNTER_COUNTER = 0x8,    // counter (vs guage)
+  PERFCOUNTER_HISTOGRAM = 0x10, // histogram (vector) of values
 };
 
 
