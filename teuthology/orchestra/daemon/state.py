@@ -25,7 +25,7 @@ class DaemonState(object):
         self.command_args = command_args
         self.command_kwargs = command_kwargs
         self.role = role
-        self.type_ = self.role.split('.')[-1]
+        self.cluster, self.type_ = self.role.split('.')[0:2]
         self.id_ = id_
         self.log = command_kwargs.get('logger', log)
         self.proc = None

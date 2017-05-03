@@ -11,36 +11,44 @@ log = logging.getLogger(__name__)
 systemd_cmd_templ = 'sudo systemctl {action} {daemon}@{id_}'
 
 
-def get_systemd_cmd(action, daemon, id_):
-    if daemon == 'rgw':
-        daemon = 'radosgw'
-        id_ = 'rgw.%s' % id_
-    daemon = 'ceph-%s' % daemon
-    cmd = systemd_cmd_templ.format(
-        action=action,
-        daemon=daemon,
-        id_=id_,
-    )
-    return cmd
-
-
 class SystemDState(DaemonState):
     def __init__(self, remote, role, id_, *command_args,
                  **command_kwargs):
         super(SystemDState, self).__init__(
-                remote, role, id_, *command_args, **command_kwargs)
-        self.log = command_kwargs.get('logger', log)
+            remote, role, id_, *command_args, **command_kwargs)
         self._set_commands()
+        self.log = command_kwargs.get('logger', log)
+
+    @property
+    def daemon_type(self):
+        if self.type_ == 'rgw':
+            return 'radosgw'
+        return self.type_
+
+    def _get_systemd_cmd(self, action):
+        cmd = systemd_cmd_templ.format(
+            action=action,
+            daemon='%s-%s' % (self.cluster, self.daemon_type),
+            id_=self.id_.replace('client.', ''),
+        )
+        return cmd
 
     def _set_commands(self):
-        self.start_cmd = get_systemd_cmd('start', self.type_, self.id_)
-        self.stop_cmd = get_systemd_cmd('stop', self.type_, self.id_)
-        self.restart_cmd = get_systemd_cmd('restart', self.type_, self.id_)
-        self.show_cmd = get_systemd_cmd('show', self.type_, self.id_)
-        self.status_cmd = get_systemd_cmd('status', self.type_, self.id_)
+        self.start_cmd = self._get_systemd_cmd('start')
+        self.stop_cmd = self._get_systemd_cmd('stop')
+        self.restart_cmd = self._get_systemd_cmd('restart')
+        self.show_cmd = self._get_systemd_cmd('show')
+        self.status_cmd = self._get_systemd_cmd('status')
+        cluster_and_type = '%s-%s' % (self.cluster, self.daemon_type)
+        if self.type_ == self.daemon_type:
+            syslog_id = cluster_and_type
+        else:
+            syslog_id = self.daemon_type
         self.output_cmd = 'sudo journalctl -u ' \
-            '{role}@{id_} -t {role} -n 10'.format(
-                role=self.role.replace('.', '-'), id_=self.id_,
+            '{0}@{1} -t {2} -n 10'.format(
+                cluster_and_type,
+                self.id_.replace('client.', ''),
+                syslog_id,
             )
 
     def check_status(self):
