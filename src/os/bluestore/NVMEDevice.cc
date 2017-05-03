@@ -812,9 +812,10 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     // check waiting count before doing callback (which may
     // destroy this ioc).
     if (!--ctx->num_running) {
-      ctx->aio_wake();
       if (task->device->aio_callback && ctx->priv) {
         task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
+      } else {
+	ctx->aio_wake();
       }
     }
     task->release_segs(queue);
@@ -828,10 +829,11 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     // read submitted by AIO
     if(!task->return_code) {
       if (!--ctx->num_running) {
-        ctx->aio_wake();
         if (task->device->aio_callback && ctx->priv) {
           task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
-        }
+        } else {
+	  ctx->aio_wake();
+	}
       }
       delete task;
     } else {
