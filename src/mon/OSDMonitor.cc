@@ -1076,6 +1076,9 @@ void OSDMonitor::prime_pg_temp(
       return;
     }
   }
+  if (!osdmap.have_pg_pool(pgid.pool())) {
+    return;
+  }
 
   vector<int> up, acting;
   mapping.get(pgid, &up, nullptr, &acting, nullptr);
