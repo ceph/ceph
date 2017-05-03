@@ -370,6 +370,10 @@ static int read_bucket_header(cls_method_context_t hctx, struct rgw_bucket_dir_h
   int rc = cls_cxx_map_read_header(hctx, &bl);
   if (rc < 0)
     return rc;
+
+  if (bl.length() == 0) {
+      return -ENOENT;
+  }
   bufferlist::iterator iter = bl.begin();
   try {
     ::decode(*header, iter);
