@@ -848,7 +848,6 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     queue->logger->tinc(l_bluestore_nvmedevice_flush_lat, dur);
     dout(20) << __func__ << " flush op successfully" << dendl;
     task->return_code = 0;
-    ctx->aio_wake();
   }
 }
 
