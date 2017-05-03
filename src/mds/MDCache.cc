@@ -271,9 +271,6 @@ void MDCache::add_inode(CInode *in)
         g_conf->mds_cache_size * g_conf->mds_health_cache_threshold) {
     exceeded_size_limit = true;
   }
-
-  /* This is the place where inodes are thrown in the cache, so check if the inode should be somewhere else: */
-  in->maybe_export_pin();
 }
 
 void MDCache::remove_inode(CInode *o) 
