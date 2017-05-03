@@ -47,16 +47,19 @@ static void simple_segv_test()
 
 // Given the name of the function, we can be pretty sure this is intentional.
 
+#ifdef __clang__
 #pragma clang diagnostic push
-
 #pragma clang diagnostic ignored "-Winfinite-recursion"
+#endif
 
 static void infinite_recursion_test_impl()
 {
   infinite_recursion_test_impl();
 }
 
+#ifdef __clang__
 #pragma clang diagnostic pop
+#endif
 
 static void infinite_recursion_test()
 {
