@@ -33,9 +33,11 @@ void Finisher::wait_for_empty()
   finisher_lock.Lock();
   while (!finisher_queue.empty() || finisher_running) {
     ldout(cct, 10) << "wait_for_empty waiting" << dendl;
+    finisher_empty_wait = true;
     finisher_empty_cond.Wait(finisher_lock);
   }
   ldout(cct, 10) << "wait_for_empty empty" << dendl;
+  finisher_empty_wait = false;
   finisher_lock.Unlock();
 }
 
@@ -92,7 +94,8 @@ void *Finisher::finisher_thread_entry()
       finisher_running = false;
     }
     ldout(cct, 10) << "finisher_thread empty" << dendl;
-    finisher_empty_cond.Signal();
+    if (unlikely(finisher_empty_wait))
+      finisher_empty_cond.Signal();
     if (finisher_stop)
       break;
     
