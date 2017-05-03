@@ -825,3 +825,11 @@ Section: java
 Depends: libcephfs2 (= ${binary:Version}), ${java:Depends},
          ${misc:Depends}, ${shlibs:Depends}
 Description: Java Native Interface library for CephFS Java bindings
+
+Package: rados-objclass-dev
+Architecture: linux-any
+Section: libdevel
+Depends: librados-dev (= ${binary:Version}) ${misc:Depends}
+Description: RADOS object class development kit.
+ .
+ This package contains development files needed for building RADOS object class plugins.
