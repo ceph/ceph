@@ -149,11 +149,7 @@ class MDSearchConfig:
 
         query_args = append_query_arg(query_args, 'format', 'json')
 
-        result = make_request(self.conn, method, bucket=self.bucket_name, key='', query_args=query_args, headers=headers)
-        if result.status / 100 != 2:
-            raise boto.exception.S3ResponseError(result.status, result.reason, result.read())
-
-        return result
+        return make_request(self.conn, method, bucket=self.bucket_name, key='', query_args=query_args, headers=headers)
 
     def get_config(self):
         result = self.send_request(None, 'GET')
