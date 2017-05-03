@@ -529,8 +529,11 @@ class Thrasher:
         """
         if pool is None:
             pool = self.ceph_manager.get_pool()
+            force = False
+        else:
+            force = True
         self.log("fixing pg num pool %s" % (pool,))
-        if self.ceph_manager.set_pool_pgpnum(pool):
+        if self.ceph_manager.set_pool_pgpnum(pool, force):
             self.pools_to_fix_pgp_num.discard(pool)
 
     def test_pool_min_size(self):
@@ -1517,14 +1520,14 @@ class CephManager:
             self.pools[pool_name] = new_pg_num
             return True
 
-    def set_pool_pgpnum(self, pool_name):
+    def set_pool_pgpnum(self, pool_name, force):
         """
         Set pgpnum property of pool_name pool.
         """
         with self.lock:
             assert isinstance(pool_name, basestring)
             assert pool_name in self.pools
-            if self.get_num_creating() > 0:
+            if not force and self.get_num_creating() > 0:
                 return False
             self.set_pool_property(pool_name, 'pgp_num', self.pools[pool_name])
             return True
