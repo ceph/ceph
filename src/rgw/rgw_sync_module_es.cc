@@ -443,9 +443,9 @@ public:
                                                                                versioned_epoch(_versioned_epoch) {}
   int operate() override {
     reenter(this) {
-      ldout(sync_env->cct, 0) << ": stat of remote obj: z=" << sync_env->source_zone
-                              << " b=" << bucket_info.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
-                              << " attrs=" << attrs << dendl;
+      ldout(sync_env->cct, 10) << ": stat of remote obj: z=" << sync_env->source_zone
+                               << " b=" << bucket_info.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
+                               << " attrs=" << attrs << dendl;
       yield {
         string path = conf->get_obj_path(bucket_info, key);
         es_obj_metadata doc(sync_env->cct, conf, bucket_info, key, mtime, size, attrs, versioned_epoch);
@@ -496,8 +496,8 @@ public:
                                                         mtime(_mtime), conf(_conf) {}
   int operate() override {
     reenter(this) {
-      ldout(sync_env->cct, 0) << ": remove remote obj: z=" << sync_env->source_zone
-                              << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
+      ldout(sync_env->cct, 10) << ": remove remote obj: z=" << sync_env->source_zone
+                               << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
         string path = conf->get_obj_path(bucket_info, key);
 
