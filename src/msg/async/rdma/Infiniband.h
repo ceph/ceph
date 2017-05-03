@@ -17,6 +17,12 @@
 #ifndef CEPH_INFINIBAND_H
 #define CEPH_INFINIBAND_H
 
+#include <boost/pool/pool.hpp>
+// need this because boost messes with ceph log/assert definitions
+#include <include/assert.h>
+
+#include <infiniband/verbs.h>
+
 #include <string>
 #include <vector>
 
@@ -27,6 +33,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Mutex.h"
+#include "common/perf_counters.h"
 #include "msg/msg_types.h"
 #include "msg/async/net_handler.h"
 
@@ -121,6 +128,50 @@ class DeviceList {
   }
 };
 
+// stat counters
+enum {
+  l_msgr_rdma_dispatcher_first = 94000,
+
+  l_msgr_rdma_polling,
+  l_msgr_rdma_inflight_tx_chunks,
+  l_msgr_rdma_rx_bufs_in_use,
+  l_msgr_rdma_rx_bufs_total,
+
+  l_msgr_rdma_tx_total_wc,
+  l_msgr_rdma_tx_total_wc_errors,
+  l_msgr_rdma_tx_wc_retry_errors,
+  l_msgr_rdma_tx_wc_wr_flush_errors,
+
+  l_msgr_rdma_rx_total_wc,
+  l_msgr_rdma_rx_total_wc_errors,
+  l_msgr_rdma_rx_fin,
+
+  l_msgr_rdma_handshake_errors,
+
+  l_msgr_rdma_total_async_events,
+  l_msgr_rdma_async_last_wqe_events,
+
+  l_msgr_rdma_created_queue_pair,
+  l_msgr_rdma_active_queue_pair,
+
+  l_msgr_rdma_dispatcher_last,
+};
+
+enum {
+  l_msgr_rdma_first = 95000,
+
+  l_msgr_rdma_tx_no_mem,
+  l_msgr_rdma_tx_parital_mem,
+  l_msgr_rdma_tx_failed,
+
+  l_msgr_rdma_tx_chunks,
+  l_msgr_rdma_tx_bytes,
+  l_msgr_rdma_rx_chunks,
+  l_msgr_rdma_rx_bytes,
+  l_msgr_rdma_pending_sent_conns,
+
+  l_msgr_rdma_last,
+};
 
 class RDMADispatcher;
 
@@ -152,14 +203,15 @@ class Infiniband {
       bool full();
       bool over();
       void clear();
-      void post_srq(Infiniband *ib);
 
      public:
       ibv_mr* mr;
+      uint32_t lkey;
       uint32_t bytes;
       uint32_t bound;
       uint32_t offset;
-      char* buffer;
+      char* buffer; // TODO: remove buffer/refactor TX
+      char  data[0];
     };
 
     class Cluster {
@@ -189,17 +241,46 @@ class Infiniband {
       Chunk* chunk_base = nullptr;
     };
 
-    MemoryManager(Device *d, ProtectionDomain *p, bool hugepage);
+    class RxAllocator {
+      struct mem_info {
+        ibv_mr   *mr;
+        unsigned nbufs;
+        Chunk    chunks[0];
+      };
+      static MemoryManager *manager;
+      static unsigned n_bufs_allocated;
+      static unsigned max_bufs;
+      static PerfCounters *perf_logger;
+     public:
+      typedef std::size_t size_type;
+      typedef std::ptrdiff_t difference_type;
+
+      static char * malloc(const size_type bytes);
+      static void free(char * const block);
+
+      static void set_memory_manager(MemoryManager *m) {
+        manager = m;
+      }
+      static void set_max_bufs(int n) {
+        max_bufs = n;
+      }
+
+      static void set_perf_logger(PerfCounters *logger) {
+        perf_logger = logger;
+        perf_logger->set(l_msgr_rdma_rx_bufs_total, n_bufs_allocated);
+      }
+    };
+
+    MemoryManager(CephContext *c, Device *d, ProtectionDomain *p);
     ~MemoryManager();
 
-    void* malloc_huge_pages(size_t size);
-    void free_huge_pages(void *ptr);
-    void register_rx_tx(uint32_t size, uint32_t rx_num, uint32_t tx_num);
+    void* malloc(size_t size);
+    void  free(void *ptr);
+
+    void create_tx_pool(uint32_t size, uint32_t tx_num);
     void return_tx(std::vector<Chunk*> &chunks);
     int get_send_buffers(std::vector<Chunk*> &c, size_t bytes);
-    int get_channel_buffers(std::vector<Chunk*> &chunks, size_t bytes);
     bool is_tx_buffer(const char* c) { return send->is_my_buffer(c); }
-    bool is_rx_buffer(const char* c) { return channel->is_my_buffer(c); }
     Chunk *get_tx_chunk_by_buffer(const char *c) {
       return send->get_chunk_by_buffer(c);
     }
@@ -207,18 +288,32 @@ class Infiniband {
       return send->buffer_size;
     }
 
-    bool enabled_huge_page;
+    Chunk *get_rx_buffer() {
+       return reinterpret_cast<Chunk *>(rxbuf_pool.malloc());
+    }
 
+    void release_rx_buffer(Chunk *chunk) {
+      rxbuf_pool.free(chunk);
+    }
+
+    CephContext  *cct;
    private:
-    Cluster* channel;//RECV
+    // TODO: Cluster -> TxPool txbuf_pool
+    // chunk layout fix
+    //  
     Cluster* send;// SEND
     Device *device;
     ProtectionDomain *pd;
+    boost::pool<RxAllocator> rxbuf_pool;
+    bool  hp_enabled;
+
+    void* huge_pages_malloc(size_t size);
+    void  huge_pages_free(void *ptr);
   };
 
  private:
-  uint32_t max_send_wr = 0;
-  uint32_t max_recv_wr = 0;
+  uint32_t tx_queue_len = 0;
+  uint32_t rx_queue_len = 0;
   uint32_t max_sge = 0;
   uint8_t  ib_physical_port = 0;
   MemoryManager* memory_manager = nullptr;
@@ -297,7 +392,7 @@ class Infiniband {
               int ib_physical_port,  ibv_srq *srq,
               Infiniband::CompletionQueue* txcq,
               Infiniband::CompletionQueue* rxcq,
-              uint32_t max_send_wr, uint32_t max_recv_wr, uint32_t q_key = 0);
+              uint32_t tx_queue_len, uint32_t max_recv_wr, uint32_t q_key = 0);
     ~QueuePair();
 
     int init();
@@ -361,8 +456,10 @@ class Infiniband {
   typedef MemoryManager::Chunk Chunk;
   QueuePair* create_queue_pair(CephContext *c, CompletionQueue*, CompletionQueue*, ibv_qp_type type);
   ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
-  int post_chunk(Chunk* chunk);
-  int post_channel_cluster();
+  void  post_chunks_to_srq(int);
+  void post_chunk_to_pool(Chunk* chunk) {
+    get_memory_manager()->release_rx_buffer(chunk);
+  }
   int get_tx_buffers(std::vector<Chunk*> &c, size_t bytes);
   CompletionChannel *create_comp_channel(CephContext *c);
   CompletionQueue *create_comp_queue(CephContext *c, CompletionChannel *cc=NULL);
@@ -375,7 +472,6 @@ class Infiniband {
   Device* get_device() { return device; }
   int get_async_fd() { return device->ctxt->async_fd; }
   bool is_tx_buffer(const char* c) { return memory_manager->is_tx_buffer(c);}
-  bool is_rx_buffer(const char* c) { return memory_manager->is_rx_buffer(c);}
   Chunk *get_tx_chunk_by_buffer(const char *c) { return memory_manager->get_tx_chunk_by_buffer(c); }
   static const char* wc_status_to_string(int status);
   static const char* qp_state_string(int status);

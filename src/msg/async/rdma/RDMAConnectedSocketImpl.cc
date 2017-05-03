@@ -45,23 +45,20 @@ RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
   cleanup();
   worker->remove_pending_conn(this);
   dispatcher->erase_qpn(my_msg.qpn);
+
+  for (unsigned i=0; i < wc.size(); ++i) {
+    dispatcher->post_chunk_to_pool(reinterpret_cast<Chunk*>(wc[i].wr_id));
+  }
+  for (unsigned i=0; i < buffers.size(); ++i) {
+    dispatcher->post_chunk_to_pool(buffers[i]);
+  }
+
   Mutex::Locker l(lock);
   if (notify_fd >= 0)
     ::close(notify_fd);
   if (tcp_fd >= 0)
     ::close(tcp_fd);
   error = ECONNRESET;
-  int ret = 0;
-  for (unsigned i=0; i < wc.size(); ++i) {
-    ret = infiniband->post_chunk(reinterpret_cast<Chunk*>(wc[i].wr_id));
-    assert(ret == 0);
-    dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
-  }
-  for (unsigned i=0; i < buffers.size(); ++i) {
-    ret = infiniband->post_chunk(buffers[i]);
-    assert(ret == 0);
-    dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
-  }
 }
 
 void RDMAConnectedSocketImpl::pass_wc(std::vector<ibv_wc> &&v)
@@ -290,8 +287,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
         error = ECONNRESET;
         ldout(cct, 20) << __func__ << " got remote close msg..." << dendl;
       }
-      assert(infiniband->post_chunk(chunk) == 0);
-      dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
+      dispatcher->post_chunk_to_pool(chunk);
     } else {
       if (read == (ssize_t)len) {
         buffers.push_back(chunk);
@@ -302,8 +298,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
         ldout(cct, 25) << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound() << dendl;
       } else {
         read += chunk->read(buf+read, response->byte_len);
-        assert(infiniband->post_chunk(chunk) == 0);
-        dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
+        dispatcher->post_chunk_to_pool(chunk);
       }
     }
   }
@@ -334,8 +329,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
     read += tmp;
     ldout(cct, 25) << __func__ << " this iter read: " << tmp << " bytes." << " offset: " << (*c)->get_offset() << " ,bound: " << (*c)->get_bound()  << ". Chunk:" << *c  << dendl;
     if ((*c)->over()) {
-      assert(infiniband->post_chunk(*c) == 0);
-      dispatcher->perf_logger->dec(l_msgr_rdma_inqueue_rx_chunks);
+      dispatcher->post_chunk_to_pool(*c);
       ldout(cct, 25) << __func__ << " one chunk over." << dendl;
     }
     if (read == len) {

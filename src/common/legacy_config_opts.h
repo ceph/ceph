@@ -165,7 +165,10 @@ OPTION(ms_async_rdma_device_name, OPT_STR)
 OPTION(ms_async_rdma_enable_hugepage, OPT_BOOL)
 OPTION(ms_async_rdma_buffer_size, OPT_INT)
 OPTION(ms_async_rdma_send_buffers, OPT_U32)
+//size of the receive buffer pool, 0 is unlimited
 OPTION(ms_async_rdma_receive_buffers, OPT_U32)
+// max number of wr in srq
+OPTION(ms_async_rdma_receive_queue_len, OPT_U32)
 OPTION(ms_async_rdma_port_num, OPT_U32)
 OPTION(ms_async_rdma_polling_us, OPT_U32)
 OPTION(ms_async_rdma_local_gid, OPT_STR)       // GID format: "fe80:0000:0000:0000:7efe:90ff:fe72:6efe", no zero folding
