@@ -2720,7 +2720,7 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
   auto iter = s->info.x_meta_map.find("x-amz-meta-search");
   if (iter == s->info.x_meta_map.end()) {
     s->err.message = "X-Rgw-Meta-Search header not provided";
-    ldout(s->cct, 20) << s->err.message << dendl;
+    ldout(s->cct, 5) << s->err.message << dendl;
     return -EINVAL;
   }
 
@@ -2733,12 +2733,12 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
 
     if (args.empty()) {
       s->err.message = "invalid empty expression";
-      ldout(s->cct, 20) << s->err.message << dendl;
+      ldout(s->cct, 5) << s->err.message << dendl;
       return -EINVAL;
     }
     if (args.size() > 2) {
       s->err.message = string("invalid expression: ") + expression;
-      ldout(s->cct, 20) << s->err.message << dendl;
+      ldout(s->cct, 5) << s->err.message << dendl;
       return -EINVAL;
     }
 
@@ -2750,7 +2750,7 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
 
     if (!boost::algorithm::starts_with(key, RGW_AMZ_META_PREFIX)) {
       s->err.message = string("invalid expression, key must start with '" RGW_AMZ_META_PREFIX "' : ") + expression;
-      ldout(s->cct, 20) << s->err.message << dendl;
+      ldout(s->cct, 5) << s->err.message << dendl;
       return -EINVAL;
     }
 
@@ -2766,7 +2766,7 @@ int RGWConfigBucketMetaSearch_ObjStore_S3::get_params()
       entity_type = ESEntityTypeMap::ES_ENTITY_DATE;
     } else {
       s->err.message = string("invalid entity type: ") + val;
-      ldout(s->cct, 20) << s->err.message << dendl;
+      ldout(s->cct, 5) << s->err.message << dendl;
       return -EINVAL;
     }
 
