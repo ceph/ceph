@@ -521,7 +521,7 @@ void PerfCountersBuilder::add_time_avg(
 	   PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG);
 }
 
-void PerfCountersBuilder::add_histogram(
+void PerfCountersBuilder::add_u64_counter_histogram(
   int idx, const char *name,
   PerfHistogramCommon::axis_config_d x_axis_config,
   PerfHistogramCommon::axis_config_d y_axis_config,
