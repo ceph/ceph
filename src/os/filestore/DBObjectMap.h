@@ -30,7 +30,7 @@
  * @see user_prefix
  * @see sys_prefix
  *
- * - GHOBJECT_TO_SEQ: Contains leaf mapping from ghobject_t->hobj.seq and
+ * - HOBJECT_TO_SEQ: Contains leaf mapping from ghobject_t->header.seq and
  *                   corresponding omap header
  * - SYS_PREFIX: GLOBAL_STATE_KEY - contains next seq number
  *                                  @see State
@@ -205,6 +205,18 @@ public:
     const SequencerPosition *spos=0
     );
 
+  int rename(
+    const ghobject_t &from,
+    const ghobject_t &to,
+    const SequencerPosition *spos=0
+    );
+
+  int legacy_clone(
+    const ghobject_t &oid,
+    const ghobject_t &target,
+    const SequencerPosition *spos=0
+    );
+
   /// Read initial state from backing store
   int init(bool upgrade = false);
 
@@ -212,13 +224,18 @@ public:
   int upgrade_to_v2();
 
   /// Consistency check, debug, there must be no parallel writes
-  bool check(std::ostream &out);
+  int check(std::ostream &out, bool repair = false);
 
   /// Ensure that all previous operations are durable
   int sync(const ghobject_t *oid=0, const SequencerPosition *spos=0);
 
-  /// Util, list all objects, there must be no other concurrent access
+  /// Util, get all objects, there must be no other concurrent access
   int list_objects(vector<ghobject_t> *objs ///< [out] objects
+    );
+
+  struct _Header;
+  // Util, get all object headers, there must be no other concurrent access
+  int list_object_headers(vector<_Header> *out ///< [out] headers
     );
 
   ObjectMapIterator get_iterator(const ghobject_t &oid);
@@ -275,28 +292,29 @@ public:
     uint64_t parent;
     uint64_t num_children;
 
-    coll_t c;
     ghobject_t oid;
 
     SequencerPosition spos;
 
     void encode(bufferlist &bl) const {
+      coll_t unused;
       ENCODE_START(2, 1, bl);
       ::encode(seq, bl);
       ::encode(parent, bl);
       ::encode(num_children, bl);
-      ::encode(c, bl);
+      ::encode(unused, bl);
       ::encode(oid, bl);
       ::encode(spos, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator &bl) {
+      coll_t unused;
       DECODE_START(2, bl);
       ::decode(seq, bl);
       ::decode(parent, bl);
       ::decode(num_children, bl);
-      ::decode(c, bl);
+      ::decode(unused, bl);
       ::decode(oid, bl);
       if (struct_v >= 2)
 	::decode(spos, bl);
@@ -307,7 +325,6 @@ public:
       f->dump_unsigned("seq", seq);
       f->dump_unsigned("parent", parent);
       f->dump_unsigned("num_children", num_children);
-      f->dump_stream("coll") << c;
       f->dump_stream("oid") << oid;
     }
 
@@ -398,8 +415,15 @@ private:
 
     /// skips to next valid parent entry
     int next_parent();
+    
+    /// first parent() >= to
+    int lower_bound_parent(const string &to);
 
-    /// Tests whether to_test is in complete region
+    /**
+     * Tests whether to_test is in complete region
+     *
+     * postcondition: complete_iter will be max s.t. complete_iter->value > to_test
+     */
     int in_complete_region(const string &to_test, ///< [in] key to test
 			   string *begin,         ///< [out] beginning of region
 			   string *end            ///< [out] end of region
@@ -486,18 +510,18 @@ private:
   /// Remove header and all related prefixes
   int _clear(Header header,
 	     KeyValueDB::Transaction t);
-  /// Adds to t operations necessary to add new_complete to the complete set
-  int merge_new_complete(Header header,
-			 const map<string, string> &new_complete,
-			 DBObjectMapIterator iter,
-			 KeyValueDB::Transaction t);
+
+  /* Scan complete region bumping *begin to the beginning of any
+   * containing region and adding all complete region keys between
+   * the updated begin and end to the complete_keys_to_remove set */
+  int merge_new_complete(DBObjectMapIterator &iter,
+			 string *begin,
+			 const string &end,
+			 set<string> *complete_keys_to_remove);
 
   /// Writes out State (mainly next_seq)
   int write_state(KeyValueDB::Transaction _t =
 		  KeyValueDB::Transaction());
-
-  /// 0 if the complete set now contains all of key space, < 0 on error, 1 else
-  int need_parent(DBObjectMapIterator iter);
 
   /// Copies header entry from parent @see rm_keys
   int copy_up_header(Header header,
@@ -530,5 +554,7 @@ private:
 };
 WRITE_CLASS_ENCODER(DBObjectMap::_Header)
 WRITE_CLASS_ENCODER(DBObjectMap::State)
+
+ostream& operator<<(ostream& out, const DBObjectMap::_Header& h);
 
 #endif
