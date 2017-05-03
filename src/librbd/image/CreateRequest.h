@@ -103,8 +103,11 @@ private:
 
   IoCtx &m_ioctx;
   IoCtx m_data_io_ctx;
+  std::string m_nspace;
+  set<std::string> m_namespaces;
   std::string m_image_name;
   std::string m_image_id;
+  std::string m_namespace;
   uint64_t m_size;
   uint8_t m_order = 0;
   uint64_t m_features = 0;
@@ -142,6 +145,15 @@ private:
   void create_id_object();
   void handle_create_id_object(int r);
 
+  void set_namespace();
+  void handle_set_namespace(int r);
+
+  void send_namespace_list();
+  void handle_namespace_list(int r);
+
+  void add_new_namespace();
+  void handle_new_namespace(int r);
+
   void add_image_to_directory();
   void handle_add_image_to_directory(int r);
 
@@ -165,6 +177,9 @@ private:
 
   void mirror_image_enable();
   void handle_mirror_image_enable(int r);
+
+  void switch_ns_to_default();
+  void switch_ns_back();
 
   void complete(int r);
 

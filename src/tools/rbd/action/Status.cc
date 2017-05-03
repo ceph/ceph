@@ -82,6 +82,7 @@ static int do_show_status(librados::IoCtx &io_ctx, librbd::Image &image,
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   at::add_format_options(options);
 }
 
@@ -106,7 +107,8 @@ int execute(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", true, &rados,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", true, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;

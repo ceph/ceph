@@ -202,6 +202,73 @@ std::string get_pool_name(const po::variables_map &vm,
   return pool_name;
 }
 
+std::string get_namespace(const po::variables_map &vm, at::ArgumentModifier mod)
+{
+  std::string nspace;
+  std::string nspace_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_NAMESPACE : at::NAMESPACE_NAME);
+
+  if (vm.count(nspace_key)) {
+    nspace = vm[nspace_key].as<std::string>();
+  }
+
+  if (nspace.empty()) {
+    nspace = at::DEFAULT_NAMESPACE;
+  }
+  return nspace;
+}
+
+int get_special_namespace(const po::variables_map &vm,
+			  std::string *nspace_name,
+			  std::string prefix) {
+  if (nullptr == nspace_name) return -EINVAL;
+
+  std::string nspace_key = prefix + "-" + at::NAMESPACE_NAME;
+
+  if (vm.count(nspace_key)) {
+    *nspace_name = vm[nspace_key].as<std::string>();
+  }
+
+  if (nspace_name->empty()) {
+    *nspace_name = std::string("");
+  }
+
+  return 0;
+}
+
+int get_special_pool_ns_names(const po::variables_map &vm,
+			      size_t *arg_index,
+			      std::string *pool_name,
+			      std::string *ns_name) {
+  if (nullptr == pool_name) return -EINVAL;
+  if (nullptr == ns_name) return -EINVAL;
+  std::string pool_key = at::POOL_NAME;
+  std::string ns_key = at::NAMESPACE_NAME;
+
+  if (vm.count(pool_key)) {
+    *pool_name = vm[pool_key].as<std::string>();
+  }
+
+  if (vm.count(ns_key)) {
+    *ns_name = vm[ns_key].as<std::string>();
+  }
+
+  if (ns_name->empty()) {
+    *ns_name = utils::get_positional_argument(vm, (*arg_index)++);
+  }
+
+  if (pool_name->empty()) {
+    *pool_name = at::DEFAULT_POOL_NAME;
+  }
+
+  if (ns_name->empty()) {
+    std::cerr << "rbd: namespace name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 int get_special_pool_group_names(const po::variables_map &vm,
 				 size_t *arg_index,
 				 std::string *group_pool_name,
@@ -558,7 +625,7 @@ int get_pool_journal_names(const po::variables_map &vm,
     librados::Rados rados;
     librados::IoCtx io_ctx;
     librbd::Image image;
-    int r = init_and_open_image(*pool_name, image_name, "", "", true, &rados,
+    int r = init_and_open_image(*pool_name, "", image_name, "", "", true, &rados,
                                 &io_ctx, &image);
     if (r < 0) {
       std::cerr << "rbd: failed to open image " << image_name
@@ -840,8 +907,27 @@ void init_context() {
   common_init_finish(g_ceph_context);
 }
 
-int init(const std::string &pool_name, librados::Rados *rados,
-         librados::IoCtx *io_ctx) {
+int set_namespace(librados::IoCtx *io_ctx, const std::string &nspace) {
+  librbd::RBD rbd;
+  bool exists = false;
+
+  int r = rbd.namespace_exists(*io_ctx, nspace, &exists);
+  if (r < 0) {
+    std::cerr << "rbd: couldn't check the namespace!" << std::endl;
+    return r;
+  }
+
+  if (!exists) {
+    std::cerr << "rbd: No namespace " << nspace << " exists!" << std::endl;
+    return -ENOENT;
+  }
+  io_ctx->set_namespace(nspace);
+
+  return 0;
+}
+
+int init(const std::string &pool_name, const std::string &nspace,
+	 librados::Rados *rados, librados::IoCtx *io_ctx) {
   init_context();
 
   int r = rados->init_with_context(g_ceph_context);
@@ -856,20 +942,35 @@ int init(const std::string &pool_name, librados::Rados *rados,
     return r;
   }
 
-  r = init_io_ctx(*rados, pool_name, io_ctx);
+  r = init_io_ctx(*rados, pool_name, "", io_ctx);
   if (r < 0) {
     return r;
   }
+
+  if (nspace != "") {
+    r = set_namespace(io_ctx, nspace);
+    if (r < 0) {
+      return r;
+    }
+  }
+
   return 0;
 }
 
 int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
-                librados::IoCtx *io_ctx) {
+                const std::string &nspace, librados::IoCtx *io_ctx) {
   int r = rados.ioctx_create(pool_name.c_str(), *io_ctx);
   if (r < 0) {
     std::cerr << "rbd: error opening pool " << pool_name << ": "
               << cpp_strerror(r) << std::endl;
     return r;
+  }
+
+  if (nspace != "") {
+    r = set_namespace(io_ctx, nspace);
+    if (r < 0) {
+      return r;
+    }
   }
   return 0;
 }
@@ -911,12 +1012,13 @@ int open_image_by_id(librados::IoCtx &io_ctx, const std::string &image_id,
 }
 
 int init_and_open_image(const std::string &pool_name,
+			const std::string &nspace,
                         const std::string &image_name,
                         const std::string &image_id,
                         const std::string &snap_name, bool read_only,
                         librados::Rados *rados, librados::IoCtx *io_ctx,
                         librbd::Image *image) {
-  int r = init(pool_name, rados, io_ctx);
+  int r = init(pool_name, nspace, rados, io_ctx);
   if (r < 0) {
     return r;
   }

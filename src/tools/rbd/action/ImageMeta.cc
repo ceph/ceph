@@ -120,6 +120,7 @@ static int do_metadata_get(librbd::Image& image, const char *key)
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   at::add_format_options(options);
 }
 
@@ -144,7 +145,8 @@ int execute_list(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -162,6 +164,7 @@ int execute_list(const po::variables_map &vm) {
 void get_get_arguments(po::options_description *positional,
                        po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   add_key_option(positional);
 }
 
@@ -186,7 +189,8 @@ int execute_get(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -204,6 +208,7 @@ int execute_get(const po::variables_map &vm) {
 void get_set_arguments(po::options_description *positional,
                        po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   add_key_option(positional);
   positional->add_options()
     ("value", "image meta value");
@@ -236,7 +241,8 @@ int execute_set(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -254,6 +260,7 @@ int execute_set(const po::variables_map &vm) {
 void get_remove_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   add_key_option(positional);
 }
 
@@ -278,7 +285,8 @@ int execute_remove(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;

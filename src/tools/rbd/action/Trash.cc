@@ -35,6 +35,7 @@ namespace po = boost::program_options;
 void get_move_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   options->add_options()
     (at::DELAY.c_str(), po::value<uint64_t>(),
      "time delay in seconds until effectively remove the image");
@@ -55,7 +56,8 @@ int execute_move(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -81,6 +83,7 @@ void get_remove_arguments(po::options_description *positional,
   positional->add_options()
     (at::IMAGE_ID.c_str(), "image id\n(example: [<pool-name>/]<image-id>)");
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   at::add_image_id_option(options);
 
   at::add_no_progress_option(options);
@@ -99,7 +102,8 @@ int execute_remove(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -266,6 +270,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_pool_options(positional, options);
+  at::add_namespace_options(positional, options);
   options->add_options()
     ("all,a", po::bool_switch(), "list images from all sources");
   options->add_options()
@@ -285,7 +290,8 @@ int execute_list(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -306,6 +312,7 @@ void get_restore_arguments(po::options_description *positional,
   positional->add_options()
     (at::IMAGE_ID.c_str(), "image id\n(example: [<pool-name>/]<image-id>)");
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   at::add_image_id_option(options);
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE, "");
 }
@@ -321,7 +328,8 @@ int execute_restore(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }

@@ -140,6 +140,7 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
     m_primary_mirror_uuid(primary_mirror_uuid),
     m_skip_mirror_enable(skip_mirror_enable),
     m_op_work_queue(op_work_queue), m_on_finish(on_finish) {
+  m_nspace = m_ioctx.get_namespace();
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 
   m_id_obj = util::id_obj_name(m_image_name);
@@ -426,6 +427,104 @@ void CreateRequest<I>::handle_create_id_object(int r) {
     return;
   }
 
+  set_namespace();
+}
+
+template<typename I>
+void CreateRequest<I>::set_namespace() {
+  ldout(m_cct, 20) << this << " " << __func__ << dendl;
+
+  librados::ObjectWriteOperation op;
+  cls_client::set_namespace(&op, m_nspace);
+
+  using klass = CreateRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_callback<klass, &klass::handle_set_namespace>(this);
+  int r = m_ioctx.aio_operate(m_id_obj, comp, &op);
+  assert(r == 0);
+  comp->release();
+}
+
+template<typename I>
+void CreateRequest<I>::handle_set_namespace(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "error set namespace: " << cpp_strerror(r) << dendl;
+    return complete(r);
+  }
+
+  send_namespace_list();
+}
+
+template<typename I>
+void CreateRequest<I>::send_namespace_list() {
+  ldout(m_cct, 20) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::namespace_list_start(&op, "", 0);
+
+  using klass = CreateRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_callback<klass, &klass::handle_namespace_list>(this);
+  m_outbl.clear();
+  switch_ns_to_default();
+  int r = m_ioctx.aio_operate(RBD_NAMESPACE, comp, &op, &m_outbl);
+  assert(r == 0);
+  comp->release();
+}
+
+template<typename I>
+void CreateRequest<I>::handle_namespace_list(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
+
+  switch_ns_back();
+  if (r >= 0) {
+    bufferlist::iterator it = m_outbl.begin();
+    r = cls_client::namespace_list_finish(&it, &m_namespaces);
+  }
+
+  if (r < 0 && r != -ENOENT) {
+    ldout(m_cct, 10) << "error retrieving namespaces: "
+                     << cpp_strerror(r) << dendl;
+    return complete(r);
+  }
+
+  if (m_namespaces.empty() ||
+      m_namespaces.find(m_nspace) == m_namespaces.end()) {
+    add_new_namespace();
+    return;
+  }
+
+  add_image_to_directory();
+}
+
+template<typename I>
+void CreateRequest<I>::add_new_namespace() {
+  ldout(m_cct, 20) << this << " " << __func__ << dendl;
+
+  librados::ObjectWriteOperation op;
+  cls_client::namespace_add(&op, m_nspace);
+
+  using klass = CreateRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_callback<klass, &klass::handle_new_namespace>(this);
+  switch_ns_to_default();
+  int r = m_ioctx.aio_operate(RBD_NAMESPACE, comp, &op);
+  assert(r == 0);
+  comp->release();
+}
+
+template<typename I>
+void CreateRequest<I>::handle_new_namespace(int r) {
+  ldout(m_cct, 20) << __func__ << ": r=" << r << dendl;
+
+  switch_ns_back();
+  if (r < 0) {
+    lderr(m_cct) << "error set namespace: " << cpp_strerror(r) << dendl;
+    return complete(r);
+  }
+
   add_image_to_directory();
 }
 
@@ -474,7 +573,6 @@ void CreateRequest<I>::negotiate_features() {
   using klass = CreateRequest<I>;
   librados::AioCompletion *comp =
     create_rados_callback<klass, &klass::handle_negotiate_features>(this);
-
   m_outbl.clear();
   int r = m_ioctx.aio_operate(RBD_DIRECTORY, comp, &op, &m_outbl);
   assert(r == 0);
@@ -751,6 +849,20 @@ void CreateRequest<I>::handle_mirror_image_enable(int r) {
   }
 
   complete(0);
+}
+
+template<typename I>
+void CreateRequest<I>::switch_ns_to_default() {
+  ldout(m_cct, 20) << dendl;
+
+  m_ioctx.set_namespace(RBD_DEFAULT_NS);
+}
+
+template<typename I>
+void CreateRequest<I>::switch_ns_back() {
+  ldout(m_cct, 20) << dendl;
+
+  m_ioctx.set_namespace(m_nspace);
 }
 
 template<typename I>

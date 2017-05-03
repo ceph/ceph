@@ -450,6 +450,21 @@ test_trash() {
     remove_images
 }
 
+test_ns() {
+    echo "testing namespace..."
+
+    remove_images
+    rbd ns create test_ns
+    rbd ns list | grep 'test_ns'
+    rbd -N test_ns create test_image -s 1
+    rbd -N test_ns list | wc -l | grep 1
+
+    rbd list | wc -l | grep 0
+
+    rbd -N test_ns remove test_image
+    rbd ns remove test_ns
+    rbd ns list | grep 'test_ns' && exit 1 || true
+}
 
 test_pool_image_args
 test_rename
@@ -463,5 +478,6 @@ test_others
 test_locking
 test_clone
 test_trash
+test_ns
 
 echo OK

@@ -60,6 +60,17 @@
 #define RBD_LOCK_NAME		"rbd_lock"
 
 /**
+ * Default of the namespace in a rbd pool
+ */
+#define RBD_DEFAULT_NS		""
+
+/**
+ * rbd_namespace object in default namespace contains all namespaces
+ * of this pool containing images.
+ */
+#define RBD_NAMESPACE		"rbd_namespace"
+
+/**
  * rbd_mirroring object in each pool contains pool-specific settings
  * for configuring mirroring.
  */

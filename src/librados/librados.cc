@@ -2139,6 +2139,11 @@ void librados::IoCtx::set_namespace(const string& nspace)
   io_ctx_impl->oloc.nspace = nspace;
 }
 
+string librados::IoCtx::get_namespace()
+{
+  return io_ctx_impl->oloc.nspace;
+}
+
 int64_t librados::IoCtx::get_id()
 {
   return io_ctx_impl->get_id();

@@ -72,6 +72,25 @@ CLS_NAME(rbd)
 
 #define GROUP_SNAP_SEQ "snap_seq"
 
+static const std::string RBD_NAMESPACE_KEY_PREFIX("rbd_namespace_");
+static const std::string RBD_DEFAULT_NAMESPACE_KEY("default_rbd_namespace");
+
+std::string get_key_from_nspace(const std::string &nspace) {
+  if (nspace == "") {
+    return RBD_DEFAULT_NAMESPACE_KEY;
+  } else {
+    return RBD_NAMESPACE_KEY_PREFIX + nspace;
+  }
+}
+
+std::string get_nspace_from_key(const std::string &key) {
+  if (key == RBD_DEFAULT_NAMESPACE_KEY) {
+    return "";
+  } else {
+    return key.substr(RBD_NAMESPACE_KEY_PREFIX.size());
+  }
+}
+
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
   unsigned snap_count = 0;
@@ -2784,6 +2803,137 @@ int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
   return rc;
 }
 
+int get_namespace(cls_method_context_t hctx, bufferlist *in,
+		  bufferlist *out)
+{
+  int rc;
+  string ns;
+
+  rc = read_key(hctx, "namespace", &ns);
+  if (rc == -ENOENT) {
+    rc = 0;
+    ::encode("", *out);
+  } else {
+    ::encode(ns, *out);
+  }
+
+  CLS_LOG(20, "get namespace %s", ns.c_str());
+  return rc;
+}
+
+int set_namespace(cls_method_context_t hctx, bufferlist *in,
+		  bufferlist *out)
+{
+  int rc;
+  string ns;
+  bufferlist bl;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(ns, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "set namespace to %s\n", ns.c_str());
+  ::encode(ns, bl);
+  rc = cls_cxx_map_set_val(hctx, "namespace", &bl);
+
+  return rc;
+}
+
+int namespace_add(cls_method_context_t hctx, bufferlist *in,
+		  bufferlist *out)
+{
+  string ns;
+  bufferlist bl;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(ns, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "add a new namespace: %s\n", ns.c_str());
+  ::encode(ns, bl);
+  return cls_cxx_map_set_val(hctx, get_key_from_nspace(ns), &bl);
+}
+
+int namespace_remove(cls_method_context_t hctx, bufferlist *in,
+		     bufferlist *out)
+{
+  string ns;
+  bufferlist bl;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(ns, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "remove namespace: %s\n", ns.c_str());
+  int r = cls_cxx_map_remove_key(hctx, get_key_from_nspace(ns));
+  if (r < 0) {
+    CLS_ERR("error remove namespace: %s: %s", ns.c_str(), cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+
+/**
+ * Input:
+ * @param start_after  <std::string>
+ * @param max_return <uint64_t>: 0 means return all.
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int namespace_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string start_after;
+  uint64_t max_return;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_after, iter);
+    ::decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int max_read = RBD_MAX_KEYS_READ;
+  int r = max_read;
+  set<string> namespaces;
+  string last_read = start_after;
+
+  while (r == max_read && (max_return == 0 || namespaces.size() < max_return)) {
+    set<string> keys;
+
+    r = cls_cxx_map_get_keys(hctx, last_read, max_read, &keys);
+    if (r < 0) {
+      CLS_ERR("error reading namespaces: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (string key : keys) {
+      namespaces.insert(get_nspace_from_key(key));
+
+      if (max_return > 0 && namespaces.size() >= max_return)
+	break;
+    }
+    if (!keys.empty()) {
+      last_read = *(keys.rbegin());
+    }
+  }
+
+  ::encode(namespaces, *out);
+
+  return 0;
+}
 
 /****************************** Old format *******************************/
 
@@ -5116,6 +5266,11 @@ CLS_INIT(rbd)
   cls_method_handle_t h_metadata_get;
   cls_method_handle_t h_snapshot_get_limit;
   cls_method_handle_t h_snapshot_set_limit;
+  cls_method_handle_t h_get_namespace;
+  cls_method_handle_t h_set_namespace;
+  cls_method_handle_t h_namespace_add;
+  cls_method_handle_t h_namespace_remove;
+  cls_method_handle_t h_namespace_list;
   cls_method_handle_t h_old_snapshots_list;
   cls_method_handle_t h_old_snapshot_add;
   cls_method_handle_t h_old_snapshot_remove;
@@ -5251,6 +5406,12 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "snapshot_set_limit",
 			  CLS_METHOD_WR,
 			  snapshot_set_limit, &h_snapshot_set_limit);
+  cls_register_cxx_method(h_class, "get_namespace",
+			  CLS_METHOD_RD,
+			  get_namespace, &h_get_namespace);
+  cls_register_cxx_method(h_class, "set_namespace",
+			  CLS_METHOD_WR,
+			  set_namespace, &h_set_namespace);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",
@@ -5310,6 +5471,17 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "object_map_snap_remove",
                           CLS_METHOD_RD | CLS_METHOD_WR,
 			  object_map_snap_remove, &h_object_map_snap_remove);
+
+  /* methods for the rbd_namespace object */
+  cls_register_cxx_method(h_class, "namespace_add",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  namespace_add, &h_namespace_add);
+  cls_register_cxx_method(h_class, "namespace_remove",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  namespace_remove, &h_namespace_remove);
+  cls_register_cxx_method(h_class, "namespace_list",
+			  CLS_METHOD_RD,
+			  namespace_list, &h_namespace_list);
 
  /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",

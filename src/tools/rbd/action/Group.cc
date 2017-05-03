@@ -32,8 +32,9 @@ int execute_create(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
+  std::string nspace = utils::get_namespace(vm);
 
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -61,7 +62,8 @@ int execute_list(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -105,8 +107,9 @@ int execute_remove(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
+  std::string nspace = utils::get_namespace(vm);
 
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -126,6 +129,7 @@ int execute_add(const po::variables_map &vm) {
   // Parse group data.
   std::string group_name;
   std::string group_pool_name;
+  std::string group_nspace;
 
   int r = utils::get_special_pool_group_names(vm, &arg_index,
 					      &group_pool_name,
@@ -135,8 +139,15 @@ int execute_add(const po::variables_map &vm) {
     return r;
   }
 
+  r = utils::get_special_namespace(vm, &group_nspace, "group");
+  if (r < 0) {
+    std::cerr << "rbd: image add error: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
   std::string image_name;
   std::string image_pool_name;
+  std::string image_nspace;
 
   r = utils::get_special_pool_image_names(vm, &arg_index,
 					  &image_pool_name,
@@ -147,16 +158,21 @@ int execute_add(const po::variables_map &vm) {
     return r;
   }
 
-  librados::Rados rados;
+  r = utils::get_special_namespace(vm, &image_nspace, "image");
+  if (r < 0) {
+    std::cerr << "rbd: image add error: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
 
+  librados::Rados rados;
   librados::IoCtx cg_io_ctx;
-  r = utils::init(group_pool_name, &rados, &cg_io_ctx);
+  r = utils::init(group_pool_name, group_nspace, &rados, &cg_io_ctx);
   if (r < 0) {
     return r;
   }
 
   librados::IoCtx image_io_ctx;
-  r = utils::init(image_pool_name, &rados, &image_io_ctx);
+  r = utils::init(image_pool_name, image_nspace, &rados, &image_io_ctx);
   if (r < 0) {
     return r;
   }
@@ -177,6 +193,7 @@ int execute_remove_image(const po::variables_map &vm) {
 
   std::string group_name;
   std::string group_pool_name;
+  std::string group_nspace;
 
   int r = utils::get_special_pool_group_names(vm, &arg_index,
 					      &group_pool_name,
@@ -186,9 +203,16 @@ int execute_remove_image(const po::variables_map &vm) {
     return r;
   }
 
+  r = utils::get_special_namespace(vm, &group_nspace, "group");
+  if (r < 0) {
+    std::cerr << "rbd: image remove error: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
   std::string image_name;
   std::string image_pool_name;
   std::string image_id;
+  std::string image_nspace;
 
   if (vm.count(at::IMAGE_ID)) {
     image_id = vm[at::IMAGE_ID].as<std::string>();
@@ -215,16 +239,21 @@ int execute_remove_image(const po::variables_map &vm) {
     return r;
   }
 
-  librados::Rados rados;
+  r = utils::get_special_namespace(vm, &image_nspace, "image");
+  if (r < 0) {
+    std::cerr << "rbd: image remove error: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
 
+  librados::Rados rados;
   librados::IoCtx cg_io_ctx;
-  r = utils::init(group_pool_name, &rados, &cg_io_ctx);
+  r = utils::init(group_pool_name, group_nspace, &rados, &cg_io_ctx);
   if (r < 0) {
     return r;
   }
 
   librados::IoCtx image_io_ctx;
-  r = utils::init(image_pool_name, &rados, &image_io_ctx);
+  r = utils::init(image_pool_name, image_nspace, &rados, &image_io_ctx);
   if (r < 0) {
     return r;
   }
@@ -271,7 +300,8 @@ int execute_list_images(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -317,16 +347,19 @@ int execute_list_images(const po::variables_map &vm) {
 void get_create_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
 }
 
 void get_remove_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
 }
 
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   at::add_format_options(options);
 }
 
@@ -338,6 +371,7 @@ void get_add_arguments(po::options_description *positional,
      "(example: [<pool-name>/]<group-name>)");
 
   at::add_special_pool_option(options, "group");
+  at::add_special_namespace_option(options, "group");
   at::add_group_option(options, at::ARGUMENT_MODIFIER_NONE);
 
   positional->add_options()
@@ -346,6 +380,7 @@ void get_add_arguments(po::options_description *positional,
      "(example: [<pool-name>/]<image-name>)");
 
   at::add_special_pool_option(options, "image");
+  at::add_special_namespace_option(options, "image");
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
 
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE,
@@ -360,6 +395,7 @@ void get_remove_image_arguments(po::options_description *positional,
      "(example: [<pool-name>/]<group-name>)");
 
   at::add_special_pool_option(options, "group");
+  at::add_special_namespace_option(options, "group");
   at::add_group_option(options, at::ARGUMENT_MODIFIER_NONE);
 
   positional->add_options()
@@ -368,6 +404,7 @@ void get_remove_image_arguments(po::options_description *positional,
      "(example: [<pool-name>/]<image-name>)");
 
   at::add_special_pool_option(options, "image");
+  at::add_special_namespace_option(options, "image");
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
 
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE,
@@ -379,6 +416,7 @@ void get_list_images_arguments(po::options_description *positional,
                                po::options_description *options) {
   at::add_format_options(options);
   at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
 }
 
 Shell::Action action_create(

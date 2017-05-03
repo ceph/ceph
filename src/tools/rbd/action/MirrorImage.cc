@@ -35,6 +35,7 @@ namespace po = boost::program_options;
 void get_arguments(po::options_description *positional,
                            po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
 }
 
 void get_arguments_disable(po::options_description *positional,
@@ -42,6 +43,7 @@ void get_arguments_disable(po::options_description *positional,
   options->add_options()
     ("force", po::bool_switch(), "disable even if not primary");
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
 }
 
 int execute_enable_disable(const po::variables_map &vm, bool enable,
@@ -60,7 +62,8 @@ int execute_enable_disable(const po::variables_map &vm, bool enable,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -90,6 +93,7 @@ void get_arguments_promote(po::options_description *positional,
   options->add_options()
     ("force", po::bool_switch(), "promote even if not cleanly demoted by remote cluster");
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
 }
 
 int execute_promote(const po::variables_map &vm) {
@@ -109,7 +113,8 @@ int execute_promote(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -140,7 +145,8 @@ int execute_demote(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -171,7 +177,8 @@ int execute_resync(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -190,6 +197,7 @@ int execute_resync(const po::variables_map &vm) {
 void get_status_arguments(po::options_description *positional,
 			  po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   at::add_format_options(options);
 }
 
@@ -214,7 +222,8 @@ int execute_status(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;

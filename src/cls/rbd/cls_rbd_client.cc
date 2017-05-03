@@ -861,6 +861,34 @@ namespace librbd {
       op->exec("rbd", "snapshot_set_limit", in);
     }
 
+    int get_namespace(librados::IoCtx *ioctx, const std::string &oid,
+		      std::string *ns)
+    {
+      bufferlist in, out;
+      int r =  ioctx->exec(oid, "rbd", "get_namespace", in, out);
+
+      if (r < 0) {
+	return r;
+      }
+
+      try {
+	bufferlist::iterator iter = out.begin();
+	::decode(*ns, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    void set_namespace(librados::ObjectWriteOperation *op,
+		      const std::string ns)
+    {
+      bufferlist in;
+      ::encode(ns, in);
+      op->exec("rbd", "set_namespace", in);
+    }
+
     void get_stripe_unit_count_start(librados::ObjectReadOperation *op) {
       bufferlist empty_bl;
       op->exec("rbd", "get_stripe_unit_count", empty_bl);
@@ -1285,6 +1313,69 @@ namespace librbd {
         return -EBADMSG;
       }
 
+      return 0;
+    }
+
+    int namespace_list(librados::IoCtx *ioctx,  std::set<std::string> *namespaces)
+    {
+      librados::ObjectReadOperation op;
+      namespace_list_start(&op, "", 0);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(RBD_NAMESPACE, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      return namespace_list_finish(&it, namespaces);
+    }
+
+    int namespace_add(librados::IoCtx *ioctx, const std::string &nspace)
+    {
+      bufferlist in_bl;
+      bufferlist out_bl;
+      ::encode(nspace, in_bl);
+
+      return ioctx->exec(RBD_NAMESPACE, "rbd", "namespace_add", in_bl, out_bl);
+    }
+
+    void namespace_add(librados::ObjectWriteOperation *op,
+		       std::string &nspace)
+    {
+      bufferlist bl;
+      ::encode(nspace, bl);
+
+      op->exec("rbd", "namespace_add", bl);
+    }
+
+    int namespace_remove(librados::IoCtx *ioctx, const std::string &nspace)
+    {
+      bufferlist in_bl;
+      bufferlist out_bl;
+      ::encode(nspace, in_bl);
+
+      return ioctx->exec(RBD_NAMESPACE, "rbd", "namespace_remove", in_bl, out_bl);
+    }
+
+    void namespace_list_start(librados::ObjectReadOperation *op,
+                              const std::string &start, uint64_t max_return)
+    {
+      bufferlist in_bl;
+      ::encode(start, in_bl);
+      ::encode(max_return, in_bl);
+      op->exec("rbd", "namespace_list", in_bl);
+    }
+
+    int namespace_list_finish(bufferlist::iterator *it,
+                              std::set<std::string> *namespaces)
+    {
+      assert(namespaces);
+      try {
+        ::decode(*namespaces, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
       return 0;
     }
 

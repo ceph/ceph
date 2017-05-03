@@ -166,6 +166,10 @@ namespace librbd {
 			   uint64_t *limit);
     void snapshot_set_limit(librados::ObjectWriteOperation *op,
 			    uint64_t limit);
+    int get_namespace(librados::IoCtx *ioctx, const std::string &oid,
+		      std::string *ns);
+    void set_namespace(librados::ObjectWriteOperation *op,
+		      const std::string ns);
 
     void get_stripe_unit_count_start(librados::ObjectReadOperation *op);
     int get_stripe_unit_count_finish(bufferlist::iterator *it,
@@ -251,6 +255,16 @@ namespace librbd {
     void object_map_snap_add(librados::ObjectWriteOperation *rados_op);
     void object_map_snap_remove(librados::ObjectWriteOperation *rados_op,
                                 const ceph::BitVector<2> &object_map);
+
+    // operations on rbd_namespace objects
+    int namespace_add(librados::IoCtx *ioctx, const std::string &nspace);
+    void namespace_add(librados::ObjectWriteOperation *op, std::string &nspace);
+    int namespace_remove(librados::IoCtx *ioctx, const std::string &nspace);
+    void namespace_list_start(librados::ObjectReadOperation *op,
+                              const std::string &start, uint64_t max_return);
+    int namespace_list_finish(bufferlist::iterator *it,
+                              std::set<std::string> *namespaces);
+    int namespace_list(librados::IoCtx *ioctx,  std::set<std::string> *namespaces);
 
     // class operations on the old format, kept for
     // backwards compatability

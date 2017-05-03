@@ -105,6 +105,17 @@ std::string get_positional_argument(
 std::string get_pool_name(const boost::program_options::variables_map &vm,
                           size_t *arg_index);
 
+std::string get_namespace(const boost::program_options::variables_map &vm,
+			  argument_types::ArgumentModifier mod = argument_types::ARGUMENT_MODIFIER_SOURCE);
+
+int get_special_namespace(const boost::program_options::variables_map &vm, std::string *nspace_name,
+			  std::string prefix);
+
+int get_special_pool_ns_names(const boost::program_options::variables_map &vm,
+			      size_t *arg_index,
+			      std::string *pool_name,
+			      std::string *ns_name);
+
 int get_pool_image_snapshot_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,
@@ -166,11 +177,11 @@ int get_formatter(const boost::program_options::variables_map &vm,
 
 void init_context();
 
-int init(const std::string &pool_name, librados::Rados *rados,
-         librados::IoCtx *io_ctx);
+int init(const std::string &pool_name, const std::string &nspace,
+	 librados::Rados *rados, librados::IoCtx *io_ctx);
 
 int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
-                librados::IoCtx *io_ctx);
+                const std::string &nspace, librados::IoCtx *io_ctx);
 
 int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
                bool read_only, librbd::Image *image);
@@ -179,6 +190,7 @@ int open_image_by_id(librados::IoCtx &io_ctx, const std::string &image_id,
                      bool read_only, librbd::Image *image);
 
 int init_and_open_image(const std::string &pool_name,
+			const std::string &nspace,
                         const std::string &image_name,
                         const std::string &image_id,
                         const std::string &snap_name, bool read_only,

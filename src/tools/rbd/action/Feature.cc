@@ -20,6 +20,7 @@ namespace po = boost::program_options;
 void get_arguments(po::options_description *positional,
                    po::options_description *options, bool enabled) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(positional, options);
   positional->add_options()
     ("features", po::value<at::ImageFeatures>()->multitoken(),
      ("image features\n" + at::get_short_features_help(false)).c_str());
@@ -72,7 +73,8 @@ int execute(const po::variables_map &vm, bool enabled) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;

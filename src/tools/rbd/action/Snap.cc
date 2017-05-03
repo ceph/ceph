@@ -181,6 +181,7 @@ void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_id_option(options);
+  at::add_namespace_options(positional, options);
   at::add_format_options(options);
 }
 
@@ -230,7 +231,8 @@ int execute_list(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, image_id, "", true,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, image_id, "", true,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -265,7 +267,8 @@ int execute_create(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -331,7 +334,8 @@ int execute_remove(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -364,6 +368,7 @@ void get_purge_arguments(po::options_description *positional,
                          po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_id_option(options);
+  at::add_namespace_options(positional, options);
   at::add_no_progress_option(options);
 }
 
@@ -407,7 +412,8 @@ int execute_purge(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -454,7 +460,8 @@ int execute_rollback(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -489,7 +496,8 @@ int execute_protect(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;
@@ -561,7 +569,8 @@ int execute_unprotect(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init(pool_name, nspace, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -599,6 +608,7 @@ int execute_unprotect(const po::variables_map &vm) {
 void get_set_limit_arguments(po::options_description *pos,
 			     po::options_description *opt) {
   at::add_image_spec_options(pos, opt, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(pos, opt);
   at::add_limit_option(opt);
 }
 
@@ -626,7 +636,8 @@ int execute_set_limit(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false, &rados,
 				 &io_ctx, &image);
   if (r < 0) {
       return r;
@@ -644,6 +655,7 @@ int execute_set_limit(const po::variables_map &vm) {
 void get_clear_limit_arguments(po::options_description *pos,
 			       po::options_description *opt) {
   at::add_image_spec_options(pos, opt, at::ARGUMENT_MODIFIER_NONE);
+  at::add_namespace_options(pos, opt);
 }
 
 int execute_clear_limit(const po::variables_map &vm) {
@@ -662,7 +674,8 @@ int execute_clear_limit(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false, &rados,
 				 &io_ctx, &image);
   if (r < 0) {
       return r;
@@ -720,7 +733,8 @@ int execute_rename(const po::variables_map &vm) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
+  std::string nspace = utils::get_namespace(vm);
+  r = utils::init_and_open_image(pool_name, nspace, image_name, "", "", false, &rados,
                                  &io_ctx, &image);
   if (r < 0) {
     return r;

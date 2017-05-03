@@ -617,6 +617,22 @@ namespace librbd {
     return r;
   }
 
+  int RBD::namespace_exists(IoCtx& io_ctx, const string &nspace, bool *exists) {
+    return librbd::namespace_exists(io_ctx, nspace, exists);
+  }
+
+  int RBD::namespace_add(IoCtx& io_ctx, const string &nspace) {
+    return librbd::namespace_add(io_ctx, nspace);
+  }
+
+  int RBD::namespace_remove(IoCtx& io_ctx, const string &nspace) {
+    return librbd::namespace_remove(io_ctx, nspace);
+  }
+
+  int RBD::namespace_list(IoCtx& io_ctx, set<string>& namespaces) {
+    return librbd::namespace_list(io_ctx, namespaces);
+  }
+
   int RBD::mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode) {
     return librbd::api::Mirror<>::mode_get(io_ctx, mirror_mode);
   }

@@ -27,6 +27,7 @@ set(rbd_srcs
   action/MirrorPool.cc
   action/MirrorImage.cc
   action/Nbd.cc
+  action/Namespace.cc
   action/ObjectMap.cc
   action/Remove.cc
   action/Rename.cc
