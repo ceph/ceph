@@ -5739,6 +5739,11 @@ TEST_F(TestLibRBD, TestTrashMoveAndPurge) {
     ASSERT_TRUE(image != name);
   }
 
+  librbd::trash_image_info_t info;
+  ASSERT_EQ(-ENOENT, rbd.trash_get(ioctx, "dummy image id", &info));
+  ASSERT_EQ(0, rbd.trash_get(ioctx, image_id.c_str(), &info));
+  ASSERT_EQ(image_id, info.id);
+
   std::vector<librbd::trash_image_info_t> entries;
   ASSERT_EQ(0, rbd.trash_list(ioctx, entries));
   ASSERT_FALSE(entries.empty());
