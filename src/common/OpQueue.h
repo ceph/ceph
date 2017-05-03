@@ -37,10 +37,11 @@ class OpQueue {
   public:
     // How many Ops are in the queue
     virtual unsigned length() const = 0;
-    // Ops will be removed f evaluates to true, f may have sideeffects
-    virtual void remove_by_filter(
-	std::function<bool (T)> f) = 0;
-    // Ops of this priority should be deleted immediately
+    // Ops of this class should be deleted immediately. If out isn't
+    // nullptr then items should be added to the front in
+    // front-to-back order. The typical strategy is to visit items in
+    // the queue in *reverse* order and to use *push_front* to insert
+    // them into out.
     virtual void remove_by_class(K k, std::list<T> *out) = 0;
     // Enqueue op in the back of the strict queue
     virtual void enqueue_strict(K cl, unsigned priority, T item) = 0;
