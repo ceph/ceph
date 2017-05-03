@@ -51,7 +51,7 @@ class ItemList {
         continue;
       }
 
-      if (entry[entry.size() - 1] == '*') {
+      if (entry.back() == '*') {
         prefixes.insert(entry.substr(0, entry.size() - 1));
         continue;
       }
