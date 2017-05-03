@@ -184,7 +184,7 @@ class ESZoneBucket:
 
 
 class ESZone(Zone):
-    def __init__(self, name, es_endpoint, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = []):
+    def __init__(self, name, es_endpoint, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = None):
         self.es_endpoint = es_endpoint
         super(ESZone, self).__init__(name, zonegroup, cluster, data, zone_id, gateways)
 

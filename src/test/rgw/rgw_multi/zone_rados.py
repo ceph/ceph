@@ -35,7 +35,7 @@ def check_object_eq(k1, k2, check_extra = True):
 
 
 class RadosZone(Zone):
-    def __init__(self, name, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = []):
+    def __init__(self, name, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = None):
         super(RadosZone, self).__init__(name, zonegroup, cluster, data, zone_id, gateways)
 
     def  tier_type(self):
