@@ -2578,15 +2578,20 @@ int RGWPutObjProcessor_Aio::prepare(RGWRados *store, string *oid_rand)
 int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again)
 {
   *phandle = NULL;
-  uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
+  uint64_t write_size =
+    MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
+
+  /* accept full-stride, aligned writes */
+  if (write_size == 0)
+    write_size = max_chunk_size;
 
   pending_data_bl.claim_append(bl);
-  if (pending_data_bl.length() < max_write_size) {
+  if (pending_data_bl.length() < write_size) {
     *again = false;
     return 0;
   }
 
-  pending_data_bl.splice(0, max_write_size, &bl);
+  pending_data_bl.splice(0, write_size, &bl);
 
   /* do we have enough data pending accumulated that needs to be written? */
   *again = (pending_data_bl.length() >= max_chunk_size);
@@ -2676,8 +2681,9 @@ int RGWPutObjProcessor_Atomic::complete_parts()
 int RGWPutObjProcessor_Atomic::complete_writing_data()
 {
   if (!data_ofs && !immutable_head()) {
-    /* only claim if pending_data_bl() is not empty. This is needed because we might be called twice
-     * (e.g., when a retry due to race happens). So a second call to first_chunk.claim() would
+    /* only claim if pending_data_bl() is not empty. This is needed
+     * because we might be called twice (e.g., when a retry due to
+     * race happens). So a second call to first_chunk.claim() would
      * clobber first_chunk
      */
     if (pending_data_bl.length() > 0) {
@@ -2688,12 +2694,19 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
   while (pending_data_bl.length()) {
     void *handle;
     rgw_raw_obj obj;
-    uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
-    if (max_write_size > pending_data_bl.length()) {
-      max_write_size = pending_data_bl.length();
-    }
+    uint64_t write_size =
+      MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
+
+    /* accept full-stride, aligned writes */
+    if (write_size == 0)
+      write_size = max_chunk_size;
+
+    /* XXX buffer::list::splice throws on "short" splice */
+    if (write_size > pending_data_bl.length())
+      write_size = pending_data_bl.length();
+
     bufferlist bl;
-    pending_data_bl.splice(0, max_write_size, &bl);
+    pending_data_bl.splice(0, write_size, &bl);
     uint64_t write_len = bl.length();
     int r = write_data(bl, data_ofs, &handle, &obj, false);
     if (r < 0) {
