@@ -161,7 +161,9 @@ void RGWMetadataSearchOp::execute()
 
   list<pair<string, string> > conds;
 
-  conds.push_back(make_pair("permissions", s->user->user_id.to_str()));
+  if (s->user->system) {
+    conds.push_back(make_pair("permissions", s->user->user_id.to_str()));
+  }
 
   if (!s->bucket_name.empty()) {
     conds.push_back(make_pair("bucket", s->bucket_name));
