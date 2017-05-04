@@ -316,6 +316,8 @@ public:
   bool has_v3_rules() const;
   bool has_v4_buckets() const;
   bool has_v5_rules() const;
+  bool has_chooseargs() const;          // any chooseargs
+  bool has_incompat_chooseargs() const; // chooseargs that can't be made compat
 
   bool is_v2_rule(unsigned ruleid) const;
   bool is_v3_rule(unsigned ruleid) const;
