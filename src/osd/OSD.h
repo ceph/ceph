@@ -15,6 +15,11 @@
 #ifndef CEPH_OSD_H
 #define CEPH_OSD_H
 
+#include <boost/thread/shared_mutex.hpp>
+#include <boost/thread/condition_variable.hpp>
+
+#include "include/assert.h"
+
 #include "PG.h"
 
 #include "msg/Dispatcher.h"
@@ -528,7 +533,7 @@ public:
 
 private:
   // -- superblock --
-  Mutex publish_lock, pre_publish_lock; // pre-publish orders before publish
+  Mutex publish_lock = {"OSDService::publish_lock"};
   OSDSuperblock superblock;
 
 public:
@@ -543,7 +548,7 @@ public:
 
   int get_nodeid() const { return whoami; }
 
-  std::atomic<epoch_t> max_oldest_map;
+  std::atomic<epoch_t> max_oldest_map = {0};
 private:
   OSDMapRef osdmap;
 
@@ -576,52 +581,73 @@ public:
    * working from old maps.
    */
 private:
+  boost::shared_mutex next_osdmap_lock; // orders before publish
+  boost::condition_variable_any next_osdmap_wait_cond;
   OSDMapRef next_osdmap;
-  Cond pre_publish_cond;
+
+  /// map epochs reserved below
+  map<epoch_t,int> map_reservations;
+
+  /// pointer to next_osdmap's reservation slot
+  map<epoch_t,int>::iterator next_map_reservation;
+
 
 public:
   void pre_publish_map(OSDMapRef map) {
-    Mutex::Locker l(pre_publish_lock);
+    std::unique_lock<boost::shared_mutex> l(next_osdmap_lock);
     next_osdmap = std::move(map);
+    next_map_reservation = map_reservations.insert(
+      make_pair(next_osdmap->get_epoch(), 0)).first;
   }
 
   void activate_map();
-  /// map epochs reserved below
-  map<epoch_t, unsigned> map_reservations;
 
   /// gets ref to next_osdmap and registers the epoch as reserved
   OSDMapRef get_nextmap_reserved() {
-    Mutex::Locker l(pre_publish_lock);
-    if (!next_osdmap)
+    boost::shared_lock<boost::shared_mutex> l(next_osdmap_lock);
+    if (!next_osdmap) {
       return OSDMapRef();
-    epoch_t e = next_osdmap->get_epoch();
-    map<epoch_t, unsigned>::iterator i =
-      map_reservations.insert(make_pair(e, 0)).first;
-    i->second++;
+    }
+    ++next_map_reservation->second;
     return next_osdmap;
   }
+
   /// releases reservation on map
   void release_map(OSDMapRef osdmap) {
-    Mutex::Locker l(pre_publish_lock);
-    map<epoch_t, unsigned>::iterator i =
-      map_reservations.find(osdmap->get_epoch());
-    assert(i != map_reservations.end());
-    assert(i->second > 0);
-    if (--(i->second) == 0) {
-      map_reservations.erase(i);
+    boost::shared_lock<boost::shared_mutex> l(next_osdmap_lock);
+    if (osdmap->get_epoch() == next_map_reservation->first) {
+      // fast path: still the latest
+      --next_map_reservation->second;
+    } else {
+      auto i = map_reservations.find(osdmap->get_epoch());
+      if (--i->second == 0) {
+	next_osdmap_wait_cond.notify_all();
+      }
     }
-    pre_publish_cond.Signal();
   }
+
   /// blocks until there are no reserved maps prior to next_osdmap
   void await_reserved_maps() {
-    Mutex::Locker l(pre_publish_lock);
-    assert(next_osdmap);
-    while (true) {
-      map<epoch_t, unsigned>::const_iterator i = map_reservations.cbegin();
-      if (i == map_reservations.cend() || i->first >= next_osdmap->get_epoch()) {
-	break;
-      } else {
-	pre_publish_cond.Wait(pre_publish_lock);
+    // wait
+    {
+      boost::shared_lock<boost::shared_mutex> l(next_osdmap_lock);
+      for (auto i = map_reservations.begin();
+	   i != map_reservations.end() &&
+	     i->first < next_osdmap->get_epoch();
+	   ++i) {
+	while (i->second > 0) {
+	  next_osdmap_wait_cond.wait(l);
+	}
+      }
+    }
+    // clean up
+    {
+      std::unique_lock<boost::shared_mutex> l(next_osdmap_lock);
+      auto i = map_reservations.begin();
+      while (i != map_reservations.end() &&
+	     i->first < next_osdmap->get_epoch()) {
+	assert(i->second == 0);
+	i = map_reservations.erase(i);
       }
     }
   }
