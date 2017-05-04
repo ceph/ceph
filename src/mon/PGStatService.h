@@ -43,6 +43,7 @@ public:
     parent = o;
   }
 
+  // FIXME: Kill this once we rip out PGMonitor post-luminous
   /** returns true if the underlying data is readable. Always true
    * post-luminous, but not when we are redirecting to the PGMonitor
    */
