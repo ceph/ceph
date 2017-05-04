@@ -21,6 +21,7 @@
 #include <string>
 #include <mutex>
 #include <iostream>
+#include <functional>
 
 
 using ClientId = uint;
