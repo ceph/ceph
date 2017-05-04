@@ -430,9 +430,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
   // XXX: need to trim MonSession connected with a osd whose id > max_osd?
 
-  /** we don't have any of the feature bit infrastructure in place for
-   * supporting primary_temp mappings without breaking old clients/OSDs.*/
-  assert(g_conf->mon_osd_allow_primary_temp || osdmap.primary_temp->empty());
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
     mon->pgmon()->check_osd_map(osdmap.epoch);
@@ -7562,7 +7559,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    if (!g_conf->mon_osd_allow_primary_temp) {
+    if (osdmap.require_min_compat_client.length() &&
+	osdmap.require_min_compat_client < "firefly") {
+      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+	 << " < firefly, which is required for primary-temp";
+      err = -EPERM;
+      goto reply;
+    } else if (!g_conf->mon_osd_allow_primary_temp) {
       ss << "you must enable 'mon osd allow primary temp = true' on the mons before you can set primary_temp mappings.  note that this is for developers only: older clients/OSDs will break and there is no feature bit infrastructure in place.";
       err = -EPERM;
       goto reply;
@@ -7815,7 +7818,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    if (!g_conf->mon_osd_allow_primary_affinity) {
+    if (osdmap.require_min_compat_client.length() &&
+	osdmap.require_min_compat_client < "firefly") {
+      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+	 << " < firefly, which is required for primary-affinity";
+      err = -EPERM;
+      goto reply;
+    } else if (!g_conf->mon_osd_allow_primary_affinity) {
       ss << "you must enable 'mon osd allow primary affinity = true' on the mons before you can adjust primary-affinity.  note that older clients will no longer be able to communicate with the cluster.";
       err = -EPERM;
       goto reply;
