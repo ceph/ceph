@@ -16,7 +16,7 @@ find_program(BABELTRACE_EXECUTABLE
   NAMES babeltrace babeltrace-ctf)
 
 include(FindPackageHandleStandardArgs)
-find_package_handle_standard_args(BABELTRACE DEFAULT_MSG
+find_package_handle_standard_args(babeltrace DEFAULT_MSG
   BABELTRACE_INCLUDE_DIR BABELTRACE_LIBRARY)
 set(BABELTRACE_LIBRARIES ${BABELTRACE_LIBRARY})
 mark_as_advanced(BABELTRACE_INCLUDE_DIR BABELTRACE_LIBRARY)
