@@ -2156,9 +2156,7 @@ bool CrushWrapper::is_valid_crush_name(const string& s)
     if (!(*p == '-') &&
 	!(*p == '_') &&
 	!(*p == '.') &&
-	!(*p >= '0' && *p <= '9') &&
-	!(*p >= 'A' && *p <= 'Z') &&
-	!(*p >= 'a' && *p <= 'z'))
+	!(isalnum(*p)))
       return false;
   }
   return true;
