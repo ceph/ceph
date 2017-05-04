@@ -18,7 +18,6 @@
 #include "ceph_crypto.h"
 #include "auth/Crypto.h"
 
-#include <nspr.h>
 #include <pthread.h>
 #include <stdlib.h>
 
@@ -28,7 +27,7 @@ void ceph::crypto::init(CephContext *cct)
 {
 }
 
-void ceph::crypto::shutdown()
+void ceph::crypto::shutdown(bool)
 {
 }
 
@@ -45,6 +44,7 @@ ceph::crypto::HMACSHA256::~HMACSHA256()
 
 // for SECMOD_RestartModules()
 #include <secmod.h>
+#include <nspr.h>
 
 static pthread_mutex_t crypto_init_mutex = PTHREAD_MUTEX_INITIALIZER;
 static uint32_t crypto_refs = 0;
