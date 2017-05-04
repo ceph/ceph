@@ -61,6 +61,10 @@ class RGWRESTConn
 public:
 
   RGWRESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints);
+
+  RGWRESTConn(CephContext *_cct, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred):
+    cct(_cct), endpoints(endpoints.begin(),endpoints.end()), key(std::move(_cred)), remote_id(_remote_id) {}
+
   int get_url(string& endpoint);
   string get_url();
   const string& get_self_zonegroup() {
