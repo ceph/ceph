@@ -1031,6 +1031,7 @@ OPTION(bluefs_log_compact_min_size, OPT_U64, 16*1048576)  // before we consider
 OPTION(bluefs_min_flush_size, OPT_U64, 524288)  // ignore flush until its this big
 OPTION(bluefs_compact_log_sync, OPT_BOOL, false)  // sync or async log compaction?
 OPTION(bluefs_buffered_io, OPT_BOOL, false)
+OPTION(bluefs_sync_write, OPT_BOOL, false)
 OPTION(bluefs_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluefs_preextend_wal_files, OPT_BOOL, false)  // this *requires* that rocksdb has recycling enabled
 
