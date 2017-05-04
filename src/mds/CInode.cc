@@ -4416,7 +4416,7 @@ private:
 
 void CInode::maybe_export_pin()
 {
-  if (g_conf->mds_bal_export_pin && is_dir()) {
+  if (g_conf->mds_bal_export_pin && is_dir() && is_normal()) {
     dout(20) << "maybe_export_pin " << *this << dendl;
     mds_rank_t pin = get_projected_inode()->export_pin;
     if (pin == mdcache->mds->get_nodeid()) {
