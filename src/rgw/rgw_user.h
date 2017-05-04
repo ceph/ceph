@@ -50,12 +50,11 @@ struct RGWUID
 WRITE_CLASS_ENCODER(RGWUID)
 
 extern int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id);
+extern int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>&buckets_usage_map);
+
 /**
  * Get the anonymous (ie, unauthenticated) user info.
  */
- 
-extern int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>&buckets_usage_map);
-
 extern void rgw_get_anon_user(RGWUserInfo& info);
 
 /**
