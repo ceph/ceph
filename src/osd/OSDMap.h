@@ -607,6 +607,12 @@ public:
   uint64_t get_features(int entity_type, uint64_t *mask) const;
 
   /**
+   * get oldest *client* version (firefly, hammer, etc.) that can connect given
+   * the feature bits required (according to get_features()).
+   */
+  pair<string,string> get_min_compat_client() const;
+
+  /**
    * get intersection of features supported by up osds
    */
   uint64_t get_up_osd_features() const;
