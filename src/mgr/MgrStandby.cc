@@ -175,13 +175,19 @@ void MgrStandby::shutdown()
   // Expect already to be locked as we're called from signal handler
   assert(lock.is_locked_by_me());
 
+  // stop sending beacon first, i use monc to talk with monitors
+  timer.shutdown();
+  // client uses monc and objecter
+  client.shutdown();
+  // stop monc, so mon won't be able to instruct me to shutdown/activate after
+  // the active_mgr is stopped
+  monc.shutdown();
   if (active_mgr) {
     active_mgr->shutdown();
   }
-  client.shutdown();
+  // objecter is used by monc and active_mgr
   objecter.shutdown();
-  timer.shutdown();
-  monc.shutdown();
+  // client_messenger is used by all of them, so stop it in the end
   client_messenger->shutdown();
 }
 
