@@ -1149,13 +1149,13 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   bufferlist bl;
 
-  // set or clear full/nearfull?
   {
     OSDMap tmp;
     tmp.deepish_copy_from(osdmap);
     tmp.apply_incremental(pending_inc);
 
     if (tmp.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      // set or clear full/nearfull?
       int full, backfill, nearfull;
       tmp.count_full_nearfull_osds(&full, &backfill, &nearfull);
       if (full > 0) {
@@ -1180,6 +1180,16 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	    remove_flag(CEPH_OSDMAP_NEARFULL);
 	  }
 	}
+      }
+
+      // min_compat_client?
+      if (tmp.require_min_compat_client.empty()) {
+	auto mv = tmp.get_min_compat_client();
+	dout(1) << __func__ << " setting require_min_compat_client to current " << mv
+		<< dendl;
+	mon->clog->info() << "setting require_min_compat_client to currently required "
+			  << mv;
+	pending_inc.new_require_min_compat_client = mv.first;
       }
     }
   }
