@@ -8710,13 +8710,14 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
   s->accounted_size = s->size;
 
   auto iter = s->attrset.find(RGW_ATTR_COMPRESSION);
-  if (iter != s->attrset.end()) {
+  const bool compressed = (iter != s->attrset.end());
+  if (compressed) {
     // use uncompressed size for accounted_size
     try {
       RGWCompressionInfo info;
       auto p = iter->second.begin();
       ::decode(info, p);
-      s->accounted_size = info.orig_size;
+      s->accounted_size = info.orig_size; 
     } catch (buffer::error&) {
       dout(0) << "ERROR: could not decode compression info for object: " << obj << dendl;
       return -EIO;
@@ -8741,6 +8742,8 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
       s->manifest.set_head(bucket_info.placement_rule, obj, s->size); /* patch manifest to reflect the head we just read, some manifests might be
                                              broken due to old bugs */
       s->size = s->manifest.get_obj_size();
+      if (!compressed)
+        s->accounted_size = s->size;
     } catch (buffer::error& err) {
       ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
       return -EIO;
