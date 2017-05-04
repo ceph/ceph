@@ -120,6 +120,25 @@ wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${image}
 
+# failover (unmodified)
+demote_image ${CLUSTER2} ${POOL} ${image}
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+promote_image ${CLUSTER1} ${POOL} ${image}
+wait_for_image_replay_started ${CLUSTER2} ${POOL} ${image}
+
+# failback (unmodified)
+demote_image ${CLUSTER1} ${POOL} ${image}
+wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${image}
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+promote_image ${CLUSTER2} ${POOL} ${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+compare_images ${POOL} ${image}
+
 # failover
 demote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
