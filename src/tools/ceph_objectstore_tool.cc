@@ -3007,7 +3007,7 @@ int main(int argc, char **argv)
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db, dump-import, trim-pg-log]")
+     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, apply-layout-settings, update-mon-db, dump-import, trim-pg-log]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
@@ -3543,6 +3543,7 @@ int main(int argc, char **argv)
   // mentioned in the usage for --pgid.
   if ((op == "info" || op == "log" || op == "remove" || op == "export"
       || op == "export-remove" || op == "mark-complete"
+      || op == "reset-last-complete"
       || op == "trim-pg-log") &&
       pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
@@ -3745,7 +3746,7 @@ int main(int argc, char **argv)
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log") {
     cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-import, trim-pg-log)"
+      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-import, trim-pg-log)"
 	 << std::endl;
     usage(desc);
     ret = 1;
@@ -4088,6 +4089,38 @@ int main(int argc, char **argv)
       }
       cout << "Finished trimming pg log" << std::endl;
       goto out;
+    } else if (op == "reset-last-complete") {
+      if (!force) {
+        std::cerr << "WARNING: reset-last-complete is extremely dangerous and almost "
+                  << "certain to lead to permanent data loss unless you know exactly "
+                  << "what you are doing. Pass --force to proceed anyway."
+                  << std::endl;
+        ret = -EINVAL;
+        goto out;
+      }
+      ObjectStore::Transaction tran;
+      ObjectStore::Transaction *t = &tran;
+
+      if (struct_ver < PG::get_compat_struct_v()) {
+        cerr << "Can't reset-last-complete, version mismatch " << (int)struct_ver
+	     << " (pg)  < compat " << (int)PG::get_compat_struct_v() << " (tool)"
+	     << std::endl;
+	ret = 1;
+	goto out;
+      }
+
+      cout << "Reseting last_complete " << std::endl;
+
+      info.last_complete = info.last_update;
+
+      if (!dry_run) {
+	ret = write_info(*t, map_epoch, info, past_intervals);
+	if (ret != 0)
+	  goto out;
+	fs->queue_transaction(ch, std::move(*t));
+      }
+      cout << "Reseting last_complete succeeded" << std::endl;
+   
     } else {
       ceph_assert(!"Should have already checked for valid --op");
     }
