@@ -1238,6 +1238,35 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   return features;
 }
 
+pair<string,string> OSDMap::get_min_compat_client() const
+{
+  uint64_t f = get_features(CEPH_ENTITY_TYPE_CLIENT, nullptr);
+
+  if (HAVE_FEATURE(f, OSDMAP_REMAP)) {         // v12.0.0-1733-g27d6f43
+    return make_pair("luminous", "12.2.0");
+  }
+  if (HAVE_FEATURE(f, CRUSH_TUNABLES5)) {      // v10.0.0-612-g043a737
+    return make_pair("jewel", "10.2.0");
+  }
+  if (HAVE_FEATURE(f, CRUSH_V4)) {             // v0.91-678-g325fc56
+    return make_pair("hammer", "0.94");
+  }
+  if (HAVE_FEATURE(f, OSD_PRIMARY_AFFINITY) || // v0.76-553-gf825624
+      HAVE_FEATURE(f, CRUSH_TUNABLES3) ||      // v0.76-395-ge20a55d
+      HAVE_FEATURE(f, OSD_ERASURE_CODES) ||    // v0.73-498-gbfc86a8
+      HAVE_FEATURE(f, OSD_CACHEPOOL)) {        // v0.67-401-gb91c1c5
+    return make_pair("firefly", "0.80");
+  }
+  if (HAVE_FEATURE(f, CRUSH_TUNABLES2) ||      // v0.54-684-g0cc47ff
+      HAVE_FEATURE(f, OSDHASHPSPOOL)) {        // v0.57-398-g8cc2b0f
+    return make_pair("dumpling", "0.67");
+  }
+  if (HAVE_FEATURE(f, CRUSH_TUNABLES)) {       // v0.48argonaut-206-g6f381af
+    return make_pair("argonaut", "0.48argonaut-207");
+  }
+  return make_pair("argonaut", "0.48");
+}
+
 void OSDMap::_calc_up_osd_features()
 {
   bool first = true;
@@ -2493,6 +2522,9 @@ void OSDMap::dump(Formatter *f) const
   f->dump_string("cluster_snapshot", get_cluster_snapshot());
   f->dump_int("pool_max", get_pool_max());
   f->dump_int("max_osd", get_max_osd());
+  auto mv = get_min_compat_client();
+  f->dump_string("min_compat_client", mv.first);
+  f->dump_string("min_compat_client_version", mv.second);
 
   f->open_array_section("pools");
   for (const auto &pool : pools) {
