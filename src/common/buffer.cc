@@ -2130,7 +2130,8 @@ int buffer::list::write_fd(int fd) const
     return write_fd_zero_copy(fd);
 
   // use writev!
-  iovec iov[IOV_MAX];
+  int max = MIN(_buffers.size(), IOV_MAX);
+  iovec iov[max];
   int iovlen = 0;
   ssize_t bytes = 0;
 
