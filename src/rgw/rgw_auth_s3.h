@@ -203,6 +203,12 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
   SHA256* sha256_hash;
   std::string prev_chunk_signature;
 
+  bool is_signature_mismatched();
+  std::string calc_chunk_signature(const std::string& payload_hash) const;
+
+public:
+  /* We need the constructor to be public because of the std::make_shared that
+   * is employed by the create() method. */
   AWSv4ComplMulti(const req_state* const s,
                   std::string date,
                   std::string credential_scope,
@@ -221,10 +227,6 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
       prev_chunk_signature(std::move(seed_signature)) {
   }
 
-  bool is_signature_mismatched();
-  std::string calc_chunk_signature(const std::string& payload_hash) const;
-
-public:
   ~AWSv4ComplMulti() {
     if (sha256_hash) {
       calc_hash_sha256_close_stream(&sha256_hash);
@@ -256,10 +258,12 @@ class AWSv4ComplSingle : public rgw::auth::Completer,
   const char* const expected_request_payload_hash;
   ceph::crypto::SHA256* sha256_hash = nullptr;
 
-  /* Defined in rgw_auth_s3.cc because of get_v4_exp_payload_hash(). */
+public:
+  /* Defined in rgw_auth_s3.cc because of get_v4_exp_payload_hash(). We need
+   * the constructor to be public because of the std::make_shared employed by
+   * the create() method. */
   AWSv4ComplSingle(const req_state* const s);
 
-public:
   ~AWSv4ComplSingle() {
     if (sha256_hash) {
       calc_hash_sha256_close_stream(&sha256_hash);

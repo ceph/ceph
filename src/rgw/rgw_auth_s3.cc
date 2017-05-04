@@ -1062,12 +1062,11 @@ AWSv4ComplMulti::create(const req_state* const s,
   const auto signing_key = \
     rgw::auth::s3::get_v4_signing_key(s->cct, credential_scope, *secret_key);
 
-  return rgw::auth::Completer::cmplptr_t(
-    new AWSv4ComplMulti(s,
-                        std::move(date),
-                        std::move(credential_scope),
-                        std::move(seed_signature),
-                        signing_key));
+  return std::make_shared<AWSv4ComplMulti>(s,
+                                           std::move(date),
+                                           std::move(credential_scope),
+                                           std::move(seed_signature),
+                                           signing_key);
 }
 
 size_t AWSv4ComplSingle::recv_body(char* const buf, const size_t max)
@@ -1117,7 +1116,7 @@ rgw::auth::Completer::cmplptr_t
 AWSv4ComplSingle::create(const req_state* const s,
                          const boost::optional<std::string>&)
 {
-  return rgw::auth::Completer::cmplptr_t(new AWSv4ComplSingle(s));
+  return std::make_shared<AWSv4ComplSingle>(s);
 }
 
 } /* namespace s3 */
