@@ -926,7 +926,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
   pending_created_pgs.clear();
   // PAXOS_PGMAP is less than PAXOS_OSDMAP, so PGMonitor::update_from_paxos()
   // should have prepared the latest pgmap if any
-  const auto& pgm = mon->pgmon()->pg_map;
+  const auto& pgm = mon->pgservice.get_pg_map();
   if (pgm.last_pg_scan >= creating_pgs.last_scan_epoch) {
     // TODO: please stop updating pgmap with pgstats once the upgrade is completed
     for (auto& pgid : pgm.creating_pgs) {
@@ -1276,7 +1276,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       dout(7) << __func__ << " in the middle of upgrading, "
 	      << " trimming pending creating_pgs using pgmap" << dendl;
-      trim_creating_pgs(&pending_creatings, mon->pgmon()->pg_map);
+      trim_creating_pgs(&pending_creatings, mon->pgservice.get_pg_map());
     }
     bufferlist creatings_bl;
     ::encode(pending_creatings, creatings_bl);
@@ -3555,7 +3555,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       }
 
       map<int, float> full, backfillfull, nearfull;
-      osdmap.get_full_osd_util(mon->pgmon()->pg_map.osd_stat, &full, &backfillfull, &nearfull);
+      osdmap.get_full_osd_util(mon->pgservice.get_pg_map().osd_stat, &full, &backfillfull, &nearfull);
       if (full.size()) {
 	ostringstream ss;
 	ss << full.size() << " full osd(s)";
@@ -4868,7 +4868,7 @@ void OSDMonitor::update_pool_flags(int64_t pool_id, uint64_t flags)
 
 bool OSDMonitor::update_pools_status()
 {
-  if (!mon->pgmon()->is_readable())
+  if (!mon->pgservice.is_readable())
     return false;
 
   bool ret = false;
@@ -8929,7 +8929,7 @@ done:
     string out_str;
     mempool::osdmap::map<int32_t, uint32_t> new_weights;
     err = reweight::by_utilization(osdmap,
-				   mon->pgmon()->pg_map,
+				   mon->pgservice.get_pg_map(),
 				   oload,
 				   max_change,
 				   max_osds,
