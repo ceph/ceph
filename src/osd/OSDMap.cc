@@ -467,6 +467,9 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
       ::encode(new_full_ratio, bl);
       ::encode(new_backfillfull_ratio, bl);
     }
+    if (target_v >= 4) {
+      ::encode(new_require_min_compat_client, bl);
+    }
     ENCODE_FINISH(bl); // osd-only data
   }
 
@@ -675,6 +678,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     }
     if (struct_v >= 4) {
       ::decode(new_backfillfull_ratio, bl);
+      ::decode(new_require_min_compat_client, bl);
     } else {
       new_backfillfull_ratio = -1;
     }
@@ -722,6 +726,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_float("new_full_ratio", new_full_ratio);
   f->dump_float("new_nearfull_ratio", new_nearfull_ratio);
   f->dump_float("new_backfillfull_ratio", new_backfillfull_ratio);
+  f->dump_string("new_require_min_compat_client", new_require_min_compat_client);
 
   if (fullmap.length()) {
     f->open_object_section("full_map");
@@ -1619,6 +1624,9 @@ int OSDMap::apply_incremental(const Incremental &inc)
   if (inc.new_full_ratio >= 0) {
     full_ratio = inc.new_full_ratio;
   }
+  if (inc.new_require_min_compat_client.length()) {
+    require_min_compat_client = inc.new_require_min_compat_client;
+  }
 
   // do new crush map last (after up/down stuff)
   if (inc.crush.length()) {
@@ -2210,6 +2218,9 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       ::encode(full_ratio, bl);
       ::encode(backfillfull_ratio, bl);
     }
+    if (target_v >= 3) {
+      ::encode(require_min_compat_client, bl);
+    }
     ENCODE_FINISH(bl); // osd-only data
   }
 
@@ -2445,6 +2456,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
     }
     if (struct_v >= 3) {
       ::decode(backfillfull_ratio, bl);
+      ::decode(require_min_compat_client, bl);
     } else {
       backfillfull_ratio = 0;
     }
@@ -2522,6 +2534,7 @@ void OSDMap::dump(Formatter *f) const
   f->dump_string("cluster_snapshot", get_cluster_snapshot());
   f->dump_int("pool_max", get_pool_max());
   f->dump_int("max_osd", get_max_osd());
+  f->dump_string("require_min_compat_client", require_min_compat_client);
   auto mv = get_min_compat_client();
   f->dump_string("min_compat_client", mv.first);
   f->dump_string("min_compat_client_version", mv.second);
@@ -2738,6 +2751,11 @@ void OSDMap::print(ostream& out) const
   out << "full_ratio " << full_ratio << "\n";
   out << "backfillfull_ratio " << backfillfull_ratio << "\n";
   out << "nearfull_ratio " << nearfull_ratio << "\n";
+  if (require_min_compat_client.length()) {
+    out << "require_min_compat_client " << require_min_compat_client << "\n";
+  }
+  auto mv = get_min_compat_client();
+  out << "min_compat_client " << mv.first << " " << mv.second << "\n";
   if (get_cluster_snapshot().length())
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
   out << "\n";

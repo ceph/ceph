@@ -172,6 +172,8 @@ public:
     float new_backfillfull_ratio = -1;
     float new_full_ratio = -1;
 
+    string new_require_min_compat_client;
+
     mutable bool have_crc;      ///< crc values are defined
     uint32_t full_crc;  ///< crc of the resulting OSDMap
     mutable uint32_t inc_crc;   ///< crc of this incremental
@@ -269,6 +271,9 @@ private:
   bool new_blacklist_entries;
 
   float full_ratio = 0, backfillfull_ratio = 0, nearfull_ratio = 0;
+
+  /// min compat client we want to support
+  string require_min_compat_client;
 
   mutable uint64_t cached_up_osd_features;
 
