@@ -42,8 +42,7 @@ void Elector::init()
 
 void Elector::shutdown()
 {
-  if (expire_event)
-    mon->timer.cancel_event(expire_event);
+  cancel_timer();
 }
 
 void Elector::bump_epoch(epoch_t e) 
