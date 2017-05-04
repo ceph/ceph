@@ -272,13 +272,13 @@ void ResizeEvent::dump(Formatter *f) const {
   f->dump_unsigned("size", size);
 }
 
-void DemoteEvent::encode(bufferlist& bl) const {
+void DemotePromoteEvent::encode(bufferlist& bl) const {
 }
 
-void DemoteEvent::decode(__u8 version, bufferlist::iterator& it) {
+void DemotePromoteEvent::decode(__u8 version, bufferlist::iterator& it) {
 }
 
-void DemoteEvent::dump(Formatter *f) const {
+void DemotePromoteEvent::dump(Formatter *f) const {
 }
 
 void UpdateFeaturesEvent::encode(bufferlist& bl) const {
@@ -400,8 +400,8 @@ void EventEntry::decode(bufferlist::iterator& it) {
   case EVENT_TYPE_FLATTEN:
     event = FlattenEvent();
     break;
-  case EVENT_TYPE_DEMOTE:
-    event = DemoteEvent();
+  case EVENT_TYPE_DEMOTE_PROMOTE:
+    event = DemotePromoteEvent();
     break;
   case EVENT_TYPE_UPDATE_FEATURES:
     event = UpdateFeaturesEvent();
@@ -484,7 +484,7 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
 
   o.push_back(new EventEntry(FlattenEvent(123), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(DemoteEvent()));
+  o.push_back(new EventEntry(DemotePromoteEvent()));
 
   o.push_back(new EventEntry(UpdateFeaturesEvent()));
   o.push_back(new EventEntry(UpdateFeaturesEvent(123, 127, true), utime_t(1, 1)));
@@ -749,8 +749,8 @@ std::ostream &operator<<(std::ostream &out, const EventType &type) {
   case EVENT_TYPE_FLATTEN:
     out << "Flatten";
     break;
-  case EVENT_TYPE_DEMOTE:
-    out << "Demote";
+  case EVENT_TYPE_DEMOTE_PROMOTE:
+    out << "Demote/Promote";
     break;
   case EVENT_TYPE_UPDATE_FEATURES:
     out << "UpdateFeatures";

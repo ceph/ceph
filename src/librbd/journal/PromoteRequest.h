@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "common/Mutex.h"
 #include "cls/journal/cls_journal_types.h"
+#include "journal/Future.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 
@@ -37,13 +38,22 @@ private:
    * <start>
    *    |
    *    v
-   *  OPEN
-   *    |
-   *    v
-   * ALLOCATE_TAG
-   *    |
-   *    v
-   * SHUT_DOWN
+   * OPEN * * * * * * * * * *
+   *    |                   *
+   *    v                   *
+   * ALLOCATE_TAG * * * * * *
+   *    |                   *
+   *    v                   *
+   * APPEND_EVENT * * *     *
+   *    |             *     *
+   *    v             *     *
+   * COMMIT_EVENT     *     *
+   *    |             *     *
+   *    v             *     *
+   * STOP_APPEND <* * *     *
+   *    |                   *
+   *    v                   *
+   * SHUT_DOWN <* * * * * * *
    *    |
    *    v
    * <finish>
@@ -52,6 +62,7 @@ private:
    */
 
   typedef typename TypeTraits<ImageCtxT>::Journaler Journaler;
+  typedef typename TypeTraits<ImageCtxT>::Future Future;
 
   ImageCtxT *m_image_ctx;
   bool m_force;
@@ -66,12 +77,22 @@ private:
   TagData m_tag_data;
 
   cls::journal::Tag m_tag;
+  Future m_future;
 
   void send_open();
   void handle_open(int r);
 
   void allocate_tag();
   void handle_allocate_tag(int r);
+
+  void append_event();
+  void handle_append_event(int r);
+
+  void commit_event();
+  void handle_commit_event(int r);
+
+  void stop_append();
+  void handle_stop_append(int r);
 
   void shut_down();
   void handle_shut_down(int r);
