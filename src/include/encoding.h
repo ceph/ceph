@@ -112,13 +112,6 @@ WRITE_INTTYPE_ENCODER(uint16_t, le16)
 WRITE_INTTYPE_ENCODER(int16_t, le16)
 
 #ifdef ENCODE_DUMP
-# include <stdio.h>
-# include <sys/types.h>
-# include <sys/stat.h>
-# include <fcntl.h>
-
-# define ENCODE_STR(x) #x
-# define ENCODE_STRINGIFY(x) ENCODE_STR(x)
 
 # define ENCODE_DUMP_PRE()			\
   unsigned pre_off = bl.length()
