@@ -5251,17 +5251,29 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
   newmap.deepish_copy_from(osdmap);
   newmap.apply_incremental(new_pending);
 
+  // client compat
+  if (newmap.require_min_compat_client.length()) {
+    auto mv = newmap.get_min_compat_client();
+    if (mv.first > newmap.require_min_compat_client) {
+      ss << "new crush map requires client version " << mv
+	 << " but require_min_compat_client is "
+	 << newmap.require_min_compat_client;
+      return false;
+    }
+  }
+
+  // osd compat
   uint64_t features =
     newmap.get_features(CEPH_ENTITY_TYPE_MON, NULL) |
     newmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL);
-
   stringstream features_ss;
   int r = check_cluster_features(features, features_ss);
-  if (!r)
-    return true;
+  if (r) {
+    ss << "Could not change CRUSH: " << features_ss.str();
+    return false;
+  }
 
-  ss << "Could not change CRUSH: " << features_ss.str();
-  return false;
+  return true;
 }
 
 bool OSDMonitor::erasure_code_profile_in_use(
