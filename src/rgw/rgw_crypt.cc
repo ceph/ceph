@@ -24,6 +24,19 @@
 #include <cryptopp/cryptlib.h>
 #include <cryptopp/modes.h>
 #include <cryptopp/aes.h>
+
+/*
+ * patching for https://github.com/openssl/openssl/issues/1437
+ * newer versions of civetweb do not experience problems
+ */
+extern "C"
+{
+bool SSL_CTX_set_ecdh_auto(void* dummy, int onoff)
+{
+  return onoff!=0;
+}
+}
+
 using namespace CryptoPP;
 #endif
 

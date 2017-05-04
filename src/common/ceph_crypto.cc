@@ -41,7 +41,6 @@ ceph::crypto::HMACSHA256::~HMACSHA256()
 }
 
 #elif defined(USE_NSS)
-
 // for SECMOD_RestartModules()
 #include <secmod.h>
 #include <nspr.h>
