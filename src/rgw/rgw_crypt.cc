@@ -24,6 +24,24 @@
 #include <cryptopp/cryptlib.h>
 #include <cryptopp/modes.h>
 #include <cryptopp/aes.h>
+#if defined(CIVETWEB_VERSION_MAJOR) && \
+    defined(CIVETWEB_VERSION_MINOR) && \
+    (CIVETWEB_VERSION_MAJOR * 100) + CIVETWEB_VERSION_MINOR >= 110
+#error SSL_CTX_set_ecdh_auto patch no longer needed. Please delete.
+#else
+/*
+ * patching for https://github.com/openssl/openssl/issues/1437
+ * newer versions of civetweb do not experience problems
+ */
+extern "C"
+{
+bool SSL_CTX_set_ecdh_auto(void* dummy, int onoff)
+{
+  return onoff!=0;
+}
+}
+#endif
+
 using namespace CryptoPP;
 #endif
 
