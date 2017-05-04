@@ -603,6 +603,10 @@ COMMAND("osd set-nearfull-ratio " \
 	"name=ratio,type=CephFloat,range=0.0|1.0", \
 	"set usage ratio at which OSDs are marked near-full",
 	"osd", "rw", "cli,rest")
+COMMAND("osd set-require-min-compat-client " \
+	"name=version,type=CephString",
+	"set the minimum client version we will maintain compatibility with",
+	"osd", "rw", "cli,rest")
 COMMAND("osd pause", "pause osd", "osd", "rw", "cli,rest")
 COMMAND("osd unpause", "unpause osd", "osd", "rw", "cli,rest")
 COMMAND("osd erasure-code-profile set " \

@@ -7288,6 +7288,39 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd set-require-min-compat-client") {
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must complete the upgrade and set require_luminous_osds before"
+	 << " using the new interface";
+      err = -EPERM;
+      goto reply;
+    }
+    string v;
+    cmd_getval(g_ceph_context, cmdmap, "version", v);
+    if (v != "luminous" && v != "kraken" && v != "jewel" && v != "infernalis" &&
+	v != "hammer" && v != "giant" && v != "firefly" && v != "emperor" &&
+	v != "dumpling" && v != "cuttlefish" && v != "bobtail" && v != "argonaut") {
+      ss << "version " << v << " is not recognized";
+      err = -EINVAL;
+      goto reply;
+    }
+    OSDMap newmap;
+    newmap.deepish_copy_from(osdmap);
+    newmap.apply_incremental(pending_inc);
+    newmap.require_min_compat_client = v;
+    auto mv = newmap.get_min_compat_client();
+    if (v < mv.first) {
+      ss << "osdmap current utilizes features that require " << mv
+	 << "; cannot set require_min_compat_client below that to " << v;
+      err = -EPERM;
+      goto reply;
+    }
+    ss << "set require_min_compat_client to " << v;
+    pending_inc.new_require_min_compat_client = v;
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+							  get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd pause") {
     return prepare_set_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
 
