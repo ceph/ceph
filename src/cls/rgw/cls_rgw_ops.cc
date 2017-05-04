@@ -514,7 +514,6 @@ void cls_rgw_clear_bucket_resharding_op::generate_test_instances(
 
 void cls_rgw_clear_bucket_resharding_op::dump(Formatter *f) const
 {
-  ::encode_json("entry", entry, f);
 }
 
 void cls_rgw_get_bucket_resharding_op::generate_test_instances(
@@ -526,7 +525,6 @@ void cls_rgw_get_bucket_resharding_op::generate_test_instances(
 
 void cls_rgw_get_bucket_resharding_op::dump(Formatter *f) const
 {
-  ::encode_json("entry", entry, f);
 }
 
 

@@ -517,8 +517,7 @@ void rgw_bucket_dir_header::dump(Formatter *f) const
     iter->second.dump(f);
     f->close_section();
   }
-  f->dump_bool("is_resharding", is_resharding);
-  f->dump_string("new_bucket_instance_id",new_bucket_instance_id);
+  ::encode_json("new_instance", new_instance, f);
   f->close_section();
 }
 
@@ -597,7 +596,6 @@ void cls_rgw_reshard_entry::generate_test_instances(list<cls_rgw_reshard_entry*>
 
 void cls_rgw_bucket_instance_entry::dump(Formatter *f) const
 {
-  encode_json("data", data, f);
   encode_json("resharding", resharding, f);
   encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
 
