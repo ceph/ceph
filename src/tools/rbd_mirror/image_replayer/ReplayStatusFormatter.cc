@@ -195,7 +195,13 @@ void ReplayStatusFormatter<I>::handle_update_tag_cache(uint64_t master_tag_tid,
     }
   }
 
-  if (tag_data.predecessor.tag_tid == 0) {
+  if (tag_data.predecessor.mirror_uuid !=
+        librbd::Journal<>::LOCAL_MIRROR_UUID &&
+      tag_data.predecessor.mirror_uuid !=
+        librbd::Journal<>::ORPHAN_MIRROR_UUID) {
+    dout(20) << "hit remote image non-primary epoch" << dendl;
+    tag_data.predecessor.tag_tid = mirror_tag_tid;
+  } else if (tag_data.predecessor.tag_tid == 0) {
     // We failed. Don't consider this fatal, just terminate retrieving.
     dout(20) << "making fake tag" << dendl;
     tag_data.predecessor.tag_tid = mirror_tag_tid;
