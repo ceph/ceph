@@ -230,6 +230,7 @@ void OSDMonitor::create_initial()
     if (newmap.backfillfull_ratio > 1.0) newmap.backfillfull_ratio /= 100;
     newmap.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
     if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
+    newmap.require_min_compat_client = g_conf->mon_osd_initial_require_min_compat_client;
   }
 
   // encode into pending incremental
