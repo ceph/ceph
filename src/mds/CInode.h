@@ -704,6 +704,7 @@ public:
   bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(inode.ino); }
   bool is_base() const { return is_root() || is_mdsdir(); }
   bool is_system() const { return inode.ino < MDS_INO_SYSTEM_BASE; }
+  bool is_normal() const { return !(is_base() || is_system() || is_stray()); }
 
   bool is_head() const { return last == CEPH_NOSNAP; }
 
