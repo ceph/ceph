@@ -18,6 +18,7 @@
 #define MAX_SECRET_OPTION_LEN (MAX_SECRET_LEN + 7)
 
 int verboseflag = 0;
+int sloppyflag = 0;
 int skip_mtab_flag = 0;
 static const char * const EMPTY_STRING = "";
 
@@ -282,6 +283,8 @@ static int parse_arguments(int argc, char *const *const argv,
 			skip_mtab_flag = 1;
 		else if (!strcmp("-v", argv[i]))
 			verboseflag = 1;
+		else if (!strcmp("-s", argv[i]))
+			sloppyflag = 1;
 		else if (!strcmp("-o", argv[i])) {
 			++i;
 			if (i >= argc) {
@@ -317,6 +320,7 @@ static void usage(const char *prog_name)
 	printf("\t-h: Print this help\n");
 	printf("\t-n: Do not update /etc/mtab\n");
 	printf("\t-v: Verbose\n");
+	printf("\t-s: Allow sloppy mount options\n");
 	printf("\tceph-options: refer to mount.ceph(8)\n");
 	printf("\n");
 }
@@ -347,6 +351,10 @@ int main(int argc, char *argv[])
 	if (!popts) {
 		printf("failed to parse ceph_options\n");
 		exit(1);
+	}
+	if (sloppyflag) {
+		int out_len = 0;
+		safe_cat(&popts, &out_len, strlen(popts), ",sloppy");
 	}
 
 	block_signals(SIG_BLOCK);
