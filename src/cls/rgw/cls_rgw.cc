@@ -3618,8 +3618,6 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
   return ret;
 }
 
-const string resharding_attr = "resharding";
-
 static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   cls_rgw_set_bucket_resharding_op op;
@@ -3639,8 +3637,7 @@ static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
     return rc;
   }
 
-  header.is_resharding = true;
-  header.new_bucket_instance_id = op.entry.new_bucket_instance_id;
+  header.new_instance.set(op.entry.new_bucket_instance_id);
 
   return write_bucket_header(hctx, &header);
 }
@@ -3663,8 +3660,7 @@ static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in
     CLS_LOG(1, "ERROR: %s(): failed to read header\n", __func__);
     return rc;
   }
-  header.is_resharding = false;
-  header.new_bucket_instance_id.clear();
+  header.new_instance.clear();
 
   return write_bucket_header(hctx, &header);
 }
@@ -3689,7 +3685,7 @@ static int rgw_get_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
   }
 
   cls_rgw_get_bucket_resharding_ret op_ret;
-  op_ret.resharding = header.is_resharding;
+  op_ret.new_instance = header.new_instance;
 
   ::encode(op_ret, *out);
 
@@ -3802,6 +3798,7 @@ CLS_INIT(rgw)
 			  rgw_clear_bucket_resharding, &h_rgw_clear_bucket_resharding);
   cls_register_cxx_method(h_class, "get_bucket_resharding", CLS_METHOD_RD ,
 			  rgw_get_bucket_resharding, &h_rgw_get_bucket_resharding);
+
   return;
 }
 

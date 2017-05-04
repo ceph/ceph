@@ -1301,17 +1301,13 @@ struct cls_rgw_set_bucket_resharding_op  {
 WRITE_CLASS_ENCODER(cls_rgw_set_bucket_resharding_op)
 
 struct cls_rgw_clear_bucket_resharding_op {
-  cls_rgw_bucket_instance_entry entry;
-
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entry, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(entry, bl);
     DECODE_FINISH(bl);
   }
   static void generate_test_instances(list<cls_rgw_clear_bucket_resharding_op*>& o);
@@ -1320,17 +1316,14 @@ struct cls_rgw_clear_bucket_resharding_op {
 WRITE_CLASS_ENCODER(cls_rgw_clear_bucket_resharding_op)
 
 struct cls_rgw_get_bucket_resharding_op  {
-  cls_rgw_bucket_instance_entry entry;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entry, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(entry, bl);
     DECODE_FINISH(bl);
   }
 
@@ -1340,17 +1333,17 @@ struct cls_rgw_get_bucket_resharding_op  {
 WRITE_CLASS_ENCODER(cls_rgw_get_bucket_resharding_op)
 
 struct cls_rgw_get_bucket_resharding_ret  {
-  bool resharding;
+  cls_rgw_bucket_instance_entry new_instance;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(resharding, bl);
+    ::encode(new_instance, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(resharding, bl);
+    ::decode(new_instance, bl);
     DECODE_FINISH(bl);
   }
 

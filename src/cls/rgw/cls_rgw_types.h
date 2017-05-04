@@ -604,14 +604,46 @@ struct rgw_bucket_category_stats {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
 
+struct cls_rgw_bucket_instance_entry {
+  bool resharding{false};
+  string new_bucket_instance_id;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(resharding, bl);
+    ::encode(new_bucket_instance_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(resharding, bl);
+    ::decode(new_bucket_instance_id, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_bucket_instance_entry*>& o);
+
+  void clear() {
+    resharding = false;
+    new_bucket_instance_id.clear();
+  }
+
+  void set(const string& new_instance_id) {
+    resharding = true;
+    new_bucket_instance_id = new_instance_id;
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)
+
 struct rgw_bucket_dir_header {
   map<uint8_t, rgw_bucket_category_stats> stats;
   uint64_t tag_timeout;
   uint64_t ver;
   uint64_t master_ver;
   string max_marker;
-  bool is_resharding;
-  string new_bucket_instance_id;
+  cls_rgw_bucket_instance_entry new_instance;
 
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0) {}
 
@@ -622,8 +654,7 @@ struct rgw_bucket_dir_header {
     ::encode(ver, bl);
     ::encode(master_ver, bl);
     ::encode(max_marker, bl);
-    ::encode(is_resharding, bl);
-    ::encode(new_bucket_instance_id, bl);
+    ::encode(new_instance, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -644,15 +675,18 @@ struct rgw_bucket_dir_header {
       ::decode(max_marker, bl);
     }
     if (struct_v >= 6) {
-      ::decode(is_resharding, bl);
-      ::decode(new_bucket_instance_id, bl);
+      ::decode(new_instance, bl);
     } else {
-        is_resharding = false;
+      new_instance = cls_rgw_bucket_instance_entry();
     }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rgw_bucket_dir_header*>& o);
+
+  bool resharding() const {
+    return new_instance.resharding;
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
@@ -1053,31 +1087,5 @@ struct cls_rgw_reshard_entry
   static void generate_test_instances(list<cls_rgw_reshard_entry*>& o);
 };
 WRITE_CLASS_ENCODER(cls_rgw_reshard_entry)
-
-struct cls_rgw_bucket_instance_entry {
-  bool resharding;
-  string new_bucket_instance_id;
-  bufferlist data;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(resharding, bl);
-    ::encode(new_bucket_instance_id, bl);
-    ::encode(data, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    ::decode(resharding, bl);
-    ::decode(new_bucket_instance_id, bl);
-    ::decode(data, bl);
-    DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_rgw_bucket_instance_entry*>& o);
-};
-WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)
 
 #endif
