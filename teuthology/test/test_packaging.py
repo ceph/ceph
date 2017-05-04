@@ -477,7 +477,7 @@ class TestBuilderProject(object):
         ('rhel', None, None, 'centos7'),
         ('centos', None, None, 'centos7'),
         ('fedora', None, None, 'fedora20'),
-        ('ubuntu', None, None, 'trusty'),
+        ('ubuntu', None, None, 'xenial'),
         ('debian', None, None, 'wheezy'),
     ]
 
@@ -754,6 +754,6 @@ class TestShamanProject(TestBuilderProject):
         ('rhel', None, None, 'centos/7'),
         ('centos', None, None, 'centos/7'),
         ('fedora', None, None, 'fedora/20'),
-        ('ubuntu', None, None, 'ubuntu/14.04'),
+        ('ubuntu', None, None, 'ubuntu/16.04'),
         ('debian', None, None, 'debian/7.0'),
     ]
