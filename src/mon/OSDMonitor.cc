@@ -7575,13 +7575,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " primary_temp mapping to " << osd;
     goto update;
   } else if (prefix == "osd pg-upmap") {
-    if (!g_conf->mon_osd_allow_pg_upmap) {
-      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must set the require_luminous_osds flag to use this feature";
       err = -EPERM;
       goto reply;
     }
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_min_compat_client < "luminous") {
+      ss << "min_compat_client " << osdmap.require_min_compat_client
+	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
     }
@@ -7636,13 +7637,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " pg_upmap mapping to " << new_pg_upmap;
     goto update;
   } else if (prefix == "osd rm-pg-upmap") {
-    if (!g_conf->mon_osd_allow_pg_upmap) {
-      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must set the require_luminous_osds flag to use this feature";
       err = -EPERM;
       goto reply;
     }
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_min_compat_client < "luminous") {
+      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
     }
@@ -7680,13 +7682,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "clear " << pgid << " pg_upmap mapping";
     goto update;
   } else if (prefix == "osd pg-upmap-items") {
-    if (!g_conf->mon_osd_allow_pg_upmap) {
-      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must set the require_luminous_osds flag to use this feature";
       err = -EPERM;
       goto reply;
     }
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_min_compat_client < "luminous") {
+      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
     }
@@ -7754,13 +7757,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " pg_upmap_items mapping to " << new_pg_upmap_items;
     goto update;
   } else if (prefix == "osd rm-pg-upmap-items") {
-    if (!g_conf->mon_osd_allow_pg_upmap) {
-      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must set the require_luminous_osds flag to use this feature";
       err = -EPERM;
       goto reply;
     }
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_min_compat_client < "luminous") {
+      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+	 << " < luminous, which is required for pg-upmap";
       err = -EPERM;
       goto reply;
     }
