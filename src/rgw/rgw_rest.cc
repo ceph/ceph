@@ -1243,7 +1243,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 void RGWPostObj_ObjStore::parse_boundary_params(const std::string& params_str,
                                                 std::string& first,
                                                 std::map<std::string,
-                                                         std::string>& params)
+                                                std::string>& params)
 {
   size_t pos = params_str.find(';');
   if (std::string::npos == pos) {
