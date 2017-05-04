@@ -1170,8 +1170,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   mask |= CEPH_FEATURES_CRUSH;
 
   if (!pg_upmap.empty() || !pg_upmap_items.empty())
-    features |= CEPH_FEATUREMASK_OSDMAP_REMAP;
-  mask |= CEPH_FEATUREMASK_OSDMAP_REMAP;
+    features |= CEPH_FEATUREMASK_OSDMAP_PG_UPMAP;
+  mask |= CEPH_FEATUREMASK_OSDMAP_PG_UPMAP;
 
   for (auto &pool: pools) {
     if (pool.second.has_flag(pg_pool_t::FLAG_HASHPSPOOL)) {
@@ -1247,7 +1247,7 @@ pair<string,string> OSDMap::get_min_compat_client() const
 {
   uint64_t f = get_features(CEPH_ENTITY_TYPE_CLIENT, nullptr);
 
-  if (HAVE_FEATURE(f, OSDMAP_REMAP)) {         // v12.0.0-1733-g27d6f43
+  if (HAVE_FEATURE(f, OSDMAP_PG_UPMAP)) {      // v12.0.0-1733-g27d6f43
     return make_pair("luminous", "12.2.0");
   }
   if (HAVE_FEATURE(f, CRUSH_TUNABLES5)) {      // v10.0.0-612-g043a737
@@ -2145,7 +2145,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
   {
     uint8_t v = 4;
-    if (!HAVE_FEATURE(features, OSDMAP_REMAP)) {
+    if (!HAVE_FEATURE(features, OSDMAP_PG_UPMAP)) {
       v = 3;
     }
     ENCODE_START(v, 1, bl); // client-usable data

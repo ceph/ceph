@@ -7598,7 +7598,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
     if (err == -EAGAIN)
       goto wait;
     if (err < 0)
@@ -7660,7 +7660,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
     if (err == -EAGAIN)
       goto wait;
     if (err < 0)
@@ -7705,7 +7705,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
     if (err == -EAGAIN)
       goto wait;
     if (err < 0)
@@ -7780,7 +7780,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
     if (err == -EAGAIN)
       goto wait;
     if (err < 0)
