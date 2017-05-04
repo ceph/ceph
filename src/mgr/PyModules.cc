@@ -33,6 +33,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[py] "
 
+// definition for non-const static member
+std::string PyModules::config_prefix;
+
 namespace {
   PyObject* log_write(PyObject*, PyObject* args) {
     char* m = nullptr;
@@ -362,6 +365,9 @@ int PyModules::init()
   Mutex::Locker locker(lock);
 
   global_handle = this;
+  // namespace in config-key prefixed by "mgr/<id>/"
+  config_prefix = std::string(g_conf->name.get_type_str()) + "/" +
+	          g_conf->name.get_id() + "/";
 
   // Set up global python interpreter
   Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
@@ -542,7 +548,7 @@ bool PyModules::get_config(const std::string &handle,
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  const std::string global_key = config_prefix + handle + "." + key;
+  const std::string global_key = config_prefix + handle + "/" + key;
 
   dout(4) << __func__ << "key: " << global_key << dendl;
 
@@ -557,7 +563,7 @@ bool PyModules::get_config(const std::string &handle,
 void PyModules::set_config(const std::string &handle,
     const std::string &key, const std::string &val)
 {
-  const std::string global_key = config_prefix + handle + "." + key;
+  const std::string global_key = config_prefix + handle + "/" + key;
 
   Command set_cmd;
   {
