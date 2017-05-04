@@ -39,6 +39,9 @@ enum common_init_flags_t {
 
   // don't contact mons for config
   CINIT_FLAG_NO_MON_CONFIG = 0x20,
+
+  // don't expose default cct perf counters
+  CINIT_FLAG_NO_CCT_PERF_COUNTERS = 0x40,
 };
 
 #ifndef WITH_SEASTAR

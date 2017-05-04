@@ -52,7 +52,8 @@ int main(int argc, char **argv) {
   std::vector<const char*> args;
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE|
+			 CINIT_FLAG_NO_CCT_PERF_COUNTERS);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
@@ -186,19 +187,6 @@ TEST(PerfCounters, MultiplePerfCounters) {
   coll->clear();
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
   ASSERT_EQ("{}", msg);
-}
-
-TEST(PerfCounters, CephContextPerfCounters) {
-  // Enable the perf counter
-  g_ceph_context->enable_perf_counter();
-  AdminSocketClient client(get_rand_socket_path());
-  std::string msg;
-
-  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"cct\":{\"total_workers\":0,\"unhealthy_workers\":0}}"), msg);
-
-  // Restore to avoid impact to other test cases
-  g_ceph_context->disable_perf_counter();
 }
 
 TEST(PerfCounters, ResetPerfCounters) {
