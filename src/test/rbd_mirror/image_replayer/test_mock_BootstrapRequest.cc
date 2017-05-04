@@ -3,7 +3,6 @@
 
 #include "test/rbd_mirror/test_mock_fixture.h"
 #include "librbd/journal/TypeTraits.h"
-#include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/ImageSyncThrottler.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
@@ -43,40 +42,6 @@ namespace rbd {
 namespace mirror {
 
 class ProgressContext;
-
-template<>
-struct ImageSync<librbd::MockTestImageCtx> {
-  static ImageSync* s_instance;
-  Context *on_finish = nullptr;
-
-  static ImageSync* create(librbd::MockTestImageCtx *local_image_ctx,
-                           librbd::MockTestImageCtx *remote_image_ctx,
-                           SafeTimer *timer, Mutex *timer_lock,
-                           const std::string &mirror_uuid,
-                           ::journal::MockJournaler *journaler,
-                           librbd::journal::MirrorPeerClientMeta *client_meta,
-                           ContextWQ *work_queue, Context *on_finish,
-                           ProgressContext *progress_ctx = nullptr) {
-    assert(s_instance != nullptr);
-    return s_instance;
-  }
-
-  ImageSync() {
-    assert(s_instance == nullptr);
-    s_instance = this;
-  }
-
-  void put() {
-  }
-
-  void get() {
-  }
-
-  MOCK_METHOD0(send, void());
-  MOCK_METHOD0(cancel, void());
-};
-
-ImageSync<librbd::MockTestImageCtx>* ImageSync<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 template<>
 struct ImageSyncThrottler<librbd::MockTestImageCtx> {
@@ -366,12 +331,12 @@ public:
 
   void expect_open_local_image(MockOpenLocalImageRequest &mock_open_local_image_request,
                                librados::IoCtx &io_ctx, const std::string &image_id,
-                               librbd::MockTestImageCtx &mock_image_ctx, int r) {
+                               librbd::MockTestImageCtx *mock_image_ctx, int r) {
     EXPECT_CALL(mock_open_local_image_request,
                 construct(IsSameIoCtx(&io_ctx), image_id));
     EXPECT_CALL(mock_open_local_image_request, send())
-      .WillOnce(Invoke([this, &mock_open_local_image_request, &mock_image_ctx, r]() {
-          *mock_open_local_image_request.image_ctx = &mock_image_ctx;
+      .WillOnce(Invoke([this, &mock_open_local_image_request, mock_image_ctx, r]() {
+          *mock_open_local_image_request.image_ctx = mock_image_ctx;
           m_threads->work_queue->queue(mock_open_local_image_request.on_finish,
                                        r);
         }));
@@ -551,7 +516,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, RemoteDemotePromote) {
   mock_local_image_ctx.journal = &mock_journal;
   MockOpenLocalImageRequest mock_open_local_image_request;
   expect_open_local_image(mock_open_local_image_request, m_local_io_ctx,
-                          mock_local_image_ctx.id, mock_local_image_ctx, 0);
+                          mock_local_image_ctx.id, &mock_local_image_ctx, 0);
   expect_is_resync_requested(mock_journal, false, 0);
 
   // remote demotion / promotion event
@@ -630,7 +595,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, MultipleRemoteDemotePromotes) {
   mock_local_image_ctx.journal = &mock_journal;
   MockOpenLocalImageRequest mock_open_local_image_request;
   expect_open_local_image(mock_open_local_image_request, m_local_io_ctx,
-                          mock_local_image_ctx.id, mock_local_image_ctx, 0);
+                          mock_local_image_ctx.id, &mock_local_image_ctx, 0);
   expect_is_resync_requested(mock_journal, false, 0);
 
   // remote demotion / promotion event
@@ -719,7 +684,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, LocalDemoteRemotePromote) {
   mock_local_image_ctx.journal = &mock_journal;
   MockOpenLocalImageRequest mock_open_local_image_request;
   expect_open_local_image(mock_open_local_image_request, m_local_io_ctx,
-                          mock_local_image_ctx.id, mock_local_image_ctx, 0);
+                          mock_local_image_ctx.id, &mock_local_image_ctx, 0);
   expect_is_resync_requested(mock_journal, false, 0);
 
   // remote demotion / promotion event
@@ -796,7 +761,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, SplitBrainForcePromote) {
   mock_local_image_ctx.journal = &mock_journal;
   MockOpenLocalImageRequest mock_open_local_image_request;
   expect_open_local_image(mock_open_local_image_request, m_local_io_ctx,
-                          mock_local_image_ctx.id, mock_local_image_ctx, 0);
+                          mock_local_image_ctx.id, &mock_local_image_ctx, 0);
   expect_is_resync_requested(mock_journal, false, 0);
 
   // remote demotion / promotion event

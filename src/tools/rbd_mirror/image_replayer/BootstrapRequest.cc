@@ -20,7 +20,6 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
-#include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/ProgressContext.h"
 #include "tools/rbd_mirror/ImageSyncThrottler.h"
 
@@ -454,7 +453,6 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
     return;
   }
 
-  m_created_local_image = true;
   open_local_image();
 }
 
@@ -473,8 +471,8 @@ void BootstrapRequest<I>::update_client_image() {
 
   dout(20) << dendl;
 
-  librbd::journal::MirrorPeerClientMeta client_meta;
-  client_meta.image_id = m_local_image_id;
+  librbd::journal::MirrorPeerClientMeta client_meta{m_local_image_id};
+  client_meta.state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
 
   librbd::journal::ClientData client_data(client_meta);
   bufferlist data_bl;
@@ -504,7 +502,8 @@ void BootstrapRequest<I>::handle_update_client_image(int r) {
     return;
   }
 
-  m_client_meta->image_id = m_local_image_id;
+  *m_client_meta = {m_local_image_id};
+  m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
   get_remote_tags();
 }
 
@@ -514,8 +513,7 @@ void BootstrapRequest<I>::get_remote_tags() {
 
   update_progress("GET_REMOTE_TAGS");
 
-  if (m_created_local_image ||
-      m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_SYNCING) {
+  if (m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_SYNCING) {
     // optimization -- no need to compare remote tags if we just created
     // the image locally or sync was interrupted
     image_sync();
