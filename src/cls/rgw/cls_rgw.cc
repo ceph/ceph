@@ -372,7 +372,8 @@ static int read_bucket_header(cls_method_context_t hctx, struct rgw_bucket_dir_h
     return rc;
 
   if (bl.length() == 0) {
-      return -ENOENT;
+      *header = rgw_bucket_dir_header();
+      return 0;
   }
   bufferlist::iterator iter = bl.begin();
   try {
