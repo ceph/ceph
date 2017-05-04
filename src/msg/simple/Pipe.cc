@@ -860,15 +860,15 @@ void Pipe::set_socket_options()
 
     if (peer_addr.get_family() == AF_INET) {
       r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-      r = -errno;
       if (r < 0) {
+	r = -errno;
         ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
                            << ": " << cpp_strerror(r) << dendl;
       }
     } else if (peer_addr.get_family() == AF_INET6) {
       r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
-      r = -errno;
       if (r < 0) {
+	r = -errno;
         ldout(msgr->cct,0) << "couldn't set IPV6_TCLASS to " << iptos
                            << ": " << cpp_strerror(r) << dendl;
       }
