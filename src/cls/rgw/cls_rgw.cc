@@ -3485,12 +3485,12 @@ static int rgw_cls_lc_get_head(cls_method_context_t hctx, bufferlist *in,  buffe
   return 0;
 }
 
-static void generate_reshard_key(const string& bucket_name, const string& bucket_id, string& key)
+static void generate_reshard_key(const string& bucket_name, const string& bucket_id, string *key)
 {
-  key = bucket_name + "." + bucket_id;
+  *key = bucket_name + "." + bucket_id;
 }
 
-static void generate_reshard_key(const cls_rgw_reshard_entry& entry, string& key)
+static void generate_reshard_key(const cls_rgw_reshard_entry& entry, string *key)
 {
   generate_reshard_key(entry.bucket_name, entry.bucket_id, key);
 }
@@ -3509,7 +3509,7 @@ static int rgw_reshard_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 
 
   string key;
-  generate_reshard_key(op.entry, key);
+  generate_reshard_key(op.entry, &key);
   bufferlist bl;
   int ret = cls_cxx_map_get_val(hctx, key, &bl);
   if (ret < 0 && ret != -ENOENT) {
@@ -3581,7 +3581,7 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
 
   bufferlist bl;
   string key;
-  generate_reshard_key(op.entry, key);
+  generate_reshard_key(op.entry, &key);
   int ret = cls_cxx_map_get_val(hctx, key, &bl);
   if (ret < 0)
     return ret;
@@ -3613,7 +3613,7 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
   }
 
   string key;
-  generate_reshard_key(op.bucket_name, op.bucket_id, key);
+  generate_reshard_key(op.bucket_name, op.bucket_id, &key);
   int ret = cls_cxx_map_remove_key(hctx, key);
   return ret;
 }
