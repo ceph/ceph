@@ -1344,6 +1344,7 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/radosgw
 %{_bindir}/radosgw-token
+%{_bindir}/radosgw-es
 %{_bindir}/radosgw-object-expirer
 %{_mandir}/man8/radosgw.8*
 %dir %{_localstatedir}/lib/ceph/radosgw
