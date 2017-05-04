@@ -49,7 +49,6 @@ int main(int argc, const char **argv)
   if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
-  g_ceph_context->enable_perf_counter();
 
   common_init_finish(g_ceph_context);
 
