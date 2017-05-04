@@ -76,11 +76,6 @@ if(FREEBSD)
   list(APPEND CMAKE_REQUIRED_INCLUDES /usr/local/include)
 endif(FREEBSD)
 
-#put all the libs and binaries in one place
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-
 #Check Includes
 include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)
