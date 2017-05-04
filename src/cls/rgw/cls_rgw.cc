@@ -3555,10 +3555,10 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
   for (it = vals.begin(); it != vals.end(); ++it) {
     iter = it->second.begin();
     try {
-    ::decode(entry, iter);
+      ::decode(entry, iter);
     } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_cls_rehard_list(): failed to decode entry\n");
-    return -EIO;
+      CLS_LOG(1, "ERROR: rgw_cls_rehard_list(): failed to decode entry\n");
+      return -EIO;
    }
     op_ret.entries.push_back(entry);
   }
@@ -3591,7 +3591,7 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
     ::decode(entry, iter);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: rgw_cls_reshard_get : failed to decode entry %s\n",err.what());
-    return -EINVAL;
+    return -EIO;
   }
 
   cls_rgw_reshard_get_ret op_ret;
