@@ -13095,21 +13095,25 @@ int ReplicatedPG::rep_repair_primary_object(const hobject_t& soid, OpRequestRef 
 
   assert(!pg_log.get_missing().is_missing(soid));
   bufferlist bv;
-  int r = get_pgbackend()->objects_get_attr(soid, OI_ATTR, &bv);
-  if (r < 0)
-    return r;
   object_info_t oi;
-  try {
+  eversion_t v;
+  int r = get_pgbackend()->objects_get_attr(soid, OI_ATTR, &bv);
+  if (r < 0) {
+    // Leave v and try to repair without a version, getting attr failed
+    dout(0) << __func__ << ": Need version of replica, objects_get_attr failed: "
+	    << soid << " error=" << r << dendl;
+  } else try {
     bufferlist::iterator bliter = bv.begin();
     ::decode(oi, bliter);
+    v = oi.version;
   } catch (...) {
-    dout(0) << __func__ << ":  bad object_info_t: " << soid << dendl;
-    // XXX: Too bad I can't get the version to recover, so can't repair
-    return -EIO;
+    // Leave v as default constructed. This will fail when sent to older OSDs, but
+    // not much worse than failing here.
+    dout(0) << __func__ << ": Need version of replica, bad object_info_t: " << soid << dendl;
   }
 
-  missing_loc.add_missing(soid, oi.version, eversion_t());
-  if (primary_error(soid, oi.version)) {
+  missing_loc.add_missing(soid, v, eversion_t());
+  if (primary_error(soid, v)) {
     dout(0) << __func__ << " No other replicas available for " << soid << dendl;
     // XXX: If we knew that there is no down osd which could include this
     // object, it would be nice if we could return EIO here.

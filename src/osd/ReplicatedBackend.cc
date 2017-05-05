@@ -1788,6 +1788,10 @@ bool ReplicatedBackend::handle_pull_response(
     pi.recovery_info.copy_subset.intersection_of(
       pop.recovery_info.copy_subset);
   }
+  // If primary doesn't have object info and didn't know version
+  if (pi.recovery_info.version == eversion_t()) {
+    pi.recovery_info.version = pop.version;
+  }
 
   bool first = pi.recovery_progress.first;
   if (first) {
@@ -1965,15 +1969,26 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 	  << " recovery_info: " << recovery_info
           << dendl;
 
+  eversion_t v  = recovery_info.version;
   if (progress.first) {
     store->omap_get_header(coll, ghobject_t(recovery_info.soid), &out_op->omap_header);
     store->getattrs(ch, ghobject_t(recovery_info.soid), out_op->attrset);
 
     // Debug
     bufferlist bv = out_op->attrset[OI_ATTR];
-    object_info_t oi(bv);
+    object_info_t oi;
+    try {
+     bufferlist::iterator bliter = bv.begin();
+     ::decode(oi, bliter);
+    } catch (...) {
+      dout(0) << __func__ << ": bad object_info_t: " << recovery_info.soid << dendl;
+      return -EINVAL;
+    }
 
-    if (oi.version != recovery_info.version) {
+    // If requestor didn't know the version, use ours
+    if (v == eversion_t()) {
+      v = oi.version;
+    } else if (oi.version != v) {
       get_parent()->clog_error() << get_info().pgid << " push "
 				 << recovery_info.soid << " v "
 				 << recovery_info.version
@@ -1984,6 +1999,9 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
     new_progress.first = false;
   }
+  // Once we provide the version subsequent requests will have it, so
+  // at this point it must be known.
+  assert(v != eversion_t());
 
   uint64_t available = cct->_conf->osd_recovery_max_chunk;
   if (!progress.omap_complete) {
@@ -2086,7 +2104,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
   get_parent()->get_logger()->inc(l_osd_push_outb, out_op->data.length());
 
   // send
-  out_op->version = recovery_info.version;
+  out_op->version = v;
   out_op->soid = recovery_info.soid;
   out_op->recovery_info = recovery_info;
   out_op->after_progress = new_progress;
