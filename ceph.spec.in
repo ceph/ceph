@@ -153,6 +153,7 @@ BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
 BuildRequires:	python-Cython
+BuildRequires:  python-setuptools
 %endif
 %if 0%{?fedora} || 0%{?rhel} 
 Requires:	systemd
