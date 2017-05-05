@@ -187,3 +187,130 @@ TEST(AES, LoopKey) {
   utime_t dur = end - start;
   cout << n << " encoded in " << dur << std::endl;
 }
+
+
+void check_encryption(int mode, const bufferlist& expected)
+{
+  CryptoHandler* ch = CryptoHandler::create(mode);
+  ASSERT_NE(ch, nullptr);
+  string error;
+  static char key_s[] =
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+  static char iv_s[] =
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+  bufferptr key(buffer::create_static(sizeof(key_s), key_s));
+  bufferptr iv(buffer::create_static(sizeof(iv_s), iv_s));
+
+  static char data_in[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+  bufferlist in;
+  in.append(data_in, sizeof(data_in));
+  bufferlist out;
+  bufferlist out_decrypt;
+  CryptoKeyHandler* ckh = ch->get_key_handler(key, iv, error);
+  ASSERT_NE(ckh, nullptr);
+  ASSERT_EQ(ckh->encrypt(in, out, &error), 0);
+  ASSERT_EQ(ckh->decrypt(out, out_decrypt, &error), 0);
+  ASSERT_EQ(in, out_decrypt);
+  delete ckh;
+  delete ch;
+}
+
+void check_encryption_errors(int mode, bool check_iv)
+{
+  CryptoHandler* ch = CryptoHandler::create(mode);
+  ASSERT_NE(ch, nullptr);
+  string error;
+  static char key_s[] =
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31};
+  static char key_s_too_long[] =
+      {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+      16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};
+  static char key_s_too_short[] =
+        {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+        16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30};
+
+  static char iv_s[] =
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+  static char iv_s_too_long[] =
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+  static char iv_s_too_short[] =
+    {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
+
+  bufferptr key(buffer::create_static(sizeof(key_s), key_s));
+  bufferptr key_too_long(buffer::create_static(sizeof(key_s_too_long), key_s_too_long));
+  bufferptr key_too_short(buffer::create_static(sizeof(key_s_too_short), key_s_too_short));
+
+  bufferptr iv(buffer::create_static(sizeof(iv_s), iv_s));
+  bufferptr iv_too_long(buffer::create_static(sizeof(iv_s_too_long), iv_s_too_long));
+  bufferptr iv_too_short(buffer::create_static(sizeof(iv_s_too_short), iv_s_too_short));
+
+  CryptoKeyHandler* ckh;
+  ckh = ch->get_key_handler(key_too_long, iv, error);
+  ASSERT_EQ(ckh, nullptr);
+  cout << "Key too long: error = " << error << endl;
+
+  ckh = ch->get_key_handler(key_too_short, iv, error);
+  ASSERT_EQ(ckh, nullptr);
+  cout << "Key too short: error = " << error << endl;
+
+  if (check_iv) {
+    ckh = ch->get_key_handler(key, iv_too_long, error);
+    ASSERT_EQ(ckh, nullptr);
+    cout << "IV too long: error = " << error << endl;
+
+    ckh = ch->get_key_handler(key, iv_too_short, error);
+    ASSERT_EQ(ckh, nullptr);
+    cout << "IV too short: error = " << error << endl;
+  }
+  ckh = ch->get_key_handler(key, iv, error);
+  ASSERT_NE(ckh, nullptr);
+
+  static char data_in[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+  static char data_in_uneven[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+  bufferlist in;
+  in.append(data_in, sizeof(data_in));
+  bufferlist in_uneven;
+  in_uneven.append(data_in_uneven, sizeof(data_in_uneven));
+  bufferlist out;
+
+  ASSERT_NE(ckh->encrypt(in_uneven, out, &error), 0);
+
+  cout << "Improper input length: error = " << error << endl;
+  delete ckh;
+  delete ch;
+}
+
+TEST(AES256, AES_256_CBC) {
+  char expected_s[] = {-14,-112,0,-74,42,73,-97,-48,-87,-13,-102,106,-35,46,119,-128};
+  bufferlist expected;
+  expected.append(expected_s, sizeof(expected_s));
+  check_encryption(CEPH_CRYPTO_AES_256_CBC, expected);
+}
+
+TEST(AES256, AES_256_ECB) {
+  char expected_s[] = {90,110,4,87,8,-5,113,-106,-16,46,85,61,2,-61,-90,-110};
+  bufferlist expected;
+  expected.append(expected_s, sizeof(expected_s));
+  check_encryption(CEPH_CRYPTO_AES_256_ECB, expected);
+}
+
+TEST(AES256, AES_256_CTR) {
+  char expected_s[] = {90,111,6,84,12,-2,119,-111,-8,39,95,54,14,-50,-88,-99};
+  bufferlist expected;
+  expected.append(expected_s, sizeof(expected_s));
+  check_encryption(CEPH_CRYPTO_AES_256_CTR, expected);
+}
+
+TEST(AES256, AES_256_CBC_errors) {
+  check_encryption_errors(CEPH_CRYPTO_AES_256_CBC, true);
+}
+
+TEST(AES256, AES_256_ECB_errors) {
+  check_encryption_errors(CEPH_CRYPTO_AES_256_ECB, false);
+}
+
+TEST(AES256, AES_256_CTR_errors) {
+  check_encryption_errors(CEPH_CRYPTO_AES_256_CTR, true);
+}
