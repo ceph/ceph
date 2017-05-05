@@ -10631,8 +10631,10 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 	subtrees[parent_subtree].erase(dir);
 	for (list<CDir*>::iterator p = resultfrags.begin();
 	     p != resultfrags.end();
-	     ++p)
+	     ++p) {
+	  assert((*p)->is_subtree_root());
 	  subtrees[parent_subtree].insert(*p);
+	}
       }
       
       // adjust my bounds.
@@ -10686,6 +10688,7 @@ void MDCache::adjust_dir_fragments(CInode *diri,
     diri->add_dirfrag(f);
 
     if (was_subtree) {
+      assert(f->is_subtree_root());
       subtrees[f].swap(new_bounds);
       if (parent_subtree)
 	subtrees[parent_subtree].insert(f);
