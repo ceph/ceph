@@ -824,6 +824,7 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
   reply->set_priority(m->get_priority());
   reply->pgid = get_info().pgid;
   reply->map_epoch = m->map_epoch;
+  reply->min_epoch = m->min_epoch;
   reply->replies.swap(replies);
   reply->compute_cost(cct);
 
@@ -902,6 +903,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     reply->set_priority(m->get_priority());
     reply->pgid = get_info().pgid;
     reply->map_epoch = m->map_epoch;
+    reply->min_epoch = m->min_epoch;
     reply->set_pulls(&replies);
     reply->compute_cost(cct);
 
@@ -972,6 +974,7 @@ Message * ReplicatedBackend::generate_subop(
     spg_t(get_info().pgid.pgid, peer.shard),
     soid, acks_wanted,
     get_osdmap()->get_epoch(),
+    parent->get_last_peering_reset_epoch(),
     tid, at_version);
 
   // ship resulting transaction, log entries, and pg_stats
@@ -1152,19 +1155,14 @@ void ReplicatedBackend::repop_applied(RepModifyRef rm)
   dout(10) << __func__ << " on " << rm << " op "
 	   << *rm->op->get_req() << dendl;
   const Message *m = rm->op->get_req();
-
-  Message *ack = NULL;
-  eversion_t version;
-
   const MOSDRepOp *req = static_cast<const MOSDRepOp*>(m);
-  version = req->version;
-  if (!rm->committed)
-    ack = new MOSDRepOpReply(
-	static_cast<const MOSDRepOp*>(m), parent->whoami_shard(),
-	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
+  eversion_t version = req->version;
 
   // send ack to acker only if we haven't sent a commit already
-  if (ack) {
+  if (!rm->committed) {
+    Message *ack = new MOSDRepOpReply(
+      req, parent->whoami_shard(),
+      0, get_osdmap()->get_epoch(), req->min_epoch, CEPH_OSD_FLAG_ACK);
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
     get_parent()->send_message_osd_cluster(
       rm->ackerosd, ack, get_osdmap()->get_epoch());
@@ -1179,19 +1177,19 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   rm->committed = true;
 
   // send commit.
-  const Message *m = rm->op->get_req();
+  const MOSDRepOp *m = static_cast<const MOSDRepOp*>(rm->op->get_req());
+  assert(m->get_type() == MSG_OSD_REPOP);
   dout(10) << __func__ << " on op " << *m
 	   << ", sending commit to osd." << rm->ackerosd
 	   << dendl;
-  assert(m->get_type() == MSG_OSD_REPOP);
   assert(get_osdmap()->is_up(rm->ackerosd));
 
   get_parent()->update_last_complete_ondisk(rm->last_complete);
 
   MOSDRepOpReply *reply = new MOSDRepOpReply(
-    static_cast<const MOSDRepOp*>(m),
+    m,
     get_parent()->whoami_shard(),
-    0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
+    0, get_osdmap()->get_epoch(), m->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
   reply->set_last_complete_ondisk(rm->last_complete);
   reply->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
   get_parent()->send_message_osd_cluster(
@@ -1847,6 +1845,7 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
       msg->from = get_parent()->whoami_shard();
       msg->pgid = get_parent()->primary_spg_t();
       msg->map_epoch = get_osdmap()->get_epoch();
+      msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
       msg->set_priority(prio);
       for (;
            (j != i->second.end() &&
@@ -1882,6 +1881,7 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
     msg->set_priority(prio);
     msg->pgid = get_parent()->primary_spg_t();
     msg->map_epoch = get_osdmap()->get_epoch();
+    msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
     msg->set_pulls(&i->second);
     msg->compute_cost(cct);
     get_parent()->send_message_osd_cluster(msg, con);
