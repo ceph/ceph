@@ -43,7 +43,6 @@ struct IOContext {
   std::list<aio_t> running_aios;    ///< submitting or submitted
   std::atomic_int num_pending = {0};
   std::atomic_int num_running = {0};
-  std::atomic_int num_reading = {0};
 
   explicit IOContext(CephContext* cct, void *p)
     : cct(cct), priv(p)
