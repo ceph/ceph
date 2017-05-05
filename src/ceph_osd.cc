@@ -492,9 +492,6 @@ flushjournal_out:
   boost::scoped_ptr<Throttle> client_byte_throttler(
     new Throttle(g_ceph_context, "osd_client_bytes",
 		 g_conf->osd_client_message_size_cap));
-  boost::scoped_ptr<Throttle> client_msg_throttler(
-    new Throttle(g_ceph_context, "osd_client_messages",
-		 g_conf->osd_client_message_cap));
 
   // All feature bits 0 - 34 should be present from dumpling v0.67 forward
   uint64_t osd_required =
@@ -505,7 +502,7 @@ flushjournal_out:
   ms_public->set_default_policy(Messenger::Policy::stateless_server(0));
   ms_public->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 				   client_byte_throttler.get(),
-				   client_msg_throttler.get());
+				   nullptr);
   ms_public->set_policy(entity_name_t::TYPE_MON,
                                Messenger::Policy::lossy_client(CEPH_FEATURE_UID |
 							       CEPH_FEATURE_PGID64 |
@@ -669,7 +666,6 @@ flushjournal_out:
   delete ms_objecter;
 
   client_byte_throttler.reset();
-  client_msg_throttler.reset();
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
