@@ -45,6 +45,7 @@ public:
   virtual OSDStatIter osd_stat_iter_begin() const = 0;
   virtual OSDStatIter osd_stat_iter_end() const = 0;
   virtual const osd_stat_t *get_osd_stat(int osd) const = 0;
+  virtual const ceph::unordered_map<int32_t,osd_stat_t> *get_osd_stat() const = 0;
   virtual float get_full_ratio() const = 0;
   virtual float get_nearfull_ratio() const = 0;
   virtual bool have_creating_pgs() const = 0;
@@ -121,6 +122,9 @@ public:
       return NULL;
     }
     return &i->second;
+  }
+  const ceph::unordered_map<int32_t,osd_stat_t> *get_osd_stat() const {
+    return &parent.osd_stat;
   }
 
   float get_full_ratio() const { return parent.full_ratio; }
