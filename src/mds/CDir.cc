@@ -1231,10 +1231,7 @@ void CDir::add_waiter(uint64_t tag, MDSInternalContextBase *c)
     }
   }
 
-  if (tag & WAIT_CREATED) {
-    assert(state_test(STATE_CREATING));
-    assert(state_test(STATE_FRAGMENTING));
-  }
+  assert(!(tag & WAIT_CREATED) || state_test(STATE_CREATING));
 
   MDSCacheObject::add_waiter(tag, c);
 }
@@ -1349,11 +1346,9 @@ void CDir::mark_new(LogSegment *ls)
   ls->new_dirfrags.push_back(&item_new);
   state_clear(STATE_CREATING);
 
-  if (state_test(CDir::STATE_FRAGMENTING)) {
-    list<MDSInternalContextBase*> ls;
-    take_waiting(CDir::WAIT_CREATED, ls);
-    cache->mds->queue_waiters(ls);
-  }
+  list<MDSInternalContextBase*> waiters;
+  take_waiting(CDir::WAIT_CREATED, waiters);
+  cache->mds->queue_waiters(waiters);
 }
 
 void CDir::mark_clean()

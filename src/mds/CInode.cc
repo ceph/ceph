@@ -4417,14 +4417,21 @@ private:
 void CInode::maybe_export_pin()
 {
   if (g_conf->mds_bal_export_pin && is_dir() && is_normal()) {
-    dout(20) << "maybe_export_pin " << *this << dendl;
-    mds_rank_t pin = get_projected_inode()->export_pin;
+    mds_rank_t pin = get_export_pin(false);
+    dout(20) << "maybe_export_pin export_pin=" << pin << " on " << *this << dendl;
     if (pin == mdcache->mds->get_nodeid()) {
       for (auto it = dirfrags.begin(); it != dirfrags.end(); it++) {
         CDir *cd = it->second;
+        dout(20) << "dirfrag: " << *cd << dendl;
+        if (cd->state_test(CDir::STATE_CREATING)) {
+          /* inode is not journaled yet */
+          cd->add_waiter(CDir::WAIT_CREATED, new C_CInode_ExportPin(this));
+          dout(15) << "aux subtree pin of " << *cd << " delayed for finished creation" << dendl;
+          continue;
+        }
         if (cd->state_test(CDir::STATE_AUXSUBTREE)) continue;
         CDir *subtree = mdcache->get_subtree_root(cd);
-        if (!subtree) continue;
+        assert(subtree);
         if (subtree->is_ambiguous_auth()) {
           subtree->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_CInode_ExportPin(this));
           dout(15) << "aux subtree pin of " << *cd << " delayed for single auth on subtree " << *subtree << dendl;
