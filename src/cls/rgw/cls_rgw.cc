@@ -124,11 +124,15 @@ static void get_index_ver_key(cls_method_context_t hctx, uint64_t index_ver, str
   *key = buf;
 }
 
-static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id, uint64_t index_ver)
+static void bi_log_prefix(string& key)
 {
   key = BI_PREFIX_CHAR;
   key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+}
 
+static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id, uint64_t index_ver)
+{
+  bi_log_prefix(key);
   get_index_ver_key(hctx, index_ver, &id);
   key.append(id);
 }
@@ -2286,9 +2290,8 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
   string filter = name;
   string start_key = marker;
 
-  string first_instance_idx;
-  encode_obj_versioned_data_key(string(), &first_instance_idx);
-  string end_key = first_instance_idx;
+  string end_key; // stop listing at bi_log_prefix
+  bi_log_prefix(end_key);
 
   int count = 0;
   map<string, bufferlist> keys;
@@ -2536,7 +2539,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   ret = list_olh_entries(hctx, op.name, op.marker, max - count, &op_ret.entries);
   if (ret < 0) {
-    CLS_LOG(0, "ERROR: %s(): list_instance_entries retured ret=%d", __func__, ret);
+    CLS_LOG(0, "ERROR: %s(): list_olh_entries retured ret=%d", __func__, ret);
     return ret;
   }
 
