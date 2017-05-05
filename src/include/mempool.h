@@ -62,15 +62,15 @@ automatically created (name is same as in DEFINE_MEMORY_POOLS_HELPER).
 That namespace contains a set of common STL containers that are predefined
 with the appropriate allocators.
 
-Thus for mempool "unittest_1" we have automatically available to us:
+Thus for mempool "osd" we have automatically available to us:
 
-   mempool::unittest_1::map
-   mempool::unittest_1::multimap
-   mempool::unittest_1::set
-   mempool::unittest_1::multiset
-   mempool::unittest_1::list
-   mempool::unittest_1::vector
-   mempool::unittest_1::unordered_map
+   mempool::osd::map
+   mempool::osd::multimap
+   mempool::osd::set
+   mempool::osd::multiset
+   mempool::osd::list
+   mempool::osd::vector
+   mempool::osd::unordered_map
 
 
 Putting objects in a mempool
@@ -88,7 +88,7 @@ For a class:
 
 Then, in an appropriate .cc file,
 
-  MEMPOOL_DEFINE_OBJECT_FACTORY(Foo, foo, unittest_1);
+  MEMPOOL_DEFINE_OBJECT_FACTORY(Foo, foo, osd);
 
 The second argument can generally be identical to the first, except
 when the type contains a nested scope.  For example, for
@@ -103,7 +103,7 @@ can't use :: in a variable name.)
 In order to use the STL containers, simply use the namespaced variant
 of the container type.  For example,
 
-  mempool::unittest_1::map<int> myvec;
+  mempool::osd::map<int> myvec;
 
 Introspection
 -------------
@@ -146,9 +146,7 @@ namespace mempool {
   f(buffer_data)		      \
   f(osd)			      \
   f(osdmap)			      \
-  f(osdmap_mapping)		      \
-  f(unittest_1)			      \
-  f(unittest_2)
+  f(osdmap_mapping)
 
 
 // give them integer ids
