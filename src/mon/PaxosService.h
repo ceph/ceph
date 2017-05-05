@@ -120,8 +120,6 @@ protected:
   /**
    * @}
    */
-  friend class C_Propose;
-  
 
 public:
   /**
