@@ -1,0 +1,27 @@
+meta:
+- desc: 2 ceph clusters with 3 mons, 3 osds, 5 rbd-mirrors each
+roles:
+- - cluster1.mon.a
+  - cluster1.mon.b
+  - cluster1.osd.0
+  - cluster1.osd.1
+  - cluster1.osd.2
+  - cluster2.mon.c
+  - cluster1.client.mirror1
+  - cluster1.client.mirror2
+  - cluster1.client.mirror3
+  - cluster1.client.mirror4
+  - cluster1.client.mirror5
+  - cluster1.client.0
+- - cluster1.mon.c
+  - cluster2.mon.a
+  - cluster2.mon.b
+  - cluster2.osd.0
+  - cluster2.osd.1
+  - cluster2.osd.2
+  - cluster2.client.mirror1
+  - cluster2.client.mirror2
+  - cluster2.client.mirror3
+  - cluster2.client.mirror4
+  - cluster2.client.mirror5
+  - cluster2.client.0

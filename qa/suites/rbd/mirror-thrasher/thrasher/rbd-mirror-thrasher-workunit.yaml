@@ -1,0 +1,22 @@
+meta:
+- desc: run the rbd_mirror_thrasher.sh workunit to thrash rbd-mirror daemons
+thrasher_workload:
+  sequential:
+    - workunit:
+        clients:
+          cluster1.client.mirror1: [rbd/rbd_mirror_thrasher.sh]
+          cluster1.client.mirror2: [rbd/rbd_mirror_thrasher.sh]
+          cluster1.client.mirror3: [rbd/rbd_mirror_thrasher.sh]
+          cluster1.client.mirror4: [rbd/rbd_mirror_thrasher.sh]
+          cluster1.client.mirror5: [rbd/rbd_mirror_thrasher.sh]
+          cluster2.client.mirror1: [rbd/rbd_mirror_thrasher.sh]
+          cluster2.client.mirror2: [rbd/rbd_mirror_thrasher.sh]
+          cluster2.client.mirror3: [rbd/rbd_mirror_thrasher.sh]
+          cluster2.client.mirror4: [rbd/rbd_mirror_thrasher.sh]
+          cluster2.client.mirror5: [rbd/rbd_mirror_thrasher.sh]
+        env:
+          # override workunit setting of CEPH_ARGS='--cluster'
+          CEPH_ARGS: ''
+          RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
+          RBD_MIRROR_USE_RBD_MIRROR: '1'
+        timeout: 6h

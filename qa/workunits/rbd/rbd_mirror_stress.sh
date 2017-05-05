@@ -83,6 +83,7 @@ wait_for_pool_healthy()
     return 1
 }
 
+setup
 start_mirror ${CLUSTER1}
 start_mirror ${CLUSTER2}
 

@@ -91,9 +91,11 @@ fi
 # by default.
 #
 # RBD_MIRROR_USE_EXISTING_CLUSTER - if set, do not start and stop ceph clusters
-# RBD_MIRROR_USE_RBD_MIRROR - if set, use an existing instance of rbd-mirror
-#                             running as ceph client $CEPH_ID. If empty,
-#                             this script will start and stop rbd-mirror
+# RBD_MIRROR_USE_RBD_MIRROR       - if set, use an existing instance of
+#                                   rbd-mirror running as ceph client $CEPH_ID.
+#                                   If empty, this script will start and stop
+#                                   rbd-mirror
+# RBD_MIRROR_REMOTE               - if set, rbd-mirror is not run on local host
 
 #
 # Functions
@@ -174,11 +176,8 @@ expect_failure()
     return 0
 }
 
-setup()
+setup_tempdir()
 {
-    local c
-    trap cleanup INT TERM EXIT
-
     if [ -n "${RBD_MIRROR_TEMDIR}" ]; then
 	test -d "${RBD_MIRROR_TEMDIR}" ||
 	mkdir "${RBD_MIRROR_TEMDIR}"
@@ -202,6 +201,13 @@ setup()
 
         cd ${TEMPDIR}
     fi
+}
+
+setup()
+{
+    trap cleanup INT TERM EXIT
+
+    setup_tempdir
 
     ceph --cluster ${CLUSTER1} osd pool create ${POOL} 64 64
     ceph --cluster ${CLUSTER1} osd pool create ${PARENT_POOL} 64 64
@@ -297,6 +303,8 @@ admin_daemon()
 {
     local cluster=$1 ; shift
     local instance
+
+    test -z "${RBD_MIRROR_REMOTE}"
 
     set_cluster_instance "${cluster}" cluster instance
 
@@ -442,7 +450,11 @@ wait_for_image_replay_started()
     local pool=$2
     local image=$3
 
-    wait_for_image_replay_state "${cluster}" "${pool}" "${image}" started
+    if [ -z "${RBD_MIRROR_REMOTE}" ]; then
+	wait_for_image_replay_state "${cluster}" "${pool}" "${image}" started
+    else
+	wait_for_status_in_pool_dir ${cluster} ${pool} ${image} 'up+replaying'
+    fi
 }
 
 wait_for_image_replay_stopped()
@@ -451,7 +463,12 @@ wait_for_image_replay_stopped()
     local pool=$2
     local image=$3
 
-    wait_for_image_replay_state "${cluster}" "${pool}" "${image}" stopped
+    if [ -z "${RBD_MIRROR_REMOTE}" ]; then
+	wait_for_image_replay_state "${cluster}" "${pool}" "${image}" stopped
+    else
+	wait_for_status_in_pool_dir ${cluster} ${pool} ${image} \
+				    'up+stopped\|up+error'
+    fi
 }
 
 get_position()
@@ -501,6 +518,7 @@ wait_for_replay_complete()
     while true; do
         for s in 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16 32 32; do
 	    sleep ${s}
+	    test -z "${RBD_MIRROR_REMOTE}" &&
 	    flush "${local_cluster}" "${pool}" "${image}"
 	    master_pos=$(get_master_position "${cluster}" "${pool}" "${image}")
 	    mirror_pos=$(get_mirror_position "${cluster}" "${pool}" "${image}")
@@ -852,6 +870,28 @@ request_resync_image()
     rbd --cluster=${cluster} -p ${pool} mirror image resync ${image}
 }
 
+is_pool_leader()
+{
+    local cluster=$1
+    local pool=$2
+    local peer=$3
+
+    admin_daemon "${cluster}" rbd mirror status "${pool}" "${peer}" |
+	grep '"leader": true'
+}
+
+release_pool_leader()
+{
+    local cluster=$1
+    local pool=$2
+    local peer=$3
+    local cmd="rbd mirror leader release"
+
+    test -n "${pool}" && cmd="${cmd} ${pool} ${peer}"
+
+    admin_daemon "${cluster}" ${cmd}
+}
+
 #
 # Main
 #
@@ -871,5 +911,3 @@ then
 fi
 
 set -xe
-
-setup

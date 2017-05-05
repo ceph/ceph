@@ -1,0 +1,46 @@
+meta:
+- desc: run many rbd-mirror daemons per cluster
+overrides:
+  ceph:
+    conf:
+      client.mirror1:
+        # override to make these names predictable
+        admin socket: /var/run/ceph/$cluster-$name.asok
+        pid file: /var/run/ceph/$cluster-$name.pid
+      client.mirror2:
+        # override to make these names predictable
+        admin socket: /var/run/ceph/$cluster-$name.asok
+        pid file: /var/run/ceph/$cluster-$name.pid
+      client.mirror3:
+        # override to make these names predictable
+        admin socket: /var/run/ceph/$cluster-$name.asok
+        pid file: /var/run/ceph/$cluster-$name.pid
+      client.mirror4:
+        # override to make these names predictable
+        admin socket: /var/run/ceph/$cluster-$name.asok
+        pid file: /var/run/ceph/$cluster-$name.pid
+      client.mirror5:
+        # override to make these names predictable
+        admin socket: /var/run/ceph/$cluster-$name.asok
+        pid file: /var/run/ceph/$cluster-$name.pid
+tasks:
+- rbd-mirror:
+    client: cluster1.client.mirror1
+- rbd-mirror:
+    client: cluster1.client.mirror2
+- rbd-mirror:
+    client: cluster1.client.mirror3
+- rbd-mirror:
+    client: cluster1.client.mirror4
+- rbd-mirror:
+    client: cluster1.client.mirror5
+- rbd-mirror:
+    client: cluster2.client.mirror1
+- rbd-mirror:
+    client: cluster2.client.mirror2
+- rbd-mirror:
+    client: cluster2.client.mirror3
+- rbd-mirror:
+    client: cluster2.client.mirror4
+- rbd-mirror:
+    client: cluster2.client.mirror5
