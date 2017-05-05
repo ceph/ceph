@@ -340,7 +340,7 @@ endif(WITH_DPDK)
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" ON)
-option(WITH_RADOSGW_ASIO_FRONTEND "Rados Gateway's ASIO frontend is enabled" ON)
+option(WITH_RADOSGW_BEAST_FRONTEND "Rados Gateway's Beast frontend is enabled" ON)
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
   if(WITH_RADOSGW_FCGI_FRONTEND)
@@ -508,7 +508,7 @@ endif()
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
 set(BOOST_COMPONENTS
-	container thread system regex random program_options date_time iostreams)
+	container thread system regex random program_options date_time iostreams coroutine context)
 if(WITH_MGR)
 	list(APPEND BOOST_COMPONENTS python)
 endif()
