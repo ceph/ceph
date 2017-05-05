@@ -824,7 +824,7 @@ add_executable(unittest_libcephfs_config
   libcephfs_config.cc
   )
 add_ceph_unittest(unittest_libcephfs_config ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_libcephfs_config)
-target_link_libraries(unittest_libcephfs_config cephfs)
+target_link_libraries(unittest_libcephfs_config cephfs ${EXTRALIBS})
 endif(WITH_LIBCEPHFS)
 
 if(WITH_RBD)
