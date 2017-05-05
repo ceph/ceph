@@ -28,17 +28,66 @@
 
 #include "mon/PGMap.h"
 
-class PGStatService : public PGMap {
+class PGStatService {
+public:
+  PGStatService() {}
+  virtual ~PGStatService() {}
+  virtual void reset(const PGMap& o) = 0;
+  virtual bool is_readable() const = 0;
+  virtual const pool_stat_t* get_pool_stat(int poolid) const = 0;
+  virtual const pool_stat_t& get_pg_sum() const = 0;
+  virtual const osd_stat_t& get_osd_sum() const = 0;
+
+  typedef ceph::unordered_map<pg_t,pg_stat_t>::const_iterator PGStatIter;
+  typedef ceph::unordered_map<int32_t,osd_stat_t>::const_iterator OSDStatIter;
+  virtual PGStatIter pg_stat_iter_begin() const = 0;
+  virtual PGStatIter pg_stat_iter_end() const = 0;
+  virtual OSDStatIter osd_stat_iter_begin() const = 0;
+  virtual OSDStatIter osd_stat_iter_end() const = 0;
+  virtual const osd_stat_t *get_osd_stat(int osd) const = 0;
+  virtual float get_full_ratio() const = 0;
+  virtual float get_nearfull_ratio() const = 0;
+  virtual bool have_creating_pgs() const = 0;
+  virtual bool is_creating_pg(pg_t pgid) const = 0;
+  virtual epoch_t get_min_last_epoch_clean() const = 0;
+
+  virtual PGMap& get_pg_map() = 0;
+
+  virtual bool have_full_osds() const = 0;
+  virtual bool have_nearfull_osds() const = 0;
+
+  virtual size_t get_num_pg_by_osd(int osd) const = 0;
+  virtual void print_summary(Formatter *f, ostream *out) const = 0;
+  virtual void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const = 0;
+  virtual void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
+			       bool verbose) const = 0;
+
+  virtual int process_pg_command(const string& prefix,
+				 const map<string,cmd_vartype>& cmdmap,
+				 const OSDMap& osdmap,
+				 Formatter *f,
+				 stringstream *ss,
+				 bufferlist *odata) = 0;
+
+  virtual int reweight_by_utilization(const OSDMap &osd_map,
+			      int oload,
+			      double max_changef,
+			      int max_osds,
+			      bool by_pg, const set<int64_t> *pools,
+			      bool no_increasing,
+			      mempool::osdmap::map<int32_t, uint32_t>* new_weights,
+			      std::stringstream *ss,
+			      std::string *out_str,
+			      Formatter *f) = 0;
+};
+
+class PGMapStatService : public PGMap, public PGStatService {
   PGMap& parent;
 public:
-  PGStatService() : PGMap(),
+  PGMapStatService() : PGMap(), PGStatService(),
 		    parent(*static_cast<PGMap*>(this)) {}
-  PGStatService(const PGMap& o) : PGMap(o),
+  PGMapStatService(const PGMap& o) : PGMap(o), PGStatService(),
 				  parent(*static_cast<PGMap*>(this)) {}
-  PGStatService& operator=(const PGMap& o) {
-    reset(o);
-    return *this;
-  }
   void reset(const PGMap& o) {
     parent = o;
   }
@@ -47,7 +96,7 @@ public:
   /** returns true if the underlying data is readable. Always true
    * post-luminous, but not when we are redirecting to the PGMonitor
    */
-  bool is_readable() { return true; }
+  bool is_readable() const { return true; }
 
   const pool_stat_t* get_pool_stat(int poolid) const {
     auto i = parent.pg_pool_sum.find(poolid);
@@ -62,8 +111,6 @@ public:
   const pool_stat_t& get_pg_sum() const { return parent.pg_sum; }
   const osd_stat_t& get_osd_sum() const { return parent.osd_sum; }
 
-  typedef ceph::unordered_map<pg_t,pg_stat_t>::const_iterator PGStatIter;
-  typedef ceph::unordered_map<int32_t,osd_stat_t>::const_iterator OSDStatIter;
   PGStatIter pg_stat_iter_begin() const { return parent.pg_stat.begin(); }
   PGStatIter pg_stat_iter_end() const { return parent.pg_stat.end(); }
   OSDStatIter osd_stat_iter_begin() const { return parent.osd_stat.begin(); }

@@ -179,7 +179,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   leader_supported_mon_commands_size(0),
   mgr_messenger(mgr_m),
   mgr_client(cct_, mgr_m),
-  pgservice(new PGStatService),
+  pgservice(new PGMapStatService),
   store(s),
   
   state(STATE_PROBING),
