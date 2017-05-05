@@ -655,12 +655,7 @@ CDir *CInode::add_dirfrag(CDir *dir)
     dir->get(CDir::PIN_STICKY);
   }
 
-  if (get_export_pin(false) != mdcache->mds->get_nodeid()) {
-    /* We don't need to look at parents export pins as that would be done when
-     * the parent's dirfrags are loaded.
-     */
-    maybe_export_pin();
-  }
+  maybe_export_pin();
 
   return dir;
 }
