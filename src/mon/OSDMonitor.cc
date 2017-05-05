@@ -3960,8 +3960,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   }
   else if (prefix == "osd perf" ||
 	   prefix == "osd blocked-by") {
-    r = process_pg_map_command(prefix, cmdmap, mon->pgservice->get_pg_map(),
-			       osdmap, f.get(), &ss, &rdata);
+    r = mon->pgservice->process_pg_command(prefix, cmdmap,
+					   osdmap, f.get(), &ss, &rdata);
   }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
@@ -4851,8 +4851,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     r = 0;
   } else if (prefix == "osd pool stats") {
-    r = process_pg_map_command(prefix, cmdmap, mon->pgservice->get_pg_map(),
-			       osdmap, f.get(), &ss, &rdata);
+    r = mon->pgservice->process_pg_command(prefix, cmdmap,
+					   osdmap, f.get(), &ss, &rdata);
   } else if (prefix == "osd pool get-quota") {
     string pool_name;
     cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
