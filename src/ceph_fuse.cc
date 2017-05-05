@@ -194,7 +194,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     // get monmap
     Messenger *messenger = NULL;
-    Client *client;
+    StandaloneClient *client;
     CephFuse *cfuse;
     UserPerm perms;
     int tester_r = 0;
@@ -213,7 +213,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     messenger->set_policy(entity_name_t::TYPE_MDS,
 			  Messenger::Policy::lossless_client(0));
 
-    client = new Client(messenger, mc);
+    client = new StandaloneClient(messenger, mc);
     if (filer_flags) {
       client->set_filer_flags(filer_flags);
     }
