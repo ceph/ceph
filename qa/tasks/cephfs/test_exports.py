@@ -5,8 +5,22 @@ from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 log = logging.getLogger(__name__)
 
-
 class TestExports(CephFSTestCase):
+    def _wait_subtrees(self, status, rank, test):
+        timeout = 30
+        pause = 2
+        test = sorted(test)
+        for i in range(timeout/pause):
+            subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
+            subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
+            log.info(subtrees)
+            filtered = sorted([(s['dir']['path'], s['auth_first']) for s in subtrees])
+            log.info(filtered)
+            if filtered == test:
+                return subtrees
+            time.sleep(pause)
+        raise RuntimeError("rank {0} failed to reach desired subtree state", rank)
+
     def test_export_pin(self):
         self.fs.set_allow_multimds(True)
         self.fs.set_max_mds(2)
@@ -14,33 +28,19 @@ class TestExports(CephFSTestCase):
         status = self.fs.status()
 
         self.mount_a.run_shell(["mkdir", "-p", "1/2/3"])
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 0)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1'), subtrees)
-        self.assertTrue(len(subtrees) == 0)
+        self._wait_subtrees(status, 0, [])
 
         # NOP
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "-1", "1"])
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 0)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1'), subtrees)
-        self.assertTrue(len(subtrees) == 0)
+        self._wait_subtrees(status, 0, [])
 
         # NOP (rank < -1)
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "-2341", "1"])
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 0)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1'), subtrees)
-        self.assertTrue(len(subtrees) == 0)
+        self._wait_subtrees(status, 0, [])
 
         # pin /1 to rank 1
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "1", "1"])
-        time.sleep(10)
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 1)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1'), subtrees)
-        log.info(subtrees)
-        self.assertTrue(len(subtrees) == 1 and subtrees[0]['auth_first'] == 1)
+        self._wait_subtrees(status, 1, [('/1', 1)])
 
         # Check export_targets is set properly
         status = self.fs.status()
@@ -50,72 +50,39 @@ class TestExports(CephFSTestCase):
 
         # redundant pin /1/2 to rank 1
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "1", "1/2"])
-        time.sleep(10)
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 1)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1'), subtrees)
-        self.assertTrue(len(subtrees) == 2 and subtrees[0]['auth_first'] == 1 and subtrees[1]['auth_first'] == 1)
+        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 1)])
 
         # change pin /1/2 to rank 0
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "0", "1/2"])
-        time.sleep(10)
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 0)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1'), subtrees)
-        self.assertTrue(len(subtrees) == 2)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1/2'), subtrees)
-        self.assertTrue(len(subtrees) == 1 and subtrees[0]['auth_first'] == 0)
+        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 0)])
+        self._wait_subtrees(status, 0, [('/1', 1), ('/1/2', 0)])
 
         # change pin /1/2/3 to (presently) non-existent rank 2
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "2", "1/2/3"])
-        time.sleep(10)
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 0)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1'), subtrees)
-        self.assertTrue(len(subtrees) == 2)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1/2'), subtrees)
-        self.assertTrue(len(subtrees) == 1 and subtrees[0]['auth_first'] == 0)
+        self._wait_subtrees(status, 0, [('/1', 1), ('/1/2', 0)])
+        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 0)])
 
         # change pin /1/2 back to rank 1
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "1", "1/2"])
-        time.sleep(10)
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 1)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1'), subtrees)
-        self.assertTrue(len(subtrees) == 2 and subtrees[0]['auth_first'] == 1 and subtrees[1]['auth_first'] == 1)
+        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 1)])
 
         # add another directory pinned to 1
         self.mount_a.run_shell(["mkdir", "-p", "1/4/5"])
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "1", "1/4/5"])
+        self._wait_subtrees(status, 1, [('/1', 1), ('/1/2', 1), ('/1/4/5', 1)])
 
         # change pin /1 to 0
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "0", "1"])
-        time.sleep(20)
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 0)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'] == '/1', subtrees)
-        self.assertTrue(len(subtrees) == 1)
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 1)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1/'), subtrees)
-        self.assertTrue(len(subtrees) == 2 and subtrees[0]['auth_first'] == 1 and subtrees[1]['auth_first'] == 1) # /1/2 and /1/4/5
+        self._wait_subtrees(status, 0, [('/1', 0), ('/1/2', 1), ('/1/4/5', 1)])
 
         # change pin /1/2 to default (-1); does the subtree root properly respect it's parent pin?
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "-1", "1/2"])
-        time.sleep(10)
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 1)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/1'), subtrees)
-        self.assertTrue(len(subtrees) == 1) # /1/4 still here!
+        self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1)])
 
         if len(list(status.get_standbys())):
             self.fs.set_max_mds(3)
-            time.sleep(10)
-            status = self.fs.status()
-            subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 2)['name'])
-            log.info(subtrees)
-            subtrees = filter(lambda s: s['dir']['path'].startswith('/1/2/3'), subtrees)
-            self.assertTrue(len(subtrees) == 1)
+            self.fs.wait_for_state('up:active', rank=2)
+            self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2)])
 
             # Check export_targets is set properly
             status = self.fs.status()
@@ -130,14 +97,7 @@ class TestExports(CephFSTestCase):
         # Test rename
         self.mount_a.run_shell(["mkdir", "-p", "a/b", "aa/bb"])
         self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "1", "a"])
-        time.sleep(10);
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 0)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/a'), subtrees)
-        self.assertTrue(len(subtrees) == 1 and subtrees[0]['auth_first'] == 1)
+        self.mount_a.run_shell(["setfattr", "-n", "ceph.dir.pin", "-v", "0", "aa/bb"])
+        self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/aa/bb', 0)])
         self.mount_a.run_shell(["mv", "aa", "a/b/"])
-        time.sleep(10)
-        subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, 0)['name'])
-        log.info(subtrees)
-        subtrees = filter(lambda s: s['dir']['path'].startswith('/a'), subtrees)
-        self.assertTrue(len(subtrees) == 1 and subtrees[0]['auth_first'] == 1)
+        self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/a/b/aa/bb', 0)])
