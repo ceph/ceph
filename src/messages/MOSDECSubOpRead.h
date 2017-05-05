@@ -51,6 +51,7 @@ public:
     ::decode(op, p);
     if (header.version >= 3) {
       ::decode(min_epoch, p);
+      decode_trace(p);
     } else {
       min_epoch = map_epoch;
     }
@@ -61,6 +62,7 @@ public:
     ::encode(map_epoch, payload);
     ::encode(op, payload, features);
     ::encode(min_epoch, payload);
+    encode_trace(payload, features);
   }
 
   const char *get_type_name() const override { return "MOSDECSubOpRead"; }

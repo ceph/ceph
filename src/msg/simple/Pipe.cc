@@ -1718,6 +1718,8 @@ void Pipe::reader()
 	continue;
       }
 
+      m->trace.event("pipe read message");
+
       if (state == STATE_CLOSED ||
 	  state == STATE_CONNECTING) {
 	in_q->dispatch_throttle_release(m->get_dispatch_throttle_size());
@@ -1951,6 +1953,8 @@ void Pipe::writer()
 	blist.append(m->get_data());
 
         pipe_lock.Unlock();
+
+        m->trace.event("pipe writing message");
 
         ldout(msgr->cct,20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(header, footer, blist);
@@ -2196,7 +2200,8 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
   ldout(msgr->cct,20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
-  message = decode_message(msgr->cct, msgr->crcflags, header, footer, front, middle, data);
+  message = decode_message(msgr->cct, msgr->crcflags, header, footer,
+                           front, middle, data, connection_state.get());
   if (!message) {
     ret = -EINVAL;
     goto out_dethrottle;
