@@ -1304,7 +1304,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       dout(7) << __func__ << " in the middle of upgrading, "
 	      << " trimming pending creating_pgs using pgmap" << dendl;
-      trim_creating_pgs(&pending_creatings, mon->pgservice->get_pg_map());
+      trim_creating_pgs(&pending_creatings, *mon->pgservice->get_pg_stat());
     }
     bufferlist creatings_bl;
     ::encode(pending_creatings, creatings_bl);
@@ -1313,12 +1313,12 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 }
 
 void OSDMonitor::trim_creating_pgs(creating_pgs_t* creating_pgs,
-				   const PGMap& pgm)
+				   const ceph::unordered_map<pg_t,pg_stat_t>& pg_stat)
 {
   auto p = creating_pgs->pgs.begin();
   while (p != creating_pgs->pgs.end()) {
-    auto q = pgm.pg_stat.find(p->first);
-    if (q != pgm.pg_stat.end() &&
+    auto q = pg_stat.find(p->first);
+    if (q != pg_stat.end() &&
 	!(q->second.state & PG_STATE_CREATING)) {
       dout(20) << __func__ << " pgmap shows " << p->first << " is created"
 	       << dendl;
