@@ -24,7 +24,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::io::ObjectRequest: "
+#define dout_prefix *_dout << "librbd::io::ObjectRequest: " << this \
+                           << " " << __func__ << ": "
 
 namespace librbd {
 namespace io {
@@ -105,7 +106,7 @@ template <typename I>
 void ObjectRequest<I>::complete(int r)
 {
   if (should_complete(r)) {
-    ldout(m_ictx->cct, 20) << "complete " << this << dendl;
+    ldout(m_ictx->cct, 20) << dendl;
     if (m_hide_enoent && r == -ENOENT) {
       r = 0;
     }
@@ -124,8 +125,8 @@ bool ObjectRequest<I>::compute_parent_extents() {
   if (r < 0) {
     // NOTE: it's possible for a snapshot to be deleted while we are
     // still reading from it
-    lderr(m_ictx->cct) << this << " compute_parent_extents: failed to "
-                       << "retrieve parent overlap: " << cpp_strerror(r)
+    lderr(m_ictx->cct) << "failed to retrieve parent overlap: "
+                       << cpp_strerror(r)
                        << dendl;
     m_has_parent = false;
     m_parent_extents.clear();
@@ -135,8 +136,7 @@ bool ObjectRequest<I>::compute_parent_extents() {
   uint64_t object_overlap = m_ictx->prune_parent_extents(
     m_parent_extents, parent_overlap);
   if (object_overlap > 0) {
-    ldout(m_ictx->cct, 20) << this << " compute_parent_extents: "
-                           << "overlap " << parent_overlap << " "
+    ldout(m_ictx->cct, 20) << "overlap " << parent_overlap << " "
                            << "extents " << m_parent_extents << dendl;
     m_has_parent = !m_parent_extents.empty();
     return true;
@@ -175,7 +175,7 @@ void ObjectReadRequest<I>::guard_read()
   RWLock::RLocker parent_locker(image_ctx->parent_lock);
 
   if (this->has_parent()) {
-    ldout(image_ctx->cct, 20) << __func__ << " guarding read" << dendl;
+    ldout(image_ctx->cct, 20) << "guarding read" << dendl;
     m_state = LIBRBD_AIO_READ_GUARD;
   }
 }
@@ -184,8 +184,7 @@ template <typename I>
 bool ObjectReadRequest<I>::should_complete(int r)
 {
   ImageCtx *image_ctx = this->m_ictx;
-  ldout(image_ctx->cct, 20) << "should_complete " << this << " "
-                            << this->m_oid << " "
+  ldout(image_ctx->cct, 20) << this->m_oid << " "
                             << this->m_object_off << "~" << this->m_object_len
                             << " r = " << r << dendl;
 
@@ -193,8 +192,7 @@ bool ObjectReadRequest<I>::should_complete(int r)
 
   switch (m_state) {
   case LIBRBD_AIO_READ_GUARD:
-    ldout(image_ctx->cct, 20) << "should_complete " << this
-                              << " READ_CHECK_GUARD" << dendl;
+    ldout(image_ctx->cct, 20) << "READ_CHECK_GUARD" << dendl;
 
     // This is the step to read from parent
     if (!m_tried_parent && r == -ENOENT) {
@@ -235,8 +233,7 @@ bool ObjectReadRequest<I>::should_complete(int r)
     }
     break;
   case LIBRBD_AIO_READ_COPYUP:
-    ldout(image_ctx->cct, 20) << "should_complete " << this << " READ_COPYUP"
-                              << dendl;
+    ldout(image_ctx->cct, 20) << "READ_COPYUP" << dendl;
     // This is the extra step for copy-on-read: kick off an asynchronous copyup.
     // It is different from copy-on-write as asynchronous copyup will finish
     // by itself so state won't go back to LIBRBD_AIO_READ_GUARD.
@@ -250,8 +247,7 @@ bool ObjectReadRequest<I>::should_complete(int r)
     }
     break;
   case LIBRBD_AIO_READ_FLAT:
-    ldout(image_ctx->cct, 20) << "should_complete " << this << " READ_FLAT"
-                              << dendl;
+    ldout(image_ctx->cct, 20) << "READ_FLAT" << dendl;
     // The read content should be deposit in m_read_data
     break;
   default:
@@ -265,8 +261,8 @@ bool ObjectReadRequest<I>::should_complete(int r)
 template <typename I>
 void ObjectReadRequest<I>::send() {
   ImageCtx *image_ctx = this->m_ictx;
-  ldout(image_ctx->cct, 20) << "send " << this << " " << this->m_oid << " "
-                            << this->m_object_off << "~" << this->m_object_len
+  ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off
+                            << "~" << this->m_object_len
                             << dendl;
 
   {
@@ -304,6 +300,9 @@ template <typename I>
 void ObjectReadRequest<I>::send_copyup()
 {
   ImageCtx *image_ctx = this->m_ictx;
+  ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off
+                            << "~" << this->m_object_len << dendl;
+
   {
     RWLock::RLocker snap_locker(image_ctx->snap_lock);
     RWLock::RLocker parent_locker(image_ctx->parent_lock);
@@ -336,10 +335,8 @@ void ObjectReadRequest<I>::read_from_parent(Extents&& parent_extents)
   AioCompletion *parent_completion = AioCompletion::create_and_start<
     ObjectRequest<I> >(this, image_ctx, AIO_TYPE_READ);
 
-  ldout(image_ctx->cct, 20) << "read_from_parent this = " << this
-                            << " parent completion " << parent_completion
-                            << " extents " << parent_extents
-                            << dendl;
+  ldout(image_ctx->cct, 20) << "parent completion " << parent_completion
+                            << " extents " << parent_extents << dendl;
   ImageRequest<>::aio_read(image_ctx->parent, parent_completion,
                            std::move(parent_extents),
                            ReadResult{&m_read_data}, 0);
@@ -367,15 +364,15 @@ void AbstractObjectWriteRequest::guard_write()
   if (has_parent()) {
     m_state = LIBRBD_AIO_WRITE_GUARD;
     m_write.assert_exists();
-    ldout(m_ictx->cct, 20) << __func__ << " guarding write" << dendl;
+    ldout(m_ictx->cct, 20) << "guarding write" << dendl;
   }
 }
 
 bool AbstractObjectWriteRequest::should_complete(int r)
 {
-  ldout(m_ictx->cct, 20) << get_op_type() << " " << this << " " << m_oid
-                         << " " << m_object_off << "~" << m_object_len
-                         << " should_complete: r = " << r << dendl;
+  ldout(m_ictx->cct, 20) << get_op_type() << m_oid << " "
+                         << m_object_off << "~" << m_object_len
+                         << " r = " << r << dendl;
 
   bool finished = true;
   switch (m_state) {
@@ -443,9 +440,8 @@ bool AbstractObjectWriteRequest::should_complete(int r)
 }
 
 void AbstractObjectWriteRequest::send() {
-  ldout(m_ictx->cct, 20) << "send " << get_op_type() << " " << this <<" "
-                         << m_oid << " " << m_object_off << "~"
-                         << m_object_len << dendl;
+  ldout(m_ictx->cct, 20) << get_op_type() << " " << m_oid << " "
+                         << m_object_off << "~" << m_object_len << dendl;
   {
     RWLock::RLocker snap_lock(m_ictx->snap_lock);
     if (m_ictx->object_map == nullptr) {
@@ -461,7 +457,7 @@ void AbstractObjectWriteRequest::send() {
 }
 
 void AbstractObjectWriteRequest::send_pre_object_map_update() {
-  ldout(m_ictx->cct, 20) << __func__ << dendl;
+  ldout(m_ictx->cct, 20) << dendl;
 
   {
     RWLock::RLocker snap_lock(m_ictx->snap_lock);
@@ -469,9 +465,8 @@ void AbstractObjectWriteRequest::send_pre_object_map_update() {
       uint8_t new_state;
       pre_object_map_update(&new_state);
       RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-      ldout(m_ictx->cct, 20) << __func__ << this << " " << m_oid << " "
-                             << m_object_off << "~" << m_object_len
-                             << dendl;
+      ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off
+                             << "~" << m_object_len << dendl;
       m_state = LIBRBD_AIO_WRITE_PRE;
 
       if (m_ictx->object_map->aio_update<ObjectRequest>(
@@ -485,6 +480,8 @@ void AbstractObjectWriteRequest::send_pre_object_map_update() {
 }
 
 bool AbstractObjectWriteRequest::send_post_object_map_update() {
+  ldout(m_ictx->cct, 20) << dendl;
+
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
   if (m_ictx->object_map == nullptr || !post_object_map_update()) {
     return true;
@@ -494,8 +491,8 @@ bool AbstractObjectWriteRequest::send_post_object_map_update() {
   assert(m_ictx->exclusive_lock->is_lock_owner());
 
   RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-  ldout(m_ictx->cct, 20) << __func__ << this << " " << m_oid << " "
-                         << m_object_off << "~" << m_object_len << dendl;
+  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off
+                         << "~" << m_object_len << dendl;
   m_state = LIBRBD_AIO_WRITE_POST;
 
   if (m_ictx->object_map->aio_update<ObjectRequest>(
@@ -507,8 +504,7 @@ bool AbstractObjectWriteRequest::send_post_object_map_update() {
 }
 
 void AbstractObjectWriteRequest::send_write() {
-  ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
-      		         << m_object_off << "~" << m_object_len
+  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off << "~" << m_object_len
                          << " object exist " << m_object_exist << dendl;
 
   if (!m_object_exist && has_parent()) {
@@ -521,8 +517,8 @@ void AbstractObjectWriteRequest::send_write() {
 
 void AbstractObjectWriteRequest::send_copyup()
 {
-  ldout(m_ictx->cct, 20) << "send_copyup " << this << " " << m_oid << " "
-                         << m_object_off << "~" << m_object_len << dendl;
+  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off
+                         << "~" << m_object_len << dendl;
   m_state = LIBRBD_AIO_WRITE_COPYUP;
 
   m_ictx->copyup_list_lock.Lock();
@@ -598,8 +594,7 @@ void ObjectWriteRequest::add_write_ops(librados::ObjectWriteOperation *wr) {
 
 void ObjectWriteRequest::send_write() {
   bool write_full = (m_object_off == 0 && m_object_len == m_ictx->get_object_size());
-  ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
-                         << m_object_off << "~" << m_object_len
+  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off << "~" << m_object_len
                          << " object exist " << m_object_exist
                          << " write_full " << write_full << dendl;
   if (write_full && !has_parent()) {
@@ -617,14 +612,13 @@ void ObjectRemoveRequest::guard_write() {
   }
 }
 void ObjectRemoveRequest::send_write() {
-  ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
-                         << m_object_off << "~" << m_object_len << dendl;
+  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off
+                         << "~" << m_object_len << dendl;
   send_pre_object_map_update();
 }
 
 void ObjectTruncateRequest::send_write() {
-  ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid
-                         << " truncate " << m_object_off << dendl;
+  ldout(m_ictx->cct, 20) << m_oid << " truncate " << m_object_off << dendl;
   if (!m_object_exist && ! has_parent()) {
     m_state = LIBRBD_AIO_WRITE_FLAT;
     Context *ctx = util::create_context_callback<ObjectRequest>(this);
@@ -647,8 +641,7 @@ void ObjectWriteSameRequest::add_write_ops(librados::ObjectWriteOperation *wr) {
 
 void ObjectWriteSameRequest::send_write() {
   bool write_full = (m_object_off == 0 && m_object_len == m_ictx->get_object_size());
-  ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
-                         << m_object_off << "~" << m_object_len
+  ldout(m_ictx->cct, 20) << m_oid << " " << m_object_off << "~" << m_object_len
                          << " write_full " << write_full << dendl;
   if (write_full && !has_parent()) {
     m_guard = false;
