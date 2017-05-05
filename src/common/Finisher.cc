@@ -47,7 +47,7 @@ void *Finisher::finisher_thread_entry()
   ldout(cct, 10) << "finisher_thread start" << dendl;
 
   utime_t start;
-  uint64_t count;
+  uint64_t count = 0;
   while (!finisher_stop) {
     /// Every time we are woken up, we process the queue until it is empty.
     while (!finisher_queue.empty()) {
