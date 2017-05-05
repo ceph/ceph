@@ -7939,7 +7939,6 @@ void BlueStore::_kv_sync_thread()
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
-      kv_sync_cond.notify_all();
       kv_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
