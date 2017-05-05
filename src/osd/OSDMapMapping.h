@@ -285,6 +285,7 @@ public:
 	   int *acting_primary) const {
     auto p = pools.find(pgid.pool());
     assert(p != pools.end());
+    assert(pgid.ps() < p->second.pg_num);
     p->second.get(pgid.ps(), up, up_primary, acting, acting_primary);
   }
 
