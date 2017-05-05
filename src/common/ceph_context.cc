@@ -821,6 +821,32 @@ void CephContext::_enable_perf_counter()
   plb.add_u64(l_cct_unhealthy_workers, "unhealthy_workers", "Unhealthy workers");
   _cct_perf = plb.create_perf_counters();
   _perf_counters_collection->add(_cct_perf);
+
+  assert(_mempool_perf_names.empty());
+  assert(_mempool_perf_descriptions.empty());
+  _mempool_perf_names.reserve(mempool::num_pools * 2);
+  _mempool_perf_descriptions.reserve(mempool::num_pools * 2);
+  for (unsigned i = 0; i < mempool::num_pools; ++i) {
+    string n = mempool::get_pool_name(mempool::pool_index_t(i));
+    _mempool_perf_names.push_back(n + "_bytes");
+    _mempool_perf_descriptions.push_back(
+      string("mempool ") + n + " total bytes");
+    _mempool_perf_names.push_back(n + "_items");
+    _mempool_perf_descriptions.push_back(
+      string("mempool ") + n + " total items");
+  }
+
+  PerfCountersBuilder plb2(this, "mempool", l_mempool_first,
+			  l_mempool_first + 1 + 2*mempool::num_pools);
+  unsigned l = l_mempool_first + 1;
+  for (unsigned i = 0; i < mempool::num_pools; ++i) {
+    plb2.add_u64(l++, _mempool_perf_names[i*2].c_str(),
+		 _mempool_perf_descriptions[i*2].c_str());
+    plb2.add_u64(l++, _mempool_perf_names[i*2+1].c_str(),
+		 _mempool_perf_descriptions[i*2+1].c_str());
+  }
+  _mempool_perf = plb2.create_perf_counters();
+  _perf_counters_collection->add(_mempool_perf);
 }
 
 void CephContext::_disable_perf_counter()
@@ -831,6 +857,12 @@ void CephContext::_disable_perf_counter()
   _perf_counters_collection->remove(_cct_perf);
   delete _cct_perf;
   _cct_perf = nullptr;
+
+  _perf_counters_collection->remove(_mempool_perf);
+  delete _mempool_perf;
+  _mempool_perf = nullptr;
+  _mempool_perf_names.clear();
+  _mempool_perf_descriptions.clear();
 }
 
 void CephContext::_refresh_perf_values()
@@ -838,6 +870,12 @@ void CephContext::_refresh_perf_values()
   if (_cct_perf) {
     _cct_perf->set(l_cct_total_workers, _heartbeat_map->get_total_workers());
     _cct_perf->set(l_cct_unhealthy_workers, _heartbeat_map->get_unhealthy_workers());
+  }
+  unsigned l = l_mempool_first + 1;
+  for (unsigned i = 0; i < mempool::num_pools; ++i) {
+    mempool::pool_t& p = mempool::get_pool(mempool::pool_index_t(i));
+    _mempool_perf->set(l++, p.allocated_bytes());
+    _mempool_perf->set(l++, p.allocated_items());
   }
 }
 
