@@ -108,6 +108,10 @@ public:
     uint64_t len,
     char *buf,
     bool buffered) = 0;
+  virtual int write(
+    uint64_t off,
+    bufferlist& bl,
+    bool buffered) = 0;
 
   virtual int aio_read(
     uint64_t off,

@@ -466,9 +466,7 @@ int BlueFS::_write_super()
   assert(bl.length() <= get_super_length());
   bl.append_zero(get_super_length() - bl.length());
 
-  bdev[BDEV_DB]->aio_write(get_super_offset(), bl, ioc[BDEV_DB], false);
-  bdev[BDEV_DB]->aio_submit(ioc[BDEV_DB]);
-  ioc[BDEV_DB]->aio_wait();
+  bdev[BDEV_DB]->write(get_super_offset(), bl, false);
   dout(20) << __func__ << " v " << super.version
            << " crc 0x" << std::hex << crc
            << " offset 0x" << get_super_offset() << std::dec
@@ -1399,14 +1397,7 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
     log_writer->file->fnode.size = jump_to;
   }
 
-  // drop lock while we wait for io
-  list<aio_t> completed_ios;
-  _claim_completed_aios(log_writer, &completed_ios);
-  l.unlock();
-  wait_for_aio(log_writer);
-  completed_ios.clear();
-  flush_bdev();
-  l.lock();
+  _flush_bdev_safely(log_writer);
 
   log_flushing = false;
   log_cond.notify_all();
@@ -1622,7 +1613,11 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	t.append_zero(zlen);
       }
     }
-    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
+    if (cct->_conf->bluefs_sync_write) {
+      bdev[p->bdev]->write(p->offset + x_off, t, buffered);
+    } else {
+      bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
+    }
     bloff += x_len;
     length -= x_len;
     ++p;
@@ -1742,13 +1737,7 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
      return r;
   uint64_t old_dirty_seq = h->file->dirty_seq;
 
-  list<aio_t> completed_ios;
-  _claim_completed_aios(h, &completed_ios);
-  lock.unlock();
-  wait_for_aio(h);
-  completed_ios.clear();
-  flush_bdev();
-  lock.lock();
+  _flush_bdev_safely(h);
 
   if (old_dirty_seq) {
     uint64_t s = log_seq;
@@ -1759,6 +1748,23 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
 	   h->file->dirty_seq > s);    // or redirtied by someone else
   }
   return 0;
+}
+
+void BlueFS::_flush_bdev_safely(FileWriter *h)
+{
+  if (!cct->_conf->bluefs_sync_write) {
+    list<aio_t> completed_ios;
+    _claim_completed_aios(h, &completed_ios);
+    lock.unlock();
+    wait_for_aio(h);
+    completed_ios.clear();
+    flush_bdev();
+    lock.lock();
+  } else {
+    lock.unlock();
+    flush_bdev();
+    lock.lock();
+  }
 }
 
 void BlueFS::flush_bdev()
