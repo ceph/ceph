@@ -138,6 +138,7 @@
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
      --subuser=<name>          subuser name
+     --all-subuser             trim all subusers usage log
      --access-key=<key>        S3 access key
      --email=<email>
      --secret/--secret-key=<key>

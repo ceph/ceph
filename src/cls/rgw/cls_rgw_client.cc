@@ -593,7 +593,8 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,const string
 }
 
 void cls_rgw_usage_log_trim(ObjectWriteOperation& op, string& user, string& subuser,
-                           uint64_t start_epoch, uint64_t end_epoch)
+                            uint64_t start_epoch, uint64_t end_epoch,
+                            bool subuser_specified) 
 {
   bufferlist in;
   rgw_cls_usage_log_trim_op call;
@@ -601,6 +602,7 @@ void cls_rgw_usage_log_trim(ObjectWriteOperation& op, string& user, string& subu
   call.end_epoch = end_epoch;
   call.user = user;
   call.subuser = subuser;
+  call.subuser_specified = subuser_specified;
   ::encode(call, in);
   op.exec(RGW_CLASS, RGW_USER_USAGE_LOG_TRIM, in);
 }

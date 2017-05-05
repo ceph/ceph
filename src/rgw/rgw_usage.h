@@ -23,7 +23,8 @@ public:
 	          RGWFormatterFlusher& flusher);
 
   static int trim(RGWRados *store, rgw_user& uid, string& subuser,
-		  uint64_t start_epoch, uint64_t end_epoch);
+                  uint64_t start_epoch, uint64_t end_epoch,
+                  bool subuser_specified);
 };
 
 

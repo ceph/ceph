@@ -2850,7 +2850,7 @@ int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist
 }
 
 static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64_t end,
-			       string& user, string& subuser,
+			       string& user, string& subuser, bool subuser_specified,
 			       string& key_iter, uint32_t max_entries, bool *truncated,
 			       int (*cb)(cls_method_context_t, const string&,
 					 rgw_usage_log_entry&, void *),
@@ -2895,6 +2895,9 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
       }
     } else {
       usage_record_prefix_by_time(start, start_key);
+      if (subuser_specified) {
+	start_key = "$" + start_key;
+      }
     }
   } else {
     start_key = key_iter;
@@ -2947,6 +2950,12 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
       /* keys are sorted by epoch, so once we're past end we're done */
       if (e.epoch >= end)
         return 0;
+
+      if (subuser_specified) {
+	if (e.subuser.empty()) {
+	  continue;
+	}
+      }
 
       ret = cb(hctx, key, e, param);
       if (ret < 0)
@@ -3003,7 +3012,7 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
 #define MAX_ENTRIES 1000
   uint32_t max_entries = (op.max_entries ? op.max_entries : MAX_ENTRIES);
   int ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch,
-				op.owner, op.subuser,
+				op.owner, op.subuser, false,
 				iter, max_entries, &ret_info.truncated,
 				usage_log_read_cb, (void *)usage);
   if (ret < 0)
@@ -3057,7 +3066,7 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
 
   string iter;
   ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch,
-			    op.user, op.subuser,
+			    op.user, op.subuser, op.subuser_specified,
 			    iter, 0, NULL, usage_log_trim_cb, NULL);
   if (ret < 0)
     return ret;

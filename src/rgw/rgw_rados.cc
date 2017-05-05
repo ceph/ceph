@@ -4782,7 +4782,8 @@ next:
   return 0;
 }
 
-int RGWRados::trim_usage(rgw_user& user, string& subuser, uint64_t start_epoch, uint64_t end_epoch)
+int RGWRados::trim_usage(rgw_user& user, string& subuser, uint64_t start_epoch, uint64_t end_epoch,
+                         bool subuser_specified)
 {
   uint32_t index = 0;
   string hash, first_hash;
@@ -4792,7 +4793,8 @@ int RGWRados::trim_usage(rgw_user& user, string& subuser, uint64_t start_epoch, 
   hash = first_hash;
 
   do {
-    int ret =  cls_obj_usage_log_trim(hash, user_str, subuser, start_epoch, end_epoch);
+    int ret =  cls_obj_usage_log_trim(hash, user_str, subuser, start_epoch, end_epoch,
+                                      subuser_specified);
     if (ret == -ENOENT)
       goto next;
 
@@ -12248,7 +12250,8 @@ int RGWRados::cls_obj_usage_log_read(string& oid, string& user, string& subuser,
   return r;
 }
 
-int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, string& subuser, uint64_t start_epoch, uint64_t end_epoch)
+int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, string& subuser, uint64_t start_epoch, uint64_t end_epoch,
+                                     bool subuser_specified)
 {
   rgw_raw_obj obj(get_zone_params().usage_log_pool, oid);
 
@@ -12260,7 +12263,7 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, string& subuser,
   }
 
   ObjectWriteOperation op;
-  cls_rgw_usage_log_trim(op, user, subuser, start_epoch, end_epoch);
+  cls_rgw_usage_log_trim(op, user, subuser, start_epoch, end_epoch, subuser_specified);
 
   r = ref.ioctx.operate(ref.oid, &op);
   return r;

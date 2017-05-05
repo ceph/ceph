@@ -148,7 +148,8 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, string& subuser,
 }
 
 int RGWUsage::trim(RGWRados *store, rgw_user& uid, string& subuser,
-                   uint64_t start_epoch, uint64_t end_epoch)
+                   uint64_t start_epoch, uint64_t end_epoch,
+                   bool subuser_specified)
 {
-  return store->trim_usage(uid, subuser, start_epoch, end_epoch);
+  return store->trim_usage(uid, subuser, start_epoch, end_epoch, subuser_specified);
 }
