@@ -469,6 +469,10 @@ static int open_device(const char* path, bool try_load_moudle = false)
 
 static int check_device_size(int nbd_index, unsigned long expected_size)
 {
+  // There are bugs with some older kernel versions that result in an
+  // overflow for large image sizes. This check is to ensure we are
+  // not affected.
+
   unsigned long size = 0;
   std::string path = "/sys/block/nbd" + stringify(nbd_index) + "/size";
   std::ifstream ifs;
@@ -479,6 +483,12 @@ static int check_device_size(int nbd_index, unsigned long expected_size)
   }
   ifs >> size;
   size *= RBD_NBD_BLKSIZE;
+
+  if (size == 0) {
+    // Newer kernel versions will report real size only after nbd
+    // connect. Assume this is the case and return success.
+    return 0;
+  }
 
   if (size != expected_size) {
     cerr << "rbd-nbd: kernel reported invalid device size (" << size
