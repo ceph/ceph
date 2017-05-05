@@ -629,7 +629,6 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   assert(off + len <= size);
 
   _aio_log_start(ioc, off, len);
-  ++ioc->num_reading;
 
   bufferptr p = buffer::create_page_aligned(len);
   int r = ::pread(buffered ? fd_buffered : fd_direct,
@@ -647,7 +646,6 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 
  out:
   _aio_log_finish(ioc, off, len);
-  --ioc->num_reading;
   return r < 0 ? r : 0;
 }
 

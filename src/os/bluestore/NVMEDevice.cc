@@ -846,7 +846,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
       delete task;
     } else {
       task->return_code = 0;
-      if(!--ctx->num_reading) {
+      if (!--ctx->num_running) {
         task->io_wake();
       }
     }
@@ -1052,7 +1052,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   t->fill_cb = [buf, t]() {
     t->copy_to_buf(buf, 0, t->len);
   };
-  ++ioc->num_reading;
+  ++ioc->num_running;
   if(queue_id == -1)
     queue_id = ceph_gettid();
   driver->get_queue(queue_id)->queue_task(t);
@@ -1118,7 +1118,7 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   t->fill_cb = [buf, t, off, len]() {
     t->copy_to_buf(buf, off-t->offset, len);
   };
-  ++ioc.num_reading;
+  ++ioc.num_running;
   if(queue_id == -1)
     queue_id = ceph_gettid();
   driver->get_queue(queue_id)->queue_task(t);
