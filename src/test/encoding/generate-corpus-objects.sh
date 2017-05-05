@@ -24,7 +24,7 @@ echo 'starting some background work'
 ../qa/workunits/rados/test.sh &
 ../qa/workunits/rbd/test_librbd.sh &
 ../qa/workunits/libcephfs/test.sh &
-../qa/workunits/rgw/run-s3-tests.sh &
+../qa/workunits/rgw/run-s3tests.sh &
 ceph-syn --syn makedirs 3 3 3 &
 
 echo 'waiting a bit'
