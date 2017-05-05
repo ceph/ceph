@@ -24,6 +24,7 @@ namespace journal {
 template <>
 struct TypeTraits<MockTestImageCtx> {
   typedef ::journal::MockJournalerProxy Journaler;
+  typedef ::journal::MockFutureProxy  Future;
 };
 
 template <>
@@ -63,7 +64,9 @@ namespace librbd {
 namespace journal {
 
 using ::testing::_;
+using ::testing::A;
 using ::testing::InSequence;
+using ::testing::Return;
 using ::testing::WithArg;
 
 class TestMockJournalPromoteRequest : public TestMockFixture {
@@ -95,6 +98,35 @@ public:
       .WillOnce(WithArg<3>(CompleteContext(r, static_cast<ContextWQ*>(NULL))));
   }
 
+  void expect_append_journaler(::journal::MockJournaler &mock_journaler) {
+    EXPECT_CALL(mock_journaler, append(_, _))
+                  .WillOnce(Return(::journal::MockFutureProxy()));
+  }
+
+  void expect_future_flush(::journal::MockFuture &mock_future, int r) {
+    EXPECT_CALL(mock_future, flush(_))
+                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
+  }
+
+  void expect_future_committed(::journal::MockJournaler &mock_journaler) {
+    EXPECT_CALL(mock_journaler, committed(A<const ::journal::MockFutureProxy &>()));
+  }
+
+  void expect_flush_commit_position(::journal::MockJournaler &mock_journaler,
+                                    int r) {
+    EXPECT_CALL(mock_journaler, flush_commit_position(_))
+                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
+  }
+
+  void expect_start_append(::journal::MockJournaler &mock_journaler) {
+    EXPECT_CALL(mock_journaler, start_append(_, _, _));
+  }
+
+  void expect_stop_append(::journal::MockJournaler &mock_journaler, int r) {
+    EXPECT_CALL(mock_journaler, stop_append(_))
+                  .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
+  }
+
   void expect_shut_down_journaler(::journal::MockJournaler &mock_journaler,
                                   int r) {
     EXPECT_CALL(mock_journaler, shut_down(_))
@@ -120,6 +152,15 @@ TEST_F(TestMockJournalPromoteRequest, SuccessOrderly) {
   expect_open_journaler(mock_image_ctx, mock_open_request, 0);
   expect_allocate_tag(mock_journaler,
                       {Journal<>::ORPHAN_MIRROR_UUID, true, 567, 1}, 0);
+
+  ::journal::MockFuture mock_future;
+  expect_start_append(mock_journaler);
+  expect_append_journaler(mock_journaler);
+  expect_future_flush(mock_future, 0);
+  expect_future_committed(mock_journaler);
+  expect_flush_commit_position(mock_journaler, 0);
+  expect_stop_append(mock_journaler, 0);
+
   expect_shut_down_journaler(mock_journaler, 0);
 
   C_SaferCond ctx;
@@ -145,6 +186,15 @@ TEST_F(TestMockJournalPromoteRequest, SuccessForced) {
   expect_open_journaler(mock_image_ctx, mock_open_request, 0);
   expect_allocate_tag(mock_journaler,
                       {Journal<>::LOCAL_MIRROR_UUID, true, 567, 0}, 0);
+
+  ::journal::MockFuture mock_future;
+  expect_start_append(mock_journaler);
+  expect_append_journaler(mock_journaler);
+  expect_future_flush(mock_future, 0);
+  expect_future_committed(mock_journaler);
+  expect_flush_commit_position(mock_journaler, 0);
+  expect_stop_append(mock_journaler, 0);
+
   expect_shut_down_journaler(mock_journaler, 0);
 
   C_SaferCond ctx;
@@ -201,6 +251,72 @@ TEST_F(TestMockJournalPromoteRequest, AllocateTagError) {
   ASSERT_EQ(-EBADMSG, ctx.wait());
 }
 
+TEST_F(TestMockJournalPromoteRequest, AppendEventError) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  ::journal::MockJournaler mock_journaler;
+  MockOpenRequest mock_open_request;
+
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_construct_journaler(mock_journaler);
+  expect_open_journaler(mock_image_ctx, mock_open_request, 0);
+  expect_allocate_tag(mock_journaler,
+                      {Journal<>::ORPHAN_MIRROR_UUID, true, 567, 1}, 0);
+
+  ::journal::MockFuture mock_future;
+  expect_start_append(mock_journaler);
+  expect_append_journaler(mock_journaler);
+  expect_future_flush(mock_future, -EPERM);
+  expect_stop_append(mock_journaler, 0);
+
+  expect_shut_down_journaler(mock_journaler, 0);
+
+  C_SaferCond ctx;
+  auto req = MockPromoteRequest::create(&mock_image_ctx, false, &ctx);
+  req->send();
+  ASSERT_EQ(-EPERM, ctx.wait());
+}
+
+TEST_F(TestMockJournalPromoteRequest, CommitEventError) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  ::journal::MockJournaler mock_journaler;
+  MockOpenRequest mock_open_request;
+
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_construct_journaler(mock_journaler);
+  expect_open_journaler(mock_image_ctx, mock_open_request, 0);
+  expect_allocate_tag(mock_journaler,
+                      {Journal<>::ORPHAN_MIRROR_UUID, true, 567, 1}, 0);
+
+  ::journal::MockFuture mock_future;
+  expect_start_append(mock_journaler);
+  expect_append_journaler(mock_journaler);
+  expect_future_flush(mock_future, 0);
+  expect_future_committed(mock_journaler);
+  expect_flush_commit_position(mock_journaler, -EINVAL);
+  expect_stop_append(mock_journaler, 0);
+
+  expect_shut_down_journaler(mock_journaler, 0);
+
+  C_SaferCond ctx;
+  auto req = MockPromoteRequest::create(&mock_image_ctx, false, &ctx);
+  req->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
 TEST_F(TestMockJournalPromoteRequest, ShutDownError) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
@@ -218,6 +334,15 @@ TEST_F(TestMockJournalPromoteRequest, ShutDownError) {
   expect_open_journaler(mock_image_ctx, mock_open_request, 0);
   expect_allocate_tag(mock_journaler,
                       {Journal<>::LOCAL_MIRROR_UUID, true, 567, 0}, 0);
+
+  ::journal::MockFuture mock_future;
+  expect_start_append(mock_journaler);
+  expect_append_journaler(mock_journaler);
+  expect_future_flush(mock_future, 0);
+  expect_future_committed(mock_journaler);
+  expect_flush_commit_position(mock_journaler, 0);
+  expect_stop_append(mock_journaler, 0);
+
   expect_shut_down_journaler(mock_journaler, -EINVAL);
 
   C_SaferCond ctx;

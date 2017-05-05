@@ -131,7 +131,7 @@ void DemoteRequest<I>::append_event() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  EventEntry event_entry{DemoteEvent{}, ceph_clock_now()};
+  EventEntry event_entry{DemotePromoteEvent{}, {}};
   bufferlist event_entry_bl;
   ::encode(event_entry, event_entry_bl);
 
