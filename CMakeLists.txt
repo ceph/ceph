@@ -337,7 +337,7 @@ find_package(dpdk)
 set(HAVE_DPDK ${DPDK_FOUND})
 endif(WITH_DPDK)
 
-option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" ON)
+option(WITH_BLKIN "Use blkin to emit LTTng tracepoints for Zipkin" OFF)
 if(WITH_BLKIN)
   set(BLKIN_LIBRARIES blkin lttng-ust)
   include_directories(src/blkin/blkin-lib)
