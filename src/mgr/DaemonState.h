@@ -141,7 +141,7 @@ class DaemonStateIndex
   PerfCounterTypes types;
 
   void insert(DaemonStatePtr dm);
-  void _erase(DaemonKey dmk);
+  void _erase(const DaemonKey& dmk);
 
   bool exists(const DaemonKey &key) const;
   DaemonStatePtr get(const DaemonKey &key);
@@ -164,7 +164,7 @@ class DaemonStateIndex
    * a cluster map and want to ensure that anything absent in the map
    * is also absent in this class.
    */
-  void cull(entity_type_t daemon_type, std::set<std::string> names_exist);
+  void cull(entity_type_t daemon_type, const std::set<std::string>& names_exist);
 };
 
 #endif

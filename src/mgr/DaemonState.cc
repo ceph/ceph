@@ -30,18 +30,20 @@ void DaemonStateIndex::insert(DaemonStatePtr dm)
   all[dm->key] = dm;
 }
 
-void DaemonStateIndex::_erase(DaemonKey dmk)
+void DaemonStateIndex::_erase(const DaemonKey& dmk)
 {
   assert(lock.is_locked_by_me());
 
-  const auto dm = all.at(dmk);
+  const auto to_erase = all.find(dmk);
+  assert(to_erase != all.end());
+  const auto dm = to_erase->second;
   auto &server_collection = by_server[dm->hostname];
   server_collection.erase(dm->key);
   if (server_collection.empty()) {
     by_server.erase(dm->hostname);
   }
 
-  all.erase(dmk);
+  all.erase(to_erase);
 }
 
 DaemonStateCollection DaemonStateIndex::get_by_type(uint8_t type) const
@@ -85,25 +87,25 @@ DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
 }
 
 void DaemonStateIndex::cull(entity_type_t daemon_type,
-                               std::set<std::string> names_exist)
+			    const std::set<std::string>& names_exist)
 {
+  std::vector<string> victims;
+
   Mutex::Locker l(lock);
-
-  std::set<DaemonKey> victims;
-
-  for (const auto &i : all) {
-    if (i.first.first != daemon_type) {
-      continue;
-    }
-
-    if (names_exist.count(i.first.second) == 0) {
-      victims.insert(i.first);
+  auto begin = all.lower_bound({daemon_type, ""});
+  auto end = all.end();
+  for (auto &i = begin; i != end; ++i) {
+    const auto& daemon_key = i->first;
+    if (daemon_key.first != daemon_type)
+      break;
+    if (names_exist.count(daemon_key.second) == 0) {
+      victims.push_back(daemon_key.second);
     }
   }
 
-  for (const auto &i : victims) {
+  for (auto &i : victims) {
     dout(4) << "Removing data for " << i << dendl;
-    _erase(i);
+    _erase({daemon_type, i});
   }
 }
 
