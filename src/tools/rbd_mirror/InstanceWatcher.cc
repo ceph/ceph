@@ -785,8 +785,16 @@ void InstanceWatcher<I>::handle_image_acquire(
   const std::string &peer_image_id, Context *on_finish) {
   dout(20) << "global_image_id=" << global_image_id << dendl;
 
-  m_instance_replayer->acquire_image(global_image_id, peer_mirror_uuid,
-                                     peer_image_id, on_finish);
+  auto ctx = new FunctionContext(
+      [this, global_image_id, peer_mirror_uuid, peer_image_id,
+       on_finish] (int r) {
+        m_instance_replayer->acquire_image(global_image_id, peer_mirror_uuid,
+                                           peer_image_id, on_finish);
+        m_notify_op_tracker.finish_op();
+      });
+
+  m_notify_op_tracker.start_op();
+  m_work_queue->queue(ctx, 0);
 }
 
 template <typename I>
@@ -795,8 +803,17 @@ void InstanceWatcher<I>::handle_image_release(
   const std::string &peer_image_id, bool schedule_delete, Context *on_finish) {
   dout(20) << "global_image_id=" << global_image_id << dendl;
 
-  m_instance_replayer->release_image(global_image_id, peer_mirror_uuid,
-                                     peer_image_id, schedule_delete, on_finish);
+  auto ctx = new FunctionContext(
+      [this, global_image_id, peer_mirror_uuid, peer_image_id, schedule_delete,
+       on_finish] (int r) {
+        m_instance_replayer->release_image(global_image_id, peer_mirror_uuid,
+                                           peer_image_id, schedule_delete,
+                                           on_finish);
+        m_notify_op_tracker.finish_op();
+      });
+
+  m_notify_op_tracker.start_op();
+  m_work_queue->queue(ctx, 0);
 }
 
 template <typename I>
