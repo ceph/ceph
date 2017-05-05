@@ -258,11 +258,8 @@ namespace rgw {
       /* LOCKED */
       parent = rgw_fh->get_parent();
     } else {
-      /* atomicity */
       parent = rgw_fh;
-      LookupFHResult fhr = lookup_fh(parent, name, RGWFileHandle::FLAG_LOCK);
-      rgw_fh = get<0>(fhr);
-      /* LOCKED */
+      rgw_fh = nullptr;
     }
 
     if (parent->is_root()) {
