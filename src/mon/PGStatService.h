@@ -96,6 +96,15 @@ public:
 		       bool verbose) const {
     parent.dump_pool_stats(osdm, ss, f, verbose);
   }
+
+  int process_pg_command(const string& prefix,
+			 const map<string,cmd_vartype>& cmdmap,
+			 const OSDMap& osdmap,
+			 Formatter *f,
+			 stringstream *ss,
+			 bufferlist *odata) {
+    return process_pg_map_command(prefix, cmdmap, parent, osdmap, f, ss, odata);
+  }
 };
 
 
