@@ -84,6 +84,7 @@ static int get_features(bool *old_format, uint64_t *features)
     cout << "using new format!" << std::endl;
   } else {
     *old_format = true;
+    *features = 0;
     cout << "using old format" << std::endl;
   }
 
