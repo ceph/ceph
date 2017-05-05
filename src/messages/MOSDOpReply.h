@@ -32,7 +32,7 @@
 
 class MOSDOpReply : public Message {
 
-  static const int HEAD_VERSION = 7;
+  static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -204,6 +204,7 @@ public:
           ::encode(redirect, payload);
         }
       }
+      encode_trace(payload, features);
     }
   }
   void decode_payload() override {
@@ -293,6 +294,9 @@ public:
         if (do_redirect) {
 	  ::decode(redirect, p);
         }
+      }
+      if (header.version >= 8) {
+        decode_trace(p);
       }
     }
   }

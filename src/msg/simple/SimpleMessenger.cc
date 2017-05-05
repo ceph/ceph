@@ -443,6 +443,7 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
 				     const entity_addr_t& dest_addr, int dest_type,
 				     bool already_locked)
 {
+  m->trace.event("simple submitting message");
   if (cct->_conf->ms_dump_on_send) {
     m->encode(-1, true);
     ldout(cct, 0) << "submit_message " << *m << "\n";

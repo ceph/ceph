@@ -933,7 +933,10 @@ assert(req->out.pdata_iov.nents || !nbuffers);
      }
     tail->next = NULL;
   }
-  xcon->portal->enqueue(xcon, xmsg);
+  xmsg->trace = m->trace;
+  m->trace.event("xio portal enqueue for send");
+  m->trace.keyval("xio message segments", xmsg->hdr.msg_cnt);
+  xcon->portal->enqueue_for_send(xcon, xmsg);
 
   return code;
 } /* send_message(Message *, Connection *) */

@@ -25,6 +25,7 @@
 #include "common/WorkQueue.h"
 #include "common/AsyncReserver.h"
 #include "common/ceph_context.h"
+#include "common/zipkin_trace.h"
 
 #include "mgr/MgrClient.h"
 
@@ -1321,6 +1322,7 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
+  ZTracer::Endpoint trace_endpoint;
   void create_logger();
   void create_recoverystate_perf();
   void tick();

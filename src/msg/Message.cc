@@ -276,7 +276,7 @@ Message *decode_message(CephContext *cct, int crcflags,
 			ceph_msg_header& header,
 			ceph_msg_footer& footer,
 			bufferlist& front, bufferlist& middle,
-			bufferlist& data)
+			bufferlist& data, Connection* conn)
 {
   // verify crc
   if (crcflags & MSG_CRC_HEADER) {
@@ -812,6 +812,7 @@ Message *decode_message(CephContext *cct, int crcflags,
     return 0;
   }
 
+  m->set_connection(conn);
   m->set_header(header);
   m->set_footer(footer);
   m->set_payload(front);
@@ -838,6 +839,42 @@ Message *decode_message(CephContext *cct, int crcflags,
 
   // done!
   return m;
+}
+
+void Message::encode_trace(bufferlist &bl, uint64_t features) const
+{
+  auto p = trace.get_info();
+  static const blkin_trace_info empty = { 0, 0, 0 };
+  if (!p) {
+    p = &empty;
+  }
+  ::encode(*p, bl);
+}
+
+void Message::decode_trace(bufferlist::iterator &p, bool create)
+{
+  blkin_trace_info info = {};
+  ::decode(info, p);
+
+#ifdef WITH_BLKIN
+  if (!connection)
+    return;
+
+  const auto msgr = connection->get_messenger();
+  const auto endpoint = msgr->get_trace_endpoint();
+  if (info.trace_id) {
+    trace.init(get_type_name(), endpoint, &info, true);
+    trace.event("decoded trace");
+  } else if (create || (msgr->get_myname().is_osd() &&
+                        msgr->cct->_conf->osd_blkin_trace_all)) {
+    // create a trace even if we didn't get one on the wire
+    trace.init(get_type_name(), endpoint);
+    trace.event("created trace");
+  }
+  trace.keyval("tid", get_tid());
+  trace.keyval("entity type", get_source().type_str());
+  trace.keyval("entity num", get_source().num());
+#endif
 }
 
 
@@ -890,6 +927,6 @@ Message *decode_message(CephContext *cct, int crcflags, bufferlist::iterator& p)
   ::decode(fr, p);
   ::decode(mi, p);
   ::decode(da, p);
-  return decode_message(cct, crcflags, h, f, fr, mi, da);
+  return decode_message(cct, crcflags, h, f, fr, mi, da, nullptr);
 }
 
