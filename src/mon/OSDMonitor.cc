@@ -23,6 +23,8 @@
 #include "Monitor.h"
 #include "MDSMonitor.h"
 #include "PGMonitor.h"
+#include "AuthMonitor.h"
+#include "ConfigKeyService.h"
 
 #include "MonitorDBStore.h"
 #include "Session.h"
@@ -6274,7 +6276,35 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   // This should be used as a general guideline for most commands handled
   // in this function.  Adapt as you see fit, but please bear in mind that
   // this is the expected behavior.
-   
+
+  if (prefix == "osd test") {
+    // 1. make sure other paxosservices are writeable.
+    if (!mon->authmon()->is_writeable()) {
+      dout(10) << "waiting for auth mon" << dendl;
+      mon->authmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+      return false;
+    }
+    // ConfigKeyService is a QuorumService and always writeable
+
+    // 2. plug paxos while we do the *other* services
+    paxos->plug();
+    mon->authmon()->test_do_thing();
+    ((ConfigKeyService*)mon->config_key_service)->test_do_thing();
+    paxos->unplug();
+
+    // 3. now do *our* work to go along with it
+    pending_inc.new_max_osd = 100;
+    
+    ss << "doing cross-propose";
+    getline(ss, rs);
+    wait_for_finished_proposal(op,
+			       new Monitor::C_Command(mon, op, 0, rs,
+						      get_last_committed() + 1));
+    // 4. force a propose now to ensure *our* stuff is included
+    // atomically with the other service's changes.
+    force_immediate_propose();
+    return true;
+  }
  
   if (prefix == "osd setcrushmap" ||
       (prefix == "osd crush set" && !osdid_present)) {

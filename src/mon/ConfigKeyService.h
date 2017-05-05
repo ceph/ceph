@@ -61,6 +61,8 @@ public:
   void cleanup() override { }
   void service_tick() override { }
 
+  void test_do_thing();
+
   int get_type() override {
     return QuorumService::SERVICE_CONFIG_KEY;
   }

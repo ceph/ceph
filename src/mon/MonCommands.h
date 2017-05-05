@@ -629,6 +629,9 @@ COMMAND("osd unset " \
 	"unset <key>", "osd", "rw", "cli,rest")
 COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
 	"osd", "r", "")
+COMMAND("osd test",
+	"testtest test",
+	"osd", "rw", "cli,rest")
 COMMAND("osd down " \
 	"type=CephString,name=ids,n=N", \
 	"set osd(s) <id> [<id>...] down", "osd", "rw", "cli,rest")

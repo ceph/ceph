@@ -1186,3 +1186,15 @@ void AuthMonitor::dump_info(Formatter *f)
   f->dump_unsigned("num_secrets", mon->key_server.get_num_secrets());
   f->close_section();
 }
+
+void AuthMonitor::test_do_thing()
+{
+  dout(10) << __func__ << dendl;
+  KeyServerData::Incremental auth_inc;
+  auth_inc.op = KeyServerData::AUTH_INC_ADD;
+  auth_inc.name.from_str("client.testorama");
+  auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+  ::encode("my caps", auth_inc.auth.caps["test"]);
+  assert(paxos->is_plugged());
+  propose_pending();  // caller has us plugged
+}
