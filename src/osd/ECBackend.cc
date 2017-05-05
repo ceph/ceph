@@ -927,20 +927,34 @@ void ECBackend::handle_sub_write(
     dout(10) << "Queueing onreadable_sync: " << on_local_applied_sync << dendl;
     localt.register_on_applied_sync(on_local_applied_sync);
   }
-  localt.register_on_commit(
-    get_parent()->bless_context(
-      new SubWriteCommitted(
-	this, msg, op.tid,
-	op.at_version,
-	get_parent()->get_info().last_complete)));
-  localt.register_on_applied(
-    get_parent()->bless_context(
-      new SubWriteApplied(this, msg, op.tid, op.at_version)));
+  if (store->is_synchronous_apply()) {
+    localt.register_on_commit(
+	get_parent()->bless_context(
+	  new SubWriteCommitted(
+	    this, msg, op.tid,
+	    op.at_version,
+	    get_parent()->get_info().last_complete)));
+  } else {
+    localt.register_on_commit(
+	get_parent()->bless_context(
+	  new SubWriteCommitted(
+	    this, msg, op.tid,
+	    op.at_version,
+	    get_parent()->get_info().last_complete)));
+    localt.register_on_applied(
+	get_parent()->bless_context(
+	  new SubWriteApplied(this, msg, op.tid, op.at_version)));
+  }
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(op.t));
   tls.push_back(std::move(localt));
   get_parent()->queue_transactions(tls, msg);
+  if (store->is_synchronous_apply()) {
+    if (msg)
+      msg->mark_event("sub_op_applied");
+    sub_write_applied(op.tid, op.at_version);
+  }
 }
 
 void ECBackend::handle_sub_read(

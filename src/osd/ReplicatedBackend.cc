@@ -565,17 +565,27 @@ void ReplicatedBackend::submit_transaction(
     op_t);
   
   op_t.register_on_applied_sync(on_local_applied_sync);
-  op_t.register_on_applied(
-    parent->bless_context(
-      new C_OSD_OnOpApplied(this, &op)));
-  op_t.register_on_commit(
-    parent->bless_context(
-      new C_OSD_OnOpCommit(this, &op)));
+  if (store->is_synchronous_apply()) {
+    op_t.register_on_commit(
+	parent->bless_context(
+	  new C_OSD_OnOpCommit(this, &op)));
+  } else {
+    op_t.register_on_applied(
+	parent->bless_context(
+	  new C_OSD_OnOpApplied(this, &op)));
+    op_t.register_on_commit(
+	parent->bless_context(
+	  new C_OSD_OnOpCommit(this, &op)));
+  }
 
   vector<ObjectStore::Transaction> tls;
   tls.push_back(std::move(op_t));
 
   parent->queue_transactions(tls, op.op);
+
+  if (store->is_synchronous_apply()) {
+    op_applied(&op);
+  }
 }
 
 void ReplicatedBackend::op_applied(
@@ -1130,18 +1140,27 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     update_snaps,
     rm->localt);
 
-  rm->opt.register_on_commit(
-    parent->bless_context(
-      new C_OSD_RepModifyCommit(this, rm)));
-  rm->localt.register_on_applied(
-    parent->bless_context(
-      new C_OSD_RepModifyApply(this, rm)));
+  if (store->is_synchronous_apply()) {
+    rm->opt.register_on_commit(
+	parent->bless_context(
+	  new C_OSD_RepModifyCommit(this, rm)));
+  } else {
+    rm->opt.register_on_commit(
+	parent->bless_context(
+	  new C_OSD_RepModifyCommit(this, rm)));
+    rm->localt.register_on_applied(
+	parent->bless_context(
+	  new C_OSD_RepModifyApply(this, rm)));
+  }
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(rm->localt));
   tls.push_back(std::move(rm->opt));
   parent->queue_transactions(tls, op);
   // op is cleaned up by oncommit/onapply when both are executed
+  if (store->is_synchronous_apply()) {
+    repop_applied(rm);
+  }
 }
 
 void ReplicatedBackend::repop_applied(RepModifyRef rm)
@@ -1158,16 +1177,15 @@ void ReplicatedBackend::repop_applied(RepModifyRef rm)
 
   const MOSDRepOp *req = static_cast<const MOSDRepOp*>(m);
   version = req->version;
-  if (!rm->committed)
+  if (!store->is_synchronous_apply() && !rm->committed) {
     ack = new MOSDRepOpReply(
 	static_cast<const MOSDRepOp*>(m), parent->whoami_shard(),
 	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
 
-  // send ack to acker only if we haven't sent a commit already
-  if (ack) {
+    // send ack to acker only if we haven't sent a commit already
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
     get_parent()->send_message_osd_cluster(
-      rm->ackerosd, ack, get_osdmap()->get_epoch());
+	rm->ackerosd, ack, get_osdmap()->get_epoch());
   }
 
   parent->op_applied(version);

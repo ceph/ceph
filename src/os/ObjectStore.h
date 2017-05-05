@@ -1998,6 +1998,8 @@ public:
   virtual void set_fsid(uuid_d u) = 0;
   virtual uuid_d get_fsid() = 0;
 
+  virtual bool is_synchronous_apply() const { return false; };
+
   /**
   * Estimates additional disk space used by the specified amount of objects and caused by file allocation granularity and metadata store
   * - num objects - total (including witeouts) object count to measure used space for.
