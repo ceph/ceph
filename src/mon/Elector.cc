@@ -129,6 +129,8 @@ void Elector::defer(int who)
 
 void Elector::reset_timer(double plus)
 {
+  // set the timer
+  cancel_timer();
   /**
    * This class is used as the callback when the expire_event timer fires up.
    *
@@ -142,17 +144,9 @@ void Elector::reset_timer(double plus)
    * as far as we know, we may even be dead); so, just propose ourselves as the
    * Leader.
    */
-  class C_ElectionExpire : public Context {
-    Elector *elector;
-  public:
-    explicit C_ElectionExpire(Elector *e) : elector(e) { }
-    void finish(int r) override {
-      elector->expire();
-    }
-  };
-  // set the timer
-  cancel_timer();
-  expire_event = new C_ElectionExpire(this);
+  expire_event = new C_MonContext(mon, [this](int) {
+      expire();
+    });
   mon->timer.add_event_after(g_conf->mon_election_timeout + plus,
 			     expire_event);
 }

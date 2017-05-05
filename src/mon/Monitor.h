@@ -111,6 +111,14 @@ struct MonCommand;
 
 #define COMPAT_SET_LOC "feature_set"
 
+class C_MonContext final : public FunctionContext {
+  const Monitor *mon;
+public:
+  explicit C_MonContext(Monitor *m, boost::function<void(int)>&& callback)
+    : FunctionContext(std::move(callback)), mon(m) {}
+  void finish(int r) override;
+};
+
 class Monitor : public Dispatcher,
                 public md_config_obs_t {
 public:
@@ -154,7 +162,6 @@ public:
 
 private:
   void new_tick();
-  friend class C_Mon_Tick;
 
   // -- local storage --
 public:
@@ -329,14 +336,6 @@ private:
    */
   version_t sync_last_committed_floor;
 
-  struct C_SyncTimeout : public Context {
-    Monitor *mon;
-    explicit C_SyncTimeout(Monitor *m) : mon(m) {}
-    void finish(int r) override {
-      mon->sync_timeout();
-    }
-  };
-
   /**
    * Obtain the synchronization target prefixes in set form.
    *
@@ -496,14 +495,6 @@ private:
    */
   Context *timecheck_event;
 
-  struct C_TimeCheck : public Context {
-    Monitor *mon;
-    explicit C_TimeCheck(Monitor *m) : mon(m) { }
-    void finish(int r) override {
-      mon->timecheck_start_round();
-    }
-  };
-
   void timecheck_start();
   void timecheck_finish();
   void timecheck_start_round();
@@ -539,15 +530,7 @@ private:
    */
   void handle_ping(MonOpRequestRef op);
 
-  Context *probe_timeout_event;  // for probing
-
-  struct C_ProbeTimeout : public Context {
-    Monitor *mon;
-    explicit C_ProbeTimeout(Monitor *m) : mon(m) {}
-    void finish(int r) override {
-      mon->probe_timeout(r);
-    }
-  };
+  Context *probe_timeout_event = nullptr;  // for probing
 
   void reset_probe_timeout();
   void cancel_probe_timeout();
@@ -706,29 +689,8 @@ public:
     }
   } health_status_cache;
 
-  struct C_HealthToClogTick : public Context {
-    Monitor *mon;
-    explicit C_HealthToClogTick(Monitor *m) : mon(m) { }
-    void finish(int r) override {
-      if (r < 0)
-        return;
-      mon->do_health_to_clog();
-      mon->health_tick_start();
-    }
-  };
-
-  struct C_HealthToClogInterval : public Context {
-    Monitor *mon;
-    explicit C_HealthToClogInterval(Monitor *m) : mon(m) { }
-    void finish(int r) override {
-      if (r < 0)
-        return;
-      mon->do_health_to_clog_interval();
-    }
-  };
-
-  Context *health_tick_event;
-  Context *health_interval_event;
+  Context *health_tick_event = nullptr;
+  Context *health_interval_event = nullptr;
 
   void health_tick_start();
   void health_tick_stop();
