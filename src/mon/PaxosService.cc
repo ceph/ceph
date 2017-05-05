@@ -93,6 +93,13 @@ bool PaxosService::dispatch(MonOpRequestRef op)
     return true;
   }
 
+  if (need_immediate_propose) {
+    dout(10) << __func__ << " forced immediate propose" << dendl;
+    need_immediate_propose = false;
+    propose_pending();
+    return true;
+  }
+
   double delay = 0.0;
   if (!should_propose(delay)) {
     dout(10) << " not proposing" << dendl;
