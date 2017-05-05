@@ -137,6 +137,7 @@ public:
   (STATE_DIRTY|
    STATE_EXPORTBOUND |
    STATE_IMPORTBOUND |
+   STATE_AUXSUBTREE |
    STATE_REJOINUNDEF);
 
   // -- rep spec --

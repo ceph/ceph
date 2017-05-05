@@ -1012,7 +1012,16 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
 {
   dout(10) << "merge " << subs << dendl;
 
-  set_dir_auth(subs.front()->get_dir_auth());
+  mds_authority_t new_auth = CDIR_AUTH_DEFAULT;
+  for (auto dir : subs) {
+    if (dir->get_dir_auth() != CDIR_AUTH_DEFAULT ||
+	dir->get_dir_auth() != new_auth) {
+      assert(new_auth == CDIR_AUTH_DEFAULT);
+      new_auth = dir->get_dir_auth();
+    }
+  }
+
+  set_dir_auth(new_auth);
   prepare_new_fragment(replay);
 
   nest_info_t rstatdiff;
@@ -1021,8 +1030,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
   version_t rstat_version = inode->get_projected_inode()->rstat.version;
   version_t dirstat_version = inode->get_projected_inode()->dirstat.version;
 
-  for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); ++p) {
-    CDir *dir = *p;
+  for (auto dir : subs) {
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
     assert(!dir->is_auth() || dir->is_complete() || replay);
 
