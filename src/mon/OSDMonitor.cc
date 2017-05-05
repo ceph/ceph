@@ -3686,7 +3686,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       }
 
       map<int, float> full, backfillfull, nearfull;
-      osdmap.get_full_osd_util(mon->pgservice->get_pg_map().osd_stat, &full, &backfillfull, &nearfull);
+      osdmap.get_full_osd_util(*mon->pgservice->get_osd_stat(), &full, &backfillfull, &nearfull);
       if (full.size()) {
 	ostringstream ss;
 	ss << full.size() << " full osd(s)";
