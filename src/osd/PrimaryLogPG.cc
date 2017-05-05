@@ -9184,7 +9184,8 @@ ObjectContextRef PrimaryLogPG::create_object_context(const object_info_t& oi,
 ObjectContextRef PrimaryLogPG::get_object_context(
   const hobject_t& soid,
   bool can_create,
-  const map<string, bufferlist> *attrs)
+  const map<string, bufferlist> *attrs,
+  bool lookup_only)
 {
   assert(
     attrs || !pg_log.get_missing().is_missing(soid) ||
@@ -9200,6 +9201,11 @@ ObjectContextRef PrimaryLogPG::get_object_context(
 	     << dendl;
   } else {
     dout(10) << __func__ << ": obc NOT found in cache: " << soid << dendl;
+    if (lookup_only) {
+      dout(10) << __func__ << ": lookup only, no create obc" << dendl;
+      return ObjectContextRef();
+    }
+
     // check disk
     bufferlist bv;
     if (attrs) {
@@ -9519,6 +9525,14 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 	     << "] does not contain " << oid.snap << " -- DNE" << dendl;
     return -ENOENT;
   }
+}
+
+void PrimaryLogPG::check_object_context_and_purge(const hobject_t& oid)
+{
+  dout(10) << "check_object_context_and_purge " << oid << dendl;
+  ObjectContextRef obc = get_object_context(oid, false, 0, true);
+  if (obc)
+    object_contexts.purge(oid);
 }
 
 void PrimaryLogPG::object_context_destructor_callback(ObjectContext *obc)
