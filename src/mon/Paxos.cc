@@ -1539,7 +1539,10 @@ MonitorDBStore::TransactionRef Paxos::get_pending_transaction()
 
 bool Paxos::trigger_propose()
 {
-  if (is_active()) {
+  if (plugged) {
+    dout(10) << __func__ << " plugged, not proposing now" << dendl;
+    return false;
+  } else if (is_active()) {
     dout(10) << __func__ << " active, proposing now" << dendl;
     propose_pending();
     return true;
