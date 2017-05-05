@@ -242,8 +242,8 @@ void Objecter::init()
   if (!logger) {
     PerfCountersBuilder pcb(cct, "objecter", l_osdc_first, l_osdc_last);
 
-    pcb.add_u64(l_osdc_op_active, "op_active",
-		"Operations active", "actv");
+    pcb.add_u64(l_osdc_op_active, "op_active", "Operations active", "actv",
+		PerfCountersBuilder::PRIO_CRITICAL);
     pcb.add_u64(l_osdc_op_laggy, "op_laggy", "Laggy operations");
     pcb.add_u64_counter(l_osdc_op_send, "op_send", "Sent operations");
     pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes", "Sent data");
@@ -251,12 +251,12 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_op_reply, "op_reply", "Operation reply");
 
     pcb.add_u64_counter(l_osdc_op, "op", "Operations");
-    pcb.add_u64_counter(l_osdc_op_r, "op_r",
-			"Read operations", "read");
-    pcb.add_u64_counter(l_osdc_op_w, "op_w",
-			"Write operations", "writ");
-    pcb.add_u64_counter(l_osdc_op_rmw, "op_rmw",
-			"Read-modify-write operations");
+    pcb.add_u64_counter(l_osdc_op_r, "op_r", "Read operations", "rd",
+			PerfCountersBuilder::PRIO_CRITICAL);
+    pcb.add_u64_counter(l_osdc_op_w, "op_w", "Write operations", "wr",
+			PerfCountersBuilder::PRIO_CRITICAL);
+    pcb.add_u64_counter(l_osdc_op_rmw, "op_rmw", "Read-modify-write operations",
+			"rdwr", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64_counter(l_osdc_op_pg, "op_pg", "PG operation");
 
     pcb.add_u64_counter(l_osdc_osdop_stat, "osdop_stat", "Stat operations");
