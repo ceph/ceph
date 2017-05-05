@@ -105,6 +105,22 @@ public:
 			 bufferlist *odata) {
     return process_pg_map_command(prefix, cmdmap, parent, osdmap, f, ss, odata);
   }
+
+  int reweight_by_utilization(const OSDMap &osd_map,
+			      int oload,
+			      double max_changef,
+			      int max_osds,
+			      bool by_pg, const set<int64_t> *pools,
+			      bool no_increasing,
+			      mempool::osdmap::map<int32_t, uint32_t>* new_weights,
+			      std::stringstream *ss,
+			      std::string *out_str,
+			      Formatter *f) {
+    return reweight::by_utilization(osd_map, parent, oload, max_changef,
+				    max_osds, by_pg, pools, no_increasing,
+				    new_weights, ss, out_str, f);
+  }
+
 };
 
 

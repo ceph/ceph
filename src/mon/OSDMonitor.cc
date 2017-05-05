@@ -9230,16 +9230,15 @@ done:
     cmd_getval(g_ceph_context, cmdmap, "no_increasing", no_increasing);
     string out_str;
     mempool::osdmap::map<int32_t, uint32_t> new_weights;
-    err = reweight::by_utilization(osdmap,
-				   mon->pgservice->get_pg_map(),
-				   oload,
-				   max_change,
-				   max_osds,
-				   by_pg,
-				   pools.empty() ? NULL : &pools,
-				   no_increasing == "--no-increasing",
-				   &new_weights,
-				   &ss, &out_str, f.get());
+    err = mon->pgservice->reweight_by_utilization(osdmap,
+					     oload,
+					     max_change,
+					     max_osds,
+					     by_pg,
+					     pools.empty() ? NULL : &pools,
+					     no_increasing == "--no-increasing",
+					     &new_weights,
+					     &ss, &out_str, f.get());
     if (err >= 0) {
       dout(10) << "reweight::by_utilization: finished with " << out_str << dendl;
     }
