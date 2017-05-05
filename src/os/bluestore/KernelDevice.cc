@@ -648,7 +648,6 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
  out:
   _aio_log_finish(ioc, off, len);
   --ioc->num_reading;
-  ioc->aio_wake();
   return r < 0 ? r : 0;
 }
 
