@@ -21,54 +21,49 @@ from util.rados import (rados, create_ec_pool,
 log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
-def create_apache_dirs(ctx, config, on_client = None, except_client = None):
+def create_apache_dirs(ctx, config):
     """
     Remotely create apache directories.  Delete when finished.
     """
     log.info('Creating apache directories...')
-    log.debug('client is %r', on_client)
     testdir = teuthology.get_testdir(ctx)
-    clients_to_create_as = [on_client]
-    if on_client is None:
-        clients_to_create_as = config.keys()
-    for client in clients_to_create_as:
-        if client == except_client:
-            continue
+    for client in config.keys():
     	cluster_name, daemon_type, client_id = teuthology.split_role(client)
-    	client_with_cluster = cluster_name + '.' + daemon_type + '.' + client_id
+        client_with_cluster = cluster_name + '.' + daemon_type + '.' + client_id
         ctx.cluster.only(client).run(
             args=[
                 'mkdir',
                 '-p',
-                '{tdir}/apache/htdocs.{client_with_cluster}'.format(tdir=testdir,
-                                                       client_with_cluster=client_with_cluster),
-                '{tdir}/apache/tmp.{client_with_cluster}/fastcgi_sock'.format(
+                '{tdir}/apache/htdocs.{client}'.format(tdir=testdir,
+                                                       client=client_with_cluster),
+                '{tdir}/apache/tmp.{client}/fastcgi_sock'.format(
                     tdir=testdir,
-                    client_with_cluster=client_with_cluster),
+                    client=client_with_cluster),
                 run.Raw('&&'),
                 'mkdir',
-                '{tdir}/archive/apache.{client_with_cluster}'.format(tdir=testdir,
-                                                        client_with_cluster=client_with_cluster),
+                '{tdir}/archive/apache.{client}'.format(tdir=testdir,
+                                                        client=client_with_cluster),
                 ],
             )
     try:
         yield
     finally:
         log.info('Cleaning up apache directories...')
-        for client in clients_to_create_as:
+        for client in config.keys():
+            cluster_name, daemon_type, client_id = teuthology.split_role(client)
+            client_with_cluster = cluster_name + '.' + daemon_type + '.' + client_id
             ctx.cluster.only(client).run(
                 args=[
                     'rm',
                     '-rf',
-                    '{tdir}/apache/tmp.{client_with_cluster}'.format(tdir=testdir,
-                                                        client_with_cluster=client_with_cluster),
+                    '{tdir}/apache/tmp.{client}'.format(tdir=testdir,
+                                                        client=client_with_cluster),
                     run.Raw('&&'),
                     'rmdir',
-                    '{tdir}/apache/htdocs.{client_with_cluster}'.format(tdir=testdir,
-                                                           client_with_cluster=client_with_cluster),
+                    '{tdir}/apache/htdocs.{client}'.format(tdir=testdir,
+                                                           client=client_with_cluster),
                     ],
                 )
-        for client in clients_to_create_as:
             ctx.cluster.only(client).run(
                 args=[
                     'rmdir',
@@ -92,8 +87,7 @@ def _use_uds_with_fcgi(remote):
 
 
 @contextlib.contextmanager
-def ship_apache_configs(ctx, config, role_endpoints, on_client = None,
-                        except_client = None):
+def ship_apache_configs(ctx, config, role_endpoints):
     """
     Ship apache config and rgw.fgci to all clients.  Clean up on termination
     """
@@ -102,12 +96,7 @@ def ship_apache_configs(ctx, config, role_endpoints, on_client = None,
     testdir = teuthology.get_testdir(ctx)
     log.info('Shipping apache config and rgw.fcgi...')
     src = os.path.join(os.path.dirname(__file__), 'apache.conf.template')
-    clients_to_create_as = [on_client]
-    if on_client is None:
-        clients_to_create_as = config.keys()
-    for client in clients_to_create_as:
-        if client == except_client:
-            continue
+    for client in config.keys():
     	cluster_name, daemon_type, client_id = teuthology.split_role(client)
     	client_with_id = daemon_type + '.' + client_id
     	client_with_cluster = cluster_name + '.' + client_with_id
@@ -215,7 +204,7 @@ exec radosgw -f -n {client_with_id} --cluster {cluster_name} -k /etc/ceph/{clien
         yield
     finally:
         log.info('Removing apache config...')
-        for client in clients_to_create_as:
+        for client in config.keys():
             cluster_name, daemon_type, client_id = teuthology.split_role(client)
             client_with_cluster = '.'.join((cluster_name, daemon_type, client_id))
             ctx.cluster.only(client).run(
@@ -235,20 +224,13 @@ exec radosgw -f -n {client_with_id} --cluster {cluster_name} -k /etc/ceph/{clien
 
 
 @contextlib.contextmanager
-def start_rgw(ctx, config, on_client = None, except_client = None):
+def start_rgw(ctx, config):
     """
     Start rgw on remote sites.
     """
     log.info('Starting rgw...')
-    log.debug('client %r', on_client)
-    clients_to_run = [on_client]
-    if on_client is None:
-        clients_to_run = config.keys()
-        log.debug('client %r', clients_to_run)
     testdir = teuthology.get_testdir(ctx)
-    for client in clients_to_run:
-        if client == except_client:
-            continue
+    for client in config.keys():
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
         client_with_id = daemon_type + '.' + client_id
@@ -337,9 +319,7 @@ def start_rgw(ctx, config, on_client = None, except_client = None):
             )
 
     # XXX: add_daemon() doesn't let us wait until radosgw finishes startup
-    for client in clients_to_run:
-        if client == except_client:
-            continue
+    for client in config.keys():
         host, port = ctx.rgw.role_endpoints[client]
         endpoint = 'http://{host}:{port}/'.format(host=host, port=port)
         log.info('Polling {client} until it starts accepting connections on {endpoint}'.format(client=client, endpoint=endpoint))
@@ -364,21 +344,16 @@ def start_rgw(ctx, config, on_client = None, except_client = None):
 
 
 @contextlib.contextmanager
-def start_apache(ctx, config, on_client = None, except_client = None):
+def start_apache(ctx, config):
     """
     Start apache on remote sites.
     """
     log.info('Starting apache...')
     testdir = teuthology.get_testdir(ctx)
     apaches = {}
-    clients_to_run = [on_client]
-    if on_client is None:
-        clients_to_run = config.keys()
-    for client in clients_to_run:
+    for client in config.keys():
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
         client_with_cluster = cluster_name + '.' + daemon_type + '.' + client_id
-        if client == except_client:
-            continue
         (remote,) = ctx.cluster.only(client).remotes.keys()
         system_type = teuthology.get_system_type(remote)
         if system_type == 'deb':
@@ -457,12 +432,8 @@ def create_pools(ctx, config):
     yield
 
 @contextlib.contextmanager
-def configure_compression(ctx, config):
+def configure_compression(ctx, config, compression):
     """ set a compression type in the default zone placement """
-    compression = ctx.rgw.compression_type
-    if not compression:
-        return
-
     log.info('Configuring compression type = %s', compression)
     for client, c_config in config.iteritems():
         # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
@@ -583,7 +554,13 @@ def task(ctx, config):
 
     subtasks.extend([
         lambda: create_pools(ctx=ctx, config=config),
-        lambda: configure_compression(ctx=ctx, config=config),
+    ])
+    if ctx.rgw.compression_type:
+        subtasks.extend([
+            lambda: configure_compression(ctx=ctx, config=config,
+                                          compression=ctx.rgw.compression_type),
+        ])
+    subtasks.extend([
         lambda: start_rgw(ctx=ctx, config=config),
     ])
 
