@@ -121,23 +121,19 @@ Context *OpenRequest<I>::handle_v2_detect_header(int *result) {
 
 template <typename I>
 void OpenRequest<I>::send_v2_get_id() {
-  if (m_image_ctx->id.empty()) {
-    CephContext *cct = m_image_ctx->cct;
-    ldout(cct, 10) << this << " " << __func__ << dendl;
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
 
-    librados::ObjectReadOperation op;
-    cls_client::get_id_start(&op);
+  librados::ObjectReadOperation op;
+  cls_client::get_id_start(&op);
 
-    using klass = OpenRequest<I>;
-    librados::AioCompletion *comp =
-      create_rados_callback<klass, &klass::handle_v2_get_id>(this);
-    m_out_bl.clear();
-    m_image_ctx->md_ctx.aio_operate(util::id_obj_name(m_image_ctx->name),
-                                    comp, &op, &m_out_bl);
-    comp->release();
-  } else {
-    send_v2_get_name();
-  }
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_callback<klass, &klass::handle_v2_get_id>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(util::id_obj_name(m_image_ctx->name),
+                                  comp, &op, &m_out_bl);
+  comp->release();
 }
 
 template <typename I>
