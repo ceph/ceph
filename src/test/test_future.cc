@@ -11,7 +11,9 @@
  * Foundation.  See file COPYING.
  */
 
-#include "common/future.hpp"
+#include "common/use_future.hpp"
+#include <boost/asio.hpp>
+#include <boost/pool/pool_alloc.hpp>
 #include <gtest/gtest.h>
 
 using namespace ceph;
@@ -559,4 +561,33 @@ TEST(future, when_any)
   EXPECT_EQ(0, f1.get());
   EXPECT_FALSE(f2.is_ready());
   EXPECT_FALSE(f3.is_ready());
+}
+
+TEST(use_future, token)
+{
+  boost::asio::io_service io;
+  // timer that completes immediately. doesn't start until io.run()
+  boost::asio::deadline_timer timer(io, boost::posix_time::time_duration());
+  // test that use_future works as a completion token to produce a future
+  future<void> f = timer.async_wait(use_future);
+  ASSERT_TRUE(f.valid());
+  EXPECT_FALSE(f.is_ready());
+  io.run();
+  f.wait();
+  ASSERT_TRUE(f.is_ready());
+  EXPECT_NO_THROW(f.get());
+}
+
+TEST(use_future, allocator)
+{
+  boost::asio::io_service io;
+  boost::asio::deadline_timer timer(io, boost::posix_time::time_duration());
+  // test use_future with a custom allocator
+  future<void> f = timer.async_wait(use_future[boost::pool_allocator<int>()]);
+  ASSERT_TRUE(f.valid());
+  EXPECT_FALSE(f.is_ready());
+  io.run();
+  f.wait();
+  ASSERT_TRUE(f.is_ready());
+  EXPECT_NO_THROW(f.get());
 }
