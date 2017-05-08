@@ -124,6 +124,7 @@ class CryptoAESKeyHandler : public CryptoKeyHandler {
 public:
   CryptoPP::AES::Encryption *enc_key;
   CryptoPP::AES::Decryption *dec_key;
+  bufferptr secret;
 
   CryptoAESKeyHandler()
     : enc_key(NULL),
@@ -265,6 +266,7 @@ class CryptoAESKeyHandler : public CryptoKeyHandler {
   PK11SlotInfo *slot;
   PK11SymKey *key;
   SECItem *param;
+  bufferptr secret;
 
 public:
   CryptoAESKeyHandler()
@@ -307,9 +309,7 @@ public:
     if (iv.length() == 0) {
       ivItem.data = (unsigned char*)CEPH_AES_IV;
       ivItem.len = sizeof(CEPH_AES_IV)-1;
-    }
-    else
-    {
+    } else {
       ivItem.data = (unsigned char*)iv.c_str();
       ivItem.len = iv.length();
     }
@@ -360,14 +360,12 @@ int CryptoAES::validate_secret(const bufferptr& secret)
   return 0;
 }
 
-CryptoKeyHandler *CryptoAES::get_key_handler(
-    const bufferptr& secret,
-		string& error)
+CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
+                                            string& error)
 {
   CryptoAESKeyHandler *ckh = new CryptoAESKeyHandler;
   ostringstream oss;
   if (ckh->init(secret, bufferptr(), oss) < 0) {
-    bufferptr a();
     error = oss.str();
     delete ckh;
     return NULL;
@@ -393,8 +391,6 @@ CryptoKeyHandler *CryptoAES::get_key_handler(
 
 class CryptoAES_256_CBC : public CryptoHandler {
 public:
-  CryptoAES_256_CBC() { }
-  ~CryptoAES_256_CBC() override {}
   int get_type() const override {
     return CEPH_CRYPTO_AES_256_CBC;
   }
@@ -429,8 +425,6 @@ public:
 
 class CryptoAES_256_CTR : public CryptoHandler {
 public:
-  CryptoAES_256_CTR() { }
-  ~CryptoAES_256_CTR() override {}
   int get_type() const override {
     return CEPH_CRYPTO_AES_256_CTR;
   }
@@ -465,8 +459,6 @@ public:
 
 class CryptoAES_256_ECB : public CryptoHandler {
 public:
-  CryptoAES_256_ECB() { }
-  ~CryptoAES_256_ECB() override {}
   int get_type() const override {
     return CEPH_CRYPTO_AES_256_ECB;
   }
@@ -503,11 +495,7 @@ public:
   CryptoAES_256_CBCKeyHandler(
       const bufferptr& key,
       const bufferptr& iv)
-    : iv(iv) {
-    secret = key;
-  }
-  virtual ~CryptoAES_256_CBCKeyHandler() {}
-
+    :secret(key), iv(iv) {}
   int encrypt(
       const bufferlist& in,
       bufferlist& out,
@@ -521,8 +509,8 @@ public:
     return cbc_transform(in, out, false, error);
   }
 private:
+  bufferptr secret;
   bufferptr iv;
-
   int cbc_transform(
       const bufferlist& in,
       bufferlist& out,
@@ -679,10 +667,7 @@ CryptoKeyHandler *CryptoAES_256_CBC::get_key_handler(
 class CryptoAES_256_ECBKeyHandler : public CryptoKeyHandler {
 public:
   CryptoAES_256_ECBKeyHandler(const bufferptr& key)
-  {
-    secret = key;
-  }
-  virtual ~CryptoAES_256_ECBKeyHandler() {}
+  :secret(key) {}
 
   int encrypt(const bufferlist& in, bufferlist& out, std::string *error) const {
     return ecb_transform(in, out, true, error);
@@ -691,6 +676,7 @@ public:
     return ecb_transform(in, out, false, error);
   }
 private:
+  bufferptr secret;
   int ecb_transform(
       const bufferlist& in,
       bufferlist& out,
@@ -865,10 +851,7 @@ CryptoKeyHandler *CryptoAES_256_ECB::get_key_handler(
 class CryptoAES_256_CTRKeyHandler : public CryptoKeyHandler {
 public:
   CryptoAES_256_CTRKeyHandler(const bufferptr& key, const bufferptr& iv)
-  :iv(iv) {
-    secret = key;
-  }
-  virtual ~CryptoAES_256_CTRKeyHandler() {}
+  :secret(key), iv(iv) {}
 
   int encrypt(
       const bufferlist& in,
@@ -887,6 +870,7 @@ public:
     return encrypt(in, out, error);
   }
 private:
+  bufferptr secret;
   bufferptr iv;
   bool ctr_transform(const bufferlist& in, bufferlist& out,
       std::string *error) const;

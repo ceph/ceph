@@ -38,8 +38,7 @@ public:
 		       bufferlist& out, std::string *error) const = 0;
   virtual int decrypt(const bufferlist& in,
 		       bufferlist& out, std::string *error) const = 0;
-protected:
-  bufferptr secret;
+
 };
 
 /*
@@ -139,7 +138,7 @@ public:
   virtual int create(bufferptr& secret) = 0;
   virtual int validate_secret(const bufferptr& secret) = 0;
   virtual CryptoKeyHandler *get_key_handler(const bufferptr& secret,
-					    string& error) = 0;
+                                           string& error) = 0;
   virtual CryptoKeyHandler *get_key_handler(const bufferptr& secret, const bufferptr& iv,
               string& error) = 0;
 
