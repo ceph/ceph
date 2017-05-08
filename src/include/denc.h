@@ -56,8 +56,16 @@ struct denc_traits {
 //#include <iostream>
 //using std::cout;
 
+// Define this to compile in a dump of all encoded objects to disk to
+// populate ceph-object-corpus.  Note that there is an almost
+// identical implementation in encoding.h, but you only need to define
+// ENCODE_DUMP_PATH here.
+//
+// See src/test/encoding/generate-corpus-objects.sh.
+//
+//#define ENCODE_DUMP_PATH /tmp/something
 
-#ifdef ENCODE_DUMP
+#ifdef ENCODE_DUMP_PATH
 # include <stdio.h>
 # include <sys/types.h>
 # include <sys/stat.h>
@@ -66,6 +74,9 @@ struct denc_traits {
 # define ENCODE_STRINGIFY(x) ENCODE_STR(x)
 # define DENC_DUMP_PRE(Type)			\
   char *__denc_dump_pre = p.get_pos();
+  // this hackery with bits below is just to get a semi-reasonable
+  // distribution across time.  it is somewhat exponential but not
+  // quite.
 # define DENC_DUMP_POST(Type)			\
   do {									\
     static int i = 0;							\
@@ -75,9 +86,9 @@ struct denc_traits {
       t &= t - 1;							\
     if (bits > 2)							\
       break;								\
-    char fn[200];							\
+    char fn[PATH_MAX];							\
     snprintf(fn, sizeof(fn),						\
-	     ENCODE_STRINGIFY(ENCODE_DUMP) "/%s__%d.%x", #Type,		\
+	     ENCODE_STRINGIFY(ENCODE_DUMP_PATH) "/%s__%d.%x", #Type,		\
 	     getpid(), i++);						\
     int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);		\
     if (fd >= 0) {							\
