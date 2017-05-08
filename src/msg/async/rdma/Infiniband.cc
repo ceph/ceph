@@ -769,7 +769,7 @@ Infiniband::~Infiniband()
   if (dispatcher)
     dispatcher->polling_stop();
 
-  assert(ibv_destroy_srq(srq) == 0);
+  ibv_destroy_srq(srq);
   delete memory_manager;
   delete pd;
 }
