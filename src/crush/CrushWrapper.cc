@@ -112,10 +112,20 @@ bool CrushWrapper::has_choose_args() const
 
 bool CrushWrapper::has_incompat_choose_args() const
 {
-  // FIXME: if the chooseargs all have 1 position *and* do not remap IDs then
-  // we can fabricate a compatible crush map for legacy clients by swapping the
-  // choose_args weights in for the real weights.  until then,
-  return has_chooseargs();
+  if (choose_args.size() != 1)
+    return true;
+  crush_choose_arg_map arg_map = choose_args.begin()->second;
+  for (__u32 i = 0; i < arg_map.size; i++) {
+    crush_choose_arg *arg = &arg_map.args[i];
+    if (arg->weight_set_size == 0 &&
+	arg->ids_size == 0)
+	continue;
+    if (arg->weight_set_size != 1)
+      return true;
+    if (arg->ids_size != 0)
+      return true;
+  }
+  return false;
 }
 
 int CrushWrapper::split_id_class(int i, int *idout, int *classout) const
@@ -1394,6 +1404,16 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
   ::encode(crush->max_rules, bl);
   ::encode(crush->max_devices, bl);
 
+  bool encode_compat_choose_args = false;
+  crush_choose_arg_map arg_map;
+  memset(&arg_map, '\0', sizeof(arg_map));
+  if (has_choose_args() &&
+      !HAVE_FEATURE(features, CRUSH_CHOOSE_ARGS)) {
+    assert(!has_incompat_choose_args());
+    encode_compat_choose_args = true;
+    arg_map = choose_args.begin()->second;
+  }
+
   // buckets
   for (int i=0; i<crush->max_buckets; i++) {
     __u32 alg = 0;
@@ -1437,8 +1457,17 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
       break;
 
     case CRUSH_BUCKET_STRAW2:
-      for (unsigned j=0; j<crush->buckets[i]->size; j++) {
-	::encode((reinterpret_cast<crush_bucket_straw2*>(crush->buckets[i]))->item_weights[j], bl);
+      {
+	__u32 *weights;
+	if (encode_compat_choose_args &&
+	    arg_map.args[i].weight_set_size > 0) {
+	  weights = arg_map.args[i].weight_set[0].weights;
+	} else {
+	  weights = (reinterpret_cast<crush_bucket_straw2*>(crush->buckets[i]))->item_weights;
+	}
+	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
+	  ::encode(weights[j], bl);
+	}
       }
       break;
 
