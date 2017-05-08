@@ -7032,11 +7032,16 @@ void OSD::sched_scrub()
         break;
       }
 
+      if ((scrub.deadline >= now) && !(time_permit && load_is_low)) {
+        dout(10) << __func__ << " not scheduling scrub for " << scrub.pgid << " due to "
+                 << (!time_permit ? "time not permit" : "high load") << dendl;
+        continue;
+      }
+
       PG *pg = _lookup_lock_pg(scrub.pgid);
       if (!pg)
 	continue;
-      if (pg->get_pgbackend()->scrub_supported() && pg->is_active() &&
-	  (scrub.deadline < now || (time_permit && load_is_low))) {
+      if (pg->get_pgbackend()->scrub_supported() && pg->is_active()) {
 	dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time
 		 << (pg->scrubber.must_scrub ? ", explicitly requested" :
 		     (load_is_low ? ", load_is_low" : " deadline < now"))
