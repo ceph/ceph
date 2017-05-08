@@ -718,7 +718,7 @@ void PGMap::dump_basic(Formatter *f) const
   osd_sum.dump(f);
   f->close_section();
 
-  f->open_object_section("osd_epochs");
+  f->open_array_section("osd_epochs");
   for (ceph::unordered_map<int32_t,epoch_t>::const_iterator p =
          osd_epochs.begin(); p != osd_epochs.end(); ++p) {
     f->open_object_section("osd");
