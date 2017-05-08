@@ -8454,7 +8454,16 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
     if (!more && pg->have_unfound()) {
       pg->discover_all_missing(*rctx.query_map);
       if (rctx.query_map->empty()) {
-	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
+	dout(10) << __func__ << ": no luck, giving up on this pg for now" << dendl;
+        if (pg->state_test(PG_STATE_BACKFILL)) {
+	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
+	    osdmap->get_epoch(),
+	    osdmap->get_epoch(),
+	    PG::CancelBackfill()));
+	  pg->queue_peering_event(evt);
+        }
+      } else {
+	dout(10) << __func__ << ": no luck, giving up on this pg for now" << dendl;
 	recovery_wq.lock();
 	recovery_wq._dequeue(pg);
 	recovery_wq.unlock();

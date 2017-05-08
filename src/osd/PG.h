@@ -1536,6 +1536,7 @@ public:
   TrivialEvent(LocalBackfillReserved)
   TrivialEvent(RemoteBackfillReserved)
   TrivialEvent(RemoteReservationRejected)
+  TrivialEvent(CancelBackfill)
   TrivialEvent(RequestBackfill)
   TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
@@ -1844,10 +1845,12 @@ public:
     struct Backfilling : boost::statechart::state< Backfilling, Active >, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::transition< Backfilled, Recovered >,
+	boost::statechart::custom_reaction< CancelBackfill >,
 	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       explicit Backfilling(my_context ctx);
       boost::statechart::result react(const RemoteReservationRejected& evt);
+      boost::statechart::result react(const CancelBackfill& evt);
       void exit();
     };
 
