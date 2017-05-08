@@ -177,7 +177,7 @@ const int num_retries = 10;
 const int default_reshard_sleep_duration = 30;
 
 int RGWReshard::block_while_resharding(const string& bucket_instance_oid,
-				                                  BucketIndexLockGuard& guard)
+				       BucketIndexLockGuard& guard)
 {
   int ret = 0;
   cls_rgw_bucket_instance_entry entry;
@@ -195,16 +195,15 @@ int RGWReshard::block_while_resharding(const string& bucket_instance_oid,
       return ret;
     }
 
-    if (entry.resharding) {
-      /* clear resharding uses the same lock */
-      ret = guard.unlock();
-      if (ret < 0) {
-	return ret;
-      }
-      sleep(default_reshard_sleep_duration);
-    } else {
+    ret = guard.unlock();
+    if (ret < 0) {
+      return ret;
+    }
+    if (!entry.resharding) {
       return 0;
     }
+    /* needed to unlock as clear resharding uses the same lock */
+    sleep(default_reshard_sleep_duration);
   }
   ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
   return -EAGAIN;

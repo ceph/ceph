@@ -9535,14 +9535,6 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_t
   RGWRados *store = target->get_store();
   BucketShard *bs;
 
-  /* handle on going bucket resharding */
-  BucketIndexLockGuard guard(store->ctx(), store, target->get_bucket().bucket_id, target->get_bucket().oid,
-			     store->reshard_pool_ctx);
-  int ret = store->reshard->block_while_resharding(target->get_bucket().oid, guard);
-  if (ret < 0) {
-    return ret;
-  }
-
   ret = get_bucket_shard(&bs);
   if (ret < 0) {
     ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
@@ -12157,6 +12149,7 @@ int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
   
   ObjectWriteOperation o;
   cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
+  cls_rgw_guard_resharding(o, -ERR_BUSY_RESHARDING);
   cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), get_zone().log_data, bilog_flags, zones_trace);
   return bs.index_ctx.operate(bs.bucket_obj, &o);
 }
@@ -12193,6 +12186,7 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, RGWModifyOp op, string& tag,
   ver.pool = pool;
   ver.epoch = epoch;
   cls_rgw_obj_key key(ent.key.name, ent.key.instance);
+  cls_rgw_guard_resharding(o, -ERR_BUSY_RESHARDING);
   cls_rgw_bucket_complete_op(o, op, tag, ver, key, dir_meta, pro,
                              get_zone().log_data, bilog_flags, zones_trace);
 
