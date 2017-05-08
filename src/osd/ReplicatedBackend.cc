@@ -1820,6 +1820,15 @@ void ReplicatedBackend::handle_push(
   bool complete = pop.after_progress.data_complete &&
     pop.after_progress.omap_complete;
 
+  if (first) {
+    // attrs only reference the origin bufferlist (decode from MOSDPGPush message)
+    // whose size is much greater than attrs in recovery. Onode in BlueStore will cache it
+    for (map<string, bufferlist>::iterator it = pop.attrset.begin();
+         it != pop.attrset.end();
+         ++it) {
+      it->second.rebuild();
+    }    
+  }
   response->soid = pop.recovery_info.soid;
   submit_push_data(pop.recovery_info,
 		   first,
