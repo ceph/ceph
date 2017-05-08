@@ -472,7 +472,6 @@ public:
   MonClient   *&monc;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
   GenContextWQ recovery_gen_wq;
-  GenContextWQ op_gen_wq;
   ClassHandler  *&class_handler;
 
   void enqueue_back(spg_t pgid, PGQueueable qi);
