@@ -5,10 +5,11 @@
 #define CEPH_LIBRBD_IO_IMAGE_REQUEST_WQ_H
 
 #include "include/Context.h"
-#include "include/atomic.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
+
 #include <list>
+#include <atomic>
 
 namespace librbd {
 
@@ -98,10 +99,10 @@ private:
   Contexts m_write_blocker_contexts;
   uint32_t m_write_blockers;
   bool m_require_lock_on_read = false;
-  atomic_t m_in_progress_writes;
-  atomic_t m_queued_reads;
-  atomic_t m_queued_writes;
-  atomic_t m_in_flight_ops;
+  std::atomic<unsigned> m_in_progress_writes { 0 };
+  std::atomic<unsigned> m_queued_reads { 0 };
+  std::atomic<unsigned> m_queued_writes { 0 };
+  std::atomic<unsigned> m_in_flight_ops { 0 };
 
   bool m_refresh_in_progress;
 
@@ -110,7 +111,7 @@ private:
 
   inline bool writes_empty() const {
     RWLock::RLocker locker(m_lock);
-    return (m_queued_writes.read() == 0);
+    return (m_queued_writes == 0);
   }
 
   void finish_queued_op(ImageRequest<ImageCtx> *req);

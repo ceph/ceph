@@ -229,7 +229,7 @@ PoolReplayer::~PoolReplayer()
 {
   delete m_asok_hook;
 
-  m_stopping.set(1);
+  m_stopping = true;
   {
     Mutex::Locker l(m_lock);
     m_cond.Signal();
@@ -410,7 +410,7 @@ void PoolReplayer::run()
 {
   dout(20) << "enter" << dendl;
 
-  while (!m_stopping.read()) {
+  while (!m_stopping) {
     std::string asok_hook_name = m_local_io_ctx.get_pool_name() + " " +
                                  m_peer.cluster_name;
     if (m_asok_hook_name != asok_hook_name || m_asok_hook == nullptr) {
@@ -425,7 +425,7 @@ void PoolReplayer::run()
     if ((m_local_pool_watcher && m_local_pool_watcher->is_blacklisted()) ||
 	(m_remote_pool_watcher && m_remote_pool_watcher->is_blacklisted())) {
       m_blacklisted = true;
-      m_stopping.set(1);
+      m_stopping = true;
       break;
     }
 
@@ -476,7 +476,7 @@ void PoolReplayer::start()
 
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping) {
     return;
   }
 
@@ -489,10 +489,10 @@ void PoolReplayer::stop(bool manual)
 
   Mutex::Locker l(m_lock);
   if (!manual) {
-    m_stopping.set(1);
+    m_stopping = true;
     m_cond.Signal();
     return;
-  } else if (m_stopping.read()) {
+  } else if (m_stopping) {
     return;
   }
 
@@ -505,7 +505,7 @@ void PoolReplayer::restart()
 
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read()) {
+  if (m_stopping) {
     return;
   }
 
@@ -518,7 +518,7 @@ void PoolReplayer::flush()
 
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read() || m_manual_stop) {
+  if (m_stopping || m_manual_stop) {
     return;
   }
 
@@ -531,7 +531,7 @@ void PoolReplayer::release_leader()
 
   Mutex::Locker l(m_lock);
 
-  if (m_stopping.read() || !m_leader_watcher) {
+  if (m_stopping || !m_leader_watcher) {
     return;
   }
 
@@ -541,7 +541,7 @@ void PoolReplayer::release_leader()
 void PoolReplayer::handle_update(const std::string &mirror_uuid,
 				 ImageIds &&added_image_ids,
 				 ImageIds &&removed_image_ids) {
-  if (m_stopping.read()) {
+  if (m_stopping) {
     return;
   }
 

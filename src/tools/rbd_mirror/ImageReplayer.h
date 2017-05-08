@@ -4,11 +4,6 @@
 #ifndef CEPH_RBD_MIRROR_IMAGE_REPLAYER_H
 #define CEPH_RBD_MIRROR_IMAGE_REPLAYER_H
 
-#include <map>
-#include <string>
-#include <vector>
-
-#include "include/atomic.h"
 #include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
@@ -23,9 +18,15 @@
 #include "ImageDeleter.h"
 #include "ProgressContext.h"
 #include "types.h"
-#include <set>
+
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
+
+#include <set>
+#include <map>
+#include <atomic>
+#include <string>
+#include <vector>
 
 class AdminSocketHook;
 

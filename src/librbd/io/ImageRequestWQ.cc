@@ -275,9 +275,9 @@ void ImageRequestWQ::shut_down(Context *on_shutdown) {
     m_shutdown = true;
 
     CephContext *cct = m_image_ctx.cct;
-    ldout(cct, 5) << __func__ << ": in_flight=" << m_in_flight_ops.read()
+    ldout(cct, 5) << __func__ << ": in_flight=" << m_in_flight_ops.load()
                   << dendl;
-    if (m_in_flight_ops.read() > 0) {
+    if (m_in_flight_ops > 0) {
       m_on_shutdown = on_shutdown;
       return;
     }
@@ -289,8 +289,8 @@ void ImageRequestWQ::shut_down(Context *on_shutdown) {
 
 bool ImageRequestWQ::is_lock_request_needed() const {
   RWLock::RLocker locker(m_lock);
-  return (m_queued_writes.read() > 0 ||
-          (m_require_lock_on_read && m_queued_reads.read() > 0));
+  return (m_queued_writes > 0 ||
+          (m_require_lock_on_read && m_queued_reads > 0));
 }
 
 int ImageRequestWQ::block_writes() {
@@ -308,7 +308,7 @@ void ImageRequestWQ::block_writes(Context *on_blocked) {
     ++m_write_blockers;
     ldout(cct, 5) << __func__ << ": " << &m_image_ctx << ", "
                   << "num=" << m_write_blockers << dendl;
-    if (!m_write_blocker_contexts.empty() || m_in_progress_writes.read() > 0) {
+    if (!m_write_blocker_contexts.empty() || m_in_progress_writes > 0) {
       m_write_blocker_contexts.push_back(on_blocked);
       return;
     }
@@ -380,7 +380,7 @@ void *ImageRequestWQ::_void_dequeue() {
 
       // refresh will requeue the op -- don't count it as in-progress
       if (!refresh_required) {
-        m_in_progress_writes.inc();
+        m_in_progress_writes++;
       }
     } else if (m_require_lock_on_read) {
       return nullptr;
@@ -427,11 +427,11 @@ void ImageRequestWQ::process(ImageRequest<> *req) {
 void ImageRequestWQ::finish_queued_op(ImageRequest<> *req) {
   RWLock::RLocker locker(m_lock);
   if (req->is_write_op()) {
-    assert(m_queued_writes.read() > 0);
-    m_queued_writes.dec();
+    assert(m_queued_writes > 0);
+    m_queued_writes--;
   } else {
-    assert(m_queued_reads.read() > 0);
-    m_queued_reads.dec();
+    assert(m_queued_reads > 0);
+    m_queued_reads--;
   }
 }
 
@@ -439,8 +439,8 @@ void ImageRequestWQ::finish_in_progress_write() {
   bool writes_blocked = false;
   {
     RWLock::RLocker locker(m_lock);
-    assert(m_in_progress_writes.read() > 0);
-    if (m_in_progress_writes.dec() == 0 &&
+    assert(m_in_progress_writes > 0);
+    if (--m_in_progress_writes == 0 &&
         !m_write_blocker_contexts.empty()) {
       writes_blocked = true;
     }
@@ -462,7 +462,7 @@ int ImageRequestWQ::start_in_flight_op(AioCompletion *c) {
     return false;
   }
 
-  m_in_flight_ops.inc();
+  m_in_flight_ops++;
   return true;
 }
 
@@ -470,7 +470,7 @@ void ImageRequestWQ::finish_in_flight_op() {
   Context *on_shutdown;
   {
     RWLock::RLocker locker(m_lock);
-    if (m_in_flight_ops.dec() > 0 || !m_shutdown) {
+    if (--m_in_flight_ops > 0 || !m_shutdown) {
       return;
     }
     on_shutdown = m_on_shutdown;
@@ -512,9 +512,9 @@ void ImageRequestWQ::queue(ImageRequest<> *req) {
   }
 
   if (write_op) {
-    m_queued_writes.inc();
+    m_queued_writes++;
   } else {
-    m_queued_reads.inc();
+    m_queued_reads++;
   }
 
   ThreadPool::PointerWQ<ImageRequest<> >::queue(req);
