@@ -88,44 +88,57 @@ bool PaxosService::dispatch(MonOpRequestRef op)
   }
 
   // update
-  if (prepare_update(op)) {
-    double delay = 0.0;
-    if (should_propose(delay)) {
-      if (delay == 0.0) {
-	propose_pending();
-      } else {
-	// delay a bit
-	if (!proposal_timer) {
-	  /**
-	   * Callback class used to propose the pending value once the proposal_timer
-	   * fires up.
-	   */
-	  class C_Propose : public Context {
-	    PaxosService *ps;
-	  public:
-	    explicit C_Propose(PaxosService *p) : ps(p) { }
-	    void finish(int r) override {
-	      ps->proposal_timer = 0;
-	      if (r >= 0)
-		ps->propose_pending();
-	      else if (r == -ECANCELED || r == -EAGAIN)
-		return;
-	      else
-		assert(0 == "bad return value for C_Propose");
-	    }
-	  };
+  if (!prepare_update(op)) {
+    // no changes made.
+    return true;
+  }
 
-	  proposal_timer = new C_Propose(this);
-	  dout(10) << " setting proposal_timer " << proposal_timer << " with delay of " << delay << dendl;
-	  mon->timer.add_event_after(delay, proposal_timer);
-	} else { 
-	  dout(10) << " proposal_timer already set" << dendl;
-	}
+  if (need_immediate_propose) {
+    dout(10) << __func__ << " forced immediate propose" << dendl;
+    need_immediate_propose = false;
+    propose_pending();
+    return true;
+  }
+
+  double delay = 0.0;
+  if (!should_propose(delay)) {
+    dout(10) << " not proposing" << dendl;
+    return true;
+  }
+
+  if (delay == 0.0) {
+    propose_pending();
+    return true;
+  }
+
+  // delay a bit
+  if (!proposal_timer) {
+    /**
+       * Callback class used to propose the pending value once the proposal_timer
+       * fires up.
+       */
+    class C_Propose : public Context {
+      PaxosService *ps;
+    public:
+      explicit C_Propose(PaxosService *p) : ps(p) { }
+      void finish(int r) override {
+	ps->proposal_timer = 0;
+	if (r >= 0)
+	  ps->propose_pending();
+	else if (r == -ECANCELED || r == -EAGAIN)
+	  return;
+	else
+	  assert(0 == "bad return value for C_Propose");
       }
-    } else {
-      dout(10) << " not proposing" << dendl;
-    }
-  }     
+    };
+
+    proposal_timer = new C_Propose(this);
+    dout(10) << " setting proposal_timer " << proposal_timer
+	     << " with delay of " << delay << dendl;
+    mon->timer.add_event_after(delay, proposal_timer);
+  } else {
+    dout(10) << " proposal_timer already set" << dendl;
+  }
   return true;
 }
 
@@ -161,9 +174,9 @@ void PaxosService::post_refresh()
 bool PaxosService::should_propose(double& delay)
 {
   // simple default policy: quick startup, then some damping.
-  if (get_last_committed() <= 1)
+  if (get_last_committed() <= 1) {
     delay = 0.0;
-  else {
+  } else {
     utime_t now = ceph_clock_now();
     if ((now - paxos->last_commit_time) > g_conf->paxos_propose_interval)
       delay = (double)g_conf->paxos_min_wait;

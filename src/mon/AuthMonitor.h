@@ -170,6 +170,8 @@ private:
   
   void tick() override;  // check state, take actions
 
+  void test_do_thing();
+
   void dump_info(Formatter *f);
 };
 

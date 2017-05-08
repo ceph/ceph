@@ -219,3 +219,10 @@ out:
   return (ret == 0);
 }
 
+void ConfigKeyService::test_do_thing()
+{
+  dout(10) << __func__ << dendl;
+  bufferlist bl;
+  bl.append("value");
+  store_put("test/item", bl);
+}
