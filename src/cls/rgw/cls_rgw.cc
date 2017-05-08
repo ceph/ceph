@@ -3585,14 +3585,12 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
   if (ret < 0)
     return ret;
   cls_rgw_reshard_entry  entry;
-  if (bl.length() != 0) {
-    bufferlist::iterator iter = bl.begin();
-    try {
-      ::decode(entry, iter);
-    } catch (buffer::error& err) {
-      CLS_LOG(0, "ERROR: rgw_cls_reshard_get_head(): failed to decode entry %s\n",err.what());
-      return -EINVAL;
-    }
+  bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(entry, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: rgw_cls_reshard_get : failed to decode entry %s\n",err.what());
+    return -EINVAL;
   }
 
   cls_rgw_reshard_get_ret op_ret;
