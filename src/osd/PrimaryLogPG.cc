@@ -11129,8 +11129,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
     const pg_missing_item& item = missing.get_items().find(p->second)->second;
     ++p;
 
-    hobject_t head = soid;
-    head.snap = CEPH_NOSNAP;
+    hobject_t head = soid.get_head();
 
     eversion_t need = item.need;
 
