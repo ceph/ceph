@@ -111,13 +111,10 @@ WRITE_INTTYPE_ENCODER(int32_t, le32)
 WRITE_INTTYPE_ENCODER(uint16_t, le16)
 WRITE_INTTYPE_ENCODER(int16_t, le16)
 
-#ifdef ENCODE_DUMP
-
+// see denc.h for ENCODE_DUMP_PATH discussion and definition.
+#ifdef ENCODE_DUMP_PATH
 # define ENCODE_DUMP_PRE()			\
   unsigned pre_off = bl.length()
-
-// NOTE: This is almost an exponential backoff, but because we count
-// bits we get a better sample of things we encode later on.
 # define ENCODE_DUMP_POST(cl)						\
   do {									\
     static int i = 0;							\
@@ -127,8 +124,8 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
       t &= t - 1;							\
     if (bits > 2)							\
       break;								\
-    char fn[200];							\
-    snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP) "/%s__%d.%x", #cl, getpid(), i++); \
+    char fn[PATH_MAX];							\
+    snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP_PATH) "/%s__%d.%x", #cl, getpid(), i++); \
     int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT, 0644);		\
     if (fd >= 0) {							\
       bufferlist sub;							\
@@ -141,6 +138,7 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
 # define ENCODE_DUMP_PRE()
 # define ENCODE_DUMP_POST(cl)
 #endif
+
 
 #define WRITE_CLASS_ENCODER(cl)						\
   inline void encode(const cl &c, bufferlist &bl, uint64_t features=0) { \
