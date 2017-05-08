@@ -110,13 +110,18 @@ string ceph_osd_alloc_hint_flag_string(unsigned flags);
  */
 struct osd_reqid_t {
   entity_name_t name; // who
-  ceph_tid_t         tid;
+  ceph_tid_t    tid;
   int32_t       inc;  // incarnation
 
   osd_reqid_t()
-    : tid(0), inc(0) {}
+    : tid(0), inc(0)
+  {}
+  osd_reqid_t(const osd_reqid_t& other)
+    : name(other.name), tid(other.tid), inc(other.inc)
+  {}
   osd_reqid_t(const entity_name_t& a, int i, ceph_tid_t t)
-    : name(a), tid(t), inc(i) {}
+    : name(a), tid(t), inc(i)
+  {}
 
   DENC(osd_reqid_t, v, p) {
     DENC_START(2, 2, p);
@@ -783,7 +788,7 @@ public:
   eversion_t(epoch_t e, version_t v) : version(v), epoch(e), __pad(0) {}
 
   // cppcheck-suppress noExplicitConstructor
-  eversion_t(const ceph_eversion& ce) : 
+  eversion_t(const ceph_eversion& ce) :
     version(ce.version),
     epoch(ce.epoch),
     __pad(0) { }
@@ -3412,8 +3417,9 @@ struct pg_log_dup_t {
   int32_t return_code; // only stored for ERRORs for dup detection
 
   pg_log_dup_t()
-   : user_version(0), return_code(0) {}
-  pg_log_dup_t(const pg_log_entry_t &entry) explicit
+    : user_version(0), return_code(0)
+  {}
+  explicit pg_log_dup_t(const pg_log_entry_t& entry)
     : reqid(entry.reqid), version(entry.version),
       user_version(entry.user_version), return_code(entry.return_code)
   {}
@@ -3422,13 +3428,18 @@ struct pg_log_dup_t {
     : reqid(rid), version(v), user_version(uv),
       return_code(return_code)
   {}
+
   string get_key_name() const;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_log_dup_t*>& o);
+
+  friend std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e);
 };
 WRITE_CLASS_ENCODER(pg_log_dup_t)
+
+std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e);
 
 /**
  * pg_log_t - incremental log of recent pg changes.
@@ -3454,9 +3465,12 @@ protected:
   eversion_t rollback_info_trimmed_to;
 
 public:
-  mempool::osd_pglog::list<pg_log_entry_t> log;  // the actual log.
-  mempool::osd_pglog::list<pg_log_dup_t> dups;  // entries just for dup op detection
-  
+  // the actual log
+  mempool::osd_pglog::list<pg_log_entry_t> log;
+
+  // entries just for dup op detection ordered oldest to newest
+  mempool::osd_pglog::list<pg_log_dup_t> dups;
+
   pg_log_t() = default;
   pg_log_t(const eversion_t &last_update,
 	   const eversion_t &log_tail,
@@ -3527,7 +3541,7 @@ public:
       rollback_info_trimmed_to,
       std::move(childlog),
       std::move(childdups));
-  }
+    }
 
   mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
     assert(newhead >= tail);
@@ -3618,7 +3632,7 @@ public:
 };
 WRITE_CLASS_ENCODER(pg_log_t)
 
-inline ostream& operator<<(ostream& out, const pg_log_t& log) 
+inline ostream& operator<<(ostream& out, const pg_log_t& log)
 {
   out << "log((" << log.tail << "," << log.head << "], crt="
       << log.get_can_rollback_to() << ")";
@@ -4379,10 +4393,6 @@ inline ostream& operator<<(ostream& out, const ObjectExtent &ex)
 	     << " -> " << ex.buffer_extents
              << ")";
 }
-
-
-
-
 
 
 // ---------------------------------------

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -10,9 +10,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include "PGLog.h"
@@ -37,7 +37,7 @@ void PGLog::IndexedLog::split_out_child(
   PGLog::IndexedLog *target)
 {
   unindex();
-  *target = pg_log_t::split_out_child(child_pgid, split_bits);
+  *target = IndexedLog(pg_log_t::split_out_child(child_pgid, split_bits));
   index();
   target->index();
   reset_rollback_info_trimmed_to_riter();
@@ -47,7 +47,8 @@ void PGLog::IndexedLog::trim(
   CephContext* cct,
   eversion_t s,
   set<eversion_t> *trimmed,
-  set<string> *trimmed_dups)
+  set<string>* trimmed_dups,
+  bool* dirty_dups)
 {
   if (complete_to != log.end() &&
       complete_to->version <= s) {
@@ -58,8 +59,13 @@ void PGLog::IndexedLog::trim(
 
   assert(s <= can_rollback_to);
 
+  auto earliest_dup_version =
+    log.rbegin()->version.version < cct->_conf->osd_pg_log_dups_tracked
+    ? 0u
+    : log.rbegin()->version.version - cct->_conf->osd_pg_log_dups_tracked;
+
   while (!log.empty()) {
-    pg_log_entry_t &e = *log.begin();
+    const pg_log_entry_t &e = *log.begin();
     if (e.version > s)
       break;
     generic_dout(20) << "trim " << e << dendl;
@@ -69,14 +75,15 @@ void PGLog::IndexedLog::trim(
     unindex(e);         // remove from index,
 
     // add to dup list
-    if (e.version.version + 1000 > s.version) {
-      dirty_dups = true;
+    if (e.version.version >= earliest_dup_version) {
+      if (dirty_dups) *dirty_dups = true;
       dups.push_back(pg_log_dup_t(e));
-      dup_index[e.reqid] = &(dups.back());
+      index(dups.back());
       for (const auto& extra : e.extra_reqids) {
+	// note: extras have the same version as outer op
 	dups.push_back(pg_log_dup_t(e.version, extra.second,
 				    extra.first, e.return_code));
-	dup_index[extra->first] = &(dups.back());
+	index(dups.back());
       }
     }
 
@@ -90,13 +97,15 @@ void PGLog::IndexedLog::trim(
   }
 
   while (!dups.empty()) {
-    auto &e = *dups.begin();
-    if (e.version.version + 1000 > s.version)
+    const auto& e = *dups.begin();
+    if (e.version.version >= earliest_dup_version)
       break;
     generic_dout(20) << "trim dup " << e << dendl;
     if (trimmed_dups)
       trimmed_dups->insert(e.get_key_name());
-    dup_index.erase(e.reqid);
+    if (indexed_data & PGLOG_INDEXED_DUPS) {
+      dup_index.erase(e.reqid);
+    }
     dups.pop_front();
   }
 
@@ -111,9 +120,18 @@ ostream& PGLog::IndexedLog::print(ostream& out) const
   for (list<pg_log_entry_t>::const_iterator p = log.begin();
        p != log.end();
        ++p) {
-    out << *p << " " << (logged_object(p->soid) ? "indexed":"NOT INDEXED") << std::endl;
+    out << *p << " " <<
+      (logged_object(p->soid) ? "indexed" : "NOT INDEXED") <<
+      std::endl;
     assert(!p->reqid_is_indexed() || logged_req(p->reqid));
   }
+
+  for (list<pg_log_dup_t>::const_iterator p = dups.begin();
+       p != dups.end();
+       ++p) {
+    out << *p << std::endl;
+  }
+
   return out;
 }
 
@@ -148,7 +166,7 @@ void PGLog::trim(
     assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
-    log.trim(cct, trim_to, &trimmed, &trimmed_dups);
+    log.trim(cct, trim_to, &trimmed, &trimmed_dups, &dirty_dups);
     info.log_tail = log.tail;
   }
 }
@@ -254,7 +272,7 @@ void PGLog::proc_replica_log(
   } else {
     oinfo.last_complete = oinfo.last_update;
   }
-}
+} // proc_replica_log
 
 /**
  * rewind divergent entries at the head of the log
@@ -268,7 +286,8 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
 				 pg_info_t &info, LogEntryHandler *rollbacker,
 				 bool &dirty_info, bool &dirty_big_info)
 {
-  dout(10) << "rewind_divergent_log truncate divergent future " << newhead << dendl;
+  dout(10) << "rewind_divergent_log truncate divergent future " <<
+    newhead << dendl;
 
 
   if (info.last_complete > newhead)
@@ -342,7 +361,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
     // splice into our log.
     log.log.splice(log.log.begin(),
 		   olog.log, from, to);
-      
+
     info.log_tail = log.tail = olog.tail;
     changed = true;
   }
@@ -365,7 +384,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
   // extend on head?
   if (olog.head > log.head) {
     dout(10) << "merge_log extending head to " << olog.head << dendl;
-      
+
     // find start point in olog
     list<pg_log_entry_t>::iterator to = olog.log.end();
     list<pg_log_entry_t>::iterator from = olog.log.end();
@@ -423,13 +442,95 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
 
     changed = true;
   }
-  
-  dout(10) << "merge_log result " << log << " " << missing << " changed=" << changed << dendl;
+
+  // now handle dups
+  if (merge_log_dups(olog)) {
+    dirty_dups = true;
+    changed = true;
+  }
+
+  dout(10) << "merge_log result " << log << " " << missing <<
+    " changed=" << changed << dendl;
 
   if (changed) {
     dirty_info = true;
     dirty_big_info = true;
   }
+}
+
+
+// returns true if any changes were made to log.dups
+bool PGLog::merge_log_dups(const pg_log_t& olog) {
+  bool changed = false;
+
+  if (!olog.dups.empty()) {
+    if (log.dups.empty()) {
+      dout(10) << "merge_log copying olog dups to log " <<
+	olog.dups.front().version << " to " <<
+	olog.dups.back().version << dendl;
+      changed = true;
+      // since our log.dups is empty just copy them
+      for (const auto& i : olog.dups) {
+	log.dups.push_back(i);
+	log.index(log.dups.back());
+      }
+    } else {
+      // since our log.dups is not empty try to extend on each end
+
+      if (olog.dups.back().version > log.dups.back().version) {
+	// extend the dups's tail (i.e., newer dups)
+	dout(10) << "merge_log extending dups tail to " <<
+	  olog.dups.back().version << dendl;
+	changed = true;
+
+	auto log_tail_version = log.dups.back().version;
+
+	auto insert_cursor = log.dups.end();
+	for (auto i = olog.dups.crbegin(); i != olog.dups.crend(); ++i) {
+	  if (i->version <= log_tail_version) break;
+	  log.dups.insert(insert_cursor, *i);
+
+	  auto prev = insert_cursor;
+	  --prev;
+	  // be sure to pass reference of copy in log.dups
+	  log.index(*prev);
+
+	  --insert_cursor; // make sure we insert in reverse order
+	}
+      }
+
+      if (olog.dups.front().version < log.dups.front().version) {
+	// extend the dups's head (i.e., older dups)
+	dout(10) << "merge_log extending dups head to " <<
+	  olog.dups.front().version << dendl;
+	changed = true;
+
+	auto insert_cursor = log.dups.begin();
+	for (auto i = olog.dups.cbegin(); i != olog.dups.cend(); ++i) {
+	  if (i->version >= insert_cursor->version) break;
+	  log.dups.insert(insert_cursor, *i);
+	  auto prev = insert_cursor;
+	  --prev;
+	  // be sure to pass address of copy in log.dups
+	  log.index(*prev);
+	}
+      }
+    }
+  }
+
+  // remove any dup entries that overlap with pglog
+  if (!log.dups.empty() && log.dups.back().version >= log.tail) {
+    dout(10) << "merge_log removed dups overlapping log entries [" <<
+      log.tail << "," << log.dups.back().version << "]" << dendl;
+    changed = true;
+
+    while (!log.dups.empty() && log.dups.back().version >= log.tail) {
+      log.unindex(log.dups.back());
+      log.dups.pop_back();
+    }
+  }
+
+  return changed;
 }
 
 void PGLog::check() {
@@ -458,10 +559,12 @@ void PGLog::check() {
   }
 }
 
+// non-static
 void PGLog::write_log_and_missing(
   ObjectStore::Transaction& t,
   map<string,bufferlist> *km,
-  const coll_t& coll, const ghobject_t &log_oid,
+  const coll_t& coll,
+  const ghobject_t &log_oid,
   bool require_rollback)
 {
   if (is_dirty()) {
@@ -484,29 +587,34 @@ void PGLog::write_log_and_missing(
       !touched_log,
       require_rollback,
       clear_divergent_priors,
+      dirty_dups,
       &rebuilt_missing_with_deletes,
-      (pg_log_debug ? &log_keys_debug : 0));
+      (pg_log_debug ? &log_keys_debug : nullptr));
     undirty();
   } else {
     dout(10) << "log is not dirty" << dendl;
   }
 }
 
+// static
 void PGLog::write_log_and_missing_wo_missing(
     ObjectStore::Transaction& t,
     map<string,bufferlist> *km,
     pg_log_t &log,
     const coll_t& coll, const ghobject_t &log_oid,
     map<eversion_t, hobject_t> &divergent_priors,
-    bool require_rollback)
+    bool require_rollback,
+    bool dirty_dups)
 {
   _write_log_and_missing_wo_missing(
     t, km, log, coll, log_oid,
     divergent_priors, eversion_t::max(), eversion_t(), eversion_t(),
     set<eversion_t>(),
-    true, true, require_rollback, 0);
+    set<string>(),
+    true, true, require_rollback, dirty_dups, nullptr);
 }
 
+// static
 void PGLog::write_log_and_missing(
     ObjectStore::Transaction& t,
     map<string,bufferlist> *km,
@@ -515,6 +623,7 @@ void PGLog::write_log_and_missing(
     const ghobject_t &log_oid,
     const pg_missing_tracker_t &missing,
     bool require_rollback,
+    bool dirty_dups,
     bool *rebuilt_missing_with_deletes)
 {
   _write_log_and_missing(
@@ -523,10 +632,12 @@ void PGLog::write_log_and_missing(
     eversion_t(),
     eversion_t(),
     set<eversion_t>(),
+    set<string>(),
     missing,
-    true, require_rollback, false, rebuilt_missing_with_deletes, 0);
+    true, require_rollback, false, dirty_dups, rebuilt_missing_with_deletes, nullptr);
 }
 
+// static
 void PGLog::_write_log_and_missing_wo_missing(
   ObjectStore::Transaction& t,
   map<string,bufferlist> *km,
@@ -541,6 +652,7 @@ void PGLog::_write_log_and_missing_wo_missing(
   bool dirty_divergent_priors,
   bool touch_log,
   bool require_rollback,
+  bool dirty_dups,
   set<string> *log_keys_debug
   )
 {
@@ -555,7 +667,7 @@ void PGLog::_write_log_and_missing_wo_missing(
     }
   }
 
-//dout(10) << "write_log_and_missing, clearing up to " << dirty_to << dendl;
+  // dout(10) << "write_log_and_missing, clearing up to " << dirty_to << dendl;
   if (touch_log)
     t.touch(coll, log_oid);
   if (dirty_to != eversion_t()) {
@@ -565,7 +677,7 @@ void PGLog::_write_log_and_missing_wo_missing(
     clear_up_to(log_keys_debug, dirty_to.get_key_name());
   }
   if (dirty_to != eversion_t::max() && dirty_from != eversion_t::max()) {
-    //   dout(10) << "write_log_and_missing, clearing from " << dirty_from << dendl;
+    // dout(10) << "write_log_and_missing, clearing from " << dirty_from << dendl;
     t.omap_rmkeyrange(
       coll, log_oid,
       dirty_from.get_key_name(), eversion_t::max().get_key_name());
@@ -590,6 +702,19 @@ void PGLog::_write_log_and_missing_wo_missing(
     (*km)[p->get_key_name()].claim(bl);
   }
 
+  if (log_keys_debug) {
+    for (map<string, bufferlist>::iterator i = (*km).begin();
+	 i != (*km).end();
+	 ++i) {
+      if (i->first[0] == '_')
+	continue;
+      assert(!log_keys_debug->count(i->first));
+      log_keys_debug->insert(i->first);
+    }
+  }
+
+  // process dirty_dups after log_keys_debug is filled, so dups do not
+  // end up in that set
   if (dirty_dups) {
     pg_log_dup_t min;
     t.omap_rmkeyrange(
@@ -599,17 +724,6 @@ void PGLog::_write_log_and_missing_wo_missing(
       bufferlist bl;
       ::encode(entry, bl);
       (*km)[entry.get_key_name()].claim(bl);
-    }
-  }
-
-  if (log_keys_debug) {
-    for (map<string, bufferlist>::iterator i = (*km).begin();
-	 i != (*km).end();
-	 ++i) {
-      if (i->first[0] == '_')
-	continue;
-      assert(!log_keys_debug->count(i->first));
-      log_keys_debug->insert(i->first);
     }
   }
 
@@ -630,6 +744,7 @@ void PGLog::_write_log_and_missing_wo_missing(
     t.omap_rmkeys(coll, log_oid, to_remove);
 }
 
+// static
 void PGLog::_write_log_and_missing(
   ObjectStore::Transaction& t,
   map<string,bufferlist>* km,
@@ -644,6 +759,7 @@ void PGLog::_write_log_and_missing(
   bool touch_log,
   bool require_rollback,
   bool clear_divergent_priors,
+  bool dirty_dups,
   bool *rebuilt_missing_with_deletes, // in/out param
   set<string> *log_keys_debug
   ) {
@@ -692,6 +808,19 @@ void PGLog::_write_log_and_missing(
     (*km)[p->get_key_name()].claim(bl);
   }
 
+  if (log_keys_debug) {
+    for (map<string, bufferlist>::iterator i = (*km).begin();
+	 i != (*km).end();
+	 ++i) {
+      if (i->first[0] == '_')
+	continue;
+      assert(!log_keys_debug->count(i->first));
+      log_keys_debug->insert(i->first);
+    }
+  }
+
+  // process dirty_dups after log_keys_debug is filled, so dups do not
+  // end up in that set
   if (dirty_dups) {
     pg_log_dup_t min;
     t.omap_rmkeyrange(
@@ -701,17 +830,6 @@ void PGLog::_write_log_and_missing(
       bufferlist bl;
       ::encode(entry, bl);
       (*km)[entry.get_key_name()].claim(bl);
-    }
-  }
-
-  if (log_keys_debug) {
-    for (map<string, bufferlist>::iterator i = (*km).begin();
-	 i != (*km).end();
-	 ++i) {
-      if (i->first[0] == '_')
-	continue;
-      assert(!log_keys_debug->count(i->first));
-      log_keys_debug->insert(i->first);
     }
   }
 
