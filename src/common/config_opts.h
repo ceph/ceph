@@ -795,8 +795,9 @@ OPTION(osd_kill_backfill_at, OPT_INT, 0)
 // Bounds how infrequently a new map epoch will be persisted for a pg
 OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 150) // make this < map_cache_size!
 
-OPTION(osd_min_pg_log_entries, OPT_U32, 3000)  // number of entries to keep in the pg log when trimming it
-OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // max entries, say when degraded, before we trim
+OPTION(osd_min_pg_log_entries, OPT_U32, 1500)  // minimum number of entries to maintain in the PG log
+OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // maximum number of entries to maintain in the PG log when degraded before we trim
+OPTION(osd_pg_log_dups_tracked, OPT_U32, 3000) // how many versions back to track in order to detect duplicate ops; this is combined with both the regular pg log entries and additional minimal dup detection entries
 OPTION(osd_pg_log_trim_min, OPT_U32, 100)
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT, 256)

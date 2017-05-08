@@ -28,7 +28,11 @@ using namespace std;
 #define PGLOG_INDEXED_OBJECTS          (1 << 0)
 #define PGLOG_INDEXED_CALLER_OPS       (1 << 1)
 #define PGLOG_INDEXED_EXTRA_CALLER_OPS (1 << 2)
-#define PGLOG_INDEXED_ALL              (PGLOG_INDEXED_OBJECTS | PGLOG_INDEXED_CALLER_OPS | PGLOG_INDEXED_EXTRA_CALLER_OPS)
+#define PGLOG_INDEXED_DUPS             (1 << 3)
+#define PGLOG_INDEXED_ALL              (PGLOG_INDEXED_OBJECTS | \
+					PGLOG_INDEXED_CALLER_OPS | \
+					PGLOG_INDEXED_EXTRA_CALLER_OPS | \
+					PGLOG_INDEXED_DUPS)
 
 struct PGLog : DoutPrefixProvider {
   DoutPrefixProvider *prefix_provider;
@@ -78,7 +82,7 @@ struct PGLog : DoutPrefixProvider {
     mutable ceph::unordered_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
     mutable ceph::unordered_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
     mutable ceph::unordered_multimap<osd_reqid_t,pg_log_entry_t*> extra_caller_ops;
-    mutable ceph::unordered_map<osd_reqid_t, pg_log_dup_t*> dup_index;
+    mutable ceph::unordered_map<osd_reqid_t,pg_log_dup_t*> dup_index;
 
     // recovery pointers
     list<pg_log_entry_t>::iterator complete_to;  // not inclusive of referenced item
@@ -104,7 +108,7 @@ struct PGLog : DoutPrefixProvider {
       last_requested(0),
       indexed_data(0),
       rollback_info_trimmed_to_riter(log.rbegin())
-      {}
+    { }
 
     void claim_log_and_clear_rollback_info(const pg_log_t& o) {
       // we must have already trimmed the old entries
@@ -199,6 +203,17 @@ struct PGLog : DoutPrefixProvider {
 	}
 	assert(0 == "in extra_caller_ops but not extra_reqids");
       }
+
+      if (!(indexed_data & PGLOG_INDEXED_DUPS)) {
+        index_dups();
+      }
+      auto q = dup_index.find(r);
+      if (q != dup_index.end()) {
+	*replay_version = q->second->version;
+	*user_version = q->second->user_version;
+	return true;
+      }
+
       return false;
     }
 
@@ -266,6 +281,11 @@ struct PGLog : DoutPrefixProvider {
             extra_caller_ops.insert(make_pair(j->first, &(*i)));
         }
       }
+
+      dup_index.clear();
+      for (auto& i : dups) {
+	dup_index[i.reqid] = const_cast<pg_log_dup_t*>(&i);
+      }
         
       reset_riter();
       indexed_data = PGLOG_INDEXED_ALL;
@@ -315,6 +335,14 @@ struct PGLog : DoutPrefixProvider {
       indexed_data |= PGLOG_INDEXED_EXTRA_CALLER_OPS;        
     }
 
+    void index_dups() const {
+      dup_index.clear();
+      for (auto& i : dups) {
+	dup_index[i.reqid] = const_cast<pg_log_dup_t*>(&i);
+      }
+      indexed_data |= PGLOG_INDEXED_DUPS;
+    }
+
     void index(pg_log_entry_t& e) {
       if (indexed_data & PGLOG_INDEXED_OBJECTS) {
         if (objects.count(e.soid) == 0 || 
@@ -336,6 +364,7 @@ struct PGLog : DoutPrefixProvider {
         }
       }
     }
+
     void unindex() {
       objects.clear();
       caller_ops.clear();
@@ -343,7 +372,8 @@ struct PGLog : DoutPrefixProvider {
       dup_index.clear();
       indexed_data = 0;
     }
-    void unindex(pg_log_entry_t& e) {
+
+    void unindex(const pg_log_entry_t& e) {
       // NOTE: this only works if we remove from the _tail_ of the log!
       if (indexed_data & PGLOG_INDEXED_OBJECTS) {
         if (objects.count(e.soid) && objects[e.soid]->version == e.version)
@@ -371,6 +401,21 @@ struct PGLog : DoutPrefixProvider {
             }
           }
         }
+      }
+    }
+
+    void index(pg_log_dup_t& e) {
+      if (PGLOG_INDEXED_DUPS) {
+	dup_index[e.reqid] = &e;
+      }
+    }
+
+    void unindex(const pg_log_dup_t& e) {
+      if (PGLOG_INDEXED_DUPS) {
+	auto i = dup_index.find(e.reqid);
+	if (i != dup_index.end()) {
+	  dup_index.erase(i);
+	}
       }
     }
 
@@ -402,7 +447,7 @@ struct PGLog : DoutPrefixProvider {
     caller_ops[e.reqid] = &(log.back());
         }
       }
-      
+
       if (indexed_data & PGLOG_INDEXED_EXTRA_CALLER_OPS) {
         for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
          e.extra_reqids.begin();
@@ -414,10 +459,12 @@ struct PGLog : DoutPrefixProvider {
     }
 
     void trim(
+      CephContext *cct,
       LogEntryHandler *handler,
       eversion_t s,
       set<eversion_t> *trimmed,
-      set<string> *trimmed_dups);
+      set<string>* trimmed_dups,
+      bool* dirty_dups);
 
     ostream& print(ostream& out) const;
 
@@ -436,7 +483,7 @@ protected:
   eversion_t dirty_from;       ///< must clear/writeout all keys >= dirty_from
   eversion_t writeout_from;    ///< must writout keys >= writeout_from
   set<eversion_t> trimmed;     ///< must clear keys in trimmed
-  set<string> trimmed_dups; ///< must clear keys in trimmed_dups
+  set<string> trimmed_dups;    ///< must clear keys in trimmed_dups
   CephContext *cct;
   bool pg_log_debug;
   /// Log is clean on [dirty_to, dirty_from)
@@ -451,6 +498,7 @@ protected:
       dirty_divergent_priors ||
       (writeout_from != eversion_t::max()) ||
       !(trimmed_dups.empty()) ||
+      dirty_dups ||
       !(trimmed.empty());
   }
   void mark_dirty_to(eversion_t to) {
@@ -507,15 +555,15 @@ protected:
     dirty_dups = false;
   }
 public:
+
   // cppcheck-suppress noExplicitConstructor
-  PGLog(CephContext *cct, DoutPrefixProvider *dpp = 0) :
+  PGLog(CephContext *cct, DoutPrefixProvider *dpp = nullptr) :
     prefix_provider(dpp),
     dirty_from(eversion_t::max()),
     writeout_from(eversion_t::max()), 
     cct(cct), 
     pg_log_debug(!(cct && !(cct->_conf->osd_debug_pg_log_writeout))),
-    touched_log(false), dirty_divergent_priors(false) {}
-
+    touched_log(false), dirty_divergent_priors(false), dirty_dups(false) {}
 
   void reset_backfill();
 
@@ -647,7 +695,7 @@ public:
   void recover_got(hobject_t oid, eversion_t v, pg_info_t &info) {
     if (missing.is_missing(oid, v)) {
       missing.got(oid, v);
-      
+
       // raise last_complete?
       if (missing.missing.empty()) {
 	log.complete_to = log.log.end();
@@ -783,6 +831,9 @@ protected:
 	(*new_divergent_prior).first,
 	(*new_divergent_prior).second);
   }
+
+  bool merge_log_dups(const pg_log_t& olog);
+
 public:
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
                             pg_info_t &info, LogEntryHandler *rollbacker,
@@ -842,7 +893,8 @@ public:
     pg_log_t &log,
     const coll_t& coll,
     const ghobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
-    bool require_rollback);
+    bool require_rollback,
+    bool dirty_dups);
 
   static void _write_log(
     ObjectStore::Transaction& t,
@@ -858,6 +910,7 @@ public:
     bool dirty_divergent_priors,
     bool touch_log,
     bool require_rollback,
+    bool dirty_dups,
     set<string> *log_keys_debug
     );
 

@@ -3658,17 +3658,21 @@ void pg_log_dup_t::dump(Formatter *f) const
 void pg_log_dup_t::generate_test_instances(list<pg_log_dup_t*>& o)
 {
   o.push_back(new pg_log_dup_t());
-  o.push_back(new pg_log_dup_t(osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
-			       eversion_t(1,2), 1, 0);
-  o.push_back(new pg_log_dup_t(osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
-			       eversion_t(1,2), 2, -ENOENT);
+  o.push_back(new pg_log_dup_t(eversion_t(1,2),
+			       1,
+			       osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+			       0));
+  o.push_back(new pg_log_dup_t(eversion_t(1,2),
+			       2,
+			       osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+			       -ENOENT));
 }
 
-ostream& operator<<(ostream& out, const pg_log_dup_t& e)
-{
-  out << e.reqid << " v" << e.version << " uv" << e.user_version
-      << " rc=" << e.return_code;
-  return out;
+
+std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e) {
+  return out << "log_dup(reqid=" << e.reqid <<
+    " v=" << e.version << " uv=" << e.user_version <<
+    " rc=" << e.return_code << ")";
 }
 
 
