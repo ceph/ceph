@@ -32,7 +32,6 @@
 
 #include "include/mempool.h"
 #include "include/encoding.h"
-#include "common/Formatter.h"
 
 static const std::size_t bits_per_char = 0x08;    // 8 bits in 1 char(unsigned)
 static const unsigned char bit_mask[bits_per_char] = {

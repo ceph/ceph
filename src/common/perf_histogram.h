@@ -17,7 +17,6 @@
 
 #include "common/Formatter.h"
 #include "include/atomic.h"
-#include "include/int_types.h"
 
 #include <array>
 #include <memory>
