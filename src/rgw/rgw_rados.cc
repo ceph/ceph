@@ -4029,10 +4029,12 @@ int RGWRados::init_complete()
 
   zone_short_id = current_period.get_map().get_zone_short_id(zone_params.get_id());
 
-  ret = sync_modules_manager->create_instance(cct, zone_public_config.tier_type, zone_params.tier_config, &sync_module);
-  if (ret < 0) {
-    lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
-    return ret;
+  if (run_sync_thread) {
+    ret = sync_modules_manager->create_instance(cct, zone_public_config.tier_type, zone_params.tier_config, &sync_module);
+    if (ret < 0) {
+      lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
+      return ret;
+    }
   }
 
   writeable_zone = (zone_public_config.tier_type.empty() || zone_public_config.tier_type == "rgw");
