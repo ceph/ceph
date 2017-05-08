@@ -3665,6 +3665,32 @@ static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in
   return write_bucket_header(hctx, &header);
 }
 
+static int rgw_guard_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
+{
+  cls_rgw_guard_bucket_resharding_op op;
+
+  bufferlist::iterator in_iter = in->begin();
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_rgw_clear_bucket_resharding: failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  struct rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: %s(): failed to read header\n", __func__);
+    return rc;
+  }
+
+  if (header.resharding()) {
+    return op.ret_err;
+  }
+
+  return 0;
+}
+
 static int rgw_get_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   cls_rgw_get_bucket_resharding_op op;
@@ -3737,6 +3763,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_reshard_remove;
   cls_method_handle_t h_rgw_set_bucket_resharding;
   cls_method_handle_t h_rgw_clear_bucket_resharding;
+  cls_method_handle_t h_rgw_guard_bucket_resharding;
   cls_method_handle_t h_rgw_get_bucket_resharding;
 
 
@@ -3796,6 +3823,8 @@ CLS_INIT(rgw)
 			  rgw_set_bucket_resharding, &h_rgw_set_bucket_resharding);
   cls_register_cxx_method(h_class, "clear_bucket_resharding", CLS_METHOD_RD | CLS_METHOD_WR,
 			  rgw_clear_bucket_resharding, &h_rgw_clear_bucket_resharding);
+  cls_register_cxx_method(h_class, "guard_bucket_resharding", CLS_METHOD_RD ,
+			  rgw_guard_bucket_resharding, &h_rgw_guard_bucket_resharding);
   cls_register_cxx_method(h_class, "get_bucket_resharding", CLS_METHOD_RD ,
 			  rgw_get_bucket_resharding, &h_rgw_get_bucket_resharding);
 

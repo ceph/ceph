@@ -885,3 +885,12 @@ int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
 
   return 0;
 }
+
+void cls_rgw_guard_bucket_resharding(librados::ObjectWriteOperation& op, int ret_err)
+{
+  bufferlist in, out;
+  struct cls_rgw_guard_bucket_resharding_op call;
+  call.ret_err = ret_err;
+  ::encode(call, in);
+  op.exec("rgw", "guard_bucket_resharding", in);
+}

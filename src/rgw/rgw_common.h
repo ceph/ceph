@@ -200,6 +200,7 @@ using ceph::crypto::MD5;
 #define ERR_MALFORMED_DOC        2204
 #define ERR_NO_ROLE_FOUND        2205
 #define ERR_DELETE_CONFLICT      2206
+#define ERR_BUSY_RESHARDING      2300
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)

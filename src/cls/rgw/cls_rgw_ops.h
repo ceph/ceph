@@ -1315,6 +1315,26 @@ struct cls_rgw_clear_bucket_resharding_op {
 };
 WRITE_CLASS_ENCODER(cls_rgw_clear_bucket_resharding_op)
 
+struct cls_rgw_guard_bucket_resharding_op  {
+  int ret_err{0};
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(ret_err, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(ret_err, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static void generate_test_instances(list<cls_rgw_guard_bucket_resharding_op*>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(cls_rgw_guard_bucket_resharding_op)
+
 struct cls_rgw_get_bucket_resharding_op  {
 
   void encode(bufferlist& bl) const {

@@ -505,6 +505,7 @@ void cls_rgw_reshard_remove(librados::ObjectWriteOperation& op, const cls_rgw_re
 int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
                                   const cls_rgw_bucket_instance_entry& entry);
 int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const string& oid);
+void cls_rgw_guard_bucket_resharding(librados::ObjectWriteOperation& op, int ret_err);
 int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
                                   cls_rgw_bucket_instance_entry *entry);
 
