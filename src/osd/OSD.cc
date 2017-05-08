@@ -9124,9 +9124,16 @@ void OSD::do_recovery(
     if (!more && pg->have_unfound()) {
       pg->discover_all_missing(*rctx.query_map);
       if (rctx.query_map->empty()) {
-	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
+	dout(10) << __func__ << ": no luck, giving up on this pg for now" << dendl;
+        if (pg->state_test(PG_STATE_BACKFILL)) {
+	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
+	    queued,
+	    queued,
+	    PG::CancelBackfill()));
+	  pg->queue_peering_event(evt);
+        }
       } else {
-	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
+	dout(10) << __func__ << ": no luck, giving up on this pg for now" << dendl;
 	pg->queue_recovery();
       }
     }
