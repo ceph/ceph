@@ -4163,6 +4163,7 @@ void OSD::build_initial_pg_history(
 {
   dout(10) << __func__ << " " << pgid << " created " << created << dendl;
   h->epoch_created = created;
+  h->epoch_pool_created = created;
   h->same_interval_since = created;
   h->same_up_since = created;
   h->same_primary_since = created;
@@ -4305,7 +4306,7 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
       break;
   }
 
-  // base case: these floors should be the creation epoch if we didn't
+  // base case: these floors should be the pg creation epoch if we didn't
   // find any changes.
   if (e == h.epoch_created) {
     if (!h.same_interval_since)
