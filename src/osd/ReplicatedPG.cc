@@ -10545,8 +10545,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
     const pg_missing_t::item& item = missing.missing.find(p->second)->second;
     ++p;
 
-    hobject_t head = soid;
-    head.snap = CEPH_NOSNAP;
+    hobject_t head = soid.get_head();
 
     eversion_t need = item.need;
 
