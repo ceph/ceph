@@ -229,7 +229,6 @@ OSDService::OSDService(OSD *osd) :
   peering_wq(osd->peering_wq),
   recovery_gen_wq("recovery_gen_wq", cct->_conf->osd_recovery_thread_timeout,
 		  &osd->disk_tp),
-  op_gen_wq("op_gen_wq", cct->_conf->osd_recovery_thread_timeout, &osd->osd_tp),
   class_handler(osd->class_handler),
   pg_epoch_lock("OSDService::pg_epoch_lock"),
   publish_lock("OSDService::publish_lock"),
