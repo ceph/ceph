@@ -600,10 +600,12 @@ void RDMAConnectedSocketImpl::cleanup() {
 void RDMAConnectedSocketImpl::notify()
 {
   uint64_t i = 1;
-  int ret;
-
-  ret = write(notify_fd, &i, sizeof(i));
-  assert(ret = sizeof(i));
+  int ret = write(notify_fd, &i, sizeof(i));
+  if (ret == -1) {
+     int write_errno = errno;
+     lderr(cct) <<__func__ << " failed to write to fd=" << notify_fd << ", error: " << cpp_strerror(errno) <<dendl;
+     assert(write_errno != EAGAIN);
+  }
 }
 
 void RDMAConnectedSocketImpl::shutdown()
