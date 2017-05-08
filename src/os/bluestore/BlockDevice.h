@@ -43,8 +43,6 @@ struct IOContext {
   std::list<aio_t> running_aios;    ///< submitting or submitted
   std::atomic_int num_pending = {0};
   std::atomic_int num_running = {0};
-  std::atomic_int num_reading = {0};
-  std::atomic_int num_waiting = {0};
 
   explicit IOContext(CephContext* cct, void *p)
     : cct(cct), priv(p)
@@ -61,10 +59,10 @@ struct IOContext {
   void aio_wait();
 
   void aio_wake() {
-    if (num_waiting.load()) {
-      std::lock_guard<std::mutex> l(lock);
-      cond.notify_all();
-    }
+    std::lock_guard<std::mutex> l(lock);
+    cond.notify_all();
+    --num_running;
+    assert(num_running == 0);
   }
 };
 

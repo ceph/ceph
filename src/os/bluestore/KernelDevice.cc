@@ -365,17 +365,18 @@ void KernelDevice::_aio_thread()
 		 << " aios left" << dendl;
 	assert(r >= 0);
 
-	int left = --ioc->num_running;
-	// NOTE: once num_running is decremented we can no longer
-	// trust aio[] values; they my be freed (e.g., by BlueFS::_fsync)
-	if (left == 0) {
-	  // check waiting count before doing callback (which may
-	  // destroy this ioc).  and avoid ref to ioc after aio_wake()
-	  // in case that triggers destruction.
-	  void *priv = ioc->priv;
-	  ioc->aio_wake();
-	  if (priv) {
-	    aio_callback(aio_callback_priv, priv);
+	// NOTE: once num_running and we either call the callback or
+	// call aio_wake we cannot touch ioc or aio[] as the caller
+	// may free it.
+	if (ioc->priv) {
+	  if (--ioc->num_running == 0) {
+	    aio_callback(aio_callback_priv, ioc->priv);
+	  }
+	} else {
+	  if (ioc->num_running == 1) {
+	    ioc->aio_wake();
+	  } else {
+	    --ioc->num_running;
 	  }
 	}
       }
@@ -663,7 +664,6 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   assert(off + len <= size);
 
   _aio_log_start(ioc, off, len);
-  ++ioc->num_reading;
 
   bufferptr p = buffer::create_page_aligned(len);
   int r = ::pread(buffered ? fd_buffered : fd_direct,
@@ -681,8 +681,6 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 
  out:
   _aio_log_finish(ioc, off, len);
-  --ioc->num_reading;
-  ioc->aio_wake();
   return r < 0 ? r : 0;
 }
 
