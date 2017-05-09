@@ -38,12 +38,6 @@ public:
   virtual const pool_stat_t& get_pg_sum() const = 0;
   virtual const osd_stat_t& get_osd_sum() const = 0;
 
-  typedef ceph::unordered_map<pg_t,pg_stat_t>::const_iterator PGStatIter;
-  typedef ceph::unordered_map<int32_t,osd_stat_t>::const_iterator OSDStatIter;
-  virtual PGStatIter pg_stat_iter_begin() const = 0;
-  virtual PGStatIter pg_stat_iter_end() const = 0;
-  virtual OSDStatIter osd_stat_iter_begin() const = 0;
-  virtual OSDStatIter osd_stat_iter_end() const = 0;
   virtual const osd_stat_t *get_osd_stat(int osd) const = 0;
   virtual const ceph::unordered_map<int32_t,osd_stat_t> *get_osd_stat() const = 0;
   virtual const ceph::unordered_map<pg_t,pg_stat_t> *get_pg_stat() const = 0;
@@ -113,10 +107,6 @@ public:
   const pool_stat_t& get_pg_sum() const { return parent.pg_sum; }
   const osd_stat_t& get_osd_sum() const { return parent.osd_sum; }
 
-  PGStatIter pg_stat_iter_begin() const { return parent.pg_stat.begin(); }
-  PGStatIter pg_stat_iter_end() const { return parent.pg_stat.end(); }
-  OSDStatIter osd_stat_iter_begin() const { return parent.osd_stat.begin(); }
-  OSDStatIter osd_stat_iter_end() const { return parent.osd_stat.end(); }
   const osd_stat_t *get_osd_stat(int osd) const {
     auto i = parent.osd_stat.find(osd);
     if (i == parent.osd_stat.end()) {
