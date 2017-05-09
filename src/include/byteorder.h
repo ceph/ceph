@@ -64,23 +64,24 @@ inline T mswab(T val) {
 }
 #endif
 
-#define MAKE_LE_CLASS(bits)						\
-  struct ceph_le##bits {						\
-    __u##bits v;							\
-    ceph_le##bits &operator=(__u##bits nv) {				\
-      v = mswab(nv);							\
-      return *this;							\
-    }									\
-    operator __u##bits() const { return mswab(v); }			\
-  } __attribute__ ((packed));						\
-  static inline bool operator==(ceph_le##bits a, ceph_le##bits b) {	\
-    return a.v == b.v;							\
+template<typename T>
+struct ceph_le {
+  T v;
+  ceph_le<T>& operator=(T nv) {
+    v = mswab(nv);
+    return *this;
   }
-  
-MAKE_LE_CLASS(64)
-MAKE_LE_CLASS(32)
-MAKE_LE_CLASS(16)
-#undef MAKE_LE_CLASS
+  operator T() const { return mswab(v); }
+} __attribute__ ((packed));
+
+template<typename T>
+inline bool operator==(ceph_le<T> a, ceph_le<T> b) {
+  return a.v == b.v;
+}
+
+using ceph_le64 = ceph_le<__u64>;
+using ceph_le32 = ceph_le<__u32>;
+using ceph_le16 = ceph_le<__u16>;
 
 inline __u64 init_le64(__u64 x) {
   return mswab<__u64>(x);
