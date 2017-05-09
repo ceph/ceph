@@ -824,6 +824,12 @@ if (NOT WITH_SYSTEM_ROCKSDB)
 
 endif(NOT WITH_SYSTEM_ROCKSDB)
 
+include(TestBigEndian)
+test_big_endian(CEPH_BIG_ENDIAN)
+if(NOT CEPH_BIG_ENDIAN)
+  set(CEPH_LITTLE_ENDIAN 1)
+endif()
+
 add_subdirectory(kv)
 add_subdirectory(os)
 

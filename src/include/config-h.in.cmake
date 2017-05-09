@@ -313,6 +313,12 @@
 /* Support POWER8 instructions */
 #cmakedefine HAVE_POWER8
 
+/* Define if endian type is big endian */
+#cmakedefine CEPH_BIG_ENDIAN
+
+/* Define if endian type is little endian */
+#cmakedefine CEPH_LITTLE_ENDIAN
+
 #cmakedefine PYTHON_EXECUTABLE "@PYTHON_EXECUTABLE@"
 
 #endif /* CONFIG_H */
