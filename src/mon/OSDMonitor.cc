@@ -926,17 +926,8 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
   pending_created_pgs.clear();
   // PAXOS_PGMAP is less than PAXOS_OSDMAP, so PGMonitor::update_from_paxos()
   // should have prepared the latest pgmap if any
-  const auto& pgm = mon->pgservice->get_pg_map();
-  if (pgm.last_pg_scan >= creating_pgs.last_scan_epoch) {
-    // TODO: please stop updating pgmap with pgstats once the upgrade is completed
-    for (auto& pgid : pgm.creating_pgs) {
-      auto st = pgm.pg_stat.find(pgid);
-      assert(st != pgm.pg_stat.end());
-      auto created = make_pair(st->second.created, st->second.last_scrub_stamp);
-      // no need to add the pg, if it already exists in creating_pgs
-      pending_creatings.pgs.emplace(pgid, created);
-    }
-  }
+  mon->pgservice->maybe_add_creating_pgs(creating_pgs.last_scan_epoch,
+					 &pending_creatings);
   for (auto old_pool : inc.old_pools) {
     pending_creatings.created_pools.erase(old_pool);
     const auto removed_pool = (uint64_t)old_pool;
