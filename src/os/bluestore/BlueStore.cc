@@ -8281,19 +8281,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
 {
   dout(10) << __func__ << " osr " << osr << dendl;
   assert(osr->deferred_running);
-
   DeferredBatch *b = osr->deferred_running;
-  {
-    std::lock_guard<std::mutex> l2(osr->qlock);
-    for (auto& i : b->txcs) {
-      TransContext *txc = &i;
-      txc->state = TransContext::STATE_DEFERRED_CLEANUP;
-      txc->osr->qcond.notify_all();
-      throttle_deferred_bytes.put(txc->cost);
-    }
-    std::lock_guard<std::mutex> l(kv_lock);
-    deferred_done_queue.emplace_back(b);
-  }
 
   {
     std::lock_guard<std::mutex> l(deferred_lock);
@@ -8305,6 +8293,18 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
     } else if (deferred_aggressive) {
       _deferred_submit(osr);
     }
+  }
+
+  {
+    std::lock_guard<std::mutex> l2(osr->qlock);
+    for (auto& i : b->txcs) {
+      TransContext *txc = &i;
+      txc->state = TransContext::STATE_DEFERRED_CLEANUP;
+      txc->osr->qcond.notify_all();
+      throttle_deferred_bytes.put(txc->cost);
+    }
+    std::lock_guard<std::mutex> l(kv_lock);
+    deferred_done_queue.emplace_back(b);
   }
 
   // in the normal case, do not bother waking up the kv thread; it will
