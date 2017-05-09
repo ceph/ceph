@@ -313,12 +313,10 @@ Group:          System/Filesystems
 Requires:       ceph-base = %{epoch}:%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python-cherrypy
-Requires:       pyOpenSSL
 Requires:       python-werkzeug
 %endif
 %if 0%{?suse_version}
 Requires: 	python-CherryPy
-Requires:       python-pyOpenSSL
 Requires:       python-Werkzeug
 %endif
 Requires:       python-pecan

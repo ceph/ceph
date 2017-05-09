@@ -2,6 +2,7 @@
 A RESTful API for Ceph
 """
 
+import os
 import json
 import time
 import errno
@@ -13,11 +14,8 @@ import common
 
 from uuid import uuid4
 from pecan import jsonify, make_app
-from OpenSSL import crypto
-from tempfile import NamedTemporaryFile
 from pecan.rest import RestController
-from werkzeug.serving import make_server
-
+from werkzeug.serving import make_server, make_ssl_devcert
 
 from mgr_module import MgrModule, CommandResult
 
@@ -211,9 +209,6 @@ class Module(MgrModule):
 
         self.server = None
 
-        self.cert_file = None
-        self.pkey_file = None
-
 
     def serve(self):
         try:
@@ -232,29 +227,12 @@ class Module(MgrModule):
             separators=(',', ': '),
         )
 
-        self.cert = self.get_config_json('cert')
-        self.pkey = self.get_config_json('pkey')
-
-        # Create a new shared cert if it does not exist, yet
-        if not self.cert or not self.pkey:
-            (self.cert, self.pkey) = self.create_cert()
-            self.set_config_json('cert', self.cert)
-            self.set_config_json('pkey', self.pkey)
-
-        self.cert_file = NamedTemporaryFile()
-        self.cert_file.write(self.cert)
-        self.cert_file.flush()
-
-        self.pkey_file = NamedTemporaryFile()
-        self.pkey_file.write(self.pkey)
-        self.pkey_file.flush()
-
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(
             host='0.0.0.0',
             port=8002,
             app=make_app('restful.api.Root'),
-            ssl_context=(self.cert_file.name, self.pkey_file.name),
+            ssl_context=self.load_cert(),
         )
 
         self.server.serve_forever()
@@ -264,10 +242,6 @@ class Module(MgrModule):
         try:
             if self.server:
                 self.server.shutdown()
-            if self.cert_file:
-                self.cert_file.close()
-            if self.pkey_file:
-                self.pkey_file.close()
         except:
             self.log.error(str(traceback.format_exc()))
 
@@ -343,29 +317,41 @@ class Module(MgrModule):
             )
 
 
-    def create_cert(self):
-        # create a key pair
-        pkey = crypto.PKey()
-        pkey.generate_key(crypto.TYPE_RSA, 2048)
+    def load_cert(self):
+        cert_base = '/etc/ceph/ceph-mgr-restful'
+        cert_file = cert_base + '.crt'
+        pkey_file = cert_base + '.key'
 
-        # create a self-signed cert
-        cert = crypto.X509()
-        cert.get_subject().C = "US"
-        cert.get_subject().ST = "Oregon"
-        cert.get_subject().L = "Portland"
-        cert.get_subject().O = "IT"
-        cert.get_subject().CN = "ceph-restful"
-        cert.set_serial_number(int(uuid4()))
-        cert.gmtime_adj_notBefore(0)
-        cert.gmtime_adj_notAfter(10*365*24*60*60)
-        cert.set_issuer(cert.get_subject())
-        cert.set_pubkey(pkey)
-        cert.sign(pkey, 'sha512')
+        # If the files are already there, we are good
+        if os.access(cert_file, os.R_OK) and os.access(pkey_file, os.R_OK):
+            return (cert_file, pkey_file)
 
-        return (
-            crypto.dump_certificate(crypto.FILETYPE_PEM, cert),
-            crypto.dump_privatekey(crypto.FILETYPE_PEM, pkey)
-        )
+        # If the certificate is in the ceph config db, write it to the files
+        cert = self.get_config_json('cert')
+        pkey = self.get_config_json('pkey')
+
+        if cert and pkey:
+            f = file(cert_file, 'w')
+            f.write(cert)
+            f.close()
+
+            f = file(pkey_file, 'w')
+            f.write(pkey)
+            f.close()
+            return (cert_file, pkey_file)
+
+        # Otherwise, generate the certificate and save it in the config db
+        make_ssl_devcert(cert_base, host='localhost')
+
+        f = file(cert_file, 'r')
+        self.set_config_json('cert', f.read())
+        f.close()
+
+        f = file(pkey_file, 'r')
+        self.set_config_json('pkey', f.read())
+        f.close()
+
+        return (cert_file, pkey_file)
 
 
     def get_doc_api(self, root, prefix=''):

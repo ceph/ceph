@@ -4,10 +4,6 @@ from functools import wraps
 
 import traceback
 
-## We need this to access the instance of the module
-#
-# We can't use 'from module import instance' because
-# the instance is not ready, yet (would be None)
 import module
 
 
