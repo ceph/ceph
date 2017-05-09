@@ -2891,6 +2891,8 @@ void OSD::create_logger()
   osd_plb.add_u64(
     l_osd_cached_crc_adjusted, "cached_crc_adjusted",
     "Total number getting crc from crc_cache with adjusting");
+  osd_plb.add_u64(l_osd_missed_crc, "missed_crc", 
+    "Total number of crc cache misses");
 
   osd_plb.add_u64(l_osd_pg, "numpg", "Placement groups",
 		  "pgs", PerfCountersBuilder::PRIO_USEFUL);
@@ -4869,6 +4871,7 @@ void OSD::tick_without_osd_lock()
   logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
   logger->set(l_osd_cached_crc, buffer::get_cached_crc());
   logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
+  logger->set(l_osd_missed_crc, buffer::get_missed_crc());
 
   // osd_lock is not being held, which means the OSD state
   // might change when doing the monitor report
