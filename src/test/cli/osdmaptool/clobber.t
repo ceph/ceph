@@ -22,6 +22,7 @@
   full_ratio 0
   backfillfull_ratio 0
   nearfull_ratio 0
+  min_compat_client hammer 0.94
   
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0
   
@@ -46,6 +47,7 @@
   full_ratio 0
   backfillfull_ratio 0
   nearfull_ratio 0
+  min_compat_client hammer 0.94
   
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 64 pgp_num 64 last_change 0 flags hashpspool stripe_width 0
   
