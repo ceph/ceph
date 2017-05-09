@@ -34,6 +34,102 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 		<< ").mgr e" << mgrmap.get_epoch() << " ";
 }
 
+
+class MgrPGStatService : public PGMap, public PGStatService {
+  PGMap& parent;
+public:
+  MgrPGStatService() : PGMap(), PGStatService(),
+		    parent(*static_cast<PGMap*>(this)) {}
+  MgrPGStatService(const PGMap& o) : PGMap(o), PGStatService(),
+				  parent(*static_cast<PGMap*>(this)) {}
+  void reset(const PGMap& o) {
+    parent = o;
+  }
+
+  const pool_stat_t* get_pool_stat(int poolid) const {
+    auto i = parent.pg_pool_sum.find(poolid);
+    if (i != parent.pg_pool_sum.end()) {
+      return &i->second;
+    }
+    return NULL;
+  }
+
+  const pool_stat_t& get_pg_sum() const { return parent.pg_sum; }
+  const osd_stat_t& get_osd_sum() const { return parent.osd_sum; }
+
+  const osd_stat_t *get_osd_stat(int osd) const {
+    auto i = parent.osd_stat.find(osd);
+    if (i == parent.osd_stat.end()) {
+      return NULL;
+    }
+    return &i->second;
+  }
+  const ceph::unordered_map<int32_t,osd_stat_t> *get_osd_stat() const {
+    return &parent.osd_stat;
+  }
+  const ceph::unordered_map<pg_t,pg_stat_t> *get_pg_stat() const {
+    return &parent.pg_stat;
+  }
+  float get_full_ratio() const { return parent.full_ratio; }
+  float get_nearfull_ratio() const { return parent.nearfull_ratio; }
+
+  bool have_creating_pgs() const { return !parent.creating_pgs.empty(); }
+  bool is_creating_pg(pg_t pgid) const { return parent.creating_pgs.count(pgid); }
+  virtual void maybe_add_creating_pgs(epoch_t scan_epoch,
+				      creating_pgs_t *pending_creates) const {
+    if (parent.last_pg_scan >= scan_epoch) {
+      for (auto& pgid : parent.creating_pgs) {
+      auto st = parent.pg_stat.find(pgid);
+      assert(st != parent.pg_stat.end());
+      auto created = make_pair(st->second.created, st->second.last_scrub_stamp);
+      // no need to add the pg, if it already exists in creating_pgs
+      pending_creates->pgs.emplace(pgid, created);
+      }
+    }
+  }
+  epoch_t get_min_last_epoch_clean() const { return parent.get_min_last_epoch_clean(); }
+
+  bool have_full_osds() const { return !parent.full_osds.empty(); }
+  bool have_nearfull_osds() const { return !parent.nearfull_osds.empty(); }
+
+  size_t get_num_pg_by_osd(int osd) const { return parent.get_num_pg_by_osd(osd); }
+
+  void print_summary(Formatter *f, ostream *out) const { parent.print_summary(f, out); }
+  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const {
+    parent.dump_fs_stats(ss, f, verbose);
+  }
+  void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
+		       bool verbose) const {
+    parent.dump_pool_stats(osdm, ss, f, verbose);
+  }
+
+  int process_pg_command(const string& prefix,
+			 const map<string,cmd_vartype>& cmdmap,
+			 const OSDMap& osdmap,
+			 Formatter *f,
+			 stringstream *ss,
+			 bufferlist *odata) {
+    return process_pg_map_command(prefix, cmdmap, parent, osdmap, f, ss, odata);
+  }
+
+  int reweight_by_utilization(const OSDMap &osd_map,
+			      int oload,
+			      double max_changef,
+			      int max_osds,
+			      bool by_pg, const set<int64_t> *pools,
+			      bool no_increasing,
+			      mempool::osdmap::map<int32_t, uint32_t>* new_weights,
+			      std::stringstream *ss,
+			      std::string *out_str,
+			      Formatter *f) {
+    return reweight::by_utilization(osd_map, parent, oload, max_changef,
+				    max_osds, by_pg, pools, no_increasing,
+				    new_weights, ss, out_str, f);
+  }
+
+};
+
+
 void MgrMonitor::create_initial()
 {
 }
@@ -626,15 +722,15 @@ void MgrMonitor::on_shutdown()
   cancel_timer();
 }
 
-PGStatService *MgrMonitor::get_pg_stat_service()
-{
-  if (!pgservice) {
-    pgservice = new PGMapStatService();
-  }
-  return pgservice;
-}
-
 MgrMonitor::~MgrMonitor()
 {
   delete pgservice;
+}
+
+PGStatService *MgrMonitor::get_pg_stat_service()
+{
+  if (!pgservice) {
+    pgservice = new MgrPGStatService();
+  }
+  return pgservice;
 }
