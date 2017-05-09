@@ -1077,7 +1077,7 @@ void OSDMonitor::prime_pg_temp(
       return;
     }
   }
-  if (!osdmap.have_pg_pool(pgid.pool())) {
+  if (!osdmap.pg_exists(pgid)) {
     return;
   }
 

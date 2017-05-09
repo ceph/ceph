@@ -40,6 +40,7 @@ class MCommand;
 class MMgrDigest;
 class MLog;
 class Objecter;
+class Client;
 
 
 class MgrPyModule;
@@ -48,6 +49,7 @@ class Mgr {
 protected:
   MonClient *monc;
   Objecter  *objecter;
+  Client    *client;
   Messenger *client_messenger;
 
   Mutex lock;
@@ -71,7 +73,7 @@ protected:
 
 public:
   Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
-      LogChannelRef clog_, LogChannelRef audit_clog_);
+      Client *client_, LogChannelRef clog_, LogChannelRef audit_clog_);
   ~Mgr();
 
   bool is_initialized() const {return initialized;}

@@ -1801,7 +1801,7 @@ private:
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
-  std::condition_variable kv_cond, kv_sync_cond;
+  std::condition_variable kv_cond;
   bool kv_stop = false;
   deque<TransContext*> kv_queue;             ///< ready, already submitted
   deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread

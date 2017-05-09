@@ -44,6 +44,9 @@ public:
   epoch_t get_map_epoch() const override {
     return map_epoch;
   }
+  epoch_t get_min_epoch() const override {
+    return query_epoch;
+  }
   spg_t get_spg() const override {
     return pgid;
   }
