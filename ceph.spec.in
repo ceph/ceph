@@ -115,7 +115,6 @@ BuildRequires:	python
 BuildRequires:	python-devel
 BuildRequires:	python-nose
 BuildRequires:	python-requests
-BuildRequires:	python-sphinx
 BuildRequires:	python-virtualenv
 BuildRequires:	snappy-devel
 BuildRequires:	udev
@@ -144,6 +143,7 @@ BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
 BuildRequires:	python-Cython
+BuildRequires:	python-Sphinx
 %endif
 %if 0%{?fedora} || 0%{?rhel} 
 Requires:	systemd
@@ -155,6 +155,7 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  redhat-lsb-core
 BuildRequires:	Cython
+BuildRequires:	python-sphinx
 %endif
 # lttng and babeltrace for rbd-replay-prep
 %if %{with lttng}
