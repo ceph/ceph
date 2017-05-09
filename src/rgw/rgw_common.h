@@ -1180,6 +1180,7 @@ struct RGWBucketInfo
 
   bool swift_versioning;
   string swift_ver_location;
+  string swift_his_location;
 
   map<string, uint32_t> mdsearch_config;
 
@@ -1188,7 +1189,7 @@ struct RGWBucketInfo
   string new_bucket_instance_id;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(19, 4, bl);
+     ENCODE_START(20, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner.id, bl);
      ::encode(flags, bl);
@@ -1210,6 +1211,7 @@ struct RGWBucketInfo
      ::encode(swift_versioning, bl);
      if (swift_versioning) {
        ::encode(swift_ver_location, bl);
+       ::encode(swift_his_location, bl);
      }
      ::encode(creation_time, bl);
      ::encode(mdsearch_config, bl);
@@ -1218,7 +1220,7 @@ struct RGWBucketInfo
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(19, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(20, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2) {
        string s;
@@ -1266,17 +1268,17 @@ struct RGWBucketInfo
      }
      swift_versioning = false;
      swift_ver_location.clear();
-     if (struct_v >= 16) {
+     swift_his_location.clear();
+     if (struct_v >= 18) {
        ::decode(swift_versioning, bl);
+       ::decode(mdsearch_config, bl);
        if (swift_versioning) {
          ::decode(swift_ver_location, bl);
+         ::decode(swift_his_location, bl);
        }
      }
      if (struct_v >= 17) {
        ::decode(creation_time, bl);
-     }
-     if (struct_v >= 18) {
-       ::decode(mdsearch_config, bl);
      }
      if (struct_v >= 19) {
        ::decode(reshard_status, bl);

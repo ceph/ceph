@@ -806,6 +806,7 @@ protected:
   bool has_cors;
   RGWCORSConfiguration cors_config;
   boost::optional<std::string> swift_ver_location;
+  boost::optional<std::string> swift_his_location;
   map<string, buffer::list> attrs;
   set<string> rmattr_names;
 
@@ -1118,6 +1119,7 @@ protected:
   RGWCORSConfiguration cors_config;
   string placement_rule;
   boost::optional<std::string> swift_ver_location;
+  boost::optional<std::string> swift_his_location;
 
 public:
   RGWPutMetadataBucket()

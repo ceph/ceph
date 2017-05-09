@@ -736,6 +736,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   }
   encode_json("swift_versioning", swift_versioning, f);
   encode_json("swift_ver_location", swift_ver_location, f);
+  encode_json("swift_his_location", swift_his_location, f);
   encode_json("index_type", (uint32_t)index_type, f);
   encode_json("mdsearch_config", mdsearch_config, f);
   encode_json("reshard_status", (int)reshard_status, f);
@@ -768,6 +769,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   }
   JSONDecoder::decode_json("swift_versioning", swift_versioning, obj);
   JSONDecoder::decode_json("swift_ver_location", swift_ver_location, obj);
+  JSONDecoder::decode_json("swift_his_location", swift_his_location, obj);
   uint32_t it;
   JSONDecoder::decode_json("index_type", it, obj);
   index_type = (RGWBucketIndexType)it;
