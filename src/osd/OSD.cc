@@ -10061,7 +10061,7 @@ void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
   assert (NULL != sdata);
   unsigned priority = item.get_priority();
   unsigned cost = item.get_cost();
-  sdata->sdata_lock.Lock();
+  Mutex::Locker l(sdata->sdata_lock);
 
   dout(20) << __func__ << " " << item << dendl;
   if (priority >= osd->op_prio_cutoff)
@@ -10071,7 +10071,6 @@ void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
     sdata->pqueue->enqueue(
       item.get_owner(), priority, cost, std::move(item));
   sdata->sdata_cond.SignalOne();
-  sdata->sdata_lock.Unlock();
 }
 
 void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)
@@ -10079,7 +10078,7 @@ void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)
   auto shard_index = item.get_ordering_token().hash_to_shard(shard_list.size());
   auto& sdata = shard_list[shard_index];
   assert(sdata);
-  sdata->sdata_lock.Lock();
+  Mutex::Locker l(sdata->sdata_lock);
   auto p = sdata->pg_slots.find(item.get_ordering_token());
   if (p != sdata->pg_slots.end() && !p->second.to_process.empty()) {
     // we may be racing with _process, which has dequeued a new item
@@ -10097,7 +10096,6 @@ void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)
   }
   sdata->_enqueue_front(std::move(item), osd->op_prio_cutoff);
   sdata->sdata_cond.SignalOne();
-  sdata->sdata_lock.Unlock();
 }
 
 namespace ceph { 
