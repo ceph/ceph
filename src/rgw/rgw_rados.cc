@@ -4270,7 +4270,7 @@ int RGWRados::init_complete()
     obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
   }
 
-  reshard = new RGWReshard(cct, this);
+  reshard = new RGWReshard(this);
 
   return ret;
 }
