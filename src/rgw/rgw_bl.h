@@ -15,6 +15,7 @@
 #ifndef CEPH_RGW_BL_H
 #define CEPH_RGW_BL_H
 
+#include <atomic>
 #include <map>
 #include <string>
 #include <iostream>
@@ -23,7 +24,6 @@
 #include "common/debug.h"
 
 #include "include/types.h"
-#include "include/atomic.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -53,7 +53,7 @@ class RGWBL {
   RGWRados *store;
   int max_objs;
   string *obj_names;
-  atomic_t down_flag;
+  std::atomic<bool> down_flag = { false };
   string cookie;
 
   class BLWorker : public Thread {

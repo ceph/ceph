@@ -665,7 +665,7 @@ void RGWBL::start_processor()
 
 void RGWBL::stop_processor()
 {
-  down_flag.set(1);
+  down_flag = true;
   if (worker) {
     worker->stop();
     worker->join();
@@ -682,7 +682,7 @@ void RGWBL::BLWorker::stop()
 
 bool RGWBL::going_down()
 {
-  return (down_flag.read() != 0);
+  return down_flag;
 }
 
 bool RGWBL::BLWorker::should_work(utime_t& now)
