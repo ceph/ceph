@@ -161,9 +161,8 @@ Description: debugging symbols for ceph-mds
 Package: ceph-mgr
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
-         python-openssl
-         python-pecan
-         python-werkzeug
+         python-pecan,
+         python-werkzeug,
          ${misc:Depends},
          ${python:Depends},
 	 python-cherrypy3,
