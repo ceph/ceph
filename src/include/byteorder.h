@@ -7,46 +7,8 @@
 #ifndef CEPH_BYTEORDER_H
 #define CEPH_BYTEORDER_H
 
-#include <sys/param.h>
+#include "acconfig.h"
 #include "int_types.h"
-
-#if defined(__APPLE__)
-# if __DARWIN_BYTE_ORDER == __DARWIN_LITTLE_ENDIAN
-#  define CEPH_LITTLE_ENDIAN
-# elif __DARWIN_BYTE_ORDER == __DARWIN_BIG_ENDIAN
-#  define CEPH_BIG_ENDIAN
-# endif
-#endif
-
-#if defined(__FreeBSD__)
-# if _BYTE_ORDER == _LITTLE_ENDIAN
-#  define CEPH_LITTLE_ENDIAN
-# elif _BYTE_ORDER == _BIG_ENDIAN
-#  define CEPH_BIG_ENDIAN
-# endif
-#endif
-
-#if defined(__linux__)
-# if BYTE_ORDER == LITTLE_ENDIAN
-#  define CEPH_LITTLE_ENDIAN
-# elif BYTE_ORDER == BIG_ENDIAN
-#  define CEPH_BIG_ENDIAN
-# endif
-#endif
-
-#if defined(__sun) && defined(__SVR4)
-# if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-#  define CEPH_BIG_ENDIAN
-# elif __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-#  define CEPH_LITTLE_ENDIAN
-# endif
-#endif
-
-#if defined(_AIX)
-# define CEPH_BIG_ENDIAN
-#endif
-
-
 
 
 static __inline__ __u16 swab16(__u16 val) 
