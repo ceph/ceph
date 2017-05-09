@@ -37,6 +37,7 @@ protected:
 class RGWBucketReshard {
   RGWRados *store;
   RGWBucketInfo bucket_info;
+  std::map<string, bufferlist> bucket_attrs;
 
   string reshard_oid;
   rados::cls::lock::Lock reshard_lock;
@@ -45,15 +46,26 @@ class RGWBucketReshard {
   void unlock_bucket();
   int init_resharding(const cls_rgw_reshard_entry& entry);
   int clear_resharding();
-public:
-  RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info);
 
-  int reshard();
-  int abort_reshard();
+  int create_new_bucket_instance(int new_num_shards,
+                                 RGWBucketInfo& new_bucket_info);
+  int do_reshard(int num_shards,
+		 const RGWBucketInfo& new_bucket_info,
+		 int max_entries,
+                 bool verbose,
+                 ostream *os,
+		 Formatter *formatter);
+public:
+  RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info,
+                   const std::map<string, bufferlist>& _bucket_attrs);
+
+  int execute(int num_shards, int max_op_entries,
+              bool verbose = false, ostream *out = nullptr,
+              Formatter *formatter = nullptr);
+  int abort();
 };
 
 class RGWReshard {
-    CephContext *cct;
     RGWRados *store;
     string lock_name;
     int max_jobs;
@@ -63,7 +75,7 @@ class RGWReshard {
     int unlock_bucket_index(const string& oid);
 
   public:
-    RGWReshard(CephContext* cct, RGWRados* _store);
+    RGWReshard(RGWRados* _store);
     int add(cls_rgw_reshard_entry& entry);
     int get(cls_rgw_reshard_entry& entry);
     int remove(cls_rgw_reshard_entry& entry);
