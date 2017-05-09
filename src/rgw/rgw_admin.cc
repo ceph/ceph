@@ -191,9 +191,9 @@ void _usage()
   cout << "  role-policy get            get the specified inline policy document embedded with the given role\n";
   cout << "  role-policy delete         delete policy attached to a role\n";
   cout << "  reshard add                schedule a resharding of a bucket\n";
-  cout << "  reshard list                  list all bucket resharding or scheduled to be reshared\n";
-  cout << "  reshard execute         execute resharding of  a bucket \n";
-  cout << "  reshard cancel           cancel resharding a bucket\n";
+  cout << "  reshard list               list all bucket resharding or scheduled to be reshared\n";
+  cout << "  reshard execute            execute resharding of  a bucket \n";
+  cout << "  reshard cancel             cancel resharding a bucket\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -2215,176 +2215,6 @@ static void parse_tier_config_param(const string& s, map<string, string, ltstr_n
   }
 }
 
-#define RESHARD_SHARD_WINDOW 64
-#define RESHARD_MAX_AIO 128
-
-class BucketReshardShard {
-  RGWRados *store;
-  RGWBucketInfo& bucket_info;
-  int num_shard;
-  RGWRados::BucketShard bs;
-  vector<rgw_cls_bi_entry> entries;
-  map<uint8_t, rgw_bucket_category_stats> stats;
-  deque<librados::AioCompletion *>& aio_completions;
-
-  int wait_next_completion() {
-    librados::AioCompletion *c = aio_completions.front();
-    aio_completions.pop_front();
-
-    c->wait_for_safe();
-
-    int ret = c->get_return_value();
-    c->release();
-
-    if (ret < 0) {
-      cerr << "ERROR: reshard rados operation failed: " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-
-    return 0;
-  }
-
-  int get_completion(librados::AioCompletion **c) {
-    if (aio_completions.size() >= RESHARD_MAX_AIO) {
-      int ret = wait_next_completion();
-      if (ret < 0) {
-        return ret;
-      }
-    }
-
-    *c = librados::Rados::aio_create_completion(nullptr, nullptr, nullptr);
-    aio_completions.push_back(*c);
-
-    return 0;
-  }
-
-public:
-  BucketReshardShard(RGWRados *_store, RGWBucketInfo& _bucket_info,
-                     int _num_shard,
-                     deque<librados::AioCompletion *>& _completions) : store(_store), bucket_info(_bucket_info), bs(store),
-                                                                       aio_completions(_completions) {
-    num_shard = (bucket_info.num_shards > 0 ? _num_shard : -1);
-    bs.init(bucket_info.bucket, num_shard);
-  }
-
-  int get_num_shard() {
-    return num_shard;
-  }
-
-  int add_entry(rgw_cls_bi_entry& entry, bool account, uint8_t category,
-                const rgw_bucket_category_stats& entry_stats) {
-    entries.push_back(entry);
-    if (account) {
-      rgw_bucket_category_stats& target = stats[category];
-      target.num_entries += entry_stats.num_entries;
-      target.total_size += entry_stats.total_size;
-      target.total_size_rounded += entry_stats.total_size_rounded;
-    }
-    if (entries.size() >= RESHARD_SHARD_WINDOW) {
-      int ret = flush();
-      if (ret < 0) {
-        return ret;
-      }
-    }
-    return 0;
-  }
-  int flush() {
-    if (entries.size() == 0) {
-      return 0;
-    }
-
-    librados::ObjectWriteOperation op;
-    for (auto& entry : entries) {
-      store->bi_put(op, bs, entry);
-    }
-    cls_rgw_bucket_update_stats(op, false, stats);
-
-    librados::AioCompletion *c;
-    int ret = get_completion(&c);
-    if (ret < 0) {
-      return ret;
-    }
-    ret = bs.index_ctx.aio_operate(bs.bucket_obj, c, &op);
-    if (ret < 0) {
-      std::cerr << "ERROR: failed to store entries in target bucket shard (bs=" << bs.bucket << "/" << bs.shard_id << ") error=" << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-    entries.clear();
-    stats.clear();
-    return 0;
-  }
-
-  int wait_all_aio() {
-    int ret = 0;
-    while (!aio_completions.empty()) {
-      int r = wait_next_completion();
-      if (r < 0) {
-        ret = r;
-      }
-    }
-    return ret;
-  }
-};
-
-class BucketReshardManager {
-  RGWRados *store;
-  RGWBucketInfo& target_bucket_info;
-  deque<librados::AioCompletion *> completions;
-  int num_target_shards;
-  vector<BucketReshardShard *> target_shards;
-
-public:
-  BucketReshardManager(RGWRados *_store, RGWBucketInfo& _target_bucket_info, int _num_target_shards) : store(_store), target_bucket_info(_target_bucket_info),
-                                                                                                       num_target_shards(_num_target_shards) {
-    target_shards.resize(num_target_shards);
-    for (int i = 0; i < num_target_shards; ++i) {
-      target_shards[i] = new BucketReshardShard(store, target_bucket_info, i, completions);
-    }
-  }
-
-  ~BucketReshardManager() {
-    for (auto& shard : target_shards) {
-      int ret = shard->wait_all_aio();
-      if (ret < 0) {
-        ldout(store->ctx(), 20) << __func__ << ": shard->wait_all_aio() returned ret=" << ret << dendl;
-      }
-    }
-  }
-
-  int add_entry(int shard_index,
-                rgw_cls_bi_entry& entry, bool account, uint8_t category,
-                const rgw_bucket_category_stats& entry_stats) {
-    int ret = target_shards[shard_index]->add_entry(entry, account, category, entry_stats);
-    if (ret < 0) {
-      cerr << "ERROR: target_shards.add_entry(" << entry.idx << ") returned error: " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-    return 0;
-  }
-
-  int finish() {
-    int ret = 0;
-    for (auto& shard : target_shards) {
-      int r = shard->flush();
-      if (r < 0) {
-        cerr << "ERROR: target_shards[" << shard->get_num_shard() << "].flush() returned error: " << cpp_strerror(-r) << std::endl;
-        ret = r;
-      }
-    }
-    for (auto& shard : target_shards) {
-      int r = shard->wait_all_aio();
-      if (r < 0) {
-        cerr << "ERROR: target_shards[" << shard->get_num_shard() << "].wait_all_aio() returned error: " << cpp_strerror(-r) << std::endl;
-        ret = r;
-      }
-      delete shard;
-    }
-    target_shards.clear();
-    return ret;
-  }
-};
-
-
 int check_reshard_bucket_params(RGWRados *store,
 				const string& bucket_name,
 				const string& tenant,
@@ -2423,152 +2253,6 @@ int check_reshard_bucket_params(RGWRados *store,
     cerr << "num shards is less or equal to current shards count" << std::endl
 	 << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
     return EINVAL;
-  }
-  return 0;
-}
-
-int create_new_bucket_instance(RGWRados *store,
-			       int new_num_shards,
-			       const RGWBucketInfo& bucket_info,
-			       map<string, bufferlist>& attrs,
-			       RGWBucketInfo& new_bucket_info)
-{
-
-  store->create_bucket_id(&new_bucket_info.bucket.bucket_id);
-  new_bucket_info.bucket.oid.clear();
-
-  new_bucket_info.num_shards = new_num_shards;
-  new_bucket_info.objv_tracker.clear();
-
-  int ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
-  if (ret < 0) {
-    cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
-  }
-
-  ret = store->put_bucket_instance_info(new_bucket_info, true, real_time(), &attrs);
-  if (ret < 0) {
-    cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
-  }
-
-  return 0;
-}
-
-int reshard_bucket(RGWRados *store,
-		   Formatter *formatter,
-		   int num_shards,
-		   rgw_bucket& bucket,
-		   RGWBucketInfo& bucket_info,
-		   RGWBucketInfo& new_bucket_info,
-		   int max_entries,
-		   RGWBucketAdminOpState& bucket_op,
-		   bool verbose)
-{
-
-  int ret = 0;
-
-  cout << "*** NOTICE: operation will not remove old bucket index objects ***" << std::endl;
-  cout << "***         these will need to be removed manually             ***" << std::endl;
-  cout << "old bucket instance id: " << bucket_info.bucket.bucket_id << std::endl;
-  cout << "new bucket instance id: " << new_bucket_info.bucket.bucket_id << std::endl;
-
-  list<rgw_cls_bi_entry> entries;
-
-  if (max_entries < 0) {
-    max_entries = 1000;
-  }
-
-  int num_target_shards = (new_bucket_info.num_shards > 0 ? new_bucket_info.num_shards : 1);
-
-  BucketReshardManager target_shards_mgr(store, new_bucket_info, num_target_shards);
-
-  if (verbose) {
-    formatter->open_array_section("entries");
-  }
-
-  uint64_t total_entries = 0;
-
-  if (!verbose) {
-    cout << "total entries:";
-  }
-
-  int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
-  string marker;
-  for (int i = 0; i < num_source_shards; ++i) {
-    bool is_truncated = true;
-    marker.clear();
-    while (is_truncated) {
-      entries.clear();
-      ret = store->bi_list(bucket, i, string(), marker, max_entries, &entries, &is_truncated);
-      if (ret < 0) {
-	cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
-	return -ret;
-      }
-
-      list<rgw_cls_bi_entry>::iterator iter;
-      for (iter = entries.begin(); iter != entries.end(); ++iter) {
-	rgw_cls_bi_entry& entry = *iter;
-	if (verbose) {
-	  formatter->open_object_section("entry");
-
-	  encode_json("shard_id", i, formatter);
-	  encode_json("num_entry", total_entries, formatter);
-	  encode_json("entry", entry, formatter);
-	}
-	total_entries++;
-
-	marker = entry.idx;
-
-	int target_shard_id;
-	cls_rgw_obj_key cls_key;
-	uint8_t category;
-	rgw_bucket_category_stats stats;
-	bool account = entry.get_info(&cls_key, &category, &stats);
-	rgw_obj_key key(cls_key);
-	rgw_obj obj(new_bucket_info.bucket, key);
-	int ret = store->get_target_shard_id(new_bucket_info, obj.get_hash_object(), &target_shard_id);
-	if (ret < 0) {
-	  cerr << "ERROR: get_target_shard_id() returned ret=" << ret << std::endl;
-	  return ret;
-	}
-
-	int shard_index = (target_shard_id > 0 ? target_shard_id : 0);
-
-	ret = target_shards_mgr.add_entry(shard_index, entry, account, category, stats);
-	if (ret < 0) {
-	  return ret;
-	}
-	if (verbose) {
-	  formatter->close_section();
-	  formatter->flush(cout);
-	  formatter->flush(cout);
-	} else if (!(total_entries % 1000)) {
-	  cout << " " << total_entries;
-	}
-      }
-    }
-  }
-  if (verbose) {
-    formatter->close_section();
-    formatter->flush(cout);
-  } else {
-    cout << " " << total_entries << std::endl;
-  }
-
-  ret = target_shards_mgr.finish();
-  if (ret < 0) {
-    cerr << "ERROR: failed to reshard" << std::endl;
-    return EIO;
-  }
-
-  bucket_op.set_bucket_id(new_bucket_info.bucket.bucket_id);
-  bucket_op.set_user_id(new_bucket_info.owner);
-  string err;
-  int r = RGWBucketAdminOp::link(store, bucket_op, &err);
-  if (r < 0) {
-    cerr << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-r) << std::endl;
-    return -r;
   }
   return 0;
 }
@@ -5860,22 +5544,10 @@ next:
       return ret;
     }
 
-    RGWBucketInfo new_bucket_info(bucket_info);
-    ret = create_new_bucket_instance(store, num_shards, bucket_info, attrs,
-				     new_bucket_info);
-    if (ret < 0) {
-      return ret;
-    }
+    RGWBucketReshard br(store, bucket_info, attrs);
 
-    return reshard_bucket(store,
-			  formatter,
-			  num_shards,
-			  bucket,
-			  bucket_info,
-			  new_bucket_info,
-			  max_entries,
-			  bucket_op,
-			  verbose);
+    return br.execute(num_shards, max_entries,
+                      verbose, &cout, formatter);
   }
 
   if (opt_cmd == OPT_RESHARD_ADD) {
@@ -5899,7 +5571,7 @@ next:
 
     int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
 
-    RGWReshard reshard(g_ceph_context, store);
+    RGWReshard reshard(store);
     cls_rgw_reshard_entry entry;
     entry.time = real_clock::now();
     entry.tenant = tenant;
@@ -5921,7 +5593,7 @@ next:
       max_entries = 1000;
     }
 
-    RGWReshard reshard(g_ceph_context, store);
+    RGWReshard reshard(store);
 
     formatter->open_array_section("reshard");
     do {
@@ -5944,9 +5616,9 @@ next:
     return 0;
   }
 
+#if 0
   if (opt_cmd == OPT_RESHARD_EXECUTE) {
-    RGWReshard reshard(g_ceph_context, store);
-
+    RGWReshard reshard(store);
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -5960,6 +5632,8 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+
+    RGWBucketReshard bucket_reshard(store, bucket_info);
 
     cls_rgw_reshard_entry entry;
     entry.tenant = tenant;
@@ -6016,9 +5690,10 @@ next:
 
     return 0;
   }
+#endif
 
   if (opt_cmd == OPT_RESHARD_CANCEL) {
-    RGWReshard reshard(g_ceph_context, store);
+    RGWReshard reshard(store);
 
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
