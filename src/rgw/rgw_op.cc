@@ -1781,7 +1781,7 @@ void RGWListBucket::execute()
   list_op.params.list_versions = list_versions;
 
   op_ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated);
-  if (op_ret >= 0 && !delimiter.empty()) {
+  if (op_ret >= 0) {
     next_marker = list_op.get_next_marker();
   }
 }
