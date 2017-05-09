@@ -310,6 +310,7 @@ protected:
 public:
   bool deleting;  // true while in removing or OSD is shutting down
 
+  ZTracer::Endpoint trace_endpoint;
 
   void lock_suspend_timeout(ThreadPool::TPHandle &handle);
   void lock(bool no_lockdep = false) const;
@@ -2426,8 +2427,6 @@ public:
 
   template<typename T, int MSGTYPE>
   bool can_discard_replica_op(OpRequestRef& op);
-
-  static bool op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op);
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
   bool old_peering_evt(CephPeeringEvtRef evt) {

@@ -1768,4 +1768,6 @@ void Journal<I>::remove_listener(journal::Listener *listener) {
 
 } // namespace librbd
 
+#ifndef TEST_F
 template class librbd::Journal<librbd::ImageCtx>;
+#endif

@@ -134,7 +134,7 @@ private:
 
 ImageDeleter::ImageDeleter(ContextWQ *work_queue, SafeTimer *timer,
                            Mutex *timer_lock)
-  : m_running(1),
+  : m_running(true),
     m_work_queue(work_queue),
     m_delete_lock("rbd::mirror::ImageDeleter::Delete"),
     m_image_deleter_thread(this),
@@ -149,7 +149,7 @@ ImageDeleter::ImageDeleter(ContextWQ *work_queue, SafeTimer *timer,
 ImageDeleter::~ImageDeleter() {
   dout(20) << "enter" << dendl;
 
-  m_running.set(0);
+  m_running = false;
   {
     Mutex::Locker l (m_delete_lock);
     m_delete_queue_cond.Signal();
@@ -164,13 +164,13 @@ ImageDeleter::~ImageDeleter() {
 
 void ImageDeleter::run() {
   dout(20) << "enter" << dendl;
-  while(m_running.read()) {
+  while(m_running) {
     m_delete_lock.Lock();
     while (m_delete_queue.empty()) {
       dout(20) << "waiting for delete requests" << dendl;
       m_delete_queue_cond.Wait(m_delete_lock);
 
-      if (!m_running.read()) {
+      if (!m_running) {
         m_delete_lock.Unlock();
         dout(20) << "return" << dendl;
         return;
@@ -183,7 +183,7 @@ void ImageDeleter::run() {
 
     bool move_to_next = process_image_delete();
     if (!move_to_next) {
-      if (!m_running.read()) {
+      if (!m_running) {
        dout(20) << "return" << dendl;
        return;
       }

@@ -1726,6 +1726,278 @@ bool RGWInfo_ObjStore_SWIFT::is_expired(const std::string& expires, CephContext*
   return false;
 }
 
+
+void RGWFormPost::init(RGWRados* const store,
+                       req_state* const s,
+                       RGWHandler* const dialect_handler)
+{
+  prefix = std::move(s->object.name);
+  s->object = rgw_obj_key();
+
+  return RGWPostObj_ObjStore::init(store, s, dialect_handler);
+}
+
+std::size_t RGWFormPost::get_max_file_size() /*const*/
+{
+  std::string max_str = get_part_str(ctrl_parts, "max_file_size", "0");
+
+  std::string err;
+  const std::size_t max_file_size =
+    static_cast<uint64_t>(strict_strtoll(max_str.c_str(), 10, &err));
+
+  if (! err.empty()) {
+    ldout(s->cct, 5) << "failed to parse FormPost's max_file_size: " << err
+                     << dendl;
+    return 0;
+  }
+
+  return max_file_size;
+}
+
+bool RGWFormPost::is_non_expired()
+{
+  std::string expires = get_part_str(ctrl_parts, "expires", "0");
+
+  std::string err;
+  const uint64_t expires_timestamp =
+    static_cast<uint64_t>(strict_strtoll(expires.c_str(), 10, &err));
+
+  if (! err.empty()) {
+    dout(5) << "failed to parse FormPost's expires: " << err << dendl;
+    return false;
+  }
+
+  const utime_t now = ceph_clock_now();
+  if (expires_timestamp <= static_cast<uint64_t>(now.sec())) {
+    dout(5) << "FormPost form expired: "
+            << expires_timestamp << " <= " << now.sec() << dendl;
+    return false;
+  }
+
+  return true;
+}
+
+bool RGWFormPost::is_integral()
+{
+  const std::string form_signature = get_part_str(ctrl_parts, "signature");
+
+  for (const auto& kv : s->user->temp_url_keys) {
+    const int temp_url_key_num = kv.first;
+    const string& temp_url_key = kv.second;
+
+    if (temp_url_key.empty()) {
+      continue;
+    }
+
+    SignatureHelper sig_helper;
+    sig_helper.calc(temp_url_key,
+                    s->info.request_uri,
+                    get_part_str(ctrl_parts, "redirect"),
+                    get_part_str(ctrl_parts, "max_file_size", "0"),
+                    get_part_str(ctrl_parts, "max_file_count", "0"),
+                    get_part_str(ctrl_parts, "expires", "0"));
+
+    const auto local_sig = sig_helper.get_signature();
+
+    ldout(s->cct, 20) << "FormPost signature [" << temp_url_key_num << "]"
+                      << " (calculated): " << local_sig << dendl;
+
+    if (sig_helper.is_equal_to(form_signature)) {
+      return true;
+    } else {
+      ldout(s->cct, 5) << "FormPost's signature mismatch: "
+                       << local_sig << " != " << form_signature << dendl;
+    }
+  }
+
+  return false;
+}
+
+int RGWFormPost::get_params()
+{
+  /* The parentt class extracts boundary info from the Content-Type. */
+  int ret = RGWPostObj_ObjStore::get_params();
+  if (ret < 0) {
+    return ret;
+  }
+
+  policy.create_default(s->user->user_id, s->user->display_name);
+
+  /* Let's start parsing the HTTP body by parsing each form part step-
+   * by-step till encountering the first part with file data. */
+  do {
+    struct post_form_part part;
+    ret = read_form_part_header(&part, stream_done);
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+      ldout(s->cct, 20) << "read part header -- part.name="
+                        << part.name << dendl;
+
+      for (const auto& pair : part.fields) {
+        ldout(s->cct, 20) << "field.name=" << pair.first << dendl;
+        ldout(s->cct, 20) << "field.val=" << pair.second.val << dendl;
+        ldout(s->cct, 20) << "field.params:" << dendl;
+
+        for (const auto& param_pair : pair.second.params) {
+          ldout(s->cct, 20) << " " << param_pair.first
+                            << " -> " << param_pair.second << dendl;
+        }
+      }
+    }
+
+    if (stream_done) {
+      /* Unexpected here. */
+      err_msg = "Malformed request";
+      return -EINVAL;
+    }
+
+    const auto field_iter = part.fields.find("Content-Disposition");
+    if (std::end(part.fields) != field_iter &&
+        std::end(field_iter->second.params) != field_iter->second.params.find("filename")) {
+      /* First data part ahead. */
+      current_data_part = std::move(part);
+
+      /* Stop the iteration. We can assume that all control parts have been
+       * already parsed. The rest of HTTP body should contain data parts
+       * only. They will be picked up by ::get_data(). */
+      break;
+    } else {
+      /* Control part ahead. Receive, parse and store for later usage. */
+      bool boundary;
+      ret = read_data(part.data, s->cct->_conf->rgw_max_chunk_size,
+                      boundary, stream_done);
+      if (ret < 0) {
+        return ret;
+      } else if (! boundary) {
+        err_msg = "Couldn't find boundary";
+        return -EINVAL;
+      }
+
+      ctrl_parts[part.name] = std::move(part);
+    }
+  } while (! stream_done);
+
+  min_len = 0;
+  max_len = get_max_file_size();
+
+  if (! current_data_part) {
+    err_msg = "FormPost: no files to process";
+    return -EINVAL;
+  }
+
+  if (! is_non_expired()) {
+    err_msg = "FormPost: Form Expired";
+    return -EPERM;
+  }
+
+  if (! is_integral()) {
+    err_msg = "FormPost: Invalid Signature";
+    return -EPERM;
+  }
+
+  return 0;
+}
+
+std::string RGWFormPost::get_current_filename() const
+{
+  try {
+    const auto& field = current_data_part->fields.at("Content-Disposition");
+    const auto iter = field.params.find("filename");
+
+    if (std::end(field.params) != iter) {
+      return prefix + iter->second;
+    }
+  } catch (std::out_of_range&) {
+    /* NOP */;
+  }
+
+  return prefix;
+}
+
+std::string RGWFormPost::get_current_content_type() const
+{
+  try {
+    const auto& field = current_data_part->fields.at("Content-Type");
+    return field.val;
+  } catch (std::out_of_range&) {
+    /* NOP */;
+  }
+
+  return std::string();
+}
+
+bool RGWFormPost::is_next_file_to_upload()
+{
+  if (! stream_done) {
+    /* We have at least one additional part in the body. */
+    struct post_form_part part;
+    int r = read_form_part_header(&part, stream_done);
+    if (r < 0) {
+      return false;
+    }
+
+    const auto field_iter = part.fields.find("Content-Disposition");
+    if (std::end(part.fields) != field_iter) {
+      const auto& params = field_iter->second.params;
+
+      if (std::end(params) != params.find("filename")) {
+        current_data_part = std::move(part);
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+int RGWFormPost::get_data(ceph::bufferlist& bl, bool& again)
+{
+  bool boundary;
+
+  int r = read_data(bl, s->cct->_conf->rgw_max_chunk_size,
+                    boundary, stream_done);
+  if (r < 0) {
+    return r;
+  }
+
+  /* Tell RGWPostObj::execute() that it has some data to put. */
+  again = !boundary;
+
+  return bl.length();
+}
+
+void RGWFormPost::send_response()
+{
+  std::string redirect = get_part_str(ctrl_parts, "redirect");
+  if (! redirect.empty()) {
+    op_ret = STATUS_REDIRECT;
+  }
+
+  set_req_state_err(s, op_ret);
+  s->err.s3_code = err_msg;
+  dump_errno(s);
+  if (! redirect.empty()) {
+    dump_redirect(s, redirect);
+  }
+  end_header(s, this);
+}
+
+bool RGWFormPost::is_formpost_req(req_state* const s)
+{
+  std::string content_type;
+  std::map<std::string, std::string> params;
+
+  parse_boundary_params(s->info.env->get("CONTENT_TYPE", ""),
+                        content_type, params);
+
+  return boost::algorithm::iequals(content_type, "multipart/form-data") &&
+         params.count("boundary") > 0;
+}
+
+
 RGWOp *RGWHandler_REST_Service_SWIFT::op_get()
 {
   return new RGWListBuckets_ObjStore_SWIFT;
@@ -2129,7 +2401,11 @@ RGWOp *RGWHandler_REST_Bucket_SWIFT::op_delete()
 
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_post()
 {
-  return new RGWPutMetadataBucket_ObjStore_SWIFT;
+  if (RGWFormPost::is_formpost_req(s)) {
+    return new RGWFormPost;
+  } else {
+    return new RGWPutMetadataBucket_ObjStore_SWIFT;
+  }
 }
 
 RGWOp *RGWHandler_REST_Bucket_SWIFT::op_options()
@@ -2180,7 +2456,11 @@ RGWOp *RGWHandler_REST_Obj_SWIFT::op_delete()
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::op_post()
 {
-  return new RGWPutMetadataObject_ObjStore_SWIFT;
+  if (RGWFormPost::is_formpost_req(s)) {
+    return new RGWFormPost;
+  } else {
+    return new RGWPutMetadataObject_ObjStore_SWIFT;
+  }
 }
 
 RGWOp *RGWHandler_REST_Obj_SWIFT::op_copy()

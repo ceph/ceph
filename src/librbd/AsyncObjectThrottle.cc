@@ -100,4 +100,6 @@ void AsyncObjectThrottle<T>::start_next_op() {
 
 } // namespace librbd
 
+#ifndef TEST_F
 template class librbd::AsyncObjectThrottle<librbd::ImageCtx>;
+#endif

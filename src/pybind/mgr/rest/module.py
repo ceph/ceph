@@ -156,7 +156,7 @@ class Module(MgrModule):
         return [self._auth_cls()]
 
     def shutdown(self):
-        cherrypy.engine.stop()
+        cherrypy.engine.exit()
 
     def serve(self):
         self.keys = self._load_keys()

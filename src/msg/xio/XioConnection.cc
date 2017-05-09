@@ -435,9 +435,8 @@ int XioConnection::handle_data_msg(struct xio_session *session,
   /* update connection timestamp */
   recv.set(tmsg->timestamp);
 
-  Message *m =
-    decode_message(msgr->cct, msgr->crcflags, header, footer, payload, middle,
-		   data);
+  Message *m = decode_message(msgr->cct, msgr->crcflags, header, footer,
+                              payload, middle, data, this);
 
   if (m) {
     /* completion */

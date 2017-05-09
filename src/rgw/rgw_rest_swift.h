@@ -12,6 +12,8 @@
 #include "rgw_rest.h"
 #include "rgw_swift_auth.h"
 
+#include <boost/utility/string_ref.hpp>
+
 class RGWGetObj_ObjStore_SWIFT : public RGWGetObj_ObjStore {
   int custom_http_ret = 0;
 public:
@@ -236,6 +238,94 @@ public:
   static void list_slo_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
   static bool is_expired(const std::string& expires, CephContext* cct);
 };
+
+
+class RGWFormPost : public RGWPostObj_ObjStore {
+  std::string get_current_filename() const override;
+  std::string get_current_content_type() const override;
+  std::size_t get_max_file_size() /*const*/;
+  bool is_next_file_to_upload() override;
+  bool is_integral();
+  bool is_non_expired();
+
+  parts_collection_t ctrl_parts;
+  boost::optional<post_form_part> current_data_part;
+  std::string prefix;
+  bool stream_done = false;
+
+  class SignatureHelper;
+public:
+  RGWFormPost() = default;
+  ~RGWFormPost() = default;
+
+  void init(RGWRados* store,
+            req_state* s,
+            RGWHandler* dialect_handler) override;
+
+  int get_params() override;
+  int get_data(ceph::bufferlist& bl, bool& again) override;
+  void send_response() override;
+
+  static bool is_formpost_req(req_state* const s);
+};
+
+class RGWFormPost::SignatureHelper
+{
+private:
+  static constexpr uint32_t output_size =
+    CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1;
+
+  unsigned char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE]; // 20
+  char dest_str[output_size];
+
+public:
+  SignatureHelper() = default;
+
+  const char* calc(const std::string& key,
+                   const boost::string_ref& path_info,
+                   const boost::string_ref& redirect,
+                   const boost::string_ref& max_file_size,
+                   const boost::string_ref& max_file_count,
+                   const boost::string_ref& expires) {
+    using ceph::crypto::HMACSHA1;
+    using UCHARPTR = const unsigned char*;
+
+    HMACSHA1 hmac((UCHARPTR) key.data(), key.size());
+
+    hmac.Update((UCHARPTR) path_info.data(), path_info.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) redirect.data(), redirect.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) max_file_size.data(), max_file_size.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) max_file_count.data(), max_file_count.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) expires.data(), expires.size());
+
+    hmac.Final(dest);
+
+    buf_to_hex((UCHARPTR) dest, sizeof(dest), dest_str);
+
+    return dest_str;
+  }
+
+  const char* get_signature() const {
+    return dest_str;
+  }
+
+  bool is_equal_to(const std::string& rhs) const {
+    /* never allow out-of-range exception */
+    if (rhs.size() < (output_size - 1)) {
+      return false;
+    }
+    return rhs.compare(0 /* pos */,  output_size, dest_str) == 0;
+  }
+
+}; /* RGWFormPost::SignatureHelper */
 
 
 class RGWSwiftWebsiteHandler {

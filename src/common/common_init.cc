@@ -25,6 +25,7 @@
 #include "common/valgrind.h"
 #include "common/version.h"
 #include "common/strtol.h"
+#include "common/zipkin_trace.h"
 #include "include/color.h"
 
 #include <errno.h>
@@ -124,6 +125,7 @@ void complain_about_parse_errors(CephContext *cct,
 void common_init_finish(CephContext *cct)
 {
   cct->init_crypto();
+  ZTracer::ztrace_init();
 
   int flags = cct->get_init_flags();
   if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))

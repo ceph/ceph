@@ -465,7 +465,7 @@ OPTION(client_dirsize_rbytes, OPT_BOOL, true)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, true) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_disable_pagecache, OPT_BOOL, false)
 OPTION(fuse_allow_other, OPT_BOOL, true)
-OPTION(fuse_default_permissions, OPT_BOOL, true)
+OPTION(fuse_default_permissions, OPT_BOOL, false)
 OPTION(fuse_big_writes, OPT_BOOL, true)
 OPTION(fuse_atomic_o_trunc, OPT_BOOL, true)
 OPTION(fuse_debug, OPT_BOOL, false)
@@ -998,6 +998,9 @@ OPTION(osd_bench_large_size_max_throughput, OPT_U64, 100 << 20) // 100 MB/s
 OPTION(osd_bench_max_block_size, OPT_U64, 64 << 20) // cap the block size at 64MB
 OPTION(osd_bench_duration, OPT_U32, 30) // duration of 'osd bench', capped at 30s to avoid triggering timeouts
 
+OPTION(osd_blkin_trace_all, OPT_BOOL, false) // create a blkin trace for all osd requests
+OPTION(osdc_blkin_trace_all, OPT_BOOL, false) // create a blkin trace for all objecter requests
+
 OPTION(osd_discard_disconnected_ops, OPT_BOOL, true)
 
 OPTION(memstore_device_bytes, OPT_U64, 1024*1024*1024)
@@ -1031,6 +1034,7 @@ OPTION(bluefs_log_compact_min_size, OPT_U64, 16*1048576)  // before we consider
 OPTION(bluefs_min_flush_size, OPT_U64, 524288)  // ignore flush until its this big
 OPTION(bluefs_compact_log_sync, OPT_BOOL, false)  // sync or async log compaction?
 OPTION(bluefs_buffered_io, OPT_BOOL, false)
+OPTION(bluefs_sync_write, OPT_BOOL, false)
 OPTION(bluefs_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluefs_preextend_wal_files, OPT_BOOL, false)  // this *requires* that rocksdb has recycling enabled
 

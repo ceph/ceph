@@ -3354,7 +3354,6 @@ int SyntheticClient::chunk_file(string &filename)
   uint64_t size = st.st_size;
   dout(0) << "file " << filename << " size is " << size << dendl;
 
-  Filer *filer = client->filer;
 
   inode_t inode;
   memset(&inode, 0, sizeof(inode));
@@ -3374,7 +3373,8 @@ int SyntheticClient::chunk_file(string &filename)
     
     flock.Lock();
     Context *onfinish = new C_SafeCond(&flock, &cond, &done);
-    filer->read(inode.ino, &inode.layout, CEPH_NOSNAP, pos, get, &bl, 0, onfinish);
+    client->filer->read(inode.ino, &inode.layout, CEPH_NOSNAP, pos, get, &bl, 0,
+			onfinish);
     while (!done)
       cond.Wait(flock);
     flock.Unlock();
