@@ -52,7 +52,7 @@ TEST(AES, Encrypt) {
 
   bufferlist cipher;
   std::string error;
-  CryptoKeyHandler *kh = h->get_key_handler(secret, error);
+  CryptoKeyHandler *kh = h->get_key_handler(secret, AES_IV, error);
   int r = kh->encrypt(plaintext, cipher, &error);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(error, "");
@@ -100,7 +100,7 @@ TEST(AES, Decrypt) {
 
   std::string error;
   bufferlist plaintext;
-  CryptoKeyHandler *kh = h->get_key_handler(secret, error);
+  CryptoKeyHandler *kh = h->get_key_handler(secret, AES_IV, error);
   int r = kh->decrypt(cipher, plaintext, &error);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(error, "");
@@ -136,7 +136,7 @@ TEST(AES, Loop) {
       CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
 
       std::string error;
-      CryptoKeyHandler *kh = h->get_key_handler(secret, error);
+      CryptoKeyHandler *kh = h->get_key_handler(secret, AES_IV, error);
       int r = kh->encrypt(plaintext, cipher, &error);
       ASSERT_EQ(r, 0);
       ASSERT_EQ(error, "");
@@ -148,7 +148,7 @@ TEST(AES, Loop) {
     {
       CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
       std::string error;
-      CryptoKeyHandler *ckh = h->get_key_handler(secret, error);
+      CryptoKeyHandler *ckh = h->get_key_handler(secret, AES_IV, error);
       int r = ckh->decrypt(cipher, plaintext, &error);
       ASSERT_EQ(r, 0);
       ASSERT_EQ(error, "");

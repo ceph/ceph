@@ -63,6 +63,12 @@ uint64_t get_random(uint64_t min_val, uint64_t max_val)
 
 
 // ---------------------------------------------------
+namespace ceph {
+const bufferptr AES_IV =
+    buffer::create_static(sizeof(CEPH_AES_IV)-1, (char*)CEPH_AES_IV);
+const bufferptr EMPTY_IV =
+    buffer::create_static(0, nullptr);
+}
 
 class CryptoNoneKeyHandler : public CryptoKeyHandler {
 public:
@@ -91,9 +97,6 @@ public:
   int validate_secret(const bufferptr& secret) override {
     return 0;
   }
-  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override {
-    return new CryptoNoneKeyHandler;
-  }
   CryptoKeyHandler *get_key_handler(const bufferptr& secret, const bufferptr& iv, string& error) override {
     return new CryptoNoneKeyHandler;
   }
@@ -112,7 +115,6 @@ public:
   }
   int create(bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
-  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
   CryptoKeyHandler *get_key_handler(const bufferptr& secret, const bufferptr& iv, string& error) override;
 };
 
@@ -306,13 +308,8 @@ public:
     ivItem.type = siBuffer;
     // losing constness due to SECItem.data; IV should never be
     // modified, regardless
-    if (iv.length() == 0) {
-      ivItem.data = (unsigned char*)CEPH_AES_IV;
-      ivItem.len = sizeof(CEPH_AES_IV)-1;
-    } else {
-      ivItem.data = (unsigned char*)iv.c_str();
-      ivItem.len = iv.length();
-    }
+    ivItem.data = (unsigned char*)iv.c_str();
+    ivItem.len = iv.length();
 
     param = PK11_ParamFromIV(mechanism, &ivItem);
     if (!param) {
@@ -360,19 +357,6 @@ int CryptoAES::validate_secret(const bufferptr& secret)
   return 0;
 }
 
-CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
-                                            string& error)
-{
-  CryptoAESKeyHandler *ckh = new CryptoAESKeyHandler;
-  ostringstream oss;
-  if (ckh->init(secret, bufferptr(), oss) < 0) {
-    error = oss.str();
-    delete ckh;
-    return NULL;
-  }
-  return ckh;
-}
-
 CryptoKeyHandler *CryptoAES::get_key_handler(
     const bufferptr& secret,
     const bufferptr& iv,
@@ -395,12 +379,11 @@ public:
     return CEPH_CRYPTO_AES_256_CBC;
   }
   int create(bufferptr& secret) override {
-    char d[KEY_SIZE];
     bufferptr p(KEY_SIZE);
-    int r = get_random_bytes(d, KEY_SIZE);
+    int r = get_random_bytes(p.c_str(), p.length());
     if (r < 0)
       return r;
-    secret = buffer::ptr(d, KEY_SIZE);
+    secret = std::move(p);
     return 0;
   }
   int validate_secret(const bufferptr& secret) override {
@@ -409,9 +392,6 @@ public:
     }
     return 0;
   }
-  CryptoKeyHandler *get_key_handler(
-      const bufferptr& secret,
-      string& error) override;
   CryptoKeyHandler *get_key_handler(
       const bufferptr& secret,
       const bufferptr& iv,
@@ -429,12 +409,11 @@ public:
     return CEPH_CRYPTO_AES_256_CTR;
   }
   int create(bufferptr& secret) override {
-    char d[KEY_SIZE];
     bufferptr p(KEY_SIZE);
-    int r = get_random_bytes(d, KEY_SIZE);
+    int r = get_random_bytes(p.c_str(), p.length());
     if (r < 0)
       return r;
-    secret = buffer::ptr(d, KEY_SIZE);
+    secret = std::move(p);
     return 0;
   }
   int validate_secret(const bufferptr& secret) override {
@@ -443,9 +422,6 @@ public:
     }
     return 0;
   }
-  CryptoKeyHandler *get_key_handler(
-      const bufferptr& secret,
-      string& error) override;
   CryptoKeyHandler *get_key_handler(
       const bufferptr& secret,
       const bufferptr& iv,
@@ -463,12 +439,11 @@ public:
     return CEPH_CRYPTO_AES_256_ECB;
   }
   int create(bufferptr& secret) override {
-    char d[KEY_SIZE];
     bufferptr p(KEY_SIZE);
-    int r = get_random_bytes(d, KEY_SIZE);
+    int r = get_random_bytes(p.c_str(), p.length());
     if (r < 0)
       return r;
-    secret = buffer::ptr(d, KEY_SIZE);
+    secret = std::move(p);
     return 0;
   }
   int validate_secret(const bufferptr& secret) override {
@@ -477,9 +452,6 @@ public:
     }
     return 0;
   }
-  CryptoKeyHandler *get_key_handler(
-      const bufferptr& secret,
-      string& error) override;
   CryptoKeyHandler *get_key_handler(
       const bufferptr& secret,
       const bufferptr& iv,
@@ -633,19 +605,6 @@ bool CryptoAES_256_CBCKeyHandler::cbc_transform(
 #else
 #error Must define USE_CRYPTOPP or USE_NSS
 #endif
-
-CryptoKeyHandler *CryptoAES_256_CBC::get_key_handler(
-    const bufferptr& secret, string& error)
-{
-  static_assert(sizeof(CEPH_AES_IV) - 1 == IV_SIZE, "mismatch in IV size");
-  static bufferptr iv = bufferptr(buffer::create_static(IV_SIZE, (char*)CEPH_AES_IV));
-  if (secret.length() != KEY_SIZE) {
-    error = "Improper key size.";
-    return nullptr;
-  }
-  CryptoAES_256_CBCKeyHandler *ckh = new CryptoAES_256_CBCKeyHandler(secret, iv);
-  return ckh;
-}
 
 CryptoKeyHandler *CryptoAES_256_CBC::get_key_handler(
     const bufferptr& secret, const bufferptr& iv, string& error)
@@ -823,19 +782,12 @@ bool CryptoAES_256_ECBKeyHandler::ecb_transform(
 #endif
 
 CryptoKeyHandler *CryptoAES_256_ECB::get_key_handler(
-    const bufferptr& secret, string& error)
-{
-  if (secret.length() != KEY_SIZE) {
-    error = "Invalid key size";
-    return nullptr;
-  }
-  CryptoAES_256_ECBKeyHandler *ckh = new CryptoAES_256_ECBKeyHandler(secret);
-  return ckh;
-}
-
-CryptoKeyHandler *CryptoAES_256_ECB::get_key_handler(
     const bufferptr& secret, const bufferptr& iv, string& error)
 {
+  if (iv.length() != 0) {
+    error = "IV size must be 0 for ECB mode";
+    return nullptr;
+  }
   if (secret.length() != KEY_SIZE) {
     error = "Invalid key size";
     return nullptr;
@@ -878,19 +830,6 @@ private:
       const unsigned char* in, size_t size, unsigned char* out,
       std::string *error) const;
 };
-
-CryptoKeyHandler *CryptoAES_256_CTR::get_key_handler(
-    const bufferptr& secret, string& error)
-{
-  static_assert(sizeof(CEPH_AES_IV) - 1 == BLOCK_SIZE, "mismatch in IV size");
-  bufferptr iv(CEPH_AES_IV, BLOCK_SIZE);
-  if (secret.length() != KEY_SIZE) {
-    error = "Improper key size.";
-    return nullptr;
-  }
-  CryptoAES_256_CTRKeyHandler *ckh = new CryptoAES_256_CTRKeyHandler(secret, iv);
-  return ckh;
-}
 
 CryptoKeyHandler *CryptoAES_256_CTR::get_key_handler(
     const bufferptr& secret, const bufferptr& iv, string& error)
@@ -983,7 +922,7 @@ bool CryptoAES_256_CTRKeyHandler::ctr_transform(
     if (slot) {
       keyItem.type = siBuffer;
       keyItem.data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(secret.c_str()));
-      keyItem.len = CryptoAES_256_CBC::KEY_SIZE;
+      keyItem.len = CryptoAES_256_CTR::KEY_SIZE;
 
       symkey = PK11_ImportSymKey(slot, CKM_AES_CTR, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
       if (symkey) {
@@ -1083,7 +1022,7 @@ int CryptoKey::_set_secret(int t, const bufferptr& s)
       return ret;
     }
     string error;
-    ckh.reset(ch->get_key_handler(s, error));
+    ckh.reset(ch->get_key_handler(s, AES_IV, error));
     delete ch;
     if (error.length()) {
       return -EIO;
@@ -1148,6 +1087,7 @@ void CryptoKey::encode_plaintext(bufferlist &bl)
 
 CryptoHandler *CryptoHandler::create(int type)
 {
+  using namespace ceph;
   switch (type) {
   case CEPH_CRYPTO_NONE:
     return new CryptoNone;
@@ -1160,6 +1100,6 @@ CryptoHandler *CryptoHandler::create(int type)
   case CEPH_CRYPTO_AES_256_CTR:
       return new CryptoAES_256_CTR;
   default:
-    return NULL;
+    return nullptr;
   }
 }

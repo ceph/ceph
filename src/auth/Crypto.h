@@ -26,6 +26,10 @@ class CephContext;
 class CryptoKeyContext;
 namespace ceph { class Formatter; }
 
+namespace ceph {
+extern const bufferptr AES_IV;
+extern const bufferptr EMPTY_IV;
+}
 
 /*
  * some per-key context that is specific to a particular crypto backend
@@ -137,8 +141,6 @@ public:
   virtual int get_type() const = 0;
   virtual int create(bufferptr& secret) = 0;
   virtual int validate_secret(const bufferptr& secret) = 0;
-  virtual CryptoKeyHandler *get_key_handler(const bufferptr& secret,
-                                           string& error) = 0;
   virtual CryptoKeyHandler *get_key_handler(const bufferptr& secret, const bufferptr& iv,
               string& error) = 0;
 
