@@ -484,7 +484,7 @@ private:
 
 public:
   enum {
-    FLAG_MUTABLE = 1,         ///< blob can be overwritten or split
+    LEGACY_FLAG_MUTABLE = 1,  ///< [legacy] blob can be overwritten or split
     FLAG_COMPRESSED = 2,      ///< blob is compressed
     FLAG_CSUM = 4,            ///< blob has checksums
     FLAG_HAS_UNUSED = 8,      ///< blob has unused map
@@ -596,7 +596,7 @@ public:
     compressed_length = clen;
   }
   bool is_mutable() const {
-    return has_flag(FLAG_MUTABLE);
+    return !is_compressed() && !is_shared();
   }
   bool is_compressed() const {
     return has_flag(FLAG_COMPRESSED);
