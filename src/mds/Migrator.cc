@@ -1691,7 +1691,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
 
   // log completion. 
   //  include export bounds, to ensure they're in the journal.
-  EExport *le = new EExport(mds->mdlog, dir);
+  EExport *le = new EExport(mds->mdlog, dir, it->second.peer);;
   mds->mdlog->start_entry(le);
 
   le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
@@ -2160,6 +2160,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   if (!m->did_assim()) {
     assert(it != import_state.end());
     assert(it->second.state == IMPORT_DISCOVERED);
+    assert(it->second.peer == oldauth);
     diri = cache->get_inode(m->get_dirfrag().ino);
     assert(diri);
     bufferlist::iterator p = m->basedir.begin();
@@ -2174,6 +2175,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
       return;
     }
     assert(it->second.state == IMPORT_PREPPING);
+    assert(it->second.peer == oldauth);
 
     dir = cache->get_dirfrag(m->get_dirfrag());
     assert(dir);
@@ -2366,27 +2368,29 @@ void Migrator::handle_export_dir(MExportDir *m)
   assert (g_conf->mds_kill_import_at != 5);
   CDir *dir = cache->get_dirfrag(m->dirfrag);
   assert(dir);
+
+  mds_rank_t oldauth = mds_rank_t(m->get_source().num());
+  dout(7) << "handle_export_dir importing " << *dir << " from " << oldauth << dendl;
+
+  assert(!dir->is_auth());
   
   map<dirfrag_t,import_state_t>::iterator it = import_state.find(m->dirfrag);
   assert(it != import_state.end());
   assert(it->second.state == IMPORT_PREPPED);
   assert(it->second.tid == m->get_tid());
+  assert(it->second.peer == oldauth);
 
   utime_t now = ceph_clock_now();
-  mds_rank_t oldauth = mds_rank_t(m->get_source().num());
-  dout(7) << "handle_export_dir importing " << *dir << " from " << oldauth << dendl;
-  assert(dir->is_auth() == false);
 
   if (!dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()))
     dir->get_inode()->dirfragtree.force_to_leaf(g_ceph_context, dir->get_frag());
 
   cache->show_subtrees();
 
-  C_MDS_ImportDirLoggedStart *onlogged = new C_MDS_ImportDirLoggedStart(
-      this, dir, mds_rank_t(m->get_source().num()));
+  C_MDS_ImportDirLoggedStart *onlogged = new C_MDS_ImportDirLoggedStart(this, dir, oldauth);
 
   // start the journal entry
-  EImportStart *le = new EImportStart(mds->mdlog, dir->dirfrag(), m->bounds);
+  EImportStart *le = new EImportStart(mds->mdlog, dir->dirfrag(), m->bounds, oldauth);
   mds->mdlog->start_entry(le);
 
   le->metablob.add_dir_context(dir);

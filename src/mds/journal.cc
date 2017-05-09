@@ -2872,11 +2872,12 @@ void EExport::replay(MDSRank *mds)
 
 void EExport::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(stamp, bl);
   ::encode(metablob, bl, features);
   ::encode(base, bl);
   ::encode(bounds, bl);
+  ::encode(target, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2888,6 +2889,8 @@ void EExport::decode(bufferlist::iterator &bl)
   ::decode(metablob, bl);
   ::decode(base, bl);
   ::decode(bounds, bl);
+  if (struct_v >= 4)
+    ::decode(target, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2966,13 +2969,14 @@ void EImportStart::replay(MDSRank *mds)
 }
 
 void EImportStart::encode(bufferlist &bl, uint64_t features) const {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(stamp, bl);
   ::encode(base, bl);
   ::encode(metablob, bl, features);
   ::encode(bounds, bl);
   ::encode(cmapv, bl);
   ::encode(client_map, bl);
+  ::encode(from, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2985,6 +2989,8 @@ void EImportStart::decode(bufferlist::iterator &bl) {
   ::decode(bounds, bl);
   ::decode(cmapv, bl);
   ::decode(client_map, bl);
+  if (struct_v >= 4)
+    ::decode(from, bl);
   DECODE_FINISH(bl);
 }
 
