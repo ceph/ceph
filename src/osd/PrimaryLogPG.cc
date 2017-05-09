@@ -2251,6 +2251,12 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
   bool write_ordered,
   ObjectContextRef obc)
 {
+  if (static_cast<const MOSDOp *>(op->get_req())->get_flags() &
+      CEPH_OSD_FLAG_IGNORE_REDIRECT) {
+    dout(20) << __func__ << ": ignoring redirect due to flag" << dendl;
+    return cache_result_t::NOOP;
+  }
+
   if (obc)
     dout(10) << __func__ << " " << obc->obs.oi << " "
        << (obc->obs.exists ? "exists" : "DNE")
@@ -5790,6 +5796,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+
 	object_t target_name;
 	object_locator_t target_oloc;
 	snapid_t target_snapid = (uint64_t)op.copy_from.snapid;
