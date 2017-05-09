@@ -931,20 +931,11 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
   if (pending_creatings.last_scan_epoch > inc.epoch) {
     return pending_creatings;
   }
-  const auto& pgm = mon->pgservice->get_pg_map();
-  if (pgm.last_pg_scan >= creating_pgs.last_scan_epoch) {
-    // TODO: please stop updating pgmap with pgstats once the upgrade is completed
-    const unsigned total = pending_creatings.pgs.size();
-    for (auto& pgid : pgm.creating_pgs) {
-      auto st = pgm.pg_stat.find(pgid);
-      assert(st != pgm.pg_stat.end());
-      auto created = make_pair(st->second.created, st->second.last_scrub_stamp);
-      // no need to add the pg, if it already exists in creating_pgs
-      pending_creatings.pgs.emplace(pgid, created);
-    }
-    dout(7) << __func__ << total - pending_creatings.pgs.size()
-	    << " pgs added from pgmap" << dendl;
-  }
+  const unsigned total = pending_creatings.pgs.size();
+  mon->pgservice->maybe_add_creating_pgs(creating_pgs.last_scan_epoch,
+					 &pending_creatings);
+  dout(7) << __func__ << total - pending_creatings.pgs.size()
+	  << " pgs added from pgmap" << dendl;
   unsigned added = 0;
   added += scan_for_creating_pgs(osdmap.get_pools(),
 				 inc.old_pools,
