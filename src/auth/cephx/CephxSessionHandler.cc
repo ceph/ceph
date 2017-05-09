@@ -41,9 +41,9 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
     __le32 middle_crc;
     __le32 data_crc;
   } __attribute__ ((packed)) sigblock = {
-    1, mswab64(AUTH_ENC_MAGIC), mswab32(4*4),
-    mswab32(header.crc), mswab32(footer.front_crc),
-    mswab32(footer.middle_crc), mswab32(footer.data_crc)
+    1, mswab(AUTH_ENC_MAGIC), mswab<uint32_t>(4*4),
+    mswab<uint32_t>(header.crc), mswab<uint32_t>(footer.front_crc),
+    mswab<uint32_t>(footer.middle_crc), mswab<uint32_t>(footer.data_crc)
   };
   bufferlist bl_plaintext;
   bl_plaintext.append(buffer::create_static(sizeof(sigblock), (char*)&sigblock));
