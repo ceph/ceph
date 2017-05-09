@@ -669,6 +669,7 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       }
     } else {
       assert(ip_op.waiting_for_applied.count(from));
+      ip_op.waiting_for_applied.erase(from);
       if (ip_op.op) {
         ostringstream ss;
         ss << "sub_op_applied_rec from " << from;
@@ -676,7 +677,6 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
 	ip_op.op->pg_trace.event("sub_op_applied_rec");
       }
     }
-    ip_op.waiting_for_applied.erase(from);
 
     parent->update_peer_last_complete_ondisk(
       from,
