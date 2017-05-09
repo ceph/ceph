@@ -27,6 +27,7 @@
 #define CEPH_PGSTATSERVICE_H
 
 #include "mon/PGMap.h"
+struct creating_pgs_t;
 
 class PGStatService {
 public:
@@ -45,9 +46,13 @@ public:
   virtual float get_nearfull_ratio() const = 0;
   virtual bool have_creating_pgs() const = 0;
   virtual bool is_creating_pg(pg_t pgid) const = 0;
+  /**
+   * For upgrades. If the PGMap has newer data than the monitor's new
+   * creating_pgs (scan_epoch), insert them into the passed pending_creates.
+   */
+  virtual void maybe_add_creating_pgs(epoch_t scan_epoch,
+				      creating_pgs_t *pending_creates) const = 0;
   virtual epoch_t get_min_last_epoch_clean() const = 0;
-
-  virtual PGMap& get_pg_map() = 0;
 
   virtual bool have_full_osds() const = 0;
   virtual bool have_nearfull_osds() const = 0;
@@ -102,8 +107,6 @@ public:
     return NULL;
   }
 
-  PGMap& get_pg_map() { return parent; }
-
   const pool_stat_t& get_pg_sum() const { return parent.pg_sum; }
   const osd_stat_t& get_osd_sum() const { return parent.osd_sum; }
 
@@ -125,6 +128,18 @@ public:
 
   bool have_creating_pgs() const { return !parent.creating_pgs.empty(); }
   bool is_creating_pg(pg_t pgid) const { return parent.creating_pgs.count(pgid); }
+  virtual void maybe_add_creating_pgs(epoch_t scan_epoch,
+				      creating_pgs_t *pending_creates) const {
+    if (parent.last_pg_scan >= scan_epoch) {
+      for (auto& pgid : parent.creating_pgs) {
+	auto st = parent.pg_stat.find(pgid);
+	assert(st != parent.pg_stat.end());
+	auto created = make_pair(st->second.created, st->second.last_scrub_stamp);
+	// no need to add the pg, if it already exists in creating_pgs
+	pending_creatings->pgs.emplace(pgid, created);
+      }
+    }
+  }
   epoch_t get_min_last_epoch_clean() const { return parent.get_min_last_epoch_clean(); }
 
   bool have_full_osds() const { return !parent.full_osds.empty(); }
