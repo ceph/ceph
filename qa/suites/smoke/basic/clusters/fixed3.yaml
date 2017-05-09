@@ -1,3 +1,6 @@
+os_type: ubuntu
+os_version: "16.04"
+
 roles:
 - [mon.a, mds.a, osd.0, osd.1, osd.2]
 - [mon.b, mds.a-s, osd.3, osd.4, osd.5]
