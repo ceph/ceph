@@ -19,6 +19,7 @@
 #include "PaxosService.h"
 
 class PGStatService;
+class MgrPGStatService;
 
 class MgrMonitor: public PaxosService
 {
@@ -27,7 +28,7 @@ class MgrMonitor: public PaxosService
 
   utime_t first_seen_inactive;
 
-  PGStatService *pgservice;
+  MgrPGStatService *pgservice;
   
   std::map<uint64_t, utime_t> last_beacon;
   
