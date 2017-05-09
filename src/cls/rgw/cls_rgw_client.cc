@@ -894,3 +894,21 @@ void cls_rgw_guard_bucket_resharding(librados::ObjectWriteOperation& op, int ret
   ::encode(call, in);
   op.exec("rgw", "guard_bucket_resharding", in);
 }
+
+static bool issue_set_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
+                                        const cls_rgw_bucket_instance_entry& entry,
+                                        BucketIndexAioManager *manager) {
+  bufferlist in;
+  struct cls_rgw_set_bucket_resharding_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  librados::ObjectWriteOperation op;
+  op.exec("rgw", "set_bucket_resharding", in);
+  return manager->aio_operate(io_ctx, oid, &op);
+}
+
+int CLSRGWIssueSetBucketResharding::issue_op(int shard_id, const string& oid)
+{
+  return issue_set_bucket_resharding(io_ctx, oid, entry, &manager);
+}
+

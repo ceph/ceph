@@ -456,6 +456,16 @@ public:
     CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(dir_headers) {}
 };
 
+class CLSRGWIssueSetBucketResharding : public CLSRGWConcurrentIO {
+  cls_rgw_bucket_instance_entry entry;
+protected:
+  int issue_op(int shard_id, const string& oid) override;
+public:
+  CLSRGWIssueSetBucketResharding(librados::IoCtx& ioc, map<int, string>& _bucket_objs,
+                                 const cls_rgw_bucket_instance_entry& entry,
+                                 uint32_t _max_aio) : CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio) {}
+};
+
 int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB *ctx);
 
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates);
