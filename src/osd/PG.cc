@@ -6785,10 +6785,10 @@ PG::RecoveryState::Recovering::Recovering(my_context ctx)
   pg->osd->queue_for_recovery(pg);
 }
 
-void PG::RecoveryState::Recovering::release_reservations()
+void PG::RecoveryState::Recovering::release_reservations(bool cancel)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  assert(!pg->pg_log.get_missing().have_missing());
+  assert(cancel || !pg->pg_log.get_missing().have_missing());
 
   // release remote reservations
   for (set<pg_shard_t>::const_iterator i =
@@ -6826,6 +6826,17 @@ PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
   pg->state_clear(PG_STATE_RECOVERING);
   release_reservations();
   return transit<WaitRemoteBackfillReserved>();
+}
+
+boost::statechart::result
+PG::RecoveryState::Recovering::react(const CancelRecovery &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_RECOVERING);
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  release_reservations(true);
+  pg->schedule_recovery_full_retry();
+  return transit<NotRecovering>();
 }
 
 void PG::RecoveryState::Recovering::exit()
