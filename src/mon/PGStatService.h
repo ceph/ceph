@@ -27,6 +27,7 @@
 #define CEPH_PGSTATSERVICE_H
 
 #include "mon/PGMap.h"
+struct creating_pgs_t;
 
 class PGStatService {
 public:
