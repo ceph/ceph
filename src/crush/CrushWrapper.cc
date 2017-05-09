@@ -105,6 +105,19 @@ bool CrushWrapper::is_v5_rule(unsigned ruleid) const
   return false;
 }
 
+bool CrushWrapper::has_chooseargs() const
+{
+  return !choose_args.empty();
+}
+
+bool CrushWrapper::has_incompat_chooseargs() const
+{
+  // FIXME: if the chooseargs all have 1 position *and* do not remap IDs then
+  // we can fabricate a compatible crush map for legacy clients by swapping the
+  // choose_args weights in for the real weights.  until then,
+  return has_chooseargs();
+}
+
 int CrushWrapper::split_id_class(int i, int *idout, int *classout) const
 {
   if (!item_exists(i))

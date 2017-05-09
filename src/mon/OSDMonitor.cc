@@ -230,6 +230,7 @@ void OSDMonitor::create_initial()
     if (newmap.backfillfull_ratio > 1.0) newmap.backfillfull_ratio /= 100;
     newmap.nearfull_ratio = g_conf->mon_osd_nearfull_ratio;
     if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
+    newmap.require_min_compat_client = g_conf->mon_osd_initial_require_min_compat_client;
   }
 
   // encode into pending incremental
@@ -429,9 +430,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
   // XXX: need to trim MonSession connected with a osd whose id > max_osd?
 
-  /** we don't have any of the feature bit infrastructure in place for
-   * supporting primary_temp mappings without breaking old clients/OSDs.*/
-  assert(g_conf->mon_osd_allow_primary_temp || osdmap.primary_temp->empty());
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
     mon->pgmon()->check_osd_map(osdmap.epoch);
@@ -1148,13 +1146,13 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   bufferlist bl;
 
-  // set or clear full/nearfull?
   {
     OSDMap tmp;
     tmp.deepish_copy_from(osdmap);
     tmp.apply_incremental(pending_inc);
 
     if (tmp.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      // set or clear full/nearfull?
       int full, backfill, nearfull;
       tmp.count_full_nearfull_osds(&full, &backfill, &nearfull);
       if (full > 0) {
@@ -1179,6 +1177,16 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	    remove_flag(CEPH_OSDMAP_NEARFULL);
 	  }
 	}
+      }
+
+      // min_compat_client?
+      if (tmp.require_min_compat_client.empty()) {
+	auto mv = tmp.get_min_compat_client();
+	dout(1) << __func__ << " setting require_min_compat_client to current " << mv
+		<< dendl;
+	mon->clog->info() << "setting require_min_compat_client to currently required "
+			  << mv;
+	pending_inc.new_require_min_compat_client = mv.first;
       }
     }
   }
@@ -5243,17 +5251,29 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
   newmap.deepish_copy_from(osdmap);
   newmap.apply_incremental(new_pending);
 
+  // client compat
+  if (newmap.require_min_compat_client.length()) {
+    auto mv = newmap.get_min_compat_client();
+    if (mv.first > newmap.require_min_compat_client) {
+      ss << "new crush map requires client version " << mv
+	 << " but require_min_compat_client is "
+	 << newmap.require_min_compat_client;
+      return false;
+    }
+  }
+
+  // osd compat
   uint64_t features =
     newmap.get_features(CEPH_ENTITY_TYPE_MON, NULL) |
     newmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL);
-
   stringstream features_ss;
   int r = check_cluster_features(features, features_ss);
-  if (!r)
-    return true;
+  if (r) {
+    ss << "Could not change CRUSH: " << features_ss.str();
+    return false;
+  }
 
-  ss << "Could not change CRUSH: " << features_ss.str();
-  return false;
+  return true;
 }
 
 bool OSDMonitor::erasure_code_profile_in_use(
@@ -7268,6 +7288,39 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd set-require-min-compat-client") {
+    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      ss << "you must complete the upgrade and set require_luminous_osds before"
+	 << " using the new interface";
+      err = -EPERM;
+      goto reply;
+    }
+    string v;
+    cmd_getval(g_ceph_context, cmdmap, "version", v);
+    if (v != "luminous" && v != "kraken" && v != "jewel" && v != "infernalis" &&
+	v != "hammer" && v != "giant" && v != "firefly" && v != "emperor" &&
+	v != "dumpling" && v != "cuttlefish" && v != "bobtail" && v != "argonaut") {
+      ss << "version " << v << " is not recognized";
+      err = -EINVAL;
+      goto reply;
+    }
+    OSDMap newmap;
+    newmap.deepish_copy_from(osdmap);
+    newmap.apply_incremental(pending_inc);
+    newmap.require_min_compat_client = v;
+    auto mv = newmap.get_min_compat_client();
+    if (v < mv.first) {
+      ss << "osdmap current utilizes features that require " << mv
+	 << "; cannot set require_min_compat_client below that to " << v;
+      err = -EPERM;
+      goto reply;
+    }
+    ss << "set require_min_compat_client to " << v;
+    pending_inc.new_require_min_compat_client = v;
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+							  get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd pause") {
     return prepare_set_flag(op, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
 
@@ -7551,7 +7604,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    if (!g_conf->mon_osd_allow_primary_temp) {
+    if (osdmap.require_min_compat_client.length() &&
+	osdmap.require_min_compat_client < "firefly") {
+      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+	 << " < firefly, which is required for primary-temp";
+      err = -EPERM;
+      goto reply;
+    } else if (!g_conf->mon_osd_allow_primary_temp) {
       ss << "you must enable 'mon osd allow primary temp = true' on the mons before you can set primary_temp mappings.  note that this is for developers only: older clients/OSDs will break and there is no feature bit infrastructure in place.";
       err = -EPERM;
       goto reply;
@@ -7561,17 +7620,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " primary_temp mapping to " << osd;
     goto update;
   } else if (prefix == "osd pg-upmap") {
-    if (!g_conf->mon_osd_allow_pg_upmap) {
-      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
-      err = -EPERM;
-      goto reply;
-    }
     if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       ss << "you must set the require_luminous_osds flag to use this feature";
       err = -EPERM;
       goto reply;
     }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    if (osdmap.require_min_compat_client < "luminous") {
+      ss << "min_compat_client " << osdmap.require_min_compat_client
+	 << " < luminous, which is required for pg-upmap";
+      err = -EPERM;
+      goto reply;
+    }
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
     if (err == -EAGAIN)
       goto wait;
     if (err < 0)
@@ -7622,17 +7682,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " pg_upmap mapping to " << new_pg_upmap;
     goto update;
   } else if (prefix == "osd rm-pg-upmap") {
-    if (!g_conf->mon_osd_allow_pg_upmap) {
-      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
-      err = -EPERM;
-      goto reply;
-    }
     if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       ss << "you must set the require_luminous_osds flag to use this feature";
       err = -EPERM;
       goto reply;
     }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    if (osdmap.require_min_compat_client < "luminous") {
+      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+	 << " < luminous, which is required for pg-upmap";
+      err = -EPERM;
+      goto reply;
+    }
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
     if (err == -EAGAIN)
       goto wait;
     if (err < 0)
@@ -7666,17 +7727,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "clear " << pgid << " pg_upmap mapping";
     goto update;
   } else if (prefix == "osd pg-upmap-items") {
-    if (!g_conf->mon_osd_allow_pg_upmap) {
-      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
-      err = -EPERM;
-      goto reply;
-    }
     if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       ss << "you must set the require_luminous_osds flag to use this feature";
       err = -EPERM;
       goto reply;
     }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    if (osdmap.require_min_compat_client < "luminous") {
+      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+	 << " < luminous, which is required for pg-upmap";
+      err = -EPERM;
+      goto reply;
+    }
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
     if (err == -EAGAIN)
       goto wait;
     if (err < 0)
@@ -7740,17 +7802,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " pg_upmap_items mapping to " << new_pg_upmap_items;
     goto update;
   } else if (prefix == "osd rm-pg-upmap-items") {
-    if (!g_conf->mon_osd_allow_pg_upmap) {
-      ss << "you must enable 'mon osd allow pg upmap = true' on the mons before you can adjust pg_upmap.  note that pre-luminous clients will no longer be able to communicate with the cluster.";
-      err = -EPERM;
-      goto reply;
-    }
     if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
       ss << "you must set the require_luminous_osds flag to use this feature";
       err = -EPERM;
       goto reply;
     }
-    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_REMAP, ss);
+    if (osdmap.require_min_compat_client < "luminous") {
+      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+	 << " < luminous, which is required for pg-upmap";
+      err = -EPERM;
+      goto reply;
+    }
+    err = check_cluster_features(CEPH_FEATUREMASK_OSDMAP_PG_UPMAP, ss);
     if (err == -EAGAIN)
       goto wait;
     if (err < 0)
@@ -7804,7 +7867,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    if (!g_conf->mon_osd_allow_primary_affinity) {
+    if (osdmap.require_min_compat_client.length() &&
+	osdmap.require_min_compat_client < "firefly") {
+      ss << "require_min_compat_client " << osdmap.require_min_compat_client
+	 << " < firefly, which is required for primary-affinity";
+      err = -EPERM;
+      goto reply;
+    } else if (!g_conf->mon_osd_allow_primary_affinity) {
       ss << "you must enable 'mon osd allow primary affinity = true' on the mons before you can adjust primary-affinity.  note that older clients will no longer be able to communicate with the cluster.";
       err = -EPERM;
       goto reply;
