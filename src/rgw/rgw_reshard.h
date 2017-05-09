@@ -33,6 +33,25 @@ protected:
   int unlock();
 };
 
+
+class RGWBucketReshard {
+  RGWRados *store;
+  RGWBucketInfo bucket_info;
+
+  string reshard_oid;
+  rados::cls::lock::Lock reshard_lock;
+
+  int lock_bucket();
+  void unlock_bucket();
+  int init_resharding(const cls_rgw_reshard_entry& entry);
+  int clear_resharding();
+public:
+  RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info);
+
+  int reshard();
+  int abort_reshard();
+};
+
 class RGWReshard {
     CephContext *cct;
     RGWRados *store;
@@ -49,7 +68,6 @@ class RGWReshard {
     int get(cls_rgw_reshard_entry& entry);
     int remove(cls_rgw_reshard_entry& entry);
     int list(string& marker, uint32_t max, list<cls_rgw_reshard_entry>& entries, bool& is_truncated);
-    int set_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
     int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
     /*
       if succefull, keeps the bucket index locked. It will be unlocked

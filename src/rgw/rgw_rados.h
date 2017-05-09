@@ -2181,6 +2181,7 @@ class RGWRados
   friend class RGWStateLog;
   friend class RGWReplicaLogger;
   friend class RGWReshard;
+  friend class RGWBucketReshard;
   friend class BucketIndexLockGuard;
 
   /** Open the pool used as root for this gateway */
@@ -3427,6 +3428,7 @@ public:
                          map<RGWObjCategory, RGWStorageStats> *existing_stats,
                          map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(RGWBucketInfo& bucket_info);
+  int bucket_set_reshard(RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry);
   int remove_objs_from_index(RGWBucketInfo& bucket_info, list<rgw_obj_index_key>& oid_list);
   int move_rados_obj(librados::IoCtx& src_ioctx,
 		     const string& src_oid, const string& src_locator,

@@ -14,6 +14,65 @@ const string reshard_oid = "reshard";
 const string reshard_lock_name = "reshard_process";
 const string bucket_instance_lock_name = "bucket_instance_lock";
 
+RGWBucketReshard::RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info) :
+                                                     store(_store), bucket_info(_bucket_info),
+                                                     reshard_lock(reshard_lock_name) {
+  const rgw_bucket& b = bucket_info.bucket;                                                       
+  reshard_oid = b.tenant + (b.tenant.empty() ? "" : ":") + b.name + ":" + b.bucket_id;
+}
+
+int RGWBucketReshard::lock_bucket()
+{
+#warning set timeout for guard lock
+
+  int ret = reshard_lock.lock_exclusive(&store->reshard_pool_ctx, reshard_oid);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "RGWReshard::add failed to acquire lock on " << reshard_oid << " ret=" << ret << dendl;
+    return ret;
+  }
+  return 0;
+}
+
+void RGWBucketReshard::unlock_bucket()
+{
+  int ret = reshard_lock.unlock(&store->reshard_pool_ctx, reshard_oid);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "WARNING: RGWReshard::add failed to drop lock on " << reshard_oid << " ret=" << ret << dendl;
+  }
+}
+
+int RGWBucketReshard::init_resharding(const cls_rgw_reshard_entry& entry)
+{
+  if (entry.new_instance_id.empty()) {
+    ldout(store->ctx(), 0) << __func__ << " missing new bucket instance id" << dendl;
+    return -EINVAL;
+  }
+
+  cls_rgw_bucket_instance_entry instance_entry;
+  instance_entry.new_bucket_instance_id = entry.new_instance_id;
+
+  int ret = store->bucket_set_reshard(bucket_info, instance_entry);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "RGWReshard::" << __func__ << " ERROR: error setting bucket resharding flag on bucket index: "
+		  << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  return 0;
+}
+
+int RGWBucketReshard::clear_resharding()
+{
+  cls_rgw_bucket_instance_entry instance_entry;
+  
+  int ret = store->bucket_set_reshard(bucket_info, instance_entry);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "RGWReshard::" << __func__ << " ERROR: error setting bucket resharding flag on bucket index: "
+		  << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  return 0;
+}
+
 RGWReshard::RGWReshard(CephContext *_cct, RGWRados* _store):cct(_cct), store(_store),
 							    instance_lock(bucket_instance_lock_name)
 {
@@ -104,38 +163,6 @@ std::string create_bucket_index_lock_name(const string& bucket_instance_id) {
   return bucket_instance_lock_name + "." + bucket_instance_id;
 }
 
-int RGWReshard::set_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
-{
-  rados::cls::lock::Lock l(create_bucket_index_lock_name(entry.old_instance_id));
-
-  if (entry.new_instance_id.empty()) {
-    ldout(cct, 0) << "RGWReshard::" << __func__ << " missing new bucket instance id" << dendl;
-    return -EEXIST;
-  }
-
-  int ret = l.lock_exclusive(&store->reshard_pool_ctx, bucket_instance_oid);
-  if (ret == -EBUSY) {
-    ldout(cct, 0) << "RGWReshardLog::add failed to acquire lock on " << reshard_oid << dendl;
-    return 0;
-  }
-  if (ret < 0)
-    return ret;
-
-  cls_rgw_bucket_instance_entry instance_entry;
-  instance_entry.new_bucket_instance_id = entry.new_instance_id;
-
-  ret =   cls_rgw_set_bucket_resharding(store->reshard_pool_ctx, bucket_instance_oid, instance_entry);
-  if (ret < 0) {
-    ldout(cct, 0) << "RGWReshard::" << __func__ << " ERROR: cls_rgw_set_bucket_resharding: "
-		  << cpp_strerror(-ret) << dendl;
-    goto done;
-  }
-
-done:
-  l.unlock(&store->reshard_pool_ctx, bucket_instance_oid);
-  return ret;
-}
-
 int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry)
 {
   rados::cls::lock::Lock l(create_bucket_index_lock_name(entry.old_instance_id));
@@ -150,7 +177,7 @@ int RGWReshard::clear_bucket_resharding(const string& bucket_instance_oid, cls_r
 
   entry.new_instance_id.clear();
 
-  ret =   cls_rgw_clear_bucket_resharding(store->reshard_pool_ctx, bucket_instance_oid);
+  ret = cls_rgw_clear_bucket_resharding(store->reshard_pool_ctx, bucket_instance_oid);
 
   l.unlock(&store->reshard_pool_ctx, bucket_instance_oid);
   return ret;

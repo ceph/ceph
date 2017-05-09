@@ -8250,6 +8250,19 @@ int RGWRados::bucket_rebuild_index(RGWBucketInfo& bucket_info)
   return CLSRGWIssueBucketRebuild(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
+int RGWRados::bucket_set_reshard(RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry)
+{
+  librados::IoCtx index_ctx;
+  map<int, string> bucket_objs;
+
+  int r = open_bucket_index(bucket_info, index_ctx, bucket_objs);
+  if (r < 0) {
+    return r;
+  }
+
+  return CLSRGWIssueSetBucketResharding(index_ctx, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
+}
+
 int RGWRados::defer_gc(void *ctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj)
 {
   RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
