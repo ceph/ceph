@@ -50,6 +50,7 @@
   tunable choose_total_tries 50
   tunable chooseleaf_descend_once 1
   tunable straw_calc_version 1
+  tunable allowed_bucket_algs 54
   
   # devices
   device 0 osd.0

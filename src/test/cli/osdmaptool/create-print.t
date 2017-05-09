@@ -13,6 +13,7 @@
   tunable chooseleaf_descend_once 1
   tunable chooseleaf_vary_r 1
   tunable straw_calc_version 1
+  tunable allowed_bucket_algs 54
   
   # devices
   device 0 osd.0
@@ -36,7 +37,7 @@
   host localhost {
   \tid -2\t\t# do not change unnecessarily (esc)
   \t# weight 3.000 (esc)
-  \talg straw (esc)
+  \talg straw2 (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem osd.0 weight 1.000 (esc)
   \titem osd.1 weight 1.000 (esc)
@@ -45,14 +46,14 @@
   rack localrack {
   \tid -3\t\t# do not change unnecessarily (esc)
   \t# weight 3.000 (esc)
-  \talg straw (esc)
+  \talg straw2 (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem localhost weight 3.000 (esc)
   }
   root default {
   \tid -1\t\t# do not change unnecessarily (esc)
   \t# weight 3.000 (esc)
-  \talg straw (esc)
+  \talg straw2 (esc)
   \thash 0\t# rjenkins1 (esc)
   \titem localrack weight 3.000 (esc)
   }
@@ -79,6 +80,7 @@
   full_ratio 0
   backfillfull_ratio 0
   nearfull_ratio 0
+  min_compat_client hammer 0.94
   
   pool 0 'rbd' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0
   

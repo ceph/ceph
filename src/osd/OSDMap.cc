@@ -467,6 +467,9 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
       ::encode(new_full_ratio, bl);
       ::encode(new_backfillfull_ratio, bl);
     }
+    if (target_v >= 4) {
+      ::encode(new_require_min_compat_client, bl);
+    }
     ENCODE_FINISH(bl); // osd-only data
   }
 
@@ -675,6 +678,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     }
     if (struct_v >= 4) {
       ::decode(new_backfillfull_ratio, bl);
+      ::decode(new_require_min_compat_client, bl);
     } else {
       new_backfillfull_ratio = -1;
     }
@@ -722,6 +726,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_float("new_full_ratio", new_full_ratio);
   f->dump_float("new_nearfull_ratio", new_nearfull_ratio);
   f->dump_float("new_backfillfull_ratio", new_backfillfull_ratio);
+  f->dump_string("new_require_min_compat_client", new_require_min_compat_client);
 
   if (fullmap.length()) {
     f->open_object_section("full_map");
@@ -1162,11 +1167,13 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_V4;
   if (crush->has_nondefault_tunables5())
     features |= CEPH_FEATURE_CRUSH_TUNABLES5;
+  if (crush->has_incompat_chooseargs())
+    features |= CEPH_FEATURE_CRUSH_CHOOSEARGS;
   mask |= CEPH_FEATURES_CRUSH;
 
   if (!pg_upmap.empty() || !pg_upmap_items.empty())
-    features |= CEPH_FEATUREMASK_OSDMAP_REMAP;
-  mask |= CEPH_FEATUREMASK_OSDMAP_REMAP;
+    features |= CEPH_FEATUREMASK_OSDMAP_PG_UPMAP;
+  mask |= CEPH_FEATUREMASK_OSDMAP_PG_UPMAP;
 
   for (auto &pool: pools) {
     if (pool.second.has_flag(pg_pool_t::FLAG_HASHPSPOOL)) {
@@ -1236,6 +1243,37 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   if (pmask)
     *pmask = mask;
   return features;
+}
+
+pair<string,string> OSDMap::get_min_compat_client() const
+{
+  uint64_t f = get_features(CEPH_ENTITY_TYPE_CLIENT, nullptr);
+
+  if (HAVE_FEATURE(f, OSDMAP_PG_UPMAP) ||      // v12.0.0-1733-g27d6f43
+#warning update this commit description right before or after merge
+      HAVE_FEATURE(f, CRUSH_CHOOSEARGS)) {     // FIXME
+    return make_pair("luminous", "12.2.0");
+  }
+  if (HAVE_FEATURE(f, CRUSH_TUNABLES5)) {      // v10.0.0-612-g043a737
+    return make_pair("jewel", "10.2.0");
+  }
+  if (HAVE_FEATURE(f, CRUSH_V4)) {             // v0.91-678-g325fc56
+    return make_pair("hammer", "0.94");
+  }
+  if (HAVE_FEATURE(f, OSD_PRIMARY_AFFINITY) || // v0.76-553-gf825624
+      HAVE_FEATURE(f, CRUSH_TUNABLES3) ||      // v0.76-395-ge20a55d
+      HAVE_FEATURE(f, OSD_ERASURE_CODES) ||    // v0.73-498-gbfc86a8
+      HAVE_FEATURE(f, OSD_CACHEPOOL)) {        // v0.67-401-gb91c1c5
+    return make_pair("firefly", "0.80");
+  }
+  if (HAVE_FEATURE(f, CRUSH_TUNABLES2) ||      // v0.54-684-g0cc47ff
+      HAVE_FEATURE(f, OSDHASHPSPOOL)) {        // v0.57-398-g8cc2b0f
+    return make_pair("dumpling", "0.67");
+  }
+  if (HAVE_FEATURE(f, CRUSH_TUNABLES)) {       // v0.48argonaut-206-g6f381af
+    return make_pair("argonaut", "0.48argonaut-207");
+  }
+  return make_pair("argonaut", "0.48");
 }
 
 void OSDMap::_calc_up_osd_features()
@@ -1589,6 +1627,9 @@ int OSDMap::apply_incremental(const Incremental &inc)
   }
   if (inc.new_full_ratio >= 0) {
     full_ratio = inc.new_full_ratio;
+  }
+  if (inc.new_require_min_compat_client.length()) {
+    require_min_compat_client = inc.new_require_min_compat_client;
   }
 
   // do new crush map last (after up/down stuff)
@@ -2108,7 +2149,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
   {
     uint8_t v = 4;
-    if (!HAVE_FEATURE(features, OSDMAP_REMAP)) {
+    if (!HAVE_FEATURE(features, OSDMAP_PG_UPMAP)) {
       v = 3;
     }
     ENCODE_START(v, 1, bl); // client-usable data
@@ -2180,6 +2221,9 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       ::encode(nearfull_ratio, bl);
       ::encode(full_ratio, bl);
       ::encode(backfillfull_ratio, bl);
+    }
+    if (target_v >= 3) {
+      ::encode(require_min_compat_client, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -2416,6 +2460,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
     }
     if (struct_v >= 3) {
       ::decode(backfillfull_ratio, bl);
+      ::decode(require_min_compat_client, bl);
     } else {
       backfillfull_ratio = 0;
     }
@@ -2493,6 +2538,10 @@ void OSDMap::dump(Formatter *f) const
   f->dump_string("cluster_snapshot", get_cluster_snapshot());
   f->dump_int("pool_max", get_pool_max());
   f->dump_int("max_osd", get_max_osd());
+  f->dump_string("require_min_compat_client", require_min_compat_client);
+  auto mv = get_min_compat_client();
+  f->dump_string("min_compat_client", mv.first);
+  f->dump_string("min_compat_client_version", mv.second);
 
   f->open_array_section("pools");
   for (const auto &pool : pools) {
@@ -2706,6 +2755,11 @@ void OSDMap::print(ostream& out) const
   out << "full_ratio " << full_ratio << "\n";
   out << "backfillfull_ratio " << backfillfull_ratio << "\n";
   out << "nearfull_ratio " << nearfull_ratio << "\n";
+  if (require_min_compat_client.length()) {
+    out << "require_min_compat_client " << require_min_compat_client << "\n";
+  }
+  auto mv = get_min_compat_client();
+  out << "min_compat_client " << mv.first << " " << mv.second << "\n";
   if (get_cluster_snapshot().length())
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
   out << "\n";
