@@ -444,8 +444,52 @@ void MgrMonitor::drop_standby(uint64_t gid)
 
 bool MgrMonitor::preprocess_command(MonOpRequestRef op)
 {
-  return false;
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  int r = -1;
+  std::stringstream ss;
+  std::stringstream ds;
 
+  bufferlist rdata;
+  MgrMap *p = &map;
+
+  std::map<std::string, cmd_vartype> cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    string rs = ss.str();
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
+    return true;
+  }
+   
+  string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+
+  MonSession *session = m->get_session();
+  if (!session) {
+    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
+    return true;
+  }
+
+  if (prefix == "mgr dump") {
+    if (f) {
+      f->open_object_section("mgrmap");
+      p->dump(f.get());
+      f->close_section();
+      f->flush(ds);
+    } 
+    rdata.append(ds);
+    ss << "dumped mgrmap epoch " << p->get_epoch();
+    r = 0;
+  }
+  if (r != -1) {
+    rdata.append(ds);
+    string rs;
+    getline(ss, rs);
+    mon->reply_command(op, r, rs, rdata, get_last_committed());
+    return true;
+  } else
+    return false;
 }
 
 bool MgrMonitor::prepare_command(MonOpRequestRef op)
