@@ -6642,13 +6642,6 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     --ctx->delta_stats.num_objects_omap;
   }
 
-  // use newer snapc?
-  if (ctx->new_snapset.seq > snapc.seq) {
-    snapc.seq = ctx->new_snapset.seq;
-    snapc.snaps = ctx->new_snapset.snaps;
-    dout(10) << " using newer snapc " << snapc << dendl;
-  }
-
   if (ctx->obs->exists)
     filter_snapc(snapc.snaps);
   
