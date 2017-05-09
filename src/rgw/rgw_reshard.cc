@@ -214,15 +214,15 @@ void RGWBucketReshard::unlock_bucket()
   }
 }
 
-int RGWBucketReshard::init_resharding(const cls_rgw_reshard_entry& entry)
+int RGWBucketReshard::init_resharding(const string& new_instance_id)
 {
-  if (entry.new_instance_id.empty()) {
+  if (new_instance_id.empty()) {
     ldout(store->ctx(), 0) << __func__ << " missing new bucket instance id" << dendl;
     return -EINVAL;
   }
 
   cls_rgw_bucket_instance_entry instance_entry;
-  instance_entry.new_bucket_instance_id = entry.new_instance_id;
+  instance_entry.set(new_instance_id);
 
   int ret = store->bucket_set_reshard(bucket_info, instance_entry);
   if (ret < 0) {
@@ -408,6 +408,13 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
 
   ret = create_new_bucket_instance(num_shards, new_bucket_info);
   if (ret < 0) {
+    unlock_bucket();
+    return ret;
+  }
+
+  ret = init_resharding(new_bucket_info.bucket.bucket_id);
+  if (ret < 0) {
+    unlock_bucket();
     return ret;
   }
 
@@ -417,6 +424,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
                    verbose, out, formatter);
 
   if (ret < 0) {
+    unlock_bucket();
     return ret;
   }
 
