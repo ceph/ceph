@@ -66,4 +66,6 @@ void AsyncRequest<T>::finish_request() {
 
 } // namespace librbd
 
+#ifndef TEST_F
 template class librbd::AsyncRequest<librbd::ImageCtx>;
+#endif

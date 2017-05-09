@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_JOURNAL_H
 
 #include "include/int_types.h"
-#include "include/atomic.h"
 #include "include/Context.h"
 #include "include/interval_set.h"
 #include "common/Cond.h"
@@ -19,9 +18,11 @@
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
+
 #include <algorithm>
 #include <list>
 #include <string>
+#include <atomic>
 #include <unordered_map>
 
 class SafeTimer;
@@ -155,7 +156,7 @@ public:
   void wait_event(uint64_t tid, Context *on_safe);
 
   uint64_t allocate_op_tid() {
-    uint64_t op_tid = m_op_tid.inc();
+    uint64_t op_tid = ++m_op_tid;
     assert(op_tid != 0);
     return op_tid;
   }
@@ -297,7 +298,7 @@ private:
   uint64_t m_event_tid;
   Events m_events;
 
-  atomic_t m_op_tid;
+  std::atomic<uint64_t> m_op_tid = { 0 };
   TidToFutures m_op_futures;
 
   bool m_processing_entry = false;

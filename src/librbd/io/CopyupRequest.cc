@@ -128,7 +128,7 @@ bool CopyupRequest::send_copyup() {
   std::vector<librados::snap_t> snaps;
 
   if (!copy_on_read) {
-    m_pending_copyups.inc();
+    m_pending_copyups++;
   }
 
   int r;
@@ -143,7 +143,7 @@ bool CopyupRequest::send_copyup() {
     // all snapshots are detected from the parent for this object.  If
     // this is a CoW request, a second request will be created for the
     // actual modification.
-    m_pending_copyups.inc();
+    m_pending_copyups++;
 
     ldout(m_ictx->cct, 20) << __func__ << " " << this << " copyup with "
                            << "empty snapshot context" << dendl;
@@ -252,7 +252,7 @@ bool CopyupRequest::should_complete(int r)
 
   case STATE_COPYUP:
     // invoked via a finisher in librados, so thread safe
-    pending_copyups = m_pending_copyups.dec();
+    pending_copyups = --m_pending_copyups;
     ldout(cct, 20) << "COPYUP (" << pending_copyups << " pending)"
                    << dendl;
     if (r == -ENOENT) {

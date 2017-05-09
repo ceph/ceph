@@ -10,6 +10,9 @@
 #include "common/WorkQueue.h"
 #include <boost/bind.hpp>
 
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_rbd
 
 namespace librbd {

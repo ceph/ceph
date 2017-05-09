@@ -25,6 +25,7 @@
 #include "common/WorkQueue.h"
 #include "common/AsyncReserver.h"
 #include "common/ceph_context.h"
+#include "common/zipkin_trace.h"
 
 #include "mgr/MgrClient.h"
 
@@ -471,7 +472,6 @@ public:
   MonClient   *&monc;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
   GenContextWQ recovery_gen_wq;
-  GenContextWQ op_gen_wq;
   ClassHandler  *&class_handler;
 
   void enqueue_back(spg_t pgid, PGQueueable qi);
@@ -1321,6 +1321,7 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
+  ZTracer::Endpoint trace_endpoint;
   void create_logger();
   void create_recoverystate_perf();
   void tick();

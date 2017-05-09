@@ -569,11 +569,13 @@ namespace librbd {
     tracepoint(librbd, trash_list_enter,
                io_ctx.get_pool_name().c_str(), io_ctx.get_id());
     int r = librbd::trash_list(io_ctx, entries);
+#ifdef WITH_LTTNG
     if (r >= 0) {
       for (const auto& entry : entries) {
 	tracepoint(librbd, trash_list_entry, entry.id.c_str());
       }
     }
+#endif
     tracepoint(librbd, trash_list_exit, r, r);
     return r;
   }

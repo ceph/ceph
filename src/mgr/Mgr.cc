@@ -14,6 +14,7 @@
 #include <Python.h>
 
 #include "osdc/Objecter.h"
+#include "client/Client.h"
 #include "common/errno.h"
 #include "mon/MonClient.h"
 #include "include/stringify.h"
@@ -39,14 +40,16 @@
 
 
 Mgr::Mgr(MonClient *monc_, Messenger *clientm_, Objecter *objecter_,
-	 LogChannelRef clog_, LogChannelRef audit_clog_) :
+	 Client* client_, LogChannelRef clog_, LogChannelRef audit_clog_) :
   monc(monc_),
   objecter(objecter_),
+  client(client_),
   client_messenger(clientm_),
   lock("Mgr::lock"),
   timer(g_ceph_context, lock),
   finisher(g_ceph_context, "Mgr", "mgr-fin"),
-  py_modules(daemon_state, cluster_state, *monc, finisher),
+  py_modules(daemon_state, cluster_state, *monc, *objecter, *client,
+             finisher),
   cluster_state(monc, nullptr),
   server(monc, finisher, daemon_state, cluster_state, py_modules,
          clog_, audit_clog_),

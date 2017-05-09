@@ -116,11 +116,12 @@ add_dependencies(rgw_a civetweb_h)
 target_include_directories(rgw_a PUBLIC
   "../Beast/include"
   ${FCGI_INCLUDE_DIR})
+target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
 
 target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
   cls_replica_log_client cls_user_client ceph-common common_utf8 global
-  ${CURL_LIBRARIES}
+  ${CURL_LIBRARIES} ${Boost_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS})
 
@@ -134,11 +135,11 @@ if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND radosgw_srcs rgw_fcgi_process.cc)
 endif()
 
-if (WITH_RADOSGW_ASIO_FRONTEND)
+if (WITH_RADOSGW_BEAST_FRONTEND)
   list(APPEND radosgw_srcs
     rgw_asio_client.cc
     rgw_asio_frontend.cc)
-endif (WITH_RADOSGW_ASIO_FRONTEND)
+endif (WITH_RADOSGW_BEAST_FRONTEND)
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)

@@ -61,8 +61,11 @@ namespace {
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 PyModules::PyModules(DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
+                     Objecter &objecter_, Client &client_,
 		     Finisher &f)
-  : daemon_state(ds), cluster_state(cs), monc(mc), finisher(f)
+  : daemon_state(ds), cluster_state(cs), monc(mc),
+    objecter(objecter_), client(client_),
+    finisher(f)
 {}
 
 // we can not have the default destructor in header, because ServeThread is
@@ -655,5 +658,18 @@ PyObject* PyModules::get_counter_python(
   }
   f.close_section();
   return f.get();
+}
+
+PyObject *PyModules::get_context()
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
+  // Construct a capsule containing ceph context.
+  // Not incrementing/decrementing ref count on the context because
+  // it's the global one and it has process lifetime.
+  auto capsule = PyCapsule_New(g_ceph_context, nullptr, nullptr);
+  return capsule;
 }
 

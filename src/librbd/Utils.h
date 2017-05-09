@@ -7,6 +7,8 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd_types.h"
 #include "include/Context.h"
+
+#include <atomic>
 #include <type_traits>
 
 namespace librbd {
@@ -153,15 +155,12 @@ inline ImageCtx *get_image_ctx(ImageCtx *image_ctx) {
 /// a shut down of the invoking class instance
 class AsyncOpTracker {
 public:
-  AsyncOpTracker() : m_refs(0) {
-  }
-
   void start_op() {
-    m_refs.inc();
+    m_refs++;
   }
 
   void finish_op() {
-    if (m_refs.dec() == 0 && m_on_finish != nullptr) {
+    if (--m_refs == 0 && m_on_finish != nullptr) {
       Context *on_finish = nullptr;
       std::swap(on_finish, m_on_finish);
       on_finish->complete(0);
@@ -173,7 +172,7 @@ public:
     assert(m_on_finish == nullptr);
 
     on_finish = create_async_context_callback(image_ctx, on_finish);
-    if (m_refs.read() == 0) {
+    if (m_refs == 0) {
       on_finish->complete(0);
       return;
     }
@@ -181,7 +180,7 @@ public:
   }
 
 private:
-  atomic_t m_refs;
+  std::atomic<uint64_t> m_refs = { 0 };
   Context *m_on_finish = nullptr;
 };
 

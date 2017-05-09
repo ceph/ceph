@@ -19,6 +19,27 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
   }
 }
 
+RGWRESTConn::RGWRESTConn(RGWRESTConn&& other)
+  : cct(other.cct),
+    endpoints(std::move(other.endpoints)),
+    key(std::move(other.key)),
+    self_zone_group(std::move(other.self_zone_group)),
+    remote_id(std::move(other.remote_id)),
+    counter(other.counter.load())
+{
+}
+
+RGWRESTConn& RGWRESTConn::operator=(RGWRESTConn&& other)
+{
+  cct = other.cct;
+  endpoints = std::move(other.endpoints);
+  key = std::move(other.key);
+  self_zone_group = std::move(other.self_zone_group);
+  remote_id = std::move(other.remote_id);
+  counter = other.counter.load();
+  return *this;
+}
+
 int RGWRESTConn::get_url(string& endpoint)
 {
   if (endpoints.empty()) {
@@ -182,7 +203,13 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
     set_header(mod_pg_ver, extra_headers, "HTTP_DEST_PG_VER");
   }
 
-  return (*req)->get_obj(key, extra_headers, obj);
+  int r = (*req)->get_obj(key, extra_headers, obj);
+  if (r < 0) {
+    delete *req;
+    *req = nullptr;
+  }
+  
+  return r;
 }
 
 int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req, string& etag, real_time *mtime,

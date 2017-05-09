@@ -289,6 +289,12 @@ public:
   epoch_t get_epoch() const override {
     return get_osdmap()->get_epoch();
   }
+  epoch_t get_interval_start_epoch() const override {
+    return info.history.same_interval_since;
+  }
+  epoch_t get_last_peering_reset_epoch() const override {
+    return get_last_peering_reset();
+  }
   const set<pg_shard_t> &get_actingbackfill_shards() const override {
     return actingbackfill;
   }

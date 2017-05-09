@@ -25,7 +25,7 @@ class MCommand : public Message {
   std::vector<string> cmd;
 
   MCommand()
-    : Message(MSG_MON_COMMAND) {}
+    : Message(MSG_COMMAND) {}
   MCommand(const uuid_d &f)
     : Message(MSG_COMMAND),
       fsid(f) { }

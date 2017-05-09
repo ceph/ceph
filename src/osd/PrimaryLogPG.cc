@@ -1596,6 +1596,10 @@ void PrimaryLogPG::do_request(
   OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
+  if (op->osd_trace) {
+    op->pg_trace.init("pg op", &trace_endpoint, &op->osd_trace);
+    op->pg_trace.event("do request");
+  }
   // make sure we have a new enough map
   auto p = waiting_for_map.find(op->get_source());
   if (p != waiting_for_map.end()) {
@@ -1606,9 +1610,9 @@ void PrimaryLogPG::do_request(
     op->mark_delayed("waiting_for_map not empty");
     return;
   }
-  if (op_must_wait_for_map(get_osdmap()->get_epoch(), op)) {
-    dout(20) << __func__ << " queue on waiting_for_map "
-	     << op->get_source() << dendl;
+  if (!have_same_or_newer_map(op->min_epoch)) {
+    dout(20) << __func__ << " min " << op->min_epoch
+	     << ", queue on waiting_for_map " << op->get_source() << dendl;
     waiting_for_map[op->get_source()].push_back(op);
     op->mark_delayed("op must wait for map");
     return;
@@ -8912,6 +8916,7 @@ void PrimaryLogPG::submit_log_entries(
 	    spg_t(info.pgid.pgid, i->shard),
 	    pg_whoami.shard,
 	    get_osdmap()->get_epoch(),
+	    last_peering_reset,
 	    repop->rep_tid);
 	  osd->send_message_osd_cluster(
 	    peer.osd, m, get_osdmap()->get_epoch());
@@ -9946,6 +9951,7 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
 	    spg_t(info.pgid.pgid, primary_shard().shard),
 	    pg_whoami.shard,
 	    msg->get_epoch(),
+	    msg->min_epoch,
 	    msg->get_tid());
 	reply->set_priority(CEPH_MSG_PRIO_HIGH);
 	msg->get_connection()->send_message(reply);
@@ -11172,7 +11178,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	dout(10) << " scanning peer osd." << bt << " from " << pbi.end << dendl;
 	epoch_t e = get_osdmap()->get_epoch();
 	MOSDPGScan *m = new MOSDPGScan(
-	  MOSDPGScan::OP_SCAN_GET_DIGEST, pg_whoami, e, e,
+	  MOSDPGScan::OP_SCAN_GET_DIGEST, pg_whoami, e, last_peering_reset,
 	  spg_t(info.pgid.pgid, bt.shard),
 	  pbi.end, hobject_t());
 	osd->send_message_osd_cluster(bt.osd, m, get_osdmap()->get_epoch());
@@ -11476,7 +11482,7 @@ uint64_t PrimaryLogPG::recover_backfill(
         m = new MOSDPGBackfill(
 	  MOSDPGBackfill::OP_BACKFILL_FINISH,
 	  e,
-	  e,
+	  last_peering_reset,
 	  spg_t(info.pgid.pgid, bt.shard));
         // Use default priority here, must match sub_op priority
         /* pinfo.stats might be wrong if we did log-based recovery on the
@@ -11488,7 +11494,7 @@ uint64_t PrimaryLogPG::recover_backfill(
         m = new MOSDPGBackfill(
 	  MOSDPGBackfill::OP_BACKFILL_PROGRESS,
 	  e,
-	  e,
+	  last_peering_reset,
 	  spg_t(info.pgid.pgid, bt.shard));
         // Use default priority here, must match sub_op priority
       }

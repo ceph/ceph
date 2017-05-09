@@ -7,6 +7,7 @@
 #define CEPH_RGW_CRYPT_H
 
 #include <rgw/rgw_op.h>
+#include <rgw/rgw_rest.h>
 #include <rgw/rgw_rest_s3.h>
 #include <boost/utility/string_ref.hpp>
 
@@ -136,14 +137,18 @@ public:
 
 
 int rgw_s3_prepare_encrypt(struct req_state* s,
-                       map<string, bufferlist>& attrs,
-                       map<string, post_form_part, const ltstr_nocase>* parts,
-                       std::unique_ptr<BlockCrypt>* block_crypt,
-                       std::map<std::string, std::string>& crypt_http_responses);
+                           std::map<std::string, ceph::bufferlist>& attrs,
+                           std::map<std::string,
+                                    RGWPostObj_ObjStore::post_form_part,
+                                    const ltstr_nocase>* parts,
+                           std::unique_ptr<BlockCrypt>* block_crypt,
+                           std::map<std::string,
+                                    std::string>& crypt_http_responses);
 
 int rgw_s3_prepare_decrypt(struct req_state* s,
-                       map<string, bufferlist>& attrs,
-                       std::unique_ptr<BlockCrypt>* block_crypt,
-                       std::map<std::string, std::string>& crypt_http_responses);
+                           std::map<std::string, ceph::bufferlist>& attrs,
+                           std::unique_ptr<BlockCrypt>* block_crypt,
+                           std::map<std::string,
+                                    std::string>& crypt_http_responses);
 
 #endif
