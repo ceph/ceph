@@ -778,12 +778,6 @@ def test_zonegroup_remove():
     zonegroup.zones.append(zone)
     zonegroup.period.update(zone, commit=True)
 
-    # try to 'zone delete' the new zone from cluster 1
-    # must fail with ENOENT because the zone is local to cluster 2
-    retcode = zone.delete(c1, check_retcode=False)
-    assert(retcode == 2) # ENOENT
-
-    # use 'zonegroup remove', expecting success
     zonegroup.remove(c1, zone)
 
     # another 'zonegroup remove' should fail with ENOENT
