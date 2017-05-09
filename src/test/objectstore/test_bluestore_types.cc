@@ -828,7 +828,6 @@ TEST(Blob, put_ref)
 TEST(bluestore_blob_t, can_split)
 {
   bluestore_blob_t a;
-  a.flags = bluestore_blob_t::FLAG_MUTABLE;
   ASSERT_TRUE(a.can_split());
   a.flags = bluestore_blob_t::FLAG_SHARED;
   ASSERT_FALSE(a.can_split());
@@ -841,7 +840,6 @@ TEST(bluestore_blob_t, can_split)
 TEST(bluestore_blob_t, can_split_at)
 {
   bluestore_blob_t a;
-  a.flags = bluestore_blob_t::FLAG_MUTABLE;
   a.allocated_test(bluestore_pextent_t(0x10000, 0x2000));
   a.allocated_test(bluestore_pextent_t(0x20000, 0x2000));
   ASSERT_TRUE(a.can_split_at(0x1000));
@@ -856,7 +854,6 @@ TEST(bluestore_blob_t, can_split_at)
 TEST(bluestore_blob_t, prune_tail)
 {
   bluestore_blob_t a;
-  a.flags = bluestore_blob_t::FLAG_MUTABLE;
   a.allocated_test(bluestore_pextent_t(0x10000, 0x2000));
   a.allocated_test(bluestore_pextent_t(0x20000, 0x2000));
   ASSERT_FALSE(a.can_prune_tail());

@@ -569,9 +569,6 @@ void bluestore_pextent_t::generate_test_instances(list<bluestore_pextent_t*>& ls
 string bluestore_blob_t::get_flags_string(unsigned flags)
 {
   string s;
-  if (flags & FLAG_MUTABLE) {
-    s = "mutable";
-  }
   if (flags & FLAG_COMPRESSED) {
     if (s.length())
       s += '+';
