@@ -6709,6 +6709,190 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                                   handler);
 }
 
+int RGWRados::swift_versioning_history(req_state *s,
+                                       RGWQuotaInfo& user_quota,
+                                       RGWQuotaInfo& bucket_quota,
+                                       rgw_obj& src_obj,
+                                       bool& deleted)
+{
+  boost::optional<std::string> versioning_location = get_swift_versioning_location(s->bucket_info);
+  if (! versioning_location ||
+      versioning_location->compare(s->bucket_info.swift_his_location) !=0 ) {
+    return 0;
+  }
+
+  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  obj_ctx.obj.set_atomic(src_obj);
+
+  /* Copy the current version of the object to the archive container. */
+  int ret = swift_versioning_copy(obj_ctx, s->bucket_owner.get_id(),
+                                  s->bucket_info, src_obj);
+  if (ret < 0) {
+    return ret;
+  } 
+    
+  /* Delete the object from the versioned container. If the object
+   * does not exist, only "delete marker" will be written. */
+  int del_ret = delete_obj(obj_ctx, s->bucket_info, src_obj,
+                           s->bucket_info.versioning_status());
+  if (del_ret < 0 && del_ret != -ENOENT) {
+    return del_ret;
+  }
+  
+  /* Write a zero-byte “delete marker” object. */
+  RGWPutObjDataProcessor *filter = nullptr;
+  boost::optional<RGWPutObj_Compress> compressor;
+  
+  /* The content length of delete marker is always zero. */
+  const size_t ofs = 0;
+  ret = check_quota(s->bucket_owner.get_id(), s->bucket,
+                    user_quota, bucket_quota, ofs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  const string& src_name = src_obj.get_oid();
+  char buf[src_name.size() + 32];
+  struct timespec ts = ceph::real_clock::to_timespec(ceph::real_clock::now());
+  snprintf(buf, sizeof(buf), "%03x%s/%lld.%06ld", (int)src_name.size(),
+           src_name.c_str(), (long long)ts.tv_sec, ts.tv_nsec / 1000);
+
+  RGWBucketInfo dest_bucket_info;
+
+  ret = get_bucket_info(obj_ctx, s->bucket_info.bucket.tenant,
+                        *versioning_location, dest_bucket_info, NULL, NULL);
+  if (ret < 0) {
+    ldout(cct, 10) << "failed to read dest bucket info: ret=" << ret << dendl;
+    if (ret == -ENOENT) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+    return ret;
+  }
+
+  if (dest_bucket_info.owner != s->bucket_info.owner) {
+    return -ERR_PRECONDITION_FAILED;
+  }
+
+  rgw_obj dest_obj(dest_bucket_info.bucket, buf);
+
+  RGWPutObjProcessor_Atomic processor(obj_ctx,
+                                      dest_bucket_info,
+                                      dest_bucket_info.bucket,
+                                      dest_obj.key.name,
+                                      s->cct->_conf->rgw_obj_stripe_size,
+                                      s->req_id,
+                                      dest_bucket_info.versioning_enabled());
+
+  /* No filters by default. */
+  filter = &processor;
+
+  ret = processor.prepare(this, nullptr);
+  if (ret < 0) {
+    ldout(s->cct, 20) << "swift history location: cannot prepare processor due to ret="
+                      << ret << dendl;
+    return ret;
+  }
+
+  const auto& compression_type = get_zone_params().get_compression_type(
+      s->bucket_info.placement_rule);
+  CompressorRef plugin;
+  if (compression_type != "none") {
+    plugin = Compressor::create(s->cct, compression_type);
+    if (! plugin) {
+      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+                       << compression_type << dendl;
+    } else {
+      compressor.emplace(s->cct, plugin, filter);
+      filter = &*compressor;
+    }
+  }
+  
+  MD5 hash;
+  ceph::bufferlist data;
+  hash.Update((const byte *)data.c_str(), data.length());
+
+  bool again = false;
+  do {
+    void *handle;
+    rgw_raw_obj obj;
+
+    uint64_t size = data.length();
+
+    ret = filter->handle_data(data, ofs, &handle, &obj, &again);
+    if (ret < 0) {
+      ldout(s->cct, 20) << "filter->handle_data() returned ret="
+                        << ret << dendl;
+      return ret;
+    }
+
+    ret = filter->throttle_data(handle, obj, size, false);
+    if (ret < 0) {
+      ldout(s->cct, 20) << "filter->thottle_data() returned ret="
+                        << ret << dendl;
+      return ret;
+    }
+  } while (again);
+
+  ret = check_quota(s->bucket_owner.get_id(), s->bucket,
+                              user_quota, bucket_quota, ofs);
+  if (ret < 0) {
+    ldout(s->cct, 20) << "swift history location: quota exceeded" << dendl;
+    return ret;
+  }
+
+  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  hash.Final(m);
+  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+
+  /* Create metadata: ETAG. */
+  std::map<std::string, ceph::bufferlist> attrs;
+  std::string etag = calc_md5;
+  ceph::bufferlist etag_bl;
+  etag_bl.append(etag.c_str(), etag.size() + 1);
+  attrs.emplace(RGW_ATTR_ETAG, std::move(etag_bl));
+
+  /* Create metadata: CONTENT_TYPE. */
+  std::string content_type = "application/x-deleted;swift_versions_deleted=1";
+  bufferlist ct_bl;
+  ct_bl.append(content_type.c_str(), content_type.size() + 1);
+  attrs.emplace(RGW_ATTR_CONTENT_TYPE, std::move(ct_bl));
+
+  /* Create metadata: ACLs. */
+  RGWAccessControlPolicy policy;
+  policy.create_default(s->user->user_id, s->user->display_name);
+  ceph::bufferlist aclbl;
+  policy.encode(aclbl);
+  attrs.emplace(RGW_ATTR_ACL, std::move(aclbl));
+
+  /* Create metadata: compression info. */
+  if (compressor && compressor->is_compressed()) {
+    ceph::bufferlist tmp;
+    RGWCompressionInfo cs_info;
+    cs_info.compression_type = plugin->get_type_name();
+    cs_info.orig_size = s->obj_size;
+    cs_info.blocks = std::move(compressor->get_compression_blocks());
+    ::encode(cs_info, tmp);
+    attrs.emplace(RGW_ATTR_COMPRESSION, std::move(tmp));
+  }
+
+  /* Complete the transaction. */
+  ret = processor.complete(ofs, etag, nullptr,
+                           ceph::real_time(), attrs, ceph::real_time());
+  if (ret < 0) {
+    ldout(s->cct, 20) << "swift delete marker: processor::complete returned ret="
+                      << ret << dendl;
+  } else {
+    deleted = true;
+  }
+
+  if (del_ret < 0) {
+    return -ENOENT;
+  } else {
+    return ret;
+  }
+}
+
 /**
  * Write/overwrite an object to the bucket storage.
  * bucket: the bucket to store the object in

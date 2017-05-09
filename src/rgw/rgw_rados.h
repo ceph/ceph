@@ -3025,6 +3025,11 @@ public:
                                RGWBucketInfo& bucket_info,      /* in */
                                rgw_obj& obj,                    /* in */
                                bool& restored);                 /* out */
+  int swift_versioning_history(req_state *s,                    /* in */
+                               RGWQuotaInfo& user_quota,        /* in */
+                               RGWQuotaInfo& bucket_quota,      /* in */
+                               rgw_obj& src_obj,                /* in */
+                               bool& deleted);                  /* out */
   int copy_obj_to_remote_dest(RGWObjState *astate,
                               map<string, bufferlist>& src_attrs,
                               RGWRados::Object::Read& read_op,
