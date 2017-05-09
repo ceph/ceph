@@ -32,6 +32,8 @@ const uint64_t CHUNK_INFO = 8;
 const uint64_t CHUNK_PADDING = 8;
 const uint64_t CHUNK_OVERHEAD = 16; // INFO + PADDING
 
+const std::string HINFO_KEY = "hinfo_key";
+
 class stripe_info_t {
   const uint64_t stripe_width;
   const uint64_t chunk_size;
