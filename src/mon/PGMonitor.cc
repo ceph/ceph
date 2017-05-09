@@ -1732,7 +1732,7 @@ public:
       assert(st != parent.pg_stat.end());
       auto created = make_pair(st->second.created, st->second.last_scrub_stamp);
       // no need to add the pg, if it already exists in creating_pgs
-      pending_creatings->pgs.emplace(pgid, created);
+      pending_creates->pgs.emplace(pgid, created);
       }
     }
   }
