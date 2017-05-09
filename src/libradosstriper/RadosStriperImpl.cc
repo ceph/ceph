@@ -1169,10 +1169,13 @@ int libradosstriper::RadosStriperImpl::internal_get_layout_and_size(
   // deal with size
   size_t ssize;
   rc = extract_sizet_attr(attrs, XATTR_SIZE, &ssize);
+  if (rc) {
+    return rc;
+  }
   *size = ssize;
   // make valgrind happy by setting unused fl_pg_pool
   layout->fl_pg_pool = 0;
-  return rc;
+  return 0;
 }
 
 int libradosstriper::RadosStriperImpl::openStripedObjectForRead(
