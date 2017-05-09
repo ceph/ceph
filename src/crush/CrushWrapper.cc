@@ -105,12 +105,12 @@ bool CrushWrapper::is_v5_rule(unsigned ruleid) const
   return false;
 }
 
-bool CrushWrapper::has_chooseargs() const
+bool CrushWrapper::has_choose_args() const
 {
   return !choose_args.empty();
 }
 
-bool CrushWrapper::has_incompat_chooseargs() const
+bool CrushWrapper::has_incompat_choose_args() const
 {
   // FIXME: if the chooseargs all have 1 position *and* do not remap IDs then
   // we can fabricate a compatible crush map for legacy clients by swapping the
