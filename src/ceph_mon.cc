@@ -509,6 +509,7 @@ int main(int argc, const char **argv)
           cerr << err_msg << std::endl;
         prefork.exit(err);
       }
+      setsid();
       global_init_postfork_start(g_ceph_context);
     }
     common_init_finish(g_ceph_context);
