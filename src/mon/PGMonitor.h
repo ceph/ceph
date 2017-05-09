@@ -39,11 +39,12 @@ class MGetPoolStats;
 class TextTable;
 class MPGStats;
 class PGStatService;
+class PGMapStatService;
 
 class PGMonitor : public PaxosService {
 public:
   PGMap pg_map;
-  PGStatService *pgservice;
+  PGMapStatService *pgservice;
 
 private:
   PGMap::Incremental pending_inc;
