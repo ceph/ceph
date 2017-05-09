@@ -1014,7 +1014,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
 
   mds_authority_t new_auth = CDIR_AUTH_DEFAULT;
   for (auto dir : subs) {
-    if (dir->get_dir_auth() != CDIR_AUTH_DEFAULT ||
+    if (dir->get_dir_auth() != CDIR_AUTH_DEFAULT &&
 	dir->get_dir_auth() != new_auth) {
       assert(new_auth == CDIR_AUTH_DEFAULT);
       new_auth = dir->get_dir_auth();
