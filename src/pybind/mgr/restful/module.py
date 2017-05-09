@@ -3,18 +3,18 @@ A RESTful API for Ceph
 """
 
 import json
+import time
 import errno
 import inspect
-import StringIO
 import threading
 import traceback
-import ConfigParser
 
 import common
 
 from uuid import uuid4
 from pecan import jsonify, make_app
-from OpenSSL import SSL, crypto
+from OpenSSL import crypto
+from tempfile import NamedTemporaryFile
 from pecan.rest import RestController
 from werkzeug.serving import make_server
 
@@ -152,7 +152,7 @@ class CommandsRequest(object):
             return "success"
 
 
-    def humanify(self):
+    def __json__(self):
         return {
             'id': self.id,
             'running': map(
@@ -181,23 +181,21 @@ class CommandsRequest(object):
 
 class Module(MgrModule):
     COMMANDS = [
-            {
-                "cmd": "create_key "
-                       "name=key_name,type=CephString",
-                "desc": "Create an API key with this name",
-                "perm": "rw"
-            },
-            {
-                "cmd": "delete_key "
-                       "name=key_name,type=CephString",
-                "desc": "Delete an API key with this name",
-                "perm": "rw"
-            },
-            {
-                "cmd": "list_keys",
-                "desc": "List all API keys",
-                "perm": "rw"
-            },
+        {
+            "cmd": "create_key name=key_name,type=CephString",
+            "desc": "Create an API key with this name",
+            "perm": "rw"
+        },
+        {
+            "cmd": "delete_key name=key_name,type=CephString",
+            "desc": "Delete an API key with this name",
+            "perm": "rw"
+        },
+        {
+            "cmd": "list_keys",
+            "desc": "List all API keys",
+            "perm": "rw"
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -211,9 +209,10 @@ class Module(MgrModule):
         self.keys = {}
         self.disable_auth = False
 
-        self.shutdown_key = str(uuid4())
-
         self.server = None
+
+        self.cert_file = None
+        self.pkey_file = None
 
 
     def serve(self):
@@ -242,21 +241,20 @@ class Module(MgrModule):
             self.set_config_json('cert', self.cert)
             self.set_config_json('pkey', self.pkey)
 
-        # use SSL context for https
-        context = SSL.Context(SSL.TLSv1_METHOD)
-        context.use_certificate(
-            crypto.load_certificate(crypto.FILETYPE_PEM, self.cert)
-        )
-        context.use_privatekey(
-            crypto.load_privatekey(crypto.FILETYPE_PEM, self.pkey)
-        )
+        self.cert_file = NamedTemporaryFile()
+        self.cert_file.write(self.cert)
+        self.cert_file.flush()
+
+        self.pkey_file = NamedTemporaryFile()
+        self.pkey_file.write(self.pkey)
+        self.pkey_file.flush()
 
         # Create the HTTPS werkzeug server serving pecan app
         self.server = make_server(
             host='0.0.0.0',
             port=8002,
             app=make_app('restful.api.Root'),
-            ssl_context=context
+            ssl_context=(self.cert_file.name, self.pkey_file.name),
         )
 
         self.server.serve_forever()
@@ -264,7 +262,12 @@ class Module(MgrModule):
 
     def shutdown(self):
         try:
-            self.server.shutdown()
+            if self.server:
+                self.server.shutdown()
+            if self.cert_file:
+                self.cert_file.close()
+            if self.pkey_file:
+                self.pkey_file.close()
         except:
             self.log.error(str(traceback.format_exc()))
 
@@ -336,7 +339,7 @@ class Module(MgrModule):
             return (
                 -errno.EINVAL,
                 "",
-                "Command not found '{0}'".format(prefix)
+                "Command not found '{0}'".format(command['prefix'])
             )
 
 
@@ -423,7 +426,7 @@ class Module(MgrModule):
         return osds
 
 
-    def get_osds(self, ids=[], pool_id=None):
+    def get_osds(self, pool_id=None, ids=None):
         # Get data
         osd_map = self.get('osd_map')
         osd_metadata = self.get('osd_metadata')
@@ -432,7 +435,7 @@ class Module(MgrModule):
         osds = osd_map['osds']
 
         # Filter by osd ids
-        if ids:
+        if ids is not None:
             osds = filter(
                 lambda x: str(x['osd']) in ids,
                 osds
@@ -494,10 +497,14 @@ class Module(MgrModule):
         return pool[0]
 
 
-    def submit_request(self, _request):
+    def submit_request(self, _request, **kwargs):
         request = CommandsRequest(_request)
-        self.requests.append(request)
-        return request.humanify()
+        with self.requests_lock:
+            self.requests.append(request)
+        if kwargs.get('wait', 0):
+            while not request.is_finished():
+                time.sleep(0.001)
+        return request
 
 
     def run_command(self, command):
