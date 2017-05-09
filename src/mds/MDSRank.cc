@@ -284,11 +284,14 @@ void MDSRankDispatcher::tick()
 
   if (is_active()) {
     balancer->tick();
-    update_targets(ceph_clock_now());
     mdcache->find_stale_fragment_freeze();
     mdcache->migrator->find_stale_export_freeze();
     if (snapserver)
       snapserver->check_osd_map(false);
+  }
+
+  if (is_active() || is_stopping()) {
+    update_targets(ceph_clock_now());
   }
 
   // shut down?
