@@ -103,13 +103,13 @@
 
 /// default object layout
 struct ceph_file_layout default_file_layout = {
- fl_stripe_unit: init_le32(1<<22),
- fl_stripe_count: init_le32(1),
- fl_object_size: init_le32(1<<22),
- fl_cas_hash: init_le32(0),
- fl_object_stripe_unit: init_le32(0),
- fl_unused: init_le32(-1),
- fl_pg_pool : init_le32(-1),
+  init_le32(1<<22),	// fl_stripe_unit
+  init_le32(1),		// fl_stripe_count
+  init_le32(1<<22),	// fl_object_size
+  init_le32(0),		// fl_cas_hash
+  init_le32(0),		// fl_object_stripe_unit
+  init_le32(-1),	// fl_unused
+  init_le32(-1),	// fl_pg_pool
 };
 
 
