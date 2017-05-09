@@ -883,7 +883,7 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     dout(7) << "dest is not yet an export target" << dendl;
     if (count > 3) {
       dout(5) << "dest has not been added as export target after three MDSMap epochs, canceling export" << dendl;
-      mds->mdcache->request_finish(mdr);
+      export_try_cancel(dir);
       return;
     }
     mds->wait_for_mdsmap(mds->mdsmap->get_epoch(), new C_M_ExportTargetWait(this, mdr, count+1));
