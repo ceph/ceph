@@ -2,11 +2,10 @@ from pecan import expose, request, response
 from pecan.rest import RestController
 
 import common
-import traceback
 
-from base64 import b64decode
-from functools import wraps
 from collections import defaultdict
+
+from decorators import auth, catch, lock
 
 ## We need this to access the instance of the module
 #
@@ -15,65 +14,15 @@ from collections import defaultdict
 import module
 
 
-# Helper function to catch and log the exceptions
-def catch(f):
-    @wraps(f)
-    def catcher(*args, **kwargs):
-        try:
-            return f(*args, **kwargs)
-        except:
-            module.instance.log.error(str(traceback.format_exc()))
-            response.status = 500
-            return {'message': str(traceback.format_exc()).split('\n')}
-    return catcher
-
-
-# Handle authorization
-def auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not request.authorization:
-            response.status = 401
-            response.headers['WWW-Authenticate'] = 'Basic realm="Login Required"'
-            return {'message': 'auth: No HTTP username/password'}
-
-        username, password = b64decode(request.authorization[1]).split(':')
-
-        # Check that the username exists
-        if username not in module.instance.keys:
-            response.status = 401
-            response.headers['WWW-Authenticate'] = 'Basic realm="Login Required"'
-            return {'message': 'auth: No such user'}
-
-        # Check the password
-        if module.instance.keys[username] != password:
-            response.status = 401
-            response.headers['WWW-Authenticate'] = 'Basic realm="Login Required"'
-            return {'message': 'auth: Incorrect password'}
-
-        return f(*args, **kwargs)
-    return decorated
-
-
-# Helper function to lock the function
-def lock(f):
-    @wraps(f)
-    def locker(*args, **kwargs):
-        with module.instance.requests_lock:
-            return f(*args, **kwargs)
-    return locker
-
-
-
 class ServerFqdn(RestController):
     def __init__(self, fqdn):
         self.fqdn = fqdn
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show the information for the server fqdn
         """
@@ -82,10 +31,10 @@ class ServerFqdn(RestController):
 
 
 class Server(RestController):
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show the information for all the servers
         """
@@ -103,10 +52,10 @@ class RequestId(RestController):
         self.request_id = request_id
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show the information for the request id
         """
@@ -120,20 +69,20 @@ class RequestId(RestController):
             return {'message': 'Unknown request id "%s"' % str(self.request_id)}
 
         request = request[0]
-        return request.humanify()
+        return request
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
     @lock
-    def delete(self):
+    def delete(self, **kwargs):
         """
         Remove the request id from the database
         """
         for index in range(len(module.instance.requests)):
             if module.instance.requests[index].id == self.request_id:
-                return module.instance.requests.pop(index).humanify()
+                return module.instance.requests.pop(index)
 
         # Failed to find the job to cancel
         response.status = 500
@@ -142,10 +91,10 @@ class RequestId(RestController):
 
 
 class Request(RestController):
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         List all the available requests and their state
         """
@@ -156,11 +105,11 @@ class Request(RestController):
         return states
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
     @lock
-    def delete(self):
+    def delete(self, **kwargs):
         """
         Remove all the finished requests
         """
@@ -178,6 +127,16 @@ class Request(RestController):
         }
 
 
+    @expose(template='json')
+    @catch
+    @auth
+    def post(self, **kwargs):
+        """
+        Pass through method to create any request
+        """
+        return module.instance.submit_request([[request.json]], **kwargs)
+
+
     @expose()
     def _lookup(self, request_id, *remainder):
         return RequestId(request_id), remainder
@@ -189,10 +148,10 @@ class PoolId(RestController):
         self.pool_id = pool_id
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show the information for the pool id
         """
@@ -208,10 +167,10 @@ class PoolId(RestController):
         return pool
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def patch(self):
+    def patch(self, **kwargs):
         """
         Modify the information for the pool id
         """
@@ -230,13 +189,13 @@ class PoolId(RestController):
             return {'message': 'Invalid arguments found: "%s"' % str(invalid)}
 
         # Schedule the update request
-        return module.instance.submit_request(common.pool_update_commands(pool['pool_name'], args))
+        return module.instance.submit_request(common.pool_update_commands(pool['pool_name'], args), **kwargs)
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def delete(self):
+    def delete(self, **kwargs):
         """
         Remove the pool data for the pool id
         """
@@ -251,15 +210,15 @@ class PoolId(RestController):
             'pool': pool['pool_name'],
             'pool2': pool['pool_name'],
             'sure': '--yes-i-really-really-mean-it'
-        }]])
+        }]], **kwargs)
 
 
 
 class Pool(RestController):
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show the information for all the pools
         """
@@ -273,10 +232,10 @@ class Pool(RestController):
         return pools
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def post(self):
+    def post(self, **kwargs):
         """
         Create a new pool
         Requires name and pg_num dict arguments
@@ -310,7 +269,8 @@ class Pool(RestController):
         # Schedule the creation and update requests
         return module.instance.submit_request(
             [[create_command]] +
-            common.pool_update_commands(pool_name, args)
+            common.pool_update_commands(pool_name, args),
+            **kwargs
         )
 
 
@@ -325,10 +285,10 @@ class OsdIdCommand(RestController):
         self.osd_id = osd_id
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show implemented commands for the OSD id
         """
@@ -344,10 +304,10 @@ class OsdIdCommand(RestController):
             return []
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def post(self):
+    def post(self, **kwargs):
         """
         Run the implemented command for the OSD id
         """
@@ -366,7 +326,7 @@ class OsdIdCommand(RestController):
         return module.instance.submit_request([[{
             'prefix': 'osd ' + command,
             'who': str(self.osd_id)
-        }]])
+        }]], **kwargs)
 
 
 
@@ -376,14 +336,14 @@ class OsdId(RestController):
         self.command = OsdIdCommand(osd_id)
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show the information for the OSD id
         """
-        osd = module.instance.get_osds([str(self.osd_id)])
+        osd = module.instance.get_osds(ids=[str(self.osd_id)])
         if len(osd) != 1:
             response.status = 500
             return {'message': 'Failed to identify the OSD id "%d"' % self.osd_id}
@@ -391,10 +351,10 @@ class OsdId(RestController):
         return osd[0]
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def patch(self):
+    def patch(self, **kwargs):
         """
         Modify the state (up, in) of the OSD id or reweight it
         """
@@ -431,23 +391,23 @@ class OsdId(RestController):
                 'weight': args['reweight']
             })
 
-        return module.instance.submit_request([commands])
+        return module.instance.submit_request([commands], **kwargs)
 
 
 
 class Osd(RestController):
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show the information for all the OSDs
         """
         # Parse request args
-        ids = request.GET.getall('id[]')
-        pool_id = request.GET.get('pool', None)
+        # TODO Filter by ids
+        pool_id = kwargs.get('pool', None)
 
-        return module.instance.get_osds(ids, pool_id)
+        return module.instance.get_osds(pool_id)
 
 
     @expose()
@@ -461,10 +421,10 @@ class MonName(RestController):
         self.name = name
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show the information for the monitor name
         """
@@ -482,10 +442,10 @@ class MonName(RestController):
 
 
 class Mon(RestController):
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show the information for all the monitors
         """
@@ -499,9 +459,9 @@ class Mon(RestController):
 
 
 class Doc(RestController):
-    @expose('json')
+    @expose(template='json')
     @catch
-    def get(self):
+    def get(self, **kwargs):
         """
         Show documentation information
         """
@@ -510,10 +470,10 @@ class Doc(RestController):
 
 
 class CrushRuleset(RestController):
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show crush rulesets
         """
@@ -530,10 +490,10 @@ class CrushRuleset(RestController):
 
 
 class CrushRule(RestController):
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show crush rules
         """
@@ -554,10 +514,10 @@ class Crush(RestController):
 
 
 class ConfigOsd(RestController):
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show OSD configuration options
         """
@@ -569,14 +529,13 @@ class ConfigOsd(RestController):
         return flags.split(',')
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def patch(self):
+    def patch(self, **kwargs):
         """
         Modify OSD configration options
         """
-
         args = request.json
 
         commands = []
@@ -597,7 +556,7 @@ class ConfigOsd(RestController):
                 'key': flag,
             })
 
-        return module.instance.submit_request([commands])
+        return module.instance.submit_request([commands], **kwargs)
 
 
 
@@ -606,10 +565,10 @@ class ConfigClusterKey(RestController):
         self.key = key
 
 
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show specific configuration option
         """
@@ -618,10 +577,10 @@ class ConfigClusterKey(RestController):
 
 
 class ConfigCluster(RestController):
-    @expose('json')
+    @expose(template='json')
     @catch
     @auth
-    def get(self):
+    def get(self, **kwargs):
         """
         Show all cluster configuration options
         """
@@ -650,9 +609,9 @@ class Root(RestController):
     request = Request()
     server = Server()
 
-    @expose('json')
+    @expose(template='json')
     @catch
-    def get(self):
+    def get(self, **kwargs):
         """
         Show the basic information for the REST API
         This includes values like api version or auth method
