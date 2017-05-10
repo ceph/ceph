@@ -192,12 +192,18 @@ RGWBucketReshard::RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucke
                                                      reshard_lock(reshard_lock_name) {
   const rgw_bucket& b = bucket_info.bucket;                                                       
   reshard_oid = b.tenant + (b.tenant.empty() ? "" : ":") + b.name + ":" + b.bucket_id;
+
+  utime_t lock_duration(store->ctx()->_conf->rgw_reshard_bucket_lock_duration, 0);
+#define COOKIE_LEN 16
+  char cookie_buf[COOKIE_LEN + 1];
+  gen_rand_alphanumeric(store->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
+
+  reshard_lock.set_cookie(cookie_buf);
+  reshard_lock.set_duration(lock_duration);
 }
 
 int RGWBucketReshard::lock_bucket()
 {
-#warning set timeout for guard lock
-
   int ret = reshard_lock.lock_exclusive(&store->reshard_pool_ctx, reshard_oid);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "RGWReshard::add failed to acquire lock on " << reshard_oid << " ret=" << ret << dendl;
@@ -249,6 +255,8 @@ int RGWBucketReshard::clear_resharding()
 int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
                                                  RGWBucketInfo& new_bucket_info)
 {
+  new_bucket_info = bucket_info;
+
   store->create_bucket_id(&new_bucket_info.bucket.bucket_id);
   new_bucket_info.bucket.oid.clear();
 
@@ -389,7 +397,7 @@ int RGWBucketReshard::do_reshard(
   string err;
   int r = RGWBucketAdminOp::link(store, bucket_op, &err);
   if (r < 0) {
-    lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-r) << dendl;
+    lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-r) << ")" << dendl;
     return -r;
   }
   return 0;

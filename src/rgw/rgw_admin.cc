@@ -517,7 +517,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "quota") == 0 ||
       strcmp(cmd, "realm") == 0 ||
       strcmp(cmd, "replicalog") == 0 ||
-      strcmp(cmd, "reshard") == 0 ||
       strcmp(cmd, "role") == 0 ||
       strcmp(cmd, "role-policy") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
@@ -526,8 +525,13 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "user") == 0 ||
       strcmp(cmd, "zone") == 0 ||
       strcmp(cmd, "zonegroup") == 0 ||
-      strcmp(cmd, "zonegroups") == 0)
-{
+      strcmp(cmd, "zonegroups") == 0) {
+    *need_more = true;
+    return 0;
+  }
+
+  if (strcmp(cmd, "reshard") == 0 &&
+      !(prev_cmd && strcmp(prev_cmd, "bucket") == 0)) {
     *need_more = true;
     return 0;
   }
@@ -2228,17 +2232,17 @@ int check_reshard_bucket_params(RGWRados *store,
 {
   if (bucket_name.empty()) {
     cerr << "ERROR: bucket not specified" << std::endl;
-    return EINVAL;
+    return -EINVAL;
   }
 
   if (!num_shards_specified) {
     cerr << "ERROR: --num-shards not specified" << std::endl;
-    return EINVAL;
+    return -EINVAL;
   }
 
   if (num_shards > (int)store->get_max_bucket_shards()) {
     cerr << "ERROR: num_shards too high, max value: " << store->get_max_bucket_shards() << std::endl;
-    return EINVAL;
+    return -EINVAL;
   }
 
   int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
@@ -2252,7 +2256,7 @@ int check_reshard_bucket_params(RGWRados *store,
   if (num_shards <= num_source_shards && !yes_i_really_mean_it) {
     cerr << "num shards is less or equal to current shards count" << std::endl
 	 << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-    return EINVAL;
+    return -EINVAL;
   }
   return 0;
 }
@@ -5545,6 +5549,11 @@ next:
     }
 
     RGWBucketReshard br(store, bucket_info, attrs);
+
+#define DEFAULT_RESHARD_MAX_ENTRIES 1000
+    if (max_entries < 1) {
+      max_entries = DEFAULT_RESHARD_MAX_ENTRIES;
+    }
 
     return br.execute(num_shards, max_entries,
                       verbose, &cout, formatter);
