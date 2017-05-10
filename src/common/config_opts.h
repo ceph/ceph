@@ -852,6 +852,8 @@ OPTION(osd_rollback_to_cluster_snap, OPT_STR, "")
 OPTION(osd_default_notify_timeout, OPT_U32, 30) // default notify timeout in seconds
 OPTION(osd_kill_backfill_at, OPT_INT, 0)
 
+OPTION(osd_commit_majority, OPT_BOOL, false) //default disable,if send 3 replica,now return 2 ack ,can response to client
+
 // Bounds how infrequently a new map epoch will be persisted for a pg
 OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 150) // make this < map_cache_size!
 

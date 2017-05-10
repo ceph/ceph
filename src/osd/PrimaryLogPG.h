@@ -435,6 +435,13 @@ public:
     return get_min_peer_features();
   }
 
+  unsigned get_allow_uncommitted_replicas() const {
+    return allow_uncommitted_replicas;
+  }
+  bool can_commit_majority() const {
+    return !is_degraded();
+  }
+
   void send_message_osd_cluster(
     int peer, Message *m, epoch_t from_epoch) override;
   void send_message_osd_cluster(
