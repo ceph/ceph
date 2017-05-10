@@ -890,6 +890,12 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
     return;
   }
 
+  if (!dir->inode->get_parent_dn()) {
+    dout(7) << "waiting for dir to become stable before export: " << *dir << dendl;
+    dir->add_waiter(CDir::WAIT_CREATED, new C_M_ExportTargetWait(this, mdr, 1));
+    return;
+  }
+
   if (mdr->aborted || dir->is_frozen() || dir->is_freezing()) {
     dout(7) << "wouldblock|freezing|frozen, canceling export" << dendl;
     export_try_cancel(dir);
