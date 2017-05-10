@@ -10844,6 +10844,11 @@ void MDCache::split_dir(CDir *dir, int bits)
     return;
   }
 
+  if (dir->frag.bits() + bits > 24) {
+    dout(7) << __func__ << " frag bits > 24, dropping" << dendl;
+    return;
+  }
+
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FRAGMENTDIR);
   mdr->more()->fragment_base = dir->dirfrag();
 
