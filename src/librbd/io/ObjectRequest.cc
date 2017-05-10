@@ -548,7 +548,7 @@ void AbstractObjectWriteRequest::send_write_op()
     guard_write();
   }
 
-  add_write_ops(&m_write);
+  add_write_ops(&m_write, true);
   assert(m_write.size() != 0);
 
   librados::AioCompletion *rados_completion =
@@ -577,9 +577,10 @@ void AbstractObjectWriteRequest::handle_write_guard()
   }
 }
 
-void ObjectWriteRequest::add_write_ops(librados::ObjectWriteOperation *wr) {
+void ObjectWriteRequest::add_write_ops(librados::ObjectWriteOperation *wr,
+                                       bool set_hints) {
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
-  if (m_ictx->enable_alloc_hint &&
+  if (set_hints && m_ictx->enable_alloc_hint &&
       (m_ictx->object_map == nullptr || !m_object_exist)) {
     wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
   }
@@ -628,9 +629,10 @@ void ObjectTruncateRequest::send_write() {
   }
 }
 
-void ObjectWriteSameRequest::add_write_ops(librados::ObjectWriteOperation *wr) {
+void ObjectWriteSameRequest::add_write_ops(librados::ObjectWriteOperation *wr,
+                                           bool set_hints) {
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
-  if (m_ictx->enable_alloc_hint &&
+  if (set_hints && m_ictx->enable_alloc_hint &&
       (m_ictx->object_map == nullptr || !m_object_exist)) {
     wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
   }
