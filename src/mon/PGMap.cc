@@ -983,6 +983,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
   tab.define_column("HB_PEERS", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("PG_SUM", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("PRIMARY_PG_SUM", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("PG_LIST", TextTable::LEFT, TextTable::RIGHT);
 
   for (ceph::unordered_map<int32_t,osd_stat_t>::const_iterator p = osd_stat.begin();
        p != osd_stat.end();
@@ -994,6 +995,7 @@ void PGMap::dump_osd_stats(ostream& ss) const
         << p->second.hb_peers
         << get_num_pg_by_osd(p->first)
         << get_num_primary_pg_by_osd(p->first)
+        << get_pg_list_by_osd(p->first)
         << TextTable::endrow;
   }
 
