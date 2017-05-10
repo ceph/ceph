@@ -24,6 +24,7 @@
 #include "include/timegm.h"
 #include "common/strtol.h"
 #include "common/ceph_time.h"
+#include "include/denc.h"
 
 
 // --------
@@ -135,6 +136,12 @@ public:
     ::decode(tv.tv_nsec, p);
 #endif
   }
+
+  DENC(utime_t, v, p) {
+    denc(v.tv.tv_sec, p);
+    denc(v.tv.tv_nsec, p);
+  }
+
 
   void encode_timeval(struct ceph_timespec *t) const {
     t->tv_sec = tv.tv_sec;
@@ -381,6 +388,7 @@ public:
   }
 };
 WRITE_CLASS_ENCODER(utime_t)
+WRITE_CLASS_DENC(utime_t)
 
 
 // arithmetic operators

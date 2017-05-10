@@ -6,6 +6,7 @@
 #include "bluestore_types.h"
 #include "include/utime.h"
 #include "include/encoding.h"
+#include "include/denc.h"
 
 class bluefs_extent_t : public AllocExtent{
 public:
@@ -14,12 +15,18 @@ public:
   bluefs_extent_t(uint8_t b = 0, uint64_t o = 0, uint32_t l = 0)
     : AllocExtent(o, l), bdev(b) {}
 
-  void encode(bufferlist&) const;
-  void decode(bufferlist::iterator&);
+  DENC(bluefs_extent_t, v, p) {
+    DENC_START(1, 1, p);
+    denc_lba(v.offset, p);
+    denc_varint_lowz(v.length, p);
+    denc(v.bdev, p);
+    DENC_FINISH(p);
+  }
+
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluefs_extent_t*>&);
 };
-WRITE_CLASS_ENCODER(bluefs_extent_t)
+WRITE_CLASS_DENC(bluefs_extent_t)
 
 ostream& operator<<(ostream& out, bluefs_extent_t e);
 
@@ -44,15 +51,23 @@ struct bluefs_fnode_t {
       allocated += p.length;
   }
 
+  DENC(bluefs_fnode_t, v, p) {
+    DENC_START(1, 1, p);
+    denc_varint(v.ino, p);
+    denc_varint(v.size, p);
+    denc(v.mtime, p);
+    denc(v.prefer_bdev, p);
+    denc(v.extents, p);
+    DENC_FINISH(p);
+  }
+
   mempool::bluefs::vector<bluefs_extent_t>::iterator seek(
     uint64_t off, uint64_t *x_off);
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluefs_fnode_t*>& ls);
 };
-WRITE_CLASS_ENCODER(bluefs_fnode_t)
+WRITE_CLASS_DENC(bluefs_fnode_t)
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file);
 
