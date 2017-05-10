@@ -97,6 +97,8 @@ void usage(ostream& out)
 "   mapext <obj-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
+"   pool-rollback <snap-name>  roll back pool to snap <snap-name>\n"
+"\n"
 "   listsnaps <obj-name>             list the snapshots of this object\n"
 "   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup] [--run-name run_name] [--no-hints]\n"
 "                                    default is 16 concurrent IOs and 4 MB ops\n"
@@ -2187,6 +2189,27 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     if (!stdout)
       delete outstream;
+  }
+  else if (strcmp(nargs[0],"pool-rollback") == 0) {
+    if (!pool_name) {
+      cerr << "pool name was not specified" << std::endl;
+      ret = -1;
+      goto out;
+    }
+    if (nargs.size() < 2)
+      usage_exit();
+
+    librados::NObjectIterator i = io_ctx.nobjects_begin();
+    librados::NObjectIterator i_end = io_ctx.nobjects_end();
+    for (; i != i_end; ++i) {  
+      string oid = i->get_oid();
+      ret = io_ctx.snap_rollback(oid, nargs[1]);
+      if (ret < 0) {
+        cerr << "error rolling back pool " << pool_name << " to snapshot " << nargs[1]
+             << " on object " << oid << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
+    }
   }
   else if (strcmp(nargs[0], "chown") == 0) {
     if (!pool_name || nargs.size() < 2)
