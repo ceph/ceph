@@ -1134,7 +1134,8 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     }
 
     // adjust warm out list too, if necessary
-    while (buffer_warm_out.size() > kout) {
+    int64_t num = buffer_warm_out.size() - kout;
+    while (num-- > 0) {
       Buffer *b = &*buffer_warm_out.rbegin();
       assert(b->is_empty());
       dout(20) << __func__ << " buffer_warm_out rm " << *b << dendl;
