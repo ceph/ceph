@@ -82,7 +82,7 @@ class CommandsRequest(object):
             results.append(result)
 
             # Run the command
-            instance.send_command(result, json.dumps(commands[index]), tag)
+            instance.send_command(result, 'mon', '', json.dumps(commands[index]), tag)
 
         return results
 
@@ -497,5 +497,5 @@ class Module(MgrModule):
         # tag with 'seq' so that we can ingore these in notify function
         result = CommandResult('seq')
 
-        self.send_command(result, json.dumps(command), 'seq')
+        self.send_command(result, 'mon', '', json.dumps(command), 'seq')
         return result.wait()
