@@ -83,7 +83,9 @@ public:
                 Context *completion, bool hide_enoent);
   ~ObjectRequest() override {}
 
-  virtual void add_copyup_ops(librados::ObjectWriteOperation *wr) {};
+  virtual void add_copyup_ops(librados::ObjectWriteOperation *wr,
+                              bool set_hints) {
+  };
 
   void complete(int r) override;
 
@@ -209,9 +211,10 @@ public:
                              uint64_t len, const ::SnapContext &snapc,
                              Context *completion, bool hide_enoent);
 
-  void add_copyup_ops(librados::ObjectWriteOperation *wr) override
+  void add_copyup_ops(librados::ObjectWriteOperation *wr,
+                      bool set_hints) override
   {
-    add_write_ops(wr);
+    add_write_ops(wr, set_hints);
   }
 
   bool should_complete(int r) override;
@@ -270,7 +273,8 @@ protected:
   bool m_object_exist;
   bool m_guard = true;
 
-  virtual void add_write_ops(librados::ObjectWriteOperation *wr) = 0;
+  virtual void add_write_ops(librados::ObjectWriteOperation *wr,
+                             bool set_hints) = 0;
   virtual void guard_write();
   virtual bool post_object_map_update() {
     return false;
@@ -311,7 +315,8 @@ public:
   }
 
 protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr) override;
+  void add_write_ops(librados::ObjectWriteOperation *wr,
+                     bool set_hints) override;
 
   void send_write() override;
 
@@ -358,7 +363,8 @@ public:
   void send_write() override;
 
 protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr) override {
+  void add_write_ops(librados::ObjectWriteOperation *wr,
+                     bool set_hints) override {
     if (has_parent()) {
       wr->truncate(0);
     } else {
@@ -397,7 +403,8 @@ public:
   }
 
 protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr) override {
+  void add_write_ops(librados::ObjectWriteOperation *wr,
+                     bool set_hints) override {
     wr->remove();
   }
 
@@ -429,7 +436,8 @@ public:
   void send_write() override;
 
 protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr) override {
+  void add_write_ops(librados::ObjectWriteOperation *wr,
+                     bool set_hints) override {
     wr->truncate(m_object_off);
   }
 };
@@ -453,7 +461,8 @@ public:
   }
 
 protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr) override {
+  void add_write_ops(librados::ObjectWriteOperation *wr,
+                     bool set_hints) override {
     wr->zero(m_object_off, m_object_len);
   }
 };
@@ -480,7 +489,8 @@ public:
   }
 
 protected:
-  void add_write_ops(librados::ObjectWriteOperation *wr) override;
+  void add_write_ops(librados::ObjectWriteOperation *wr,
+                     bool set_hints) override;
 
   void send_write() override;
 
