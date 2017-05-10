@@ -220,6 +220,11 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
   std::string row_separator = " ";
   std::string newliner = "\n";
   std::stringstream pending_column;
+  std::string oname;
+  std::string oversion_id;
+
+  oname = entry.obj.name.empty() ? "-" : entry.obj.name;
+  oversion_id = entry.obj.instance.empty() ? "-" : entry.obj.instance;
 
                                                                                // S3 BL field
   pending_column << entry.bucket_owner.id << row_separator                     // Bucket Owner
@@ -229,7 +234,7 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
                  << entry.user << row_separator                                // Requester
                  << "-" << row_separator                                       // Request ID
                  << entry.op << row_separator                                  // Operation
-                 << "-" << row_separator                                       // Key
+                 << oname << row_separator                                     // Key
                  << entry.uri << row_separator                                 // Request-URI
                  << entry.http_status << row_separator                         // HTTP status
                  << entry.error_code << row_separator                          // Error Code
@@ -239,7 +244,7 @@ void RGWBL::format_opslog_entry(struct rgw_log_entry& entry, bufferlist *buffer)
                  << "-" << row_separator                                       // Turn-Around Time
                  << entry.referrer << row_separator                            // Referrer
                  << entry.user_agent << row_separator                          // User-Agent
-                 << "-" << row_separator                                       // Version Id
+                 << oversion_id << row_separator                               // Version Id
                  << newliner;
 
   buffer->append(pending_column.str());
