@@ -44,7 +44,7 @@ class RGWBucketReshard {
 
   int lock_bucket();
   void unlock_bucket();
-  int init_resharding(const string& new_instance_id);
+  int set_resharding_status(const string& new_instance_id, cls_rgw_reshard_status status);
   int clear_resharding();
 
   int create_new_bucket_instance(int new_num_shards,
@@ -63,6 +63,7 @@ public:
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr);
   int abort();
+  int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
 };
 
 class RGWReshard {
@@ -81,11 +82,7 @@ class RGWReshard {
     int remove(cls_rgw_reshard_entry& entry);
     int list(string& marker, uint32_t max, list<cls_rgw_reshard_entry>& entries, bool& is_truncated);
     int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
-    /*
-      if succefull, keeps the bucket index locked. It will be unlocked
-      in the guard dtor.
-     */
-    int block_while_resharding(const string& bucket_instance_oid);
+    int block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id);
 };
 
 #endif
