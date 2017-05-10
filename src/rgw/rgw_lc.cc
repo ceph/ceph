@@ -545,8 +545,15 @@ int RGWLC::list_lc_progress(const string& marker, uint32_t max_entries, map<stri
   for(; index <max_objs; index++) {
     map<string, int > entries;
     int ret = cls_rgw_lc_list(store->lc_pool_ctx, obj_names[index], marker, max_entries, entries);
-    if (ret < 0)
-      return ret;
+    if (ret < 0) {
+      if (ret == -ENOENT) {
+        dout(10) << __func__ << " ignoring unfound lc object="
+                             << obj_names[index] << dendl;
+        continue;
+      } else {
+        return ret;
+      }
+    }
     map<string, int>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
       progress_map->insert(*iter);
