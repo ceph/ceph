@@ -131,6 +131,9 @@ COMMAND("pg set_nearfull_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
 	"set ratio at which pgs are considered nearly full",		\
 	"pg", "rw", "cli,rest")
 
+COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
+	"pg", "r", "cli,rest")
+
 /*
  * auth commands AuthMonitor.cc
  */
@@ -600,6 +603,10 @@ COMMAND("osd set-nearfull-ratio " \
 	"name=ratio,type=CephFloat,range=0.0|1.0", \
 	"set usage ratio at which OSDs are marked near-full",
 	"osd", "rw", "cli,rest")
+COMMAND("osd set-require-min-compat-client " \
+	"name=version,type=CephString",
+	"set the minimum client version we will maintain compatibility with",
+	"osd", "rw", "cli,rest")
 COMMAND("osd pause", "pause osd", "osd", "rw", "cli,rest")
 COMMAND("osd unpause", "unpause osd", "osd", "rw", "cli,rest")
 COMMAND("osd erasure-code-profile set " \
@@ -821,6 +828,7 @@ COMMAND("config-key exists " \
 	"name=key,type=CephString", \
 	"check for <key>'s existence", "config-key", "r", "cli,rest")
 COMMAND("config-key list ", "list keys", "config-key", "r", "cli,rest")
+COMMAND("config-key dump", "dump keys and values", "config-key", "r", "cli,rest")
 
 
 /*

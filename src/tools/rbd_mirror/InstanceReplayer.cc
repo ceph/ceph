@@ -90,11 +90,22 @@ void InstanceReplayer<I>::shut_down(Context *on_finish) {
 }
 
 template <typename I>
-void InstanceReplayer<I>::set_peers(const Peers &peers) {
-  dout(20) << dendl;
+void InstanceReplayer<I>::add_peer(std::string mirror_uuid,
+                                   librados::IoCtx io_ctx) {
+  dout(20) << mirror_uuid << dendl;
 
   Mutex::Locker locker(m_lock);
-  m_peers = peers;
+  auto result = m_peers.insert(Peer(mirror_uuid, io_ctx)).second;
+  assert(result);
+}
+
+template <typename I>
+void InstanceReplayer<I>::remove_peer(std::string mirror_uuid) {
+  dout(20) << mirror_uuid << dendl;
+
+  Mutex::Locker locker(m_lock);
+  auto result = m_peers.erase(Peer(mirror_uuid));
+  assert(result > 0);
 }
 
 template <typename I>
@@ -119,10 +130,12 @@ void InstanceReplayer<I>::release_all(Context *on_finish) {
 }
 
 template <typename I>
-void InstanceReplayer<I>::acquire_image(
-    const std::string &global_image_id,
-    const instance_watcher::PeerImageIds &peers, Context *on_finish) {
-  dout(20) << "global_image_id=" << global_image_id << dendl;
+void InstanceReplayer<I>::acquire_image(const std::string &global_image_id,
+                                        const std::string &peer_mirror_uuid,
+                                        const std::string &peer_image_id,
+                                        Context *on_finish) {
+  dout(20) << "global_image_id=" << global_image_id << ", peer_mirror_uuid="
+           << peer_mirror_uuid << ", peer_image_id=" << peer_image_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -143,29 +156,26 @@ void InstanceReplayer<I>::acquire_image(
   }
 
   auto image_replayer = it->second;
+  if (!peer_mirror_uuid.empty()) {
+    auto iter = m_peers.find(Peer(peer_mirror_uuid));
+    assert(iter != m_peers.end());
+    auto io_ctx = iter->io_ctx;
 
-  PeerImages remote_images;
-  for (auto &peer : peers) {
-    auto it = m_peers.find(Peer(peer.mirror_uuid));
-    assert(it != m_peers.end());
-    auto io_ctx = it->io_ctx;
-    remote_images.insert({peer.mirror_uuid, io_ctx, peer.image_id});
+    image_replayer->add_remote_image(peer_mirror_uuid, peer_image_id, io_ctx);
   }
-
-  image_replayer->set_remote_images(remote_images);
-
   start_image_replayer(image_replayer);
 
   m_threads->work_queue->queue(on_finish, 0);
 }
 
 template <typename I>
-void InstanceReplayer<I>::release_image(
-    const std::string &global_image_id,
-    const instance_watcher::PeerImageIds &peers, bool schedule_delete,
-    Context *on_finish) {
-  dout(20) << "global_image_id=" << global_image_id << ", "
-           << "schedule_delete=" << schedule_delete << dendl;
+void InstanceReplayer<I>::release_image(const std::string &global_image_id,
+                                        const std::string &peer_mirror_uuid,
+                                        const std::string &peer_image_id,
+                                        bool schedule_delete,
+                                        Context *on_finish) {
+  dout(20) << "global_image_id=" << global_image_id << ", peer_mirror_uuid="
+           << peer_mirror_uuid << ", peer_image_id=" << peer_image_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -180,13 +190,13 @@ void InstanceReplayer<I>::release_image(
   }
 
   auto image_replayer = it->second;
-
-  for (auto &peer : peers) {
-    image_replayer->remove_remote_image(peer.mirror_uuid, peer.image_id);
+  if (!peer_mirror_uuid.empty()) {
+    image_replayer->remove_remote_image(peer_mirror_uuid, peer_image_id,
+					schedule_delete);
   }
 
   if (!image_replayer->remote_images_empty()) {
-    dout(20) << global_image_id << ": still has remote images" << dendl;
+    dout(20) << global_image_id << ": still has peer images" << dendl;
     m_threads->work_queue->queue(on_finish, 0);
     return;
   }
@@ -203,15 +213,8 @@ void InstanceReplayer<I>::release_image(
     on_finish = new FunctionContext(
       [this, image_replayer, on_finish] (int r) {
         auto global_image_id = image_replayer->get_global_image_id();
-        auto local_image_id = image_replayer->get_local_image_id();
-        if (local_image_id.empty()) {
-          dout(20) << global_image_id << ": unknown local_image_id"
-                   << " (image does not exist or primary), skipping delete"
-                   << dendl;
-        } else {
-          m_image_deleter->schedule_image_delete(
-            m_local_rados, m_local_pool_id, local_image_id, global_image_id);
-        }
+        m_image_deleter->schedule_image_delete(
+          m_local_rados, m_local_pool_id, global_image_id);
         on_finish->complete(0);
       });
   }

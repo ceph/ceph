@@ -22,6 +22,8 @@
 #include "rgw_common.h"
 #include "rgw_boost_asio_coroutine.h"
 
+#include <atomic>
+
 #define RGW_ASYNC_OPS_MGR_WINDOW 100
 
 class RGWCoroutinesStack;
@@ -39,7 +41,7 @@ class RGWCompletionManager : public RefCountedObject {
 
   SafeTimer timer;
 
-  atomic_t going_down;
+  std::atomic<bool> going_down = { false };
 
   map<void *, void *> waiters;
 
@@ -506,9 +508,9 @@ public:
 
 class RGWCoroutinesManager {
   CephContext *cct;
-  atomic_t going_down;
+  std::atomic<bool> going_down = { false };
 
-  atomic64_t run_context_count;
+  std::atomic<int64_t> run_context_count = { 0 };
   map<uint64_t, set<RGWCoroutinesStack *> > run_contexts;
 
   RWLock lock;
@@ -542,7 +544,8 @@ public:
   int run(list<RGWCoroutinesStack *>& ops);
   int run(RGWCoroutine *op);
   void stop() {
-    if (going_down.inc() == 1) {
+    bool expected = false;
+    if (going_down.compare_exchange_strong(expected, true)) {
       completion_mgr->go_down();
     }
   }

@@ -169,7 +169,7 @@ public:
     crush->straw_calc_version = 1;
   }
   void set_tunables_default() {
-    set_tunables_firefly();
+    set_tunables_hammer();
     crush->straw_calc_version = 1;
   }
 
@@ -316,6 +316,8 @@ public:
   bool has_v3_rules() const;
   bool has_v4_buckets() const;
   bool has_v5_rules() const;
+  bool has_chooseargs() const;          // any chooseargs
+  bool has_incompat_chooseargs() const; // chooseargs that can't be made compat
 
   bool is_v2_rule(unsigned ruleid) const;
   bool is_v3_rule(unsigned ruleid) const;
@@ -1208,8 +1210,9 @@ public:
     choose_args.clear();
   }
 
+  template<typename WeightVector>
   void do_rule(int rule, int x, vector<int>& out, int maxout,
-	       const vector<__u32>& weight,
+	       const WeightVector& weight,
 	       uint64_t choose_args_index) const {
     int rawout[maxout];
     char work[crush_work_size(crush, maxout)];

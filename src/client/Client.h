@@ -252,7 +252,7 @@ class Client : public Dispatcher, public md_config_obs_t {
  public:
   using Dispatcher::cct;
 
-  PerfCounters *logger;
+  std::unique_ptr<PerfCounters> logger;
 
   class CommandHook : public AdminSocketHook {
     Client *m_client;
@@ -304,8 +304,10 @@ public:
     return UserPerm(uid, gid);
   }
 protected:
-  MonClient *monclient;
   Messenger *messenger;  
+  MonClient *monclient;
+  Objecter  *objecter;
+
   client_t whoami;
 
   int user_id, group_id;
@@ -339,6 +341,7 @@ protected:
   MetaSession *_open_mds_session(mds_rank_t mds);
   void _close_mds_session(MetaSession *s);
   void _closed_mds_session(MetaSession *s);
+  bool _any_stale_sessions() const;
   void _kick_stale_sessions();
   void handle_client_session(MClientSession *m);
   void send_reconnect(MetaSession *s);
@@ -383,7 +386,6 @@ protected:
   bool is_dir_operation(MetaRequest *request);
 
   bool   initialized;
-  bool   authenticated;
   bool   mounted;
   bool   unmounting;
 
@@ -403,10 +405,9 @@ public:
   void _sync_write_commit(Inode *in);
 
 protected:
-  Filer                 *filer;     
-  ObjectCacher          *objectcacher;
-  Objecter              *objecter;     // (non-blocking) osd interface
-  WritebackHandler      *writeback_handler;
+  std::unique_ptr<Filer>             filer;
+  std::unique_ptr<ObjectCacher>      objectcacher;
+  std::unique_ptr<WritebackHandler>  writeback_handler;
 
   // cache
   ceph::unordered_map<vinodeno_t, Inode*> inode_map;
@@ -585,11 +586,18 @@ protected:
 
   void _close_sessions();
 
+  /**
+   * The basic housekeeping parts of init (perf counters, admin socket)
+   * that is independent of how objecters/monclient/messengers are
+   * being set up.
+   */
+  void _finish_init();
+
  public:
   void set_filer_flags(int flags);
   void clear_filer_flags(int flags);
 
-  Client(Messenger *m, MonClient *mc);
+  Client(Messenger *m, MonClient *mc, Objecter *objecter_);
   ~Client() override;
   void tear_down_cache();
 
@@ -600,8 +608,8 @@ protected:
   inodeno_t get_root_ino();
   Inode *get_root();
 
-  int init()  WARN_UNUSED_RESULT;
-  void shutdown();
+  virtual int init();
+  virtual void shutdown();
 
   // messaging
   void handle_mds_map(class MMDSMap *m);
@@ -1222,6 +1230,21 @@ public:
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(const struct md_config_t *conf,
 	                          const std::set <std::string> &changed) override;
+};
+
+/**
+ * Specialization of Client that manages its own Objecter instance
+ * and handles init/shutdown of messenger/monclient
+ */
+class StandaloneClient : public Client
+{
+  public:
+  StandaloneClient(Messenger *m, MonClient *mc);
+
+  ~StandaloneClient() override;
+
+  int init() override;
+  void shutdown() override;
 };
 
 #endif

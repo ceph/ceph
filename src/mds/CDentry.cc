@@ -36,8 +36,6 @@ ostream& CDentry::print_db_line_prefix(ostream& out)
   return out << ceph_clock_now() << " mds." << dir->cache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
 }
 
-boost::pool<> CDentry::pool(sizeof(CDentry));
-
 LockType CDentry::lock_type(CEPH_LOCK_DN);
 LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
 

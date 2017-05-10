@@ -63,8 +63,8 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 // superblock (always the second block of the device).
 #define BDEV_LABEL_BLOCK_SIZE  4096
 
-// for bluefs, label (4k) + bluefs super (4k), means we start at 8k.
-#define BLUEFS_START  8192
+// reserve: label (4k) + bluefs super (4k), which means we start at 8k.
+#define SUPER_RESERVED  8192
 
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
 
@@ -2853,13 +2853,14 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 
 void BlueStore::Onode::flush()
 {
-  if (flushing_count) {
+  if (flushing_count.load()) {
+    ldout(c->store->cct, 20) << __func__ << " cnt:" << flushing_count << dendl;
     std::unique_lock<std::mutex> l(flush_lock);
-    ldout(c->store->cct, 20) << flush_txns << dendl;
-    while (!flush_txns.empty())
+    while (flushing_count.load()) {
       flush_cond.wait(l);
+    }
   }
-  ldout(c->store->cct, 20) << "done" << dendl;
+  ldout(c->store->cct, 20) << __func__ << " done" << dendl;
 }
 
 // =======================================================
@@ -2887,8 +2888,110 @@ bool BlueStore::WriteContext::has_conflict(
   return false;
 }
  
- // =======================================================
- 
+// =======================================================
+
+// DeferredBatch
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.DeferredBatch(" << this << ") "
+
+void BlueStore::DeferredBatch::prepare_write(
+  CephContext *cct,
+  uint64_t seq, uint64_t offset, uint64_t length,
+  bufferlist::const_iterator& blp)
+{
+  _discard(cct, offset, length);
+  auto i = iomap.insert(make_pair(offset, deferred_io()));
+  assert(i.second);  // this should be a new insertion
+  i.first->second.seq = seq;
+  blp.copy(length, i.first->second.bl);
+  dout(20) << __func__ << " seq " << seq
+	   << " 0x" << std::hex << offset << "~" << length
+	   << " crc " << i.first->second.bl.crc32c(-1)
+	   << std::dec << dendl;
+  seq_bytes[seq] += length;
+#ifdef DEBUG_DEFERRED
+  _audit(cct);
+#endif
+}
+
+void BlueStore::DeferredBatch::_discard(
+  CephContext *cct, uint64_t offset, uint64_t length)
+{
+  generic_dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
+		   << std::dec << dendl;
+  auto p = iomap.lower_bound(offset);
+  if (p != iomap.begin()) {
+    --p;
+    auto end = p->first + p->second.bl.length();
+    if (end > offset) {
+      bufferlist head;
+      head.substr_of(p->second.bl, 0, offset - p->first);
+      dout(20) << __func__ << "  keep head " << p->second.seq
+	       << " 0x" << std::hex << p->first << "~" << p->second.bl.length()
+	       << " -> 0x" << head.length() << std::dec << dendl;
+      auto i = seq_bytes.find(p->second.seq);
+      if (end > offset + length) {
+	bufferlist tail;
+	tail.substr_of(p->second.bl, offset + length - p->first,
+		       end - (offset + length));
+	dout(20) << __func__ << "  keep tail " << p->second.seq
+		 << " 0x" << std::hex << p->first << "~" << p->second.bl.length()
+		 << " -> 0x" << tail.length() << std::dec << dendl;
+	auto &n = iomap[offset + length];
+	n.bl.swap(tail);
+	n.seq = p->second.seq;
+	i->second -= length;
+      } else {
+	i->second -= end - offset;
+      }
+      p->second.bl.swap(head);
+    }
+    ++p;
+  }
+  while (p != iomap.end()) {
+    if (p->first >= offset + length) {
+      break;
+    }
+    auto i = seq_bytes.find(p->second.seq);
+    auto end = p->first + p->second.bl.length();
+    if (end > offset + length) {
+      unsigned drop_front = offset + length - p->first;
+      unsigned keep_tail = end - (offset + length);
+      dout(20) << __func__ << "  truncate front " << p->second.seq
+	       << " 0x" << std::hex << p->first << "~" << p->second.bl.length()
+	       << " drop_front 0x" << drop_front << " keep_tail 0x" << keep_tail
+	       << " to 0x" << (offset + length) << "~" << keep_tail
+	       << std::dec << dendl;
+      auto &s = iomap[offset + length];
+      s.seq = p->second.seq;
+      s.bl.substr_of(p->second.bl, drop_front, keep_tail);
+      i->second -= drop_front;
+    } else {
+      dout(20) << __func__ << "  drop " << p->second.seq
+	       << " 0x" << std::hex << p->first << "~" << p->second.bl.length()
+	       << std::dec << dendl;
+      i->second -= p->second.bl.length();
+    }
+    p = iomap.erase(p);
+  }
+}
+
+void BlueStore::DeferredBatch::_audit(CephContext *cct)
+{
+  map<uint64_t,int> sb;
+  for (auto p : seq_bytes) {
+    sb[p.first] = 0;  // make sure we have the same set of keys
+  }
+  uint64_t pos = 0;
+  for (auto& p : iomap) {
+    assert(p.first >= pos);
+    sb[p.second.seq] += p.second.bl.length();
+    pos = p.first + p.second.bl.length();
+  }
+  assert(sb == seq_bytes);
+}
+
+
 // Collection
 
 #undef dout_prefix
@@ -3165,15 +3268,17 @@ void *BlueStore::MempoolThread::entry()
 static void aio_cb(void *priv, void *priv2)
 {
   BlueStore *store = static_cast<BlueStore*>(priv);
-  store->_txc_aio_finish(priv2);
+  BlueStore::AioContext *c = static_cast<BlueStore::AioContext*>(priv2);
+  c->aio_finish(store);
 }
 
 BlueStore::BlueStore(CephContext *cct, const string& path)
   : ObjectStore(cct, path),
-    throttle_bytes(cct, "bluestore_max_bytes", cct->_conf->bluestore_max_bytes),
-    throttle_deferred_bytes(cct, "bluestore_deferred_max_bytes",
-		       cct->_conf->bluestore_max_bytes +
-		       cct->_conf->bluestore_deferred_max_bytes),
+    throttle_bytes(cct, "bluestore_throttle_bytes",
+		   cct->_conf->bluestore_throttle_bytes),
+    throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
+		       cct->_conf->bluestore_throttle_bytes +
+		       cct->_conf->bluestore_throttle_deferred_bytes),
     kv_sync_thread(this),
     mempool_thread(this)
 {
@@ -3197,10 +3302,11 @@ BlueStore::BlueStore(CephContext *cct,
   const string& path,
   uint64_t _min_alloc_size)
   : ObjectStore(cct, path),
-    throttle_bytes(cct, "bluestore_max_bytes", cct->_conf->bluestore_max_bytes),
-    throttle_deferred_bytes(cct, "bluestore_deferred_max_bytes",
-		       cct->_conf->bluestore_max_bytes +
-		       cct->_conf->bluestore_deferred_max_bytes),
+    throttle_bytes(cct, "bluestore_throttle_bytes",
+		   cct->_conf->bluestore_throttle_bytes),
+    throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
+		       cct->_conf->bluestore_throttle_bytes +
+		       cct->_conf->bluestore_throttle_deferred_bytes),
     kv_sync_thread(this),
     min_alloc_size(_min_alloc_size),
     min_alloc_size_order(ctz(_min_alloc_size)),
@@ -3249,16 +3355,24 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_compression_mode",
     "bluestore_compression_algorithm",
     "bluestore_compression_min_blob_size",
+    "bluestore_compression_min_blob_size_ssd",
+    "bluestore_compression_min_blob_size_hdd",
     "bluestore_compression_max_blob_size",
+    "bluestore_compression_max_blob_size_ssd",
+    "bluestore_compression_max_blob_size_hdd",
     "bluestore_max_alloc_size",
     "bluestore_prefer_deferred_size",
     "bleustore_deferred_batch_ops",
     "bleustore_deferred_batch_ops_hdd",
     "bleustore_deferred_batch_ops_ssd",
-    "bluestore_max_ops",
-    "bluestore_max_bytes",
-    "bluestore_deferred_max_ops",
-    "bluestore_deferred_max_bytes",
+    "bluestore_throttle_bytes",
+    "bluestore_throttle_deferred_bytes",
+    "bluestore_throttle_cost_per_io_hdd",
+    "bluestore_throttle_cost_per_io_ssd",
+    "bluestore_throttle_cost_per_io",
+    "bluestore_max_blob_size",
+    "bluestore_max_blob_size_ssd",
+    "bluestore_max_blob_size_hdd",
     NULL
   };
   return KEYS;
@@ -3274,7 +3388,17 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("bluestore_compression_algorithm") ||
       changed.count("bluestore_compression_min_blob_size") ||
       changed.count("bluestore_compression_max_blob_size")) {
-    _set_compression();
+    if (bdev) {
+      _set_compression();
+    }
+  }
+  if (changed.count("bluestore_max_blob_size") ||
+      changed.count("bluestore_max_blob_size_ssd") ||
+      changed.count("bluestore_max_blob_size_hdd")) {
+    if (bdev) {
+      // only after startup
+      _set_blob_size();
+    }
   }
   if (changed.count("bluestore_prefer_deferred_size") ||
       changed.count("bluestore_max_alloc_size") ||
@@ -3293,21 +3417,40 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
       _set_throttle_params();
     }
   }
-  if (changed.count("bluestore_max_bytes")) {
-    throttle_bytes.reset_max(conf->bluestore_max_bytes);
+  if (changed.count("bluestore_throttle_bytes")) {
+    throttle_bytes.reset_max(conf->bluestore_throttle_bytes);
     throttle_deferred_bytes.reset_max(
-      conf->bluestore_max_bytes + conf->bluestore_deferred_max_bytes);
+      conf->bluestore_throttle_bytes + conf->bluestore_throttle_deferred_bytes);
   }
-  if (changed.count("bluestore_deferred_max_bytes")) {
+  if (changed.count("bluestore_throttle_deferred_bytes")) {
     throttle_deferred_bytes.reset_max(
-      conf->bluestore_max_bytes + conf->bluestore_deferred_max_bytes);
+      conf->bluestore_throttle_bytes + conf->bluestore_throttle_deferred_bytes);
   }
 }
 
 void BlueStore::_set_compression()
 {
-  comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size;
-  comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+  if (cct->_conf->bluestore_compression_max_blob_size) {
+    comp_min_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size_hdd;
+    } else {
+      comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size_ssd;
+    }
+  }
+
+  if (cct->_conf->bluestore_compression_max_blob_size) {
+    comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_hdd;
+    } else {
+      comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_ssd;
+    }
+  }
 
   auto m = Compressor::get_comp_mode_type(cct->_conf->bluestore_compression_mode);
   if (m) {
@@ -3364,21 +3507,39 @@ void BlueStore::_set_throttle_params()
   dout(10) << __func__ << " throttle_cost_per_io " << throttle_cost_per_io
 	   << dendl;
 }
+void BlueStore::_set_blob_size()
+{
+  if (cct->_conf->bluestore_max_blob_size) {
+    max_blob_size = cct->_conf->bluestore_max_blob_size;
+  } else {
+    assert(bdev);
+    if (bdev->is_rotational()) {
+      max_blob_size = cct->_conf->bluestore_max_blob_size_hdd;
+    } else {
+      max_blob_size = cct->_conf->bluestore_max_blob_size_ssd;
+    }
+  }
+  dout(10) << __func__ << " max_blob_size 0x" << std::hex << max_blob_size
+           << std::dec << dendl;
+}
 
 void BlueStore::_init_logger()
 {
   PerfCountersBuilder b(cct, "bluestore",
                         l_bluestore_first, l_bluestore_last);
   b.add_time_avg(l_bluestore_kv_flush_lat, "kv_flush_lat",
-		 "Average kv_thread flush latency", "kflat");
+		 "Average kv_thread flush latency",
+		 "fl_l", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_kv_commit_lat, "kv_commit_lat",
 		 "Average kv_thread commit latency");
   b.add_time_avg(l_bluestore_kv_lat, "kv_lat",
-		 "Average kv_thread sync latency", "klat");
+		 "Average kv_thread sync latency",
+		 "k_l", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_state_prepare_lat, "state_prepare_lat",
     "Average prepare state latency");
   b.add_time_avg(l_bluestore_state_aio_wait_lat, "state_aio_wait_lat",
-		 "Average aio_wait state latency", "iolat");
+		 "Average aio_wait state latency",
+		 "io_l", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_state_io_done_lat, "state_io_done_lat",
     "Average io_done state latency");
   b.add_time_avg(l_bluestore_state_kv_queued_lat, "state_kv_queued_lat",
@@ -3398,13 +3559,17 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_state_done_lat, "state_done_lat",
     "Average done state latency");
   b.add_time_avg(l_bluestore_throttle_lat, "throttle_lat",
-		 "Average submit throttle latency", "tlat");
+		 "Average submit throttle latency",
+		 "th_l", PerfCountersBuilder::PRIO_CRITICAL);
   b.add_time_avg(l_bluestore_submit_lat, "submit_lat",
-		 "Average submit latency", "slat");
+		 "Average submit latency",
+		 "s_l", PerfCountersBuilder::PRIO_CRITICAL);
   b.add_time_avg(l_bluestore_commit_lat, "commit_lat",
-		 "Average commit latency", "clat");
+		 "Average commit latency",
+		 "c_l", PerfCountersBuilder::PRIO_CRITICAL);
   b.add_time_avg(l_bluestore_read_lat, "read_lat",
-		 "Average read latency", "rlat");
+		 "Average read latency",
+		 "r_l", PerfCountersBuilder::PRIO_CRITICAL);
   b.add_time_avg(l_bluestore_read_onode_meta_lat, "read_onode_meta_lat",
     "Average read onode metadata latency");
   b.add_time_avg(l_bluestore_read_wait_aio_lat, "read_wait_aio_lat",
@@ -3739,6 +3904,11 @@ int BlueStore::_open_fm(bool create)
     }
     fm->create(bdev->get_size(), t);
 
+    // allocate superblock reserved space.  note that we do not mark
+    // bluefs space as allocated in the freelist; we instead rely on
+    // bluefs_extents.
+    fm->allocate(0, SUPER_RESERVED, t);
+
     uint64_t reserved = 0;
     if (cct->_conf->bluestore_bluefs) {
       assert(bluefs_extents.num_intervals() == 1);
@@ -3752,12 +3922,8 @@ int BlueStore::_open_fm(bool create)
       dout(20) << __func__ << " bluefs_extents 0x" << std::hex << bluefs_extents
 	       << std::dec << dendl;
     } else {
-      reserved = BLUEFS_START;
+      reserved = SUPER_RESERVED;
     }
-
-    // note: we do not mark bluefs space as allocated in the freelist; we
-    // instead rely on bluefs_extents.
-    fm->allocate(0, BLUEFS_START, t);
 
     if (cct->_conf->bluestore_debug_prefill > 0) {
       uint64_t end = bdev->get_size() - reserved;
@@ -4050,8 +4216,8 @@ int BlueStore::_open_db(bool create)
       if (create) {
 	bluefs->add_block_extent(
 	  BlueFS::BDEV_DB,
-	  BLUEFS_START,
-	  bluefs->get_block_device_size(BlueFS::BDEV_DB) - BLUEFS_START);
+	  SUPER_RESERVED,
+	  bluefs->get_block_device_size(BlueFS::BDEV_DB) - SUPER_RESERVED);
       }
       bluefs_shared_bdev = BlueFS::BDEV_SLOW;
       bluefs_single_shared_device = false;
@@ -4068,17 +4234,16 @@ int BlueStore::_open_db(bool create)
       goto free_bluefs;
     }
     if (create) {
-      // note: we might waste a 4k block here if block.db is used, but it's
-      // simpler.
+      // note: we always leave the first SUPER_RESERVED (8k) of the device unused
       uint64_t initial =
 	bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
 			    cct->_conf->bluestore_bluefs_gift_ratio);
       initial = MAX(initial, cct->_conf->bluestore_bluefs_min);
       // align to bluefs's alloc_size
       initial = P2ROUNDUP(initial, cct->_conf->bluefs_alloc_size);
-      initial += cct->_conf->bluefs_alloc_size - BLUEFS_START;
-      bluefs->add_block_extent(bluefs_shared_bdev, BLUEFS_START, initial);
-      bluefs_extents.insert(BLUEFS_START, initial);
+      initial += cct->_conf->bluefs_alloc_size - SUPER_RESERVED;
+      bluefs->add_block_extent(bluefs_shared_bdev, SUPER_RESERVED, initial);
+      bluefs_extents.insert(SUPER_RESERVED, initial);
     }
 
     bfn = path + "/block.wal";
@@ -4351,7 +4516,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 
   if (gift) {
     // round up to alloc size
-    gift = P2ROUNDUP(gift, min_alloc_size);
+    gift = P2ROUNDUP(gift, cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
     gift = MIN(gift, 1ull<<31);
@@ -4386,7 +4551,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
   // reclaim from bluefs?
   if (reclaim) {
     // round up to alloc size
-    reclaim = P2ROUNDUP(reclaim, min_alloc_size);
+    reclaim = P2ROUNDUP(reclaim, cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
     reclaim = MIN(reclaim, 1ull<<31);
@@ -4598,7 +4763,7 @@ int BlueStore::mkfs()
     }
   }
 
-  freelist_type = cct->_conf->bluestore_freelist_type;
+  freelist_type = "bitmap";
 
   r = _open_path();
   if (r < 0)
@@ -4759,7 +4924,7 @@ void BlueStore::set_cache_shards(unsigned num)
   }
 }
 
-int BlueStore::mount()
+int BlueStore::_mount(bool kv_only)
 {
   dout(1) << __func__ << " path " << path << dendl;
 
@@ -4811,6 +4976,9 @@ int BlueStore::mount()
   if (r < 0)
     goto out_bdev;
 
+  if (kv_only)
+    return 0;
+
   r = _open_super_meta();
   if (r < 0)
     goto out_db;
@@ -4848,8 +5016,6 @@ int BlueStore::mount()
 
   mempool_thread.init();
 
-  _set_csum();
-  _set_compression();
 
   mounted = true;
   return 0;
@@ -5048,7 +5214,7 @@ int BlueStore::fsck(bool deep)
 
   used_blocks.resize(bdev->get_size() / block_size);
   apply(
-    0, BLUEFS_START, block_size, used_blocks, "0~BLUEFS_START",
+    0, SUPER_RESERVED, block_size, used_blocks, "0~SUPER_RESERVED",
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
       bs.set(pos);
     }
@@ -5634,9 +5800,9 @@ void BlueStore::_reap_collections()
     dout(10) << __func__ << " " << c << " " << c->cid << dendl;
     if (c->onode_map.map_any([&](OnodeRef o) {
 	  assert(!o->exists);
-	  if (!o->flush_txns.empty()) {
+	  if (o->flushing_count.load()) {
 	    dout(10) << __func__ << " " << c << " " << c->cid << " " << o->oid
-		     << " flush_txns " << o->flush_txns << dendl;
+		     << " flush_txns " << o->flushing_count << dendl;
 	    return false;
 	  }
 	  return true;
@@ -5997,6 +6163,7 @@ int BlueStore::_do_read(
             return r;
           return 0;
 	});
+        assert(r == 0);
     } else {
       // read the pieces
       for (auto& reg : p.second) {
@@ -6034,8 +6201,7 @@ int BlueStore::_do_read(
               return r;
             return 0;
 	  });
-        if (r < 0)
-          return r;
+	assert(r == 0);
 	assert(reg.bl.length() == r_len);
       }
     }
@@ -6192,30 +6358,18 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   return r;
 }
 
-int BlueStore::fiemap(
-  const coll_t& cid,
-  const ghobject_t& oid,
-  uint64_t offset,
-  size_t len,
-  bufferlist& bl)
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return fiemap(c, oid, offset, len, bl);
-}
-
-int BlueStore::fiemap(
+// this stores fiemap into interval_set, other variations
+// use it internally
+int BlueStore::_fiemap(
   CollectionHandle &c_,
   const ghobject_t& oid,
   uint64_t offset,
   size_t length,
-  bufferlist& bl)
+  interval_set<uint64_t>& destset)
 {
   Collection *c = static_cast<Collection *>(c_.get());
   if (!c->exists)
     return -ENOENT;
-  interval_set<uint64_t> m;
   {
     RWLock::RLocker l(c->lock);
 
@@ -6252,7 +6406,7 @@ int BlueStore::fiemap(
         x_len = MIN(x_len, ep->length - x_off);
         dout(30) << __func__ << " lextent 0x" << std::hex << offset << "~"
 	         << x_len << std::dec << " blob " << ep->blob << dendl;
-        m.insert(offset, x_len);
+        destset.insert(offset, x_len);
         length -= x_len;
         offset += x_len;
         if (x_off + x_len == ep->length)
@@ -6271,10 +6425,65 @@ int BlueStore::fiemap(
 
  out:
   c->trim_cache();
-  ::encode(m, bl);
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << " size = 0x(" << m << ")" << std::dec << dendl;
+	   << " size = 0x(" << destset << ")" << std::dec << dendl;
   return 0;
+}
+
+int BlueStore::fiemap(
+  const coll_t& cid,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t len,
+  bufferlist& bl)
+{
+  CollectionHandle c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+  return fiemap(c, oid, offset, len, bl);
+}
+
+int BlueStore::fiemap(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t length,
+  bufferlist& bl)
+{
+  interval_set<uint64_t> m;
+  int r = _fiemap(c_, oid, offset, length, m);
+  if (r >= 0) {
+    ::encode(m, bl);
+  }
+  return r;
+}
+
+int BlueStore::fiemap(
+  const coll_t& cid,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t len,
+  map<uint64_t, uint64_t>& destmap)
+{
+  CollectionHandle c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+  return fiemap(c, oid, offset, len, destmap);
+}
+
+int BlueStore::fiemap(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t length,
+  map<uint64_t, uint64_t>& destmap)
+{
+  interval_set<uint64_t> m;
+  int r = _fiemap(c_, oid, offset, length, m);
+  if (r >= 0) {
+    m.move_into(destmap);
+  }
+  return r;
 }
 
 int BlueStore::getattr(
@@ -7029,9 +7238,7 @@ int BlueStore::_open_super_meta()
       freelist_type = std::string(bl.c_str(), bl.length());
       dout(10) << __func__ << " freelist_type " << freelist_type << dendl;
     } else {
-      freelist_type = "extent";
-      dout(10) << __func__ << " freelist_type " << freelist_type
-	       << " (legacy bluestore instance)" << dendl;
+      assert("Not Support extent freelist manager" == 0);
     }
   }
 
@@ -7074,6 +7281,7 @@ int BlueStore::_open_super_meta()
       bl.clear();
       {
 	r = db->get(PREFIX_SUPER, "min_compat_ondisk_format", &bl);
+	assert(!r);
 	auto p = bl.begin();
 	try {
 	  ::decode(compat_ondisk_format, p);
@@ -7118,6 +7326,10 @@ int BlueStore::_open_super_meta()
   }
   _set_alloc_sizes();
   _set_throttle_params();
+
+  _set_csum();
+  _set_compression();
+  _set_blob_size();
 
   return 0;
 }
@@ -7198,7 +7410,7 @@ BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
 
 void BlueStore::_txc_calc_cost(TransContext *txc)
 {
-  // this is about the simplest model for trasnaction cost you can
+  // this is about the simplest model for transaction cost you can
   // imagine.  there is some fixed overhead cost by saying there is a
   // minimum of one "io".  and then we have some cost per "io" that is
   // a configurable (with different hdd and ssd defaults), and add
@@ -7207,9 +7419,10 @@ void BlueStore::_txc_calc_cost(TransContext *txc)
   for (auto& p : txc->ioc.pending_aios) {
     ios += p.iov.size();
   }
-  txc->cost = ios * throttle_cost_per_io + txc->bytes;
+  auto cost = throttle_cost_per_io.load();
+  txc->cost = ios * cost + txc->bytes;
   dout(10) << __func__ << " " << txc << " cost " << txc->cost << " ("
-	   << ios << " ios * " << throttle_cost_per_io << " + " << txc->bytes
+	   << ios << " ios * " << cost << " + " << txc->bytes
 	   << " bytes)" << dendl;
 }
 
@@ -7259,8 +7472,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       }
       txc->log_state_latency(logger, l_bluestore_state_io_done_lat);
       txc->state = TransContext::STATE_KV_QUEUED;
-      if (cct->_conf->bluestore_sync_submit_transaction &&
-	  fm->supports_parallel_transactions()) {
+      if (cct->_conf->bluestore_sync_submit_transaction) {
 	if (txc->last_nid >= nid_max ||
 	    txc->last_blobid >= blobid_max) {
 	  dout(20) << __func__
@@ -7282,7 +7494,6 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	  dout(20) << __func__ << " DEBUG randomly forcing submit via kv thread"
 		   << dendl;
 	} else {
-	  _txc_finalize_kv(txc, txc->t);
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  int r = db->submit_transaction(txc->t);
 	  assert(r == 0);
@@ -7314,11 +7525,6 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       }
       txc->state = TransContext::STATE_FINISHING;
       break;
-
-    case TransContext::STATE_DEFERRED_AIO_WAIT:
-      txc->log_state_latency(logger, l_bluestore_state_deferred_aio_wait_lat);
-      _deferred_finish(txc);
-      return;
 
     case TransContext::STATE_DEFERRED_CLEANUP:
       txc->log_state_latency(logger, l_bluestore_state_deferred_cleanup_lat);
@@ -7427,9 +7633,6 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 	     << extent_part << " bytes inline extents)"
 	     << dendl;
     t->set(PREFIX_OBJ, o->key.c_str(), o->key.size(), bl);
-
-    std::lock_guard<std::mutex> l(o->flush_lock);
-    o->flush_txns.insert(txc);
     o->flushing_count++;
   }
 
@@ -7437,8 +7640,6 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
   auto p = txc->modified_objects.begin();
   while (p != txc->modified_objects.end()) {
     if (txc->onodes.count(*p) == 0) {
-      std::lock_guard<std::mutex> l((*p)->flush_lock);
-      (*p)->flush_txns.insert(txc);
       (*p)->flushing_count++;
       ++p;
     } else {
@@ -7529,13 +7730,10 @@ void BlueStore::_txc_applied_kv(TransContext *txc)
 {
   for (auto ls : { &txc->onodes, &txc->modified_objects }) {
     for (auto& o : *ls) {
-      std::lock_guard<std::mutex> l(o->flush_lock);
-      dout(20) << __func__ << " onode " << o << " had " << o->flush_txns
+      dout(20) << __func__ << " onode " << o << " had " << o->flushing_count
 	       << dendl;
-      assert(o->flush_txns.count(txc));
-      o->flush_txns.erase(txc);
-      o->flushing_count--;
-      if (o->flush_txns.empty()) {
+      if (--o->flushing_count == 0) {
+        std::lock_guard<std::mutex> l(o->flush_lock);
 	o->flush_cond.notify_all();
       }
     }
@@ -7583,12 +7781,57 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   OpSequencerRef osr = txc->osr;
+  CollectionRef c;
+  bool empty = false;
+  OpSequencer::q_list_t releasing_txc;
   {
     std::lock_guard<std::mutex> l(osr->qlock);
     txc->state = TransContext::STATE_DONE;
+    bool notify = false;
+    while (!osr->q.empty()) {
+      TransContext *txc = &osr->q.front();
+      dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
+	       << dendl;
+      if (txc->state != TransContext::STATE_DONE) {
+	if (txc->state == TransContext::STATE_PREPARE &&
+	  deferred_aggressive) {
+	  // for _osr_drain_preceding()
+          notify = true;
+	}
+        break;
+      }
+
+      if (!c && txc->first_collection) {
+        c = txc->first_collection;
+      }
+      osr->q.pop_front();
+      releasing_txc.push_back(*txc);
+      notify = true;
+    }
+    if (notify) {
+      osr->qcond.notify_all();
+    }
+    if (osr->q.empty()) {
+      dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
+      empty = true;
+    }
+  }
+  while (!releasing_txc.empty()) {
+    // release to allocator only after all preceding txc's have also
+    // finished any deferred writes that potentially land in these
+    // blocks
+    auto txc = &releasing_txc.front();
+    _txc_release_alloc(txc);
+    releasing_txc.pop_front();
+    txc->log_state_latency(logger, l_bluestore_state_done_lat);
+    delete txc;
   }
 
-  bool empty = _osr_reap_done(osr.get());
+  if (c) {
+    c->trim_cache();
+  }
+
+
   if (empty && osr->zombie) {
     dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
     osr->_unregister();
@@ -7611,53 +7854,6 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   txc->released.clear();
 }
 
-bool BlueStore::_osr_reap_done(OpSequencer *osr)
-{
-  CollectionRef c;
-  bool empty = false;
-  {
-    std::lock_guard<std::mutex> l(osr->qlock);
-    dout(20) << __func__ << " osr " << osr << dendl;
-    while (!osr->q.empty()) {
-      TransContext *txc = &osr->q.front();
-      dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
-	       << dendl;
-      if (txc->state != TransContext::STATE_DONE) {
-	if (txc->state == TransContext::STATE_PREPARE &&
-	  deferred_aggressive) {
-	  // for _osr_drain_preceding()
-	  osr->qcond.notify_all();
-	}
-        break;
-      }
-
-      // release to allocator only after all preceding txc's have also
-      // finished any deferred writes that potentially land in these
-      // blocks
-      _txc_release_alloc(txc);
-
-      if (!c && txc->first_collection) {
-        c = txc->first_collection;
-      }
-
-      osr->q.pop_front();
-      txc->log_state_latency(logger, l_bluestore_state_done_lat);
-      delete txc;
-      osr->qcond.notify_all();
-    }
-    if (osr->q.empty()) {
-      dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
-      empty = true;
-    }
-  }
-
-  if (c) {
-    c->trim_cache();
-  }
-
-  return empty;
-}
-
 void BlueStore::_osr_drain_preceding(TransContext *txc)
 {
   OpSequencer *osr = txc->osr.get();
@@ -7666,8 +7862,8 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
   {
     // submit anything pending
     std::lock_guard<std::mutex> l(deferred_lock);
-    if (!osr->deferred_pending.empty()) {
-      _deferred_try_submit(osr);
+    if (osr->deferred_pending) {
+      _deferred_submit(osr);
     }
   }
   {
@@ -7749,12 +7945,11 @@ void BlueStore::_kv_sync_thread()
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
-      kv_sync_cond.notify_all();
       kv_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
       deque<TransContext*> kv_submitting;
-      deque<TransContext*> deferred_done, deferred_stable;
+      deque<DeferredBatch*> deferred_done, deferred_stable;
       dout(20) << __func__ << " committing " << kv_queue.size()
 	       << " submitting " << kv_queue_unsubmitted.size()
 	       << " deferred done " << deferred_done_queue.size()
@@ -7788,7 +7983,7 @@ void BlueStore::_kv_sync_thread()
 	if (num_aios) {
 	  force_flush = true;
 	} else if (kv_committing.empty() && kv_submitting.empty() &&
-	    deferred_stable.empty()) {
+		   deferred_stable.empty()) {
 	  force_flush = true;  // there's nothing else to commit!
 	} else if (deferred_aggressive) {
 	  force_flush = true;
@@ -7838,7 +8033,6 @@ void BlueStore::_kv_sync_thread()
       }
       for (auto txc : kv_submitting) {
 	assert(txc->state == TransContext::STATE_KV_QUEUED);
-	_txc_finalize_kv(txc, txc->t);
 	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	int r = db->submit_transaction(txc->t);
 	assert(r == 0);
@@ -7856,7 +8050,7 @@ void BlueStore::_kv_sync_thread()
 	if (txc->had_ios) {
 	  --txc->osr->txc_with_unstable_io;
 	}
-
+	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	// release throttle *before* we commit.  this allows new ops
 	// to be prepared and enter pipeline while we are waiting on
 	// the kv commit sync/flush.  then hopefully on the next
@@ -7867,7 +8061,10 @@ void BlueStore::_kv_sync_thread()
       }
 
       PExtentVector bluefs_gift_extents;
-      if (bluefs) {
+      if (bluefs &&
+	  after_flush - bluefs_last_balance >
+	  cct->_conf->bluestore_bluefs_balance_interval) {
+	bluefs_last_balance = after_flush;
 	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
 	assert(r >= 0);
 	if (r > 0) {
@@ -7883,19 +8080,22 @@ void BlueStore::_kv_sync_thread()
       }
 
       // cleanup sync deferred keys
-      for (auto txc : deferred_stable) {
-	bluestore_deferred_transaction_t& wt = *txc->deferred_txn;
-	if (!wt.released.empty()) {
-	  // kraken replay compat only
-	  txc->released = wt.released;
-	  dout(10) << __func__ << " deferred txn has released " << txc->released
-		   << " (we just upgraded from kraken) on " << txc << dendl;
-	  _txc_finalize_kv(txc, synct);
+      for (auto b : deferred_stable) {
+	for (auto& txc : b->txcs) {
+	  bluestore_deferred_transaction_t& wt = *txc.deferred_txn;
+	  if (!wt.released.empty()) {
+	    // kraken replay compat only
+	    txc.released = wt.released;
+	    dout(10) << __func__ << " deferred txn has released "
+		     << txc.released
+		     << " (we just upgraded from kraken) on " << &txc << dendl;
+	    _txc_finalize_kv(&txc, synct);
+	  }
+	  // cleanup the deferred
+	  string key;
+	  get_deferred_key(wt.seq, &key);
+	  synct->rm_single_key(PREFIX_DEFERRED, key);
 	}
-	// cleanup the deferred
-	string key;
-	get_deferred_key(wt.seq, &key);
-	synct->rm_single_key(PREFIX_DEFERRED, key);
       }
 
       // submit synct synchronously (block and wait for it to commit)
@@ -7931,10 +8131,14 @@ void BlueStore::_kv_sync_thread()
 	_txc_state_proc(txc);
 	kv_committing.pop_front();
       }
-      while (!deferred_stable.empty()) {
-	TransContext *txc = deferred_stable.front();
-	_txc_state_proc(txc);
-	deferred_stable.pop_front();
+      for (auto b : deferred_stable) {
+	auto p = b->txcs.begin();
+	while (p != b->txcs.end()) {
+	  TransContext *txc = &*p;
+	  p = b->txcs.erase(p); // unlink here because
+	  _txc_state_proc(txc); // this may destroy txc
+	}
+	delete b;
       }
 
       if (!deferred_aggressive) {
@@ -7984,17 +8188,30 @@ bluestore_deferred_op_t *BlueStore::_get_deferred_op(
 
 void BlueStore::_deferred_queue(TransContext *txc)
 {
-  dout(20) << __func__ << " txc " << txc << " on " << txc->osr << dendl;
+  dout(20) << __func__ << " txc " << txc << " osr " << txc->osr << dendl;
   std::lock_guard<std::mutex> l(deferred_lock);
-  if (txc->osr->deferred_pending.empty() &&
-      txc->osr->deferred_running.empty()) {
+  if (!txc->osr->deferred_pending &&
+      !txc->osr->deferred_running) {
     deferred_queue.push_back(*txc->osr);
   }
-  txc->osr->deferred_pending.push_back(*txc);
+  if (!txc->osr->deferred_pending) {
+    txc->osr->deferred_pending = new DeferredBatch(cct, txc->osr.get());
+  }
   ++deferred_queue_size;
+  txc->osr->deferred_pending->txcs.push_back(*txc);
+  bluestore_deferred_transaction_t& wt = *txc->deferred_txn;
+  for (auto opi = wt.ops.begin(); opi != wt.ops.end(); ++opi) {
+    const auto& op = *opi;
+    assert(op.op == bluestore_deferred_op_t::OP_WRITE);
+    bufferlist::const_iterator p = op.data.begin();
+    for (auto e : op.extents) {
+      txc->osr->deferred_pending->prepare_write(
+	cct, wt.seq, e.offset, e.length, p);
+    }
+  }
   if (deferred_aggressive &&
-      txc->osr->deferred_running.empty()) {
-    _deferred_try_submit(txc->osr.get());
+      !txc->osr->deferred_running) {
+    _deferred_submit(txc->osr.get());
   }
 }
 
@@ -8003,106 +8220,99 @@ void BlueStore::_deferred_try_submit()
   dout(20) << __func__ << " " << deferred_queue.size() << " osrs, "
 	   << deferred_queue_size << " txcs" << dendl;
   for (auto& osr : deferred_queue) {
-    if (osr.deferred_running.empty()) {
-      _deferred_try_submit(&osr);
+    if (!osr.deferred_running) {
+      _deferred_submit(&osr);
     }
   }
 }
 
-void BlueStore::_deferred_try_submit(OpSequencer *osr)
+void BlueStore::_deferred_submit(OpSequencer *osr)
 {
-  dout(10) << __func__ << " osr " << osr << " " << osr->deferred_pending.size()
-	   << " pending " << dendl;
-  assert(!osr->deferred_pending.empty());
-  assert(osr->deferred_running.empty());
+  dout(10) << __func__ << " osr " << osr
+	   << " " << osr->deferred_pending->iomap.size() << " ios pending "
+	   << dendl;
+  assert(osr->deferred_pending);
+  assert(!osr->deferred_running);
 
-  deferred_queue_size -= osr->deferred_pending.size();
+  auto b = osr->deferred_pending;
+  deferred_queue_size -= b->seq_bytes.size();
   assert(deferred_queue_size >= 0);
-  osr->deferred_running.swap(osr->deferred_pending);
 
-  // attach all IO to the last in the batch
-  TransContext *last = &osr->deferred_running.back();
+  osr->deferred_running = osr->deferred_pending;
+  osr->deferred_pending = nullptr;
 
-  // reverse order
-  for (auto i = osr->deferred_running.rbegin();
-       i != osr->deferred_running.rend();
-       ++i) {
-    TransContext *txc = &*i;
-    bluestore_deferred_transaction_t& wt = *txc->deferred_txn;
-    dout(20) << __func__ << "  txc " << txc << " seq " << wt.seq << dendl;
-    txc->log_state_latency(logger, l_bluestore_state_deferred_queued_lat);
-    txc->state = TransContext::STATE_DEFERRED_AIO_WAIT;
-    for (auto opi = wt.ops.rbegin(); opi != wt.ops.rend(); ++opi) {
-      assert(opi->op == bluestore_deferred_op_t::OP_WRITE);
-      const auto& op = *opi;
-      uint64_t bl_offset = 0;
-      for (auto e : op.extents) {
-	interval_set<uint64_t> cur;
-	cur.insert(e.offset, e.length);
-	interval_set<uint64_t> overlap;
-	overlap.intersection_of(cur, osr->deferred_blocks);
-	cur.subtract(overlap);
-	dout(20) << __func__ << "  txc " << txc << " " << e << std::hex
-		 << " overlap 0x" << overlap << " new 0x" << cur
-		 << " from bl_offset 0x" << bl_offset << std::dec << dendl;
-	for (auto j = cur.begin(); j != cur.end(); ++j) {
-	  bufferlist bl;
-	  bl.substr_of(op.data, bl_offset + j.get_start() - e.offset,
-		       j.get_len());
-	  if (!g_conf->bluestore_debug_omit_block_device_write) {
-	    logger->inc(l_bluestore_deferred_write_ops);
-	    logger->inc(l_bluestore_deferred_write_bytes, bl.length());
-	    int r = bdev->aio_write(j.get_start(), bl, &last->ioc, false);
-	    assert(r == 0);
-	  }
-	  txc->osr->deferred_blocks.insert(j.get_start(), j.get_len());
+  uint64_t start = 0, pos = 0;
+  bufferlist bl;
+  auto i = b->iomap.begin();
+  while (true) {
+    if (i == b->iomap.end() || i->first != pos) {
+      if (bl.length()) {
+	dout(20) << __func__ << " write 0x" << std::hex
+		 << start << "~" << bl.length()
+		 << " crc " << bl.crc32c(-1) << std::dec << dendl;
+	if (!g_conf->bluestore_debug_omit_block_device_write) {
+	  logger->inc(l_bluestore_deferred_write_ops);
+	  logger->inc(l_bluestore_deferred_write_bytes, bl.length());
+	  int r = bdev->aio_write(start, bl, &b->ioc, false);
+	  assert(r == 0);
 	}
-        bl_offset += e.length;
       }
+      if (i == b->iomap.end()) {
+	break;
+      }
+      start = 0;
+      pos = i->first;
+      bl.clear();
     }
+    dout(20) << __func__ << "   seq " << i->second.seq << " 0x"
+	     << std::hex << pos << "~" << i->second.bl.length() << std::dec
+	     << dendl;
+    if (!bl.length()) {
+      start = pos;
+    }
+    pos += i->second.bl.length();
+    bl.claim_append(i->second.bl);
+    ++i;
   }
-  osr->deferred_txc = last;
-  dout(20) << __func__ << " osr " << osr << " deferred_blocks 0x" << std::hex
-	   << osr->deferred_blocks << std::dec << dendl;
-  _txc_aio_submit(last);
+  bdev->aio_submit(&b->ioc);
 }
 
-int BlueStore::_deferred_finish(TransContext *txc)
+void BlueStore::_deferred_aio_finish(OpSequencer *osr)
 {
-  bluestore_deferred_transaction_t& wt = *txc->deferred_txn;
-  dout(20) << __func__ << " txc " << txc << " seq " << wt.seq << dendl;
+  dout(10) << __func__ << " osr " << osr << dendl;
+  assert(osr->deferred_running);
 
-  OpSequencer::deferred_queue_t finished;
+  DeferredBatch *b = osr->deferred_running;
+  {
+    std::lock_guard<std::mutex> l2(osr->qlock);
+    for (auto& i : b->txcs) {
+      TransContext *txc = &i;
+      txc->state = TransContext::STATE_DEFERRED_CLEANUP;
+      txc->osr->qcond.notify_all();
+      throttle_deferred_bytes.put(txc->cost);
+    }
+    std::lock_guard<std::mutex> l(kv_lock);
+    deferred_done_queue.emplace_back(b);
+  }
+
   {
     std::lock_guard<std::mutex> l(deferred_lock);
-    assert(txc->osr->deferred_txc == txc);
-    txc->osr->deferred_blocks.clear();
-    finished.swap(txc->osr->deferred_running);
-    if (txc->osr->deferred_pending.empty()) {
-      auto q = deferred_queue.iterator_to(*txc->osr);
+    assert(osr->deferred_running == b);
+    osr->deferred_running = nullptr;
+    if (!osr->deferred_pending) {
+      auto q = deferred_queue.iterator_to(*osr);
       deferred_queue.erase(q);
     } else if (deferred_aggressive) {
-      _deferred_try_submit(txc->osr.get());
+      _deferred_submit(osr);
     }
   }
-
-  std::lock_guard<std::mutex> l2(txc->osr->qlock);
-  std::lock_guard<std::mutex> l(kv_lock);
-  for (auto& i : finished) {
-    TransContext *txc = &i;
-    txc->state = TransContext::STATE_DEFERRED_CLEANUP;
-    txc->osr->qcond.notify_all();
-    throttle_deferred_bytes.put(txc->cost);
-    deferred_done_queue.push_back(txc);
-  }
-  finished.clear();
 
   // in the normal case, do not bother waking up the kv thread; it will
   // catch us on the next commit anyway.
   if (deferred_aggressive) {
+    std::lock_guard<std::mutex> l(kv_lock);
     kv_cond.notify_one();
   }
-  return 0;
 }
 
 int BlueStore::_deferred_replay()
@@ -8204,6 +8414,7 @@ int BlueStore::queue_transactions(
     txc->t->set(PREFIX_DEFERRED, key, bl);
   }
 
+  _txc_finalize_kv(txc, txc->t);
   if (handle)
     handle->suspend_tp_timeout();
 
@@ -9301,8 +9512,9 @@ int BlueStore::_do_alloc_write(
 
     AllocExtentVector extents;
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
-    int64_t got = alloc->allocate(final_length, min_alloc_size, max_alloc_size,
-                            hint, &extents);
+    int64_t got = alloc->allocate(final_length, min_alloc_size, 
+				  max_alloc_size.load(),
+                    		  hint, &extents);
     assert(got == (int64_t)final_length);
     need -= got;
     txc->statfs_delta.allocated() += got;
@@ -9348,17 +9560,18 @@ int BlueStore::_do_alloc_write(
 
     // queue io
     if (!g_conf->bluestore_debug_omit_block_device_write) {
-      if (l->length() <= prefer_deferred_size) {
+      if (l->length() <= prefer_deferred_size.load()) {
 	dout(20) << __func__ << " deferring small 0x" << std::hex
 		 << l->length() << std::dec << " write via deferred" << dendl;
 	bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
 	op->op = bluestore_deferred_op_t::OP_WRITE;
-	b->get_blob().map(
+	int r = b->get_blob().map(
 	  b_off, l->length(),
 	  [&](uint64_t offset, uint64_t length) {
 	    op->extents.emplace_back(bluestore_pextent_t(offset, length));
 	    return 0;
 	  });
+        assert(r == 0);
 	op->data = *l;
       } else {
 	b->get_blob().map_bl(
@@ -9553,11 +9766,12 @@ int BlueStore::_do_write(
 			CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
       (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0) {
     dout(20) << __func__ << " will prefer large blob and csum sizes" << dendl;
+    auto order = min_alloc_size_order.load();
     if (o->onode.expected_write_size) {
-      wctx.csum_order = std::max(min_alloc_size_order,
-			         (size_t)ctzl(o->onode.expected_write_size));
+      wctx.csum_order = std::max(order,
+			         (uint8_t)ctz(o->onode.expected_write_size));
     } else {
-      wctx.csum_order = min_alloc_size_order;
+      wctx.csum_order = order;
     }
 
     if (wctx.compress) {
@@ -9588,9 +9802,9 @@ int BlueStore::_do_write(
       );
     }
   }
-  if (wctx.target_blob_size == 0 ||
-      wctx.target_blob_size > cct->_conf->bluestore_max_blob_size) {
-    wctx.target_blob_size = cct->_conf->bluestore_max_blob_size;
+  uint64_t max_bsize = max_blob_size.load();
+  if (wctx.target_blob_size == 0 || wctx.target_blob_size > max_bsize) {
+    wctx.target_blob_size = max_bsize;
   }
   // set the min blob size floor at 2x the min_alloc_size, or else we
   // won't be able to allocate a smaller extent for the compressed

@@ -217,18 +217,6 @@ void PoolWatcher<I>::refresh_images() {
     // a full image list refresh
     m_pending_added_image_ids.clear();
     m_pending_removed_image_ids.clear();
-    if (!m_updated_images.empty()) {
-      auto it = m_updated_images.begin();
-      it->invalid = true;
-
-      // only have a single in-flight request -- remove the rest
-      ++it;
-      while (it != m_updated_images.end()) {
-        m_id_to_updated_images.erase({it->global_image_id,
-                                      it->remote_image_id});
-        it = m_updated_images.erase(it);
-      }
-    }
   }
 
   m_async_op_tracker.start_op();
@@ -413,108 +401,13 @@ void PoolWatcher<I>::handle_image_updated(const std::string &remote_image_id,
   m_pending_added_image_ids.erase(image_id);
   m_pending_removed_image_ids.erase(image_id);
 
-  auto id = std::make_pair(global_image_id, remote_image_id);
-  auto id_it = m_id_to_updated_images.find(id);
-  if (id_it != m_id_to_updated_images.end()) {
-    id_it->second->enabled = enabled;
-    id_it->second->invalid = false;
-  } else if (enabled) {
-    // need to resolve the image name before notifying listener
-    auto it = m_updated_images.emplace(m_updated_images.end(),
-                                       global_image_id, remote_image_id);
-    m_id_to_updated_images[id] = it;
-    schedule_get_image_name();
+  if (enabled) {
+    m_pending_added_image_ids.insert(image_id);
+    schedule_listener();
   } else {
-    // delete image w/ if no resolve name in-flight
     m_pending_removed_image_ids.insert(image_id);
     schedule_listener();
   }
-}
-
-template <typename I>
-void PoolWatcher<I>::schedule_get_image_name() {
-  assert(m_lock.is_locked());
-  if (m_shutting_down || m_blacklisted || m_updated_images.empty() ||
-      m_get_name_in_progress) {
-    return;
-  }
-  m_get_name_in_progress = true;
-
-  auto &updated_image = m_updated_images.front();
-  dout(10) << "global_image_id=" << updated_image.global_image_id << ", "
-           << "remote_image_id=" << updated_image.remote_image_id << dendl;
-
-  librados::ObjectReadOperation op;
-  librbd::cls_client::dir_get_name_start(&op, updated_image.remote_image_id);
-
-  m_async_op_tracker.start_op();
-
-  m_out_bl.clear();
-  librados::AioCompletion *aio_comp = create_rados_callback<
-    PoolWatcher, &PoolWatcher<I>::handle_get_image_name>(this);
-  int r = m_remote_io_ctx.aio_operate(RBD_DIRECTORY, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
-  aio_comp->release();
-}
-
-template <typename I>
-void PoolWatcher<I>::handle_get_image_name(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  std::string name;
-  if (r == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
-    r = librbd::cls_client::dir_get_name_finish(&it, &name);
-  }
-
-  bool image_ids_invalid = false;
-  {
-    Mutex::Locker locker(m_lock);
-    assert(!m_updated_images.empty());
-    m_get_name_in_progress = false;
-
-    auto updated_image = m_updated_images.front();
-    m_updated_images.pop_front();
-    m_id_to_updated_images.erase(std::make_pair(updated_image.global_image_id,
-                                                updated_image.remote_image_id));
-
-    if (r == 0) {
-      // since names are resolved in event order -- the current update is
-      // the latest state
-      ImageId image_id(updated_image.global_image_id,
-                       updated_image.remote_image_id, name);
-      m_pending_added_image_ids.erase(image_id);
-      m_pending_removed_image_ids.erase(image_id);
-      if (!updated_image.invalid) {
-        if (updated_image.enabled) {
-          m_pending_added_image_ids.insert(image_id);
-        } else {
-          m_pending_removed_image_ids.insert(image_id);
-        }
-        schedule_listener();
-      }
-    } else if (r == -EBLACKLISTED) {
-      dout(0) << "detected client is blacklisted" << dendl;
-
-      m_blacklisted = true;
-    } else if (r == -ENOENT) {
-      dout(10) << "image removed after add notification" << dendl;
-    } else {
-      derr << "error resolving image name " << updated_image.remote_image_id
-           << " (" << updated_image.global_image_id << "): " << cpp_strerror(r)
-           << dendl;
-      image_ids_invalid = true;
-    }
-
-    if (!image_ids_invalid) {
-      schedule_get_image_name();
-    }
-  }
-
-  if (image_ids_invalid) {
-    schedule_refresh_images(5);
-  }
-  m_async_op_tracker.finish_op();
 }
 
 template <typename I>
@@ -586,7 +479,7 @@ void PoolWatcher<I>::notify_listener() {
   }
 
   if (!removed_image_ids.empty()) {
-    m_listener.handle_update(mirror_uuid, {}, removed_image_ids);
+    m_listener.handle_update(mirror_uuid, {}, std::move(removed_image_ids));
     removed_image_ids.clear();
   }
 
@@ -603,24 +496,9 @@ void PoolWatcher<I>::notify_listener() {
 
     // merge add/remove notifications into pending set (a given image
     // can only be in one set or another)
-    for (auto it = m_pending_removed_image_ids.begin();
-         it != m_pending_removed_image_ids.end(); ) {
-      if (std::find_if(m_updated_images.begin(), m_updated_images.end(),
-                       [&it](const UpdatedImage &updated_image) {
-              return (it->id == updated_image.remote_image_id);
-            }) != m_updated_images.end()) {
-        // still resolving the name -- so keep it in the pending set
-        auto image_id_it = m_image_ids.find(*it);
-        if (image_id_it != m_image_ids.end()) {
-          m_pending_image_ids.insert(*image_id_it);
-        }
-        ++it;
-        continue;
-      }
-
-      // merge the remove event into the pending set
-      m_pending_image_ids.erase(*it);
-      it = m_pending_removed_image_ids.erase(it);
+    for (auto &image_id : m_pending_removed_image_ids) {
+      dout(20) << "image_id=" << image_id << dendl;
+      m_pending_image_ids.erase(image_id);
     }
 
     for (auto &image_id : m_pending_added_image_ids) {
@@ -651,7 +529,8 @@ void PoolWatcher<I>::notify_listener() {
     mirror_uuid = m_mirror_uuid;
   }
 
-  m_listener.handle_update(mirror_uuid, added_image_ids, removed_image_ids);
+  m_listener.handle_update(mirror_uuid, std::move(added_image_ids),
+                           std::move(removed_image_ids));
 
   {
     Mutex::Locker locker(m_lock);

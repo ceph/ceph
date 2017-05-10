@@ -36,6 +36,7 @@
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/stringify.h"
+#include "include/coredumpctl.h"
 
 #include "include/unordered_map.h"
 #include "store_test_fixture.h"
@@ -461,6 +462,7 @@ TEST_P(StoreTest, FiemapHoles) {
     ASSERT_EQ(r, 0);
   }
   {
+    //fiemap test from 0 to SKIP_STEP * (MAX_EXTENTS - 1) + 3
     bufferlist bl;
     store->fiemap(cid, oid, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3, bl);
     map<uint64_t,uint64_t> m, e;
@@ -477,6 +479,26 @@ TEST_P(StoreTest, FiemapHoles) {
     ASSERT_TRUE((m.size() == 1 &&
 		 m[0] > SKIP_STEP * (MAX_EXTENTS - 1)) ||
 		 (m.size() == MAX_EXTENTS && extents_exist));
+
+    // fiemap test from SKIP_STEP to SKIP_STEP * (MAX_EXTENTS - 2) + 3
+    // reset bufferlist and map
+    bl.clear();
+    m.clear();
+    e.clear();
+    store->fiemap(cid, oid, SKIP_STEP, SKIP_STEP * (MAX_EXTENTS - 2) + 3, bl);
+    p = bl.begin();
+    ::decode(m, p);
+    cout << " got " << m << std::endl;
+    ASSERT_TRUE(!m.empty());
+    ASSERT_GE(m[SKIP_STEP], 3u);
+    extents_exist = true;
+    if (m.size() == (MAX_EXTENTS - 2)) {
+      for (uint64_t i = 1; i < MAX_EXTENTS - 1; i++)
+	extents_exist = extents_exist && m.count(SKIP_STEP*i);
+    }
+    ASSERT_TRUE((m.size() == 1 &&
+		 m[SKIP_STEP] > SKIP_STEP * (MAX_EXTENTS - 2)) ||
+		 (m.size() == (MAX_EXTENTS - 1) && extents_exist));
   }
   {
     ObjectStore::Transaction t;
@@ -1549,9 +1571,10 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   g_ceph_context->_conf->apply_changes(NULL);
 }
 
-TEST_P(StoreTest, BluestoreFragmentedBlobTest) {
+TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
   if(string(GetParam()) != "bluestore")
     return;
+  StartDeferred(0x10000);
 
   ObjectStore::Sequencer osr("test");
   int r;
@@ -2825,8 +2848,8 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ObjectStore::Transaction t;
     t.remove_collection(cid);
     cerr << "Invalid rm coll" << std::endl;
+    PrCtl unset_dumpable;
     EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), ".*Directory not empty.*");
-
   }
   {
     ObjectStore::Transaction t;
@@ -2847,6 +2870,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
     t.remove_collection(cid);
+    PrCtl unset_dumpable;
     EXPECT_DEATH(apply_transaction(store, &osr, std::move(t)), ".*Directory not empty.*");
   }
   {
@@ -3092,7 +3116,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
     t.create_collection(cid, 0);
     cerr << "Creating collection " << cid << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
-    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0, r);
   }
   for (unsigned i = 0; i < 320; ++i) {
     ObjectStore::Transaction t;
@@ -3100,6 +3124,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
     t.touch(cid, hoid);
     cerr << "Creating object " << hoid << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(0, r);
   }
 
   ghobject_t test_obj = generate_long_name(319);
@@ -3112,6 +3137,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
       cid, test_obj,
       cid, test_obj_2);
     r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(0, r);
   }
 
   for (unsigned i = 0; i < 319; ++i) {
@@ -3120,6 +3146,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
     t.remove(cid, hoid);
     cerr << "Removing object " << hoid << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
+    ASSERT_EQ(0, r);
   }
   {
     ObjectStore::Transaction t;
@@ -3127,7 +3154,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
-    ASSERT_EQ(r, 0);
+    ASSERT_EQ(0, r);
   }
 
 }
@@ -5662,9 +5689,12 @@ void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
   test_obj.shutdown();
 }
 
-TEST_P(StoreTest, Many4KWritesTest) {
+TEST_P(StoreTestSpecificAUSize, Many4KWritesTest) {
   if (string(GetParam()) != "bluestore")
     return;
+
+  StartDeferred(0x10000);
+
   store_statfs_t res_stat;
   unsigned max_object = 4*1024*1024;
 
@@ -5674,9 +5704,10 @@ TEST_P(StoreTest, Many4KWritesTest) {
   ASSERT_EQ(res_stat.allocated, max_object);
 }
 
-TEST_P(StoreTest, Many4KWritesNoCSumTest) {
+TEST_P(StoreTestSpecificAUSize, Many4KWritesNoCSumTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  StartDeferred(0x10000);
   g_conf->set_val("bluestore_csum_type", "none");
   g_ceph_context->_conf->apply_changes(NULL);
   store_statfs_t res_stat;
@@ -5689,9 +5720,10 @@ TEST_P(StoreTest, Many4KWritesNoCSumTest) {
   g_conf->set_val("bluestore_csum_type", "crc32c");
 }
 
-TEST_P(StoreTest, TooManyBlobsTest) {
+TEST_P(StoreTestSpecificAUSize, TooManyBlobsTest) {
   if (string(GetParam()) != "bluestore")
     return;
+  StartDeferred(0x10000);
   store_statfs_t res_stat;
   unsigned max_object = 4*1024*1024;
   doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0, &res_stat);
@@ -5988,7 +6020,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  g_conf->set_val("bluestore_max_blob_size", "524288");
+  g_conf->set_val("bluestore_max_blob_size", "0");
 
 }
 
@@ -6171,7 +6203,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  g_conf->set_val("bluestore_max_blob_size", "524288");
+  g_conf->set_val("bluestore_max_blob_size", "0");
 }
 
 TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
@@ -6245,7 +6277,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  g_conf->set_val("bluestore_max_blob_size", "524288");
+  g_conf->set_val("bluestore_max_blob_size", "0");
 }
 
 // The test case to reproduce an issue when write happens
@@ -6449,6 +6481,7 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
 
   StartDeferred(65536);
 
+  g_conf->set_val("bluestore_compression_max_blob_size", "524288");
   g_conf->set_val("bluestore_compression_min_blob_size", "262144");
   g_conf->set_val("bluestore_compression_mode", "force");
   g_conf->apply_changes(NULL);
@@ -6582,7 +6615,8 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
     }
   }
   g_conf->set_val("bluestore_gc_enable_total_threshold", "0");
-  g_conf->set_val("bluestore_compression_min_blob_size", "131072");
+  g_conf->set_val("bluestore_compression_min_blob_size", "0");
+  g_conf->set_val("bluestore_compression_max_blob_size", "0");
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->apply_changes(NULL);
 }

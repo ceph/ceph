@@ -27,6 +27,7 @@ OPTION(lockdep, OPT_BOOL, false)
 OPTION(lockdep_force_backtrace, OPT_BOOL, false) // always gather current backtrace at every lock
 OPTION(run_dir, OPT_STR, "/var/run/ceph")       // the "/var/run/ceph" dir, created on daemon startup
 OPTION(admin_socket, OPT_STR, "$run_dir/$cluster-$name.asok") // default changed by common_preinit()
+OPTION(admin_socket_mode, OPT_STR, "") // permission bits to set for admin socket file, e.g., "0775", "0755"
 OPTION(crushtool, OPT_STR, "crushtool") // crushtool utility path
 
 OPTION(daemonize, OPT_BOOL, false) // default changed by common_preinit()
@@ -171,7 +172,14 @@ SUBSYS(eventtrace, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
-OPTION(keyring, OPT_STR, "/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin") // default changed by common_preinit() for mds and osd
+OPTION(keyring, OPT_STR, 
+    // default changed by common_preinit() for mds and osd
+    "/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,/etc/ceph/keyring,/etc/ceph/keyring.bin," 
+#if defined(__FreeBSD)
+    "/usr/local/etc/ceph/$cluster.$name.keyring,/usr/local/etc/ceph/$cluster.keyring,"
+    "/usr/local/etc/ceph/keyring,/usr/local/etc/ceph/keyring.bin," 
+#endif
+    )
 OPTION(heartbeat_interval, OPT_INT, 5)
 OPTION(heartbeat_file, OPT_STR, "")
 OPTION(heartbeat_inject_failure, OPT_INT, 0)    // force an unhealthy heartbeat for N seconds
@@ -284,7 +292,6 @@ OPTION(mon_osd_max_op_age, OPT_DOUBLE, 32)     // max op age before we get conce
 OPTION(mon_osd_max_split_count, OPT_INT, 32) // largest number of PGs per "involved" OSD to let split create
 OPTION(mon_osd_allow_primary_temp, OPT_BOOL, false)  // allow primary_temp to be set in the osdmap
 OPTION(mon_osd_allow_primary_affinity, OPT_BOOL, false)  // allow primary_affinity to be set in the osdmap
-OPTION(mon_osd_allow_pg_upmap, OPT_BOOL, false) // allow pg upmap to be set in the osdmap
 OPTION(mon_osd_prime_pg_temp, OPT_BOOL, true)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT, .5)  // max time to spend priming
 OPTION(mon_osd_prime_pg_temp_max_estimate, OPT_FLOAT, .25) // max estimate of pg total before we do all pgs in parallel
@@ -312,6 +319,7 @@ OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT, .66) // position between poo
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
 OPTION(mon_osd_backfillfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD backfill full (backfill halted)
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
+OPTION(mon_osd_initial_require_min_compat_client, OPT_STR, "hammer")
 OPTION(mon_allow_pool_delete, OPT_BOOL, false) // allow pool deletion
 OPTION(mon_globalid_prealloc, OPT_U32, 10000)   // how many globalids to prealloc
 OPTION(mon_osd_report_timeout, OPT_INT, 900)    // grace period before declaring unresponsive OSDs dead
@@ -321,7 +329,7 @@ OPTION(mon_crush_min_required_version, OPT_STR, "firefly")
 OPTION(mon_warn_on_crush_straw_calc_version_zero, OPT_BOOL, true) // warn if crush straw_calc_version==0
 OPTION(mon_warn_on_osd_down_out_interval_zero, OPT_BOOL, true) // warn if 'mon_osd_down_out_interval == 0'
 OPTION(mon_warn_on_cache_pools_without_hit_sets, OPT_BOOL, true)
-OPTION(mon_warn_osd_usage_percent, OPT_FLOAT, .40) // warn if difference in usage percent between OSDs exceeds specified percent
+OPTION(mon_warn_osd_usage_min_max_delta, OPT_FLOAT, .40) // warn if difference between min and max OSD utilizations exceeds specified amount
 OPTION(mon_min_osdmap_epochs, OPT_INT, 500)
 OPTION(mon_max_pgmap_epochs, OPT_INT, 500)
 OPTION(mon_max_log_epochs, OPT_INT, 500)
@@ -457,7 +465,7 @@ OPTION(client_dirsize_rbytes, OPT_BOOL, true)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, true) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_disable_pagecache, OPT_BOOL, false)
 OPTION(fuse_allow_other, OPT_BOOL, true)
-OPTION(fuse_default_permissions, OPT_BOOL, true)
+OPTION(fuse_default_permissions, OPT_BOOL, false)
 OPTION(fuse_big_writes, OPT_BOOL, true)
 OPTION(fuse_atomic_o_trunc, OPT_BOOL, true)
 OPTION(fuse_debug, OPT_BOOL, false)
@@ -488,7 +496,6 @@ OPTION(objecter_debug_inject_relock_delay, OPT_BOOL, false)
 // Max number of deletes at once in a single Filer::purge call
 OPTION(filer_max_purge_ops, OPT_U32, 10)
 
-OPTION(journaler_allow_split_entries, OPT_BOOL, true)
 OPTION(journaler_write_head_interval, OPT_INT, 15)
 OPTION(journaler_prefetch_periods, OPT_INT, 10)   // * journal object size
 OPTION(journaler_prezero_periods, OPT_INT, 5)     // * journal object size
@@ -522,7 +529,6 @@ OPTION(mds_scatter_nudge_interval, OPT_FLOAT, 5)  // how quickly dirstat changes
 OPTION(mds_client_prealloc_inos, OPT_INT, 1000)
 OPTION(mds_early_reply, OPT_BOOL, true)
 OPTION(mds_default_dir_hash, OPT_INT, CEPH_STR_HASH_RJENKINS)
-OPTION(mds_log, OPT_BOOL, true)
 OPTION(mds_log_pause, OPT_BOOL, false)
 OPTION(mds_log_skip_corrupt_events, OPT_BOOL, false)
 OPTION(mds_log_max_events, OPT_INT, -1)
@@ -751,6 +757,8 @@ OPTION(osd_op_num_shards, OPT_INT, 5)
 OPTION(osd_op_queue, OPT_STR, "wpq") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), or debug_random
 OPTION(osd_op_queue_cut_off, OPT_STR, "low") // Min priority to go to strict queue. (low, high, debug_random)
 
+OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL, false) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
+
 // Set to true for testing.  Users should NOT set this.
 // If set to true even after reading enough shards to
 // decode the object, any error will be reported.
@@ -849,6 +857,7 @@ OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 150) // make this < map_cache_
 
 OPTION(osd_min_pg_log_entries, OPT_U32, 3000)  // number of entries to keep in the pg log when trimming it
 OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // max entries, say when degraded, before we trim
+OPTION(osd_force_recovery_pg_log_entries_factor, OPT_FLOAT, 1.3) // max entries factor before force recovery
 OPTION(osd_pg_log_trim_min, OPT_U32, 100)
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT, 256)
@@ -880,6 +889,8 @@ OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
 OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
+OPTION(osd_op_history_slow_op_size, OPT_U32, 20)           // Max number of slow ops to track
+OPTION(osd_op_history_slow_op_threshold, OPT_DOUBLE, 10.0) // track the op if over this threshold
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_fast_fail_on_connection_refused, OPT_BOOL, true) // immediately mark OSDs as down once they refuse to accept connections
@@ -987,6 +998,9 @@ OPTION(osd_bench_large_size_max_throughput, OPT_U64, 100 << 20) // 100 MB/s
 OPTION(osd_bench_max_block_size, OPT_U64, 64 << 20) // cap the block size at 64MB
 OPTION(osd_bench_duration, OPT_U32, 30) // duration of 'osd bench', capped at 30s to avoid triggering timeouts
 
+OPTION(osd_blkin_trace_all, OPT_BOOL, false) // create a blkin trace for all osd requests
+OPTION(osdc_blkin_trace_all, OPT_BOOL, false) // create a blkin trace for all objecter requests
+
 OPTION(osd_discard_disconnected_ops, OPT_BOOL, true)
 
 OPTION(memstore_device_bytes, OPT_U64, 1024*1024*1024)
@@ -1020,6 +1034,7 @@ OPTION(bluefs_log_compact_min_size, OPT_U64, 16*1048576)  // before we consider
 OPTION(bluefs_min_flush_size, OPT_U64, 524288)  // ignore flush until its this big
 OPTION(bluefs_compact_log_sync, OPT_BOOL, false)  // sync or async log compaction?
 OPTION(bluefs_buffered_io, OPT_BOOL, false)
+OPTION(bluefs_sync_write, OPT_BOOL, false)
 OPTION(bluefs_allocator, OPT_STR, "bitmap")     // stupid | bitmap
 OPTION(bluefs_preextend_wal_files, OPT_BOOL, false)  // this *requires* that rocksdb has recycling enabled
 
@@ -1030,6 +1045,7 @@ OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .02)  // min fs free / total free
 OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT, .90)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT, .02) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT, .20) // how much to reclaim at a time
+OPTION(bluestore_bluefs_balance_interval, OPT_FLOAT, 1) // how often (sec) to balance free space between bluefs and bluestore
 // If you want to use spdk driver, you need to specify NVMe serial number here
 // with "spdk:" prefix.
 // Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
@@ -1067,8 +1083,12 @@ OPTION(bluestore_prefer_deferred_size_hdd, OPT_U32, 32768)
 OPTION(bluestore_prefer_deferred_size_ssd, OPT_U32, 0)
 OPTION(bluestore_compression_mode, OPT_STR, "none")  // force|aggressive|passive|none
 OPTION(bluestore_compression_algorithm, OPT_STR, "snappy")
-OPTION(bluestore_compression_min_blob_size, OPT_U32, 128*1024)
-OPTION(bluestore_compression_max_blob_size, OPT_U32, 512*1024)
+OPTION(bluestore_compression_min_blob_size, OPT_U32, 0)
+OPTION(bluestore_compression_min_blob_size_hdd, OPT_U32, 128*1024)
+OPTION(bluestore_compression_min_blob_size_ssd, OPT_U32, 8*1024)
+OPTION(bluestore_compression_max_blob_size, OPT_U32, 0)
+OPTION(bluestore_compression_max_blob_size_hdd, OPT_U32, 512*1024)
+OPTION(bluestore_compression_max_blob_size_ssd, OPT_U32, 64*1024)
 /*
  * Specifies minimum expected amount of saved allocation units
  * per single blob to enable compressed blobs garbage collection
@@ -1082,7 +1102,9 @@ OPTION(bluestore_gc_enable_blob_threshold, OPT_INT, 0)
  */
 OPTION(bluestore_gc_enable_total_threshold, OPT_INT, 0)  
 
-OPTION(bluestore_max_blob_size, OPT_U32, 512*1024)
+OPTION(bluestore_max_blob_size, OPT_U32, 0)
+OPTION(bluestore_max_blob_size_hdd, OPT_U32, 512*1024)
+OPTION(bluestore_max_blob_size_ssd, OPT_U32, 64*1024)
 /*
  * Require the net gain of compression at least to be at this ratio,
  * otherwise we don't compress.
@@ -1103,11 +1125,10 @@ OPTION(bluestore_cache_size, OPT_U64, 1024*1024*1024)
 OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE, .9)
 OPTION(bluestore_kvbackend, OPT_STR, "rocksdb")
 OPTION(bluestore_allocator, OPT_STR, "bitmap")     // stupid | bitmap
-OPTION(bluestore_freelist_type, OPT_STR, "bitmap") // extent | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT, 128)
 OPTION(bluestore_bitmapallocator_blocks_per_zone, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
 OPTION(bluestore_bitmapallocator_span_size, OPT_INT, 1024) // must be power of 2 aligned, e.g., 512, 1024, 2048...
-OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0")
+OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0,compaction_readahead_size=2097152")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_mount_deep, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
@@ -1115,13 +1136,11 @@ OPTION(bluestore_fsck_on_umount_deep, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_mkfs, OPT_BOOL, true)
 OPTION(bluestore_fsck_on_mkfs_deep, OPT_BOOL, false)
 OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false) // submit kv txn in queueing thread (not kv_sync_thread)
-OPTION(bluestore_max_ops, OPT_U64, 512)
-OPTION(bluestore_max_bytes, OPT_U64, 64*1024*1024)
-OPTION(bluestore_throttle_cost_per_io_hdd, OPT_U64, 200000)
+OPTION(bluestore_throttle_bytes, OPT_U64, 64*1024*1024)
+OPTION(bluestore_throttle_deferred_bytes, OPT_U64, 128*1024*1024)
+OPTION(bluestore_throttle_cost_per_io_hdd, OPT_U64, 1500000)
 OPTION(bluestore_throttle_cost_per_io_ssd, OPT_U64, 4000)
 OPTION(bluestore_throttle_cost_per_io, OPT_U64, 0)
-OPTION(bluestore_deferred_max_ops, OPT_U64, 512)
-OPTION(bluestore_deferred_max_bytes, OPT_U64, 128*1024*1024)
 OPTION(bluestore_deferred_batch_ops, OPT_U64, 0)
 OPTION(bluestore_deferred_batch_ops_hdd, OPT_U64, 64)
 OPTION(bluestore_deferred_batch_ops_ssd, OPT_U64, 16)
@@ -1145,6 +1164,7 @@ OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
 OPTION(kstore_backend, OPT_STR, "rocksdb")
 OPTION(kstore_rocksdb_options, OPT_STR, "compression=kNoCompression")
+OPTION(kstore_rocksdb_bloom_bits_per_key, OPT_INT, 0)
 OPTION(kstore_fsck_on_mount, OPT_BOOL, false)
 OPTION(kstore_fsck_on_mount_deep, OPT_BOOL, true)
 OPTION(kstore_nid_prealloc, OPT_U64, 1024)
@@ -1154,7 +1174,7 @@ OPTION(kstore_onode_map_size, OPT_U64, 1024)
 OPTION(kstore_cache_tails, OPT_BOOL, true)
 OPTION(kstore_default_stripe_size, OPT_INT, 65536)
 
-OPTION(filestore_omap_backend, OPT_STR, "leveldb")
+OPTION(filestore_omap_backend, OPT_STR, "rocksdb")
 OPTION(filestore_omap_backend_path, OPT_STR, "")
 
 /// filestore wb throttle limits
@@ -1647,9 +1667,12 @@ OPTION(rgw_sync_data_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(rgw_sync_meta_inject_err_probability, OPT_DOUBLE, 0) // range [0, 1]
 
 
-OPTION(rgw_realm_reconfigure_delay, OPT_DOUBLE, 2) // seconds to wait before reloading realm configuration
 OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
 OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
+
+OPTION(rgw_safe_max_objects_per_shard, OPT_INT, 100*1024) // safe max loading
+OPTION(rgw_shard_warning_threshold, OPT_DOUBLE, 90) // pct of safe max
+						    // at which to warn
 
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
 
@@ -1700,3 +1723,5 @@ OPTION(event_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should b
 OPTION(internal_safe_to_start_threads, OPT_BOOL, false)
 
 OPTION(debug_deliberately_leak_memory, OPT_BOOL, false)
+
+OPTION(rgw_swift_custom_header, OPT_STR, "") // option to enable swift custom headers

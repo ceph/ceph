@@ -52,6 +52,7 @@ RDMADispatcher::RDMADispatcher(CephContext* c, RDMAStack* s)
 
   plb.add_u64_counter(l_msgr_rdma_polling, "polling", "Whether dispatcher thread is polling");
   plb.add_u64_counter(l_msgr_rdma_inflight_tx_chunks, "inflight_tx_chunks", "The number of inflight tx chunks");
+  plb.add_u64_counter(l_msgr_rdma_inqueue_rx_chunks, "inqueue_rx_chunks", "The number of inqueue rx chunks");
 
   plb.add_u64_counter(l_msgr_rdma_tx_total_wc, "tx_total_wc", "The number of tx work comletions");
   plb.add_u64_counter(l_msgr_rdma_tx_total_wc_errors, "tx_total_wc_errors", "The number of tx errors");
@@ -179,8 +180,10 @@ void RDMADispatcher::polling()
         }
       }
 
-      for (auto &&i : polled)
+      for (auto &&i : polled) {
+        perf_logger->inc(l_msgr_rdma_inqueue_rx_chunks, i.second.size());
         i.first->pass_wc(std::move(i.second));
+      }
       polled.clear();
     }
 

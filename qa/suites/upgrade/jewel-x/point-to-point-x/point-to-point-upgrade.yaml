@@ -112,6 +112,7 @@ workload_jewel:
          client.0:
            force-branch: ceph-jewel
            rgw_server: client.0
+           scan_for_encryption_keys: false
      - print: "**** done s3tests workload_jewel"
 upgrade-sequence_jewel:
    sequential:
@@ -171,6 +172,7 @@ workload_x:
        client.1:
          force-branch: ceph-jewel
          rgw_server: client.1
+         scan_for_encryption_keys: false
    - print: "**** done s3tests workload_x"
 upgrade-sequence_x:
    sequential:

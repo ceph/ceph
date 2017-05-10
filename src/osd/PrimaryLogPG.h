@@ -289,6 +289,12 @@ public:
   epoch_t get_epoch() const override {
     return get_osdmap()->get_epoch();
   }
+  epoch_t get_interval_start_epoch() const override {
+    return info.history.same_interval_since;
+  }
+  epoch_t get_last_peering_reset_epoch() const override {
+    return get_last_peering_reset();
+  }
   const set<pg_shard_t> &get_actingbackfill_shards() const override {
     return actingbackfill;
   }
@@ -1311,6 +1317,7 @@ protected:
 
   friend class C_ChecksumRead;
 
+  int do_extent_cmp(OpContext *ctx, OSDOp& osd_op);
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 
   bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
@@ -1482,7 +1489,7 @@ private:
 
     explicit Trimming(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming") {
       context< SnapTrimmer >().log_enter(state_name);
       assert(context< SnapTrimmer >().can_trim());
       assert(in_flight.empty());
@@ -1507,7 +1514,7 @@ private:
     Context *wakeup = nullptr;
     explicit WaitTrimTimer(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitTrimTimer") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitTrimTimer") {
       context< SnapTrimmer >().log_enter(state_name);
       assert(context<Trimming>().in_flight.empty());
       struct OnTimer : Context {
@@ -1557,7 +1564,7 @@ private:
       > reactions;
     explicit WaitRWLock(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRWLock") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRWLock") {
       context< SnapTrimmer >().log_enter(state_name);
       assert(context<Trimming>().in_flight.empty());
     }
@@ -1580,7 +1587,7 @@ private:
       > reactions;
     explicit WaitRepops(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitRepops") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRepops") {
       context< SnapTrimmer >().log_enter(state_name);
       assert(!context<Trimming>().in_flight.empty());
     }
@@ -1634,7 +1641,7 @@ private:
 
     explicit WaitReservation(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitReservation") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitReservation") {
       context< SnapTrimmer >().log_enter(state_name);
       assert(context<Trimming>().in_flight.empty());
       auto *pg = context< SnapTrimmer >().pg;
@@ -1666,7 +1673,7 @@ private:
       > reactions;
     explicit WaitScrub(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitScrub") {
+	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitScrub") {
       context< SnapTrimmer >().log_enter(state_name);
     }
     void exit() {
@@ -1720,6 +1727,8 @@ public:
   bool maybe_await_blocked_snapset(const hobject_t &soid, OpRequestRef op);
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
+
+  void maybe_force_recovery();
 
   void mark_all_unfound_lost(
     int what,

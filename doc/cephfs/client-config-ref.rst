@@ -35,7 +35,7 @@
 
 ``client_dirsize_rbytes``
 
-:Description: If set to `true`, use the recursive size of a directory (that is, total of all descendants).
+:Description: If set to ``true``, use the recursive size of a directory (that is, total of all descendants).
 :Type: Boolean
 :Default: ``true``
 
@@ -71,7 +71,7 @@
 
 ``client_mountpoint``
 
-:Description: Directory to mount on the CephFS file system. An alternative to the `-r` option of the `ceph-fuse` command.
+:Description: Directory to mount on the CephFS file system. An alternative to the ``-r`` option of the ``ceph-fuse`` command.
 :Type: String
 :Default: ``"/"``
 
@@ -208,7 +208,7 @@ Developer Options
 
 ``client_trace``
 
-:Description: The path to the trace file for all file operations. The output is designed to be used by the Ceph `synthetic client <../man/8/ceph-syn>`.
+:Description: The path to the trace file for all file operations. The output is designed to be used by the Ceph `synthetic client <../../man/8/ceph-syn>`_.
 :Type: String
 :Default: ``""`` (disabled)
 

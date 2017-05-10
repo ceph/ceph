@@ -7,6 +7,19 @@ set -o functrace
 PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 SUDO=${SUDO:-sudo}
 
+function get_admin_socket()
+{
+  local client=$1
+
+  if test -n "$CEPH_OUT_DIR";
+  then
+    echo $CEPH_OUT_DIR/$client.asok
+  else
+    local cluster=$(echo $CEPH_ARGS | sed  -r 's/.*--cluster[[:blank:]]*([[:alnum:]]*).*/\1/')
+    echo "/var/run/ceph/$cluster-$client.asok"
+  fi
+}
+
 function check_no_osd_down()
 {
     ! ceph osd dump | grep ' down '
@@ -381,6 +394,7 @@ function test_tiering()
 
   # make sure we can't create an ec pool tier
   ceph osd pool create eccache 2 2 erasure
+  expect_false ceph osd set-require-min-compat-client bobtail
   ceph osd pool create repbase 2
   expect_false ceph osd tier add repbase eccache
   ceph osd pool delete repbase repbase --yes-i-really-really-mean-it
@@ -1120,6 +1134,12 @@ function test_mon_osd()
   ceph osd crush get-tunable straw_calc_version | grep 1
 
   #
+  # require-min-compat-client
+  expect_false ceph osd set-require-min-compat-client dumpling  # firefly tunables
+  ceph osd set-require-min-compat-client luminous
+  ceph osd dump | grep 'require_min_compat_client luminous'
+
+  #
   # osd scrub
   #
   # how do I tell when these are done?
@@ -1383,6 +1403,9 @@ function test_mon_osd_pool_quota()
 
 function test_mon_pg()
 {
+  # Make sure we start healthy.
+  wait_for_health_ok
+
   ceph pg debug unfound_objects_exist
   ceph pg debug degraded_pgs_exist
   ceph pg deep-scrub 0.0
@@ -1438,36 +1461,30 @@ function test_mon_pg()
 
   # Check health status
   ceph osd set-nearfull-ratio .913
-  ceph health | grep 'ratio(s) out of order'
-  ceph health detail | grep 'backfill_ratio (0.912) < nearfull_ratio (0.913), increased'
+  ceph health | grep 'HEALTH_ERR.*Full ratio(s) out of order'
+  ceph health detail | grep 'backfillfull_ratio (0.912) < nearfull_ratio (0.913), increased'
   ceph osd set-nearfull-ratio .892
   ceph osd set-backfillfull-ratio .963
   ceph health detail | grep 'full_ratio (0.962) < backfillfull_ratio (0.963), increased'
   ceph osd set-backfillfull-ratio .912
 
   # Check injected full results
-  WAITFORFULL=10
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull nearfull
-  sleep $WAITFORFULL
-  ceph health | grep "HEALTH_WARN.*1 nearfull osd(s)"
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.1.asok injectfull backfillfull
-  sleep $WAITFORFULL
-  ceph health | grep "HEALTH_WARN.*1 backfillfull osd(s)"
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.2.asok injectfull failsafe
-  sleep $WAITFORFULL
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull nearfull
+  wait_for_health "HEALTH_WARN.*1 nearfull osd(s)"
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull backfillfull
+  wait_for_health "HEALTH_WARN.*1 backfillfull osd(s)"
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull failsafe
   # failsafe and full are the same as far as the monitor is concerned
-  ceph health | grep "HEALTH_ERR.*1 full osd(s)"
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull full
-  sleep  $WAITFORFULL
-  ceph health | grep "HEALTH_ERR.*2 full osd(s)"
+  wait_for_health "HEALTH_ERR.*1 full osd(s)"
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull full
+  wait_for_health "HEALTH_ERR.*2 full osd(s)"
   ceph health detail | grep "osd.0 is full at.*%"
   ceph health detail | grep "osd.2 is full at.*%"
   ceph health detail | grep "osd.1 is backfill full at.*%"
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.0.asok injectfull none
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.1.asok injectfull none
-  ceph --admin-daemon $CEPH_OUT_DIR/osd.2.asok injectfull none
-  sleep $WAITFORFULL
-  ceph health | grep HEALTH_OK
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.0) injectfull none
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.1) injectfull none
+  $SUDO ceph --admin-daemon $(get_admin_socket osd.2) injectfull none
+  wait_for_health_ok
 
   ceph pg stat | grep 'pgs:'
   ceph pg 0.0 query
@@ -1803,12 +1820,12 @@ function test_admin_heap_profiler()
 
   [[ $do_test -eq 0 ]] && return 0
 
-  admin_socket = "--admin-daemon out/osd.0.asok"
+  local admin_socket=$(get_admin_socket osd.0)
 
-  ceph --admin $admin_socket heap start_profiler
-  ceph --admin $admin_socket heap dump
-  ceph --admin $admin_socket heap stop_profiler
-  ceph --admin $admin_socket heap release
+  $SUDO ceph --admin-daemon $admin_socket heap start_profiler
+  $SUDO ceph --admin-daemon $admin_socket heap dump
+  $SUDO ceph --admin-daemon $admin_socket heap stop_profiler
+  $SUDO ceph --admin-daemon $admin_socket heap release
 }
 
 function test_osd_bench()
@@ -2036,6 +2053,7 @@ MON_TESTS+=" mon_cephdf_commands"
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" osd_negative_filestore_merge_threshold"
 OSD_TESTS+=" tiering_agent"
+OSD_TESTS+=" admin_heap_profiler"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"

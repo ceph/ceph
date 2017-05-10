@@ -241,7 +241,7 @@ uint64_t PerfCounters::get(int idx) const
   return data.u64.read();
 }
 
-void PerfCounters::tinc(int idx, utime_t amt)
+void PerfCounters::tinc(int idx, utime_t amt, uint32_t avgcount)
 {
   if (!m_cct->_conf->perf)
     return;
@@ -252,15 +252,15 @@ void PerfCounters::tinc(int idx, utime_t amt)
   if (!(data.type & PERFCOUNTER_TIME))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
-    data.avgcount.inc();
+    data.avgcount.add(avgcount);
     data.u64.add(amt.to_nsec());
-    data.avgcount2.inc();
+    data.avgcount2.add(avgcount);
   } else {
     data.u64.add(amt.to_nsec());
   }
 }
 
-void PerfCounters::tinc(int idx, ceph::timespan amt)
+void PerfCounters::tinc(int idx, ceph::timespan amt, uint32_t avgcount)
 {
   if (!m_cct->_conf->perf)
     return;
@@ -271,9 +271,9 @@ void PerfCounters::tinc(int idx, ceph::timespan amt)
   if (!(data.type & PERFCOUNTER_TIME))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
-    data.avgcount.inc();
+    data.avgcount.add(avgcount);
     data.u64.add(amt.count());
-    data.avgcount2.inc();
+    data.avgcount2.add(avgcount);
   } else {
     data.u64.add(amt.count());
   }
@@ -378,10 +378,16 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
         f->dump_string("description", "");
       }
 
-      if (d->nick != NULL && !suppress_nicks) {
+      if (d->nick != NULL) {
         f->dump_string("nick", d->nick);
       } else {
         f->dump_string("nick", "");
+      }
+      if (d->prio) {
+	int p = std::max(std::min(d->prio + prio_adjust,
+				  (int)PerfCountersBuilder::PRIO_CRITICAL),
+			 0);
+	f->dump_int("priority", p);
       }
       f->close_section();
     } else {
@@ -453,48 +459,59 @@ PerfCountersBuilder::~PerfCountersBuilder()
   m_perf_counters = NULL;
 }
 
-void PerfCountersBuilder::add_u64_counter(int idx, const char *name,
-    const char *description, const char *nick)
+void PerfCountersBuilder::add_u64_counter(
+  int idx, const char *name,
+  const char *description, const char *nick, int prio)
 {
-  add_impl(idx, name, description, nick, PERFCOUNTER_U64 | PERFCOUNTER_COUNTER);
+  add_impl(idx, name, description, nick, prio,
+	   PERFCOUNTER_U64 | PERFCOUNTER_COUNTER);
 }
 
-void PerfCountersBuilder::add_u64(int idx, const char *name,
-    const char *description, const char *nick)
+void PerfCountersBuilder::add_u64(
+  int idx, const char *name,
+  const char *description, const char *nick, int prio)
 {
-  add_impl(idx, name, description, nick, PERFCOUNTER_U64);
+  add_impl(idx, name, description, nick, prio, PERFCOUNTER_U64);
 }
 
-void PerfCountersBuilder::add_u64_avg(int idx, const char *name,
-    const char *description, const char *nick)
+void PerfCountersBuilder::add_u64_avg(
+  int idx, const char *name,
+  const char *description, const char *nick, int prio)
 {
-  add_impl(idx, name, description, nick, PERFCOUNTER_U64 | PERFCOUNTER_LONGRUNAVG);
+  add_impl(idx, name, description, nick, prio,
+	   PERFCOUNTER_U64 | PERFCOUNTER_LONGRUNAVG);
 }
 
-void PerfCountersBuilder::add_time(int idx, const char *name,
-    const char *description, const char *nick)
+void PerfCountersBuilder::add_time(
+  int idx, const char *name,
+  const char *description, const char *nick, int prio)
 {
-  add_impl(idx, name, description, nick, PERFCOUNTER_TIME);
+  add_impl(idx, name, description, nick, prio, PERFCOUNTER_TIME);
 }
 
-void PerfCountersBuilder::add_time_avg(int idx, const char *name,
-    const char *description, const char *nick)
+void PerfCountersBuilder::add_time_avg(
+  int idx, const char *name,
+  const char *description, const char *nick, int prio)
 {
-  add_impl(idx, name, description, nick, PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG);
+  add_impl(idx, name, description, nick, prio,
+	   PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG);
 }
 
-void PerfCountersBuilder::add_histogram(int idx, const char *name,
-    PerfHistogramCommon::axis_config_d x_axis_config,
-    PerfHistogramCommon::axis_config_d y_axis_config,
-    const char *description, const char *nick)
+void PerfCountersBuilder::add_histogram(
+  int idx, const char *name,
+  PerfHistogramCommon::axis_config_d x_axis_config,
+  PerfHistogramCommon::axis_config_d y_axis_config,
+  const char *description, const char *nick, int prio)
 {
-  add_impl(idx, name, description, nick, PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM,
+  add_impl(idx, name, description, nick, prio,
+	   PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM,
            unique_ptr<PerfHistogram<>>{new PerfHistogram<>{x_axis_config, y_axis_config}});
 }
 
-void PerfCountersBuilder::add_impl(int idx, const char *name,
-    const char *description, const char *nick, int ty,
-    unique_ptr<PerfHistogram<>> histogram)
+void PerfCountersBuilder::add_impl(
+  int idx, const char *name,
+  const char *description, const char *nick, int prio, int ty,
+  unique_ptr<PerfHistogram<>> histogram)
 {
   assert(idx > m_perf_counters->m_lower_bound);
   assert(idx < m_perf_counters->m_upper_bound);
@@ -504,7 +521,12 @@ void PerfCountersBuilder::add_impl(int idx, const char *name,
   assert(data.type == PERFCOUNTER_NONE);
   data.name = name;
   data.description = description;
+  // nick must be <= 4 chars
+  if (nick) {
+    assert(strlen(nick) <= 4);
+  }
   data.nick = nick;
+  data.prio = prio;
   data.type = (enum perfcounter_type_d)ty;
   data.histogram = std::move(histogram);
 }

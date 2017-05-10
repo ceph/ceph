@@ -38,7 +38,7 @@ function vstart_setup()
         --short \
         $OBJSTORE_ARGS \
         -o 'paxos propose interval = 0.01' \
-        -n -l || return 1
+        -d -n -l || return 1
     export CEPH_CONF=$CEPH_DIR/ceph.conf
 
     crit=$(expr 100 - $(ceph-conf --show-config-value mon_data_avail_crit))

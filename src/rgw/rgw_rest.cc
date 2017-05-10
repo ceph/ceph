@@ -1236,6 +1236,308 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   return len;
 }
 
+
+/*
+ * parses params in the format: 'first; param1=foo; param2=bar'
+ */
+void RGWPostObj_ObjStore::parse_boundary_params(const std::string& params_str,
+                                                std::string& first,
+                                                std::map<std::string,
+                                                std::string>& params)
+{
+  size_t pos = params_str.find(';');
+  if (std::string::npos == pos) {
+    first = rgw_trim_whitespace(params_str);
+    return;
+  }
+
+  first = rgw_trim_whitespace(params_str.substr(0, pos));
+  pos++;
+
+  while (pos < params_str.size()) {
+    size_t end = params_str.find(';', pos);
+    if (std::string::npos == end) {
+      end = params_str.size();
+    }
+
+    std::string param = params_str.substr(pos, end - pos);
+    size_t eqpos = param.find('=');
+
+    if (std::string::npos != eqpos) {
+      std::string param_name = rgw_trim_whitespace(param.substr(0, eqpos));
+      std::string val = rgw_trim_quotes(param.substr(eqpos + 1));
+      params[std::move(param_name)] = std::move(val);
+    } else {
+      params[rgw_trim_whitespace(param)] = "";
+    }
+
+    pos = end + 1;
+  }
+}
+
+int RGWPostObj_ObjStore::parse_part_field(const std::string& line,
+                                          std::string& field_name,  /* out */
+                                          post_part_field& field)   /* out */
+{
+  size_t pos = line.find(':');
+  if (pos == string::npos)
+    return -EINVAL;
+
+  field_name = line.substr(0, pos);
+  if (pos >= line.size() - 1)
+    return 0;
+
+  parse_boundary_params(line.substr(pos + 1), field.val, field.params);
+
+  return 0;
+}
+
+static bool is_crlf(const char *s)
+{
+  return (*s == '\r' && *(s + 1) == '\n');
+}
+
+/*
+ * find the index of the boundary, if exists, or optionally the next end of line
+ * also returns how many bytes to skip
+ */
+static int index_of(ceph::bufferlist& bl,
+                    uint64_t max_len,
+                    const std::string& str,
+                    const bool check_crlf,
+                    bool& reached_boundary,
+                    int& skip)
+{
+  reached_boundary = false;
+  skip = 0;
+
+  if (str.size() < 2) // we assume boundary is at least 2 chars (makes it easier with crlf checks)
+    return -EINVAL;
+
+  if (bl.length() < str.size())
+    return -1;
+
+  const char *buf = bl.c_str();
+  const char *s = str.c_str();
+
+  if (max_len > bl.length())
+    max_len = bl.length();
+
+  for (uint64_t i = 0; i < max_len; i++, buf++) {
+    if (check_crlf &&
+	i >= 1 &&
+	is_crlf(buf - 1)) {
+      return i + 1; // skip the crlf
+    }
+    if ((i < max_len - str.size() + 1) &&
+	(buf[0] == s[0] && buf[1] == s[1]) &&
+	(strncmp(buf, s, str.size()) == 0)) {
+      reached_boundary = true;
+      skip = str.size();
+
+      /* oh, great, now we need to swallow the preceding crlf
+       * if exists
+       */
+      if ((i >= 2) &&
+	  is_crlf(buf - 2)) {
+	i -= 2;
+	skip += 2;
+      }
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
+                                            uint64_t max,
+                                            const bool check_crlf,
+                                            bool& reached_boundary,
+                                            bool& done)
+{
+  uint64_t cl = max + 2 + boundary.size();
+
+  if (max > in_data.length()) {
+    uint64_t need_to_read = cl - in_data.length();
+
+    bufferptr bp(need_to_read);
+
+    const auto read_len = recv_body(s, bp.c_str(), need_to_read);
+    if (read_len < 0) {
+      return read_len;
+    }
+    in_data.append(bp, 0, read_len);
+  }
+
+  done = false;
+  int skip;
+  const int index = index_of(in_data, cl, boundary, check_crlf,
+                             reached_boundary, skip);
+  if (index >= 0) {
+    max = index;
+  }
+
+  if (max > in_data.length()) {
+    max = in_data.length();
+  }
+
+  bl.substr_of(in_data, 0, max);
+
+  ceph::bufferlist new_read_data;
+
+  /*
+   * now we need to skip boundary for next time, also skip any crlf, or
+   * check to see if it's the last final boundary (marked with "--" at the end
+   */
+  if (reached_boundary) {
+    int left = in_data.length() - max;
+    if (left < skip + 2) {
+      int need = skip + 2 - left;
+      bufferptr boundary_bp(need);
+      const int r = recv_body(s, boundary_bp.c_str(), need);
+      if (r < 0) {
+        return r;
+      }
+      in_data.append(boundary_bp);
+    }
+    max += skip; // skip boundary for next time
+    if (in_data.length() >= max + 2) {
+      const char *data = in_data.c_str();
+      if (is_crlf(data + max)) {
+	max += 2;
+      } else {
+	if (*(data + max) == '-' &&
+	    *(data + max + 1) == '-') {
+	  done = true;
+	  max += 2;
+	}
+      }
+    }
+  }
+
+  new_read_data.substr_of(in_data, max, in_data.length() - max);
+  in_data = new_read_data;
+
+  return 0;
+}
+
+int RGWPostObj_ObjStore::read_line(ceph::bufferlist& bl,
+                                   const uint64_t max,
+                                   bool& reached_boundary,
+                                   bool& done)
+{
+  return read_with_boundary(bl, max, true, reached_boundary, done);
+}
+
+int RGWPostObj_ObjStore::read_data(ceph::bufferlist& bl,
+                                   const uint64_t max,
+                                   bool& reached_boundary,
+                                   bool& done)
+{
+  return read_with_boundary(bl, max, false, reached_boundary, done);
+}
+
+
+int RGWPostObj_ObjStore::read_form_part_header(struct post_form_part* const part,
+                                               bool& done)
+{
+  bufferlist bl;
+  bool reached_boundary;
+  uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+  int r = read_line(bl, chunk_size, reached_boundary, done);
+  if (r < 0) {
+    return r;
+  }
+
+  if (done) {
+    return 0;
+  }
+
+  if (reached_boundary) { // skip the first boundary
+    r = read_line(bl, chunk_size, reached_boundary, done);
+    if (r < 0) {
+      return r;
+    } else if (done) {
+      return 0;
+    }
+  }
+
+  while (true) {
+  /*
+   * iterate through fields
+   */
+    std::string line = rgw_trim_whitespace(string(bl.c_str(), bl.length()));
+
+    if (line.empty()) {
+      break;
+    }
+
+    struct post_part_field field;
+
+    string field_name;
+    r = parse_part_field(line, field_name, field);
+    if (r < 0) {
+      return r;
+    }
+
+    part->fields[field_name] = field;
+
+    if (stringcasecmp(field_name, "Content-Disposition") == 0) {
+      part->name = field.params["name"];
+    }
+
+    if (reached_boundary) {
+      break;
+    }
+
+    r = read_line(bl, chunk_size, reached_boundary, done);
+  }
+
+  return 0;
+}
+
+bool RGWPostObj_ObjStore::part_str(parts_collection_t& parts,
+                                   const std::string& name,
+                                   std::string* val)
+{
+  const auto iter = parts.find(name);
+  if (std::end(parts) == iter) {
+    return false;
+  }
+
+  ceph::bufferlist& data = iter->second.data;
+  std::string str = string(data.c_str(), data.length());
+  *val = rgw_trim_whitespace(str);
+  return true;
+}
+
+std::string RGWPostObj_ObjStore::get_part_str(parts_collection_t& parts,
+                                              const std::string& name,
+                                              const std::string& def_val)
+{
+  std::string val;
+
+  if (part_str(parts, name, &val)) {
+    return val;
+  } else {
+    return rgw_trim_whitespace(def_val);
+  }
+}
+
+bool RGWPostObj_ObjStore::part_bl(parts_collection_t& parts,
+                                  const std::string& name,
+                                  ceph::bufferlist* pbl)
+{
+  const auto iter = parts.find(name);
+  if (std::end(parts) == iter) {
+    return false;
+  }
+
+  *pbl = iter->second.data;
+  return true;
+}
+
 int RGWPostObj_ObjStore::verify_params()
 {
   /*  check that we have enough memory to store the object
@@ -1251,6 +1553,51 @@ int RGWPostObj_ObjStore::verify_params()
 
   return 0;
 }
+
+int RGWPostObj_ObjStore::get_params()
+{
+  if (s->expect_cont) {
+    /* OK, here it really gets ugly. With POST, the params are embedded in the
+     * request body, so we need to continue before being able to actually look
+     * at them. This diverts from the usual request flow. */
+    dump_continue(s);
+    s->expect_cont = false;
+  }
+
+  std::string req_content_type_str = s->info.env->get("CONTENT_TYPE", "");
+  std::string req_content_type;
+  std::map<std::string, std::string> params;
+  parse_boundary_params(req_content_type_str, req_content_type, params);
+
+  if (req_content_type.compare("multipart/form-data") != 0) {
+    err_msg = "Request Content-Type is not multipart/form-data";
+    return -EINVAL;
+  }
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    ldout(s->cct, 20) << "request content_type_str="
+		      << req_content_type_str << dendl;
+    ldout(s->cct, 20) << "request content_type params:" << dendl;
+
+    for (const auto& pair : params) {
+      ldout(s->cct, 20) << " " << pair.first << " -> " << pair.second
+			<< dendl;
+    }
+  }
+
+  const auto iter = params.find("boundary");
+  if (std::end(params) == iter) {
+    err_msg = "Missing multipart boundary specification";
+    return -EINVAL;
+  }
+
+  /* Create the boundary. */
+  boundary = "--";
+  boundary.append(iter->second);
+
+  return 0;
+}
+
 
 int RGWPutACLs_ObjStore::get_params()
 {

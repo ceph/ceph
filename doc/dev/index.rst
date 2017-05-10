@@ -165,6 +165,39 @@ Building from source
 
 See instructions at :doc:`/install/build-ceph`.
 
+Using ccache to speed up local builds
+-------------------------------------
+
+Rebuilds of the ceph source tree can benefit significantly from use of `ccache`_.
+Many a times while switching branches and such, one might see build failures for
+certain older branches mostly due to older build artifacts. These rebuilds can
+significantly benefit the use of ccache. For a full clean source tree, one could
+do ::
+
+  $ make clean
+
+  # note the following will nuke everything in the source tree that
+  # isn't tracked by git, so make sure to backup any log files /conf options
+
+  $ git clean -fdx; git submodule foreach git clean -fdx
+
+ccache is available as a package in most distros. To build ceph with ccache one
+can::
+
+  $ cmake -DWITH_CCACHE=ON ..
+
+ccache can also be used for speeding up all builds in the system. for more
+details refer to the `run modes`_ of the ccache manual. The default settings of
+``ccache`` can be displayed with ``ccache -s``.
+
+.. note: It is recommended to override the ``max_size``, which is the size of
+   cache, defaulting to 10G, to a larger size like 25G or so. Refer to the
+   `configuration`_ section of ccache manual.
+
+.. _`ccache`: https://ccache.samba.org/
+.. _`run modes`: https://ccache.samba.org/manual.html#_run_modes
+.. _`configuration`: https://ccache.samba.org/manual.html#_configuration
+
 Development-mode cluster
 ------------------------
 
@@ -1154,8 +1187,8 @@ proceed to the next step.
 To start with a clean slate, login to your tenant via the Horizon dashboard and:
 
 * terminate the ``teuthology`` and ``packages-repository`` instances, if any
-* delete the ``teuthology`` security group
-* delete the ``teuthology`` and ``teuthology-myself`` key pairs
+* delete the ``teuthology`` and ``teuthology-worker`` security groups, if any
+* delete the ``teuthology`` and ``teuthology-myself`` key pairs, if any
 
 Also do the above if you ever get key-related errors ("invalid key", etc.) when
 trying to schedule suites.

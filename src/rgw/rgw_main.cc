@@ -53,13 +53,14 @@
 #include "rgw_request.h"
 #include "rgw_process.h"
 #include "rgw_frontend.h"
-#if defined(WITH_RADOSGW_ASIO_FRONTEND)
+#if defined(WITH_RADOSGW_BEAST_FRONTEND)
 #include "rgw_asio_frontend.h"
-#endif /* WITH_RADOSGW_ASIO_FRONTEND */
+#endif /* WITH_RADOSGW_BEAST_FRONTEND */
 
 #include <map>
 #include <string>
 #include <vector>
+#include <atomic>
 
 #include "include/types.h"
 #include "common/BackTrace.h"
@@ -77,11 +78,11 @@ static sig_t sighandler_alrm;
 class RGWProcess;
 
 static int signal_fd[2] = {0, 0};
-static atomic_t disable_signal_fd;
+static std::atomic<int64_t> disable_signal_fd = { 0 };
 
 void signal_shutdown()
 {
-  if (!disable_signal_fd.read()) {
+  if (!disable_signal_fd) {
     int val = 0;
     int ret = write(signal_fd[0], (char *)&val, sizeof(val));
     if (ret < 0) {
@@ -470,8 +471,6 @@ int main(int argc, const char **argv)
     RGWFrontend *fe = NULL;
 
     if (framework == "civetweb" || framework == "mongoose") {
-      int port;
-      config->get_val("port", 80, &port);
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
@@ -489,9 +488,9 @@ int main(int argc, const char **argv)
 
       fe = new RGWLoadGenFrontend(env, config);
     }
-#if defined(WITH_RADOSGW_ASIO_FRONTEND)
-    else if ((framework == "asio") &&
-	cct->check_experimental_feature_enabled("rgw-asio-frontend")) {
+#if defined(WITH_RADOSGW_BEAST_FRONTEND)
+    else if ((framework == "beast") &&
+	cct->check_experimental_feature_enabled("rgw-beast-frontend")) {
       int port;
       config->get_val("port", 80, &port);
       std::string uri_prefix;
@@ -499,7 +498,7 @@ int main(int argc, const char **argv)
       RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry };
       fe = new RGWAsioFrontend(env);
     }
-#endif /* WITH_RADOSGW_ASIO_FRONTEND */
+#endif /* WITH_RADOSGW_BEAST_FRONTEND */
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
     else if (framework == "fastcgi" || framework == "fcgi") {
       std::string uri_prefix;

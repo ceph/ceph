@@ -4,11 +4,6 @@
 #ifndef CEPH_RBD_MIRROR_IMAGE_REPLAYER_H
 #define CEPH_RBD_MIRROR_IMAGE_REPLAYER_H
 
-#include <map>
-#include <string>
-#include <vector>
-
-#include "include/atomic.h"
 #include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
@@ -23,9 +18,15 @@
 #include "ImageDeleter.h"
 #include "ProgressContext.h"
 #include "types.h"
-#include <set>
+
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
+
+#include <set>
+#include <map>
+#include <atomic>
+#include <string>
+#include <vector>
 
 class AdminSocketHook;
 
@@ -109,9 +110,8 @@ public:
                         const std::string &remote_image_id,
                         librados::IoCtx &remote_io_ctx);
   void remove_remote_image(const std::string &remote_mirror_uuid,
-                           const std::string &remote_image_id);
-  void set_remote_images(const PeerImages &remote_images);
-
+                           const std::string &remote_image_id,
+			   bool schedule_delete);
   bool remote_images_empty() const;
 
   inline int64_t get_local_pool_id() const {
@@ -119,14 +119,6 @@ public:
   }
   inline const std::string& get_global_image_id() const {
     return m_global_image_id;
-  }
-  inline std::string get_local_image_id() {
-    Mutex::Locker locker(m_lock);
-    return m_local_image_id;
-  }
-  inline std::string get_local_image_name() {
-    Mutex::Locker locker(m_lock);
-    return m_local_image_name;
   }
 
   void start(Context *on_finish = nullptr, bool manual = false);
@@ -150,6 +142,9 @@ protected:
    *    |                                                   ^
    *    v                                                   *
    * <starting>                                             *
+   *    |                                                   *
+   *    v                                           (error) *
+   * PREPARE_LOCAL_IMAGE  * * * * * * * * * * * * * * * * * *
    *    |                                                   *
    *    v                                           (error) *
    * BOOTSTRAP_IMAGE  * * * * * * * * * * * * * * * * * * * *
@@ -220,6 +215,37 @@ protected:
   bool on_replay_interrupted();
 
 private:
+  struct RemoteImage {
+    std::string mirror_uuid;
+    std::string image_id;
+    librados::IoCtx io_ctx;
+
+    RemoteImage() {
+    }
+    RemoteImage(const std::string &mirror_uuid,
+                const std::string &image_id)
+      : mirror_uuid(mirror_uuid), image_id(image_id) {
+    }
+    RemoteImage(const std::string &mirror_uuid,
+                const std::string &image_id,
+                librados::IoCtx &io_ctx)
+      : mirror_uuid(mirror_uuid), image_id(image_id), io_ctx(io_ctx) {
+    }
+
+    inline bool operator<(const RemoteImage &rhs) const {
+      if (mirror_uuid != rhs.mirror_uuid) {
+        return mirror_uuid < rhs.mirror_uuid;
+      } else {
+        return image_id < rhs.image_id;
+      }
+    }
+    inline bool operator==(const RemoteImage &rhs) const {
+      return (mirror_uuid == rhs.mirror_uuid && image_id == rhs.image_id);
+    }
+  };
+
+  typedef std::set<RemoteImage> RemoteImages;
+
   typedef typename librbd::journal::TypeTraits<ImageCtxT>::Journaler Journaler;
   typedef boost::optional<State> OptionalState;
 
@@ -259,15 +285,14 @@ private:
   std::shared_ptr<ImageDeleter> m_image_deleter;
   ImageSyncThrottlerRef<ImageCtxT> m_image_sync_throttler;
 
-  PeerImages m_remote_images;
-  PeerImage m_remote_image;
+  RemoteImages m_remote_images;
+  RemoteImage m_remote_image;
 
   RadosRef m_local;
   std::string m_local_mirror_uuid;
   int64_t m_local_pool_id;
   std::string m_local_image_id;
   std::string m_global_image_id;
-  std::string m_local_image_name;
   std::string m_name;
   mutable Mutex m_lock;
   State m_state = STATE_STOPPED;
@@ -280,6 +305,7 @@ private:
     nullptr;
   librados::IoCtx m_local_ioctx;
   ImageCtxT *m_local_image_ctx = nullptr;
+  std::string m_local_image_tag_owner;
 
   decltype(ImageCtxT::journal) m_local_journal = nullptr;
   librbd::journal::Replay<ImageCtxT> *m_local_replay = nullptr;
@@ -363,6 +389,9 @@ private:
   void shut_down(int r);
   void handle_shut_down(int r);
   void handle_remote_journal_metadata_updated();
+
+  void prepare_local_image();
+  void handle_prepare_local_image(int r);
 
   void bootstrap();
   void handle_bootstrap(int r);

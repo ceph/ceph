@@ -35,6 +35,14 @@ public:
     return io_ctx_impl;
   }
 
+  MOCK_METHOD5(aio_notify, void(const std::string& o, AioCompletionImpl *c,
+                                bufferlist& bl, uint64_t timeout_ms,
+                                bufferlist *pbl));
+  void do_aio_notify(const std::string& o, AioCompletionImpl *c, bufferlist& bl,
+                     uint64_t timeout_ms, bufferlist *pbl) {
+    return TestMemIoCtxImpl::aio_notify(o, c, bl, timeout_ms, pbl);
+  }
+
   MOCK_METHOD4(aio_watch, int(const std::string& o, AioCompletionImpl *c,
                               uint64_t *handle, librados::WatchCtx2 *ctx));
   int do_aio_watch(const std::string& o, AioCompletionImpl *c,
@@ -91,7 +99,7 @@ public:
   }
   MOCK_METHOD5(sparse_read, int(const std::string& oid,
                                uint64_t off,
-                               size_t len,
+                               uint64_t len,
                                std::map<uint64_t, uint64_t> *m,
                                bufferlist *bl));
   int do_sparse_read(const std::string& oid, uint64_t off, size_t len,
@@ -155,6 +163,7 @@ public:
   void default_to_parent() {
     using namespace ::testing;
 
+    ON_CALL(*this, aio_notify(_, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_notify));
     ON_CALL(*this, aio_watch(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_watch));
     ON_CALL(*this, aio_unwatch(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_unwatch));
     ON_CALL(*this, exec(_, _, _, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_exec));

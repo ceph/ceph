@@ -15,6 +15,7 @@ Build-Depends: bc,
                cython,
                cython3,
                debhelper (>= 9),
+               dh-exec,
                dh-python,
 	       dh-systemd,
                default-jdk,
@@ -50,6 +51,7 @@ Build-Depends: bc,
                python (>= 2.7),
                python-all-dev,
                python-nose,
+	       python-prettytable,
 	       python-setuptools,
                python-sphinx,
                python3-all-dev,
@@ -363,7 +365,8 @@ Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
          python-rbd (= ${binary:Version}),
          python-rgw (= ${binary:Version}),
          ${python:Depends},
-	 python-requests
+	 python-requests,
+	 python-prettytable
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools,
 	  ceph (<< 10),
@@ -824,3 +827,11 @@ Section: java
 Depends: libcephfs2 (= ${binary:Version}), ${java:Depends},
          ${misc:Depends}, ${shlibs:Depends}
 Description: Java Native Interface library for CephFS Java bindings
+
+Package: rados-objclass-dev
+Architecture: linux-any
+Section: libdevel
+Depends: librados-dev (= ${binary:Version}) ${misc:Depends}
+Description: RADOS object class development kit.
+ .
+ This package contains development files needed for building RADOS object class plugins.

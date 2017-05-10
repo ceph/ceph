@@ -745,7 +745,7 @@ namespace rgw {
     RGWUserInfo user;
     RGWAccessKey key; // XXXX acc_key
 
-    static atomic<uint32_t> fs_inst_counter;
+    static std::atomic<uint32_t> fs_inst_counter;
 
     static uint32_t write_completion_interval_s;
     std::string fsid;
@@ -1449,9 +1449,9 @@ public:
     op = this;
   }
 
-  virtual bool only_bucket() override { return false; }
+  bool only_bucket() override { return false; }
 
-  virtual int op_init() override {
+  int op_init() override {
     // assign store, s, and dialect_handler
     RGWObjectCtx* rados_ctx
       = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
@@ -1462,7 +1462,7 @@ public:
     return 0;
   }
 
-  virtual int header_init() override {
+  int header_init() override {
     struct req_state* s = get_state();
     s->info.method = "GET";
     s->op = OP_GET;
@@ -1484,12 +1484,12 @@ public:
     return 0;
   }
 
-  virtual int get_params() override {
+  int get_params() override {
     max = default_max;
     return 0;
   }
 
-  virtual void send_response() override {
+  void send_response() override {
     valid = true;
     if ((objs.size() > 1) ||
 	(! objs.empty() &&

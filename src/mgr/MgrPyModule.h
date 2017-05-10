@@ -43,8 +43,6 @@ class MgrPyModule
 {
 private:
   const std::string module_name;
-  PyObject *pModule;
-  PyObject *pClass;
   PyObject *pClassInstance;
 
   std::vector<ModuleCommand> commands;
@@ -73,9 +71,11 @@ public:
 
   int handle_command(
     const cmdmap_t &cmdmap,
-    std::stringstream *ss,
-    std::stringstream *ds);
+    std::stringstream *ds,
+    std::stringstream *ss);
 };
+
+std::string handle_pyerror();
 
 #endif
 

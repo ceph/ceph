@@ -242,8 +242,8 @@ void Objecter::init()
   if (!logger) {
     PerfCountersBuilder pcb(cct, "objecter", l_osdc_first, l_osdc_last);
 
-    pcb.add_u64(l_osdc_op_active, "op_active",
-		"Operations active", "actv");
+    pcb.add_u64(l_osdc_op_active, "op_active", "Operations active", "actv",
+		PerfCountersBuilder::PRIO_CRITICAL);
     pcb.add_u64(l_osdc_op_laggy, "op_laggy", "Laggy operations");
     pcb.add_u64_counter(l_osdc_op_send, "op_send", "Sent operations");
     pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes", "Sent data");
@@ -251,12 +251,12 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_op_reply, "op_reply", "Operation reply");
 
     pcb.add_u64_counter(l_osdc_op, "op", "Operations");
-    pcb.add_u64_counter(l_osdc_op_r, "op_r",
-			"Read operations", "read");
-    pcb.add_u64_counter(l_osdc_op_w, "op_w",
-			"Write operations", "writ");
-    pcb.add_u64_counter(l_osdc_op_rmw, "op_rmw",
-			"Read-modify-write operations");
+    pcb.add_u64_counter(l_osdc_op_r, "op_r", "Read operations", "rd",
+			PerfCountersBuilder::PRIO_CRITICAL);
+    pcb.add_u64_counter(l_osdc_op_w, "op_w", "Write operations", "wr",
+			PerfCountersBuilder::PRIO_CRITICAL);
+    pcb.add_u64_counter(l_osdc_op_rmw, "op_rmw", "Read-modify-write operations",
+			"rdwr", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64_counter(l_osdc_op_pg, "op_pg", "PG operation");
 
     pcb.add_u64_counter(l_osdc_osdop_stat, "osdop_stat", "Stat operations");
@@ -1331,9 +1331,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
   for (map<ceph_tid_t,CommandOp*>::iterator p = need_resend_command.begin();
        p != need_resend_command.end(); ++p) {
     CommandOp *c = p->second;
-    _assign_command_session(c, sul);
-    if (c->session && !c->session->is_homeless()) {
-      _send_command(c);
+    if (c->target.osd >= 0) {
+      _assign_command_session(c, sul);
+      if (c->session && !c->session->is_homeless()) {
+	_send_command(c);
+      }
     }
   }
 
@@ -1396,18 +1398,17 @@ void Objecter::C_Op_Map_Latest::finish(int r)
 }
 
 int Objecter::pool_snap_by_name(int64_t poolid, const char *snap_name,
-				snapid_t *snap)
+				snapid_t *snap) const
 {
   shared_lock rl(rwlock);
 
-  const map<int64_t, pg_pool_t>& pools = osdmap->get_pools();
-  map<int64_t, pg_pool_t>::const_iterator iter = pools.find(poolid);
+  auto& pools = osdmap->get_pools();
+  auto iter = pools.find(poolid);
   if (iter == pools.end()) {
     return -ENOENT;
   }
   const pg_pool_t& pg_pool = iter->second;
-  map<snapid_t, pool_snap_info_t>::const_iterator p;
-  for (p = pg_pool.snaps.begin();
+  for (auto p = pg_pool.snaps.begin();
        p != pg_pool.snaps.end();
        ++p) {
     if (p->second.name == snap_name) {
@@ -1419,17 +1420,17 @@ int Objecter::pool_snap_by_name(int64_t poolid, const char *snap_name,
 }
 
 int Objecter::pool_snap_get_info(int64_t poolid, snapid_t snap,
-				 pool_snap_info_t *info)
+				 pool_snap_info_t *info) const
 {
   shared_lock rl(rwlock);
 
-  const map<int64_t, pg_pool_t>& pools = osdmap->get_pools();
-  map<int64_t, pg_pool_t>::const_iterator iter = pools.find(poolid);
+  auto& pools = osdmap->get_pools();
+  auto iter = pools.find(poolid);
   if (iter == pools.end()) {
     return -ENOENT;
   }
   const pg_pool_t& pg_pool = iter->second;
-  map<snapid_t,pool_snap_info_t>::const_iterator p = pg_pool.snaps.find(snap);
+  auto p = pg_pool.snaps.find(snap);
   if (p == pg_pool.snaps.end())
     return -ENOENT;
   *info = p->second;
@@ -1457,9 +1458,9 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock *sl)
 {
   // rwlock is locked unique
 
-  if (op->attempts) {
-    // we send a reply earlier, which means that previously the pool
-    // existed, and now it does not (i.e., it was deleted).
+  if (op->target.pool_ever_existed) {
+    // the pool previously existed and now it does not, which means it
+    // was deleted.
     op->map_dne_bound = osdmap->get_epoch();
     ldout(cct, 10) << "check_op_pool_dne tid " << op->tid
 		   << " pool previously exists but now does not"
@@ -2748,6 +2749,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
 		<< t->target_oloc << " -> pgid " << pgid << dendl;
   ldout(cct,30) << __func__ << "  target pi " << pi
 		<< " pg_num " << pi->get_pg_num() << dendl;
+  t->pool_ever_existed = true;
 
   int size = pi->size;
   int min_size = pi->min_size;
@@ -2759,7 +2761,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   bool sort_bitwise = osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE);
   unsigned prev_seed = ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask);
   pg_t prev_pgid(prev_seed, pgid.pool());
-  if (any_change && pg_interval_t::is_new_interval(
+  if (any_change && PastIntervals::is_new_interval(
 	t->acting_primary,
 	acting_primary,
 	t->acting,
@@ -3088,6 +3090,9 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   m->ops = op->ops;
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
+  m->trace = op->trace;
+  if (!m->trace && cct->_conf->osdc_blkin_trace_all)
+    m->trace.init("objecter op", &trace_endpoint);
 
   if (op->priority)
     m->set_priority(op->priority);
@@ -4727,11 +4732,13 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
     if (!osdmap->exists(c->target_osd)) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "osd dne";
+      c->target.osd = -1;
       return RECALC_OP_TARGET_OSD_DNE;
     }
     if (osdmap->is_down(c->target_osd)) {
       c->map_check_error = -ENXIO;
       c->map_check_error_str = "osd down";
+      c->target.osd = -1;
       return RECALC_OP_TARGET_OSD_DOWN;
     }
     c->target.osd = c->target_osd;
@@ -4740,10 +4747,12 @@ int Objecter::_calc_command_target(CommandOp *c, shunique_lock& sul)
     if (ret == RECALC_OP_TARGET_POOL_DNE) {
       c->map_check_error = -ENOENT;
       c->map_check_error_str = "pool dne";
+      c->target.osd = -1;
       return ret;
     } else if (ret == RECALC_OP_TARGET_OSD_DOWN) {
       c->map_check_error = -ENXIO;
       c->map_check_error_str = "osd down";
+      c->target.osd = -1;
       return ret;
     }
   }

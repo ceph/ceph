@@ -655,7 +655,7 @@ void RGWLC::start_processor()
 
 void RGWLC::stop_processor()
 {
-  down_flag.set(1);
+  down_flag = true;
   if (worker) {
     worker->stop();
     worker->join();
@@ -672,7 +672,7 @@ void RGWLC::LCWorker::stop()
 
 bool RGWLC::going_down()
 {
-  return (down_flag.read() != 0);
+  return down_flag;
 }
 
 bool RGWLC::LCWorker::should_work(utime_t& now)

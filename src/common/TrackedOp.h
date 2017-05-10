@@ -21,6 +21,7 @@
 #include "include/utime.h"
 #include "common/Mutex.h"
 #include "common/histogram.h"
+#include "common/zipkin_trace.h"
 #include "msg/Message.h"
 #include "include/memory.h"
 #include "common/RWLock.h"
@@ -33,26 +34,36 @@ typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
 class OpHistory {
   set<pair<utime_t, TrackedOpRef> > arrived;
   set<pair<double, TrackedOpRef> > duration;
+  set<pair<utime_t, TrackedOpRef> > slow_op;
   Mutex ops_history_lock;
   void cleanup(utime_t now);
   bool shutdown;
   uint32_t history_size;
   uint32_t history_duration;
+  uint32_t history_slow_op_size;
+  uint32_t history_slow_op_threshold;
 
 public:
   OpHistory() : ops_history_lock("OpHistory::Lock"), shutdown(false),
-  history_size(0), history_duration(0) {}
+    history_size(0), history_duration(0),
+    history_slow_op_size(0), history_slow_op_threshold(0) {}
   ~OpHistory() {
     assert(arrived.empty());
     assert(duration.empty());
+    assert(slow_op.empty());
   }
   void insert(utime_t now, TrackedOpRef op);
   void dump_ops(utime_t now, Formatter *f);
   void dump_ops_by_duration(utime_t now, Formatter *f);
+  void dump_slow_ops(utime_t now, Formatter *f);
   void on_shutdown();
   void set_size_and_duration(uint32_t new_size, uint32_t new_duration) {
     history_size = new_size;
     history_duration = new_duration;
+  }
+  void set_slow_op_size_and_threshold(uint32_t new_size, uint32_t new_threshold) {
+    history_slow_op_size = new_size;
+    history_slow_op_threshold = new_threshold;
   }
 };
 
@@ -79,12 +90,16 @@ public:
   void set_history_size_and_duration(uint32_t new_size, uint32_t new_duration) {
     history.set_size_and_duration(new_size, new_duration);
   }
+  void set_history_slow_op_size_and_threshold(uint32_t new_size, uint32_t new_threshold) {
+    history.set_slow_op_size_and_threshold(new_size, new_threshold);
+  }
   void set_tracking(bool enable) {
     RWLock::WLocker l(lock);
     tracking_enabled = enable;
   }
   bool dump_ops_in_flight(Formatter *f, bool print_only_blocked=false);
   bool dump_historic_ops(Formatter *f, bool by_duration = false);
+  bool dump_historic_slow_ops(Formatter *f);
   bool register_inflight_op(TrackedOp *i);
   void unregister_inflight_op(TrackedOp *i);
 
@@ -208,6 +223,11 @@ protected:
   virtual void _unregistered() {};
 
 public:
+  ZTracer::Trace osd_trace;
+  ZTracer::Trace pg_trace;
+  ZTracer::Trace store_trace;
+  ZTracer::Trace journal_trace;
+
   virtual ~TrackedOp() {}
 
   void get() {

@@ -379,13 +379,17 @@ def scan_for_leaked_encryption_keys(ctx, config):
         log.debug('Scanning radosgw logs for leaked encryption keys...')
         procs = list()
         for client, client_config in config.iteritems():
+            if not client_config.get('scan_for_encryption_keys', True):
+                continue
+            cluster_name, daemon_type, client_id = teuthology.split_role(client)
+            client_with_cluster = '.'.join((cluster_name, daemon_type, client_id))
             (remote,) = ctx.cluster.only(client).remotes.keys()
             proc = remote.run(
                 args=[
                     'grep',
                     '--binary-files=text',
                     s3test_customer_key,
-                    '/var/log/ceph/rgw.{client}.log'.format(client=client),
+                    '/var/log/ceph/rgw.{client}.log'.format(client=client_with_cluster),
                 ],
                 wait=False,
                 check_status=False,

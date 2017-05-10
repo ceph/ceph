@@ -664,8 +664,9 @@ TEST_F(TestInternal, ResizeCopyup)
   bufferlist bl;
   bl.append(std::string(4096, '1'));
   for (size_t i = 0; i < m_image_size; i += bl.length()) {
-    ASSERT_EQ(bl.length(), ictx->io_work_queue->write(i, bl.length(),
-                                                      bufferlist{bl}, 0));
+    ASSERT_EQ((ssize_t)bl.length(),
+	      ictx->io_work_queue->write(i, bl.length(),
+					 bufferlist{bl}, 0));
   }
 
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
@@ -703,7 +704,7 @@ TEST_F(TestInternal, ResizeCopyup)
 
   librbd::io::ReadResult read_result{&read_bl};
   for (size_t i = 2 << order; i < m_image_size; i += bl.length()) {
-    ASSERT_EQ(bl.length(),
+    ASSERT_EQ((ssize_t)bl.length(),
               ictx2->io_work_queue->read(i, bl.length(),
                                          librbd::io::ReadResult{read_result},
                                          0));
@@ -733,8 +734,9 @@ TEST_F(TestInternal, DiscardCopyup)
   bufferlist bl;
   bl.append(std::string(4096, '1'));
   for (size_t i = 0; i < m_image_size; i += bl.length()) {
-    ASSERT_EQ(bl.length(), ictx->io_work_queue->write(i, bl.length(),
-                                                      bufferlist{bl}, 0));
+    ASSERT_EQ((ssize_t)bl.length(),
+	      ictx->io_work_queue->write(i, bl.length(),
+					 bufferlist{bl}, 0));
   }
 
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
@@ -769,7 +771,7 @@ TEST_F(TestInternal, DiscardCopyup)
 
   librbd::io::ReadResult read_result{&read_bl};
   for (size_t i = 0; i < m_image_size; i += bl.length()) {
-    ASSERT_EQ(bl.length(),
+    ASSERT_EQ((ssize_t)bl.length(),
               ictx2->io_work_queue->read(i, bl.length(),
                                          librbd::io::ReadResult{read_result},
                                          0));
@@ -880,7 +882,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
 
   bufferlist bl;
   bl.append(std::string(1 << ictx->order, '1'));
-  ASSERT_EQ(bl.length(),
+  ASSERT_EQ((ssize_t)bl.length(),
             ictx->io_work_queue->write(0, bl.length(), bufferlist{bl}, 0));
   ASSERT_EQ(0, librbd::flush(ictx));
 
@@ -910,7 +912,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
 
   bufferlist write_full_bl;
   write_full_bl.append(std::string(1 << ictx2->order, '2'));
-  ASSERT_EQ(write_full_bl.length(),
+  ASSERT_EQ((ssize_t)write_full_bl.length(),
             ictx2->io_work_queue->write(0, write_full_bl.length(),
                                         bufferlist{write_full_bl}, 0));
 
@@ -921,7 +923,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
   read_bl.push_back(read_ptr);
 
   librbd::io::ReadResult read_result{&read_bl};
-  ASSERT_EQ(read_bl.length(),
+  ASSERT_EQ((ssize_t)read_bl.length(),
             ictx2->io_work_queue->read(0, read_bl.length(),
                                        librbd::io::ReadResult{read_result}, 0));
   ASSERT_TRUE(write_full_bl.contents_equal(read_bl));
@@ -929,7 +931,7 @@ TEST_F(TestInternal, WriteFullCopyup) {
   ASSERT_EQ(0, librbd::snap_set(ictx2,
 				cls::rbd::UserSnapshotNamespace(),
 				"snap1"));
-  ASSERT_EQ(read_bl.length(),
+  ASSERT_EQ((ssize_t)read_bl.length(),
             ictx2->io_work_queue->read(0, read_bl.length(),
                                        librbd::io::ReadResult{read_result}, 0));
   ASSERT_TRUE(bl.contents_equal(read_bl));
@@ -1030,7 +1032,7 @@ TEST_F(TestInternal, TestCoR)
   ASSERT_EQ(0, image.stat(info, sizeof(info)));
 
   const int object_num = info.size / info.obj_size;
-  printf("made parent image \"%s\": %ldK (%d * %ldK)\n", m_image_name.c_str(),
+  printf("made parent image \"%s\": %ldK (%d * %" PRIu64 "K)\n", m_image_name.c_str(),
          (unsigned long)m_image_size, object_num, info.obj_size/1024);
 
   // write something into parent
@@ -1167,8 +1169,8 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   ASSERT_EQ(0, image.stat(info, sizeof(info)));
 
   const int object_num = info.size / info.obj_size;
-  printf("made parent image \"%s\": %ldK (%d * %ldK)\n", m_image_name.c_str(),
-         (unsigned long)m_image_size, object_num, info.obj_size/1024);
+  printf("made parent image \"%s\": %" PRIu64 "K (%d * %" PRIu64 "K)\n",
+	 m_image_name.c_str(), m_image_size, object_num, info.obj_size/1024);
 
   // write something into parent
   char test_data[TEST_IO_SIZE + 1];

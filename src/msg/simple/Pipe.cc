@@ -917,45 +917,48 @@ void Pipe::set_socket_options()
   }
 #endif
 
+#ifdef SO_PRIORITY
   int prio = msgr->get_socket_priority();
   if (prio >= 0) {
     int r = -1;
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
-
-    if (peer_addr.get_family() == AF_INET) {
-      r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
-      if (r < 0) {
-        r = -errno;
-        ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
-                           << ": " << cpp_strerror(r) << dendl;
-      }
-    } else if (peer_addr.get_family() == AF_INET6) {
-      r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
-      if (r < 0) {
-        r = -errno;
-        ldout(msgr->cct,0) << "couldn't set IPV6_TCLASS to " << iptos
-                           << ": " << cpp_strerror(r) << dendl;
-      }
+    int addr_family = 0;
+    if (!peer_addr.is_blank_ip()) {
+      addr_family = peer_addr.get_family();
     } else {
-      ldout(msgr->cct,0) << "couldn't set ToS of unknown family to " << iptos
-                         << dendl;
+      addr_family = msgr->get_myaddr().get_family();
+    }
+    switch (addr_family) {
+    case AF_INET:
+      r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
+      break;
+    case AF_INET6:
+      r = ::setsockopt(sd, IPPROTO_IPV6, IPV6_TCLASS, &iptos, sizeof(iptos));
+      break;
+    default:
+      lderr(msgr->cct) << "couldn't set ToS of unknown family ("
+		       << addr_family << ")"
+		       << " to " << iptos << dendl;
+      return;
+    }
+    if (r < 0) {
+      r = -errno;
+      ldout(msgr->cct,0) << "couldn't set TOS to " << iptos
+			 << ": " << cpp_strerror(r) << dendl;
     }
 #endif
-#if defined(SO_PRIORITY) 
     // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
     // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
     // We need to call setsockopt(SO_PRIORITY) after it.
-#if defined(__linux__)
     r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
-#endif
     if (r < 0) {
       r = -errno;
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
                          << ": " << cpp_strerror(r) << dendl;
     }
-#endif
   }
+#endif
 }
 
 int Pipe::connect()
@@ -1715,6 +1718,8 @@ void Pipe::reader()
 	continue;
       }
 
+      m->trace.event("pipe read message");
+
       if (state == STATE_CLOSED ||
 	  state == STATE_CONNECTING) {
 	in_q->dispatch_throttle_release(m->get_dispatch_throttle_size());
@@ -1948,6 +1953,8 @@ void Pipe::writer()
 	blist.append(m->get_data());
 
         pipe_lock.Unlock();
+
+        m->trace.event("pipe writing message");
 
         ldout(msgr->cct,20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(header, footer, blist);
@@ -2193,7 +2200,8 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
   ldout(msgr->cct,20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
-  message = decode_message(msgr->cct, msgr->crcflags, header, footer, front, middle, data);
+  message = decode_message(msgr->cct, msgr->crcflags, header, footer,
+                           front, middle, data, connection_state.get());
   if (!message) {
     ret = -EINVAL;
     goto out_dethrottle;

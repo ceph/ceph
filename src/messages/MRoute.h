@@ -23,7 +23,7 @@
 struct MRoute : public Message {
 
   static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 2;
+  static const int COMPAT_VERSION = 3;
 
   uint64_t session_mon_tid;
   Message *msg;
@@ -58,17 +58,11 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(session_mon_tid, p);
     ::decode(dest, p);
-    if (header.version >= 2) {
-      bool m;
-      ::decode(m, p);
-      if (m)
-	msg = decode_message(NULL, 0, p);
-    } else {
+    bool m;
+    ::decode(m, p);
+    if (m)
       msg = decode_message(NULL, 0, p);
-    }
-    if (header.version >= 3) {
-      ::decode(send_osdmap_first, p);
-    }
+    ::decode(send_osdmap_first, p);
   }
   void encode_payload(uint64_t features) override {
     ::encode(session_mon_tid, payload);

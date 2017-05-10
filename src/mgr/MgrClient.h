@@ -95,6 +95,7 @@ public:
 
   void set_pgstats_cb(std::function<MPGStats*()> cb_)
   {
+    Mutex::Locker l(lock);
     pgstats_cb = cb_;
   }
 

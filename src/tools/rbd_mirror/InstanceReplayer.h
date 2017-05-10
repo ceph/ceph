@@ -10,7 +10,6 @@
 #include "common/AsyncOpTracker.h"
 #include "common/Formatter.h"
 #include "common/Mutex.h"
-#include "tools/rbd_mirror/instance_watcher/Types.h"
 #include "types.h"
 
 namespace librbd { class ImageCtx; }
@@ -50,13 +49,16 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
-  void set_peers(const Peers &peers);
+  void add_peer(std::string mirror_uuid, librados::IoCtx io_ctx);
+  void remove_peer(std::string mirror_uuid);
 
   void acquire_image(const std::string &global_image_id,
-                     const instance_watcher::PeerImageIds &peers,
+                     const std::string &peer_mirror_uuid,
+                     const std::string &peer_image_id,
                      Context *on_finish);
   void release_image(const std::string &global_image_id,
-                     const instance_watcher::PeerImageIds &peers,
+                     const std::string &peer_mirror_uuid,
+                     const std::string &peer_image_id,
                      bool schedule_delete, Context *on_finish);
   void release_all(Context *on_finish);
 
@@ -80,6 +82,30 @@ private:
    *
    * @endverbatim
    */
+
+  struct Peer {
+    std::string mirror_uuid;
+    librados::IoCtx io_ctx;
+
+    Peer() {
+    }
+
+    Peer(const std::string &mirror_uuid) : mirror_uuid(mirror_uuid) {
+    }
+
+    Peer(const std::string &mirror_uuid, librados::IoCtx &io_ctx)
+      : mirror_uuid(mirror_uuid), io_ctx(io_ctx) {
+    }
+
+    inline bool operator<(const Peer &rhs) const {
+      return mirror_uuid < rhs.mirror_uuid;
+    }
+    inline bool operator==(const Peer &rhs) const {
+      return mirror_uuid == rhs.mirror_uuid;
+    }
+  };
+
+  typedef std::set<Peer> Peers;
 
   Threads<ImageCtxT> *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;

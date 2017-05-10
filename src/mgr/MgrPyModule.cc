@@ -18,6 +18,31 @@
 
 #include "MgrPyModule.h"
 
+//XXX courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
+#include <boost/python.hpp>
+#include "include/assert.h"  // boost clobbers this
+
+// decode a Python exception into a string
+std::string handle_pyerror()
+{
+    using namespace boost::python;
+    using namespace boost;
+
+    PyObject *exc, *val, *tb;
+    object formatted_list, formatted;
+    PyErr_Fetch(&exc, &val, &tb);
+    handle<> hexc(exc), hval(allow_null(val)), htb(allow_null(tb));
+    object traceback(import("traceback"));
+    if (!tb) {
+        object format_exception_only(traceback.attr("format_exception_only"));
+        formatted_list = format_exception_only(hexc, hval);
+    } else {
+        object format_exception(traceback.attr("format_exception"));
+        formatted_list = format_exception(hexc,hval, htb);
+    }
+    formatted = str("").join(formatted_list);
+    return extract<std::string>(formatted);
+}
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -25,22 +50,25 @@
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 MgrPyModule::MgrPyModule(const std::string &module_name_)
-  : module_name(module_name_), pModule(nullptr), pClass(nullptr),
+  : module_name(module_name_),
     pClassInstance(nullptr)
 {}
 
 MgrPyModule::~MgrPyModule()
 {
-  Py_XDECREF(pModule);
-  Py_XDECREF(pClass);
+  PyGILState_STATE gstate;
+  gstate = PyGILState_Ensure();
+
   Py_XDECREF(pClassInstance);
+
+  PyGILState_Release(gstate);
 }
 
 int MgrPyModule::load()
 {
   // Load the module
   PyObject *pName = PyString_FromString(module_name.c_str());
-  pModule = PyImport_Import(pName);
+  auto pModule = PyImport_Import(pName);
   Py_DECREF(pName);
   if (pModule == nullptr) {
     derr << "Module not found: '" << module_name << "'" << dendl;
@@ -49,7 +77,8 @@ int MgrPyModule::load()
 
   // Find the class
   // TODO: let them call it what they want instead of just 'Module'
-  pClass = PyObject_GetAttrString(pModule, (const char*)"Module");
+  auto pClass = PyObject_GetAttrString(pModule, (const char*)"Module");
+  Py_DECREF(pModule);
   if (pClass == nullptr) {
     derr << "Class not found in module '" << module_name << "'" << dendl;
     return -EINVAL;
@@ -61,13 +90,15 @@ int MgrPyModule::load()
   auto pyHandle = PyString_FromString(module_name.c_str());
   auto pArgs = PyTuple_Pack(1, pyHandle);
   pClassInstance = PyObject_CallObject(pClass, pArgs);
+  Py_DECREF(pClass);
+  Py_DECREF(pyHandle);
+  Py_DECREF(pArgs);
   if (pClassInstance == nullptr) {
     derr << "Failed to construct class in '" << module_name << "'" << dendl;
     return -EINVAL;
   } else {
     dout(1) << "Constructed class from module: " << module_name << dendl;
   }
-  Py_DECREF(pArgs);
 
   return load_commands();
 }
@@ -82,16 +113,18 @@ int MgrPyModule::serve()
   auto pValue = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("serve"), nullptr);
 
+  int r = 0;
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
+    derr << module_name << ".serve:" << dendl;
+    derr << handle_pyerror() << dendl;
     return -EINVAL;
   }
 
   PyGILState_Release(gstate);
 
-  return 0;
+  return r;
 }
 
 // FIXME: DRY wrt serve
@@ -108,8 +141,8 @@ void MgrPyModule::shutdown()
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
     derr << "Failed to invoke shutdown() on " << module_name << dendl;
+    derr << handle_pyerror() << dendl;
   }
 
   PyGILState_Release(gstate);
@@ -130,7 +163,8 @@ void MgrPyModule::notify(const std::string &notify_type, const std::string &noti
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
+    derr << module_name << ".notify:" << dendl;
+    derr << handle_pyerror() << dendl;
     // FIXME: callers can't be expected to handle a python module
     // that has spontaneously broken, but Mgr() should provide
     // a hook to unload misbehaving modules when they have an
@@ -160,7 +194,8 @@ void MgrPyModule::notify_clog(const LogEntry &log_entry)
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    PyErr_Print();
+    derr << module_name << ".notify_clog:" << dendl;
+    derr << handle_pyerror() << dendl;
     // FIXME: callers can't be expected to handle a python module
     // that has spontaneously broken, but Mgr() should provide
     // a hook to unload misbehaving modules when they have an
@@ -213,8 +248,8 @@ int MgrPyModule::load_commands()
 
 int MgrPyModule::handle_command(
   const cmdmap_t &cmdmap,
-  std::stringstream *ss,
-  std::stringstream *ds)
+  std::stringstream *ds,
+  std::stringstream *ss)
 {
   assert(ss != nullptr);
   assert(ds != nullptr);
@@ -243,7 +278,8 @@ int MgrPyModule::handle_command(
 
     Py_DECREF(pResult);
   } else {
-    PyErr_Print();
+    *ds << "";
+    *ss << handle_pyerror();
     r = -EINVAL;
   }
 

@@ -456,25 +456,6 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
 }
 
 template <typename I>
-int Journal<I>::is_tag_owner(I *image_ctx, bool *is_tag_owner) {
-  return Journal<I>::is_tag_owner(image_ctx->md_ctx, image_ctx->id,
-                                  is_tag_owner, image_ctx->op_work_queue);
-}
-
-template <typename I>
-int Journal<I>::is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
-                             bool *is_tag_owner, ContextWQ *op_work_queue) {
-  C_SaferCond ctx;
-  Journal<I>::is_tag_owner(io_ctx, image_id, is_tag_owner, op_work_queue, &ctx);
-
-  int r = ctx.wait();
-  if (r < 0) {
-    return r;
-  }
-  return r;
-}
-
-template <typename I>
 void Journal<I>::is_tag_owner(I *image_ctx, bool *owner,
                               Context *on_finish) {
   Journal<I>::is_tag_owner(image_ctx->md_ctx, image_ctx->id, owner,
@@ -493,19 +474,6 @@ void Journal<I>::is_tag_owner(librados::IoCtx& io_ctx, std::string& image_id,
   get_tags(cct, is_tag_owner_ctx->journaler, &is_tag_owner_ctx->client,
 	   &is_tag_owner_ctx->client_meta, &is_tag_owner_ctx->tag_tid,
 	   &is_tag_owner_ctx->tag_data, is_tag_owner_ctx);
-}
-
-template <typename I>
-int Journal<I>::get_tag_owner(I *image_ctx, std::string *mirror_uuid) {
-  C_SaferCond get_tags_ctx;
-  get_tag_owner(image_ctx->md_ctx, image_ctx->id, mirror_uuid,
-                image_ctx->op_work_queue, &get_tags_ctx);
-
-  int r = get_tags_ctx.wait();
-  if (r < 0) {
-    return r;
-  }
-  return 0;
 }
 
 template <typename I>
@@ -1800,4 +1768,6 @@ void Journal<I>::remove_listener(journal::Listener *listener) {
 
 } // namespace librbd
 
+#ifndef TEST_F
 template class librbd::Journal<librbd::ImageCtx>;
+#endif

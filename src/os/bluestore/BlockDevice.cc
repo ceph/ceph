@@ -34,14 +34,12 @@ void IOContext::aio_wait()
 {
   std::unique_lock<std::mutex> l(lock);
   // see _aio_thread for waker logic
-  ++num_waiting;
-  while (num_running.load() > 0 || num_reading.load() > 0) {
+  while (num_running.load() > 0) {
     dout(10) << __func__ << " " << this
-	     << " waiting for " << num_running.load() << " aios and/or "
-	     << num_reading.load() << " readers to complete" << dendl;
+	     << " waiting for " << num_running.load() << " aios to complete"
+	     << dendl;
     cond.wait(l);
   }
-  --num_waiting;
   dout(20) << __func__ << " " << this << " done" << dendl;
 }
 

@@ -69,9 +69,12 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   MOCK_METHOD0(restart, void());
   MOCK_METHOD0(flush, void());
   MOCK_METHOD2(print_status, void(Formatter *, stringstream *));
-  MOCK_METHOD1(set_remote_images, void(const PeerImages &));
-  MOCK_METHOD2(remove_remote_image, void(const std::string &,
-                                         const std::string &));
+  MOCK_METHOD3(add_remote_image, void(const std::string &,
+                                      const std::string &,
+                                      librados::IoCtx &));
+  MOCK_METHOD3(remove_remote_image, void(const std::string &,
+                                         const std::string &,
+                                         bool));
   MOCK_METHOD0(remote_images_empty, bool());
   MOCK_METHOD0(get_global_image_id, const std::string &());
   MOCK_METHOD0(get_local_image_id, const std::string &());
@@ -142,8 +145,6 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
     "local_mirror_uuid", m_local_io_ctx.get_id());
 
   std::string global_image_id("global_image_id");
-  rbd::mirror::instance_watcher::PeerImageIds peer_image_ids =
-    {{"remote_mirror_uuid", "remote_image_id"}};
 
   EXPECT_CALL(mock_image_replayer, get_global_image_id())
     .WillRepeatedly(ReturnRef(global_image_id));
@@ -153,18 +154,20 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   InSequence seq;
 
   instance_replayer.init();
-  instance_replayer.set_peers({{"remote_mirror_uuid", m_remote_io_ctx}});
+  instance_replayer.add_peer("remote_mirror_uuid", m_remote_io_ctx);
 
   // Acquire
 
   C_SaferCond on_acquire;
 
-  EXPECT_CALL(mock_image_replayer, set_remote_images(_));
+  EXPECT_CALL(mock_image_replayer, add_remote_image("remote_mirror_uuid",
+                                                    "remote_image_id", _));
   EXPECT_CALL(mock_image_replayer, is_stopped())
     .WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, start(nullptr, false));
 
-  instance_replayer.acquire_image(global_image_id, peer_image_ids, &on_acquire);
+  instance_replayer.acquire_image(global_image_id, "remote_mirror_uuid",
+                                  "remote_image_id", &on_acquire);
   ASSERT_EQ(0, on_acquire.wait());
 
   // Release
@@ -172,7 +175,8 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   C_SaferCond on_release;
 
   EXPECT_CALL(mock_image_replayer,
-              remove_remote_image("remote_mirror_uuid", "remote_image_id"));
+              remove_remote_image("remote_mirror_uuid", "remote_image_id",
+                                  false));
   EXPECT_CALL(mock_image_replayer, remote_images_empty())
     .WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_stopped())
@@ -189,8 +193,8 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
     .WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, destroy());
 
-  instance_replayer.release_image("global_image_id", peer_image_ids, false,
-                                  &on_release);
+  instance_replayer.release_image("global_image_id", "remote_mirror_uuid",
+                                  "remote_image_id", false, &on_release);
   ASSERT_EQ(0, on_release.wait());
 
   instance_replayer.shut_down();

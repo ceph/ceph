@@ -185,6 +185,10 @@ case $1 in
 	    valgrind=$2
 	    shift
 	    ;;
+    --valgrind_args )
+	valgrind_args="$2"
+	shift
+	;;
     --valgrind_mds )
 	    [ -z "$2" ] && usage_exit
 	    valgrind_mds=$2
@@ -198,6 +202,11 @@ case $1 in
     --valgrind_mon )
 	    [ -z "$2" ] && usage_exit
 	    valgrind_mon=$2
+	    shift
+	    ;;
+    --valgrind_mgr )
+	    [ -z "$2" ] && usage_exit
+	    valgrind_mgr=$2
 	    shift
 	    ;;
     --valgrind_rgw )
@@ -339,7 +348,7 @@ run() {
     [ -z "$valg" ] && valg="$valgrind"
 
     if [ -n "$valg" ]; then
-        prunb valgrind --tool="$valg" "$@" -f
+        prunb valgrind --tool="$valg" $valgrind_args "$@" -f
         sleep 1
     else
         if [ "$nodaemon" -eq 0 ]; then
@@ -593,7 +602,7 @@ start_mgr() {
             mkdir -p $CEPH_DEV_DIR/mgr.$name
             key_fn=$CEPH_DEV_DIR/mgr.$name/keyring
             $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mgr.$name $key_fn
-            ceph_adm -i $key_fn auth add mgr.$name mon 'allow profile mgr'
+            ceph_adm -i $key_fn auth add mgr.$name mon 'allow profile mgr' mds 'allow *' osd 'allow *'
         fi
 
         wconf <<EOF
@@ -648,7 +657,7 @@ EOF
 EOF
 	        fi
 	        prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.$name" "$key_fn"
-	        ceph_adm -i "$key_fn" auth add "mds.$name" mon 'allow profile mds' osd 'allow *' mds 'allow' mgr 'allow'
+	        ceph_adm -i "$key_fn" auth add "mds.$name" mon 'allow profile mds' osd 'allow *' mds 'allow' mgr 'allow profile mds'
 	        if [ "$standby" -eq 1 ]; then
 			    prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.${name}s" \
 				     "$CEPH_DEV_DIR/mds.${name}s/keyring"

@@ -21,6 +21,7 @@
 #include "common/admin_socket.h"
 #include "common/perf_counters.h"
 #include "common/Thread.h"
+#include "common/code_environment.h"
 #include "common/ceph_context.h"
 #include "common/ceph_crypto.h"
 #include "common/config.h"
@@ -305,6 +306,17 @@ public:
 	conf->enable_experimental_unrecoverable_data_corrupting_features,
 	cct->_experimental_features);
       ceph_spin_unlock(&cct->_feature_lock);
+      if (getenv("CEPH_DEV") == NULL) {
+        if (!cct->_experimental_features.empty()) {
+          if (cct->_experimental_features.count("*")) {
+            lderr(cct) << "WARNING: all dangerous and experimental features are enabled." << dendl;
+          } else {
+            lderr(cct) << "WARNING: the following dangerous and experimental features are enabled: "
+              << cct->_experimental_features << dendl;
+          }
+        }
+      }
+
     }
     if (changed.count("crush_location")) {
       cct->crush_location.update_from_conf();
@@ -648,7 +660,7 @@ CephContext::~CephContext()
   delete _crypto_none;
   delete _crypto_aes;
   if (_crypto_inited)
-    ceph::crypto::shutdown();
+    ceph::crypto::shutdown(g_code_env == CODE_ENVIRONMENT_LIBRARY);
 }
 
 void CephContext::put() {

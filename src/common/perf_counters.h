@@ -102,6 +102,7 @@ public:
     const char *name;
     const char *description;
     const char *nick;
+    int prio = 0;
     enum perfcounter_type_d type;
     atomic64_t u64;
     atomic64_t avgcount;
@@ -159,8 +160,8 @@ public:
   uint64_t get(int idx) const;
 
   void tset(int idx, utime_t v);
-  void tinc(int idx, utime_t v);
-  void tinc(int idx, ceph::timespan v);
+  void tinc(int idx, utime_t v, uint32_t avgcount = 1);
+  void tinc(int idx, ceph::timespan v, uint32_t avgcount = 1);
   utime_t tget(int idx) const;
 
   void hinc(int idx, int64_t x, int64_t y);
@@ -181,8 +182,9 @@ public:
     m_name = s;
   }
 
-  void set_suppress_nicks(bool b) {
-    suppress_nicks = b;
+  /// adjust priority values by some value
+  void set_prio_adjust(int p) {
+    prio_adjust = p;
   }
 
 private:
@@ -201,7 +203,7 @@ private:
   std::string m_name;
   const std::string m_lock_name;
 
-  bool suppress_nicks = false;
+  int prio_adjust = 0;
 
   /** Protects m_data */
   mutable Mutex m_lock;
@@ -282,26 +284,47 @@ public:
   PerfCountersBuilder(CephContext *cct, const std::string &name,
 		    int first, int last);
   ~PerfCountersBuilder();
+
+  // prio values: higher is better, and higher values get included in
+  // 'ceph daemonperf' (and similar) results.
+  enum {
+    PRIO_CRITICAL = 10,
+    PRIO_INTERESTING = 8,
+    PRIO_USEFUL = 5,
+    PRIO_UNINTERESTING = 2,
+    PRIO_DEBUGONLY = 0,
+  };
   void add_u64(int key, const char *name,
-      const char *description=NULL, const char *nick = NULL);
+	       const char *description=NULL, const char *nick = NULL,
+	       int prio=0);
   void add_u64_counter(int key, const char *name,
-      const char *description=NULL, const char *nick = NULL);
+		       const char *description=NULL,
+		       const char *nick = NULL,
+		       int prio=0);
   void add_u64_avg(int key, const char *name,
-      const char *description=NULL, const char *nick = NULL);
+		   const char *description=NULL,
+		   const char *nick = NULL,
+		   int prio=0);
   void add_time(int key, const char *name,
-      const char *description=NULL, const char *nick = NULL);
+		const char *description=NULL,
+		const char *nick = NULL,
+		int prio=0);
   void add_time_avg(int key, const char *name,
-      const char *description=NULL, const char *nick = NULL);
+		    const char *description=NULL,
+		    const char *nick = NULL,
+		    int prio=0);
   void add_histogram(int key, const char* name,
-      PerfHistogramCommon::axis_config_d x_axis_config,
-      PerfHistogramCommon::axis_config_d y_axis_config,
-      const char *description=NULL, const char* nick = NULL);
+		     PerfHistogramCommon::axis_config_d x_axis_config,
+		     PerfHistogramCommon::axis_config_d y_axis_config,
+		     const char *description=NULL,
+		     const char* nick = NULL,
+		     int prio=0);
   PerfCounters* create_perf_counters();
 private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
   void add_impl(int idx, const char *name,
-                const char *description, const char *nick, int ty,
+                const char *description, const char *nick, int prio, int ty,
                 unique_ptr<PerfHistogram<>> histogram = nullptr);
 
   PerfCounters *m_perf_counters;

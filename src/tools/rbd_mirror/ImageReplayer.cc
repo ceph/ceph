@@ -26,6 +26,7 @@
 #include "tools/rbd_mirror/image_replayer/BootstrapRequest.h"
 #include "tools/rbd_mirror/image_replayer/CloseImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/EventPreprocessor.h"
+#include "tools/rbd_mirror/image_replayer/PrepareLocalImageRequest.h"
 #include "tools/rbd_mirror/image_replayer/ReplayStatusFormatter.h"
 
 #define dout_context g_ceph_context
@@ -326,7 +327,7 @@ void ImageReplayer<I>::add_remote_image(const std::string &mirror_uuid,
                                         librados::IoCtx &io_ctx) {
   Mutex::Locker locker(m_lock);
 
-  PeerImage remote_image(mirror_uuid, io_ctx, image_id);
+  RemoteImage remote_image(mirror_uuid, image_id, io_ctx);
   auto it = m_remote_images.find(remote_image);
   if (it == m_remote_images.end()) {
     m_remote_images.insert(remote_image);
@@ -335,15 +336,10 @@ void ImageReplayer<I>::add_remote_image(const std::string &mirror_uuid,
 
 template <typename I>
 void ImageReplayer<I>::remove_remote_image(const std::string &mirror_uuid,
-                                           const std::string &image_id) {
+                                           const std::string &image_id,
+					   bool schedule_delete) {
   Mutex::Locker locker(m_lock);
   m_remote_images.erase({mirror_uuid, image_id});
-}
-
-template <typename I>
-void ImageReplayer<I>::set_remote_images(const PeerImages &remote_images) {
-  Mutex::Locker locker(m_lock);
-  m_remote_images = remote_images;
 }
 
 template <typename I>
@@ -376,17 +372,11 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
       dout(5) << "stopped manually, ignoring start without manual flag"
 	      << dendl;
       r = -EPERM;
-    } else if (m_remote_images.empty()) {
-      derr << "no remote images associated with replayer" << dendl;
-      r = -EINVAL;
     } else {
       m_state = STATE_STARTING;
       m_last_r = 0;
       m_state_desc.clear();
       m_manual_stop = false;
-
-      // TODO bootstrap will need to support multiple remote images
-      m_remote_image = *m_remote_images.begin();
 
       if (on_finish != nullptr) {
         assert(m_on_start_finish == nullptr);
@@ -411,6 +401,52 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
     return;
   }
 
+  prepare_local_image();
+}
+
+template <typename I>
+void ImageReplayer<I>::prepare_local_image() {
+  dout(20) << dendl;
+
+  Context *ctx = create_context_callback<
+    ImageReplayer, &ImageReplayer<I>::handle_prepare_local_image>(this);
+  auto req = PrepareLocalImageRequest<I>::create(
+    m_local_ioctx, m_global_image_id, &m_local_image_id,
+    &m_local_image_tag_owner, m_threads->work_queue, ctx);
+  req->send();
+}
+
+template <typename I>
+void ImageReplayer<I>::handle_prepare_local_image(int r) {
+  dout(20) << "r=" << r << dendl;
+
+  if (r == -ENOENT) {
+    dout(20) << "local image does not exist" << dendl;
+  } else if (r < 0) {
+    on_start_fail(r, "error preparing local image for replay");
+    return;
+  } else if (m_local_image_tag_owner == librbd::Journal<>::LOCAL_MIRROR_UUID) {
+    dout(5) << "local image is primary" << dendl;
+    on_start_fail(0, "local image is primary");
+    return;
+  }
+
+  // local image doesn't exist or is non-primary
+  bootstrap();
+}
+
+template <typename I>
+void ImageReplayer<I>::bootstrap() {
+  dout(20) << dendl;
+
+  if (m_remote_images.empty()) {
+    on_start_fail(0, "waiting for primary remote image");
+    return;
+  }
+
+  // TODO bootstrap will need to support multiple remote images
+  m_remote_image = *m_remote_images.begin();
+
   CephContext *cct = static_cast<CephContext *>(m_local->cct());
   journal::Settings settings;
   settings.commit_interval = cct->_conf->rbd_mirror_journal_commit_age;
@@ -418,24 +454,17 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
 
   m_remote_journaler = new Journaler(m_threads->work_queue,
                                      m_threads->timer,
-				     &m_threads->timer_lock,
+                                     &m_threads->timer_lock,
                                      m_remote_image.io_ctx,
                                      m_remote_image.image_id,
                                      m_local_mirror_uuid, settings);
-  bootstrap();
-}
-
-template <typename I>
-void ImageReplayer<I>::bootstrap() {
-  dout(20) << "bootstrap params: "
-	   << "local_image_name=" << m_local_image_name << dendl;
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
 
   BootstrapRequest<I> *request = BootstrapRequest<I>::create(
     m_local_ioctx, m_remote_image.io_ctx, m_image_sync_throttler,
-    &m_local_image_ctx, m_local_image_name, m_remote_image.image_id,
+    &m_local_image_ctx, m_local_image_id, m_remote_image.image_id,
     m_global_image_id, m_threads->work_queue, m_threads->timer,
     &m_threads->timer_lock, m_local_mirror_uuid, m_remote_image.mirror_uuid,
     m_remote_journaler, &m_client_meta, ctx, &m_do_resync, &m_progress_cxt);
@@ -461,15 +490,16 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     m_bootstrap_request = nullptr;
     if (m_local_image_ctx) {
       m_local_image_id = m_local_image_ctx->id;
-      m_local_image_name = m_local_image_ctx->name;
     }
   }
 
   if (r == -EREMOTEIO) {
+    m_local_image_tag_owner = "";
     dout(5) << "remote image is non-primary or local image is primary" << dendl;
     on_start_fail(0, "remote image is non-primary or local image is primary");
     return;
   } else if (r == -EEXIST) {
+    m_local_image_tag_owner = "";
     on_start_fail(r, "split-brain detected");
     return;
   } else if (r < 0) {
@@ -1519,7 +1549,6 @@ void ImageReplayer<I>::handle_shut_down(int r) {
     if (m_stopping_for_resync) {
       m_image_deleter->schedule_image_delete(m_local,
                                              m_local_pool_id,
-                                             m_local_image_id,
                                              m_global_image_id);
       m_stopping_for_resync = false;
     }

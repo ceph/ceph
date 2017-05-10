@@ -13,6 +13,8 @@
 #include "rgw_http_client.h"
 #include "common/Cond.h"
 
+#include <atomic>
+
 int rgw_open_cms_envelope(CephContext *cct,
                           const std::string& src,
                           std::string& dst);            /* out */
@@ -216,7 +218,7 @@ class TokenCache {
     list<string>::iterator lru_iter;
   };
 
-  atomic_t down_flag;
+  std::atomic<bool> down_flag = { false };
 
   class RevokeThread : public Thread {
     friend class TokenCache;
@@ -258,12 +260,20 @@ class TokenCache {
       cct(g_ceph_context),
       lock("rgw::keystone::TokenCache"),
       max(cct->_conf->rgw_keystone_token_cache_size) {
-    /* The thread name has been kept for backward compliance. */
-    revocator.create("rgw_swift_k_rev");
+    /* revocation logic needs to be smarter, but meanwhile,
+     *  make it optional.
+     * see http://tracker.ceph.com/issues/9493
+     *     http://tracker.ceph.com/issues/19499
+     */
+    if (cct->_conf->rgw_keystone_revocation_interval > 0
+        && cct->_conf->rgw_keystone_token_cache_size ) {
+      /* The thread name has been kept for backward compliance. */
+      revocator.create("rgw_swift_k_rev");
+    }
   }
 
   ~TokenCache() {
-    down_flag.set(1);
+    down_flag = true;
 
     revocator.stop();
     revocator.join();

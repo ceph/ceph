@@ -66,9 +66,6 @@ public:
 };
 
 
-boost::pool<> CInode::pool(sizeof(CInode));
-boost::pool<> Capability::pool(sizeof(Capability));
-
 LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
 LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
 LockType CInode::linklock_type(CEPH_LOCK_ILINK);

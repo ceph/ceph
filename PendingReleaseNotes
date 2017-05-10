@@ -30,6 +30,7 @@
   to zero will effectively disable the health check.
 * The "ceph mds tell ..." command has been removed.  It is superceded
   by "ceph tell mds.<id> ..."
+* The "journaler allow split entries" config setting has been removed.
 
 12.0.0
 ------
@@ -116,3 +117,7 @@
   enabled by setting 'allow_ec_overwrites' to 'true' for a pool. Since
   this relies on bluestore's checksumming to do deep scrubbing,
   enabling this on a pool stored on filestore is not allowed.
+
+* The 'rados df' JSON output now prints numeric values as numbers instead of
+  strings.
+
