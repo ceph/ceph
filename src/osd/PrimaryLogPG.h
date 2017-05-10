@@ -1396,8 +1396,8 @@ protected:
 
   friend class C_ChecksumRead;
 
-  int do_extent_cmp(OpContext *ctx, OSDOp& osd_op);
-  int finish_extent_cmp(OSDOp& osd_op, const bufferlist &read_bl);
+  int do_extent_cmp(OpContext *ctx, OSDOp& osd_op, bool munged);
+  int finish_extent_cmp(OSDOp& osd_op, const bufferlist &read_bl, bool munged);
 
   friend class C_ExtentCmpRead;
 
