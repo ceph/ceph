@@ -16,7 +16,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::io::ImageRequest: "
+#define dout_prefix *_dout << "librbd::io::ImageRequest: " << this \
+                           << " " << __func__ << ": "
 
 namespace librbd {
 namespace io {
@@ -38,8 +39,7 @@ struct C_DiscardJournalCommit : public Context {
     : image_ctx(_image_ctx), aio_comp(_aio_comp),
       object_extents(_object_extents) {
     CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << this << " C_DiscardJournalCommit: "
-                   << "delaying cache discard until journal tid " << tid << " "
+    ldout(cct, 20) << "delaying cache discard until journal tid " << tid << " "
                    << "safe" << dendl;
 
     aio_comp->add_request();
@@ -47,7 +47,7 @@ struct C_DiscardJournalCommit : public Context {
 
   void finish(int r) override {
     CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << this << " C_DiscardJournalCommit: "
+    ldout(cct, 20) << "C_DiscardJournalCommit: "
                    << "journal committed: discarding from cache" << dendl;
 
     Mutex::Locker cache_locker(image_ctx.cache_lock);
@@ -65,8 +65,7 @@ struct C_FlushJournalCommit : public Context {
                        uint64_t tid)
     : image_ctx(_image_ctx), aio_comp(_aio_comp) {
     CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << this << " C_FlushJournalCommit: "
-                   << "delaying flush until journal tid " << tid << " "
+    ldout(cct, 20) << "delaying flush until journal tid " << tid << " "
                    << "safe" << dendl;
 
     aio_comp->add_request();
@@ -74,8 +73,7 @@ struct C_FlushJournalCommit : public Context {
 
   void finish(int r) override {
     CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << this << " C_FlushJournalCommit: journal committed"
-                   << dendl;
+    ldout(cct, 20) << "C_FlushJournalCommit: journal committed" << dendl;
     aio_comp->complete_request(r);
   }
 };
@@ -273,7 +271,7 @@ void ImageReadRequest<I>::send_request() {
   // issue the requests
   for (auto &object_extent : object_extents) {
     for (auto &extent : object_extent.second) {
-      ldout(cct, 20) << " oid " << extent.oid << " " << extent.offset << "~"
+      ldout(cct, 20) << "oid " << extent.oid << " " << extent.offset << "~"
                      << extent.length << " from " << extent.buffer_extents
                      << dendl;
 
@@ -395,7 +393,7 @@ void AbstractImageWriteRequest<I>::send_object_requests(
   AioCompletion *aio_comp = this->m_aio_comp;
   for (ObjectExtents::const_iterator p = object_extents.begin();
        p != object_extents.end(); ++p) {
-    ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~" << p->length
+    ldout(cct, 20) << "oid " << p->oid << " " << p->offset << "~" << p->length
                    << " from " << p->buffer_extents << dendl;
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
     ObjectRequestHandle *request = create_object_request(*p, snapc,
@@ -543,7 +541,7 @@ void ImageDiscardRequest<I>::prune_object_extents(ObjectExtents &object_extents)
 
   for (auto p = object_extents.begin(); p != object_extents.end(); ) {
     if (p->offset + p->length < image_ctx.layout.object_size) {
-      ldout(cct, 20) << " oid " << p->oid << " " << p->offset << "~"
+      ldout(cct, 20) << "oid " << p->oid << " " << p->offset << "~"
 		     << p->length << " from " << p->buffer_extents
 		     << ": skip partial discard" << dendl;
       p = object_extents.erase(p);

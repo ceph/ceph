@@ -14,7 +14,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::io::ImageRequestWQ: "
+#define dout_prefix *_dout << "librbd::io::ImageRequestWQ: " << this \
+                           << " " << __func__ << ": "
 
 namespace librbd {
 namespace io {
@@ -28,14 +29,14 @@ ImageRequestWQ::ImageRequestWQ(ImageCtx *image_ctx, const string &name,
     m_queued_writes(0), m_in_flight_ops(0), m_refresh_in_progress(false),
     m_shutdown(false), m_on_shutdown(nullptr) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 5) << this << " " << ": ictx=" << image_ctx << dendl;
+  ldout(cct, 5) << "ictx=" << image_ctx << dendl;
   tp->add_work_queue(this);
 }
 
 ssize_t ImageRequestWQ::read(uint64_t off, uint64_t len,
                              ReadResult &&read_result, int op_flags) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "read: ictx=" << &m_image_ctx << ", off=" << off << ", "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
 
   C_SaferCond cond;
@@ -47,7 +48,7 @@ ssize_t ImageRequestWQ::read(uint64_t off, uint64_t len,
 ssize_t ImageRequestWQ::write(uint64_t off, uint64_t len,
                               bufferlist &&bl, int op_flags) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "write: ictx=" << &m_image_ctx << ", off=" << off << ", "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
 
   m_image_ctx.snap_lock.get_read();
@@ -71,7 +72,7 @@ ssize_t ImageRequestWQ::write(uint64_t off, uint64_t len,
 
 ssize_t ImageRequestWQ::discard(uint64_t off, uint64_t len, bool skip_partial_discard) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "discard: ictx=" << &m_image_ctx << ", off=" << off << ", "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
 
   m_image_ctx.snap_lock.get_read();
@@ -96,7 +97,7 @@ ssize_t ImageRequestWQ::discard(uint64_t off, uint64_t len, bool skip_partial_di
 ssize_t ImageRequestWQ::writesame(uint64_t off, uint64_t len, bufferlist &&bl,
                                   int op_flags) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "writesame ictx=" << &m_image_ctx << ", off=" << off << ", "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << ", data_len " << bl.length() << dendl;
 
   m_image_ctx.snap_lock.get_read();
@@ -123,7 +124,7 @@ void ImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
                               bool native_async) {
   c->init_time(&m_image_ctx, AIO_TYPE_READ);
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "aio_read: ictx=" << &m_image_ctx << ", "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", "
                  << "len=" << len << ", " << "flags=" << op_flags << dendl;
 
@@ -162,7 +163,7 @@ void ImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
                                bool native_async) {
   c->init_time(&m_image_ctx, AIO_TYPE_WRITE);
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "aio_write: ictx=" << &m_image_ctx << ", "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", "
                  << "len=" << len << ", flags=" << op_flags << dendl;
 
@@ -191,7 +192,7 @@ void ImageRequestWQ::aio_discard(AioCompletion *c, uint64_t off,
                                  bool native_async) {
   c->init_time(&m_image_ctx, AIO_TYPE_DISCARD);
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "aio_discard: ictx=" << &m_image_ctx << ", "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", len=" << len
                  << dendl;
 
@@ -216,7 +217,7 @@ void ImageRequestWQ::aio_discard(AioCompletion *c, uint64_t off,
 void ImageRequestWQ::aio_flush(AioCompletion *c, bool native_async) {
   c->init_time(&m_image_ctx, AIO_TYPE_FLUSH);
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "aio_flush: ictx=" << &m_image_ctx << ", "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << dendl;
 
   if (native_async && m_image_ctx.event_socket.is_valid()) {
@@ -241,7 +242,7 @@ void ImageRequestWQ::aio_writesame(AioCompletion *c, uint64_t off, uint64_t len,
                                    bool native_async) {
   c->init_time(&m_image_ctx, AIO_TYPE_WRITESAME);
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "aio_writesame: ictx=" << &m_image_ctx << ", "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", "
                  << "len=" << len << ", data_len = " << bl.length() << ", "
                  << "flags=" << op_flags << dendl;
@@ -306,8 +307,8 @@ void ImageRequestWQ::block_writes(Context *on_blocked) {
   {
     RWLock::WLocker locker(m_lock);
     ++m_write_blockers;
-    ldout(cct, 5) << __func__ << ": " << &m_image_ctx << ", "
-                  << "num=" << m_write_blockers << dendl;
+    ldout(cct, 5) << &m_image_ctx << ", " << "num="
+                  << m_write_blockers << dendl;
     if (!m_write_blocker_contexts.empty() || m_in_progress_writes > 0) {
       m_write_blocker_contexts.push_back(on_blocked);
       return;
@@ -327,8 +328,8 @@ void ImageRequestWQ::unblock_writes() {
     assert(m_write_blockers > 0);
     --m_write_blockers;
 
-    ldout(cct, 5) << __func__ << ": " << &m_image_ctx << ", "
-                  << "num=" << m_write_blockers << dendl;
+    ldout(cct, 5) << &m_image_ctx << ", " << "num="
+                  << m_write_blockers << dendl;
     if (m_write_blockers == 0) {
       wake_up = true;
     }
@@ -341,7 +342,7 @@ void ImageRequestWQ::unblock_writes() {
 
 void ImageRequestWQ::set_require_lock_on_read() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << __func__ << dendl;
+  ldout(cct, 20) << dendl;
 
   RWLock::WLocker locker(m_lock);
   m_require_lock_on_read = true;
@@ -349,7 +350,7 @@ void ImageRequestWQ::set_require_lock_on_read() {
 
 void ImageRequestWQ::clear_require_lock_on_read() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << __func__ << dendl;
+  ldout(cct, 20) << dendl;
 
   {
     RWLock::WLocker locker(m_lock);
@@ -410,7 +411,7 @@ void *ImageRequestWQ::_void_dequeue() {
 
 void ImageRequestWQ::process(ImageRequest<> *req) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << __func__ << ": ictx=" << &m_image_ctx << ", "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "req=" << req << dendl;
 
   req->send();
@@ -477,7 +478,7 @@ void ImageRequestWQ::finish_in_flight_op() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 5) << __func__ << ": completing shut down" << dendl;
+  ldout(cct, 5) << "completing shut down" << dendl;
 
   assert(on_shutdown != nullptr);
   m_image_ctx.flush(on_shutdown);
@@ -494,7 +495,7 @@ bool ImageRequestWQ::is_lock_required() const {
 
 void ImageRequestWQ::queue(ImageRequest<> *req) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << __func__ << ": ictx=" << &m_image_ctx << ", "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "req=" << req << dendl;
 
   assert(m_image_ctx.owner_lock.is_locked());
