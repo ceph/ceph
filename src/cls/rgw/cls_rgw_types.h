@@ -646,6 +646,9 @@ struct cls_rgw_bucket_instance_entry {
   bool resharding() const {
     return reshard_status != CLS_RGW_RESHARD_NONE;
   }
+  bool resharding_in_progress() const {
+    return reshard_status == CLS_RGW_RESHARD_IN_PROGRESS;
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_bucket_instance_entry)
 
@@ -698,6 +701,9 @@ struct rgw_bucket_dir_header {
 
   bool resharding() const {
     return new_instance.resharding();
+  }
+  bool resharding_in_progress() const {
+    return new_instance.resharding_in_progress();
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)

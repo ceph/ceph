@@ -482,6 +482,7 @@ enum {
   OPT_ROLE_POLICY_DELETE,
   OPT_RESHARD_ADD,
   OPT_RESHARD_LIST,
+  OPT_RESHARD_STATUS,
   OPT_RESHARD_EXECUTE,
   OPT_RESHARD_CANCEL,
 };
@@ -913,6 +914,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_RESHARD_ADD;
     if (strcmp(cmd, "list") == 0)
       return OPT_RESHARD_LIST;
+    if (strcmp(cmd, "status") == 0)
+      return OPT_RESHARD_STATUS;
     if (strcmp(cmd, "execute") == 0)
       return OPT_RESHARD_EXECUTE;
     if (strcmp(cmd, "cancel") == 0)
@@ -5623,6 +5626,33 @@ next:
     formatter->close_section();
     formatter->flush(cout);
     return 0;
+  }
+
+  if (opt_cmd == OPT_RESHARD_STATUS) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+
+    rgw_bucket bucket;
+    RGWBucketInfo bucket_info;
+    map<string, bufferlist> attrs;
+    ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    RGWBucketReshard br(store, bucket_info, attrs);
+    list<cls_rgw_bucket_instance_entry> status;
+    int r = br.get_status(&status);
+    if (r < 0) {
+      cerr << "ERROR: could not get resharding status for bucket " << bucket_name << std::endl;
+      return -r;
+    }
+
+    encode_json("status", status, formatter);
+    formatter->flush(cout);
   }
 
 #if 0
