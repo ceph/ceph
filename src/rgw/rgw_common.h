@@ -2215,10 +2215,14 @@ extern std::string url_encode(const std::string& src);
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
 /* destination should be CEPH_CRYPTO_HMACSHA256_DIGESTSIZE bytes long */
-extern void calc_hmac_sha256(const char *key, int key_len, const char *msg, int msg_len, char *dest);
+extern void calc_hmac_sha256(const char *key, int key_len,
+                             const char *msg, int msg_len,
+                             char *dest);
 
-static inline std::array<unsigned char,
-                         CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>
+using sha256_digest_t = \
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>;
+
+static inline sha256_digest_t
 calc_hmac_sha256(const char *key, const int key_len,
                  const char *msg, const int msg_len) {
   std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
@@ -2227,9 +2231,27 @@ calc_hmac_sha256(const char *key, const int key_len,
   return dest;
 }
 
+static inline sha256_digest_t
+calc_hmac_sha256(const boost::string_ref& key, const boost::string_ref& msg) {
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  calc_hmac_sha256(key.data(), key.size(),
+                   msg.data(), msg.size(),
+                   reinterpret_cast<char*>(dest.data()));
+  return dest;
+}
+
+static inline sha256_digest_t
+calc_hmac_sha256(const std::vector<unsigned char>& key,
+                 const boost::string_ref& msg) {
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  calc_hmac_sha256(reinterpret_cast<const char*>(key.data()), key.size(),
+                   msg.data(), msg.size(),
+                   reinterpret_cast<char*>(dest.data()));
+  return dest;
+}
+
 template<size_t KeyLenN>
-static inline std::array<unsigned char,
-                         CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>
+static inline sha256_digest_t
 calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
                  const boost::string_ref& msg) {
   std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
@@ -2239,8 +2261,7 @@ calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
   return dest;
 }
 
-extern void calc_hash_sha256(const char *msg, int len, string& dest);
-extern void calc_hash_sha256(const string& msg, string& dest);
+extern sha256_digest_t calc_hash_sha256(const boost::string_ref& msg);
 
 using ceph::crypto::SHA256;
 extern SHA256* calc_hash_sha256_open_stream();

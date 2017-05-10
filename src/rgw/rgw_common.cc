@@ -675,24 +675,21 @@ void calc_hmac_sha256(const char *key, int key_len,
   memcpy(dest, hash_sha256, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE);
 }
 
+using ceph::crypto::SHA256;
+
 /*
  * calculate the sha256 hash value of a given msg
  */
-void calc_hash_sha256(const char *msg, int len, string& dest)
+sha256_digest_t calc_hash_sha256(const boost::string_ref& msg)
 {
-  char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> hash;
 
-  SHA256 hash;
-  hash.Update((const unsigned char *)msg, len);
-  hash.Final((unsigned char *)hash_sha256);
+  SHA256 hasher;
+  hasher.Update(reinterpret_cast<const unsigned char*>(msg.data()), msg.size());
+  hasher.Final(hash.data());
 
-  char hex_str[(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2) + 1];
-  buf_to_hex((unsigned char *)hash_sha256, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
-
-  dest = std::string(hex_str);
+  return hash;
 }
-
-using ceph::crypto::SHA256;
 
 SHA256* calc_hash_sha256_open_stream()
 {
