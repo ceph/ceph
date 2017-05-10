@@ -2675,6 +2675,8 @@ public:
     RGWBucketInfo& get_bucket_info() { return bucket_info; }
     int get_manifest(RGWObjManifest **pmanifest);
 
+    void update_bucket_id(const string& new_bucket_id);
+
     int get_bucket_shard(BucketShard **pbs) {
       if (!bs_initialized) {
         int r = bs.init(bucket_info.bucket, obj);
@@ -2866,6 +2868,19 @@ public:
       bool blind;
       bool prepared{false};
       rgw_zone_set *zones_trace{nullptr};
+
+      int init_bs() {
+        int r = bs.init(target->get_bucket(), obj);
+        if (r < 0) {
+          return r;
+        }
+        bs_initialized = true;
+        return 0;
+      }
+
+      void invalidate_bs() {
+        bs_initialized = false;
+      }
     public:
 
       UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj) : target(_target), obj(_obj),
@@ -2875,11 +2890,10 @@ public:
 
       int get_bucket_shard(BucketShard **pbs) {
         if (!bs_initialized) {
-          int r = bs.init(target->get_bucket(), obj);
+          int r = init_bs();
           if (r < 0) {
             return r;
           }
-          bs_initialized = true;
         }
         *pbs = &bs;
         return 0;

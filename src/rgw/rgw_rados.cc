@@ -8892,6 +8892,22 @@ int RGWRados::Object::get_manifest(RGWObjManifest **pmanifest)
   return 0;
 }
 
+int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
+{
+  rgw_bucket& bucket = bucket_info.bucket;
+  bucket.bucket_id = new_bucket_id;
+
+  int ret = get_bucket_instance_info(ctx, bucket, bucket_info, nullptr, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+  obj.bucket = bucket;
+  bucket_shard.bucket = bucket;
+  bs_initialized = false
+
+  return 0;
+}
+
 int RGWRados::Object::Read::get_attr(const char *name, bufferlist& dest)
 {
   RGWObjState *state;
@@ -9521,13 +9537,6 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_t
     return 0;
   }
   RGWRados *store = target->get_store();
-  BucketShard *bs;
-
-  int ret = get_bucket_shard(&bs);
-  if (ret < 0) {
-    ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
-    return ret;
-  }
 
   if (write_tag && write_tag->length()) {
     optag = string(write_tag->c_str(), write_tag->length());
@@ -9537,7 +9546,34 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_t
     }
   }
 
-  int r = store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags, zones_trace);
+  int r;
+
+#define NUM_RESHARD_RETRIES 3
+
+  for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
+    BucketShard *bs;
+    int ret = get_bucket_shard(&bs);
+    if (ret < 0) {
+      ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
+      return ret;
+    }
+    r = store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags, zones_trace);
+    if (r != -ERR_BUSY_RESHARDING) {
+      break;
+    }
+    ldout(store->ctx(), 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
+    RGWReshard reshard(store);
+    string new_bucket_id;
+    r = reshard.block_while_resharding(bs, &new_bucket_id);
+    if (r != -EAGAIN) {
+      if (r < 0) {
+        return r;
+      }
+      r = target->update_bucket_id(new_bucket_id);
+      break;
+    }
+  }
+
   if (r < 0) {
     return r;
   }
