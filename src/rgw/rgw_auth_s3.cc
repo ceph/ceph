@@ -3,6 +3,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 
 #include "common/armor.h"
 #include "common/utf8.h"
@@ -587,113 +588,42 @@ get_v4_canonical_headers(const req_info& info,
   return canonical_hdrs;
 }
 
-std::string hash_string_sha256(const char* const data, const int len)
-{
-  std::string dest;
-  calc_hash_sha256(data, len, dest);
-  return dest;
-}
-
-/*
- * assemble canonical request for signature version 4
- */
-static std::string assemble_v4_canonical_request(
-  const char* const method,
-  const char* const canonical_uri,
-  const char* const canonical_qs,
-  const char* const canonical_hdrs,
-  const char* const signed_hdrs,
-  const char* const request_payload_hash)
-{
-  std::string dest;
-
-  if (method)
-    dest = method;
-  dest.append("\n");
-
-  if (canonical_uri) {
-    dest.append(canonical_uri);
-  }
-  dest.append("\n");
-
-  if (canonical_qs) {
-    dest.append(canonical_qs);
-  }
-  dest.append("\n");
-
-  if (canonical_hdrs)
-    dest.append(canonical_hdrs);
-  dest.append("\n");
-
-  if (signed_hdrs)
-    dest.append(signed_hdrs);
-  dest.append("\n");
-
-  if (request_payload_hash)
-    dest.append(request_payload_hash);
-
-  return dest;
-}
-
 /*
  * create canonical request for signature version 4
  *
  * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
  */
-std::string get_v4_canon_req_hash(CephContext* cct,
-                                  const std::string& http_verb,
-                                  const std::string& canonical_uri,
-                                  const std::string& canonical_qs,
-                                  const std::string& canonical_hdrs,
-                                  const std::string& signed_hdrs,
-                                  const std::string& request_payload_hash)
+sha256_digest_t
+get_v4_canon_req_hash(CephContext* cct,
+                      const boost::string_ref& http_verb,
+                      const std::string& canonical_uri,
+                      const std::string& canonical_qs,
+                      const std::string& canonical_hdrs,
+                      const std::string& signed_hdrs,
+                      const boost::string_ref& request_payload_hash)
 {
   ldout(cct, 10) << "payload request hash = " << request_payload_hash << dendl;
 
-  std::string canonical_req = \
-    assemble_v4_canonical_request(http_verb.c_str(),
-                                  canonical_uri.c_str(),
-                                  canonical_qs.c_str(),
-                                  canonical_hdrs.c_str(),
-                                  signed_hdrs.c_str(),
-                                  request_payload_hash.c_str());
+  const auto canonical_req = std::string()
+    .append(http_verb.data(), http_verb.length())
+    .append("\n")
+    .append(canonical_uri)
+    .append("\n")
+    .append(canonical_qs)
+    .append("\n")
+    .append(canonical_hdrs)
+    .append("\n")
+    .append(signed_hdrs)
+    .append("\n")
+    .append(request_payload_hash.data(), request_payload_hash.length());
 
-  std::string canonical_req_hash = \
-    hash_string_sha256(canonical_req.c_str(), canonical_req.size());
+  const auto canonical_req_hash = calc_hash_sha256(canonical_req);
 
   ldout(cct, 10) << "canonical request = " << canonical_req << dendl;
-  ldout(cct, 10) << "canonical request hash = " << canonical_req_hash << dendl;
+  ldout(cct, 10) << "canonical request hash = "
+                 << buf_to_hex(canonical_req_hash).data() << dendl;
 
   return canonical_req_hash;
-}
-
-/*
- * assemble string to sign for signature version 4
- */
-static std::string rgw_assemble_s3_v4_string_to_sign(
-  const char* const algorithm,
-  const char* const request_date,
-  const char* const credential_scope,
-  const char* const hashed_qr
-) {
-  std::string dest;
-
-  if (algorithm)
-    dest = algorithm;
-  dest.append("\n");
-
-  if (request_date)
-    dest.append(request_date);
-  dest.append("\n");
-
-  if (credential_scope)
-    dest.append(credential_scope);
-  dest.append("\n");
-
-  if (hashed_qr)
-    dest.append(hashed_qr);
-
-  return dest;
 }
 
 /*
@@ -702,21 +632,25 @@ static std::string rgw_assemble_s3_v4_string_to_sign(
  * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
  */
 std::string get_v4_string_to_sign(CephContext* const cct,
-                                  const std::string& algorithm,
-                                  const std::string& request_date,
-                                  const std::string& credential_scope,
-                                  const std::string& hashed_qr)
+                                  const boost::string_ref& algorithm,
+                                  const boost::string_ref& request_date,
+                                  const boost::string_ref& credential_scope,
+                                  const sha256_digest_t& canonreq_hash)
 {
-  const auto string_to_sign = \
-    rgw_assemble_s3_v4_string_to_sign(
-      algorithm.c_str(),
-      request_date.c_str(),
-      credential_scope.c_str(),
-      hashed_qr.c_str());
+  const auto hexed_cr_hash = buf_to_hex(canonreq_hash);
+  const auto string_to_sign = std::string()
+    .append(algorithm.data(), algorithm.length())
+    .append("\n")
+    .append(request_date.data(), request_date.length())
+    .append("\n")
+    .append(credential_scope.data(), credential_scope.length())
+    .append("\n")
+    .append(hexed_cr_hash.data(), hexed_cr_hash.size() - 1);
 
   ldout(cct, 10) << "string to sign = "
                  << rgw::crypt_sanitize::log_content{string_to_sign.c_str()}
                  << dendl;
+
   return string_to_sign;
 }
 
@@ -743,31 +677,40 @@ parse_cred_scope(boost::string_ref credential_scope)
   return std::make_tuple(date_cs, region_cs, service_cs);
 }
 
+static inline std::vector<unsigned char>
+transform_secret_key(const boost::string_ref& secret_access_key)
+{
+  /* TODO(rzarzynski): switch to constexpr when C++14 becomes available. */
+  static const std::initializer_list<unsigned char> AWS4 { 'A', 'W', 'S', '4' };
+
+  /* boost::container::small_vector might be used here if someone wants to
+   * optimize out even more dynamic allocations. */
+  std::vector<unsigned char> secret_key_utf8;
+  secret_key_utf8.reserve(AWS4.size() + secret_access_key.size());
+  secret_key_utf8.assign(AWS4);
+
+  for (const auto c : secret_access_key) {
+    std::array<unsigned char, MAX_UTF8_SZ> buf;
+    const size_t n = encode_utf8(c, buf.data());
+    secret_key_utf8.insert(std::end(secret_key_utf8),
+                           std::begin(buf), std::begin(buf) + n);
+  }
+
+  return secret_key_utf8;
+}
+
 /*
  * calculate the SigningKey of AWS auth version 4
  */
-std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>
-get_v4_signing_key(CephContext* const cct,
-                   const std::string& credential_scope,
-                   const std::string& access_key_secret)
+sha256_digest_t get_v4_signing_key(CephContext* const cct,
+                                   const boost::string_ref& credential_scope,
+                                   const boost::string_ref& secret_access_key)
 {
-  std::string secret_key = "AWS4" + access_key_secret;
-  char secret_k[secret_key.size() * MAX_UTF8_SZ];
-
-  size_t n = 0;
-
-  for (size_t i = 0; i < secret_key.size(); i++) {
-    n += encode_utf8(secret_key[i], (unsigned char *) (secret_k + n));
-  }
-
-  string secret_key_utf8_k(secret_k, n);
-
   boost::string_ref date, region, service;
   std::tie(date, region, service) = parse_cred_scope(credential_scope);
 
-  const auto date_k = calc_hmac_sha256(secret_key_utf8_k.c_str(),
-                                       secret_key_utf8_k.size(),
-                                       date.data(), date.size());
+  const auto utfed_sec_key = transform_secret_key(secret_access_key);
+  const auto date_k = calc_hmac_sha256(utfed_sec_key, date);
   const auto region_k = calc_hmac_sha256(date_k, region);
   const auto service_k = calc_hmac_sha256(region_k, service);
 
@@ -788,20 +731,17 @@ get_v4_signing_key(CephContext* const cct,
 
  * http://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
  */
-std::string get_v4_signature(CephContext* const cct,
-                             const std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>& signing_key,
-                             const std::string& string_to_sign)
+std::array<char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1>
+get_v4_signature(CephContext* const cct,
+                 const sha256_digest_t& signing_key,
+                 const boost::string_ref& string_to_sign)
 {
   /* The server-side generated signature for comparison. */
-  const auto signature_k = \
+  const auto signature = \
     buf_to_hex(calc_hmac_sha256(signing_key, string_to_sign));
 
-  /* FIXME(rzarzynski): we might want to switch the return type from
-   * std::string to std::array<char, N>. */
-  const std::string signature = \
-    std::string(signature_k.data(), signature_k.size() - 1);
+  ldout(cct, 10) << "generated signature = " << signature.data() << dendl;
 
-  ldout(cct, 10) << "generated signature = " << signature << dendl;
   return signature;
 }
 

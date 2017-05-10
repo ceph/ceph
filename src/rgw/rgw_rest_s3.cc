@@ -3566,8 +3566,8 @@ static inline
 std::string v4_signature(const std::string& credential_scope,
 
                          CephContext* const cct,
-                         const std::string& secret_key,
-                         const std::string& string_to_sign)
+                         const boost::string_ref& secret_key,
+                         const boost::string_ref& string_to_sign)
 {
   auto signing_key = \
     rgw::auth::s3::get_v4_signing_key(cct, credential_scope, secret_key);
@@ -3576,13 +3576,7 @@ std::string v4_signature(const std::string& credential_scope,
     rgw::auth::s3::get_v4_signature(cct, std::move(signing_key),
                                     string_to_sign);
 
-
-  ldout(cct, 10) << "-----------------------------" << dendl;
-  ldout(cct, 10) << "Server Signature = " << server_signature
-                 << dendl;
-  ldout(cct, 10) << "-----------------------------" << dendl;
-
-  return server_signature;
+  return std::string(server_signature.data(), server_signature.size() - 1);
 }
 
 std::tuple<AWSVerAbstractor::access_key_id_t,

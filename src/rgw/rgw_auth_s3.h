@@ -10,6 +10,7 @@
 #include <tuple>
 
 #include <boost/container/static_vector.hpp>
+#include <boost/utility/string_ref.hpp>
 
 #include "rgw_common.h"
 #include "rgw_rest_s3.h"
@@ -397,30 +398,30 @@ boost::optional<std::string> get_v4_canonical_headers(const req_info& info,
                                                       bool using_qs,
                                                       bool force_boto2_compat);
 
-std::string hash_string_sha256(const char* data, int len);
-
-std::string get_v4_canon_req_hash(CephContext* cct,
-                                  const std::string& http_verb,
-                                  const std::string& canonical_uri,
-                                  const std::string& canonical_qs,
-                                  const std::string& canonical_hdrs,
-                                  const std::string& signed_hdrs,
-                                  const std::string& request_payload_hash);
+extern sha256_digest_t
+get_v4_canon_req_hash(CephContext* cct,
+                      const boost::string_ref& http_verb,
+                      const std::string& canonical_uri,
+                      const std::string& canonical_qs,
+                      const std::string& canonical_hdrs,
+                      const std::string& signed_hdrs,
+                      const boost::string_ref& request_payload_hash);
 
 std::string get_v4_string_to_sign(CephContext* cct,
-                                  const std::string& algorithm,
-                                  const std::string& request_date,
-                                  const std::string& credential_scope,
-                                  const std::string& hashed_qr);
+                                  const boost::string_ref& algorithm,
+                                  const boost::string_ref& request_date,
+                                  const boost::string_ref& credential_scope,
+                                  const sha256_digest_t& canonreq_hash);
 
-std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>
+extern sha256_digest_t
 get_v4_signing_key(CephContext* const cct,
-                   const std::string& credential_scope,
-                   const std::string& access_key_secret);
+                   const boost::string_ref& credential_scope,
+                   const boost::string_ref& access_key_secret);
 
-std::string get_v4_signature(CephContext* cct,
-                             const std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>& signing_key,
-                             const std::string& string_to_sign);
+extern std::array<char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1>
+get_v4_signature(CephContext* cct,
+                 const sha256_digest_t& signing_key,
+                 const boost::string_ref& string_to_sign);
 
 static inline
 std::string get_v2_signature(CephContext*,
