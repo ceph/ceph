@@ -33,6 +33,7 @@
 #include <sys/socket.h>
 
 #include <iostream>
+#include <fstream>
 #include <boost/regex.hpp>
 
 #include "mon/MonClient.h"
