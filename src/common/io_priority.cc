@@ -12,7 +12,6 @@
  *
  */
 
-#include <sys/types.h>
 #include <unistd.h>
 #ifdef __linux__
 #include <sys/syscall.h>   /* For SYS_xxx definitions */
@@ -20,7 +19,6 @@
 #include <algorithm>
 #include <errno.h>
 
-#include "common/errno.h"
 #include "io_priority.h"
 
 pid_t ceph_gettid(void)

@@ -13,7 +13,6 @@
  */
 #include "common/utf8.h"
 
-#include <stdio.h>
 #include <string.h>
 
 static int high_bits_set(int c)

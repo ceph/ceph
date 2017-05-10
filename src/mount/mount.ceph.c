@@ -3,8 +3,6 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/mount.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 
 #include "common/module.h"
 #include "common/secret.h"
