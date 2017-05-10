@@ -872,13 +872,13 @@ Swift Settings
 ``rgw swift versioning enabled``
 
 :Description: Enables the Object Versioning of OpenStack Object Storage API.
-              This allows clients to put the ``X-Versions-Location`` attribute
-              on containers that should be versioned. The attribute specifies
-              the name of container storing archived versions. It must be owned
-              by the same user that the versioned container due to access
-              control verification - ACLs are NOT taken into consideration.
-              Those containers cannot be versioned by the S3 object versioning
-              mechanism.
+              This allows clients to put the ``X-Versions-Location`` or
+              ``X-History-Location`` attribute on containers that should be
+              versioned. The attribute specifies the name of container storing
+              archived versions. It must be owned by the same user that the
+              versioned container due to access control verification - ACLs
+              are NOT taken into consideration. Those containers cannot be
+              versioned by the S3 object versioning mechanism.
 :Type: Boolean
 :Default: ``false``
 

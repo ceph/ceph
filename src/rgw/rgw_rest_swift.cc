@@ -422,6 +422,11 @@ static void dump_container_metadata(struct req_state *s,
                 url_encode(s->bucket_info.swift_ver_location));
   }
 
+  if (! s->bucket_info.swift_his_location.empty()) {
+    dump_header(s, "X-History-Location",
+                url_encode(s->bucket_info.swift_his_location));
+  }
+
   /* Dump quota headers. */
   if (quota.enabled) {
     if (quota.max_size >= 0) {
@@ -599,7 +604,8 @@ static void get_rmattrs_from_headers(const req_state * const s,
 
 static int get_swift_versioning_settings(
   req_state * const s,
-  boost::optional<std::string>& swift_ver_location)
+  boost::optional<std::string>& swift_ver_location,
+  boost::optional<std::string>& swift_his_location)
 {
   /* Removing the Swift's versions location has lower priority than setting
    * a new one. That's the reason why we're handling it first. */
@@ -609,7 +615,13 @@ static int get_swift_versioning_settings(
     swift_ver_location = boost::in_place(std::string());
   }
 
-  if (s->info.env->exists("HTTP_X_VERSIONS_LOCATION")) {
+  bool ver_exists = s->info.env->exists("HTTP_X_VERSIONS_LOCATION");
+  bool his_exists = s->info.env->exists("HTTP_X_HISTORY_LOCATION");
+  if (ver_exists && his_exists) {
+    return -EINVAL;
+  }
+
+  if (ver_exists) {
     /* If the Swift's versioning is globally disabled but someone wants to
      * enable it for a given container, new version of Swift will generate
      * the precondition failed error. */
@@ -618,6 +630,14 @@ static int get_swift_versioning_settings(
     }
 
     swift_ver_location = s->info.env->get("HTTP_X_VERSIONS_LOCATION", "");
+    swift_his_location = boost::none;
+  } else if (his_exists) {
+    if (! s->cct->_conf->rgw_swift_versioning_enabled) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+
+    swift_his_location = s->info.env->get("HTTP_X_HISTORY_LOCATION", "");
+    swift_ver_location = boost::none;
   }
 
   return 0;
@@ -643,7 +663,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
                            CONT_REMOVE_ATTR_PREFIX, rmattr_names);
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
-  return get_swift_versioning_settings(s, swift_ver_location);
+  return get_swift_versioning_settings(s, swift_ver_location, swift_his_location);
 }
 
 void RGWCreateBucket_ObjStore_SWIFT::send_response()
@@ -917,7 +937,7 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params()
 			   rmattr_names);
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
-  return get_swift_versioning_settings(s, swift_ver_location);
+  return get_swift_versioning_settings(s, swift_ver_location, swift_his_location);
 }
 
 void RGWPutMetadataBucket_ObjStore_SWIFT::send_response()

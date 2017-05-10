@@ -5723,6 +5723,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
                             const string& swift_ver_location,
+                            const string& swift_his_location,
                             const RGWQuotaInfo * pquota_info,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
@@ -5766,7 +5767,8 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.placement_rule = selected_placement_rule_name;
     info.index_type = rule_info.index_type;
     info.swift_ver_location = swift_ver_location;
-    info.swift_versioning = (!swift_ver_location.empty());
+    info.swift_his_location = swift_his_location;
+    info.swift_versioning = (!swift_ver_location.empty() || !swift_his_location.empty());
     if (pmaster_num_shards) {
       info.num_shards = *pmaster_num_shards;
     } else {
@@ -6522,7 +6524,8 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                                     RGWBucketInfo& bucket_info,
                                     rgw_obj& obj)
 {
-  if (! swift_versioning_enabled(bucket_info)) {
+  boost::optional<std::string> versioning_location = get_swift_versioning_location(bucket_info);
+  if (! versioning_location) {
     return 0;
   }
 
@@ -6549,7 +6552,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
 
   RGWBucketInfo dest_bucket_info;
 
-  r = get_bucket_info(obj_ctx, bucket_info.bucket.tenant, bucket_info.swift_ver_location, dest_bucket_info, NULL, NULL);
+  r = get_bucket_info(obj_ctx, bucket_info.bucket.tenant, *versioning_location, dest_bucket_info, NULL, NULL);
   if (r < 0) {
     ldout(cct, 10) << "failed to read dest bucket info: r=" << r << dendl;
     if (r == -ENOENT) {
@@ -6610,7 +6613,9 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                                        rgw_obj& obj,
                                        bool& restored)             /* out */
 {
-  if (! swift_versioning_enabled(bucket_info)) {
+  boost::optional<std::string> versioning_location = get_swift_versioning_location(bucket_info);
+  if (! versioning_location ||
+      versioning_location->compare(bucket_info.swift_ver_location) != 0) {
     return 0;
   }
 
@@ -6618,7 +6623,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
   RGWBucketInfo archive_binfo;
 
   int ret = get_bucket_info(obj_ctx, bucket_info.bucket.tenant,
-                            bucket_info.swift_ver_location, archive_binfo,
+                            *versioning_location, archive_binfo,
                             nullptr, nullptr);
   if (ret < 0) {
     return ret;
@@ -6853,7 +6858,7 @@ int RGWRados::swift_versioning_history(req_state *s,
   attrs.emplace(RGW_ATTR_ETAG, std::move(etag_bl));
 
   /* Create metadata: CONTENT_TYPE. */
-  std::string content_type = "application/x-deleted;swift_versions_deleted=1";
+  const std::string content_type = "application/x-deleted;swift_versions_deleted=1";
   bufferlist ct_bl;
   ct_bl.append(content_type.c_str(), content_type.size() + 1);
   attrs.emplace(RGW_ATTR_CONTENT_TYPE, std::move(ct_bl));

@@ -2585,6 +2585,7 @@ public:
                             const string& zonegroup_id,
                             const string& placement_rule,
                             const string& swift_ver_location,
+                            const string& swift_his_location,
                             const RGWQuotaInfo * pquota_info,
                             map<std::string,bufferlist>& attrs,
                             RGWBucketInfo& bucket_info,
@@ -3011,9 +3012,15 @@ public:
                                const std::string& obj_delim,
                                std::function<int(const rgw_bucket_dir_entry&)> handler);
 
-  bool swift_versioning_enabled(const RGWBucketInfo& bucket_info) const {
-    return bucket_info.has_swift_versioning() &&
-        bucket_info.swift_ver_location.size();
+  boost::optional<std::string> get_swift_versioning_location(const RGWBucketInfo& bucket_info) const {
+    if (bucket_info.has_swift_versioning()) {
+      if (bucket_info.swift_ver_location.size()) {
+        return bucket_info.swift_ver_location;
+      } else if (bucket_info.swift_his_location.size()) {
+        return bucket_info.swift_his_location;
+      }
+    } 
+    return boost::none;
   }
 
   int swift_versioning_copy(RGWObjectCtx& obj_ctx,              /* in/out */

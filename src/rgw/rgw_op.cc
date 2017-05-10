@@ -2512,11 +2512,16 @@ void RGWCreateBucket::execute()
   if (swift_ver_location) {
     s->bucket_info.swift_ver_location = *swift_ver_location;
     s->bucket_info.swift_versioning = (! swift_ver_location->empty());
+    s->bucket_info.swift_his_location.clear();
+  } else if (swift_his_location) {
+    s->bucket_info.swift_his_location = *swift_his_location;
+    s->bucket_info.swift_versioning = (! swift_his_location->empty());
+    s->bucket_info.swift_ver_location.clear();
   }
 
   op_ret = store->create_bucket(*(s->user), s->bucket, zonegroup_id,
                                 placement_rule, s->bucket_info.swift_ver_location,
-                                pquota_info, attrs,
+                                s->bucket_info.swift_his_location, pquota_info, attrs,
                                 info, pobjv, &ep_objv, creation_time,
                                 pmaster_bucket, pmaster_num_shards, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
@@ -2594,6 +2599,11 @@ void RGWCreateBucket::execute()
       if (swift_ver_location) {
         s->bucket_info.swift_ver_location = *swift_ver_location;
         s->bucket_info.swift_versioning = (! swift_ver_location->empty());
+        s->bucket_info.swift_his_location.clear();
+      } else if(swift_his_location) {
+        s->bucket_info.swift_his_location = *swift_his_location;
+        s->bucket_info.swift_versioning = (! swift_his_location->empty());
+        s->bucket_info.swift_ver_location.clear();
       }
 
       /* Web site of Swift API. */
@@ -3816,6 +3826,11 @@ void RGWPutMetadataBucket::execute()
   if (swift_ver_location) {
     s->bucket_info.swift_ver_location = *swift_ver_location;
     s->bucket_info.swift_versioning = (! swift_ver_location->empty());
+    s->bucket_info.swift_his_location.clear();
+  } else if(swift_his_location) {
+    s->bucket_info.swift_his_location = *swift_his_location;
+    s->bucket_info.swift_versioning = (! swift_his_location->empty());
+    s->bucket_info.swift_ver_location.clear();
   }
 
   /* Web site of Swift API. */
@@ -3984,6 +3999,14 @@ void RGWDeleteObj::execute()
 
 
   if (!s->object.empty()) {
+    bool his_deleted = false;
+    /* If obj does not exits, the "delete marker" still
+     * can be written in swift history location. */
+    op_ret = store->swift_versioning_history(s, user_quota, bucket_quota, obj, his_deleted);
+    if (op_ret < 0) {
+      return;
+    }
+
     if (need_object_expiration() || multipart_delete) {
       /* check if obj exists, read orig attrs */
       op_ret = get_obj_attrs(store, s, obj, attrs);
@@ -4017,7 +4040,7 @@ void RGWDeleteObj::execute()
       return;
     }
 
-    if (!ver_restored) {
+    if (!ver_restored && !his_deleted) {
       /* Swift's versioning mechanism hasn't found any previous version of
        * the object that could be restored. This means we should proceed
        * with the regular delete path. */
@@ -5902,7 +5925,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
                                 bucket,
                                 store->get_zonegroup().get_id(),
                                 placement_rule, binfo.swift_ver_location,
-                                pquota_info, attrs,
+                                binfo.swift_his_location, pquota_info, attrs,
                                 out_info, pobjv, &ep_objv, creation_time,
                                 pmaster_bucket, pmaster_num_shards, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can
