@@ -204,7 +204,7 @@ int RGWBL::bucket_bl_fetch(const string opslog_obj, bufferlist *buffer)
      return r;
     }
 
-    if (!entry.bucket.empty())
+    if (!entry.http_status.empty())
       format_opslog_entry(entry, buffer);
 
     if (r == 0) {
