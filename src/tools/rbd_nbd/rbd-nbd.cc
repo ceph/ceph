@@ -126,7 +126,7 @@ private:
   void shutdown()
   {
     bool expected = false;
-    if (terminated.compare_exchange_weak(expected, true)) {
+    if (terminated.compare_exchange_strong(expected, true)) {
       ::shutdown(fd, SHUT_RDWR);
 
       Mutex::Locker l(lock);
