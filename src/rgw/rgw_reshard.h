@@ -85,7 +85,7 @@ class RGWReshard {
       if succefull, keeps the bucket index locked. It will be unlocked
       in the guard dtor.
      */
-    int block_while_resharding(const string& bucket_instance_oid, BucketIndexLockGuard& guard);
+    int block_while_resharding(const string& bucket_instance_oid);
 };
 
 #endif

@@ -228,7 +228,7 @@ int RGWBucketReshard::init_resharding(const string& new_instance_id)
   }
 
   cls_rgw_bucket_instance_entry instance_entry;
-  instance_entry.set(new_instance_id);
+  instance_entry.set_status(new_instance_id, CLS_RGW_RESHARD_IN_PROGRESS);
 
   int ret = store->bucket_set_reshard(bucket_info, instance_entry);
   if (ret < 0) {
@@ -571,33 +571,23 @@ int RGWReshard::unlock_bucket_index(const string& oid)
 const int num_retries = 10;
 const int default_reshard_sleep_duration = 30;
 
-int RGWReshard::block_while_resharding(const string& bucket_instance_oid,
-				       BucketIndexLockGuard& guard)
+int RGWReshard::block_while_resharding(const string& bucket_instance_oid)
 {
   int ret = 0;
   cls_rgw_bucket_instance_entry entry;
 
   for (int i=0; i< num_retries;i++) {
-    ret = guard.lock();
-    if (ret < 0) {
-      return ret;
-    }
-
     ret = cls_rgw_get_bucket_resharding(store->reshard_pool_ctx, bucket_instance_oid, &entry);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "RGWReshard::" << __func__ << " ERROR: failed to get bucket resharding :"  <<
 	cpp_strerror(-ret)<< dendl;
       return ret;
     }
-
-    ret = guard.unlock();
-    if (ret < 0) {
-      return ret;
-    }
-    if (!entry.resharding) {
+    if (!entry.resharding()) {
       return 0;
     }
     /* needed to unlock as clear resharding uses the same lock */
+#warning replace sleep with interruptible condition
     sleep(default_reshard_sleep_duration);
   }
   ldout(store->ctx(), 0) << "RGWReshard::" << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
