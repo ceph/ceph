@@ -18,7 +18,7 @@ def multi_region_enabled(ctx):
     return 'radosgw_agent' in ctx
 
 def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
-             format='json', decode=True):
+             format='json', decode=True, log_level=logging.DEBUG):
     log.info('rgwadmin: {client} : {cmd}'.format(client=client,cmd=cmd))
     testdir = teuthology.get_testdir(ctx)
     cluster_name, daemon_type, client_id = teuthology.split_role(client)
@@ -34,7 +34,7 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
         '--cluster', cluster_name,
         ]
     pre.extend(cmd)
-    log.info('rgwadmin: cmd=%s' % pre)
+    log.log(log_level, 'rgwadmin: cmd=%s' % pre)
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
     proc = remote.run(
         args=pre,
@@ -51,10 +51,10 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
     if not r and out != '':
         try:
             j = json.loads(out)
-            log.info(' json result: %s' % j)
+            log.log(log_level, ' json result: %s' % j)
         except ValueError:
             j = out
-            log.info(' raw result: %s' % j)
+            log.log(log_level, ' raw result: %s' % j)
     return (r, j)
 
 def get_user_summary(out, user):
