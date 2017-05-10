@@ -405,8 +405,7 @@ class TestClusterFull(FullnessTestCase):
             # `max_avail` attribute of pools that sometimes occurs in between
             # tests (reason as yet unclear, but this dodges the issue)
             TestClusterFull.pool_capacity = self.fs.get_pool_df(self._data_pool_name())['max_avail']
-            mon_osd_full_ratio = float(self.fs.get_config("mon_osd_full_ratio"))
-            TestClusterFull.fill_mb = int(1.05 * mon_osd_full_ratio * (self.pool_capacity / (1024.0 * 1024.0)))
+            TestClusterFull.fill_mb = int(1.05 * (self.pool_capacity / (1024.0 * 1024.0)))
 
     def is_full(self):
         return self.fs.is_full()
