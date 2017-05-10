@@ -2002,7 +2002,7 @@ void PG::queue_recovery(bool front)
 
 bool PG::queue_scrub()
 {
-  assert(_lock.is_locked());
+  assert(is_locked());
   if (is_scrubbing()) {
     return false;
   }
@@ -3528,7 +3528,7 @@ void PG::requeue_map_waiters()
 bool PG::sched_scrub()
 {
   bool nodeep_scrub = false;
-  assert(_lock.is_locked());
+  assert(is_locked());
   if (!(is_primary() && is_active() && is_clean() && !is_scrubbing())) {
     return false;
   }
@@ -4615,7 +4615,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
 void PG::scrub_clear_state()
 {
-  assert(_lock.is_locked());
+  assert(is_locked());
   state_clear(PG_STATE_SCRUBBING);
   state_clear(PG_STATE_REPAIR);
   state_clear(PG_STATE_DEEP_SCRUB);
