@@ -633,12 +633,11 @@ int validate_snapshot_name(at::ArgumentModifier mod,
 int get_image_options(const boost::program_options::variables_map &vm,
 		      bool get_format, librbd::ImageOptions *opts) {
   uint64_t order = 0, stripe_unit = 0, stripe_count = 0, object_size = 0;
-  uint64_t features = 0, features_clear = 0, features_set = 0;
+  uint64_t features = 0, features_clear = 0;
   std::string data_pool;
   bool order_specified = true;
   bool features_specified = false;
   bool features_clear_specified = false;
-  bool features_set_specified = false;
   bool stripe_specified = false;
 
   if (vm.count(at::IMAGE_ORDER)) {
@@ -647,7 +646,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
 	      << std::endl;
   } else if (vm.count(at::IMAGE_OBJECT_SIZE)) {
     object_size = vm[at::IMAGE_OBJECT_SIZE].as<uint64_t>();
-    order = std::round(std::log2(object_size)); 
+    order = std::round(std::log2(object_size));
   } else {
     order_specified = false;
   }
@@ -744,8 +743,6 @@ int get_image_options(const boost::program_options::variables_map &vm,
   if (features_clear_specified) {
     opts->set(RBD_IMAGE_OPTION_FEATURES_CLEAR, features_clear);
   }
-  if (features_set_specified)
-    opts->set(RBD_IMAGE_OPTION_FEATURES_SET, features_set);
   if (stripe_specified) {
     opts->set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
     opts->set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
