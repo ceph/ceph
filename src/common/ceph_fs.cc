@@ -4,8 +4,6 @@
  *
  */
 
-#include <errno.h>
-
 /*
  * Some non-inline ceph helpers
  */

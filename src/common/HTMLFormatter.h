@@ -3,18 +3,10 @@
 #ifndef CEPH_HTML_FORMATTER_H
 #define CEPH_HTML_FORMATTER_H
 
-#include "include/int_types.h"
-
-#include <deque>
 #include <iosfwd>
-#include <list>
-#include <vector>
-#include <sstream>
 #include <stdarg.h>
 #include <string>
-#include <map>
 
-#include "include/buffer.h"
 #include "Formatter.h"
 
 namespace ceph {
