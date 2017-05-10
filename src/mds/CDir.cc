@@ -1099,7 +1099,6 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
 
     // merge state
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
-    dir_auth = dir->dir_auth;
 
     dir->finish_old_fragment(waiters, replay);
     inode->close_dirfrag(dir->get_frag());
