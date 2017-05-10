@@ -455,17 +455,19 @@ static inline bool char_needs_aws4_escaping(const char c)
   return true;
 }
 
-static inline void aws4_uri_encode(const string& src, string& dst)
+static inline std::string aws4_uri_encode(const std::string& src)
 {
-  const char *p = src.c_str();
-  for (unsigned i = 0; i < src.size(); i++, p++) {
-    if (char_needs_aws4_escaping(*p)) {
-      rgw_uri_escape_char(*p, dst);
-      continue;
-    }
+  std::string result;
 
-    dst.append(p, 1);
+  for (const std::string::value_type c : src) {
+    if (char_needs_aws4_escaping(c)) {
+      rgw_uri_escape_char(c, result);
+    } else {
+      result.push_back(c);
+    }
   }
+
+  return result;
 }
 
 std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
@@ -494,14 +496,14 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
           if (key.length() != key_decoded.length()) {
             encoded_key = key;
           } else {
-            aws4_uri_encode(key, encoded_key);
+            encoded_key = aws4_uri_encode(key);
           }
           string val_decoded;
           url_decode(val, val_decoded);
           if (val.length() != val_decoded.length()) {
             encoded_val = val;
           } else {
-            aws4_uri_encode(val, encoded_val);
+            encoded_val = aws4_uri_encode(val);
           }
         } else {
           encoded_key = key;
