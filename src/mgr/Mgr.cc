@@ -443,7 +443,7 @@ void Mgr::handle_osd_map()
     cluster_state.notify_osdmap(osd_map);
   });
 
-  // TODO: same culling for MonMap and FSMap
+  // TODO: same culling for MonMap
   daemon_state.cull(CEPH_ENTITY_TYPE_OSD, names_exist);
 }
 
@@ -509,6 +509,8 @@ void Mgr::handle_fs_map(MFSMap* m)
 {
   assert(lock.is_locked_by_me());
 
+  std::set<std::string> names_exist;
+  
   const FSMap &new_fsmap = m->get_fsmap();
 
   fs_map_cond.Signal();
@@ -523,6 +525,13 @@ void Mgr::handle_fs_map(MFSMap* m)
   auto mds_info = new_fsmap.get_mds_info();
   for (const auto &i : mds_info) {
     const auto &info = i.second;
+
+    if (!new_fsmap.gid_exists(i.first)){
+      continue;
+    }
+
+    // Remember which MDS exists so that we can cull any that don't
+    names_exist.insert(info.name);
 
     const auto k = DaemonKey(CEPH_ENTITY_TYPE_MDS, info.name);
     if (daemon_state.is_updating(k)) {
@@ -564,6 +573,7 @@ void Mgr::handle_fs_map(MFSMap* m)
           {}, &c->outbl, &c->outs, c);
     }
   }
+  daemon_state.cull(CEPH_ENTITY_TYPE_MDS, names_exist);
 }
 
 
