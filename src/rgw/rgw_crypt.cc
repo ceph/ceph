@@ -125,7 +125,7 @@ public:
   {
     CryptoHandler* ch = CryptoHandler::create(CEPH_CRYPTO_AES_256_CBC);
     string error;
-    bool result;
+    int result;
     size_t out_len = out.length();
     CryptoKeyHandler* ckh = ch->get_key_handler(key, iv, error);
     if (encrypt) {
@@ -136,7 +136,7 @@ public:
     assert(out.length() == out_len+in.length());
     delete ckh;
     delete ch;
-    return result;
+    return result == 0;
   }
 
   bool cbc_transform(bufferlist& output,
@@ -360,7 +360,7 @@ bool AES_256_ECB_encrypt(CephContext* cct,
   string error;
   int result;
   size_t out_len = out.length();
-  CryptoKeyHandler* ckh = ch->get_key_handler(key, AES_IV, error);
+  CryptoKeyHandler* ckh = ch->get_key_handler(key, EMPTY_IV, error);
   result = ckh->encrypt(in, out, &error);
 
   if (result != 0) {

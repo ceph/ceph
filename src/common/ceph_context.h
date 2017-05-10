@@ -32,7 +32,9 @@ class md_config_obs_t;
 struct md_config_t;
 class CephContextHook;
 class CephContextObs;
+namespace ceph {
 class CryptoHandler;
+}
 
 namespace ceph {
   class PluginRegistry;

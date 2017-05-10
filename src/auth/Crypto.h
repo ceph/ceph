@@ -31,6 +31,7 @@ extern const bufferptr AES_IV;
 extern const bufferptr EMPTY_IV;
 }
 
+namespace ceph {
 /*
  * some per-key context that is specific to a particular crypto backend
  */
@@ -120,15 +121,16 @@ public:
 
   void to_str(std::string& s) const;
 };
-WRITE_CLASS_ENCODER(CryptoKey)
+}
+WRITE_CLASS_ENCODER(ceph::CryptoKey)
 
-static inline ostream& operator<<(ostream& out, const CryptoKey& k)
+static inline ostream& operator<<(ostream& out, const ceph::CryptoKey& k)
 {
   k.print(out);
   return out;
 }
 
-
+namespace ceph {
 /*
  * Driver for a particular algorithm
  *
@@ -150,4 +152,5 @@ public:
 extern int get_random_bytes(char *buf, int len);
 extern uint64_t get_random(uint64_t min_val, uint64_t max_val);
 
+}
 #endif

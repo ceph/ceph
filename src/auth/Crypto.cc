@@ -35,6 +35,8 @@
 #include "common/debug.h"
 #include <errno.h>
 
+namespace ceph {
+
 int get_random_bytes(char *buf, int len)
 {
   int fd = TEMP_FAILURE_RETRY(::open("/dev/urandom", O_RDONLY));
@@ -61,6 +63,7 @@ uint64_t get_random(uint64_t min_val, uint64_t max_val)
   return r;
 }
 
+}
 
 // ---------------------------------------------------
 namespace ceph {
@@ -69,6 +72,8 @@ const bufferptr AES_IV =
 const bufferptr EMPTY_IV =
     buffer::create_static(0, nullptr);
 }
+
+namespace ceph {
 
 class CryptoNoneKeyHandler : public CryptoKeyHandler {
 public:
@@ -555,7 +560,7 @@ bool CryptoAES_256_CBCKeyHandler::cbc_transform(
   PK11SlotInfo *slot;
   SECItem keyItem;
   PK11SymKey *symkey;
-  CK_AES_CBC_ENCRYPT_DATA_PARAMS ctr_params = {0};
+  CK_AES_CBC_ENCRYPT_DATA_PARAMS cbc_params = {0};
   SECItem ivItem;
   SECItem *param;
   SECStatus ret;
@@ -569,10 +574,10 @@ bool CryptoAES_256_CBCKeyHandler::cbc_transform(
     keyItem.len = CryptoAES_256_CBC::KEY_SIZE;
     symkey = PK11_ImportSymKey(slot, CKM_AES_CBC, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
     if (symkey) {
-      memcpy(ctr_params.iv, iv.c_str(), CryptoAES_256_CBC::IV_SIZE);
+      memcpy(cbc_params.iv, iv.c_str(), CryptoAES_256_CBC::IV_SIZE);
       ivItem.type = siBuffer;
-      ivItem.data = (unsigned char*)&ctr_params;
-      ivItem.len = sizeof(ctr_params);
+      ivItem.data = (unsigned char*)&cbc_params;
+      ivItem.len = sizeof(cbc_params);
 
       param = PK11_ParamFromIV(CKM_AES_CBC, &ivItem);
       if (param) {
@@ -1102,4 +1107,6 @@ CryptoHandler *CryptoHandler::create(int type)
   default:
     return nullptr;
   }
+}
+
 }

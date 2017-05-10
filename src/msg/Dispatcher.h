@@ -24,7 +24,9 @@ class Messenger;
 class Message;
 class Connection;
 class AuthAuthorizer;
+namespace ceph {
 class CryptoKey;
+}
 class CephContext;
 
 class Dispatcher {

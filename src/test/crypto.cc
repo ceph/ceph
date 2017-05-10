@@ -207,7 +207,11 @@ void check_encryption(int mode, const bufferlist& expected)
   in.append(data_in, sizeof(data_in));
   bufferlist out;
   bufferlist out_decrypt;
-  CryptoKeyHandler* ckh = ch->get_key_handler(key, iv, error);
+  CryptoKeyHandler* ckh;
+  if (mode == CEPH_CRYPTO_AES_256_ECB)
+    ckh = ch->get_key_handler(key, EMPTY_IV, error);
+  else
+    ckh = ch->get_key_handler(key, iv, error);
   ASSERT_NE(ckh, nullptr);
   ASSERT_EQ(ckh->encrypt(in, out, &error), 0);
   ASSERT_EQ(ckh->decrypt(out, out_decrypt, &error), 0);
@@ -264,8 +268,14 @@ void check_encryption_errors(int mode, bool check_iv)
     ASSERT_EQ(ckh, nullptr);
     cout << "IV too short: error = " << error << endl;
   }
-  ckh = ch->get_key_handler(key, iv, error);
+  if (mode != CEPH_CRYPTO_AES_256_ECB) {
+    ckh = ch->get_key_handler(key, iv, error);
+  }
+  else {
+    ckh = ch->get_key_handler(key, EMPTY_IV, error);
+  }
   ASSERT_NE(ckh, nullptr);
+
 
   static char data_in[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
   static char data_in_uneven[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
