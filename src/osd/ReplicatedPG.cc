@@ -9996,7 +9996,8 @@ void ReplicatedPG::on_removal(ObjectStore::Transaction *t)
 
   write_if_dirty(*t);
 
-  on_shutdown();
+  if (!deleting)
+    on_shutdown();
 }
 
 void ReplicatedPG::on_shutdown()
