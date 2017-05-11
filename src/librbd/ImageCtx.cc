@@ -198,7 +198,8 @@ struct C_InvalidateCache : public Context {
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
       io_work_queue(nullptr), op_work_queue(nullptr),
-      asok_hook(nullptr)
+      asok_hook(nullptr),
+      trace_endpoint("librbd")
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -269,6 +270,7 @@ struct C_InvalidateCache : public Context {
       pname += snap_name;
     }
 
+    trace_endpoint.copy_name(pname);
     perf_start(pname);
 
     if (cache) {

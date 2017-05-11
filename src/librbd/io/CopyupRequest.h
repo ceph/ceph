@@ -8,11 +8,14 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
+#include "common/zipkin_trace.h"
 #include "librbd/io/Types.h"
 
 #include <string>
 #include <vector>
 #include <atomic>
+
+namespace ZTracer { struct Trace; }
 
 namespace librbd {
 
@@ -26,7 +29,7 @@ template <typename I> class ObjectRequest;
 class CopyupRequest {
 public:
   CopyupRequest(ImageCtx *ictx, const std::string &oid, uint64_t objectno,
-                Extents &&image_extents);
+                Extents &&image_extents, const ZTracer::Trace &parent_trace);
   ~CopyupRequest();
 
   void append_request(ObjectRequest<ImageCtx> *req);
@@ -77,6 +80,8 @@ private:
   std::string m_oid;
   uint64_t m_object_no;
   Extents m_image_extents;
+  ZTracer::Trace m_trace;
+
   State m_state;
   ceph::bufferlist m_copyup_data;
   std::vector<ObjectRequest<ImageCtx> *> m_pending_requests;

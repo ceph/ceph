@@ -46,7 +46,7 @@ public:
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
 
     auto req = new io::ObjectTrimRequest(&image_ctx, oid, m_object_no,
-                                         m_snapc, this, false);
+                                         m_snapc, false, this);
     req->send();
     return 0;
   }
@@ -416,10 +416,10 @@ void TrimRequest<I>::send_clean_boundary() {
     io::ObjectRequest<> *req;
     if (p->offset == 0) {
       req = new io::ObjectTrimRequest(&image_ctx, p->oid.name, p->objectno,
-                                      snapc, req_comp, true);
+                                      snapc, true, req_comp);
     } else {
       req = new io::ObjectTruncateRequest(&image_ctx, p->oid.name, p->objectno,
-                                          p->offset, snapc, req_comp);
+                                          p->offset, snapc, {}, req_comp);
     }
     req->send();
   }

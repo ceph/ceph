@@ -7,6 +7,7 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd_types.h"
 #include "include/Context.h"
+#include "common/zipkin_trace.h"
 
 #include <atomic>
 #include <type_traits>
@@ -192,6 +193,16 @@ bool calc_sparse_extent(const bufferptr &bp,
                         size_t *write_offset,
                         size_t *write_length,
                         size_t *offset);
+
+template <typename I>
+inline ZTracer::Trace create_trace(const I &image_ctx, const char *trace_name,
+				   const ZTracer::Trace &parent_trace) {
+  if (parent_trace.valid()) {
+    return ZTracer::Trace(trace_name, &image_ctx.trace_endpoint, &parent_trace);
+  }
+  return ZTracer::Trace();
+}
+
 } // namespace util
 
 } // namespace librbd

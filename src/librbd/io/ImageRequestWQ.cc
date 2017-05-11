@@ -3,6 +3,7 @@
 
 #include "librbd/io/ImageRequestWQ.h"
 #include "common/errno.h"
+#include "common/zipkin_trace.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -122,8 +123,14 @@ ssize_t ImageRequestWQ::writesame(uint64_t off, uint64_t len, bufferlist &&bl,
 void ImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
                               ReadResult &&read_result, int op_flags,
                               bool native_async) {
-  c->init_time(&m_image_ctx, AIO_TYPE_READ);
   CephContext *cct = m_image_ctx.cct;
+  ZTracer::Trace trace;
+  if (cct->_conf->rbd_blkin_trace_all) {
+    trace.init("wq: read", &m_image_ctx.trace_endpoint);
+    trace.event("start");
+  }
+
+  c->init_time(&m_image_ctx, AIO_TYPE_READ);
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", "
                  << "len=" << len << ", " << "flags=" << op_flags << dendl;
@@ -149,20 +156,27 @@ void ImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty() ||
       lock_required) {
     queue(new ImageReadRequest<>(m_image_ctx, c, {{off, len}},
-                                 std::move(read_result), op_flags));
+                                 std::move(read_result), op_flags, trace));
   } else {
     c->start_op();
     ImageRequest<>::aio_read(&m_image_ctx, c, {{off, len}},
-                             std::move(read_result), op_flags);
+                             std::move(read_result), op_flags, trace);
     finish_in_flight_op();
   }
+  trace.event("finish");
 }
 
 void ImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
                                bufferlist &&bl, int op_flags,
                                bool native_async) {
-  c->init_time(&m_image_ctx, AIO_TYPE_WRITE);
   CephContext *cct = m_image_ctx.cct;
+  ZTracer::Trace trace;
+  if (cct->_conf->rbd_blkin_trace_all) {
+    trace.init("wq: write", &m_image_ctx.trace_endpoint);
+    trace.event("init");
+  }
+
+  c->init_time(&m_image_ctx, AIO_TYPE_WRITE);
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", "
                  << "len=" << len << ", flags=" << op_flags << dendl;
@@ -178,20 +192,27 @@ void ImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(new ImageWriteRequest<>(m_image_ctx, c, {{off, len}},
-                                  std::move(bl), op_flags));
+                                  std::move(bl), op_flags, trace));
   } else {
     c->start_op();
     ImageRequest<>::aio_write(&m_image_ctx, c, {{off, len}},
-                              std::move(bl), op_flags);
+                              std::move(bl), op_flags, trace);
     finish_in_flight_op();
   }
+  trace.event("finish");
 }
 
 void ImageRequestWQ::aio_discard(AioCompletion *c, uint64_t off,
                                  uint64_t len, bool skip_partial_discard,
                                  bool native_async) {
-  c->init_time(&m_image_ctx, AIO_TYPE_DISCARD);
   CephContext *cct = m_image_ctx.cct;
+  ZTracer::Trace trace;
+  if (cct->_conf->rbd_blkin_trace_all) {
+    trace.init("wq: discard", &m_image_ctx.trace_endpoint);
+    trace.event("init");
+  }
+
+  c->init_time(&m_image_ctx, AIO_TYPE_DISCARD);
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", len=" << len
                  << dendl;
@@ -206,17 +227,26 @@ void ImageRequestWQ::aio_discard(AioCompletion *c, uint64_t off,
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(new ImageDiscardRequest<>(m_image_ctx, c, off, len, skip_partial_discard));
+    queue(new ImageDiscardRequest<>(m_image_ctx, c, off, len,
+				    skip_partial_discard, trace));
   } else {
     c->start_op();
-    ImageRequest<>::aio_discard(&m_image_ctx, c, off, len, skip_partial_discard);
+    ImageRequest<>::aio_discard(&m_image_ctx, c, off, len,
+				skip_partial_discard, trace);
     finish_in_flight_op();
   }
+  trace.event("finish");
 }
 
 void ImageRequestWQ::aio_flush(AioCompletion *c, bool native_async) {
-  c->init_time(&m_image_ctx, AIO_TYPE_FLUSH);
   CephContext *cct = m_image_ctx.cct;
+  ZTracer::Trace trace;
+  if (cct->_conf->rbd_blkin_trace_all) {
+    trace.init("wq: flush", &m_image_ctx.trace_endpoint);
+    trace.event("init");
+  }
+
+  c->init_time(&m_image_ctx, AIO_TYPE_FLUSH);
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << dendl;
 
@@ -230,18 +260,25 @@ void ImageRequestWQ::aio_flush(AioCompletion *c, bool native_async) {
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty()) {
-    queue(new ImageFlushRequest<>(m_image_ctx, c));
+    queue(new ImageFlushRequest<>(m_image_ctx, c, trace));
   } else {
-    ImageRequest<>::aio_flush(&m_image_ctx, c);
+    ImageRequest<>::aio_flush(&m_image_ctx, c, trace);
     finish_in_flight_op();
   }
+  trace.event("finish");
 }
 
 void ImageRequestWQ::aio_writesame(AioCompletion *c, uint64_t off, uint64_t len,
                                    bufferlist &&bl, int op_flags,
                                    bool native_async) {
-  c->init_time(&m_image_ctx, AIO_TYPE_WRITESAME);
   CephContext *cct = m_image_ctx.cct;
+  ZTracer::Trace trace;
+  if (cct->_conf->rbd_blkin_trace_all) {
+    trace.init("wq: writesame", &m_image_ctx.trace_endpoint);
+    trace.event("init");
+  }
+
+  c->init_time(&m_image_ctx, AIO_TYPE_WRITESAME);
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "completion=" << c << ", off=" << off << ", "
                  << "len=" << len << ", data_len = " << bl.length() << ", "
@@ -258,13 +295,14 @@ void ImageRequestWQ::aio_writesame(AioCompletion *c, uint64_t off, uint64_t len,
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(new ImageWriteSameRequest<>(m_image_ctx, c, off, len, std::move(bl),
-                                      op_flags));
+                                      op_flags, trace));
   } else {
     c->start_op();
     ImageRequest<>::aio_writesame(&m_image_ctx, c, off, len, std::move(bl),
-                                  op_flags);
+                                  op_flags, trace);
     finish_in_flight_op();
   }
+  trace.event("finish");
 }
 
 void ImageRequestWQ::shut_down(Context *on_shutdown) {
