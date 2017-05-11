@@ -295,6 +295,8 @@ void MDCache::remove_inode(CInode *o)
 
   o->item_open_file.remove_myself();
 
+  export_pin_queue.erase(o);
+
   // remove from inode map
   inode_map.erase(o->vino());    
 
@@ -353,6 +355,7 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
   in->inode.nlink = 1;
   in->inode.truncate_size = -1ull;
   in->inode.change_attr = 0;
+  in->inode.export_pin = MDS_RANK_NONE;
 
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
@@ -909,7 +912,8 @@ void MDCache::try_subtree_merge_at(CDir *dir, bool do_eval)
   if (parent != dir &&                              // we have a parent,
       parent->dir_auth == dir->dir_auth &&          // auth matches,
       dir->dir_auth.second == CDIR_AUTH_UNKNOWN &&  // auth is unambiguous,
-      !dir->state_test(CDir::STATE_EXPORTBOUND)) {  // not an exportbound,
+      !dir->state_test(CDir::STATE_EXPORTBOUND) && // not an exportbound,
+      !dir->state_test(CDir::STATE_AUXSUBTREE)) {  // not aux subtree
     // merge with parent.
     dout(10) << "  subtree merge at " << *dir << dendl;
     dir->set_dir_auth(CDIR_AUTH_DEFAULT);
@@ -1260,19 +1264,15 @@ void MDCache::verify_subtree_bounds(CDir *dir, const set<CDir*>& bounds)
   if (bounds != subtrees[dir]) {
     dout(0) << "verify_subtree_bounds failed" << dendl;
     set<CDir*> b = bounds;
-    for (set<CDir*>::iterator p = subtrees[dir].begin();
-	 p != subtrees[dir].end();
-	 ++p) {
-      if (bounds.count(*p)) {
-	b.erase(*p);
+    for (auto &cd : subtrees[dir]) {
+      if (bounds.count(cd)) {
+	b.erase(cd);
 	continue;
       }
-      dout(0) << "  missing bound " << **p << dendl;
+      dout(0) << "  missing bound " << *cd << dendl;
     }
-    for (set<CDir*>::iterator p = b.begin();
-	 p != b.end();
-	 ++p) 
-      dout(0) << "    extra bound " << **p << dendl;
+    for (const auto &cd : b)
+      dout(0) << "    extra bound " << *cd << dendl;
   }
   assert(bounds == subtrees[dir]);
 }
@@ -1284,10 +1284,8 @@ void MDCache::verify_subtree_bounds(CDir *dir, const list<dirfrag_t>& bounds)
 
   // make sure that any bounds i do have are properly noted as such.
   int failed = 0;
-  for (list<dirfrag_t>::const_iterator p = bounds.begin();
-       p != bounds.end();
-       ++p) {
-    CDir *bd = get_dirfrag(*p);
+  for (const auto &fg : bounds) {
+    CDir *bd = get_dirfrag(fg);
     if (!bd) continue;
     if (subtrees[dir].count(bd) == 0) {
       dout(0) << "verify_subtree_bounds failed: extra bound " << *bd << dendl;
@@ -2780,6 +2778,9 @@ void MDCache::send_subtree_resolves()
       resolves[*p] = new MMDSResolve;
   }
 
+  map<dirfrag_t, vector<dirfrag_t> > my_subtrees;
+  map<dirfrag_t, vector<dirfrag_t> > my_ambig_imports;
+
   // known
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
        p != subtrees.end();
@@ -2800,10 +2801,8 @@ void MDCache::send_subtree_resolves()
       vector<dirfrag_t> dfls;
       for (set<CDir*>::iterator q = bounds.begin(); q != bounds.end(); ++q)
 	dfls.push_back((*q)->dirfrag());
-      for (map<mds_rank_t, MMDSResolve*>::iterator q = resolves.begin();
-	   q != resolves.end();
-	   ++q)
-	resolves[q->first]->add_ambiguous_import(dir->dirfrag(), dfls);
+
+      my_ambig_imports[dir->dirfrag()] = dfls;
       dout(10) << " ambig " << dir->dirfrag() << " " << dfls << dendl;
     } else {
       // not ambiguous.
@@ -2818,11 +2817,9 @@ void MDCache::send_subtree_resolves()
 	   ++q) {
 	CDir *bound = *q;
 	dfls.push_back(bound->dirfrag());
-	for (map<mds_rank_t, MMDSResolve*>::iterator r = resolves.begin();
-	     r != resolves.end();
-	     ++r)
-	  resolves[r->first]->add_subtree_bound(dir->dirfrag(), bound->dirfrag());
       }
+
+      my_subtrees[dir->dirfrag()] = dfls;
       dout(10) << " claim " << dir->dirfrag() << " " << dfls << dendl;
     }
   }
@@ -2831,19 +2828,37 @@ void MDCache::send_subtree_resolves()
   for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = my_ambiguous_imports.begin();
        p != my_ambiguous_imports.end();
        ++p) {
-    for (map<mds_rank_t, MMDSResolve*>::iterator q = resolves.begin();
-	 q != resolves.end();
-	 ++q)
-      resolves[q->first]->add_ambiguous_import(p->first, p->second);
+    my_ambig_imports[p->first] = p->second;
     dout(10) << " ambig " << p->first << " " << p->second << dendl;
+  }
+
+  // simplify the claimed subtree.
+  for (auto p = my_subtrees.begin(); p != my_subtrees.end(); ++p) {
+    unsigned i = 0;
+    while (i < p->second.size()) {
+      dirfrag_t b = p->second[i];
+      if (my_subtrees.count(b)) {
+	vector<dirfrag_t>& bb = my_subtrees[b];
+	dout(10) << " simplify: " << p->first << " swallowing " << b << " with bounds " << bb << dendl;
+	for (vector<dirfrag_t>::iterator r = bb.begin(); r != bb.end(); ++r)
+	  p->second.push_back(*r);
+	my_subtrees.erase(b);
+	p->second.erase(p->second.begin() + i);
+      } else {
+	++i;
+      }
+    }
   }
 
   // send
   for (map<mds_rank_t, MMDSResolve*>::iterator p = resolves.begin();
        p != resolves.end();
        ++p) {
+    MMDSResolve* m = p->second;
+    m->subtrees = my_subtrees;
+    m->ambiguous_imports = my_ambig_imports;
     dout(10) << "sending subtee resolve to mds." << p->first << dendl;
-    mds->send_message_mds(p->second, p->first);
+    mds->send_message_mds(m, p->first);
   }
   resolves_pending = false;
 }
@@ -9015,7 +9030,7 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
       dispatch_fragment_dir(mdr);
       break;
     case CEPH_MDS_OP_EXPORTDIR:
-      migrator->dispatch_export_dir(mdr);
+      migrator->dispatch_export_dir(mdr, 0);
       break;
     case CEPH_MDS_OP_ENQUEUE_SCRUB:
       enqueue_scrub_work(mdr);
@@ -10626,8 +10641,10 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 	subtrees[parent_subtree].erase(dir);
 	for (list<CDir*>::iterator p = resultfrags.begin();
 	     p != resultfrags.end();
-	     ++p)
+	     ++p) {
+	  assert((*p)->is_subtree_root());
 	  subtrees[parent_subtree].insert(*p);
+	}
       }
       
       // adjust my bounds.
@@ -10681,6 +10698,7 @@ void MDCache::adjust_dir_fragments(CInode *diri,
     diri->add_dirfrag(f);
 
     if (was_subtree) {
+      assert(f->is_subtree_root());
       subtrees[f].swap(new_bounds);
       if (parent_subtree)
 	subtrees[parent_subtree].insert(f);
