@@ -11,6 +11,7 @@
 
 #include <boost/container/static_vector.hpp>
 #include <boost/utility/string_ref.hpp>
+#include <boost/utility/string_view.hpp>
 
 #include "rgw_common.h"
 #include "rgw_rest_s3.h"
@@ -402,28 +403,28 @@ boost::optional<std::string> get_v4_canonical_headers(const req_info& info,
 
 extern sha256_digest_t
 get_v4_canon_req_hash(CephContext* cct,
-                      const boost::string_ref& http_verb,
+                      const boost::string_view& http_verb,
                       const std::string& canonical_uri,
                       const std::string& canonical_qs,
                       const std::string& canonical_hdrs,
                       const std::string& signed_hdrs,
-                      const boost::string_ref& request_payload_hash);
+                      const boost::string_view& request_payload_hash);
 
 std::string get_v4_string_to_sign(CephContext* cct,
-                                  const boost::string_ref& algorithm,
-                                  const boost::string_ref& request_date,
-                                  const boost::string_ref& credential_scope,
+                                  const boost::string_view& algorithm,
+                                  const boost::string_view& request_date,
+                                  const boost::string_view& credential_scope,
                                   const sha256_digest_t& canonreq_hash);
 
 extern sha256_digest_t
 get_v4_signing_key(CephContext* const cct,
-                   const boost::string_ref& credential_scope,
-                   const boost::string_ref& access_key_secret);
+                   const boost::string_view& credential_scope,
+                   const boost::string_view& access_key_secret);
 
 extern std::array<char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1>
 get_v4_signature(CephContext* cct,
                  const sha256_digest_t& signing_key,
-                 const boost::string_ref& string_to_sign);
+                 const boost::string_view& string_to_sign);
 
 static inline
 std::string get_v2_signature(CephContext*,
