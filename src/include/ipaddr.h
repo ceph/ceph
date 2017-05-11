@@ -1,10 +1,6 @@
 #ifndef CEPH_IPADDR_H
 #define CEPH_IPADDR_H
 
-#include <netinet/in.h>
-#include <sys/types.h>
-#include <ifaddrs.h>
-
 /*
   Find an IP address that is in the wanted subnet.
 

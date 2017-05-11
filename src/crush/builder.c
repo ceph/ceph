@@ -1,15 +1,12 @@
 #include <string.h>
-#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
 #include <errno.h>
 
-#include "include/int_types.h"
-
+#include "crush/crush.h"
 #include "builder.h"
-#include "hash.h"
 
 #define dprintk(args...) /* printf(args) */
 

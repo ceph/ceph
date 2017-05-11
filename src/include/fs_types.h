@@ -4,7 +4,6 @@
 #define CEPH_INCLUDE_FS_TYPES_H
 
 #include "types.h"
-#include "utime.h"
 
 // --------------------------------------
 // ino
