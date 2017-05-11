@@ -276,6 +276,9 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
         if (!content_type) {
           content_type = iter->second.c_str();
         }
+      } else if (strcmp(name, RGW_ATTR_SLO_UINDICATOR) == 0) {
+        // this attr has an extra length prefix from ::encode() in prior versions
+        dump_header(s, "X-Object-Meta-Static-Large-Object", "True");
       } else if (strncmp(name, RGW_ATTR_META_PREFIX,
 			 sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
         /* User custom metadata. */
