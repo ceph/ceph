@@ -1,7 +1,12 @@
 #ifndef CEPH_CRUSH_BUILDER_H
 #define CEPH_CRUSH_BUILDER_H
 
-#include "crush.h"
+#include "include/int_types.h"
+
+struct crush_bucket;
+struct crush_choose_arg;
+struct crush_map;
+struct crush_rule;
 
 /** @ingroup API
  *
