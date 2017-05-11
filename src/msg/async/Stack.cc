@@ -164,6 +164,7 @@ Worker* NetworkStack::get_worker()
   return current_best;
 }
 
+
 void NetworkStack::stop()
 {
   Spinlock::Locker l(pool_spin);
