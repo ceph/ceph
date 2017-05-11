@@ -3373,7 +3373,7 @@ static int rgw_cls_lc_get_next_entry(cls_method_context_t hctx, bufferlist *in, 
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_cls_lc_rm_entry(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: rgw_cls_lc_get_next_entry: failed to decode op\n");
     return -EINVAL;
   }
 
@@ -3406,10 +3406,11 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in, bu
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_cls_lc_rm_entry(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: rgw_cls_lc_list_entries(): failed to decode op\n");
     return -EINVAL;
   }
-    cls_rgw_lc_list_entries_ret op_ret;
+
+  cls_rgw_lc_list_entries_ret op_ret;
   bufferlist::iterator iter;
   map<string, bufferlist> vals;
   string filter_prefix;
@@ -3440,7 +3441,7 @@ static int rgw_cls_lc_put_head(cls_method_context_t hctx, bufferlist *in, buffer
   try {
     ::decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_cls_lc_set_entry(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: rgw_cls_lc_put_head(): failed to decode entry\n");
     return -EINVAL;
   }
 
