@@ -331,9 +331,7 @@ static inline int parse_v4_credentials_hdrs(const req_info& info,           /* i
   const char* const http_auth = info.env->get("HTTP_AUTHORIZATION");
   string auth_str = http_auth;
 
-#define AWS4_HMAC_SHA256_STR "AWS4-HMAC-SHA256"
-#define CREDENTIALS_PREFIX_LEN (sizeof(AWS4_HMAC_SHA256_STR) - 1)
-  uint64_t min_len = CREDENTIALS_PREFIX_LEN + 1;
+  constexpr size_t min_len = strlen(AWS4_HMAC_SHA256_STR) + 1;
   if (auth_str.length() < min_len) {
     dout(10) << "credentials string is too short" << dendl;
     return -EINVAL;

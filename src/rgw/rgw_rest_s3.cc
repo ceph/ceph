@@ -3108,6 +3108,8 @@ enum class AwsRoute {
 static inline std::pair<AwsVersion, AwsRoute>
 discover_aws_flavour(const req_info& info)
 {
+  using rgw::auth::s3::AWS4_HMAC_SHA256_STR;
+
   AwsVersion version = AwsVersion::UNKOWN;
   AwsRoute route = AwsRoute::UNKOWN;
 
@@ -3116,7 +3118,8 @@ discover_aws_flavour(const req_info& info)
     /* Authorization in Header */
     route = AwsRoute::HEADERS;
 
-    if (!strncmp(http_auth, "AWS4-HMAC-SHA256", 16)) {
+    if (!strncmp(http_auth, AWS4_HMAC_SHA256_STR,
+                 strlen(AWS4_HMAC_SHA256_STR))) {
       /* AWS v4 */
       version = AwsVersion::V4;
     } else if (!strncmp(http_auth, "AWS ", 4)) {
@@ -3126,7 +3129,7 @@ discover_aws_flavour(const req_info& info)
   } else {
     route = AwsRoute::QUERY_STRING;
 
-    if (info.args.get("X-Amz-Algorithm") == "AWS4-HMAC-SHA256") {
+    if (info.args.get("X-Amz-Algorithm") == AWS4_HMAC_SHA256_STR) {
       /* AWS v4 */
       version = AwsVersion::V4;
     } else if (!info.args.get("AWSAccessKeyId").empty()) {
