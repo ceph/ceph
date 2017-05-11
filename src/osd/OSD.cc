@@ -1030,9 +1030,20 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
     release_map(next_map);
     return ret;
   }
-  ret.first = osd->hb_back_client_messenger->get_connection(next_map->get_hb_back_inst(peer));
-  if (next_map->get_hb_front_addr(peer) != entity_addr_t())
-    ret.second = osd->hb_front_client_messenger->get_connection(next_map->get_hb_front_inst(peer));
+
+  if (HAVE_FEATURE(next_map->get_xinfo(peer).features, SERVER_MIMIC)) {
+    ret.first = osd->hb_back_client_messenger->get_connection(
+      next_map->get_cluster_inst(peer));
+    ret.second = osd->hb_front_client_messenger->get_connection(
+      next_map->get_inst(peer));
+  } else {
+    // for luminous compat only
+    ret.first = osd->hb_back_client_messenger->get_connection(
+      next_map->get_hb_back_inst(peer));
+    if (next_map->get_hb_front_addr(peer) != entity_addr_t())
+      ret.second = osd->hb_front_client_messenger->get_connection(
+	next_map->get_hb_front_inst(peer));
+  }
   release_map(next_map);
   return ret;
 }
