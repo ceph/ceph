@@ -258,6 +258,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   _reset_faked_inos();
   //
   root = 0;
+  root_ancestor = 0;
 
   num_flushing_caps = 0;
 
