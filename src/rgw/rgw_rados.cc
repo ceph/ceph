@@ -9521,6 +9521,55 @@ int RGWRados::stat_system_obj(RGWObjectCtx& obj_ctx,
   return 0;
 }
 
+
+int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard *pbs, std::function<int(BucketShard *)> call)
+{
+  RGWRados *store = target->get_store();
+  BucketShard *bs;
+  int r;
+
+#define NUM_RESHARD_RETRIES 10
+  for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
+    int ret = get_bucket_shard(&bs);
+    if (ret < 0) {
+      ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
+      return ret;
+    }
+    r = call(bs);
+    if (r != -ERR_BUSY_RESHARDING) {
+      break;
+    }
+    ldout(store->ctx(), 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
+    RGWReshard reshard(store);
+    string new_bucket_id;
+    r = reshard.block_while_resharding(bs, &new_bucket_id);
+    if (r == -ERR_BUSY_RESHARDING) {
+      continue;
+    }
+    if (r < 0) {
+      return r;
+    }
+    ldout(store->ctx(), 20) << "reshard completion identified, new_bucket_id=" << new_bucket_id << dendl;
+    i = 0; /* resharding is finished, make sure we can retry */
+    r = target->update_bucket_id(new_bucket_id);
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "ERROR: update_bucket_id() new_bucket_id=" << new_bucket_id << " returned r=" << r << dendl;
+      return r;
+    }
+    invalidate_bs();
+  }
+
+  if (r < 0) {
+    return r;
+  }
+
+  if (pbs) {
+    *pbs = bs;
+  }
+
+  return 0;
+}
+
 int RGWRados::SystemObject::Read::stat(RGWObjVersionTracker *objv_tracker)
 {
   RGWRados *store = source->get_store();
@@ -9545,40 +9594,9 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_t
     }
   }
 
-  int r;
-
-#define NUM_RESHARD_RETRIES 10
-
-  for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
-    BucketShard *bs;
-    int ret = get_bucket_shard(&bs);
-    if (ret < 0) {
-      ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
-      return ret;
-    }
-    r = store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags, zones_trace);
-    if (r != -ERR_BUSY_RESHARDING) {
-      break;
-    }
-    ldout(store->ctx(), 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
-    RGWReshard reshard(store);
-    string new_bucket_id;
-    r = reshard.block_while_resharding(bs, &new_bucket_id);
-    if (r == -ERR_BUSY_RESHARDING) {
-      continue;
-    }
-    if (r < 0) {
-      return r;
-    }
-    ldout(store->ctx(), 20) << "reshard completion identified, new_bucket_id=" << new_bucket_id << dendl;
-    i = 0; /* resharding is finished, make sure we can retry */
-    r = target->update_bucket_id(new_bucket_id);
-    if (r < 0) {
-      ldout(store->ctx(), 0) << "ERROR: update_bucket_id() new_bucket_id=" << new_bucket_id << " returned r=" << r << dendl;
-      return r;
-    }
-    invalidate_bs();
-  }
+  int r = guard_reshard(nullptr, [&](BucketShard *bs) -> int { 
+    return store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags, zones_trace);
+  });
 
   if (r < 0) {
     return r;
@@ -9673,13 +9691,9 @@ int RGWRados::Bucket::UpdateIndex::cancel()
   RGWRados *store = target->get_store();
   BucketShard *bs;
 
-  int ret = get_bucket_shard(&bs);
-  if (ret < 0) {
-    ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
-    return ret;
-  }
-
-  ret = store->cls_obj_complete_cancel(*bs, optag, obj, bilog_flags, zones_trace);
+  ret = guard_reshard(&bs, [&](BucketShard *bs) -> int { 
+    return store->cls_obj_complete_cancel(*bs, optag, obj, bilog_flags, zones_trace);
+  });
 
   /*
    * need to update data log anyhow, so that whoever follows needs to update its internal markers
