@@ -4666,6 +4666,7 @@ ostream& operator<<(ostream& out, const PushOp &op);
 struct ScrubMap {
   struct object {
     map<string,bufferptr> attrs;
+    map<uint64_t, uint64_t> object_fiemap;
     set<snapid_t> snapcolls;
     uint64_t size;
     __u32 omap_digest;         ///< omap crc32c

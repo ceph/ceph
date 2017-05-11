@@ -5571,7 +5571,7 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 void ScrubMap::object::encode(bufferlist& bl) const
 {
   bool compat_read_error = read_error || ec_hash_mismatch || ec_size_mismatch;
-  ENCODE_START(8, 2, bl);
+  ENCODE_START(9, 2, bl);
   ::encode(size, bl);
   ::encode(negative, bl);
   ::encode(attrs, bl);
@@ -5586,12 +5586,13 @@ void ScrubMap::object::encode(bufferlist& bl) const
   ::encode(read_error, bl);
   ::encode(ec_hash_mismatch, bl);
   ::encode(ec_size_mismatch, bl);
+  ::encode(object_fiemap, bl);
   ENCODE_FINISH(bl);
 }
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 2, 2, bl);
   ::decode(size, bl);
   bool tmp, compat_read_error = false;
   ::decode(tmp, bl);
@@ -5630,6 +5631,9 @@ void ScrubMap::object::decode(bufferlist::iterator& bl)
     ::decode(tmp, bl);
     ec_size_mismatch = tmp;
   }
+  if (struct_v >= 9) {
+    ::decode(object_fiemap, bl);
+  }
   // If older encoder found a read_error, set read_error
   if (compat_read_error && !read_error && !ec_hash_mismatch && !ec_size_mismatch)
     read_error = true;
@@ -5647,6 +5651,14 @@ void ScrubMap::object::dump(Formatter *f) const
     f->dump_int("length", p->second.length());
     f->close_section();
   }
+  f->open_array_section("object_fiemap");
+  for (map<uint64_t,uint64_t>::const_iterator p = object_fiemap.begin();
+        p != object_fiemap.end(); ++p) {
+    f->open_object_section("extent");
+    f->dump_unsigned("offset", p->first);
+    f->dump_unsigned("length", p->second);
+    f->close_section();
+  }
   f->close_section();
 }
 
@@ -5659,6 +5671,8 @@ void ScrubMap::object::generate_test_instances(list<object*>& o)
   o.back()->size = 123;
   o.back()->attrs["foo"] = buffer::copy("foo", 3);
   o.back()->attrs["bar"] = buffer::copy("barval", 6);
+  o.back()->object_fiemap[4096] = 4096;
+  o.back()->object_fiemap[16384] = 8192;
 }
 
 // -- OSDOp --

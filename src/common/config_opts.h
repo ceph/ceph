@@ -839,6 +839,8 @@ OPTION(osd_deep_scrub_interval, OPT_FLOAT, 60*60*24*7) // once a week
 OPTION(osd_deep_scrub_randomize_ratio, OPT_FLOAT, 0.15) // scrubs will randomly become deep scrubs at this rate (0.15 -> 15% of scrubs are deep)
 OPTION(osd_deep_scrub_stride, OPT_INT, 524288)
 OPTION(osd_deep_scrub_update_digest_min_age, OPT_INT, 2*60*60)   // objects must be this old (seconds) before we update the whole-object digest on scrub
+OPTION(osd_deep_scrub_allocation_fix, OPT_BOOL, false) // fix object allocation diff among the replicas
+OPTION(osd_deep_scrub_allocation_fix_threshold, OPT_FLOAT, 0.20) // the imbalance thereshold for us to fix the allocation
 OPTION(osd_scan_list_ping_tp_interval, OPT_U64, 100)
 OPTION(osd_class_dir, OPT_STR, CEPH_LIBDIR "/rados-classes") // where rados plugins are stored
 OPTION(osd_open_classes_on_start, OPT_BOOL, true)
