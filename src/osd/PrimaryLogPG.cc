@@ -5458,7 +5458,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	else
 	  obs.oi.clear_data_digest();
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
-				    op.extent.offset, op.extent.length, true);
+				    op.extent.offset, op.extent.length);
 
       }
       break;
@@ -5491,7 +5491,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
 
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
-	    0, op.extent.length, true, op.extent.length != oi.size ? true : false);
+	    0, op.extent.length, op.extent.length != oi.size ? true : false);
       }
       break;
 
@@ -6753,7 +6753,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
 
 void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, object_info_t& oi,
 					       interval_set<uint64_t>& modified, uint64_t offset,
-					       uint64_t length, bool count_bytes, bool force_changesize)
+					       uint64_t length, bool force_changesize)
 {
   interval_set<uint64_t> ch;
   if (length)
@@ -6766,8 +6766,7 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
     oi.size = new_size;
   }
   delta_stats.num_wr++;
-  if (count_bytes)
-    delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
+  delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
 }
 
 void PrimaryLogPG::add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& delta_stats)
