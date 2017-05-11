@@ -6629,6 +6629,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (err == 0) {
 	ss << "create-or-move updated item name '" << name << "' weight " << weight
 	   << " at location " << loc << " to crush map";
+	ret = true;
 	break;
       }
       if (err > 0) {
