@@ -445,7 +445,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
     return ret;
   }
 
-  ret = set_resharding_status(bucket_info.bucket.bucket_id, CLS_RGW_RESHARD_IN_PROGRESS);
+  ret = set_resharding_status(new_bucket_info.bucket.bucket_id, CLS_RGW_RESHARD_IN_PROGRESS);
   if (ret < 0) {
     unlock_bucket();
     return ret;
@@ -464,7 +464,7 @@ sleep(10);
     return ret;
   }
 
-  ret = set_resharding_status(bucket_info.bucket.bucket_id, CLS_RGW_RESHARD_DONE);
+  ret = set_resharding_status(new_bucket_info.bucket.bucket_id, CLS_RGW_RESHARD_DONE);
   if (ret < 0) {
     unlock_bucket();
     return ret;
@@ -627,7 +627,7 @@ int RGWReshard::block_while_resharding(RGWRados::BucketShard *bs, string *new_bu
     sleep(default_reshard_sleep_duration);
   }
   ldout(store->ctx(), 0) << "RGWReshard::" << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
-  return -EAGAIN;
+  return -ERR_BUSY_RESHARDING;
 }
 
 BucketIndexLockGuard::BucketIndexLockGuard(CephContext *_cct, RGWRados* _store, const string& bucket_instance_id, const string& _oid, const librados::IoCtx& _io_ctx) :

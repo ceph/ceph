@@ -1028,6 +1028,11 @@ struct rgw_bucket {
     DECODE_FINISH(bl);
   }
 
+  void update_bucket_id(const string& new_bucket_id) {
+    bucket_id = new_bucket_id;
+    oid.clear();
+  }
+
   // format a key for the bucket/instance. pass delim=0 to skip a field
   std::string get_key(char tenant_delim = '/',
                       char id_delim = ':') const;

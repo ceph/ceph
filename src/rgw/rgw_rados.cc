@@ -5182,6 +5182,21 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
 }
 
 
+int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
+{
+  rgw_bucket bucket = bucket_info.bucket;
+  bucket.update_bucket_id(new_bucket_id);
+
+  RGWObjectCtx obj_ctx(store);
+
+  int ret = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
 /** 
  * get listing of the objects in a bucket.
  *
@@ -8892,22 +8907,6 @@ int RGWRados::Object::get_manifest(RGWObjManifest **pmanifest)
   return 0;
 }
 
-int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
-{
-  rgw_bucket& bucket = bucket_info.bucket;
-  bucket.bucket_id = new_bucket_id;
-
-  int ret = get_bucket_instance_info(ctx, bucket, bucket_info, nullptr, nullptr);
-  if (ret < 0) {
-    return ret;
-  }
-  obj.bucket = bucket;
-  bucket_shard.bucket = bucket;
-  bs_initialized = false
-
-  return 0;
-}
-
 int RGWRados::Object::Read::get_attr(const char *name, bufferlist& dest)
 {
   RGWObjState *state;
@@ -9548,7 +9547,7 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_t
 
   int r;
 
-#define NUM_RESHARD_RETRIES 3
+#define NUM_RESHARD_RETRIES 10
 
   for (int i = 0; i < NUM_RESHARD_RETRIES; ++i) {
     BucketShard *bs;
@@ -9565,13 +9564,20 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_t
     RGWReshard reshard(store);
     string new_bucket_id;
     r = reshard.block_while_resharding(bs, &new_bucket_id);
-    if (r != -EAGAIN) {
-      if (r < 0) {
-        return r;
-      }
-      r = target->update_bucket_id(new_bucket_id);
-      break;
+    if (r == -ERR_BUSY_RESHARDING) {
+      continue;
     }
+    if (r < 0) {
+      return r;
+    }
+    ldout(store->ctx(), 20) << "reshard completion identified, new_bucket_id=" << new_bucket_id << dendl;
+    i = 0; /* resharding is finished, make sure we can retry */
+    r = target->update_bucket_id(new_bucket_id);
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "ERROR: update_bucket_id() new_bucket_id=" << new_bucket_id << " returned r=" << r << dendl;
+      return r;
+    }
+    invalidate_bs();
   }
 
   if (r < 0) {

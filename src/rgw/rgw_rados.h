@@ -2675,8 +2675,6 @@ public:
     RGWBucketInfo& get_bucket_info() { return bucket_info; }
     int get_manifest(RGWObjManifest **pmanifest);
 
-    void update_bucket_id(const string& new_bucket_id);
-
     int get_bucket_shard(BucketShard **pbs) {
       if (!bs_initialized) {
         int r = bs.init(bucket_info.bucket, obj);
@@ -2852,6 +2850,8 @@ public:
     RGWRados *get_store() { return store; }
     rgw_bucket& get_bucket() { return bucket; }
     RGWBucketInfo& get_bucket_info() { return bucket_info; }
+
+    int update_bucket_id(const string& new_bucket_id);
 
     int get_shard_id() { return shard_id; }
     void set_shard_id(int id) {
