@@ -2397,15 +2397,14 @@ void ReplicatedBackend::_failed_pull(pg_shard_t from, const hobject_t &soid)
   pulling.erase(soid);
 }
 
-// This can read the local replica multiple times.  This
-// isn't so bad as long as the ObjectStore caches and
-// h->cache_dont_need is NOT true.
 int ReplicatedBackend::start_pushes(
   const hobject_t &soid,
   ObjectContextRef obc,
   RPGHandle *h)
 {
-  int pushes = 0;
+  list< map<pg_shard_t, pg_missing_t>::const_iterator > shards;
+
+  dout(20) << __func__ << " soid " << soid << dendl;
   // who needs it?
   assert(get_parent()->get_actingbackfill_shards().size() > 0);
   for (set<pg_shard_t>::iterator i =
@@ -2418,17 +2417,28 @@ int ReplicatedBackend::start_pushes(
       get_parent()->get_shard_missing().find(peer);
     assert(j != get_parent()->get_shard_missing().end());
     if (j->second.is_missing(soid)) {
-      ++pushes;
-      h->pushes[peer].push_back(PushOp());
-      int r = prep_push_to_replica(obc, soid, peer,
-			   &(h->pushes[peer].back()), h->cache_dont_need);
-      if (r < 0) {
-	// prep_push_to_replica() should fail on first attempt or not at all
-	assert(pushes == 1);
-	h->pushes[peer].pop_back();
-	return r;
-      }
+      shards.push_back(j);
     }
   }
-  return pushes;
+
+  // If more than 1 read will occur ignore possible request to not cache
+  bool cache = shards.size() == 1 ? h->cache_dont_need : false;
+
+  for (auto j : shards) {
+    pg_shard_t peer = j->first;
+    h->pushes[peer].push_back(PushOp());
+    int r = prep_push_to_replica(obc, soid, peer,
+	    &(h->pushes[peer].back()), cache);
+    if (r < 0) {
+      // Back out all failed reads
+      for (auto k : shards) {
+	pg_shard_t p = k->first;
+	dout(10) << __func__ << " clean up peer " << p << dendl;
+	h->pushes[p].pop_back();
+	if (p == peer) break;
+      }
+      return r;
+    }
+  }
+  return shards.size();
 }
