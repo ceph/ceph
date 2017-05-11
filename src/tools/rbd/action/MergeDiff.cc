@@ -389,7 +389,7 @@ static int do_merge_diff(const char *first, const char *second,
 done:
   if (pd > 2)
     close(pd);
-  if (sd)
+  if (sd >= 0)
     close(sd);
   if (fd > 2)
     close(fd);
