@@ -387,6 +387,11 @@ int PoolReplayer::init_rados(const std::string &cluster_name,
     }
   }
 
+  if (!g_ceph_context->_conf->admin_socket.empty()) {
+    cct->_conf->set_val_or_die("admin_socket",
+                               "$run_dir/$name.$pid.$cluster.$cctid.asok");
+  }
+
   // disable unnecessary librbd cache
   cct->_conf->set_val_or_die("rbd_cache", "false");
   cct->_conf->apply_changes(nullptr);
@@ -463,6 +468,13 @@ void PoolReplayer::print_status(Formatter *f, stringstream *ss)
     }
     f->close_section();
   }
+
+  f->dump_string("local_cluster_admin_socket",
+                 reinterpret_cast<CephContext *>(m_local_io_ctx.cct())->_conf->
+                     admin_socket);
+  f->dump_string("remote_cluster_admin_socket",
+                 reinterpret_cast<CephContext *>(m_remote_io_ctx.cct())->_conf->
+                     admin_socket);
 
   m_instance_replayer->print_status(f, ss);
 
