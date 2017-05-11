@@ -988,9 +988,6 @@ OPTION(osd_max_omap_bytes_per_request, OPT_U64, 1<<30)
 
 OPTION(osd_objectstore, OPT_STR, "filestore")  // ObjectStore backend type
 OPTION(osd_objectstore_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
-// Override maintaining compatibility with older OSDs
-// Set to true for testing.  Users should NOT set this.
-OPTION(osd_debug_override_acting_compat, OPT_BOOL, false)
 OPTION(osd_objectstore_fuse, OPT_BOOL, false)
 
 OPTION(osd_bench_small_size_max_iops, OPT_U32, 100) // 100 IOPS
