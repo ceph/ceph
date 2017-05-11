@@ -1099,8 +1099,7 @@ protected:
 
   void write_update_size_and_usage(object_stat_sum_t& stats, object_info_t& oi,
 				   interval_set<uint64_t>& modified, uint64_t offset,
-				   uint64_t length,
-				   bool force_changesize=false);
+				   uint64_t length, bool write_full=false);
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
 
 
