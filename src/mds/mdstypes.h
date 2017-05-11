@@ -74,8 +74,6 @@
 typedef int32_t mds_rank_t;
 typedef int32_t fs_cluster_id_t;
 
-
-
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;
 constexpr fs_cluster_id_t FS_CLUSTER_ID_NONE = {-1};
@@ -508,6 +506,8 @@ struct inode_t {
   nest_info_t accounted_rstat; // protected by parent's nestlock
 
   quota_info_t quota;
+
+  mds_rank_t export_pin;
  
   // special stuff
   version_t version;           // auth only
@@ -529,6 +529,7 @@ struct inode_t {
 	      truncate_seq(0), truncate_size(0), truncate_from(0),
 	      truncate_pending(0),
 	      time_warp_seq(0), change_attr(0),
+              export_pin(MDS_RANK_NONE),
 	      version(0), file_data_version(0), xattr_version(0),
 	      last_scrub_version(0), backtrace_version(0) {
     clear_layout();

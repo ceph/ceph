@@ -536,6 +536,7 @@ OPTION(mds_log_events_per_segment, OPT_INT, 1024)
 OPTION(mds_log_segment_size, OPT_INT, 0)  // segment size for mds log, default to default file_layout_t
 OPTION(mds_log_max_segments, OPT_U32, 30)
 OPTION(mds_log_max_expiring, OPT_INT, 20)
+OPTION(mds_bal_export_pin, OPT_BOOL, true)  // allow clients to pin directory trees to ranks
 OPTION(mds_bal_sample_interval, OPT_DOUBLE, 3.0)  // every 3 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT, 8000)
 OPTION(mds_bal_unreplicate_threshold, OPT_FLOAT, 0)
@@ -559,8 +560,7 @@ OPTION(mds_bal_need_min, OPT_FLOAT, .8)       // take within this range of what 
 OPTION(mds_bal_need_max, OPT_FLOAT, 1.2)
 OPTION(mds_bal_midchunk, OPT_FLOAT, .3)       // any sub bigger than this taken in full
 OPTION(mds_bal_minchunk, OPT_FLOAT, .001)     // never take anything smaller than this
-OPTION(mds_bal_target_removal_min, OPT_INT, 5) // min balance iterations before old target is removed
-OPTION(mds_bal_target_removal_max, OPT_INT, 10) // max balance iterations before old target is removed
+OPTION(mds_bal_target_decay, OPT_DOUBLE, 10.0) // target decay half-life in MDSMap (2x larger is approx. 2x slower)
 OPTION(mds_replay_interval, OPT_FLOAT, 1.0) // time to wait before starting replay again
 OPTION(mds_shutdown_check, OPT_INT, 0)
 OPTION(mds_thrash_exports, OPT_INT, 0)

@@ -627,6 +627,7 @@ public:
   friend class StrayManager;
   friend class CDir;
   friend class CInodeExport;
+  friend class C_CInode_ExportPin;
 
   // ---------------------------
   CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP) : 
@@ -682,6 +683,7 @@ public:
   bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(inode.ino); }
   bool is_base() const { return is_root() || is_mdsdir(); }
   bool is_system() const { return inode.ino < MDS_INO_SYSTEM_BASE; }
+  bool is_normal() const { return !(is_base() || is_system() || is_stray()); }
 
   bool is_head() const { return last == CEPH_NOSNAP; }
 
@@ -1065,6 +1067,13 @@ public:
     parent = projected_parent.front();
     projected_parent.pop_front();
   }
+
+private:
+  void maybe_export_pin();
+public:
+  void set_export_pin(mds_rank_t rank);
+  mds_rank_t get_export_pin(bool inherit=true) const;
+  bool is_exportable(mds_rank_t dest) const;
 
   void print(ostream& out) override;
   void dump(Formatter *f) const;
