@@ -445,7 +445,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    uint8_t target_v = 4;
+    uint8_t target_v = 5;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     }
@@ -466,8 +466,6 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
       ::encode(new_nearfull_ratio, bl);
       ::encode(new_full_ratio, bl);
       ::encode(new_backfillfull_ratio, bl);
-    }
-    if (target_v >= 4) {
       ::encode(new_require_min_compat_client, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
@@ -653,7 +651,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
   }
 
   {
-    DECODE_START(4, bl); // extended, osd-only data
+    DECODE_START(5, bl); // extended, osd-only data
     ::decode(new_hb_back_up, bl);
     ::decode(new_up_thru, bl);
     ::decode(new_last_clean_interval, bl);
@@ -678,10 +676,11 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     }
     if (struct_v >= 4) {
       ::decode(new_backfillfull_ratio, bl);
-      ::decode(new_require_min_compat_client, bl);
     } else {
       new_backfillfull_ratio = -1;
     }
+    if (struct_v >= 5)
+      ::decode(new_require_min_compat_client, bl);
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -2196,7 +2195,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    uint8_t target_v = 3;
+    uint8_t target_v = 4;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     }
@@ -2221,8 +2220,6 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       ::encode(nearfull_ratio, bl);
       ::encode(full_ratio, bl);
       ::encode(backfillfull_ratio, bl);
-    }
-    if (target_v >= 3) {
       ::encode(require_min_compat_client, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
@@ -2441,7 +2438,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
   }
 
   {
-    DECODE_START(3, bl); // extended, osd-only data
+    DECODE_START(4, bl); // extended, osd-only data
     ::decode(osd_addrs->hb_back_addr, bl);
     ::decode(osd_info, bl);
     ::decode(blacklist, bl);
@@ -2460,10 +2457,11 @@ void OSDMap::decode(bufferlist::iterator& bl)
     }
     if (struct_v >= 3) {
       ::decode(backfillfull_ratio, bl);
-      ::decode(require_min_compat_client, bl);
     } else {
       backfillfull_ratio = 0;
     }
+    if (struct_v >= 4)
+      ::decode(require_min_compat_client, bl);
     DECODE_FINISH(bl); // osd-only data
   }
 
