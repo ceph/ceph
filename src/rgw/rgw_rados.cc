@@ -5452,7 +5452,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       info.quota = *pquota_info;
     }
 
-    int r = init_bucket_index(info, bucket_index_max_shards);
+    int r = init_bucket_index(info, info.num_shards);
     if (r < 0) {
       return r;
     }
