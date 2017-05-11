@@ -253,7 +253,11 @@ def configure(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     for client, properties in config['clients'].iteritems():
         s3tests_conf = config['s3tests_conf'][client]
-        if properties is not None and 'rgw_server' in properties:
+        if properties is not None and 'rgw_host_override' in properties:
+            s3host = properties['rgw_host_override']
+            log.info('host name override specified configuring %s' % s3host)
+            s3tests_conf['DEFAULT']['host'] = s3host
+        elif properties is not None and 'rgw_server' in properties:
             host = None
             for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
                 log.info('roles: ' + str(roles))
