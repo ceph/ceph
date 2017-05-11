@@ -1122,7 +1122,6 @@ void PG::calc_ec_acting(
   const vector<int> &up,
   pg_shard_t up_primary,
   const map<pg_shard_t, pg_info_t> &all_info,
-  bool compat_mode,
   bool restrict_to_up_acting,
   vector<int> *_want,
   set<pg_shard_t> *backfill,
@@ -1210,7 +1209,6 @@ void PG::calc_replicated_acting(
   const vector<int> &up,
   pg_shard_t up_primary,
   const map<pg_shard_t, pg_info_t> &all_info,
-  bool compat_mode,
   bool restrict_to_up_acting,
   vector<int> *want,
   set<pg_shard_t> *backfill,
@@ -1264,16 +1262,8 @@ void PG::calc_replicated_acting(
        * as far backwards as necessary to pick up any peers which can
        * be log recovered by auth_log_shard's log */
       ss << " shard " << up_cand << " (up) backfill " << cur_info << std::endl;
-      if (compat_mode) {
-	if (backfill->empty()) {
-	  backfill->insert(up_cand);
-	  want->push_back(*i);
-	  acting_backfill->insert(up_cand);
-	}
-      } else {
-	backfill->insert(up_cand);
-	acting_backfill->insert(up_cand);
-      }
+      backfill->insert(up_cand);
+      acting_backfill->insert(up_cand);
     } else {
       want->push_back(*i);
       acting_backfill->insert(up_cand);
@@ -1393,27 +1383,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   assert(!auth_log_shard->second.is_incomplete());
   auth_log_shard_id = auth_log_shard->first;
 
-  // Determine if compatibility needed
-  bool compat_mode = !cct->_conf->osd_debug_override_acting_compat;
-  if (compat_mode) {
-    bool all_support = true;
-    OSDMapRef osdmap = get_osdmap();
-
-    for (map<pg_shard_t, pg_info_t>::iterator it = all_info.begin();
-	 it != all_info.end();
-	 ++it) {
-      pg_shard_t peer = it->first;
-
-      const osd_xinfo_t& xi = osdmap->get_xinfo(peer.osd);
-      if (!(xi.features & CEPH_FEATURE_OSD_ERASURE_CODES)) {
-	all_support = false;
-	break;
-      }
-    }
-    if (all_support)
-      compat_mode = false;
-  }
-
   set<pg_shard_t> want_backfill, want_acting_backfill;
   vector<int> want;
   pg_shard_t want_primary;
@@ -1427,7 +1396,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
       up,
       up_primary,
       all_info,
-      compat_mode,
       restrict_to_up_acting,
       &want,
       &want_backfill,
@@ -1443,7 +1411,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
       up,
       up_primary,
       all_info,
-      compat_mode,
       restrict_to_up_acting,
       &want,
       &want_backfill,
@@ -1492,7 +1459,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
     if (want_acting == up) {
       // There can't be any pending backfill if
       // want is the same as crush map up OSDs.
-      assert(compat_mode || want_backfill.empty());
+      assert(want_backfill.empty());
       vector<int> empty;
       osd->queue_want_pg_temp(info.pgid.pgid, empty);
     } else
