@@ -1052,8 +1052,8 @@ public:
     p->get(MDSCacheObject::PIN_PTRWAITER);    
   }
   void finish(int r) override {
-    p->put(MDSCacheObject::PIN_PTRWAITER);
     locker->try_eval(p, mask);
+    p->put(MDSCacheObject::PIN_PTRWAITER);
   }
 };
 
@@ -1770,6 +1770,7 @@ public:
   }
   void finish(int r) override {
     locker->file_update_finish(in, mut, share, client, cap, ack);
+    in->put(CInode::PIN_PTRWAITER);
   }
 };
 
@@ -1778,7 +1779,6 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share, client
 {
   dout(10) << "file_update_finish on " << *in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
-  in->put(CInode::PIN_PTRWAITER);
 
   mut->apply();
   
@@ -2146,9 +2146,9 @@ public:
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) override {
-    in->put(CInode::PIN_PTRWAITER);
     if (!in->is_auth())
       locker->request_inode_file_caps(in);
+    in->put(CInode::PIN_PTRWAITER);
   }
 };
 
@@ -2225,9 +2225,9 @@ public:
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) override {
-    in->put(CInode::PIN_PTRWAITER);
     if (in->is_auth())
       locker->check_inode_max_size(in, false, new_max_size, newsize, mtime);
+    in->put(CInode::PIN_PTRWAITER);
   }
 };
 
