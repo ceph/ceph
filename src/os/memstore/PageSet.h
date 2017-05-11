@@ -24,8 +24,6 @@
 #include <boost/intrusive_ptr.hpp>
 
 #include "include/encoding.h"
-#include "include/Spinlock.h"
-
 
 struct Page {
   char *const data;
@@ -103,7 +101,7 @@ class PageSet {
   page_set pages;
   uint64_t page_size;
 
-  typedef Spinlock lock_type;
+  typedef std::mutex lock_type;
   lock_type mutex;
 
   void free_pages(iterator cur, iterator end) {

@@ -29,14 +29,13 @@ using namespace std;
 #include "common/Cond.h"
 #include "common/Thread.h"
 
-#include "include/Spinlock.h"
+#include "include/spinlock.h"
 
 #include "msg/SimplePolicyMessenger.h"
 #include "msg/DispatchQueue.h"
 #include "include/assert.h"
 #include "AsyncConnection.h"
 #include "Event.h"
-
 
 class AsyncMessenger;
 
@@ -262,7 +261,7 @@ private:
   /// counter for the global seq our connection protocol uses
   __u32 global_seq;
   /// lock to protect the global_seq
-  ceph_spinlock_t global_seq_lock;
+  std::atomic_flag global_seq_lock { false };
 
   /**
    * hash map of addresses to Asyncconnection
@@ -396,11 +395,11 @@ public:
    * @return a global sequence ID that nobody else has seen.
    */
   __u32 get_global_seq(__u32 old=0) {
-    ceph_spin_lock(&global_seq_lock);
+    ceph::spin_lock(&global_seq_lock);
     if (old > global_seq)
       global_seq = old;
     __u32 ret = ++global_seq;
-    ceph_spin_unlock(&global_seq_lock);
+    ceph::spin_unlock(&global_seq_lock);
     return ret;
   }
   /**

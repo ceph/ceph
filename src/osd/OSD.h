@@ -58,7 +58,6 @@ using namespace std;
 #include "osd/mClockOpClassQueue.h"
 #include "osd/mClockClientQueue.h"
 #include "messages/MOSDOp.h"
-#include "include/Spinlock.h"
 #include "common/EventTrace.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
