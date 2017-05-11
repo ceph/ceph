@@ -15,6 +15,7 @@
 #include "common/Readahead.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
+#include "common/zipkin_trace.h"
 
 #include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
@@ -34,8 +35,6 @@ class Finisher;
 class PerfCounters;
 class ThreadPool;
 class SafeTimer;
-
-namespace ZTracer { struct Trace; }
 
 namespace librbd {
 
@@ -201,6 +200,8 @@ namespace librbd {
 
     exclusive_lock::Policy *exclusive_lock_policy = nullptr;
     journal::Policy *journal_policy = nullptr;
+
+    ZTracer::Endpoint trace_endpoint;
 
     static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
                                        const map<string, bufferlist> &pairs, map<string, bufferlist> *res);

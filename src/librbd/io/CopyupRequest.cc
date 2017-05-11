@@ -81,9 +81,12 @@ private:
 
 
 CopyupRequest::CopyupRequest(ImageCtx *ictx, const std::string &oid,
-                             uint64_t objectno, Extents &&image_extents)
+                             uint64_t objectno, Extents &&image_extents,
+			     const ZTracer::Trace &parent_trace)
   : m_ictx(ictx), m_oid(oid), m_object_no(objectno),
-    m_image_extents(image_extents), m_state(STATE_READ_FROM_PARENT)
+    m_image_extents(image_extents),
+    m_trace(util::create_trace(*m_ictx, "copy-up", parent_trace)),
+    m_state(STATE_READ_FROM_PARENT)
 {
   m_async_op.start_op(*m_ictx);
 }
@@ -151,7 +154,9 @@ bool CopyupRequest::send_copyup() {
     r = rados.ioctx_create2(m_ictx->data_ctx.get_id(), m_data_ctx);
     assert(r == 0);
 
-    r = m_data_ctx.aio_operate(m_oid, comp, &copyup_op, 0, snaps);
+    r = m_data_ctx.aio_operate(
+      m_oid, comp, &copyup_op, 0, snaps,
+      (m_trace.valid() ? m_trace.get_info() : nullptr));
     assert(r == 0);
     comp->release();
   }
@@ -174,7 +179,9 @@ bool CopyupRequest::send_copyup() {
 
     snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
     librados::AioCompletion *comp = util::create_rados_callback(this);
-    r = m_ictx->data_ctx.aio_operate(m_oid, comp, &write_op);
+    r = m_ictx->data_ctx.aio_operate(
+      m_oid, comp, &write_op, snapc.seq, snaps,
+      (m_trace.valid() ? m_trace.get_info() : nullptr));
     assert(r == 0);
     comp->release();
   }
@@ -204,7 +211,7 @@ void CopyupRequest::send()
                          << ", extents " << m_image_extents
                          << dendl;
   ImageRequest<>::aio_read(m_ictx->parent, comp, std::move(m_image_extents),
-                           ReadResult{&m_copyup_data}, 0);
+                           ReadResult{&m_copyup_data}, 0, m_trace);
 }
 
 void CopyupRequest::complete(int r)

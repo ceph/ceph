@@ -87,6 +87,7 @@ struct MockImageCtx {
       state(new MockImageState()),
       image_watcher(NULL), object_map(NULL),
       exclusive_lock(NULL), journal(NULL),
+      trace_endpoint(image_ctx.trace_endpoint),
       concurrent_management_ops(image_ctx.concurrent_management_ops),
       blacklist_on_break_lock(image_ctx.blacklist_on_break_lock),
       blacklist_expire_seconds(image_ctx.blacklist_expire_seconds),
@@ -272,6 +273,8 @@ struct MockImageCtx {
   MockObjectMap *object_map;
   MockExclusiveLock *exclusive_lock;
   MockJournal *journal;
+
+  ZTracer::Endpoint trace_endpoint;
 
   int concurrent_management_ops;
   bool blacklist_on_break_lock;

@@ -32,7 +32,7 @@ struct ImageRequest<MockReplayImageCtx> {
                                const bufferlist &bl, int op_flags));
   static void aio_write(MockReplayImageCtx *ictx, AioCompletion *c,
                         Extents &&image_extents, bufferlist &&bl,
-                        int op_flags) {
+                        int op_flags, const ZTracer::Trace &parent_trace) {
     assert(s_instance != nullptr);
     s_instance->aio_write(c, image_extents, bl, op_flags);
   }
@@ -40,13 +40,16 @@ struct ImageRequest<MockReplayImageCtx> {
   MOCK_METHOD4(aio_discard, void(AioCompletion *c, uint64_t off, uint64_t len,
                                  bool skip_partial_discard));
   static void aio_discard(MockReplayImageCtx *ictx, AioCompletion *c,
-                          uint64_t off, uint64_t len, bool skip_partial_discard) {
+                          uint64_t off, uint64_t len,
+                          bool skip_partial_discard,
+                          const ZTracer::Trace &parent_trace) {
     assert(s_instance != nullptr);
     s_instance->aio_discard(c, off, len, skip_partial_discard);
   }
 
   MOCK_METHOD1(aio_flush, void(AioCompletion *c));
-  static void aio_flush(MockReplayImageCtx *ictx, AioCompletion *c) {
+  static void aio_flush(MockReplayImageCtx *ictx, AioCompletion *c,
+                        const ZTracer::Trace &parent_trace) {
     assert(s_instance != nullptr);
     s_instance->aio_flush(c);
   }
@@ -55,7 +58,7 @@ struct ImageRequest<MockReplayImageCtx> {
                                    const bufferlist &bl, int op_flags));
   static void aio_writesame(MockReplayImageCtx *ictx, AioCompletion *c,
                             uint64_t off, uint64_t len, bufferlist &&bl,
-                            int op_flags) {
+                            int op_flags, const ZTracer::Trace &parent_trace) {
     assert(s_instance != nullptr);
     s_instance->aio_writesame(c, off, len, bl, op_flags);
   }
