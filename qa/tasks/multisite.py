@@ -16,8 +16,8 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra.run import CommandFailedError
 # from util.rgw import rgwadmin
-from util.rgw import rgwadmin, get_config_master_client, extract_zone_info, extract_region_info
-from util.rados import (rados, create_ec_pool,
+from util.multisite-rgw import rgwadmin, get_config_master_client, extract_zone_info, extract_region_info
+from util.multisite-rados import (rados, create_ec_pool,
                                         create_replicated_pool,
                                         create_cache_pool)
 
