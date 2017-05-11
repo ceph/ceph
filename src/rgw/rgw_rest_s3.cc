@@ -12,6 +12,7 @@
 #include "common/safe_io.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/utility/string_view.hpp>
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -3569,8 +3570,8 @@ static inline
 std::string v4_signature(const std::string& credential_scope,
 
                          CephContext* const cct,
-                         const boost::string_ref& secret_key,
-                         const boost::string_ref& string_to_sign)
+                         const boost::string_view& secret_key,
+                         const boost::string_view& string_to_sign)
 {
   auto signing_key = \
     rgw::auth::s3::get_v4_signing_key(cct, credential_scope, secret_key);

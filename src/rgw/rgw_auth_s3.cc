@@ -14,6 +14,7 @@
 #include "rgw_crypt_sanitize.h"
 
 #include "include/str_list.h"
+#include <boost/utility/string_view.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -593,12 +594,12 @@ get_v4_canonical_headers(const req_info& info,
  */
 sha256_digest_t
 get_v4_canon_req_hash(CephContext* cct,
-                      const boost::string_ref& http_verb,
+                      const boost::string_view& http_verb,
                       const std::string& canonical_uri,
                       const std::string& canonical_qs,
                       const std::string& canonical_hdrs,
                       const std::string& signed_hdrs,
-                      const boost::string_ref& request_payload_hash)
+                      const boost::string_view& request_payload_hash)
 {
   ldout(cct, 10) << "payload request hash = " << request_payload_hash << dendl;
 
@@ -630,9 +631,9 @@ get_v4_canon_req_hash(CephContext* cct,
  * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-string-to-sign.html
  */
 std::string get_v4_string_to_sign(CephContext* const cct,
-                                  const boost::string_ref& algorithm,
-                                  const boost::string_ref& request_date,
-                                  const boost::string_ref& credential_scope,
+                                  const boost::string_view& algorithm,
+                                  const boost::string_view& request_date,
+                                  const boost::string_view& credential_scope,
                                   const sha256_digest_t& canonreq_hash)
 {
   const auto hexed_cr_hash = buf_to_hex(canonreq_hash);
@@ -653,10 +654,10 @@ std::string get_v4_string_to_sign(CephContext* const cct,
 }
 
 
-static inline std::tuple<boost::string_ref,             /* date */
-                         boost::string_ref,             /* region */
-                         boost::string_ref>             /* service */
-parse_cred_scope(boost::string_ref credential_scope)
+static inline std::tuple<boost::string_view,            /* date */
+                         boost::string_view,            /* region */
+                         boost::string_view>            /* service */
+parse_cred_scope(boost::string_view credential_scope)
 {
   /* date cred */
   size_t pos = credential_scope.find("/");
@@ -676,7 +677,7 @@ parse_cred_scope(boost::string_ref credential_scope)
 }
 
 static inline std::vector<unsigned char>
-transform_secret_key(const boost::string_ref& secret_access_key)
+transform_secret_key(const boost::string_view& secret_access_key)
 {
   /* TODO(rzarzynski): switch to constexpr when C++14 becomes available. */
   static const std::initializer_list<unsigned char> AWS4 { 'A', 'W', 'S', '4' };
@@ -701,10 +702,10 @@ transform_secret_key(const boost::string_ref& secret_access_key)
  * calculate the SigningKey of AWS auth version 4
  */
 sha256_digest_t get_v4_signing_key(CephContext* const cct,
-                                   const boost::string_ref& credential_scope,
-                                   const boost::string_ref& secret_access_key)
+                                   const boost::string_view& credential_scope,
+                                   const boost::string_view& secret_access_key)
 {
-  boost::string_ref date, region, service;
+  boost::string_view date, region, service;
   std::tie(date, region, service) = parse_cred_scope(credential_scope);
 
   const auto utfed_sec_key = transform_secret_key(secret_access_key);
@@ -714,7 +715,7 @@ sha256_digest_t get_v4_signing_key(CephContext* const cct,
 
   /* aws4_request */
   const auto signing_key = calc_hmac_sha256(service_k,
-                                            boost::string_ref("aws4_request"));
+                                            boost::string_view("aws4_request"));
 
   ldout(cct, 10) << "date_k    = " << buf_to_hex(date_k).data() << dendl;
   ldout(cct, 10) << "region_k  = " << buf_to_hex(region_k).data() << dendl;
@@ -732,7 +733,7 @@ sha256_digest_t get_v4_signing_key(CephContext* const cct,
 std::array<char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1>
 get_v4_signature(CephContext* const cct,
                  const sha256_digest_t& signing_key,
-                 const boost::string_ref& string_to_sign)
+                 const boost::string_view& string_to_sign)
 {
   /* The server-side generated signature for comparison. */
   const auto signature = \

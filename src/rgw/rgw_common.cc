@@ -7,6 +7,7 @@
 #include <string>
 #include <boost/tokenizer.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/utility/string_view.hpp>
 
 #include "json_spirit/json_spirit.h"
 #include "common/ceph_json.h"
@@ -680,7 +681,7 @@ using ceph::crypto::SHA256;
 /*
  * calculate the sha256 hash value of a given msg
  */
-sha256_digest_t calc_hash_sha256(const boost::string_ref& msg)
+sha256_digest_t calc_hash_sha256(const boost::string_view& msg)
 {
   std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> hash;
 

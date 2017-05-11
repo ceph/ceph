@@ -18,6 +18,8 @@
 
 #include <array>
 
+#include <boost/utility/string_view.hpp>
+
 #include "common/ceph_crypto.h"
 #include "common/perf_counters.h"
 #include "acconfig.h"
@@ -2232,7 +2234,7 @@ calc_hmac_sha256(const char *key, const int key_len,
 }
 
 static inline sha256_digest_t
-calc_hmac_sha256(const boost::string_ref& key, const boost::string_ref& msg) {
+calc_hmac_sha256(const boost::string_view& key, const boost::string_view& msg) {
   std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
   calc_hmac_sha256(key.data(), key.size(),
                    msg.data(), msg.size(),
@@ -2242,7 +2244,7 @@ calc_hmac_sha256(const boost::string_ref& key, const boost::string_ref& msg) {
 
 static inline sha256_digest_t
 calc_hmac_sha256(const std::vector<unsigned char>& key,
-                 const boost::string_ref& msg) {
+                 const boost::string_view& msg) {
   std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
   calc_hmac_sha256(reinterpret_cast<const char*>(key.data()), key.size(),
                    msg.data(), msg.size(),
@@ -2253,7 +2255,7 @@ calc_hmac_sha256(const std::vector<unsigned char>& key,
 template<size_t KeyLenN>
 static inline sha256_digest_t
 calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
-                 const boost::string_ref& msg) {
+                 const boost::string_view& msg) {
   std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
   calc_hmac_sha256(reinterpret_cast<const char*>(key.data()), key.size(),
                    msg.data(), msg.size(),
@@ -2261,7 +2263,7 @@ calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
   return dest;
 }
 
-extern sha256_digest_t calc_hash_sha256(const boost::string_ref& msg);
+extern sha256_digest_t calc_hash_sha256(const boost::string_view& msg);
 
 using ceph::crypto::SHA256;
 extern SHA256* calc_hash_sha256_open_stream();
