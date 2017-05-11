@@ -2881,6 +2881,8 @@ public:
       void invalidate_bs() {
         bs_initialized = false;
       }
+
+      int guard_reshard(BucketShard *pbs, std::function<int(BucketShard *)> call);
     public:
 
       UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj) : target(_target), obj(_obj),
