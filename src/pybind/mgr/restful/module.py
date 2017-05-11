@@ -318,7 +318,7 @@ class Module(MgrModule):
 
 
     def load_cert(self):
-        cert_base = '/etc/ceph/ceph-mgr-restful'
+        cert_base = self.get("config").get("mgr_data", "/tmp") + "/ceph-mgr-restful"
         cert_file = cert_base + '.crt'
         pkey_file = cert_base + '.key'
 

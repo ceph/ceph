@@ -33,8 +33,8 @@ class Root(RestController):
         return {
             'api_version': 1,
             'auth':
-                'Use ceph auth key pair as HTTP Basic user/password '
-                '(requires caps mon allow * to function properly)',
+                'Use "ceph tell mgr create_key <key>" to create a key pair, '
+                'pass it as HTTP Basic auth to authenticate',
             'doc': 'See /doc endpoint',
             'info': "Ceph Manager RESTful API server",
         }
