@@ -10120,7 +10120,8 @@ void PrimaryLogPG::on_removal(ObjectStore::Transaction *t)
 
   write_if_dirty(*t);
 
-  on_shutdown();
+  if (!deleting)
+    on_shutdown();
 }
 
 void PrimaryLogPG::on_shutdown()
