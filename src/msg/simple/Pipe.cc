@@ -456,6 +456,10 @@ int Pipe::accept()
     // note peer's type, flags
     set_peer_type(connect.host_type);
     policy = msgr->get_policy(connect.host_type);
+    if ((connect.flags & CEPH_MSG_CONNECT_LOSSY) && !policy.lossy) {
+      ldout(msgr->cct, 10) << __func__ << " client forcing lossy session" << dendl;
+      policy = Messenger::Policy::stateless_server(policy.features_required);
+    }
     ldout(msgr->cct,10) << "accept of host_type " << connect.host_type
 			<< ", policy.lossy=" << policy.lossy
 			<< " policy.server=" << policy.server
