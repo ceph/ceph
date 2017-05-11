@@ -169,6 +169,9 @@
 /* Define if you want to use LTTng */
 #cmakedefine WITH_LTTNG
 
+/* Define if you want to OSD function instrumentation */
+#cmakedefine WITH_OSD_INSTRUMENT_FUNCTIONS
+
 /* Define if you want to use Babeltrace */
 #cmakedefine WITH_BABELTRACE
 
