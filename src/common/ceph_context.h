@@ -15,14 +15,17 @@
 #ifndef CEPH_CEPHCONTEXT_H
 #define CEPH_CEPHCONTEXT_H
 
-#include <atomic>
 #include <set>
+#include <atomic>
+
 #include <boost/noncopyable.hpp>
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
+
+#include "include/spinlock.h"
+
 #include "crush/CrushLocation.h"
-#include "include/Spinlock.h"
 
 class AdminSocket;
 class CephContextServiceThread;
@@ -125,7 +128,7 @@ public:
 
   template<typename T>
   void lookup_or_create_singleton_object(T*& p, const std::string &name) {
-    ceph_spin_lock(&_associated_objs_lock);
+    ceph::spin_lock(&_associated_objs_lock);
     if (!_associated_objs.count(name)) {
       p = new T(this);
       _associated_objs[name] = new TypedSingletonWrapper<T>(p);
@@ -135,7 +138,7 @@ public:
       assert(wrapper != NULL);
       p = wrapper->singleton;
     }
-    ceph_spin_unlock(&_associated_objs_lock);
+    ceph::spin_unlock(&_associated_objs_lock);
   }
   /**
    * get a crypto handler
@@ -181,23 +184,23 @@ public:
   };
 
   void register_fork_watcher(ForkWatcher *w) {
-    ceph_spin_lock(&_fork_watchers_lock);
+    ceph::spin_lock_guard lg(_fork_watchers_lock);
     _fork_watchers.push_back(w);
-    ceph_spin_unlock(&_fork_watchers_lock);
+    ceph::spin_unlock(&_fork_watchers_lock);
   }
 
   void notify_pre_fork() {
-    ceph_spin_lock(&_fork_watchers_lock);
+    ceph::spin_lock_guard lg(_fork_watchers_lock);
     for (auto &&t : _fork_watchers)
       t->handle_pre_fork();
-    ceph_spin_unlock(&_fork_watchers_lock);
+    ceph::spin_unlock(&_fork_watchers_lock);
   }
 
   void notify_post_fork() {
-    ceph_spin_lock(&_fork_watchers_lock);
+    ceph::spin_lock(&_fork_watchers_lock);
     for (auto &&t : _fork_watchers)
       t->handle_post_fork();
-    ceph_spin_unlock(&_fork_watchers_lock);
+    ceph::spin_unlock(&_fork_watchers_lock);
   }
 
 private:
@@ -244,7 +247,7 @@ private:
   AdminSocket *_admin_socket;
 
   /* lock which protects service thread creation, destruction, etc. */
-  ceph_spinlock_t _service_thread_lock;
+  std::atomic_flag _service_thread_lock { false };
 
   /* The collection of profiling loggers associated with this context */
   PerfCountersCollection *_perf_counters_collection;
@@ -255,10 +258,10 @@ private:
 
   ceph::HeartbeatMap *_heartbeat_map;
 
-  ceph_spinlock_t _associated_objs_lock;
+  std::atomic_flag _associated_objs_lock { false };
   std::map<std::string, SingletonWrapper*> _associated_objs;
 
-  ceph_spinlock_t _fork_watchers_lock;
+  std::atomic_flag _fork_watchers_lock { false };
   std::vector<ForkWatcher*> _fork_watchers;
 
   // crypto
@@ -267,7 +270,7 @@ private:
 
   // experimental
   CephContextObs *_cct_obs;
-  ceph_spinlock_t _feature_lock;
+  std::atomic_flag _feature_lock { false };
   std::set<std::string> _experimental_features;
 
   PluginRegistry *_plugin_registry;
@@ -285,7 +288,7 @@ private:
     l_cct_last
   };
   PerfCounters *_cct_perf;
-  ceph_spinlock_t _cct_perf_lock;
+  std::atomic_flag _cct_perf_lock { false };
 
   friend class CephContextObs;
 };

@@ -21,7 +21,6 @@
 
 #include "include/unordered_map.h"
 #include "include/memory.h"
-#include "include/Spinlock.h"
 #include "common/Finisher.h"
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
