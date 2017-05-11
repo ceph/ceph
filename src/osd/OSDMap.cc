@@ -1250,8 +1250,7 @@ pair<string,string> OSDMap::get_min_compat_client() const
   uint64_t f = get_features(CEPH_ENTITY_TYPE_CLIENT, nullptr);
 
   if (HAVE_FEATURE(f, OSDMAP_PG_UPMAP) ||      // v12.0.0-1733-g27d6f43
-#warning update this commit description right before or after merge
-      HAVE_FEATURE(f, CRUSH_CHOOSEARGS)) {     // FIXME
+      HAVE_FEATURE(f, CRUSH_CHOOSEARGS)) {     // v12.0.1-2172-gef1ef28
     return make_pair("luminous", "12.2.0");
   }
   if (HAVE_FEATURE(f, CRUSH_TUNABLES5)) {      // v10.0.0-612-g043a737
