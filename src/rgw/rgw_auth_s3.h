@@ -318,6 +318,8 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
+static constexpr char AWS4_HMAC_SHA256_STR[] = "AWS4-HMAC-SHA256";
+
 static constexpr char AWS4_EMPTY_PAYLOAD_HASH[] = \
   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
