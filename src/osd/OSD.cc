@@ -8871,7 +8871,7 @@ void OSD::handle_pg_query(OpRequestRef op)
       ConnectionRef con = service.get_con_osd_cluster(from, osdmap->get_epoch());
       if (con) {
 	MOSDPGLog *mlog = new MOSDPGLog(
-	  it->second.from, it->second.to,
+	  it->second.to, it->second.from,
 	  osdmap->get_epoch(), empty,
 	  it->second.epoch_sent);
 	service.share_map_peer(from, con.get(), osdmap);
@@ -8881,9 +8881,9 @@ void OSD::handle_pg_query(OpRequestRef op)
       notify_list[from].push_back(
 	make_pair(
 	  pg_notify_t(
-	    it->second.from, it->second.to,
-	    it->second.epoch_sent,
+	    it->second.to, it->second.from,
 	    osdmap->get_epoch(),
+	    it->second.epoch_sent,
 	    empty),
 	  PastIntervals(
 	    osdmap->get_pools().at(pgid.pool()).ec_pool(),
