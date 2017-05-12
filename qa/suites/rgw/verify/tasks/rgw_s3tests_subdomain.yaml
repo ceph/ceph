@@ -9,7 +9,8 @@ tasks:
       valgrind: [--tool=memcheck]
 - s3tests:
     client.0:
-      force-branch: ceph-master
+      git_remote: git://github.com/theanalyst/
+      force-branch: abs-urls
       rgw_server: client.0
       calling_format: subdomain
       extra_attrs: '!fails_with_subdomain'
