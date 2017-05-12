@@ -1617,6 +1617,7 @@ struct object_stat_sum_t {
   int32_t num_evict_mode_full;  // 1 when in evict full mode, otherwise 0
   int64_t num_objects_pinned;
   int64_t num_objects_missing;
+  int64_t num_legacy_snapsets; ///< upper bound on pre-luminous-style SnapSets
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1644,7 +1645,8 @@ struct object_stat_sum_t {
       num_flush_mode_high(0), num_flush_mode_low(0),
       num_evict_mode_some(0), num_evict_mode_full(0),
       num_objects_pinned(0),
-      num_objects_missing(0)
+      num_objects_missing(0),
+      num_legacy_snapsets(0)
   {}
 
   void floor(int64_t f) {
@@ -1683,6 +1685,7 @@ struct object_stat_sum_t {
     FLOOR(num_evict_mode_some);
     FLOOR(num_evict_mode_full);
     FLOOR(num_objects_pinned);
+    FLOOR(num_legacy_snapsets);
 #undef FLOOR
   }
 
@@ -1693,7 +1696,14 @@ struct object_stat_sum_t {
       if (i < (PARAM % out.size())) {           \
 	out[i].PARAM++;                         \
       }                                         \
-    }                                           \
+    }
+#define SPLIT_PRESERVE_NONZERO(PARAM)		\
+    for (unsigned i = 0; i < out.size(); ++i) { \
+      if (PARAM)				\
+	out[i].PARAM = 1 + PARAM / out.size();	\
+      else					\
+	out[i].PARAM = 0;			\
+    }
 
     SPLIT(num_bytes);
     SPLIT(num_objects);
@@ -1729,7 +1739,9 @@ struct object_stat_sum_t {
     SPLIT(num_evict_mode_some);
     SPLIT(num_evict_mode_full);
     SPLIT(num_objects_pinned);
+    SPLIT_PRESERVE_NONZERO(num_legacy_snapsets);
 #undef SPLIT
+#undef SPLIT_PRESERVE_NONZERO
   }
 
   void clear() {
@@ -1784,7 +1796,8 @@ struct object_stat_sum_t {
         sizeof(num_evict_mode_some) +
         sizeof(num_evict_mode_full) +
         sizeof(num_objects_pinned) +
-        sizeof(num_objects_missing)
+        sizeof(num_objects_missing) +
+        sizeof(num_legacy_snapsets)
       ,
       "object_stat_sum_t have padding");
   }
@@ -4291,6 +4304,7 @@ struct SnapSet {
   vector<snapid_t> clones;   // ascending
   map<snapid_t, interval_set<uint64_t> > clone_overlap;  // overlap w/ next newest
   map<snapid_t, uint64_t> clone_size;
+  map<snapid_t, vector<snapid_t>> clone_snaps; // descending
 
   SnapSet() : seq(0), head_exists(false) {}
   explicit SnapSet(bufferlist& bl) {
@@ -4298,8 +4312,12 @@ struct SnapSet {
     decode(p);
   }
 
+  bool is_legacy() const {
+    return clone_snaps.size() < clones.size() || !head_exists;
+  }
+
   /// populate SnapSet from a librados::snap_set_t
-  void from_snap_set(const librados::snap_set_t& ss);
+  void from_snap_set(const librados::snap_set_t& ss, bool legacy);
 
   /// get space accounted to clone
   uint64_t get_clone_bytes(snapid_t clone) const;
@@ -4435,7 +4453,8 @@ struct object_info_t {
     return get_flag_string(flags);
   }
 
-  vector<snapid_t> snaps;  // [clone]
+  /// [clone] descending. pre-luminous; moved to SnapSet
+  vector<snapid_t> legacy_snaps;
 
   uint64_t truncate_seq, truncate_size;
 
@@ -4538,19 +4557,6 @@ struct object_info_t {
 };
 WRITE_CLASS_ENCODER_FEATURES(object_info_t)
 
-struct SnapSetContext {
-  hobject_t oid;
-  SnapSet snapset;
-  int ref;
-  bool registered : 1;
-  bool exists : 1;
-
-  explicit SnapSetContext(const hobject_t& o) :
-    oid(o), ref(0), registered(false), exists(true) { }
-};
-
-
-
 ostream& operator<<(ostream& out, const object_info_t& oi);
 
 
@@ -4561,7 +4567,7 @@ struct ObjectRecoveryInfo {
   eversion_t version;
   uint64_t size;
   object_info_t oi;
-  SnapSet ss;
+  SnapSet ss;   // only populated if soid is_snap()
   interval_set<uint64_t> copy_subset;
   map<hobject_t, interval_set<uint64_t>> clone_subset;
 
@@ -4666,11 +4672,9 @@ ostream& operator<<(ostream& out, const PushOp &op);
 struct ScrubMap {
   struct object {
     map<string,bufferptr> attrs;
-    set<snapid_t> snapcolls;
     uint64_t size;
     __u32 omap_digest;         ///< omap crc32c
     __u32 digest;              ///< data crc32c
-    uint32_t nlinks;
     bool negative:1;
     bool digest_present:1;
     bool omap_digest_present:1;
@@ -4681,7 +4685,7 @@ struct ScrubMap {
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
-      size(-1), omap_digest(0), digest(0), nlinks(0), 
+      size(-1), omap_digest(0), digest(0),
       negative(false), digest_present(false), omap_digest_present(false), 
       read_error(false), stat_error(false), ec_hash_mismatch(false), ec_size_mismatch(false) {}
 

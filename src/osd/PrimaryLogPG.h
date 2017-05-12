@@ -1703,7 +1703,7 @@ private:
   // return true if we're creating a local object, false for a
   // whiteout or no change.
   void maybe_create_new_object(OpContext *ctx, bool ignore_transaction=false);
-  int _delete_oid(OpContext *ctx, bool no_whiteout);
+  int _delete_oid(OpContext *ctx, bool no_whiteout, bool try_no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
   bool is_missing_object(const hobject_t& oid) const;

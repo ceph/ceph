@@ -1883,11 +1883,12 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_evict_mode_some", num_evict_mode_some);
   f->dump_int("num_evict_mode_full", num_evict_mode_full);
   f->dump_int("num_objects_pinned", num_objects_pinned);
+  f->dump_int("num_legacy_snapsets", num_legacy_snapsets);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(15, 14, bl);
+  ENCODE_START(16, 14, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
 #else
@@ -1925,6 +1926,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_evict_mode_full, bl);
   ::encode(num_objects_pinned, bl);
   ::encode(num_objects_missing, bl);
+  ::encode(num_legacy_snapsets, bl);
 #endif
   ENCODE_FINISH(bl);
 }
@@ -1932,9 +1934,9 @@ void object_stat_sum_t::encode(bufferlist& bl) const
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
   bool decode_finish = false;
-  DECODE_START(15, bl);
+  DECODE_START(16, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
-  if (struct_v >= 15) {
+  if (struct_v >= 16) {
     bl.copy(sizeof(object_stat_sum_t), (char*)(&num_bytes));
     decode_finish = true;
   }
@@ -1974,6 +1976,11 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
     ::decode(num_evict_mode_full, bl);
     ::decode(num_objects_pinned, bl);
     ::decode(num_objects_missing, bl);
+    if (struct_v >= 16) {
+      ::decode(num_legacy_snapsets, bl);
+    } else {
+      num_legacy_snapsets = num_object_clones;  // upper bound
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -2052,6 +2059,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_evict_mode_some += o.num_evict_mode_some;
   num_evict_mode_full += o.num_evict_mode_full;
   num_objects_pinned += o.num_objects_pinned;
+  num_legacy_snapsets += o.num_legacy_snapsets;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -2090,6 +2098,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_evict_mode_some -= o.num_evict_mode_some;
   num_evict_mode_full -= o.num_evict_mode_full;
   num_objects_pinned -= o.num_objects_pinned;
+  num_legacy_snapsets -= o.num_legacy_snapsets;
 }
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
@@ -2128,7 +2137,8 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_flush_mode_low == r.num_flush_mode_low &&
     l.num_evict_mode_some == r.num_evict_mode_some &&
     l.num_evict_mode_full == r.num_evict_mode_full &&
-    l.num_objects_pinned == r.num_objects_pinned;
+    l.num_objects_pinned == r.num_objects_pinned &&
+    l.num_legacy_snapsets == r.num_legacy_snapsets;
 }
 
 // -- object_stat_collection_t --
@@ -4682,25 +4692,31 @@ void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
 
 void SnapSet::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(seq, bl);
   ::encode(head_exists, bl);
   ::encode(snaps, bl);
   ::encode(clones, bl);
   ::encode(clone_overlap, bl);
   ::encode(clone_size, bl);
+  ::encode(clone_snaps, bl);
   ENCODE_FINISH(bl);
 }
 
 void SnapSet::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(seq, bl);
   ::decode(head_exists, bl);
   ::decode(snaps, bl);
   ::decode(clones, bl);
   ::decode(clone_overlap, bl);
   ::decode(clone_size, bl);
+  if (struct_v >= 3) {
+    ::decode(clone_snaps, bl);
+  } else {
+    clone_snaps.clear();
+  }
   DECODE_FINISH(bl);
 }
 
@@ -4717,6 +4733,14 @@ void SnapSet::dump(Formatter *f) const
     f->dump_unsigned("snap", *p);
     f->dump_unsigned("size", clone_size.find(*p)->second);
     f->dump_stream("overlap") << clone_overlap.find(*p)->second;
+    auto q = clone_snaps.find(*p);
+    if (q != clone_snaps.end()) {
+      f->open_array_section("snaps");
+      for (auto s : q->second) {
+	f->dump_unsigned("snap", s);
+      }
+      f->close_section();
+    }
     f->close_section();
   }
   f->close_section();
@@ -4738,16 +4762,26 @@ void SnapSet::generate_test_instances(list<SnapSet*>& o)
   o.back()->clones.push_back(12);
   o.back()->clone_size[12] = 12345;
   o.back()->clone_overlap[12];
+  o.back()->clone_snaps[12] = {12, 10, 8};
 }
 
 ostream& operator<<(ostream& out, const SnapSet& cs)
 {
-  return out << cs.seq << "=" << cs.snaps << ":"
-	     << cs.clones
-	     << (cs.head_exists ? "+head":"");
+  if (cs.is_legacy()) {
+    out << cs.seq << "=" << cs.snaps << ":"
+	<< cs.clones
+	<< (cs.head_exists ? "+head":"");
+    if (!cs.clone_snaps.empty()) {
+      out << "+stray_clone_snaps=" << cs.clone_snaps;
+    }
+    return out;
+  } else {
+    return out << cs.seq << "=" << cs.snaps << ":"
+	       << cs.clone_snaps;
+  }
 }
 
-void SnapSet::from_snap_set(const librados::snap_set_t& ss)
+void SnapSet::from_snap_set(const librados::snap_set_t& ss, bool legacy)
 {
   // NOTE: our reconstruction of snaps (and the snapc) is not strictly
   // correct: it will not include snaps that still logically exist
@@ -4773,6 +4807,13 @@ void SnapSet::from_snap_set(const librados::snap_set_t& ss)
       for (vector<pair<uint64_t, uint64_t> >::const_iterator q =
 	     p->overlap.begin(); q != p->overlap.end(); ++q)
 	clone_overlap[p->cloneid].insert(q->first, q->second);
+      if (!legacy) {
+	// p->snaps is ascending; clone_snaps is descending
+	vector<snapid_t>& v = clone_snaps[p->cloneid];
+	for (auto q = p->snaps.rbegin(); q != p->snaps.rend(); ++q) {
+	  v.push_back(*q);
+	}
+      }
     }
   }
 
@@ -4930,7 +4971,7 @@ void object_info_t::encode(bufferlist& bl, uint64_t features) const
   if (soid.snap == CEPH_NOSNAP)
     ::encode(osd_reqid_t(), bl);  // used to be wrlock_by
   else
-    ::encode(snaps, bl);
+    ::encode(legacy_snaps, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
   ::encode(is_lost(), bl);
@@ -4972,7 +5013,7 @@ void object_info_t::decode(bufferlist::iterator& bl)
     osd_reqid_t wrlock_by;
     ::decode(wrlock_by, bl);
   } else {
-    ::decode(snaps, bl);
+    ::decode(legacy_snaps, bl);
   }
   ::decode(truncate_seq, bl);
   ::decode(truncate_size, bl);
@@ -5054,9 +5095,10 @@ void object_info_t::dump(Formatter *f) const
   f->dump_stream("local_mtime") << local_mtime;
   f->dump_unsigned("lost", (int)is_lost());
   f->dump_unsigned("flags", (int)flags);
-  f->open_array_section("snaps");
-  for (vector<snapid_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p)
-    f->dump_unsigned("snap", *p);
+  f->open_array_section("legacy_snaps");
+  for (auto s : legacy_snaps) {
+    f->dump_unsigned("snap", s);
+  }
   f->close_section();
   f->dump_unsigned("truncate_seq", truncate_seq);
   f->dump_unsigned("truncate_size", truncate_size);
@@ -5089,8 +5131,8 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
 {
   out << oi.soid << "(" << oi.version
       << " " << oi.last_reqid;
-  if (oi.soid.snap != CEPH_NOSNAP)
-    out << " " << oi.snaps;
+  if (oi.soid.snap != CEPH_NOSNAP && !oi.legacy_snaps.empty())
+    out << " " << oi.legacy_snaps;
   if (oi.flags)
     out << " " << oi.get_flag_string();
   out << " s " << oi.size;
@@ -5254,6 +5296,7 @@ ostream &ObjectRecoveryInfo::print(ostream &out) const
 	     << ", size: " << size
 	     << ", copy_subset: " << copy_subset
 	     << ", clone_subset: " << clone_subset
+	     << ", snapset: " << ss
 	     << ")";
 }
 
@@ -5571,14 +5614,14 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 void ScrubMap::object::encode(bufferlist& bl) const
 {
   bool compat_read_error = read_error || ec_hash_mismatch || ec_size_mismatch;
-  ENCODE_START(8, 2, bl);
+  ENCODE_START(8, 7, bl);
   ::encode(size, bl);
   ::encode(negative, bl);
   ::encode(attrs, bl);
   ::encode(digest, bl);
   ::encode(digest_present, bl);
-  ::encode(nlinks, bl);
-  ::encode(snapcolls, bl);
+  ::encode((uint32_t)0, bl);  // obsolete nlinks
+  ::encode((uint32_t)0, bl);  // snapcolls
   ::encode(omap_digest, bl);
   ::encode(omap_digest_present, bl);
   ::encode(compat_read_error, bl);
@@ -5591,37 +5634,27 @@ void ScrubMap::object::encode(bufferlist& bl) const
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
+  DECODE_START(8, bl);
   ::decode(size, bl);
   bool tmp, compat_read_error = false;
   ::decode(tmp, bl);
   negative = tmp;
   ::decode(attrs, bl);
-  if (struct_v >= 3) {
-    ::decode(digest, bl);
-    ::decode(tmp, bl);
-    digest_present = tmp;
-  }
-  if (struct_v >= 4) {
+  ::decode(digest, bl);
+  ::decode(tmp, bl);
+  digest_present = tmp;
+  {
+    uint32_t nlinks;
     ::decode(nlinks, bl);
+    set<snapid_t> snapcolls;
     ::decode(snapcolls, bl);
-  } else {
-    /* Indicates that encoder was not aware of this field since stat must
-     * return nlink >= 1 */
-    nlinks = 0;
   }
-  if (struct_v >= 5) {
-    ::decode(omap_digest, bl);
-    ::decode(tmp, bl);
-    omap_digest_present = tmp;
-  }
-  if (struct_v >= 6) {
-    ::decode(compat_read_error, bl);
-  }
-  if (struct_v >= 7) {
-    ::decode(tmp, bl);
-    stat_error = tmp;
-  }
+  ::decode(omap_digest, bl);
+  ::decode(tmp, bl);
+  omap_digest_present = tmp;
+  ::decode(compat_read_error, bl);
+  ::decode(tmp, bl);
+  stat_error = tmp;
   if (struct_v >= 8) {
     ::decode(tmp, bl);
     read_error = tmp;

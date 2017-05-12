@@ -4,8 +4,6 @@ overrides:
     - reached quota
     - wrongly marked me down
 tasks:
-- install:
-- ceph:
 - workunit:
     clients:
       client.0:

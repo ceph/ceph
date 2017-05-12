@@ -412,10 +412,12 @@ void ECBackend::handle_recovery_read_complete(
     op.xattrs.swap(*attrs);
 
     if (!op.obc) {
-      // attrs only reference the origin bufferlist (decode from ECSubReadReply message)
-      // whose size is much greater than attrs in recovery. If obc cache it (get_obc maybe
-      // cache the attr), this causes the whole origin bufferlist would not be free until
-      // obc is evicted from obc cache. So rebuild the bufferlist before cache it.
+      // attrs only reference the origin bufferlist (decode from
+      // ECSubReadReply message) whose size is much greater than attrs
+      // in recovery. If obc cache it (get_obc maybe cache the attr),
+      // this causes the whole origin bufferlist would not be free
+      // until obc is evicted from obc cache. So rebuild the
+      // bufferlist before cache it.
       for (map<string, bufferlist>::iterator it = op.xattrs.begin();
            it != op.xattrs.end();
            ++it) {
@@ -704,6 +706,17 @@ void ECBackend::recover_object(
   if (obc) {
     h->ops.back().recovery_info.size = obc->obs.oi.size;
     h->ops.back().recovery_info.oi = obc->obs.oi;
+  }
+  if (hoid.is_snap()) {
+    if (obc) {
+      assert(obc->ssc);
+      h->ops.back().recovery_info.ss = obc->ssc->snapset;
+    } else if (head) {
+      assert(head->ssc);
+      h->ops.back().recovery_info.ss = head->ssc->snapset;
+    } else {
+      assert(0 == "neither obc nor head set for a snap object");
+    }
   }
   h->ops.back().recovery_progress.omap_complete = true;
   for (set<pg_shard_t>::const_iterator i =
