@@ -141,11 +141,12 @@ def download(ctx, config):
         else:
             log.info("Using branch '%s' for s3tests", branch)
         sha1 = cconf.get('sha1')
+        git_remote = cconf.get('git_remote', None) or teuth_config.ceph_git_base_url
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
                 '-b', branch,
-                teuth_config.ceph_git_base_url + 's3-tests.git',
+                git_remote + 's3-tests.git',
                 '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
             )
