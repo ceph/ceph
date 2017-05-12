@@ -9,6 +9,8 @@
 #include "common/Formatter.h"
 #include "json_spirit/json_spirit.h"
 #include "common/errno.h"
+#include "common/ceph_context.h"
+#include "common/config.h"
 
 #include <errno.h>
 #include <sstream>
@@ -447,11 +449,14 @@ int destroy_one_ec_pool(const std::string &pool_name, rados_t *cluster)
     return ret;
   }
 
-  std::ostringstream oss;
-  ret = destroy_ec_profile_and_ruleset(cluster, pool_name, oss);
-  if (ret) {
-    rados_shutdown(*cluster);
-    return ret;
+  CephContext *cct = static_cast<CephContext*>(rados_cct(*cluster));
+  if (!cct->_conf->mon_fake_pool_delete) { // hope this is in [global]
+    std::ostringstream oss;
+    ret = destroy_ec_profile_and_ruleset(cluster, pool_name, oss);
+    if (ret) {
+      rados_shutdown(*cluster);
+      return ret;
+    }
   }
 
   rados_wait_for_latest_osdmap(*cluster);
@@ -478,11 +483,14 @@ int destroy_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
     return ret;
   }
 
-  std::ostringstream oss;
-  ret = destroy_ec_profile_and_ruleset_pp(cluster, pool_name, oss);
-  if (ret) {
-    cluster.shutdown();
-    return ret;
+  CephContext *cct = static_cast<CephContext*>(cluster.cct());
+  if (!cct->_conf->mon_fake_pool_delete) { // hope this is in [global]
+    std::ostringstream oss;
+    ret = destroy_ec_profile_and_ruleset_pp(cluster, pool_name, oss);
+    if (ret) {
+      cluster.shutdown();
+      return ret;
+    }
   }
 
   cluster.wait_for_latest_osdmap();

@@ -8377,14 +8377,16 @@ done:
       goto reply;
     }
 
-    if (poolstr2 != poolstr || sure != "--yes-i-really-really-mean-it") {
+    bool force_no_fake = sure == "--yes-i-really-really-mean-it-not-faking";
+    if (poolstr2 != poolstr ||
+	(sure != "--yes-i-really-really-mean-it" && !force_no_fake)) {
       ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << poolstr
 	 << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
 	 << "followed by --yes-i-really-really-mean-it.";
       err = -EPERM;
       goto reply;
     }
-    err = _prepare_remove_pool(pool, &ss);
+    err = _prepare_remove_pool(pool, &ss, force_no_fake);
     if (err == -EAGAIN) {
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
@@ -9448,7 +9450,8 @@ bool OSDMonitor::_check_remove_tier(
   return true;
 }
 
-int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
+int OSDMonitor::_prepare_remove_pool(
+  int64_t pool, ostream *ss, bool no_fake)
 {
   dout(10) << "_prepare_remove_pool " << pool << dendl;
   const pg_pool_t *p = osdmap.get_pg_pool(pool);
@@ -9469,6 +9472,15 @@ int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)
   if (pending_inc.old_pools.count(pool)) {
     dout(10) << "_prepare_remove_pool " << pool << " already pending removal"
 	     << dendl;
+    return 0;
+  }
+
+  if (g_conf->mon_fake_pool_delete && !no_fake) {
+    string old_name = osdmap.get_pool_name(pool);
+    string new_name = old_name + "." + stringify(pool) + ".DELETED";
+    dout(1) << __func__ << " faking pool deletion: renaming " << pool << " "
+	    << old_name << " -> " << new_name << dendl;
+    pending_inc.new_pool_names[pool] = new_name;
     return 0;
   }
 
@@ -9521,7 +9533,7 @@ bool OSDMonitor::prepare_pool_op_delete(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
   MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
   ostringstream ss;
-  int ret = _prepare_remove_pool(m->pool, &ss);
+  int ret = _prepare_remove_pool(m->pool, &ss, false);
   if (ret == -EAGAIN) {
     wait_for_finished_proposal(op, new C_RetryMessage(this, op));
     return true;
