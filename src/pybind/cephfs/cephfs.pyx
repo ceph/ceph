@@ -322,7 +322,8 @@ cdef class LibCephFS(object):
         self.state = "uninitialized"
         if rados_inst is not None:
             if auth_id is not None or conffile is not None or conf is not None:
-                raise InvalidValue("May not pass RADOS instance as well as other configuration")
+                raise make_ex(errno.EINVAL,
+                              "May not pass RADOS instance as well as other configuration")
 
             self.create_with_rados(rados_inst)
         else:
@@ -628,8 +629,8 @@ cdef class LibCephFS(object):
                     elif access_flags > 0 and c == '+':
                         access_flags = 3;
                     else:
-                        raise OperationNotSupported(
-                            "open flags doesn't support %s" % c)
+                        raise make_ex(errno.EOPNOTSUPP,
+                                      "open flags doesn't support %s" % c)
 
                 if access_flags == 1:
                     cephfs_flags |= os.O_RDONLY;
