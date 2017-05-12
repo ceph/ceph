@@ -164,7 +164,7 @@ TEST(DaemonConfig, InjectArgs) {
   char buf[128];
   char *tmp = buf;
   memset(buf, 0, sizeof(buf));
-  ret = g_ceph_context->_conf->get_val("max_open_files", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("leveldb_max_open_files", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("42"), string(buf));
 
@@ -268,7 +268,7 @@ TEST(DaemonConfig, InjectArgsBooleans) {
 
   // debug-ms should still become 42...
   memset(buf, 0, sizeof(buf));
-  ret = g_ceph_context->_conf->get_val("max_open_files", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("leveldb_max_open_files", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("42"), string(buf));
 }
