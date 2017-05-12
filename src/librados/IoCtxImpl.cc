@@ -770,7 +770,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 					  AioCompletionImpl *c,
 					  int flags,
 					  bufferlist *pbl,
-            const blkin_trace_info *trace_info)
+                                          const blkin_trace_info *trace_info)
 {
   FUNCTRACE();
   Context *oncomplete = new C_aio_Complete(c);
@@ -782,8 +782,10 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
   c->io = this;
 
   ZTracer::Trace trace;
-  if (trace_info)
-    trace.init("rados operate read", &objecter->trace_endpoint, trace_info);
+  if (trace_info) {
+    ZTracer::Trace parent_trace("", nullptr, trace_info);
+    trace.init("rados operate read", &objecter->trace_endpoint, &parent_trace);
+  }
 
   trace.event("init root span");
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
@@ -798,7 +800,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     ::ObjectOperation *o, AioCompletionImpl *c,
 				     const SnapContext& snap_context, int flags,
-             const blkin_trace_info *trace_info)
+                                     const blkin_trace_info *trace_info)
 {
   FUNCTRACE();
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_WRITE_OP_BEGIN");
@@ -816,8 +818,10 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   queue_aio_write(c);
 
   ZTracer::Trace trace;
-  if (trace_info)
-    trace.init("rados operate", &objecter->trace_endpoint, trace_info);
+  if (trace_info) {
+    ZTracer::Trace parent_trace("", nullptr, trace_info);
+    trace.init("rados operate", &objecter->trace_endpoint, &parent_trace);
+  }
 
   trace.event("init root span");
   Objecter::Op *op = objecter->prepare_mutate_op(
