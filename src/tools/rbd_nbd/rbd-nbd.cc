@@ -86,7 +86,7 @@ static int nbd = -1;
 #ifdef CEPH_BIG_ENDIAN
 #define ntohll(a) (a)
 #elif defined(CEPH_LITTLE_ENDIAN)
-#define ntohll(a) swab64(a)
+#define ntohll(a) swab(a)
 #else
 #error "Could not determine endianess"
 #endif
