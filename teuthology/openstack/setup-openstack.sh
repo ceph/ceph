@@ -33,13 +33,8 @@ function create_config() {
     local nameserver="$3"
     local labdomain="$4"
     local ip="$5"
-    local flavor_select="$6"
-    local archive_upload="$7"
-    local canonical_tags="$8"
-
-    if test "$flavor_select" ; then
-        flavor_select="flavor-select-regexp: $flavor_select"
-    fi
+    local archive_upload="$6"
+    local canonical_tags="$7"
 
     if test "$network" ; then
         network="network: $network"
@@ -92,7 +87,6 @@ openstack:
   volumes:
     count: 0
     size: 1 # GB
-  $flavor_select
   subnet: $subnet
   $network
 EOF
@@ -530,7 +524,6 @@ function main() {
     local nameserver
     local labdomain=teuthology
     local nworkers=2
-    local flavor_select
     local keypair=teuthology
     local archive_upload
     local ceph_workbench_git_url
@@ -676,12 +669,6 @@ function main() {
             ;;
     esac
 
-    case $provider in
-        ovh)
-            flavor_select='^(vps|hg|sg|c2)-.*ssd'
-            ;;
-    esac
-
     local ip
     for dev in eth0 ens3 ; do
         ip=$(ip a show dev $dev 2>/dev/null | sed -n "s:.*inet \(.*\)/.*:\1:p")
@@ -690,7 +677,7 @@ function main() {
     : ${nameserver:=$ip}
 
     if $do_create_config ; then
-        create_config "$network" "$subnets" "$nameserver" "$labdomain" "$ip" "$flavor_select" "$archive_upload" "$canonical_tags" || return 1
+        create_config "$network" "$subnets" "$nameserver" "$labdomain" "$ip" "$archive_upload" "$canonical_tags" || return 1
         setup_ansible "$subnets" $labdomain || return 1
         setup_ssh_config || return 1
         setup_authorized_keys || return 1

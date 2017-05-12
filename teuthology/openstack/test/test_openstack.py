@@ -1310,7 +1310,7 @@ class TestOpenStack(TestOpenStackBase):
         ):
             with pytest.raises(NoFlavorException):
                 hint = { 'ram': 1000, 'disk': 40, 'cpus': 2 }
-                OpenStack().flavor(hint, 'arch', None)
+                OpenStack().flavor(hint, 'arch')
 
         flavor = 'good-flavor'
         def get_sorted_flavors(self, arch, select):
@@ -1327,7 +1327,7 @@ class TestOpenStack(TestOpenStackBase):
                 get_sorted_flavors=get_sorted_flavors,
         ):
             hint = { 'ram': 1000, 'disk': 40, 'cpus': 2 }
-            assert flavor == OpenStack().flavor(hint, 'arch', None)
+            assert flavor == OpenStack().flavor(hint, 'arch')
 
     def test_flavor_range(self):
         flavors = [
@@ -1352,7 +1352,7 @@ class TestOpenStack(TestOpenStackBase):
                 get_sorted_flavors=get_sorted_flavors,
         ):
             with pytest.raises(NoFlavorException):
-                OpenStack().flavor_range(min, good, 'arch', None)
+                OpenStack().flavor_range(min, good, 'arch')
 
         #
         # there is one flavor in the required range
@@ -1369,7 +1369,7 @@ class TestOpenStack(TestOpenStackBase):
                 get_sorted_flavors=get_sorted_flavors,
         ):
 
-            assert 'min' == OpenStack().flavor_range(min, good, 'arch', None)
+            assert 'min' == OpenStack().flavor_range(min, good, 'arch')
 
         #
         # out of the two flavors in the required range, get the bigger one
@@ -1386,7 +1386,7 @@ class TestOpenStack(TestOpenStackBase):
                 get_sorted_flavors=get_sorted_flavors,
         ):
 
-            assert 'good' == OpenStack().flavor_range(min, good, 'arch', None)
+            assert 'good' == OpenStack().flavor_range(min, good, 'arch')
 
         #
         # there is one flavor bigger or equal to good, get this one
@@ -1403,7 +1403,7 @@ class TestOpenStack(TestOpenStackBase):
                 get_sorted_flavors=get_sorted_flavors,
         ):
 
-            assert 'best' == OpenStack().flavor_range(min, good, 'arch', None)
+            assert 'best' == OpenStack().flavor_range(min, good, 'arch')
 
         #
         # there are two flavors bigger or equal to good, get the smallest one
@@ -1420,7 +1420,7 @@ class TestOpenStack(TestOpenStackBase):
                 get_sorted_flavors=get_sorted_flavors,
         ):
 
-            assert 'best' == OpenStack().flavor_range(min, good, 'arch', None)
+            assert 'best' == OpenStack().flavor_range(min, good, 'arch')
 
 
     def test_interpret_hints(self):

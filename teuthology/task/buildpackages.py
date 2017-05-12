@@ -181,22 +181,18 @@ def task(ctx, config):
                   sha1)
         openstack = OpenStack()
         openstack.set_provider()
-        if openstack.provider == 'ovh':
-            select = '^(vps|hg|sg|c2)-.*ssd'
-        else:
-            select = ''
         network = openstack.net()
         if network != "":
             network = " OPENSTACK_NETWORK='" + network + "' "
         openstack.image(os_type, os_version, arch) # create if it does not exist
         build_flavor = openstack.flavor_range(
-            config['min_machine'], config['good_machine'], arch, select)
+            config['min_machine'], config['good_machine'], arch)
         default_arch = openstack.get_default_arch()
         http_flavor = openstack.flavor({
             'disk': 30, # GB
             'ram': 1024, # MB
             'cpus': 1,
-        }, default_arch, select)
+        }, default_arch)
         lock = "/tmp/buildpackages-" + sha1 + "-" + os_type + "-" + os_version
         cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; " +
                " flock --close " + lock +

@@ -385,9 +385,7 @@ class OpenStack(object):
         return self.image_name(name)
 
     def get_sorted_flavors(self, arch, select):
-        """
-        Return the smallest flavor that satisfies the desired size.
-        """
+        log.debug("flavor selection regex: " + select)
         flavors_string = self.run("flavor list -f json")
         flavors = json.loads(flavors_string)
         found = []
@@ -404,7 +402,7 @@ class OpenStack(object):
         log.debug("sorted flavors = " + str(sorted_flavors))
         return sorted_flavors
 
-    def flavor(self, hint, arch, select):
+    def __flavor(self, hint, arch, select):
         """
         Return the smallest flavor that satisfies the desired size.
         """
@@ -418,7 +416,7 @@ class OpenStack(object):
                                 " does not contain a flavor in which" +
                                 " the desired " + str(hint) + " can fit")
 
-    def flavor_range(self, min, good, arch, select):
+    def __flavor_range(self, min, good, arch, select):
         """
         Return the smallest flavor that satisfies the good hint.
         If no such flavor, get the largest flavor smaller than good
@@ -442,6 +440,37 @@ class OpenStack(object):
         raise NoFlavorException("openstack flavor list: " + str(flavors) +
                                 " does not contain a flavor which" +
                                 " is larger than " + str(min))
+
+    def __flavor_wrapper(self, min, good, hint, arch):
+        """
+        Wrapper for __flavor_range() and __flavor(), to hide the messiness of
+        the real world.
+
+        This is the one, single place for coding OpenStack-provider-specific
+        heuristics for selecting flavors.
+        """
+        select = None
+        if self.get_provider() == 'ovh':
+            log.debug("Looking for a match among the El Cheapo flavors...")
+            select = '^vps-ssd-'
+            try:
+                if (hint is not None):
+                    return self.__flavor(hint, arch, select)
+                return self.__flavor_range(min, good, arch, select)
+            except NoFlavorException:
+                pass
+            log.debug("No El Cheapo flavors match the selection criteria. "
+                      "Looking for a match among the more expensive flavors...")
+            select = '^(hg|sg|c2)-.*ssd'
+        if (hint is not None):
+            return self.__flavor(hint, arch, select)
+        return self.__flavor_range(min, good, arch, select)
+
+    def flavor(self, hint, arch):
+        return self.__flavor_wrapper(None, None, hint, arch)
+
+    def flavor_range(self, min, good, arch):
+        return self.__flavor_wrapper(min, good, None, arch)
 
     def interpret_hints(self, defaults, hints):
         """
@@ -884,7 +913,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             log.exception("flavor list")
             raise Exception("verify openrc.sh has been sourced")
 
-    def flavor(self, arch):
+    def teuthology_openstack_flavor(self, arch):
         """
         Return an OpenStack flavor fit to run the teuthology cluster.
         The RAM size depends on the maximum number of workers that
@@ -908,10 +937,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         if self.args.controller_disk > 0:
             hint['disk'] = self.args.controller_disk
 
-        select = None
-        if self.get_provider() == 'ovh':
-            select = '^(vps|hg|sg|c2)-.*ssd'
-        return super(TeuthologyOpenStack, self).flavor(hint, arch, select)
+        return self.flavor(hint, arch)
 
     def net(self):
         """
@@ -1085,7 +1111,7 @@ openstack security group rule create --proto udp --dst-port 16000:65535 teutholo
         self.run(
             "server create " +
             " --image '" + self.image('ubuntu', '16.04', arch) + "' " +
-            " --flavor '" + self.flavor(arch) + "' " +
+            " --flavor '" + self.teuthology_openstack_flavor(arch) + "' " +
             " " + self.net() +
             " --key-name " + self.args.key_name +
             " --user-data " + user_data +
