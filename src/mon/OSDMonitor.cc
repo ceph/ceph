@@ -7597,6 +7597,34 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
     }
 
+  } else if (prefix == "osd require-osd-release") {
+    string release;
+    cmd_getval(g_ceph_context, cmdmap, "release", release);
+    if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+      ss << "the sortbitwise flag must be set first";
+      err = -EPERM;
+      goto reply;
+    }
+    int rel = -1;
+    if (release == "luminous") {
+      if (!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS)) {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_LUMINOUS feature";
+	err = -EPERM;
+	goto reply;
+      }
+      rel = CEPH_RELEASE_LUMINOUS;
+    } else {
+      ss << "unrecognized release " << release;
+      err = -EINVAL;
+      goto reply;
+    }
+    if (rel < osdmap.require_osd_release) {
+      ss << "require_osd_release cannot be lowered once it has been set";
+      err = -EPERM;
+      goto reply;
+    }
+    pending_inc.new_require_osd_release = rel;
+    goto update;
   } else if (prefix == "osd cluster_snap") {
     // ** DISABLE THIS FOR NOW **
     ss << "cluster snapshot currently disabled (broken implementation)";
