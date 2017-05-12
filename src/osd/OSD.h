@@ -1491,6 +1491,7 @@ private:
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
   Messenger *hb_front_client_messenger;
+  Messenger *hb_front_client_legacy_messenger;
   Messenger *hb_back_client_messenger;
   Messenger *hb_front_server_messenger;
   Messenger *hb_back_server_messenger;
@@ -2306,6 +2307,7 @@ private:
       Messenger *internal,
       Messenger *external,
       Messenger *hb_front_client,
+      Messenger *hb_front_client_legacy,
       Messenger *hb_back_client,
       Messenger *hb_front_server,
       Messenger *hb_back_server,
