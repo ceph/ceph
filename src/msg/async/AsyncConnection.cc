@@ -1030,7 +1030,7 @@ ssize_t AsyncConnection::_process_connection()
                                      << connect_msg.authorizer_protocol << dendl;
         connect_msg.flags = 0;
         if (policy.lossy)
-          connect_msg.flags |= CEPH_MSG_CONNECT_LOSSY;  // this is fyi, actually, server decides!
+          connect_msg.flags |= CEPH_MSG_CONNECT_LOSSY;
         bl.append((char*)&connect_msg, sizeof(connect_msg));
         if (authorizer) {
           bl.append(authorizer->bl.c_str(), authorizer->bl.length());
@@ -1306,6 +1306,11 @@ ssize_t AsyncConnection::_process_connection()
                              << connect_msg.global_seq << dendl;
         set_peer_type(connect_msg.host_type);
         policy = async_msgr->get_policy(connect_msg.host_type);
+	if ((connect_msg.flags & CEPH_MSG_CONNECT_LOSSY) && !policy.lossy) {
+	  ldout(msgr->cct, 10) << __func__ << " client forcing lossy session"
+			       << dendl;
+	  policy = Messenger::Policy::stateless_server(policy.features_required);
+	}
         ldout(async_msgr->cct, 10) << __func__ << " accept of host_type " << connect_msg.host_type
                                    << ", policy.lossy=" << policy.lossy << " policy.server="
                                    << policy.server << " policy.standby=" << policy.standby
