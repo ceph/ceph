@@ -293,32 +293,36 @@ bool OSDMap::containing_subtree_is_down(CephContext *cct, int id, int subtree_ty
   }
 }
 
-int OSDMap::get_parent_subtree_id(CephContext *cct, int id, int subtree_type, set<int> *down_cache) const
+bool OSDMap::subtree_type_is_down(CephContext *cct, int id, int subtree_type, set<int> *down_in_osds, set<int> *up_in_osds,
+                                           set<int> *subtree_up, unordered_map<int, set<int> > *subtree_type_down) const
 {
-  set<int> local_down_cache;
-  if (!down_cache) {
-    down_cache = &local_down_cache;
-  }
-
-  int current = id;
-  while (true) {
-    int type;
-    if (current >= 0) {
-      type = 0;
+  if (id >= 0) {
+    bool is_down_ret = is_down(id);
+    if (is_down_ret) {
+      down_in_osds->insert(id);
     } else {
-      type = crush->get_bucket_type(current);
+      up_in_osds->insert(id);
     }
-    assert(type >= 0);
+    return is_down_ret;
+  }
 
-    if (type >= subtree_type) {
-      return current;
-    }
+  if (subtree_type_down &&
+      (*subtree_type_down)[subtree_type].count(id)) {
+    return true;
+  }
 
-    int r = crush->get_immediate_parent_id(current, &current);
-    if (r < 0) {
-      return -ENOENT;
+  list<int> children;
+  crush->get_children(id, &children);
+  for (const auto &child : children) {
+    if (!subtree_type_is_down(cct, child, crush->get_bucket_type(child), down_in_osds, up_in_osds, subtree_up, subtree_type_down)) {
+      subtree_up->insert(id);
+      return false;
     }
   }
+  if (subtree_type_down) {
+    (*subtree_type_down)[subtree_type].insert(id);
+  }
+  return true;
 }
 
 void OSDMap::Incremental::encode_client_old(bufferlist& bl) const

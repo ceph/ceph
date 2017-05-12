@@ -590,6 +590,15 @@ public:
    */
   int get_full_location_ordered(int id, vector<pair<string, string> >& path);
 
+  /*
+   * identical to get_full_location_ordered(int id, vector<pair<string, string> >& path),
+   * although it returns a concatenated string with the type/name pairs in descending
+   * hierarchical order with format key1=val1,key2=val2.
+   *
+   * returns the location in descending hierarchy as a string.
+   */
+  string get_full_location_ordered_string(int id);
+
   /**
    * returns (type_id, type) of all parent buckets between id and
    * default, can be used to check for anomolous CRUSH maps

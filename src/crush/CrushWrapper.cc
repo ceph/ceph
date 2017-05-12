@@ -587,6 +587,20 @@ int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> 
   return 0;
 }
 
+string CrushWrapper::get_full_location_ordered_string(int id)
+{
+  vector<pair<string, string> > full_location_ordered;
+  string full_location;
+  get_full_location_ordered(id, full_location_ordered);
+  reverse(begin(full_location_ordered), end(full_location_ordered));
+  for(auto i = full_location_ordered.begin(); i != full_location_ordered.end(); i++) {
+    full_location = full_location + i->first + "=" + i->second;
+    if (i != full_location_ordered.end() - 1) {
+      full_location = full_location + ",";
+    }
+  }
+  return full_location;
+}
 
 map<int, string> CrushWrapper::get_parent_hierarchy(int id)
 {
