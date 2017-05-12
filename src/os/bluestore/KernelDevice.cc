@@ -559,6 +559,9 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered)
       return r;
     }
   }
+
+  io_since_flush.store(true);
+
   return 0;
 }
 
