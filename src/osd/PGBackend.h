@@ -111,6 +111,14 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        const hobject_t &soid,
        const object_stat_sum_t &delta_stats) = 0;
 
+     /**
+      * Called when a read on the primary fails when pushing
+      */
+     virtual void on_primary_error(
+       const hobject_t &oid,
+       eversion_t v
+       ) = 0;
+
 
      /**
       * Bless a context
