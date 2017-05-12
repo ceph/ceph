@@ -6613,6 +6613,17 @@ void OSD::ms_fast_dispatch(Message *m)
     m->put();
     return;
   }
+
+  switch (m->get_type()) {
+  case CEPH_MSG_PING:
+    dout(10) << "ping from " << m->get_source_inst() << dendl;
+    m->put();
+    return;
+  case MSG_OSD_PING:
+    handle_osd_ping(static_cast<MOSDPing*>(m));
+    return;
+  }
+
   OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
   {
 #ifdef WITH_LTTNG

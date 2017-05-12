@@ -2246,6 +2246,8 @@ private:
     case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     case MSG_OSD_PG_RECOVERY_DELETE:
     case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    case CEPH_MSG_PING:
+    case MSG_OSD_PING:
       return true;
     default:
       return false;
