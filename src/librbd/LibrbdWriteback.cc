@@ -70,8 +70,8 @@ namespace librbd {
   class C_OrderedWrite : public Context {
   public:
     C_OrderedWrite(CephContext *cct, LibrbdWriteback::write_result_d *result,
-		   LibrbdWriteback *wb)
-      : m_cct(cct), m_result(result), m_wb_handler(wb) {}
+		   const ZTracer::Trace &trace, LibrbdWriteback *wb)
+      : m_cct(cct), m_result(result), m_trace(trace), m_wb_handler(wb) {}
     ~C_OrderedWrite() override {}
     void finish(int r) override {
       ldout(m_cct, 20) << "C_OrderedWrite completing " << m_result << dendl;
@@ -83,10 +83,12 @@ namespace librbd {
 	m_wb_handler->complete_writes(m_result->oid);
       }
       ldout(m_cct, 20) << "C_OrderedWrite finished " << m_result << dendl;
+      m_trace.event("finish");
     }
   private:
     CephContext *m_cct;
     LibrbdWriteback::write_result_d *m_result;
+    ZTracer::Trace m_trace;
     LibrbdWriteback *m_wb_handler;
   };
 
@@ -196,8 +198,9 @@ namespace librbd {
 			     const object_locator_t& oloc,
 			     uint64_t off, uint64_t len, snapid_t snapid,
 			     bufferlist *pbl, uint64_t trunc_size,
-			     __u32 trunc_seq, int op_flags, Context *onfinish,
-			     ZTracer::Trace *trace)
+			     __u32 trunc_seq, int op_flags,
+                             const ZTracer::Trace &parent_trace,
+                             Context *onfinish)
   {
     // on completion, take the mutex and then call onfinish.
     Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_lock);
@@ -220,7 +223,7 @@ namespace librbd {
       util::create_rados_callback(req);
     int r = m_ictx->data_ctx.aio_operate(
       oid.name, rados_completion, &op, flags, nullptr,
-      (trace ? trace->get_info() : nullptr));
+      (parent_trace.valid() ? parent_trace.get_info() : nullptr));
     rados_completion->release();
     assert(r >= 0);
   }
@@ -256,15 +259,23 @@ namespace librbd {
 				    const bufferlist &bl,
 				    ceph::real_time mtime, uint64_t trunc_size,
 				    __u32 trunc_seq, ceph_tid_t journal_tid,
-				    Context *oncommit,
-				    ZTracer::Trace *trace)
+                                    const ZTracer::Trace &parent_trace,
+				    Context *oncommit)
   {
+    ZTracer::Trace trace;
+    if (parent_trace.valid()) {
+      trace.init("", nullptr, &parent_trace);
+      trace.copy_name("writeback " + oid.name);
+      trace.event("start");
+    }
+
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 
     write_result_d *result = new write_result_d(oid.name, oncommit);
     m_writes[oid.name].push(result);
     ldout(m_ictx->cct, 20) << "write will wait for result " << result << dendl;
-    C_OrderedWrite *req_comp = new C_OrderedWrite(m_ictx->cct, result, this);
+    C_OrderedWrite *req_comp = new C_OrderedWrite(m_ictx->cct, result, trace,
+                                                  this);
 
     // all IO operations are flushed prior to closing the journal
     assert(journal_tid == 0 || m_ictx->journal != NULL);
