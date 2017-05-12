@@ -1346,29 +1346,28 @@ void md_config_t::diff(
   map<string, pair<string, string> > *diff,
   set<string> *unknown) 
 {
-  diff_helper(other, diff, unknown, "");
+  diff_helper(other, diff, unknown);
 }
 void md_config_t::diff(
   const md_config_t *other,
   map<string, pair<string, string> > *diff,
-  set<string> *unknown, const string& ceph_setting = string("")) 
+  set<string> *unknown, const string& setting) 
 {
-  diff_helper(other, diff, unknown, ceph_setting);
+  diff_helper(other, diff, unknown, setting);
 }
 
 void md_config_t::diff_helper(
     const md_config_t *other,
     map<string,pair<string,string> > *diff,
-    set<string> *unknown, const string& ceph_setting=string(""))
+    set<string> *unknown, const string& setting)
 {
   Mutex::Locker l(lock);
 
-  bool ceph_param_search = !ceph_setting.empty(); 
   char local_buf[4096];
   char other_buf[4096];
-  for (auto& opt: *config_options) {
-    if (ceph_param_search) {
-      if (ceph_setting != opt.name) {
+  for (auto& opt : *config_options) {
+    if (!setting.empty()) {
+      if (setting != opt.name) {
         continue;
       }
     }
@@ -1378,7 +1377,7 @@ void md_config_t::diff_helper(
     char *other_val = other_buf;
     int err = other->get_val(opt.name, &other_val, sizeof(other_buf));
     if (err < 0) {
-      if (ceph_param_search) {
+      if (!setting.empty()) {
         continue;
       }
       if (err == -ENOENT) {
@@ -1395,7 +1394,7 @@ void md_config_t::diff_helper(
     if (strcmp(local_val, other_val))
       diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
     else {
-      if (ceph_param_search) {
+      if (!setting.empty()) {
         diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
         break;
       }
