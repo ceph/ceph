@@ -95,6 +95,7 @@
 
 
 void parse_syn_options(vector<const char*>& args);
+extern int num_client;
 
 class SyntheticClient {
   StandaloneClient *client;
