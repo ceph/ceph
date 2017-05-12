@@ -26,7 +26,7 @@ void decode_big_endian_string(std::string &str, bufferlist::iterator &it) {
 #if defined(CEPH_LITTLE_ENDIAN)
   uint32_t length;
   ::decode(length, it);
-  length = swab32(length);
+  length = swab(length);
   str.clear();
   it.copy(length, str);
 #else
@@ -92,8 +92,8 @@ void Dependency::decode(__u8 version, bufferlist::iterator &it) {
   ::decode(id, it);
   ::decode(time_delta, it);
   if (byte_swap_required(version)) {
-    id = swab32(id);
-    time_delta = swab64(time_delta);
+    id = swab(id);
+    time_delta = swab(time_delta);
   }
 }
 
@@ -125,12 +125,12 @@ void ActionBase::decode(__u8 version, bufferlist::iterator &it) {
   }
 
   if (byte_swap_required(version)) {
-    id = swab32(id);
-    thread_id = swab64(thread_id);
+    id = swab(id);
+    thread_id = swab(thread_id);
 
     uint32_t dep_count;
     ::decode(dep_count, it);
-    dep_count = swab32(dep_count);
+    dep_count = swab(dep_count);
     dependencies.resize(dep_count);
     for (uint32_t i = 0; i < dep_count; ++i) {
       dependencies[i].decode(0, it);
@@ -161,7 +161,7 @@ void ImageActionBase::decode(__u8 version, bufferlist::iterator &it) {
   ActionBase::decode(version, it);
   ::decode(imagectx_id, it);
   if (byte_swap_required(version)) {
-    imagectx_id = swab64(imagectx_id);
+    imagectx_id = swab(imagectx_id);
   }
 }
 
@@ -181,8 +181,8 @@ void IoActionBase::decode(__u8 version, bufferlist::iterator &it) {
   ::decode(offset, it);
   ::decode(length, it);
   if (byte_swap_required(version)) {
-    offset = swab64(offset);
-    length = swab64(length);
+    offset = swab(offset);
+    length = swab(length);
   }
 }
 
