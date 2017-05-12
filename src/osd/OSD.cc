@@ -7658,12 +7658,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	       !osdmap->get_addr(whoami).probably_equals(
 		 client_messenger->get_myaddr()) ||
 	       !osdmap->get_cluster_addr(whoami).probably_equals(
-		 cluster_messenger->get_myaddr()) ||
-	       !osdmap->get_hb_back_addr(whoami).probably_equals(
-		 hb_back_server_messenger->get_myaddr()) ||
-	       (osdmap->get_hb_front_addr(whoami) != entity_addr_t() &&
-                !osdmap->get_hb_front_addr(whoami).probably_equals(
-		  hb_front_server_messenger->get_myaddr()))) {
+		 cluster_messenger->get_myaddr())) {
       if (!osdmap->is_up(whoami)) {
 	if (service.is_preparing_to_stop() || service.is_stopping()) {
 	  service.got_stop_ack();
@@ -7685,21 +7680,6 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 		      << " had wrong cluster addr ("
 		      << osdmap->get_cluster_addr(whoami)
 		      << " != my " << cluster_messenger->get_myaddr() << ")";
-      } else if (!osdmap->get_hb_back_addr(whoami).probably_equals(
-		   hb_back_server_messenger->get_myaddr())) {
-	clog->error() << "map e" << osdmap->get_epoch()
-		      << " had wrong heartbeat back addr ("
-		      << osdmap->get_hb_back_addr(whoami)
-		      << " != my " << hb_back_server_messenger->get_myaddr()
-		      << ")";
-      } else if (osdmap->get_hb_front_addr(whoami) != entity_addr_t() &&
-		 !osdmap->get_hb_front_addr(whoami).probably_equals(
-		   hb_front_server_messenger->get_myaddr())) {
-	clog->error() << "map e" << osdmap->get_epoch()
-		      << " had wrong heartbeat front addr ("
-		      << osdmap->get_hb_front_addr(whoami)
-		      << " != my " << hb_front_server_messenger->get_myaddr()
-		      << ")";
       }
 
       if (!service.is_stopping()) {
