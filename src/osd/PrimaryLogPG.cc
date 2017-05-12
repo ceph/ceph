@@ -2175,7 +2175,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
     dout(20) << __func__ << "find_object_context got error " << r << dendl;
     if (op->may_write() &&
-	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
       record_write_error(op, oid, nullptr, r);
     } else {
       osd->reply_op_error(op, r);
@@ -2252,7 +2252,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     dout(20) << __func__ << " returned an error: " << r << dendl;
     close_op_ctx(ctx);
     if (op->may_write() &&
-	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
       record_write_error(op, oid, nullptr, r);
     } else {
       osd->reply_op_error(op, r);
@@ -3634,7 +3634,7 @@ PrimaryLogPG::OpContextUPtr PrimaryLogPG::trim_object(
   SnapSet& snapset = obc->ssc->snapset;
 
   bool legacy = snapset.is_legacy() ||
-    !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
+    get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
 
   object_info_t &coi = obc->obs.oi;
   set<snapid_t> old_snaps;
@@ -5931,7 +5931,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENOENT;
 	  break;
 	}
-	if (!get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+	if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
 	  result = -EOPNOTSUPP;
 	  break;
 	}
@@ -6633,7 +6633,7 @@ inline int PrimaryLogPG::_delete_oid(
     whiteout = true;
   }
   bool legacy;
-  if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
     legacy = false;
     // in luminous or later, we can't delete the head if there are
     // clones. we trust the caller passing no_whiteout has already
@@ -6974,7 +6974,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     snap_oi->copy_user_bits(ctx->obs->oi);
 
     bool legacy = ctx->new_snapset.is_legacy() ||
-      !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
+      get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
     if (legacy) {
       snap_oi->legacy_snaps = snaps;
     }
@@ -7035,7 +7035,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
   // update snapset with latest snap context
   ctx->new_snapset.seq = snapc.seq;
   ctx->new_snapset.snaps = snapc.snaps;
-  if (!get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+  if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
     // pessimistic assumption that this is a net-new legacy SnapSet
     ctx->delta_stats.num_legacy_snapsets++;
     ctx->new_snapset.head_exists = ctx->new_obs.exists;
@@ -7223,7 +7223,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
   int result = do_osd_ops(ctx, ctx->ops);
   if (result < 0) {
     if (ctx->op->may_write() &&
-	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
       // need to save the error code in the pg log, to detect dup ops,
       // but do nothing else
       ctx->update_log_only = true;
@@ -7235,7 +7235,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
   if (ctx->op_t->empty() && !ctx->modify) {
     unstable_stats.add(ctx->delta_stats);
     if (ctx->op->may_write() &&
-	get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
       ctx->update_log_only = true;
     }
     return result;
@@ -7314,7 +7314,7 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 			info.pgid.pool(), soid.get_namespace());
       dout(10) << " final snapset " << ctx->new_snapset
 	       << " in " << snapoid << dendl;
-      assert(!get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS));
+      assert(get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS);
       ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid,
 					ctx->at_version,
 	                                eversion_t(),
@@ -7402,7 +7402,7 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
   }
 
   bool legacy_snapset = ctx->new_snapset.is_legacy() ||
-    !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
+    get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
 
   // append to log
   ctx->log.push_back(pg_log_entry_t(log_op_type, soid, ctx->at_version,
@@ -8314,7 +8314,7 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
   tctx->extra_reqids = results->reqids;
 
   bool legacy_snapset = tctx->new_snapset.is_legacy() ||
-    !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
+    get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS;
 
   if (whiteout) {
     // create a whiteout
@@ -8367,7 +8367,7 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     assert(tctx->new_obs.oi.soid.snap == CEPH_NOSNAP);
     tctx->new_snapset.from_snap_set(
       results->snapset,
-      !get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS));
+      get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS);
   }
   tctx->new_snapset.head_exists = true;
   dout(20) << __func__ << " new_snapset " << tctx->new_snapset << dendl;
@@ -9229,7 +9229,7 @@ void PrimaryLogPG::submit_log_entries(
 
   boost::intrusive_ptr<RepGather> repop;
   boost::optional<std::function<void(void)> > on_complete;
-  if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
     repop = new_repop(
       version,
       r,
@@ -9255,7 +9255,7 @@ void PrimaryLogPG::submit_log_entries(
 	if (peer == pg_whoami) continue;
 	assert(peer_missing.count(peer));
 	assert(peer_info.count(peer));
-	if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+	if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
 	  assert(repop);
 	  MOSDPGUpdateLogMissing *m = new MOSDPGUpdateLogMissing(
 	    entries,
@@ -9279,7 +9279,7 @@ void PrimaryLogPG::submit_log_entries(
 	    peer.osd, m, get_osdmap()->get_epoch());
 	}
       }
-      if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
 	ceph_tid_t rep_tid = repop->rep_tid;
 	waiting_on.insert(pg_whoami);
 	log_entry_update_waiting_on.insert(
@@ -10316,7 +10316,7 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
       unlock();
     });
 
-  if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
     t.register_on_commit(complete);
   } else {
     /* Hack to work around the fact that ReplicatedBackend sends
@@ -10432,7 +10432,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
       {
 	pg_log_entry_t e(pg_log_entry_t::LOST_DELETE, oid, v, m->second.need,
 			 0, osd_reqid_t(), mtime, 0);
-	if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+	if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
 	  if (pool.info.require_rollback()) {
 	    e.mod_desc.try_rmobject(v.version);
 	  } else {
@@ -13500,7 +13500,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	  head_error.set_head_mismatch();
 	}
 
-	if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+	if (get_osdmap()->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
 	  if (soid.is_snapdir()) {
 	    dout(10) << " will move snapset to head from " << soid << dendl;
 	    snapset_to_repair[soid.get_head()] = *snapset;

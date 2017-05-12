@@ -885,7 +885,7 @@ void OSDMonitor::create_pending()
     dout(1) << __func__ << " setting backfillfull_ratio = "
 	    << pending_inc.new_backfillfull_ratio << dendl;
   }
-  if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+  if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
     // transition full ratios from PGMap to OSDMap (on upgrade)
     PGMap *pg_map = &mon->pgmon()->pg_map;
     if (osdmap.full_ratio != pg_map->full_ratio) {
@@ -1160,7 +1160,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     tmp.deepish_copy_from(osdmap);
     tmp.apply_incremental(pending_inc);
 
-    if (tmp.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (tmp.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       // set or clear full/nearfull?
       int full, backfill, nearfull;
       tmp.count_full_nearfull_osds(&full, &backfill, &nearfull);
@@ -1238,20 +1238,20 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     tmp.apply_incremental(pending_inc);
 
     // determine appropriate features
-    if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (tmp.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       dout(10) << __func__ << " encoding without feature SERVER_LUMINOUS"
 	       << dendl;
       features &= ~CEPH_FEATURE_SERVER_LUMINOUS;
     }
-    if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
-      dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
-      features &= ~CEPH_FEATURE_SERVER_JEWEL;
-    }
-    if (!tmp.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+    if (tmp.require_osd_release < CEPH_RELEASE_KRAKEN) {
       dout(10) << __func__ << " encoding without feature SERVER_KRAKEN | "
 	       << "MSG_ADDR2" << dendl;
       features &= ~(CEPH_FEATURE_SERVER_KRAKEN |
 		    CEPH_FEATURE_MSG_ADDR2);
+    }
+    if (tmp.require_osd_release < CEPH_RELEASE_JEWEL) {
+      dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
+      features &= ~CEPH_FEATURE_SERVER_JEWEL;
     }
     dout(10) << __func__ << " encoding full map with " << features << dendl;
 
@@ -1292,7 +1292,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (mon->monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {
     auto pending_creatings = update_pending_pgs(pending_inc);
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       dout(7) << __func__ << " in the middle of upgrading, "
 	      << " trimming pending creating_pgs using pgmap" << dendl;
       trim_creating_pgs(&pending_creatings, mon->pgmon()->pg_map);
@@ -2158,7 +2158,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) &&
+  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
       !HAVE_FEATURE(m->osd_features, SERVER_LUMINOUS)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
@@ -2168,7 +2168,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL) &&
+  if (osdmap.require_osd_release >= CEPH_RELEASE_JEWEL &&
       !(m->osd_features & CEPH_FEATURE_SERVER_JEWEL)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
@@ -2178,7 +2178,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN) &&
+  if (osdmap.require_osd_release >= CEPH_RELEASE_KRAKEN &&
       !HAVE_FEATURE(m->osd_features, SERVER_KRAKEN)) {
     mon->clog->info() << "disallowing boot of OSD "
 		      << m->get_orig_source_inst()
@@ -2212,19 +2212,19 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   // make sure upgrades stop at luminous
   if (HAVE_FEATURE(m->osd_features, SERVER_M) &&
-      !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+      osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
     mon->clog->info() << "disallowing boot of post-luminous OSD "
 		      << m->get_orig_source_inst()
-		      << " because require_luminous_osds is not set";
+		      << " because require_osd_release < luminous";
     goto ignore;
   }
 
   // make sure upgrades stop at jewel
   if (HAVE_FEATURE(m->osd_features, SERVER_KRAKEN) &&
-      !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
+      osdmap.require_osd_release < CEPH_RELEASE_JEWEL) {
     mon->clog->info() << "disallowing boot of post-jewel OSD "
 		      << m->get_orig_source_inst()
-		      << " because require_jewel_osds is not set";
+		      << " because require_osd_release < jewel";
     goto ignore;
   }
 
@@ -3305,7 +3305,7 @@ void OSDMonitor::tick()
   bool do_propose = false;
   utime_t now = ceph_clock_now();
 
-  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) &&
+  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
       mon->monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {
     if (handle_osd_timeouts(now, last_osd_report)) {
@@ -3408,7 +3408,7 @@ void OSDMonitor::tick()
   }
 
   // if map full setting has changed, get that info out there!
-  if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) &&
+  if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS &&
       mon->pgmon()->is_readable()) {
     // for pre-luminous compat only!
     if (!mon->pgmon()->pg_map.full_osds.empty()) {
@@ -3632,7 +3632,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       }
     }
 
-    if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       // An osd could configure failsafe ratio, to something different
       // but for now assume it is the same here.
       float fsr = g_conf->osd_failsafe_full_ratio;
@@ -3827,25 +3827,25 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     if (g_conf->mon_debug_no_require_luminous) {
       // ignore these checks
     } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS) &&
-	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      string msg = "all OSDs are running luminous or later but the"
-	" 'require_luminous_osds' osdmap flag is not set";
+	       osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      string msg = "all OSDs are running luminous or later but"
+	" require_osd_release < luminous";
       summary.push_back(make_pair(HEALTH_WARN, msg));
       if (detail) {
 	detail->push_back(make_pair(HEALTH_WARN, msg));
       }
     } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN) &&
-	!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_KRAKEN)) {
-      string msg = "all OSDs are running kraken or later but the"
-	" 'require_kraken_osds' osdmap flag is not set";
+	       osdmap.require_osd_release < CEPH_RELEASE_KRAKEN) {
+      string msg = "all OSDs are running kraken or later but"
+	" require_osd_release < kraken";
       summary.push_back(make_pair(HEALTH_WARN, msg));
       if (detail) {
 	detail->push_back(make_pair(HEALTH_WARN, msg));
       }
     } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL) &&
-	       !osdmap.test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
-      string msg = "all OSDs are running jewel or later but the"
-	" 'require_jewel_osds' osdmap flag is not set";
+	       osdmap.require_osd_release < CEPH_RELEASE_JEWEL) {
+      string msg = "all OSDs are running jewel or later but"
+	" require_osd_release < jewel";
       summary.push_back(make_pair(HEALTH_WARN, msg));
       if (detail) {
 	detail->push_back(make_pair(HEALTH_WARN, msg));
@@ -7423,9 +7423,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd set-full-ratio" ||
 	     prefix == "osd set-backfillfull-ratio" ||
              prefix == "osd set-nearfull-ratio") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must complete the upgrade and set require_luminous_osds before"
-	 << " using the new interface";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
@@ -7448,9 +7448,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd set-require-min-compat-client") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must complete the upgrade and set require_luminous_osds before"
-	 << " using the new interface";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
@@ -7804,8 +7804,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " primary_temp mapping to " << osd;
     goto update;
   } else if (prefix == "osd pg-upmap") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
@@ -7866,8 +7867,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " pg_upmap mapping to " << new_pg_upmap;
     goto update;
   } else if (prefix == "osd rm-pg-upmap") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
@@ -7906,8 +7908,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "clear " << pgid << " pg_upmap mapping";
     goto update;
   } else if (prefix == "osd pg-upmap-items") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
@@ -7981,8 +7984,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set " << pgid << " pg_upmap_items mapping to " << new_pg_upmap_items;
     goto update;
   } else if (prefix == "osd rm-pg-upmap-items") {
-    if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
-      ss << "you must set the require_luminous_osds flag to use this feature";
+    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+      ss << "you must complete the upgrade and set require_osd_release ="
+	 << "luminous before using the new interface";
       err = -EPERM;
       goto reply;
     }
