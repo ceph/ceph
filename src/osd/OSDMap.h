@@ -872,12 +872,16 @@ public:
       return get_addr(osd);
     return *osd_addrs->cluster_addr[osd];
   }
-  const entity_addr_t &get_hb_back_addr(int osd) const {
+  entity_addr_t get_hb_back_addr(int osd) const {
     assert(exists(osd));
+    if (osd_addrs->hb_back_addr.empty())
+      return entity_addr_t();
     return osd_addrs->hb_back_addr[osd] ? *osd_addrs->hb_back_addr[osd] : osd_addrs->blank;
   }
-  const entity_addr_t &get_hb_front_addr(int osd) const {
+  entity_addr_t get_hb_front_addr(int osd) const {
     assert(exists(osd));
+    if (osd_addrs->hb_back_addr.empty())
+      return entity_addr_t();
     return osd_addrs->hb_front_addr[osd] ? *osd_addrs->hb_front_addr[osd] : osd_addrs->blank;
   }
   entity_inst_t get_most_recent_inst(int osd) const {
