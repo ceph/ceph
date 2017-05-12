@@ -227,8 +227,8 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked)
       f->open_object_section("op");
       op.dump(now, f);
       f->close_section(); // this TrackedOp
-      total_ops_in_flight++;
     }
+    total_ops_in_flight += sdata->ops_in_flight_sharded.size();
   }
   f->close_section(); // list of TrackedOps
   if (print_only_blocked) {
