@@ -31,13 +31,13 @@ using std::string;
 
 TEST(DaemonConfig, SimpleSet) {
   int ret;
-  ret = g_ceph_context->_conf->set_val("num_client", "21");
+  ret = g_ceph_context->_conf->set_val("log_graylog_port", "21");
   ASSERT_EQ(ret, 0);
   g_ceph_context->_conf->apply_changes(NULL);
   char buf[128];
   memset(buf, 0, sizeof(buf));
   char *tmp = buf;
-  ret = g_ceph_context->_conf->get_val("num_client", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_graylog_port", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("21"), string(buf));
 }
@@ -147,7 +147,7 @@ TEST(DaemonConfig, ArgV) {
   ASSERT_EQ(string("/tmp/my-keyfile"), string(buf));
 
   memset(buf, 0, sizeof(buf));
-  ret = g_ceph_context->_conf->get_val("num_client", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_graylog_port", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("22"), string(buf));
 
@@ -169,14 +169,14 @@ TEST(DaemonConfig, InjectArgs) {
   ASSERT_EQ(string("42"), string(buf));
 
   memset(buf, 0, sizeof(buf));
-  ret = g_ceph_context->_conf->get_val("num_client", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_graylog_port", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("56"), string(buf));
 
   injection = "--num-client 57";
   ret = g_ceph_context->_conf->injectargs(injection, &cout);
   ASSERT_EQ(ret, 0);
-  ret = g_ceph_context->_conf->get_val("num_client", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_graylog_port", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("57"), string(buf));
 }
@@ -195,7 +195,7 @@ TEST(DaemonConfig, InjectArgsReject) {
 
   // But, debug should still be set...
   memset(buf, 0, sizeof(buf));
-  ret = g_ceph_context->_conf->get_val("num_client", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("log_graylog_port", &tmp, sizeof(buf));
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(string("28"), string(buf));
 
@@ -342,13 +342,13 @@ TEST(DaemonConfig, InvalidIntegers) {
   {
     long long bad_value = (long long)std::numeric_limits<int>::max() + 1;
     string str = boost::lexical_cast<string>(bad_value);
-    int ret = g_ceph_context->_conf->set_val("num_client", str);
+    int ret = g_ceph_context->_conf->set_val("log_graylog_port", str);
     ASSERT_EQ(ret, -EINVAL);
   }
   {
     // 4G must be greater than INT_MAX
     ASSERT_GT(4LL * 1024 * 1024 * 1024, (long long)std::numeric_limits<int>::max());
-    int ret = g_ceph_context->_conf->set_val("num_client", "4G");
+    int ret = g_ceph_context->_conf->set_val("log_graylog_port", "4G");
     ASSERT_EQ(ret, -EINVAL);
   }
 }
