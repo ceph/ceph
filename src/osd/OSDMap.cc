@@ -724,7 +724,17 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     if (struct_v >= 6) {
       ::decode(new_require_osd_release, bl);
     } else {
-      new_require_osd_release = -1;
+      if (new_flags >= 0 && (new_flags & CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+	// only for compat with post-kraken pre-luminous test clusters
+	new_require_osd_release = CEPH_RELEASE_LUMINOUS;
+	new_flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+      } else if (new_flags >= 0 && (new_flags & CEPH_OSDMAP_REQUIRE_KRAKEN)) {
+	new_require_osd_release = CEPH_RELEASE_KRAKEN;
+      } else if (new_flags >= 0 && (new_flags & CEPH_OSDMAP_REQUIRE_JEWEL)) {
+	new_require_osd_release = CEPH_RELEASE_JEWEL;
+      } else {
+	new_require_osd_release = -1;
+      }
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -1505,8 +1515,22 @@ int OSDMap::apply_incremental(const Incremental &inc)
   }
 
   // nope, incremental.
-  if (inc.new_flags >= 0)
+  if (inc.new_flags >= 0) {
     flags = inc.new_flags;
+    // the below is just to cover a newly-upgraded luminous mon
+    // cluster that has to set require_jewel_osds or
+    // require_kraken_osds before the osds can be upgraded to
+    // luminous.
+    if (flags & CEPH_OSDMAP_REQUIRE_KRAKEN) {
+      if (require_osd_release < CEPH_RELEASE_KRAKEN) {
+	require_osd_release = CEPH_RELEASE_KRAKEN;
+      }
+    } else if (flags & CEPH_OSDMAP_REQUIRE_JEWEL) {
+      if (require_osd_release < CEPH_RELEASE_JEWEL) {
+	require_osd_release = CEPH_RELEASE_JEWEL;
+      }
+    }
+  }
 
   if (inc.new_max_osd >= 0)
     set_max_osd(inc.new_max_osd);
@@ -1684,6 +1708,9 @@ int OSDMap::apply_incremental(const Incremental &inc)
   }
   if (inc.new_require_osd_release >= 0) {
     require_osd_release = inc.new_require_osd_release;
+    if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+    }
   }
 
   // do new crush map last (after up/down stuff)
@@ -2203,7 +2230,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
   {
     uint8_t v = 4;
-    if (!HAVE_FEATURE(features, OSDMAP_PG_UPMAP)) {
+    if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     }
     ENCODE_START(v, 1, bl); // client-usable data
@@ -2217,7 +2244,18 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(pool_name, bl);
     ::encode(pool_max, bl);
 
-    ::encode(flags, bl);
+    if (v < 4) {
+      decltype(flags) f = flags;
+      if (require_osd_release >= CEPH_RELEASE_LUMINOUS)
+	f |= CEPH_OSDMAP_REQUIRE_LUMINOUS;
+      else if (require_osd_release == CEPH_RELEASE_KRAKEN)
+	f |= CEPH_OSDMAP_REQUIRE_KRAKEN;
+      else if (require_osd_release == CEPH_RELEASE_JEWEL)
+	f |= CEPH_OSDMAP_REQUIRE_JEWEL;
+      ::encode(f, bl);
+    } else {
+      ::encode(flags, bl);
+    }
 
     ::encode(max_osd, bl);
     ::encode(osd_state, bl);
@@ -2525,8 +2563,21 @@ void OSDMap::decode(bufferlist::iterator& bl)
     }
     if (struct_v >= 5) {
       ::decode(require_osd_release, bl);
+      if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+      }
     } else {
-      require_osd_release = -1;
+      if (flags & CEPH_OSDMAP_REQUIRE_LUMINOUS) {
+	// only for compat with post-kraken pre-luminous test clusters
+	require_osd_release = CEPH_RELEASE_LUMINOUS;
+	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
+      } else if (flags & CEPH_OSDMAP_REQUIRE_KRAKEN) {
+	require_osd_release = CEPH_RELEASE_KRAKEN;
+      } else if (flags & CEPH_OSDMAP_REQUIRE_JEWEL) {
+	require_osd_release = CEPH_RELEASE_JEWEL;
+      } else {
+	require_osd_release = 0;
+      }
     }
     DECODE_FINISH(bl); // osd-only data
   }

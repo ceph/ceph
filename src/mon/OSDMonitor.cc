@@ -220,10 +220,10 @@ void OSDMonitor::create_initial()
   newmap.set_flag(CEPH_OSDMAP_SORTBITWISE);
 
   // new cluster should require latest by default
-  newmap.set_flag(CEPH_OSDMAP_REQUIRE_JEWEL);
-  newmap.set_flag(CEPH_OSDMAP_REQUIRE_KRAKEN);
-  if (!g_conf->mon_debug_no_require_luminous) {
-    newmap.set_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS);
+  if (g_conf->mon_debug_no_require_luminous) {
+    newmap.require_osd_release = CEPH_RELEASE_KRAKEN;
+  } else {
+    newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
     newmap.full_ratio = g_conf->mon_osd_full_ratio;
     if (newmap.full_ratio > 1.0) newmap.full_ratio /= 100;
     newmap.backfillfull_ratio = g_conf->mon_osd_backfillfull_ratio;
@@ -7519,11 +7519,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       } else {
 	ss << "not all up OSDs have OSD_BITWISE_HOBJ_SORT feature";
 	err = -EPERM;
+	goto reply;
       }
     } else if (key == "require_jewel_osds") {
       if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
 	ss << "the sortbitwise flag must be set before require_jewel_osds";
 	err = -EPERM;
+	goto reply;
+      } else if (osdmap.require_osd_release >= CEPH_RELEASE_JEWEL) {
+	ss << "require_osd_release is already >= jewel";
+	err = 0;
+	goto reply;
       } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL)) {
 	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
       } else {
@@ -7534,6 +7540,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
 	ss << "the sortbitwise flag must be set before require_kraken_osds";
 	err = -EPERM;
+	goto reply;
+      } else if (osdmap.require_osd_release >= CEPH_RELEASE_KRAKEN) {
+	ss << "require_osd_release is already >= kraken";
+	err = 0;
+	goto reply;
       } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN)) {
 	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
 	// ensure JEWEL is also set
@@ -7541,20 +7552,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	return r;
       } else {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_KRAKEN feature";
-	err = -EPERM;
-      }
-    } else if (key == "require_luminous_osds") {
-      if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-	ss << "the sortbitwise flag must be set before require_luminous_osds";
-	err = -EPERM;
-      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_LUMINOUS)) {
-	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_LUMINOUS);
-	// ensure JEWEL and KRAKEN are also set
-	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
-	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_KRAKEN;
-	return r;
-      } else {
-	ss << "not all up OSDs have CEPH_FEATURE_SERVER_LUMINOUS feature";
 	err = -EPERM;
       }
     } else {

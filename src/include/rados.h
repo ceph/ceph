@@ -156,6 +156,9 @@ extern const char *ceph_osd_state_name(int s);
 				      CEPH_OSDMAP_REQUIRE_KRAKEN |	\
 				      CEPH_OSDMAP_REQUIRE_LUMINOUS |	\
 				      CEPH_OSDMAP_SORTBITWISE)
+#define CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL |	\
+					  CEPH_OSDMAP_REQUIRE_KRAKEN |	\
+					  CEPH_OSDMAP_REQUIRE_LUMINOUS)
 
 /*
  * major ceph release numbers

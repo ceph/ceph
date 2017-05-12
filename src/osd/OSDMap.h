@@ -276,9 +276,11 @@ private:
   /// min compat client we want to support
   string require_min_compat_client;
 
+public:
   /// require osds to run at least this release
   uint8_t require_osd_release = 0;
 
+private:
   mutable uint64_t cached_up_osd_features;
 
   mutable bool crc_defined;
