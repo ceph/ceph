@@ -337,6 +337,7 @@ def setup_dnsmasq(ctx, config):
     for client, properties in config['clients'].iteritems():
         s3tests_conf = config['s3tests_conf'][client]
         calling_format = s3tests_conf.get('calling_format','ordinary')
+        log.debug('calling format %s' % calling_format)
         if calling_format in ['absolute','subdomain','vhost']:
             rgws = ctx.cluster.only(misc.is_type('rgw'))
             rgw_node = rgw.remotes.keys()[0]
@@ -348,6 +349,7 @@ server=8.8.4.4
             """.format(name=name, ip_address=client.ip_address)
             dnsmasq_config_path = '/etc/dnsmasq.d/ceph'
             # point resolv.conf to local dnsmasq
+            log.info("configuring dnsmasq with entry %s" % client.ip_address)
             misc.sudo_write_file(
                 remote=client,
                 path='/etc/resolv.conf',
