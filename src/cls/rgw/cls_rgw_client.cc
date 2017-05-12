@@ -326,7 +326,8 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
-int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key, bufferlist& olh_tag,
+int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op,
+                            const string& oid, const cls_rgw_obj_key& key, bufferlist& olh_tag,
                             bool delete_marker, const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op)
 {
@@ -344,14 +345,16 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cl
   call.unmod_since = unmod_since;
   call.high_precision_time = high_precision_time;
   ::encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BUCKET_LINK_OLH, in, out);
+  op.exec(RGW_CLASS, RGW_BUCKET_LINK_OLH, in);
+  int r = io_ctx.operate(oid, &op);
   if (r < 0)
     return r;
 
   return 0;
 }
 
-int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
+int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op,
+                                   const string& oid,
                                    const cls_rgw_obj_key& key, const string& op_tag,
                                    const string& olh_tag, uint64_t olh_epoch, bool log_op)
 {
@@ -363,7 +366,8 @@ int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
   call.olh_tag = olh_tag;
   call.log_op = log_op;
   ::encode(call, in);
-  int r = io_ctx.exec(oid, RGW_CLASS, RGW_BUCKET_UNLINK_INSTANCE, in, out);
+  op.exec(RGW_CLASS, RGW_BUCKET_UNLINK_INSTANCE, in);
+  int r = io_ctx.operate(oid, &op);
   if (r < 0)
     return r;
 
@@ -419,14 +423,13 @@ void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_
   op.exec(RGW_CLASS, RGW_BUCKET_TRIM_OLH_LOG, in);
 }
 
-int cls_rgw_clear_olh(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, const string& olh_tag)
+int cls_rgw_clear_olh(IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid, const cls_rgw_obj_key& olh, const string& olh_tag)
 {
   bufferlist in, out;
   struct rgw_cls_bucket_clear_olh_op call;
   call.key = olh;
   call.olh_tag = olh_tag;
   ::encode(call, in);
-  librados::ObjectWriteOperation op;
   int op_ret;
   op.exec(RGW_CLASS, RGW_BUCKET_CLEAR_OLH, in, &out, &op_ret);
   int r = io_ctx.operate(oid, &op);
@@ -881,7 +884,7 @@ int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const string& oid,
   return 0;
 }
 
-void cls_rgw_guard_bucket_resharding(librados::ObjectWriteOperation& op, int ret_err)
+void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err)
 {
   bufferlist in, out;
   struct cls_rgw_guard_bucket_resharding_op call;
