@@ -13,6 +13,7 @@
 
 // Include this first to get python headers earlier
 #include "PyState.h"
+#include "Gil.h"
 
 #include <boost/tokenizer.hpp>
 #include "common/errno.h"
@@ -403,16 +404,21 @@ int PyModules::init()
     PyEval_InitThreads();
   }
 
+  // Drop the GIL and remember the main thread state (current
+  // thread state becomes NULL)
+  pMainThreadState = PyEval_SaveThread();
+
   // Load python code
   boost::tokenizer<> tok(g_conf->mgr_modules);
   for(const auto& module_name : tok) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
-    auto mod = std::unique_ptr<MgrPyModule>(new MgrPyModule(module_name));
+    auto mod = std::unique_ptr<MgrPyModule>(new MgrPyModule(module_name, pMainThreadState));
     int r = mod->load();
     if (r != 0) {
+      // Don't use handle_pyerror() here; we don't have the GIL
+      // or a thread state (this is deliberate).
       derr << "Error loading module '" << module_name << "': "
         << cpp_strerror(r) << dendl;
-      derr << handle_pyerror() << dendl;
       // Don't drop out here, load the other modules
     } else {
       // Success!
@@ -420,9 +426,6 @@ int PyModules::init()
     }
   } 
 
-  // Drop the GIL
-  PyEval_SaveThread();
-  
   return 0;
 }
 
@@ -438,14 +441,11 @@ public:
 
   void *entry() override
   {
-    PyGILState_STATE gstate;
-    gstate = PyGILState_Ensure();
     running = true;
 
+    // No need to acquire the GIL here; the module does it.
     dout(4) << "Entering thread for " << mod->get_name() << dendl;
     mod->serve();
-
-    PyGILState_Release(gstate);
 
     running = false;
     return nullptr;
@@ -495,7 +495,7 @@ void PyModules::shutdown()
 
   modules.clear();
 
-  PyGILState_Ensure();
+  PyEval_RestoreThread(pMainThreadState);
   Py_Finalize();
 
   // nobody needs me anymore.

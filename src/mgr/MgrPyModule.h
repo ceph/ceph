@@ -44,13 +44,14 @@ class MgrPyModule
 private:
   const std::string module_name;
   PyObject *pClassInstance;
+  PyThreadState *pMainThreadState;
 
   std::vector<ModuleCommand> commands;
 
   int load_commands();
 
 public:
-  MgrPyModule(const std::string &module_name);
+  MgrPyModule(const std::string &module_name, PyThreadState *main_ts);
   ~MgrPyModule();
 
   int load();
