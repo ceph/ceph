@@ -1963,7 +1963,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
   ObjectRecoveryProgress &new_progress = *out_progress;
   new_progress = progress;
 
-  dout(7) << "send_push_op " << recovery_info.soid
+  dout(7) << __func__ << " " << recovery_info.soid
 	  << " v " << recovery_info.version
 	  << " size " << recovery_info.size
 	  << " recovery_info: " << recovery_info
@@ -2178,8 +2178,9 @@ bool ReplicatedBackend::handle_push_reply(pg_shard_t peer, PushReplyOp &op, Push
     return false;
   } else {
     PushInfo *pi = &pushing[soid][peer];
+    bool error = pushing[soid].begin()->second.recovery_progress.error;
 
-    if (!pi->recovery_progress.data_complete) {
+    if (!pi->recovery_progress.data_complete && !error) {
       dout(10) << " pushing more from, "
 	       << pi->recovery_progress.data_recovered_to
 	       << " of " << pi->recovery_info.copy_subset << dendl;
@@ -2188,29 +2189,46 @@ bool ReplicatedBackend::handle_push_reply(pg_shard_t peer, PushReplyOp &op, Push
 	pi->recovery_info,
 	pi->recovery_progress, &new_progress, reply,
 	&(pi->stat));
-      // XXX: What can we do here?
-      assert(r == 0);
+      // Handle the case of a read error right after we wrote, which is
+      // hopefuilly extremely rare.
+      if (r < 0) {
+        dout(5) << __func__ << ": oid " << soid << " error " << r << dendl;
+
+	error = true;
+	goto done;
+      }
       pi->recovery_progress = new_progress;
       return true;
     } else {
       // done!
-      get_parent()->on_peer_recover(
-	peer, soid, pi->recovery_info,
-	pi->stat);
+done:
+      if (!error)
+        get_parent()->on_peer_recover(
+	  peer, soid, pi->recovery_info,
+	  pi->stat);
 
       object_stat_sum_t stat;
       stat.num_bytes_recovered = pi->recovery_info.size;
       stat.num_keys_recovered = reply->omap_entries.size();
       stat.num_objects_recovered = 1;
 
+      eversion_t v = pi->recovery_info.version;
       pushing[soid].erase(peer);
       pi = NULL;
 
 
       if (pushing[soid].empty()) {
-	get_parent()->on_global_recover(soid, stat);
+	if (!error)
+	  get_parent()->on_global_recover(soid, stat);
+	else
+	  get_parent()->on_primary_error(soid, v);
+
 	pushing.erase(soid);
       } else {
+	// This looks weird, but we erased the current peer and need to remember
+	// the error on any other one, while getting more acks.
+	if (error)
+	  pushing[soid].begin()->second.recovery_progress.error = true;
 	dout(10) << "pushed " << soid << ", still waiting for push ack from "
 		 << pushing[soid].size() << " others" << dendl;
       }

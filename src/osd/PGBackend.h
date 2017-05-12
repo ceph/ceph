@@ -106,6 +106,15 @@ struct inconsistent_obj_wrapper;
        ) = 0;
 
      /**
+      * Called when a read on the primary fails when pushing
+      */
+     virtual void on_primary_error(
+       const hobject_t &oid,
+       eversion_t v
+       ) = 0;
+
+
+     /**
       * Bless a context
       *
       * Wraps a context in whatever outer layers the parent usually

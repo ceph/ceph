@@ -356,6 +356,17 @@ void ReplicatedPG::send_message_osd_cluster(
   osd->send_message_osd_cluster(m, con);
 }
 
+void ReplicatedPG::on_primary_error(
+  const hobject_t &oid,
+  eversion_t v)
+{
+  dout(0) << __func__ << ": oid " << oid << " version " << v << dendl;
+  list<pg_shard_t> fl = { pg_whoami };
+  failed_push(fl, oid);
+  primary_error(oid, v);
+  backfill_add_missing(oid, v);
+}
+
 void ReplicatedPG::backfill_add_missing(
   const hobject_t &oid,
   eversion_t v)

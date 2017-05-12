@@ -283,6 +283,7 @@ public:
   void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) override;
   bool primary_error(const hobject_t& soid, eversion_t v) override;
   void cancel_pull(const hobject_t &soid);
+  void on_primary_error(const hobject_t &oid, eversion_t v) override;
   void backfill_add_missing(const hobject_t &oid, eversion_t v) override;
 
   template <typename T>
