@@ -1023,6 +1023,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_bindir}/cephfs-journal-tool
 %{_bindir}/cephfs-table-tool
 %{_bindir}/rados
+%{_bindir}/radosgw-admin
 %{_bindir}/rbd
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
@@ -1046,6 +1047,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %{_mandir}/man8/ceph.8*
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/rados.8*
+%{_mandir}/man8/radosgw-admin.8*
 %{_mandir}/man8/rbd.8*
 %{_mandir}/man8/rbdmap.8*
 %{_mandir}/man8/rbd-replay.8*
@@ -1058,6 +1060,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 %dir %{_sysconfdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/rbd
+%config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %{_unitdir}/rbdmap.service
 %{python_sitelib}/ceph_argparse.py*
@@ -1323,12 +1326,9 @@ fi
 %files radosgw
 %defattr(-,root,root,-)
 %{_bindir}/radosgw
-%{_bindir}/radosgw-admin
 %{_bindir}/radosgw-token
 %{_bindir}/radosgw-object-expirer
 %{_mandir}/man8/radosgw.8*
-%{_mandir}/man8/radosgw-admin.8*
-%config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target
