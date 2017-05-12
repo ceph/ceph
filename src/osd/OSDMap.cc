@@ -2818,7 +2818,7 @@ public:
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
     tbl->define_column("UP/DOWN", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("IN/OUT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("PRIMARY-AFFINITY", TextTable::LEFT, TextTable::RIGHT);
 
     Parent::dump(tbl);
@@ -2852,7 +2852,7 @@ protected:
 	     << 0;
       } else {
 	*tbl << (osdmap->is_up(qi.id) ? "up" : "down")
-	     << weightf_t(osdmap->get_weightf(qi.id))
+	     << (osdmap->is_in(qi.id) ? "in" : "out")
 	     << weightf_t(osdmap->get_primary_affinityf(qi.id));
       }
     }
@@ -2889,7 +2889,7 @@ protected:
     {
       f->dump_unsigned("exists", (int)osdmap->exists(qi.id));
       f->dump_string("status", osdmap->is_up(qi.id) ? "up" : "down");
-      f->dump_float("reweight", osdmap->get_weightf(qi.id));
+      f->dump_string("reweight", osdmap->is_in(qi.id) ? "in" : "out");
       f->dump_float("primary_affinity", osdmap->get_primary_affinityf(qi.id));
     }
   }
