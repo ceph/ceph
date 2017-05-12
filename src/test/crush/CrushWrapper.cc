@@ -128,6 +128,69 @@ TEST(CrushWrapper, move_bucket) {
   delete c;
 }
 
+TEST(CrushWrapper, swap_bucket) {
+  CrushWrapper *c = new CrushWrapper;
+
+  const int ROOT_TYPE = 2;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int HOST_TYPE = 1;
+  c->set_type_name(HOST_TYPE, "host");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int root;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+			     ROOT_TYPE, 0, NULL, NULL, &root));
+  EXPECT_EQ(0, c->set_item_name(root, "root"));
+
+  int a, b;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+			     HOST_TYPE, 0, NULL, NULL, &a));
+  EXPECT_EQ(0, c->set_item_name(a, "a"));
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_RJENKINS1,
+			     HOST_TYPE, 0, NULL, NULL, &b));
+  EXPECT_EQ(0, c->set_item_name(b, "b"));
+
+  {
+    map<string,string> loc;
+    loc["root"] = "root";
+    EXPECT_EQ(0, c->move_bucket(g_ceph_context, a, loc));
+  }
+  {
+    map<string,string> loc;
+    loc["root"] = "root";
+    loc["host"] = "a";
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, 0, 1.0, "osd.0", loc));
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, 1, 1.0, "osd.1", loc));
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, 2, 1.0, "osd.2", loc));
+  }
+  {
+    map<string,string> loc;
+    loc["host"] = "b";
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, 3, 1.0, "osd.3", loc));
+  }
+  ASSERT_EQ(0x30000, c->get_item_weight(a));
+  ASSERT_EQ(string("a"), c->get_item_name(a));
+  ASSERT_EQ(0x10000, c->get_item_weight(b));
+  ASSERT_EQ(string("b"), c->get_item_name(b));
+  ASSERT_EQ(a, c->get_bucket_item(root, 0));
+  ASSERT_EQ(0, c->get_bucket_item(a, 0));
+  ASSERT_EQ(1, c->get_bucket_item(a, 1));
+  ASSERT_EQ(2, c->get_bucket_item(a, 2));
+  ASSERT_EQ(3, c->get_bucket_item(b, 0));
+
+  c->swap_bucket(g_ceph_context, a, b);
+  ASSERT_EQ(0x30000, c->get_item_weight(b));
+  ASSERT_EQ(string("a"), c->get_item_name(b));
+  ASSERT_EQ(0x10000, c->get_item_weight(a));
+  ASSERT_EQ(string("b"), c->get_item_name(a));
+  ASSERT_EQ(a, c->get_bucket_item(root, 0));
+  ASSERT_EQ(0, c->get_bucket_item(b, 0));
+  ASSERT_EQ(1, c->get_bucket_item(b, 1));
+  ASSERT_EQ(2, c->get_bucket_item(b, 2));
+  ASSERT_EQ(3, c->get_bucket_item(a, 0));
+}
+
 TEST(CrushWrapper, rename_bucket_or_item) {
   CrushWrapper *c = new CrushWrapper;
 

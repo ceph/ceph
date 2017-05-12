@@ -790,6 +790,52 @@ int CrushWrapper::move_bucket(CephContext *cct, int id, const map<string,string>
   return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
 }
 
+int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
+{
+  if (src >= 0 || dst >= 0)
+    return -EINVAL;
+  if (!item_exists(src) || !item_exists(dst))
+    return -EINVAL;
+  crush_bucket *a = get_bucket(src);
+  crush_bucket *b = get_bucket(dst);
+  unsigned aw = a->weight;
+  unsigned bw = b->weight;
+
+  // swap weights
+  adjust_item_weight(cct, a->id, bw);
+  adjust_item_weight(cct, b->id, aw);
+
+  // swap items
+  map<int,unsigned> tmp;
+  unsigned as = a->size;
+  unsigned bs = b->size;
+  for (unsigned i = 0; i < as; ++i) {
+    int item = a->items[0];
+    int itemw = crush_get_bucket_item_weight(a, 0);
+    tmp[item] = itemw;
+    crush_bucket_remove_item(crush, a, item);
+  }
+  assert(a->size == 0);
+  assert(b->size == bs);
+  for (unsigned i = 0; i < bs; ++i) {
+    int item = b->items[0];
+    int itemw = crush_get_bucket_item_weight(b, 0);
+    crush_bucket_remove_item(crush, b, item);
+    crush_bucket_add_item(crush, a, item, itemw);
+  }
+  assert(a->size == bs);
+  assert(b->size == 0);
+  for (auto t : tmp) {
+    crush_bucket_add_item(crush, b, t.first, t.second);
+  }
+  assert(a->size == bs);
+  assert(b->size == as);
+
+  // swap names
+  swap_names(src, dst);
+  return 0;
+}
+
 int CrushWrapper::link_bucket(CephContext *cct, int id, const map<string,string>& loc)
 {
   if (choose_args.size() > 0) {
