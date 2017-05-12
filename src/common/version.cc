@@ -12,7 +12,6 @@
  *
  */
 
-#include "acconfig.h"
 #include "ceph_ver.h"
 #include "common/version.h"
 

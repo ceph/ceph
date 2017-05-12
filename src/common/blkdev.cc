@@ -18,7 +18,6 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <stdlib.h>
-#include "include/int_types.h"
 #include "include/uuid.h"
 
 #ifdef __linux__

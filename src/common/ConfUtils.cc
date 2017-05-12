@@ -14,7 +14,6 @@
 
 #include <algorithm>
 #include <errno.h>
-#include <list>
 #include <map>
 #include <sstream>
 #include <stdio.h>
@@ -22,8 +21,6 @@
 #include <string.h>
 #include <string>
 #include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
 #include <iostream>
 
 #include "include/buffer.h"
