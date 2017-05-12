@@ -35,7 +35,6 @@ OPTION(setgroup, OPT_STR, "")        // gid or group name
 OPTION(setuser_match_path, OPT_STR, "")  // make setuser/group conditional on this path matching ownership
 OPTION(pid_file, OPT_STR, "") // default changed by common_preinit()
 OPTION(chdir, OPT_STR, "/")
-OPTION(max_open_files, OPT_LONGLONG, 0)
 OPTION(restapi_log_level, OPT_STR, "") 	// default set by Python code
 OPTION(restapi_base_url, OPT_STR, "")	// "
 OPTION(fatal_signal_handlers, OPT_BOOL, true)
