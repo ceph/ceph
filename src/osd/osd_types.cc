@@ -3363,7 +3363,7 @@ void PastIntervals::update_type(bool ec_pool, bool compact)
 
 void PastIntervals::update_type_from_map(bool ec_pool, const OSDMap &osdmap)
 {
-  update_type(ec_pool, osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS));
+  update_type(ec_pool, osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
 }
 
 bool PastIntervals::is_new_interval(

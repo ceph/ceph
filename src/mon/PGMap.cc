@@ -1905,7 +1905,8 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
   }
 
   float fratio;
-  if (osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS) && osdmap.get_full_ratio() > 0) {
+  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+      osdmap.get_full_ratio() > 0) {
     fratio = osdmap.get_full_ratio();
   } else if (full_ratio > 0) {
     fratio = full_ratio;
