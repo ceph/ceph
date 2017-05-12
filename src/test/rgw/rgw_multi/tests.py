@@ -53,6 +53,17 @@ def get_zone_connection(zone, credentials):
         credentials = credentials[0]
     return get_gateway_connection(zone.gateways[0], credentials)
 
+def mdlog_list(zone, period = None):
+    cmd = ['mdlog', 'list']
+    if period:
+        cmd += ['--period', period]
+    (mdlog_json, _) = zone.cluster.admin(cmd, read_only=True)
+    mdlog_json = mdlog_json.decode('utf-8')
+    return json.loads(mdlog_json)
+
+def mdlog_autotrim(zone):
+    zone.cluster.admin(['mdlog', 'autotrim'])
+
 def meta_sync_status(zone):
     while True:
         cmd = ['metadata', 'sync', 'status'] + zone.zone_args()
@@ -654,6 +665,9 @@ def test_multi_period_incremental_sync():
     if len(zonegroup.zones) < 3:
         raise SkipTest("test_multi_period_incremental_sync skipped. Requires 3 or more zones in master zonegroup.")
 
+    # periods to include in mdlog comparison
+    mdlog_periods = [realm.current_period.id]
+
     # create a bucket in each zone
     buckets = []
     for zone in zonegroup.zones:
@@ -673,6 +687,7 @@ def test_multi_period_incremental_sync():
 
     # change master to zone 2 -> period 2
     set_master_zone(z2)
+    mdlog_periods += [realm.current_period.id]
 
     # create another bucket in each zone, except for z3
     for zone in zonegroup.zones:
@@ -689,6 +704,7 @@ def test_multi_period_incremental_sync():
 
     # change master back to zone 1 -> period 3
     set_master_zone(z1)
+    mdlog_periods += [realm.current_period.id]
 
     # create another bucket in each zone, except for z3
     for zone in zonegroup.zones:
@@ -708,6 +724,31 @@ def test_multi_period_incremental_sync():
     for bucket_name in buckets:
         for source_zone, target_zone in combinations(zonegroup.zones, 2):
             check_bucket_eq(source_zone, target_zone, bucket_name)
+
+    # verify that mdlogs are not empty and match for each period
+    for period in mdlog_periods:
+        master_mdlog = mdlog_list(z1, period)
+        assert len(master_mdlog) > 0
+        for zone in zonegroup.zones:
+            if zone == z1:
+                continue
+            mdlog = mdlog_list(zone, period)
+            assert len(mdlog) == len(master_mdlog)
+
+    # autotrim mdlogs for master zone
+    mdlog_autotrim(z1)
+
+    # autotrim mdlogs for peers
+    for zone in zonegroup.zones:
+        if zone == z1:
+            continue
+        mdlog_autotrim(zone)
+
+    # verify that mdlogs are empty for each period
+    for period in mdlog_periods:
+        for zone in zonegroup.zones:
+            mdlog = mdlog_list(zone, period)
+            assert len(mdlog) == 0
 
 def test_zonegroup_remove():
     zonegroup = realm.master_zonegroup()
