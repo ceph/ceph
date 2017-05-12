@@ -158,6 +158,16 @@ extern const char *ceph_osd_state_name(int s);
 				      CEPH_OSDMAP_SORTBITWISE)
 
 /*
+ * major ceph release numbers
+ */
+#define CEPH_RELEASE_JEWEL    10
+#define CEPH_RELEASE_KRAKEN   11
+#define CEPH_RELEASE_LUMINOUS 12
+#define CEPH_RELEASE_MIMIC    13
+
+extern const char *ceph_osd_release_name(int r);
+
+/*
  * The error code to return when an OSD can't handle a write
  * because it is too large.
  */

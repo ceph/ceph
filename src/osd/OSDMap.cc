@@ -479,7 +479,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    uint8_t target_v = 5;
+    uint8_t target_v = 6;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     }
@@ -500,7 +500,12 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
       ::encode(new_nearfull_ratio, bl);
       ::encode(new_full_ratio, bl);
       ::encode(new_backfillfull_ratio, bl);
+    }
+    if (target_v >= 5) {
       ::encode(new_require_min_compat_client, bl);
+    }
+    if (target_v >= 6) {
+      ::encode(new_require_osd_release, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -685,7 +690,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
   }
 
   {
-    DECODE_START(5, bl); // extended, osd-only data
+    DECODE_START(6, bl); // extended, osd-only data
     ::decode(new_hb_back_up, bl);
     ::decode(new_up_thru, bl);
     ::decode(new_last_clean_interval, bl);
@@ -713,8 +718,14 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     } else {
       new_backfillfull_ratio = -1;
     }
-    if (struct_v >= 5)
+    if (struct_v >= 5) {
       ::decode(new_require_min_compat_client, bl);
+    }
+    if (struct_v >= 6) {
+      ::decode(new_require_osd_release, bl);
+    } else {
+      new_require_osd_release = -1;
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -760,6 +771,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_float("new_nearfull_ratio", new_nearfull_ratio);
   f->dump_float("new_backfillfull_ratio", new_backfillfull_ratio);
   f->dump_string("new_require_min_compat_client", new_require_min_compat_client);
+  f->dump_int("new_require_osd_release", new_require_osd_release);
 
   if (fullmap.length()) {
     f->open_object_section("full_map");
@@ -1670,6 +1682,9 @@ int OSDMap::apply_incremental(const Incremental &inc)
   if (inc.new_require_min_compat_client.length()) {
     require_min_compat_client = inc.new_require_min_compat_client;
   }
+  if (inc.new_require_osd_release >= 0) {
+    require_osd_release = inc.new_require_osd_release;
+  }
 
   // do new crush map last (after up/down stuff)
   if (inc.crush.length()) {
@@ -2235,7 +2250,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    uint8_t target_v = 4;
+    uint8_t target_v = 5;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     }
@@ -2260,7 +2275,12 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       ::encode(nearfull_ratio, bl);
       ::encode(full_ratio, bl);
       ::encode(backfillfull_ratio, bl);
+    }
+    if (target_v >= 4) {
       ::encode(require_min_compat_client, bl);
+    }
+    if (target_v >= 5) {
+      ::encode(require_osd_release, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -2478,7 +2498,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
   }
 
   {
-    DECODE_START(4, bl); // extended, osd-only data
+    DECODE_START(5, bl); // extended, osd-only data
     ::decode(osd_addrs->hb_back_addr, bl);
     ::decode(osd_info, bl);
     ::decode(blacklist, bl);
@@ -2500,8 +2520,14 @@ void OSDMap::decode(bufferlist::iterator& bl)
     } else {
       backfillfull_ratio = 0;
     }
-    if (struct_v >= 4)
+    if (struct_v >= 4) {
       ::decode(require_min_compat_client, bl);
+    }
+    if (struct_v >= 5) {
+      ::decode(require_osd_release, bl);
+    } else {
+      require_osd_release = -1;
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -2580,6 +2606,9 @@ void OSDMap::dump(Formatter *f) const
   auto mv = get_min_compat_client();
   f->dump_string("min_compat_client", mv.first);
   f->dump_string("min_compat_client_version", mv.second);
+  f->dump_int("require_osd_release", require_osd_release);
+  f->dump_string("require_osd_release_name",
+		 ceph_osd_release_name(require_osd_release));
 
   f->open_array_section("pools");
   for (const auto &pool : pools) {
