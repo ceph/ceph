@@ -14,8 +14,6 @@
 
 #define LARGE_SIZE 1024
 
-#include "include/int_types.h"
-
 #include "assert.h"
 #include "Formatter.h"
 #include "HTMLFormatter.h"
@@ -23,11 +21,9 @@
 #include "include/buffer.h"
 
 #include <algorithm>
-#include <iostream>
 #include <sstream>
 #include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <vector>
 #include <string>
 #include <set>

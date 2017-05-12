@@ -9,8 +9,10 @@
 #include <iosfwd>
 #include <list>
 #include <vector>
-#include <sstream>
 #include <stdarg.h>
+#include <stddef.h>
+#include <utility>
+#include <sstream>
 #include <string>
 #include <map>
 
