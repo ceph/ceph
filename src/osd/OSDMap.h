@@ -132,6 +132,7 @@ public:
     utime_t modified;
     int64_t new_pool_max; //incremented by the OSDMonitor on each pool create
     int32_t new_flags;
+    int8_t new_require_osd_release = -1;
 
     // full (rare)
     bufferlist fullmap;  // in lieu of below.
@@ -274,6 +275,9 @@ private:
 
   /// min compat client we want to support
   string require_min_compat_client;
+
+  /// require osds to run at least this release
+  uint8_t require_osd_release = 0;
 
   mutable uint64_t cached_up_osd_features;
 
