@@ -4,6 +4,7 @@
 #define COMMON_ZIPKIN_TRACE_H
 
 #include "acconfig.h"
+#include "include/encoding.h"
 
 #ifdef WITH_BLKIN
 
