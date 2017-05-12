@@ -6685,7 +6685,44 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = 0;
       }
     } while (false);
-
+  } else if (prefix == "osd crush swap-bucket") {
+    string source, dest, force;
+    cmd_getval(g_ceph_context, cmdmap, "source", source);
+    cmd_getval(g_ceph_context, cmdmap, "dest", dest);
+    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    if (!newcrush.name_exists(source)) {
+      ss << "source item " << source << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    if (!newcrush.name_exists(dest)) {
+      ss << "dest item " << dest << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    int sid = newcrush.get_item_id(source);
+    int did = newcrush.get_item_id(dest);
+    int sparent;
+    if (newcrush.get_immediate_parent_id(sid, &sparent) == 0 &&
+	force != "--yes-i-really-mean-it") {
+      ss << "source item " << source << " is not an orphan bucket; pass --yes-i-really-mean-it to proceed anyway";
+      err = -EPERM;
+      goto reply;
+    }
+    int r = newcrush.swap_bucket(g_ceph_context, sid, did);
+    if (r < 0) {
+      ss << "failed to swap bucket contents: " << cpp_strerror(r);
+      goto reply;
+    }
+    ss << "swapped bucket of " << source << " to " << dest;
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    wait_for_finished_proposal(op,
+			       new Monitor::C_Command(mon, op, err, ss.str(),
+						      get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd crush link") {
     // osd crush link <name> <loc1> [<loc2> ...]
     string name;
