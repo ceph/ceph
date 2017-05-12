@@ -315,7 +315,7 @@ class TestClientRecovery(CephFSTestCase):
             self.mount_a.run_shell(["touch", "f{0}".format(i)])
 
         # Populate mount_b's cache
-        self.mount_b.run_shell(["ls"])
+        self.mount_b.run_shell(["ls", "-l"])
 
         client_id = self.mount_b.get_global_id()
         num_caps = self._session_num_caps(client_id)
