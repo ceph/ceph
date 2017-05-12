@@ -2195,6 +2195,7 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
   ceph_tid_t tid = 0;
   if (!ptid)
     ptid = &tid;
+  op->trace.event("op submit");
   _op_submit_with_budget(op, rl, ptid, ctx_budget);
 }
 
@@ -3090,9 +3091,10 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   m->ops = op->ops;
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
-  m->trace = op->trace;
-  if (!m->trace && cct->_conf->osdc_blkin_trace_all)
-    m->trace.init("objecter op", &trace_endpoint);
+
+  if (!op->trace.valid() && cct->_conf->osdc_blkin_trace_all) {
+    op->trace.init("op", &trace_endpoint);
+  }
 
   if (op->priority)
     m->set_priority(op->priority);
@@ -3177,6 +3179,9 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
 
   m->set_tid(op->tid);
 
+  if (op->trace.valid()) {
+    m->trace.init("op msg", nullptr, &op->trace);
+  }
   op->session->con->send_message(m);
 }
 
@@ -3285,6 +3290,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		<< " attempt " << m->get_retry_attempt()
 		<< dendl;
   Op *op = iter->second;
+  op->trace.event("osd op reply");
 
   if (retry_writes_after_first_reply && op->attempts == 1 &&
       (op->target.flags & CEPH_OSD_FLAG_WRITE)) {
