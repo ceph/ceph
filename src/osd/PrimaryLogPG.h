@@ -268,6 +268,7 @@ public:
   void apply_stats(
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) override;
+  void on_primary_error(const hobject_t &oid, eversion_t v) override;
 
   template<class T> class BlessedGenContext;
   class BlessedContext;
