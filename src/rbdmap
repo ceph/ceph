@@ -8,8 +8,6 @@ do_map() {
 		  ""|\#*)
 			continue
 			;;
-		  */*)
-			;;
 		  *)
 			DEV=rbd/$DEV
 			;;
