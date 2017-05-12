@@ -94,7 +94,9 @@ TEST(blkdev, device_model)
   set_block_device_sandbox_dir(root.c_str());
 
   char model[1000] = {0};
-  block_device_model("sda", model, sizeof(model));
+  int rc = block_device_model("sda", model, sizeof(model));
+  ASSERT_EQ(0, rc);
+
   printf("model '%s'\n", model);
   ASSERT_EQ(strcmp(model, "myfancymodel"), 0);
 }
