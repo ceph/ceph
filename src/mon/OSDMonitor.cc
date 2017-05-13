@@ -931,11 +931,13 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
   if (pending_creatings.last_scan_epoch > inc.epoch) {
     return pending_creatings;
   }
-  const unsigned total = pending_creatings.pgs.size();
-  mon->pgservice->maybe_add_creating_pgs(creating_pgs.last_scan_epoch,
-					 &pending_creatings);
-  dout(7) << __func__ << total - pending_creatings.pgs.size()
-	  << " pgs added from pgmap" << dendl;
+  if (!osdmap.test_flag(CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
+    const unsigned total = pending_creatings.pgs.size();
+    mon->pgservice->maybe_add_creating_pgs(creating_pgs.last_scan_epoch,
+					   &pending_creatings);
+    dout(7) << __func__ << total - pending_creatings.pgs.size()
+	    << " pgs added from pgmap" << dendl;
+  }
   unsigned added = 0;
   added += scan_for_creating_pgs(osdmap.get_pools(),
 				 inc.old_pools,
