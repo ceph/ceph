@@ -36,51 +36,48 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 
 
 class MgrPGStatService : public PGMap, public PGStatService {
-  PGMap& parent;
+  PGMapDigest digest;
 public:
-  MgrPGStatService() : PGMap(), PGStatService(),
-		    parent(*static_cast<PGMap*>(this)) {}
-  MgrPGStatService(const PGMap& o) : PGMap(o), PGStatService(),
-				  parent(*static_cast<PGMap*>(this)) {}
-  void reset(const PGMap& o) {
-    parent = o;
+  void decode_digest(bufferlist& bl) {
+    auto p = bl.begin();
+    ::decode(digest, p);
   }
 
   const pool_stat_t* get_pool_stat(int poolid) const {
-    auto i = parent.pg_pool_sum.find(poolid);
-    if (i != parent.pg_pool_sum.end()) {
+    auto i = digest.pg_pool_sum.find(poolid);
+    if (i != digest.pg_pool_sum.end()) {
       return &i->second;
     }
     return NULL;
   }
 
-  const pool_stat_t& get_pg_sum() const { return parent.pg_sum; }
-  const osd_stat_t& get_osd_sum() const { return parent.osd_sum; }
+  const pool_stat_t& get_pg_sum() const { return digest.pg_sum; }
+  const osd_stat_t& get_osd_sum() const { return digest.osd_sum; }
 
   const osd_stat_t *get_osd_stat(int osd) const {
-    auto i = parent.osd_stat.find(osd);
-    if (i == parent.osd_stat.end()) {
+    auto i = digest.osd_stat.find(osd);
+    if (i == digest.osd_stat.end()) {
       return NULL;
     }
     return &i->second;
   }
   const ceph::unordered_map<int32_t,osd_stat_t> *get_osd_stat() const {
-    return &parent.osd_stat;
+    return &digest.osd_stat;
   }
 
   size_t get_num_pg_by_osd(int osd) const {
-    return parent.get_num_pg_by_osd(osd);
+    return digest.get_num_pg_by_osd(osd);
   }
 
   void print_summary(Formatter *f, ostream *out) const {
-    parent.print_summary(f, out);
+    digest.print_summary(f, out);
   }
   void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const {
-    parent.dump_fs_stats(ss, f, verbose);
+    digest.dump_fs_stats(ss, f, verbose);
   }
   void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
 		       bool verbose) const {
-    parent.dump_pool_stats_full(osdm, ss, f, verbose);
+    digest.dump_pool_stats_full(osdm, ss, f, verbose);
   }
 };
 
@@ -301,7 +298,7 @@ bool MgrMonitor::preprocess_report(MonOpRequestRef op) { return false; }
 bool MgrMonitor::prepare_report(MonOpRequestRef op)
 {
   MMonMgrReport *m = static_cast<MMonMgrReport*>(op->get_req());
-  pgservice->reset(m->pg_map);
+  pgservice->decode_digest(m->get_data());
   return true;
 }
 
