@@ -1645,7 +1645,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     f->close_section();
 
   if (f) {
-    f->dump_unsigned("num_pgs", pg_stat.size());
+    f->dump_unsigned("num_pgs", num_pg);
     f->dump_unsigned("num_pools", pg_pool_sum.size());
     f->dump_unsigned("num_objects", pg_sum.stats.sum.num_objects);
     f->dump_unsigned("data_bytes", pg_sum.stats.sum.num_bytes);
@@ -1654,7 +1654,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     f->dump_unsigned("bytes_total", osd_sum.kb * 1024ull);
   } else {
     *out << "      pgmap "
-         << pg_stat.size() << " pgs, " << pg_pool_sum.size() << " pools, "
+         << num_pg << " pgs, " << pg_pool_sum.size() << " pools, "
          << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, "
          << si_t(pg_sum.stats.sum.num_objects) << " objects\n";
     *out << "            "
@@ -1662,7 +1662,6 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
          << kb_t(osd_sum.kb_avail) << " / "
          << kb_t(osd_sum.kb) << " avail\n";
   }
-
 
   if (num_pg_active < num_pg) {
     float p = (float)num_pg_active / (float)num_pg;
