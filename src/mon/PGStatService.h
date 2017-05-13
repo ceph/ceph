@@ -44,21 +44,39 @@ public:
 
   virtual const osd_stat_t *get_osd_stat(int osd) const = 0;
   virtual const ceph::unordered_map<int32_t,osd_stat_t> *get_osd_stat() const = 0;
-  virtual const ceph::unordered_map<pg_t,pg_stat_t> *get_pg_stat() const = 0;
-  virtual float get_full_ratio() const = 0;
-  virtual float get_nearfull_ratio() const = 0;
-  virtual bool have_creating_pgs() const = 0;
-  virtual bool is_creating_pg(pg_t pgid) const = 0;
+  virtual const ceph::unordered_map<pg_t,pg_stat_t> *get_pg_stat() const {
+    ceph_abort();
+  }
+  virtual float get_full_ratio() const {
+    ceph_abort();
+  }
+  virtual float get_nearfull_ratio() const {
+    ceph_abort();
+  }
+  virtual bool have_creating_pgs() const {
+    ceph_abort();
+  }
+  virtual bool is_creating_pg(pg_t pgid) const {
+    ceph_abort();
+  }
   /**
    * For upgrades. If the PGMap has newer data than the monitor's new
    * creating_pgs (scan_epoch), insert them into the passed pending_creates.
    */
   virtual void maybe_add_creating_pgs(epoch_t scan_epoch,
-				      creating_pgs_t *pending_creates) const = 0;
-  virtual epoch_t get_min_last_epoch_clean() const = 0;
+				      creating_pgs_t *pending_creates) const {
+    ceph_abort();
+  }
+  virtual epoch_t get_min_last_epoch_clean() const {
+    ceph_abort();
+  }
 
-  virtual bool have_full_osds() const = 0;
-  virtual bool have_nearfull_osds() const = 0;
+  virtual bool have_full_osds() const {
+    ceph_abort();
+  }
+  virtual bool have_nearfull_osds() const {
+    ceph_abort();
+  }
 
   virtual size_t get_num_pg_by_osd(int osd) const = 0;
   virtual void print_summary(Formatter *f, ostream *out) const = 0;
@@ -71,7 +89,9 @@ public:
 				 const OSDMap& osdmap,
 				 Formatter *f,
 				 stringstream *ss,
-				 bufferlist *odata) = 0;
+				 bufferlist *odata) {
+    ceph_abort();
+  }
 
   virtual int reweight_by_utilization(const OSDMap &osd_map,
 			      int oload,
@@ -82,7 +102,9 @@ public:
 			      mempool::osdmap::map<int32_t, uint32_t>* new_weights,
 			      std::stringstream *ss,
 			      std::string *out_str,
-			      Formatter *f) = 0;
+				      Formatter *f) {
+    ceph_abort();
+  }
 };
 
 #endif
