@@ -1645,7 +1645,6 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     f->close_section();
 
   if (f) {
-    f->dump_unsigned("version", version);
     f->dump_unsigned("num_pgs", pg_stat.size());
     f->dump_unsigned("num_pools", pg_pool_sum.size());
     f->dump_unsigned("num_objects", pg_sum.stats.sum.num_objects);
@@ -1654,7 +1653,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     f->dump_unsigned("bytes_avail", osd_sum.kb_avail * 1024ull);
     f->dump_unsigned("bytes_total", osd_sum.kb * 1024ull);
   } else {
-    *out << "      pgmap v" << version << ": "
+    *out << "      pgmap "
          << pg_stat.size() << " pgs, " << pg_pool_sum.size() << " pools, "
          << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, "
          << si_t(pg_sum.stats.sum.num_objects) << " objects\n";
@@ -1731,16 +1730,14 @@ void PGMap::print_oneline_summary(Formatter *f, ostream *out) const
 
   string states = ss.str();
   if (out)
-    *out << "v" << version << ": "
-         << pg_stat.size() << " pgs: "
+    *out << num_pg << " pgs: "
          << states << "; "
          << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, "
          << kb_t(osd_sum.kb_used) << " used, "
          << kb_t(osd_sum.kb_avail) << " / "
          << kb_t(osd_sum.kb) << " avail";
   if (f) {
-    f->dump_unsigned("version", version);
-    f->dump_unsigned("num_pgs", pg_stat.size());
+    f->dump_unsigned("num_pgs", num_pg);
     f->dump_unsigned("num_bytes", pg_sum.stats.sum.num_bytes);
     f->dump_unsigned("raw_bytes_used", osd_sum.kb_used << 10);
     f->dump_unsigned("raw_bytes_avail", osd_sum.kb_avail << 10);
