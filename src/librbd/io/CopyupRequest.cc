@@ -35,9 +35,9 @@ class UpdateObjectMap : public C_AsyncObjectThrottle<> {
 public:
   UpdateObjectMap(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
                   uint64_t object_no, const std::vector<uint64_t> *snap_ids,
-                  size_t snap_id_idx)
-    : C_AsyncObjectThrottle(throttle, *image_ctx),
-      m_object_no(object_no), m_snap_ids(*snap_ids), m_snap_id_idx(snap_id_idx)
+                  const ZTracer::Trace &trace, size_t snap_id_idx)
+    : C_AsyncObjectThrottle(throttle, *image_ctx), m_object_no(object_no),
+      m_snap_ids(*snap_ids), m_trace(trace), m_snap_id_idx(snap_id_idx)
   {
   }
 
@@ -49,7 +49,7 @@ public:
       assert(m_image_ctx.exclusive_lock->is_lock_owner());
       assert(m_image_ctx.object_map != nullptr);
       bool sent = m_image_ctx.object_map->aio_update<Context>(
-        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, this);
+        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, m_trace, this);
       return (sent ? 0 : 1);
     }
 
@@ -66,7 +66,7 @@ public:
     }
 
     bool sent = m_image_ctx.object_map->aio_update<Context>(
-      snap_id, m_object_no, state, {}, this);
+      snap_id, m_object_no, state, {}, m_trace, this);
     assert(sent);
     return 0;
   }
@@ -74,6 +74,7 @@ public:
 private:
   uint64_t m_object_no;
   const std::vector<uint64_t> &m_snap_ids;
+  const ZTracer::Trace &m_trace;
   size_t m_snap_id_idx;
 };
 
@@ -335,7 +336,8 @@ bool CopyupRequest::send_object_map_head() {
 
       if (may_update && (new_state != current_state) &&
           m_ictx->object_map->aio_update<CopyupRequest>(
-            CEPH_NOSNAP, m_object_no, new_state, current_state, this)) {
+            CEPH_NOSNAP, m_object_no, new_state, current_state, m_trace,
+            this)) {
         return false;
       }
     }
@@ -357,7 +359,7 @@ bool CopyupRequest::send_object_map() {
     RWLock::RLocker owner_locker(m_ictx->owner_lock);
     AsyncObjectThrottle<>::ContextFactory context_factory(
       boost::lambda::bind(boost::lambda::new_ptr<UpdateObjectMap>(),
-      boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids,
+      boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids, m_trace,
       boost::lambda::_2));
     AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
       NULL, *m_ictx, context_factory, util::create_context_callback(this),
