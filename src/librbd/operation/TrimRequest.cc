@@ -277,7 +277,7 @@ void TrimRequest<I>::send_pre_copyup() {
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_copyup_start, m_copyup_end, OBJECT_PENDING,
-            OBJECT_EXISTS, this)) {
+            OBJECT_EXISTS, {}, this)) {
         return;
       }
     }
@@ -309,7 +309,7 @@ void TrimRequest<I>::send_pre_remove() {
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start, m_num_objects, OBJECT_PENDING,
-            OBJECT_EXISTS, this)) {
+            OBJECT_EXISTS, {}, this)) {
         return;
       }
     }
@@ -337,7 +337,7 @@ void TrimRequest<I>::send_post_copyup() {
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_copyup_start, m_copyup_end, OBJECT_NONEXISTENT,
-            OBJECT_PENDING, this)) {
+            OBJECT_PENDING, {}, this)) {
         return;
       }
     }
@@ -365,7 +365,7 @@ void TrimRequest<I>::send_post_remove() {
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start, m_num_objects, OBJECT_NONEXISTENT,
-            OBJECT_PENDING, this)) {
+            OBJECT_PENDING, {}, this)) {
         return;
       }
     }

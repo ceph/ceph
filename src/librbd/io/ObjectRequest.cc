@@ -489,7 +489,7 @@ void AbstractObjectWriteRequest::send_pre_object_map_update() {
       m_state = LIBRBD_AIO_WRITE_PRE;
 
       if (m_ictx->object_map->aio_update<ObjectRequest>(
-            CEPH_NOSNAP, m_object_no, new_state, {}, this)) {
+            CEPH_NOSNAP, m_object_no, new_state, {}, this->m_trace, this)) {
         return;
       }
     }
@@ -515,7 +515,8 @@ bool AbstractObjectWriteRequest::send_post_object_map_update() {
   m_state = LIBRBD_AIO_WRITE_POST;
 
   if (m_ictx->object_map->aio_update<ObjectRequest>(
-        CEPH_NOSNAP, m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING, this)) {
+        CEPH_NOSNAP, m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING,
+        this->m_trace, this)) {
     return false;
   }
 
