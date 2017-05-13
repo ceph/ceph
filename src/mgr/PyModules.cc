@@ -237,7 +237,7 @@ PyObject *PyModules::get_python(const std::string &what)
       cluster_state.with_pgmap(
           [&osd_map, &f](const PGMap &pg_map) {
         pg_map.dump_fs_stats(nullptr, &f, true);
-        pg_map.dump_pool_stats(osd_map, nullptr, &f, true);
+        pg_map.dump_pool_stats_full(osd_map, nullptr, &f, true);
       });
     });
     return f.get();
