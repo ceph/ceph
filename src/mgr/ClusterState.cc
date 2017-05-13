@@ -117,6 +117,8 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
 void ClusterState::tick(MMonMgrReport *m)
 {
   dout(0) << __func__ << dendl;
-  m->pg_map = pg_map;
+  // FIXME: no easy way to get mon features here.  this will do for
+  // now, though, as long as we don't make a backward-incompat change.
+  pg_map.encode_digest(m->get_data(), CEPH_FEATURES_ALL);
   m->needs_send = true;
 }
