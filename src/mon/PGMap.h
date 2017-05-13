@@ -32,14 +32,159 @@
 
 namespace ceph { class Formatter; }
 
-class PGMap {
+class PGMapDigest {
+public:
+  virtual ~PGMapDigest() {}
+
+  ceph::unordered_map<int32_t,osd_stat_t> osd_stat;
+
+  // aggregate state, populated by PGMap child
+  int64_t num_pg = 0, num_osd = 0;
+  int64_t num_pg_active = 0;
+  ceph::unordered_map<int,pool_stat_t> pg_pool_sum;
+  pool_stat_t pg_sum;
+  osd_stat_t osd_sum;
+  ceph::unordered_map<int,int> num_pg_by_state;
+  struct pg_count {
+    int acting = 0;
+    int up = 0;
+    int primary = 0;
+    void encode(bufferlist& bl) const {
+      ::encode(acting, bl);
+      ::encode(up, bl);
+      ::encode(primary, bl);
+    }
+    void decode(bufferlist::iterator& p) {
+      ::decode(acting, p);
+      ::decode(up, p);
+      ::decode(primary, p);
+    }
+  };
+  ceph::unordered_map<int,pg_count> num_pg_by_osd;
+
+  void print_summary(Formatter *f, ostream *out) const;
+  void print_oneline_summary(Formatter *f, ostream *out) const;
+
+  // recent deltas, and summation
+  /**
+   * keep track of last deltas for each pool, calculated using
+   * @p pg_pool_sum as baseline.
+   */
+  ceph::unordered_map<uint64_t, list< pair<pool_stat_t, utime_t> > > per_pool_sum_deltas;
+  /**
+   * keep track of per-pool timestamp deltas, according to last update on
+   * each pool.
+   */
+  ceph::unordered_map<uint64_t, utime_t> per_pool_sum_deltas_stamps;
+  /**
+   * keep track of sum deltas, per-pool, taking into account any previous
+   * deltas existing in @p per_pool_sum_deltas.  The utime_t as second member
+   * of the pair is the timestamp refering to the last update (i.e., the first
+   * member of the pair) for a given pool.
+   */
+  ceph::unordered_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
+
+  list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
+  pool_stat_t pg_sum_delta;
+  utime_t stamp_delta;
+
+
+  void recovery_summary(Formatter *f, list<string> *psl,
+                        const pool_stat_t& delta_sum) const;
+  void overall_recovery_summary(Formatter *f, list<string> *psl) const;
+  void pool_recovery_summary(Formatter *f, list<string> *psl,
+                             uint64_t poolid) const;
+  void recovery_rate_summary(Formatter *f, ostream *out,
+                             const pool_stat_t& delta_sum,
+                             utime_t delta_stamp) const;
+  void overall_recovery_rate_summary(Formatter *f, ostream *out) const;
+  void pool_recovery_rate_summary(Formatter *f, ostream *out,
+                                  uint64_t poolid) const;
+  /**
+   * Obtain a formatted/plain output for client I/O, source from stats for a
+   * given @p delta_sum pool over a given @p delta_stamp period of time.
+   */
+  void client_io_rate_summary(Formatter *f, ostream *out,
+                              const pool_stat_t& delta_sum,
+                              utime_t delta_stamp) const;
+  /**
+   * Obtain a formatted/plain output for the overall client I/O, which is
+   * calculated resorting to @p pg_sum_delta and @p stamp_delta.
+   */
+  void overall_client_io_rate_summary(Formatter *f, ostream *out) const;
+  /**
+   * Obtain a formatted/plain output for client I/O over a given pool
+   * with id @p pool_id.  We will then obtain pool-specific data
+   * from @p per_pool_sum_delta.
+   */
+  void pool_client_io_rate_summary(Formatter *f, ostream *out,
+                                   uint64_t poolid) const;
+  /**
+   * Obtain a formatted/plain output for cache tier IO, source from stats for a
+   * given @p delta_sum pool over a given @p delta_stamp period of time.
+   */
+  void cache_io_rate_summary(Formatter *f, ostream *out,
+                             const pool_stat_t& delta_sum,
+                             utime_t delta_stamp) const;
+  /**
+   * Obtain a formatted/plain output for the overall cache tier IO, which is
+   * calculated resorting to @p pg_sum_delta and @p stamp_delta.
+   */
+  void overall_cache_io_rate_summary(Formatter *f, ostream *out) const;
+  /**
+   * Obtain a formatted/plain output for cache tier IO over a given pool
+   * with id @p pool_id.  We will then obtain pool-specific data
+   * from @p per_pool_sum_delta.
+   */
+  void pool_cache_io_rate_summary(Formatter *f, ostream *out,
+                                  uint64_t poolid) const;
+
+  void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss, Formatter *f,
+      bool verbose) const;
+  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
+  static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
+			    const object_stat_sum_t &sum,
+			    uint64_t avail,
+			    float raw_used_rate,
+			    bool verbose, const pg_pool_t *pool);
+
+  size_t get_num_pg_by_osd(int osd) const {
+    auto p = num_pg_by_osd.find(osd);
+    if (p == num_pg_by_osd.end())
+      return 0;
+    else
+      return p->second.acting;
+  }
+  int get_num_primary_pg_by_osd(int osd) const {
+    auto p = num_pg_by_osd.find(osd);
+    if (p == num_pg_by_osd.end())
+      return 0;
+    else
+      return p->second.primary;
+  }
+
+  int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
+
+  // kill me post-luminous:
+  virtual float get_fallback_full_ratio() const {
+    return .95;
+  }
+
+  void encode(bufferlist& bl, uint64_t features) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<PGMapDigest*>& ls);
+};
+WRITE_CLASS_ENCODER(PGMapDigest::pg_count);
+WRITE_CLASS_ENCODER_FEATURES(PGMapDigest);
+
+class PGMap : public PGMapDigest {
 public:
   // the map
   version_t version;
   epoch_t last_osdmap_epoch;   // last osdmap epoch i applied to the pgmap
   epoch_t last_pg_scan;  // osdmap epoch
   ceph::unordered_map<pg_t,pg_stat_t> pg_stat;
-  ceph::unordered_map<int32_t,osd_stat_t> osd_stat;
   set<int32_t> full_osds;
   set<int32_t> nearfull_osds;
   float full_ratio;
@@ -117,41 +262,11 @@ public:
 
 
   // aggregate stats (soft state), generated by calc_stats()
-  ceph::unordered_map<int,int> num_pg_by_state;
-  int64_t num_pg = 0, num_osd = 0;
-  int64_t num_pg_active = 0;
-  ceph::unordered_map<int,pool_stat_t> pg_pool_sum;
-  pool_stat_t pg_sum;
-  osd_stat_t osd_sum;
   mutable epoch_t min_last_epoch_clean = 0;
-  ceph::unordered_map<int,int> blocked_by_sum;
   ceph::unordered_map<int,set<pg_t> > pg_by_osd;
-  ceph::unordered_map<int,int> num_primary_pg_by_osd;
+  ceph::unordered_map<int,int> blocked_by_sum;
 
   utime_t stamp;
-
-  // recent deltas, and summation
-  /**
-   * keep track of last deltas for each pool, calculated using
-   * @p pg_pool_sum as baseline.
-   */
-  ceph::unordered_map<uint64_t, list< pair<pool_stat_t, utime_t> > > per_pool_sum_deltas;
-  /**
-   * keep track of per-pool timestamp deltas, according to last update on
-   * each pool.
-   */
-  ceph::unordered_map<uint64_t, utime_t> per_pool_sum_deltas_stamps;
-  /**
-   * keep track of sum deltas, per-pool, taking into account any previous
-   * deltas existing in @p per_pool_sum_deltas.  The utime_t as second member
-   * of the pair is the timestamp refering to the last update (i.e., the first
-   * member of the pair) for a given pool.
-   */
-  ceph::unordered_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
-
-  list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
-  pool_stat_t pg_sum_delta;
-  utime_t stamp_delta;
 
   void update_global_delta(CephContext *cct,
                            const utime_t ts, const pool_stat_t& pg_sum_old);
@@ -183,8 +298,6 @@ public:
                              const pool_stat_t& old_pool_sum);
 
   epoch_t calc_min_last_epoch_clean() const;
-
-  int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
 
  public:
 
@@ -237,14 +350,6 @@ public:
     stamp = s;
   }
 
-  size_t get_num_pg_by_osd(int osd) const {
-    ceph::unordered_map<int,set<pg_t> >::const_iterator p = pg_by_osd.find(osd);
-    if (p == pg_by_osd.end())
-      return 0;
-    else
-      return p->second.size();
-  }
-
   pool_stat_t get_pg_pool_sum_stat(int64_t pool) const {
     ceph::unordered_map<int,pool_stat_t>::const_iterator p =
       pg_pool_sum.find(pool);
@@ -253,14 +358,6 @@ public:
     return pool_stat_t();
   }
 
-  int get_num_primary_pg_by_osd(int osd) const {
-    assert(osd >= 0);
-    int num = 0;
-    auto it = num_primary_pg_by_osd.find(osd);
-    if (it != num_primary_pg_by_osd.end())
-      num = it->second;
-    return num;
-  }
 
   void update_pg(pg_t pgid, bufferlist& bl);
   void remove_pg(pg_t pgid);
@@ -282,15 +379,12 @@ public:
   void encode(bufferlist &bl, uint64_t features=-1) const;
   void decode(bufferlist::iterator &bl);
 
+  /// encode subset of our data to a PGMapDigest
+  void encode_digest(bufferlist& bl, uint64_t features) const;
+
+  void dirty_all(Incremental& inc);
+
   void dump(Formatter *f) const; 
-  void dump_pool_stats(const OSDMap &osd_map, stringstream *ss, Formatter *f,
-      bool verbose) const;
-  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
-  static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
-			    const object_stat_sum_t &sum,
-			    uint64_t avail,
-			    float raw_used_rate,
-			    bool verbose, const pg_pool_t *pool);
   void dump_basic(Formatter *f) const;
   void dump_pg_stats(Formatter *f, bool brief) const;
   void dump_pool_stats(Formatter *f) const;
@@ -327,63 +421,18 @@ public:
 
   void get_filtered_pg_stats(uint32_t state, int64_t poolid, int64_t osdid,
                              bool primary, set<pg_t>& pgs) const;
-  void recovery_summary(Formatter *f, list<string> *psl,
-                        const pool_stat_t& delta_sum) const;
-  void overall_recovery_summary(Formatter *f, list<string> *psl) const;
-  void pool_recovery_summary(Formatter *f, list<string> *psl,
-                             uint64_t poolid) const;
-  void recovery_rate_summary(Formatter *f, ostream *out,
-                             const pool_stat_t& delta_sum,
-                             utime_t delta_stamp) const;
-  void overall_recovery_rate_summary(Formatter *f, ostream *out) const;
-  void pool_recovery_rate_summary(Formatter *f, ostream *out,
-                                  uint64_t poolid) const;
-  /**
-   * Obtain a formatted/plain output for client I/O, source from stats for a
-   * given @p delta_sum pool over a given @p delta_stamp period of time.
-   */
-  void client_io_rate_summary(Formatter *f, ostream *out,
-                              const pool_stat_t& delta_sum,
-                              utime_t delta_stamp) const;
-  /**
-   * Obtain a formatted/plain output for the overall client I/O, which is
-   * calculated resorting to @p pg_sum_delta and @p stamp_delta.
-   */
-  void overall_client_io_rate_summary(Formatter *f, ostream *out) const;
-  /**
-   * Obtain a formatted/plain output for client I/O over a given pool
-   * with id @p pool_id.  We will then obtain pool-specific data
-   * from @p per_pool_sum_delta.
-   */
-  void pool_client_io_rate_summary(Formatter *f, ostream *out,
-                                   uint64_t poolid) const;
-  /**
-   * Obtain a formatted/plain output for cache tier IO, source from stats for a
-   * given @p delta_sum pool over a given @p delta_stamp period of time.
-   */
-  void cache_io_rate_summary(Formatter *f, ostream *out,
-                             const pool_stat_t& delta_sum,
-                             utime_t delta_stamp) const;
-  /**
-   * Obtain a formatted/plain output for the overall cache tier IO, which is
-   * calculated resorting to @p pg_sum_delta and @p stamp_delta.
-   */
-  void overall_cache_io_rate_summary(Formatter *f, ostream *out) const;
-  /**
-   * Obtain a formatted/plain output for cache tier IO over a given pool
-   * with id @p pool_id.  We will then obtain pool-specific data
-   * from @p per_pool_sum_delta.
-   */
-  void pool_cache_io_rate_summary(Formatter *f, ostream *out,
-                                  uint64_t poolid) const;
-
-  void print_summary(Formatter *f, ostream *out) const;
-  void print_oneline_summary(Formatter *f, ostream *out) const;
 
   epoch_t get_min_last_epoch_clean() const {
     if (!min_last_epoch_clean)
       min_last_epoch_clean = calc_min_last_epoch_clean();
     return min_last_epoch_clean;
+  }
+
+  float get_fallback_full_ratio() const override {
+    if (full_ratio > 0) {
+      return full_ratio;
+    }
+    return .95;
   }
 
   static void generate_test_instances(list<PGMap*>& o);

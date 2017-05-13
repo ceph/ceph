@@ -1741,7 +1741,7 @@ public:
   }
   void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
 		       bool verbose) const {
-    parent.dump_pool_stats(osdm, ss, f, verbose);
+    parent.dump_pool_stats_full(osdm, ss, f, verbose);
   }
 
   int process_pg_command(const string& prefix,
