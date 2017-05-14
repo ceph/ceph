@@ -319,12 +319,23 @@ TEST(Crc32c, zeros_performance_compare) {
 
     pre_start = ceph_clock_now();
     start = ceph_clock_now();
+#ifdef HAVE_POWER8
+    uint32_t crc_b = ceph_crc32c_zeros(111, size);
+#else
     uint32_t crc_b = ceph_crc32c_func(111, nullptr, size);
+#endif
     end = ceph_clock_now();
     time_adjusted = (end - start) - (start - pre_start);
+#ifdef HAVE_POWER8
+    std::cout << "ceph_crc32c_zeros method. size=" << size << " time=" 
+        << (double)(end-start) << " at " << (double)size/(1024*1024)/(time_adjusted) 
+        << " MB/sec" << " error=" << resolution / time_adjusted * 100 << "%" 
+        << std::endl;
+#else
     std::cout << "fallback method. size=" << size << " time=" << (double)(end-start)
         << " at " << (double)size/(1024*1024)/(time_adjusted) << " MB/sec"
         << " error=" << resolution / time_adjusted * 100 << "%" << std::endl;
+#endif
     EXPECT_EQ(crc_a, crc_b);
   }
 }
@@ -336,10 +347,12 @@ TEST(Crc32c, zeros_performance) {
 
   start = ceph_clock_now();
   for (size_t i=0; i<ITER; i++)
-  for (size_t scale=1; scale < 31; scale++)
   {
-    size_t size = (1<<scale) + rand() % (1<<scale);
-    ceph_crc32c(rand(), nullptr, size);
+    for (size_t scale=1; scale < 31; scale++)
+    {
+      size_t size = (1<<scale) + rand() % (1<<scale);
+      ceph_crc32c(rand(), nullptr, size);
+    }
   }
   end = ceph_clock_now();
   std::cout << "iterations="<< ITER*31 << " time=" << (double)(end-start) << std::endl;
