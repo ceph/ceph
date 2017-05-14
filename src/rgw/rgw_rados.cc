@@ -9951,7 +9951,6 @@ int RGWRados::Bucket::UpdateIndex::cancel()
     return store->cls_obj_complete_cancel(*bs, optag, obj, bilog_flags);
   });
 
-
   /*
    * need to update data log anyhow, so that whoever follows needs to update its internal markers
    * for following the specific bucket shard log. Otherwise they end up staying behind, and users
@@ -10798,6 +10797,14 @@ int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjStat
 {
   rgw_rados_ref ref;
   int r = get_obj_head_ref(bucket_info, obj_instance, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  /* handle on going bucket resharding */
+  BucketIndexLockGuard guard(this, bucket_info.bucket.bucket_id, bucket_info.bucket.oid,
+			     reshard_pool_ctx);
+  r = reshard->block_while_resharding(bucket_info.bucket.oid, guard);
   if (r < 0) {
     return r;
   }
