@@ -397,6 +397,7 @@ int FileJournal::open(uint64_t fs_op_seq)
 {
   dout(2) << "open " << fn << " fsid " << fsid << " fs_op_seq " << fs_op_seq << dendl;
 
+  uint64_t seq;
   uint64_t next_seq = fs_op_seq + 1;
 
   int err = _open(false);
@@ -409,8 +410,10 @@ int FileJournal::open(uint64_t fs_op_seq)
 
   // read header?
   err = read_header(&header);
-  if (err < 0)
+  if (err < 0) {
+    close();
     return err;
+  }
 
   // static zeroed buffer for alignment padding
   delete [] zero_buf;
@@ -423,32 +426,32 @@ int FileJournal::open(uint64_t fs_op_seq)
   if (header.fsid != fsid) {
     derr << "FileJournal::open: ondisk fsid " << header.fsid << " doesn't match expected " << fsid
          << ", invalid (someone else's?) journal" << dendl;
-    return -EINVAL;
+    goto out;
   }
   if (header.max_size > max_size) {
     dout(2) << "open journal size " << header.max_size << " > current " << max_size << dendl;
-    return -EINVAL;
+    goto out;
   }
   if (header.block_size != block_size) {
     dout(2) << "open journal block size " << header.block_size << " != current " << block_size << dendl;
-    return -EINVAL;
+    goto out;
   }
   if (header.max_size % header.block_size) {
     dout(2) << "open journal max size " << header.max_size
 	    << " not a multiple of block size " << header.block_size << dendl;
-    return -EINVAL;
+    goto out;
   }
   if (header.alignment != block_size && directio) {
     dout(0) << "open journal alignment " << header.alignment << " does not match block size "
 	    << block_size << " (required for direct_io journal mode)" << dendl;
-    return -EINVAL;
+    goto out;
   }
   if ((header.alignment % CEPH_DIRECTIO_ALIGNMENT) && directio) {
     dout(0) << "open journal alignment " << header.alignment
 	    << " is not multiple of minimum directio alignment "
 	    << CEPH_DIRECTIO_ALIGNMENT << " (required for direct_io journal mode)"
 	    << dendl;
-    return -EINVAL;
+    goto out;
   }
 
   // looks like a valid header.
@@ -458,7 +461,7 @@ int FileJournal::open(uint64_t fs_op_seq)
 
   // find next entry
   read_pos = header.start;
-  uint64_t seq = header.start_seq;
+  seq = header.start_seq;
 
   // last_committed_seq is 1 before the start of the journal or
   // 0 if the start is 0
@@ -493,6 +496,10 @@ int FileJournal::open(uint64_t fs_op_seq)
   }
 
   return 0;
+
+out:
+  close();
+  return -EINVAL;
 }
 
 void FileJournal::_close(int fd) const
