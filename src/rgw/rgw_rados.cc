@@ -10801,14 +10801,6 @@ int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjStat
     return r;
   }
 
-  /* handle on going bucket resharding */
-  BucketIndexLockGuard guard(this, bucket_info.bucket.bucket_id, bucket_info.bucket.oid,
-			     reshard_pool_ctx);
-  r = reshard->block_while_resharding(bucket_info.bucket.oid, guard);
-  if (r < 0) {
-    return r;
-  }
-
   BucketShard bs(this);
 
   cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), obj_instance.key.instance);
