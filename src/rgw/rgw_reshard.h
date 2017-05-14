@@ -22,6 +22,7 @@ class BucketIndexLockGuard
    string oid;
    librados::IoCtx io_ctx;
    bool locked;
+
 public:
   BucketIndexLockGuard(CephContext* cct, RGWRados* store, const string& bucket_instance_id,
 		                         const string& oid, const librados::IoCtx& io_ctx);
@@ -71,9 +72,32 @@ class RGWReshard {
     string lock_name;
     int max_jobs;
     rados::cls::lock::Lock instance_lock;
+    int num_shards;
 
     int lock_bucket_index_shared(const string& oid);
     int unlock_bucket_index(const string& oid);
+    void get_shard(int shard_num, string& shard);
+protected:
+  class ReshardWorker : public Thread {
+    CephContext *cct;
+    RGWReshard *reshard;
+    Mutex lock;
+    Cond cond;
+
+  public:
+    ReshardWorker(CephContext * const _cct,
+		              RGWReshard * const _reshard)
+      : cct(_cct),
+        reshard(_reshard),
+        lock("ReshardWorker") {
+    }
+
+    void *entry() override;
+    void stop();
+  };
+
+  ReshardWorker *worker;
+  std::atomic<bool> down_flag = { false };
 
   public:
     RGWReshard(RGWRados* _store);
@@ -83,6 +107,12 @@ class RGWReshard {
     int list(string& marker, uint32_t max, list<cls_rgw_reshard_entry>& entries, bool& is_truncated);
     int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
     int block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id);
+    /* reshard thread */
+    int process_single_shard(const std::string& shard);
+    int inspect_all_shards();
+    bool going_down();
+    void start_processor();
+    void stop_processor();
 };
 
 #endif
