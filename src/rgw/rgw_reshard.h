@@ -16,7 +16,6 @@ class RGWRados;
 /* gets a locked lock , release it when exiting context */
 class BucketIndexLockGuard
 {
-   CephContext *cct;
    RGWRados *store;
    rados::cls::lock::Lock l;
    string oid;
@@ -24,7 +23,7 @@ class BucketIndexLockGuard
    bool locked;
 
 public:
-  BucketIndexLockGuard(CephContext* cct, RGWRados* store, const string& bucket_instance_id,
+  BucketIndexLockGuard(RGWRados* store, const string& bucket_instance_id,
 		                         const string& oid, const librados::IoCtx& io_ctx);
   /* unlocks the lock */
   ~BucketIndexLockGuard();

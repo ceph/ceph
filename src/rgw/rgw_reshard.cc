@@ -481,7 +481,6 @@ RGWReshard::RGWReshard(RGWRados* _store): store(_store), instance_lock(bucket_in
   max_jobs = store->ctx()->_conf->rgw_reshard_max_jobs;
 }
 
-
 int RGWReshard::add(cls_rgw_reshard_entry& entry)
 {
   rados::cls::lock::Lock l(reshard_lock_name);
@@ -755,9 +754,9 @@ void RGWReshard::ReshardWorker::stop()
   cond.Signal();
 }
 
-BucketIndexLockGuard::BucketIndexLockGuard(CephContext* _cct, RGWRados* _store,
+BucketIndexLockGuard::BucketIndexLockGuard(RGWRados* _store,
 					   const string& bucket_instance_id, const string& _oid, const librados::IoCtx& _io_ctx) :
-  cct(_cct),store(_store),
+  store(_store),
   l(create_bucket_index_lock_name(bucket_instance_id)),
   oid(_oid), io_ctx(_io_ctx),locked(false)
 {
@@ -768,7 +767,7 @@ int BucketIndexLockGuard::lock()
   if (!locked) {
     int ret = l.lock_shared(&store->reshard_pool_ctx, oid);
     if (ret == -EBUSY) {
-      ldout(cct,0) << "RGWReshardLog::add failed to acquire lock on " << oid << dendl;
+      ldout(store->ctx(), 0) << "RGWReshardLog::add failed to acquire lock on " << oid << dendl;
       return 0;
     }
     if (ret < 0) {
@@ -777,7 +776,7 @@ int BucketIndexLockGuard::lock()
     locked = true;
     return ret;
   } else {
-    ldout(cct,0) << " % alread lock" << oid << dendl;
+    ldout(store->ctx(), 0) << " % alread lock" << oid << dendl;
     return -EBUSY;
   }
 }
@@ -787,7 +786,7 @@ int BucketIndexLockGuard::unlock()
   if (locked) {
     int ret = l.unlock(&io_ctx, oid);
     if (ret <0) {
-      ldout(cct, 0) << "failed to unlock " << oid << dendl;
+      ldout(store->ctx(), 0) << "failed to unlock " << oid << dendl;
     } else {
       locked = false;
     }
