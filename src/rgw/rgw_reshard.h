@@ -8,6 +8,7 @@
 #include "include/rados/librados.hpp"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/lock/cls_lock_client.h"
+#include "rgw_bucket.h"
 
 class CephContext;
 class RGWRados;
@@ -106,6 +107,16 @@ protected:
     int list(string& marker, uint32_t max, list<cls_rgw_reshard_entry>& entries, bool& is_truncated);
     int clear_bucket_resharding(const string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
     int block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id);
+
+    int reshard_bucket(Formatter *formatter,
+		       int num_shards,
+		       rgw_bucket& bucket,
+		       RGWBucketInfo& bucket_info,
+		       RGWBucketInfo& new_bucket_info,
+		       int max_entries,
+		       RGWBucketAdminOpState& bucket_op,
+		       bool verbose = false);
+
     /* reshard thread */
     int process_single_shard(const std::string& shard);
     int inspect_all_shards();
