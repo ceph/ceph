@@ -2264,6 +2264,35 @@ int check_reshard_bucket_params(RGWRados *store,
   return 0;
 }
 
+int create_new_bucket_instance(RGWRados *store,
+			       int new_num_shards,
+			       const RGWBucketInfo& bucket_info,
+			       map<string, bufferlist>& attrs,
+			       RGWBucketInfo& new_bucket_info)
+{
+
+  store->create_bucket_id(&new_bucket_info.bucket.bucket_id);
+  new_bucket_info.bucket.oid.clear();
+
+  new_bucket_info.num_shards = new_num_shards;
+  new_bucket_info.objv_tracker.clear();
+
+  int ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
+  if (ret < 0) {
+    cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  ret = store->put_bucket_instance_info(new_bucket_info, true, real_time(), &attrs);
+  if (ret < 0) {
+    cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  return 0;
+}
+
+
 #ifdef BUILDING_FOR_EMBEDDED
 extern "C" int cephd_rgw_admin(int argc, const char **argv)
 #else
@@ -5707,8 +5736,9 @@ next:
       return ret;
     }
 
-    ret = reshard_bucket(store, formatter, entry.new_num_shards, bucket, bucket_info, new_bucket_info,
-			 max_entries, bucket_op, verbose);
+    ret = reshard.reshard_bucket(formatter, entry.new_num_shards, bucket, bucket_info, new_bucket_info,
+				 max_entries, bucket_op, verbose);
+    formatter->flush(cout);
     if (ret < 0) {
       return ret;
     }
