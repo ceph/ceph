@@ -235,7 +235,7 @@ public:
   /// dump all config values to a formatter
   void show_config(Formatter *f);
 
-  /// obtain a diff between our config values and another md_config_t values 
+  /// obtain a diff between our config values and another md_config_t values
   void diff(const md_config_t *other,
             map<string,pair<string,string> > *diff, set<string> *unknown);
 
