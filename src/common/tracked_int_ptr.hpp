@@ -15,12 +15,6 @@
 #ifndef CEPH_TRACKEDINTPTR_H
 #define CEPH_TRACKEDINTPTR_H
 
-#include <map>
-#include <list>
-#include <memory>
-#include <utility>
-#include "common/Mutex.h"
-#include "common/Cond.h"
 
 template <class T>
 class TrackedIntPtr {

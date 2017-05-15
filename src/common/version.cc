@@ -16,7 +16,6 @@
 #include "common/version.h"
 
 #include <sstream>
-#include <string>
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
