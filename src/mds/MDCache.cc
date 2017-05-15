@@ -6806,9 +6806,7 @@ void MDCache::trim_non_auth()
        ++p) 
     p->first->get(CDir::PIN_SUBTREETEMP);
 
-  // note first auth item we see.  
-  // when we see it the second time, stop.
-  CDentry *first_auth = 0;
+  list<CDentry*> auth_list;
   
   // trim non-auth items from the lru
   for (;;) {
@@ -6824,20 +6822,10 @@ void MDCache::trim_non_auth()
 
     if (dn->is_auth()) {
       // add back into lru (at the top)
-      if (dn->state_test(CDentry::STATE_BOTTOMLRU))
-	bottom_lru.lru_insert_mid(dn);
-      else
-	lru.lru_insert_top(dn);
+      auth_list.push_back(dn);
 
       if (dnl->is_remote() && dnl->get_inode() && !dnl->get_inode()->is_auth())
 	dn->unlink_remote(dnl);
-
-      if (!first_auth) {
-	first_auth = dn;
-      } else {
-	if (first_auth == dn) 
-	  break;
-      }
     } else {
       // non-auth.  expire.
       CDir *dir = dn->get_dir();
@@ -6873,6 +6861,13 @@ void MDCache::trim_non_auth()
       if (!dir->is_subtree_root() && dir->get_num_any() == 0)
 	dir->inode->close_dirfrag(dir->get_frag());
     }
+  }
+
+  for (auto dn : auth_list) {
+      if (dn->state_test(CDentry::STATE_BOTTOMLRU))
+	bottom_lru.lru_insert_mid(dn);
+      else
+	lru.lru_insert_top(dn);
   }
 
   // move everything in the pintail to the top bit of the lru.
