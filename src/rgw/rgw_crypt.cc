@@ -9,7 +9,7 @@
 #include <rgw/rgw_b64.h>
 #include <rgw/rgw_rest_s3.h>
 #include "include/assert.h"
-#include <boost/utility/string_ref.hpp>
+#include <boost/utility/string_view.hpp>
 #include <rgw/rgw_keystone.h>
 #include "include/str_map.h"
 #include "crypto/crypto_accel.h"
@@ -923,8 +923,8 @@ static int get_barbican_url(CephContext * const cct,
 }
 
 static int request_key_from_barbican(CephContext *cct,
-                              boost::string_ref key_id,
-                              boost::string_ref key_selector,
+                              boost::string_view key_id,
+                              boost::string_view key_selector,
                               const std::string& barbican_token,
                               std::string& actual_key) {
   std::string secret_url;
@@ -967,8 +967,8 @@ static map<string,string> get_str_map(const string &str) {
 }
 
 static int get_actual_key_from_kms(CephContext *cct,
-                            boost::string_ref key_id,
-                            boost::string_ref key_selector,
+                            boost::string_view key_id,
+                            boost::string_view key_selector,
                             std::string& actual_key)
 {
   int res = 0;
@@ -1012,7 +1012,7 @@ static int get_actual_key_from_kms(CephContext *cct,
 
 static inline void set_attr(map<string, bufferlist>& attrs,
                             const char* key,
-                            boost::string_ref value)
+                            boost::string_view value)
 {
   bufferlist bl;
   bl.append(value.data(), value.size());
@@ -1051,7 +1051,7 @@ static const crypt_option_names crypt_options[] = {
     {"HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID",      "x-amz-server-side-encryption-aws-kms-key-id"},
 };
 
-static boost::string_ref get_crypt_attribute(
+static boost::string_view get_crypt_attribute(
     RGWEnv* env,
     std::map<std::string,
              RGWPostObj_ObjStore::post_form_part,
@@ -1065,16 +1065,16 @@ static boost::string_ref get_crypt_attribute(
     auto iter
       = parts->find(crypt_options[option].post_part_name);
     if (iter == parts->end())
-      return boost::string_ref();
+      return boost::string_view();
     bufferlist& data = iter->second.data;
-    boost::string_ref str = boost::string_ref(data.c_str(), data.length());
+    boost::string_view str = boost::string_view(data.c_str(), data.length());
     return rgw_trim_whitespace(str);
   } else {
     const char* hdr = env->get(crypt_options[option].http_header_name, nullptr);
     if (hdr != nullptr) {
-      return boost::string_ref(hdr);
+      return boost::string_view(hdr);
     } else {
-      return boost::string_ref();
+      return boost::string_view();
     }
   }
 }
@@ -1091,7 +1091,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
   int res = 0;
   crypt_http_responses.clear();
   {
-    boost::string_ref req_sse_ca =
+    boost::string_view req_sse_ca =
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM);
     if (! req_sse_ca.empty()) {
       if (req_sse_ca != "AES256") {
@@ -1106,7 +1106,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       if (key_bin.size() != AES_256_CBC::AES_256_KEYSIZE) {
         return -ERR_INVALID_REQUEST;
       }
-      boost::string_ref keymd5 =
+      boost::string_view keymd5 =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5);
       std::string keymd5_bin = from_base64(keymd5);
       if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
@@ -1135,7 +1135,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       return 0;
     }
     /* AMAZON server side encryption with KMS (key management service) */
-    boost::string_ref req_sse =
+    boost::string_view req_sse =
         get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION);
     if (! req_sse.empty()) {
       if (req_sse != "aws:kms") {
@@ -1145,7 +1145,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
           !s->info.env->exists("SERVER_PORT_SECURE")) {
         return -ERR_INVALID_REQUEST;
       }
-      boost::string_ref key_id =
+      boost::string_view key_id =
           get_crypt_attribute(s->info.env, parts, X_AMZ_SERVER_SIDE_ENCRYPTION_AWS_KMS_KEY_ID);
       if (key_id.empty()) {
         return -ERR_INVALID_ACCESS_KEY;

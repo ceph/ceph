@@ -8,6 +8,8 @@
 
 #include <mutex>
 
+#include <boost/utility/string_view.hpp>
+
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_http_errors.h"
@@ -664,8 +666,8 @@ public:
   public:
     virtual ~VersionAbstractor() {};
 
-    using access_key_id_t = std::string;
-    using signature_t = std::string;
+    using access_key_id_t = boost::string_view;
+    using signature_t = boost::string_view;
     using string_to_sign_t = std::string;
 
     /* Transformation for crafting the AWS signature at server side which is
@@ -707,8 +709,8 @@ protected:
   /* TODO(rzarzynski): clean up. We've too many input parameter hee. Also
    * the signature get_auth_data() of VersionAbstractor is too complicated.
    * Replace these thing with a simple, dedicated structure. */
-  virtual result_t authenticate(const std::string& access_key_id,
-                                const std::string& signature,
+  virtual result_t authenticate(const boost::string_view& access_key_id,
+                                const boost::string_view& signature,
                                 const std::string& string_to_sign,
                                 const signature_factory_t& signature_factory,
                                 const completer_factory_t& completer_factory,
@@ -716,8 +718,8 @@ protected:
 
 public:
   result_t authenticate(const req_state* const s) const final {
-    std::string access_key_id;
-    std::string signature;
+    boost::string_view access_key_id;
+    boost::string_view signature;
     std::string string_to_sign;
 
     VersionAbstractor::signature_factory_t signature_factory;
@@ -818,8 +820,8 @@ protected:
   acl_strategy_t get_acl_strategy() const;
   auth_info_t get_creds_info(const rgw::RGWToken& token) const noexcept;
 
-  result_t authenticate(const std::string& access_key_id,
-                        const std::string& signature,
+  result_t authenticate(const boost::string_view& access_key_id,
+                        const boost::string_view& signature,
                         const std::string& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,
@@ -847,8 +849,8 @@ class LocalEngine : public AWSEngine {
   RGWRados* const store;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
-  result_t authenticate(const std::string& access_key_id,
-                        const std::string& signature,
+  result_t authenticate(const boost::string_view& access_key_id,
+                        const boost::string_view& signature,
                         const std::string& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,

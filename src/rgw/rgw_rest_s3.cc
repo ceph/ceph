@@ -3567,7 +3567,7 @@ AWSGeneralAbstractor::get_auth_data(const req_state* const s) const
 }
 
 static inline
-std::string v4_signature(const std::string& credential_scope,
+std::string v4_signature(const boost::string_view& credential_scope,
 
                          CephContext* const cct,
                          const boost::string_view& secret_key,
@@ -3592,12 +3592,12 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                        /* FIXME: const. */
                                        bool using_qs) const
 {
-  std::string access_key_id;
-  std::string signed_hdrs;
+  boost::string_view access_key_id;
+  boost::string_view signed_hdrs;
 
-  std::string date;
-  std::string credential_scope;
-  std::string client_signature;
+  boost::string_view date;
+  boost::string_view credential_scope;
+  boost::string_view client_signature;
 
   int ret = rgw::auth::s3::parse_credentials(s->info,
                                              access_key_id,
@@ -3637,7 +3637,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                          std::move(canonical_uri),
                                          std::move(canonical_qs),
                                          std::move(*canonical_headers),
-                                         std::move(signed_hdrs),
+                                         signed_hdrs,
                                          exp_payload_hash);
 
   auto string_to_sign = \
@@ -3666,8 +3666,8 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
    * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
    * by default. We don't need to change that. */
   if (is_v4_payload_unsigned(exp_payload_hash) || is_v4_payload_empty(s)) {
-    return std::make_tuple(std::move(access_key_id),
-                           std::move(client_signature),
+    return std::make_tuple(access_key_id,
+                           client_signature,
                            std::move(string_to_sign),
                            sig_factory,
                            null_completer_factory);
@@ -3703,8 +3703,8 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       const auto cmpl_factory = std::bind(AWSv4ComplSingle::create,
                                           s,
                                           std::placeholders::_1);
-      return std::make_tuple(std::move(access_key_id),
-                             std::move(client_signature),
+      return std::make_tuple(access_key_id,
+                             client_signature,
                              std::move(string_to_sign),
                              sig_factory,
                              cmpl_factory);
@@ -3739,12 +3739,12 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
        * for CanonReq. */
       const auto cmpl_factory = std::bind(AWSv4ComplMulti::create,
                                           s,
-                                          std::move(date),
-                                          std::move(credential_scope),
+                                          date,
+                                          credential_scope,
                                           client_signature,
                                           std::placeholders::_1);
-      return std::make_tuple(std::move(access_key_id),
-                             std::move(client_signature),
+      return std::make_tuple(access_key_id,
+                             client_signature,
                              std::move(string_to_sign),
                              sig_factory,
                              cmpl_factory);
@@ -3760,8 +3760,8 @@ std::tuple<AWSVerAbstractor::access_key_id_t,
            AWSVerAbstractor::completer_factory_t>
 AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
 {
-  std::string access_key_id;
-  std::string signature;
+  boost::string_view access_key_id;
+  boost::string_view signature;
   bool qsr = false;
 
   const char* http_auth = s->info.env->get("HTTP_AUTHORIZATION");
@@ -3772,9 +3772,11 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     signature = s->info.args.get("Signature");
     qsr = true;
 
-    std::string expires = s->info.args.get("Expires");
+    boost::string_view expires = s->info.args.get("Expires");
     if (! expires.empty()) {
-      const time_t exp = atoll(expires.c_str());
+      /* It looks we have the guarantee that expires is a null-terminated,
+       * and thus string_view::data() can be safely used. */
+      const time_t exp = atoll(expires.data());
       time_t now;
       time(&now);
 
@@ -3784,9 +3786,9 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     }
   } else {
     /* The "Authorization" HTTP header is being used. */
-    const std::string auth_str(http_auth + strlen("AWS "));
+    const boost::string_view auth_str(http_auth + strlen("AWS "));
     const size_t pos = auth_str.rfind(':');
-    if (pos != std::string::npos) {
+    if (pos != boost::string_view::npos) {
       access_key_id = auth_str.substr(0, pos);
       signature = auth_str.substr(pos + 1);
     }
@@ -3838,15 +3840,15 @@ std::tuple<AWSVerAbstractor::access_key_id_t,
            AWSVerAbstractor::completer_factory_t>
 AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
 {
-  const std::string& credential = s->auth.s3_postobj_creds.x_amz_credential;
+  const boost::string_view credential = s->auth.s3_postobj_creds.x_amz_credential;
 
   /* grab access key id */
   const size_t pos = credential.find("/");
-  const std::string access_key_id = credential.substr(0, pos);
+  const boost::string_view access_key_id = credential.substr(0, pos);
   dout(10) << "access key id = " << access_key_id << dendl;
 
   /* grab credential scope */
-  const std::string credential_scope = credential.substr(pos + 1);
+  const boost::string_view credential_scope = credential.substr(pos + 1);
   dout(10) << "credential scope = " << credential_scope << dendl;
 
   const auto sig_factory = std::bind(v4_signature,
@@ -3934,8 +3936,8 @@ rgw::auth::s3::LDAPEngine::get_creds_info(const rgw::RGWToken& token) const noex
 
 rgw::auth::Engine::result_t
 rgw::auth::s3::LDAPEngine::authenticate(
-  const std::string& access_key_id,
-  const std::string& signature,
+  const boost::string_view& access_key_id,
+  const boost::string_view& signature,
   const std::string& string_to_sign,
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,
@@ -3978,8 +3980,8 @@ rgw::auth::s3::LDAPEngine::authenticate(
 /* LocalEndgine */
 rgw::auth::Engine::result_t
 rgw::auth::s3::LocalEngine::authenticate(
-  const std::string& access_key_id,
-  const std::string& signature,
+  const boost::string_view& _access_key_id,
+  const boost::string_view& signature,
   const std::string& string_to_sign,
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,
@@ -3987,6 +3989,8 @@ rgw::auth::s3::LocalEngine::authenticate(
 {
   /* get the user info */
   RGWUserInfo user_info;
+  /* TODO(rzarzynski): we need to have string-view taking variant. */
+  const std::string access_key_id = _access_key_id.to_string();
   if (rgw_get_user_info_by_access_key(store, access_key_id, user_info) < 0) {
       ldout(cct, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
