@@ -1638,10 +1638,15 @@ void BlueStore::SharedBlob::get_ref(uint64_t offset, uint32_t length)
 }
 
 void BlueStore::SharedBlob::put_ref(uint64_t offset, uint32_t length,
-  PExtentVector *r)
+				    PExtentVector *r,
+				    set<SharedBlob*> *maybe_unshared)
 {
   assert(persistent);
-  persistent->ref_map.put(offset, length, r);
+  bool maybe = false;
+  persistent->ref_map.put(offset, length, r, maybe_unshared ? &maybe : nullptr);
+  if (maybe_unshared && maybe) {
+    maybe_unshared->insert(this);
+  }
 }
 
 // Blob
@@ -3074,12 +3079,11 @@ void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
 
 void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
 {
+  ldout(store->cct, 10) << __func__ << " " << *b << dendl;
   assert(!b->shared_blob->is_loaded());
 
-  ldout(store->cct, 10) << __func__ << " " << *b << dendl;
-  bluestore_blob_t& blob = b->dirty_blob();
-
   // update blob
+  bluestore_blob_t& blob = b->dirty_blob();
   blob.set_flag(bluestore_blob_t::FLAG_SHARED);
 
   // update shared blob
@@ -3094,6 +3098,20 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
     }
   }
   ldout(store->cct, 20) << __func__ << " now " << *b << dendl;
+}
+
+uint64_t BlueStore::Collection::make_blob_unshared(SharedBlob *sb)
+{
+  ldout(store->cct, 10) << __func__ << " " << *sb << dendl;
+  assert(sb->is_loaded());
+
+  uint64_t sbid = sb->get_sbid();
+  shared_blob_set.remove(sb);
+  sb->loaded = false;
+  delete sb->persistent;
+  sb->sbid_unloaded = 0;
+  ldout(store->cct, 20) << __func__ << " now " << *sb << dendl;
+  return sbid;
 }
 
 BlueStore::OnodeRef BlueStore::Collection::get_onode(
@@ -9742,7 +9760,8 @@ void BlueStore::_wctx_finish(
   TransContext *txc,
   CollectionRef& c,
   OnodeRef o,
-  WriteContext *wctx)
+  WriteContext *wctx,
+  set<SharedBlob*> *maybe_unshared_blobs)
 {
   auto oep = wctx->old_extents.begin();
   while (oep != wctx->old_extents.end()) {
@@ -9765,7 +9784,9 @@ void BlueStore::_wctx_finish(
 	PExtentVector final;
         c->load_shared_blob(b->shared_blob);
 	for (auto e : r) {
-	  b->shared_blob->put_ref(e.offset, e.length, &final);
+	  b->shared_blob->put_ref(
+	    e.offset, e.length, &final,
+	    b->is_referenced() ? nullptr : maybe_unshared_blobs);
 	}
 	dout(20) << __func__ << "  shared_blob release " << final
 		 << " from " << *b->shared_blob << dendl;
@@ -10102,7 +10123,8 @@ int BlueStore::_do_zero(TransContext *txc,
 }
 
 void BlueStore::_do_truncate(
-  TransContext *txc, CollectionRef& c, OnodeRef o, uint64_t offset)
+  TransContext *txc, CollectionRef& c, OnodeRef o, uint64_t offset,
+  set<SharedBlob*> *maybe_unshared_blobs)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec << dendl;
@@ -10110,15 +10132,15 @@ void BlueStore::_do_truncate(
   _dump_onode(o, 30);
 
   if (offset == o->onode.size)
-    return ;
+    return;
 
   if (offset < o->onode.size) {
     WriteContext wctx;
     uint64_t length = o->onode.size - offset;
     o->extent_map.fault_range(db, offset, length);
     o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
-    o->extent_map.dirty_range(txc->t, offset, length);
-    _wctx_finish(txc, c, o, &wctx);
+    o->extent_map.dirty_range(offset, length);
+    _wctx_finish(txc, c, o, &wctx, maybe_unshared_blobs);
 
     // if we have shards past EOF, ask for a reshard
     if (!o->onode.extent_map_shards.empty() &&
@@ -10153,7 +10175,8 @@ int BlueStore::_do_remove(
   CollectionRef& c,
   OnodeRef o)
 {
-  _do_truncate(txc, c, o, 0);
+  set<SharedBlob*> maybe_unshared_blobs;
+  _do_truncate(txc, c, o, 0, &maybe_unshared_blobs);
   if (o->onode.has_omap()) {
     o->flush();
     _do_omap_clear(txc, o->onode.nid);
@@ -10174,6 +10197,72 @@ int BlueStore::_do_remove(
   o->extent_map.clear();
   o->onode = bluestore_onode_t();
   _debug_obj_on_delete(o->oid);
+
+  if (!o->oid.is_no_gen() &&
+      !maybe_unshared_blobs.empty()) {
+    // see if we can unshare blobs still referenced by the head
+    dout(10) << __func__ << " gen and maybe_unshared_blobs "
+	     << maybe_unshared_blobs << dendl;
+    ghobject_t nogen = o->oid;
+    nogen.generation = ghobject_t::NO_GEN;
+    OnodeRef h = c->onode_map.lookup(nogen);
+    if (h && h->exists) {
+      dout(20) << __func__ << " checking for unshareable blobs on " << h
+	       << " " << h->oid << dendl;
+      map<SharedBlob*,bluestore_extent_ref_map_t> expect;
+      for (auto& e : h->extent_map.extent_map) {
+	const bluestore_blob_t& b = e.blob->get_blob();
+	SharedBlob *sb = e.blob->shared_blob.get();
+	if (b.is_shared() &&
+	    sb->loaded &&
+	    maybe_unshared_blobs.count(sb)) {
+	  b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
+	      expect[sb].get(off, len);
+	      return 0;
+	    });
+	}
+      }
+      vector<SharedBlob*> unshared_blobs;
+      unshared_blobs.reserve(maybe_unshared_blobs.size());
+      for (auto& p : expect) {
+	dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
+	if (p.first->persistent->ref_map == p.second) {
+	  SharedBlob *sb = p.first;
+	  dout(20) << __func__ << "  unsharing " << *sb << dendl;
+	  unshared_blobs.push_back(sb);
+	  txc->unshare_blob(sb);
+	  uint64_t sbid = c->make_blob_unshared(sb);
+	  string key;
+	  get_shared_blob_key(sbid, &key);
+	  txc->t->rmkey(PREFIX_SHARED_BLOB, key);
+	}
+      }
+
+      uint32_t b_start = OBJECT_MAX_SIZE;
+      uint32_t b_end = 0;
+      for (auto& e : h->extent_map.extent_map) {
+	const bluestore_blob_t& b = e.blob->get_blob();
+	SharedBlob *sb = e.blob->shared_blob.get();
+	if (b.is_shared() &&
+	    std::find(unshared_blobs.begin(), unshared_blobs.end(),
+		      sb) != unshared_blobs.end()) {
+	  dout(20) << __func__ << "  unsharing " << *e.blob << dendl;
+	  bluestore_blob_t& blob = e.blob->dirty_blob();
+	  blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
+	  if (e.logical_offset < b_start) {
+	    b_start = e.logical_offset;
+	  }
+	  if (e.logical_end() > b_end) {
+	    b_end = e.logical_end();
+	  }
+	}
+      }
+      if (!unshared_blobs.empty()) {
+	h->extent_map.dirty_range(b_start, b_end);
+	txc->write_onode(h);
+      }
+    }
+  }
   return 0;
 }
 
