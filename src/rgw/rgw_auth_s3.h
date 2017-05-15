@@ -200,7 +200,7 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
   size_t stream_pos;
   boost::container::static_vector<char, ChunkMeta::META_MAX_SIZE> parsing_buf;
-  SHA256* sha256_hash;
+  ceph::crypto::SHA256* sha256_hash;
   std::string prev_chunk_signature;
 
   bool is_signature_mismatched();
