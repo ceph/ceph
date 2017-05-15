@@ -2273,11 +2273,12 @@ calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
 
 extern sha256_digest_t calc_hash_sha256(const boost::string_view& msg);
 
-using ceph::crypto::SHA256;
-extern SHA256* calc_hash_sha256_open_stream();
-extern void calc_hash_sha256_update_stream(SHA256 *hash, const char *msg, int len);
-extern std::string calc_hash_sha256_close_stream(SHA256 **hash);
-extern std::string calc_hash_sha256_restart_stream(SHA256 **phash);
+extern ceph::crypto::SHA256* calc_hash_sha256_open_stream();
+extern void calc_hash_sha256_update_stream(ceph::crypto::SHA256* hash,
+                                           const char* msg,
+                                           int len);
+extern std::string calc_hash_sha256_close_stream(ceph::crypto::SHA256** phash);
+extern std::string calc_hash_sha256_restart_stream(ceph::crypto::SHA256** phash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
