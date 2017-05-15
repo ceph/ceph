@@ -209,7 +209,7 @@ Job::Job(Engine* engine, const thread_data* td)
   for (uint32_t i = 0; i < td->o.nr_files; i++) {
     auto f = td->files[i];
     f->real_file_size = file_size;
-    f->engine_data = i;
+    f->engine_pos = i;
 
     // associate each object with a collection in a round-robin fashion
     auto& coll = collections[i % collections.size()];
@@ -329,7 +329,7 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
   fio_ro_check(td, u);
 
   auto job = static_cast<Job*>(td->io_ops_data);
-  auto& object = job->objects[u->file->engine_data];
+  auto& object = job->objects[u->file->engine_pos];
   auto& coll = object.coll;
   auto& os = job->engine->os;
 
