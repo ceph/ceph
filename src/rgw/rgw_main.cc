@@ -232,7 +232,7 @@ int main(int argc, const char **argv)
   multimap<string, RGWFrontendConfig *> fe_map;
   list<RGWFrontendConfig *> configs;
   if (frontends.empty()) {
-    frontends.push_back("fastcgi");
+    frontends.push_back("civetweb");
   }
   for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
     string& f = *iter;

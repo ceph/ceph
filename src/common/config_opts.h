@@ -1658,7 +1658,7 @@ OPTION(rgw_bucket_default_quota_max_size, OPT_LONGLONG, -1) // Max size of objec
 
 OPTION(rgw_expose_bucket, OPT_BOOL, false) // Return the bucket name in the 'Bucket' response header
 
-OPTION(rgw_frontends, OPT_STR, "fastcgi, civetweb port=7480") // rgw front ends
+OPTION(rgw_frontends, OPT_STR, "civetweb port=7480") // rgw front ends
 
 OPTION(rgw_user_quota_bucket_sync_interval, OPT_INT, 180) // time period for accumulating modified buckets before syncing stats
 OPTION(rgw_user_quota_sync_interval, OPT_INT, 3600 * 24) // time period for accumulating modified buckets before syncing entire user stats
