@@ -38,14 +38,11 @@ Create a Cluster
 ================
 
 If at any point you run into trouble and you want to start over, execute
-the following to purge the configuration::
-
-	ceph-deploy purgedata {ceph-node} [{ceph-node}]
-	ceph-deploy forgetkeys
-
-To purge the Ceph packages too, you may also execute::
+the following to purge the Ceph packages, and erase all its data and configuration::
 
 	ceph-deploy purge {ceph-node} [{ceph-node}]
+	ceph-deploy purgedata {ceph-node} [{ceph-node}]
+	ceph-deploy forgetkeys
 
 If you execute ``purge``, you must re-install Ceph.
 
