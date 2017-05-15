@@ -436,36 +436,6 @@ class CephFSMount(object):
         self._kill_background(p)
         self.background_procs.remove(p)
 
-    def spam_dir_background(self, path):
-        """
-        Create directory `path` and do lots of metadata operations
-        in it until further notice.
-        """
-        assert(self.is_mounted())
-        abs_path = os.path.join(self.mountpoint, path)
-
-        pyscript = dedent("""
-            import sys
-            import time
-            import os
-
-            abs_path = "{abs_path}"
-
-            if not os.path.exists(abs_path):
-                os.makedirs(abs_path)
-
-            n = 0
-            while True:
-                file_path = os.path.join(abs_path, "tmp%d" % n)
-                f = open(file_path, 'w')
-                f.close()
-                n = n + 1
-            """).format(abs_path=abs_path)
-
-        rproc = self._run_python(pyscript)
-        self.background_procs.append(rproc)
-        return rproc
-
     def get_global_id(self):
         raise NotImplementedError()
 
