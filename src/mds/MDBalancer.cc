@@ -41,10 +41,19 @@ using std::vector;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
-#undef DOUT_COND
-#define DOUT_COND(cct, l) l<=cct->_conf->debug_mds || l <= cct->_conf->debug_mds_balancer
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".bal "
+#undef dout
+#define dout(lvl) \
+  do {\
+    auto subsys = ceph_subsys_mds;\
+    if ((dout_context)->_conf->subsys.should_gather(ceph_subsys_mds_balancer, lvl)) {\
+      subsys = ceph_subsys_mds_balancer;\
+    }\
+    dout_impl(dout_context, subsys, lvl) dout_prefix
+#undef dendl
+#define dendl dendl_impl; } while (0)
+
 
 #define MIN_LOAD    50   //  ??
 #define MIN_REEXPORT 5  // will automatically reexport
@@ -61,7 +70,7 @@ int MDBalancer::proc_message(Message *m)
     break;
 
   default:
-    derr << " balancer unknown message " << m->get_type() << dendl;
+    dout(0) << " balancer unknown message " << m->get_type() << dendl;
     assert(0 == "balancer unknown message");
   }
 
@@ -205,7 +214,7 @@ mds_load_t MDBalancer::get_load(utime_t now)
   if (cpu.is_open())
     cpu >> load.cpu_load_avg;
   else
-    derr << "input file " PROCPREFIX "'/proc/loadavg' not found" << dendl;
+    dout(0) << "input file " PROCPREFIX "'/proc/loadavg' not found" << dendl;
   
   dout(15) << "get_load " << load << dendl;
   return load;
