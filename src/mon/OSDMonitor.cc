@@ -2371,6 +2371,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
     bufferlist osd_metadata;
     ::encode(m->metadata, osd_metadata);
     pending_metadata[from] = osd_metadata;
+    pending_metadata_rm.erase(from);
 
     // adjust last clean unmount epoch?
     const osd_info_t& info = osdmap.get_info(from);
@@ -7694,6 +7695,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  pending_inc.new_state[osd] = osdmap.get_state(osd);
           pending_inc.new_uuid[osd] = uuid_d();
 	  pending_metadata_rm.insert(osd);
+	  pending_metadata.erase(osd);
 	  if (any) {
 	    ss << ", osd." << osd;
           } else {
