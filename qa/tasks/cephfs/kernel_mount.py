@@ -18,7 +18,7 @@ UMOUNT_TIMEOUT = 300
 
 class KernelMount(CephFSMount):
     def __init__(self, mons, test_dir, client_id, client_remote,
-                 ipmi_user, ipmi_password, ipmi_domain):
+                 ipmi_user, ipmi_password, ipmi_domain, no_rbytes=False):
         super(KernelMount, self).__init__(test_dir, client_id, client_remote)
         self.mons = mons
 
@@ -26,6 +26,8 @@ class KernelMount(CephFSMount):
         self.ipmi_user = ipmi_user
         self.ipmi_password = ipmi_password
         self.ipmi_domain = ipmi_domain
+
+        self.no_rbytes = no_rbytes
 
     def write_secret_file(self, remote, role, keyring, filename):
         """
@@ -65,11 +67,16 @@ class KernelMount(CephFSMount):
         if mount_path is None:
             mount_path = "/"
 
-        opts = 'name={id},secretfile={secret},norequire_active_mds'.format(id=self.client_id,
-                                                      secret=secret)
+        opts = 'name={id},secretfile={secret},norequire_active_mds'.format(
+                id=self.client_id,
+                secret=secret)
+
+        if self.no_rbytes:
+            opts += ",norbytes"
 
         if mount_fs_name is not None:
             opts += ",mds_namespace={0}".format(mount_fs_name)
+
 
         self.client_remote.run(
             args=[

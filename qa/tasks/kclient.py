@@ -95,7 +95,8 @@ def task(ctx, config):
             remote,
             ctx.teuthology_config.get('ipmi_user', None),
             ctx.teuthology_config.get('ipmi_password', None),
-            ctx.teuthology_config.get('ipmi_domain', None)
+            ctx.teuthology_config.get('ipmi_domain', None),
+            no_rbytes=client_config.get("no_rbytes", False)
         )
 
         mounts[id_] = kernel_mount
