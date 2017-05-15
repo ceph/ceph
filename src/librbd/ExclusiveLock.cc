@@ -294,6 +294,16 @@ void ExclusiveLock<I>::post_release_lock_handler(bool shutting_down, int r,
 }
 
 template <typename I>
+void ExclusiveLock<I>::post_reacquire_lock_handler(int r, Context *on_finish) {
+  ldout(m_image_ctx.cct, 10) << dendl;
+  if (r >= 0) {
+    m_image_ctx.image_watcher->notify_acquired_lock();
+  }
+
+  on_finish->complete(r);
+}
+
+template <typename I>
 struct ExclusiveLock<I>::C_InitComplete : public Context {
   ExclusiveLock *exclusive_lock;
   uint64_t features;
