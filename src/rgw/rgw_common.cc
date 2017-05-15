@@ -453,28 +453,6 @@ string rgw_string_unquote(const string& s)
   return s.substr(1, len - 2);
 }
 
-static void trim_whitespace(const string& src, string& dst)
-{
-  const char *spacestr = " \t\n\r\f\v";
-  auto start = src.find_first_not_of(spacestr);
-  if (start == string::npos)
-    return;
-
-  auto end = src.find_last_not_of(spacestr);
-  dst = src.substr(start, end - start + 1);
-}
-
-static boost::string_view trim_whitespace(const boost::string_view& src)
-{
-  const char* spacestr = " \t\n\r\f\v";
-  const size_t start = src.find_first_not_of(spacestr);
-  if (start == boost::string_view::npos) {
-    return boost::string_view();
-  }
-
-  const size_t end = src.find_last_not_of(spacestr);
-  return src.substr(start, end - start + 1);
-}
 static bool check_str_end(const char *s)
 {
   if (!s)
@@ -555,7 +533,7 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
     dout(0) << "parse_iso8601 failed" << dendl;
     return false;
   }
-  const boost::string_view str = trim_whitespace(p);
+  const boost::string_view str = rgw_trim_whitespace(boost::string_view(p));
   int len = str.size();
 
   if (len == 0 || (len == 1 && str[0] == 'Z'))
@@ -605,10 +583,8 @@ int parse_key_value(string& in_str, const char *delim, string& key, string& val)
   if (pos == string::npos)
     return -EINVAL;
 
-  trim_whitespace(in_str.substr(0, pos), key);
-  pos++;
-
-  trim_whitespace(in_str.substr(pos), val);
+  key = rgw_trim_whitespace(in_str.substr(0, pos));
+  val = rgw_trim_whitespace(in_str.substr(pos + 1));
 
   return 0;
 }
@@ -627,8 +603,8 @@ parse_key_value(const boost::string_view& in_str,
     return boost::none;
   }
 
-  const auto key = trim_whitespace(in_str.substr(0, pos));
-  const auto val = trim_whitespace(in_str.substr(pos + 1));
+  const auto key = rgw_trim_whitespace(in_str.substr(0, pos));
+  const auto val = rgw_trim_whitespace(in_str.substr(pos + 1));
 
   return std::make_pair(key, val);
 }
@@ -1559,7 +1535,7 @@ int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
 {
   int pos = cap.find('=');
   if (pos >= 0) {
-    type = trim_whitespace(cap.substr(0, pos)).to_string();
+    type = rgw_trim_whitespace(cap.substr(0, pos));
   }
 
   if (!is_valid_cap_type(type))
