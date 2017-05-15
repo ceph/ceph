@@ -49,11 +49,11 @@ Because the ObjectStore is not a public-facing interface, we build it inside
 of the ceph tree and load libfio_ceph_objectstore.so into fio as an external
 engine.
 
-To build ceph with fio_ceph_objectstore:
+To build fio_ceph_objectstore:
 ```
   mkdir build && cd build
   cmake -DWITH_FIO=ON -DFIO_INCLUDE_DIR=/path/to/fio -DCMAKE_BUILD_TYPE=Release /path/to/ceph
-  make install
+  make -C src/test/fio install
 ```
 If you install the ceph libraries to a location that isn't in your
 LD_LIBRARY_PATH, be sure to add it:
