@@ -124,7 +124,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     logger(w->get_perf_counter()), global_seq(0), connect_seq(0), peer_global_seq(0),
     out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(STATE_NONE), port(-1),
     dispatch_queue(q), can_write(WriteStatus::NOWRITE),
-    open_write(false), keepalive(false), recv_buf(NULL),
+    keepalive(false), recv_buf(NULL),
     recv_max_prefetch(MAX(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0),
     last_active(ceph::coarse_mono_clock::now()),
@@ -1671,8 +1671,6 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
 
     center->delete_file_event(cs.fd(), EVENT_READABLE|EVENT_WRITABLE);
 
-    // Clean up output buffer
-    existing->outcoming_bl.clear();
     if (existing->delay_state) {
       existing->delay_state->flush();
       assert(!delay_state);
@@ -1690,7 +1688,6 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     dispatch_queue->queue_reset(this);
     ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
     existing->can_write = WriteStatus::REPLACING;
-    existing->open_write = false;
     existing->replacing = true;
     existing->state_offset = 0;
     // avoid previous thread modify event
@@ -1705,6 +1702,8 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       // we need to delete time event in original thread
       {
         std::lock_guard<std::mutex> l(existing->lock);
+        existing->outcoming_bl.clear();
+        existing->open_write = false;
         if (existing->state == STATE_NONE) {
           existing->shutdown_socket();
           existing->cs = std::move(cs);
@@ -1985,7 +1984,7 @@ void AsyncConnection::discard_requeued_up_to(uint64_t seq)
 
 /*
  * Tears down the AsyncConnection's message queues, and removes them from the DispatchQueue
- * Must hold pipe_lock prior to calling.
+ * Must hold write_lock prior to calling.
  */
 void AsyncConnection::discard_out_queue()
 {
@@ -2173,14 +2172,7 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
 ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
 {
   FUNCTRACE();
-  assert(can_write == WriteStatus::CANWRITE);
   m->set_seq(out_seq.inc());
-
-  if (!policy.lossy) {
-    // put on sent list
-    sent.push_back(m);
-    m->get();
-  }
 
   if (msgr->crcflags & MSG_CRC_HEADER)
     m->calc_header_crc();
@@ -2429,11 +2421,18 @@ void AsyncConnection::handle_write()
       keepalive = false;
     }
 
-    while (1) {
+    do {
       bufferlist data;
       Message *m = _get_next_outgoing(&data);
       if (!m)
         break;
+
+      if (!policy.lossy) {
+        // put on sent list
+        sent.push_back(m);
+        m->get();
+      }
+      write_lock.unlock();
 
       // send_message or requeue messages may not encode message
       if (!data.length())
@@ -2442,12 +2441,13 @@ void AsyncConnection::handle_write()
       r = write_message(m, data, _has_next_outgoing());
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
-        write_lock.unlock();
         goto fail;
-      } else if (r > 0) {
-        break;
       }
-    }
+      write_lock.lock();
+      if (r > 0)
+        break;
+    } while (can_write == WriteStatus::CANWRITE);
+    write_lock.unlock();
 
     uint64_t left = ack_left.read();
     if (left) {
@@ -2463,7 +2463,6 @@ void AsyncConnection::handle_write()
       r = _try_send();
     }
 
-    write_lock.unlock();
     if (r < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
       goto fail;
