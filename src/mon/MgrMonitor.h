@@ -28,7 +28,7 @@ class MgrMonitor: public PaxosService
 
   utime_t first_seen_inactive;
 
-  MgrPGStatService *pgservice = nullptr;
+  std::unique_ptr<MgrPGStatService> pgservice;
 
   std::map<uint64_t, ceph::coarse_mono_clock::time_point> last_beacon;
 
@@ -50,9 +50,8 @@ class MgrMonitor: public PaxosService
 public:
   MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name)
-    : PaxosService(mn, p, service_name)
   {}
-  ~MgrMonitor() override;
+  ~MgrMonitor() override {}
 
   void init() override;
   void on_shutdown() override;
