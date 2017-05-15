@@ -10730,13 +10730,26 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 
     // are my constituent bits subtrees?  if so, i will be too.
     // (it's all or none, actually.)
-    bool was_subtree = false;
-    set<CDir*> new_bounds;
-    for (list<CDir*>::iterator p = srcfrags.begin(); p != srcfrags.end(); ++p) {
-      CDir *dir = *p;
+    bool any_subtree = false;
+    for (CDir *dir : srcfrags) {
       if (dir->is_subtree_root()) {
+	any_subtree = true;
+	break;
+      }
+    }
+    set<CDir*> new_bounds;
+    if (any_subtree)  {
+      for (CDir *dir : srcfrags) {
+	// this simplifies the code that find subtrees underneath the dirfrag
+	if (!dir->is_subtree_root()) {
+	  dir->state_set(CDir::STATE_AUXSUBTREE);
+	  adjust_subtree_auth(dir, mds->get_nodeid());
+	}
+      }
+
+      for (CDir *dir : srcfrags) {
+	assert(dir->is_subtree_root());
 	dout(10) << " taking srcfrag subtree bounds from " << *dir << dendl;
-	was_subtree = true;
 	map<CDir*, set<CDir*> >::iterator q = subtrees.find(dir);
 	set<CDir*>::iterator r = q->second.begin();
 	while (r != subtrees[dir].end()) {
@@ -10744,7 +10757,7 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 	  subtrees[dir].erase(r++);
 	}
 	subtrees.erase(q);
-	
+
 	// remove myself as my parent's bound
 	if (parent_subtree)
 	  subtrees[parent_subtree].erase(dir);
@@ -10756,7 +10769,7 @@ void MDCache::adjust_dir_fragments(CInode *diri,
     f->merge(srcfrags, waiters, replay);
     diri->add_dirfrag(f);
 
-    if (was_subtree) {
+    if (any_subtree) {
       assert(f->is_subtree_root());
       subtrees[f].swap(new_bounds);
       if (parent_subtree)
