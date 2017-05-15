@@ -6711,6 +6711,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EPERM;
       goto reply;
     }
+    if (newcrush.get_bucket_alg(sid) != newcrush.get_bucket_alg(did) &&
+	force != "--yes-i-really-mean-it") {
+      ss << "source bucket alg " << crush_alg_name(newcrush.get_bucket_alg(sid)) << " != "
+	 << "dest bucket alg " << crush_alg_name(newcrush.get_bucket_alg(did))
+	 << "; pass --yes-i-really-mean-it to proceed anyway";
+      err = -EPERM;
+      goto reply;
+    }
     int r = newcrush.swap_bucket(g_ceph_context, sid, did);
     if (r < 0) {
       ss << "failed to swap bucket contents: " << cpp_strerror(r);
