@@ -506,6 +506,24 @@ static inline int crush_calc_tree_node(int i)
 	return ((i+1) << 1)-1;
 }
 
+static inline const char *crush_alg_name(int alg)
+{
+	switch (alg) {
+	case CRUSH_BUCKET_UNIFORM:
+		return "uniform";
+	case CRUSH_BUCKET_LIST:
+		return "list";
+	case CRUSH_BUCKET_TREE:
+		return "tree";
+	case CRUSH_BUCKET_STRAW:
+		return "straw";
+	case CRUSH_BUCKET_STRAW2:
+		return "straw2";
+	default:
+		return "unknown";
+	}
+}
+
 /* ---------------------------------------------------------------------
 			       Private
    --------------------------------------------------------------------- */
