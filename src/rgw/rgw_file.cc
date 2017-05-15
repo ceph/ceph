@@ -1101,6 +1101,8 @@ namespace rgw {
     int rc = write_finish(FLAG_LOCKED);
 
     flags &= ~FLAG_OPEN;
+    flags &= ~FLAG_STATELESS_OPEN;
+
     return rc;
   } /* RGWFileHandle::close */
 
