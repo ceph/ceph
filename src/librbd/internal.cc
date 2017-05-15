@@ -546,8 +546,12 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     bufferlist bl;
     int r = io_ctx.read(RBD_DIRECTORY, bl, 0, 0);
-    if (r < 0)
+    if (r < 0) {
+      if (r == -ENOENT) {
+        r = 0;
+      }
       return r;
+    }
 
     // old format images are in a tmap
     if (bl.length()) {
@@ -1479,6 +1483,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       if (r != -ENOENT) {
         lderr(cct) << "error listing rbd_trash entries: " << cpp_strerror(r)
                    << dendl;
+      } else {
+        r = 0;
       }
       return r;
     }

@@ -2141,11 +2141,6 @@ extern "C" int rbd_list(rados_ioctx_t p, char *names, size_t *size)
   tracepoint(librbd, list_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id());
   vector<string> cpp_names;
   int r = librbd::list(io_ctx, cpp_names);
-  if (r == -ENOENT) {
-    tracepoint(librbd, list_exit, 0, *size);
-    return 0;
-  }
-
   if (r < 0) {
     tracepoint(librbd, list_exit, r, *size);
     return r;
@@ -4038,14 +4033,6 @@ extern "C" int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
 
   vector<string> cpp_names;
   int r = librbd::list(io_ctx, cpp_names);
-
-  if (r == -ENOENT) {
-    *size = 0;
-    *names = '\0';
-    tracepoint(librbd, group_list_exit, 0);
-    return 0;
-  }
-
   if (r < 0) {
     tracepoint(librbd, group_list_exit, r);
     return r;
