@@ -2878,6 +2878,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 
   rejoin_gather.insert(who);
   rejoin_sent.erase(who);        // i need to send another
+  rejoin_ack_sent.erase(who);    // i need to send another
   rejoin_ack_gather.erase(who);  // i'll need/get another.
 
   dout(10) << " resolve_gather " << resolve_gather << dendl;
@@ -5928,11 +5929,16 @@ void MDCache::rejoin_send_acks()
   rejoin_unlinked_inodes.clear();
   
   // send acks to everyone in the recovery set
-  map<mds_rank_t,MMDSCacheRejoin*> ack;
+  map<mds_rank_t,MMDSCacheRejoin*> acks;
   for (set<mds_rank_t>::iterator p = recovery_set.begin();
        p != recovery_set.end();
-       ++p) 
-    ack[*p] = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
+       ++p) {
+    if (rejoin_ack_sent.count(*p))
+      continue;
+    acks[*p] = new MMDSCacheRejoin(MMDSCacheRejoin::OP_ACK);
+  }
+
+  rejoin_ack_sent = recovery_set;
   
   // walk subtrees
   for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin(); 
@@ -5955,8 +5961,11 @@ void MDCache::rejoin_send_acks()
       for (compact_map<mds_rank_t,unsigned>::iterator r = dir->replicas_begin();
 	   r != dir->replicas_end();
 	   ++r) {
-	ack[r->first]->add_strong_dirfrag(dir->dirfrag(), ++r->second, dir->dir_rep);
-	ack[r->first]->add_dirfrag_base(dir);
+	auto it = acks.find(r->first);
+	if (it == acks.end())
+	  continue;
+	it->second->add_strong_dirfrag(dir->dirfrag(), ++r->second, dir->dir_rep);
+	it->second->add_dirfrag_base(dir);
       }
 	   
       for (CDir::map_t::iterator q = dir->items.begin();
@@ -5974,7 +5983,10 @@ void MDCache::rejoin_send_acks()
 	for (compact_map<mds_rank_t,unsigned>::iterator r = dn->replicas_begin();
 	     r != dn->replicas_end();
 	     ++r) {
-	  ack[r->first]->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
+	  auto it = acks.find(r->first);
+	  if (it == acks.end())
+	    continue;
+	  it->second->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
 					   dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_d_type():0,
@@ -5991,10 +6003,13 @@ void MDCache::rejoin_send_acks()
 	for (compact_map<mds_rank_t,unsigned>::iterator r = in->replicas_begin();
 	     r != in->replicas_end();
 	     ++r) {
-	  ack[r->first]->add_inode_base(in, mds->mdsmap->get_up_features());
+	  auto it = acks.find(r->first);
+	  if (it == acks.end())
+	    continue;
+	  it->second->add_inode_base(in, mds->mdsmap->get_up_features());
 	  bufferlist bl;
 	  in->_encode_locks_state_for_rejoin(bl, r->first);
-	  ack[r->first]->add_inode_locks(in, ++r->second, bl);
+	  it->second->add_inode_locks(in, ++r->second, bl);
 	}
 	
 	// subdirs in this subtree?
@@ -6008,19 +6023,25 @@ void MDCache::rejoin_send_acks()
     for (compact_map<mds_rank_t,unsigned>::iterator r = root->replicas_begin();
 	 r != root->replicas_end();
 	 ++r) {
-      ack[r->first]->add_inode_base(root, mds->mdsmap->get_up_features());
+      auto it = acks.find(r->first);
+      if (it == acks.end())
+	continue;
+      it->second->add_inode_base(root, mds->mdsmap->get_up_features());
       bufferlist bl;
       root->_encode_locks_state_for_rejoin(bl, r->first);
-      ack[r->first]->add_inode_locks(root, ++r->second, bl);
+      it->second->add_inode_locks(root, ++r->second, bl);
     }
   if (myin)
     for (compact_map<mds_rank_t,unsigned>::iterator r = myin->replicas_begin();
 	 r != myin->replicas_end();
 	 ++r) {
-      ack[r->first]->add_inode_base(myin, mds->mdsmap->get_up_features());
+      auto it = acks.find(r->first);
+      if (it == acks.end())
+	continue;
+      it->second->add_inode_base(myin, mds->mdsmap->get_up_features());
       bufferlist bl;
       myin->_encode_locks_state_for_rejoin(bl, r->first);
-      ack[r->first]->add_inode_locks(myin, ++r->second, bl);
+      it->second->add_inode_locks(myin, ++r->second, bl);
     }
 
   // include inode base for any inodes whose scatterlocks may have updated
@@ -6030,14 +6051,16 @@ void MDCache::rejoin_send_acks()
     CInode *in = *p;
     for (compact_map<mds_rank_t,unsigned>::iterator r = in->replicas_begin();
 	 r != in->replicas_end();
-	 ++r)
-      ack[r->first]->add_inode_base(in, mds->mdsmap->get_up_features());
+	 ++r) {
+      auto it = acks.find(r->first);
+      if (it == acks.end())
+	continue;
+      it->second->add_inode_base(in, mds->mdsmap->get_up_features());
+    }
   }
 
   // send acks
-  for (map<mds_rank_t,MMDSCacheRejoin*>::iterator p = ack.begin();
-       p != ack.end();
-       ++p) {
+  for (auto p = acks.begin(); p != acks.end(); ++p) {
     ::encode(rejoin_imported_caps[p->first], p->second->imported_caps);
     mds->send_message_mds(p->second, p->first);
   }
