@@ -810,6 +810,17 @@ void ImageReplayer<I>::handle_replay_ready()
   }
 
   m_event_replay_tracker.start_op();
+
+  m_lock.Lock();
+  bool stopping = (m_state == STATE_STOPPING);
+  m_lock.Unlock();
+
+  if (stopping) {
+    dout(10) << "stopping event replay" << dendl;
+    m_event_replay_tracker.finish_op();
+    return;
+  }
+
   if (m_replay_tag_valid && m_replay_tag.tid == m_replay_tag_tid) {
     preprocess_entry();
     return;
@@ -1452,19 +1463,18 @@ void ImageReplayer<I>::shut_down(int r) {
     }
   }
 
+  // NOTE: it's important to ensure that the local image is fully
+  // closed before attempting to close the remote journal in
+  // case the remote cluster is unreachable
+
   // chain the shut down sequence (reverse order)
   Context *ctx = new FunctionContext(
     [this, r](int _r) {
       update_mirror_image_status(true, STATE_STOPPED);
       handle_shut_down(r);
     });
-  if (m_local_image_ctx) {
-    ctx = new FunctionContext([this, ctx](int r) {
-      CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-        &m_local_image_ctx, ctx);
-      request->send();
-    });
-  }
+
+  // close the remote journal
   if (m_remote_journaler != nullptr) {
     ctx = new FunctionContext([this, ctx](int r) {
         delete m_remote_journaler;
@@ -1481,6 +1491,30 @@ void ImageReplayer<I>::shut_down(int r) {
         });
     }
   }
+
+  // stop the replay of remote journal events
+  if (m_replay_handler != nullptr) {
+    ctx = new FunctionContext([this, ctx](int r) {
+        delete m_replay_handler;
+        m_replay_handler = nullptr;
+
+        m_event_replay_tracker.wait_for_ops(ctx);
+      });
+    ctx = new FunctionContext([this, ctx](int r) {
+        m_remote_journaler->stop_replay(ctx);
+      });
+  }
+
+  // close the local image (release exclusive lock)
+  if (m_local_image_ctx) {
+    ctx = new FunctionContext([this, ctx](int r) {
+      CloseImageRequest<I> *request = CloseImageRequest<I>::create(
+        &m_local_image_ctx, ctx);
+      request->send();
+    });
+  }
+
+  // shut down event replay into the local image
   if (m_local_journal != nullptr) {
     ctx = new FunctionContext([this, ctx](int r) {
         m_local_journal = nullptr;
@@ -1497,32 +1531,29 @@ void ImageReplayer<I>::shut_down(int r) {
         });
     }
     ctx = new FunctionContext([this, ctx](int r) {
-        if (r < 0) {
-          derr << "error flushing journal replay: " << cpp_strerror(r) << dendl;
-        }
-
         // blocks if listener notification is in-progress
         m_local_journal->remove_listener(m_journal_listener);
-
-        // wait for all in-flight replayed events to complete
-        m_event_replay_tracker.wait_for_ops(ctx);
-      });
-    if (m_local_replay != nullptr) {
-      ctx = new FunctionContext([this, ctx](int r) {
-          m_local_replay->shut_down(true, ctx);
-        });
-    }
-  }
-  if (m_replay_handler != nullptr) {
-    ctx = new FunctionContext([this, ctx](int r) {
-        delete m_replay_handler;
-        m_replay_handler = nullptr;
         ctx->complete(0);
       });
+  }
+
+  // wait for all local in-flight replay events to complete
+  ctx = new FunctionContext([this, ctx](int r) {
+      if (r < 0) {
+        derr << "error shutting down journal replay: " << cpp_strerror(r)
+             << dendl;
+      }
+
+      m_event_replay_tracker.wait_for_ops(ctx);
+    });
+
+  // flush any local in-flight replay events
+  if (m_local_replay != nullptr) {
     ctx = new FunctionContext([this, ctx](int r) {
-        m_remote_journaler->stop_replay(ctx);
+        m_local_replay->shut_down(true, ctx);
       });
   }
+
   m_threads->work_queue->queue(ctx, 0);
 }
 
