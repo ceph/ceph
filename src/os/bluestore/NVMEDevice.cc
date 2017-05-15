@@ -1006,10 +1006,7 @@ int NVMEDevice::aio_write(
   assert(off + len <= size);
 
   Task *t = new Task(this, IOCommand::WRITE_COMMAND, off, len);
-
-  // TODO: if upper layer alloc memory with known physical address,
-  // we can reduce this copy
-  t->write_bl = std::move(bl);
+  t->write_bl = bl;
 
   if (buffered) {
     // Only need to push the first entry
