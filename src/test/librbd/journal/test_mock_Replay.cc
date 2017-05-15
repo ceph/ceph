@@ -1592,5 +1592,69 @@ TEST_F(TestMockJournalReplay, RefreshImageBeforeOpStart) {
   ASSERT_EQ(0, on_finish_safe.wait());
 }
 
+TEST_F(TestMockJournalReplay, FlushEventAfterShutDown) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  MockIoImageRequest mock_io_image_request;
+  expect_op_work_queue(mock_image_ctx);
+
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay, false));
+
+  C_SaferCond on_ready;
+  C_SaferCond on_safe;
+  when_process(mock_journal_replay, EventEntry{AioFlushEvent()},
+               &on_ready, &on_safe);
+  ASSERT_EQ(0, on_ready.wait());
+  ASSERT_EQ(-ESHUTDOWN, on_safe.wait());
+}
+
+TEST_F(TestMockJournalReplay, ModifyEventAfterShutDown) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  MockIoImageRequest mock_io_image_request;
+  expect_op_work_queue(mock_image_ctx);
+
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay, false));
+
+  C_SaferCond on_ready;
+  C_SaferCond on_safe;
+  when_process(mock_journal_replay,
+               EventEntry{AioWriteEvent(123, 456, to_bl("test"))},
+               &on_ready, &on_safe);
+  ASSERT_EQ(0, on_ready.wait());
+  ASSERT_EQ(-ESHUTDOWN, on_safe.wait());
+}
+
+TEST_F(TestMockJournalReplay, OpEventAfterShutDown) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockReplayImageCtx mock_image_ctx(*ictx);
+  MockJournalReplay mock_journal_replay(mock_image_ctx);
+  MockIoImageRequest mock_io_image_request;
+  expect_op_work_queue(mock_image_ctx);
+
+  ASSERT_EQ(0, when_shut_down(mock_journal_replay, false));
+
+  C_SaferCond on_ready;
+  C_SaferCond on_safe;
+  when_process(mock_journal_replay, EventEntry{RenameEvent(123, "image")},
+               &on_ready, &on_safe);
+  ASSERT_EQ(0, on_ready.wait());
+  ASSERT_EQ(-ESHUTDOWN, on_safe.wait());
+}
+
 } // namespace journal
 } // namespace librbd

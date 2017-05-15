@@ -385,6 +385,10 @@ public:
       .WillOnce(CompleteContext(r));
   }
 
+  void expect_flush(MockReplay &mock_replay, int r) {
+    EXPECT_CALL(mock_replay, flush(_)).WillOnce(CompleteContext(r));
+  }
+
   void expect_shut_down(MockReplay &mock_replay, bool cancel_ops, int r) {
     EXPECT_CALL(mock_replay, shut_down(cancel_ops, _))
       .WillOnce(WithArg<1>(CompleteContext(r)));
@@ -514,16 +518,14 @@ TEST_F(TestMockImageReplayer, StartStop) {
 
   MockCloseImageRequest mock_close_local_image_request;
 
-  expect_stop_replay(mock_remote_journaler, 0);
   expect_shut_down(mock_local_replay, true, 0);
-
   EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
+  expect_send(mock_close_local_image_request, 0);
 
+  expect_stop_replay(mock_remote_journaler, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
   expect_shut_down(mock_remote_journaler, 0);
-
-  expect_send(mock_close_local_image_request, 0);
 
   C_SaferCond stop_ctx;
   m_image_replayer->stop(&stop_ctx);
@@ -650,13 +652,11 @@ TEST_F(TestMockImageReplayer, StartExternalReplayError) {
   expect_start_external_replay(mock_local_journal, nullptr, -EINVAL);
 
   MockCloseImageRequest mock_close_local_image_request;
-
   EXPECT_CALL(mock_local_journal, remove_listener(_));
+  expect_send(mock_close_local_image_request, 0);
 
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
   expect_shut_down(mock_remote_journaler, 0);
-
-  expect_send(mock_close_local_image_request, 0);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -706,16 +706,14 @@ TEST_F(TestMockImageReplayer, StopError) {
 
   MockCloseImageRequest mock_close_local_image_request;
 
-  expect_stop_replay(mock_remote_journaler, -EINVAL);
   expect_shut_down(mock_local_replay, true, -EINVAL);
-
   EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
+  expect_send(mock_close_local_image_request, -EINVAL);
 
+  expect_stop_replay(mock_remote_journaler, -EINVAL);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
   expect_shut_down(mock_remote_journaler, -EINVAL);
-
-  expect_send(mock_close_local_image_request, -EINVAL);
 
   C_SaferCond stop_ctx;
   m_image_replayer->stop(&stop_ctx);
@@ -806,17 +804,14 @@ TEST_F(TestMockImageReplayer, Replay) {
   // STOP
 
   MockCloseImageRequest mock_close_local_image_request;
-
-  expect_stop_replay(mock_remote_journaler, 0);
   expect_shut_down(mock_local_replay, true, 0);
-
   EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
+  expect_send(mock_close_local_image_request, 0);
 
+  expect_stop_replay(mock_remote_journaler, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
   expect_shut_down(mock_remote_journaler, 0);
-
-  expect_send(mock_close_local_image_request, 0);
 
   C_SaferCond stop_ctx;
   m_image_replayer->stop(&stop_ctx);
@@ -886,14 +881,9 @@ TEST_F(TestMockImageReplayer, DecodeError) {
     .WillOnce(Return(-EINVAL));
 
   // stop on error
-  expect_stop_replay(mock_remote_journaler, 0);
   expect_shut_down(mock_local_replay, true, 0);
-
   EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
-
-  EXPECT_CALL(mock_remote_journaler, remove_listener(_));
-  expect_shut_down(mock_remote_journaler, 0);
 
   MockCloseImageRequest mock_close_local_image_request;
   C_SaferCond close_ctx;
@@ -903,6 +893,10 @@ TEST_F(TestMockImageReplayer, DecodeError) {
 	  mock_close_local_image_request.on_finish->complete(0);
 	  close_ctx.complete(0);
 	}));
+
+  expect_stop_replay(mock_remote_journaler, 0);
+  EXPECT_CALL(mock_remote_journaler, remove_listener(_));
+  expect_shut_down(mock_remote_journaler, 0);
 
   // fire
   m_image_replayer->handle_replay_ready();
@@ -1010,16 +1004,14 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
 
   MockCloseImageRequest mock_close_local_image_request;
 
-  expect_stop_replay(mock_remote_journaler, 0);
   expect_shut_down(mock_local_replay, true, 0);
-
   EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
+  expect_send(mock_close_local_image_request, 0);
 
+  expect_stop_replay(mock_remote_journaler, 0);
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
   expect_shut_down(mock_remote_journaler, 0);
-
-  expect_send(mock_close_local_image_request, 0);
 
   C_SaferCond stop_ctx;
   m_image_replayer->stop(&stop_ctx);
