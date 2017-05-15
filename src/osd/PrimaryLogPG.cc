@@ -11978,7 +11978,10 @@ void PrimaryLogPG::hit_set_remove_all()
     hobject_t oid = get_hit_set_archive_object(p->begin, p->end, p->using_gmt);
     assert(!is_degraded_or_backfilling_object(oid));
     ObjectContextRef obc = get_object_context(oid, false);
-    assert(obc);
+    if (!obc) {
+      derr << __func__ << " skipping missing " << oid << dendl;
+      return;
+    }
 
     OpContextUPtr ctx = simple_opc_create(obc);
     ctx->at_version = get_next_version();
