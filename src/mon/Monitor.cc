@@ -244,6 +244,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   get_locally_supported_monitor_commands(&cmds, &cmdsize);
   set_leader_supported_commands(cmds, cmdsize);
 
+  // note: OSDMonitor may update this based on the luminous flag.
   pgservice = mgrmon()->get_pg_stat_service();
 }
 
