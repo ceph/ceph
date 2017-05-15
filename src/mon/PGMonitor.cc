@@ -1671,19 +1671,13 @@ bool PGMonitor::check_sub(Subscription *sub)
   }
   return true;
 }
-class PGMapStatService : public PGMap, public PGStatService {
-  PGMap& parent;
+class PGMapStatService : public PGStatService {
+  const PGMap& parent;
   PGMonitor *pgmon;
 public:
-  PGMapStatService() : PGMap(), PGStatService(),
-		       parent(*static_cast<PGMap*>(this)), pgmon(nullptr) {}
-  PGMapStatService(const PGMap& o,
-		   PGMonitor *pgm) : PGMap(o), PGStatService(),
-				     parent(*static_cast<PGMap*>(this)),
-				     pgmon(pgm) {}
-  void reset(const PGMap& o) {
-    parent = o;
-  }
+  PGMapStatService(const PGMap& o, PGMonitor *pgm)
+    : parent(o),
+      pgmon(pgm) {}
 
   bool is_readable() const { return pgmon->is_readable(); }
 
