@@ -223,7 +223,8 @@ struct bluestore_extent_ref_map_t {
   }
 
   void get(uint64_t offset, uint32_t len);
-  void put(uint64_t offset, uint32_t len, PExtentVector *release);
+  void put(uint64_t offset, uint32_t len, PExtentVector *release,
+	   bool *maybe_unshared);
 
   bool contains(uint64_t offset, uint32_t len) const;
   bool intersects(uint64_t offset, uint32_t len) const;

@@ -388,7 +388,7 @@ public:
 
     /// put logical references, and get back any released extents
     void put_ref(uint64_t offset, uint32_t length,
-      PExtentVector *r);
+		 PExtentVector *r, set<SharedBlob*> *maybe_unshared_blobs);
 
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
       return l.get_sbid() == r.get_sbid();
@@ -1339,6 +1339,7 @@ public:
     void open_shared_blob(uint64_t sbid, BlobRef b);
     void load_shared_blob(SharedBlobRef sb);
     void make_blob_shared(uint64_t sbid, BlobRef b);
+    uint64_t make_blob_unshared(SharedBlob *sb);
 
     BlobRef new_blob() {
       BlobRef b = new Blob();
@@ -1557,6 +1558,10 @@ public:
     void write_shared_blob(SharedBlobRef &sb) {
       shared_blobs.insert(sb);
     }
+    void unshare_blob(SharedBlob *sb) {
+      shared_blobs.erase(sb);
+    }
+
     /// note we logically modified object (when onode itself is unmodified)
     void note_modified_object(OnodeRef &o) {
       // onode itself isn't written, though
@@ -2495,7 +2500,8 @@ private:
     TransContext *txc,
     CollectionRef& c,
     OnodeRef o,
-    WriteContext *wctx);
+    WriteContext *wctx,
+    set<SharedBlob*> *maybe_unshared_blobs=0);
 
   int _do_transaction(Transaction *t,
 		      TransContext *txc,
@@ -2538,7 +2544,8 @@ private:
   void _do_truncate(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef o,
-		   uint64_t offset);
+		   uint64_t offset,
+		   set<SharedBlob*> *maybe_unshared_blobs=0);
   void _truncate(TransContext *txc,
 		CollectionRef& c,
 		OnodeRef& o,

@@ -120,18 +120,22 @@ TEST(bluestore_extent_ref_map_t, put)
 {
   bluestore_extent_ref_map_t m;
   PExtentVector r;
+  bool maybe_unshared = false;
   m.get(10, 30);
-  m.put(10, 30, &r);
-  cout << m << " " << r << std::endl;
+  maybe_unshared = true;
+  m.put(10, 30, &r, &maybe_unshared);
+  cout << m << " " << r << " " << (int)maybe_unshared << std::endl;
   ASSERT_EQ(0u, m.ref_map.size());
   ASSERT_EQ(1u, r.size());
   ASSERT_EQ(10u, r[0].offset);
   ASSERT_EQ(30u, r[0].length);
+  ASSERT_TRUE(maybe_unshared);
   r.clear();
   m.get(10, 30);
   m.get(20, 10);
-  m.put(10, 30, &r);
-  cout << m << " " << r << std::endl;
+  maybe_unshared = true;
+  m.put(10, 30, &r, &maybe_unshared);
+  cout << m << " " << r << " " << (int)maybe_unshared << std::endl;
   ASSERT_EQ(1u, m.ref_map.size());
   ASSERT_EQ(10u, m.ref_map[20].length);
   ASSERT_EQ(1u, m.ref_map[20].refs);
@@ -140,11 +144,13 @@ TEST(bluestore_extent_ref_map_t, put)
   ASSERT_EQ(10u, r[0].length);
   ASSERT_EQ(30u, r[1].offset);
   ASSERT_EQ(10u, r[1].length);
+  ASSERT_TRUE(maybe_unshared);
   r.clear();
   m.get(30, 10);
   m.get(30, 10);
-  m.put(20, 15, &r);
-  cout << m << " " << r << std::endl;
+  maybe_unshared = true;
+  m.put(20, 15, &r, &maybe_unshared);
+  cout << m << " " << r << " " << (int)maybe_unshared << std::endl;
   ASSERT_EQ(2u, m.ref_map.size());
   ASSERT_EQ(5u, m.ref_map[30].length);
   ASSERT_EQ(1u, m.ref_map[30].refs);
@@ -153,9 +159,11 @@ TEST(bluestore_extent_ref_map_t, put)
   ASSERT_EQ(1u, r.size());
   ASSERT_EQ(20u, r[0].offset);
   ASSERT_EQ(10u, r[0].length);
+  ASSERT_FALSE(maybe_unshared);
   r.clear();
-  m.put(33, 5, &r);
-  cout << m << " " << r << std::endl;
+  maybe_unshared = true;
+  m.put(33, 5, &r, &maybe_unshared);
+  cout << m << " " << r << " " << (int)maybe_unshared << std::endl;
   ASSERT_EQ(3u, m.ref_map.size());
   ASSERT_EQ(3u, m.ref_map[30].length);
   ASSERT_EQ(1u, m.ref_map[30].refs);
@@ -166,6 +174,12 @@ TEST(bluestore_extent_ref_map_t, put)
   ASSERT_EQ(1u, r.size());
   ASSERT_EQ(33u, r[0].offset);
   ASSERT_EQ(2u, r[0].length);
+  ASSERT_FALSE(maybe_unshared);
+  r.clear();
+  maybe_unshared = true;
+  m.put(38, 2, &r, &maybe_unshared);
+  cout << m << " " << r << " " << (int)maybe_unshared << std::endl;
+  ASSERT_TRUE(maybe_unshared);
 }
 
 TEST(bluestore_extent_ref_map_t, contains)

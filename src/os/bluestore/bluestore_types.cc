@@ -196,10 +196,11 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
 
 void bluestore_extent_ref_map_t::put(
   uint64_t offset, uint32_t length,
-  PExtentVector *release)
+  PExtentVector *release,
+  bool *maybe_unshared)
 {
   //NB: existing entries in 'release' container must be preserved!
-
+  bool unshared = true;
   auto p = ref_map.lower_bound(offset);
   if (p == ref_map.end() || p->first > offset) {
     if (p == ref_map.begin()) {
@@ -213,30 +214,42 @@ void bluestore_extent_ref_map_t::put(
   if (p->first < offset) {
     uint64_t left = p->first + p->second.length - offset;
     p->second.length = offset - p->first;
+    if (p->second.refs != 1) {
+      unshared = false;
+    }
     p = ref_map.insert(map<uint64_t,record_t>::value_type(
 			 offset, record_t(left, p->second.refs))).first;
   }
   while (length > 0) {
     assert(p->first == offset);
     if (length < p->second.length) {
+      if (p->second.refs != 1) {
+	unshared = false;
+      }
       ref_map.insert(make_pair(offset + length,
 			       record_t(p->second.length - length,
 					p->second.refs)));
       if (p->second.refs > 1) {
 	p->second.length = length;
 	--p->second.refs;
+	if (p->second.refs != 1) {
+	  unshared = false;
+	}
 	_maybe_merge_left(p);
       } else {
 	if (release)
 	  release->push_back(bluestore_pextent_t(p->first, length));
 	ref_map.erase(p);
       }
-      return;
+      goto out;
     }
     offset += p->second.length;
     length -= p->second.length;
     if (p->second.refs > 1) {
       --p->second.refs;
+      if (p->second.refs != 1) {
+	unshared = false;
+      }
       _maybe_merge_left(p);
       ++p;
     } else {
@@ -248,6 +261,19 @@ void bluestore_extent_ref_map_t::put(
   if (p != ref_map.end())
     _maybe_merge_left(p);
   //_check();
+out:
+  if (maybe_unshared) {
+    if (unshared) {
+      // we haven't seen a ref != 1 yet; check the whole map.
+      for (auto& p : ref_map) {
+	if (p.second.refs != 1) {
+	  unshared = false;
+	  break;
+	}
+      }
+    }
+    *maybe_unshared = unshared;
+  }
 }
 
 bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) const
