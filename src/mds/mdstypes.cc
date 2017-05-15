@@ -1074,4 +1074,3 @@ ostream& operator<<(ostream &out, const mds_role_t &role)
   out << role.fscid << ":" << role.rank;
   return out;
 }
-

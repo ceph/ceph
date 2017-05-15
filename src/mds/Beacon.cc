@@ -21,6 +21,7 @@
 #include "messages/MMDSBeacon.h"
 #include "mon/MonClient.h"
 #include "mds/MDLog.h"
+#include "mds/Migrator.h"
 #include "mds/MDSRank.h"
 #include "mds/MDSMap.h"
 #include "mds/Locker.h"
@@ -494,6 +495,8 @@ void Beacon::notify_health(MDSRank const *mds)
     MDSHealthMetric m(MDS_HEALTH_CACHE_OVERSIZED, HEALTH_WARN, oss.str());
     health.metrics.push_back(m);
   }
+
+  mds->mdcache->migrator->get_health(health);
 }
 
 MDSMap::DaemonState Beacon::get_want_state() const

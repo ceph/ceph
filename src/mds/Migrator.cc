@@ -21,6 +21,7 @@
 #include "Locker.h"
 #include "Server.h"
 
+#include "Beacon.h"
 #include "MDBalancer.h"
 #include "MDLog.h"
 #include "MDSMap.h"
@@ -3279,4 +3280,35 @@ void Migrator::logged_import_caps(CInode *in,
   // clients will release caps from the exporter when they receive the cap import message.
   finish_import_inode_caps(in, from, false, peer_exports[in], imported_caps);
   mds->locker->eval(in, CEPH_CAP_LOCKS, true);
+}
+
+void Migrator::get_health(MDSHealth& health)
+{
+  std::map<CInode *, std::list<std::pair<CDir*, export_state_t *>>> out;
+  for (auto &it : export_state) {
+    CDir *cd = it.first;
+    export_state_t& state = it.second;
+    out[cd->inode].push_back(std::make_pair(cd, &state));
+  }
+
+  for (auto &it : out) {
+    CInode *inode = it.first;
+    auto& exports = it.second;
+
+    std::string path;
+    inode->make_path_string(path);
+
+    std::ostringstream oss;
+    oss << "exporting " << path << " fragments [";
+    bool first = true;
+    for (auto& ex : exports) {
+      CDir *cd = ex.first;
+      export_state_t *state = ex.second;
+      if (!first) oss << ", ";
+      oss << "f(" << cd->frag << ")->mds." << state->peer << "@" << get_export_statename(state->state);
+    }
+    oss << "]";
+    MDSHealthMetric m(MDS_HEALTH_EXPORT, HEALTH_OK, oss.str());
+    health.metrics.push_back(m);
+  }
 }
