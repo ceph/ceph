@@ -13,7 +13,6 @@
 #include "rgw_rest.h"
 #include "rgw_crypt_sanitize.h"
 
-#include "include/str_list.h"
 #include <boost/utility/string_view.hpp>
 
 #define dout_context g_ceph_context
@@ -250,11 +249,11 @@ namespace s3 {
 /* FIXME(rzarzynski): duplicated from rgw_rest_s3.h. */
 #define RGW_AUTH_GRACE_MINS 15
 
-static inline int parse_v4_credentials_qs(const req_info& info,           /* in */
-                                          std::string& credential,        /* out */
-                                          std::string& signedheaders,     /* out */
-                                          std::string& signature,         /* out */
-                                          std::string& date)              /* out */
+static inline int parse_v4_query_string(const req_info& info,              /* in */
+                                        boost::string_view& credential,    /* out */
+                                        boost::string_view& signedheaders, /* out */
+                                        boost::string_view& signature,     /* out */
+                                        boost::string_view& date)          /* out */
 {
   /* auth ships with req params ... */
 
@@ -266,8 +265,9 @@ static inline int parse_v4_credentials_qs(const req_info& info,           /* in 
 
   date = info.args.get("X-Amz-Date");
   struct tm date_t;
-  if (!parse_iso8601(date.c_str(), &date_t, NULL, false))
+  if (!parse_iso8601(sview2cstr(date).data(), &date_t, nullptr, false)) {
     return -EPERM;
+  }
 
   /* Used for pre-signatured url, We shouldn't return -ERR_REQUEST_TIME_SKEWED
    * when current time <= X-Amz-Expires */
@@ -276,12 +276,12 @@ static inline int parse_v4_credentials_qs(const req_info& info,           /* in 
   uint64_t now_req = 0;
   uint64_t now = ceph_clock_now();
 
-  std::string expires = info.args.get("X-Amz-Expires");
+  boost::string_view expires = info.args.get("X-Amz-Expires");
   if (!expires.empty()) {
     /* X-Amz-Expires provides the time period, in seconds, for which
        the generated presigned URL is valid. The minimum value
        you can set is 1, and the maximum is 604800 (seven days) */
-    time_t exp = atoll(expires.c_str());
+    time_t exp = atoll(expires.data());
     if ((exp < 1) || (exp > 7*24*60*60)) {
       dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
       return -EPERM;
@@ -319,56 +319,99 @@ static inline int parse_v4_credentials_qs(const req_info& info,           /* in 
   return 0;
 }
 
-static inline int parse_v4_credentials_hdrs(const req_info& info,           /* in */
-                                            std::string& credential,        /* out */
-                                            std::string& signedheaders,     /* out */
-                                            std::string& signature,         /* out */
-                                            std::string& date)              /* out */
+namespace {
+static bool get_next_token(const boost::string_view& s,
+                           size_t& pos,
+                           const char* const delims,
+                           boost::string_view& token)
 {
-  /* auth ships in headers ... */
+  const size_t start = s.find_first_not_of(delims, pos);
+  if (start == boost::string_view::npos) {
+    pos = s.size();
+    return false;
+  }
 
-  /* ------------------------- handle Credential header */
+  size_t end = s.find_first_of(delims, start);
+  if (end != boost::string_view::npos)
+    pos = end + 1;
+  else {
+    pos = end = s.size();
+  }
 
-  const char* const http_auth = info.env->get("HTTP_AUTHORIZATION");
-  string auth_str = http_auth;
+  token = s.substr(start, end - start);
+  return true;
+}
 
-  constexpr size_t min_len = strlen(AWS4_HMAC_SHA256_STR) + 1;
-  if (auth_str.length() < min_len) {
+std::vector<boost::string_view> get_str_vec(const boost::string_view& str,
+                                            const char* const delims)
+{
+  std::vector<boost::string_view> str_vec;
+
+  size_t pos = 0;
+  boost::string_view token;
+  while (pos < str.size()) {
+    if (get_next_token(str, pos, delims, token)) {
+      if (token.size() > 0) {
+        str_vec.push_back(token);
+      }
+    }
+  }
+
+  return str_vec;
+}
+
+std::vector<boost::string_view> get_str_vec(const boost::string_view& str)
+{
+  const char delims[] = ";,= \t";
+  return get_str_vec(str, delims);
+}
+};
+
+static inline int parse_v4_auth_header(const req_info& info,               /* in */
+                                       boost::string_view& credential,     /* out */
+                                       boost::string_view& signedheaders,  /* out */
+                                       boost::string_view& signature,      /* out */
+                                       boost::string_view& date)           /* out */
+{
+  boost::string_view input(info.env->get("HTTP_AUTHORIZATION", ""));
+  try {
+    input = input.substr(::strlen(AWS4_HMAC_SHA256_STR) + 1);
+  } catch (std::out_of_range&) {
+    /* We should never ever run into this situation as the presence of
+     * AWS4_HMAC_SHA256_STR had been verified earlier. */
     dout(10) << "credentials string is too short" << dendl;
     return -EINVAL;
   }
 
-  list<string> auth_list;
-  get_str_list(auth_str.substr(min_len), ",", auth_list);
-
-  map<string, string> kv;
-
-  for (string& s : auth_list) {
-    string key, val;
-    int ret = parse_key_value(s, key, val);
-    if (ret < 0) {
-      dout(10) << "NOTICE: failed to parse auth header (s=" << s << ")" << dendl;
+  std::map<boost::string_view, boost::string_view> kv;
+  for (const auto& s : get_str_vec(input, ",")) {
+    const auto parsed_pair = parse_key_value(s);
+    if (parsed_pair) {
+      kv[parsed_pair->first] = parsed_pair->second;
+    } else {
+      dout(10) << "NOTICE: failed to parse auth header (s=" << s << ")"
+               << dendl;
       return -EINVAL;
     }
-    kv[key] = std::move(val);
   }
 
-  static std::array<string, 3> aws4_presigned_required_keys = {
+  static const std::array<boost::string_view, 3> required_keys = {
     "Credential",
     "SignedHeaders",
     "Signature"
   };
 
-  for (string& k : aws4_presigned_required_keys) {
-    if (kv.find(k) == kv.end()) {
+  /* Ensure that the presigned required keys are really there. */
+  for (const auto& k : required_keys) {
+    if (kv.find(k) == std::end(kv)) {
       dout(10) << "NOTICE: auth header missing key: " << k << dendl;
       return -EINVAL;
     }
   }
 
-  credential = std::move(kv["Credential"]);
-  signedheaders = std::move(kv["SignedHeaders"]);
-  signature = std::move(kv["Signature"]);
+  credential = kv["Credential"];
+  signedheaders = kv["SignedHeaders"];
+  signature = kv["Signature"];
 
   /* sig hex str */
   dout(10) << "v4 signature format = " << signature << dendl;
@@ -388,25 +431,25 @@ static inline int parse_v4_credentials_hdrs(const req_info& info,           /* i
   return 0;
 }
 
-int parse_credentials(const req_info& info,             /* in */
-                      std::string& access_key_id,       /* out */
-                      std::string& credential_scope,    /* out */
-                      std::string& signedheaders,       /* out */
-                      std::string& signature,           /* out */
-                      std::string& date,                /* out */
-                      bool& using_qs)                   /* out */
+int parse_credentials(const req_info& info,                     /* in */
+                      boost::string_view& access_key_id,        /* out */
+                      boost::string_view& credential_scope,     /* out */
+                      boost::string_view& signedheaders,        /* out */
+                      boost::string_view& signature,            /* out */
+                      boost::string_view& date,                 /* out */
+                      bool& using_qs)                           /* out */
 {
   const char* const http_auth = info.env->get("HTTP_AUTHORIZATION");
   using_qs = http_auth == nullptr || http_auth[0] == '\0';
 
   int ret;
-  std::string credential;
+  boost::string_view credential;
   if (using_qs) {
-    ret = parse_v4_credentials_qs(info, credential, signedheaders,
-                                  signature, date);
+    ret = parse_v4_query_string(info, credential, signedheaders,
+                                signature, date);
   } else {
-    ret = parse_v4_credentials_hdrs(info, credential, signedheaders,
-                                    signature, date);
+    ret = parse_v4_auth_header(info, credential, signedheaders,
+                               signature, date);
   }
 
   if (ret < 0) {
@@ -532,12 +575,12 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
 
 boost::optional<std::string>
 get_v4_canonical_headers(const req_info& info,
-                         const std::string& signedheaders,
+                         const boost::string_view& signedheaders,
                          const bool using_qs,
                          const bool force_boto2_compat)
 {
   map<string, string> canonical_hdrs_map;
-  istringstream sh(signedheaders);
+  istringstream sh(signedheaders.to_string());
   string token;
   string port = info.env->get("SERVER_PORT", "");
   string secure_port = info.env->get("SERVER_PORT_SECURE", "");
@@ -598,7 +641,7 @@ get_v4_canon_req_hash(CephContext* cct,
                       const std::string& canonical_uri,
                       const std::string& canonical_qs,
                       const std::string& canonical_hdrs,
-                      const std::string& signed_hdrs,
+                      const boost::string_view& signed_hdrs,
                       const boost::string_view& request_payload_hash)
 {
   ldout(cct, 10) << "payload request hash = " << request_payload_hash << dendl;
@@ -612,7 +655,7 @@ get_v4_canon_req_hash(CephContext* cct,
     .append("\n")
     .append(canonical_hdrs)
     .append("\n")
-    .append(signed_hdrs)
+    .append(signed_hdrs.data(), signed_hdrs.length())
     .append("\n")
     .append(request_payload_hash.data(), request_payload_hash.length());
 
@@ -830,10 +873,14 @@ AWSv4ComplMulti::calc_chunk_signature(const std::string& payload_hash) const
 {
   std::string string_to_sign = "AWS4-HMAC-SHA256-PAYLOAD\n";
 
-  string_to_sign.append(date + "\n");
-  string_to_sign.append(credential_scope + "\n");
-  string_to_sign.append(prev_chunk_signature + "\n");
-  string_to_sign.append(std::string(AWS4_EMPTY_PAYLOAD_HASH) + "\n");
+  string_to_sign.append(date.data(), date.length());
+  string_to_sign.append("\n");
+  string_to_sign.append(credential_scope.data(), credential_scope.length());
+  string_to_sign.append("\n");
+  string_to_sign.append(prev_chunk_signature);
+  string_to_sign.append("\n");
+  string_to_sign.append(AWS4_EMPTY_PAYLOAD_HASH, strlen(AWS4_EMPTY_PAYLOAD_HASH));
+  string_to_sign.append("\n");
   string_to_sign.append(payload_hash);
 
   ldout(cct, 20) << "AWSv4ComplMulti: string_to_sign=\n" << string_to_sign
@@ -988,9 +1035,9 @@ bool AWSv4ComplMulti::complete()
 
 rgw::auth::Completer::cmplptr_t
 AWSv4ComplMulti::create(const req_state* const s,
-                        std::string date,
-                        std::string credential_scope,
-                        std::string seed_signature,
+                        boost::string_view date,
+                        boost::string_view credential_scope,
+                        boost::string_view seed_signature,
                         const boost::optional<std::string>& secret_key)
 {
   if (!secret_key) {

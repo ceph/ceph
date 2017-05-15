@@ -2153,12 +2153,20 @@ extern string rgw_string_unquote(const string& s);
 extern void parse_csv_string(const string& ival, vector<string>& ovals);
 extern int parse_key_value(string& in_str, string& key, string& val);
 extern int parse_key_value(string& in_str, const char *delim, string& key, string& val);
+
+extern boost::optional<std::pair<boost::string_view, boost::string_view>>
+parse_key_value(const boost::string_view& in_str,
+                const boost::string_view& delim);
+extern boost::optional<std::pair<boost::string_view, boost::string_view>>
+parse_key_value(const boost::string_view& in_str);
+
+
 /** time parsing */
 extern int parse_time(const char *time_str, real_time *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
 extern bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns = NULL, bool extended_format = true);
 extern string rgw_trim_whitespace(const string& src);
-extern boost::string_ref rgw_trim_whitespace(const boost::string_ref& src);
+extern boost::string_view rgw_trim_whitespace(const boost::string_view& src);
 extern string rgw_trim_quotes(const string& val);
 
 extern void rgw_to_iso8601(const real_time& t, char *dest, int buf_size);

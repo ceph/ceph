@@ -141,10 +141,8 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
   CephContext* const cct;
 
-  /* TODO(rzarzynski): move to boost::string_ref. This should be just fine
-   * as (all?) parameters here are actually views over req_info. */
-  const std::string date;
-  const std::string credential_scope;
+  const boost::string_view date;
+  const boost::string_view credential_scope;
   const signing_key_t signing_key;
 
   class ChunkMeta {
@@ -160,7 +158,7 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
         signature(signature.to_string()) {
     }
 
-    ChunkMeta(const boost::string_ref signature)
+    ChunkMeta(const boost::string_view& signature)
       : signature(signature.to_string()) {
     }
 
@@ -187,7 +185,7 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
     /* Factory: create an object representing metadata of first, initial chunk
      * in a stream. */
-    static ChunkMeta create_first(const boost::string_ref seed_signature) {
+    static ChunkMeta create_first(const boost::string_view& seed_signature) {
       return ChunkMeta(seed_signature);
     }
 
@@ -212,9 +210,9 @@ public:
   /* We need the constructor to be public because of the std::make_shared that
    * is employed by the create() method. */
   AWSv4ComplMulti(const req_state* const s,
-                  std::string date,
-                  std::string credential_scope,
-                  std::string seed_signature,
+                  boost::string_view date,
+                  boost::string_view credential_scope,
+                  boost::string_view seed_signature,
                   const signing_key_t& signing_key)
     : io_base_t(nullptr),
       cct(s->cct),
@@ -244,9 +242,9 @@ public:
 
   /* Factories. */
   static cmplptr_t create(const req_state* s,
-                          std::string date,
-                          std::string credential_scope,
-                          std::string seed_signature,
+                          boost::string_view date,
+                          boost::string_view credential_scope,
+                          boost::string_view seed_signature,
                           const boost::optional<std::string>& secret_key);
 
 };
@@ -324,13 +322,13 @@ static constexpr char AWS4_HMAC_SHA256_STR[] = "AWS4-HMAC-SHA256";
 static constexpr char AWS4_EMPTY_PAYLOAD_HASH[] = \
   "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
-int parse_credentials(const req_info& info,             /* in */
-                      std::string& access_key_id,       /* out */
-                      std::string& credential_scope,    /* out */
-                      std::string& signedheaders,       /* out */
-                      std::string& signature,           /* out */
-                      std::string& date,                /* out */
-                      bool& using_qs);                  /* out */
+int parse_credentials(const req_info& info,                     /* in */
+                      boost::string_view& access_key_id,        /* out */
+                      boost::string_view& credential_scope,     /* out */
+                      boost::string_view& signedheaders,        /* out */
+                      boost::string_view& signature,            /* out */
+                      boost::string_view& date,                 /* out */
+                      bool& using_qs);                          /* out */
 
 static inline std::string get_v4_canonical_uri(const req_info& info) {
   /* The code should normalize according to RFC 3986 but S3 does NOT do path
@@ -396,10 +394,11 @@ static inline bool is_v4_payload_streamed(const char* const exp_payload_hash)
 
 std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
-boost::optional<std::string> get_v4_canonical_headers(const req_info& info,
-                                                      const std::string& signedheaders,
-                                                      bool using_qs,
-                                                      bool force_boto2_compat);
+boost::optional<std::string>
+get_v4_canonical_headers(const req_info& info,
+                         const boost::string_view& signedheaders,
+                         bool using_qs,
+                         bool force_boto2_compat);
 
 extern sha256_digest_t
 get_v4_canon_req_hash(CephContext* cct,
@@ -407,7 +406,7 @@ get_v4_canon_req_hash(CephContext* cct,
                       const std::string& canonical_uri,
                       const std::string& canonical_qs,
                       const std::string& canonical_hdrs,
-                      const std::string& signed_hdrs,
+                      const boost::string_view& signed_hdrs,
                       const boost::string_view& request_payload_hash);
 
 std::string get_v4_string_to_sign(CephContext* cct,

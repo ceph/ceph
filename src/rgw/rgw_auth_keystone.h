@@ -7,6 +7,7 @@
 
 #include <utility>
 #include <boost/optional.hpp>
+#include <boost/utility/string_view.hpp>
 
 #include "rgw_auth.h"
 #include "rgw_rest_s3.h"
@@ -87,11 +88,11 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                              const std::vector<std::string>& admin_roles
                             ) const noexcept;
   std::pair<boost::optional<token_envelope_t>, int>
-  get_from_keystone(const std::string& access_key_id,
+  get_from_keystone(const boost::string_view& access_key_id,
                     const std::string& string_to_sign,
-                    const std::string& signature) const;
-  result_t authenticate(const std::string& access_key_id,
-                        const std::string& signature,
+                    const boost::string_view& signature) const;
+  result_t authenticate(const boost::string_view& access_key_id,
+                        const boost::string_view& signature,
                         const std::string& string_to_sign,
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,

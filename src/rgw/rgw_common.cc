@@ -464,6 +464,17 @@ static void trim_whitespace(const string& src, string& dst)
   dst = src.substr(start, end - start + 1);
 }
 
+static boost::string_view trim_whitespace(const boost::string_view& src)
+{
+  const char* spacestr = " \t\n\r\f\v";
+  const size_t start = src.find_first_not_of(spacestr);
+  if (start == boost::string_view::npos) {
+    return boost::string_view();
+  }
+
+  const size_t end = src.find_last_not_of(spacestr);
+  return src.substr(start, end - start + 1);
+}
 static bool check_str_end(const char *s)
 {
   if (!s)
@@ -544,8 +555,7 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
     dout(0) << "parse_iso8601 failed" << dendl;
     return false;
   }
-  string str;
-  trim_whitespace(p, str);
+  const boost::string_view str = trim_whitespace(p);
   int len = str.size();
 
   if (len == 0 || (len == 1 && str[0] == 'Z'))
@@ -556,8 +566,8 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
     return false;
 
   uint32_t ms;
-  string nsstr = str.substr(1,  len - 2);
-  int r = stringtoul(nsstr, &ms);
+  boost::string_view nsstr = str.substr(1,  len - 2);
+  int r = stringtoul(nsstr.to_string(), &ms);
   if (r < 0)
     return false;
 
@@ -606,6 +616,27 @@ int parse_key_value(string& in_str, const char *delim, string& key, string& val)
 int parse_key_value(string& in_str, string& key, string& val)
 {
   return parse_key_value(in_str, "=", key,val);
+}
+
+boost::optional<std::pair<boost::string_view, boost::string_view>>
+parse_key_value(const boost::string_view& in_str,
+                const boost::string_view& delim)
+{
+  const size_t pos = in_str.find(delim);
+  if (pos == boost::string_view::npos) {
+    return boost::none;
+  }
+
+  const auto key = trim_whitespace(in_str.substr(0, pos));
+  const auto val = trim_whitespace(in_str.substr(pos + 1));
+
+  return std::make_pair(key, val);
+}
+
+boost::optional<std::pair<boost::string_view, boost::string_view>>
+parse_key_value(const boost::string_view& in_str)
+{
+  return parse_key_value(in_str, "=");
 }
 
 int parse_time(const char *time_str, real_time *time)
@@ -1453,9 +1484,9 @@ string rgw_trim_whitespace(const string& src)
   return src.substr(start, end - start + 1);
 }
 
-boost::string_ref rgw_trim_whitespace(const boost::string_ref& src)
+boost::string_view rgw_trim_whitespace(const boost::string_view& src)
 {
-  boost::string_ref res = src;
+  boost::string_view res = src;
 
   while (res.size() > 0 && std::isspace(res.front())) {
     res.remove_prefix(1);
@@ -1528,7 +1559,7 @@ int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
 {
   int pos = cap.find('=');
   if (pos >= 0) {
-    trim_whitespace(cap.substr(0, pos), type);
+    type = trim_whitespace(cap.substr(0, pos)).to_string();
   }
 
   if (!is_valid_cap_type(type))
