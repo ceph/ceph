@@ -470,8 +470,7 @@ Infiniband::ProtectionDomain::ProtectionDomain(CephContext *cct, Device *device)
 
 Infiniband::ProtectionDomain::~ProtectionDomain()
 {
-  int rc = ibv_dealloc_pd(pd);
-  assert(rc == 0);
+  ibv_dealloc_pd(pd);
 }
 
 
