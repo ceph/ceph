@@ -1969,6 +1969,14 @@ void RGWSetBucketWebsite::execute()
   if (op_ret < 0)
     return;
 
+  if (!store->is_meta_master()) {
+    op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldout(s->cct, 20) << __func__ << " forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   s->bucket_info.has_website = true;
   s->bucket_info.website_conf = website_conf;
 
