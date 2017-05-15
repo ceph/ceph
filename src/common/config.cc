@@ -1377,9 +1377,6 @@ void md_config_t::diff_helper(
     char *other_val = other_buf;
     int err = other->get_val(opt.name, &other_val, sizeof(other_buf));
     if (err < 0) {
-      if (!setting.empty()) {
-        continue;
-      }
       if (err == -ENOENT) {
         unknown->insert(opt.name);
       }
@@ -1393,11 +1390,9 @@ void md_config_t::diff_helper(
 
     if (strcmp(local_val, other_val))
       diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
-    else {
-      if (!setting.empty()) {
+    else if (!setting.empty()) {
         diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
         break;
-      }
     }
   }
 }
