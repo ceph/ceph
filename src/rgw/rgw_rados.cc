@@ -4736,8 +4736,9 @@ int RGWRados::log_usage(map<rgw_user_bucket, RGWUsageBatch>& usage_info)
   return 0;
 }
 
-int RGWRados::read_usage(const rgw_user& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
-                         bool *is_truncated, RGWUsageIter& usage_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage)
+int RGWRados::read_usage(const rgw_user& user, string& subuser, uint64_t start_epoch, uint64_t end_epoch,
+                         uint32_t max_entries, bool *is_truncated, RGWUsageIter& usage_iter, 
+			 map<rgw_user_bucket, rgw_usage_log_entry>& usage)
 {
   uint32_t num = max_entries;
   string hash, first_hash;
@@ -4756,7 +4757,7 @@ int RGWRados::read_usage(const rgw_user& user, uint64_t start_epoch, uint64_t en
     map<rgw_user_bucket, rgw_usage_log_entry> ret_usage;
     map<rgw_user_bucket, rgw_usage_log_entry>::iterator iter;
 
-    int ret =  cls_obj_usage_log_read(hash, user_str, start_epoch, end_epoch, num,
+    int ret =  cls_obj_usage_log_read(hash, user_str, subuser, start_epoch, end_epoch, num,
                                     usage_iter.read_iter, ret_usage, is_truncated);
     if (ret == -ENOENT)
       goto next;
@@ -4779,7 +4780,7 @@ next:
   return 0;
 }
 
-int RGWRados::trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoch)
+int RGWRados::trim_usage(rgw_user& user, string& subuser, uint64_t start_epoch, uint64_t end_epoch)
 {
   uint32_t index = 0;
   string hash, first_hash;
@@ -4789,7 +4790,7 @@ int RGWRados::trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoc
   hash = first_hash;
 
   do {
-    int ret =  cls_obj_usage_log_trim(hash, user_str, start_epoch, end_epoch);
+    int ret =  cls_obj_usage_log_trim(hash, user_str, subuser, start_epoch, end_epoch);
     if (ret == -ENOENT)
       goto next;
 
@@ -12228,8 +12229,11 @@ int RGWRados::cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info)
   return r;
 }
 
-int RGWRados::cls_obj_usage_log_read(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
-                                     string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated)
+int RGWRados::cls_obj_usage_log_read(string& oid, string& user, string& subuser, 
+                                     uint64_t start_epoch, uint64_t end_epoch, 
+				     uint32_t max_entries, string& read_iter, 
+				     map<rgw_user_bucket, rgw_usage_log_entry>& usage,
+				     bool *is_truncated)
 {
   rgw_raw_obj obj(get_zone_params().usage_log_pool, oid);
 
@@ -12242,13 +12246,13 @@ int RGWRados::cls_obj_usage_log_read(string& oid, string& user, uint64_t start_e
 
   *is_truncated = false;
 
-  r = cls_rgw_usage_log_read(ref.ioctx, ref.oid, user, start_epoch, end_epoch,
+  r = cls_rgw_usage_log_read(ref.ioctx, ref.oid, user, subuser, start_epoch, end_epoch,
 			     max_entries, read_iter, usage, is_truncated);
 
   return r;
 }
 
-int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch)
+int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, string& subuser, uint64_t start_epoch, uint64_t end_epoch)
 {
   rgw_raw_obj obj(get_zone_params().usage_log_pool, oid);
 
@@ -12260,7 +12264,7 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_e
   }
 
   ObjectWriteOperation op;
-  cls_rgw_usage_log_trim(op, user, start_epoch, end_epoch);
+  cls_rgw_usage_log_trim(op, user, subuser, start_epoch, end_epoch);
 
   r = ref.ioctx.operate(ref.oid, &op);
   return r;

@@ -554,23 +554,16 @@ WRITE_CLASS_ENCODER(rgw_cls_obj_check_mtime)
 
 struct rgw_cls_usage_log_add_op {
   rgw_usage_log_info info;
-  rgw_user user;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(info, bl);
-    ::encode(user.to_str(), bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     ::decode(info, bl);
-    if (struct_v >= 2) {
-      string s;
-      ::decode(s, bl);
-      user.from_str(s);
-    }
     DECODE_FINISH(bl);
   }
 };
@@ -689,27 +682,32 @@ struct rgw_cls_usage_log_read_op {
   uint64_t start_epoch;
   uint64_t end_epoch;
   string owner;
+  string subuser;
 
   string iter;  // should be empty for the first call, non empty for subsequent calls
   uint32_t max_entries;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(start_epoch, bl);
     ::encode(end_epoch, bl);
     ::encode(owner, bl);
     ::encode(iter, bl);
     ::encode(max_entries, bl);
+    ::encode(subuser, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(start_epoch, bl);
     ::decode(end_epoch, bl);
     ::decode(owner, bl);
     ::decode(iter, bl);
     ::decode(max_entries, bl);
+    if (struct_v >=2 ) {
+      ::decode(subuser, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -742,20 +740,25 @@ struct rgw_cls_usage_log_trim_op {
   uint64_t start_epoch;
   uint64_t end_epoch;
   string user;
+  string subuser;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     ::encode(start_epoch, bl);
     ::encode(end_epoch, bl);
     ::encode(user, bl);
+    ::encode(subuser, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     ::decode(start_epoch, bl);
     ::decode(end_epoch, bl);
     ::decode(user, bl);
+    if (struct_v >= 3) {
+      ::decode(subuser, bl);
+     }
     DECODE_FINISH(bl);
   }
 };
