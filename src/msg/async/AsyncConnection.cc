@@ -1933,16 +1933,7 @@ int AsyncConnection::send_message(Message *m)
     ldout(async_msgr->cct, 5) << __func__ << " clear encoded buffer previous "
                               << f << " != " << get_features() << dendl;
   }
-  if (!is_queued() && can_write == WriteStatus::CANWRITE && async_msgr->cct->_conf->ms_async_send_inline) {
-    if (!bl.length())
-      prepare_send_message(get_features(), m, bl);
-    logger->inc(l_msgr_send_messages_inline);
-    if (write_message(m, bl, false) < 0) {
-      ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
-      // we want to handle fault within internal thread
-      center->dispatch_event_external(write_handler);
-    }
-  } else if (can_write == WriteStatus::CLOSED) {
+  if (can_write == WriteStatus::CLOSED) {
     ldout(async_msgr->cct, 10) << __func__ << " connection closed."
                                << " Drop message " << m << dendl;
     m->put();
