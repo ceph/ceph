@@ -203,6 +203,7 @@ ssize_t AsyncConnection::_try_send(bool more)
     }
   }
 
+  assert(center->in_thread());
   ssize_t r = cs.send(outcoming_bl, more);
   if (r < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
@@ -213,21 +214,13 @@ ssize_t AsyncConnection::_try_send(bool more)
                              << " remaining bytes " << outcoming_bl.length() << dendl;
 
   if (!open_write && is_queued()) {
-    if (center->in_thread()) {
-      center->create_file_event(cs.fd(), EVENT_WRITABLE, write_handler);
-      open_write = true;
-    } else {
-      center->dispatch_event_external(write_handler);
-    }
+    center->create_file_event(cs.fd(), EVENT_WRITABLE, write_handler);
+    open_write = true;
   }
 
   if (open_write && !is_queued()) {
-    if (center->in_thread()) {
-      center->delete_file_event(cs.fd(), EVENT_WRITABLE);
-      open_write = false;
-    } else {
-      center->dispatch_event_external(write_handler);
-    }
+    center->delete_file_event(cs.fd(), EVENT_WRITABLE);
+    open_write = false;
     if (state_after_send != STATE_NONE)
       center->dispatch_event_external(read_handler);
   }
@@ -2172,6 +2165,7 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
 ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
 {
   FUNCTRACE();
+  assert(center->in_thread());
   m->set_seq(out_seq.inc());
 
   if (msgr->crcflags & MSG_CRC_HEADER)
