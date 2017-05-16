@@ -425,20 +425,11 @@ class TestDataScan(CephFSTestCase):
         self.fs.wait_for_daemons()
         if other_pool:
             for mds_id in self.fs.mds_ids:
-                self.wait_until_equal(
-                        lambda: get_state(mds_id),
-                        "up:active",
-                        timeout=60)
-            self.fs.mon_manager.raw_cluster_cmd('tell', 'mds.a',
-                                                'injectargs', '--debug-mds=20')
-            self.fs.mon_manager.raw_cluster_cmd('tell', 'mds.b',
-                                                'injectargs', '--debug-mds=20')
-            self.fs.mon_manager.raw_cluster_cmd('daemon', 'mds.a',
-                                                'scrub_path', '/',
-                                                'recursive', 'repair')
-            self.fs.mon_manager.raw_cluster_cmd('daemon', 'mds.b',
-                                                'scrub_path', '/',
-                                                'recursive', 'repair')
+                self.fs.mon_manager.raw_cluster_cmd('tell', "mds." + mds_id,
+                                                    'injectargs', '--debug-mds=20')
+                self.fs.mon_manager.raw_cluster_cmd('daemon', "mds." + mds_id,
+                                                    'scrub_path', '/',
+                                                    'recursive', 'repair')
         log.info(str(self.mds_cluster.status()))
 
         # Mount a client
