@@ -512,6 +512,7 @@ decode(boost::container::flat_set<T, Comp, Alloc>& s, bufferlist::iterator& p)
   __u32 n;
   decode(n, p);
   s.clear();
+  s.reserve(n);
   while (n--) {
     T v;
     decode(v, p);
@@ -532,6 +533,7 @@ inline typename std::enable_if<!traits::supported>::type
 decode_nohead(int len, boost::container::flat_set<T, Comp, Alloc>& s,
 	      bufferlist::iterator& p)
 {
+  s.reserve(len);
   for (int i=0; i<len; i++) {
     T v;
     decode(v, p);
@@ -817,6 +819,7 @@ template<class T, class U, class Comp, class Alloc,
   __u32 n;
   decode(n, p);
   m.clear();
+  m.reserve(n);
   while (n--) {
     T k;
     decode(k, p);
@@ -829,6 +832,7 @@ inline void decode_noclear(boost::container::flat_map<T,U,Comp,Alloc>& m,
 {
   __u32 n;
   decode(n, p);
+  m.reserve(m.size() + n);
   while (n--) {
     T k;
     decode(k, p);
