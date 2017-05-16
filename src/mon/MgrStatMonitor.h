@@ -12,6 +12,7 @@ class MgrPGStatService;
 class MgrStatMonitor : public PaxosService {
   version_t version = 0;
   std::unique_ptr<MgrPGStatService> pgservice;
+  list<pair<health_status_t,string>> health_summary, health_detail;
 
 public:
   MgrStatMonitor(Monitor *mn, Paxos *p, const string& service_name);
