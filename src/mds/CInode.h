@@ -153,6 +153,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
   static const int PIN_SCRUBQUEUE =       25;
+  static const int PIN_EXPORTPINQUEUE =   26;
 
   const char *pin_name(int p) const override {
     switch (p) {
@@ -178,6 +179,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     case PIN_DIRTYPARENT: return "dirtyparent";
     case PIN_DIRWAITER: return "dirwaiter";
     case PIN_SCRUBQUEUE: return "scrubqueue";
+    case PIN_EXPORTPINQUEUE: return "exportpinqueue";
     default: return generic_pin_name(p);
     }
   }
@@ -627,7 +629,6 @@ public:
   friend class StrayManager;
   friend class CDir;
   friend class CInodeExport;
-  friend class C_CInode_ExportPin;
 
   // ---------------------------
   CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP) : 
@@ -1069,7 +1070,7 @@ public:
   }
 
 private:
-  void maybe_export_pin();
+  void maybe_export_pin(bool update=false);
 public:
   void set_export_pin(mds_rank_t rank);
   mds_rank_t get_export_pin(bool inherit=true) const;
