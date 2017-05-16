@@ -14,7 +14,6 @@
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrMap.h"
 #include "messages/MMgrDigest.h"
-#include "messages/MMonMgrReport.h"
 
 #include "PGStatService.h"
 #include "include/stringify.h"
@@ -33,52 +32,6 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 		<< ").mgr e" << mgrmap.get_epoch() << " ";
 }
 
-
-class MgrPGStatService : public PGStatService {
-  PGMapDigest digest;
-public:
-  void decode_digest(bufferlist& bl) {
-    auto p = bl.begin();
-    ::decode(digest, p);
-  }
-
-  const pool_stat_t* get_pool_stat(int poolid) const {
-    auto i = digest.pg_pool_sum.find(poolid);
-    if (i != digest.pg_pool_sum.end()) {
-      return &i->second;
-    }
-    return NULL;
-  }
-
-  const pool_stat_t& get_pg_sum() const { return digest.pg_sum; }
-  const osd_stat_t& get_osd_sum() const { return digest.osd_sum; }
-
-  const osd_stat_t *get_osd_stat(int osd) const {
-    auto i = digest.osd_stat.find(osd);
-    if (i == digest.osd_stat.end()) {
-      return NULL;
-    }
-    return &i->second;
-  }
-  const ceph::unordered_map<int32_t,osd_stat_t> *get_osd_stat() const {
-    return &digest.osd_stat;
-  }
-
-  size_t get_num_pg_by_osd(int osd) const {
-    return digest.get_num_pg_by_osd(osd);
-  }
-
-  void print_summary(Formatter *f, ostream *out) const {
-    digest.print_summary(f, out);
-  }
-  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const {
-    digest.dump_fs_stats(ss, f, verbose);
-  }
-  void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
-		       bool verbose) const {
-    digest.dump_pool_stats_full(osdm, ss, f, verbose);
-  }
-};
 
 
 void MgrMonitor::create_initial()
@@ -155,8 +108,6 @@ bool MgrMonitor::preprocess_query(MonOpRequestRef op)
       return preprocess_beacon(op);
     case MSG_MON_COMMAND:
       return preprocess_command(op);
-    case MSG_MON_MGR_REPORT:
-      return preprocess_report(op);
     default:
       mon->no_reply(op);
       derr << "Unhandled message type " << m->get_type() << dendl;
@@ -173,9 +124,6 @@ bool MgrMonitor::prepare_update(MonOpRequestRef op)
 
     case MSG_MON_COMMAND:
       return prepare_command(op);
-
-    case MSG_MON_MGR_REPORT:
-      return prepare_report(op);
 
     default:
       mon->no_reply(op);
@@ -290,15 +238,6 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
   }
 
   return updated;
-}
-
-bool MgrMonitor::preprocess_report(MonOpRequestRef op) { return false; }
-
-bool MgrMonitor::prepare_report(MonOpRequestRef op)
-{
-  MMonMgrReport *m = static_cast<MMonMgrReport*>(op->get_req());
-  pgservice->decode_digest(m->get_data());
-  return true;
 }
 
 void MgrMonitor::check_subs()
@@ -674,10 +613,3 @@ void MgrMonitor::on_shutdown()
 }
 
 
-PGStatService *MgrMonitor::get_pg_stat_service()
-{
-  if (!pgservice) {
-    pgservice.reset(new MgrPGStatService());
-  }
-  return pgservice.get();
-}

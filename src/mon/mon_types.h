@@ -29,7 +29,8 @@
 #define PAXOS_MONMAP     4
 #define PAXOS_AUTH       5
 #define PAXOS_MGR        6
-#define PAXOS_NUM        7
+#define PAXOS_MGRSTAT    7
+#define PAXOS_NUM        8
 
 inline const char *get_paxos_name(int p) {
   switch (p) {
@@ -40,6 +41,7 @@ inline const char *get_paxos_name(int p) {
   case PAXOS_LOG: return "logm";
   case PAXOS_AUTH: return "auth";
   case PAXOS_MGR: return "mgr";
+  case PAXOS_MGRSTAT: return "mgrstat";
   default: ceph_abort(); return 0;
   }
 }
