@@ -277,6 +277,10 @@ void MgrMonitor::send_digests()
 {
   cancel_timer();
 
+  if (!is_active()) {
+    return;
+  }
+
   const std::string type = "mgrdigest";
   if (mon->session_map.subs.count(type) == 0)
     return;
