@@ -1,0 +1,134 @@
+overrides:
+  admin_socket:
+    branch: jewel
+  ceph:
+    conf:
+      mon:
+        debug mon: 20
+        debug ms: 1
+        debug paxos: 20
+      osd:
+        debug filestore: 20
+        debug journal: 20
+        debug ms: 1
+        debug osd: 25
+    log-whitelist:
+    - slow request
+    sha1: 0c83eb355e989fb6ed38a3b82f9705fd5d700e89
+  ceph-ansible:
+      group_vars:
+        all:
+          ceph_conf_overrides:
+            global:
+              osd_default_pool_size: 2
+              osd_pool_default_pg_num: 128
+              osd_pool_default_pgp_num: 128
+      osd_auto_discovery: false
+      rhbuild: '2.3'
+      setup-clients: true
+      vars:
+        ceph_origin: distro
+        ceph_stable: true
+        ceph_stable_rh_storage: true
+        ceph_test: true
+        journal_collocation: true
+        journal_size: 1024
+        osd_auto_discovery: false
+  ceph-deploy:
+    conf:
+      client:
+        log file: /var/log/ceph/ceph-$name.$pid.log
+      global:
+        mon osd allow primary affinity: true
+      mon:
+        osd default pool size: 2
+    rhbuild: true
+  install:
+    ceph:
+      deb-gpg-key: http://download.eng.bos.redhat.com/rcm-guest/ceph-drops/2.0.0/latest-Ceph-2-Ubuntu/MON/release.asc
+      deb-repo: http://download.eng.bos.redhat.com/rcm-guest/ceph-drops/2.0.0/latest-Ceph-2-Ubuntu
+      fs: xfs
+      rhbuild: '2.3'
+      sha1: 41fcf740ba9205c08a2995fd69dc29051ed81b6a
+  selinux:
+    whitelist:
+    - /home/ubuntu/cephtest/
+    - /var/lib/ceph/tmp/ceph-disk.activate.lock
+  workunit:
+    branch: jewel
+    sha1: 0c83eb355e989fb6ed38a3b82f9705fd5d700e89
+roles:
+- - source.mon.a
+- - source.osd.0
+  - source.osd.1
+  - source.osd.2
+- - source.osd.3
+  - source.osd.4
+  - source.osd.5
+- - source.osd.6
+  - source.osd.7
+  - source.osd.8
+- - source.client.0
+- - target.mon.a
+- - target.osd.0
+  - target.osd.1
+  - target.osd.2
+- - target.osd.3
+  - target.osd.4
+  - target.osd.5
+- - target.osd.6
+  - target.osd.7
+  - target.osd.8
+- - target.client.1
+tasks:
+- install: null
+- ceph:
+    cluster: source
+    rh-build: '2.3'
+    conf:
+      source.client.0:
+        rgw gc pool: .rgw.gc.0
+        rgw log data: true
+        rgw log meta: true
+        rgw region: zg-2
+        rgw region root pool: .rgw.region.0
+        rgw user keys pool: .users.0
+        rgw user uid pool: .users.uid.0
+        rgw zone: z-2
+        rgw zone root pool: .rgw.zone.0
+- ceph:
+    cluster: target
+    rh-build: '2.3'
+    conf:
+      target.client.1:
+        rgw gc pool: .rgw.gc.1
+        rgw log data: false
+        rgw log meta: false
+        rgw region: zg-2
+        rgw region root pool: .rgw.region.1
+        rgw user keys pool: .users.1
+        rgw user uid pool: .users.uid.1
+        rgw zone: z-1
+        rgw zone root pool: .rgw.zone.1
+- multisite:
+    source.client.0:
+      system user:
+        access key: 1te6NH5mcdcq0Tc5i8i2
+        name: client0-system-user
+        secret key: 1y4IOauQoL18Gp2zM7lC1vLmoawgqcYPbYGcWfXv
+    target.client.1:
+      system user:
+        access key: 0te6NH5mcdcq0Tc5i8i2
+        name: client1-system-user
+        secret key: Oy4IOauQoL18Gp2zM7lC1vLmoawgqcYPbYGcWfXv
+    realm: foo
+    regions:
+      zg-2:
+        api name: api1
+        is master: true
+        master zone: z-2
+        zones:
+        - z-1
+        - z-2
+- interactive:
+
