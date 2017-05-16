@@ -23,7 +23,6 @@ class TestExports(CephFSTestCase):
         raise RuntimeError("rank {0} failed to reach desired subtree state", rank)
 
     def test_export_pin(self):
-        self.fs.set_allow_multimds(True)
         self.fs.set_max_mds(2)
 
         status = self.fs.status()
