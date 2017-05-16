@@ -32,6 +32,7 @@ function TEST_filestore_to_bluestore() {
     fi
 
     run_mon $dir a || return 1
+    run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
     osd_pid=$(cat $dir/osd.0.pid)
     run_osd $dir 1 || return 1
