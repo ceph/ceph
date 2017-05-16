@@ -118,6 +118,62 @@ void Server::create_logger()
       "Client session messages", "hcs");
   plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request", "Client requests dispatched");
   plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request", "Server requests dispatched");
+  plb.add_u64_counter(l_mdss_req_lookuphash, "req_lookuphash",
+      "Request type lookup hash of inode");
+  plb.add_u64_counter(l_mdss_req_lookupino, "req_lookupino",
+      "Request type lookup inode");
+  plb.add_u64_counter(l_mdss_req_lookupparent, "req_lookupparent",
+      "Request type lookup parent");
+  plb.add_u64_counter(l_mdss_req_lookupname, "req_lookupname",
+      "Request type lookup name");
+  plb.add_u64_counter(l_mdss_req_lookup, "req_lookup",
+      "Request type lookup");
+  plb.add_u64_counter(l_mdss_req_lookupsnap, "req_lookupsnap",
+      "Request type lookup snapshot");
+  plb.add_u64_counter(l_mdss_req_getattr, "req_getattr",
+      "Request type get attribute");
+  plb.add_u64_counter(l_mdss_req_setattr, "req_setattr",
+      "Request type set attribute");
+  plb.add_u64_counter(l_mdss_req_setlayout, "req_setlayout",
+      "Request type set file layout");
+  plb.add_u64_counter(l_mdss_req_setdirlayout, "req_setdirlayout",
+      "Request type set directory layout");
+  plb.add_u64_counter(l_mdss_req_setxattr, "req_setxattr",
+      "Request type set extended attribute");
+  plb.add_u64_counter(l_mdss_req_rmxattr, "req_rmxattr",
+      "Request type remove extended attribute");
+  plb.add_u64_counter(l_mdss_req_readdir, "req_readdir",
+      "Request type read directory");
+  plb.add_u64_counter(l_mdss_req_setfilelock, "req_setfilelock",
+      "Request type set file lock");
+  plb.add_u64_counter(l_mdss_req_getfilelock, "req_getfilelock",
+      "Request type get file lock");
+  plb.add_u64_counter(l_mdss_req_create, "req_create",
+      "Request type create");
+  plb.add_u64_counter(l_mdss_req_open, "req_open",
+      "Request type open");
+  plb.add_u64_counter(l_mdss_req_mknod, "req_mknod",
+      "Request type make node");
+  plb.add_u64_counter(l_mdss_req_link, "req_link",
+      "Request type link");
+  plb.add_u64_counter(l_mdss_req_unlink, "req_unlink",
+      "Request type unlink");
+  plb.add_u64_counter(l_mdss_req_rmdir, "req_rmdir",
+      "Request type remove directory");
+  plb.add_u64_counter(l_mdss_req_rename, "req_rename",
+      "Request type rename");
+  plb.add_u64_counter(l_mdss_req_mkdir, "req_mkdir",
+      "Request type make directory");
+  plb.add_u64_counter(l_mdss_req_symlink, "req_symlink",
+      "Request type symbolic link");
+  plb.add_u64_counter(l_mdss_req_lssnap, "req_lssnap",
+      "Request type list snapshot");
+  plb.add_u64_counter(l_mdss_req_mksnap, "req_mksnap",
+      "Request type make snapshot");
+  plb.add_u64_counter(l_mdss_req_rmsnap, "req_rmsnap",
+      "Request type remove snapshot");
+  plb.add_u64_counter(l_mdss_req_renamesnap, "req_renamesnap",
+      "Request type rename snapshot");
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -1038,6 +1094,93 @@ void Server::respond_to_request(MDRequestRef& mdr, int r)
 {
   if (mdr->client_request) {
     reply_client_request(mdr, new MClientReply(mdr->client_request, r));
+
+    // add here to avoid counting ops multiple times (e.g., locks, loading)
+    switch(mdr->client_request->get_op()) {
+    case CEPH_MDS_OP_LOOKUPHASH:
+      logger->inc(l_mdss_req_lookuphash);
+      break;
+    case CEPH_MDS_OP_LOOKUPINO:
+      logger->inc(l_mdss_req_lookupino);
+      break;
+    case CEPH_MDS_OP_LOOKUPPARENT:
+      logger->inc(l_mdss_req_lookupparent);
+      break;
+    case CEPH_MDS_OP_LOOKUPNAME:
+      logger->inc(l_mdss_req_lookupname);
+      break;
+    case CEPH_MDS_OP_LOOKUP:
+      logger->inc(l_mdss_req_lookup);
+      break;
+    case CEPH_MDS_OP_LOOKUPSNAP:
+      logger->inc(l_mdss_req_lookupsnap);
+      break;
+    case CEPH_MDS_OP_GETATTR:
+      logger->inc(l_mdss_req_getattr);
+      break;
+    case CEPH_MDS_OP_SETATTR:
+      logger->inc(l_mdss_req_setattr);
+      break;
+    case CEPH_MDS_OP_SETLAYOUT:
+      logger->inc(l_mdss_req_setlayout);
+      break;
+    case CEPH_MDS_OP_SETDIRLAYOUT:
+      logger->inc(l_mdss_req_setdirlayout);
+      break;
+    case CEPH_MDS_OP_SETXATTR:
+      logger->inc(l_mdss_req_setxattr);
+      break;
+    case CEPH_MDS_OP_RMXATTR:
+      logger->inc(l_mdss_req_rmxattr);
+      break;
+    case CEPH_MDS_OP_READDIR:
+      logger->inc(l_mdss_req_readdir);
+      break;
+    case CEPH_MDS_OP_SETFILELOCK:
+      logger->inc(l_mdss_req_setfilelock);
+      break;
+    case CEPH_MDS_OP_GETFILELOCK:
+      logger->inc(l_mdss_req_getfilelock);
+      break;
+    case CEPH_MDS_OP_CREATE:
+      logger->inc(l_mdss_req_create);
+    case CEPH_MDS_OP_OPEN:
+      logger->inc(l_mdss_req_open);
+      break;
+    case CEPH_MDS_OP_MKNOD:
+      logger->inc(l_mdss_req_mknod);
+      break;
+    case CEPH_MDS_OP_LINK:
+      logger->inc(l_mdss_req_link);
+      break;
+    case CEPH_MDS_OP_UNLINK:
+      logger->inc(l_mdss_req_unlink);
+      break;
+    case CEPH_MDS_OP_RMDIR:
+      logger->inc(l_mdss_req_rmdir);
+      break;
+    case CEPH_MDS_OP_RENAME:
+      logger->inc(l_mdss_req_rename);
+      break;
+    case CEPH_MDS_OP_MKDIR:
+      logger->inc(l_mdss_req_mkdir);
+      break;
+    case CEPH_MDS_OP_SYMLINK:
+      logger->inc(l_mdss_req_symlink);
+      break;
+    case CEPH_MDS_OP_LSSNAP:
+      logger->inc(l_mdss_req_lssnap);
+      break;
+    case CEPH_MDS_OP_MKSNAP:
+      logger->inc(l_mdss_req_mksnap);
+      break;
+    case CEPH_MDS_OP_RMSNAP:
+      logger->inc(l_mdss_req_rmsnap);
+      break;
+    case CEPH_MDS_OP_RENAMESNAP:
+      logger->inc(l_mdss_req_renamesnap);
+      break;
+    }
   } else if (mdr->internal_op > -1) {
     dout(10) << "respond_to_request on internal request " << mdr << dendl;
     if (!mdr->internal_op_finish)
