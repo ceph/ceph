@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #endif
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 
 static void ipv4(struct sockaddr_in *addr, const char *s) {
   int err;

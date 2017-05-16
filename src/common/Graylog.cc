@@ -4,9 +4,6 @@
 #include "Graylog.h"
 
 #include <iostream>
-#include <sstream>
-
-#include <arpa/inet.h>
 
 #include "common/Formatter.h"
 #include "common/LogEntry.h"

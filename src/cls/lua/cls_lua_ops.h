@@ -2,8 +2,8 @@
 #define CEPH_CLS_LUA_OPS_H
 
 struct cls_lua_eval_op {
-  string script;
-  string handler;
+  std::string script;
+  std::string handler;
   bufferlist input;
 
   void encode(bufferlist &bl) const {
