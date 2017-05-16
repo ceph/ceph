@@ -440,6 +440,9 @@ public:
 	assert(get_can_rollback_to() == head);
       }
 
+      // make sure our buffers don't pin bigger buffers
+      e.mod_desc.trim_bl();
+
       // add to log
       log.push_back(e);
 

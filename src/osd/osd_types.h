@@ -3225,7 +3225,7 @@ public:
    * in the case that bl contains ptrs which point into a much larger
    * message buffer
    */
-  void trim_bl() {
+  void trim_bl() const {
     if (bl.length() > 0)
       bl.rebuild();
   }
