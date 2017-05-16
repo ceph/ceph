@@ -42,13 +42,13 @@ void dump_cmddesc_to_json(ceph::Formatter *jf,
 bool cmdmap_from_json(std::vector<std::string> cmd, cmdmap_t *mapp,
 		      std::stringstream &ss);
 void cmdmap_dump(const cmdmap_t &cmdmap, ceph::Formatter *f);
-void handle_bad_get(CephContext *cct, std::string k, const char *name);
+void handle_bad_get(CephContext *cct, const std::string& k, const char *name);
 
 std::string cmd_vartype_stringify(const cmd_vartype& v);
 
 template <typename T>
 bool
-cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, std::string k, T& val)
+cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& val)
 {
   if (cmdmap.count(k)) {
     try {
@@ -65,7 +65,7 @@ cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, std::string k, T& val)
 
 template <typename T>
 void
-cmd_getval(CephContext *cct, cmdmap_t& cmdmap, std::string k, T& val, T defval)
+cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& val, const T& defval)
 {
   if (!cmd_getval(cct, cmdmap, k, val))
     val = defval;
@@ -73,7 +73,7 @@ cmd_getval(CephContext *cct, cmdmap_t& cmdmap, std::string k, T& val, T defval)
 
 template <typename T>
 void
-cmd_putval(CephContext *cct, cmdmap_t& cmdmap, std::string k, T val)
+cmd_putval(CephContext *cct, cmdmap_t& cmdmap, const std::string& k, const T& val)
 {
   cmdmap[k] = val;
 }
