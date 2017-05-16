@@ -114,12 +114,18 @@ public:
   }
 
   void expect_flush_cache(MockImageCtx &mock_image_ctx, int r) {
+    if (!mock_image_ctx.image_ctx->cache) {
+      return;
+    }
     EXPECT_CALL(mock_image_ctx, flush_cache(_))
                   .WillOnce(CompleteContext(r, static_cast<ContextWQ*>(NULL)));
     expect_op_work_queue(mock_image_ctx);
   }
 
   void expect_invalidate_cache(MockImageCtx &mock_image_ctx, int r) {
+    if (!mock_image_ctx.image_ctx->cache) {
+      return;
+    }
     EXPECT_CALL(mock_image_ctx, invalidate_cache(false, _))
                    .WillOnce(WithArg<1>(CompleteContext(r, static_cast<ContextWQ*>(NULL))));
     expect_op_work_queue(mock_image_ctx);
@@ -278,6 +284,7 @@ TEST_F(TestMockOperationResizeRequest, TrimError) {
 TEST_F(TestMockOperationResizeRequest, FlushCacheError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  REQUIRE(ictx->cache);
 
   MockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
@@ -300,6 +307,7 @@ TEST_F(TestMockOperationResizeRequest, FlushCacheError) {
 TEST_F(TestMockOperationResizeRequest, InvalidateCacheError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  REQUIRE(ictx->cache);
 
   MockImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
