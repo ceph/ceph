@@ -53,19 +53,19 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, FSMap const& fsmap) {
  * out strongly-typedef'd types
  */
 template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
-                std::string k, mds_gid_t &val)
+			   const std::string& k, mds_gid_t &val)
 {
   return cmd_getval(cct, cmdmap, k, (int64_t&)val);
 }
 
 template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
-                std::string k, mds_rank_t &val)
+			   const std::string& k, mds_rank_t &val)
 {
   return cmd_getval(cct, cmdmap, k, (int64_t&)val);
 }
 
 template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
-                std::string k, MDSMap::DaemonState &val)
+			   const std::string& k, MDSMap::DaemonState &val)
 {
   return cmd_getval(cct, cmdmap, k, (int64_t&)val);
 }

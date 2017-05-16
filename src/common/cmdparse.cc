@@ -319,7 +319,7 @@ cmd_vartype_stringify(const cmd_vartype &v)
 
 
 void
-handle_bad_get(CephContext *cct, string k, const char *tname)
+handle_bad_get(CephContext *cct, const string& k, const char *tname)
 {
   ostringstream errstr;
   int status;
