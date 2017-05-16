@@ -6,6 +6,8 @@ tasks:
   - exec:
       mon.a:
         - ceph osd set require_luminous_osds
+# make sure osds have latest map
+        - rados -p rbd bench 5 write -b 4096
   - ceph.osd_scrub_pgs:
       cluster: ceph
   - exec:
