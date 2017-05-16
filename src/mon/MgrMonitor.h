@@ -36,13 +36,13 @@ class MgrMonitor : public PaxosService
   void drop_active();
   void drop_standby(uint64_t gid);
 
-  Context *digest_callback;
+  Context *digest_event = nullptr;
 
   bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
 
 public:
   MgrMonitor(Monitor *mn, Paxos *p, const string& service_name)
-    : PaxosService(mn, p, service_name), digest_callback(nullptr)
+    : PaxosService(mn, p, service_name)
   {}
 
   void init() override;
