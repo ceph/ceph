@@ -1410,6 +1410,8 @@ int AsyncConnection::handle_connect_reply(ceph_msg_connect &connect, ceph_msg_co
   if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
     ldout(async_msgr->cct, 0) << __func__ << " connect got RESETSESSION" << dendl;
     was_session_reset();
+    // see was_session_reset
+    outcoming_bl.clear();
     state = STATE_CONNECTING_SEND_CONNECT_MSG;
   }
   if (reply.tag == CEPH_MSGR_TAG_RETRY_GLOBAL) {
@@ -1994,7 +1996,6 @@ void AsyncConnection::discard_out_queue()
       r->second->put();
     }
   out_q.clear();
-  outcoming_bl.clear();
 }
 
 int AsyncConnection::randomize_out_seq()
@@ -2102,6 +2103,9 @@ void AsyncConnection::was_session_reset()
     delay_state->discard();
   dispatch_queue->discard_queue(conn_id);
   discard_out_queue();
+  // note: we need to clear outcoming_bl here, but was_session_reset may be
+  // called by other thread, so let caller clear this itself!
+  // outcoming_bl.clear();
 
   dispatch_queue->queue_remote_reset(this);
 
