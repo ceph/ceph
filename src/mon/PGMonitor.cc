@@ -353,7 +353,7 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
   }
 
   pool_stat_t pg_sum_old = pg_map.pg_sum;
-  ceph::unordered_map<uint64_t, pool_stat_t> pg_pool_sum_old;
+  mempool::pgmap::unordered_map<uint64_t, pool_stat_t> pg_pool_sum_old;
 
   // pgs
   set<int64_t> deleted_pools;
@@ -1143,7 +1143,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 
 void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summary,
                                       list<pair<health_status_t,string> > *detail,
-                                      const set<int>& s, const char *desc,
+                                      const mempool::pgmap::set<int>& s, const char *desc,
                                       health_status_t sev) const
 {
   if (!s.empty()) {
@@ -1225,7 +1225,7 @@ public:
     }
     return &i->second;
   }
-  const ceph::unordered_map<int32_t,osd_stat_t>& get_osd_stat() const override {
+  const mempool::pgmap::unordered_map<int32_t,osd_stat_t>& get_osd_stat() const override {
     return pgmap.osd_stat;
   }
   float get_full_ratio() const override { return pgmap.full_ratio; }

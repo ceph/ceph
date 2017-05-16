@@ -34,7 +34,7 @@ public:
     }
     return &i->second;
   }
-  const ceph::unordered_map<int32_t,osd_stat_t> &get_osd_stat() const override {
+  const mempool::pgmap::unordered_map<int32_t,osd_stat_t> &get_osd_stat() const override {
     return digest.osd_stat;
   }
 
