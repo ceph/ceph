@@ -976,11 +976,11 @@ public:
     epoch_t oldest_map) {
     epoch_t start = MAX(
       info.history.last_epoch_clean ? info.history.last_epoch_clean :
-       info.history.epoch_created,
+       info.history.epoch_pool_created,
       oldest_map);
     epoch_t end = MAX(
       info.history.same_interval_since,
-      info.history.epoch_created);
+      info.history.epoch_pool_created);
     return make_pair(start, end);
   }
   void check_past_interval_bounds() const;
