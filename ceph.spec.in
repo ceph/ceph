@@ -235,7 +235,6 @@ Requires:      logrotate
 Requires:      util-linux
 Requires:      cryptsetup
 Requires:      findutils
-Requires:      psmisc
 Requires:      which
 %if 0%{?suse_version}
 Recommends:    ntp-daemon
@@ -254,6 +253,7 @@ Group:		System/Filesystems
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	libcephfs2 = %{epoch}:%{version}-%{release}
+Requires:	psmisc
 Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
