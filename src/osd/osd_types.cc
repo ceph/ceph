@@ -3259,7 +3259,7 @@ PastIntervals::PastIntervals(const PastIntervals &rhs)
 PastIntervals &PastIntervals::operator=(const PastIntervals &rhs)
 {
   PastIntervals other(rhs);
-  ::swap(other, *this);
+  swap(other);
   return *this;
 }
 
