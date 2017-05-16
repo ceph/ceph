@@ -1714,11 +1714,11 @@ public:
 				      creating_pgs_t *pending_creates) const {
     if (parent.last_pg_scan >= scan_epoch) {
       for (auto& pgid : parent.creating_pgs) {
-      auto st = parent.pg_stat.find(pgid);
-      assert(st != parent.pg_stat.end());
-      auto created = make_pair(st->second.created, st->second.last_scrub_stamp);
-      // no need to add the pg, if it already exists in creating_pgs
-      pending_creates->pgs.emplace(pgid, created);
+	auto st = parent.pg_stat.find(pgid);
+	assert(st != parent.pg_stat.end());
+	auto created = make_pair(st->second.created, st->second.last_scrub_stamp);
+	// no need to add the pg, if it already exists in creating_pgs
+	pending_creates->pgs.emplace(pgid, created);
       }
     }
   }
