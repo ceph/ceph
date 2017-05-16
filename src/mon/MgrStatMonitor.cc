@@ -16,40 +16,42 @@ public:
     ::encode(digest, bl, features);
   }
 
-  const pool_stat_t* get_pool_stat(int poolid) const {
+  const pool_stat_t* get_pool_stat(int poolid) const override {
     auto i = digest.pg_pool_sum.find(poolid);
     if (i != digest.pg_pool_sum.end()) {
       return &i->second;
     }
-    return NULL;
+    return nullptr;
   }
 
-  const pool_stat_t& get_pg_sum() const { return digest.pg_sum; }
-  const osd_stat_t& get_osd_sum() const { return digest.osd_sum; }
+  const pool_stat_t& get_pg_sum() const override { return digest.pg_sum; }
+  const osd_stat_t& get_osd_sum() const override { return digest.osd_sum; }
 
-  const osd_stat_t *get_osd_stat(int osd) const {
+  const osd_stat_t *get_osd_stat(int osd) const override {
     auto i = digest.osd_stat.find(osd);
     if (i == digest.osd_stat.end()) {
-      return NULL;
+      return nullptr;
     }
     return &i->second;
   }
-  const ceph::unordered_map<int32_t,osd_stat_t> *get_osd_stat() const {
-    return &digest.osd_stat;
+  const ceph::unordered_map<int32_t,osd_stat_t> &get_osd_stat() const override {
+    return digest.osd_stat;
   }
 
-  size_t get_num_pg_by_osd(int osd) const {
+  size_t get_num_pg_by_osd(int osd) const override {
     return digest.get_num_pg_by_osd(osd);
   }
 
-  void print_summary(Formatter *f, ostream *out) const {
+  void print_summary(Formatter *f, ostream *out) const override {
     digest.print_summary(f, out);
   }
-  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const {
+  void dump_fs_stats(stringstream *ss,
+		     Formatter *f,
+		     bool verbose) const override {
     digest.dump_fs_stats(ss, f, verbose);
   }
   void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
-		       bool verbose) const {
+		       bool verbose) const override {
     digest.dump_pool_stats_full(osdm, ss, f, verbose);
   }
 };
@@ -70,9 +72,7 @@ MgrStatMonitor::MgrStatMonitor(Monitor *mn, Paxos *p, const string& service_name
 {
 }
 
-MgrStatMonitor::~MgrStatMonitor()
-{
-}
+MgrStatMonitor::~MgrStatMonitor() = default;
 
 PGStatService *MgrStatMonitor::get_pg_stat_service()
 {
@@ -120,7 +120,7 @@ void MgrStatMonitor::print_summary(Formatter *f, std::ostream *ss) const
 
 bool MgrStatMonitor::preprocess_query(MonOpRequestRef op)
 {
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = static_cast<PaxosServiceMessage*>(op->get_req());
   switch (m->get_type()) {
   case MSG_MON_MGR_REPORT:
     return preprocess_report(op);
@@ -133,11 +133,10 @@ bool MgrStatMonitor::preprocess_query(MonOpRequestRef op)
 
 bool MgrStatMonitor::prepare_update(MonOpRequestRef op)
 {
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = static_cast<PaxosServiceMessage*>(op->get_req());
   switch (m->get_type()) {
   case MSG_MON_MGR_REPORT:
     return prepare_report(op);
-
   default:
     mon->no_reply(op);
     derr << "Unhandled message type " << m->get_type() << dendl;
@@ -152,7 +151,7 @@ bool MgrStatMonitor::preprocess_report(MonOpRequestRef op)
 
 bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
 {
-  MMonMgrReport *m = static_cast<MMonMgrReport*>(op->get_req());
+  auto m = static_cast<MMonMgrReport*>(op->get_req());
   pgservice->decode_digest(m->get_data());
   return true;
 }
