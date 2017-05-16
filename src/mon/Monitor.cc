@@ -75,6 +75,7 @@
 #include "LogMonitor.h"
 #include "AuthMonitor.h"
 #include "MgrMonitor.h"
+#include "MgrStatMonitor.h"
 #include "mon/QuorumService.h"
 #include "mon/HealthMonitor.h"
 #include "mon/ConfigKeyService.h"
@@ -225,6 +226,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
   paxos_service[PAXOS_MGR] = new MgrMonitor(this, paxos, "mgr");
+  paxos_service[PAXOS_MGRSTAT] = new MgrStatMonitor(this, paxos, "mgrstat");
 
   health_monitor = new HealthMonitor(this);
   config_key_service = new ConfigKeyService(this, paxos);
@@ -245,7 +247,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   set_leader_supported_commands(cmds, cmdsize);
 
   // note: OSDMonitor may update this based on the luminous flag.
-  pgservice = mgrmon()->get_pg_stat_service();
+  pgservice = mgrstatmon()->get_pg_stat_service();
 }
 
 PaxosService *Monitor::get_paxos_service_by_name(const string& name)
@@ -3816,8 +3818,11 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 
     // Mgrs
     case MSG_MGR_BEACON:
-    case MSG_MON_MGR_REPORT:
       paxos_service[PAXOS_MGR]->dispatch(op);
+      break;
+
+    case MSG_MON_MGR_REPORT:
+      paxos_service[PAXOS_MGRSTAT]->dispatch(op);
       break;
 
     // pg
