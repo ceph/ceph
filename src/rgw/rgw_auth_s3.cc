@@ -513,61 +513,71 @@ static inline std::string aws4_uri_encode(const std::string& src)
   return result;
 }
 
+static inline std::string aws4_uri_recode(const boost::string_view& src)
+{
+  /* TODO(rzarzynski): we might want to have a string_view-aware variant of
+   * url_decode. */
+  const auto src_str = src.to_string();
+
+  std::string decoded;
+  url_decode(src_str, decoded);
+  if (decoded.length() != src.length()) {
+    return src_str;
+  } else {
+    return aws4_uri_encode(decoded);
+  }
+}
+
 std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
 {
-  std::string canonical_qs = info.request_params;
+  if (info.request_params.empty()) {
+    /* Optimize the typical flow. */
+    return std::string();
+  }
 
-  if (!canonical_qs.empty()) {
-
-    /* Handle case when query string exists. Step 3 in
-     * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
-    map<string, string> canonical_qs_map;
-    istringstream cqs(canonical_qs);
-    string keyval;
-
-    while (getline(cqs, keyval, '&')) {
-      string key, val;
-      istringstream kv(keyval);
-      getline(kv, key, '=');
-      getline(kv, val, '=');
-      if (!using_qs || key != "X-Amz-Signature") {
-        string encoded_key;
-        string encoded_val;
-        if (key != "X-Amz-Credential") {
-          string key_decoded;
-          url_decode(key, key_decoded);
-          if (key.length() != key_decoded.length()) {
-            encoded_key = key;
-          } else {
-            encoded_key = aws4_uri_encode(key);
-          }
-          string val_decoded;
-          url_decode(val, val_decoded);
-          if (val.length() != val_decoded.length()) {
-            encoded_val = val;
-          } else {
-            encoded_val = aws4_uri_encode(val);
-          }
-        } else {
-          encoded_key = key;
-          encoded_val = val;
-        }
-        canonical_qs_map[encoded_key] = encoded_val;
-      }
+  /* Handle case when query string exists. Step 3 described in: http://docs.
+   * aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
+  std::map<std::string, std::string> canonical_qs_map;
+  for (const auto& s : get_str_vec(info.request_params, "&")) {
+    boost::string_view key, val;
+    const auto parsed_pair = parse_key_value(s);
+    if (parsed_pair) {
+      std::tie(key, val) = *parsed_pair;
+    } else {
+      /* Handling a parameter without any value (even the empty one). That's
+       * it, we've encountered something like "this_param&other_param=val"
+       * which is used by S3 for subresources. */
+      key = s;
     }
 
-    canonical_qs = "";
-
-    map<string, string>::iterator last = canonical_qs_map.end();
-    --last;
-
-    for (map<string, string>::iterator it = canonical_qs_map.begin();
-        it != canonical_qs_map.end(); ++it) {
-      canonical_qs.append(it->first + "=" + it->second);
-      if (it != last) {
-        canonical_qs.append("&");
-      }
+    if (using_qs && key == "X-Amz-Signature") {
+      /* Preserving the original behaviour of get_v4_canonical_qs() here. */
+      continue;
     }
+
+    if (key == "X-Amz-Credential") {
+      /* FIXME(rzarzynski): I can't find any comment in the previously linked
+       * Amazon's docs saying that X-Amz-Credential should be handled in this
+       * way. */
+      canonical_qs_map[key.to_string()] = val.to_string();
+    } else {
+      canonical_qs_map[aws4_uri_recode(key)] = aws4_uri_recode(val);
+    }
+  }
+
+  /* Thanks to the early exist we have the guarantee that canonical_qs_map has
+   * at least one element. */
+  auto iter = std::begin(canonical_qs_map);
+  std::string canonical_qs;
+  canonical_qs.append(iter->first)
+              .append("=", ::strlen("="))
+              .append(iter->second);
+
+  for (iter++; iter != std::end(canonical_qs_map); iter++) {
+    canonical_qs.append("&", ::strlen("&"))
+                .append(iter->first)
+                .append("=", ::strlen("="))
+                .append(iter->second);
   }
 
   return canonical_qs;
