@@ -331,6 +331,11 @@ TEST(LibRGW, DELETE_OBJECT) {
     int ret = rgw_unlink(fs, bucket_fh, object_name.c_str(),
 			 RGW_UNLINK_FLAG_NONE);
     ASSERT_EQ(ret, 0);
+    if (do_create) {
+      // delete test bucket that is empty
+      ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(), RGW_UNLINK_FLAG_NONE);
+      ASSERT_EQ(ret, 0);
+    }
   }
 }
 
