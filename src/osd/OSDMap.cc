@@ -3080,7 +3080,7 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
     f->close_section();
   } else {
     out << "     osdmap e" << get_epoch() << ": "
-	<< get_num_osds() << " osds: "
+	<< get_num_osds() << " osds, "
 	<< get_num_up_osds() << " up, "
 	<< get_num_in_osds() << " in";
     if (get_num_pg_temp())
