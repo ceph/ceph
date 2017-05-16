@@ -26,7 +26,6 @@
 #ifndef CEPH_PGSTATSERVICE_H
 #define CEPH_PGSTATSERVICE_H
 
-#include "mon/PGMap.h"
 struct creating_pgs_t;
 
 class PGStatService {
@@ -43,10 +42,7 @@ public:
   virtual const osd_stat_t& get_osd_sum() const = 0;
 
   virtual const osd_stat_t *get_osd_stat(int osd) const = 0;
-  virtual const ceph::unordered_map<int32_t,osd_stat_t> *get_osd_stat() const = 0;
-  virtual const ceph::unordered_map<pg_t,pg_stat_t> *get_pg_stat() const {
-    ceph_abort();
-  }
+  virtual const ceph::unordered_map<int32_t,osd_stat_t>& get_osd_stat() const = 0;
   virtual float get_full_ratio() const {
     ceph_abort();
   }
@@ -65,6 +61,14 @@ public:
    */
   virtual void maybe_add_creating_pgs(epoch_t scan_epoch,
 				      creating_pgs_t *pending_creates) const {
+    ceph_abort();
+  }
+  /**
+   * For upgrades. If some PGs are created before all OSDs are luminous
+   * and start sending MOSDPGCreated, we need to be sync with pgmap
+   *
+   */
+  virtual void maybe_trim_creating_pgs(creating_pgs_t *creates) const {
     ceph_abort();
   }
   virtual epoch_t get_min_last_epoch_clean() const {
