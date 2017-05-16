@@ -210,8 +210,12 @@ TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
-  expect_write_to_cache(mock_image_ctx, ictx->get_object_name(0),
-                        0, 1, 0, 0);
+  if (mock_image_ctx.image_ctx->cache) {
+    expect_write_to_cache(mock_image_ctx, ictx->get_object_name(0),
+                          0, 1, 0, 0);
+  } else {
+    expect_object_request_send(mock_image_ctx, mock_aio_object_request, 0);
+  }
 
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
@@ -296,8 +300,13 @@ TEST_F(TestMockIoImageRequest, AioWriteSameJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
-  expect_write_to_cache(mock_image_ctx, ictx->get_object_name(0),
-                        0, 1, 0, 0);
+  if (mock_image_ctx.image_ctx->cache) {
+    expect_write_to_cache(mock_image_ctx, ictx->get_object_name(0),
+                          0, 1, 0, 0);
+  } else {
+    expect_object_request_send(mock_image_ctx, mock_aio_object_request, 0);
+  }
+
 
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
