@@ -14,6 +14,11 @@
 
 #define dout_context g_ceph_context
 
+MEMPOOL_DEFINE_OBJECT_FACTORY(PGMapDigest, pgmap_digest, pgmap);
+MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap, pgmap, pgmap);
+MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
+
+
 // ---------------------
 // PGMapDigest
 
@@ -963,7 +968,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   stamp = inc.stamp;
 
   pool_stat_t pg_sum_old = pg_sum;
-  ceph::unordered_map<uint64_t, pool_stat_t> pg_pool_sum_old;
+  mempool::pgmap::unordered_map<uint64_t, pool_stat_t> pg_pool_sum_old;
 
   bool ratios_changed = false;
   if (inc.full_ratio != full_ratio && inc.full_ratio != -1) {
@@ -1064,7 +1069,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   stamp_delta += delta_t;
 
   pg_sum_delta.stats.add(d.stats);
-  if (pg_sum_deltas.size() > (std::list< pair<pool_stat_t, utime_t> >::size_type)MAX(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1)) {
+  if (pg_sum_deltas.size() > (unsigned)MAX(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1)) {
     pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
     stamp_delta -= pg_sum_deltas.front().second;
     pg_sum_deltas.pop_front();
@@ -1576,9 +1581,10 @@ void PGMap::dump_osd_stats(Formatter *f) const
   f->close_section();
 }
 
-void PGMap::dump_pg_stats_plain(ostream& ss,
-                                const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats,
-                                bool brief) const
+void PGMap::dump_pg_stats_plain(
+  ostream& ss,
+  const mempool::pgmap::unordered_map<pg_t, pg_stat_t>& pg_stats,
+  bool brief) const
 {
   TextTable tab;
 
@@ -1817,8 +1823,9 @@ void PGMap::dump_osd_sum_stats(ostream& ss) const
   ss << tab;
 }
 
-void PGMap::get_stuck_stats(int types, const utime_t cutoff,
-                            ceph::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const
+void PGMap::get_stuck_stats(
+  int types, const utime_t cutoff,
+  mempool::pgmap::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const
 {
   assert(types != 0);
   for (auto i = pg_stat.begin();
@@ -1911,7 +1918,7 @@ bool PGMap::get_stuck_counts(const utime_t cutoff, map<string, int>& note) const
 
 void PGMap::dump_stuck(Formatter *f, int types, utime_t cutoff) const
 {
-  ceph::unordered_map<pg_t, pg_stat_t> stuck_pg_stats;
+  mempool::pgmap::unordered_map<pg_t, pg_stat_t> stuck_pg_stats;
   get_stuck_stats(types, cutoff, stuck_pg_stats);
   f->open_array_section("stuck_pg_stats");
   for (auto i = stuck_pg_stats.begin();
@@ -1927,7 +1934,7 @@ void PGMap::dump_stuck(Formatter *f, int types, utime_t cutoff) const
 
 void PGMap::dump_stuck_plain(ostream& ss, int types, utime_t cutoff) const
 {
-  ceph::unordered_map<pg_t, pg_stat_t> stuck_pg_stats;
+  mempool::pgmap::unordered_map<pg_t, pg_stat_t> stuck_pg_stats;
   get_stuck_stats(types, cutoff, stuck_pg_stats);
   if (!stuck_pg_stats.empty())
     dump_pg_stats_plain(ss, stuck_pg_stats, true);
@@ -2046,14 +2053,15 @@ void PGMap::print_osd_blocked_by_stats(std::ostream *ss) const
  * @param result_ts_delta   Resulting timestamp delta
  * @param delta_avg_list    List of last N computed deltas, used to average
  */
-void PGMap::update_delta(CephContext *cct,
-                         const utime_t ts,
-                         const pool_stat_t& old_pool_sum,
-                         utime_t *last_ts,
-                         const pool_stat_t& current_pool_sum,
-                         pool_stat_t *result_pool_delta,
-                         utime_t *result_ts_delta,
-                         list<pair<pool_stat_t,utime_t> > *delta_avg_list)
+void PGMap::update_delta(
+  CephContext *cct,
+  const utime_t ts,
+  const pool_stat_t& old_pool_sum,
+  utime_t *last_ts,
+  const pool_stat_t& current_pool_sum,
+  pool_stat_t *result_pool_delta,
+  utime_t *result_ts_delta,
+  mempool::pgmap::list<pair<pool_stat_t,utime_t> > *delta_avg_list)
 {
   /* @p ts is the timestamp we want to associate with the data
    * in @p old_pool_sum, and on which we will base ourselves to
@@ -2113,17 +2121,18 @@ void PGMap::update_global_delta(CephContext *cct,
  * @param pool          Pool's id
  * @param old_pool_sum  Previous stats sum
  */
-void PGMap::update_one_pool_delta(CephContext *cct,
-                                  const utime_t ts,
-                                  const uint64_t pool,
-                                  const pool_stat_t& old_pool_sum)
+void PGMap::update_one_pool_delta(
+  CephContext *cct,
+  const utime_t ts,
+  const uint64_t pool,
+  const pool_stat_t& old_pool_sum)
 {
   if (per_pool_sum_deltas.count(pool) == 0) {
     assert(per_pool_sum_deltas_stamps.count(pool) == 0);
     assert(per_pool_sum_delta.count(pool) == 0);
   }
 
-  pair<pool_stat_t,utime_t>& sum_delta = per_pool_sum_delta[pool];
+  auto& sum_delta = per_pool_sum_delta[pool];
 
   update_delta(cct, ts, old_pool_sum, &sum_delta.second, pg_pool_sum[pool],
                &sum_delta.first, &per_pool_sum_deltas_stamps[pool],
@@ -2137,8 +2146,9 @@ void PGMap::update_one_pool_delta(CephContext *cct,
  * @param ts                Timestamp for the stats being delta'ed
  * @param pg_pool_sum_old   Map of pool stats for delta calcs.
  */
-void PGMap::update_pool_deltas(CephContext *cct, const utime_t ts,
-                               const ceph::unordered_map<uint64_t,pool_stat_t>& pg_pool_sum_old)
+void PGMap::update_pool_deltas(
+  CephContext *cct, const utime_t ts,
+  const mempool::pgmap::unordered_map<uint64_t,pool_stat_t>& pg_pool_sum_old)
 {
   for (auto it = pg_pool_sum_old.begin();
        it != pg_pool_sum_old.end(); ++it) {
@@ -2261,9 +2271,10 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
 
 
 // Only called with a single bit set in "what"
-static void note_stuck_detail(int what,
-                              ceph::unordered_map<pg_t,pg_stat_t>& stuck_pgs,
-                              list<pair<health_status_t,string> > *detail)
+static void note_stuck_detail(
+  int what,
+  mempool::pgmap::unordered_map<pg_t,pg_stat_t>& stuck_pgs,
+  list<pair<health_status_t,string> > *detail)
 {
   for (auto p = stuck_pgs.begin();
        p != stuck_pgs.end();
@@ -2337,10 +2348,11 @@ static int _warn_slow_request_histogram(
 namespace {
   enum class scrubbed_or_deepscrubbed_t { SCRUBBED, DEEPSCRUBBED };
 
-  void print_unscrubbed_detailed(const std::pair<const pg_t,pg_stat_t> &pg_entry,
-				 list<pair<health_status_t,string> > *detail,
-				 scrubbed_or_deepscrubbed_t how_scrubbed) {
-
+  void print_unscrubbed_detailed(
+    const std::pair<const pg_t,pg_stat_t> &pg_entry,
+    list<pair<health_status_t,string> > *detail,
+    scrubbed_or_deepscrubbed_t how_scrubbed)
+  {
     std::stringstream ss;
     const auto& pg_stat(pg_entry.second);
 
@@ -2356,13 +2368,14 @@ namespace {
     detail->push_back(make_pair(HEALTH_WARN, ss.str()));
   }
 
+  using pg_stat_map_t = const mempool::pgmap::unordered_map<pg_t,pg_stat_t>;
 
-  using pg_stat_map_t = const ceph::unordered_map<pg_t,pg_stat_t>;
-
-  void print_unscrubbed_pgs(pg_stat_map_t& pg_stats,
-			    list<pair<health_status_t,string> > &summary,
-			    list<pair<health_status_t,string> > *detail,
-			    const CephContext* cct) {
+  void print_unscrubbed_pgs(
+    pg_stat_map_t& pg_stats,
+    list<pair<health_status_t,string> > &summary,
+    list<pair<health_status_t,string> > *detail,
+    const CephContext* cct)
+  {
     if (cct->_conf->mon_warn_not_scrubbed == 0 &&
       cct->_conf->mon_warn_not_deep_scrubbed == 0)
       return;
@@ -2452,7 +2465,7 @@ void PGMap::get_health(
       note["recovery_toofull"] += p->second;
   }
 
-  ceph::unordered_map<pg_t, pg_stat_t> stuck_pgs;
+  mempool::pgmap::unordered_map<pg_t, pg_stat_t> stuck_pgs;
   utime_t now(ceph_clock_now());
   utime_t cutoff = now - utime_t(cct->_conf->mon_pg_stuck_threshold, 0);
   uint64_t num_inactive_pgs = 0;
