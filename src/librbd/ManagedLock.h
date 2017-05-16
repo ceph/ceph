@@ -134,6 +134,7 @@ protected:
                                         Context *on_finish);
   virtual void post_release_lock_handler(bool shutting_down, int r,
                                           Context *on_finish);
+  virtual void post_reacquire_lock_handler(int r, Context *on_finish);
 
   void execute_next_action();
 

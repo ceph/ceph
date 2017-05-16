@@ -330,6 +330,11 @@ void  ManagedLock<I>::post_release_lock_handler(bool shutting_down, int r,
 }
 
 template <typename I>
+void ManagedLock<I>::post_reacquire_lock_handler(int r, Context *on_finish) {
+  on_finish->complete(r);
+}
+
+template <typename I>
 bool ManagedLock<I>::is_transition_state() const {
   switch (m_state) {
   case STATE_ACQUIRING:
@@ -565,11 +570,15 @@ void ManagedLock<I>::send_reacquire_lock() {
   ldout(m_cct, 10) << dendl;
   m_state = STATE_REACQUIRING;
 
+  auto ctx = create_context_callback<
+    ManagedLock, &ManagedLock<I>::handle_reacquire_lock>(this);
+  ctx = new FunctionContext([this, ctx](int r) {
+      post_reacquire_lock_handler(r, ctx);
+    });
+
   using managed_lock::ReacquireRequest;
   ReacquireRequest<I>* req = ReacquireRequest<I>::create(m_ioctx, m_oid,
-      m_cookie, m_new_cookie, m_mode == EXCLUSIVE,
-      create_context_callback<
-        ManagedLock, &ManagedLock<I>::handle_reacquire_lock>(this));
+      m_cookie, m_new_cookie, m_mode == EXCLUSIVE, ctx);
   m_work_queue->queue(new C_SendLockRequest<ReacquireRequest<I>>(req));
 }
 

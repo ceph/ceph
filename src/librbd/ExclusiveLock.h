@@ -36,6 +36,7 @@ protected:
                                 Context *on_finish) override;
   void post_release_lock_handler(bool shutting_down, int r,
                                  Context *on_finish) override;
+  void post_reacquire_lock_handler(int r, Context *on_finish) override;
 
 private:
 
