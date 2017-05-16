@@ -3430,33 +3430,40 @@ int RGWIndexCompletionThread::process()
     completions.swap(comps);
   }
 
-  for (auto c: comps) {
-    if (!going_down()) {
-      ldout(store->ctx(), 20) << __func__ << "(): handling completion for key=" << c->key << dendl;
+  for (auto c : comps) {
+    std::unique_ptr<complete_op_data> up{c};
 
-      RGWRados::BucketShard bs(store);
-
-      int r = bs.init(c->obj.bucket, c->obj);
-      if (r < 0) {
-        ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to initialize BucketShard, obj=" << c->obj << " r=" << r << dendl;
-        /* not much to do */
-        delete c;
-        continue;
-      }
-
-      r = store->guard_reshard(&bs, c->obj, [&](RGWRados::BucketShard *bs) -> int { 
-                               librados::ObjectWriteOperation o;
-                               cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-                               cls_rgw_bucket_complete_op(o, c->op, c->tag, c->ver, c->key, c->dir_meta, &c->remove_objs,
-                                                          c->log_op, c->bilog_op);
-
-                               return bs->index_ctx.operate(bs->bucket_obj, &o);
-                               });
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): bucket index completion failed, obj=" << c->obj << " r=" << r << dendl;
-
-      /* ignoring error, can't do anything about it */
+    if (going_down()) {
+      continue;
     }
-    delete c;
+    ldout(store->ctx(), 20) << __func__ << "(): handling completion for key=" << c->key << dendl;
+
+    RGWRados::BucketShard bs(store);
+
+    int r = bs.init(c->obj.bucket, c->obj);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to initialize BucketShard, obj=" << c->obj << " r=" << r << dendl;
+      /* not much to do */
+      continue;
+    }
+
+    r = store->guard_reshard(&bs, c->obj, [&](RGWRados::BucketShard *bs) -> int { 
+                             librados::ObjectWriteOperation o;
+                             cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
+                             cls_rgw_bucket_complete_op(o, c->op, c->tag, c->ver, c->key, c->dir_meta, &c->remove_objs,
+                                                        c->log_op, c->bilog_op);
+
+                             return bs->index_ctx.operate(bs->bucket_obj, &o);
+                             });
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): bucket index completion failed, obj=" << c->obj << " r=" << r << dendl;
+      /* ignoring error, can't do anything about it */
+      continue;
+    }
+    r = store->data_log->add_entry(bs.bucket, bs.shard_id);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+    }
   }
 
   return 0;
