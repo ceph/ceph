@@ -5023,7 +5023,9 @@ void OSD::tick_without_osd_lock()
       // do any pending reports
       send_full_update();
       send_failures();
-      send_pg_stats(now);
+      if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	send_pg_stats(now);
+      }
     }
     map_lock.put_read();
   }
@@ -5413,7 +5415,9 @@ void OSD::ms_handle_connect(Connection *con)
       service.send_pg_temp();
       requeue_failures();
       send_failures();
-      send_pg_stats(now);
+      if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	send_pg_stats(now);
+      }
 
       map_lock.put_read();
       if (is_active()) {
@@ -5854,6 +5858,7 @@ void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
 void OSD::send_pg_stats(const utime_t &now)
 {
   assert(map_lock.is_locked());
+  assert(osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS);
   dout(20) << "send_pg_stats" << dendl;
 
   osd_stat_t cur_stat = service.get_osd_stat();
@@ -6454,7 +6459,11 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   }
 
   else if (prefix == "flush_pg_stats") {
-    flush_pg_stats();
+    if (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      mgrc.send_pgstats();
+    } else {
+      flush_pg_stats();
+    }
   }
 
   else if (prefix == "heap") {
@@ -7567,6 +7576,13 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	// that is harmless (boot will just take slightly longer).
 	do_restart = true;
       }
+    }
+    if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS &&
+	newmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      dout(10) << __func__ << " require_osd_release reached luminous in "
+	       << newmap->get_epoch() << dendl;
+      clear_pg_stat_queue();
+      outstanding_pg_stats.clear();
     }
 
     osdmap = newmap;
