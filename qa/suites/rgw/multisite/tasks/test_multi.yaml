@@ -13,3 +13,5 @@ tasks:
       valgrind: [--tool=memcheck]
 - rgw-multisite:
 - rgw-multisite-tests:
+    config:
+      reconfigure_delay: 60

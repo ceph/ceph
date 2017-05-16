@@ -18,11 +18,13 @@ class RGWMultisiteTests(Task):
     """
     Runs the rgw_multi tests against a multisite configuration created by the
     rgw-multisite task. Tests are run with nose, using any additional 'args'
-    provided.
+    provided. Overrides for tests.Config can be set in 'config'.
 
         - rgw-multisite-tests:
             args:
             - tasks.rgw_multi.tests:test_object_sync
+            config:
+              reconfigure_delay: 60
 
     """
     def __init__(self, ctx, config):
@@ -30,6 +32,9 @@ class RGWMultisiteTests(Task):
 
     def setup(self):
         super(RGWMultisiteTests, self).setup()
+
+        overrides = self.ctx.config.get('overrides', {})
+        misc.deep_merge(self.config, overrides.get('rgw-multisite-tests', {}))
 
         if not self.ctx.rgw_multisite:
             raise ConfigError('rgw-multisite-tests must run after the rgw-multisite task')
@@ -42,11 +47,9 @@ class RGWMultisiteTests(Task):
         user.create(master_zone, ['--display-name', 'Multisite Test User',
                                   '--gen-access-key', '--gen-secret'])
 
-        tests.init_multi(realm, user)
+        config = self.config.get('config', {})
+        tests.init_multi(realm, user, tests.Config(**config))
         tests.realm_meta_checkpoint(realm)
-
-        overrides = self.ctx.config.get('overrides', {})
-        misc.deep_merge(self.config, overrides.get('rgw-multisite-tests', {}))
 
     def begin(self):
         # extra arguments for nose can be passed as a string or list
