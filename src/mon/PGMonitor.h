@@ -32,19 +32,12 @@ using namespace std;
 #include "msg/Messenger.h"
 #include "mon/MonitorDBStore.h"
 
-class MStatfs;
-class MMonCommand;
-class MGetPoolStats;
-
-class TextTable;
 class MPGStats;
 class PGStatService;
-class PGMapStatService;
 
 class PGMonitor : public PaxosService {
-public:
   PGMap pg_map;
-  PGMapStatService *pgservice;
+  std::unique_ptr<PGStatService> pgservice;
 
 private:
   PGMap::Incremental pending_inc;
@@ -93,13 +86,7 @@ private:
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
 public:
-  PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
-    : PaxosService(mn, p, service_name),
-      pgservice(nullptr),
-      pgmap_meta_prefix("pgmap_meta"),
-      pgmap_pg_prefix("pgmap_pg"),
-      pgmap_osd_prefix("pgmap_osd")
-  { }
+  PGMonitor(Monitor *mn, Paxos *p, const string& service_name);
   ~PGMonitor() override;
 
   void get_store_prefixes(set<string>& s) override {

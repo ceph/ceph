@@ -1319,7 +1319,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       dout(7) << __func__ << " in the middle of upgrading, "
 	      << " trimming pending creating_pgs using pgmap" << dendl;
-      trim_creating_pgs(&pending_creatings, *mon->pgservice->get_pg_stat());
+      mon->pgservice->maybe_trim_creating_pgs(&pending_creatings);
     }
     bufferlist creatings_bl;
     ::encode(pending_creatings, creatings_bl);
@@ -3701,7 +3701,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       }
 
       map<int, float> full, backfillfull, nearfull;
-      osdmap.get_full_osd_util(*mon->pgservice->get_osd_stat(), &full, &backfillfull, &nearfull);
+      osdmap.get_full_osd_util(mon->pgservice->get_osd_stat(), &full, &backfillfull, &nearfull);
       if (full.size()) {
 	ostringstream ss;
 	ss << full.size() << " full osd(s)";
