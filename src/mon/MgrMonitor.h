@@ -24,7 +24,7 @@ class MgrMonitor : public PaxosService
 
   utime_t first_seen_inactive;
 
-  std::map<uint64_t, utime_t> last_beacon;
+  std::map<uint64_t, ceph::coarse_mono_clock::time_point> last_beacon;
 
   /**
    * If a standby is available, make it active, given that
