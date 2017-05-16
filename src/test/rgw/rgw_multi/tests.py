@@ -19,16 +19,28 @@ from nose.plugins.skip import SkipTest
 
 from .multisite import Zone
 
+class Config:
+    """ test configuration """
+    def __init__(self, **kwargs):
+        # by default, wait up to 5 minutes before giving up on a sync checkpoint
+        self.checkpoint_retries = kwargs.get('checkpoint_retries', 60)
+        self.checkpoint_delay = kwargs.get('checkpoint_delay', 5)
+        # allow some time for realm reconfiguration after changing master zone
+        self.reconfigure_delay = kwargs.get('reconfigure_delay', 5)
+
 # rgw multisite tests, written against the interfaces provided in rgw_multi.
 # these tests must be initialized and run by another module that provides
 # implementations of these interfaces by calling init_multi()
 realm = None
 user = None
-def init_multi(_realm, _user):
+config = None
+def init_multi(_realm, _user, _config=None):
     global realm
     realm = _realm
     global user
     user = _user
+    global config
+    config = _config or Config()
 
 log = logging.getLogger(__name__)
 
@@ -90,13 +102,13 @@ def parse_meta_sync_status(meta_sync_status_json):
     return period, realm_epoch, num_shards, markers
 
 def meta_sync_status(zone):
-    for _ in range(60):
+    for _ in range(config.checkpoint_retries):
         cmd = ['metadata', 'sync', 'status'] + zone.zone_args()
         meta_sync_status_json, retcode = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
         if retcode == 0:
             return parse_meta_sync_status(meta_sync_status_json)
         assert(retcode == 2) # ENOENT
-        time.sleep(5)
+        time.sleep(config.checkpoint_delay)
 
     assert False, 'failed to read metadata sync status for zone=%s' % zone.name
 
@@ -137,7 +149,7 @@ def zone_meta_checkpoint(zone, meta_master_zone = None, master_status = None):
 
     log.info('starting meta checkpoint for zone=%s', zone.name)
 
-    for _ in range(60):
+    for _ in range(config.checkpoint_retries):
         period, realm_epoch, num_shards, sync_status = meta_sync_status(zone)
         if realm_epoch < current_realm_epoch:
             log.warning('zone %s is syncing realm epoch=%d, behind current realm epoch=%d',
@@ -149,7 +161,7 @@ def zone_meta_checkpoint(zone, meta_master_zone = None, master_status = None):
                 log.info('finish meta checkpoint for zone=%s', zone.name)
                 return
 
-        time.sleep(5)
+        time.sleep(config.checkpoint_delay)
     assert False, 'failed meta checkpoint for zone=%s' % zone.name
 
 def zonegroup_meta_checkpoint(zonegroup, meta_master_zone = None, master_status = None):
@@ -194,7 +206,7 @@ def data_sync_status(target_zone, source_zone):
     if target_zone == source_zone:
         return None
 
-    for _ in range(60):
+    for _ in range(config.checkpoint_retries):
         cmd = ['data', 'sync', 'status'] + target_zone.zone_args()
         cmd += ['--source-zone', source_zone.name]
         data_sync_status_json, retcode = target_zone.cluster.admin(cmd, check_retcode=False, read_only=True)
@@ -202,7 +214,7 @@ def data_sync_status(target_zone, source_zone):
             return parse_data_sync_status(data_sync_status_json)
 
         assert(retcode == 2) # ENOENT
-        time.sleep(5)
+        time.sleep(config.checkpoint_delay)
 
     assert False, 'failed to read data sync status for target_zone=%s source_zone=%s' % \
                   (target_zone.name, source_zone.name)
@@ -311,7 +323,7 @@ def zone_data_checkpoint(target_zone, source_zone):
     log_status = data_source_log_status(source_zone)
     log.info('starting data checkpoint for target_zone=%s source_zone=%s', target_zone.name, source_zone.name)
 
-    for _ in range(60):
+    for _ in range(config.checkpoint_retries):
         num_shards, sync_status = data_sync_status(target_zone, source_zone)
 
         log.debug('log_status=%s', log_status)
@@ -321,7 +333,7 @@ def zone_data_checkpoint(target_zone, source_zone):
             log.info('finished data checkpoint for target_zone=%s source_zone=%s',
                      target_zone.name, source_zone.name)
             return
-        time.sleep(5)
+        time.sleep(config.checkpoint_delay)
 
     assert False, 'failed data checkpoint for target_zone=%s source_zone=%s' % \
                   (target_zone.name, source_zone.name)
@@ -334,7 +346,7 @@ def zone_bucket_checkpoint(target_zone, source_zone, bucket_name):
     log_status = bucket_source_log_status(source_zone, bucket_name)
     log.info('starting bucket checkpoint for target_zone=%s source_zone=%s bucket=%s', target_zone.name, source_zone.name, bucket_name)
 
-    for _ in range(60):
+    for _ in range(config.checkpoint_retries):
         sync_status = bucket_sync_status(target_zone, source_zone, bucket_name)
 
         log.debug('log_status=%s', log_status)
@@ -344,7 +356,7 @@ def zone_bucket_checkpoint(target_zone, source_zone, bucket_name):
             log.info('finished bucket checkpoint for target_zone=%s source_zone=%s bucket=%s', target_zone.name, source_zone.name, bucket_name)
             return
 
-        time.sleep(5)
+        time.sleep(config.checkpoint_delay)
 
     assert False, 'finished bucket checkpoint for target_zone=%s source_zone=%s bucket=%s' % \
                   (target_zone.name, source_zone.name, bucket_name)
@@ -354,8 +366,8 @@ def set_master_zone(zone):
     zonegroup = zone.zonegroup
     zonegroup.period.update(zone, commit=True)
     zonegroup.master_zone = zone
-    # wait for reconfiguration, so that later metadata requests go to the new master
-    time.sleep(5)
+    log.info('Set master zone=%s, waiting %ds for reconfiguration..', zone.name, config.reconfigure_delay)
+    time.sleep(config.reconfigure_delay)
 
 def gen_bucket_name():
     global num_buckets
