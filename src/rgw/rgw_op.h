@@ -22,6 +22,7 @@
 
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
+#include <boost/function.hpp>
 
 #include "common/armor.h"
 #include "common/mime.h"
@@ -93,6 +94,7 @@ public:
   virtual int authorize() = 0;
   virtual int postauth_init() = 0;
   virtual int error_handler(int err_no, std::string* error_content);
+  virtual void dump(const string& code, const string& message) const {}
 };
 
 

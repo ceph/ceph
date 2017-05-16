@@ -202,6 +202,8 @@ using ceph::crypto::MD5;
 #define UINT32_MAX (0xffffffffu)
 #endif
 
+struct req_state;
+
 typedef void *RGWAccessHandle;
 
 
@@ -263,7 +265,6 @@ enum RGWObjCategory {
 /** Store error returns for output at a different point in the program */
 struct rgw_err {
   rgw_err();
-  rgw_err(int http, const std::string &s3);
   void clear();
   bool is_clear() const;
   bool is_err() const;
@@ -274,6 +275,8 @@ struct rgw_err {
   std::string s3_code;
   std::string message;
 };
+
+
 
 /* Helper class used for RGWHTTPArgs parsing */
 class NameVal
@@ -1338,8 +1341,6 @@ struct RGWStorageStats
   void dump(Formatter *f) const;
 };
 
-struct req_state;
-
 class RGWEnv;
 
 /* Namespaced forward declarations. */
@@ -1701,7 +1702,7 @@ struct req_state {
   const char *length;
   int64_t content_length;
   map<string, string> generic_attrs;
-  struct rgw_err err;
+  rgw_err err;
   bool expect_cont;
   bool header_ended;
   uint64_t obj_size;
@@ -1805,7 +1806,14 @@ struct req_state {
 
   req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
   ~req_state();
+
+  bool is_err() const { return err.is_err(); }
 };
+
+void set_req_state_err(struct req_state*, int);
+void set_req_state_err(struct req_state*, int, const string&);
+void set_req_state_err(struct rgw_err&, int, const int);
+void dump(struct req_state*);
 
 /** Store basic data on bucket */
 struct RGWBucketEnt {

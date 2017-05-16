@@ -20,6 +20,7 @@
 #include "rgw_client_io.h"
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
+#include "rgw_common.h"
 #include "common/errno.h"
 #include "include/assert.h"
 

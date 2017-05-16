@@ -218,7 +218,7 @@ static void log_usage(struct req_state *s, const string& op_name)
   rgw_usage_data data(bytes_sent, bytes_received);
 
   data.ops = 1;
-  if (!error)
+  if (!s->is_err())
     data.successful_ops = 1;
 
   entry.add(op_name, data);

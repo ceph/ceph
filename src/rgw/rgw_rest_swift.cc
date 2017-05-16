@@ -956,7 +956,7 @@ void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
     op_ret = STATUS_ACCEPTED;
   }
   set_req_state_err(s, op_ret);
-  if (!s->err.is_err()) {
+  if (!s->is_err()) {
     dump_content_length(s, 0);
   }
   dump_errno(s);
@@ -982,7 +982,6 @@ static void bulkdelete_respond(const unsigned num_deleted,
         reason = fail_desc.err;
       }
     }
-
     rgw_err err;
     set_req_state_err(err, reason, prot_flags);
     dump_errno(err, resp_status);
@@ -1296,7 +1295,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
 		    : op_ret);
     dump_errno(s);
 
-    if (s->err.is_err()) {
+    if (s->is_err()) {
       end_header(s, NULL);
       return 0;
     }
@@ -1306,7 +1305,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
     dump_range(s, ofs, end, s->obj_size);
   }
 
-  if (s->err.is_err()) {
+  if (s->is_err()) {
     end_header(s, NULL);
     return 0;
   }
@@ -2073,9 +2072,8 @@ int RGWSwiftWebsiteHandler::error_handler(const int err_no,
   const auto& ws_conf = s->bucket_info.website_conf;
 
   if (can_be_website_req() && ! ws_conf.error_doc.empty()) {
-    struct rgw_err err;
-    set_req_state_err(err, err_no, s->prot_flags);
-    return serve_errordoc(err.http_ret, ws_conf.error_doc);
+    set_req_state_err(s, err_no);
+    return serve_errordoc(s->err.http_ret, ws_conf.error_doc);
   }
 
   /* Let's go to the default, no-op handler. */
