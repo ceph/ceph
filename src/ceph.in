@@ -287,7 +287,7 @@ daemonperf {type.id | path} list|ls [stat-pats] [priority]
     """, file=sys.stdout)
 
 
-def do_extended_help(parser, args):
+def do_extended_help(parser, args, target, partial):
     def help_for_sigs(sigs, partial=None):
         sys.stdout.write(format_help(parse_json_funcsigs(sigs, 'cli'),
                          partial=partial))
@@ -299,13 +299,12 @@ def do_extended_help(parser, args):
         if ret:
             print("couldn't get command descriptions for {0}: {1}".\
                 format(target, outs), file=sys.stderr)
+            return 1
         else:
-            help_for_sigs(outbuf.decode('utf-8'), partial)
+            return help_for_sigs(outbuf.decode('utf-8'), partial)
 
-    partial = ' '.join(args)
     assert(cluster_handle.state == "connected")
-    help_for_target(target=('mon', ''), partial=partial)
-    return 0
+    return help_for_target(target, partial)
 
 DONTSPLIT = string.ascii_letters + '{[<>]}'
 
@@ -853,7 +852,11 @@ def main():
         return 1
 
     if parsed_args.help:
-        return do_extended_help(parser, childargs)
+        return do_extended_help(parser, childargs, ('mon', ''), ' '.join(childargs))
+
+    # implement "tell service.id help"
+    if len(childargs) >= 3 and childargs[0] == 'tell' and childargs[2] == 'help':
+        return do_extended_help(parser, childargs, childargs[1].split('.'), None)
 
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
