@@ -18,6 +18,11 @@ def parse_args():
     parser.add_argument('--cluster', help='Ceph cluster name')
     parser.add_argument('-n', '--name', help='Ceph client name')
     parser.add_argument('-i', '--id', help='Ceph client id')
+    parser.add_argument('--addr', help='Ceph public address and port separated by ":"')
+    parser.add_argument('--keyring', help='Ceph keyring')
+    parser.add_argument('--log-file', help='Ceph log file path')
+    parser.add_argument('--base-url', help='Ceph REST API base URL')
+    parser.add_argument('--log-level', help='Ceph log Level')
 
     return parser.parse_known_args()
 
@@ -35,11 +40,20 @@ except EnvironmentError as e:
 
 # let other exceptions generate traceback
 
+options = {
+    'addr': parsed_args.addr,
+    'log_file': parsed_args.log_file,
+    'key_ring': parsed_args.log_file,
+    'base_url': parsed_args.base_url,
+    'log_level': parsed_args.log_level,
+}
+
 app = ceph_rest_api.generate_app(
     parsed_args.conf,
     parsed_args.cluster,
     parsed_args.name,
     parsed_args.id,
+    options,
     rest,
 )
 

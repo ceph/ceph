@@ -64,7 +64,7 @@ def find_up_osd(app):
 METHOD_DICT = {'r': ['GET'], 'w': ['PUT', 'DELETE']}
 
 
-def api_setup(app, conf, cluster, clientname, clientid, args):
+def api_setup(app, conf, cluster, clientname, clientid, options, args):
     '''
     This is done globally, and cluster connection kept open for
     the lifetime of the daemon.  librados should assure that even
@@ -105,11 +105,14 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
     app.ceph_cluster.conf_parse_argv(args)
     app.ceph_cluster.connect()
 
-    app.ceph_baseurl = app.ceph_cluster.conf_get('restapi_base_url') \
+    app.ceph_baseurl = options.get(
+        'base_url', app.ceph_cluster.conf_get('restapi_base_url')) \
         or DEFAULT_BASEURL
     if app.ceph_baseurl.endswith('/'):
         app.ceph_baseurl = app.ceph_baseurl[:-1]
-    addr = app.ceph_cluster.conf_get('public_addr') or DEFAULT_ADDR
+
+    addr = options.get('addr', app.ceph_cluster.conf_get('public_addr')) \
+           or DEFAULT_ADDR
 
     if addr == '-':
         addr = None
@@ -127,11 +130,12 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
     port = port or DEFAULT_PORT
     port = int(port)
 
-    loglevel = app.ceph_cluster.conf_get('restapi_log_level') \
+    loglevel = options.get('log_level',
+                           app.ceph_cluster.conf_get('restapi_log_level')) \
         or DEFAULT_LOG_LEVEL
     # ceph has a default log file for daemons only; clients (like this)
     # default to "".  Override that for this particular client.
-    logfile = app.ceph_cluster.conf_get('log_file')
+    logfile = options.get('log_file', app.ceph_cluster.conf_get('log_file'))
     if not logfile:
         logfile = os.path.join(
             DEFAULT_LOGDIR,
@@ -500,8 +504,9 @@ def handler(catchall_path=None, fmt=None, target=None):
 # Main entry point from wrapper/WSGI server: call with cmdline args,
 # get back the WSGI app entry point
 #
-def generate_app(conf, cluster, clientname, clientid, args):
-    addr, port = api_setup(app, conf, cluster, clientname, clientid, args)
+def generate_app(conf, cluster, clientname, clientid, options, args):
+    addr, port = api_setup(app, conf, cluster, clientname, clientid,
+                           options, args)
     app.ceph_addr = addr
     app.ceph_port = port
     return app
