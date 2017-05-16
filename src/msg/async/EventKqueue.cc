@@ -156,8 +156,13 @@ int KqueueDriver::add_event(int fd, int cur_mask, int add_mask)
     }
   }
   // keep what we set
-  if (fd >= sav_max)
-    resize_events(sav_max+5000);
+  if (fd >= sav_max) {
+    r = resize_events(sav_max+5000);
+    if (r < 0) {
+      lderr(cct) << __func__ << " event count is exceed." << dendl;
+      return r;
+    }
+  }
   sav_events[fd].mask = cur_mask | add_mask;
   return 0;
 }
