@@ -559,6 +559,12 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
   // finish any triggered contexts
   _advance_queues();
 
+  // In case any dirs hit in this request are now enqueued for
+  // split or merge -- avoid waiting for the next tick() to do so
+  // so that the split happens before any subsequent requests that
+  // might otherwise lead to an oversized fragment.
+  balancer->do_fragmenting();
+
   if (beacon.is_laggy()) {
     // We've gone laggy during dispatch, don't do any
     // more housekeeping

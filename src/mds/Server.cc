@@ -3475,6 +3475,9 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     ::encode(in->inode.ino, mdr->reply_extra_bl);
   }
 
+  mds->balancer->hit_dir(ceph_clock_now(nullptr), dn->get_dir(),
+      META_POP_IWR);
+
   journal_and_reply(mdr, in, dn, le, fin);
 
   // We hit_dir (via hit_inode) in our finish callback, but by then we might
