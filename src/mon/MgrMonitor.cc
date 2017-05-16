@@ -187,7 +187,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     }
   }
 
-  last_beacon[m->get_gid()] = ceph_clock_now();
+  last_beacon[m->get_gid()] = ceph::coarse_mono_clock::now();
 
   // Track whether we modified pending_map
   bool updated = false;
@@ -357,9 +357,8 @@ void MgrMonitor::tick()
   if (!is_active() || !mon->is_leader())
     return;
 
-  const utime_t now = ceph_clock_now();
-  utime_t cutoff = now;
-  cutoff -= g_conf->mon_mgr_beacon_grace;
+  const auto now = ceph::coarse_mono_clock::now();
+  const auto cutoff = now - std::chrono::seconds(g_conf->mon_mgr_beacon_grace);
 
   // Populate any missing beacons (i.e. no beacon since MgrMonitor
   // instantiation) with the current time, so that they will
