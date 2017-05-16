@@ -2739,7 +2739,8 @@ public:
   }
 
   void swap(PastIntervals &other) {
-    ::swap(other.past_intervals, past_intervals);
+    using std::swap;
+    swap(other.past_intervals, past_intervals);
   }
 
   /**
@@ -3131,9 +3132,10 @@ public:
   void swap(ObjectModDesc &other) {
     bl.swap(other.bl);
 
-    ::swap(other.can_local_rollback, can_local_rollback);
-    ::swap(other.rollback_info_completed, rollback_info_completed);
-    ::swap(other.max_required_version, max_required_version);
+    using std::swap;
+    swap(other.can_local_rollback, can_local_rollback);
+    swap(other.rollback_info_completed, rollback_info_completed);
+    swap(other.max_required_version, max_required_version);
   }
   void append_id(ModID id) {
     uint8_t _id(id);
@@ -3466,7 +3468,8 @@ public:
     while (true) {
       if (p == log.begin()) {
 	// yikes, the whole thing is divergent!
-	::swap(divergent, log);
+	using std::swap;
+	swap(divergent, log);
 	break;
       }
       --p;
@@ -4705,9 +4708,10 @@ struct ScrubMap {
     objects.insert(r.objects.begin(), r.objects.end());
   }
   void swap(ScrubMap &r) {
-    ::swap(objects, r.objects);
-    ::swap(valid_through, r.valid_through);
-    ::swap(incr_since, r.incr_since);
+    using std::swap;
+    swap(objects, r.objects);
+    swap(valid_through, r.valid_through);
+    swap(incr_since, r.incr_since);
   }
 
   void encode(bufferlist& bl) const;
