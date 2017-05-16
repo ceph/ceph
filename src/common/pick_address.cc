@@ -16,6 +16,7 @@
 
 #include <netdb.h>
 #include <errno.h>
+#include <ifaddrs.h>
 
 #include "include/ipaddr.h"
 #include "include/str_list.h"
