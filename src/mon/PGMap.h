@@ -185,8 +185,8 @@ public:
   epoch_t last_osdmap_epoch;   // last osdmap epoch i applied to the pgmap
   epoch_t last_pg_scan;  // osdmap epoch
   ceph::unordered_map<pg_t,pg_stat_t> pg_stat;
-  set<int32_t> full_osds;
-  set<int32_t> nearfull_osds;
+  set<int32_t> full_osds;     // for pre-luminous only
+  set<int32_t> nearfull_osds; // for pre-luminous only
   float full_ratio;
   float nearfull_ratio;
 
@@ -434,6 +434,11 @@ public:
     }
     return .95;
   }
+
+  void get_health(CephContext *cct,
+		  const OSDMap& osdmap,
+		  list<pair<health_status_t,string> >& summary,
+		  list<pair<health_status_t,string> > *detail) const;
 
   static void generate_test_instances(list<PGMap*>& o);
 };
