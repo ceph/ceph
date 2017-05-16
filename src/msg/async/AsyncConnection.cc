@@ -329,6 +329,7 @@ void AsyncConnection::process()
   bool need_dispatch_writer = false;
   std::lock_guard<std::mutex> l(lock);
   last_active = ceph::coarse_mono_clock::now();
+  auto recv_start_time = ceph::mono_clock::now();
   do {
     ldout(async_msgr->cct, 20) << __func__ << " prev state is " << get_state_name(prev_state) << dendl;
     prev_state = state;
@@ -773,6 +774,8 @@ void AsyncConnection::process()
           logger->inc(l_msgr_recv_bytes, cur_msg_size + sizeof(ceph_msg_header) + sizeof(ceph_msg_footer));
 
           async_msgr->ms_fast_preprocess(message);
+          auto fast_dispatch_time = ceph::mono_clock::now();
+          logger->tinc(l_msgr_running_recv_time, fast_dispatch_time - recv_start_time);
           if (delay_state) {
             utime_t release = message->get_recv_stamp();
             double delay_period = 0;
@@ -786,6 +789,9 @@ void AsyncConnection::process()
           } else if (async_msgr->ms_can_fast_dispatch(message)) {
             lock.unlock();
             dispatch_queue->fast_dispatch(message);
+            recv_start_time = ceph::mono_clock::now();
+            logger->tinc(l_msgr_running_fast_dispatch_time,
+                         recv_start_time - fast_dispatch_time);
             lock.lock();
           } else {
             dispatch_queue->enqueue(message, message->get_priority(), conn_id);
@@ -837,6 +843,8 @@ void AsyncConnection::process()
 
   if (need_dispatch_writer && is_connected())
     center->dispatch_event_external(write_handler);
+
+  logger->tinc(l_msgr_running_recv_time, ceph::mono_clock::now() - recv_start_time);
   return;
 
  fail:
@@ -2419,6 +2427,7 @@ void AsyncConnection::handle_write()
       keepalive = false;
     }
 
+    auto start = ceph::mono_clock::now();
     do {
       bufferlist data;
       Message *m = _get_next_outgoing(&data);
@@ -2461,6 +2470,7 @@ void AsyncConnection::handle_write()
       r = _try_send();
     }
 
+    logger->tinc(l_msgr_running_send_time, ceph::mono_clock::now() - start);
     if (r < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
       goto fail;
