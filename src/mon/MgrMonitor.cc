@@ -263,7 +263,7 @@ void MgrMonitor::check_sub(Subscription *sub)
     }
   } else {
     assert(sub->type == "mgrdigest");
-    if (digest_callback == nullptr) {
+    if (digest_event == nullptr) {
       send_digests();
     }
   }
@@ -275,7 +275,7 @@ void MgrMonitor::check_sub(Subscription *sub)
  */
 void MgrMonitor::send_digests()
 {
-  digest_callback = nullptr;
+  digest_event = nullptr;
 
   const std::string type = "mgrdigest";
   if (mon->session_map.subs.count(type) == 0)
@@ -298,10 +298,10 @@ void MgrMonitor::send_digests()
     sub->session->con->send_message(mdigest);
   }
 
-  digest_callback = new C_MonContext(mon, [this](int){
+  digest_event = new C_MonContext(mon, [this](int){
       send_digests();
   });
-  mon->timer.add_event_after(g_conf->mon_mgr_digest_period, digest_callback);
+  mon->timer.add_event_after(g_conf->mon_mgr_digest_period, digest_event);
 }
 
 void MgrMonitor::on_active()
@@ -538,15 +538,14 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
 
 void MgrMonitor::init()
 {
-  if (digest_callback == nullptr) {
+  if (digest_event == nullptr) {
     send_digests();  // To get it to schedule its own event
   }
 }
 
 void MgrMonitor::on_shutdown()
 {
-  if (digest_callback) {
-    mon->timer.cancel_event(digest_callback);
+  if (digest_event) {
+    mon->timer.cancel_event(digest_event);
   }
 }
-
