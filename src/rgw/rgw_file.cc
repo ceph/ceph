@@ -1419,7 +1419,6 @@ int rgw_umount(struct rgw_fs *rgw_fs, uint32_t flags)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   fs->close();
-  fs->rele();
   return 0;
 }
 
