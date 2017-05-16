@@ -37,6 +37,7 @@ class MgrMonitor : public PaxosService
   void drop_standby(uint64_t gid);
 
   Context *digest_event = nullptr;
+  void cancel_timer();
 
   bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
 

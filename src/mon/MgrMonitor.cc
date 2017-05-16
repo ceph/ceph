@@ -275,7 +275,7 @@ void MgrMonitor::check_sub(Subscription *sub)
  */
 void MgrMonitor::send_digests()
 {
-  digest_event = nullptr;
+  cancel_timer();
 
   const std::string type = "mgrdigest";
   if (mon->session_map.subs.count(type) == 0)
@@ -302,6 +302,14 @@ void MgrMonitor::send_digests()
       send_digests();
   });
   mon->timer.add_event_after(g_conf->mon_mgr_digest_period, digest_event);
+}
+
+void MgrMonitor::cancel_timer()
+{
+  if (digest_event) {
+    mon->timer.cancel_event(digest_event);
+    digest_event = nullptr;
+  }
 }
 
 void MgrMonitor::on_active()
@@ -545,7 +553,5 @@ void MgrMonitor::init()
 
 void MgrMonitor::on_shutdown()
 {
-  if (digest_event) {
-    mon->timer.cancel_event(digest_event);
-  }
+  cancel_timer();
 }
