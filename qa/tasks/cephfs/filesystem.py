@@ -439,6 +439,15 @@ class Filesystem(MDSCluster):
         osd_count = len(list(misc.all_roles_of_type(self._ctx.cluster, 'osd')))
         return pg_warn_min_per_osd * osd_count
 
+    def configure(self, **kwargs):
+        """
+        Apply kwargs as MDS configuration settings and restart the MDSs.
+        """
+        for k, v in kwargs.items():
+            self.set_ceph_conf("mds", k, v.__str__())
+        self.mds_fail_restart()
+        self.wait_for_daemons()
+
     def create(self):
         if self.name is None:
             self.name = "cephfs"

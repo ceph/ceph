@@ -1,11 +1,15 @@
 import logging
 import time
+from teuthology.orchestra.run import Raw
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 log = logging.getLogger(__name__)
 
 class TestExports(CephFSTestCase):
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 2
+
     def _wait_subtrees(self, status, rank, test):
         timeout = 30
         pause = 2
@@ -101,3 +105,21 @@ class TestExports(CephFSTestCase):
         self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/aa/bb', 0)])
         self.mount_a.run_shell(["mv", "aa", "a/b/"])
         self._wait_subtrees(status, 0, [('/1', 0), ('/1/4/5', 1), ('/1/2/3', 2), ('/a', 1), ('/a/b/aa/bb', 0)])
+
+    def _get_splits(self, mds_id):
+        return self.fs.mds_asok(['perf', 'dump', 'mds'], mds_id=mds_id)['mds']['dir_split']
+
+    def test_export_log(self):
+        self.fs.set_allow_multimds(True)
+        self.fs.set_allow_dirfrags(True)
+        self.fs.set_max_mds(2)
+
+        self.fs.configure(mds_bal_frag="true",mds_bal_split_size=100,mds_bal_merge_size=50,mds_bal_split_bits=1)
+        status = self.fs.status()
+        self.assertEqual(self._get_splits(mds_id=status.get_rank(self.fs.id, 0)['name']), 0)
+        self.mount_a.create_n_files("big", 101)
+        self.wait_until_true(lambda: self._get_splits(mds_id=status.get_rank(self.fs.id, 0)['name']) == 1, timeout=30)
+        self.mount_a.run_shell(Raw("setfattr -n ceph.dir.pin -v 1 big"))
+        self.wait_for_health("exporting", timeout=30)
+        self._wait_subtrees(status, 0, [('/big', 1)])
+        self.wait_for_health_clear(timeout=30)
