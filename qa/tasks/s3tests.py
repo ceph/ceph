@@ -272,6 +272,14 @@ def configure(ctx, config):
         if properties is not None and 'slow_backend' in properties:
 	    s3tests_conf['fixtures']['slow backend'] = properties['slow_backend']
 
+        if properties is not None and 'calling_format' in properties:
+            calling_format = properties['calling_format']
+            s3tests_conf['DEFAULT']['calling_format'] = properties['calling_format']
+            if calling_format in {'subdomain', 'vhost', 'absolute'}:
+                # drop the trailing dash as it would create invalid dns
+                s3tests_conf['fixtures']['bucket prefix'] = 'test-' + client + '-{random}'
+
+
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
@@ -346,6 +354,8 @@ def run_tests(ctx, config):
     if not ctx.rgw.use_fastcgi:
         attrs.append("!fails_on_mod_proxy_fcgi")
     for client, client_config in config.iteritems():
+        if client_config is not None and 'extra_attrs' in client_config:
+            attrs.append(client_config['extra_attrs'])
         args = [
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
             'BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir),
