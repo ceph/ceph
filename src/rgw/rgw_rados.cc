@@ -3380,6 +3380,7 @@ int RGWRados::get_max_chunk_size(const string& placement_rule, const rgw_obj& ob
 class RGWIndexCompletionManager;
 
 struct complete_op_data {
+  AioCompletion *rados_completion{nullptr};
   RGWIndexCompletionManager *manager{nullptr};
   rgw_obj obj;
   RGWModifyOp op;
@@ -3477,10 +3478,11 @@ class RGWIndexCompletionManager {
 public:
   RGWIndexCompletionManager(RGWRados *_store) : store(_store) {}
   ~RGWIndexCompletionManager() {
-    delete completion_thread;
+    stop();
   }
 
-  void create_completion(const rgw_obj& obj,
+  void create_completion(AioCompletion *rados_completion,
+                         const rgw_obj& obj,
                          RGWModifyOp op, string& tag,
                          rgw_bucket_entry_ver& ver,
                          const cls_rgw_obj_key& key,
@@ -3502,11 +3504,20 @@ public:
   void stop() {
     if (completion_thread) {
       completion_thread->stop();
+      delete completion_thread;
     }
+
+    Mutex::Locker l(lock);
+    for (auto c : completions) {
+      c->rados_completion->release();
+      delete c;
+    }
+    completions.clear();
   }
 };
 
-void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
+void RGWIndexCompletionManager::create_completion(AioCompletion *rados_completion,
+                                                  const rgw_obj& obj,
                                                   RGWModifyOp op, string& tag,
                                                   rgw_bucket_entry_ver& ver,
                                                   const cls_rgw_obj_key& key,
@@ -3517,6 +3528,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
 {
   complete_op_data *entry = new complete_op_data;
 
+  entry->rados_completion = rados_completion;
   entry->manager = this;
   entry->obj = obj;
   entry->op = op;
@@ -12412,9 +12424,9 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
                              get_zone().log_data, bilog_flags);
 
   complete_op_data *arg;
-  index_completion_manager->create_completion(obj, op, tag, ver, key, dir_meta, ro,
-                                              get_zone().log_data, bilog_flags, &arg);
   AioCompletion *c = librados::Rados::aio_create_completion(arg, NULL, obj_complete_cb);
+  index_completion_manager->create_completion(c, obj, op, tag, ver, key, dir_meta, ro,
+                                              get_zone().log_data, bilog_flags, &arg);
   int ret = bs.index_ctx.aio_operate(bs.bucket_obj, c, &o);
   c->release();
   return ret;
