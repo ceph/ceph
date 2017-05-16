@@ -1453,7 +1453,10 @@ OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after e
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL, false) // whether swift object versioning feature is enabled
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
-OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
+OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable
+					       // throttler perf
+					       // counter
+OPTION(rgw_swift_custom_header, OPT_STR, "") // option to enable swift custom headers
 
 // This will be set to true when it is safe to start threads.
 // Once it is true, it will never change.
