@@ -2590,9 +2590,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     ss << "    cluster " << monmap->get_fsid() << "\n";
     ss << "     health " << joinify(health.begin(), health.end(), 
 				    string("\n            ")) << "\n";
-    ss << "     monmap " << *monmap << "\n";
-    ss << "            election epoch " << get_epoch()
-       << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
+    ss << "     monmap e" << monmap->get_epoch() << ": "
+       << monmap->size() << " mons" << ", quorum " << get_quorum_names() << "\n";
     if (mdsmon()->get_fsmap().filesystem_count() > 0) {
       ss << "      fsmap " << mdsmon()->get_fsmap() << "\n";
     }
