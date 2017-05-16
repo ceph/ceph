@@ -1258,7 +1258,10 @@ function wait_for_clean() {
     local cur_active_clean
     local -a delays=($(get_timeout_delays $TIMEOUT .1))
     local -i loop=0
-    test $(get_num_pgs) != 0 || return 1
+
+    while test $(get_num_pgs) == 0 ; do
+	sleep 1
+    done
 
     while true ; do
         # Comparing get_num_active_clean & get_num_pgs is used to determine
