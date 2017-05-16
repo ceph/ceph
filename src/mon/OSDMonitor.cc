@@ -3540,7 +3540,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
           ss << " (" << sum_down_osds << " osds) down\n";
 	}
       }
-      ss << down_in_osds.size() << " osds are down\n";
+      ss << down_in_osds.size() << " osds down\n";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 
       if (detail) {
