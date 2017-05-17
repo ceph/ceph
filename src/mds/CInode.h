@@ -153,7 +153,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
   static const int PIN_SCRUBQUEUE =       25;
-  static const int PIN_EXPORTPINQUEUE =   26;
 
   const char *pin_name(int p) const override {
     switch (p) {
@@ -179,7 +178,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     case PIN_DIRTYPARENT: return "dirtyparent";
     case PIN_DIRWAITER: return "dirwaiter";
     case PIN_SCRUBQUEUE: return "scrubqueue";
-    case PIN_EXPORTPINQUEUE: return "exportpinqueue";
     default: return generic_pin_name(p);
     }
   }
@@ -202,6 +200,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int STATE_REPAIRSTATS = (1<<19);
   static const int STATE_MISSINGOBJS = (1<<20);
   static const int STATE_EVALSTALECAPS = (1<<21);
+  static const int STATE_QUEUEDEXPORTPIN = (1<<22);
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 

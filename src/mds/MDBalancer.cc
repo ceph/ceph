@@ -125,8 +125,8 @@ void MDBalancer::handle_export_pins(void)
     }
 
     if (remove) {
+      in->state_clear(CInode::STATE_QUEUEDEXPORTPIN);
       q.erase(cur);
-      in->put(CInode::PIN_EXPORTPINQUEUE);
     }
   }
 
