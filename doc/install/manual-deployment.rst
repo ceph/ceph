@@ -58,7 +58,7 @@ a number of things:
   For example, when you run multiple clusters in a `federated architecture`_, 
   the cluster name (e.g., ``us-west``, ``us-east``) identifies the cluster for
   the current CLI session. **Note:** To identify the cluster name on the 
-  command line interface, specify the a Ceph configuration file with the 
+  command line interface, specify the Ceph configuration file with the 
   cluster name (e.g., ``ceph.conf``, ``us-west.conf``, ``us-east.conf``, etc.).
   Also see CLI usage (``ceph --cluster {cluster-name}``).
   

@@ -12,6 +12,13 @@ This allows for less configuration on clients and monitors. Using a DNS update c
 
 By default clients and daemons will look for the TCP service called *ceph-mon* which is configured by the *mon_dns_srv_name* configuration directive.
 
+
+``mon dns srv name``
+
+:Description: the service name used querying the DNS for the monitor hosts/addresses
+:Type: String
+:Default: ``ceph-mon``
+
 Example
 -------
 When the DNS search domain is set to *example.com* a DNS zone file might contain the following elements.
