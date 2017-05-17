@@ -18,7 +18,6 @@
 #include <map>
 #include <string>
 #include <iosfwd>
-#include <expat.h>
 
 #include <include/types.h>
 #include <common/Formatter.h>
