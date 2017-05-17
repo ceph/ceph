@@ -1166,8 +1166,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_V4;
   if (crush->has_nondefault_tunables5())
     features |= CEPH_FEATURE_CRUSH_TUNABLES5;
-  if (crush->has_incompat_chooseargs())
-    features |= CEPH_FEATURE_CRUSH_CHOOSEARGS;
+  if (crush->has_incompat_choose_args())
+    features |= CEPH_FEATURE_CRUSH_CHOOSE_ARGS;
   mask |= CEPH_FEATURES_CRUSH;
 
   if (!pg_upmap.empty() || !pg_upmap_items.empty())
@@ -1249,7 +1249,7 @@ pair<string,string> OSDMap::get_min_compat_client() const
   uint64_t f = get_features(CEPH_ENTITY_TYPE_CLIENT, nullptr);
 
   if (HAVE_FEATURE(f, OSDMAP_PG_UPMAP) ||      // v12.0.0-1733-g27d6f43
-      HAVE_FEATURE(f, CRUSH_CHOOSEARGS)) {     // v12.0.1-2172-gef1ef28
+      HAVE_FEATURE(f, CRUSH_CHOOSE_ARGS)) {     // v12.0.1-2172-gef1ef28
     return make_pair("luminous", "12.2.0");
   }
   if (HAVE_FEATURE(f, CRUSH_TUNABLES5)) {      // v10.0.0-612-g043a737
