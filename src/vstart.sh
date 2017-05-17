@@ -685,6 +685,8 @@ if [ "$debug" -eq 0 ]; then
         debug ms = 1'
     CMDSDEBUG='
         debug ms = 1'
+    CMGRDEBUG='
+        debug ms = 1'
 else
     echo "** going verbose **"
     CMONDEBUG='
