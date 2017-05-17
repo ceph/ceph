@@ -1458,8 +1458,12 @@ void OSDMonitor::share_map_with_random_osd()
 
 version_t OSDMonitor::get_trim_to()
 {
-  epoch_t floor;
+  if (mon->get_quorum().empty()) {
+    dout(10) << __func__ << ": quorum not formed" << dendl;
+    return 0;
+  }
 
+  epoch_t floor;
   if (mon->monmap->get_required_features().contains_all(
         ceph::features::mon::FEATURE_LUMINOUS)) {
     {
