@@ -59,7 +59,10 @@ void MgrClient::shutdown()
   command_table.clear();
 
   timer.shutdown();
-  session.reset();
+  if (session) {
+    session->con->mark_down();
+    session.reset();
+  }
 }
 
 bool MgrClient::ms_dispatch(Message *m)
