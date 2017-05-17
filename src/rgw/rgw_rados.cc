@@ -3522,7 +3522,7 @@ public:
                          list<cls_rgw_obj_key>& remove_objs, bool log_op,
                          uint16_t bilog_op,
                          complete_op_data **result);
-  void handle_completion(completion_t cb, complete_op_data *arg);
+  bool handle_completion(completion_t cb, complete_op_data *arg);
 
   int start() {
     completion_thread = new RGWIndexCompletionThread(store);
@@ -3557,9 +3557,13 @@ static void obj_complete_cb(completion_t cb, void *arg)
   if (completion->stopped) {
     completion->lock.Unlock(); /* can drop lock, no one else is referencing us */
     delete completion;
+    return;
   }
-  ((complete_op_data *)arg)->manager->handle_completion(cb, completion);
+  bool need_delete = completion->manager->handle_completion(cb, completion);
   completion->lock.Unlock();
+  if (need_delete) {
+    delete completion;
+  }
 }
 
 
@@ -3596,7 +3600,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
   completions[shard_id].insert(entry);
 }
 
-void RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_data *arg)
+bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_data *arg)
 {
   int shard_id = arg->manager_shard_id;
   {
@@ -3606,7 +3610,7 @@ void RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
     auto iter = comps.find(arg);
     if (iter == comps.end()) {
-      return;
+      return true;
     }
 
     comps.erase(iter);
@@ -3614,10 +3618,10 @@ void RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
   int r = rados_aio_get_return_value(cb);
   if (r != -ERR_BUSY_RESHARDING) {
-    delete arg;
-    return;
+    return true;
   }
   completion_thread->add_completion(arg);
+  return false;
 }
 
 void RGWRados::finalize()
