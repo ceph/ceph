@@ -332,7 +332,7 @@ private:
   struct C_SyncTimeout : public Context {
     Monitor *mon;
     explicit C_SyncTimeout(Monitor *m) : mon(m) {}
-    void finish(int r) {
+    void finish(int r) override {
       mon->sync_timeout();
     }
   };
@@ -499,7 +499,7 @@ private:
   struct C_TimeCheck : public Context {
     Monitor *mon;
     explicit C_TimeCheck(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       mon->timecheck_start_round();
     }
   };
@@ -544,7 +544,7 @@ private:
   struct C_ProbeTimeout : public Context {
     Monitor *mon;
     explicit C_ProbeTimeout(Monitor *m) : mon(m) {}
-    void finish(int r) {
+    void finish(int r) override {
       mon->probe_timeout(r);
     }
   };
@@ -709,7 +709,7 @@ public:
   struct C_HealthToClogTick : public Context {
     Monitor *mon;
     explicit C_HealthToClogTick(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       if (r < 0)
         return;
       mon->do_health_to_clog();
@@ -720,7 +720,7 @@ public:
   struct C_HealthToClogInterval : public Context {
     Monitor *mon;
     explicit C_HealthToClogInterval(Monitor *m) : mon(m) { }
-    void finish(int r) {
+    void finish(int r) override {
       if (r < 0)
         return;
       mon->do_health_to_clog_interval();

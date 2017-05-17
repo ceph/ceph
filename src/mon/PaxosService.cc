@@ -104,7 +104,7 @@ bool PaxosService::dispatch(MonOpRequestRef op)
 	    PaxosService *ps;
 	  public:
 	    explicit C_Propose(PaxosService *p) : ps(p) { }
-	    void finish(int r) {
+	    void finish(int r) override {
 	      ps->proposal_timer = 0;
 	      if (r >= 0)
 		ps->propose_pending();
