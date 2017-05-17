@@ -65,7 +65,14 @@ struct aio_queue_t {
 
   int init() {
     assert(ctx == 0);
-    return io_setup(max_iodepth, &ctx);
+    int r = io_setup(max_iodepth, &ctx);
+    if (r < 0) {
+      if (ctx) {
+	io_destroy(ctx);
+	ctx = 0;
+      }
+    }
+    return r;
   }
   void shutdown() {
     if (ctx) {
