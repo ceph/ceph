@@ -17,7 +17,6 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
-#include "mon/PGMap.h"
 
 // health_status_t
 static inline void encode(health_status_t hs, bufferlist& bl) {
@@ -46,7 +45,6 @@ private:
   ~MMonMgrReport() override {}
 
 public:
-  bool needs_send = false;
   const char *get_type_name() const override { return "monmgrreport"; }
 
   void print(ostream& out) const override {

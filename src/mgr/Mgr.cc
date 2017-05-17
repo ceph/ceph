@@ -27,7 +27,6 @@
 #include "DaemonServer.h"
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrDigest.h"
-#include "messages/MMonMgrReport.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 #include "messages/MLog.h"
@@ -587,11 +586,5 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
 void Mgr::tick()
 {
   dout(0) << __func__ << dendl;
-  MMonMgrReport *m = new MMonMgrReport();
-  cluster_state.tick(m);
-  server.tick(m);
-  // TODO? We currently do not notify the PyModules
-  if (m->needs_send) {
-    monc->send_mon_message(m);
-  }
+  server.send_report();
 }

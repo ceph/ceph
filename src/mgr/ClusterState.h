@@ -58,8 +58,6 @@ public:
 
   void notify_osdmap(const OSDMap &osd_map);
 
-  void tick(MMonMgrReport *m);
-
   bool have_fsmap() const {
     Mutex::Locker l(lock);
     return fsmap.get_epoch() > 0;
