@@ -37,7 +37,6 @@ you may write data with one API and retrieve it with the other.
    :maxdepth: 1
 
    Manual Install w/Civetweb <../../install/install-ceph-gateway>
-   Federated Configuration (Deprecated) <federated-config>
    Multisite Configuration <multisite>
    Config Reference <config-ref>
    Admin Guide <admin>
