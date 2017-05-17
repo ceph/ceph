@@ -519,8 +519,7 @@ void PrimaryLogPG::on_primary_error(
   eversion_t v)
 {
   dout(0) << __func__ << ": oid " << oid << " version " << v << dendl;
-  list<pg_shard_t> fl = { pg_whoami };
-  failed_push(fl, oid);
+  primary_failed(oid);
   primary_error(oid, v);
   backfills_in_flight.erase(oid);
   missing_loc.add_missing(oid, v, eversion_t());
@@ -10258,6 +10257,12 @@ void PrimaryLogPG::recover_got(hobject_t oid, eversion_t v)
   }
 }
 
+void PrimaryLogPG::primary_failed(const hobject_t &soid)
+{
+  list<pg_shard_t> fl = { pg_whoami };
+  failed_push(fl, soid);
+}
+
 void PrimaryLogPG::failed_push(const list<pg_shard_t> &from, const hobject_t &soid)
 {
   dout(20) << __func__ << ": " << soid << dendl;
@@ -11351,8 +11356,7 @@ int PrimaryLogPG::prep_object_replica_pushes(
   obc->ondisk_read_unlock();
   if (r < 0) {
     dout(0) << __func__ << " Error " << r << " on oid " << soid << dendl;
-    list<pg_shard_t> fl = { pg_whoami };
-    failed_push(fl, soid);
+    primary_failed(soid);
     primary_error(soid, v);
     return 0;
   }
@@ -11947,8 +11951,7 @@ int PrimaryLogPG::prep_backfill_object_push(
   obc->ondisk_read_unlock();
   if (r < 0) {
     dout(0) << __func__ << " Error " << r << " on oid " << oid << dendl;
-    list<pg_shard_t> fl = { pg_whoami };
-    failed_push(fl, oid);
+    primary_failed(oid);
     primary_error(oid, v);
     backfills_in_flight.erase(oid);
     missing_loc.add_missing(oid, v, eversion_t());

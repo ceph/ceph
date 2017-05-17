@@ -859,9 +859,11 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
       ObjectContextRef obc = j->second.obc;
       bc->clear_pull(j, false /* already did it */);
       int started = bc->start_pushes(i.hoid, obc, h);
-      // XXX: Handle errors here?
-      assert(started >= 0);
-      if (!started) {
+      if (started < 0) {
+	bc->pushing[i.hoid].clear();
+	bc->get_parent()->primary_failed(i.hoid);
+	bc->get_parent()->primary_error(i.hoid, obc->obs.oi.version);
+      } else if (!started) {
 	bc->get_parent()->on_global_recover(
 	  i.hoid, i.stat);
       }
