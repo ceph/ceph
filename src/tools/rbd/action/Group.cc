@@ -69,9 +69,6 @@ int execute_list(const po::variables_map &vm) {
   librbd::RBD rbd;
   std::vector<std::string> names;
   r = rbd.group_list(io_ctx, &names);
-
-  if (r == -ENOENT)
-    r = 0;
   if (r < 0)
     return r;
 

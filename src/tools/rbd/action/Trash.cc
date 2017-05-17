@@ -160,10 +160,9 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
             bool all_flag, Formatter *f) {
   std::vector<librbd::trash_image_info_t> trash_entries;
   int r = rbd.trash_list(io_ctx, trash_entries);
-  if (r < 0 && r != -ENOENT) {
+  if (r < 0) {
     return r;
   }
-  r = 0;
 
   if (!long_flag) {
     if (f) {
