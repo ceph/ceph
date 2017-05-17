@@ -2498,6 +2498,25 @@ void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
   out.flags(original_flags);
 }
 
+
+buffer::list buffer::list::static_from_mem(char* c, size_t l) {
+  list bl;
+  bl.push_back(ptr(create_static(l, c)));
+  return bl;
+}
+
+buffer::list buffer::list::static_from_cstring(char* c) {
+  return static_from_mem(c, std::strlen(c));
+}
+
+buffer::list buffer::list::static_from_string(string& s) {
+  // C++14 just has string::data return a char* from a non-const
+  // string.
+  return static_from_mem(const_cast<char*>(s.data()), s.length());
+  // But the way buffer::list mostly doesn't work in a sane way with
+  // const makes me generally sad.
+}
+
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::raw &r) {
   return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref.read() << ")";
 }

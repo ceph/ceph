@@ -56,6 +56,21 @@ transform_old_authinfo(const req_state* const s)
       return id == acct_id;
     }
 
+    bool is_identity(const idset_t& ids) const override {
+      for (auto& p : ids) {
+	if (p.is_wildcard()) {
+	  return true;
+	} else if (p.is_tenant() && p.get_tenant() == id.tenant) {
+	  return true;
+	} else if (p.is_user() &&
+		   (p.get_tenant() == id.tenant) &&
+		   (p.get_id() == id.id)) {
+	  return true;
+	}
+      }
+      return false;
+    }
+
     uint32_t get_perm_mask() const override {
       return perm_mask;
     }
@@ -291,6 +306,29 @@ bool rgw::auth::RemoteApplier::is_owner_of(const rgw_user& uid) const
   return info.acct_user == uid;
 }
 
+bool rgw::auth::RemoteApplier::is_identity(const idset_t& ids) const {
+  for (auto& id : ids) {
+    if (id.is_wildcard()) {
+      return true;
+
+      // We also need to cover cases where rgw_keystone_implicit_tenants
+      // was enabled. */
+    } else if (id.is_tenant() &&
+	       (info.acct_user.tenant.empty() ?
+		info.acct_user.id :
+		info.acct_user.tenant) == id.get_tenant()) {
+      return true;
+    } else if (id.is_user() &&
+	       info.acct_user.id == id.get_id() &&
+	       (info.acct_user.tenant.empty() ?
+		info.acct_user.id :
+		info.acct_user.tenant) == id.get_tenant()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void rgw::auth::RemoteApplier::to_str(std::ostream& out) const
 {
   out << "rgw::auth::RemoteApplier(acct_user=" << info.acct_user
@@ -383,8 +421,23 @@ bool rgw::auth::LocalApplier::is_owner_of(const rgw_user& uid) const
   return uid == user_info.user_id;
 }
 
-void rgw::auth::LocalApplier::to_str(std::ostream& out) const
-{
+bool rgw::auth::LocalApplier::is_identity(const idset_t& ids) const {
+  for (auto& id : ids) {
+    if (id.is_wildcard()) {
+      return true;
+    } else if (id.is_tenant() &&
+	       id.get_tenant() == user_info.user_id.tenant) {
+      return true;
+    } else if (id.is_user() &&
+	       (id.get_tenant() == user_info.user_id.tenant) &&
+	       (id.get_id() == user_info.user_id.id)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void rgw::auth::LocalApplier::to_str(std::ostream& out) const {
   out << "rgw::auth::LocalApplier(acct_user=" << user_info.user_id
       << ", acct_name=" << user_info.display_name
       << ", subuser=" << subuser

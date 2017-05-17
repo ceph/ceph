@@ -335,6 +335,7 @@ add_library(crush_objs OBJECT ${crush_srcs})
 add_subdirectory(json_spirit)
 
 include_directories("${CMAKE_SOURCE_DIR}/src/xxHash")
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
 set(GMOCK_INCLUDE_DIRS
   "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include/gmock")
@@ -439,6 +440,7 @@ set(libcommon_files
   common/TrackedOp.cc
   common/SloppyCRCMap.cc
   common/types.cc
+  common/iso_8601.cc
   log/Log.cc
   log/SubsystemMap.cc
   mon/MonCap.cc
