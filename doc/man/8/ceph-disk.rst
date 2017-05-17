@@ -78,6 +78,11 @@ the subcommands ``deactivate`` and ``destroy``.
 The documentation for each subcommand (prepare, activate, etc.) can be displayed
 with its ``--help`` option. For instance ``ceph-disk prepare --help``.
 
+Bugs
+====
+
+See also the ``Bugs`` section in :doc:`ceph-detect-init <ceph-detect-init>`\(8).
+
 Availability
 ============
 
@@ -87,5 +92,6 @@ the Ceph documentation at http://ceph.com/docs for more information.
 See also
 ========
 
+:doc:`ceph-detect-init <ceph-detect-init>`\(8)
 :doc:`ceph-osd <ceph-osd>`\(8),
 :doc:`ceph-deploy <ceph-deploy>`\(8)

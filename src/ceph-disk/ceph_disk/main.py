@@ -546,53 +546,6 @@ def command_check_call(arguments, exit=False):
         raise
 
 
-def platform_distro():
-    """
-    Returns a normalized, lower case string without any leading nor trailing
-    whitespace that represents the distribution name of the current machine.
-    """
-    distro = platform_information()[0] or ''
-    return distro.strip().lower()
-
-
-def platform_information():
-    if FREEBSD:
-        distro = platform.system()
-        release = platform.version().split()[1]
-        codename = platform.version().split()[3]
-        version = platform.version().split('-')[0][:-1]
-        major_version = version.split('.')[0]
-        major, minor = release.split('.')
-    else:
-        distro, release, codename = platform.linux_distribution()
-        # this could be an empty string in Debian
-        if not codename and 'debian' in distro.lower():
-            debian_codenames = {
-                '8': 'jessie',
-                '7': 'wheezy',
-                '6': 'squeeze',
-            }
-            major_version = release.split('.')[0]
-            codename = debian_codenames.get(major_version, '')
-
-            # In order to support newer jessie/sid,  wheezy/sid strings we test
-            # this if sid is buried in the minor, we should use sid anyway.
-            if not codename and '/' in release:
-                major, minor = release.split('/')
-                if minor == 'sid':
-                    codename = minor
-                else:
-                    codename = major
-        # this could be an empty string in Virtuozzo linux
-        if not codename and 'virtuozzo linux' in distro.lower():
-            codename = 'virtuozzo'
-
-    return (
-        str(distro).strip(),
-        str(release).strip(),
-        str(codename).strip()
-    )
-
 #
 # An alternative block_path implementation would be
 #
