@@ -25,6 +25,15 @@ add_custom_target(civetweb_h
   "${CMAKE_BINARY_DIR}/src/include/civetweb"
   COMMENT "keep civetweb.h up-to-date")
 
+function(gperf_generate input output)
+  add_custom_command(
+    OUTPUT ${output}
+    COMMAND gperf ${input} > ${output}
+    DEPENDS ${input}
+    COMMENT "Generate ${output}"
+    )
+endfunction()
+
 set(rgw_a_srcs
   rgw_acl.cc
   rgw_acl_s3.cc
@@ -103,7 +112,15 @@ set(rgw_a_srcs
   rgw_xml_enc.cc
   rgw_torrent.cc
   rgw_crypt.cc
-  rgw_crypt_sanitize.cc)
+  rgw_crypt_sanitize.cc
+  rgw_iam_policy.cc)
+
+gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
+  rgw_iam_policy_keywords.frag.cc)
+set_source_files_properties(rgw_iam_policy.cc PROPERTIES
+  OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/rgw/rgw_iam_policy_keywords.frag.cc
+  COMPILE_FLAGS -I${CMAKE_BINARY_DIR}/src/rgw)
+
 
 if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND rgw_a_srcs rgw_fcgi.cc)
@@ -115,7 +132,9 @@ add_dependencies(rgw_a civetweb_h)
 
 target_include_directories(rgw_a PUBLIC
   "../Beast/include"
-  ${FCGI_INCLUDE_DIR})
+  ${FCGI_INCLUDE_DIR}
+  "../rapidjson/include"
+  )
 target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
 
 target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount_client

@@ -511,6 +511,9 @@ protected:
   bool is_request_payment_op() {
     return s->info.args.exists("requestPayment");
   }
+  bool is_policy_op() {
+    return s->info.args.exists("policy");
+  }
   RGWOp *get_obj_op(bool get_data);
 
   RGWOp *op_get() override;

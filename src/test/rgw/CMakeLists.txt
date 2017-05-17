@@ -105,5 +105,29 @@ target_link_libraries(unittest_rgw_crypto
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
-set_target_properties(unittest_rgw_crypto PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
+set_target_properties(unittest_rgw_crypto PROPERTIES COMPILE_FLAGS$ {UNITTEST_CXX_FLAGS})
+
+# ceph_test_rgw_iam_policy
+set(test_rgw_iam_policy_srcs test_rgw_iam_policy.cc)
+add_executable(ceph_test_rgw_iam_policy
+  ${test_rgw_iam_policy_srcs}
+  )
+target_link_libraries(ceph_test_rgw_iam_policy
+  rgw_a
+  cls_rgw_client
+  cls_lock_client
+  cls_refcount_client
+  cls_log_client
+  cls_statelog_client
+  cls_version_client
+  cls_replica_log_client
+  cls_user_client
+  librados
+  global
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${UNITTEST_LIBS}
+  ${CRYPTO_LIBS}
+  )
+set_target_properties(ceph_test_rgw_iam_policy PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
