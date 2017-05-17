@@ -2153,13 +2153,23 @@ public:
   }
 };
 
+uint64_t Locker::calc_new_max_size(inode_t *pi, uint64_t size)
+{
+  uint64_t new_max = (size + 1) << 1;
+  uint64_t max_inc = g_conf->mds_client_writeable_range_max_inc_objs;
+  if (max_inc > 0) {
+    max_inc *= pi->get_layout_size_increment();
+    new_max = MIN(new_max, size + max_inc);
+  }
+  return ROUND_UP_TO(new_max, pi->get_layout_size_increment());
+}
 
 void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,client_writeable_range_t>& new_ranges)
 {
   inode_t *latest = in->get_projected_inode();
   uint64_t ms;
   if(latest->has_layout()) {
-    ms = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
+    ms = calc_new_max_size(latest, size);
   } else {
     // Layout-less directories like ~mds0/, have zero size
     ms = 0;
@@ -2876,17 +2886,6 @@ void Locker::kick_cap_releases(MDRequestRef& mdr)
   }
 }
 
-static uint64_t calc_bounding(uint64_t t)
-{
-  t |= t >> 1;
-  t |= t >> 2;
-  t |= t >> 4;
-  t |= t >> 8;
-  t |= t >> 16;
-  t |= t >> 32;
-  return t + 1;
-}
-
 /**
  * m and ack might be NULL, so don't dereference them unless dirty != 0
  */
@@ -3089,11 +3088,9 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 		 << " > max " << old_max << dendl;
 	change_max = true;
 	forced_change_max = true;
-	new_max = ROUND_UP_TO((m->get_max_size()+1) << 1, latest->get_layout_size_increment());
+	new_max = calc_new_max_size(latest, m->get_max_size());
       } else {
-	new_max = calc_bounding(size * 2);
-	if (new_max < latest->get_layout_size_increment())
-	  new_max = latest->get_layout_size_increment();
+	new_max = calc_new_max_size(latest, size);
 
 	if (new_max > old_max)
 	  change_max = true;

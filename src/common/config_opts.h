@@ -562,6 +562,9 @@ OPTION(mds_max_scrub_ops_in_progress, OPT_INT, 5) // the number of simultaneous 
 // Maximum number of damaged frags/dentries before whole MDS rank goes damaged
 OPTION(mds_damage_table_max_entries, OPT_INT, 10000)
 
+// Maximum increment for client writable range, counted by number of objects
+OPTION(mds_client_writeable_range_max_inc_objs, OPT_U32, 1024)
+
 // verify backend can support configured max object name length
 OPTION(osd_check_max_object_name_len_on_startup, OPT_BOOL, true)
 
