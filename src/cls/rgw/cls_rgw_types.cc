@@ -598,6 +598,7 @@ void cls_rgw_bucket_instance_entry::dump(Formatter *f) const
 {
   encode_json("reshard_status", (int)reshard_status, f);
   encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
+  encode_json("num_shards", num_shards, f);
 
 }
 

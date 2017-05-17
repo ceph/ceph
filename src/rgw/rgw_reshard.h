@@ -44,7 +44,7 @@ class RGWBucketReshard {
 
   int lock_bucket();
   void unlock_bucket();
-  int set_resharding_status(const string& new_instance_id, cls_rgw_reshard_status status);
+  int set_resharding_status(const string& new_instance_id, int32_t num_shards, cls_rgw_reshard_status status);
   int clear_resharding();
 
   int create_new_bucket_instance(int new_num_shards,

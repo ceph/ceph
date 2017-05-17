@@ -613,11 +613,13 @@ enum cls_rgw_reshard_status {
 struct cls_rgw_bucket_instance_entry {
   cls_rgw_reshard_status reshard_status{CLS_RGW_RESHARD_NONE};
   string new_bucket_instance_id;
+  int32_t num_shards{-1};
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode((uint8_t)reshard_status, bl);
     ::encode(new_bucket_instance_id, bl);
+    ::encode(num_shards, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -627,6 +629,7 @@ struct cls_rgw_bucket_instance_entry {
     ::decode(s, bl);
     reshard_status = (cls_rgw_reshard_status)s;
     ::decode(new_bucket_instance_id, bl);
+    ::decode(num_shards, bl);
     DECODE_FINISH(bl);
   }
 
@@ -638,9 +641,10 @@ struct cls_rgw_bucket_instance_entry {
     new_bucket_instance_id.clear();
   }
 
-  void set_status(const string& new_instance_id, cls_rgw_reshard_status s) {
+  void set_status(const string& new_instance_id, int32_t new_num_shards, cls_rgw_reshard_status s) {
     reshard_status = s;
     new_bucket_instance_id = new_instance_id;
+    num_shards = new_num_shards;
   }
 
   bool resharding() const {
