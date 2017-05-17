@@ -584,6 +584,12 @@ public:
   int get_immediate_parent_id(int id, int *parent) const;
 
   /**
+   * return ancestor of the given type, or 0 if none
+   * (parent is always a bucket and thus <0)
+   */
+  int get_parent_of_type(int id, int type) const;
+
+  /**
    * get the fully qualified location of a device by successively finding
    * parents beginning at ID and ending at highest type number specified in
    * the CRUSH map which assumes that if device foo is under device bar, the
