@@ -11,7 +11,6 @@
 #include "rgw_rados.h"
 #include "rgw_common.h"
 
-using namespace std;
 using ceph::crypto::SHA1;
 
 struct req_state;

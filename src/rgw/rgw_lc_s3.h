@@ -12,10 +12,6 @@
 #include "rgw_lc.h"
 #include "rgw_xml.h"
 
-
-
-using namespace std;
-
 class LCID_S3 : public XMLObj
 {
 public:

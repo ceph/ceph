@@ -25,8 +25,6 @@
 #include "rgw_xml.h"
 #include "rgw_cors.h"
 
-using namespace std;
-
 class RGWCORSRule_S3 : public RGWCORSRule, public XMLObj
 {
   public:
