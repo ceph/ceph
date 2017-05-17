@@ -669,8 +669,8 @@ mds_gid_t FSMap::find_standby_for(mds_role_t role, const std::string& name) cons
   return result;
 }
 
-mds_gid_t FSMap::find_unused(fs_cluster_id_t fscid,
-			     bool force_standby_active) const {
+mds_gid_t FSMap::find_unused_for(mds_role_t role,
+				 bool force_standby_active) const {
   for (const auto &i : standby_daemons) {
     const auto &gid = i.first;
     const auto &info = i.second;
@@ -680,7 +680,10 @@ mds_gid_t FSMap::find_unused(fs_cluster_id_t fscid,
       continue;
 
     if (info.standby_for_fscid != FS_CLUSTER_ID_NONE &&
-        info.standby_for_fscid != fscid)
+        info.standby_for_fscid != role.fscid)
+      continue;
+    if (info.standby_for_rank != MDS_RANK_NONE &&
+        info.standby_for_rank != role.rank)
       continue;
 
     // To be considered 'unused' a daemon must either not
@@ -699,7 +702,7 @@ mds_gid_t FSMap::find_replacement_for(mds_role_t role, const std::string& name,
   if (standby)
     return standby;
   else
-    return find_unused(role.fscid, force_standby_active);
+    return find_unused_for(role, force_standby_active);
 }
 
 void FSMap::sanity() const
