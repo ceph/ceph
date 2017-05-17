@@ -1822,7 +1822,7 @@ cdef class WriteOp(object):
         with nogil:
             rados_write_op_set_flags(self.write_op, _flags)
 
-    @requires(('to_write', bytes))
+    @requires(('to_write', (bytes, bytearray)))
     def append(self, to_write):
         """
         Append data to an object synchronously
@@ -1837,7 +1837,7 @@ cdef class WriteOp(object):
         with nogil:
             rados_write_op_append(self.write_op, _to_write, length)
 
-    @requires(('to_write', bytes))
+    @requires(('to_write', (bytes, bytearray)))
     def write_full(self, to_write):
         """
         Write whole object, atomically replacing it.
@@ -1852,7 +1852,7 @@ cdef class WriteOp(object):
         with nogil:
             rados_write_op_write_full(self.write_op, _to_write, length)
 
-    @requires(('to_write', bytes), ('offset', int))
+    @requires(('to_write', (bytes, bytearray)), ('offset', int))
     def write(self, to_write, offset=0):
         """
         Write to offset.
@@ -2070,7 +2070,7 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error stating %s" % object_name)
         return completion
 
-    @requires(('object_name', str_type), ('to_write', bytes), ('offset', int),
+    @requires(('object_name', str_type), ('to_write', (bytes, bytearray)), ('offset', int),
               ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
     def aio_write(self, object_name, to_write, offset=0,
                   oncomplete=None, onsafe=None):
@@ -2115,7 +2115,7 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error writing object %s" % object_name)
         return completion
 
-    @requires(('object_name', str_type), ('to_write', bytes), ('oncomplete', opt(Callable)),
+    @requires(('object_name', str_type), ('to_write', (bytes, bytearray)), ('oncomplete', opt(Callable)),
               ('onsafe', opt(Callable)))
     def aio_write_full(self, object_name, to_write,
                        oncomplete=None, onsafe=None):
@@ -2160,7 +2160,7 @@ cdef class Ioctx(object):
             raise make_ex(ret, "error writing object %s" % object_name)
         return completion
 
-    @requires(('object_name', str_type), ('to_append', bytes), ('oncomplete', opt(Callable)),
+    @requires(('object_name', str_type), ('to_append', (bytes, bytearray)), ('oncomplete', opt(Callable)),
               ('onsafe', opt(Callable)))
     def aio_append(self, object_name, to_append, oncomplete=None, onsafe=None):
         """
@@ -2268,7 +2268,7 @@ cdef class Ioctx(object):
         return completion
 
     @requires(('object_name', str_type), ('cls', str_type), ('method', str_type),
-              ('data', bytes), ('length', int),
+              ('data', (bytes, bytearray)), ('length', int),
               ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
     def aio_execute(self, object_name, cls, method, data,
                     length=8192, oncomplete=None, onsafe=None):
@@ -2496,7 +2496,7 @@ cdef class Ioctx(object):
             self.state = "closed"
 
 
-    @requires(('key', str_type), ('data', bytes))
+    @requires(('key', str_type), ('data', (bytes, bytearray)))
     def write(self, key, data, offset=0):
         """
         Write data to an object synchronously
@@ -2532,7 +2532,7 @@ cdef class Ioctx(object):
             raise LogicError("Ioctx.write(%s): rados_write \
 returned %d, but should return zero on success." % (self.name, ret))
 
-    @requires(('key', str_type), ('data', bytes))
+    @requires(('key', str_type), ('data', (bytes, bytearray)))
     def write_full(self, key, data):
         """
         Write an entire object synchronously.
@@ -2567,7 +2567,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise LogicError("Ioctx.write_full(%s): rados_write_full \
 returned %d, but should return zero on success." % (self.name, ret))
 
-    @requires(('key', str_type), ('data', bytes))
+    @requires(('key', str_type), ('data', (bytes, bytearray)))
     def append(self, key, data):
         """
         Append data to an object synchronously
@@ -2643,7 +2643,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             # itself and set ret_s to NULL, hence XDECREF).
             ref.Py_XDECREF(ret_s)
 
-    @requires(('key', str_type), ('cls', str_type), ('method', str_type), ('data', bytes))
+    @requires(('key', str_type), ('cls', str_type), ('method', str_type), ('data', (bytes, bytearray)))
     def execute(self, key, cls, method, data, length=8192):
         """
         Execute an OSD class method on an object.
@@ -2884,7 +2884,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         return XattrIterator(self, oid)
 
-    @requires(('key', str_type), ('xattr_name', str_type), ('xattr_value', bytes))
+    @requires(('key', str_type), ('xattr_name', str_type), ('xattr_value', (bytes, bytearray)))
     def set_xattr(self, key, xattr_name, xattr_value):
         """
         Set an extended attribute on an object.
@@ -3652,4 +3652,3 @@ class MonitorLog(object):
         self.arg = arg
         self.cluster = cluster
         self.cluster.monitor_log(level, callback, arg)
-
