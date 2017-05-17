@@ -317,7 +317,7 @@ void PerfCounters::hinc(int idx, int64_t x, int64_t y)
   assert(idx < m_upper_bound);
 
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
-  assert(data.type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_U64));
+  assert(data.type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
   assert(data.histogram);
 
   data.histogram->inc(x, y);
@@ -370,14 +370,38 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
 
     if (schema) {
       f->open_object_section(d->name);
+      // we probably should not have exposed this raw field (with bit
+      // values), but existing plugins rely on it so we're stuck with
+      // it.
       f->dump_int("type", d->type);
 
-      if (d->description) {
-        f->dump_string("description", d->description);
+      if (d->type & PERFCOUNTER_COUNTER) {
+	f->dump_string("metric_type", "counter");
       } else {
-        f->dump_string("description", "");
+	f->dump_string("metric_type", "gauge");
       }
 
+      if (d->type & PERFCOUNTER_LONGRUNAVG) {
+	if (d->type & PERFCOUNTER_TIME) {
+	  f->dump_string("value_type", "real-integer-pair");
+	} else {
+	  f->dump_string("value_type", "integer-integer-pair");
+	}
+      } else if (d->type & PERFCOUNTER_HISTOGRAM) {
+	if (d->type & PERFCOUNTER_TIME) {
+	  f->dump_string("value_type", "real-2d-histogram");
+	} else {
+	  f->dump_string("value_type", "integer-2d-histogram");
+	}
+      } else {
+	if (d->type & PERFCOUNTER_TIME) {
+	  f->dump_string("value_type", "real");
+	} else {
+	  f->dump_string("value_type", "integer");
+	}
+      }
+
+      f->dump_string("description", d->description ? d->description : "");
       if (d->nick != NULL) {
         f->dump_string("nick", d->nick);
       } else {
@@ -407,7 +431,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
 	}
 	f->close_section();
       } else if (d->type & PERFCOUNTER_HISTOGRAM) {
-        assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_U64));
+        assert(d->type == (PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER | PERFCOUNTER_U64));
         assert(d->histogram);
         f->open_object_section(d->name);
         d->histogram->dump_formatted(f);
@@ -497,14 +521,14 @@ void PerfCountersBuilder::add_time_avg(
 	   PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG);
 }
 
-void PerfCountersBuilder::add_histogram(
+void PerfCountersBuilder::add_u64_counter_histogram(
   int idx, const char *name,
   PerfHistogramCommon::axis_config_d x_axis_config,
   PerfHistogramCommon::axis_config_d y_axis_config,
   const char *description, const char *nick, int prio)
 {
   add_impl(idx, name, description, nick, prio,
-	   PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM,
+	   PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER,
            unique_ptr<PerfHistogram<>>{new PerfHistogram<>{x_axis_config, y_axis_config}});
 }
 
@@ -535,8 +559,10 @@ PerfCounters *PerfCountersBuilder::create_perf_counters()
 {
   PerfCounters::perf_counter_data_vec_t::const_iterator d = m_perf_counters->m_data.begin();
   PerfCounters::perf_counter_data_vec_t::const_iterator d_end = m_perf_counters->m_data.end();
-  for (; d != d_end; ++d) 
+  for (; d != d_end; ++d) {
     assert(d->type != PERFCOUNTER_NONE);
+    assert(d->type & (PERFCOUNTER_U64 | PERFCOUNTER_TIME));
+  }
 
   PerfCounters *ret = m_perf_counters;
   m_perf_counters = NULL;
