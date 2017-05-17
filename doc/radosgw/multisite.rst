@@ -63,7 +63,7 @@ gateway instances, one for each Ceph storage cluster.
 
 This guide assumes at least two Ceph storage clusters in geographically
 separate locations; however, the configuration can work on the same
-site. This guide also assumes four Ceph object gateway servers named
+site. This guide also assumes two Ceph object gateway servers named
 ``rgw1`` and ``rgw2``.
 
 A multi-site configuration requires a master zone group and a master
@@ -814,8 +814,8 @@ realm. Alternatively, to change which realm is the default, execute:
 
     # radosgw-admin realm default --rgw-realm=movies
 
-..note:: When the realm is default, the command line assumes
-         ``--rgw-realm=<realm-name>`` as an argument.
+.. note:: When the realm is default, the command line assumes
+   ``--rgw-realm=<realm-name>`` as an argument.
 
 Delete a Realm
 ~~~~~~~~~~~~~~
