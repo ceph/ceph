@@ -281,6 +281,7 @@ public:
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff);
   void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) override;
+  void primary_failed(const hobject_t &soid) override;
   bool primary_error(const hobject_t& soid, eversion_t v) override;
   void cancel_pull(const hobject_t &soid);
   void on_primary_error(const hobject_t &oid, eversion_t v) override;
@@ -1151,7 +1152,6 @@ protected:
   hobject_t last_backfill_started;
   bool new_backfill;
 
-  void primary_error(const hobject_t& soid, eversion_t v);
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h);
 
