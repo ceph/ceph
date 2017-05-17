@@ -15,8 +15,6 @@
 
 #include "rgw_basic_types.h"
 
-using namespace std;
-
 #define RGW_PERM_NONE            0x00
 #define RGW_PERM_READ            0x01
 #define RGW_PERM_WRITE           0x02
