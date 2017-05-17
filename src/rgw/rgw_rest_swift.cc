@@ -1399,18 +1399,13 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(
       const size_t sep_pos = path_str.find('/', start_pos);
 
       if (string::npos != sep_pos) {
-        string bucket_name;
-        url_decode(path_str.substr(start_pos, sep_pos - start_pos), bucket_name);
-
-        string obj_name;
-        url_decode(path_str.substr(sep_pos + 1), obj_name);
-
-        path.bucket_name = bucket_name;
-        path.obj_key = obj_name;
+        path.bucket_name = url_decode(path_str.substr(start_pos,
+                                                      sep_pos - start_pos));
+        path.obj_key = url_decode(path_str.substr(sep_pos + 1));
       } else {
         /* It's guaranteed here that bucket name is at least one character
          * long and is different than slash. */
-        url_decode(path_str.substr(start_pos), path.bucket_name);
+        path.bucket_name = url_decode(path_str.substr(start_pos));
       }
 
       items.push_back(path);
@@ -2232,8 +2227,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
 
 bool RGWSwiftWebsiteHandler::is_web_dir() const
 {
-  std::string subdir_name;
-  url_decode(s->object.name, subdir_name);
+  std::string subdir_name = url_decode(s->object.name);
 
   /* Remove character from the subdir name if it is "/". */
   if (subdir_name.empty()) {
@@ -2242,7 +2236,7 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
     subdir_name.pop_back();
   }
 
-  rgw_obj obj(s->bucket, subdir_name);
+  rgw_obj obj(s->bucket, std::move(subdir_name));
 
   /* First, get attrset of the object we'll try to retrieve. */
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);

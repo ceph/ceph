@@ -907,10 +907,8 @@ int RGWHTTPArgs::parse()
        end = true;
        fpos = str.size(); 
     }
-    string substr, nameval;
-    substr = str.substr(pos, fpos - pos);
-    url_decode(substr, nameval, true);
-    NameVal nv(nameval);
+    std::string nameval = url_decode(str.substr(pos, fpos - pos), true);
+    NameVal nv(std::move(nameval));
     int ret = nv.parse();
     if (ret >= 0) {
       string& name = nv.get_name();
@@ -1336,43 +1334,39 @@ static char hex_to_num(char c)
   return hex_table.to_num(c);
 }
 
-bool url_decode(const string& src_str, string& dest_str, bool in_query)
+std::string url_decode(const boost::string_view& src_str, bool in_query)
 {
-  const char *src = src_str.c_str();
-  char dest[src_str.size() + 1];
-  int pos = 0;
-  char c;
+  std::string dest_str;
+  dest_str.reserve(src_str.length() + 1);
 
-  while (*src) {
+  for (auto src = std::begin(src_str); src != std::end(src_str); ++src) {
     if (*src != '%') {
       if (!in_query || *src != '+') {
-        if (*src == '?') in_query = true;
-        dest[pos++] = *src++;
+        if (*src == '?') {
+          in_query = true;
+        }
+        dest_str.push_back(*src);
       } else {
-        dest[pos++] = ' ';
-        ++src;
+        dest_str.push_back(' ');
       }
     } else {
+      /* 3 == strlen("%%XX") */
+      if (std::distance(src, std::end(src_str)) < 3) {
+        break;
+      }
+
       src++;
-      if (!*src)
-        break;
-      char c1 = hex_to_num(*src++);
-      if (!*src)
-        break;
-      c = c1 << 4;
-      if (c1 < 0)
-        return false;
-      c1 = hex_to_num(*src++);
-      if (c1 < 0)
-        return false;
-      c |= c1;
-      dest[pos++] = c;
+      const char c1 = hex_to_num(*src++);
+      const char c2 = hex_to_num(*src);
+      if (c1 < 0 || c2 < 0) {
+        return std::string();
+      } else {
+        dest_str.push_back(c1 << 4 | c2);
+      }
     }
   }
-  dest[pos] = 0;
-  dest_str = dest;
 
-  return true;
+  return dest_str;
 }
 
 void rgw_uri_escape_char(char c, string& dst)

@@ -1134,10 +1134,10 @@ int RGWPutObj_ObjStore_S3::get_params()
 #define VERSION_ID_STR "?versionId="
     pos = copy_source_object_name.find(VERSION_ID_STR);
     if (pos == std::string::npos) {
-      url_decode(copy_source_object_name, copy_source_object_name);
+      copy_source_object_name = url_decode(copy_source_object_name);
     } else {
       copy_source_version_id = copy_source_object_name.substr(pos + sizeof(VERSION_ID_STR) - 1);
-      url_decode(copy_source_object_name.substr(0, pos), copy_source_object_name);
+      copy_source_object_name = url_decode(copy_source_object_name.substr(0, pos));
     }
     pos = copy_source_bucket_name.find(":");
     if (pos == std::string::npos) {
@@ -1838,9 +1838,7 @@ int RGWDeleteObj_ObjStore_S3::get_params()
   }
 
   if (if_unmod) {
-    string if_unmod_str(if_unmod);
-    string if_unmod_decoded;
-    url_decode(if_unmod_str, if_unmod_decoded);
+    std::string if_unmod_decoded = url_decode(if_unmod);
     uint64_t epoch;
     uint64_t nsec;
     if (utime_t::parse_date(if_unmod_decoded, &epoch, &nsec) < 0) {

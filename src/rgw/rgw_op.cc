@@ -9,9 +9,10 @@
 #include <sstream>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/bind.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
-#include <boost/bind.hpp>
+#include <boost/utility/string_view.hpp>
 
 #include "common/Clock.h"
 #include "common/armor.h"
@@ -1180,20 +1181,17 @@ static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket,
 
 int RGWGetObj::handle_user_manifest(const char *prefix)
 {
-  ldout(s->cct, 2) << "RGWGetObj::handle_user_manifest() prefix=" << prefix << dendl;
+  const boost::string_view prefix_view(prefix);
+  ldout(s->cct, 2) << "RGWGetObj::handle_user_manifest() prefix="
+                   << prefix_view << dendl;
 
-  string prefix_str = prefix;
-  size_t pos = prefix_str.find('/');
-  if (pos == string::npos)
+  const size_t pos = prefix_view.find('/');
+  if (pos == string::npos) {
     return -EINVAL;
+  }
 
-  string bucket_name_raw, bucket_name;
-  bucket_name_raw = prefix_str.substr(0, pos);
-  url_decode(bucket_name_raw, bucket_name);
-
-  string obj_prefix_raw, obj_prefix;
-  obj_prefix_raw = prefix_str.substr(pos + 1);
-  url_decode(obj_prefix_raw, obj_prefix);
+  const std::string bucket_name = url_decode(prefix_view.substr(0, pos));
+  const std::string obj_prefix = url_decode(prefix_view.substr(pos + 1));
 
   rgw_bucket bucket;
 
@@ -3876,20 +3874,14 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
     const string& path_str = iter.path;
 
     const size_t sep_pos = path_str.find('/', 1 /* skip first slash */);
-    if (string::npos == sep_pos) {
+    if (boost::string_view::npos == sep_pos) {
       return -EINVAL;
     }
 
     RGWBulkDelete::acct_path_t path;
 
-    string bucket_name;
-    url_decode(path_str.substr(1, sep_pos - 1), bucket_name);
-
-    string obj_name;
-    url_decode(path_str.substr(sep_pos + 1), obj_name);
-
-    path.bucket_name = bucket_name;
-    path.obj_key = obj_name;
+    path.bucket_name = url_decode(path_str.substr(1, sep_pos - 1));
+    path.obj_key = url_decode(path_str.substr(sep_pos + 1));
 
     items.push_back(path);
   }
@@ -4039,9 +4031,7 @@ bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name,
     params_str = url_src.substr(pos + 1);
   }
 
-  string dec_src;
-
-  url_decode(name_str, dec_src);
+  std::string dec_src = url_decode(name_str);
   const char *src = dec_src.c_str();
 
   if (*src == '/') ++src;

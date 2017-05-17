@@ -2209,7 +2209,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
     s->info.domain = s->cct->_conf->rgw_dns_name;
   }
 
-  url_decode(s->info.request_uri, s->decoded_uri);
+  s->decoded_uri = url_decode(s->info.request_uri);
 
   /* FastCGI specification, section 6.3
    * http://www.fastcgi.com/devkit/doc/fcgi-spec.html#S6.3

@@ -2214,9 +2214,8 @@ extern bool verify_object_permission_no_policy(struct req_state *s,
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern void rgw_uri_escape_char(char c, string& dst);
-extern bool url_decode(const std::string& src_str,
-                       std::string& dest_str,
-                       bool in_query = false);
+extern std::string url_decode(const boost::string_view& src_str,
+                              bool in_query = false);
 extern void url_encode(const std::string& src,
                        string& dst);
 extern std::string url_encode(const std::string& src);

@@ -515,14 +515,9 @@ static inline std::string aws4_uri_encode(const std::string& src)
 
 static inline std::string aws4_uri_recode(const boost::string_view& src)
 {
-  /* TODO(rzarzynski): we might want to have a string_view-aware variant of
-   * url_decode. */
-  const auto src_str = src.to_string();
-
-  std::string decoded;
-  url_decode(src_str, decoded);
+  std::string decoded = url_decode(src);
   if (decoded.length() != src.length()) {
-    return src_str;
+    return src.to_string();
   } else {
     return aws4_uri_encode(decoded);
   }
