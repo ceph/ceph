@@ -4282,6 +4282,10 @@ void RGWPutACLs::execute()
   map<string, bufferlist> attrs;
 
   if (!s->object.empty()) {
+    if (s->bucket_info.versioning_enabled() && !s->object.have_instance()) {
+      op_ret = -EINVAL;
+      return;
+    }
     obj = rgw_obj(s->bucket, s->object);
     store->set_atomic(s->obj_ctx, obj);
     //if instance is empty, we should modify the latest object
