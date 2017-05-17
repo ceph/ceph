@@ -4419,7 +4419,7 @@ void CInode::maybe_export_pin(bool update)
   if (export_pin == MDS_RANK_NONE && !update)
     return;
 
-  if (mdcache->export_pin_queue.count(this))
+  if (state_test(CInode::STATE_QUEUEDEXPORTPIN))
     return;
 
   bool queue = false;
@@ -4440,7 +4440,7 @@ void CInode::maybe_export_pin(bool update)
       queue = dir->state_test(CDir::STATE_AUXSUBTREE);
     }
     if (queue) {
-      get(CInode::PIN_EXPORTPINQUEUE);
+      state_set(CInode::STATE_QUEUEDEXPORTPIN);
       mdcache->export_pin_queue.insert(this);
       break;
     }
