@@ -1,7 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <algorithm>
 #include <map>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -584,52 +586,65 @@ get_v4_canonical_headers(const req_info& info,
                          const bool using_qs,
                          const bool force_boto2_compat)
 {
-  map<string, string> canonical_hdrs_map;
-  istringstream sh(signedheaders.to_string());
-  string token;
-  string port = info.env->get("SERVER_PORT", "");
-  string secure_port = info.env->get("SERVER_PORT_SECURE", "");
+  std::map<boost::string_view, std::string> canonical_hdrs_map;
+  for (const auto& token : get_str_vec(signedheaders, ";")) {
+    /* TODO(rzarzynski): we'd like to switch to sstring here but it should
+     * get push_back() and reserve() first. */
+    std::string token_env = "HTTP_";
+    token_env.reserve(token.length() + std::strlen("HTTP_") + 1);
 
-  while (getline(sh, token, ';')) {
-    string token_env = "HTTP_" + token;
-    transform(token_env.begin(), token_env.end(), token_env.begin(), ::toupper);
-    replace(token_env.begin(), token_env.end(), '-', '_');
+    std::transform(std::begin(token), std::end(token),
+                   std::back_inserter(token_env), [](const int c) {
+                     return c == '-' ? '_' : std::toupper(c);
+                   });
+
     if (token_env == "HTTP_CONTENT_LENGTH") {
       token_env = "CONTENT_LENGTH";
-    }
-    if (token_env == "HTTP_CONTENT_TYPE") {
+    } else if (token_env == "HTTP_CONTENT_TYPE") {
       token_env = "CONTENT_TYPE";
     }
-    const char *t = info.env->get(token_env.c_str());
+    const char* const t = info.env->get(token_env.c_str());
     if (!t) {
       dout(10) << "warning env var not available" << dendl;
       continue;
     }
-    if (token_env == "HTTP_CONTENT_MD5") {
-      for (const char *p = t; *p; p++) {
-	if (!is_base64_for_content_md5(*p)) {
-	  dout(0) << "NOTICE: bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
-	  return boost::none;
-	}
-      }
+
+    std::string token_value(t);
+    if (token_env == "HTTP_CONTENT_MD5" &&
+        !std::all_of(std::begin(token_value), std::end(token_value),
+                     is_base64_for_content_md5)) {
+      dout(0) << "NOTICE: bad content-md5 provided (not base64)"
+            << ", aborting request" << dendl;
+      return boost::none;
     }
-    string token_value = string(t);
-    if (force_boto2_compat && using_qs && (token == "host")) {
+
+    if (force_boto2_compat && using_qs && token == "host") {
+      boost::string_view port = info.env->get("SERVER_PORT", "");
+      boost::string_view secure_port = info.env->get("SERVER_PORT_SECURE", "");
+
       if (!secure_port.empty()) {
 	if (secure_port != "443")
-	  token_value = token_value + ":" + secure_port;
+	  token_value.append(":", std::strlen(":"))
+                     .append(secure_port.data(), secure_port.length());
       } else if (!port.empty()) {
 	if (port != "80")
-	  token_value = token_value + ":" + port;
+	  token_value.append(":", std::strlen(":"))
+                     .append(port.data(), port.length());
       }
     }
+
     canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
   }
 
   std::string canonical_hdrs;
-  for (map<string, string>::iterator it = canonical_hdrs_map.begin();
-      it != canonical_hdrs_map.end(); ++it) {
-    canonical_hdrs.append(it->first + ":" + it->second + "\n");
+  for (const auto& header : canonical_hdrs_map) {
+    const boost::string_view& name = header.first;
+    const std::string& value = header.second;
+
+    canonical_hdrs.append(name.data(), name.length())
+                  .append(":", std::strlen(":"))
+                  .append(value)
+                  .append("\n", std::strlen("\n"));
   }
 
   return canonical_hdrs;
