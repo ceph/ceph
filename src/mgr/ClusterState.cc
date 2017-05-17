@@ -113,19 +113,3 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
   // that a cut-down set of functionality remains in PGMonitor
   // while the full-blown PGMap lives only here.
 }
-
-void ClusterState::tick(MMonMgrReport *m)
-{
-  dout(10) << __func__ << dendl;
-  // FIXME: no easy way to get mon features here.  this will do for
-  // now, though, as long as we don't make a backward-incompat change.
-  pg_map.encode_digest(m->get_data(), CEPH_FEATURES_ALL);
-
-  // FIXME: reporting health detail here might be a bad idea?
-  with_osdmap([&](const OSDMap& osdmap) {
-      pg_map.get_health(g_ceph_context, osdmap,
-			m->health_summary,
-			&m->health_detail);
-    });
-  m->needs_send = true;
-}

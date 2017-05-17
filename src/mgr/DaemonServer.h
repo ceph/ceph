@@ -112,7 +112,7 @@ public:
   bool handle_open(MMgrOpen *m);
   bool handle_report(MMgrReport *m);
   bool handle_command(MCommand *m);
-  void tick(MMonMgrReport *m) {}
+  void send_report();
 };
 
 #endif
