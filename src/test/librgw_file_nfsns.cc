@@ -58,6 +58,7 @@ namespace {
   string readf_name("toyland");
   string readf_out_name("rgwlib_readf.out");
   std::string writef_name{"bigbird"};
+  string marker_dir("nfs_marker");
 
   int n_dirs1_dirs = 3;
   int n_dirs1_objs = 2;
@@ -104,7 +105,8 @@ namespace {
     }
     return os;
   }
-  
+
+  std::vector<std::string> hier1_obj_names;
   std::stack<obj_rec> obj_stack;
   std::deque<obj_rec> cleanup_queue;
 
@@ -159,7 +161,6 @@ namespace {
   bool do_setattr = false;
   bool verbose = false;
 
-  string marker_dir("nfs_marker");
   struct rgw_file_handle *bucket_fh = nullptr;
   struct rgw_file_handle *marker_fh;
   static constexpr int marker_nobjs = 2*1024;
@@ -221,7 +222,7 @@ TEST(LibRGW, SETUP_HIER1)
 
     if (do_create) {
       /* create objects directly */
-      std::vector<std::string> obj_names =
+      hier1_obj_names =
 	{"foo/bar/baz/quux",
 	 "foo/f1",
 	 "foo/f2",
@@ -238,7 +239,7 @@ TEST(LibRGW, SETUP_HIER1)
       buffer::list bl; // empty object
       RGWLibFS *fs_private = static_cast<RGWLibFS*>(fs->fs_private);
 
-      for (const auto& obj_name : obj_names) {
+      for (const auto& obj_name : hier1_obj_names) {
 	if (verbose) {
 	  std::cout << "creating: " << bucket_name << ":" << obj_name
 		    << std::endl;
@@ -470,6 +471,11 @@ TEST(LibRGW, SETATTR) {
       ASSERT_EQ(st.st_uid, magic_uid);
       ASSERT_EQ(st.st_gid, magic_gid);
 
+      if (do_delete) {
+	rc = rgw_unlink(fs, dir.fh, sf.name.c_str(), RGW_UNLINK_FLAG_NONE);
+	ASSERT_EQ(rc, 0);
+      }
+
       /* release 1 ref on sf */
       rgw_fh_rele(fs, sf.fh, RGW_FH_RELE_FLAG_NONE);
 
@@ -503,6 +509,7 @@ TEST(LibRGW, RGW_CREATE_DIRS1) {
 	  ASSERT_EQ(rc, 0);
 	}
 	sf.sync();
+	get<1>(dirs_rec).push_back(sf);
       }
       n_dirs1_objs++;
     }
@@ -522,7 +529,7 @@ TEST(LibRGW, RGW_SETUP_RENAME1) {
 
     for (int b_ix : {0, 1}) {
       std::string bname{"brename_" + to_string(b_ix)};
-      obj_rec brec{bname, nullptr, nullptr, nullptr};
+      obj_rec brec{bname, nullptr, fs->root_fh, nullptr};
       (void) rgw_lookup(fs, fs->root_fh, brec.name.c_str(), &brec.fh,
 			RGW_LOOKUP_FLAG_NONE);
       if (! brec.fh) {
@@ -573,6 +580,7 @@ TEST(LibRGW, RGW_INTRABUCKET_RENAME1) {
     rc = rgw_rename(fs, bdir0.fh, src_obj.name.c_str(), bdir0.fh,
 		    rfname.c_str(), RGW_RENAME_FLAG_NONE);
     ASSERT_EQ(rc, 0);
+    src_obj.name = rfname;
   }
 }
 
@@ -593,6 +601,10 @@ TEST(LibRGW, RGW_CROSSBUCKET_RENAME1) {
     rc = rgw_rename(fs, bdir0.fh, src_obj.name.c_str(), bdir1.fh,
 		    rfname.c_str(), RGW_RENAME_FLAG_NONE);
     ASSERT_EQ(rc, 0);
+    src_obj.name = rfname;
+    src_obj.parent_fh = bdir1.fh;
+    get<1>(renames_vec[1]).push_back(src_obj);
+    get<1>(renames_vec[0]).pop_back();
   }
 }
 
@@ -770,6 +782,13 @@ TEST(LibRGW, READF_DIRS1) {
 	offset += nread;
       }
       of.close();
+
+      if (do_delete) {
+	rc = rgw_unlink(fs, fobj.parent_fh, fobj.name.c_str(),
+			RGW_UNLINK_FLAG_NONE);
+	ASSERT_EQ(rc, 0);
+	(void) unlink(readf_name.c_str());
+      }
       rgw_fh_rele(fs, fobj.fh, 0 /* flags */);
     }
   }
@@ -836,6 +855,14 @@ TEST(LibRGW, WRITEF_DIRS1) {
 
       ifs.close();
       free(buffer);
+
+      if (do_delete) {
+	rc = rgw_unlink(fs, fobj.parent_fh, fobj.name.c_str(),
+			RGW_UNLINK_FLAG_NONE);
+	ASSERT_EQ(rc, 0);
+	(void) unlink(readf_out_name.c_str());
+      }
+
       rgw_fh_rele(fs, fobj.fh, 0 /* flags */);
     }
   }
@@ -1078,21 +1105,30 @@ TEST(LibRGW, MARKER1_READDIR)
 
 TEST(LibRGW, MARKER1_OBJ_CLEANUP)
 {
-  int rc;
-  for (auto& obj : marker_objs) {
-    if (obj.fh) {
-      if (do_delete) {
-	if (verbose) {
-	  std::cout << "unlinking: " << bucket_name << ":" << obj.name
-		    << std::endl;
-	}
-	rc = rgw_unlink(fs, marker_fh, obj.name.c_str(), RGW_UNLINK_FLAG_NONE);
+  if (do_marker1) {
+    int rc;
+    for (auto& obj : marker_objs) {
+      if (obj.fh) {
+        if (do_delete) {
+          if (verbose) {
+            std::cout << "unlinking: " << bucket_name << ":" << obj.name
+              << std::endl;
+          }
+          rc = rgw_unlink(fs, marker_fh, obj.name.c_str(), RGW_UNLINK_FLAG_NONE);
+          ASSERT_EQ(rc, 0);
+        }
+        rc = rgw_fh_rele(fs, obj.fh, 0 /* flags */);
+        ASSERT_EQ(rc, 0);
       }
-      rc = rgw_fh_rele(fs, obj.fh, 0 /* flags */);
+    }
+    if (do_delete && do_create) {
+      rc = rgw_unlink(fs, bucket_fh, marker_dir.c_str(), RGW_UNLINK_FLAG_NONE);
       ASSERT_EQ(rc, 0);
     }
+    rc = rgw_fh_rele(fs, marker_fh, 0);
+    ASSERT_EQ(rc, 0);
+    marker_objs.clear();
   }
-  marker_objs.clear();
 }
 
 TEST(LibRGW, CLEANUP) {
@@ -1100,7 +1136,7 @@ TEST(LibRGW, CLEANUP) {
 
   if (do_marker1) {
     cleanup_queue.push_back(
-      obj_rec{bucket_name, bucket_fh, fs->root_fh, get_rgwfh(fs->root_fh)});
+      obj_rec{bucket_name, bucket_fh, fs->root_fh, get_rgwfh(bucket_fh)});
   }
 
   for (auto& elt : cleanup_queue) {
@@ -1110,6 +1146,73 @@ TEST(LibRGW, CLEANUP) {
     }
   }
   cleanup_queue.clear();
+
+  if (do_hier1) {
+    if (do_delete && do_create) {
+      for (const auto& obj_name : hier1_obj_names) {
+        if (verbose) {
+          std::cout << "deleting: " << bucket_name << ":" << obj_name
+          << std::endl;
+        }
+        RGWLibFS *fs_private = static_cast<RGWLibFS*>(fs->fs_private);
+        RGWDeleteObjRequest req(cct, fs_private->get_user(), bucket_name, obj_name);
+        rc = rgwlib.get_fe()->execute_req(&req);
+        int rc2 = req.get_ret();
+        ASSERT_EQ(rc, 0);
+        ASSERT_EQ(rc2, 0);
+      }
+
+      // delete empty test bucket
+      rc = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(), RGW_UNLINK_FLAG_NONE);
+      ASSERT_EQ(rc, 0);
+    }
+  }
+
+  if (do_dirs1) {
+    if (do_delete && do_create) {
+      for (auto& dirs_rec : dirs_vec) {
+        for (auto& obj : get<1>(dirs_rec)) {
+          if (verbose) {
+            std::cout << "unlinking: " << obj.name
+		      << std::endl;
+          }
+	  rc = rgw_unlink(fs, obj.parent_fh, obj.name.c_str(),
+			  RGW_UNLINK_FLAG_NONE);
+          ASSERT_EQ(rc, 0);
+        }
+        if (verbose) {
+          std::cout << "unlinking: " << get<0>(dirs_rec).name
+                    << std::endl;
+        }
+	rc = rgw_unlink(fs, get<0>(dirs_rec).parent_fh,
+			get<0>(dirs_rec).name.c_str(), RGW_UNLINK_FLAG_NONE);
+        ASSERT_EQ(rc, 0);
+      }
+      // delete empty test bucket
+      rc = rgw_unlink(fs, fs->root_fh, dirs1_bucket_name.c_str(), RGW_UNLINK_FLAG_NONE);
+      ASSERT_EQ(rc, 0);
+    }
+  }
+
+  if (do_rename) {
+    if (do_delete && do_create) {
+      for (auto& dirs_rec : renames_vec) {
+        for (auto& obj : get<1>(dirs_rec)) {
+          if (verbose) {
+            std::cout << "unlinking: " << obj.name
+		      << std::endl;
+          }
+	  rc = rgw_unlink(fs, obj.parent_fh, obj.name.c_str(),
+			  RGW_UNLINK_FLAG_NONE);
+          ASSERT_EQ(rc, 0);
+        }
+	// delete empty test bucket
+	rc = rgw_unlink(fs, get<0>(dirs_rec).parent_fh,
+			get<0>(dirs_rec).name.c_str(), RGW_UNLINK_FLAG_NONE);
+        ASSERT_EQ(rc, 0);
+      }
+    }
+  }
 }
 
 TEST(LibRGW, UMOUNT) {
