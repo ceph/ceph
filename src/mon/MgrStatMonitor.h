@@ -5,14 +5,24 @@
 
 #include "include/Context.h"
 #include "PaxosService.h"
+#include "mon/PGMap.h"
 
 class PGStatService;
 class MgrPGStatService;
 
 class MgrStatMonitor : public PaxosService {
+  // live version
   version_t version = 0;
+  PGMapDigest digest;
+  list<pair<health_status_t,string>> health_summary;
+  list<pair<health_status_t,string>> health_detail;
+
+  // pending commit
+  PGMapDigest pending_digest;
+  list<pair<health_status_t,string>> pending_health_summary;
+  list<pair<health_status_t,string>> pending_health_detail;
+
   std::unique_ptr<MgrPGStatService> pgservice;
-  list<pair<health_status_t,string>> health_summary, health_detail;
 
 public:
   MgrStatMonitor(Monitor *mn, Paxos *p, const string& service_name);
@@ -21,9 +31,9 @@ public:
   void init() override {}
   void on_shutdown() override {}
 
-  void create_initial() override {}
+  void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
-  void create_pending() override {}
+  void create_pending() override;
   void encode_pending(MonitorDBStore::TransactionRef t) override;
 
   bool preprocess_query(MonOpRequestRef op) override;

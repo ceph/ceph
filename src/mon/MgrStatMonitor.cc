@@ -6,15 +6,9 @@
 #include "messages/MMonMgrReport.h"
 
 class MgrPGStatService : public PGStatService {
-  PGMapDigest digest;
+  PGMapDigest& digest;
 public:
-  void decode_digest(bufferlist& bl) {
-    auto p = bl.begin();
-    ::decode(digest, p);
-  }
-  void encode_digest(bufferlist& bl, uint64_t features) {
-    ::encode(digest, bl, features);
-  }
+  MgrPGStatService(PGMapDigest& d) : digest(d) {}
 
   const pool_stat_t* get_pool_stat(int poolid) const override {
     auto i = digest.pg_pool_sum.find(poolid);
@@ -71,7 +65,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon) {
 
 MgrStatMonitor::MgrStatMonitor(Monitor *mn, Paxos *p, const string& service_name)
   : PaxosService(mn, p, service_name),
-    pgservice(new MgrPGStatService())
+    pgservice(new MgrPGStatService(digest))
 {
 }
 
@@ -82,6 +76,11 @@ PGStatService *MgrStatMonitor::get_pg_stat_service()
   return pgservice.get();
 }
 
+void MgrStatMonitor::create_initial()
+{
+  version = 0;
+}
+
 void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_last_committed();
@@ -89,25 +88,28 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
   get_version(version, bl);
   if (version) {
     assert(bl.length());
-    bufferlist digestbl;
     auto p = bl.begin();
-    ::decode(digestbl, p);
+    ::decode(digest, p);
     ::decode(health_summary, p);
     ::decode(health_detail, p);
-    pgservice->decode_digest(digestbl);
   }
+}
+
+void MgrStatMonitor::create_pending()
+{
+  pending_digest = digest;
+  pending_health_summary = health_summary;
+  pending_health_detail = health_detail;
 }
 
 void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   ++version;
   dout(10) << __func__ << " " << version << dendl;
-  bufferlist digestbl;
-  pgservice->encode_digest(digestbl, mon->get_quorum_con_features());
   bufferlist bl;
-  ::encode(digestbl, bl);
-  ::encode(health_summary, bl);
-  ::encode(health_detail, bl);
+  ::encode(pending_digest, bl, mon->get_quorum_con_features());
+  ::encode(pending_health_summary, bl);
+  ::encode(pending_health_detail, bl);
   put_version(t, version, bl);
   put_last_committed(t, version);
 }
@@ -169,8 +171,10 @@ bool MgrStatMonitor::preprocess_report(MonOpRequestRef op)
 bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
 {
   auto m = static_cast<MMonMgrReport*>(op->get_req());
-  pgservice->decode_digest(m->get_data());
-  health_summary.swap(m->health_summary);
-  health_detail.swap(m->health_detail);
+  bufferlist bl = m->get_data();
+  auto p = bl.begin();
+  ::decode(pending_digest, p);
+  pending_health_summary.swap(m->health_summary);
+  pending_health_detail.swap(m->health_detail);
   return true;
 }
