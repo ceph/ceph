@@ -73,12 +73,17 @@ void PGMonitor::on_active()
 
   update_logger();
 
-  if (mon->is_leader())
+  if (mon->is_leader() &&
+      mon->osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
     mon->clog->info() << "pgmap " << pg_map;
+  }
 }
 
 void PGMonitor::update_logger()
 {
+  if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    return;
+  }
   dout(10) << "update_logger" << dendl;
 
   mon->cluster_logger->set(l_cluster_osd_bytes, pg_map.osd_sum.kb * 1024ull);
@@ -116,6 +121,9 @@ void PGMonitor::update_logger()
 void PGMonitor::tick()
 {
   if (!is_active()) return;
+  if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    return;
+  }
 
   handle_osd_timeouts();
 
@@ -510,6 +518,10 @@ version_t PGMonitor::get_trim_to()
 
 bool PGMonitor::preprocess_query(MonOpRequestRef op)
 {
+  if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    return false;
+  }
+
   op->mark_pgmon_event(__func__);
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
@@ -536,6 +548,10 @@ bool PGMonitor::preprocess_query(MonOpRequestRef op)
 
 bool PGMonitor::prepare_update(MonOpRequestRef op)
 {
+  if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    return false;
+  }
+
   op->mark_pgmon_event(__func__);
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
@@ -1127,8 +1143,8 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			  HEALTH_ERR);
     check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full",
 			  HEALTH_WARN);
+    pg_map.get_health(cct, mon->osdmon()->osdmap, summary, detail);
   }
-  pg_map.get_health(cct, mon->osdmon()->osdmap, summary, detail);
 }
 
 void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summary,
@@ -1154,6 +1170,10 @@ void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summa
 
 void PGMonitor::check_subs()
 {
+  if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    return;
+  }
+
   dout(10) << __func__ << dendl;
   const string type = "osd_pg_creates";
 
