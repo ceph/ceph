@@ -45,6 +45,9 @@ public:
   void print_summary(Formatter *f, ostream *out) const override {
     digest.print_summary(f, out);
   }
+  void dump_info(Formatter *f) const override {
+    digest.dump(f);
+  }
   void dump_fs_stats(stringstream *ss,
 		     Formatter *f,
 		     bool verbose) const override {
@@ -129,6 +132,7 @@ void MgrStatMonitor::tick()
 
 void MgrStatMonitor::print_summary(Formatter *f, std::ostream *ss) const
 {
+  pgservice->print_summary(f, ss);
 }
 
 bool MgrStatMonitor::preprocess_query(MonOpRequestRef op)

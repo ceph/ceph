@@ -3114,8 +3114,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     monmon()->dump_info(f.get());
     osdmon()->dump_info(f.get());
     mdsmon()->dump_info(f.get());
-    pgmon()->dump_info(f.get());
     authmon()->dump_info(f.get());
+    pgservice->dump_info(f.get());
 
     paxos->dump_info(f.get());
 
