@@ -22,8 +22,6 @@
 class RGWRados;
 class CephContext;
 
-using namespace std;
-
 #define META_REPLICA_LOG_OBJ_PREFIX "meta.replicalog."
 #define DATA_REPLICA_LOG_OBJ_PREFIX "data.replicalog."
 

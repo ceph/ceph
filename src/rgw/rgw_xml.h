@@ -10,9 +10,6 @@
 #include <include/types.h>
 #include <common/Formatter.h>
 
-using namespace std;
-
-
 class XMLObj;
 
 class XMLObjIter {

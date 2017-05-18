@@ -6,15 +6,9 @@
 #include <iostream>
 #include <include/types.h>
 
-#include <expat.h>
-
 #include "include/str_list.h"
 #include "rgw_lc.h"
 #include "rgw_xml.h"
-
-
-
-using namespace std;
 
 class LCID_S3 : public XMLObj
 {

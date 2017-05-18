@@ -44,7 +44,6 @@
 
 #include "include/assert.h"
 
-using namespace std;
 using ceph::crypto::SHA1;
 
 struct req_state;

@@ -18,14 +18,11 @@
 #include <map>
 #include <string>
 #include <iosfwd>
-#include <expat.h>
 
 #include <include/types.h>
 #include <common/Formatter.h>
 #include "rgw_xml.h"
 #include "rgw_cors.h"
-
-using namespace std;
 
 class RGWCORSRule_S3 : public RGWCORSRule, public XMLObj
 {
