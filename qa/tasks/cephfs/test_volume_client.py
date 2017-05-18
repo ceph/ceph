@@ -11,10 +11,6 @@ log = logging.getLogger(__name__)
 
 
 class TestVolumeClient(CephFSTestCase):
-    #
-    # TODO: Test that VolumeClient can recover from partial auth updates.
-    #
-
     # One for looking at the global filesystem, one for being
     # the VolumeClient, two for mounting the created shares
     CLIENTS_REQUIRED = 4
