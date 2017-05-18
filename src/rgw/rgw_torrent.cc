@@ -27,7 +27,6 @@ seed::~seed()
 {
   seed::info.sha1_bl.clear();
   bl.clear();
-  torrent_bl.clear();
   s = NULL;
   store = NULL;
 }
@@ -90,15 +89,35 @@ bool seed::get_flag()
   return is_torrent;
 }
 
-void seed::save_data(bufferlist &bl)
+void seed::update(bufferlist &bl)
 {
   if (!is_torrent)
   {
     return;
   }
-
   info.len += bl.length();
-  torrent_bl.push_back(bl);
+  sha1(&h, bl, bl.length());
+}
+
+int seed::complete()
+{
+  uint64_t remain = info.len%info.piece_length;
+  uint8_t  remain_len = ((remain > 0)? 1 : 0);
+  sha_len = (info.len/info.piece_length + remain_len)*CEPH_CRYPTO_SHA1_DIGESTSIZE;
+
+  int ret = 0;
+   /* produce torrent data */
+  do_encode();
+
+  /* save torrent data into OMAP */
+  ret = save_torrent_file();
+  if (0 != ret)
+  {
+    ldout(s->cct, 0) << "ERROR: failed to save_torrent_file() ret= "<< ret << dendl;
+    return ret;
+  }
+
+  return 0;
 }
 
 off_t seed::get_data_len()
@@ -149,49 +168,6 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
     h->Final((byte *)sha);
     set_info_pieces(sha);
   }
-}
-
-int seed::sha1_process()
-{
-  uint64_t remain = info.len%info.piece_length;
-  uint8_t  remain_len = ((remain > 0)? 1 : 0);
-  sha_len = (info.len/info.piece_length + remain_len)*CEPH_CRYPTO_SHA1_DIGESTSIZE;
-
-  SHA1 h;
-  list<bufferlist>::iterator iter = torrent_bl.begin();
-  for (; iter != torrent_bl.end(); ++iter)
-  {
-    bufferlist &bl_info = *iter;
-    sha1(&h, bl_info, (*iter).length());
-  }
-
-  return 0;
-}
-
-int seed::handle_data()
-{
-  int ret = 0;
-
-  /* sha1 process */
-  ret = sha1_process();
-  if (0 != ret)
-  {
-    ldout(s->cct, 0) << "ERROR: failed to sha1_process() ret= "<< ret << dendl;
-    return ret;
-  }
-
-  /* produce torrent data */
-  do_encode();
-
-  /* save torrent data into OMAP */
-  ret = save_torrent_file();
-  if (0 != ret)
-  {
-    ldout(s->cct, 0) << "ERROR: failed to save_torrent_file() ret= "<< ret << dendl;
-    return ret;
-  }
-
-  return 0;
 }
 
 int seed::get_params()
