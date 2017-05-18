@@ -139,7 +139,7 @@ erasure coded pool as the ``--data-pool`` during image creation::
     rbd create --size 1G --data-pool ec_pool replicated_pool/image_name
 
 For Cephfs, using an erasure coded pool means setting that pool in
-a `file layout<../../cephfs/file-layouts>`_.
+a `file layout <../../../cephfs/file-layouts>`_.
 
 
 Erasure coded pool and cache tiering
