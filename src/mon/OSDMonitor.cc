@@ -3481,6 +3481,13 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
     int num_in_osds = 0;
     int num_down_in_osds = 0;
     set<int> osds;
+    set<int> down_in_osds;
+    set<int> up_in_osds;
+    set<int> subtree_up;
+    unordered_map<int, set<int> > subtree_type_down;
+    unordered_map<int, int> num_osds_subtree;
+    int max_type = osdmap.crush->get_num_type_names() - 1;
+
     for (int i = 0; i < osdmap.get_max_osd(); i++) {
       if (!osdmap.exists(i)) {
         if (osdmap.crush->item_exists(i)) {
@@ -3491,22 +3498,98 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
       if (osdmap.is_out(i))
         continue;
       ++num_in_osds;
+      if (down_in_osds.count(i) || up_in_osds.count(i))
+	continue;
       if (!osdmap.is_up(i)) {
-	++num_down_in_osds;
-	if (detail) {
-	  const osd_info_t& info = osdmap.get_info(i);
-	  ostringstream ss;
-	  ss << "osd." << i << " is down since epoch " << info.down_at
-	     << ", last address " << osdmap.get_addr(i);
-	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	down_in_osds.insert(i);
+	int parent_id = 0;
+	int current = i;
+	for (int type = 0; type <= max_type; type++) {
+	  int r = osdmap.crush->get_immediate_parent_id(current, &parent_id);
+	  if (r == -ENOENT)
+	    break;
+	  // break early if this parent is already marked as up
+	  if (subtree_up.count(parent_id))
+	    break;
+	  type = osdmap.crush->get_bucket_type(parent_id);
+	  if (!osdmap.subtree_type_is_down(g_ceph_context, parent_id, type, &down_in_osds, &up_in_osds, &subtree_up, &subtree_type_down))
+	    break;
+	  current = parent_id;
 	}
       }
     }
+
+    // calculate the number of down osds in each down subtree and store it in num_osds_subtree
+    for (int type = 1; type <= max_type; type++) {
+      for (auto j = subtree_type_down[type].begin(); j != subtree_type_down[type].end(); ++j) {
+	if (type == 1) {
+          list<int> children;
+          int num = osdmap.crush->get_children(*j, &children);
+          num_osds_subtree[*j] = num;
+        } else {
+          list<int> children;
+          int num = 0;
+          int num_children = osdmap.crush->get_children(*j, &children);
+          if (num_children == 0)
+	    continue;
+          for (auto l = children.begin(); l != children.end(); ++l) {
+            if (num_osds_subtree[*l] > 0) {
+              num = num + num_osds_subtree[*l];
+            }
+          }
+          num_osds_subtree[*j] = num;
+	}
+      }
+    }
+    num_down_in_osds = down_in_osds.size();
     assert(num_down_in_osds <= num_in_osds);
     if (num_down_in_osds > 0) {
       ostringstream ss;
-      ss << num_down_in_osds << "/" << num_in_osds << " in osds are down";
+      ss << "\n";
+      // summary of down subtree types and osds
+      for (int type = max_type; type > 0; type--) {
+	if (subtree_type_down[type].size() > 0) {
+	  ss << subtree_type_down[type].size() << " " << osdmap.crush->get_type_name(type);
+	  if (subtree_type_down[type].size() > 1) {
+	    ss << "s";
+	  }
+	  int sum_down_osds = 0;
+	  for (auto j = subtree_type_down[type].begin(); j != subtree_type_down[type].end(); ++j) {
+	    sum_down_osds = sum_down_osds + num_osds_subtree[*j];
+	  }
+          ss << " (" << sum_down_osds << " osds) down\n";
+	}
+      }
+      ss << down_in_osds.size() << " osds down\n";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+
+      if (detail) {
+	ostringstream ss;
+	// details of down subtree types
+	for (int type = max_type; type > 0; type--) {
+	  for (auto j = subtree_type_down[type].rbegin(); j != subtree_type_down[type].rend(); ++j) {
+	    ss << osdmap.crush->get_type_name(type);
+	    ss << " ";
+	    ss << osdmap.crush->get_item_name(*j);
+	    // at the top level, do not print location
+	    if (type != max_type) {
+              ss << " (";
+              ss << osdmap.crush->get_full_location_ordered_string(*j);
+              ss << ")";
+	    }
+	    int num = num_osds_subtree[*j];
+	    ss << " (" << num << " osds)";
+	    ss << " is down\n";
+	  }
+        }
+	// details of down osds
+	for (auto it = down_in_osds.begin(); it != down_in_osds.end(); ++it) {
+	  ss << "osd." << *it << " (";
+	  ss << osdmap.crush->get_full_location_ordered_string(*it);
+          ss << ") is down\n";
+	}
+        detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
     }
 
     if (!osds.empty()) {
