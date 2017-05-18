@@ -51,7 +51,7 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
   librados::Rados rados(ioctx);
 
   uint64_t bid = rados.get_instance_id();
-  uint32_t extra = rand() % 0xFFFFFFFF;
+  uint32_t extra = ceph::util::generate_random_number(0xFFFFFFFF);
 
   ostringstream bid_ss;
   bid_ss << std::hex << bid << std::hex << extra;

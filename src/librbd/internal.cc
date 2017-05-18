@@ -5,16 +5,22 @@
 #include <errno.h>
 #include <limits.h>
 
+#include <boost/scope_exit.hpp>
+#include <boost/variant.hpp>
+
 #include "include/types.h"
 #include "include/uuid.h"
+#include "include/util.h"
+#include "include/random.h"
+#include "include/stringify.h"
+
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Throttle.h"
 #include "common/event_socket.h"
-#include "cls/lock/cls_lock_client.h"
-#include "include/stringify.h"
 
+#include "cls/lock/cls_lock_client.h"
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -50,8 +56,6 @@
 
 #include "journal/Journaler.h"
 
-#include <boost/scope_exit.hpp>
-#include <boost/variant.hpp>
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -156,7 +160,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
   {
     uint32_t hi = bid >> 32;
     uint32_t lo = bid & 0xFFFFFFFF;
-    uint32_t extra = rand() % 0xFFFFFFFF;
+    uint32_t extra = ceph::util::generate_random_number(0xFFFFFFFF);
     memset(&ondisk, 0, sizeof(ondisk));
 
     memcpy(&ondisk.text, RBD_HEADER_TEXT, sizeof(RBD_HEADER_TEXT));
