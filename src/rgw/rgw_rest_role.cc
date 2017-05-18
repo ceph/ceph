@@ -17,8 +17,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
-
 void RGWRestRole::send_response()
 {
   if (op_ret) {

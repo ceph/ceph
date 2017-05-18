@@ -30,8 +30,6 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
 
-using namespace std;
-
 namespace ceph {
   class Formatter;
 }
