@@ -38,6 +38,7 @@ you may write data with one API and retrieve it with the other.
 
    Manual Install w/Civetweb <../../install/install-ceph-gateway>
    Multisite Configuration <multisite>
+   Configuring Pools <pools>
    Config Reference <config-ref>
    Admin Guide <admin>
    S3 API <s3>
