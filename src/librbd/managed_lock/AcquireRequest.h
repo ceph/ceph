@@ -47,15 +47,17 @@ private:
    * <start>
    *    |
    *    v
-   * GET_LOCKER <---------------------------------------\
-   *    |     ^                                         |
-   *    |     . (EBUSY && no cached locker)             |
-   *    |     .                                         |
-   *    |     .          (EBUSY && cached locker)       |
-   *    \--> LOCK_IMAGE * * * * * * * * > BREAK_LOCK ---/
-   *              |
-   *              v
-   *          <finish>
+   * GET_LOCKER
+   *    |     ^
+   *    |     . (EBUSY && no cached locker)
+   *    |     .
+   *    |     .          (EBUSY && cached locker)
+   *    \--> LOCK_IMAGE * * * * * * * * > BREAK_LOCK . . . . .
+   *            |   ^                         |              .
+   *            |   |                         | (success)    .
+   *            |   \-------------------------/              .
+   *            v                                            .
+   *         <finish>  < . . . . . . . . . . . . . . . . . . .
    *
    * @endverbatim
    */
