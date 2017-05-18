@@ -15,8 +15,14 @@
  *
  */
 
+
+#include <cerrno>
+#include <sstream>
+#include <utility>
+
 #include "boost/tuple/tuple.hpp"
 #include "boost/intrusive_ptr.hpp"
+
 #include "PG.h"
 #include "PrimaryLogPG.h"
 #include "OSD.h"
@@ -24,6 +30,8 @@
 #include "ScrubStore.h"
 #include "Session.h"
 #include "objclass/objclass.h"
+
+#include "include/random.h"
 
 #include "common/errno.h"
 #include "common/scrub_types.h"
@@ -67,12 +75,6 @@ template <typename T>
 static ostream& _prefix(std::ostream *_dout, T *pg) {
   return *_dout << pg->gen_prefix();
 }
-
-
-#include <sstream>
-#include <utility>
-
-#include <errno.h>
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PrimaryLogPG, replicatedpg, osd);
 
@@ -13335,7 +13337,7 @@ void PrimaryLogPG::agent_setup()
     agent_state->position.pool = info.pgid.pool();
     agent_state->position.set_hash(pool.info.get_random_pg_position(
       info.pgid.pgid,
-      rand()));
+      ceph::util::generate_random_number()));
     agent_state->start = agent_state->position;
 
     dout(10) << __func__ << " allocated new state, position "

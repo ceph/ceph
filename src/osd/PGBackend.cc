@@ -15,18 +15,23 @@
  *
  */
 
-
-#include "common/errno.h"
-#include "common/scrub_types.h"
-#include "ReplicatedBackend.h"
-#include "ScrubStore.h"
+#include "OSD.h"
+#include "PGLog.h"
+#include "OSDMap.h"
 #include "ECBackend.h"
 #include "PGBackend.h"
-#include "OSD.h"
-#include "erasure-code/ErasureCodePlugin.h"
-#include "OSDMap.h"
-#include "PGLog.h"
+#include "ScrubStore.h"
+#include "ReplicatedBackend.h"
+
+#include "include/util.h"
+#include "include/random.h"
+
+#include "common/errno.h"
 #include "common/LogClient.h"
+#include "common/scrub_types.h"
+
+#include "erasure-code/ErasureCodePlugin.h"
+
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
 

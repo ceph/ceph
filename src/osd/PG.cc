@@ -12,11 +12,10 @@
  *
  */
 
+#include <sstream>
+
 #include "PG.h"
-// #include "msg/Messenger.h"
 #include "messages/MOSDRepScrub.h"
-// #include "common/cmdparse.h"
-// #include "common/ceph_context.h"
 
 #include "common/errno.h"
 #include "common/config.h"
@@ -28,9 +27,10 @@
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 
+#include "include/random.h"
+
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGNotify.h"
-// #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGTrim.h"
@@ -68,8 +68,6 @@
 #else
 #define tracepoint(...)
 #endif
-
-#include <sstream>
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -2852,7 +2850,7 @@ void PG::_update_blocked_by()
   for (set<int>::iterator p = blocked_by.begin();
        p != blocked_by.end() && keep > 0;
        ++p) {
-    if (skip > 0 && ceph::util::generate_random_number(static_cast<unsigned>(skip + keep)) < skip)) {
+    if (skip > 0 && (ceph::util::generate_random_number(skip + keep) < skip)) {
       --skip;
     } else {
       info.stats.blocked_by[pos++] = *p;
@@ -3741,7 +3739,7 @@ bool PG::sched_scrub()
   bool deep_coin_flip = false;
   // Only add random deep scrubs when NOT user initiated scrub
   if (!scrubber.must_scrub)
-      deep_coin_flip = (rand() % 100) < cct->_conf->osd_deep_scrub_randomize_ratio * 100;
+      deep_coin_flip = ceph::util::generate_random_number(100) < cct->_conf->osd_deep_scrub_randomize_ratio * 100;
   dout(20) << __func__ << ": time_for_deep=" << time_for_deep << " deep_coin_flip=" << deep_coin_flip << dendl;
 
   time_for_deep = (time_for_deep || deep_coin_flip);
@@ -7013,7 +7011,7 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
   ostringstream ss;
 
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
-      (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
+      (ceph::util::generate_random_number(1000) < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected: failure injection"
 		       << dendl;
     post_event(RejectRemoteReservation());
@@ -7083,7 +7081,7 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
 
   ostringstream ss;
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
-      (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
+      (ceph::util::generate_random_number(1000) < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
 		       << "failure injection" << dendl;
     post_event(RejectRemoteReservation());

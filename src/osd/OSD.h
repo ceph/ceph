@@ -2155,8 +2155,8 @@ private:
 					 io_queue::weightedpriority,
 					 io_queue::mclock_opclass,
 					 io_queue::mclock_client };
-      constexpr range = sizeof(index_lookup) / sizeof(index_lookup[0]);
-      auto which = ceph::util::generate_random_number(range);
+      constexpr int range = sizeof(index_lookup) / sizeof(index_lookup[0]);
+      int which = ceph::util::generate_random_number(range);
       return index_lookup[which];
     } else if (cct->_conf->osd_op_queue == "prioritized") {
       return io_queue::prioritized;
