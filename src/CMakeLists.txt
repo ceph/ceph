@@ -90,7 +90,7 @@ if(HAVE_INTEL)
 endif()
 
 execute_process(
-  COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
+  COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.s -o /dev/null
   RESULT_VARIABLE no_yasm
   OUTPUT_QUIET)
 if(no_yasm)
@@ -536,13 +536,13 @@ if(HAVE_INTEL)
     common/crc32c_intel_fast.c)
   if(HAVE_GOOD_YASM_ELF64)
     list(APPEND libcommon_files
-      common/crc32c_intel_fast_asm.S
-      common/crc32c_intel_fast_zero_asm.S)
+      common/crc32c_intel_fast_asm.s
+      common/crc32c_intel_fast_zero_asm.s)
   endif(HAVE_GOOD_YASM_ELF64)
 elseif(HAVE_POWER8)
   list(APPEND libcommon_files
     common/crc32c_ppc.c
-    common/crc32c_ppc_asm.S)
+    common/crc32c_ppc_asm.s)
 endif(HAVE_INTEL)
 
 if(LINUX)
